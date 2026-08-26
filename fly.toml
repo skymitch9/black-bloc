@@ -1,0 +1,27 @@
+# Fly.io app definition — UNVERIFIED: written 2026-08-26, not yet deployed.
+# `fly launch --no-deploy` will offer to rewrite this; keep the [mounts] block.
+# Runbook: docs/access/deploy.md
+
+app = "black-bloc"
+primary_region = "phx"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  DATABASE_PATH = "/data/black_bloc.sqlite3"
+  LOG_LEVEL = "INFO"
+  API_ENABLED = "false"
+
+# Persistent disk for SQLite. Create once: fly volumes create black_bloc_data --size 1
+[mounts]
+  source = "black_bloc_data"
+  destination = "/data"
+
+# No [http_service] on purpose: the bot only makes an OUTBOUND websocket to
+# Discord, and a service section would enable auto-stop on idle, which would
+# kill the gateway connection. Add one only when the API is exposed publicly.
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

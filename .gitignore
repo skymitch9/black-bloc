@@ -1,0 +1,22 @@
+# Virtualenv + Python noise
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+
+# Secrets. The real bot token lives ONLY in .env (never committed) and in the
+# Discord Developer Portal, which can re-mint it. See docs/access/setup.md.
+.env
+.env.*
+!.env.example
+
+# Runtime data. The SQLite DB and its WAL/SHM sidecars are state, not source.
+data/*
+!data/.gitkeep
+
+# docs/ is TRACKED on purpose (see docs/README.md header). Never put a secret
+# VALUE in there — names only.
