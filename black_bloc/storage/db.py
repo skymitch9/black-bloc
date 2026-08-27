@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -113,6 +113,12 @@ CREATE TABLE IF NOT EXISTS honeypot_hits (
     at         TEXT    NOT NULL,
     mode       TEXT    NOT NULL,
     action     TEXT    NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS user_timezones (
+    user_id INTEGER PRIMARY KEY,
+    tz      TEXT NOT NULL,
+    set_at  TEXT NOT NULL
 );
 """
 
