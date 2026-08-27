@@ -2,6 +2,7 @@ import pytest
 
 from black_bloc.automod import validate_rules
 from black_bloc.config import load_settings
+from black_bloc.emoji import SKIN_TONE_DEFAULT, SKIN_TONE_NAMES
 from black_bloc.settings_store import (
     BIRTHDAY_CHANNEL_ID,
     BIRTHDAY_COLOR,
@@ -239,6 +240,17 @@ async def test_the_stream_ended_wording_is_a_setting_with_the_hardcoded_text_as_
     assert await store.set(1, "golive_end_suffix", " (over)") == " (over)"
     with pytest.raises(SettingError):
         await store.set(1, "golive_end_suffix", "   ")
+
+
+async def test_the_emoji_skin_tone_defaults_to_dark_and_takes_only_the_six_tones(store):
+    assert store.get(1, "emoji_skin_tone") == SKIN_TONE_DEFAULT == "dark"
+    assert KEY_TYPES["emoji_skin_tone"] == "enum"
+    assert coerce_value("emoji_skin_tone", "medium-dark") == "medium-dark"
+    for name in SKIN_TONE_NAMES:
+        assert await store.set(1, "emoji_skin_tone", name) == name
+        assert store.get(1, "emoji_skin_tone") == name
+    with pytest.raises(SettingError):
+        coerce_value("emoji_skin_tone", "teal")
 
 
 async def test_golive_channel_defaults_to_live_now_once_test_mode_is_off(tmp_path, monkeypatch):

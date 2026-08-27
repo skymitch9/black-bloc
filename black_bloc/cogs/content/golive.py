@@ -468,12 +468,13 @@ class GoLive(commands.Cog):
         channel = self._channel(guild)
         if channel is None:
             return
+        suffix = self.bot.store.get(guild.id, "golive_end_suffix")
         try:
             message = await channel.fetch_message(message_id)
             await message.edit(
-                content=ended_text(message.content),
+                content=ended_text(message.content, suffix),
                 allowed_mentions=self._mentions(guild.id),
-                **self._ended_embed(guild, row, message),
+                **self._ended_embed(guild, row, message, suffix),
             )
         except Exception as exc:
             log.info(
@@ -488,12 +489,14 @@ class GoLive(commands.Cog):
             return None
         return announcement_embed(info, member, source)
 
-    def _ended_embed(self, guild: Any, row: Any, message: Any) -> dict[str, Any]:
+    def _ended_embed(
+        self, guild: Any, row: Any, message: Any, suffix: str | None
+    ) -> dict[str, Any]:
         existing = list(getattr(message, "embeds", None) or ())
         if not existing:
             return {}
         name = self._display_name(guild, row)
-        return {"embed": ended_embed(existing[0], name, _row_value(row, "platform"))}
+        return {"embed": ended_embed(existing[0], name, _row_value(row, "platform"), suffix)}
 
     async def _box_art(self, guild: Any, info: StreamInfo) -> StreamInfo:
         """Twitch knows the game's art; YouTube and presence-only streams are never asked."""

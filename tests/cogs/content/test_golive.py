@@ -1220,6 +1220,21 @@ async def test_ending_a_stream_rewrites_the_card_and_keeps_the_art(cog, bot, mem
     assert posted.embed.url == "https://www.twitch.tv/alice"
 
 
+async def test_the_end_wording_a_guild_set_reaches_both_halves_of_the_message(
+    cog, bot, member, db
+):
+    await bot.store.set(GUILD, "golive_mode", "on")
+    await bot.store.set(GUILD, "golive_end_suffix", " (that's a wrap)")
+    cog.helix = FakeHelix(games=[twitch_game()])
+    await cog._go_live(member, from_twitch(twitch_stream()), "twitch")
+
+    await cog._end_live(bot.guild, member, "twitch")
+
+    posted = bot.guild.channel.messages[0]
+    assert posted.content.endswith(" (that's a wrap)")
+    assert posted.embed.footer.text == "Black Bloc · via Twitch · (that's a wrap)"
+
+
 async def test_ending_a_stream_posted_without_a_card_still_marks_the_sentence(
     cog, bot, member, db
 ):

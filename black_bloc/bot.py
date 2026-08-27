@@ -13,6 +13,7 @@ from .config import Settings
 from .guard import TestModeGuard
 from .intents import build_intents
 from .invite import invite_url
+from .prefix import no_prefix_commands
 from .rolemenu_panels import install as install_panels
 from .rolemenu_panels import panels_on_boot
 from .settings_store import SettingsStore
@@ -39,7 +40,7 @@ COGS: tuple[str, ...] = (
 class BlackBlocBot(commands.Bot):
     def __init__(self, settings: Settings) -> None:
         super().__init__(
-            command_prefix=commands.when_mentioned_or(settings.command_prefix),
+            command_prefix=no_prefix_commands,
             intents=build_intents(),
             help_command=None,
         )

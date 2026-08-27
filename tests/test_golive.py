@@ -25,7 +25,7 @@ from black_bloc.golive import (
     twitch_login_from_url,
     with_box_art,
 )
-from black_bloc.settings_store import GOLIVE_TEMPLATE
+from black_bloc.settings_store import GOLIVE_END_SUFFIX, GOLIVE_TEMPLATE
 from black_bloc.twitch import TwitchGame, TwitchStream
 
 NOW = datetime(2026, 8, 26, 12, 0, tzinfo=UTC)
@@ -283,6 +283,21 @@ def test_ended_text_is_appended_once():
     assert ended_text("live! — stream ended") == "live! — stream ended"
 
 
+def test_the_default_ended_wording_is_the_registrys_and_not_a_second_copy():
+    assert ended_text("live!") == "live!" + GOLIVE_END_SUFFIX
+
+
+def test_ended_text_uses_the_wording_the_guild_set():
+    assert ended_text("live!", " (over)") == "live! (over)"
+    assert ended_text("live! (over)", " (over)") == "live! (over)"
+
+
+def test_an_empty_ended_wording_adds_nothing():
+    assert ended_text("live!", "") == "live!"
+    assert ended_text("live!", "   ") == "live!"
+    assert ended_text("live!", None) == "live!"
+
+
 def twitch_info(**kwargs):
     kwargs.setdefault("url", "https://www.twitch.tv/alice")
     kwargs.setdefault("game", "Phantasy Star Online 2 New Genesis")
@@ -362,6 +377,22 @@ def test_the_ended_embed_keeps_the_art_and_says_the_stream_is_over():
     assert over.image.url == live.image.url and over.url == live.url
     assert over.footer.text == "Black Bloc · via Twitch · stream ended"
     assert ended_embed(over, "Alice", "Twitch").footer.text == over.footer.text
+
+
+def test_the_ended_embed_footer_says_what_the_guild_set():
+    live = announcement_embed(twitch_info(), FakeMember("Alice"), "twitch")
+
+    over = ended_embed(live, "Alice", "Twitch", " (over)")
+
+    assert over.footer.text == "Black Bloc · via Twitch · (over)"
+    assert ended_embed(over, "Alice", "Twitch", " (over)").footer.text == over.footer.text
+
+
+def test_an_empty_ended_wording_leaves_the_embed_footer_alone():
+    live = announcement_embed(twitch_info(), FakeMember("Alice"), "twitch")
+
+    assert ended_embed(live, "Alice", "Twitch", "").footer.text == "Black Bloc · via Twitch"
+    assert ended_embed(live, "Alice", "Twitch", None).footer.text == "Black Bloc · via Twitch"
 
 
 def test_the_ended_embed_survives_an_unknown_platform():
