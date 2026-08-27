@@ -5,13 +5,19 @@ from typing import Any
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from .. import __version__
+from . import auth, status
+from .auth import Refused, refused_handler
 
 log = logging.getLogger(__name__)
 
+CORS_METHODS = ("GET", "POST", "OPTIONS")
+CORS_HEADERS = ("content-type",)
 
-def create_app(bot: Any) -> FastAPI:
+
+def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
     app = FastAPI(title="Black Bloc API", version=__version__, docs_url=None, redoc_url=None)
 
     @app.get("/health")
@@ -25,6 +31,16 @@ def create_app(bot: Any) -> FastAPI:
             "latency_ms": round(bot.latency * 1000) if ready else None,
         }
 
+    app.add_exception_handler(Refused, refused_handler)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[str(bot.settings.site_origin).rstrip("/")],
+        allow_credentials=True,
+        allow_methods=list(CORS_METHODS),
+        allow_headers=list(CORS_HEADERS),
+    )
+    app.include_router(auth.build_router(bot, oauth_request=oauth_request))
+    app.include_router(status.build_router(bot))
     return app
 
 
