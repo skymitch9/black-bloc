@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Black Bloc — overview</title>
-<meta name="description" content="Black Bloc dashboard: every feature’s mode, open counts and the last actions the bot took.">
+<title>Black Bloc — honeypot</title>
+<meta name="description" content="Honeypot hits, Ban-now and the trap channel setup.">
 <meta name="robots" content="noindex, nofollow">
 <meta name="api-origin" content="">
 <link rel="stylesheet" href="/assets/estate-theme.css">
@@ -12,7 +12,7 @@
 <link rel="stylesheet" href="/assets/site.css">
 <script src="/assets/theme.js"></script>
 </head>
-<body data-tab="overview">
+<body data-tab="honeypot">
 
 <button id="hg-cog" class="hg-cog" type="button" aria-expanded="false" aria-controls="hg-cog-panel" aria-label="Display settings">
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.03z"/></svg>
@@ -37,8 +37,8 @@
   <nav class="tabnav" id="tabnav" aria-label="Dashboard sections"></nav>
 
   <div class="dash-body">
-    <h1>Black Bloc</h1>
-    <p class="sub" id="subtitle">Every feature’s mode, what is open, and the last ten things the bot did.</p>
+    <h1>Honeypot</h1>
+    <p class="sub" id="subtitle">Who walked into a trap channel, and what was done about it.</p>
 
     <section id="gate" hidden aria-live="polite">
       <div class="row" id="gate-row" data-state="pending">
@@ -65,7 +65,7 @@
   </div>
 </main>
 
-<script type="module" src="/assets/page-overview.js"></script>
+<script type="module" src="/assets/page-honeypot.js"></script>
 <script type="module" src="/assets/motion.js"></script>
 </body>
 </html>

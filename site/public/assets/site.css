@@ -1,8 +1,8 @@
 /*
  * site.css — the only CSS this site owns. estate-theme.css owns the palette
- * and status-shell.css owns the shell; this file adds the two things the
- * shell has no vocabulary for (the action-log table and the mode chips) and
- * nothing else. Tokens only — no raw colours, no second accent.
+ * and status-shell.css owns the shell; this file adds what the shell has no
+ * vocabulary for: the tables, the tab rail, the forms and the dialog.
+ * Tokens only — no raw colours, no second accent.
  */
 
 /* status-shell.css styles .btn for <button>; the sign-in control has to be a
@@ -88,5 +88,242 @@ a.btn { text-decoration: none; }
   border-radius: var(--et-radius-lg);
   color: var(--et-muted);
   font-size: var(--et-text-small);
+  text-wrap: pretty;
+}
+
+main.dash-main {
+  max-width: 78rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--et-space-3);
+  align-items: start;
+}
+.dash-body { min-width: 0; }
+
+.tabnav {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: .35rem;
+  margin: 0;
+  padding: .3rem;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-radius: var(--et-radius-lg);
+  background: var(--et-surface);
+}
+.tabnav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: .25em .85em;
+  border: 1px solid transparent;
+  border-radius: var(--et-radius-pill);
+  color: var(--et-muted);
+  font-size: var(--et-text-small);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.tabnav a:hover { color: var(--et-fg); }
+.tabnav a:focus-visible { outline: 2px solid var(--et-accent); outline-offset: 2px; }
+.tabnav a[aria-current="page"] {
+  background: var(--et-bg, var(--et-surface));
+  border-color: var(--et-hairline);
+  color: var(--et-fg);
+}
+
+@media (min-width: 60rem) {
+  main.dash-main { grid-template-columns: 12.5rem minmax(0, 1fr); }
+  .tabnav {
+    position: sticky;
+    top: var(--et-space-3);
+    flex-direction: column;
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+  .tabnav a { width: 100%; }
+}
+
+.card {
+  padding: .9rem 1rem;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-radius: var(--et-radius-lg);
+  background: var(--et-surface);
+}
+.card h3 { margin: 0 0 .5rem; font-size: var(--et-text-body); }
+.section-body { display: grid; gap: .7rem; }
+
+.chipgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: .55rem;
+}
+.chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  padding: .6rem .8rem;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-radius: var(--et-radius-lg);
+  background: var(--et-surface);
+  color: var(--et-fg);
+  font-size: var(--et-text-small);
+  font-weight: 600;
+  text-decoration: none;
+}
+.chip:hover { border-color: var(--et-accent); }
+.chip:focus-visible { outline: 2px solid var(--et-accent); outline-offset: 2px; }
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: .55rem;
+}
+.tile {
+  padding: .6rem .8rem;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-radius: var(--et-radius-lg);
+  background: var(--et-surface);
+}
+.tile-value { font-family: var(--et-font-mono); font-size: var(--et-text-title); font-weight: 700; }
+.tile-label { color: var(--et-muted); font-size: var(--et-text-micro); }
+
+.name { font-weight: 600; }
+.name[data-unresolved="true"] {
+  font-family: var(--et-font-mono);
+  font-weight: 400;
+  color: var(--et-muted);
+  text-decoration: underline dotted;
+  text-underline-offset: .2em;
+}
+.muted { color: var(--et-muted); }
+.mono { font-family: var(--et-font-mono); }
+
+.field { display: grid; gap: .3rem; margin: 0 0 .6rem; }
+.field-label {
+  color: var(--et-muted);
+  font-size: var(--et-text-micro);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  font-weight: 700;
+}
+.field-help { margin: 0; color: var(--et-muted); font-size: var(--et-text-micro); text-wrap: pretty; }
+.field-current { margin: .3rem 0 0; font-family: var(--et-font-mono); font-size: var(--et-text-micro); }
+
+.input {
+  width: 100%;
+  max-width: 34rem;
+  min-height: 40px;
+  padding: .45em .7em;
+  border: var(--et-border-w) solid var(--et-field-border, var(--et-hairline));
+  border-radius: var(--et-radius);
+  background: var(--et-field-bg, var(--et-surface));
+  color: var(--et-fg);
+  font: var(--et-text-body)/1.4 var(--et-font);
+}
+.input:focus-visible { outline: 2px solid var(--et-accent); outline-offset: 1px; }
+.input.area { min-height: 8rem; resize: vertical; }
+.input.mono { font-family: var(--et-font-mono); font-size: var(--et-text-small); }
+.input.switch { width: 2.6rem; min-height: 1.4rem; max-width: 2.6rem; accent-color: var(--et-accent); }
+.input.color { max-width: 6rem; padding: .2em; }
+select.input[multiple] { padding: .3em; }
+
+.formrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .8rem;
+  align-items: flex-end;
+}
+.formrow .field { flex: 1 1 12rem; margin: 0; }
+
+.settings-grid { display: grid; gap: .7rem; }
+.setting {
+  padding: .8rem .9rem;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-radius: var(--et-radius-lg);
+  background: var(--et-surface);
+}
+.setting-head { display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap; }
+.setting-key { font-family: var(--et-font-mono); font-weight: 700; }
+.setting-type {
+  color: var(--et-muted);
+  font-size: var(--et-text-micro);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.setting .bar { margin: .5rem 0 0; }
+
+.notice {
+  margin: .45rem 0 0;
+  font-size: var(--et-text-small);
+  text-wrap: pretty;
+  color: var(--et-muted);
+}
+.notice[data-tone="ok"] { color: var(--et-ok); }
+.notice[data-tone="warn"] { color: var(--et-warn); }
+.notice[data-tone="danger"] { color: var(--et-danger); }
+
+.pager { display: flex; align-items: center; gap: .7rem; margin-top: .6rem; }
+.pager-at { color: var(--et-muted); font-size: var(--et-text-micro); font-family: var(--et-font-mono); }
+
+.picker { position: relative; }
+.picker-results {
+  list-style: none;
+  margin: .2rem 0 0;
+  padding: .3rem;
+  display: grid;
+  gap: .2rem;
+  max-height: 14rem;
+  overflow-y: auto;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-radius: var(--et-radius-lg);
+  background: var(--et-surface);
+}
+.picker-picked { margin: .35rem 0 0; font-family: var(--et-font-mono); font-size: var(--et-text-micro); }
+
+dialog.ask {
+  width: min(32rem, calc(100vw - 2rem));
+  padding: 0;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-radius: var(--et-radius-lg);
+  background: var(--et-surface);
+  color: var(--et-fg);
+}
+dialog.ask::backdrop { background: var(--et-transit-bg, rgb(0 0 0 / .55)); }
+.ask-inner { padding: 1rem 1.1rem 1.1rem; }
+.ask-inner h2 { margin: 0 0 .5rem; }
+.ask-body { margin: 0 0 .6rem; text-wrap: pretty; }
+
+.msglist { display: grid; gap: .5rem; list-style: none; margin: 0; padding: 0; }
+.msg {
+  padding: .6rem .8rem;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-left-width: 3px;
+  border-radius: var(--et-radius);
+  background: var(--et-surface);
+}
+.msg[data-direction="out"] { border-left-color: var(--et-accent); }
+.msg[data-direction="note"] { border-left-color: var(--et-warn); background: var(--et-warn-bg); }
+.msg-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  align-items: baseline;
+  font-size: var(--et-text-micro);
+  color: var(--et-muted);
+}
+.msg-body { margin: .25rem 0 0; white-space: pre-wrap; text-wrap: pretty; }
+
+.badge[data-tone="ok"] { border-color: var(--et-ok); color: var(--et-ok); }
+.badge[data-tone="warn"] { border-color: var(--et-warn); color: var(--et-warn); }
+.badge[data-tone="danger"] { border-color: var(--et-danger); color: var(--et-danger); }
+
+.preview {
+  margin: .4rem 0 0;
+  padding: .6rem .8rem;
+  border: var(--et-border-w) dashed var(--et-hairline);
+  border-radius: var(--et-radius);
+  white-space: pre-wrap;
   text-wrap: pretty;
 }
