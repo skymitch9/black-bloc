@@ -421,6 +421,18 @@ def test_seed_data_is_well_formed():
         assert len({role_id for _, _, role_id in options}) == len(options)
 
 
+def test_every_sentence_about_the_seed_counts_the_menus_correctly():
+    import inspect
+
+    from black_bloc.cogs.community import role_menus
+
+    source = inspect.getsource(role_menus)
+    assert "five" not in source
+    assert source.count("six") >= 3
+    describe = RoleMenus.create.parameters[3]
+    assert "staff" in describe.description
+
+
 def test_the_marathons_option_carries_carls_own_emoji():
     options = dict(
         (label, emoji) for _, _, _, opts in SEED for emoji, label, _ in opts if label == "Marathons"

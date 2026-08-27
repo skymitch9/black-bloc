@@ -278,7 +278,7 @@ async def set_message(db: Any, menu_id: int, channel_id: int, message_id: int) -
 
 
 async def seed_from_carl(db: Any, guild_id: int) -> tuple[list[str], list[str]]:
-    """Create the five incumbent menus; names that already exist are left alone."""
+    """Create the six incumbent menus; names that already exist are left alone."""
     created: list[str] = []
     skipped: list[str] = []
     for name, title, mode, options in SEED:
@@ -468,7 +468,7 @@ class RoleMenus(commands.Cog):
         name="Short name you will use in the other commands",
         title="Heading shown on the panel",
         description="Optional line under the heading",
-        mode="multiple lets people pick several roles; single allows one",
+        mode="multiple lets people pick several; single allows one; staff hands them out",
     )
     @app_commands.choices(mode=[app_commands.Choice(name=m, value=m) for m in MODES])
     async def create(
@@ -566,7 +566,7 @@ class RoleMenus(commands.Cog):
         if not menus:
             await interaction.response.send_message(
                 "This server has no role menus yet. Make one with `/rolemenu create`, or "
-                "bring over the five old ones with `/rolemenu seed-from-carl`.",
+                "bring over the six old ones with `/rolemenu seed-from-carl`.",
                 ephemeral=True,
             )
             return
@@ -721,7 +721,7 @@ class RoleMenus(commands.Cog):
         )
 
     @rolemenu.command(
-        name="seed-from-carl", description="Create the five menus Carl-bot used to run"
+        name="seed-from-carl", description="Create the six menus Carl-bot used to run"
     )
     async def seed(self, interaction: discord.Interaction) -> None:
         if not await require_staff(interaction):

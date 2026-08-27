@@ -7,7 +7,9 @@ import pytest
 from black_bloc.cogs.community.tempvoice import (
     CREATOR_NAME,
     RECONCILE_GRACE_SECONDS,
+    RECONCILE_MINUTES,
     MemberPick,
+    RenameModal,
     TempVoice,
     TempVoicePanel,
     add_channel,
@@ -72,8 +74,9 @@ def refused():
 
 
 class FakePerms:
-    def __init__(self, manage_guild=False):
+    def __init__(self, manage_guild=False, view_channel=False):
         self.manage_guild = manage_guild
+        self.view_channel = view_channel
 
 
 class FakeText:
@@ -82,7 +85,11 @@ class FakeText:
         self.category = category
         self.category_id = category.id if category else None
         self.overwrites = {}
+        self.visible_to = set()
         self.messages = []
+
+    def permissions_for(self, role):
+        return FakePerms(view_channel=role.id in self.visible_to)
 
     async def send(self, content=None, **kwargs):
         message = FakeMessage(len(self.messages) + 1, content or "", **kwargs)
@@ -122,6 +129,10 @@ class FakeVoice:
         self.messages.append(message)
         return message
 
+    @property
+    def voice_states(self):
+        return {m.id: None for m in self.members}
+
     def overwrites_for(self, target):
         return self.overwrites.setdefault(target, discord.PermissionOverwrite())
 
@@ -135,6 +146,7 @@ class FakeGuild:
         self.channels = {}
         self.members = {}
         self.default_role = FakeRole(GUILD)
+        self.roles = []
         self.afk_channel = None
         self.created = []
         self._next_id = 1000
@@ -150,6 +162,7 @@ class FakeGuild:
         return [c for c in self.channels.values() if isinstance(c, FakeVoice)]
 
     def add(self, channel):
+        channel.guild = self
         self.channels[channel.id] = channel
         return channel
 
@@ -222,6 +235,9 @@ class FakeBot:
     def add_view(self, view, **kwargs):
         self.views.append(view)
 
+    async def wait_until_ready(self):
+        return None
+
 
 class FakeState:
     def __init__(self):
@@ -232,14 +248,21 @@ class FakeResponse:
     def __init__(self):
         self.messages = []
         self.modals = []
+        self.done = False
+
+    def is_done(self):
+        return self.done
 
     async def send_message(self, content=None, ephemeral=False, **kwargs):
+        self.done = True
         self.messages.append({"content": content, "ephemeral": ephemeral, **kwargs})
 
     async def send_modal(self, modal):
+        self.done = True
         self.modals.append(modal)
 
     async def defer(self, ephemeral=False):
+        self.done = True
         self.messages.append({"content": None, "deferred": True})
 
 
@@ -264,7 +287,8 @@ class FakeInteraction:
 
     @property
     def sent(self):
-        return self.response.messages[-1]["content"] if self.response.messages else None
+        said = [m["content"] for m in self.response.messages if m["content"] is not None]
+        return said[-1] if said else None
 
 
 async def action_kinds(db):
@@ -757,7 +781,7 @@ async def test_banning_someone_denies_connect_and_moves_them_out(cog, bot, creat
 
     await MemberPick("ban", "who")._ban(interaction, made, stranger, await get_row(db, made.id))
 
-    assert made.permissions[-1][2] == {"connect": False}
+    assert made.permissions[-1][2] == {"connect": False, "view_channel": False}
     assert stranger.moves == [None]
     assert "tempvoice.ban" in await action_kinds(db)
 
@@ -790,3 +814,176 @@ async def test_claiming_an_abandoned_channel_hands_it_over(cog, bot, creator, me
     assert (await get_row(db, made.id))["owner_id"] == stranger.id
     assert made.permissions[-1][0] is stranger
     assert "tempvoice.claim" in await action_kinds(db)
+
+
+async def test_the_panel_logs_the_action_before_it_answers(cog, bot, creator, member, db):
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+    interaction = FakeInteraction(bot, member, channel=made)
+    when_answered = []
+
+    async def watching_followup(content=None, ephemeral=False, **kwargs):
+        when_answered.append(await action_kinds(db))
+
+    interaction.followup.send = watching_followup
+
+    await TempVoicePanel()._toggle(interaction, await get_row(db, made.id), "connect")
+
+    assert when_answered and "tempvoice.lock" in when_answered[0]
+
+
+async def test_the_rename_defers_before_it_edits_the_channel(cog, bot, creator, member, db):
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+    modal = RenameModal()
+    modal.name._value = "The Pit"
+    interaction = FakeInteraction(bot, member, channel=made)
+
+    await modal.on_submit(interaction)
+
+    assert interaction.response.messages[0].get("deferred") is True
+    assert made.edits == [{"name": "The Pit", "reason": "Black Bloc temp voice"}]
+    assert "tempvoice.rename" in await action_kinds(db)
+
+
+async def test_two_people_claiming_at_once_leaves_one_of_them_told_they_lost(
+    cog, bot, creator, member, db
+):
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+    made.members.clear()
+    first = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
+    second = FakeMember(bot.guild, user_id=USER + 2, display_name="Cass")
+    made.members += [first, second]
+    one = FakeInteraction(bot, first, channel=made)
+    two = FakeInteraction(bot, second, channel=made)
+
+    await asyncio.gather(
+        TempVoicePanel().claim.callback(one), TempVoicePanel().claim.callback(two)
+    )
+
+    said = [one.sent, two.sent]
+    assert "This channel is yours now." in said
+    assert any("Someone else just claimed" in text for text in said)
+    assert (await action_kinds(db)).count("tempvoice.claim") == 1
+
+
+async def test_claiming_needs_the_clicker_to_be_in_the_channel(cog, bot, creator, member, db):
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+    made.members.clear()
+    stranger = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
+    interaction = FakeInteraction(bot, stranger, channel=made)
+
+    await TempVoicePanel().claim.callback(interaction)
+
+    assert (await get_row(db, made.id))["owner_id"] == member.id
+    assert "connected to this channel" in interaction.sent
+
+
+async def test_transferring_a_channel_someone_else_already_took_says_so(
+    cog, bot, creator, member, db
+):
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+    row = await get_row(db, made.id)
+    stranger = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
+    await set_owner(db, made.id, stranger.id)
+    interaction = FakeInteraction(bot, member, channel=made)
+
+    await MemberPick("transfer", "who")._transfer(interaction, made, stranger, row)
+
+    assert "Someone else just claimed" in interaction.sent
+    assert "tempvoice.transfer" not in await action_kinds(db)
+
+
+async def test_a_banned_member_loses_sight_of_the_channel_too(cog, bot, creator, member, db):
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+    stranger = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
+    interaction = FakeInteraction(bot, member, channel=made)
+
+    await MemberPick("ban", "who")._ban(interaction, made, stranger, await get_row(db, made.id))
+
+    assert made.permissions[-1][2]["view_channel"] is False
+
+
+async def test_emptiness_is_read_off_the_voice_states(cog, bot, creator, member, db):
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+    made.members.clear()
+    made.members.append(member)
+
+    await cog._maybe_delete(bot.guild, made)
+    assert made.deleted is False
+
+    made.members.clear()
+    await cog._maybe_delete(bot.guild, made)
+    assert made.deleted is True
+
+
+async def test_the_reconcile_loop_runs_every_five_minutes_and_stops_with_the_cog(cog, bot):
+    assert cog._reconcile_loop.minutes == RECONCILE_MINUTES
+
+    await cog.cog_load()
+    assert cog._reconcile_loop.is_running()
+
+    await cog.cog_unload()
+    await asyncio.sleep(0)
+    assert cog._reconcile_loop.is_running() is False
+
+
+async def test_setup_refuses_a_second_lobby_and_says_how_to_forget_the_first(cog, bot, lead,
+                                                                            creator):
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.setup_channel.callback(cog, interaction, None)
+
+    assert bot.guild.created == []
+    assert "/tempvoice forget" in interaction.sent
+    assert bot.store.get(GUILD, "tempvoice_creator_ids") == [CREATOR]
+
+
+async def test_forget_drops_a_creator_id_and_refuses_anything_else(cog, bot, lead, db):
+    interaction = FakeInteraction(bot, lead)
+    await cog.forget.callback(cog, interaction, str(CREATOR))
+    assert bot.store.get(GUILD, "tempvoice_creator_ids") == []
+    assert "tempvoice.creator_removed" in await action_kinds(db)
+
+    again = FakeInteraction(bot, lead)
+    await cog.forget.callback(cog, again, str(CREATOR))
+    assert "not one of" in again.sent
+
+    nonsense = FakeInteraction(bot, lead)
+    await cog.forget.callback(cog, nonsense, "the lobby")
+    assert "not a channel id" in nonsense.sent
+
+
+async def test_forget_is_staff_only(cog, bot, member):
+    interaction = FakeInteraction(bot, member)
+
+    await cog.forget.callback(cog, interaction, str(CREATOR))
+
+    assert bot.store.get(GUILD, "tempvoice_creator_ids") == [CREATOR]
+    assert "staff only" in interaction.sent
+
+
+async def test_deleting_the_lobby_makes_black_bloc_forget_it(cog, bot, creator, member, db):
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+
+    await cog.on_guild_channel_delete(creator)
+    await cog.on_guild_channel_delete(made)
+
+    assert bot.store.get(GUILD, "tempvoice_creator_ids") == []
+    assert await get_row(db, made.id) is None
+    assert "tempvoice.creator_removed" in await action_kinds(db)
+
+
+async def test_the_setup_reply_never_pings(cog, bot, lead):
+    await bot.store.set(GUILD, "tempvoice_creator_ids", [])
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.setup_channel.callback(cog, interaction, None)
+
+    assert interaction.response.messages[-1]["allowed_mentions"].everyone is False

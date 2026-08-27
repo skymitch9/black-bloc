@@ -7,7 +7,7 @@ from typing import Any
 
 import discord
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 from ...actionlog import log_action
 from ...golive import now_iso, parse_ts
@@ -24,7 +24,9 @@ CREATOR_NAME = "join to create a channel"
 AFK_FALLBACK_NAME = "You Still Here?"
 PANEL_PREFIX = "tempvoice"
 RECONCILE_GRACE_SECONDS = 60
+RECONCILE_MINUTES = 5
 NAME_LIMIT = 100
+LOCKS_ATTR = "_tempvoice_channel_locks"
 
 NOT_A_TEMP_CHANNEL = (
     "This panel is not attached to a temporary voice channel any more, so nothing was changed. "
@@ -53,6 +55,31 @@ NO_TEST_CHANNEL = (
 CANNOT_CREATE = (
     "Discord refused to create the channel, so nothing was made. Black Bloc needs the Manage "
     "Channels permission in this server. Ask an admin to give it that, then run this again."
+)
+CLAIM_LOST = (
+    "Someone else just claimed this channel, so nothing was changed. Ask them to hand it over "
+    "with the Transfer button, or make your own by joining the join-to-create channel."
+)
+CLAIM_NEEDS_CONNECTION = (
+    "You have to be connected to this channel before you can claim it, so nothing was changed. "
+    "Join the voice channel, then press Claim again."
+)
+ALREADY_A_LOBBY = (
+    "This server already has a join-to-create channel — {where} — so a second one was not made. "
+    "Delete that channel, or run `/tempvoice forget {channel_id}` if it is already gone, then "
+    "run this again."
+)
+NOT_A_LOBBY = (
+    "**{channel_id}** is not one of Black Bloc's join-to-create channels, so nothing was "
+    "forgotten. `/tempvoice status` lists the ones it knows about."
+)
+NOT_AN_ID = (
+    "**{given}** is not a channel id, so nothing was forgotten. Right-click the channel and "
+    "choose Copy Channel ID, or read the id out of `/tempvoice status`."
+)
+FORGOTTEN = (
+    "Black Bloc has forgotten **{channel_id}** — joining it no longer makes anybody a temporary "
+    "channel."
 )
 
 
@@ -113,6 +140,22 @@ def is_stale(created_at: Any, now: datetime, grace_seconds: int) -> bool:
 
 def panel_id(action: str) -> str:
     return f"{PANEL_PREFIX}:{action}"
+
+
+def channel_lock(bot: Any, channel_id: int) -> asyncio.Lock:
+    locks = getattr(bot, LOCKS_ATTR, None)
+    if locks is None:
+        locks = {}
+        setattr(bot, LOCKS_ATTR, locks)
+    lock = locks.get(channel_id)
+    if lock is None:
+        lock = locks[channel_id] = asyncio.Lock()
+    return lock
+
+
+def connected_ids(channel: Any) -> set[int]:
+    """Who Discord says is in the voice channel right now."""
+    return {int(user_id) for user_id in getattr(channel, "voice_states", {})}
 
 
 def owner_overwrites(guild: Any, member: Any, *, locked: bool = False, hidden: bool = False) -> Any:
@@ -268,6 +311,11 @@ async def panel_log(interaction: discord.Interaction, kind: str, **details: Any)
 
 
 async def answer(interaction: discord.Interaction, text: str) -> None:
+    if interaction.response.is_done():
+        await interaction.followup.send(
+            text, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+        )
+        return
     await interaction.response.send_message(
         text, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
     )
@@ -280,6 +328,7 @@ class RenameModal(discord.ui.Modal, title="Rename this channel"):
         row = await panel_context(interaction)
         if row is None:
             return
+        await interaction.response.defer(ephemeral=True)
         wanted = str(self.name).strip()[:NAME_LIMIT]
         if not wanted:
             await answer(interaction, "A channel needs a name, so nothing was changed.")
@@ -291,8 +340,8 @@ class RenameModal(discord.ui.Modal, title="Rename this channel"):
             await answer(interaction, CANNOT_EDIT)
             return
         await save_prefs(interaction.client.db, row["owner_id"], name=wanted)
-        await answer(interaction, f"Renamed to **{wanted}**, and remembered for next time.")
         await panel_log(interaction, "rename", name=wanted)
+        await answer(interaction, f"Renamed to **{wanted}**, and remembered for next time.")
 
 
 class LimitModal(discord.ui.Modal, title="How many people?"):
@@ -302,6 +351,7 @@ class LimitModal(discord.ui.Modal, title="How many people?"):
         row = await panel_context(interaction)
         if row is None:
             return
+        await interaction.response.defer(ephemeral=True)
         value = parse_limit(str(self.limit))
         if value is None:
             await answer(
@@ -317,11 +367,11 @@ class LimitModal(discord.ui.Modal, title="How many people?"):
             await answer(interaction, CANNOT_EDIT)
             return
         await save_prefs(interaction.client.db, row["owner_id"], user_limit=value)
+        await panel_log(interaction, "limit", user_limit=value)
         await answer(
             interaction,
             "Anyone can join now." if value == 0 else f"Capped at **{value}** people.",
         )
-        await panel_log(interaction, "limit", user_limit=value)
 
 
 class MemberPick(discord.ui.UserSelect):
@@ -333,38 +383,42 @@ class MemberPick(discord.ui.UserSelect):
         row = await panel_context(interaction)
         if row is None:
             return
+        await interaction.response.defer(ephemeral=True)
         target = self.values[0]
         channel = interaction.channel
         handler = getattr(self, f"_{self.action}")
         await handler(interaction, channel, target, row)
 
     async def _kick(self, interaction: Any, channel: Any, target: Any, row: Any) -> None:
-        if not any(m.id == target.id for m in getattr(channel, "members", ())):
+        if target.id not in connected_ids(channel):
             await answer(interaction, NOT_IN_CHANNEL.format(name=target.display_name))
             return
         if not await self._move_out(interaction, target):
             return
-        await answer(interaction, f"Moved **{target.display_name}** out of the channel.")
         await panel_log(interaction, "kick", target_id=target.id)
+        await answer(interaction, f"Moved **{target.display_name}** out of the channel.")
 
     async def _ban(self, interaction: Any, channel: Any, target: Any, row: Any) -> None:
         try:
             await channel.set_permissions(
-                target, connect=False, reason="Black Bloc temp voice: banned"
+                target,
+                connect=False,
+                view_channel=False,
+                reason="Black Bloc temp voice: banned",
             )
         except discord.HTTPException as exc:
             log.warning("temp voice: ban refused in %s: %s", channel.id, exc)
-            await answer(interaction, CANNOT_EDIT)
             await panel_log(interaction, "ban_failed", target_id=target.id, reason=str(exc))
+            await answer(interaction, CANNOT_EDIT)
             return
-        if any(m.id == target.id for m in getattr(channel, "members", ())):
+        if target.id in connected_ids(channel):
             await self._move_out(interaction, target, answered=False)
+        await panel_log(interaction, "ban", target_id=target.id)
         await answer(
             interaction,
             f"**{target.display_name}** can no longer join this channel. The Permit button "
             "undoes it.",
         )
-        await panel_log(interaction, "ban", target_id=target.id)
 
     async def _permit(self, interaction: Any, channel: Any, target: Any, row: Any) -> None:
         try:
@@ -373,16 +427,26 @@ class MemberPick(discord.ui.UserSelect):
             )
         except discord.HTTPException as exc:
             log.warning("temp voice: permit refused in %s: %s", channel.id, exc)
-            await answer(interaction, CANNOT_EDIT)
             await panel_log(interaction, "permit_failed", target_id=target.id, reason=str(exc))
+            await answer(interaction, CANNOT_EDIT)
             return
-        await answer(interaction, f"**{target.display_name}** can join this channel now.")
         await panel_log(interaction, "permit", target_id=target.id)
+        await answer(interaction, f"**{target.display_name}** can join this channel now.")
 
     async def _transfer(self, interaction: Any, channel: Any, target: Any, row: Any) -> None:
-        await hand_over(interaction.client, channel, row["owner_id"], target)
+        async with channel_lock(interaction.client, channel.id):
+            fresh = await get_row(interaction.client.db, channel.id)
+            if fresh is None:
+                await answer(interaction, NOT_A_TEMP_CHANNEL)
+                return
+            if int(fresh["owner_id"]) != int(row["owner_id"]):
+                await answer(interaction, CLAIM_LOST)
+                return
+            await hand_over(interaction.client, channel, fresh["owner_id"], target)
+            await panel_log(
+                interaction, "transfer", target_id=target.id, from_id=fresh["owner_id"]
+            )
         await answer(interaction, f"**{target.display_name}** owns this channel now.")
-        await panel_log(interaction, "transfer", target_id=target.id, from_id=row["owner_id"])
 
     async def _move_out(self, interaction: Any, target: Any, *, answered: bool = True) -> bool:
         try:
@@ -468,16 +532,30 @@ class TempVoicePanel(discord.ui.View):
         row = await panel_context(interaction, owner_only=False)
         if row is None:
             return
-        owner_id = row["owner_id"]
-        if is_panel_owner(owner_id, interaction.user.id):
-            await answer(interaction, "You already own this channel, so nothing changed.")
-            return
-        if any(m.id == owner_id for m in getattr(interaction.channel, "members", ())):
-            await answer(interaction, OWNER_STILL_HERE.format(owner_id=owner_id))
-            return
-        await hand_over(interaction.client, interaction.channel, owner_id, interaction.user)
+        await interaction.response.defer(ephemeral=True)
+        channel = interaction.channel
+        async with channel_lock(interaction.client, channel.id):
+            fresh = await get_row(interaction.client.db, channel.id)
+            if fresh is None:
+                await answer(interaction, NOT_A_TEMP_CHANNEL)
+                return
+            owner_id = fresh["owner_id"]
+            if is_panel_owner(owner_id, interaction.user.id):
+                await answer(interaction, "You already own this channel, so nothing changed.")
+                return
+            if int(owner_id) != int(row["owner_id"]):
+                await answer(interaction, CLAIM_LOST)
+                return
+            here = connected_ids(channel)
+            if interaction.user.id not in here:
+                await answer(interaction, CLAIM_NEEDS_CONNECTION)
+                return
+            if owner_id in here:
+                await answer(interaction, OWNER_STILL_HERE.format(owner_id=owner_id))
+                return
+            await hand_over(interaction.client, channel, owner_id, interaction.user)
+            await panel_log(interaction, "claim", from_id=owner_id)
         await answer(interaction, "This channel is yours now.")
-        await panel_log(interaction, "claim", from_id=owner_id)
 
     async def _pick(self, interaction: discord.Interaction, action: str, placeholder: str) -> None:
         if await panel_context(interaction) is None:
@@ -487,6 +565,8 @@ class TempVoicePanel(discord.ui.View):
         )
 
     async def _toggle(self, interaction: discord.Interaction, row: Any, permission: str) -> None:
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True)
         channel = interaction.channel
         everyone = channel.guild.default_role
         overwrite = channel.overwrites_for(everyone)
@@ -513,15 +593,14 @@ class TempVoicePanel(discord.ui.View):
                 else "Hidden — only people already in it can see it."
             )
             kind = "show" if was_off else "hide"
-        await answer(interaction, said)
         await panel_log(interaction, kind)
+        await answer(interaction, said)
 
 
 class TempVoice(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self._creator_locks: dict[int, asyncio.Lock] = {}
-        self._channel_locks: dict[int, asyncio.Lock] = {}
 
     tempvoice = app_commands.Group(
         name="tempvoice", description="Temporary voice channels people make by joining one"
@@ -532,6 +611,19 @@ class TempVoice(commands.Cog):
         if not self.bot.db.is_connected:
             return
         await self.reconcile_channels()
+        self._reconcile_loop.start()
+
+    async def cog_unload(self) -> None:
+        self._reconcile_loop.cancel()
+
+    @tasks.loop(minutes=RECONCILE_MINUTES)
+    async def _reconcile_loop(self) -> None:
+        if self.bot.db.is_connected:
+            await self.reconcile_channels()
+
+    @_reconcile_loop.before_loop
+    async def _before_reconcile(self) -> None:
+        await self.bot.wait_until_ready()
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
@@ -548,7 +640,7 @@ class TempVoice(commands.Cog):
                     await delete_row(self.bot.db, row["channel_id"])
                     log.info("temp voice: forgot channel %s — it is gone", row["channel_id"])
                     continue
-                if getattr(channel, "members", ()):
+                if connected_ids(channel):
                     continue
                 if not is_stale(row["created_at"], now, RECONCILE_GRACE_SECONDS):
                     continue
@@ -570,12 +662,12 @@ class TempVoice(commands.Cog):
     async def _maybe_delete(self, guild: Any, channel: Any) -> None:
         if await get_row(self.bot.db, channel.id) is None:
             return
-        if getattr(channel, "members", ()):
+        if connected_ids(channel):
             return
         await self._delete_channel(guild, channel, "empty")
 
     async def _delete_channel(self, guild: Any, channel: Any, reason: str) -> None:
-        async with self._lock(self._channel_locks, channel.id):
+        async with channel_lock(self.bot, channel.id):
             row = await get_row(self.bot.db, channel.id)
             if row is None:
                 return
@@ -785,6 +877,18 @@ class TempVoice(commands.Cog):
         if not await self._database_ready(interaction):
             return
         guild = interaction.guild
+        live = [
+            cid
+            for cid in (self.bot.store.get(guild.id, "tempvoice_creator_ids") or [])
+            if guild.get_channel(cid) is not None
+        ]
+        if live:
+            await interaction.response.send_message(
+                ALREADY_A_LOBBY.format(where=f"<#{live[0]}>", channel_id=live[0]),
+                ephemeral=True,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+            return
         category, position, where = self._creator_spot(guild)
         if where == "no_test_channel":
             await interaction.response.send_message(NO_TEST_CHANNEL, ephemeral=True)
@@ -810,6 +914,7 @@ class TempVoice(commands.Cog):
         await interaction.followup.send(
             f"**{channel.name}** is ready — {channel.mention}. {self._where_sentence(where)}",
             ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
         )
         await log_action(
             self.bot,
@@ -818,6 +923,51 @@ class TempVoice(commands.Cog):
             actor=interaction.user,
             details={"channel_id": channel.id, "placed": where},
         )
+
+    @tempvoice.command(name="forget", description="Stop treating a channel id as join-to-create")
+    @app_commands.describe(channel_id="The id of the join-to-create channel to forget")
+    async def forget(self, interaction: discord.Interaction, channel_id: str) -> None:
+        if not await require_staff(interaction):
+            return
+        digits = channel_id.strip().lstrip("<#").rstrip(">")
+        if not digits.isdigit():
+            await interaction.response.send_message(
+                NOT_AN_ID.format(given=channel_id), ephemeral=True
+            )
+            return
+        removed = await self._forget(interaction.guild, int(digits), actor=interaction.user)
+        if not removed:
+            await interaction.response.send_message(
+                NOT_A_LOBBY.format(channel_id=digits), ephemeral=True
+            )
+            return
+        await interaction.response.send_message(
+            FORGOTTEN.format(channel_id=digits), ephemeral=True
+        )
+
+    async def _forget(self, guild: Any, channel_id: int, actor: Any = None) -> bool:
+        ids = list(self.bot.store.get(guild.id, "tempvoice_creator_ids") or [])
+        if channel_id not in ids:
+            return False
+        ids.remove(channel_id)
+        await self.bot.store.set(
+            guild.id, "tempvoice_creator_ids", ids, by=getattr(actor, "id", None)
+        )
+        await log_action(
+            self.bot,
+            guild,
+            "tempvoice.creator_removed",
+            actor=actor,
+            details={"channel_id": channel_id},
+        )
+        return True
+
+    @commands.Cog.listener()
+    async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel) -> None:
+        if not self.bot.db.is_connected:
+            return
+        await self._forget(channel.guild, channel.id)
+        await delete_row(self.bot.db, channel.id)
 
     @tempvoice.command(name="status", description="Show how temporary voice channels are set up")
     async def status(self, interaction: discord.Interaction) -> None:
