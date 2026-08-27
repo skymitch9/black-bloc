@@ -277,11 +277,17 @@ async def wanted_target(bot: Any, guild: Any, menu: Any, options: Any, channel_i
     return target
 
 
+async def can_move(bot: Any, guild: Any, menu: Any, options: Any, channel_id: Any) -> None:
+    """Asked BEFORE an edit is written, so a refused move does not leave a half-saved menu."""
+    if not menu["message_id"]:
+        raise Refused(400, "not_posted", NOT_POSTED_YET.format(name=menu["name"]))
+    await wanted_target(bot, guild, menu, options, channel_id)
+
+
 async def move_panel(bot: Any, guild: Any, name: str, channel_id: int, who: Any) -> Any:
     """The old panel comes down before the new one goes up, so a menu is never in two places."""
     menu, options = await read_menu(bot, guild, name)
-    if not menu["message_id"]:
-        raise Refused(400, "not_posted", NOT_POSTED_YET.format(name=name))
+    await can_move(bot, guild, menu, options, channel_id)
     target = await wanted_target(bot, guild, menu, options, channel_id)
     if not await panels.unpost(bot, menu, actor_for(bot, who, guild)):
         raise Refused(409, "panel_stuck", PANEL_NOT_MOVED.format(name=name))
@@ -395,9 +401,11 @@ def build_router(bot: Any) -> APIRouter:
         who = await writer(request)
         guild = require_guild(bot)
         require_db(bot)
-        menu, _ = await read_menu(bot, guild, name)
+        menu, held = await read_menu(bot, guild, name)
         given = payload.get("channel_id")
         moving = as_id(given) if given not in (None, "") else None
+        if moving is not None and moving != menu["channel_id"]:
+            await can_move(bot, guild, menu, held, moving)
         mode = checked_mode(payload.get("mode"))
         title = wanted_title(payload.get("title")) if payload.get("title") else None
         description = wanted_description(payload.get("description"))

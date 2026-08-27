@@ -641,6 +641,21 @@ async def test_moving_a_panel_outside_the_test_channel_is_refused_by_the_guard(
     assert guild.get_channel(wf.OTHER_CHANNEL_ID).messages == []
 
 
+async def test_a_refused_move_leaves_the_rest_of_the_edit_unsaved(client, sign_in, web, guild, wf):
+    """The refusal says nothing was changed, so nothing may be — not even the title."""
+    sign_in(client)
+    await a_posted_menu(client, web, wf, wf.TEST_CHANNEL_ID)
+    web.guard = wf.Guard()
+
+    response = client.put(
+        "/api/rolemenus/colours",
+        json={"title": "Half saved", "channel_id": str(wf.OTHER_CHANNEL_ID)},
+    )
+
+    assert response.status_code == 409
+    assert client.get("/api/rolemenus").json()[0]["title"] == "Pick a colour"
+
+
 async def test_moving_a_panel_to_a_channel_that_is_gone_is_refused_in_words(
     client, sign_in, web, guild, wf
 ):

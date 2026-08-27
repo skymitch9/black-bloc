@@ -293,8 +293,10 @@ function seedState() {
     { id: 1, menu_id: 3, user_id: MEMBERS[4].id, role_id: '900000000000000003', requested_at: minutesAgo(9000), status: 'denied', decided_by: MEMBERS[1].id, decided_at: minutesAgo(8900), deny_reason: 'Not until the trial run is over.' },
   ],
   grants: [
-    { id: 5, user_id: MEMBERS[1].id, role_id: '900000000000000003', source: 'approval', granted_by: STAFF.id, granted_at: minutesAgo(5900), expires_at: daysAhead(2), removed_at: null, removed_reason: null },
-    { id: 4, user_id: MEMBERS[2].id, role_id: '900000000000000001', source: 'staff', granted_by: STAFF.id, granted_at: minutesAgo(20000), expires_at: daysAhead(29), removed_at: null, removed_reason: null },
+    // The two open clocks sit on roles their member ACTUALLY holds in ROSTER, so the
+    // Members tab's chips have something to count down.
+    { id: 5, user_id: MEMBERS[1].id, role_id: '900000000000000001', source: 'approval', granted_by: STAFF.id, granted_at: minutesAgo(5900), expires_at: daysAhead(2), removed_at: null, removed_reason: null },
+    { id: 4, user_id: MEMBERS[2].id, role_id: '900000000000000003', source: 'staff', granted_by: STAFF.id, granted_at: minutesAgo(20000), expires_at: daysAhead(29), removed_at: null, removed_reason: null },
     { id: 3, user_id: MEMBERS[3].id, role_id: '900000000000000004', source: 'menu', granted_by: null, granted_at: minutesAgo(30000), expires_at: null, removed_at: null, removed_reason: null },
     { id: 2, user_id: MEMBERS[5].id, role_id: '900000000000000003', source: 'staff', granted_by: MEMBERS[1].id, granted_at: minutesAgo(40000), expires_at: daysAhead(-1), removed_at: minutesAgo(1200), removed_reason: 'expired' },
     { id: 1, user_id: MEMBERS[6].id, role_id: '900000000000000005', source: 'manual', granted_by: null, granted_at: minutesAgo(50000), expires_at: null, removed_at: minutesAgo(300), removed_reason: 'ended_by_staff' },
@@ -706,13 +708,30 @@ route('GET', '/api/ref/members', (context) => {
 const NEW_MS = 7 * 24 * 60 * 60 * 1000;
 const MEMBERS_PER_PAGE = 50;
 
+/** The clock an open timed grant puts on a chip, the way api/tools/members.py joins it on. */
+function expiryOf(userId, roleId) {
+  const found = state.grants
+    .filter((row) => String(row.user_id) === String(userId)
+      && String(row.role_id) === String(roleId)
+      && row.removed_at === null
+      && row.expires_at !== null)
+    .map((row) => row.expires_at)
+    .sort();
+  return found.length ? found[0] : null;
+}
+
 function rosterRoles(row) {
   return row.role_ids
     .map((id) => ROLES.find((role) => role.id === id))
     .filter(Boolean)
     .sort((a, b) => b.position - a.position)
     .slice(0, 5)
-    .map((role) => ({ id: role.id, name: role.name, color: role.color }));
+    .map((role) => ({
+      id: role.id,
+      name: role.name,
+      color: role.color,
+      expires_at: expiryOf(row.id, role.id),
+    }));
 }
 
 function isStaffRow(row) {
@@ -847,8 +866,7 @@ function wantedDays(given, where) {
   return number;
 }
 
-/** The real API takes the old panel down before the new one goes up. */
-function movePanel(menu, channelId) {
+function checkMove(menu, channelId) {
   if (!menu.message_id) throw new Refused(400, 'not_posted', NOT_POSTED_YET);
   if (menu.mode === 'staff') throw new Refused(400, 'staff_menu', `${menu.name} is a staff-assigned menu, so there is no panel to post.`);
   if (!menu.options.length) throw new Refused(400, 'no_options', `${menu.name} has no roles on it yet, so there is nothing to post.`);
@@ -857,6 +875,11 @@ function movePanel(menu, channelId) {
     throw new Refused(400, 'no_such_channel', `${channelId} is not a channel Black Bloc can see, so nothing was moved.`);
   }
   guard('moving a role menu panel');
+}
+
+/** The real API takes the old panel down before the new one goes up. */
+function movePanel(menu, channelId) {
+  checkMove(menu, channelId);
   menu.channel_id = channelId;
   menu.message_id = String(Date.now());
   logAction('web.rolemenu.post', { reason: menu.name, target_id: menu.channel_id, details: { menu: menu.name, channel_id: menu.channel_id, message_id: menu.message_id } });
@@ -968,6 +991,12 @@ route('PUT', '/api/rolemenus/:name', async (context) => {
   const menu = state.menus.find((entry) => entry.name === context.params.name);
   if (!menu) throw new Refused(404, 'no_menu', `There is no role menu called ${context.params.name}.`);
   const body = await context.body();
+  // Asked BEFORE the edit lands, the way the real router does it, so a refused move
+  // never leaves a half-saved menu behind.
+  const moving = body.channel_id === undefined || body.channel_id === null || body.channel_id === ''
+    ? null
+    : String(body.channel_id);
+  if (moving !== null && moving !== menu.channel_id) checkMove(menu, moving);
   if (body.title !== undefined) menu.title = body.title;
   if (body.description !== undefined) menu.description = body.description;
   if (body.mode !== undefined) menu.mode = body.mode;
@@ -976,9 +1005,6 @@ route('PUT', '/api/rolemenus/:name', async (context) => {
   if (body.retry_days !== undefined) menu.retry_days = wantedDays(body.retry_days, 'retry_days') ?? menu.retry_days;
   if (Array.isArray(body.options)) menu.options = body.options;
   logAction('web.rolemenu.edit', { reason: menu.name, details: { menu: menu.name } });
-  const moving = body.channel_id === undefined || body.channel_id === null || body.channel_id === ''
-    ? null
-    : String(body.channel_id);
   if (moving !== null && moving !== menu.channel_id) movePanel(menu, moving);
   return menuRow(menu);
 });
