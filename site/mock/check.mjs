@@ -26,6 +26,9 @@ const IDS = {
   hit_id: '7',
   test_channel_id: '800000000000000003',
   lobby_channel_id: '800000000000000009',
+  plain_role_id: '900000000000000005',
+  request_id: '4',
+  grant_id: '5',
 };
 
 const failures = [];
@@ -238,6 +241,8 @@ async function checkActionKinds() {
   await post('/api/tempvoice/setup');
   await post('/api/honeypot/setup');
   await post('/api/modmail/snippets', { name: 'contract', content: 'hello' });
+  await post(`/api/rolemenus/requests/${IDS.request_id}/deny`, { reason: 'contract check' });
+  await send('DELETE', `/api/roles/grants/${IDS.grant_id}`, undefined);
   const response = await fetch(`${BASE}/api/actions?limit=200`, { headers: { cookie: 'mock_as=staff' } });
   const payload = await response.json();
   const known = new Set(contract.action_kinds);

@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
+from ... import rolegrants as grants
 from ...cogs.community.birthdays import members_of
 from ...modcases import count_cases_for
 from ...settings_store import member_is_staff
@@ -35,7 +36,7 @@ def hex_colour(role: Any) -> str | None:
     return f"#{value:06x}"
 
 
-def top_roles(member: Any) -> list[dict[str, Any]]:
+def top_roles(member: Any, expiries: dict[tuple[int, int], str]) -> list[dict[str, Any]]:
     found = [
         role
         for role in getattr(member, "roles", ()) or ()
@@ -48,6 +49,7 @@ def top_roles(member: Any) -> list[dict[str, Any]]:
             "id": str(role.id),
             "name": str(getattr(role, "name", "") or ""),
             "color": hex_colour(role),
+            "expires_at": expiries.get((int(member.id), int(role.id))),
         }
         for role in found[:ROLES_SHOWN]
     ]
@@ -118,7 +120,9 @@ def sorted_members(members: list[Any], how: str) -> list[Any]:
     return dated + undated
 
 
-def member_row(member: Any, *, staff: bool, cases: int) -> dict[str, Any]:
+def member_row(
+    member: Any, *, staff: bool, cases: int, expiries: dict[tuple[int, int], str]
+) -> dict[str, Any]:
     name = str(getattr(member, "name", "") or "")
     return {
         "id": str(member.id),
@@ -126,7 +130,7 @@ def member_row(member: Any, *, staff: bool, cases: int) -> dict[str, Any]:
         "username": name or str(member.id),
         "bot": bool(getattr(member, "bot", False)),
         "joined_at": joined_iso(member),
-        "roles": top_roles(member),
+        "roles": top_roles(member, expiries),
         "staff": staff,
         "cases": cases,
         "avatar": avatar_url(member),
@@ -170,7 +174,9 @@ def build_router(bot: Any) -> APIRouter:
         at = wanted_page(page)
         size = wanted_per_page(per_page)
         shown = sorted_members(found, wanted_one(sort, SORTS))[(at - 1) * size : at * size]
-        cases = await count_cases_for(getattr(bot, "db", None), guild.id, [m.id for m in shown])
+        ids = [m.id for m in shown]
+        cases = await count_cases_for(getattr(bot, "db", None), guild.id, ids)
+        expiries = await grants.expiring_for(getattr(bot, "db", None), guild.id, ids)
 
         return {
             "total": int(getattr(guild, "member_count", 0) or len(everyone)),
@@ -182,7 +188,12 @@ def build_router(bot: Any) -> APIRouter:
             "per_page": size,
             "shown": len(shown),
             "members": [
-                member_row(m, staff=bool(is_staff.get(m.id)), cases=cases.get(m.id, 0))
+                member_row(
+                    m,
+                    staff=bool(is_staff.get(m.id)),
+                    cases=cases.get(m.id, 0),
+                    expiries=expiries,
+                )
                 for m in shown
             ],
         }

@@ -7,9 +7,11 @@ from pathlib import Path
 import pytest
 from discord.ext import tasks
 
+from black_bloc import rolegrants as grants
 from black_bloc.api.settings_api import grouped
 from black_bloc.cogs.community.birthdays import save_birthday
 from black_bloc.cogs.community.events import create_event
+from black_bloc.cogs.community.role_menus import add_option, create_menu, get_menu
 from black_bloc.cogs.community.tempvoice import add_channel
 from black_bloc.cogs.content.golive import set_link, set_optout, start_session
 from black_bloc.cogs.moderation.honeypot import record_hit
@@ -156,6 +158,23 @@ async def seeded(client, sign_in, web, guild, wf):
     )
     client.post("/api/modmail/snippets", json={"name": "contract", "content": "hello"})
     client.post("/api/modmail/blocks", json={"user_id": str(MEMBER_ID)})
+    await create_menu(
+        db, guild_id, "runner", "Runner", None, "multiple", approval=True, expires_days=7
+    )
+    runner = await get_menu(db, guild_id, "runner")
+    await add_option(db, runner["id"], wf.STAFF_ROLE_ID, "Runner", None)
+    request_id = await grants.create_request(
+        db, guild_id, runner["id"], MEMBER_ID, wf.STAFF_ROLE_ID
+    )
+    grant_id = await grants.add_grant(
+        db,
+        guild_id,
+        MEMBER_ID,
+        wf.PLAIN_ROLE_ID,
+        grants.STAFF,
+        granted_by=7,
+        until=grants.expires_at(7),
+    )
     return {
         "member_id": str(MEMBER_ID),
         "case_id": str(case_id),
@@ -164,6 +183,9 @@ async def seeded(client, sign_in, web, guild, wf):
         "hit_id": str(hit_id),
         "test_channel_id": str(wf.TEST_CHANNEL_ID),
         "lobby_channel_id": str(wf.VOICE_CHANNEL_ID),
+        "plain_role_id": str(wf.PLAIN_ROLE_ID),
+        "request_id": str(request_id),
+        "grant_id": str(grant_id),
     }
 
 
@@ -201,6 +223,10 @@ async def test_every_write_leaves_the_action_kind_the_audit_tab_filters_on(
     client.put("/api/settings/birthday_show_age", json={"value": True})
     client.post("/api/mod/warn", json={"user_id": seeded["member_id"], "reason": "contract"})
     client.post("/api/modmail/snippets", json={"name": "second", "content": "hi"})
+    client.post(
+        f"/api/rolemenus/requests/{seeded['request_id']}/deny", json={"reason": "contract"}
+    )
+    client.delete(f"/api/roles/grants/{seeded['grant_id']}")
 
     kinds = [kind for kind in await wf.kinds_in(web.db) if kind.startswith("web")]
 

@@ -525,3 +525,144 @@ def test_a_request_nobody_has_is_refused_with_a_sentence(client, sign_in):
 
     assert response.status_code == 409
     assert "no record of that request" in response.json()["message"]
+
+
+async def test_a_queue_row_names_its_menu_and_carries_the_asker_s_picture(
+    client, sign_in, web, wf
+):
+    """The page has only a menu id otherwise, and no menu row carries one."""
+    sign_in(client)
+    member = wf.member(web.guild, MEMBER, name="ada")
+    request_id = await a_request(client, web, wf, expires=7)
+
+    row = client.get("/api/rolemenus/requests").json()[0]
+
+    assert row["menu_name"] == "runner"
+    assert row["user_avatar"] == member.display_avatar.url
+    decided = client.post(f"/api/rolemenus/requests/{request_id}/approve", json={}).json()
+    assert decided["request"]["menu_name"] == "runner"
+
+
+async def test_a_request_from_somebody_who_has_left_still_names_its_menu(client, sign_in, web, wf):
+    sign_in(client)
+    await a_request(client, web, wf)
+
+    row = client.get("/api/rolemenus/requests").json()[0]
+
+    assert row["menu_name"] == "runner"
+    assert row["user_avatar"] is None
+
+
+async def a_posted_menu(client, web, wf, channel_id):
+    await menus_on(web, wf)
+    await a_menu(client, wf)
+    client.put(
+        "/api/rolemenus/colours",
+        json={"options": [{"role_id": str(wf.PLAIN_ROLE_ID), "label": "Member"}]},
+    )
+    client.post("/api/rolemenus/colours/post", json={"channel_id": str(channel_id)})
+
+
+async def test_saving_a_different_channel_moves_the_panel_rather_than_cloning_it(
+    client, sign_in, web, guild, wf
+):
+    sign_in(client)
+    await a_posted_menu(client, web, wf, wf.OTHER_CHANNEL_ID)
+
+    body = client.put(
+        "/api/rolemenus/colours", json={"channel_id": str(wf.TEST_CHANNEL_ID)}
+    ).json()
+
+    assert guild.get_channel(wf.OTHER_CHANNEL_ID).messages == [], "the old panel came down"
+    landed = guild.get_channel(wf.TEST_CHANNEL_ID).messages
+    assert len(landed) == 1, "one panel, in the new channel"
+    assert body["channel_id"] == str(wf.TEST_CHANNEL_ID)
+    assert body["message_id"] == str(landed[0].id)
+    menu = await get_menu(web.db, wf.GUILD_ID, "colours")
+    assert (menu["channel_id"], menu["message_id"]) == (wf.TEST_CHANNEL_ID, landed[0].id)
+    assert (await wf.kinds_in(web.db)).count("web.rolemenu.post") == 2
+
+
+async def test_saving_the_channel_it_is_already_in_posts_nothing_again(
+    client, sign_in, web, guild, wf
+):
+    sign_in(client)
+    await a_posted_menu(client, web, wf, wf.TEST_CHANNEL_ID)
+    was = guild.get_channel(wf.TEST_CHANNEL_ID).messages[0].id
+
+    client.put("/api/rolemenus/colours", json={"channel_id": str(wf.TEST_CHANNEL_ID)})
+
+    messages = guild.get_channel(wf.TEST_CHANNEL_ID).messages
+    assert [m.id for m in messages] == [was]
+
+
+async def test_an_edit_that_says_nothing_about_the_channel_leaves_the_panel_alone(
+    client, sign_in, web, guild, wf
+):
+    sign_in(client)
+    await a_posted_menu(client, web, wf, wf.TEST_CHANNEL_ID)
+    was = guild.get_channel(wf.TEST_CHANNEL_ID).messages[0].id
+
+    body = client.put("/api/rolemenus/colours", json={"title": "Colours again"}).json()
+
+    assert body["message_id"] == str(was)
+    assert [m.id for m in guild.get_channel(wf.TEST_CHANNEL_ID).messages] == [was]
+
+
+async def test_a_menu_with_no_panel_is_told_to_post_it_rather_than_moved(
+    client, sign_in, web, guild, wf
+):
+    sign_in(client)
+    await menus_on(web, wf)
+    await a_menu(client, wf)
+    client.put(
+        "/api/rolemenus/colours",
+        json={"options": [{"role_id": str(wf.PLAIN_ROLE_ID), "label": "Member"}]},
+    )
+
+    response = client.put("/api/rolemenus/colours", json={"channel_id": str(wf.TEST_CHANNEL_ID)})
+
+    assert response.status_code == 400 and response.json()["error"] == "not_posted"
+    assert "no panel to move" in response.json()["message"]
+    assert guild.get_channel(wf.TEST_CHANNEL_ID).messages == []
+
+
+async def test_moving_a_panel_outside_the_test_channel_is_refused_by_the_guard(
+    client, sign_in, web, guild, wf
+):
+    sign_in(client)
+    await a_posted_menu(client, web, wf, wf.TEST_CHANNEL_ID)
+    web.guard = wf.Guard()
+
+    response = client.put("/api/rolemenus/colours", json={"channel_id": str(wf.OTHER_CHANNEL_ID)})
+
+    assert response.status_code == 409 and response.json()["error"] == "test_mode"
+    assert len(guild.get_channel(wf.TEST_CHANNEL_ID).messages) == 1
+    assert guild.get_channel(wf.OTHER_CHANNEL_ID).messages == []
+
+
+async def test_a_refused_move_leaves_the_rest_of_the_edit_unsaved(client, sign_in, web, guild, wf):
+    """The refusal says nothing was changed, so nothing may be — not even the title."""
+    sign_in(client)
+    await a_posted_menu(client, web, wf, wf.TEST_CHANNEL_ID)
+    web.guard = wf.Guard()
+
+    response = client.put(
+        "/api/rolemenus/colours",
+        json={"title": "Half saved", "channel_id": str(wf.OTHER_CHANNEL_ID)},
+    )
+
+    assert response.status_code == 409
+    assert client.get("/api/rolemenus").json()[0]["title"] == "Pick a colour"
+
+
+async def test_moving_a_panel_to_a_channel_that_is_gone_is_refused_in_words(
+    client, sign_in, web, guild, wf
+):
+    sign_in(client)
+    await a_posted_menu(client, web, wf, wf.TEST_CHANNEL_ID)
+
+    response = client.put("/api/rolemenus/colours", json={"channel_id": "404"})
+
+    assert response.status_code == 400 and response.json()["error"] == "no_such_channel"
+    assert len(guild.get_channel(wf.TEST_CHANNEL_ID).messages) == 1

@@ -81,6 +81,39 @@ export function shortWhen(iso) {
   return { text, title: at.toLocaleString() };
 }
 
+/**
+ * Whole days between now and a stamp, as a number so the caller decides the
+ * wording. Null when there is no readable stamp — never a guessed zero.
+ */
+export function daysBetween(iso) {
+  if (!iso) return null;
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return null;
+  return Math.round((at.getTime() - Date.now()) / 86400000);
+}
+
+/** "in 2 days" / "today" / "3 days ago", with the full stamp as the title. */
+export function untilWhen(iso) {
+  const days = daysBetween(iso);
+  if (days === null) return { text: '—', title: '' };
+  const title = new Date(iso).toLocaleString();
+  if (days === 0) return { text: 'today', title, days };
+  if (days > 0) return { text: `in ${days} day${days === 1 ? '' : 's'}`, title, days };
+  const gone = Math.abs(days);
+  return { text: `${gone} day${gone === 1 ? '' : 's'} ago`, title, days };
+}
+
+/** How long ago, in the coarsest unit that still says something useful. */
+export function ago(iso) {
+  const at = new Date(iso);
+  if (!iso || Number.isNaN(at.getTime())) return { text: '—', title: '' };
+  const title = at.toLocaleString();
+  const seconds = Math.max(0, Math.round((Date.now() - at.getTime()) / 1000));
+  if (seconds < 60) return { text: 'just now', title };
+  const said = duration(seconds);
+  return { text: `${said} ago`, title };
+}
+
 export function duration(seconds) {
   if (seconds === null || seconds === undefined || seconds === '') return 'not known';
   const total = Number(seconds);
@@ -239,6 +272,24 @@ export function card(title, children, { actions = null, count = null, flush = fa
   ]);
 }
 
+/**
+ * A shut-by-default block inside a section, for the part of a list nobody
+ * needs open. It is deliberately NOT a nested `section()`: those are what the
+ * "On this page" rail is built from, and a fold inside one is not a place.
+ */
+export function foldout(title, children, { count = null, open = false } = {}) {
+  return el('details', { class: 'foldout', open: open || undefined }, [
+    el('summary', { class: 'foldout-head' }, [
+      icon('chevronDown', 14, 'sect-mark'),
+      el('span', { text: title }),
+      count === null || count === undefined
+        ? null
+        : el('span', { class: 'sect-count', text: String(count) }),
+    ]),
+    el('div', { class: 'foldout-body' }, children),
+  ]);
+}
+
 export function bar(children, { sticky = false } = {}) {
   return el('div', { class: sticky ? 'bar card-bar' : 'bar' }, children);
 }
@@ -269,6 +320,47 @@ export function notice(text = '', tone = null) {
   say(text, tone);
   node.say = say;
   return node;
+}
+
+/** The circle a member wears: their picture, or their initial when it will not load. */
+export function avatar(name, url = null) {
+  const letter = String(name || '?').trim().charAt(0).toUpperCase() || '?';
+  const initial = el('span', { class: 'avatar', 'aria-hidden': 'true', text: letter });
+  if (!url) return initial;
+  const holder = el('span', { class: 'avatar' });
+  holder.append(el('img', {
+    src: url,
+    alt: '',
+    loading: 'lazy',
+    width: '28',
+    height: '28',
+    on: { error: () => holder.replaceWith(initial) },
+  }));
+  return holder;
+}
+
+/** Discord hands a colour out as an int; 0 means "no colour" and must not be black. */
+export function hexColour(value) {
+  if (typeof value === 'string') return /^#[0-9a-fA-F]{6}$/.test(value) ? value : null;
+  if (!Number.isInteger(value) || value <= 0) return null;
+  return `#${value.toString(16).padStart(6, '0')}`;
+}
+
+/**
+ * A role as a chip. The colour travels as the `--role` custom property so
+ * site.css keeps its no-raw-colour promise, and `note` is the clock a timed
+ * grant puts beside the name.
+ */
+export function roleChip(name, { color = null, note = null, title = null } = {}) {
+  const tint = hexColour(color);
+  return el('span', {
+    class: 'role-chip',
+    style: tint ? `--role: ${tint}` : undefined,
+    title: title || String(name || ''),
+  }, [
+    el('span', { class: 'role-chip-name', text: String(name || '') }),
+    note ? el('span', { class: 'role-chip-note', text: `· ${note}` }) : null,
+  ]);
 }
 
 export function modeChip(mode) {
@@ -426,6 +518,11 @@ export function ask({ title, body, confirmLabel = 'Do it', tone = 'danger' }) {
   });
 }
 
+/**
+ * The control is tagged by name so the CSS can place it in the middle row of
+ * the field's grid. Placing it as "the child that is not a label or help"
+ * would silently mis-place anything a caller adds to a field later.
+ */
 export function field(label, control, help = null) {
   const id = control && control.id ? control.id : null;
   if (control && control.classList) control.classList.add('field-control');
@@ -564,7 +661,7 @@ function segOrder(choices) {
  * The mock's three-segment control: ON / SHADOW / OFF for a mode key, and the
  * same shape for any short enum or a yes/no. Wider enums stay a <select>.
  */
-function segment(choices, current, { onChange = null } = {}) {
+export function segment(choices, current, { onChange = null } = {}) {
   const node = el('div', { class: 'seg', role: 'group' });
   const buttons = choices.map((choice) => el('button', {
     type: 'button',

@@ -27,7 +27,7 @@ export const GROUPS = [
       { tab: 'events', label: 'Events', feature: 'events' },
       { tab: 'birthdays', label: 'Birthdays', feature: 'birthday' },
       { tab: 'tempvoice', label: 'Temp voice', feature: 'tempvoice' },
-      { tab: 'rolemenus', label: 'Role menus', feature: 'rolemenu' },
+      { tab: 'rolemenus', label: 'Role menus', feature: 'rolemenu', count: 'requests' },
     ],
   },
   {
@@ -40,6 +40,7 @@ const at = (id) => document.getElementById(id);
 
 let statusOnce = null;
 let membersOnce = null;
+let requestsOnce = null;
 
 export function shellStatus() {
   if (statusOnce === null) statusOnce = api('/api/status').catch(() => null);
@@ -51,9 +52,20 @@ export function memberTally() {
   return membersOnce;
 }
 
+/** Waiting role requests, for the badge beside Role menus. */
+export function requestTally() {
+  if (requestsOnce === null) {
+    requestsOnce = api('/api/rolemenus/requests?status=pending')
+      .then((found) => (Array.isArray(found) ? found.length : null))
+      .catch(() => null);
+  }
+  return requestsOnce;
+}
+
 export function forgetShellStatus() {
   statusOnce = null;
   membersOnce = null;
+  requestsOnce = null;
 }
 
 export function renderNav(current, hrefFor) {
@@ -181,25 +193,41 @@ export function mountShell() {
   wireSidebar();
 }
 
-function paintCounts(tally) {
-  const total = tally && typeof tally.total === 'number' ? tally.total : null;
-  for (const node of document.querySelectorAll('.nav-count[data-count="members"]')) {
-    if (total === null) {
+function paintCount(which, value, said) {
+  for (const node of document.querySelectorAll(`.nav-count[data-count="${which}"]`)) {
+    if (value === null) {
       node.hidden = true;
       continue;
     }
-    node.textContent = String(total);
-    node.setAttribute('title', `${total} member${total === 1 ? '' : 's'} in the server`);
+    node.textContent = String(value);
+    node.setAttribute('title', said(value));
+    node.setAttribute('data-tone', which === 'requests' && value > 0 ? 'warn' : 'quiet');
     node.hidden = false;
   }
 }
 
+function paintCounts(tally, waiting) {
+  paintCount(
+    'members',
+    tally && typeof tally.total === 'number' ? tally.total : null,
+    (total) => `${total} member${total === 1 ? '' : 's'} in the server`,
+  );
+  // A queue with nobody in it says nothing rather than a zero nobody has to act on.
+  paintCount(
+    'requests',
+    typeof waiting === 'number' && waiting > 0 ? waiting : null,
+    (found) => `${found} role request${found === 1 ? '' : 's'} waiting for staff`,
+  );
+}
+
 export async function paintShell(me) {
   paintUser(me);
-  const [status, tally] = await Promise.all([shellStatus(), memberTally()]);
+  const [status, tally, waiting] = await Promise.all([
+    shellStatus(), memberTally(), requestTally(),
+  ]);
   paintDots(status);
   paintHealth(status);
   paintGuild(status, me);
-  paintCounts(tally);
+  paintCounts(tally, waiting);
   return status;
 }

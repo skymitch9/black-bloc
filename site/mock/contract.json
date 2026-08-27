@@ -240,6 +240,9 @@
         "mode",
         "channel_id",
         "message_id",
+        "approval",
+        "expires_days",
+        "retry_days",
         "options"
       ],
       "rows": {
@@ -270,6 +273,9 @@
         "mode",
         "channel_id",
         "message_id",
+        "approval",
+        "expires_days",
+        "retry_days",
         "options"
       ]
     },
@@ -292,6 +298,9 @@
         "mode",
         "channel_id",
         "message_id",
+        "approval",
+        "expires_days",
+        "retry_days",
         "options"
       ]
     },
@@ -323,6 +332,197 @@
       "keys": [
         "deleted",
         "name"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/rolemenus/requests",
+      "read_by": [
+        "page-rolemenus.js requests"
+      ],
+      "shape": "list",
+      "keys": [
+        "id",
+        "menu_id",
+        "menu_name",
+        "user_id",
+        "user_name",
+        "user_avatar",
+        "role_id",
+        "role_name",
+        "requested_at",
+        "status",
+        "decided_by_id",
+        "decided_by_name",
+        "decided_at",
+        "deny_reason"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/rolemenus/requests/{request_id}/approve",
+      "body": {
+        "days": 7
+      },
+      "read_by": [
+        "page-rolemenus.js requests"
+      ],
+      "shape": "object",
+      "keys": [
+        "request",
+        "message"
+      ],
+      "nested": {
+        "request": [
+          "id",
+          "menu_id",
+          "menu_name",
+          "user_id",
+          "user_name",
+          "user_avatar",
+          "role_id",
+          "role_name",
+          "requested_at",
+          "status",
+          "decided_by_id",
+          "decided_by_name",
+          "decided_at",
+          "deny_reason"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/rolemenus/requests/{request_id}/deny",
+      "body": {
+        "reason": "not this month"
+      },
+      "read_by": [
+        "page-rolemenus.js requests"
+      ],
+      "shape": "object",
+      "keys": [
+        "request",
+        "message"
+      ],
+      "nested": {
+        "request": [
+          "id",
+          "menu_id",
+          "menu_name",
+          "user_id",
+          "user_name",
+          "user_avatar",
+          "role_id",
+          "role_name",
+          "requested_at",
+          "status",
+          "decided_by_id",
+          "decided_by_name",
+          "decided_at",
+          "deny_reason"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/roles/grants",
+      "read_by": [
+        "page-rolemenus.js timed roles"
+      ],
+      "shape": "list",
+      "keys": [
+        "id",
+        "user_id",
+        "user_name",
+        "role_id",
+        "role_name",
+        "source",
+        "granted_by_id",
+        "granted_by_name",
+        "granted_at",
+        "expires_at",
+        "removed_at",
+        "removed_reason",
+        "open"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/roles/grants",
+      "body": {
+        "user_id": "{member_id}",
+        "role_id": "{plain_role_id}",
+        "days": 7,
+        "reason": "contract check"
+      },
+      "read_by": [
+        "page-rolemenus.js grant form"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "user_id",
+        "user_name",
+        "role_id",
+        "role_name",
+        "source",
+        "granted_by_id",
+        "granted_by_name",
+        "granted_at",
+        "expires_at",
+        "removed_at",
+        "removed_reason",
+        "open"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/roles/grants/{grant_id}/extend",
+      "body": {
+        "days": 3
+      },
+      "read_by": [
+        "page-rolemenus.js timed roles"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "user_id",
+        "user_name",
+        "role_id",
+        "role_name",
+        "source",
+        "granted_by_id",
+        "granted_by_name",
+        "granted_at",
+        "expires_at",
+        "removed_at",
+        "removed_reason",
+        "open"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/roles/grants/{grant_id}",
+      "read_by": [
+        "page-rolemenus.js timed roles"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "user_id",
+        "user_name",
+        "role_id",
+        "role_name",
+        "source",
+        "granted_by_id",
+        "granted_by_name",
+        "granted_at",
+        "expires_at",
+        "removed_at",
+        "removed_reason",
+        "open"
       ]
     },
     {
@@ -1111,6 +1311,11 @@
     "web.modmail.snippet",
     "web.modmail.snippet_remove",
     "web.modmail.block",
-    "web.modmail.unblock"
+    "web.modmail.unblock",
+    "web.role.approved",
+    "web.role.denied",
+    "web.role.granted",
+    "web.role.extended",
+    "web.role.ended"
   ]
 }

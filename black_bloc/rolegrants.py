@@ -328,6 +328,24 @@ async def open_grants(db: Any, guild_id: int) -> list[Any]:
     return list(await cur.fetchall())
 
 
+async def expiring_for(db: Any, guild_id: int, user_ids: Any) -> dict[tuple[int, int], str]:
+    """One grouped query for a page of members: the soonest end date each held role carries."""
+    wanted = list(dict.fromkeys(int(one) for one in user_ids or ()))
+    if not wanted or db is None or not getattr(db, "is_connected", False):
+        return {}
+    holes = ", ".join("?" for _ in wanted)
+    cur = await db.conn.execute(
+        "SELECT user_id, role_id, MIN(expires_at) AS expires_at FROM role_grants "
+        "WHERE guild_id = ? AND removed_at IS NULL AND expires_at IS NOT NULL "
+        f"AND user_id IN ({holes}) GROUP BY user_id, role_id",
+        (int(guild_id), *wanted),
+    )
+    return {
+        (int(row["user_id"]), int(row["role_id"])): row["expires_at"]
+        for row in await cur.fetchall()
+    }
+
+
 async def grants_for(
     db: Any,
     guild_id: int,
