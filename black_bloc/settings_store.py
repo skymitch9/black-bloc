@@ -20,6 +20,7 @@ GOLIVE_MODES = ("off", "shadow", "on")
 MEMBER_ROLE_ID = 1073741054563602532
 TEMPVOICE_NAME_TEMPLATE = "{user}'s bloc"
 TEMPVOICE_MODES = ("off", "on")
+HONEYPOT_MODES = ("off", "shadow", "on")
 
 KEY_TYPES: dict[str, str] = {
     "log_channel_id": "channel",
@@ -38,11 +39,16 @@ KEY_TYPES: dict[str, str] = {
     "tempvoice_creator_ids": "channels",
     "tempvoice_name_template": "text",
     "tempvoice_allowed_role_id": "role",
+    "honeypot_mode": "enum",
+    "honeypot_channel_ids": "channels",
+    "honeypot_purge_days": "int",
+    "honeypot_exempt_role_ids": "roles",
 }
 
 KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "golive_mode": GOLIVE_MODES,
     "tempvoice_mode": TEMPVOICE_MODES,
+    "honeypot_mode": HONEYPOT_MODES,
 }
 
 KEY_HELP: dict[str, str] = {
@@ -62,6 +68,10 @@ KEY_HELP: dict[str, str] = {
     "tempvoice_creator_ids": "the join-to-create channels; /tempvoice setup fills this in",
     "tempvoice_name_template": "what a spawned channel is called; {user} is the member",
     "tempvoice_allowed_role_id": "only members with this role get a temporary channel",
+    "honeypot_mode": "off, shadow (log only) or on (ban whoever posts in the trap)",
+    "honeypot_channel_ids": "the trap channels; /honeypot setup fills this in",
+    "honeypot_purge_days": "days of the banned account's messages to delete with it",
+    "honeypot_exempt_role_ids": "roles the trap ignores; staff are always ignored too",
 }
 
 
@@ -230,6 +240,10 @@ class SettingsStore:
             return TEMPVOICE_NAME_TEMPLATE
         if key == "tempvoice_allowed_role_id":
             return MEMBER_ROLE_ID
+        if key == "honeypot_mode":
+            return "shadow"
+        if key == "honeypot_purge_days":
+            return 1
         if KEY_TYPES.get(key) in ("channels", "roles"):
             return []
         return None

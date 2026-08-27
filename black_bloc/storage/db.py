@@ -102,6 +102,18 @@ CREATE TABLE IF NOT EXISTS tempvoice_prefs (
     locked     INTEGER DEFAULT 0,
     hidden     INTEGER DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS honeypot_hits (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id   INTEGER NOT NULL,
+    user_id    INTEGER NOT NULL,
+    channel_id INTEGER NOT NULL,
+    message_id INTEGER,
+    content    TEXT,
+    at         TEXT    NOT NULL,
+    mode       TEXT    NOT NULL,
+    action     TEXT    NOT NULL
+);
 """
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (

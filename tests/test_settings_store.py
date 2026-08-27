@@ -185,6 +185,20 @@ async def test_tempvoice_defaults(store):
     assert store.get(1, "tempvoice_creator_ids") == []
 
 
+async def test_honeypot_defaults(store):
+    assert store.get(1, "honeypot_mode") == "shadow"
+    assert store.get(1, "honeypot_purge_days") == 1
+    assert store.get(1, "honeypot_channel_ids") == []
+    assert store.get(1, "honeypot_exempt_role_ids") == []
+
+
+def test_role_list_settings_render_as_roles():
+    assert coerce_value("honeypot_exempt_role_ids", [_Role(5), 6]) == [5, 6]
+    with pytest.raises(SettingError, match="list of roles"):
+        coerce_value("honeypot_exempt_role_ids", "mods")
+    assert display_value("honeypot_exempt_role_ids", [5]) == "<@&5>"
+
+
 async def test_a_list_setting_round_trips_and_is_not_shared(store):
     assert await store.set(1, "tempvoice_creator_ids", [5, 6, 5]) == [5, 6]
     await store.load()
