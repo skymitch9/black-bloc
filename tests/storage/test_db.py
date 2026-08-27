@@ -18,7 +18,11 @@ async def test_connect_bootstraps_schema(tmp_path):
         assert {"settings", "action_log", "role_menus", "role_menu_options"} <= tables
         assert {"golive_links", "golive_optout", "golive_sessions"} <= tables
         assert {"tempvoice_channels", "tempvoice_prefs", "honeypot_hits"} <= tables
-        assert {"user_timezones", "events"} <= tables
+        assert {"user_timezones", "events", "mod_cases"} <= tables
+        cur = await db.conn.execute("PRAGMA table_info(mod_cases)")
+        assert {"kind", "moderator_id", "duration_s", "mode", "applied", "log_message_id"} <= {
+            row["name"] for row in await cur.fetchall()
+        }
         assert "birthdays" in tables
         cur = await db.conn.execute("PRAGMA table_info(birthdays)")
         columns = {r["name"] for r in await cur.fetchall()}

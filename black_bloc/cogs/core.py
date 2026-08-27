@@ -6,6 +6,7 @@ from discord.ext import commands
 
 from .. import __version__
 from ..actionlog import log_action
+from ..modcases import pages_under_limit
 from ..settings_store import (
     KEY_HELP,
     KEY_TYPES,
@@ -55,7 +56,11 @@ class Core(commands.Cog):
         for key, value in store.all(interaction.guild.id).items():
             shown = display_value(key, value)
             lines.append(f"**{key}** — {shown} ({KEY_HELP[key]})")
-        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+        for index, chunk in enumerate(pages_under_limit(lines)):
+            answer = interaction.followup.send if index else interaction.response.send_message
+            await answer(
+                chunk, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+            )
 
     @settings.command(name="set", description="Point one Black Bloc setting at a channel")
     @app_commands.describe(key="Which setting to change", channel="The channel it should point at")
@@ -147,7 +152,6 @@ class Core(commands.Cog):
             actor=interaction.user,
             details={"key": key.value, "value": parsed},
         )
-
 
     @settings.command(name="clear", description="Unset one channel or role setting")
     @app_commands.describe(key="Which setting to unset")

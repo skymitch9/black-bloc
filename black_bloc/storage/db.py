@@ -200,6 +200,23 @@ CREATE TABLE IF NOT EXISTS modmail_snippets (
     by      INTEGER,
     at      TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS mod_cases (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id       INTEGER NOT NULL,
+    user_id        INTEGER,
+    kind           TEXT    NOT NULL,
+    moderator_id   INTEGER,
+    reason         TEXT,
+    duration_s     INTEGER,
+    at             TEXT    NOT NULL,
+    mode           TEXT    NOT NULL,
+    applied        INTEGER NOT NULL,
+    log_message_id INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS mod_cases_by_user ON mod_cases(guild_id, user_id, id);
+CREATE INDEX IF NOT EXISTS mod_cases_by_kind ON mod_cases(guild_id, kind, at);
 """
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
@@ -207,7 +224,18 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("events", "card_channel_id", "INTEGER"),
     ("birthdays", "role_added_id", "INTEGER"),
     ("modmail_messages", "delivered", "INTEGER NOT NULL DEFAULT 1"),
+    ("mod_cases", "actions", "TEXT"),
+    ("mod_cases", "done", "TEXT"),
+    ("mod_cases", "failed", "TEXT"),
+    ("mod_cases", "message_id", "INTEGER"),
+    ("mod_cases", "channel_id", "INTEGER"),
 )
+
+MOD_CASES_CARRIED_OVER = (
+    "id, guild_id, user_id, kind, moderator_id, reason, duration_s, at, mode, applied, "
+    "log_message_id"
+)
+MOD_CASES_OLD = "mod_cases_before_null_user"
 
 CLOSE_DUPLICATE_OPEN_SESSIONS = """
 UPDATE golive_sessions SET ended_at = ?
@@ -239,8 +267,10 @@ class Database:
         await self._conn.execute("PRAGMA journal_mode=WAL")
         await self._conn.execute("PRAGMA foreign_keys=ON")
         await self._close_duplicate_open_sessions()
+        await self._set_aside_mod_cases_with_a_required_user()
         await self._conn.executescript(SCHEMA)
         await self._add_missing_columns()
+        await self._restore_set_aside_mod_cases()
         await self._conn.execute(
             "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', ?)",
             (str(SCHEMA_VERSION),),
@@ -262,6 +292,25 @@ class Database:
                 "database: closed %d duplicate open go-live session(s) before indexing them",
                 cur.rowcount,
             )
+
+    async def _set_aside_mod_cases_with_a_required_user(self) -> None:
+        cur = await self.conn.execute("PRAGMA table_info(mod_cases)")
+        rows = await cur.fetchall()
+        if not any(row["name"] == "user_id" and row["notnull"] for row in rows):
+            return
+        await self.conn.execute("DROP INDEX IF EXISTS mod_cases_by_user")
+        await self.conn.execute("DROP INDEX IF EXISTS mod_cases_by_kind")
+        await self.conn.execute(f"ALTER TABLE mod_cases RENAME TO {MOD_CASES_OLD}")
+        log.warning("database: rebuilding mod_cases so a case may belong to a channel")
+
+    async def _restore_set_aside_mod_cases(self) -> None:
+        if not await self._table_columns(MOD_CASES_OLD):
+            return
+        await self.conn.execute(
+            f"INSERT INTO mod_cases({MOD_CASES_CARRIED_OVER}) "
+            f"SELECT {MOD_CASES_CARRIED_OVER} FROM {MOD_CASES_OLD}"
+        )
+        await self.conn.execute(f"DROP TABLE {MOD_CASES_OLD}")
 
     async def _add_missing_columns(self) -> None:
         for table, column, declaration in ADDED_COLUMNS:

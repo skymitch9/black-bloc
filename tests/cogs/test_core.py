@@ -41,24 +41,14 @@ class FakeChannel:
         return self.messages[-1]
 
 
-class FakeMember:
-    def __init__(self, guild, user_id=900):
-        self.id = user_id
-        self.guild = guild
-        self.display_name = "Lead"
-        self.name = "lead"
-        self.mention = f"<@{user_id}>"
-        self.roles = []
-        self.guild_permissions = FakePerms()
-        guild.members[user_id] = self
-
-
 class FakeGuild:
     def __init__(self):
         self.id = GUILD
+        self.name = "Black Bloc"
         self.channels = {}
         self.members = {}
         self.roles = []
+        self.default_role = FakeRole(GUILD)
 
     def add(self, channel):
         self.channels[channel.id] = channel
@@ -69,6 +59,18 @@ class FakeGuild:
 
     def get_member(self, user_id):
         return self.members.get(user_id)
+
+
+class FakeMember:
+    def __init__(self, guild, user_id=900, manage_guild=False):
+        self.id = user_id
+        self.guild = guild
+        self.display_name = "Lead"
+        self.name = "lead"
+        self.mention = f"<@{user_id}>"
+        self.roles = []
+        self.guild_permissions = FakePerms(manage_guild=manage_guild)
+        guild.members[user_id] = self
 
 
 class FakeBot:
@@ -91,12 +93,23 @@ class FakeResponse:
         self.messages.append({"content": content, "ephemeral": ephemeral, **kwargs})
 
 
+class FakeFollowup:
+    def __init__(self, response):
+        self.response = response
+
+    async def send(self, content=None, ephemeral=False, **kwargs):
+        self.response.messages.append({"content": content, "ephemeral": ephemeral, **kwargs})
+
+
 class FakeInteraction:
     def __init__(self, bot, user):
         self.client = bot
         self.user = user
         self.guild = bot.guild
+        self.guild_id = bot.guild.id
+        self.channel_id = TEST_CHANNEL
         self.response = FakeResponse()
+        self.followup = FakeFollowup(self.response)
 
     @property
     def sent(self):
@@ -105,7 +118,7 @@ class FakeInteraction:
 
 @pytest.fixture
 async def db(tmp_path):
-    database = Database(tmp_path / "c.sqlite3")
+    database = Database(tmp_path / "core.sqlite3")
     await database.connect()
     try:
         yield database
@@ -152,6 +165,26 @@ def test_the_choices_cover_every_key_and_fit_discords_limit():
     assert "birthday_role_id" in CLEARABLE_KEYS and "birthday_channel_id" in CLEARABLE_KEYS
     assert "birthday_color" in VALUE_KEYS
     assert len(CLEARABLE_KEYS) <= 25
+
+
+async def test_settings_show_is_split_into_messages_discord_will_take(bot, cog):
+    interaction = FakeInteraction(bot, FakeMember(bot.guild, user_id=1, manage_guild=True))
+
+    await cog.settings_show.callback(cog, interaction)
+
+    said = [message["content"] for message in interaction.response.messages]
+    assert len(said) > 1
+    assert all(len(chunk) <= 1900 for chunk in said)
+    assert all(message["ephemeral"] for message in interaction.response.messages)
+    assert "automod_mode" in "\n".join(said)
+
+
+async def test_settings_show_is_staff_only(bot, cog, member):
+    interaction = FakeInteraction(bot, member)
+
+    await cog.settings_show.callback(cog, interaction)
+
+    assert "staff only" in interaction.response.messages[0]["content"]
 
 
 async def test_clearing_a_setting_is_staff_only(bot, cog, member):
