@@ -24,3 +24,6 @@ docs/
 
 # One-off read-only Discord scan scripts written by agents; scratch tooling, not product.
 scripts/scan/
+
+# Agent worktrees (parallel builders); never product code.
+.claude/
