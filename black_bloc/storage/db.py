@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -85,6 +85,23 @@ CREATE TABLE IF NOT EXISTS golive_sessions (
 
 CREATE UNIQUE INDEX IF NOT EXISTS golive_open_session
     ON golive_sessions(guild_id, user_id) WHERE ended_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS tempvoice_channels (
+    channel_id       INTEGER PRIMARY KEY,
+    guild_id         INTEGER NOT NULL,
+    owner_id         INTEGER NOT NULL,
+    creator_id       INTEGER NOT NULL,
+    created_at       TEXT    NOT NULL,
+    panel_message_id INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS tempvoice_prefs (
+    user_id    INTEGER PRIMARY KEY,
+    name       TEXT,
+    user_limit INTEGER,
+    locked     INTEGER DEFAULT 0,
+    hidden     INTEGER DEFAULT 0
+);
 """
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (

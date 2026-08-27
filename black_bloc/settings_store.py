@@ -17,6 +17,10 @@ GOLIVE_TEMPLATE = (
 )
 GOLIVE_MODES = ("off", "shadow", "on")
 
+MEMBER_ROLE_ID = 1073741054563602532
+TEMPVOICE_NAME_TEMPLATE = "{user}'s bloc"
+TEMPVOICE_MODES = ("off", "on")
+
 KEY_TYPES: dict[str, str] = {
     "log_channel_id": "channel",
     "staff_channel_id": "channel",
@@ -30,10 +34,15 @@ KEY_TYPES: dict[str, str] = {
     "golive_cooldown_minutes": "int",
     "golive_ping_role_id": "role",
     "golive_max_session_hours": "int",
+    "tempvoice_mode": "enum",
+    "tempvoice_creator_ids": "channels",
+    "tempvoice_name_template": "text",
+    "tempvoice_allowed_role_id": "role",
 }
 
 KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "golive_mode": GOLIVE_MODES,
+    "tempvoice_mode": TEMPVOICE_MODES,
 }
 
 KEY_HELP: dict[str, str] = {
@@ -49,12 +58,21 @@ KEY_HELP: dict[str, str] = {
     "golive_cooldown_minutes": "minutes before the same person is announced again",
     "golive_ping_role_id": "role mentioned in front of every go-live announcement",
     "golive_max_session_hours": "hours before a stream still marked live is closed anyway",
+    "tempvoice_mode": "off, or on (join-to-create makes a temporary voice channel)",
+    "tempvoice_creator_ids": "the join-to-create channels; /tempvoice setup fills this in",
+    "tempvoice_name_template": "what a spawned channel is called; {user} is the member",
+    "tempvoice_allowed_role_id": "only members with this role get a temporary channel",
 }
 
 
 GUILD_ONLY = (
     "That command changes settings for a server, so it has to be run in the server itself "
     "rather than in a DM. Run it again from a channel Black Bloc can answer in."
+)
+DB_UNAVAILABLE = (
+    "Black Bloc cannot reach its own database right now, so nothing was changed. It needs the "
+    "bot to finish starting up — wait a moment and run the command again, and tell a Lead if it "
+    "keeps happening."
 )
 
 
@@ -78,6 +96,18 @@ def coerce_value(key: str, value: Any) -> Any:
         if isinstance(raw, bool) or not isinstance(raw, int):
             raise SettingError(f"{key!r} takes a role, not {value!r}.")
         return raw
+    if kind in ("channels", "roles"):
+        what = "channels" if kind == "channels" else "roles"
+        if isinstance(value, str | bytes) or not isinstance(value, list | tuple | set):
+            raise SettingError(f"{key!r} takes a list of {what}, not {value!r}.")
+        ids: list[int] = []
+        for item in value:
+            raw = getattr(item, "id", item)
+            if isinstance(raw, bool) or not isinstance(raw, int):
+                raise SettingError(f"{key!r} takes a list of {what}, not {value!r}.")
+            if raw not in ids:
+                ids.append(raw)
+        return ids
     if kind == "enum":
         allowed = KEY_CHOICES.get(key, ())
         if value not in allowed:
@@ -111,6 +141,11 @@ def parse_value(key: str, raw: str) -> Any:
         if not digits.isdigit():
             raise SettingError(f"{key!r} takes a whole number, not {raw!r}.")
         return int(digits)
+    if kind in ("channels", "roles"):
+        parts = [p.strip().lstrip("<#@&").rstrip(">") for p in text.split(",") if p.strip()]
+        if not all(p.isdigit() for p in parts):
+            raise SettingError(f"{key!r} takes ids separated by commas, not {raw!r}.")
+        return [int(p) for p in parts]
     if kind == "bool":
         if text.lower() in ("true", "yes", "on"):
             return True
@@ -121,9 +156,12 @@ def parse_value(key: str, raw: str) -> Any:
 
 
 def display_value(key: str, value: Any) -> str:
+    kind = KEY_TYPES.get(key)
+    if kind in ("channels", "roles"):
+        mark = "#" if kind == "channels" else "@&"
+        return ", ".join(f"<{mark}{v}>" for v in value) if value else "not set"
     if value is None or value == "":
         return "not set"
-    kind = KEY_TYPES.get(key)
     if kind == "channel":
         return f"<#{value}>"
     if kind == "role":
@@ -186,6 +224,14 @@ class SettingsStore:
             return 60
         if key == "golive_max_session_hours":
             return 12
+        if key == "tempvoice_mode":
+            return "on"
+        if key == "tempvoice_name_template":
+            return TEMPVOICE_NAME_TEMPLATE
+        if key == "tempvoice_allowed_role_id":
+            return MEMBER_ROLE_ID
+        if KEY_TYPES.get(key) in ("channels", "roles"):
+            return []
         return None
 
     async def load(self) -> None:

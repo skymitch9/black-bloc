@@ -5,6 +5,8 @@ from black_bloc.settings_store import (
     GOLIVE_CHANNEL_ID,
     GOLIVE_TEMPLATE,
     KEY_TYPES,
+    MEMBER_ROLE_ID,
+    TEMPVOICE_NAME_TEMPLATE,
     SettingError,
     SettingsStore,
     coerce_value,
@@ -174,6 +176,41 @@ def test_display_value_renders_by_type():
     assert display_value("golive_live_role_id", 5) == "<@&5>"
     assert display_value("golive_cooldown_minutes", 60) == "60"
     assert display_value("golive_live_role_id", None) == "not set"
+
+
+async def test_tempvoice_defaults(store):
+    assert store.get(1, "tempvoice_mode") == "on"
+    assert store.get(1, "tempvoice_name_template") == TEMPVOICE_NAME_TEMPLATE
+    assert store.get(1, "tempvoice_allowed_role_id") == MEMBER_ROLE_ID
+    assert store.get(1, "tempvoice_creator_ids") == []
+
+
+async def test_a_list_setting_round_trips_and_is_not_shared(store):
+    assert await store.set(1, "tempvoice_creator_ids", [5, 6, 5]) == [5, 6]
+    await store.load()
+    assert store.get(1, "tempvoice_creator_ids") == [5, 6]
+    fresh = store.get(2, "tempvoice_creator_ids")
+    fresh.append(99)
+    assert store.get(2, "tempvoice_creator_ids") == []
+
+
+def test_list_settings_are_type_checked():
+    assert coerce_value("tempvoice_creator_ids", [_Role(5)]) == [5]
+    with pytest.raises(SettingError, match="list of channels"):
+        coerce_value("tempvoice_creator_ids", 5)
+    with pytest.raises(SettingError, match="list of channels"):
+        coerce_value("tempvoice_creator_ids", "5,6")
+    with pytest.raises(SettingError, match="list of channels"):
+        coerce_value("tempvoice_creator_ids", [True])
+
+
+def test_list_settings_parse_and_display():
+    assert parse_value("tempvoice_creator_ids", "<#5>, 6") == [5, 6]
+    assert parse_value("tempvoice_creator_ids", "") == []
+    with pytest.raises(SettingError, match="ids separated by commas"):
+        parse_value("tempvoice_creator_ids", "general")
+    assert display_value("tempvoice_creator_ids", [5, 6]) == "<#5>, <#6>"
+    assert display_value("tempvoice_creator_ids", []) == "not set"
 
 
 def test_staff_refusal_names_the_channel(tmp_path, monkeypatch):

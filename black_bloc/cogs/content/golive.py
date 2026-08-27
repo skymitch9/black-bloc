@@ -27,7 +27,7 @@ from ...golive import (
     should_announce,
     twitch_login_from_url,
 )
-from ...settings_store import GOLIVE_MODES, require_staff
+from ...settings_store import DB_UNAVAILABLE, GOLIVE_MODES, require_staff
 from ...twitch import TwitchClient, TwitchError
 
 log = logging.getLogger(__name__)
@@ -54,11 +54,6 @@ BAD_LOGIN = (
 NOT_LINKED = (
     "You had no Twitch channel linked, so nothing changed. Link one with `/twitch link "
     "<your twitch name>`."
-)
-DB_UNAVAILABLE = (
-    "Black Bloc cannot reach its own database right now, so nothing was changed. It needs the "
-    "bot to finish starting up — wait a moment and run the command again, and tell a Lead if it "
-    "keeps happening."
 )
 LINK_NOT_CHECKED = (
     "Linked **{login}** to you, but Twitch could not be reached to check that the name exists, "
