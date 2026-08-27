@@ -1,25 +1,34 @@
-/**
- * app.js — the whole status page. Talks to the Black Bloc API and to nothing
- * else; the API is the page's own origin unless <meta name="api-origin">
- * names another. Never hardcoded here.
- *
- * The five refusal states are the point of this file (global rule: nobody
- * sees a bare HTTP status). They are kept apart because their fixes differ:
- *   not signed in            → sign in
- *   signed in, not staff     → ask a Lead for the role
- *   session expired          → sign in again, nothing is wrong with access
- *   roles could not be read  → NEITHER of the two above: the bot could not ask
- *                              Discord, so it is a fault with a retry button
- *   API unreachable          → an OUTAGE, never described as a permission
- *                              problem, and never given a "sign in" button
- * The API supplies the sentence for the first four, so the wording has one
- * home. Only the outage sentence lives here, because a dead API cannot
- * describe itself.
- */
+import { api, Outage, signInHref } from './api.js';
 
-import { describeHttpFailure, isPermissionStatus } from './permission-ux.js';
+export const TABS = [
+  { tab: 'overview', href: '/index.html', label: 'Overview' },
+  { tab: 'moderation', href: '/moderation.html', label: 'Moderation' },
+  { tab: 'automod', href: '/automod.html', label: 'Automod' },
+  { tab: 'modmail', href: '/modmail.html', label: 'Modmail' },
+  { tab: 'events', href: '/events.html', label: 'Events' },
+  { tab: 'golive', href: '/golive.html', label: 'Go-live' },
+  { tab: 'rolemenus', href: '/rolemenus.html', label: 'Role menus' },
+  { tab: 'birthdays', href: '/birthdays.html', label: 'Birthdays' },
+  { tab: 'tempvoice', href: '/tempvoice.html', label: 'Temp voice' },
+  { tab: 'honeypot', href: '/honeypot.html', label: 'Honeypot' },
+  { tab: 'settings', href: '/settings.html', label: 'Settings' },
+  { tab: 'audit', href: '/audit.html', label: 'Audit' },
+  { tab: 'health', href: '/health.html', label: 'Health' },
+];
 
-const API = (document.querySelector('meta[name="api-origin"]')?.content || '').replace(/\/$/, '');
+export const FEATURE_TABS = {
+  golive: 'golive',
+  tempvoice: 'tempvoice',
+  honeypot: 'honeypot',
+  events: 'events',
+  birthday: 'birthdays',
+  modmail: 'modmail',
+  automod: 'automod',
+};
+
+export function tabHref(tab) {
+  return (TABS.find((entry) => entry.tab === tab) || TABS[0]).href;
+}
 
 const OUTAGE_TITLE = 'Black Bloc is not answering';
 const OUTAGE = 'This page cannot reach Black Bloc right now. That is an outage, not a permission ' +
@@ -42,18 +51,13 @@ const RETURNED = {
 
 const el = (id) => document.getElementById(id);
 
-const gate = el('gate');
-const dash = el('dash');
-
 function show(which) {
-  gate.hidden = which !== 'gate';
-  dash.hidden = which !== 'dash';
+  el('gate').hidden = which !== 'gate';
+  el('dash').hidden = which !== 'dash';
+  el('footbar').hidden = which !== 'dash';
 }
 
-// state defaults to null — a neutral grey dot. Being signed out is not a
-// warning and must not wear a warning's colour; only a real refusal (warn) or
-// a real fault (danger) gets one.
-function refuse({ title, message, note = null, state = null, canSignIn = false, canRetry = false }) {
+export function refuse({ title, message, note = null, state = null, canSignIn = false, canRetry = false }) {
   el('gate-row').setAttribute('data-state', state || '');
   el('gate-title').textContent = title;
   el('gate-message').textContent = message;
@@ -65,239 +69,7 @@ function refuse({ title, message, note = null, state = null, canSignIn = false, 
   show('gate');
 }
 
-class Outage extends Error {}
-
-// A bot that accepts the connection and then never answers looks identical to
-// a working page that never finishes loading. Ten seconds, then the outage
-// state with its retry button.
-const TIMEOUT_MS = 10000;
-
-async function api(path, options = {}) {
-  const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), TIMEOUT_MS);
-  let response;
-  try {
-    response = await fetch(`${API}${path}`, {
-      credentials: 'same-origin',
-      signal: abort.signal,
-      ...options,
-    });
-  } catch (e) {
-    throw new Outage(String(e));
-  } finally {
-    clearTimeout(timer);
-  }
-  let body = null;
-  try { body = await response.json(); } catch (e) { body = null; }
-  if (!response.ok) {
-    const error = new Error(body?.message || describeHttpFailure(response.status, body));
-    error.status = response.status;
-    error.code = body?.error || null;
-    error.isPermission = isPermissionStatus(response.status);
-    throw error;
-  }
-  return body;
-}
-
-function signInHref() {
-  return `${API}/api/auth/login`;
-}
-
-// ---- rendering -------------------------------------------------------------
-
-function row({ name, badge = null, badgeTone = null, detail = null, note = null, state = null }) {
-  const li = document.createElement('li');
-  li.className = 'row';
-  if (state) li.setAttribute('data-state', state);
-
-  const dot = document.createElement('span');
-  dot.className = 'dot';
-  li.appendChild(dot);
-
-  const body = document.createElement('div');
-  body.className = 'row-body';
-
-  const head = document.createElement('div');
-  head.className = 'row-head';
-  const label = document.createElement('span');
-  label.className = 'row-name';
-  label.textContent = name;
-  head.appendChild(label);
-  if (badge !== null) {
-    const chip = document.createElement('span');
-    chip.className = badgeTone === 'mode' ? 'mode-chip' : 'badge';
-    if (badgeTone === 'mode') chip.setAttribute('data-mode', badge);
-    chip.textContent = badge;
-    head.appendChild(chip);
-  }
-  body.appendChild(head);
-
-  if (detail !== null) {
-    const p = document.createElement('p');
-    p.className = 'row-detail';
-    p.textContent = detail;
-    body.appendChild(p);
-  }
-  if (note !== null) {
-    const p = document.createElement('p');
-    p.className = 'row-note';
-    p.textContent = note;
-    body.appendChild(p);
-  }
-  li.appendChild(body);
-  return li;
-}
-
-function fill(list, rows) {
-  list.replaceChildren(...rows);
-}
-
-function duration(seconds) {
-  if (seconds === null || seconds === undefined) return 'not known';
-  const d = Math.floor(seconds / 86400);
-  const h = Math.floor((seconds % 86400) / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (d) return `${d}d ${h}h`;
-  if (h) return `${h}h ${m}m`;
-  return `${m}m`;
-}
-
-function when(iso) {
-  if (!iso) return '—';
-  const at = new Date(iso);
-  return Number.isNaN(at.getTime()) ? String(iso) : at.toLocaleString();
-}
-
-const COUNT_LABELS = {
-  role_menus_posted: 'Role menus posted',
-  temp_channels: 'Temporary voice channels open',
-  honeypot_hits_7d: 'Honeypot hits, last 7 days',
-  open_events: 'Events open',
-  open_modmail: 'Modmail tickets open',
-};
-
-function renderHealth(status) {
-  const bot = status.bot;
-  const rows = [
-    row({
-      name: 'Gateway',
-      badge: bot.ready ? 'connected' : 'not ready',
-      state: bot.ready ? 'ok' : 'danger',
-      detail: bot.ready
-        ? `${bot.latency_ms} ms to Discord · ${bot.guilds} server(s) · up ${duration(bot.uptime_seconds)}`
-        : 'Black Bloc is running but has not finished connecting to Discord.',
-      note: `Version ${bot.version}${bot.test_mode ? ' · TEST MODE: the bot speaks only in the test channel' : ''}`,
-    }),
-  ];
-  if (status.open) {
-    for (const [key, label] of Object.entries(COUNT_LABELS)) {
-      if (!(key in status.open)) continue;
-      rows.push(row({ name: label, badge: String(status.open[key]), state: 'ok' }));
-    }
-  }
-  fill(el('health'), rows);
-
-  const note = el('health-note');
-  const notes = status.notes || [];
-  note.textContent = notes.join(' ');
-  note.hidden = notes.length === 0;
-}
-
-function renderFeatures(status) {
-  const rows = status.features.map((feature) => row({
-    name: feature.feature.replace(/^./, (c) => c.toUpperCase()),
-    badge: feature.mode === null || feature.mode === undefined ? 'not set' : String(feature.mode),
-    badgeTone: 'mode',
-    state: feature.mode === 'on' ? 'ok' : feature.mode === 'shadow' ? 'warn' : null,
-    detail: feature.mode === 'shadow' ? 'Logging what it would do, doing nothing.' : null,
-  }));
-  fill(el('features'), rows.length ? rows : [sayNothing('No features report a mode yet.')]);
-}
-
-function sayNothing(text) {
-  const li = document.createElement('li');
-  const p = document.createElement('p');
-  p.className = 'say-nothing';
-  p.textContent = text;
-  li.appendChild(p);
-  return li;
-}
-
-function renderLoops(status) {
-  const rows = (status.loops || []).map((loop) => row({
-    name: `${loop.cog} · ${loop.name}`,
-    badge: loop.running ? 'running' : loop.failed ? 'stopped after an error' : 'stopped',
-    state: loop.state,
-    detail: loop.last_error
-      ? `Last error: ${loop.last_error}`
-      : loop.last_ok_at
-        ? `Last success ${when(loop.last_ok_at)}`
-        : 'This loop does not record its last success yet, so this is liveness, not health.',
-    note: loop.next_iteration ? `Next run ${when(loop.next_iteration)}` : null,
-  }));
-  fill(el('loops'), rows.length ? rows : [sayNothing('No loops are loaded.')]);
-}
-
-function kindTone(kind) {
-  if (kind.includes('would_')) return 'would';
-  if (kind.includes('_failed')) return 'failed';
-  return null;
-}
-
-function cell(text, className = null) {
-  const td = document.createElement('td');
-  if (className) td.className = className;
-  td.textContent = text;
-  return td;
-}
-
-function renderActions(payload) {
-  const body = el('actions').querySelector('tbody');
-  const rows = (payload.actions || []).map((action) => {
-    const tr = document.createElement('tr');
-    tr.appendChild(cell(when(action.at), 'mono'));
-
-    const kind = document.createElement('td');
-    const span = document.createElement('span');
-    span.className = 'kind';
-    const tone = kindTone(action.kind);
-    if (tone) span.setAttribute('data-tone', tone);
-    span.textContent = action.kind;
-    kind.appendChild(span);
-    tr.appendChild(kind);
-
-    tr.appendChild(cell(action.actor_id || '—', 'mono'));
-    tr.appendChild(cell(action.target_id || '—', 'mono'));
-    tr.appendChild(cell(action.reason || '—', 'wrap'));
-    return tr;
-  });
-  body.replaceChildren(...rows);
-
-  const note = el('actions-note');
-  if (!rows.length) {
-    note.textContent = 'Black Bloc has not logged anything yet.';
-    note.hidden = false;
-  } else {
-    note.hidden = true;
-  }
-}
-
-// ---- the boot sequence -----------------------------------------------------
-
-async function loadDashboard() {
-    const [status, actions] = await Promise.all([
-    api('/api/status'),
-    api('/api/actions?limit=50'),
-  ]);
-  renderHealth(status);
-  renderFeatures(status);
-  renderLoops(status);
-  renderActions(actions);
-  el('checked').textContent = `checked ${when(status.checked_at)}`;
-  show('dash');
-}
-
-function handle(error) {
+export function handle(error) {
   if (error instanceof Outage) {
     refuse({ title: OUTAGE_TITLE, message: OUTAGE, state: 'danger', canRetry: true });
     return;
@@ -314,13 +86,10 @@ function handle(error) {
     refuse({ title: 'This dashboard is for staff', message: error.message, state: 'warn' });
     return;
   }
-  // Not a refusal and not an outage: the bot is up but could not ask Discord.
   if (error.code === 'staff_unknown') {
     refuse({ title: UNKNOWN_TITLE, message: error.message, state: 'info', canRetry: true });
     return;
   }
-  // Anything else — a 503 from the API, a database that cannot answer — is a
-  // fault, so it gets a retry and never a permission sentence.
   refuse({
     title: error.isPermission ? 'That was refused' : 'Something is wrong at the bot',
     message: error.message,
@@ -329,56 +98,98 @@ function handle(error) {
   });
 }
 
+function renderNav(current) {
+  const nav = el('tabnav');
+  if (!nav) return;
+  const links = TABS.map((entry) => {
+    const link = document.createElement('a');
+    link.setAttribute('href', entry.href);
+    link.textContent = entry.label;
+    if (entry.tab === current) link.setAttribute('aria-current', 'page');
+    return link;
+  });
+  nav.replaceChildren(...links);
+}
+
 function returnedFromDiscord() {
   const outcome = new URLSearchParams(location.search).get('signin');
   if (outcome) history.replaceState(null, '', location.pathname);
   return outcome && outcome !== 'ok' ? RETURNED[outcome] || RETURNED.failed : null;
 }
 
-async function boot() {
-  const complaint = returnedFromDiscord();
-  // Before the first await, so a slow or dead API shows the "Checking…" row
-  // rather than a blank page for ten seconds.
-  show('gate');
-  try {
-    const me = await api('/api/auth/me');
-    if (me.state === 'staff_unknown') {
-      refuse({
-        title: UNKNOWN_TITLE,
-        message: me.message,
-        note: `Signed in as ${me.user.name}.`,
-        state: 'info',
-        canRetry: true,
-      });
-      return;
-    }
-    if (!me.staff) {
-      refuse({
-        title: 'This dashboard is for staff',
-        message: me.message,
-        note: `Signed in as ${me.user.name}.`,
-        state: 'warn',
-      });
-      return;
-    }
-    el('subtitle').textContent =
-      `Signed in as ${me.user.name}${me.guild ? ` · ${me.guild.name}` : ''}. Read-only — nothing on this page changes anything.`;
-    await loadDashboard();
-  } catch (error) {
-    handle(error);
-    if (complaint) {
-      el('gate-note').textContent = complaint;
-      el('gate-note').hidden = false;
-    }
-  }
+function stamp() {
+  const at = el('checked');
+  if (at) at.textContent = `loaded ${new Date().toLocaleTimeString()}`;
 }
 
-el('signin').setAttribute('href', signInHref());
-el('retry').addEventListener('click', boot);
-el('refresh').addEventListener('click', () => loadDashboard().catch(handle));
-el('signout').addEventListener('click', async () => {
-  try { await api('/api/auth/logout', { method: 'POST' }); } catch (e) { /* signing out locally is enough */ }
-  refuse({ title: SIGNED_OUT_TITLE, message: SIGNED_OUT, canSignIn: true });
-});
+export function start(page) {
+  renderNav(page.tab);
 
-boot();
+  let current = null;
+
+  const reload = async () => {
+    try {
+      await page.load(current);
+      stamp();
+      show('dash');
+    } catch (error) {
+      handle(error);
+    }
+  };
+
+  const boot = async () => {
+    const complaint = returnedFromDiscord();
+    show('gate');
+    try {
+      const me = await api('/api/auth/me');
+      current = me;
+      if (me.state === 'staff_unknown') {
+        refuse({
+          title: UNKNOWN_TITLE,
+          message: me.message,
+          note: `Signed in as ${me.user.name}.`,
+          state: 'info',
+          canRetry: true,
+        });
+        return;
+      }
+      if (!me.staff) {
+        refuse({
+          title: 'This dashboard is for staff',
+          message: me.message,
+          note: `Signed in as ${me.user.name}.`,
+          state: 'warn',
+        });
+        return;
+      }
+      const subtitle = el('subtitle');
+      if (subtitle && page.subtitle) {
+        subtitle.textContent = `${page.subtitle} Signed in as ${me.user.name}${me.guild ? ` · ${me.guild.name}` : ''}.`;
+      }
+      await page.load(me);
+      stamp();
+      show('dash');
+    } catch (error) {
+      handle(error);
+      if (complaint) {
+        el('gate-note').textContent = complaint;
+        el('gate-note').hidden = false;
+      }
+    }
+  };
+
+  el('signin').setAttribute('href', signInHref());
+  el('retry').addEventListener('click', boot);
+  el('refresh').addEventListener('click', reload);
+  el('signout').addEventListener('click', async () => {
+    try {
+      await api('/api/auth/logout', { method: 'POST' });
+    } catch (e) {
+      current = null;
+    }
+    refuse({ title: SIGNED_OUT_TITLE, message: SIGNED_OUT, canSignIn: true });
+  });
+
+  boot();
+  return reload;
+}
