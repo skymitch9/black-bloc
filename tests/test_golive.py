@@ -3,8 +3,13 @@ from datetime import UTC, datetime, timedelta
 import discord
 
 from black_bloc.golive import (
+    EMBED_COLOUR_DEFAULT,
+    EMBED_NO_TITLE,
     GAME_FALLBACK,
     StreamInfo,
+    announcement_embed,
+    embed_summary,
+    ended_embed,
     ended_text,
     enriched,
     extract_stream,
@@ -13,13 +18,15 @@ from black_bloc.golive import (
     parse_ts,
     passes_role_filters,
     platform_of,
+    presence_image,
     render,
     should_announce,
     twitch_enrichable,
     twitch_login_from_url,
+    with_box_art,
 )
 from black_bloc.settings_store import GOLIVE_TEMPLATE
-from black_bloc.twitch import TwitchStream
+from black_bloc.twitch import TwitchGame, TwitchStream
 
 NOW = datetime(2026, 8, 26, 12, 0, tzinfo=UTC)
 
@@ -274,3 +281,164 @@ def test_from_twitch_builds_a_full_streaminfo():
 def test_ended_text_is_appended_once():
     assert ended_text("live!") == "live! — stream ended"
     assert ended_text("live! — stream ended") == "live! — stream ended"
+
+
+def twitch_info(**kwargs):
+    kwargs.setdefault("url", "https://www.twitch.tv/alice")
+    kwargs.setdefault("game", "Phantasy Star Online 2 New Genesis")
+    kwargs.setdefault("title", "chill grind")
+    kwargs.setdefault("platform", "Twitch")
+    kwargs.setdefault("box_art_url", "https://static-cdn.jtvnw.net/ttv-boxart/1-285x380.jpg")
+    return StreamInfo(**kwargs)
+
+
+def test_the_embed_names_the_streamer_and_the_game_and_shows_the_box_art():
+    embed = announcement_embed(twitch_info(), FakeMember("Alice"), "twitch")
+
+    assert embed.author.name == "Alice is now live on Twitch!"
+    assert embed.title == "chill grind" and embed.url == "https://www.twitch.tv/alice"
+    assert [(f.name, f.value) for f in embed.fields] == [
+        ("Game", "Phantasy Star Online 2 New Genesis")
+    ]
+    assert embed.image.url == "https://static-cdn.jtvnw.net/ttv-boxart/1-285x380.jpg"
+    assert embed.colour.value == 0x9146FF
+    assert embed.footer.text == "Black Bloc · via Twitch"
+    assert embed.timestamp is not None
+
+
+def test_the_embed_never_carries_an_avatar_anywhere():
+    embed = announcement_embed(twitch_info(), FakeMember("Alice"), "twitch")
+    payload = embed.to_dict()
+
+    assert "icon_url" not in payload["author"]
+    assert "thumbnail" not in payload
+    assert payload["author"] == {"name": "Alice is now live on Twitch!"}
+
+
+def test_a_youtube_embed_falls_back_to_the_presence_artwork():
+    info = StreamInfo(
+        url="https://www.youtube.com/watch?v=xyz",
+        game="Celeste",
+        title="any%",
+        platform="YouTube",
+        thumbnail_url="https://i.ytimg.com/vi/xyz/hqdefault.jpg",
+    )
+
+    embed = announcement_embed(info, FakeMember("Alice"), "presence")
+
+    assert embed.author.name == "Alice is now live on YouTube!"
+    assert embed.image.url == "https://i.ytimg.com/vi/xyz/hqdefault.jpg"
+    assert embed.colour.value == 0xFF0000
+    assert embed.footer.text == "Black Bloc · via Discord activity"
+
+
+def test_box_art_wins_over_the_presence_artwork():
+    info = twitch_info(thumbnail_url="https://preview/alice.jpg")
+    assert announcement_embed(info).image.url.endswith("ttv-boxart/1-285x380.jpg")
+
+
+def test_an_embed_with_nothing_known_still_reads_as_a_sentence():
+    embed = announcement_embed(StreamInfo())
+
+    assert embed.author.name == "Someone is now live!"
+    assert embed.title == EMBED_NO_TITLE and embed.url is None
+    assert [f.value for f in embed.fields] == [GAME_FALLBACK]
+    assert embed.colour.value == EMBED_COLOUR_DEFAULT
+    assert "image" not in embed.to_dict()
+
+
+def test_an_overlong_title_is_clipped_to_what_discord_takes():
+    embed = announcement_embed(twitch_info(title="x" * 400))
+    assert len(embed.title) == 256 and embed.title.endswith("…")
+
+
+def test_the_ended_embed_keeps_the_art_and_says_the_stream_is_over():
+    live = announcement_embed(twitch_info(), FakeMember("Alice"), "twitch")
+
+    over = ended_embed(live, "Alice", "Twitch")
+
+    assert over.author.name == "Alice was live on Twitch"
+    assert "icon_url" not in over.to_dict()["author"]
+    assert over.image.url == live.image.url and over.url == live.url
+    assert over.footer.text == "Black Bloc · via Twitch · stream ended"
+    assert ended_embed(over, "Alice", "Twitch").footer.text == over.footer.text
+
+
+def test_the_ended_embed_survives_an_unknown_platform():
+    live = announcement_embed(StreamInfo(game="Celeste"))
+    assert ended_embed(live, "Alice", None).author.name == "Alice was live"
+
+
+def test_the_embed_summary_is_what_the_shadow_log_shows():
+    embed = announcement_embed(twitch_info(), FakeMember("Alice"), "twitch")
+    assert embed_summary(embed) == {
+        "author": "Alice is now live on Twitch!",
+        "title": "chill grind",
+        "game": "Phantasy Star Online 2 New Genesis",
+        "image": "https://static-cdn.jtvnw.net/ttv-boxart/1-285x380.jpg",
+    }
+
+
+def test_presence_artwork_is_worked_out_from_the_asset_without_a_lookup():
+    assert presence_image(FakeActivity(assets={"large_image": "twitch:alice"})) == (
+        "https://static-cdn.jtvnw.net/previews-ttv/live_user_alice-1280x720.jpg"
+    )
+    assert presence_image(FakeActivity(assets={"large_image": "youtube:xyz"})) == (
+        "https://i.ytimg.com/vi/xyz/hqdefault.jpg"
+    )
+    assert presence_image(FakeActivity(assets={"large_image": "mp:external/a/b.png"})) == (
+        "https://media.discordapp.net/external/a/b.png"
+    )
+    assert presence_image(FakeActivity(assets={"large_image": "https://cdn/a.png"})) == (
+        "https://cdn/a.png"
+    )
+
+
+def test_unusable_presence_artwork_is_ignored_rather_than_guessed():
+    assert presence_image(FakeActivity()) is None
+    assert presence_image(FakeActivity(assets={})) is None
+    assert presence_image(FakeActivity(assets={"large_image": "spotify:1"})) is None
+    assert presence_image(FakeActivity(assets={"large_image": "https://a b/c.png"})) is None
+    assert presence_image(FakeActivity(assets={"large_image": "http://cdn/a.png"})) is None
+
+
+def test_a_generic_activitys_own_image_url_is_preferred():
+    activity = FakeActivity(large_image_url="https://cdn/ready.png", assets={"large_image": "x"})
+    assert presence_image(activity) == "https://cdn/ready.png"
+
+
+def test_a_streaming_presence_carries_its_artwork_into_the_stream_info():
+    activity = FakeActivity(
+        type=discord.ActivityType.streaming,
+        url="https://www.twitch.tv/alice",
+        assets={"large_image": "twitch:alice"},
+    )
+    info = extract_stream([activity])
+    assert info.thumbnail_url.endswith("live_user_alice-1280x720.jpg")
+
+
+def test_a_twitch_row_carries_its_game_id_and_thumbnail():
+    stream = TwitchStream(
+        "1",
+        "alice",
+        "Alice",
+        "Hades",
+        "a title",
+        "2026-08-26T12:00:00Z",
+        game_id="509658",
+        thumbnail_url="https://preview/alice-1280x720.jpg",
+    )
+    info = from_twitch(stream)
+    assert info.game_id == "509658"
+    assert info.thumbnail_url == "https://preview/alice-1280x720.jpg"
+    filled = enriched(StreamInfo(url="https://www.twitch.tv/alice"), stream)
+    assert filled.game_id == "509658" and filled.thumbnail_url == info.thumbnail_url
+
+
+def test_box_art_is_only_filled_in_once():
+    info = StreamInfo(game_id="1")
+    art = TwitchGame("1", "Hades", "https://boxart/1.jpg")
+    filled = with_box_art(info, art)
+    assert filled.box_art_url == "https://boxart/1.jpg"
+    assert with_box_art(filled, TwitchGame("1", "Hades", "https://other.jpg")) is filled
+    assert with_box_art(info, TwitchGame("1", "Hades", "")) is info

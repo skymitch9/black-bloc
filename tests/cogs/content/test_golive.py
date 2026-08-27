@@ -25,10 +25,10 @@ from black_bloc.cogs.content.golive import (
     start_session,
 )
 from black_bloc.config import load_settings
-from black_bloc.golive import StreamInfo
+from black_bloc.golive import StreamInfo, from_twitch
 from black_bloc.settings_store import SettingsStore
 from black_bloc.storage.db import Database
-from black_bloc.twitch import TwitchError, TwitchStream
+from black_bloc.twitch import TwitchError, TwitchGame, TwitchStream
 
 GUILD = 7
 CHANNEL = 111
@@ -43,10 +43,17 @@ class FakeMessage:
         self.content = content
         self.kwargs = kwargs
         self.edits = []
+        self.embeds = [kwargs["embed"]] if kwargs.get("embed") is not None else []
 
     async def edit(self, content=None, **kwargs):
         self.content = content
         self.edits.append(kwargs)
+        if kwargs.get("embed") is not None:
+            self.embeds = [kwargs["embed"]]
+
+    @property
+    def embed(self):
+        return self.embeds[0] if self.embeds else None
 
 
 class FakeChannel:
@@ -160,17 +167,26 @@ class FakeInteraction:
 
 
 class FakeHelix:
-    def __init__(self, streams=(), users=(), raises=None):
+    def __init__(self, streams=(), users=(), games=(), raises=None, game_raises=None):
         self.streams = list(streams)
         self.users = list(users)
+        self.games = list(games)
         self.raises = raises
+        self.game_raises = game_raises
         self.stream_calls = []
+        self.game_calls = []
 
     async def get_streams(self, logins):
         self.stream_calls.append(list(logins))
         if self.raises is not None:
             raise self.raises
         return [s for s in self.streams if s.user_login in {x.lower() for x in logins}]
+
+    async def get_games(self, ids):
+        self.game_calls.append(list(ids))
+        if self.game_raises is not None:
+            raise self.game_raises
+        return [g for g in self.games if g.id in {str(i) for i in ids}]
 
     async def get_users(self, logins):
         if self.raises is not None:
@@ -195,8 +211,14 @@ def youtube_activity(url="https://www.youtube.com/watch?v=xyz", game=None, detai
     return activity
 
 
-def twitch_stream(login="alice", game="Hades", title="a title"):
-    return TwitchStream("1", login, login.title(), game, title, "2026-08-26T12:00:00Z")
+def twitch_stream(login="alice", game="Hades", title="a title", game_id="1", thumbnail=""):
+    return TwitchStream(
+        "1", login, login.title(), game, title, "2026-08-26T12:00:00Z", game_id, thumbnail
+    )
+
+
+def twitch_game(game_id="1", name="Hades", art="https://boxart/1-285x380.jpg"):
+    return TwitchGame(game_id, name, art)
 
 
 async def action_kinds(db):
@@ -1077,3 +1099,184 @@ def test_the_link_command_asks_for_a_channel_name_and_never_says_login():
     )
     assert "login" not in said.lower()
     assert "channel name" in said
+
+
+async def test_the_announcement_carries_the_sentence_and_the_card(cog, bot, member, db):
+    await bot.store.set(GUILD, "golive_mode", "on")
+    info = StreamInfo(
+        url="https://www.twitch.tv/alice", game="Hades", title="any%", platform="Twitch"
+    )
+
+    await cog._go_live(member, info, "twitch")
+
+    posted = bot.guild.channel.messages[0]
+    assert posted.content.startswith("REGULATORS! Mount up! **Alice**")
+    assert posted.embed.author.name == "Alice is now live on Twitch!"
+    assert posted.embed.title == "any%" and posted.embed.url == "https://www.twitch.tv/alice"
+    assert [(f.name, f.value) for f in posted.embed.fields] == [("Game", "Hades")]
+    assert posted.embed.footer.text == "Black Bloc · via Twitch"
+    assert "icon_url" not in posted.embed.to_dict()["author"]
+
+
+async def test_the_card_shows_the_games_box_art_from_helix(cog, bot, member, db):
+    await bot.store.set(GUILD, "golive_mode", "on")
+    cog.helix = FakeHelix(games=[twitch_game()])
+
+    await cog._go_live(member, from_twitch(twitch_stream()), "twitch")
+
+    assert cog.helix.game_calls == [["1"]]
+    assert bot.guild.channel.messages[0].embed.image.url == "https://boxart/1-285x380.jpg"
+    assert (await open_session_for(db, GUILD, USER))["game"] == "Hades"
+
+
+async def test_box_art_is_only_looked_up_once_per_announcement(cog, bot, member, db):
+    await bot.store.set(GUILD, "golive_mode", "on")
+    cog.helix = FakeHelix(games=[twitch_game()])
+    info = from_twitch(twitch_stream())
+
+    filled = await cog._box_art(bot.guild, info)
+    again = await cog._box_art(bot.guild, filled)
+
+    assert filled.box_art_url == "https://boxart/1-285x380.jpg"
+    assert again is filled and cog.helix.game_calls == [["1"]]
+
+
+async def test_a_helix_failure_costs_the_art_and_nothing_else(cog, bot, member, db):
+    await bot.store.set(GUILD, "golive_mode", "on")
+    cog.helix = FakeHelix(game_raises=TwitchError("twitch unreachable"))
+
+    await cog._go_live(member, from_twitch(twitch_stream()), "twitch")
+
+    posted = bot.guild.channel.messages[0]
+    assert "image" not in posted.embed.to_dict()
+    assert posted.embed.author.name == "Alice is now live on Twitch!"
+    assert "golive.announce" in await action_kinds(db)
+
+
+async def test_a_youtube_stream_is_never_asked_about_on_the_games_endpoint(cog, bot, member, db):
+    await bot.store.set(GUILD, "golive_mode", "on")
+    cog.helix = FakeHelix(games=[twitch_game()])
+    info = StreamInfo(
+        url="https://youtu.be/xyz",
+        game="Celeste",
+        platform="YouTube",
+        game_id="1",
+        thumbnail_url="https://i.ytimg.com/vi/xyz/hqdefault.jpg",
+    )
+
+    await cog._go_live(member, info, "presence")
+
+    assert cog.helix.game_calls == [] and cog.helix.stream_calls == []
+    embed = bot.guild.channel.messages[0].embed
+    assert embed.image.url == "https://i.ytimg.com/vi/xyz/hqdefault.jpg"
+    assert embed.author.name == "Alice is now live on YouTube!"
+    assert embed.colour.value == 0xFF0000
+
+
+async def test_turning_the_card_off_posts_exactly_the_old_sentence(cog, bot, member, db):
+    await bot.store.set(GUILD, "golive_mode", "on")
+    await bot.store.set(GUILD, "golive_embed", False)
+    cog.helix = FakeHelix(games=[twitch_game()])
+
+    await cog._go_live(member, from_twitch(twitch_stream()), "twitch")
+
+    posted = bot.guild.channel.messages[0]
+    assert posted.embeds == [] and "embed" not in posted.kwargs
+    assert posted.content == (
+        "REGULATORS! Mount up! **Alice** is currently streaming **Hades**! "
+        "Check it out: https://www.twitch.tv/alice"
+    )
+    assert cog.helix.game_calls == []
+    assert "embed" not in json.loads(await action_details(db, "golive.announce"))
+
+
+async def test_shadow_mode_logs_what_the_card_would_have_said(cog, bot, member, db):
+    cog.helix = FakeHelix(games=[twitch_game()])
+
+    await cog._go_live(member, from_twitch(twitch_stream()), "twitch")
+
+    assert bot.guild.channel.messages == []
+    details = json.loads(await action_details(db, "golive.would_announce"))
+    assert details["embed"] == {
+        "author": "Alice is now live on Twitch!",
+        "title": "a title",
+        "game": "Hades",
+        "image": "https://boxart/1-285x380.jpg",
+    }
+
+
+async def test_ending_a_stream_rewrites_the_card_and_keeps_the_art(cog, bot, member, db):
+    await bot.store.set(GUILD, "golive_mode", "on")
+    cog.helix = FakeHelix(games=[twitch_game()])
+    await cog._go_live(member, from_twitch(twitch_stream()), "twitch")
+
+    await cog._end_live(bot.guild, member, "twitch")
+
+    posted = bot.guild.channel.messages[0]
+    assert posted.content.endswith(" — stream ended")
+    assert posted.embed.author.name == "Alice was live on Twitch"
+    assert posted.embed.footer.text == "Black Bloc · via Twitch · stream ended"
+    assert posted.embed.image.url == "https://boxart/1-285x380.jpg"
+    assert posted.embed.url == "https://www.twitch.tv/alice"
+
+
+async def test_ending_a_stream_posted_without_a_card_still_marks_the_sentence(
+    cog, bot, member, db
+):
+    await bot.store.set(GUILD, "golive_mode", "on")
+    await bot.store.set(GUILD, "golive_embed", False)
+    await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
+
+    await cog._end_live(bot.guild, member, "presence")
+
+    posted = bot.guild.channel.messages[0]
+    assert posted.content.endswith(" — stream ended") and posted.embeds == []
+    assert "embed" not in posted.edits[0]
+
+
+async def test_golive_test_previews_the_card_for_the_chosen_platform(
+    cog, bot, member, db, monkeypatch
+):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    cog.helix = FakeHelix(games=[twitch_game()])
+    interaction = FakeInteraction(bot, member, bot.guild)
+
+    await GoLive.test.callback(
+        cog, interaction, discord.app_commands.Choice(name="Twitch", value="Twitch")
+    )
+
+    said = interaction.response.messages[-1]
+    embed = said["kwargs"]["embed"]
+    assert said["ephemeral"] is True
+    assert embed.author.name == "Alice is now live on Twitch!"
+    assert [(f.name, f.value) for f in embed.fields] == [("Game", "Just Chatting")]
+    assert embed.image.url.endswith("ttv-boxart/509658-285x380.jpg")
+    assert embed.footer.text == "Black Bloc · via Twitch"
+    assert cog.helix.game_calls == []
+    assert "embed" in json.loads(await action_details(db, "golive.test"))
+
+
+async def test_golive_test_previews_the_youtube_card_with_its_own_artwork(
+    cog, bot, member, db, monkeypatch
+):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    interaction = FakeInteraction(bot, member, bot.guild)
+
+    await GoLive.test.callback(
+        cog, interaction, discord.app_commands.Choice(name="YouTube", value="YouTube")
+    )
+
+    embed = interaction.response.messages[-1]["kwargs"]["embed"]
+    assert embed.author.name == "Alice is now live on YouTube!"
+    assert embed.image.url == "https://i.ytimg.com/vi/aqz-KE-bpKQ/hqdefault.jpg"
+    assert embed.footer.text == "Black Bloc · via Discord activity"
+
+
+async def test_golive_test_shows_no_card_when_the_setting_is_off(cog, bot, member, monkeypatch):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    await bot.store.set(GUILD, "golive_embed", False)
+    interaction = FakeInteraction(bot, member, bot.guild)
+
+    await GoLive.test.callback(cog, interaction)
+
+    assert "embed" not in interaction.response.messages[-1]["kwargs"]
