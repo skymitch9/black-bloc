@@ -8,7 +8,9 @@ from black_bloc.golive import (
     GAME_FALLBACK,
     StreamInfo,
     announcement_embed,
+    edits_on_end,
     embed_summary,
+    end_details,
     ended_embed,
     ended_text,
     enriched,
@@ -25,7 +27,13 @@ from black_bloc.golive import (
     twitch_login_from_url,
     with_box_art,
 )
-from black_bloc.settings_store import GOLIVE_END_SUFFIX, GOLIVE_TEMPLATE
+from black_bloc.settings_store import (
+    GOLIVE_END_EDIT,
+    GOLIVE_END_MODES,
+    GOLIVE_END_OFF,
+    GOLIVE_END_SUFFIX,
+    GOLIVE_TEMPLATE,
+)
 from black_bloc.twitch import TwitchGame, TwitchStream
 
 NOW = datetime(2026, 8, 26, 12, 0, tzinfo=UTC)
@@ -276,6 +284,24 @@ def test_from_twitch_builds_a_full_streaminfo():
     assert from_twitch(stream) == StreamInfo(
         url="https://www.twitch.tv/alice", game="Hades", title="a title", platform="Twitch"
     )
+
+
+def test_only_the_edit_mode_touches_the_announcement():
+    assert edits_on_end("edit") is True
+    assert edits_on_end("off") is False
+    assert edits_on_end(None) is False
+    assert edits_on_end("on") is False
+
+
+def test_the_end_log_says_the_announcement_was_left_alone_only_when_it_was():
+    assert end_details("off") == {"announcement": "left"}
+    assert end_details(None) == {"announcement": "left"}
+    assert end_details("edit") == {}
+
+
+def test_the_edit_mode_name_is_the_registrys_and_not_a_second_copy():
+    assert edits_on_end(GOLIVE_END_EDIT) is True
+    assert GOLIVE_END_MODES == (GOLIVE_END_OFF, GOLIVE_END_EDIT)
 
 
 def test_ended_text_is_appended_once():

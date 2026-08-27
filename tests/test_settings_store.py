@@ -13,6 +13,9 @@ from black_bloc.settings_store import (
     EVENTS_RETENTION_DAYS,
     EVENTS_RETENTION_MAX_DAYS,
     EVENTS_RETENTION_MIN_DAYS,
+    GOLIVE_END_EDIT,
+    GOLIVE_END_MODES,
+    GOLIVE_END_OFF,
     GOLIVE_END_SUFFIX,
     GOLIVE_TEMPLATE,
     HONEYPOT_PURGE_MAX_DAYS,
@@ -232,6 +235,17 @@ async def test_golive_defaults(store):
     assert store.get(1, "golive_cooldown_minutes") == 60
     assert store.get(1, "golive_live_role_id") is None
     assert store.get(1, "golive_ping_role_id") is None
+
+
+async def test_the_stream_end_edit_is_off_until_a_guild_asks_for_it(store):
+    assert store.get(1, "golive_end_mode") == GOLIVE_END_OFF == "off"
+    assert KEY_TYPES["golive_end_mode"] == "enum"
+    assert coerce_value("golive_end_mode", "edit") == GOLIVE_END_EDIT
+    for name in GOLIVE_END_MODES:
+        assert await store.set(1, "golive_end_mode", name) == name
+        assert store.get(1, "golive_end_mode") == name
+    with pytest.raises(SettingError):
+        coerce_value("golive_end_mode", "delete")
 
 
 async def test_the_stream_ended_wording_is_a_setting_with_the_hardcoded_text_as_its_default(store):
