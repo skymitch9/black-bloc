@@ -148,7 +148,7 @@ export function mountSections(tab) {
   const nav = document.getElementById('subnav');
   if (!dash || !nav) return;
 
-  const sections = [...dash.querySelectorAll(':scope > section.sect')];
+  const sections = [...dash.querySelectorAll('section.sect')];
   if (sections.length === 0) {
     nav.replaceChildren();
     nav.hidden = true;

@@ -105,6 +105,5 @@ async function load() {
 
 refresh = start({
   tab: 'golive',
-  subtitle: 'Twitch links, opt-outs, recent streams and the announcement wording.',
   load,
 });

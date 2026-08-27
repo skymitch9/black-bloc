@@ -39,10 +39,46 @@ export function el(tag, props = {}, children = []) {
   return node;
 }
 
+const ICONS = {
+  chevronDown: { body: '<polyline points="6 9 12 15 18 9"></polyline>', width: 2 },
+  chevronRight: { body: '<polyline points="9 18 15 12 9 6"></polyline>', width: 2 },
+  search: { body: '<circle cx="11" cy="11" r="7"></circle><line x1="20" y1="20" x2="16.65" y2="16.65"></line>', width: 2 },
+  menu: { body: '<line x1="4" y1="7" x2="20" y2="7"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="17" x2="20" y2="17"></line>', width: 2 },
+};
+
+export function icon(name, size = 16, className = 'chev') {
+  const spec = ICONS[name];
+  if (!spec) return el('span');
+  const holder = document.createElement('div');
+  holder.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" ` +
+    `stroke="currentColor" stroke-width="${spec.width}" stroke-linecap="round" ` +
+    `stroke-linejoin="round" aria-hidden="true" class="${className}">${spec.body}</svg>`;
+  return holder.firstElementChild;
+}
+
 export function when(iso) {
   if (!iso) return '—';
   const at = new Date(iso);
   return Number.isNaN(at.getTime()) ? String(iso) : at.toLocaleString();
+}
+
+/**
+ * The mock's short stamp: the clock for something that happened today,
+ * "Yesterday" for the day before, the date for anything older. The full
+ * timestamp travels as the title so nothing is lost by shortening it.
+ */
+export function shortWhen(iso) {
+  const at = new Date(iso);
+  if (!iso || Number.isNaN(at.getTime())) return { text: '—', title: '' };
+  const day = new Date(at.getFullYear(), at.getMonth(), at.getDate());
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const days = Math.round((today - day) / 86400000);
+  let text;
+  if (days === 0) text = at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  else if (days === 1) text = 'Yesterday';
+  else text = at.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  return { text, title: at.toLocaleString() };
 }
 
 export function duration(seconds) {
@@ -96,6 +132,12 @@ export function searchBox({ label = 'Search', placeholder = 'type to filter', on
   return input;
 }
 
+/** The mock's search control: a magnifier and a borderless input in one box. */
+export function searchField(options = {}) {
+  const input = searchBox(options);
+  return el('div', { class: 'searchfield' }, [icon('search', 14, 'search-mark'), input]);
+}
+
 export function filterRows(root, query) {
   let shown = 0;
   let total = 0;
@@ -139,7 +181,7 @@ export function searchOver(root, {
     said.textContent = query === '' ? `${total} ${noun}` : `${shown} of ${total}`;
     none.hidden = shown > 0;
   };
-  const input = searchBox({ label, placeholder, onQuery: paint });
+  const input = searchField({ label, placeholder, onQuery: paint });
   paint('');
   return el('div', { class: 'table-tools' }, [input, said]);
 }
@@ -149,7 +191,7 @@ export function section(title, note, { count = null, id = null, open = false } =
   const slug = id || slugOf(title);
   const countNode = el('span', { class: 'sect-count', hidden: true });
   const heading = el('h2', { class: 'sect-title' }, [
-    el('span', { class: 'sect-mark', 'aria-hidden': 'true' }),
+    icon('chevronDown', 14, 'sect-mark'),
     el('span', { class: 'sect-name', text: title }),
     countNode,
   ]);
@@ -183,14 +225,18 @@ export function section(title, note, { count = null, id = null, open = false } =
   return { node, body, details, slug, title, count: setCount };
 }
 
-export function card(title, children, { actions = null } = {}) {
-  const head = title || actions
+export function card(title, children, { actions = null, count = null, flush = false } = {}) {
+  const head = title || actions || count !== null
     ? el('div', { class: 'card-head' }, [
       title ? el('h3', { text: title }) : null,
+      count === null || count === undefined ? null : el('span', { class: 'card-count', text: String(count) }),
       actions ? el('div', { class: 'bar card-bar' }, actions) : null,
     ])
     : null;
-  return el('div', { class: 'card' }, [head].concat(children));
+  return el('div', { class: 'card' }, [
+    head,
+    el('div', { class: flush ? 'card-body flush' : 'card-body' }, children),
+  ]);
 }
 
 export function bar(children, { sticky = false } = {}) {
@@ -321,7 +367,7 @@ export function table(columns, rows, {
   const shown = el('span', { class: 'table-count', text: `${rows.length} row(s)` });
   const none = sayNothing('Nothing in this table matches what you typed.');
   none.hidden = true;
-  const input = searchBox({
+  const input = searchField({
     label: searchLabel,
     placeholder: 'filter these rows',
     onQuery: (query) => {
@@ -495,27 +541,84 @@ export function memberPicker({ label = 'Member', onPick = null } = {}) {
 }
 
 function jsonText(value) {
+  if (value === null || value === undefined) return '';
   try {
-    return JSON.stringify(value === null || value === undefined ? {} : value, null, 2);
+    return JSON.stringify(value, null, 2);
   } catch (e) {
     return String(value);
   }
 }
 
-async function control(spec) {
+const SEG_MAX = 3;
+const SEG_FIRST = ['on', 'shadow', 'off'];
+
+/** The mock reads ON · SHADOW · OFF; the registry lists them the other way. */
+function segOrder(choices) {
+  const known = choices.filter((choice) => SEG_FIRST.includes(String(choice)));
+  if (known.length !== choices.length) return choices;
+  return SEG_FIRST.filter((one) => choices.map(String).includes(one));
+}
+
+/**
+ * The mock's three-segment control: ON / SHADOW / OFF for a mode key, and the
+ * same shape for any short enum or a yes/no. Wider enums stay a <select>.
+ */
+function segment(choices, current, { onChange = null } = {}) {
+  const node = el('div', { class: 'seg', role: 'group' });
+  const buttons = choices.map((choice) => el('button', {
+    type: 'button',
+    'data-value': String(choice.value),
+    'aria-pressed': String(choice.value) === String(current) ? 'true' : 'false',
+    text: choice.label,
+  }));
+  buttons.forEach((button) => {
+    button.addEventListener('click', () => {
+      for (const other of buttons) {
+        other.setAttribute('aria-pressed', other === button ? 'true' : 'false');
+      }
+      if (onChange) onChange();
+    });
+    node.append(button);
+  });
+  node.readValue = () => {
+    const on = buttons.find((button) => button.getAttribute('aria-pressed') === 'true');
+    return on ? on.getAttribute('data-value') : null;
+  };
+  node.setValue = (value) => {
+    for (const button of buttons) {
+      button.setAttribute('aria-pressed', button.getAttribute('data-value') === String(value) ? 'true' : 'false');
+    }
+  };
+  return node;
+}
+
+async function control(spec, onChange) {
   const kind = spec.type;
   if (kind === 'channel') return { node: await channelSelect(spec.value), read: (n) => readSelect(n, false) };
   if (kind === 'channels') return { node: await channelSelect(spec.value, { multiple: true }), read: (n) => readSelect(n, true) };
   if (kind === 'role') return { node: await roleSelect(spec.value), read: (n) => readSelect(n, false) };
   if (kind === 'roles') return { node: await roleSelect(spec.value, { multiple: true }), read: (n) => readSelect(n, true) };
   if (kind === 'bool') {
-    const box = el('input', { class: 'input switch', type: 'checkbox', checked: spec.value === true || undefined });
-    return { node: box, read: (n) => n.checked };
+    const node = segment(
+      [{ value: 'true', label: 'On' }, { value: 'false', label: 'Off' }],
+      spec.value === true ? 'true' : 'false',
+      { onChange },
+    );
+    return { node, read: (n) => n.readValue() === 'true' };
   }
   if (kind === 'enum') {
+    const choices = spec.choices || [];
+    if (choices.length && choices.length <= SEG_MAX) {
+      const node = segment(
+        segOrder(choices).map((choice) => ({ value: choice, label: String(choice) })),
+        spec.value,
+        { onChange },
+      );
+      return { node, read: (n) => n.readValue() };
+    }
     const select = el('select', { class: 'input' });
     select.append(optionNode('', 'not set', spec.value === null || spec.value === undefined));
-    for (const choice of spec.choices || []) {
+    for (const choice of choices) {
       select.append(optionNode(choice, choice, String(spec.value) === String(choice)));
     }
     return { node: select, read: (n) => (n.value === '' ? null : n.value) };
@@ -532,19 +635,20 @@ async function control(spec) {
     return { node: input, read: (n) => (n.value === '' ? null : Number(n.value)) };
   }
   if (kind === 'color') {
+    const hex = (value) => (typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : null);
     const input = el('input', {
       class: 'input color',
       type: 'color',
-      value: typeof spec.value === 'string' && /^#[0-9a-fA-F]{6}$/.test(spec.value) ? spec.value : '#4eefff',
+      value: hex(spec.value) || hex(spec.default) || '#000000',
     });
     return { node: input, read: (n) => n.value };
   }
   if (kind === 'json') {
-    const area = el('textarea', { class: 'input area mono', rows: '10', spellcheck: 'false' });
+    const area = el('textarea', { class: 'input area mono', rows: '6', spellcheck: 'false' });
     area.value = jsonText(spec.value);
     return {
       node: area,
-      read: (n) => JSON.parse(n.value),
+      read: (n) => (n.value.trim() === '' ? null : JSON.parse(n.value)),
     };
   }
   const input = el('input', {
@@ -555,62 +659,6 @@ async function control(spec) {
   return { node: input, read: (n) => (n.value === '' ? null : n.value) };
 }
 
-function shown(value) {
-  if (value === null || value === undefined || value === '') return 'not set';
-  if (Array.isArray(value)) return value.length ? value.join(', ') : 'empty';
-  if (typeof value === 'object') return jsonText(value);
-  return String(value);
-}
-
-async function labeller(type) {
-  if (type === 'channel' || type === 'channels') {
-    const list = await refChannels();
-    return (id) => {
-      const found = list.find((channel) => String(channel.id) === String(id));
-      return found ? channelLabel(found) : null;
-    };
-  }
-  if (type === 'role' || type === 'roles') {
-    const list = await refRoles();
-    return (id) => {
-      const found = list.find((role) => String(role.id) === String(id));
-      return found ? `@${found.name}` : null;
-    };
-  }
-  return null;
-}
-
-function labelled(value, label) {
-  const items = Array.isArray(value) ? value : [value];
-  if (items.length === 0) return el('span', { class: 'muted', text: 'empty' });
-  const parts = [];
-  items.forEach((item, at) => {
-    if (at > 0) parts.push(', ');
-    if (item === null || item === undefined || item === '') {
-      parts.push(el('span', { class: 'muted', text: 'not set' }));
-      return;
-    }
-    const name = label(item);
-    parts.push(name
-      ? el('span', { class: 'name', title: `Discord id ${item}`, text: name })
-      : nameNode(String(item)));
-  });
-  return el('span', {}, parts);
-}
-
-function describeValue(value, label) {
-  return label ? labelled(value, label) : valueNode(value);
-}
-
-function describeText(value, label) {
-  if (!label) return shown(value);
-  const items = Array.isArray(value) ? value : [value];
-  if (items.length === 0) return 'empty';
-  return items
-    .map((item) => (item === null || item === undefined || item === '' ? 'not set' : label(item) || String(item)))
-    .join(', ');
-}
-
 function storedValue(reply, key) {
   if (reply && typeof reply === 'object' && !Array.isArray(reply)) {
     if ('value' in reply) return reply.value;
@@ -619,82 +667,205 @@ function storedValue(reply, key) {
   return reply;
 }
 
-export async function settingRow(spec, { onSaved = null } = {}) {
-  const made = await control(spec);
-  const label = await labeller(spec.type);
-  const say = notice();
-  const current = el('p', { class: 'field-current' });
-  const paint = (value) => current.replaceChildren('Now: ', describeValue(value, label));
-  paint(spec.value);
+const NAMESPACES = ['golive', 'tempvoice', 'honeypot', 'events', 'birthday', 'modmail', 'automod', 'rolemenu'];
 
-  const save = button('Save', async () => {
-    let value;
+/** The human name a key wears; the raw key survives as the mono sub-line. */
+export function humanLabel(key) {
+  let name = String(key || '');
+  for (const namespace of NAMESPACES) {
+    if (name.startsWith(`${namespace}_`) && name.length > namespace.length + 1) {
+      name = name.slice(namespace.length + 1);
+      break;
+    }
+  }
+  name = name.replace(/_ids?$/, '');
+  name = name.replace(/_/g, ' ').trim();
+  if (!name) name = String(key);
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+function same(a, b) {
+  try {
+    return JSON.stringify(a === undefined ? null : a) === JSON.stringify(b === undefined ? null : b);
+  } catch (e) {
+    return a === b;
+  }
+}
+
+function blank(value) {
+  return value === null || value === undefined || value === '' || (Array.isArray(value) && value.length === 0);
+}
+
+/**
+ * One settings row: human label, mono raw key, control. It carries its own
+ * dirty mark and left border; saving is the panel's job, not the row's.
+ */
+export async function settingRow(spec, { onDirty = null } = {}) {
+  const say = notice();
+  const mark = el('span', { class: 'setrow-mark', text: 'CHANGED', hidden: true });
+  const node = el('div', {
+    class: 'setrow',
+    'data-key': spec.key,
+    'data-search': `${spec.key} ${humanLabel(spec.key)} ${spec.type} ${spec.help || ''}`.toLowerCase(),
+  });
+  const state = { loaded: spec.value };
+  let made = null;
+
+  const readNow = () => {
     try {
-      value = made.read(made.node);
+      return { ok: true, value: made.read(made.node) };
     } catch (error) {
-      say.say(`That is not valid JSON, so nothing was sent: ${error.message}`, 'danger');
+      return { ok: false, error };
+    }
+  };
+
+  const row = {
+    key: spec.key,
+    spec,
+    node,
+    dirty: false,
+    read: () => readNow(),
+    reset: null,
+    paint: null,
+    say,
+  };
+
+  const paint = () => {
+    const found = readNow();
+    row.dirty = found.ok ? !same(found.value, state.loaded) : true;
+    node.setAttribute('data-dirty', row.dirty ? 'true' : 'false');
+    mark.hidden = !row.dirty;
+    if (onDirty) onDirty();
+  };
+  row.paint = paint;
+
+  made = await control(spec, paint);
+  made.node.addEventListener('input', paint);
+  made.node.addEventListener('change', paint);
+
+  row.reset = () => {
+    if (made.node.setValue) made.node.setValue(state.loaded);
+    else if (made.node.tagName === 'SELECT') {
+      const wanted = new Set((Array.isArray(state.loaded) ? state.loaded : [state.loaded]).filter((v) => v !== null && v !== undefined).map(String));
+      for (const option of made.node.options) option.selected = wanted.has(option.value) || (wanted.size === 0 && option.value === '');
+    } else if (made.node.type === 'checkbox') made.node.checked = state.loaded === true;
+    else made.node.value = state.loaded === null || state.loaded === undefined ? '' : (typeof state.loaded === 'object' ? jsonText(state.loaded) : String(state.loaded));
+    say.say('');
+    paint();
+  };
+  row.settle = (value) => {
+    state.loaded = value === undefined ? state.loaded : value;
+    paint();
+  };
+
+  node.append(
+    el('div', { class: 'setrow-head' }, [
+      el('span', { class: 'setrow-label', text: humanLabel(spec.key), title: spec.help || undefined }),
+      el('span', { class: 'setrow-key', text: spec.key }),
+    ]),
+    mark,
+    el('div', { class: 'setrow-control' }, [made.node]),
+    say,
+  );
+  say.classList.add('setrow-say');
+  paint();
+  return row;
+}
+
+/**
+ * The docked bar: it exists only while something is dirty, says how many
+ * settings are waiting, and offers Discard (quiet) beside Save (accent).
+ */
+export function saveBar(onSave, onDiscard) {
+  const text = el('span', { class: 'savebar-text' });
+  const node = el('div', { class: 'savebar' }, [
+    el('span', { class: 'dot-sm', 'data-tone': 'warn' }),
+    text,
+    button('Discard', onDiscard, { tone: 'quiet', small: false }),
+    el('button', { class: 'btn save', type: 'button', text: 'Save', on: { click: onSave } }),
+  ]);
+  node.hidden = true;
+  node.say = (count, message = null, tone = null) => {
+    if (message) {
+      text.textContent = message;
+      node.querySelector('.dot-sm').setAttribute('data-tone', tone || 'warn');
+      node.hidden = false;
       return;
     }
-    say.say('Saving…');
-    try {
-      const reply = await saveSetting(spec.key, value);
-      const now = storedValue(reply, spec.key);
-      paint(now);
-      say.say(`Saved. ${spec.key} is now ${describeText(now, label)}.`, 'ok');
-      if (onSaved) onSaved(spec.key, now);
-    } catch (error) {
-      const said = sentenceFor(error);
-      say.say(said.text, said.tone);
-    }
-  });
+    text.textContent = `Unsaved changes — ${count} setting${count === 1 ? '' : 's'}`;
+    node.querySelector('.dot-sm').setAttribute('data-tone', 'warn');
+    node.hidden = count === 0;
+  };
+  return node;
+}
 
-  const clear = button('Clear', async () => {
-    const sure = await ask({
-      title: `Clear ${spec.key}?`,
-      body: [
-        `This puts ${spec.key} back to its default (${describeText(spec.default, label)}). The bot picks the change up straight away.`,
-      ],
-      confirmLabel: 'Clear it',
-    });
-    if (!sure) return;
-    say.say('Clearing…');
-    try {
-      const reply = await clearSetting(spec.key);
-      const now = storedValue(reply, spec.key);
-      paint(now === undefined ? spec.default : now);
-      say.say(`Cleared. ${spec.key} is back to its default.`, 'ok');
-      if (onSaved) onSaved(spec.key, now);
-    } catch (error) {
-      const said = sentenceFor(error);
-      say.say(said.text, said.tone);
-    }
-  }, { tone: 'quiet' });
+/**
+ * A set of settings rows sharing ONE save mechanism. `write` sends only the
+ * dirty rows; a row emptied back to nothing is CLEARED rather than stored as
+ * null, which is how "put this back to its default" survives the docked bar.
+ */
+export async function settingsEditor(specs, { onSaved = null } = {}) {
+  const rows = [];
+  const dock = saveBar(() => write(), () => discard());
+  const count = () => rows.filter((row) => row.dirty).length;
+  const refresh = () => dock.say(count());
 
-  const haystack = `${spec.key} ${spec.type} ${spec.help || ''}`.toLowerCase();
-  return el('div', {
-    class: 'setting',
-    'data-key': spec.key,
-    'data-search': haystack,
-  }, [
-    el('div', { class: 'setting-head' }, [
-      el('span', { class: 'setting-key', text: spec.key }),
-      el('span', { class: 'setting-type', text: spec.type }),
-      spec.help ? el('p', { class: 'field-help', text: spec.help }) : null,
-    ]),
-    el('div', { class: 'setting-control' }, [
-      made.node,
-      current,
-      bar([save, clear]),
-      say,
-    ]),
-  ]);
+  for (const spec of specs) rows.push(await settingRow(spec, { onDirty: refresh }));
+
+  const discard = () => {
+    for (const row of rows) row.reset();
+    refresh();
+  };
+
+  const write = async () => {
+    const dirty = rows.filter((row) => row.dirty);
+    if (dirty.length === 0) return;
+    dock.say(0, 'Saving…', 'info');
+    let saved = 0;
+    let refused = 0;
+    for (const row of dirty) {
+      const found = row.read();
+      if (!found.ok) {
+        row.say.say(`That is not valid JSON, so nothing was sent: ${found.error.message}`, 'danger');
+        refused += 1;
+        continue;
+      }
+      try {
+        const clearing = blank(found.value) && !blank(row.spec.value);
+        const reply = clearing
+          ? await clearSetting(row.key)
+          : await saveSetting(row.key, found.value);
+        const now = storedValue(reply, row.key);
+        row.spec.value = now;
+        row.settle(now);
+        row.say.say('');
+        saved += 1;
+        if (onSaved) onSaved(row.key, now);
+      } catch (error) {
+        const said = sentenceFor(error);
+        row.say.say(said.text, said.tone);
+        refused += 1;
+      }
+    }
+    if (refused === 0) {
+      dock.say(0, `Saved — ${saved} setting${saved === 1 ? '' : 's'}.`, 'ok');
+      setTimeout(refresh, 2500);
+      return;
+    }
+    dock.say(0, `${saved} saved, ${refused} refused — the refused rows say why.`, 'danger');
+  };
+
+  refresh();
+  return { rows, bar: dock, discard, write, dirtyCount: count };
 }
 
 export async function settingsPanel(specs, { onSaved = null, empty = 'This part of the bot has no settings yet.' } = {}) {
   if (!specs || specs.length === 0) return sayNothing(empty);
-  const rows = [];
-  for (const spec of specs) rows.push(await settingRow(spec, { onSaved }));
-  return el('div', { class: 'settings-grid' }, rows);
+  const editor = await settingsEditor(specs, { onSaved });
+  return el('div', { class: 'settings-grid' }, [
+    ...editor.rows.map((row) => row.node),
+    editor.bar,
+  ]);
 }
 
 export async function namespaceSettings(namespace, { title = 'Settings', note = null, onSaved = null } = {}) {

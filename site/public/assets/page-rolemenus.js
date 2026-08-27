@@ -279,6 +279,5 @@ async function load() {
 
 refresh = start({
   tab: 'rolemenus',
-  subtitle: 'Every menu, its options, and where it is posted.',
   load,
 });

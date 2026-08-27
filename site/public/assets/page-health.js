@@ -127,6 +127,5 @@ async function load() {
 
 start({
   tab: 'health',
-  subtitle: 'Read-only — nothing on this page changes anything.',
   load,
 });

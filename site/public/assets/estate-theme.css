@@ -119,6 +119,16 @@
   src: url('/assets/fonts/luckiest-guy.woff2') format('woff2');
   font-weight: 400; font-style: normal; font-display: swap;
 }
+@font-face {
+  font-family: 'Inter';
+  src: url('/assets/fonts/inter.woff2') format('woff2');
+  font-weight: 100 900; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/assets/fonts/jetbrains-mono.woff2') format('woff2');
+  font-weight: 100 800; font-style: normal; font-display: swap;
+}
 
 /* ===========================================================================
  * THE TOKEN CONTRACT — every theme defines all of these.
@@ -130,6 +140,7 @@
  *            --et-ok --et-warn --et-danger
  *            --et-ok-bg --et-warn-bg --et-danger-bg
  *            --et-info --et-info-bg --et-transit --et-transit-bg
+ *            --et-shell-bg --et-shell-inset --et-nav-active
  *            --et-panel-border --et-field-border --et-field-bg --et-field-shadow
  *            --et-brand-fill --et-brand-stroke --et-brand-shadow
  *            --et-shadow --et-shadow-lift --et-glow --et-glow-title
@@ -357,6 +368,10 @@
   --et-transit: #0e7f9b; /* INVENTED — an apple-family teal for "on its way"; no other role claims it */
   --et-transit-bg: color-mix(in srgb, var(--et-transit) 12%, var(--et-bg));
 
+  --et-shell-bg: #f5f5f7;
+  --et-shell-inset: #ffffff;
+  --et-nav-active: #e8e8ed;
+
   --et-panel-border: transparent; /* apple is FLAT: surfaces, not boxes */
   --et-field-border: transparent;
   --et-field-bg: var(--et-surface);
@@ -405,6 +420,9 @@
     --et-muted: #86868b;
     --et-hairline: #3a3a3c;
     --et-ink: #3a3a3c;
+    --et-shell-bg: #161617;
+    --et-shell-inset: #000000;
+    --et-nav-active: #2c2c2e;
     --et-accent: #2997ff;
     --et-accent-2: #2997ff;
     --et-hue-1: #2997ff;
@@ -430,6 +448,9 @@
   --et-muted: #86868b;
   --et-hairline: #3a3a3c;
   --et-ink: #3a3a3c;
+  --et-shell-bg: #161617;
+  --et-shell-inset: #000000;
+  --et-nav-active: #2c2c2e;
   --et-accent: #2997ff;
   --et-accent-2: #2997ff;
   --et-hue-1: #2997ff;
@@ -469,6 +490,9 @@
   --et-muted: #6b6559;
   --et-hairline: #e0d9c9;
   --et-ink: #e0d9c9;
+  --et-shell-bg: #efe9dc;
+  --et-shell-inset: #fffdf8;
+  --et-nav-active: #e2dbc9;
 
   --et-accent: #3a5a40;
   --et-accent-fg: #fbfaf7;
@@ -527,6 +551,9 @@
   --et-muted: #9a948a;
   --et-hairline: #2a2c22;
   --et-ink: #2a2c22;
+  --et-shell-bg: #121610;
+  --et-shell-inset: #0a0b09;
+  --et-nav-active: #22261c;
 
   --et-accent: #8fbc8f;
   --et-accent-fg: #12140f;
@@ -583,6 +610,9 @@
   --et-muted: #8a8f98;
   --et-hairline: #2a2a3a;
   --et-ink: #2a2a3a;
+  --et-shell-bg: #12121f;
+  --et-shell-inset: #0a0a12;
+  --et-nav-active: #23233a;
 
   --et-accent: #05d9e8;
   --et-accent-fg: #04121a;
@@ -649,6 +679,9 @@
   --et-muted: #5c6270;
   --et-hairline: #c9cdd9;
   --et-ink: #c9cdd9;
+  --et-shell-bg: #e4e7ee;
+  --et-shell-inset: #ffffff;
+  --et-nav-active: #d3d8e4;
 
   --et-accent: #00798f;
   --et-accent-fg: #ffffff;
@@ -695,6 +728,9 @@
   --et-muted: #7a6e60;
   --et-hairline: #cdbb9c;
   --et-ink: #2b2622;
+  --et-shell-bg: #ece0c8;
+  --et-shell-inset: #fbf5e9;
+  --et-nav-active: #ddcdae;
 
   --et-accent: #4a7c9b;
   --et-accent-fg: #fbf5e9;
@@ -768,6 +804,9 @@
   --et-muted: #a39683;
   --et-hairline: #453c2f;
   --et-ink: #0b0907;
+  --et-shell-bg: #241f18;
+  --et-shell-inset: #1b1814;
+  --et-nav-active: #3a3227;
 
   --et-accent: #7fb0cd;
   --et-accent-fg: #1b1814;
@@ -827,6 +866,9 @@
   --et-muted: #8a5a6e;
   --et-hairline: #f2c6d8;
   --et-ink: #3a1f2b;
+  --et-shell-bg: #ffe9f1;
+  --et-shell-inset: #ffffff;
+  --et-nav-active: #fbd3e3;
 
   --et-hue-1: #d6246e; /* audio — the rose */
   --et-hue-2: #4a6fb5; /* books — periwinkle, the "player 2" blue */
@@ -908,6 +950,9 @@
   --et-muted: #c39aad;
   --et-hairline: #4a2b3a;
   --et-ink: #0d0709;
+  --et-shell-bg: #261520;
+  --et-shell-inset: #1c1016;
+  --et-nav-active: #3c2130;
 
   --et-hue-1: #ff7fb0;
   --et-hue-2: #8fadea;
@@ -944,6 +989,124 @@
 
   --et-btn-fg: #2a0d19;
   --et-btn-shadow: 2px 2px 0 rgba(0, 0, 0, .55);
+}
+
+/* ---- DISCORD — dark first (this dashboard's own identity) ----------------- */
+/* Lifted verbatim from docs/info/mock-direction-a/*.dc.html (the approved
+   Direction A mock); the light set is section A's light column in
+   docs/info/dashboard-inspiration.md. Text-only grouped sidebar, grey panels
+   on a grey-black ground, blurple only on links and the primary action, green
+   only on modes and Save. Nothing is styled to be noticed. */
+
+:root[data-theme="discord"] {
+  --et-bg: #1e1f22;
+  --et-bg-2: #2b2d31;
+  --et-bg-texture: none;
+  --et-bg-texture-size: auto;
+  --et-surface: #313338;
+  --et-surface-edge: #313338;
+  --et-fg: #f2f3f5;
+  --et-muted: #b5bac1;
+  --et-hairline: #3f4147;
+  --et-ink: #3f4147;
+  --et-shell-bg: #2b2d31;
+  --et-shell-inset: #1e1f22;
+  --et-nav-active: #3f4147;
+
+  --et-accent: #5865f2;
+  --et-accent-fg: #ffffff;
+  --et-accent-2: #5865f2;
+  --et-heading-color: var(--et-fg);
+
+  --et-ok: #23a55a;
+  --et-warn: #f0b132;
+  --et-danger: #f23f43;
+  --et-info: #00a8fc;
+  --et-transit: #949cf7;
+
+  --et-panel-border: var(--et-hairline);
+  --et-field-border: var(--et-hairline);
+  --et-field-bg: var(--et-bg);
+  --et-field-shadow: none;
+  --et-brand-fill: var(--et-accent);
+  --et-brand-stroke: 0 transparent;
+  --et-brand-shadow: none;
+
+  --et-shadow: 0 1px 0 rgba(0, 0, 0, .2), 0 2px 10px -6px rgba(0, 0, 0, .6);
+  --et-shadow-lift: 0 4px 16px -6px rgba(0, 0, 0, .7);
+  --et-glow: none;
+  --et-glow-title: none;
+
+  --et-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+             'Helvetica Neue', Arial, sans-serif;
+  --et-font-display: var(--et-font);
+  --et-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --et-font-label: var(--et-font-mono);
+  --et-title-case: none;
+  --et-title-spacing: -.01em;
+  --et-heading-weight: 600;
+
+  --et-radius: 4px;
+  --et-radius-lg: 6px;
+  --et-radius-xl: 8px;
+  --et-radius-pill: 999px;
+  --et-border-w: 1px;
+  --et-clip-panel: none;
+
+  --et-btn-bg: var(--et-accent);
+  --et-btn-fg: var(--et-accent-fg);
+  --et-btn-border: 0 solid transparent;
+  --et-btn-shadow: none;
+  --et-press: scale(.98);
+
+  --et-hue-1: #5865f2;
+  --et-hue-2: #23a55a;
+  --et-hue-3: #f23f43;
+  --et-hue-4: #b581f0;
+  --et-hue-5: #f0b132;
+  --et-hue-6: #00a8fc;
+  --et-blob-1: transparent;
+  --et-blob-2: transparent;
+  --et-blob-3: transparent;
+  --et-grain-opacity: 0;
+}
+
+/* Discord light — section A's light column. The shell greys are Discord's own
+   light chrome rather than section A's --et-bg-2 (#FFFFFF): a white sidebar
+   beside white cards has nothing to separate them, and the shell tokens exist
+   to keep chrome a step off the page in both modes. */
+:root[data-theme="discord"][data-mode="light"] {
+  --et-bg: #f2f3f5;
+  --et-bg-2: #ffffff;
+  --et-surface: #ffffff;
+  --et-surface-edge: #ffffff;
+  --et-fg: #060607;
+  --et-muted: #4e5058;
+  --et-hairline: #e3e5e8;
+  --et-ink: #e3e5e8;
+  --et-shell-bg: #ebedef;
+  --et-shell-inset: #e3e5e8;
+  --et-nav-active: #d7d9dc;
+
+  --et-accent: #5865f2;
+  --et-accent-fg: #ffffff;
+  --et-accent-2: #5865f2;
+
+  --et-ok: #1a6334;
+  --et-warn: #b4841d;
+  --et-danger: #d22d30;
+  --et-info: #0069a8;
+  --et-transit: #4752c4;
+
+  --et-shadow: 0 1px 0 rgba(6, 6, 7, .06), 0 2px 10px -6px rgba(6, 6, 7, .18);
+  --et-shadow-lift: 0 4px 16px -6px rgba(6, 6, 7, .22);
+
+  --et-hue-1: #5865f2;
+  --et-hue-2: #1a6334;
+  --et-hue-3: #d22d30;
+  --et-hue-4: #8a4fd8;
+  --et-hue-5: #b4841d;
+  --et-hue-6: #0069a8;
 }
 
 /* Texture is decoration and loses to user settings (the games app's own

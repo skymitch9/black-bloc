@@ -1,5 +1,6 @@
 import { api, Outage, signInHref } from './api.js';
 import { lastTab, mountSections, rememberTab } from './layout.js';
+import { forgetShellStatus, mountShell, paintShell, renderNav } from './shell.js';
 
 export const TABS = [
   { tab: 'overview', href: '/index.html', label: 'Overview' },
@@ -100,19 +101,6 @@ export function handle(error) {
   });
 }
 
-function renderNav(current) {
-  const nav = el('tabnav');
-  if (!nav) return;
-  const links = TABS.map((entry) => {
-    const link = document.createElement('a');
-    link.setAttribute('href', entry.href);
-    link.textContent = entry.label;
-    if (entry.tab === current) link.setAttribute('aria-current', 'page');
-    return link;
-  });
-  nav.replaceChildren(...links);
-}
-
 /**
  * The rail remembers where you were. Arriving at the bare "/" with no deep
  * link is the one case that gets sent on to that tab; "/index.html" — which
@@ -144,13 +132,16 @@ function stamp() {
 
 export function start(page) {
   if (restoreTab(page.tab)) return () => {};
-  renderNav(page.tab);
+  renderNav(page.tab, tabHref);
+  mountShell();
   rememberTab(page.tab);
 
   let current = null;
 
   const reload = async () => {
     try {
+      forgetShellStatus();
+      await paintShell(current);
       await page.load(current);
       mountSections(page.tab);
       stamp();
@@ -185,10 +176,7 @@ export function start(page) {
         });
         return;
       }
-      const subtitle = el('subtitle');
-      if (subtitle && page.subtitle) {
-        subtitle.textContent = `${page.subtitle} Signed in as ${me.user.name}${me.guild ? ` · ${me.guild.name}` : ''}.`;
-      }
+      await paintShell(me);
       await page.load(me);
       mountSections(page.tab);
       stamp();

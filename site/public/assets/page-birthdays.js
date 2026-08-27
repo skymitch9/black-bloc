@@ -153,6 +153,5 @@ async function load() {
 
 refresh = start({
   tab: 'birthdays',
-  subtitle: 'Who has a birthday stored, by month.',
   load,
 });
