@@ -6,12 +6,7 @@ from discord.ext import commands
 
 from .. import __version__
 from ..actionlog import log_action
-from ..settings_store import KEY_HELP, KEY_TYPES, SettingError
-
-GUILD_ONLY = (
-    "That command changes settings for a server, so it has to be run in the server itself "
-    "rather than in a DM. Run it again from a channel Black Bloc can answer in."
-)
+from ..settings_store import KEY_HELP, KEY_TYPES, SettingError, require_staff
 
 
 class Core(commands.Cog):
@@ -35,21 +30,9 @@ class Core(commands.Cog):
         name="settings", description="Read and change Black Bloc's settings for this server"
     )
 
-    async def _staff_gate(self, interaction: discord.Interaction) -> bool:
-        store = self.bot.store
-        if interaction.guild is None:
-            await interaction.response.send_message(GUILD_ONLY, ephemeral=True)
-            return False
-        if not store.is_staff(interaction.user):
-            await interaction.response.send_message(
-                store.staff_refusal(interaction.guild.id), ephemeral=True
-            )
-            return False
-        return True
-
     @settings.command(name="show", description="Show Black Bloc's settings for this server")
     async def settings_show(self, interaction: discord.Interaction) -> None:
-        if not await self._staff_gate(interaction):
+        if not await require_staff(interaction):
             return
         store = self.bot.store
         lines = []
@@ -69,7 +52,7 @@ class Core(commands.Cog):
         key: app_commands.Choice[str],
         channel: discord.TextChannel,
     ) -> None:
-        if not await self._staff_gate(interaction):
+        if not await require_staff(interaction):
             return
         store = self.bot.store
         try:

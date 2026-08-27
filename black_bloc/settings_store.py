@@ -23,6 +23,12 @@ KEY_HELP: dict[str, str] = {
 }
 
 
+GUILD_ONLY = (
+    "That command changes settings for a server, so it has to be run in the server itself "
+    "rather than in a DM. Run it again from a channel Black Bloc can answer in."
+)
+
+
 class SettingError(ValueError):
     """A settings key is unknown, or its value is the wrong type."""
 
@@ -57,6 +63,20 @@ def member_is_staff(member: Any, staff_ids: set[int]) -> bool:
     if perms is not None and getattr(perms, "manage_guild", False):
         return True
     return any(getattr(r, "id", None) in staff_ids for r in getattr(member, "roles", ()))
+
+
+async def require_staff(interaction: Any) -> bool:
+    """True if the caller may run a staff command; otherwise answer them and return False."""
+    if interaction.guild is None:
+        await interaction.response.send_message(GUILD_ONLY, ephemeral=True)
+        return False
+    store = interaction.client.store
+    if not store.is_staff(interaction.user):
+        await interaction.response.send_message(
+            store.staff_refusal(interaction.guild.id), ephemeral=True
+        )
+        return False
+    return True
 
 
 class SettingsStore:

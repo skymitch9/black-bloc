@@ -15,7 +15,10 @@ from .storage.db import Database
 
 log = logging.getLogger(__name__)
 
-COGS: tuple[str, ...] = ("black_bloc.cogs.core",)
+COGS: tuple[str, ...] = (
+    "black_bloc.cogs.core",
+    "black_bloc.cogs.community.role_menus",
+)
 
 
 class BlackBlocBot(commands.Bot):

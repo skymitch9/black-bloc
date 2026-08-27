@@ -27,6 +27,12 @@ class TestModeGuard:
     def allows_channel(self, channel_id: int) -> bool:
         return channel_id == self.test_channel_id or self._is_dm(channel_id)
 
+    def refusal_message(self) -> str:
+        return (
+            "Black Bloc is in **test mode** — commands only work in "
+            f"<#{self.test_channel_id}> or by DM for now."
+        )
+
     def allows_interaction(self, interaction: discord.Interaction) -> bool:
         if interaction.guild_id is None:
             return True
@@ -60,11 +66,7 @@ class TestModeGuard:
                     getattr(interaction.command, "qualified_name", "?"),
                     interaction.channel_id,
                 )
-                await interaction.response.send_message(
-                    "Black Bloc is in **test mode** — commands only work in "
-                    f"<#{guard.test_channel_id}> or by DM for now.",
-                    ephemeral=True,
-                )
+                await interaction.response.send_message(guard.refusal_message(), ephemeral=True)
                 return False
 
             tree.interaction_check = interaction_check  # type: ignore[method-assign]
