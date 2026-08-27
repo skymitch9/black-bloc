@@ -1,4 +1,22 @@
-import { nameRecord, refChannels, refRoles, refMembers, saveSetting, clearSetting } from './api.js';
+import {
+  Outage,
+  clearSetting,
+  nameRecord,
+  refChannels,
+  refMembers,
+  refRoles,
+  saveSetting,
+  settings,
+  settingsNamespace,
+} from './api.js';
+
+const OUTAGE_WRITE = 'Black Bloc did not answer, so nothing was changed. That is an outage, not a ' +
+  'permission problem — try again in a minute.';
+
+export function sentenceFor(error) {
+  if (error instanceof Outage) return { text: OUTAGE_WRITE, tone: 'danger' };
+  return { text: error.message, tone: error.isPermission ? 'warn' : 'danger' };
+}
 
 export function el(tag, props = {}, children = []) {
   const node = document.createElement(tag);
@@ -475,7 +493,8 @@ export async function settingRow(spec, { onSaved = null } = {}) {
       say.say(`Saved. ${spec.key} is now ${describeText(now, label)}.`, 'ok');
       if (onSaved) onSaved(spec.key, now);
     } catch (error) {
-      say.say(error.message, error.isPermission ? 'warn' : 'danger');
+      const said = sentenceFor(error);
+      say.say(said.text, said.tone);
     }
   });
 
@@ -496,7 +515,8 @@ export async function settingRow(spec, { onSaved = null } = {}) {
       say.say(`Cleared. ${spec.key} is back to its default.`, 'ok');
       if (onSaved) onSaved(spec.key, now);
     } catch (error) {
-      say.say(error.message, error.isPermission ? 'warn' : 'danger');
+      const said = sentenceFor(error);
+      say.say(said.text, said.tone);
     }
   }, { tone: 'quiet' });
 
@@ -518,4 +538,27 @@ export async function settingsPanel(specs, { onSaved = null, empty = 'This part 
   const rows = [];
   for (const spec of specs) rows.push(await settingRow(spec, { onSaved }));
   return el('div', { class: 'settings-grid' }, rows);
+}
+
+export async function namespaceSettings(namespace, { title = 'Settings', note = null, onSaved = null } = {}) {
+  const payload = await settings();
+  const group = section(title, note);
+  group.body.append(await settingsPanel(settingsNamespace(payload, namespace), {
+    onSaved,
+    empty: `The bot registers no settings under ${namespace}.`,
+  }));
+  return group.node;
+}
+
+export async function run(say, work, okText) {
+  say.say('Working…');
+  try {
+    const found = await work();
+    say.say(typeof okText === 'function' ? okText(found) : okText, 'ok');
+    return { ok: true, found };
+  } catch (error) {
+    const said = sentenceFor(error);
+    say.say(said.text, said.tone);
+    return { ok: false, found: null };
+  }
 }
