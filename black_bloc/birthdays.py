@@ -6,15 +6,16 @@ import re
 from calendar import isleap, monthrange
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta, timezone
+from importlib.resources import files
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from .settings_store import BIRTHDAY_COLOR, BIRTHDAY_TEMPLATE, BIRTHDAY_TZ
+from .settings_store import BIRTHDAY_COLOR, BIRTHDAY_TEMPLATE, BIRTHDAY_TZ, HEX_COLOR
 
 log = logging.getLogger(__name__)
 
-DATA_FILE = Path(__file__).parent / "data" / "birthday_import_2026-08-05.json"
+DATA_FILE = files("black_bloc") / "data" / "birthday_import_2026-08-05.json"
 FALLBACK_ZONE = timezone(timedelta(hours=-7), "America/Phoenix")
 DEFAULT_COLOR_VALUE = 0x4EEFFF
 DESCRIPTION_LIMIT = 2000
@@ -49,7 +50,6 @@ MONTH_NAMES: tuple[str, ...] = (
 )
 
 TAG_PREFIX = re.compile(r"^\s*[\[(][^\])]*[\])]\s*")
-COLOR = re.compile(r"^#?([0-9a-fA-F]{6})$")
 EXPORT_ROW = re.compile(
     r"^\|\s*(?P<month>[A-Za-z]+)\s*\|\s*(?P<day>\d{1,2})\s*\|\s*(?P<name>.+?)\s*\|"
     r"\s*(?P<age>\d{1,3})?\s*\|\s*$"
@@ -205,7 +205,7 @@ def year_from_age(age_shown: Any, as_of_year: int) -> int | None:
 
 def parse_color(value: Any) -> int:
     """The embed colour as an int; anything unreadable falls back to the incumbent's."""
-    match = COLOR.match(str(value or "").strip())
+    match = HEX_COLOR.match(str(value or "").strip())
     if match is None:
         log.warning("birthdays: colour %r is not a hex colour; using %s", value, BIRTHDAY_COLOR)
         return DEFAULT_COLOR_VALUE

@@ -26,6 +26,7 @@ from ...birthdays import (
     render_description,
     resolve,
     stamp,
+    upcoming,
     year_from_age,
     year_problem,
 )
@@ -67,6 +68,14 @@ NOBODY_YET = (
 NONE_THIS_MONTH = "Nobody has a birthday stored in **{month}**."
 NOTHING_UPCOMING = (
     "There are no birthdays to show — everyone stored is opted out, or nobody has set one yet."
+)
+ROLE_CLEARED = (
+    "No birthday role will be given any more. A role somebody already has for today still "
+    "comes off tomorrow. Set one again with `/settings set-role birthday_role_id`."
+)
+ROLE_NOT_SET = (
+    "There was no birthday role set, so nothing changed. `/settings set-role birthday_role_id` "
+    "is how one is chosen."
 )
 IMPORT_EMPTY = (
     "The seed file that ships with Black Bloc has no rows in it, so nothing was imported. That "
@@ -233,6 +242,9 @@ class Birthdays(commands.Cog):
         self.last_error: str | None = None
 
     birthday = app_commands.Group(name="birthday", description="Birthday wishes on the day")
+    birthday_role = app_commands.Group(
+        name="role", description="The role given for the day", parent=birthday
+    )
 
     async def cog_load(self) -> None:
         if not self.bot.db.is_connected:
@@ -259,10 +271,25 @@ class Birthdays(commands.Cog):
     async def _before_sweep(self) -> None:
         await self.bot.wait_until_ready()
 
+    @_sweep.error
+    async def _sweep_stopped(self, exc: BaseException) -> None:
+        """The loop stops for the life of the process unless it is started again."""
+        self.last_error = f"{type(exc).__name__}: {exc}"
+        log.error("birthdays: the sweep stopped; restarting it", exc_info=exc)
+        self._sweep.restart()
+
+    @commands.Cog.listener()
+    async def on_ready(self) -> None:
+        if self.bot.db.is_connected and not self._sweep.is_running():
+            self._sweep.start()
+
     async def run_once(self, now: datetime | None = None) -> None:
         """One pass: today's birthdays announced once, yesterday's role taken back."""
         moment = now or datetime.now(UTC)
         for guild in list(getattr(self.bot, "guilds", ())):
+            if getattr(guild, "unavailable", False):
+                log.info("birthdays: skipped %s — the server is unavailable", guild.id)
+                continue
             mode = self.bot.store.get(guild.id, "birthday_mode")
             for row in await rows_for_guild(self.bot.db, guild.id):
                 async with self._lock(row["user_id"]):
@@ -293,14 +320,14 @@ class Birthdays(commands.Cog):
             "local_date": today_text,
         }
         if member is None:
-            await mark_announced(self.bot.db, row["user_id"], today_text)
-            await log_action(
-                self.bot,
-                guild,
-                "birthday.skipped",
-                target=row["user_id"],
-                details=details | {"reason": "not_in_the_server"},
-            )
+            if self._say_once(row["user_id"], "member_missing", today_text):
+                await log_action(
+                    self.bot,
+                    guild,
+                    "birthday.member_missing",
+                    target=row["user_id"],
+                    details=details | {"reason": "not_in_the_member_cache"},
+                )
             return
         years = age(row["year"], today) if store.get(guild.id, "birthday_show_age") else None
         text = render_description(
@@ -512,9 +539,10 @@ class Birthdays(commands.Cog):
             await interaction.response.send_message(problem, ephemeral=True)
             return
         m, d = clamp_month_day(month, day)
-        await save_birthday(
-            self.bot.db, interaction.guild.id, member.id, m, d, year, source
-        )
+        async with self._lock(member.id):
+            await save_birthday(
+                self.bot.db, interaction.guild.id, member.id, m, d, year, source
+            )
         zone = await self._zone_of(member.id)
         whose = "Your" if member.id == interaction.user.id else f"**{member.display_name}**'s"
         await interaction.response.send_message(
@@ -629,15 +657,22 @@ class Birthdays(commands.Cog):
         if not rows:
             await interaction.response.send_message(NOTHING_UPCOMING, ephemeral=True)
             return
-        found = []
-        for row in rows:
-            zone = await self._zone_of(row["user_id"])
-            found.append((next_occurrence(row["month"], row["day"], zone), row))
-        found.sort(key=lambda pair: (pair[0].astimezone(UTC), pair[1]["user_id"]))
+        entries = [
+            {
+                "user_id": row["user_id"],
+                "month": row["month"],
+                "day": row["day"],
+                "year": row["year"],
+                "tz": await self._zone_of(row["user_id"]),
+            }
+            for row in rows
+        ]
+        by_id = {entry["user_id"]: entry for entry in entries}
         lines = [
-            f"· <@{row['user_id']}> — {month_day_text(row['month'], row['day'])} "
-            f"({stamp(when, 'D')}, {stamp(when, 'R')})"
-            for when, row in found[:NEXT_LIMIT]
+            f"· <@{item.user_id}> — "
+            f"{month_day_text(by_id[item.user_id]['month'], by_id[item.user_id]['day'])} "
+            f"({stamp(item.when, 'D')}, {stamp(item.when, 'R')})"
+            for item in upcoming(entries, limit=NEXT_LIMIT)
         ]
         await interaction.response.send_message(
             "**Next birthdays**\n" + "\n".join(lines),
@@ -698,6 +733,8 @@ class Birthdays(commands.Cog):
     ) -> None:
         if not await require_staff(interaction):
             return
+        if not await self._ready(interaction):
+            return
         await self.bot.store.set(
             interaction.guild.id, "birthday_mode", mode.value, by=interaction.user.id
         )
@@ -710,6 +747,28 @@ class Birthdays(commands.Cog):
             "birthday.mode",
             actor=interaction.user,
             details={"mode": mode.value},
+        )
+
+    @birthday_role.command(name="clear", description="Stop giving a birthday role at all (staff)")
+    async def role_clear(self, interaction: discord.Interaction) -> None:
+        if not await require_staff(interaction):
+            return
+        if not await self._ready(interaction):
+            return
+        cleared = await self.bot.store.clear(
+            interaction.guild.id, "birthday_role_id", by=interaction.user.id
+        )
+        await interaction.response.send_message(
+            ROLE_CLEARED if cleared else ROLE_NOT_SET, ephemeral=True
+        )
+        if not cleared:
+            return
+        await log_action(
+            self.bot,
+            interaction.guild,
+            "settings.clear",
+            actor=interaction.user,
+            details={"key": "birthday_role_id"},
         )
 
     @birthday.command(name="status", description="What birthdays are set to, and how they run")

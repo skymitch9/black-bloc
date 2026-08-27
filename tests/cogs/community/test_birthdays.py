@@ -375,15 +375,34 @@ async def test_a_channel_outside_test_mode_is_a_dry_run_not_a_failure(bot, cog, 
     assert await action_kinds(bot.db) == ["birthday.would_announce"]
 
 
-async def test_a_member_who_left_is_skipped_once(bot, cog):
+async def test_a_member_the_cache_cannot_see_is_reported_once_and_not_marked_done(bot, cog):
     await bot.store.set(GUILD, "birthday_mode", "on")
     await stored(bot)
 
     await cog.run_once(MORNING)
     await cog.run_once(MORNING)
 
-    assert await action_kinds(bot.db) == ["birthday.skipped"]
+    assert await action_kinds(bot.db) == ["birthday.member_missing"]
     assert party_posts(bot) == []
+    assert (await get_birthday(bot.db, USER))["last_announced_on"] is None
+
+    FakeMember(bot.guild)
+    await cog.run_once(MORNING)
+
+    assert len(party_posts(bot)) == 1
+    assert (await get_birthday(bot.db, USER))["last_announced_on"] == "2026-08-10"
+
+
+async def test_an_unavailable_server_is_left_alone(bot, cog, birthday_person):
+    await bot.store.set(GUILD, "birthday_mode", "on")
+    await stored(bot)
+    bot.guild.unavailable = True
+
+    await cog.run_once(MORNING)
+
+    assert party_posts(bot) == []
+    assert await action_kinds(bot.db) == []
+    assert (await get_birthday(bot.db, USER))["last_announced_on"] is None
 
 
 async def test_the_role_is_never_added_in_test_mode(bot, cog, birthday_person):
@@ -899,6 +918,51 @@ async def test_the_loop_is_registered_on_load_and_cancelled_on_unload(bot, cog):
     await asyncio.sleep(0)
 
     assert not cog._sweep.is_running()
+
+
+async def test_the_loop_is_started_from_on_ready_when_the_database_was_late(bot, cog):
+    class Closed:
+        is_connected = False
+
+    live = bot.db
+    bot.db = Closed()
+    await cog.cog_load()
+    assert not cog._sweep.is_running()
+
+    bot.db = live
+    await cog.on_ready()
+    assert cog._sweep.is_running()
+
+    await cog.cog_unload()
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+
+
+async def test_a_loop_that_stops_is_recorded_and_started_again(bot, cog):
+    await cog._sweep_stopped(RuntimeError("gateway went away"))
+
+    assert cog.last_error == "RuntimeError: gateway went away"
+
+
+async def test_clearing_the_birthday_role_is_staff_only_and_says_so_when_there_was_none(
+    bot, cog, birthday_person
+):
+    interaction = FakeInteraction(bot, birthday_person)
+    await cog.role_clear.callback(cog, interaction)
+    assert "staff only" in interaction.sent
+
+    give_staff(bot, birthday_person)
+    empty = FakeInteraction(bot, birthday_person)
+    await cog.role_clear.callback(cog, empty)
+    assert "was no birthday role" in empty.sent
+
+    await bot.store.set(GUILD, "birthday_role_id", CAKE_ROLE)
+    cleared = FakeInteraction(bot, birthday_person)
+    await cog.role_clear.callback(cog, cleared)
+
+    assert bot.store.get(GUILD, "birthday_role_id") is None
+    assert "No birthday role" in cleared.sent
+    assert await action_kinds(bot.db) == ["settings.clear"]
 
 
 async def test_a_sweep_that_throws_is_recorded_not_swallowed_silently(bot, cog, monkeypatch):

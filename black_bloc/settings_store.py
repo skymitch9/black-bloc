@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -28,6 +29,7 @@ BIRTHDAY_TEMPLATE = "Happy Birthday **{name}**!"
 BIRTHDAY_COLOR = "#4eefff"
 BIRTHDAY_TZ = "America/Phoenix"
 BIRTHDAY_MODES = ("off", "shadow", "on")
+HEX_COLOR = re.compile(r"^#?([0-9a-fA-F]{6})$")
 
 KEY_TYPES: dict[str, str] = {
     "log_channel_id": "channel",
@@ -53,7 +55,7 @@ KEY_TYPES: dict[str, str] = {
     "birthday_mode": "enum",
     "birthday_channel_id": "channel",
     "birthday_template": "text",
-    "birthday_color": "text",
+    "birthday_color": "color",
     "birthday_role_id": "role",
     "birthday_show_age": "bool",
 }
@@ -171,6 +173,14 @@ def coerce_value(key: str, value: Any) -> Any:
         if not isinstance(value, str) or not value.strip():
             raise SettingError(f"{key!r} takes some text, not {value!r}.")
         return value
+    if kind == "color":
+        match = HEX_COLOR.match(str(value or "").strip()) if isinstance(value, str) else None
+        if match is None:
+            raise SettingError(
+                f"{key!r} takes a hex colour like `#4eefff` — six digits 0-9 or a-f, with or "
+                f"without the `#`, and nothing else. {value!r} is not one, so nothing was changed."
+            )
+        return f"#{match.group(1).lower()}"
     raise SettingError(f"{key!r} has no validator for type {kind!r}.")
 
 
@@ -343,6 +353,20 @@ class SettingsStore:
         await self.db.conn.commit()
         self._cache[(guild_id, key)] = stored
         return stored
+
+    async def clear(self, guild_id: int, key: str, *, by: int | None = None) -> bool:
+        """Forget one stored setting so its default applies again."""
+        if key not in KEY_TYPES:
+            raise SettingError(f"{key!r} is not a Black Bloc setting.")
+        cur = await self.db.conn.execute(
+            "DELETE FROM settings WHERE guild_id = ? AND key = ?", (guild_id, key)
+        )
+        await self.db.conn.commit()
+        self._cache.pop((guild_id, key), None)
+        cleared = bool(cur.rowcount)
+        if cleared:
+            log.info("settings cleared: %s for guild %s by %s", key, guild_id, by)
+        return cleared
 
     def staff_roles(self, guild: Any) -> list[Any]:
         channel_id = self.get(guild.id, "staff_channel_id")

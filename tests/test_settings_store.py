@@ -352,6 +352,28 @@ def test_the_birthday_values_are_checked_and_parsed():
     assert coerce_value("birthday_role_id", _Role(6)) == 6
 
 
+def test_a_colour_that_is_not_a_hex_code_is_refused_with_a_sentence():
+    assert coerce_value("birthday_color", "#4EEFFF") == "#4eefff"
+    assert coerce_value("birthday_color", " 4eefff ") == "#4eefff"
+    for bad in ("blue", "#4eeff", "#4eefffff", "", "#nothex", 4):
+        with pytest.raises(SettingError, match="hex colour"):
+            coerce_value("birthday_color", bad)
+
+
+async def test_a_setting_can_be_unset_again(store):
+    await store.set(1, "birthday_role_id", 42)
+    assert store.get(1, "birthday_role_id") == 42
+
+    assert await store.clear(1, "birthday_role_id", by=9) is True
+    assert store.get(1, "birthday_role_id") is None
+    assert await store.clear(1, "birthday_role_id") is False
+
+    await store.load()
+    assert store.get(1, "birthday_role_id") is None
+    with pytest.raises(SettingError, match="not a Black Bloc setting"):
+        await store.clear(1, "nonsense_id")
+
+
 def test_staff_refusal_names_the_channel(tmp_path, monkeypatch):
     monkeypatch.delenv("DISCORD_TOKEN", raising=False)
     settings = load_settings(_env_file=None, test_mode=True, test_channel_id=TEST_CH)
