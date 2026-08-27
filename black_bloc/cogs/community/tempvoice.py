@@ -21,7 +21,6 @@ from ...settings_store import (
 
 log = logging.getLogger(__name__)
 
-CREATOR_NAME = "join to create a channel"
 AFK_FALLBACK_NAME = "You Still Here?"
 PANEL_PREFIX = "tempvoice"
 RECONCILE_GRACE_SECONDS = 60
@@ -65,10 +64,23 @@ CLAIM_NEEDS_CONNECTION = (
     "You have to be connected to this channel before you can claim it, so nothing was changed. "
     "Join the voice channel, then press Claim again."
 )
-ALREADY_A_LOBBY = (
-    "This server already has a join-to-create channel — {where} — so a second one was not made. "
-    "Delete that channel, or run `/tempvoice forget {channel_id}` if it is already gone, then "
+REPAIRED = (
+    "Black Bloc repaired the join-to-create channel it already had — {where} — instead of making "
+    "a second one. It is called **{name}** again, and {who} can see it and join it."
+)
+EXTRA_LOBBIES = (
+    " There are other join-to-create channels too — {extras} — so drop the ones you do not want "
+    "with `/tempvoice forget <id>`."
+)
+CANNOT_REPAIR = (
+    "Discord refused to change {where}, so nothing was repaired. Black Bloc needs the Manage "
+    "Channels and Manage Roles permissions in that category. Ask an admin to check them, then "
     "run this again."
+)
+OUTSIDE_TEST_CATEGORY = (
+    "{where} is Black Bloc's join-to-create channel, but it sits outside the test channel's "
+    "category, so test mode stopped it being repaired. Delete that channel and run this again, "
+    "or turn test mode off first."
 )
 NOT_A_LOBBY = (
     "**{channel_id}** is not one of Black Bloc's join-to-create channels, so nothing was "
@@ -159,23 +171,66 @@ def connected_ids(channel: Any) -> set[int]:
     return {int(user_id) for user_id in getattr(channel, "voice_states", {})}
 
 
-def owner_overwrites(guild: Any, member: Any, *, locked: bool = False, hidden: bool = False) -> Any:
-    everyone = discord.PermissionOverwrite()
+def category_overwrites(category: Any) -> dict[Any, Any]:
+    """A copy of the category's own overwrites, so a new channel keeps what the category says."""
+    found: dict[Any, Any] = {}
+    for target, overwrite in (getattr(category, "overwrites", None) or {}).items():
+        found[target] = discord.PermissionOverwrite(**dict(overwrite))
+    return found
+
+
+def allow_join(overwrites: dict[Any, Any], targets: Any, **extra: Any) -> dict[Any, Any]:
+    """Let each target see and connect, on top of whatever the category already gave them."""
+    for target in targets:
+        if target is None:
+            continue
+        overwrite = overwrites.get(target) or discord.PermissionOverwrite()
+        overwrite.view_channel = True
+        overwrite.connect = True
+        for name, value in extra.items():
+            setattr(overwrite, name, value)
+        overwrites[target] = overwrite
+    return overwrites
+
+
+def creator_overwrites(category: Any, allow: Any = (), me: Any = None) -> dict[Any, Any]:
+    found = allow_join(category_overwrites(category), allow)
+    if me is not None:
+        allow_join(found, [me], manage_channels=True, move_members=True)
+    return found
+
+
+def owner_overwrites(
+    guild: Any,
+    member: Any,
+    *,
+    locked: bool = False,
+    hidden: bool = False,
+    category: Any = None,
+    allow: Any = (),
+) -> Any:
+    found = category_overwrites(category)
+    everyone = found.get(guild.default_role) or discord.PermissionOverwrite()
     if locked:
         everyone.connect = False
     if hidden:
         everyone.view_channel = False
-    return {
-        guild.default_role: everyone,
-        member: discord.PermissionOverwrite(
-            view_channel=True,
-            connect=True,
-            manage_channels=True,
-            move_members=True,
-            mute_members=True,
-            deafen_members=True,
-        ),
-    }
+    found[guild.default_role] = everyone
+    allow_join(found, allow)
+    found[member] = discord.PermissionOverwrite(
+        view_channel=True,
+        connect=True,
+        manage_channels=True,
+        move_members=True,
+        mute_members=True,
+        deafen_members=True,
+    )
+    return found
+
+
+def roles_sentence(roles: Any) -> str:
+    names = [f"**{getattr(role, 'name', role)}**" for role in roles]
+    return ", ".join(names) if names else "everyone the category already lets in"
 
 
 def panel_text(member: Any) -> str:
@@ -602,10 +657,17 @@ class TempVoice(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self._creator_locks: dict[int, asyncio.Lock] = {}
+        self.last_ok_at: str | None = None
+        self.last_error: str | None = None
 
     tempvoice = app_commands.Group(
         name="tempvoice", description="Temporary voice channels people make by joining one"
     )
+
+    def loop_health(self, name: str) -> tuple[str | None, str | None]:
+        if name != "_reconcile_loop":
+            return (None, None)
+        return (self.last_ok_at, self.last_error)
 
     async def cog_load(self) -> None:
         self.bot.add_view(TempVoicePanel())
@@ -619,17 +681,35 @@ class TempVoice(commands.Cog):
 
     @tasks.loop(minutes=RECONCILE_MINUTES)
     async def _reconcile_loop(self) -> None:
-        if self.bot.db.is_connected:
+        if not self.bot.db.is_connected:
+            return
+        try:
             await self.reconcile_channels()
+        except Exception as exc:
+            self.last_error = f"{type(exc).__name__}: {exc}"
+            log.exception("temp voice: the five-minute reconcile failed")
+            return
+        self.last_error = None
+        self.last_ok_at = now_iso()
 
     @_reconcile_loop.before_loop
     async def _before_reconcile(self) -> None:
         await self.bot.wait_until_ready()
 
+    @_reconcile_loop.error
+    async def _reconcile_stopped(self, exc: BaseException) -> None:
+        """The loop stops for the life of the process unless it is started again."""
+        self.last_error = f"{type(exc).__name__}: {exc}"
+        log.error("temp voice: the reconcile loop stopped; restarting it", exc_info=exc)
+        self._reconcile_loop.restart()
+
     @commands.Cog.listener()
     async def on_ready(self) -> None:
-        if self.bot.db.is_connected:
-            await self.reconcile_channels()
+        if not self.bot.db.is_connected:
+            return
+        await self.reconcile_channels()
+        if not self._reconcile_loop.is_running():
+            self._reconcile_loop.start()
 
     async def reconcile_channels(self) -> None:
         """Forget rows whose channel is gone, and delete temp channels nobody is in."""
@@ -735,6 +815,8 @@ class TempVoice(commands.Cog):
                     member,
                     locked=bool(pref(prefs, "locked")),
                     hidden=bool(pref(prefs, "hidden")),
+                    category=creator.category,
+                    allow=self._join_roles(guild),
                 ),
                 user_limit=int(pref(prefs, "user_limit") or 0),
                 reason=f"Black Bloc temp voice for {member}",
@@ -855,6 +937,23 @@ class TempVoice(commands.Cog):
             return afk.category, creator_position(afk.position, 0), "above_afk"
         return None, bottom_position(c.position for c in guild.voice_channels), "bottom"
 
+    def _join_roles(self, guild: Any) -> list[Any]:
+        """The allowed role and every resolved staff role, as role objects."""
+        found = list(self.bot.store.staff_roles(guild))
+        role_id = self.bot.store.get(guild.id, "tempvoice_allowed_role_id")
+        if not role_id:
+            return found
+        allowed = guild.get_role(role_id)
+        if allowed is None:
+            log.warning(
+                "temp voice: the allowed role %s is gone, so it was left out of the overwrites",
+                role_id,
+            )
+            return found
+        if any(getattr(role, "id", None) == role_id for role in found):
+            return found
+        return [allowed, *found]
+
     def _lock(self, locks: dict[int, asyncio.Lock], key: int) -> asyncio.Lock:
         lock = locks.get(key)
         if lock is None:
@@ -868,7 +967,7 @@ class TempVoice(commands.Cog):
         await interaction.response.send_message(DB_UNAVAILABLE, ephemeral=True)
         return False
 
-    @tempvoice.command(name="setup", description="Create the join-to-create voice channel")
+    @tempvoice.command(name="setup", description="Create or repair the join-to-create channel")
     @app_commands.describe(name="What the join-to-create channel is called")
     async def setup_channel(
         self, interaction: discord.Interaction, name: str | None = None
@@ -878,28 +977,33 @@ class TempVoice(commands.Cog):
         if not await self._database_ready(interaction):
             return
         guild = interaction.guild
+        wanted = (name or "").strip()[:NAME_LIMIT]
+        if wanted:
+            await self.bot.store.set(
+                guild.id, "tempvoice_creator_name", wanted, by=interaction.user.id
+            )
+        else:
+            wanted = self.bot.store.get(guild.id, "tempvoice_creator_name")
         live = [
-            cid
+            guild.get_channel(cid)
             for cid in (self.bot.store.get(guild.id, "tempvoice_creator_ids") or [])
             if guild.get_channel(cid) is not None
         ]
         if live:
-            await interaction.response.send_message(
-                ALREADY_A_LOBBY.format(where=f"<#{live[0]}>", channel_id=live[0]),
-                ephemeral=True,
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
+            await self._repair(interaction, live, wanted)
             return
         category, position, where = self._creator_spot(guild)
         if where == "no_test_channel":
             await interaction.response.send_message(NO_TEST_CHANNEL, ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True)
+        allow = self._join_roles(guild)
         try:
             channel = await guild.create_voice_channel(
-                name or CREATOR_NAME,
+                wanted,
                 category=category,
                 position=position,
+                overwrites=creator_overwrites(category, allow, getattr(guild, "me", None)),
                 reason="Black Bloc temp voice: join-to-create",
             )
         except discord.HTTPException as exc:
@@ -913,7 +1017,8 @@ class TempVoice(commands.Cog):
             guild.id, "tempvoice_creator_ids", ids, by=interaction.user.id
         )
         await interaction.followup.send(
-            f"**{channel.name}** is ready — {channel.mention}. {self._where_sentence(where)}",
+            f"**{channel.name}** is ready — {channel.mention}, and {roles_sentence(allow)} can "
+            f"see it and join it. {self._where_sentence(where)}",
             ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
         )
@@ -922,7 +1027,61 @@ class TempVoice(commands.Cog):
             guild,
             "tempvoice.setup",
             actor=interaction.user,
-            details={"channel_id": channel.id, "placed": where},
+            details={"channel_id": channel.id, "placed": where, "name": wanted},
+        )
+
+    async def _repair(self, interaction: discord.Interaction, live: list[Any], wanted: str) -> None:
+        """Put the lobby the server already has back to its name and its own overwrites."""
+        guild = interaction.guild
+        channel = live[0]
+        if not self._may_act_in(channel):
+            await interaction.response.send_message(
+                OUTSIDE_TEST_CATEGORY.format(where=channel.mention),
+                ephemeral=True,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+            return
+        await interaction.response.defer(ephemeral=True)
+        allow = self._join_roles(guild)
+        try:
+            await channel.edit(
+                name=wanted,
+                overwrites=creator_overwrites(
+                    channel.category, allow, getattr(guild, "me", None)
+                ),
+                reason="Black Bloc temp voice: repairing the join-to-create channel",
+            )
+        except discord.HTTPException as exc:
+            log.warning("temp voice: could not repair the lobby %s: %s", channel.id, exc)
+            await log_action(
+                self.bot,
+                guild,
+                "tempvoice.repair_failed",
+                actor=interaction.user,
+                details={"channel_id": channel.id, "reason": f"{type(exc).__name__}: {exc}"},
+            )
+            await interaction.followup.send(
+                CANNOT_REPAIR.format(where=channel.mention),
+                ephemeral=True,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+            return
+        await log_action(
+            self.bot,
+            guild,
+            "tempvoice.repair",
+            actor=interaction.user,
+            details={"channel_id": channel.id, "name": wanted},
+        )
+        said = REPAIRED.format(
+            where=channel.mention, name=wanted, who=roles_sentence(allow)
+        )
+        if len(live) > 1:
+            said += EXTRA_LOBBIES.format(
+                extras=", ".join(f"<#{other.id}>" for other in live[1:])
+            )
+        await interaction.followup.send(
+            said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
         )
 
     @tempvoice.command(name="forget", description="Stop treating a channel id as join-to-create")
@@ -986,8 +1145,11 @@ class TempVoice(commands.Cog):
             "**join-to-create** — "
             + (", ".join(f"<#{c}>" for c in creators) if creators else "not set up yet"),
             f"**name template** — `{store.get(guild.id, 'tempvoice_name_template')}`",
+            f"**join-to-create name** — `{store.get(guild.id, 'tempvoice_creator_name')}`",
             f"**allowed role** — {f'<@&{role_id}>' if role_id else 'anyone'}",
             f"**channels open now** — {len(rows)}",
+            f"**last reconcile** — {self.last_ok_at or 'not yet'}",
+            f"**last error** — {self.last_error or 'none'}",
         ]
         await interaction.response.send_message(
             "\n".join(lines), ephemeral=True, allowed_mentions=discord.AllowedMentions.none()

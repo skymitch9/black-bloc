@@ -5,7 +5,6 @@ import discord
 import pytest
 
 from black_bloc.cogs.community.tempvoice import (
-    CREATOR_NAME,
     RECONCILE_GRACE_SECONDS,
     RECONCILE_MINUTES,
     MemberPick,
@@ -14,7 +13,9 @@ from black_bloc.cogs.community.tempvoice import (
     TempVoicePanel,
     add_channel,
     bottom_position,
+    category_overwrites,
     channel_name,
+    creator_overwrites,
     creator_position,
     delete_row,
     get_prefs,
@@ -33,7 +34,11 @@ from black_bloc.cogs.community.tempvoice import (
     spawn_position,
 )
 from black_bloc.config import load_settings
-from black_bloc.settings_store import MEMBER_ROLE_ID, SettingsStore
+from black_bloc.settings_store import (
+    MEMBER_ROLE_ID,
+    TEMPVOICE_CREATOR_NAME,
+    SettingsStore,
+)
 from black_bloc.storage.db import Database
 
 GUILD = 7
@@ -50,10 +55,11 @@ class FakeRole:
 
 
 class FakeCategory:
-    def __init__(self, category_id, voice_channels=()):
+    def __init__(self, category_id, voice_channels=(), overwrites=None):
         self.id = category_id
         self.name = f"category-{category_id}"
         self.voice_channels = list(voice_channels)
+        self.overwrites = dict(overwrites or {})
 
 
 class FakeMessage:
@@ -114,13 +120,20 @@ class FakeVoice:
         self.messages = []
         self.overwrites = {}
         self.send_raises = None
+        self.edit_raises = None
 
     async def delete(self, reason=None):
         self.deleted = True
         self.guild.channels.pop(self.id, None)
 
     async def edit(self, **kwargs):
+        if self.edit_raises is not None:
+            raise self.edit_raises
         self.edits.append(kwargs)
+        if "name" in kwargs:
+            self.name = kwargs["name"]
+        if "overwrites" in kwargs:
+            self.overwrites = dict(kwargs["overwrites"])
 
     async def send(self, content=None, **kwargs):
         if self.send_raises is not None:
@@ -149,6 +162,7 @@ class FakeGuild:
         self.roles = []
         self.afk_channel = None
         self.created = []
+        self.me = FakeRole(2)
         self._next_id = 1000
 
     def get_channel(self, channel_id):
@@ -156,6 +170,9 @@ class FakeGuild:
 
     def get_member(self, user_id):
         return self.members.get(user_id)
+
+    def get_role(self, role_id):
+        return next((role for role in self.roles if role.id == role_id), None)
 
     @property
     def voice_channels(self):
@@ -326,7 +343,7 @@ def cog(bot):
 
 @pytest.fixture
 def creator(bot):
-    return bot.guild.add(FakeVoice(CREATOR, bot.guild, position=4, name=CREATOR_NAME))
+    return bot.guild.add(FakeVoice(CREATOR, bot.guild, position=4, name=TEMPVOICE_CREATOR_NAME))
 
 
 @pytest.fixture
@@ -652,7 +669,8 @@ async def test_setup_puts_the_creator_in_the_test_category_while_test_mode_is_on
     await cog.setup_channel.callback(cog, interaction, None)
 
     made = bot.guild.created[0]
-    assert made.name == CREATOR_NAME and made.category is category and made.position == 3
+    assert made.name == TEMPVOICE_CREATOR_NAME == "join to create a channel"
+    assert made.category is category and made.position == 3
     assert bot.store.get(GUILD, "tempvoice_creator_ids") == [CREATOR, made.id]
     assert "test mode is off" in interaction.sent.lower()
 
@@ -933,15 +951,61 @@ async def test_the_reconcile_loop_runs_every_five_minutes_and_stops_with_the_cog
     assert cog._reconcile_loop.is_running() is False
 
 
-async def test_setup_refuses_a_second_lobby_and_says_how_to_forget_the_first(cog, bot, lead,
-                                                                            creator):
+async def test_setup_repairs_the_lobby_it_already_has_instead_of_making_a_second_one(
+    cog, bot, lead, creator, db
+):
+    creator.name = "join"
     interaction = FakeInteraction(bot, lead)
 
     await cog.setup_channel.callback(cog, interaction, None)
 
     assert bot.guild.created == []
-    assert "/tempvoice forget" in interaction.sent
+    assert creator.name == "join to create a channel"
     assert bot.store.get(GUILD, "tempvoice_creator_ids") == [CREATOR]
+    assert "repaired" in interaction.sent
+    assert "tempvoice.repair" in await action_kinds(db)
+
+
+async def test_a_repair_that_discord_refuses_says_so_and_is_logged(cog, bot, lead, creator, db):
+    creator.edit_raises = refused()
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.setup_channel.callback(cog, interaction, None)
+
+    assert "refused" in interaction.sent
+    assert "tempvoice.repair_failed" in await action_kinds(db)
+
+
+async def test_a_repair_names_the_other_lobbies_and_how_to_drop_them(cog, bot, lead, creator):
+    second = bot.guild.add(FakeVoice(CREATOR + 1, bot.guild, name="join"))
+    await bot.store.set(GUILD, "tempvoice_creator_ids", [CREATOR, second.id])
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.setup_channel.callback(cog, interaction, None)
+
+    assert f"<#{second.id}>" in interaction.sent and "/tempvoice forget" in interaction.sent
+    assert second.name == "join"
+
+
+async def test_test_mode_will_not_repair_a_lobby_outside_the_test_category(cog, bot, lead, creator):
+    bot.guild.add(FakeText(TEST_CHANNEL, category=FakeCategory(50)))
+    bot.guard = FakeGuard()
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.setup_channel.callback(cog, interaction, None)
+
+    assert creator.name == "join to create a channel"
+    assert creator.edits == []
+    assert "test mode" in interaction.sent.lower()
+
+
+async def test_a_name_given_to_setup_is_remembered_as_the_setting(cog, bot, lead, creator):
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.setup_channel.callback(cog, interaction, "Join Here")
+
+    assert bot.store.get(GUILD, "tempvoice_creator_name") == "Join Here"
+    assert creator.name == "Join Here"
 
 
 async def test_forget_drops_a_creator_id_and_refuses_anything_else(cog, bot, lead, db):
@@ -987,3 +1051,132 @@ async def test_the_setup_reply_never_pings(cog, bot, lead):
     await cog.setup_channel.callback(cog, interaction, None)
 
     assert interaction.response.messages[-1]["allowed_mentions"].everyone is False
+
+
+def staffed(bot, category=None, staff_role_id=555):
+    """One staff role (it can see the staff channel) and the Member role, on the guild."""
+    member_role = FakeRole(MEMBER_ROLE_ID)
+    staff_role = FakeRole(staff_role_id)
+    bot.guild.roles = [member_role, staff_role]
+    channel = bot.guild.add(FakeText(TEST_CHANNEL, category=category))
+    channel.visible_to = {staff_role_id}
+    return member_role, staff_role
+
+
+def test_a_new_channel_starts_from_a_copy_of_the_category_s_overwrites():
+    role = FakeRole(9)
+    category = FakeCategory(
+        50, overwrites={role: discord.PermissionOverwrite(view_channel=False, connect=False)}
+    )
+
+    copied = category_overwrites(category)
+    copied[role].connect = True
+
+    assert category.overwrites[role].connect is False
+    assert creator_overwrites(category, [role])[role].view_channel is True
+
+
+async def test_the_lobby_lets_the_allowed_role_staff_and_the_bot_in(cog, bot, lead):
+    category = FakeCategory(
+        50, overwrites={bot.guild.default_role: discord.PermissionOverwrite(connect=False)}
+    )
+    member_role, staff_role = staffed(bot, category)
+    bot.guard = FakeGuard()
+
+    await cog.setup_channel.callback(cog, FakeInteraction(bot, lead), None)
+
+    given = bot.guild.created[0].given_overwrites
+    assert given[member_role].view_channel is True and given[member_role].connect is True
+    assert given[staff_role].view_channel is True and given[staff_role].connect is True
+    assert given[bot.guild.me].connect is True and given[bot.guild.me].manage_channels is True
+    assert given[bot.guild.default_role].connect is False
+
+
+async def test_a_repair_puts_those_overwrites_on_the_lobby_it_already_has(cog, bot, lead):
+    category = FakeCategory(
+        50, overwrites={bot.guild.default_role: discord.PermissionOverwrite(connect=False)}
+    )
+    member_role, staff_role = staffed(bot, category)
+    bot.guard = FakeGuard()
+    lobby = bot.guild.add(
+        FakeVoice(CREATOR, bot.guild, category=category, position=4, name="join")
+    )
+
+    await cog.setup_channel.callback(cog, FakeInteraction(bot, lead), None)
+
+    assert lobby.name == "join to create a channel"
+    assert lobby.overwrites[member_role].connect is True
+    assert lobby.overwrites[staff_role].connect is True
+    assert lobby.overwrites[bot.guild.default_role].connect is False
+
+
+async def test_a_spawned_channel_lets_the_allowed_role_and_staff_in_too(cog, bot, member):
+    category = FakeCategory(
+        50, overwrites={bot.guild.default_role: discord.PermissionOverwrite(connect=False)}
+    )
+    member_role, staff_role = staffed(bot, category)
+    creator = bot.guild.add(FakeVoice(CREATOR, bot.guild, category=category, position=4))
+
+    await cog._maybe_create(member, creator)
+
+    given = bot.guild.created[0].given_overwrites
+    assert given[member_role].connect is True and given[staff_role].connect is True
+    assert given[bot.guild.default_role].connect is False
+    assert given[member].manage_channels is True
+
+
+async def test_an_allowed_role_that_no_longer_exists_is_left_out(cog, bot, lead):
+    category = FakeCategory(50)
+    bot.guild.add(FakeText(TEST_CHANNEL, category=category))
+    bot.guard = FakeGuard()
+
+    await cog.setup_channel.callback(cog, FakeInteraction(bot, lead), None)
+
+    assert bot.guild.created[0].given_overwrites == {
+        bot.guild.me: discord.PermissionOverwrite(
+            view_channel=True, connect=True, manage_channels=True, move_members=True
+        )
+    }
+
+
+async def test_the_reconcile_loop_records_its_last_good_run_and_its_last_error(cog, bot):
+    assert cog.loop_health("_reconcile_loop") == (None, None)
+
+    await cog._reconcile_loop.coro(cog)
+
+    assert cog.last_ok_at is not None and cog.last_error is None
+    assert cog.loop_health("_reconcile_loop") == (cog.last_ok_at, None)
+    assert cog.loop_health("poller") == (None, None)
+
+    async def boom():
+        raise RuntimeError("the database went away")
+
+    cog.reconcile_channels = boom
+    await cog._reconcile_loop.coro(cog)
+
+    assert "the database went away" in cog.last_error
+
+
+async def test_a_reconcile_loop_that_stopped_records_the_error_and_restarts_itself(
+    cog, bot, caplog
+):
+    restarted = []
+    cog._reconcile_loop.restart = lambda *a, **k: restarted.append(True)
+
+    with caplog.at_level("ERROR"):
+        await cog._reconcile_stopped(RuntimeError("the gateway went away"))
+
+    assert restarted == [True]
+    assert "the gateway went away" in cog.last_error
+    assert cog._reconcile_loop._error is not None
+
+
+async def test_status_shows_the_lobby_name_and_the_loop_s_health(cog, bot, lead):
+    cog.last_ok_at = "2026-08-26T12:00:00+00:00"
+
+    interaction = FakeInteraction(bot, lead)
+    await cog.status.callback(cog, interaction)
+
+    assert "join to create a channel" in interaction.sent
+    assert "2026-08-26T12:00:00+00:00" in interaction.sent
+    assert "**last error** — none" in interaction.sent

@@ -28,6 +28,7 @@ GOLIVE_MODES = ("off", "shadow", "on")
 
 MEMBER_ROLE_ID = 1073741054563602532
 TEMPVOICE_NAME_TEMPLATE = "{user}'s bloc"
+TEMPVOICE_CREATOR_NAME = "join to create a channel"
 TEMPVOICE_MODES = ("off", "on")
 HONEYPOT_MODES = ("off", "shadow", "on")
 HONEYPOT_PURGE_MAX_DAYS = 7
@@ -71,6 +72,7 @@ KEY_TYPES: dict[str, str] = {
     "tempvoice_mode": "enum",
     "tempvoice_creator_ids": "channels",
     "tempvoice_name_template": "text",
+    "tempvoice_creator_name": "text",
     "tempvoice_allowed_role_id": "role",
     "honeypot_mode": "enum",
     "honeypot_channel_ids": "channels",
@@ -168,6 +170,7 @@ KEY_HELP: dict[str, str] = {
     "tempvoice_mode": "off, or on (join-to-create makes a temporary voice channel)",
     "tempvoice_creator_ids": "the join-to-create channels; /tempvoice setup fills this in",
     "tempvoice_name_template": "what a spawned channel is called; {user} is the member",
+    "tempvoice_creator_name": "what the join-to-create channel itself is called",
     "tempvoice_allowed_role_id": "only members with this role get a temporary channel",
     "honeypot_mode": "off, shadow (log only) or on (ban whoever posts in the trap)",
     "honeypot_channel_ids": "the trap channels; /honeypot setup fills this in",
@@ -427,6 +430,8 @@ class SettingsStore:
             return "on"
         if key == "tempvoice_name_template":
             return TEMPVOICE_NAME_TEMPLATE
+        if key == "tempvoice_creator_name":
+            return TEMPVOICE_CREATOR_NAME
         if key == "tempvoice_allowed_role_id":
             return MEMBER_ROLE_ID
         if key == "honeypot_mode":
