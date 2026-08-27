@@ -5,6 +5,7 @@ import pytest
 
 from black_bloc.birthdays import (
     DATA_FILE,
+    DESCRIPTION_LIMIT,
     FALLBACK_ZONE,
     ImportRow,
     age,
@@ -159,6 +160,7 @@ def test_a_broken_template_falls_back_to_the_default_wording():
     assert render_description("{name} turns {age}!", "PT", 39) == "PT turns 39!"
     assert render_description("{nope}", "PT") == "Happy Birthday **PT**!"
     assert "@everyone" in render_description(BIRTHDAY_TEMPLATE, "@everyone")
+    assert len(render_description("{name}", "x" * 5000)) == DESCRIPTION_LIMIT
 
 
 def test_bracket_and_paren_prefixes_are_stripped():

@@ -17,6 +17,7 @@ log = logging.getLogger(__name__)
 DATA_FILE = Path(__file__).parent / "data" / "birthday_import_2026-08-05.json"
 FALLBACK_ZONE = timezone(timedelta(hours=-7), "America/Phoenix")
 DEFAULT_COLOR_VALUE = 0x4EEFFF
+DESCRIPTION_LIMIT = 2000
 
 MONTHS: dict[str, int] = {
     "january": 1,
@@ -215,12 +216,13 @@ def render_description(template: str, name: str, age_value: int | None = None) -
     """The one line the embed carries; a broken template falls back to the default."""
     shown = "" if age_value is None else str(age_value)
     try:
-        return str(template).format(name=name, age=shown)
+        text = str(template).format(name=name, age=shown)
     except Exception as exc:
         log.warning(
             "birthdays: template %r could not be rendered (%s); using the default", template, exc
         )
-        return BIRTHDAY_TEMPLATE.format(name=name, age=shown)
+        text = BIRTHDAY_TEMPLATE.format(name=name, age=shown)
+    return text[:DESCRIPTION_LIMIT]
 
 
 def strip_tags(name: str) -> str:
