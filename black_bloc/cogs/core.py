@@ -5,6 +5,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from .. import __version__
+from ..actionlog import log_action
 from ..settings_store import KEY_HELP, KEY_TYPES, SettingError
 
 GUILD_ONLY = (
@@ -80,6 +81,14 @@ class Core(commands.Cog):
             return
         await interaction.response.send_message(
             f"**{key.value}** now points at {channel.mention}.", ephemeral=True
+        )
+        await log_action(
+            self.bot,
+            interaction.guild,
+            "settings.set",
+            actor=interaction.user,
+            target=channel,
+            details={"key": key.value, "channel_id": channel.id},
         )
 
 
