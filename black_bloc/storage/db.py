@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 8
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -142,6 +142,51 @@ CREATE TABLE IF NOT EXISTS events (
 );
 
 CREATE INDEX IF NOT EXISTS events_by_status ON events(guild_id, status, starts_at);
+
+CREATE TABLE IF NOT EXISTS modmail_tickets (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id       INTEGER NOT NULL,
+    user_id        INTEGER NOT NULL,
+    mode           TEXT    NOT NULL,
+    channel_id     INTEGER NOT NULL,
+    thread_id      INTEGER,
+    status         TEXT    NOT NULL DEFAULT 'open',
+    opened_at      TEXT    NOT NULL,
+    closed_at      TEXT,
+    closed_by      INTEGER,
+    close_reason   TEXT,
+    log_message_id INTEGER
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS modmail_open_ticket
+    ON modmail_tickets(guild_id, user_id) WHERE status = 'open';
+
+CREATE TABLE IF NOT EXISTS modmail_messages (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticket_id   INTEGER NOT NULL REFERENCES modmail_tickets(id),
+    at          TEXT    NOT NULL,
+    author_id   INTEGER NOT NULL,
+    direction   TEXT    NOT NULL,
+    anonymous   INTEGER NOT NULL DEFAULT 0,
+    content     TEXT,
+    attachments TEXT
+);
+
+CREATE INDEX IF NOT EXISTS modmail_messages_by_ticket ON modmail_messages(ticket_id, id);
+
+CREATE TABLE IF NOT EXISTS modmail_blocks (
+    user_id INTEGER PRIMARY KEY,
+    by      INTEGER,
+    reason  TEXT,
+    at      TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS modmail_snippets (
+    name    TEXT PRIMARY KEY,
+    content TEXT NOT NULL,
+    by      INTEGER,
+    at      TEXT NOT NULL
+);
 """
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (

@@ -12,13 +12,42 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 5
+        assert SCHEMA_VERSION == 8
         cur = await db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = {r["name"] for r in await cur.fetchall()}
         assert {"settings", "action_log", "role_menus", "role_menu_options"} <= tables
         assert {"golive_links", "golive_optout", "golive_sessions"} <= tables
         assert {"tempvoice_channels", "tempvoice_prefs", "honeypot_hits"} <= tables
         assert {"user_timezones", "events"} <= tables
+        assert {
+            "modmail_tickets",
+            "modmail_messages",
+            "modmail_blocks",
+            "modmail_snippets",
+        } <= tables
+    finally:
+        await db.close()
+
+
+async def open_ticket(db, user_id, channel_id):
+    await db.conn.execute(
+        "INSERT INTO modmail_tickets(guild_id, user_id, mode, channel_id, status, opened_at) "
+        "VALUES (1, ?, 'channel', ?, 'open', '2026-08-26T00:00:00+00:00')",
+        (user_id, channel_id),
+    )
+    await db.conn.commit()
+
+
+async def test_only_one_modmail_ticket_per_member_may_be_open(tmp_path):
+    db = Database(tmp_path / "t.sqlite3")
+    await db.connect()
+    try:
+        await open_ticket(db, 900, 10)
+        with pytest.raises(sqlite3.IntegrityError):
+            await open_ticket(db, 900, 11)
+        await db.conn.execute("UPDATE modmail_tickets SET status = 'closed'")
+        await db.conn.commit()
+        await open_ticket(db, 900, 12)
     finally:
         await db.close()
 

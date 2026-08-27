@@ -27,6 +27,12 @@ EVENTS_MODES = ("off", "shadow", "on")
 EVENTS_RETENTION_DAYS = 7
 EVENTS_RETENTION_MAX_DAYS = 365
 
+CHANNEL_MODE = "channel"
+THREAD_MODE = "thread"
+MODMAIL_MODES = (CHANNEL_MODE, THREAD_MODE)
+MODMAIL_CATEGORY_ID = 1442613057628012594
+MODMAIL_LOG_CHANNEL_ID = 1442613059704066108
+
 KEY_TYPES: dict[str, str] = {
     "log_channel_id": "channel",
     "staff_channel_id": "channel",
@@ -54,6 +60,11 @@ KEY_TYPES: dict[str, str] = {
     "events_ping_role_id": "role",
     "events_create_scheduled": "bool",
     "events_channel_retention_days": "int",
+    "modmail_enabled": "bool",
+    "modmail_mode": "enum",
+    "modmail_category_id": "channel",
+    "modmail_staff_channel_id": "channel",
+    "modmail_log_channel_id": "channel",
 }
 
 KEY_CHOICES: dict[str, tuple[str, ...]] = {
@@ -61,6 +72,7 @@ KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "tempvoice_mode": TEMPVOICE_MODES,
     "honeypot_mode": HONEYPOT_MODES,
     "events_mode": EVENTS_MODES,
+    "modmail_mode": MODMAIL_MODES,
 }
 
 KEY_MAX: dict[str, int] = {
@@ -112,6 +124,11 @@ KEY_HELP: dict[str, str] = {
         f"days a finished event's channel is kept before deletion, 0 to "
         f"{EVENTS_RETENTION_MAX_DAYS}"
     ),
+    "modmail_enabled": "true when Black Bloc answers DMs; false leaves them to the old ModMail bot",
+    "modmail_mode": "channel (one channel per ticket) or thread (private threads in one channel)",
+    "modmail_category_id": "the category ticket channels are made in, in channel mode",
+    "modmail_staff_channel_id": "the channel ticket threads are made in, in thread mode",
+    "modmail_log_channel_id": "where a closed ticket's transcript is posted",
 }
 
 
@@ -326,6 +343,16 @@ class SettingsStore:
             return True
         if key == "events_channel_retention_days":
             return EVENTS_RETENTION_DAYS
+        if key == "modmail_enabled":
+            return False
+        if key == "modmail_mode":
+            return CHANNEL_MODE
+        if key == "modmail_category_id":
+            return MODMAIL_CATEGORY_ID
+        if key == "modmail_log_channel_id":
+            if self.settings.test_mode:
+                return self.settings.test_channel_id
+            return MODMAIL_LOG_CHANNEL_ID
         if KEY_TYPES.get(key) in ("channels", "roles"):
             return []
         return None
