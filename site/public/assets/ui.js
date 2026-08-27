@@ -63,22 +63,103 @@ export function sayNothing(text) {
   return el('p', { class: 'say-nothing', text });
 }
 
-export function section(title, note) {
+export function slugOf(text) {
+  const made = String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return made || 'section';
+}
+
+const DEBOUNCE_MS = 200;
+
+export function searchBox({ label = 'Search', placeholder = 'type to filter', onQuery = null } = {}) {
+  const input = el('input', {
+    class: 'input search',
+    type: 'search',
+    placeholder,
+    autocomplete: 'off',
+    'aria-label': label,
+  });
+  let timer = null;
+  const fire = () => {
+    if (onQuery) onQuery(input.value.trim().toLowerCase());
+  };
+  input.addEventListener('input', () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(fire, DEBOUNCE_MS);
+  });
+  input.addEventListener('search', () => {
+    if (timer) clearTimeout(timer);
+    fire();
+  });
+  return input;
+}
+
+export function filterRows(root, query) {
+  let shown = 0;
+  let total = 0;
+  for (const body of root.querySelectorAll('tbody')) {
+    for (const line of body.children) {
+      total += 1;
+      const hit = query === '' || line.textContent.toLowerCase().includes(query);
+      line.hidden = !hit;
+      if (hit) shown += 1;
+    }
+  }
+  return { shown, total };
+}
+
+export function section(title, note, { count = null, id = null } = {}) {
   const body = el('div', { class: 'section-body' });
-  const node = el('section', {}, [
-    el('h2', { text: title }),
-    note ? el('p', { class: 'section-note', text: note }) : null,
-    body,
+  const slug = id || slugOf(title);
+  const countNode = el('span', { class: 'sect-count', hidden: true });
+  const heading = el('h2', { class: 'sect-title' }, [
+    el('span', { class: 'sect-mark', 'aria-hidden': 'true' }),
+    el('span', { class: 'sect-name', text: title }),
+    countNode,
   ]);
-  return { node, body };
+  const details = el('details', { class: 'card sect-card' }, [
+    el('summary', { class: 'sect-summary' }, [heading]),
+    el('div', { class: 'sect-inner' }, [
+      note ? el('p', { class: 'section-note', text: note }) : null,
+      body,
+    ]),
+  ]);
+  const node = el('section', {
+    class: 'sect',
+    id: `sect-${slug}`,
+    'data-sect': slug,
+    'data-title': title,
+  }, [details]);
+
+  const setCount = (value) => {
+    if (value === null || value === undefined) {
+      countNode.hidden = true;
+      node.removeAttribute('data-count');
+      return;
+    }
+    countNode.textContent = String(value);
+    countNode.hidden = false;
+    node.setAttribute('data-count', String(value));
+  };
+  setCount(count);
+
+  return { node, body, details, slug, title, count: setCount };
 }
 
-export function card(title, children) {
-  return el('div', { class: 'card' }, [title ? el('h3', { text: title }) : null].concat(children));
+export function card(title, children, { actions = null } = {}) {
+  const head = title || actions
+    ? el('div', { class: 'card-head' }, [
+      title ? el('h3', { text: title }) : null,
+      actions ? el('div', { class: 'bar card-bar' }, actions) : null,
+    ])
+    : null;
+  return el('div', { class: 'card' }, [head].concat(children));
 }
 
-export function bar(children) {
-  return el('div', { class: 'bar' }, children);
+export function bar(children, { sticky = false } = {}) {
+  return el('div', { class: sticky ? 'bar card-bar' : 'bar' }, children);
 }
 
 export function button(label, onClick, { tone = null, small = true, disabled = false } = {}) {
@@ -170,7 +251,14 @@ export function idsIn(rows, keys) {
   return found;
 }
 
-export function table(columns, rows, { empty = 'Nothing here yet.' } = {}) {
+const SEARCH_FROM = 2;
+const LONG_FROM = 12;
+
+export function table(columns, rows, {
+  empty = 'Nothing here yet.',
+  search = 'auto',
+  searchLabel = 'Search this table',
+} = {}) {
   if (!rows || rows.length === 0) return sayNothing(empty);
   const head = el('tr', {}, columns.map((column) =>
     el('th', { scope: 'col', text: column.label })));
@@ -182,11 +270,38 @@ export function table(columns, rows, { empty = 'Nothing here yet.' } = {}) {
     else cell.textContent = String(made);
     return cell;
   })));
-  return el('div', { class: 'table-scroll' }, [
+  const scroll = el('div', {
+    class: 'table-scroll',
+    'data-long': rows.length > LONG_FROM ? 'true' : undefined,
+  }, [
     el('table', { class: 'log-table' }, [
       el('thead', {}, [head]),
       el('tbody', {}, body),
     ]),
+  ]);
+
+  const wanted = search === true || (search === 'auto' && rows.length >= SEARCH_FROM);
+  if (!wanted) return scroll;
+
+  const shown = el('span', { class: 'table-count', text: `${rows.length} row(s)` });
+  const none = sayNothing('Nothing in this table matches what you typed.');
+  none.hidden = true;
+  const input = searchBox({
+    label: searchLabel,
+    placeholder: 'filter these rows',
+    onQuery: (query) => {
+      const found = filterRows(scroll, query);
+      shown.textContent = query === ''
+        ? `${found.total} row(s)`
+        : `${found.shown} of ${found.total}`;
+      none.hidden = found.shown > 0;
+      scroll.hidden = found.shown === 0;
+    },
+  });
+  return el('div', { class: 'table-block' }, [
+    el('div', { class: 'table-tools' }, [input, shown]),
+    scroll,
+    none,
   ]);
 }
 
@@ -520,16 +635,23 @@ export async function settingRow(spec, { onSaved = null } = {}) {
     }
   }, { tone: 'quiet' });
 
-  return el('div', { class: 'setting' }, [
+  const haystack = `${spec.key} ${spec.type} ${spec.help || ''}`.toLowerCase();
+  return el('div', {
+    class: 'setting',
+    'data-key': spec.key,
+    'data-search': haystack,
+  }, [
     el('div', { class: 'setting-head' }, [
       el('span', { class: 'setting-key', text: spec.key }),
       el('span', { class: 'setting-type', text: spec.type }),
+      spec.help ? el('p', { class: 'field-help', text: spec.help }) : null,
     ]),
-    spec.help ? el('p', { class: 'field-help', text: spec.help }) : null,
-    made.node,
-    current,
-    bar([save, clear]),
-    say,
+    el('div', { class: 'setting-control' }, [
+      made.node,
+      current,
+      bar([save, clear]),
+      say,
+    ]),
   ]);
 }
 
@@ -542,8 +664,9 @@ export async function settingsPanel(specs, { onSaved = null, empty = 'This part 
 
 export async function namespaceSettings(namespace, { title = 'Settings', note = null, onSaved = null } = {}) {
   const payload = await settings();
-  const group = section(title, note);
-  group.body.append(await settingsPanel(settingsNamespace(payload, namespace), {
+  const specs = settingsNamespace(payload, namespace);
+  const group = section(title, note, { count: specs.length || null });
+  group.body.append(await settingsPanel(specs, {
     onSaved,
     empty: `The bot registers no settings under ${namespace}.`,
   }));

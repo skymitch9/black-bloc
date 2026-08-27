@@ -1,4 +1,5 @@
 import { api, Outage, signInHref } from './api.js';
+import { lastTab, mountSections, rememberTab } from './layout.js';
 
 export const TABS = [
   { tab: 'overview', href: '/index.html', label: 'Overview' },
@@ -111,6 +112,24 @@ function renderNav(current) {
   nav.replaceChildren(...links);
 }
 
+/**
+ * The rail remembers where you were. Arriving at the bare "/" with no deep
+ * link is the one case that gets sent on to that tab; "/index.html" — which
+ * is what the Overview link in the rail points at — always means Overview, so
+ * there is a way back that the memory cannot take away.
+ */
+function restoreTab(current) {
+  if (current !== 'overview') return false;
+  if (location.pathname !== '/') return false;
+  if (location.search || location.hash) return false;
+  const wanted = lastTab();
+  if (!wanted || wanted === 'overview') return false;
+  const entry = TABS.find((one) => one.tab === wanted);
+  if (!entry) return false;
+  location.replace(entry.href);
+  return true;
+}
+
 function returnedFromDiscord() {
   const outcome = new URLSearchParams(location.search).get('signin');
   if (outcome) history.replaceState(null, '', location.pathname);
@@ -123,13 +142,16 @@ function stamp() {
 }
 
 export function start(page) {
+  if (restoreTab(page.tab)) return () => {};
   renderNav(page.tab);
+  rememberTab(page.tab);
 
   let current = null;
 
   const reload = async () => {
     try {
       await page.load(current);
+      mountSections(page.tab);
       stamp();
       show('dash');
     } catch (error) {
@@ -167,6 +189,7 @@ export function start(page) {
         subtitle.textContent = `${page.subtitle} Signed in as ${me.user.name}${me.guild ? ` · ${me.guild.name}` : ''}.`;
       }
       await page.load(me);
+      mountSections(page.tab);
       stamp();
       show('dash');
     } catch (error) {
