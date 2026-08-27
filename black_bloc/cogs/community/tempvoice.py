@@ -320,6 +320,7 @@ def owner_overwrites(
     hidden: bool = False,
     category: Any = None,
     allow: Any = (),
+    me: Any = None,
 ) -> Any:
     found = category_overwrites(category)
     everyone = found.get(guild.default_role) or discord.PermissionOverwrite()
@@ -329,6 +330,8 @@ def owner_overwrites(
         everyone.view_channel = False
     found[guild.default_role] = everyone
     allow_join(found, allow)
+    if me is not None:
+        allow_join(found, [me], manage_channels=True, move_members=True)
     found[member] = discord.PermissionOverwrite(
         view_channel=True,
         connect=True,
@@ -359,6 +362,19 @@ def panel_home(bot: Any, channel: Any) -> Any:
     if guard is None or guard.allows_channel(channel.id):
         return channel
     return bot.get_channel(guard.test_channel_id) if guard.test_channel_id else None
+
+
+def own_channel(bot: Any, channel_id: Any) -> None:
+    """Tell the test-mode guard this is one of Black Bloc's own channels."""
+    guard = getattr(bot, "guard", None)
+    if guard is not None:
+        guard.own_channel(channel_id)
+
+
+def disown_channel(bot: Any, channel_id: Any) -> None:
+    guard = getattr(bot, "guard", None)
+    if guard is not None:
+        guard.disown_channel(channel_id)
 
 
 async def add_channel(
@@ -1364,8 +1380,10 @@ class TempVoice(commands.Cog):
                 channel = guild.get_channel(row["channel_id"])
                 if channel is None:
                     await delete_row(self.bot.db, row["channel_id"])
+                    disown_channel(self.bot, row["channel_id"])
                     log.info("temp voice: forgot channel %s — it is gone", row["channel_id"])
                     continue
+                own_channel(self.bot, channel.id)
                 if connected_ids(channel):
                     continue
                 if not is_stale(row["created_at"], now, RECONCILE_GRACE_SECONDS):
@@ -1412,6 +1430,7 @@ class TempVoice(commands.Cog):
                 )
                 return
             await delete_row(self.bot.db, channel.id)
+            disown_channel(self.bot, channel.id)
             await log_action(
                 self.bot,
                 guild,
@@ -1467,6 +1486,7 @@ class TempVoice(commands.Cog):
                 hidden=bool(pref(prefs, "hidden")),
                 category=creator.category,
                 allow=self._join_roles(guild),
+                me=getattr(guild, "me", None),
             ),
             guild,
             id_list(pref(prefs, "permitted_ids")),
@@ -1494,6 +1514,7 @@ class TempVoice(commands.Cog):
             )
             return
         await add_channel(self.bot.db, channel.id, guild.id, member.id, creator.id)
+        own_channel(self.bot, channel.id)
         await log_action(
             self.bot,
             guild,
@@ -1661,6 +1682,7 @@ class TempVoice(commands.Cog):
             return
         await self._forget(channel.guild, channel.id)
         await delete_row(self.bot.db, channel.id)
+        disown_channel(self.bot, channel.id)
 
     @tempvoice.command(name="status", description="Show how temporary voice channels are set up")
     async def status(self, interaction: discord.Interaction) -> None:
