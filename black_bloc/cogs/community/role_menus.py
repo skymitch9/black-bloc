@@ -12,7 +12,9 @@ from ...settings_store import require_staff
 
 log = logging.getLogger(__name__)
 
-MODES = ("multiple", "single")
+MODES = ("multiple", "single", "staff")
+STAFF_MODE = "staff"
+JOY_GAMING = "<:JoyGAMING:1337948924844965931>"
 
 SEED: tuple[tuple[str, str, str, tuple[tuple[str, str, int], ...]], ...] = (
     (
@@ -71,7 +73,17 @@ SEED: tuple[tuple[str, str, str, tuple[tuple[str, str, int], ...]], ...] = (
         "event-alerts",
         "Event alerts",
         "multiple",
-        (("🎮", "Marathons", 1515068917628801135),),
+        ((JOY_GAMING, "Marathons", 1515068917628801135),),
+    ),
+    (
+        "runner-status",
+        "Runner status",
+        STAFF_MODE,
+        (
+            (None, "Runner", 1285361896383320074),
+            (None, "Live Runner", 1285365452666699837),
+            (None, "Commentator", 1285361954860437516),
+        ),
     ),
 )
 
@@ -83,6 +95,25 @@ CANNOT_EDIT_ROLES = (
     "Black Bloc could not change your roles because Discord refused the edit. It needs the "
     "Manage Roles permission and its own role has to sit above every role in this menu in "
     "Server Settings → Roles. Ask an admin to fix that, then click again."
+)
+CANNOT_EDIT_THEIRS = (
+    "Discord refused the change, so **{name}** still has exactly the roles they had. Black Bloc "
+    "needs the Manage Roles permission and its own role has to sit above every role in this menu "
+    "in Server Settings → Roles. Ask an admin to fix that, then run the command again."
+)
+STAFF_MENU_NOT_POSTED = (
+    "**{name}** is a staff-assigned menu, so there is no panel to post — nobody gives these "
+    "roles to themselves. Hand them out with `/rolemenu assign {name} @member` and take them "
+    "back with `/rolemenu unassign {name} @member`."
+)
+NOTHING_TO_UNASSIGN = (
+    "**{name}** has none of the roles on **{menu}**, so there is nothing to take off. "
+    "`/rolemenu assign {menu} @member` gives them one."
+)
+SEED_EMOJI_NOTE = (
+    "A menu that already exists is left exactly as it is, options and all — to pick up the "
+    "Marathons emoji on `event-alerts`, delete it with `/rolemenu delete event-alerts` and run "
+    "this again."
 )
 
 
@@ -105,6 +136,23 @@ def role_diff(
     selected = set(selected_ids) & menu
     current = set(current_ids)
     return selected - current, (current & menu) - selected
+
+
+def select_emoji(value: Any) -> Any:
+    """Custom emoji are stored as `<:name:id>` and only become a `PartialEmoji` here."""
+    if not value:
+        return None
+    text = str(value)
+    if not text.startswith("<"):
+        return text
+    try:
+        partial = discord.PartialEmoji.from_str(text)
+    except Exception:
+        partial = None
+    if partial is None or partial.id is None:
+        log.warning("role menu: %r is not an emoji Discord will accept; showing none", text)
+        return None
+    return partial
 
 
 def max_values_for(mode: str, option_count: int) -> int:
@@ -244,6 +292,18 @@ async def seed_from_carl(db: Any, guild_id: int) -> tuple[list[str], list[str]]:
     return created, skipped
 
 
+async def apply_diff(member: Any, guild: Any, to_add: Any, to_remove: Any, reason: str) -> bool:
+    """One `member.edit`, keeping every role this menu does not own."""
+    keep = [r for r in member.roles if r.id != guild.id and r.id not in to_remove]
+    gained = [role for role in (guild.get_role(i) for i in to_add) if role is not None]
+    try:
+        await member.edit(roles=keep + gained, reason=reason)
+    except discord.HTTPException as exc:
+        log.warning("role menu: could not edit %s's roles: %s", member.id, exc)
+        return False
+    return True
+
+
 class RoleMenuSelect(discord.ui.Select):
     def __init__(self, menu_id: int, options: Any, mode: str) -> None:
         super().__init__(
@@ -253,7 +313,9 @@ class RoleMenuSelect(discord.ui.Select):
             max_values=max_values_for(mode, len(options)),
             options=[
                 discord.SelectOption(
-                    label=row["label"], value=str(row["role_id"]), emoji=row["emoji"] or None
+                    label=row["label"],
+                    value=str(row["role_id"]),
+                    emoji=select_emoji(row["emoji"]),
                 )
                 for row in options
             ],
@@ -279,12 +341,7 @@ class RoleMenuSelect(discord.ui.Select):
         if not to_add and not to_remove:
             await interaction.response.send_message(summary([], []), ephemeral=True)
             return
-        keep = [r for r in member.roles if r.id != guild.id and r.id not in to_remove]
-        gained = [role for role in (guild.get_role(i) for i in to_add) if role is not None]
-        try:
-            await member.edit(roles=keep + gained, reason="Black Bloc role menu")
-        except discord.HTTPException as exc:
-            log.warning("role menu %s: could not edit roles: %s", self.menu_id, exc)
+        if not await apply_diff(member, guild, to_add, to_remove, "Black Bloc role menu"):
             await interaction.response.send_message(CANNOT_EDIT_ROLES, ephemeral=True)
             return
         added = [self.labels.get(i, str(i)) for i in to_add]
@@ -304,6 +361,86 @@ class RoleMenuView(discord.ui.View):
     def __init__(self, menu_id: int, options: Any, mode: str) -> None:
         super().__init__(timeout=None)
         self.add_item(RoleMenuSelect(menu_id, options, mode))
+
+
+class StaffAssignSelect(discord.ui.Select):
+    def __init__(self, menu_id: int, options: Any, target: Any, *, remove: bool) -> None:
+        held = {role.id for role in target.roles}
+        super().__init__(
+            placeholder=("Roles to take off " if remove else "Roles for ") + target.display_name,
+            min_values=0,
+            max_values=max(1, min(len(options), 25)),
+            options=[
+                discord.SelectOption(
+                    label=row["label"],
+                    value=str(row["role_id"]),
+                    emoji=select_emoji(row["emoji"]),
+                    default=not remove and row["role_id"] in held,
+                )
+                for row in options
+            ],
+        )
+        self.menu_id = menu_id
+        self.target = target
+        self.remove = remove
+        self.role_ids = [row["role_id"] for row in options]
+        self.labels = {row["role_id"]: row["label"] for row in options}
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        bot = interaction.client
+        guard = getattr(bot, "guard", None)
+        if guard is not None and not guard.allows_channel(interaction.channel_id):
+            await interaction.response.send_message(guard.refusal_message(), ephemeral=True)
+            return
+        guild = interaction.guild
+        if guild is None:
+            await interaction.response.send_message(NOT_IN_GUILD, ephemeral=True)
+            return
+        selected = {int(value) for value in self.values}
+        if self.remove:
+            to_add, to_remove = set(), selected & set(self.role_ids)
+        else:
+            to_add, to_remove = role_diff(
+                (role.id for role in self.target.roles), self.role_ids, selected
+            )
+        if not to_add and not to_remove:
+            await interaction.response.send_message(
+                f"**{self.target.display_name}** already has exactly those roles, so nothing "
+                "changed.",
+                ephemeral=True,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+            return
+        if not await apply_diff(
+            self.target, guild, to_add, to_remove, f"Black Bloc role menu by {interaction.user}"
+        ):
+            await interaction.response.send_message(
+                CANNOT_EDIT_THEIRS.format(name=self.target.display_name),
+                ephemeral=True,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+            return
+        added = [self.labels.get(i, str(i)) for i in to_add]
+        removed = [self.labels.get(i, str(i)) for i in to_remove]
+        await interaction.response.send_message(
+            f"**{self.target.display_name}** — {summary(added, removed)}",
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        await log_action(
+            bot,
+            guild,
+            "role_menu.unassign" if self.remove else "role_menu.assign",
+            actor=interaction.user,
+            target=self.target,
+            details={"menu_id": self.menu_id, "added": added, "removed": removed},
+        )
+
+
+class StaffAssignView(discord.ui.View):
+    def __init__(self, menu_id: int, options: Any, target: Any, *, remove: bool) -> None:
+        super().__init__(timeout=180)
+        self.add_item(StaffAssignSelect(menu_id, options, target, remove=remove))
 
 
 class RoleMenus(commands.Cog):
@@ -469,6 +606,11 @@ class RoleMenus(commands.Cog):
         if menu is None:
             await interaction.response.send_message(self._no_such_menu(name), ephemeral=True)
             return
+        if menu["mode"] == STAFF_MODE:
+            await interaction.response.send_message(
+                STAFF_MENU_NOT_POSTED.format(name=name), ephemeral=True
+            )
+            return
         options = await get_options(self.bot.db, menu["id"])
         if not options:
             await interaction.response.send_message(
@@ -508,6 +650,56 @@ class RoleMenus(commands.Cog):
             details={"menu": name, "channel_id": target.id, "message_id": message.id},
         )
 
+    @rolemenu.command(name="assign", description="Give a member roles from a menu")
+    @app_commands.describe(name="The menu the roles come from", member="Who gets them")
+    async def assign(
+        self, interaction: discord.Interaction, name: str, member: discord.Member
+    ) -> None:
+        await self._staff_pick(interaction, name, member, remove=False)
+
+    @rolemenu.command(name="unassign", description="Take a menu's roles off a member")
+    @app_commands.describe(name="The menu the roles come from", member="Who loses them")
+    async def unassign(
+        self, interaction: discord.Interaction, name: str, member: discord.Member
+    ) -> None:
+        await self._staff_pick(interaction, name, member, remove=True)
+
+    async def _staff_pick(
+        self, interaction: discord.Interaction, name: str, member: Any, *, remove: bool
+    ) -> None:
+        if not await require_staff(interaction):
+            return
+        menu = await get_menu(self.bot.db, interaction.guild.id, name)
+        if menu is None:
+            await interaction.response.send_message(self._no_such_menu(name), ephemeral=True)
+            return
+        options = await get_options(self.bot.db, menu["id"])
+        if not options:
+            await interaction.response.send_message(
+                f"**{name}** has no roles on it yet, so there is nothing to hand out. Add one "
+                f"with `/rolemenu add {name} <role>` first.",
+                ephemeral=True,
+            )
+            return
+        if remove:
+            held = {role.id for role in member.roles}
+            options = [row for row in options if row["role_id"] in held]
+            if not options:
+                await interaction.response.send_message(
+                    NOTHING_TO_UNASSIGN.format(name=member.display_name, menu=name),
+                    ephemeral=True,
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
+                return
+        await interaction.response.send_message(
+            f"Pick what **{member.display_name}** should "
+            + ("lose" if remove else "have")
+            + f" from **{name}**.",
+            view=StaffAssignView(menu["id"], options, member, remove=remove),
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
     @rolemenu.command(name="delete", description="Delete a role menu")
     async def delete(self, interaction: discord.Interaction, name: str) -> None:
         if not await require_staff(interaction):
@@ -540,7 +732,11 @@ class RoleMenus(commands.Cog):
             parts.append("Created: " + ", ".join(created))
         if skipped:
             parts.append("Already there, left alone: " + ", ".join(skipped))
-        parts.append("Post each one with `/rolemenu post <name>`.")
+            parts.append(SEED_EMOJI_NOTE)
+        parts.append(
+            "Post each one with `/rolemenu post <name>` — except `runner-status`, which staff "
+            "hand out with `/rolemenu assign`."
+        )
         await interaction.response.send_message(" · ".join(parts), ephemeral=True)
 
     def _default_channel(self, interaction: discord.Interaction) -> Any:

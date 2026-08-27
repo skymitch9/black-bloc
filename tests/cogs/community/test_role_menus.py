@@ -1,8 +1,13 @@
+import discord
 import pytest
 
 from black_bloc.cogs.community.role_menus import (
+    JOY_GAMING,
+    MODES,
     SEED,
+    RoleMenus,
     RoleMenuView,
+    StaffAssignSelect,
     add_option,
     create_menu,
     custom_id,
@@ -17,12 +22,17 @@ from black_bloc.cogs.community.role_menus import (
     remove_option,
     role_diff,
     seed_from_carl,
+    select_emoji,
     set_message,
     summary,
 )
+from black_bloc.config import load_settings
+from black_bloc.settings_store import SettingsStore
 from black_bloc.storage.db import Database
 
 GUILD = 7
+TEST_CHANNEL = 111
+LOG_CHANNEL = 222
 
 
 @pytest.fixture
@@ -97,6 +107,247 @@ async def test_seed_is_idempotent(db):
     assert len(await get_options(db, menu["id"])) == 9
 
 
+class FakeRole:
+    def __init__(self, role_id):
+        self.id = role_id
+        self.name = f"role-{role_id}"
+
+
+class FakePerms:
+    def __init__(self, manage_guild=False):
+        self.manage_guild = manage_guild
+
+
+class FakeChannel:
+    def __init__(self, channel_id):
+        self.id = channel_id
+        self.overwrites = {}
+        self.messages = []
+
+    async def send(self, content=None, **kwargs):
+        self.messages.append({"content": content, **kwargs})
+        return self
+
+
+class FakeGuild:
+    def __init__(self):
+        self.id = GUILD
+        self.channels = {LOG_CHANNEL: FakeChannel(LOG_CHANNEL)}
+
+    def get_channel(self, channel_id):
+        return self.channels.get(channel_id)
+
+    def get_role(self, role_id):
+        return FakeRole(role_id)
+
+
+class FakeMember:
+    def __init__(self, guild, user_id=900, display_name="Alice", roles=(), manage_guild=False):
+        self.id = user_id
+        self.guild = guild
+        self.display_name = display_name
+        self.mention = f"<@{user_id}>"
+        self.roles = [FakeRole(r) for r in roles]
+        self.guild_permissions = FakePerms(manage_guild=manage_guild)
+        self.edits = []
+        self.edit_raises = None
+
+    async def edit(self, roles=None, reason=None):
+        if self.edit_raises is not None:
+            raise self.edit_raises
+        self.edits.append([r.id for r in roles])
+        self.roles = list(roles)
+
+
+class FakeGuard:
+    def __init__(self, allowed=TEST_CHANNEL):
+        self.allowed = allowed
+
+    def allows_channel(self, channel_id):
+        return channel_id == self.allowed
+
+    def refusal_message(self):
+        return "test mode"
+
+
+class FakeBot:
+    def __init__(self, db, store, guild):
+        self.db = db
+        self.store = store
+        self.guild = guild
+        self.guard = None
+
+    def get_channel(self, channel_id):
+        return self.guild.get_channel(channel_id)
+
+
+class FakeResponse:
+    def __init__(self):
+        self.messages = []
+
+    async def send_message(self, content=None, ephemeral=False, **kwargs):
+        self.messages.append({"content": content, "ephemeral": ephemeral, **kwargs})
+
+
+class FakeInteraction:
+    def __init__(self, bot, user):
+        self.client = bot
+        self.user = user
+        self.guild = bot.guild
+        self.guild_id = bot.guild.id
+        self.channel_id = TEST_CHANNEL
+        self.response = FakeResponse()
+
+    @property
+    def sent(self):
+        return self.response.messages[-1]["content"] if self.response.messages else None
+
+    @property
+    def view(self):
+        return self.response.messages[-1].get("view")
+
+
+@pytest.fixture
+async def bot(db, monkeypatch):
+    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
+    settings = load_settings(_env_file=None, test_mode=True, test_channel_id=TEST_CHANNEL)
+    store = SettingsStore(db, settings)
+    await store.load()
+    await store.set(GUILD, "log_channel_id", LOG_CHANNEL)
+    return FakeBot(db, store, FakeGuild())
+
+
+@pytest.fixture
+def lead(bot):
+    return FakeMember(bot.guild, user_id=1, display_name="Lead", manage_guild=True)
+
+
+async def staff_menu(db, name="runner-status"):
+    menu_id = await create_menu(db, GUILD, name, "Runner status", None, "staff")
+    await add_option(db, menu_id, 10, "Runner")
+    await add_option(db, menu_id, 11, "Live Runner")
+    return menu_id
+
+
+async def action_kinds(db):
+    cur = await db.conn.execute("SELECT kind FROM action_log ORDER BY id")
+    return [row["kind"] for row in await cur.fetchall()]
+
+
+async def test_a_staff_menu_refuses_to_be_posted_and_says_what_to_use(bot, db, lead):
+    await staff_menu(db)
+    interaction = FakeInteraction(bot, lead)
+
+    await RoleMenus.post.callback(RoleMenus(bot), interaction, "runner-status", None)
+
+    assert "staff-assigned" in interaction.sent
+    assert "/rolemenu assign" in interaction.sent
+    assert (await get_menu(db, GUILD, "runner-status"))["message_id"] is None
+
+
+async def test_assign_offers_the_menu_s_roles_with_the_ones_they_have_preselected(bot, db, lead):
+    await staff_menu(db)
+    target = FakeMember(bot.guild, user_id=900, roles=(10,))
+    interaction = FakeInteraction(bot, lead)
+
+    await RoleMenus.assign.callback(RoleMenus(bot), interaction, "runner-status", target)
+
+    select = interaction.view.children[0]
+    assert [option.value for option in select.options] == ["10", "11"]
+    assert [option.default for option in select.options] == [True, False]
+
+
+async def test_assign_applies_the_diff_to_the_target_and_logs_who_did_it(bot, db, lead):
+    menu_id = await staff_menu(db)
+    target = FakeMember(bot.guild, user_id=900, roles=(10, 99))
+    select = StaffAssignSelect(menu_id, await get_options(db, menu_id), target, remove=False)
+    select._values = ["11"]
+    interaction = FakeInteraction(bot, lead)
+
+    await select.callback(interaction)
+
+    assert target.edits == [[99, 11]]
+    assert "Added: Live Runner" in interaction.sent and "Removed: Runner" in interaction.sent
+    assert "role_menu.assign" in await action_kinds(db)
+
+
+async def test_unassign_only_offers_what_they_actually_have(bot, db, lead):
+    await staff_menu(db)
+    target = FakeMember(bot.guild, user_id=900, roles=(11,))
+    interaction = FakeInteraction(bot, lead)
+
+    await RoleMenus.unassign.callback(RoleMenus(bot), interaction, "runner-status", target)
+
+    assert [option.value for option in interaction.view.children[0].options] == ["11"]
+
+
+async def test_unassign_says_so_when_they_have_none_of_them(bot, db, lead):
+    await staff_menu(db)
+    target = FakeMember(bot.guild, user_id=900, display_name="Bo")
+    interaction = FakeInteraction(bot, lead)
+
+    await RoleMenus.unassign.callback(RoleMenus(bot), interaction, "runner-status", target)
+
+    assert "nothing to take off" in interaction.sent
+    assert interaction.view is None
+
+
+async def test_unassign_takes_only_the_picked_roles_off(bot, db, lead):
+    menu_id = await staff_menu(db)
+    target = FakeMember(bot.guild, user_id=900, roles=(10, 11, 99))
+    options = [row for row in await get_options(db, menu_id)]
+    select = StaffAssignSelect(menu_id, options, target, remove=True)
+    select._values = ["10"]
+
+    await select.callback(FakeInteraction(bot, lead))
+
+    assert target.edits == [[11, 99]]
+    assert "role_menu.unassign" in await action_kinds(db)
+
+
+async def test_assigning_is_refused_in_test_mode(bot, db, lead):
+    menu_id = await staff_menu(db)
+    bot.guard = FakeGuard(allowed=LOG_CHANNEL)
+    target = FakeMember(bot.guild, user_id=900)
+    select = StaffAssignSelect(menu_id, await get_options(db, menu_id), target, remove=False)
+    select._values = ["10"]
+    interaction = FakeInteraction(bot, lead)
+
+    await select.callback(interaction)
+
+    assert target.edits == [] and interaction.sent == "test mode"
+
+
+async def test_a_refused_role_edit_says_the_member_is_unchanged(bot, db, lead):
+    menu_id = await staff_menu(db)
+    target = FakeMember(bot.guild, user_id=900, display_name="Bo")
+    target.edit_raises = discord.HTTPException(_Refused(403), "no")
+    select = StaffAssignSelect(menu_id, await get_options(db, menu_id), target, remove=False)
+    select._values = ["10"]
+    interaction = FakeInteraction(bot, lead)
+
+    await select.callback(interaction)
+
+    assert "still has exactly the roles they had" in interaction.sent
+    assert "role_menu.assign" not in await action_kinds(db)
+
+
+async def test_assign_is_staff_only(bot, db):
+    await staff_menu(db)
+    plain = FakeMember(bot.guild, user_id=900)
+    interaction = FakeInteraction(bot, plain)
+
+    await RoleMenus.assign.callback(RoleMenus(bot), interaction, "runner-status", plain)
+
+    assert "staff only" in interaction.sent
+
+
+class _Refused:
+    def __init__(self, status):
+        self.status = status
+        self.reason = "refused"
+
+
 def test_role_diff_only_touches_menu_roles():
     to_add, to_remove = role_diff({1, 2, 99}, [1, 2, 3], [2, 3])
     assert to_add == {3}
@@ -163,8 +414,40 @@ def test_panel_embed_lists_the_options():
 
 def test_seed_data_is_well_formed():
     names = [name for name, _, _, _ in SEED]
-    assert len(names) == len(set(names)) == 5
+    assert len(names) == len(set(names)) == 6
     for _, _, mode, options in SEED:
-        assert mode in ("multiple", "single")
+        assert mode in MODES
         assert options
         assert len({role_id for _, _, role_id in options}) == len(options)
+
+
+def test_the_marathons_option_carries_carls_own_emoji():
+    options = dict(
+        (label, emoji) for _, _, _, opts in SEED for emoji, label, _ in opts if label == "Marathons"
+    )
+    assert options["Marathons"] == JOY_GAMING
+
+
+def test_runner_status_is_a_staff_menu():
+    menu = next(entry for entry in SEED if entry[0] == "runner-status")
+    assert menu[2] == "staff"
+    assert [label for _, label, _ in menu[3]] == ["Runner", "Live Runner", "Commentator"]
+
+
+def test_custom_emoji_become_partial_emoji_and_plain_ones_do_not():
+    assert select_emoji("❤️") == "❤️"
+    assert select_emoji(None) is None
+    assert select_emoji("") is None
+    partial = select_emoji(JOY_GAMING)
+    assert isinstance(partial, discord.PartialEmoji)
+    assert partial.name == "JoyGAMING" and partial.id == 1337948924844965931
+
+
+def test_a_broken_emoji_string_shows_nothing_rather_than_breaking_the_panel():
+    assert select_emoji("<not an emoji>") is None
+
+
+def test_the_panel_renders_a_custom_emoji_option():
+    options = [{"role_id": 1, "label": "Marathons", "emoji": JOY_GAMING}]
+    select = RoleMenuView(9, options, "multiple").children[0]
+    assert select.options[0].emoji.id == 1337948924844965931
