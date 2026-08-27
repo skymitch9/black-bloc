@@ -32,4 +32,5 @@ Thin on purpose. The living state is in `docs/` — **read `docs/README.md`,
   Every ask goes on `docs/TODO.md` the moment it is mentioned;
   finished items MOVE whole to `docs/DONE.md` in the session they land.
 - Owner rule: on a Fable session, builds go to `model: 'opus'` subagents; Fable plans,
-  briefs and reviews.
+  briefs and reviews. Every build/review brief points at `docs/info/review-checklist.md`
+  (20 items traced to real findings here) and the phase's `docs/info/phaseN-design.md`.
