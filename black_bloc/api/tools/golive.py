@@ -5,7 +5,19 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
-from ...cogs.content.golive import all_links, all_optouts, recent_sessions, remove_link
+from ...cogs.content.golive import (
+    LINK_TAKEN,
+    all_links,
+    all_optouts,
+    clean_login,
+    clear_optout,
+    get_link,
+    link_owner,
+    recent_sessions,
+    remove_link,
+    set_link,
+    set_optout,
+)
 from ..auth import Refused, staff_dependency
 from ..names import resolve_one
 from ..writes import note, require_db, require_guild, wanted_id, writer_dependency
@@ -19,6 +31,20 @@ NOT_LINKED = (
     "**{user_id}** has no Twitch account linked, so there was nothing to unlink. The links table "
     "shows who has one."
 )
+NOT_OPTED_OUT = (
+    "**{user_id}** was not opted out, so there was nothing to undo. The opt-outs table lists "
+    "everyone who is."
+)
+BAD_LOGIN = (
+    "**{given}** is not a Twitch channel name Black Bloc can use, so nothing was linked. Give the "
+    "name out of the channel's own address — letters, numbers and underscores, 25 at most."
+)
+LINKED = (
+    "**{name}** is linked to twitch.tv/{login}. Black Bloc did not check that channel exists — it "
+    "finds that out the first time it looks for a stream."
+)
+OPTED_OUT = "**{name}** is opted out, so no stream of theirs is announced from now on."
+OPTED_IN = "**{name}** is no longer opted out, so their streams can be announced again."
 
 
 def with_name(guild: Any, user_id: Any) -> dict[str, Any]:
@@ -76,6 +102,27 @@ def build_router(bot: Any) -> APIRouter:
         await note(bot, guild, "web.golive.unlink", who, target=wanted)
         return {"unlinked": True, "user_id": str(wanted)}
 
+    @router.post("/links")
+    async def golive_link(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        wanted = wanted_id(payload.get("user_id"))
+        given = str(payload.get("twitch_login") or "")
+        cleaned = clean_login(given)
+        if cleaned is None:
+            raise Refused(400, "bad_login", BAD_LOGIN.format(given=given[:40] or "nothing"))
+        owner = await link_owner(bot.db, cleaned)
+        if owner is not None and owner != wanted:
+            raise Refused(409, "link_taken", LINK_TAKEN.format(channel=cleaned))
+        await set_link(bot.db, wanted, cleaned)
+        await note(bot, guild, "web.golive.link", who, target=wanted, details={"login": cleaned})
+        row = link_row(guild, await get_link(bot.db, wanted))
+        return row | {
+            "checked": False,
+            "message": LINKED.format(name=row["user_name"] or wanted, login=cleaned),
+        }
+
     @router.get("/optouts")
     async def golive_optouts() -> list[dict[str, Any]]:
         guild = require_guild(bot)
@@ -84,6 +131,35 @@ def build_router(bot: Any) -> APIRouter:
             with_name(guild, row["user_id"]) | {"at": row["at"]}
             for row in await all_optouts(bot.db)
         ]
+
+    @router.post("/optouts")
+    async def golive_opt_out(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        wanted = wanted_id(payload.get("user_id"))
+        await set_optout(bot.db, wanted)
+        await note(bot, guild, "web.golive.optout", who, target=wanted)
+        named = with_name(guild, wanted)
+        return named | {
+            "opted_out": True,
+            "message": OPTED_OUT.format(name=named["user_name"] or wanted),
+        }
+
+    @router.delete("/optouts/{user_id}")
+    async def golive_opt_in(request: Request, user_id: str) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        wanted = wanted_id(user_id)
+        if not await clear_optout(bot.db, wanted):
+            raise Refused(404, "not_opted_out", NOT_OPTED_OUT.format(user_id=wanted))
+        await note(bot, guild, "web.golive.optin", who, target=wanted)
+        named = with_name(guild, wanted)
+        return named | {
+            "opted_out": False,
+            "message": OPTED_IN.format(name=named["user_name"] or wanted),
+        }
 
     @router.get("/sessions")
     async def golive_sessions(limit: int = SESSIONS_DEFAULT_LIMIT) -> list[dict[str, Any]]:

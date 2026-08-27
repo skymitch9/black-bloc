@@ -25,6 +25,7 @@ const IDS = {
   ticket_id: '5',
   hit_id: '7',
   test_channel_id: '800000000000000003',
+  lobby_channel_id: '800000000000000009',
 };
 
 const failures = [];
@@ -111,6 +112,16 @@ async function checkPages() {
     }
     if (!html.includes('id="dash"')) fail(`GET ${page}`, 'has no #dash for a page module to fill');
     if (!html.includes('id="tabnav"')) fail(`GET ${page}`, 'has no #tabnav for the shared nav');
+    if (/(?:href|src)="\/assets\/[^"?#]+"/.test(html)) {
+      fail(`GET ${page}`, 'serves an /assets URL with no ?v= build id, so a deploy leaves it cached');
+    }
+    if (response.headers.get('cache-control') !== 'no-store') {
+      fail(`GET ${page}`, `answered cache-control ${response.headers.get('cache-control')}, not no-store`);
+    }
+  }
+  const asset = await fetch(`${BASE}/assets/site.css`);
+  if (asset.headers.get('cache-control') !== 'no-cache') {
+    fail('GET /assets/site.css', `answered cache-control ${asset.headers.get('cache-control')}, not no-cache`);
   }
 }
 
@@ -146,6 +157,8 @@ async function seed() {
   });
   await post('/api/modmail/snippets', { name: 'contract', content: 'hello' });
   await post('/api/modmail/blocks', { user_id: IDS.member_id, reason: 'contract check' });
+  // The opt-out the DELETE entry takes away again; the seed's own opt-out is somebody else.
+  await post('/api/golive/optouts', { user_id: IDS.member_id });
 }
 
 // The routes the REAL API refuses while test mode is on, and the two it does not. A reply

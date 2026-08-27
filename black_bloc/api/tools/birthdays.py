@@ -21,6 +21,7 @@ from ...cogs.community.birthdays import (
     report_lines,
     rows_for_guild,
     save_birthday,
+    set_opted_in,
 )
 from ..auth import Refused, staff_dependency
 from ..names import as_id, resolve_one
@@ -44,6 +45,8 @@ NO_BIRTHDAY = (
 NEEDS_A_DATE = (
     "A birthday needs a month and a day, so nothing was stored. Pick both and send it again."
 )
+WISHED = "**{name}** gets a birthday wish again."
+NOT_WISHED = "**{name}** is opted out, so Black Bloc says nothing on their birthday."
 IMPORT_EMPTY = (
     "There is no Birthday Bot export to read, so nothing was imported. The seed file ships with "
     "Black Bloc; ask whoever deployed it whether it was left out."
@@ -147,6 +150,27 @@ def build_router(bot: Any) -> APIRouter:
             "report": result,
             "notes": report_lines(result, as_of, len(members)),
         }
+
+    @router.post("/{user_id}/optin")
+    async def birthday_optin(
+        request: Request, user_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        wanted = wanted_id(user_id)
+        rows = await rows_for_guild(bot.db, guild.id)
+        if not any(int(row["user_id"]) == wanted for row in rows):
+            raise Refused(404, "no_birthday", NO_BIRTHDAY.format(user_id=wanted))
+        opted = payload.get("opted_in", True) is not False
+        await set_opted_in(bot.db, wanted, opted)
+        await note(
+            bot, guild, "web.birthday.optin", who, target=wanted, details={"opted_in": opted}
+        )
+        rows = await rows_for_guild(bot.db, guild.id)
+        stored = birthday_row(guild, next(row for row in rows if int(row["user_id"]) == wanted))
+        said = WISHED if opted else NOT_WISHED
+        return stored | {"message": said.format(name=stored["user_name"] or wanted)}
 
     @router.delete("/{user_id}")
     async def birthday_clear(request: Request, user_id: str) -> dict[str, Any]:

@@ -6,7 +6,7 @@ import { el, sayNothing, searchField, section, settingsEditor } from './ui.js';
 const FIRST = 'core';
 
 const NAMESPACE_NOTES = {
-  core: 'The channels the whole bot leans on. staff_channel_id is also what decides who may see this dashboard.',
+  core: 'staff_channel_id is what decides who may see this dashboard.',
   automod: 'automod_rules has its own editor on the Automod tab; the JSON box here is the fallback.',
 };
 
@@ -103,7 +103,7 @@ async function load() {
   target.replaceChildren(
     el('p', {
       class: 'section-note',
-      text: 'Every change goes through the same store the slash commands write to, is recorded on the Audit tab, and the bot picks it up straight away. A row emptied back to nothing is put back to its default.',
+      text: 'Emptying a row puts it back to its default.',
     }),
     share(groups),
     editor.bar,

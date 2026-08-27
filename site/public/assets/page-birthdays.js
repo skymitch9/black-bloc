@@ -1,29 +1,60 @@
-import { api, listOf, names, notesOf, send } from './api.js';
+import { api, listOf, names, notesOf, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
 import {
   ask,
-  badge,
   bar,
   button,
   card,
   el,
   field,
   idsIn,
+  keepSaying,
   memberPicker,
   nameNode,
   namespaceSettings,
   notice,
   run,
+  sayAgain,
   sayNothing,
   searchOver,
   section,
   table,
+  templateEditor,
 } from './ui.js';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 let refresh = () => {};
 let lastImport = null;
+
+const TEMPLATE_KEY = 'birthday_template';
+const COLOR_KEY = 'birthday_color';
+const SAMPLE = { name: 'Casey', age: '30' };
+
+/** A6: the wording, filled in as you type, in the colour the embed uses. */
+async function wordingCard(spec, color) {
+  const shown = el('p', { class: 'preview' });
+  const swatch = el('span', { class: 'swatch', style: color ? `--swatch: ${color}` : undefined });
+  const made = await templateEditor(spec, {
+    sample: () => SAMPLE,
+    paint: (filled) => {
+      shown.textContent = filled === null
+        ? 'Black Bloc would post its own default wish instead.'
+        : filled;
+    },
+  });
+  const preview = card('What a birthday wish looks like', [
+    el('p', { class: 'field-help' }, [
+      'Filled in with a made-up member. The embed’s colour is ',
+      swatch,
+      color ? ` ${color}` : ' not set',
+      ', from birthday_color.',
+    ]),
+    shown,
+    made.say,
+  ]);
+  return [made.row.node, preview, made.editor.bar];
+}
 
 function setCard() {
   const say = notice();
@@ -52,7 +83,8 @@ function setCard() {
 
   return card('Set a birthday', [
     picker.node,
-    el('div', { class: 'formrow' }, [field('Month', month), field('Day', day), field('Year', year, 'Only used when birthday_show_age is on.')]),
+    el('div', { class: 'formrow dateline' }, [field('Month', month), field('Day', day), field('Year', year)]),
+    el('p', { class: 'field-help', text: 'The year is optional, and only used when birthday_show_age is on.' }),
     bar([save]),
     say,
   ]);
@@ -81,7 +113,7 @@ function importCard() {
   }, { tone: 'warn', small: false });
 
   return card('Import from Birthday Bot', [
-    el('p', { class: 'field-help', text: 'The same import the bot runs on its own once a day, with the same report. Safe to run twice — nothing already stored is overwritten.' }),
+    el('p', { class: 'field-help', text: 'Safe to run twice — nothing already stored is overwritten.' }),
     bar([go]),
     say,
     report,
@@ -89,8 +121,11 @@ function importCard() {
 }
 
 async function load() {
-  const payload = await api('/api/birthdays');
+  const [payload, allSettings] = await Promise.all([api('/api/birthdays'), settings(true)]);
   const rows = listOf(payload, 'birthdays');
+  const birthday = settingsNamespace(allSettings, 'birthday');
+  const template = birthday.find((spec) => spec.key === TEMPLATE_KEY);
+  const color = birthday.find((spec) => spec.key === COLOR_KEY);
   await names(idsIn(rows, ['user_id']));
 
   const say = notice();
@@ -104,7 +139,22 @@ async function load() {
     { label: 'Day', cell: (row) => String(row.day), className: 'mono' },
     { label: 'Member', cell: (row) => nameNode(row.user_id, row.user_name) },
     { label: 'Year', cell: (row) => (row.year ? String(row.year) : null) },
-    { label: 'Wished', cell: (row) => (row.opted_in === false ? badge('opted out', 'warn') : badge('yes', 'ok')) },
+    {
+      label: 'Wished',
+      cell: (row) => button(row.opted_in === false ? 'opted out' : 'yes', async () => {
+        const done = await run(
+          say,
+          () => send(`/api/birthdays/${encodeURIComponent(row.user_id)}/optin`, 'POST', {
+            opted_in: row.opted_in === false,
+          }),
+          (found) => found?.message || 'Changed.',
+        );
+        if (done.ok) {
+          keepSaying('birthdays.months', say);
+          refresh();
+        }
+      }, { tone: row.opted_in === false ? 'warn' : 'quiet' }),
+    },
     { label: 'From', cell: (row) => row.source },
     {
       label: '',
@@ -116,7 +166,10 @@ async function load() {
         });
         if (!sure) return;
         const done = await run(say, () => api(`/api/birthdays/${encodeURIComponent(row.user_id)}`, { method: 'DELETE' }), 'Removed.');
-        if (done.ok) refresh();
+        if (done.ok) {
+          keepSaying('birthdays.months', say);
+          refresh();
+        }
       }, { tone: 'danger' }),
     },
     // One filter over all twelve months, not a box on each — a month with two
@@ -143,12 +196,24 @@ async function load() {
       box,
     );
   }
-  months.body.append(say);
+  months.body.append(sayAgain('birthdays.months', say));
 
   const add = section('Add or change one');
   add.body.append(setCard(), importCard());
 
-  document.getElementById('dash').replaceChildren(add.node, months.node, await namespaceSettings('birthday'));
+  const wording = section('Birthday wording');
+  if (template) {
+    wording.body.append(...await wordingCard(template, color ? color.value : null));
+  } else {
+    wording.body.append(sayNothing('The bot did not report a birthday_template key, so this editor is not shown rather than guessed at.'));
+  }
+
+  document.getElementById('dash').replaceChildren(
+    add.node,
+    months.node,
+    wording.node,
+    await namespaceSettings('birthday', { omit: [TEMPLATE_KEY] }),
+  );
 }
 
 refresh = start({

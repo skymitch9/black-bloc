@@ -61,7 +61,7 @@ async function load() {
   ], rows, { empty: 'Nobody has walked into a trap channel.' });
 
   const setup = card('Setup', [
-    el('p', { class: 'field-help', text: 'Makes the trap channel if it is missing and sets the overwrites that keep real members out of it.' }),
+    el('p', { class: 'field-help', text: 'Safe to run twice; nobody is let into the trap by it.' }),
     bar([
       button('Run setup', async () => {
         const sure = await ask({

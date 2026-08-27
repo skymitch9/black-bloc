@@ -40,12 +40,18 @@ function statStrip(payload) {
 
 function avatar(row) {
   const letter = String(row.name || row.username || '?').trim().charAt(0).toUpperCase() || '?';
-  if (row.avatar) {
-    return el('span', { class: 'avatar' }, [
-      el('img', { src: row.avatar, alt: '', loading: 'lazy', width: '28', height: '28' }),
-    ]);
-  }
-  return el('span', { class: 'avatar', 'aria-hidden': 'true', text: letter });
+  const initial = el('span', { class: 'avatar', 'aria-hidden': 'true', text: letter });
+  if (!row.avatar) return initial;
+  const holder = el('span', { class: 'avatar' });
+  holder.append(el('img', {
+    src: row.avatar,
+    alt: '',
+    loading: 'lazy',
+    width: '28',
+    height: '28',
+    on: { error: () => holder.replaceWith(initial) },
+  }));
+  return holder;
 }
 
 /**

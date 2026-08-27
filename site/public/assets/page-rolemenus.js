@@ -19,13 +19,14 @@ import {
   sayNothing,
   searchOver,
   section,
+  settingsPanel,
   table,
 } from './ui.js';
 
 const MODE_KEY = 'rolemenu_mode';
-const SWITCH_HELP = 'Turning this off removes the posted panels and hides the /rolemenu ' +
-  'commands; turning it on re-posts every menu in its channel. Nobody loses a role either way, ' +
-  'no menu is changed, and staff can still build and edit menus from here while it is off.';
+const DEFAULT_CHANNEL_KEY = 'role_menu_channel_id';
+const SWITCH_HELP = 'Off takes the panels down and hides the /rolemenu commands; on posts every ' +
+  'menu again, and nobody loses a role either way.';
 const TURNED_ON = 'On. Every menu that has a channel is posted there again, and the /rolemenu ' +
   'commands come back, within about five seconds.';
 const TURNED_OFF = 'Off. The posted panels are removed and the /rolemenu commands disappear from ' +
@@ -179,7 +180,12 @@ async function postCard(menu, say) {
 async function load() {
   const [payload, , allSettings] = await Promise.all([api('/api/rolemenus'), refRoles(), settings(true)]);
   const menus = listOf(payload, 'rolemenus');
-  const mode = settingsNamespace(allSettings, 'rolemenu').find((spec) => spec.key === MODE_KEY);
+  const rolemenu = settingsNamespace(allSettings, 'rolemenu');
+  const mode = rolemenu.find((spec) => spec.key === MODE_KEY);
+  const defaultChannel = settingsNamespace(allSettings, 'core')
+    .find((spec) => spec.key === DEFAULT_CHANNEL_KEY);
+  const settingSpecs = (defaultChannel ? [defaultChannel] : [])
+    .concat(rolemenu.filter((spec) => spec.key !== MODE_KEY));
   const optionIds = [];
   for (const menu of menus) for (const option of menu.options || []) optionIds.push(option.role_id);
   await names(idsIn(menus, ['channel_id']).concat(optionIds));
@@ -260,7 +266,14 @@ async function load() {
   const switchboard = section('Role selection', SWITCH_HELP);
   switchboard.body.append(mode ? modeSwitch(mode) : sayNothing(NO_KEY));
 
-  const nodes = [switchboard.node, one.node, two.node];
+  const box = section('Settings', 'Where a menu goes when /rolemenu post is not given a channel.', {
+    count: settingSpecs.length || null,
+  });
+  box.body.append(await settingsPanel(settingSpecs, {
+    empty: 'The bot registers no role-menu settings beyond the switch above.',
+  }));
+
+  const nodes = [switchboard.node, one.node, two.node, box.node];
   if (state.creating) {
     const made = section('New menu', null, { id: 'editor', open: true });
     made.body.append(await editor(null));

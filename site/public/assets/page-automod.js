@@ -12,7 +12,7 @@ import {
   sayNothing,
   searchOver,
   section,
-  settingRow,
+  settingsPanel,
 } from './ui.js';
 
 const ACTIONS = ['delete', 'warn', 'timeout'];
@@ -89,11 +89,11 @@ async function load() {
 
   const arming = section(
     'Mode',
-    'Arming automod is the one switch that starts deleting messages and timing people out. If the bot refuses, its sentence says what is missing.',
+    'Arming automod is the switch that starts deleting messages and timing people out.',
   );
-  arming.body.append(mode
-    ? await settingRow(mode, { onSaved: () => refresh() })
-    : sayNothing('The bot did not report an automod_mode key, so this switch is not shown rather than guessed at.'));
+  arming.body.append(await settingsPanel(mode ? [mode] : [], {
+    empty: 'The bot did not report an automod_mode key, so this switch is not shown rather than guessed at.',
+  }));
 
   const book = section('Rules', 'Each rule is a burst counter: how many in how long, and what happens then.', {
     count: rules.length || null,
@@ -116,14 +116,17 @@ async function load() {
   const exemptions = section('Exemptions', 'Staff are always exempt on top of whatever is listed here.', {
     count: exempt.length || null,
   });
-  for (const spec of exempt) exemptions.body.append(await settingRow(spec));
-  if (exempt.length === 0) exemptions.body.append(sayNothing('No exemption keys are registered.'));
+  exemptions.body.append(await settingsPanel(exempt, {
+    empty: 'No exemption keys are registered.',
+  }));
+
+  const homed = [mode, ...exempt].filter(Boolean).map((spec) => spec.key);
 
   document.getElementById('dash').replaceChildren(
     arming.node,
     book.node,
     exemptions.node,
-    await namespaceSettings('automod', { title: 'All automod settings' }),
+    await namespaceSettings('automod', { title: 'All automod settings', omit: homed }),
   );
 }
 

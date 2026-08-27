@@ -26,6 +26,7 @@ GOLIVE_TEMPLATE = (
     "Check it out: {url}"
 )
 GOLIVE_MODES = ("off", "shadow", "on")
+GOLIVE_END_SUFFIX = " — stream ended"
 
 ROLEMENU_MODES = ("off", "on")
 
@@ -75,6 +76,7 @@ KEY_TYPES: dict[str, str] = {
     "golive_mode": "enum",
     "golive_channel_id": "channel",
     "golive_template": "text",
+    "golive_end_suffix": "text",
     "golive_live_role_id": "role",
     "golive_require_role_id": "role",
     "golive_ignore_role_id": "role",
@@ -190,6 +192,7 @@ KEY_HELP: dict[str, str] = {
     "golive_mode": "off, shadow (log only) or on (post go-live announcements)",
     "golive_channel_id": "where go-live announcements are posted",
     "golive_template": "the announcement wording; {name} {game} {title} {url} {platform}",
+    "golive_end_suffix": "what is added to an announcement once the stream has ended",
     "golive_live_role_id": "role given while someone is streaming",
     "golive_require_role_id": "only announce people who have this role",
     "golive_ignore_role_id": "never announce people who have this role",
@@ -508,6 +511,8 @@ class SettingsStore:
             return "shadow"
         if key == "golive_template":
             return GOLIVE_TEMPLATE
+        if key == "golive_end_suffix":
+            return GOLIVE_END_SUFFIX
         if key == "golive_cooldown_minutes":
             return 60
         if key == "golive_max_session_hours":

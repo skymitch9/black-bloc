@@ -5,10 +5,24 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
-from ...cogs.community.tempvoice import connected_ids, make_creator_channel, rows_for_guild
+from ...cogs.community.tempvoice import (
+    LOBBY_FORGOTTEN,
+    NOT_A_LOBBY,
+    connected_ids,
+    forget_creator,
+    make_creator_channel,
+    rows_for_guild,
+)
 from ..auth import Refused, staff_dependency
 from ..names import resolve_one
-from ..writes import actor_for, note, require_db, require_guild, writer_dependency
+from ..writes import (
+    actor_for,
+    note,
+    require_db,
+    require_guild,
+    wanted_id,
+    writer_dependency,
+)
 
 log = logging.getLogger(__name__)
 
@@ -62,5 +76,21 @@ def build_router(bot: Any) -> APIRouter:
             raise Refused(409, SETUP_REFUSED.get(outcome, "setup_refused"), said)
         await note(bot, guild, "web.tempvoice.setup", who, details={"name": name})
         return {"created": True, "outcome": outcome, "message": said}
+
+    @router.post("/forget")
+    async def tempvoice_forget(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        wanted = wanted_id(payload.get("channel_id"))
+        actor = actor_for(bot, who, guild)
+        if not await forget_creator(bot, guild, wanted, actor):
+            raise Refused(404, "not_a_lobby", NOT_A_LOBBY.format(channel_id=wanted))
+        await note(bot, guild, "web.tempvoice.forget", who, target=wanted)
+        return {
+            "forgotten": True,
+            "channel_id": str(wanted),
+            "message": LOBBY_FORGOTTEN.format(channel_id=wanted),
+        }
 
     return router

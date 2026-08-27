@@ -12,6 +12,7 @@ from black_bloc.settings_store import (
     EVENTS_RETENTION_DAYS,
     EVENTS_RETENTION_MAX_DAYS,
     EVENTS_RETENTION_MIN_DAYS,
+    GOLIVE_END_SUFFIX,
     GOLIVE_TEMPLATE,
     HONEYPOT_PURGE_MAX_DAYS,
     KEY_TYPES,
@@ -230,6 +231,14 @@ async def test_golive_defaults(store):
     assert store.get(1, "golive_cooldown_minutes") == 60
     assert store.get(1, "golive_live_role_id") is None
     assert store.get(1, "golive_ping_role_id") is None
+
+
+async def test_the_stream_ended_wording_is_a_setting_with_the_hardcoded_text_as_its_default(store):
+    assert store.get(1, "golive_end_suffix") == GOLIVE_END_SUFFIX
+    assert KEY_TYPES["golive_end_suffix"] == "text"
+    assert await store.set(1, "golive_end_suffix", " (over)") == " (over)"
+    with pytest.raises(SettingError):
+        await store.set(1, "golive_end_suffix", "   ")
 
 
 async def test_golive_channel_defaults_to_live_now_once_test_mode_is_off(tmp_path, monkeypatch):

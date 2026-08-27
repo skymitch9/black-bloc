@@ -643,6 +643,11 @@ async function control(spec, onChange) {
     });
     return { node: input, read: (n) => n.value };
   }
+  if (kind === 'longtext') {
+    const area = el('textarea', { class: 'input area', rows: '3' });
+    area.value = spec.value === null || spec.value === undefined ? '' : String(spec.value);
+    return { node: area, read: (n) => (n.value === '' ? null : n.value) };
+  }
   if (kind === 'json') {
     const area = el('textarea', { class: 'input area mono', rows: '6', spellcheck: 'false' });
     area.value = jsonText(spec.value);
@@ -868,15 +873,106 @@ export async function settingsPanel(specs, { onSaved = null, empty = 'This part 
   ]);
 }
 
-export async function namespaceSettings(namespace, { title = 'Settings', note = null, onSaved = null } = {}) {
+/** `omit` is how a key that has its own editor higher up the page keeps one home. */
+export async function namespaceSettings(namespace, {
+  title = 'Settings',
+  note = null,
+  onSaved = null,
+  omit = [],
+} = {}) {
   const payload = await settings();
-  const specs = settingsNamespace(payload, namespace);
+  const skip = new Set(omit);
+  const specs = settingsNamespace(payload, namespace).filter((spec) => !skip.has(spec.key));
   const group = section(title, note, { count: specs.length || null });
   group.body.append(await settingsPanel(specs, {
     onSaved,
     empty: `The bot registers no settings under ${namespace}.`,
   }));
   return group.node;
+}
+
+const TEMPLATE_TOKEN = /\{\{|\}\}|\{([^{}]*)\}/g;
+
+const UNREADABLE = 'Black Bloc cannot read this wording, so it would use its own default instead. ' +
+  'Every { needs a matching }.';
+
+/**
+ * The answer Python's `str.format_map` gives the bot: known tokens filled in,
+ * an unknown one left standing, `{{` and `}}` unescaped — and null when a
+ * stray brace would have raised, so a caller says the default would be used
+ * rather than pretending this wording works.
+ */
+export function fillTemplate(template, values) {
+  const text = String(template === null || template === undefined ? '' : template);
+  if (/[{}]/.test(text.replace(TEMPLATE_TOKEN, ''))) return null;
+  return text.replace(TEMPLATE_TOKEN, (whole, token) => {
+    if (whole === '{{') return '{';
+    if (whole === '}}') return '}';
+    return token in values ? values[token] : whole;
+  });
+}
+
+/**
+ * A wording key edited with a preview: one settingsEditor row rendered as a
+ * textarea, the docked bar the Settings page uses, and `paint` called with the
+ * filled-in sample every time the text or one of `controls` changes.
+ */
+export async function templateEditor(spec, { sample = () => ({}), paint = null, controls = [] } = {}) {
+  const editor = await settingsEditor([{ ...spec, type: 'longtext' }]);
+  const row = editor.rows[0];
+  const say = notice();
+  const repaint = () => {
+    const found = row.read();
+    const filled = found.ok ? fillTemplate(found.value, sample()) : null;
+    if (filled === null) say.say(UNREADABLE, 'warn');
+    else say.say('');
+    if (paint) paint(filled);
+  };
+  const control = row.node.querySelector('.setrow-control');
+  if (control) {
+    control.addEventListener('input', repaint);
+    control.addEventListener('change', repaint);
+  }
+  for (const one of controls) one.addEventListener('change', repaint);
+  repaint();
+  return { row, editor, say, repaint };
+}
+
+/**
+ * The mode switch the Overview and Moderation rows share: the settings
+ * editor's own three segments, saving on the click because there is no docked
+ * bar out here, and putting the old value back with a sentence when the bot
+ * refuses. `spec` is the row /api/settings reports for the key.
+ */
+export function modeSwitch(spec, { onSaved = null, say = null, label = null } = {}) {
+  const voice = say || notice();
+  const named = label || humanLabel(spec.key);
+  let stored = spec.value === null || spec.value === undefined ? null : String(spec.value);
+  const choices = segOrder(spec.choices || []).map((choice) => ({
+    value: choice,
+    label: String(choice),
+  }));
+  const node = segment(choices, stored, {
+    onChange: async () => {
+      const wanted = node.readValue();
+      if (wanted === stored) return;
+      voice.say('Saving…');
+      try {
+        const reply = await saveSetting(spec.key, wanted);
+        stored = String(storedValue(reply, spec.key) ?? wanted);
+        node.setValue(stored);
+        voice.say(`${named} is now ${stored}.`, 'ok');
+        if (onSaved) onSaved(spec.key, stored);
+      } catch (error) {
+        node.setValue(stored);
+        const said = sentenceFor(error);
+        voice.say(said.text, said.tone);
+      }
+    },
+  });
+  node.setAttribute('data-key', spec.key);
+  node.setAttribute('aria-label', `${named} mode`);
+  return { node, say: voice };
 }
 
 export async function run(say, work, okText) {
@@ -890,4 +986,24 @@ export async function run(say, work, okText) {
     say.say(said.text, said.tone);
     return { ok: false, found: null };
   }
+}
+
+const outcomes = new Map();
+
+/**
+ * A write that reloads the page would throw away the sentence saying what it
+ * did, because the reload replaces the notice it was written into. `keepSaying`
+ * parks it under a name and `sayAgain` puts it back on the notice the reload
+ * built, so the outcome survives its own refresh.
+ */
+export function keepSaying(where, say) {
+  outcomes.set(where, { text: say.textContent, tone: say.getAttribute('data-tone') || 'ok' });
+}
+
+export function sayAgain(where, say) {
+  const found = outcomes.get(where);
+  if (!found) return say;
+  outcomes.delete(where);
+  say.say(found.text, found.tone);
+  return say;
 }

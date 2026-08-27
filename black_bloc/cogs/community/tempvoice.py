@@ -170,10 +170,27 @@ NOT_AN_ID = (
     "**{given}** is not a channel id, so nothing was forgotten. Right-click the channel and "
     "choose Copy Channel ID, or read the id out of `/tempvoice status`."
 )
-FORGOTTEN = (
+LOBBY_FORGOTTEN = (
     "Black Bloc has forgotten **{channel_id}** — joining it no longer makes anybody a temporary "
     "channel."
 )
+
+
+async def forget_creator(bot: Any, guild: Any, channel_id: int, actor: Any = None) -> bool:
+    """Stop treating one channel id as join-to-create; False when it was not one."""
+    ids = list(bot.store.get(guild.id, "tempvoice_creator_ids") or [])
+    if channel_id not in ids:
+        return False
+    ids.remove(channel_id)
+    await bot.store.set(guild.id, "tempvoice_creator_ids", ids, by=getattr(actor, "id", None))
+    await log_action(
+        bot,
+        guild,
+        "tempvoice.creator_removed",
+        actor=actor,
+        details={"channel_id": channel_id},
+    )
+    return True
 
 
 def channel_name(template: str, member_name: str, saved: str | None = None) -> str:
@@ -1656,25 +1673,11 @@ class TempVoice(commands.Cog):
             )
             return
         await interaction.response.send_message(
-            FORGOTTEN.format(channel_id=digits), ephemeral=True
+            LOBBY_FORGOTTEN.format(channel_id=digits), ephemeral=True
         )
 
     async def _forget(self, guild: Any, channel_id: int, actor: Any = None) -> bool:
-        ids = list(self.bot.store.get(guild.id, "tempvoice_creator_ids") or [])
-        if channel_id not in ids:
-            return False
-        ids.remove(channel_id)
-        await self.bot.store.set(
-            guild.id, "tempvoice_creator_ids", ids, by=getattr(actor, "id", None)
-        )
-        await log_action(
-            self.bot,
-            guild,
-            "tempvoice.creator_removed",
-            actor=actor,
-            details={"channel_id": channel_id},
-        )
-        return True
+        return await forget_creator(self.bot, guild, channel_id, actor)
 
     @commands.Cog.listener()
     async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel) -> None:

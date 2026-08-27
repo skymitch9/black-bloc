@@ -536,7 +536,26 @@ details:not([open]) > .sect-summary .sect-mark { transform: rotate(-90deg); }
 .chip:last-child { border-bottom: 0; }
 .chip:hover { background: var(--et-row-hover); }
 .chip:focus-visible { outline: var(--et-focus-ring); outline-offset: -2px; }
+/* A row that carries its own control is a div, so the link is the name and
+   the chevron rather than the whole row. */
+a.rowlist-main, .chip-go { color: inherit; text-decoration: none; }
+.chip-go { display: inline-flex; flex: none; }
+a.rowlist-main:hover .rowlist-name { text-decoration: underline; }
+a.rowlist-main:focus-visible,
+.chip-go:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; }
 .chipgrid { display: block; }
+
+/* A colour a setting holds, shown beside the wording it paints. The value
+   arrives as --swatch so the rule stays token-shaped. */
+.swatch {
+  display: inline-block;
+  width: 0.75em;
+  height: 0.75em;
+  border: var(--et-border-w) solid var(--et-hairline);
+  border-radius: var(--et-radius-pill);
+  background: var(--swatch, var(--et-muted));
+  vertical-align: baseline;
+}
 
 /* The role swatch a member's roles are shown with. The colour arrives per row
    as --role, so the rule stays token-shaped and the row carries the data. */
@@ -768,6 +787,9 @@ button.grid-row:focus-visible { outline: var(--et-focus-ring); outline-offset: -
    other control keeps the mock's 218px slot. */
 .setrow-control:has(.seg) { width: auto; }
 .setrow-control .input.area { min-height: 5rem; }
+/* A wording key is written in sentences, so its box takes the rest of the row
+   rather than the 218px slot a channel picker needs. */
+.setrow-control:has(textarea.area:not(.mono)) { flex: 1 1 20rem; width: auto; }
 .setrow-control select[multiple] { height: 5.5rem; }
 .setrow-mark {
   flex: none;
@@ -917,6 +939,21 @@ a.btn { text-decoration: none; }
 
 .formrow { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
 .formrow .field { flex: 1 1 12rem; margin: 0; }
+
+/* One date, one line: the label sits over its box so month, day and year
+   share the width instead of each claiming an 11rem label column. */
+.formrow.dateline { flex-wrap: nowrap; align-items: end; }
+.formrow.dateline .field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  flex: 1 1 0;
+  min-width: 0;
+}
+.formrow.dateline .field > .field-label { grid-column: 1; }
+@media (max-width: 30rem) {
+  .formrow.dateline { flex-wrap: wrap; }
+  .formrow.dateline .field { flex: 1 1 7rem; }
+}
 .bar > .field {
   margin: 0;
   flex: 0 1 24rem;

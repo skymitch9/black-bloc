@@ -341,6 +341,27 @@
       ]
     },
     {
+      "method": "POST",
+      "path": "/api/golive/links",
+      "body": {
+        "user_id": "{member_id}",
+        "twitch_login": "adastreams"
+      },
+      "read_by": [
+        "page-golive.js linkCard"
+      ],
+      "shape": "object",
+      "keys": [
+        "user_id",
+        "user_name",
+        "twitch_login",
+        "twitch_user_id",
+        "linked_at",
+        "checked",
+        "message"
+      ]
+    },
+    {
       "method": "GET",
       "path": "/api/golive/optouts",
       "read_by": [
@@ -351,6 +372,37 @@
         "user_id",
         "user_name",
         "at"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/golive/optouts",
+      "body": {
+        "user_id": "{member_id}"
+      },
+      "read_by": [
+        "page-golive.js optoutCard"
+      ],
+      "shape": "object",
+      "keys": [
+        "user_id",
+        "user_name",
+        "opted_out",
+        "message"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/golive/optouts/{member_id}",
+      "read_by": [
+        "page-golive.js optoutCard"
+      ],
+      "shape": "object",
+      "keys": [
+        "user_id",
+        "user_name",
+        "opted_out",
+        "message"
       ]
     },
     {
@@ -511,6 +563,30 @@
     },
     {
       "method": "POST",
+      "path": "/api/birthdays/{member_id}/optin",
+      "body": {
+        "opted_in": false
+      },
+      "read_by": [
+        "page-birthdays.js wishedCell"
+      ],
+      "shape": "object",
+      "keys": [
+        "user_id",
+        "user_name",
+        "month",
+        "day",
+        "year",
+        "when",
+        "opted_in",
+        "source",
+        "set_at",
+        "last_announced_on",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
       "path": "/api/birthdays/import",
       "body": {},
       "read_by": [
@@ -580,6 +656,22 @@
       "keys": [
         "created",
         "outcome",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/tempvoice/forget",
+      "body": {
+        "channel_id": "{lobby_channel_id}"
+      },
+      "read_by": [
+        "page-tempvoice.js lobbyLine"
+      ],
+      "shape": "object",
+      "keys": [
+        "forgotten",
+        "channel_id",
         "message"
       ]
     },
@@ -991,14 +1083,19 @@
     "web.rolemenu.edit",
     "web.rolemenu.delete",
     "web.rolemenu.post",
+    "web.golive.link",
     "web.golive.unlink",
+    "web.golive.optout",
+    "web.golive.optin",
     "web.event.approved",
     "web.event.denied",
     "web.event.cancel",
     "web.birthday.set",
+    "web.birthday.optin",
     "web.birthday.clear",
     "web.birthday.import",
     "web.tempvoice.setup",
+    "web.tempvoice.forget",
     "web.honeypot.ban",
     "web.honeypot.setup",
     "web.mod.warn",

@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import pytest
 
-from black_bloc.cogs.content.golive import get_link, set_link, set_optout
+from black_bloc.cogs.content.golive import get_link, is_opted_out, set_link, set_optout
 
 ROUTES = [
     ("GET", "/api/golive/links"),
+    ("POST", "/api/golive/links"),
     ("DELETE", "/api/golive/links/7"),
     ("GET", "/api/golive/optouts"),
+    ("POST", "/api/golive/optouts"),
+    ("DELETE", "/api/golive/optouts/7"),
     ("GET", "/api/golive/sessions"),
 ]
 
@@ -104,3 +107,79 @@ async def test_the_session_limit_is_clamped(client, sign_in, web):
     sign_in(client)
     assert client.get("/api/golive/sessions", params={"limit": 10000}).status_code == 200
     assert client.get("/api/golive/sessions", params={"limit": 0}).status_code == 200
+
+
+async def test_linking_a_member_stores_the_login_and_says_it_was_not_checked(
+    client, sign_in, web, guild, wf
+):
+    wf.member(guild, 21, name="ada")
+    sign_in(client)
+
+    response = client.post(
+        "/api/golive/links",
+        json={"user_id": "21", "twitch_login": "https://twitch.tv/AdaStreams?x=1"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["twitch_login"] == "adastreams"
+    assert body["checked"] is False
+    assert "did not check" in body["message"]
+    row = await get_link(web.db, 21)
+    assert row["twitch_login"] == "adastreams"
+    assert "web.golive.link" in await wf.kinds_in(web.db)
+
+
+async def test_linking_refuses_a_channel_another_member_already_holds(
+    client, sign_in, web, guild, wf
+):
+    wf.member(guild, 21, name="ada")
+    wf.member(guild, 22, name="bo")
+    await set_link(web.db, 21, "adastreams", "t-1")
+    sign_in(client)
+
+    response = client.post(
+        "/api/golive/links", json={"user_id": "22", "twitch_login": "adastreams"}
+    )
+
+    assert response.status_code == 409
+    assert "only belong to one member" in response.json()["message"]
+    assert await get_link(web.db, 22) is None
+
+
+def test_linking_refuses_something_that_is_not_a_channel_name_in_words(client, sign_in):
+    sign_in(client)
+
+    response = client.post(
+        "/api/golive/links", json={"user_id": "21", "twitch_login": "not a name!"}
+    )
+
+    assert response.status_code == 400
+    assert "nothing was linked" in response.json()["message"]
+
+
+async def test_opting_a_member_out_and_back_in_again(client, sign_in, web, guild, wf):
+    wf.member(guild, 21, name="ada")
+    sign_in(client)
+
+    out = client.post("/api/golive/optouts", json={"user_id": "21"})
+    assert out.status_code == 200
+    assert out.json()["opted_out"] is True
+    assert await is_opted_out(web.db, 21) is True
+
+    back = client.delete("/api/golive/optouts/21")
+    assert back.status_code == 200
+    assert back.json()["opted_out"] is False
+    assert await is_opted_out(web.db, 21) is False
+
+    kinds = await wf.kinds_in(web.db)
+    assert "web.golive.optout" in kinds and "web.golive.optin" in kinds
+
+
+def test_taking_away_an_optout_nobody_has_says_so_in_words(client, sign_in):
+    sign_in(client)
+
+    response = client.delete("/api/golive/optouts/21")
+
+    assert response.status_code == 404
+    assert "nothing to undo" in response.json()["message"]
