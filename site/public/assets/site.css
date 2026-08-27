@@ -787,6 +787,9 @@ button.grid-row:focus-visible { outline: var(--et-focus-ring); outline-offset: -
    other control keeps the mock's 218px slot. */
 .setrow-control:has(.seg) { width: auto; }
 .setrow-control .input.area { min-height: 5rem; }
+/* A wording key is written in sentences, so its box takes the rest of the row
+   rather than the 218px slot a channel picker needs. */
+.setrow-control:has(textarea.area:not(.mono)) { flex: 1 1 20rem; width: auto; }
 .setrow-control select[multiple] { height: 5.5rem; }
 .setrow-mark {
   flex: none;

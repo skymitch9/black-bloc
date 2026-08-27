@@ -6,7 +6,7 @@ import { el, sayNothing, searchField, section, settingsEditor } from './ui.js';
 const FIRST = 'core';
 
 const NAMESPACE_NOTES = {
-  core: 'The channels the whole bot leans on. staff_channel_id is also what decides who may see this dashboard.',
+  core: 'staff_channel_id is what decides who may see this dashboard.',
   automod: 'automod_rules has its own editor on the Automod tab; the JSON box here is the fallback.',
 };
 
