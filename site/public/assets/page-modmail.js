@@ -236,6 +236,5 @@ async function load() {
 
 refresh = start({
   tab: 'modmail',
-  subtitle: 'Tickets, replies, snippets and blocks.',
   load,
 });

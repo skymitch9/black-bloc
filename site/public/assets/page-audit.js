@@ -90,6 +90,5 @@ async function load() {
 
 refresh = start({
   tab: 'audit',
-  subtitle: 'Who changed which setting, and everything done from this dashboard.',
   load,
 });

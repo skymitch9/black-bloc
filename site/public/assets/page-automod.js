@@ -129,6 +129,5 @@ async function load() {
 
 refresh = start({
   tab: 'automod',
-  subtitle: 'The rule book, the exemptions and the arming switch.',
   load,
 });

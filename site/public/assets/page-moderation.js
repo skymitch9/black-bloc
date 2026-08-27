@@ -1,5 +1,6 @@
 import { api, listOf, names, send } from './api.js';
 import { start } from './app.js';
+import { shellStatus } from './shell.js';
 import {
   ask,
   badge,
@@ -9,23 +10,192 @@ import {
   duration,
   el,
   field,
+  icon,
   idsIn,
   memberPicker,
   nameNode,
   notice,
   pager,
   run,
+  searchField,
   section,
-  table,
+  shortWhen,
   when,
 } from './ui.js';
 
 const KINDS = ['warn', 'timeout', 'kick', 'ban', 'unban'];
 const DESTRUCTIVE = ['kick', 'ban', 'unban'];
+const PILL_FEATURES = [['automod', 'Automod'], ['honeypot', 'Honeypot']];
 
-const state = { page: 1, userFilter: null, userName: null, openCase: null };
+const FILTERS = [
+  ['all', 'All', null],
+  ['warn', 'Warns', ['warn']],
+  ['timeout', 'Timeouts', ['timeout']],
+  ['ban', 'Bans', ['ban', 'unban']],
+  ['note', 'Notes', ['note']],
+];
+
+const STATS = [
+  ['Cases', null],
+  ['Warns', 'warn'],
+  ['Timeouts', 'timeout'],
+  ['Bans', 'ban'],
+];
+
+const COLUMNS = ['Case', 'Member', 'Type', 'Reason', 'By', 'When', ''];
+
+const state = { page: 1, userFilter: null, userName: null, openCase: null, kind: 'all', query: '' };
 
 let refresh = () => {};
+
+function modePills(status) {
+  const modes = new Map();
+  for (const row of (status && status.features) || []) modes.set(row.feature, row.mode);
+  const nodes = [];
+  for (const [feature, label] of PILL_FEATURES) {
+    if (!modes.has(feature)) continue;
+    const mode = modes.get(feature);
+    const blank = mode === null || mode === undefined || mode === '';
+    nodes.push(el('span', { class: 'pill-label', text: label }));
+    nodes.push(el('span', {
+      class: 'pill',
+      'data-mode': blank ? 'off' : String(mode),
+      text: blank ? 'not set' : String(mode),
+    }));
+  }
+  return nodes;
+}
+
+function statStrip(payload, rows) {
+  const tiles = STATS.map(([label, kind]) => {
+    const value = kind === null
+      ? (payload && payload.total !== undefined && payload.total !== null ? payload.total : rows.length)
+      : rows.filter((row) => String(row.kind) === kind).length;
+    return el('div', { class: 'stat' }, [
+      el('span', { class: 'stat-value', 'data-blank': Number(value) === 0 ? 'true' : undefined, text: String(value) }),
+      el('span', { class: 'stat-label', text: label }),
+    ]);
+  });
+  return el('div', { class: 'statgrid' }, tiles);
+}
+
+function cell(value, className) {
+  if (value === null || value === undefined || value === '') {
+    return el('span', { class: 'cell-quiet', text: '—' });
+  }
+  return el('span', { class: className, text: String(value) });
+}
+
+function caseRow(row) {
+  return el('button', {
+    class: 'grid-row',
+    type: 'button',
+    'data-search': `${row.id} ${row.kind} ${row.user_name || row.user_id || ''} ${row.reason || ''} ${row.moderator_name || ''}`.toLowerCase(),
+    on: {
+      click: () => {
+        state.openCase = row.id;
+        refresh();
+      },
+    },
+  }, [
+    el('span', { class: 'cell-id', text: `#${row.id}` }),
+    el('span', { class: 'cell-name' }, [nameNode(row.user_id, row.user_name)]),
+    el('span', { class: 'cell-kind' }, [
+      el('span', { class: 'kind-dot', 'data-kind': String(row.kind) }),
+      el('span', { text: String(row.kind) }),
+      row.applied === false ? el('span', { class: 'pill small', 'data-mode': 'shadow', text: 'shadow' }) : null,
+    ]),
+    cell(row.reason, 'cell-reason'),
+    el('span', { class: 'cell-quiet' }, [nameNode(row.moderator_id, row.moderator_name)]),
+    el('span', { class: 'cell-quiet', text: shortWhen(row.at).text, title: shortWhen(row.at).title }),
+    icon('chevronRight', 16),
+  ]);
+}
+
+function toolbar(rows, onPaint) {
+  const said = el('span', { class: 'table-count' });
+  const chips = FILTERS.map(([key, label]) => el('button', {
+    class: 'chip-filter',
+    type: 'button',
+    'data-kind': key,
+    'aria-pressed': state.kind === key ? 'true' : 'false',
+    text: label,
+    on: {
+      click: (event) => {
+        state.kind = key;
+        for (const chip of event.currentTarget.parentElement.children) {
+          chip.setAttribute('aria-pressed', chip.getAttribute('data-kind') === key ? 'true' : 'false');
+        }
+        onPaint();
+      },
+    },
+  }));
+  const search = searchField({
+    label: 'Search cases',
+    placeholder: 'Search cases…',
+    onQuery: (query) => {
+      state.query = query;
+      onPaint();
+    },
+  });
+  const node = el('div', { class: 'card-head' }, [
+    search,
+    el('div', { class: 'chipbar' }, chips),
+    el('span', { class: 'topbar-gap' }),
+    said,
+  ]);
+  node.say = (shown) => {
+    said.textContent = `${shown} case${shown === 1 ? '' : 's'}`;
+  };
+  node.say(rows.length);
+  return node;
+}
+
+function casesCard(payload, rows) {
+  const head = el('div', { class: 'grid-row head' }, COLUMNS.map((label) => el('span', { text: label })));
+  const lines = rows.map(caseRow);
+  const foot = el('div', { class: 'grid-foot' });
+  const body = el('div', { class: 'grid-table' }, [head, ...lines, foot]);
+
+  let tools = null;
+  const paint = () => {
+    const wanted = FILTERS.find(([key]) => key === state.kind);
+    const kinds = wanted ? wanted[2] : null;
+    let shown = 0;
+    lines.forEach((line, at) => {
+      const row = rows[at];
+      const kindHit = kinds === null || kinds.includes(String(row.kind));
+      const textHit = state.query === '' || (line.getAttribute('data-search') || '').includes(state.query);
+      const hit = kindHit && textHit;
+      line.hidden = !hit;
+      if (hit) shown += 1;
+    });
+    foot.textContent = `Showing ${shown} of ${rows.length} case${rows.length === 1 ? '' : 's'}`;
+    if (tools) tools.say(shown);
+  };
+  tools = toolbar(rows, paint);
+  paint();
+
+  const hasMore = payload && payload.pages ? state.page < payload.pages : rows.length >= 10;
+  return el('div', { class: 'card' }, [
+    tools,
+    rows.length === 0
+      ? el('div', {
+        class: 'grid-foot',
+        text: state.userFilter ? 'That member has no cases.' : 'No cases have been written yet.',
+      })
+      : el('div', { class: 'table-scroll' }, [body]),
+    pager({
+      page: state.page,
+      hasMore,
+      count: rows.length,
+      onPage: (to) => {
+        state.page = Math.max(1, to);
+        refresh();
+      },
+    }),
+  ]);
+}
 
 function actionBar() {
   const say = notice();
@@ -111,9 +281,15 @@ async function caseDetail(id) {
 async function load() {
   const query = new URLSearchParams({ page: String(state.page) });
   if (state.userFilter) query.set('user_id', state.userFilter);
-  const payload = await api(`/api/mod/cases?${query.toString()}`);
+  const [status, payload] = await Promise.all([
+    shellStatus(),
+    api(`/api/mod/cases?${query.toString()}`),
+  ]);
   const rows = listOf(payload, 'cases');
   await names(idsIn(rows, ['user_id', 'moderator_id']));
+
+  const aside = document.getElementById('page-aside');
+  if (aside) aside.replaceChildren(...modePills(status));
 
   const picker = memberPicker({
     label: 'Only this member',
@@ -126,46 +302,16 @@ async function load() {
     },
   });
 
-  const casesTable = table([
-    { label: 'Case', cell: (row) => String(row.id), className: 'mono' },
-    { label: 'When', cell: (row) => when(row.at), className: 'mono' },
-    { label: 'What', cell: (row) => `${row.kind}${row.duration_s ? ` · ${duration(row.duration_s)}` : ''}` },
-    { label: 'Member', cell: (row) => nameNode(row.user_id, row.user_name) },
-    { label: 'By', cell: (row) => nameNode(row.moderator_id, row.moderator_name) },
-    { label: 'Carried out', cell: (row) => (row.applied ? badge('yes', 'ok') : badge('shadow', 'warn')) },
-    { label: 'Why', cell: (row) => row.reason, className: 'wrap' },
-    {
-      label: '',
-      cell: (row) => button('Open', () => {
-        state.openCase = row.id;
-        refresh();
-      }, { tone: 'quiet' }),
-    },
-  ], rows, { empty: state.userFilter ? 'That member has no cases.' : 'No cases have been written yet.' });
-
-  const hasMore = payload && payload.pages ? state.page < payload.pages : rows.length >= 10;
-
-  const cases = section('Cases', state.userName ? `Filtered to ${state.userName}.` : null, {
-    count: rows.length,
-  });
-  cases.body.append(
-    picker.node,
-    casesTable,
-    pager({
-      page: state.page,
-      hasMore,
-      count: rows.length,
-      onPage: (to) => {
-        state.page = Math.max(1, to);
-        refresh();
-      },
-    }),
-  );
-
-  const act = section('Action bar', 'Every one of these is the same code path as the slash command, and lands in the same case table.');
+  const act = section('Take an action', 'Every one of these is the same code path as the slash command, and lands in the same case table.');
   act.body.append(actionBar());
 
-  const nodes = [act.node, cases.node];
+  const only = section(
+    'Only one member',
+    state.userName ? `Filtered to ${state.userName}.` : 'Ask the bot for one member’s cases instead of the whole page.',
+  );
+  only.body.append(picker.node);
+
+  const nodes = [statStrip(payload, rows), casesCard(payload, rows), act.node, only.node];
   if (state.openCase !== null) {
     const detail = section(`Case ${state.openCase}`, null, { id: 'case', open: true });
     detail.body.append(await caseDetail(state.openCase));
@@ -175,8 +321,4 @@ async function load() {
   document.getElementById('dash').replaceChildren(...nodes);
 }
 
-refresh = start({
-  tab: 'moderation',
-  subtitle: 'Cases and the action bar.',
-  load,
-});
+refresh = start({ tab: 'moderation', load });

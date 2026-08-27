@@ -110,6 +110,5 @@ async function load() {
 
 refresh = start({
   tab: 'events',
-  subtitle: 'The approval queue and what happens to an approved event.',
   load,
 });

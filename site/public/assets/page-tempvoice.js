@@ -62,6 +62,5 @@ async function load() {
 
 refresh = start({
   tab: 'tempvoice',
-  subtitle: 'The channels open right now, and the join-to-create setup.',
   load,
 });

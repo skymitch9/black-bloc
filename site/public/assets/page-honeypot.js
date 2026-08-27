@@ -91,6 +91,5 @@ async function load() {
 
 refresh = start({
   tab: 'honeypot',
-  subtitle: 'Who walked into a trap channel, and what was done about it.',
   load,
 });
