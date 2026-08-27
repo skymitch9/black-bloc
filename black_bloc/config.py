@@ -1,8 +1,3 @@
-"""Settings, loaded from the environment and an optional `.env` file.
-
-One place owns configuration. Nothing else in the package reads `os.environ`.
-"""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -12,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class ConfigError(RuntimeError):
-    """Raised when required configuration is missing or invalid."""
+    """Required configuration is missing or invalid."""
 
 
 class Settings(BaseSettings):
@@ -36,16 +31,12 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
     api_port: int = 8080
 
-    # Owner rule 2026-08-26: until we are ready, the bot only speaks in ONE
-    # channel (and DMs). Enforced by black_bloc/guard.py, not just documented.
     test_mode: bool = True
     test_channel_id: int | None = None
 
     @field_validator("dev_guild_id", "test_channel_id", mode="before")
     @classmethod
     def _blank_is_none(cls, v):
-        # `.env.example` ships `DEV_GUILD_ID=`; a blank line must mean "unset",
-        # not "the empty string is not an integer".
         if isinstance(v, str) and not v.strip():
             return None
         return v
@@ -68,10 +59,7 @@ class Settings(BaseSettings):
 
 
 def load_settings(**overrides) -> Settings:
-    """Build Settings. Keyword overrides win over the environment (handy in tests).
-
-    Raises ConfigError (not a pydantic traceback) when a value cannot be parsed.
-    """
+    """Build Settings; keyword overrides win over the environment."""
     try:
         return Settings(**overrides)
     except ValidationError as exc:

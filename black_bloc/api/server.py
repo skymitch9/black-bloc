@@ -1,10 +1,3 @@
-"""FastAPI app + in-loop uvicorn runner. Off unless API_ENABLED=true.
-
-Runs in the same asyncio loop as the Discord client so routes can read bot
-state directly (no IPC). Binds to localhost by default and has NO auth yet —
-see docs/KNOWN_ISSUES.md before exposing it.
-"""
-
 from __future__ import annotations
 
 import logging

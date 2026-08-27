@@ -1,5 +1,3 @@
-"""SQLite connection lifecycle and schema bootstrap."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -8,8 +6,6 @@ import aiosqlite
 
 SCHEMA_VERSION = 1
 
-# Additive only. When a change is not additive, it becomes a numbered migration
-# (see docs/info/architecture.md) — never an edit to a statement already shipped.
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
     key   TEXT PRIMARY KEY,

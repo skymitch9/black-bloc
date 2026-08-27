@@ -1,5 +1,3 @@
-"""The test-mode gate must refuse anything outside the test channel or a DM."""
-
 import pytest
 
 from black_bloc.bot import BlackBlocBot
@@ -45,7 +43,7 @@ class _Interaction:
 async def test_interaction_policy(guarded_bot):
     g = guarded_bot.guard
     assert g.allows_interaction(_Interaction(guild_id=1, channel_id=TEST_CH))
-    assert g.allows_interaction(_Interaction(guild_id=None, channel_id=OTHER_CH))  # DM
+    assert g.allows_interaction(_Interaction(guild_id=None, channel_id=OTHER_CH))
     assert not g.allows_interaction(_Interaction(guild_id=1, channel_id=OTHER_CH))
     await guarded_bot.close()
 

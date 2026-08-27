@@ -1,5 +1,3 @@
-"""Offline checks: the bot object builds and cogs load without a gateway connection."""
-
 from black_bloc.bot import COGS, BlackBlocBot
 
 

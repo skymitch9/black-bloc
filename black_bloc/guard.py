@@ -1,23 +1,3 @@
-"""Test-mode gate — owner rule, 2026-08-26.
-
-> "we will only test in here until we're ready. never use another channel
-> except for you're allowed to be dm'd to test too"
-
-While `TEST_MODE=true`, the bot may only:
-  * send messages to `TEST_CHANNEL_ID` or to a DM channel, and
-  * answer slash commands invoked from that channel or a DM.
-
-Anything else is refused *mechanically* here, not just in the docs. The gate
-sits on the HTTP layer (`bot.http.send_message`) so every code path that ends
-in a channel message hits it, whether it went through `channel.send`,
-`ctx.send` or a cog's background task. Interaction responses are covered by
-`tree.interaction_check`, which runs before any command body.
-
-⚠️ Not covered (needs the same care in feature code): channel/role edits,
-bans, event creation, webhooks. Builders are briefed to use
-`bot.guard.allows_channel(...)` before any side effect on a channel.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -29,7 +9,7 @@ log = logging.getLogger(__name__)
 
 
 class TestModeViolation(RuntimeError):
-    """Raised when code tries to act outside the test channel in test mode."""
+    """Code tried to act outside the test channel while test mode is on."""
 
 
 class TestModeGuard:
@@ -37,8 +17,6 @@ class TestModeGuard:
         self.bot = bot
         self.test_channel_id = test_channel_id
         self._original_send: Any = None
-
-    # -- policy -------------------------------------------------------------
 
     def _is_dm(self, channel_id: int) -> bool:
         ch = self.bot.get_channel(channel_id)
@@ -50,11 +28,9 @@ class TestModeGuard:
         return channel_id == self.test_channel_id or self._is_dm(channel_id)
 
     def allows_interaction(self, interaction: discord.Interaction) -> bool:
-        if interaction.guild_id is None:  # DM
+        if interaction.guild_id is None:
             return True
         return interaction.channel_id == self.test_channel_id
-
-    # -- installation ---------------------------------------------------------
 
     def install(self) -> None:
         http = self.bot.http

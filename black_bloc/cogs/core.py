@@ -1,5 +1,3 @@
-"""Core cog: liveness and identity commands. Always loaded."""
-
 from __future__ import annotations
 
 import discord
