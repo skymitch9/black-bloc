@@ -1178,6 +1178,12 @@ dialog.ask::backdrop { background: var(--et-transit-bg, rgb(0 0 0 / .55)); }
 [data-theme="cyberpunk"] .chip-filter:hover { border-color: var(--et-accent); }
 [data-theme="cyberpunk"] .topbar,
 [data-theme="cyberpunk"] .side { border-color: var(--et-accent-2); }
+/* The wordmark is a sign, not body text — in this theme it wears the heading
+   neon and its glow, the way the source site's own logo does. */
+[data-theme="cyberpunk"] .side-wordmark {
+  color: var(--et-heading-color);
+  text-shadow: var(--et-brand-shadow);
+}
 
 /* retro + hearts: cards lift on hover the way their source apps' cards do —
    the hard offset grows, no blur, no transform. */
