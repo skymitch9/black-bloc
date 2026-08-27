@@ -13,6 +13,8 @@ from .config import Settings
 from .guard import TestModeGuard
 from .intents import build_intents
 from .invite import invite_url
+from .rolemenu_panels import install as install_panels
+from .rolemenu_panels import panels_on_boot
 from .settings_store import SettingsStore
 from .storage.db import Database
 
@@ -59,6 +61,7 @@ class BlackBlocBot(commands.Bot):
         await self._load_cogs()
         await sync_dev_guild(self, self.settings.dev_guild_id)
         install_visibility(self)
+        install_panels(self)
         self._start_api()
 
     async def _load_cogs(self) -> None:
@@ -76,6 +79,7 @@ class BlackBlocBot(commands.Bot):
     async def on_ready(self) -> None:
         assert self.user is not None
         log.info("logged in as %s (%s); %d guild(s)", self.user, self.user.id, len(self.guilds))
+        await panels_on_boot(self)
 
     async def close(self) -> None:
         visibility = getattr(self, "command_visibility", None)

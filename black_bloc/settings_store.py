@@ -223,8 +223,8 @@ KEY_HELP: dict[str, str] = {
     "bot_bio": "the About Me on Black Bloc's own profile, dashboard link and all",
     "status_prefix": "what goes in front of the member count in Black Bloc's status",
     "rolemenu_mode": (
-        "whether members can pick roles from the posted panels; off also hides the /rolemenu "
-        "commands"
+        "whether members can pick roles from the panels; off takes them down and hides the "
+        "/rolemenu commands, on posts them again"
     ),
 }
 

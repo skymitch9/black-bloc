@@ -99,13 +99,13 @@ ROLE_MENUS_OFF = (
     "from the dashboard's Role menus tab or with `/settings set-value rolemenu_mode on`."
 )
 MODE_ON = (
-    "Every panel already posted works again straight away, and the `/rolemenu` commands come "
-    "back in a few seconds."
+    "Every menu that has a channel is posted there again in a few seconds, and the `/rolemenu` "
+    "commands come back with them."
 )
 MODE_OFF = (
-    "The panels stay where they are; a click now says they are turned off. The `/rolemenu` "
-    "commands disappear from Discord in a few seconds — the dashboard's Role menus tab and "
-    "`/settings set-value rolemenu_mode on` bring them back."
+    "The posted panels are taken down in a few seconds and the `/rolemenu` commands disappear "
+    "from Discord with them. Nobody loses a role, and no menu is changed — the dashboard's Role "
+    "menus tab and `/settings set-value rolemenu_mode on` post them all again."
 )
 NOT_IN_GUILD = (
     "Role menus only work inside the server, and this click did not come from one, so no "
@@ -275,6 +275,14 @@ async def posted_menus(db: Any) -> list[Any]:
     return list(await cur.fetchall())
 
 
+async def unposted_menus(db: Any) -> list[Any]:
+    """Menus that remember a channel but have no panel in it right now."""
+    cur = await db.conn.execute(
+        "SELECT * FROM role_menus WHERE message_id IS NULL AND channel_id IS NOT NULL"
+    )
+    return list(await cur.fetchall())
+
+
 async def create_menu(
     db: Any,
     guild_id: int,
@@ -385,6 +393,14 @@ async def set_message(db: Any, menu_id: int, channel_id: int, message_id: int) -
     await db.conn.execute(
         "UPDATE role_menus SET channel_id = ?, message_id = ? WHERE id = ?",
         (channel_id, message_id, menu_id),
+    )
+    await db.conn.commit()
+
+
+async def clear_message(db: Any, menu_id: int) -> None:
+    """Forget the panel, keep the channel it was in."""
+    await db.conn.execute(
+        "UPDATE role_menus SET message_id = NULL WHERE id = ?", (menu_id,)
     )
     await db.conn.commit()
 
@@ -874,7 +890,7 @@ class RoleMenus(commands.Cog):
         name="mode", description="Turn members picking roles from the panels off or on"
     )
     @app_commands.describe(
-        mode="off leaves every panel posted and changes nobody's roles; on lets members pick again"
+        mode="off takes the posted panels down and changes nobody's roles; on posts them again"
     )
     @app_commands.choices(
         mode=[app_commands.Choice(name=name, value=name) for name in ROLEMENU_MODES]

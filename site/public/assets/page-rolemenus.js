@@ -23,14 +23,13 @@ import {
 } from './ui.js';
 
 const MODE_KEY = 'rolemenu_mode';
-const STAYS_POSTED = 'Panels stay posted; members see “turned off” until you switch this on, so ' +
-  'turning it back on is instant. Staff can still build and edit menus from here while it is ' +
-  'off — but turning this off also hides the /rolemenu commands in Discord until it is back on.';
-const TURNED_ON = 'On. Every panel already posted hands out roles again straight away, and the ' +
-  '/rolemenu commands come back within about five seconds.';
-const TURNED_OFF = 'Off. The panels stay where they are; a click on one now says role menus are ' +
-  'turned off and changes nobody’s roles. The /rolemenu commands disappear from Discord within ' +
-  'about five seconds.';
+const SWITCH_HELP = 'Turning this off removes the posted panels and hides the /rolemenu ' +
+  'commands; turning it on re-posts every menu in its channel. Nobody loses a role either way, ' +
+  'no menu is changed, and staff can still build and edit menus from here while it is off.';
+const TURNED_ON = 'On. Every menu that has a channel is posted there again, and the /rolemenu ' +
+  'commands come back, within about five seconds.';
+const TURNED_OFF = 'Off. The posted panels are removed and the /rolemenu commands disappear from ' +
+  'Discord within about five seconds. Nobody loses a role and no menu is changed.';
 const NO_KEY = 'The bot did not report a rolemenu_mode key, so this switch is not shown rather ' +
   'than guessed at.';
 
@@ -258,7 +257,7 @@ async function load() {
     );
   }
 
-  const switchboard = section('Role selection', STAYS_POSTED);
+  const switchboard = section('Role selection', SWITCH_HELP);
   switchboard.body.append(mode ? modeSwitch(mode) : sayNothing(NO_KEY));
 
   const nodes = [switchboard.node, one.node, two.node];

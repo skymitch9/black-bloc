@@ -18,6 +18,7 @@ from black_bloc.cogs.community.role_menus import (
     RoleMenuView,
     StaffAssignSelect,
     add_option,
+    clear_message,
     create_menu,
     custom_id,
     delete_menu,
@@ -36,6 +37,7 @@ from black_bloc.cogs.community.role_menus import (
     select_emoji,
     set_message,
     summary,
+    unposted_menus,
     update_menu,
 )
 from black_bloc.config import load_settings
@@ -100,6 +102,26 @@ async def test_posted_menus_only_lists_posted_ones(db):
     await set_message(db, posted_id, 500, 600)
     rows = await posted_menus(db)
     assert [(r["name"], r["channel_id"], r["message_id"]) for r in rows] == [("posted", 500, 600)]
+
+
+async def test_clearing_the_message_keeps_the_channel_the_panel_was_in(db):
+    menu_id = await create_menu(db, GUILD, "posted", "P")
+    await add_option(db, menu_id, 1, "One")
+    await set_message(db, menu_id, 500, 600)
+
+    await clear_message(db, menu_id)
+
+    menu = await get_menu(db, GUILD, "posted")
+    assert menu["message_id"] is None and menu["channel_id"] == 500
+    options = await get_options(db, menu_id)
+    assert [(row["role_id"], row["label"]) for row in options] == [(1, "One")]
+    assert [row["name"] for row in await unposted_menus(db)] == ["posted"]
+    assert await posted_menus(db) == []
+
+
+async def test_unposted_menus_skips_a_menu_that_never_had_a_channel(db):
+    await create_menu(db, GUILD, "draft", "D")
+    assert await unposted_menus(db) == []
 
 
 async def test_bad_mode_is_refused(db):

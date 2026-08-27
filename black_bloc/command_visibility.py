@@ -51,6 +51,17 @@ class VisibilitySync:
         self.last_sync: float | None = None
         self.actor: Any = None
         self.installed = False
+        self.jobs: list[Any] = []
+
+    def also(self, job: Any) -> None:
+        """Run `await job(actor)` in the same debounced run, before the tree sync."""
+        if job not in self.jobs:
+            self.jobs.append(job)
+
+    def schedule(self, *, actor: Any = None) -> None:
+        if actor is not None:
+            self.actor = actor
+        self._schedule()
 
     def apply(self, *, actor: Any = None) -> bool:
         """Match the dev guild's tree to the stored modes; True when it had to change."""
@@ -106,6 +117,7 @@ class VisibilitySync:
     async def _run(self) -> None:
         try:
             await _wait(DEBOUNCE_SECONDS)
+            await self._jobs()
             gap = self._cooldown()
             if gap > 0:
                 await _wait(gap)
@@ -114,6 +126,15 @@ class VisibilitySync:
             raise
         except Exception as exc:
             log.error("command visibility: sync failed — %s: %s", type(exc).__name__, exc)
+
+    async def _jobs(self) -> None:
+        for job in self.jobs:
+            try:
+                await job(self.actor)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                log.error("mode flip: %r failed — %s: %s", job, type(exc).__name__, exc)
 
     def _cooldown(self) -> float:
         if self.last_sync is None:

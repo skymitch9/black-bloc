@@ -114,7 +114,7 @@ const SETTING_SPECS = [
   ['automod_warn_threshold', 'int', 8, 8, 'warnings before Black Bloc says so in the log, 0 to stop counting', null, 100],
   ['modlog_channel_id', 'channel', '800000000000000004', null, 'where mod cases are posted; defaults to log_channel_id'],
   ['mod_dm_on_action', 'enum', 'server_action_reason', 'server_action', 'what a punished member is told', ['none', 'server_action', 'server_action_reason']],
-  ['rolemenu_mode', 'enum', 'off', 'off', 'whether members can pick roles from the posted panels; off also hides the /rolemenu commands', ['off', 'on']],
+  ['rolemenu_mode', 'enum', 'off', 'off', 'whether members can pick roles from the panels; off takes them down and hides the /rolemenu commands, on posts them again', ['off', 'on']],
 ];
 
 const RULES = {

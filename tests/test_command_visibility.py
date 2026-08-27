@@ -259,6 +259,47 @@ async def test_the_real_command_tree_hides_and_gives_back_the_group(tmp_path, mo
     assert synced == [GUILD]
 
 
+async def test_a_registered_job_runs_once_with_the_actor_before_the_sync(bot, waits):
+    control = cv.install(bot)
+    order = []
+    control.also(lambda actor: _record(order, actor))
+    bot.tree.sync = _syncing(order, bot.tree.sync)
+
+    await bot.store.set(GUILD, MODE_KEY, "on", by=9)
+    await bot.store.set(GUILD, MODE_KEY, "off", by=9)
+
+    waits.gate.set()
+    await control.task
+
+    assert order == [("job", 9), ("sync", None)]
+
+
+async def test_a_job_that_raises_does_not_take_the_sync_down_with_it(bot, waits):
+    control = cv.install(bot)
+
+    async def broken(actor):
+        raise RuntimeError("no")
+
+    control.also(broken)
+
+    waits.gate.set()
+    await control.task
+
+    assert bot.tree.syncs == [GUILD]
+
+
+async def _record(order, actor):
+    order.append(("job", actor))
+
+
+def _syncing(order, original):
+    async def sync(*, guild=None):
+        order.append(("sync", None))
+        return await original(guild=guild)
+
+    return sync
+
+
 async def test_a_sync_discord_refuses_is_logged_and_leaves_the_window_open(bot, waits):
     async def refuse(*, guild=None):
         raise discord.HTTPException(SimpleNamespace(status=429, reason="rate limited"), "slow down")
