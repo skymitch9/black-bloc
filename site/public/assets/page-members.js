@@ -1,6 +1,6 @@
 import { api, listOf } from './api.js';
 import { start, tabHref } from './app.js';
-import { el, icon, pager, searchField, shortWhen } from './ui.js';
+import { avatar, el, icon, pager, roleChip, searchField, shortWhen, untilWhen } from './ui.js';
 
 const FILTERS = [
   ['all', 'All'],
@@ -38,35 +38,21 @@ function statStrip(payload) {
   }));
 }
 
-function avatar(row) {
-  const letter = String(row.name || row.username || '?').trim().charAt(0).toUpperCase() || '?';
-  const initial = el('span', { class: 'avatar', 'aria-hidden': 'true', text: letter });
-  if (!row.avatar) return initial;
-  const holder = el('span', { class: 'avatar' });
-  holder.append(el('img', {
-    src: row.avatar,
-    alt: '',
-    loading: 'lazy',
-    width: '28',
-    height: '28',
-    on: { error: () => holder.replaceWith(initial) },
-  }));
-  return holder;
-}
-
 /**
- * The role swatch takes its colour through a custom property rather than a
- * style rule, so site.css keeps its "no raw colour" promise and the row still
- * wears the colour Discord gives the role.
+ * A role Black Bloc is holding a clock on wears the days it has left, so the
+ * list says which of somebody's roles is temporary without opening anything.
  */
 function roleChips(roles) {
   const found = Array.isArray(roles) ? roles : [];
-  const nodes = found.slice(0, ROLES_SHOWN).map((role) => el('span', {
-    class: 'role-chip',
-    style: role.color ? `--role: ${role.color}` : undefined,
-    title: role.name,
-    text: role.name,
-  }));
+  const nodes = found.slice(0, ROLES_SHOWN).map((role) => {
+    const until = role.expires_at ? untilWhen(role.expires_at) : null;
+    const left = until && until.days >= 0 ? `${until.days} d` : null;
+    return roleChip(role.name, {
+      color: role.color,
+      note: until ? (left || 'due') : null,
+      title: until ? `${role.name} — runs out ${until.text} (${until.title})` : role.name,
+    });
+  });
   if (found.length > ROLES_SHOWN) {
     nodes.push(el('span', { class: 'role-more', text: `+${found.length - ROLES_SHOWN}` }));
   }
@@ -80,16 +66,22 @@ function joinedCell(iso) {
   return el('span', { class: 'cell-quiet', title: stamp.title, text: stamp.text });
 }
 
+/**
+ * The row carries two links, so it is a div: the name goes to their cases and
+ * the chevron to their role requests and timed roles. An anchor inside an
+ * anchor is invalid HTML and every click would land on the outer one.
+ */
 function memberRow(row) {
-  return el('a', {
-    class: 'grid-row',
-    href: `${tabHref('moderation')}?member=${encodeURIComponent(row.id)}`,
-    title: `Discord id ${row.id}`,
-  }, [
-    el('span', { class: 'cell-member' }, [
-      avatar(row),
+  const who = String(row.name || row.username || row.id);
+  return el('div', { class: 'grid-row rowlink', title: `Discord id ${row.id}` }, [
+    el('a', {
+      class: 'cell-member',
+      href: `${tabHref('moderation')}?member=${encodeURIComponent(row.id)}`,
+      title: `${who}'s cases`,
+    }, [
+      avatar(who, row.avatar),
       el('span', { class: 'cell-member-text' }, [
-        el('span', { class: 'cell-member-name', text: String(row.name || row.username || row.id) }),
+        el('span', { class: 'cell-member-name', text: who }),
         el('span', { class: 'cell-member-tag', text: String(row.username || row.id) }),
       ]),
     ]),
@@ -98,7 +90,11 @@ function memberRow(row) {
     row.cases
       ? el('span', { class: 'count', text: String(row.cases) })
       : el('span', { class: 'cell-quiet', text: '—' }),
-    icon('chevronRight', 16),
+    el('a', {
+      class: 'chip-go',
+      href: `${tabHref('rolemenus')}?member=${encodeURIComponent(row.id)}`,
+      title: `${who}'s role requests and timed roles`,
+    }, [icon('chevronRight', 16)]),
   ]);
 }
 
