@@ -141,6 +141,7 @@ async def seeded(client, sign_in, web, guild, wf):
     )
     await save_birthday(db, guild_id, MEMBER_ID, 3, 4, None, "staff")
     await add_channel(db, wf.VOICE_CHANNEL_ID, guild_id, MEMBER_ID, wf.OTHER_CHANNEL_ID)
+    await web.store.set(guild_id, "tempvoice_creator_ids", [wf.VOICE_CHANNEL_ID], by=7)
     client.post(
         "/api/rolemenus",
         json={"name": "contract", "title": "Contract", "mode": "multiple"},
@@ -162,6 +163,7 @@ async def seeded(client, sign_in, web, guild, wf):
         "ticket_id": str(ticket_id),
         "hit_id": str(hit_id),
         "test_channel_id": str(wf.TEST_CHANNEL_ID),
+        "lobby_channel_id": str(wf.VOICE_CHANNEL_ID),
     }
 
 

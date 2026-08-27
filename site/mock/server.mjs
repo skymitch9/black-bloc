@@ -1075,6 +1075,23 @@ route('POST', '/api/tempvoice/setup', (context) => {
   };
 });
 
+route('POST', '/api/tempvoice/forget', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const wanted = String(body.channel_id || '');
+  const ids = (state.settings.get('tempvoice_creator_ids') || []).map(String);
+  if (!ids.includes(wanted)) {
+    throw new Refused(404, 'not_a_lobby', `**${wanted}** is not one of Black Bloc's join-to-create channels, so nothing was forgotten. \`/tempvoice status\` lists the ones it knows about.`);
+  }
+  state.settings.set('tempvoice_creator_ids', ids.filter((id) => id !== wanted));
+  logAction('web.tempvoice.forget', { target_id: wanted });
+  return {
+    forgotten: true,
+    channel_id: wanted,
+    message: `Black Bloc has forgotten **${wanted}** — joining it no longer makes anybody a temporary channel.`,
+  };
+});
+
 route('GET', '/api/honeypot/hits', (context) => {
   requireStaff(context.session);
   const limit = Math.max(1, Math.min(Number(context.url.searchParams.get('limit') || 50), 200));

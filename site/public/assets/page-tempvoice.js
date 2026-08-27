@@ -1,4 +1,4 @@
-import { api, listOf, names, send } from './api.js';
+import { api, listOf, names, refChannels, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
 import {
   ask,
@@ -18,9 +18,52 @@ import {
 
 let refresh = () => {};
 
+const CREATOR_KEY = 'tempvoice_creator_ids';
+
+/** The lobby line: the join-to-create channels by name, each with a Forget. */
+async function lobbyLine(ids, say) {
+  const line = el('p', { class: 'field-help' }, ['Lobby: ']);
+  if (ids.length === 0) {
+    line.append(el('span', { class: 'muted', text: 'none yet' }));
+    return line;
+  }
+  let channels = [];
+  try {
+    channels = await refChannels();
+  } catch (e) {
+    channels = [];
+  }
+  ids.forEach((id, at) => {
+    const found = channels.find((one) => String(one.id) === String(id));
+    if (at > 0) line.append(', ');
+    line.append(el('span', { class: 'name', title: `Discord id ${id}`, text: found ? `#${found.name}` : String(id) }));
+    line.append(' ', button('Forget', async () => {
+      const sure = await ask({
+        title: `Forget ${found ? `#${found.name}` : id}?`,
+        body: ['Joining it stops making anybody a temporary channel. The channel itself is left alone, and setup can adopt it again.'],
+        confirmLabel: 'Forget it',
+      });
+      if (!sure) return;
+      const done = await run(
+        say,
+        () => send('/api/tempvoice/forget', 'POST', { channel_id: String(id) }),
+        (found2) => found2.message || 'Forgotten.',
+      );
+      if (done.ok) refresh();
+    }, { tone: 'danger' }));
+  });
+  return line;
+}
+
 async function load() {
-  const payload = await api('/api/tempvoice/channels');
+  const [payload, allSettings] = await Promise.all([
+    api('/api/tempvoice/channels'),
+    settings(true),
+  ]);
   const rows = listOf(payload, 'channels');
+  const creators = settingsNamespace(allSettings, 'tempvoice')
+    .find((spec) => spec.key === CREATOR_KEY);
+  const lobbies = (creators && creators.value) || [];
   await names(idsIn(rows, ['channel_id', 'owner_id', 'creator_id']));
 
   const say = notice();
@@ -34,6 +77,7 @@ async function load() {
 
   const setup = card('Setup and repair', [
     el('p', { class: 'field-help', text: 'Makes the join-to-create channel if it is missing and puts back the permissions it needs. Safe to run twice; it does not delete anybody’s channel.' }),
+    await lobbyLine(lobbies, say),
     bar([
       button('Run setup', async () => {
         const sure = await ask({
@@ -57,7 +101,11 @@ async function load() {
   const two = section('Setup');
   two.body.append(setup);
 
-  document.getElementById('dash').replaceChildren(one.node, two.node, await namespaceSettings('tempvoice'));
+  document.getElementById('dash').replaceChildren(
+    one.node,
+    two.node,
+    await namespaceSettings('tempvoice', { omit: [CREATOR_KEY] }),
+  );
 }
 
 refresh = start({

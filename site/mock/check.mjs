@@ -25,6 +25,7 @@ const IDS = {
   ticket_id: '5',
   hit_id: '7',
   test_channel_id: '800000000000000003',
+  lobby_channel_id: '800000000000000009',
 };
 
 const failures = [];

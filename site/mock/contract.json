@@ -584,6 +584,22 @@
       ]
     },
     {
+      "method": "POST",
+      "path": "/api/tempvoice/forget",
+      "body": {
+        "channel_id": "{lobby_channel_id}"
+      },
+      "read_by": [
+        "page-tempvoice.js lobbyLine"
+      ],
+      "shape": "object",
+      "keys": [
+        "forgotten",
+        "channel_id",
+        "message"
+      ]
+    },
+    {
       "method": "GET",
       "path": "/api/honeypot/hits?limit=50",
       "read_by": [
@@ -999,6 +1015,7 @@
     "web.birthday.clear",
     "web.birthday.import",
     "web.tempvoice.setup",
+    "web.tempvoice.forget",
     "web.honeypot.ban",
     "web.honeypot.setup",
     "web.mod.warn",
