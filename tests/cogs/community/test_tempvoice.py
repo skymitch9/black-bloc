@@ -270,9 +270,19 @@ class FakeMember:
 class FakeGuard:
     def __init__(self, test_channel_id=TEST_CHANNEL):
         self.test_channel_id = test_channel_id
+        self.owned_channel_ids = set()
+
+    def own_channel(self, channel_id):
+        self.owned_channel_ids.add(int(channel_id))
+
+    def disown_channel(self, channel_id):
+        self.owned_channel_ids.discard(int(channel_id))
+
+    def owns_channel(self, channel_id):
+        return int(channel_id) in self.owned_channel_ids
 
     def allows_channel(self, channel_id):
-        return channel_id == self.test_channel_id
+        return channel_id == self.test_channel_id or self.owns_channel(channel_id)
 
     def refusal_message(self):
         return "test mode"
@@ -584,9 +594,7 @@ async def test_test_mode_only_acts_in_the_test_channel_s_category(cog, bot, memb
     assert len(bot.guild.created) == 1
 
 
-async def test_in_test_mode_the_panel_goes_to_the_test_channel_and_names_the_voice_channel(
-    cog, bot, member, db
-):
+async def test_in_test_mode_the_panel_goes_in_the_voice_channel_s_own_chat(cog, bot, member, db):
     category = FakeCategory(50)
     test_channel = bot.guild.add(FakeText(TEST_CHANNEL, category=category))
     bot.guard = FakeGuard()
@@ -595,28 +603,41 @@ async def test_in_test_mode_the_panel_goes_to_the_test_channel_and_names_the_voi
     await cog._maybe_create(member, creator)
 
     made = bot.guild.created[0]
-    assert made.messages == []
-    assert len(test_channel.messages) == 1
-    assert test_channel.messages[0].content.startswith(f"Controls for <#{made.id}>")
-    assert test_channel.messages[0].kwargs["allowed_mentions"].everyone is False
+    assert test_channel.messages == []
+    assert len(made.messages) == 1
+    assert not made.messages[0].content.startswith("Controls for")
+    assert str(TEST_CHANNEL) not in made.messages[0].content
+    assert made.messages[0].kwargs["allowed_mentions"].everyone is False
     row = await get_row(db, made.id)
-    assert row["panel_message_id"] == test_channel.messages[0].id
-    assert row["panel_channel_id"] == TEST_CHANNEL
+    assert row["panel_message_id"] == made.messages[0].id
+    assert row["panel_channel_id"] == made.id
+    assert "tempvoice.panel_elsewhere" not in await action_kinds(db)
+
+
+async def test_a_panel_for_a_channel_black_bloc_does_not_own_still_falls_back(cog, bot, member, db):
+    category = FakeCategory(50)
+    test_channel = bot.guild.add(FakeText(TEST_CHANNEL, category=category))
+    bot.guard = FakeGuard()
+    stray = bot.guild.add(FakeVoice(4321, bot.guild, category=category))
+
+    await cog._post_panel(bot.guild, stray, member)
+
+    assert stray.messages == []
+    assert len(test_channel.messages) == 1
+    assert test_channel.messages[0].content.startswith(f"Controls for <#{stray.id}>")
     assert "tempvoice.panel_elsewhere" in await action_kinds(db)
 
 
 async def test_a_panel_with_nowhere_to_go_is_logged_as_a_failure(cog, bot, member, db):
-    category = FakeCategory(50)
     bot.guard = FakeGuard(test_channel_id=None)
-    creator = bot.guild.add(FakeVoice(CREATOR, bot.guild, category=category, position=1))
-    cog._may_act_in = lambda channel: True
+    stray = bot.guild.add(FakeVoice(4321, bot.guild, category=FakeCategory(50)))
+    await add_channel(db, stray.id, GUILD, member.id, CREATOR)
 
-    await cog._maybe_create(member, creator)
+    await cog._post_panel(bot.guild, stray, member)
 
-    made = bot.guild.created[0]
-    assert made.messages == []
+    assert stray.messages == []
     assert "tempvoice.panel_failed" in await action_kinds(db)
-    assert (await get_row(db, made.id))["panel_message_id"] is None
+    assert (await get_row(db, stray.id))["panel_message_id"] is None
 
 
 def test_the_panel_lives_in_the_voice_chat_unless_the_guard_would_refuse_it(bot):
@@ -629,27 +650,44 @@ def test_the_panel_lives_in_the_voice_chat_unless_the_guard_would_refuse_it(bot)
     assert panel_home(bot, voice) is test_channel
     assert panel_home(bot, test_channel) is test_channel
 
+    bot.guard.own_channel(voice.id)
+    assert panel_home(bot, voice) is voice
+
     bot.guard = FakeGuard(test_channel_id=None)
     assert panel_home(bot, voice) is None
 
 
-async def test_a_click_in_the_test_channel_finds_the_voice_channel_the_panel_names(
+async def test_a_click_in_the_voice_chat_finds_the_channel_the_panel_belongs_to(
     cog, bot, member, db
 ):
     category = FakeCategory(50)
-    test_channel = bot.guild.add(FakeText(TEST_CHANNEL, category=category))
+    bot.guild.add(FakeText(TEST_CHANNEL, category=category))
     bot.guard = FakeGuard()
     creator = bot.guild.add(FakeVoice(CREATOR, bot.guild, category=category, position=1))
     await cog._maybe_create(member, creator)
     made = bot.guild.created[0]
-    posted = test_channel.messages[0]
+    posted = made.messages[0]
 
-    found = await panel_context(
-        FakeInteraction(bot, member, channel=test_channel, message=posted)
-    )
+    found = await panel_context(FakeInteraction(bot, member, channel=made, message=posted))
 
     assert found.channel is made and found.row["channel_id"] == made.id
     assert (await get_row_by_panel(db, posted.id))["channel_id"] == made.id
+
+
+async def test_a_click_in_a_channel_black_bloc_does_not_own_is_refused(cog, bot, member, db):
+    category = FakeCategory(50)
+    bot.guild.add(FakeText(TEST_CHANNEL, category=category))
+    bot.guard = FakeGuard()
+    creator = bot.guild.add(FakeVoice(CREATOR, bot.guild, category=category, position=1))
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+    stray = bot.guild.add(FakeVoice(4321, bot.guild, category=category))
+    bot.guard.disown_channel(made.id)
+
+    interaction = FakeInteraction(bot, member, channel=stray, message=made.messages[0])
+
+    assert await panel_context(interaction) is None
+    assert interaction.sent == "test mode"
 
 
 async def test_a_click_in_the_test_channel_with_no_panel_row_says_so(cog, bot, member, db):
@@ -774,6 +812,67 @@ async def test_reconcile_deletes_empty_channels_but_not_fresh_or_busy_ones(cog, 
     assert empty.deleted is True and await get_row(db, empty.id) is None
     assert fresh.deleted is False and await get_row(db, fresh.id) is not None
     assert busy.deleted is False and await get_row(db, busy.id) is not None
+
+
+async def test_a_spawned_channel_is_one_the_guard_lets_black_bloc_speak_in(cog, bot, member, db):
+    category = FakeCategory(50)
+    bot.guild.add(FakeText(TEST_CHANNEL, category=category))
+    bot.guard = FakeGuard()
+    creator = bot.guild.add(FakeVoice(CREATOR, bot.guild, category=category, position=1))
+
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+    assert bot.guard.owned_channel_ids == {made.id}
+
+    made.members.clear()
+    await cog._maybe_delete(bot.guild, made)
+    assert bot.guard.owned_channel_ids == set()
+
+
+async def test_a_delete_discord_refuses_keeps_the_channel_speakable(cog, bot, member, db):
+    category = FakeCategory(50)
+    bot.guild.add(FakeText(TEST_CHANNEL, category=category))
+    bot.guard = FakeGuard()
+    creator = bot.guild.add(FakeVoice(CREATOR, bot.guild, category=category, position=1))
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+    made.members.clear()
+
+    async def refusing_delete(reason=None):
+        raise refused()
+
+    made.delete = refusing_delete
+    await cog._maybe_delete(bot.guild, made)
+
+    assert bot.guard.owned_channel_ids == {made.id}
+
+
+async def test_deleting_the_channel_in_discord_takes_away_the_allowance(cog, bot, member, db):
+    category = FakeCategory(50)
+    bot.guild.add(FakeText(TEST_CHANNEL, category=category))
+    bot.guard = FakeGuard()
+    creator = bot.guild.add(FakeVoice(CREATOR, bot.guild, category=category, position=1))
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+
+    await cog.on_guild_channel_delete(made)
+
+    assert bot.guard.owned_channel_ids == set()
+
+
+async def test_reconcile_gives_back_the_allowance_after_a_restart_and_drops_dead_rows(
+    cog, bot, member, db
+):
+    bot.guard = FakeGuard()
+    busy = bot.guild.add(FakeVoice(10, bot.guild, members=[member]))
+    await add_channel(db, busy.id, GUILD, USER, CREATOR)
+    await add_channel(db, 4242, GUILD, USER, CREATOR)
+    bot.guard.own_channel(4242)
+
+    await cog.reconcile_channels()
+
+    assert bot.guard.owned_channel_ids == {busy.id}
+    assert await get_row(db, 4242) is None
 
 
 async def test_setup_puts_the_creator_in_the_test_category_while_test_mode_is_on(cog, bot, lead):
@@ -1316,6 +1415,23 @@ async def test_a_spawned_channel_lets_the_allowed_role_and_staff_in_too(cog, bot
     assert given[member_role].connect is True and given[staff_role].connect is True
     assert given[bot.guild.default_role].connect is False
     assert given[member].manage_channels is True
+    assert given[bot.guild.me].view_channel is True
+    assert given[bot.guild.me].manage_channels is True
+
+
+async def test_a_hidden_channel_still_lets_black_bloc_post_its_panel(cog, bot, member, db):
+    category = FakeCategory(50)
+    bot.guild.add(FakeText(TEST_CHANNEL, category=category))
+    bot.guard = FakeGuard()
+    creator = bot.guild.add(FakeVoice(CREATOR, bot.guild, category=category, position=1))
+    await save_prefs(db, member.id, hidden=True, locked=True)
+
+    await cog._maybe_create(member, creator)
+
+    made = bot.guild.created[0]
+    assert made.given_overwrites[bot.guild.default_role].view_channel is False
+    assert made.given_overwrites[bot.guild.me].view_channel is True
+    assert len(made.messages) == 1
 
 
 async def test_an_allowed_role_that_no_longer_exists_is_left_out(cog, bot, lead):

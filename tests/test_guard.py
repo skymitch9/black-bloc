@@ -1,3 +1,4 @@
+import discord
 import pytest
 
 from black_bloc.bot import BlackBlocBot
@@ -6,6 +7,7 @@ from black_bloc.guard import TestModeViolation
 
 TEST_CH = 111
 OTHER_CH = 222
+OWN_CH = 444
 CATEGORY = 50
 
 
@@ -52,9 +54,10 @@ async def test_edit_in_test_channel_passes_through(guarded_bot, monkeypatch):
 
 
 class _Interaction:
-    def __init__(self, guild_id, channel_id):
+    def __init__(self, guild_id, channel_id, kind=None):
         self.guild_id = guild_id
         self.channel_id = channel_id
+        self.type = kind
 
 
 async def test_interaction_policy(guarded_bot):
@@ -62,6 +65,58 @@ async def test_interaction_policy(guarded_bot):
     assert g.allows_interaction(_Interaction(guild_id=1, channel_id=TEST_CH))
     assert g.allows_interaction(_Interaction(guild_id=None, channel_id=OTHER_CH))
     assert not g.allows_interaction(_Interaction(guild_id=1, channel_id=OTHER_CH))
+    await guarded_bot.close()
+
+
+async def test_a_button_in_a_channel_black_bloc_made_is_allowed(guarded_bot):
+    g = guarded_bot.guard
+    button = _Interaction(
+        guild_id=1, channel_id=OWN_CH, kind=discord.InteractionType.component
+    )
+    command = _Interaction(guild_id=1, channel_id=OWN_CH)
+
+    assert not g.allows_interaction(button)
+
+    g.own_channel(OWN_CH)
+
+    assert g.allows_interaction(button)
+    assert not g.allows_interaction(command)
+    assert not g.allows_interaction(
+        _Interaction(guild_id=1, channel_id=OTHER_CH, kind=discord.InteractionType.component)
+    )
+    await guarded_bot.close()
+
+
+async def test_black_bloc_may_speak_in_a_channel_it_made_itself(guarded_bot, monkeypatch):
+    seen = []
+    g = guarded_bot.guard
+    monkeypatch.setattr(g, "_original_send", lambda cid, *a, **k: seen.append(cid))
+    monkeypatch.setattr(g, "_original_edit", lambda cid, *a, **k: seen.append(cid))
+
+    with pytest.raises(TestModeViolation):
+        guarded_bot.http.send_message(OWN_CH, params=None)
+
+    g.own_channel(OWN_CH)
+    guarded_bot.http.send_message(OWN_CH, params=None)
+    guarded_bot.http.edit_message(OWN_CH, 1, params=None)
+    assert seen == [OWN_CH, OWN_CH]
+    assert g.owns_channel(OWN_CH) and not g.owns_channel(OTHER_CH)
+
+    g.disown_channel(OWN_CH)
+    with pytest.raises(TestModeViolation):
+        guarded_bot.http.send_message(OWN_CH, params=None)
+    await guarded_bot.close()
+
+
+async def test_owning_a_channel_does_not_widen_where_channels_may_be_deleted(guarded_bot):
+    _cache(guarded_bot, _Channel(TEST_CH, category_id=CATEGORY), _Channel(OWN_CH, category_id=99))
+    g = guarded_bot.guard
+    g.own_channel(OWN_CH)
+
+    assert g.allows_channel(OWN_CH) is True
+    assert g.allows_place(_Channel(OWN_CH, category_id=99)) is False
+    with pytest.raises(TestModeViolation):
+        guarded_bot.http.delete_channel(OWN_CH)
     await guarded_bot.close()
 
 
