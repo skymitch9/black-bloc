@@ -7,7 +7,7 @@ import pytest
 from black_bloc.cogs.community.tempvoice import (
     RECONCILE_GRACE_SECONDS,
     RECONCILE_MINUTES,
-    MemberPick,
+    RENAMED_TOO_OFTEN,
     RenameModal,
     TempVoice,
     TempVoicePanel,
@@ -18,13 +18,21 @@ from black_bloc.cogs.community.tempvoice import (
     creator_overwrites,
     creator_position,
     delete_row,
+    do_ban,
+    do_forget_member,
+    do_kick,
+    do_privacy,
+    do_rename,
+    do_transfer,
     get_prefs,
     get_row,
+    get_row_by_panel,
     is_panel_owner,
     is_stale,
     not_owner_message,
     owner_overwrites,
     panel_context,
+    panel_home,
     panel_id,
     parse_limit,
     rows_for_guild,
@@ -77,6 +85,10 @@ class _Response:
 
 def refused():
     return discord.HTTPException(_Response(403), "no")
+
+
+def too_fast():
+    return discord.HTTPException(_Response(429), "slow down")
 
 
 class FakePerms:
@@ -292,13 +304,14 @@ class FakeFollowup:
 
 
 class FakeInteraction:
-    def __init__(self, bot, user, channel=None):
+    def __init__(self, bot, user, channel=None, message=None):
         self.client = bot
         self.user = user
         self.guild = bot.guild
         self.guild_id = bot.guild.id
         self.channel = channel
         self.channel_id = channel.id if channel is not None else TEST_CHANNEL
+        self.message = message
         self.response = FakeResponse()
         self.followup = FakeFollowup(self.response)
 
@@ -435,8 +448,8 @@ def test_the_panel_is_persistent_and_keyed_by_action():
     assert view.timeout is None and view.is_persistent()
     assert ids == [
         panel_id(name)
-        for name in ("rename", "limit", "lock", "hide", "kick", "ban", "permit", "transfer",
-                     "claim")
+        for name in ("rename", "limit", "lock", "hide", "kick", "ban", "unban", "permit",
+                     "unpermit", "transfer", "claim")
     ]
 
 
@@ -533,9 +546,11 @@ async def test_test_mode_only_acts_in_the_test_channel_s_category(cog, bot, memb
     assert len(bot.guild.created) == 1
 
 
-async def test_in_test_mode_the_panel_is_logged_instead_of_posted(cog, bot, member, db):
+async def test_in_test_mode_the_panel_goes_to_the_test_channel_and_names_the_voice_channel(
+    cog, bot, member, db
+):
     category = FakeCategory(50)
-    bot.guild.add(FakeText(TEST_CHANNEL, category=category))
+    test_channel = bot.guild.add(FakeText(TEST_CHANNEL, category=category))
     bot.guard = FakeGuard()
     creator = bot.guild.add(FakeVoice(CREATOR, bot.guild, category=category, position=1))
 
@@ -543,8 +558,71 @@ async def test_in_test_mode_the_panel_is_logged_instead_of_posted(cog, bot, memb
 
     made = bot.guild.created[0]
     assert made.messages == []
-    assert "tempvoice.would_post_panel" in await action_kinds(db)
+    assert len(test_channel.messages) == 1
+    assert test_channel.messages[0].content.startswith(f"Controls for <#{made.id}>")
+    assert test_channel.messages[0].kwargs["allowed_mentions"].everyone is False
+    row = await get_row(db, made.id)
+    assert row["panel_message_id"] == test_channel.messages[0].id
+    assert row["panel_channel_id"] == TEST_CHANNEL
+    assert "tempvoice.panel_elsewhere" in await action_kinds(db)
+
+
+async def test_a_panel_with_nowhere_to_go_is_logged_as_a_failure(cog, bot, member, db):
+    category = FakeCategory(50)
+    bot.guard = FakeGuard(test_channel_id=None)
+    creator = bot.guild.add(FakeVoice(CREATOR, bot.guild, category=category, position=1))
+    cog._may_act_in = lambda channel: True
+
+    await cog._maybe_create(member, creator)
+
+    made = bot.guild.created[0]
+    assert made.messages == []
+    assert "tempvoice.panel_failed" in await action_kinds(db)
     assert (await get_row(db, made.id))["panel_message_id"] is None
+
+
+def test_the_panel_lives_in_the_voice_chat_unless_the_guard_would_refuse_it(bot):
+    voice = bot.guild.add(FakeVoice(4321, bot.guild))
+    test_channel = bot.guild.add(FakeText(TEST_CHANNEL))
+
+    assert panel_home(bot, voice) is voice
+
+    bot.guard = FakeGuard()
+    assert panel_home(bot, voice) is test_channel
+    assert panel_home(bot, test_channel) is test_channel
+
+    bot.guard = FakeGuard(test_channel_id=None)
+    assert panel_home(bot, voice) is None
+
+
+async def test_a_click_in_the_test_channel_finds_the_voice_channel_the_panel_names(
+    cog, bot, member, db
+):
+    category = FakeCategory(50)
+    test_channel = bot.guild.add(FakeText(TEST_CHANNEL, category=category))
+    bot.guard = FakeGuard()
+    creator = bot.guild.add(FakeVoice(CREATOR, bot.guild, category=category, position=1))
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+    posted = test_channel.messages[0]
+
+    found = await panel_context(
+        FakeInteraction(bot, member, channel=test_channel, message=posted)
+    )
+
+    assert found.channel is made and found.row["channel_id"] == made.id
+    assert (await get_row_by_panel(db, posted.id))["channel_id"] == made.id
+
+
+async def test_a_click_in_the_test_channel_with_no_panel_row_says_so(cog, bot, member, db):
+    test_channel = bot.guild.add(FakeText(TEST_CHANNEL))
+    bot.guard = FakeGuard()
+    interaction = FakeInteraction(
+        bot, member, channel=test_channel, message=FakeMessage(999, "stale")
+    )
+
+    assert await panel_context(interaction) is None
+    assert "not attached" in interaction.sent
 
 
 async def test_the_panel_is_posted_and_recorded_when_the_guard_is_off(cog, bot, creator, member,
@@ -753,13 +831,12 @@ async def test_lock_and_unlock_toggle_the_everyone_overwrite_and_are_remembered(
     await cog._maybe_create(member, creator)
     made = bot.guild.created[0]
     panel = TempVoicePanel()
-    row = await get_row(db, made.id)
 
-    await panel._toggle(FakeInteraction(bot, member, channel=made), row, "connect")
+    await panel._toggle(FakeInteraction(bot, member, channel=made), "connect")
     assert made.permissions[-1][1].connect is False
     assert (await get_prefs(db, member.id))["locked"] == 1
 
-    await panel._toggle(FakeInteraction(bot, member, channel=made), row, "connect")
+    await panel._toggle(FakeInteraction(bot, member, channel=made), "connect")
     assert made.permissions[-1][1].connect is None
     assert (await get_prefs(db, member.id))["locked"] == 0
     kinds = await action_kinds(db)
@@ -769,13 +846,40 @@ async def test_lock_and_unlock_toggle_the_everyone_overwrite_and_are_remembered(
 async def test_hide_and_show_toggle_view_channel(cog, bot, creator, member, db):
     await cog._maybe_create(member, creator)
     made = bot.guild.created[0]
-    row = await get_row(db, made.id)
 
-    await TempVoicePanel()._toggle(FakeInteraction(bot, member, channel=made), row, "view_channel")
+    await TempVoicePanel()._toggle(FakeInteraction(bot, member, channel=made), "view_channel")
 
     assert made.permissions[-1][1].view_channel is False
     assert (await get_prefs(db, member.id))["hidden"] == 1
     assert "tempvoice.hide" in await action_kinds(db)
+
+
+async def test_asking_for_a_state_the_channel_is_already_in_changes_nothing(
+    cog, bot, creator, member, db
+):
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+    row = await get_row(db, made.id)
+    interaction = FakeInteraction(bot, member, channel=made)
+
+    said = await do_privacy(interaction, made, row, "connect", False)
+
+    assert made.permissions == []
+    assert said == "This channel is already unlocked, so nothing was changed."
+    assert "tempvoice.unlock" not in await action_kinds(db)
+
+
+async def test_lock_and_unlock_can_be_asked_for_by_name(cog, bot, creator, member, db):
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+    row = await get_row(db, made.id)
+
+    await do_privacy(FakeInteraction(bot, member, channel=made), made, row, "connect", True)
+    assert made.permissions[-1][1].connect is False
+
+    await do_privacy(FakeInteraction(bot, member, channel=made), made, row, "connect", False)
+    assert made.permissions[-1][1].connect is None
+    assert (await get_prefs(db, member.id))["locked"] == 0
 
 
 async def test_kicking_someone_who_is_not_here_changes_nothing(cog, bot, creator, member, db):
@@ -784,10 +888,10 @@ async def test_kicking_someone_who_is_not_here_changes_nothing(cog, bot, creator
     stranger = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
     interaction = FakeInteraction(bot, member, channel=made)
 
-    await MemberPick("kick", "who")._kick(interaction, made, stranger, await get_row(db, made.id))
+    said = await do_kick(interaction, made, await get_row(db, made.id), stranger)
 
     assert stranger.moves == []
-    assert "not in this channel" in interaction.sent
+    assert "not in this channel" in said
 
 
 async def test_banning_someone_denies_connect_and_moves_them_out(cog, bot, creator, member, db):
@@ -797,7 +901,7 @@ async def test_banning_someone_denies_connect_and_moves_them_out(cog, bot, creat
     made.members.append(stranger)
     interaction = FakeInteraction(bot, member, channel=made)
 
-    await MemberPick("ban", "who")._ban(interaction, made, stranger, await get_row(db, made.id))
+    await do_ban(interaction, made, await get_row(db, made.id), stranger)
 
     assert made.permissions[-1][2] == {"connect": False, "view_channel": False}
     assert stranger.moves == [None]
@@ -845,7 +949,7 @@ async def test_the_panel_logs_the_action_before_it_answers(cog, bot, creator, me
 
     interaction.followup.send = watching_followup
 
-    await TempVoicePanel()._toggle(interaction, await get_row(db, made.id), "connect")
+    await TempVoicePanel()._toggle(interaction, "connect")
 
     assert when_answered and "tempvoice.lock" in when_answered[0]
 
@@ -909,9 +1013,9 @@ async def test_transferring_a_channel_someone_else_already_took_says_so(
     await set_owner(db, made.id, stranger.id)
     interaction = FakeInteraction(bot, member, channel=made)
 
-    await MemberPick("transfer", "who")._transfer(interaction, made, stranger, row)
+    said = await do_transfer(interaction, made, row, stranger)
 
-    assert "Someone else just claimed" in interaction.sent
+    assert "Someone else just claimed" in said
     assert "tempvoice.transfer" not in await action_kinds(db)
 
 
@@ -921,9 +1025,60 @@ async def test_a_banned_member_loses_sight_of_the_channel_too(cog, bot, creator,
     stranger = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
     interaction = FakeInteraction(bot, member, channel=made)
 
-    await MemberPick("ban", "who")._ban(interaction, made, stranger, await get_row(db, made.id))
+    await do_ban(interaction, made, await get_row(db, made.id), stranger)
 
     assert made.permissions[-1][2]["view_channel"] is False
+
+
+async def test_unban_clears_the_member_s_own_overwrite(cog, bot, creator, member, db):
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+    stranger = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
+    row = await get_row(db, made.id)
+    await do_ban(FakeInteraction(bot, member, channel=made), made, row, stranger)
+    made.overwrites[stranger] = discord.PermissionOverwrite(connect=False, view_channel=False)
+
+    said = await do_forget_member(
+        FakeInteraction(bot, member, channel=made), made, row, stranger, "unban"
+    )
+
+    assert made.permissions[-1][:2] == (stranger, None)
+    assert "may join this channel again" in said
+    assert "tempvoice.unban" in await action_kinds(db)
+
+
+async def test_unpermit_keeps_the_rest_of_a_member_s_overwrite(cog, bot, creator, member, db):
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+    stranger = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
+    made.overwrites[stranger] = discord.PermissionOverwrite(
+        connect=True, view_channel=True, speak=False
+    )
+
+    said = await do_forget_member(
+        FakeInteraction(bot, member, channel=made), made, await get_row(db, made.id), stranger,
+        "unpermit",
+    )
+
+    left = made.permissions[-1][1]
+    assert left.connect is None and left.view_channel is None and left.speak is False
+    assert "no longer has their own way in" in said
+
+
+async def test_a_rename_discord_rate_limits_says_how_often_it_is_allowed(
+    cog, bot, creator, member, db
+):
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+    made.edit_raises = too_fast()
+
+    said = await do_rename(
+        FakeInteraction(bot, member, channel=made), made, await get_row(db, made.id), "The Pit"
+    )
+
+    assert said == RENAMED_TOO_OFTEN
+    assert "twice every 10 minutes" in said
+    assert "tempvoice.rename_failed" in await action_kinds(db)
 
 
 async def test_emptiness_is_read_off_the_voice_states(cog, bot, creator, member, db):

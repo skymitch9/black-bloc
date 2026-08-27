@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -92,7 +92,8 @@ CREATE TABLE IF NOT EXISTS tempvoice_channels (
     owner_id         INTEGER NOT NULL,
     creator_id       INTEGER NOT NULL,
     created_at       TEXT    NOT NULL,
-    panel_message_id INTEGER
+    panel_message_id INTEGER,
+    panel_channel_id INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS tempvoice_prefs (
@@ -229,6 +230,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("mod_cases", "failed", "TEXT"),
     ("mod_cases", "message_id", "INTEGER"),
     ("mod_cases", "channel_id", "INTEGER"),
+    ("tempvoice_channels", "panel_channel_id", "INTEGER"),
 )
 
 MOD_CASES_CARRIED_OVER = (
