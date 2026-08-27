@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from black_bloc import rolegrants as grants
 from black_bloc.cogs.community.role_menus import (
     DESCRIPTION_MAX,
     LABEL_MAX,
@@ -10,6 +11,8 @@ from black_bloc.cogs.community.role_menus import (
     get_menu,
     get_options,
 )
+
+MEMBER = 900
 
 ROUTES = [
     ("GET", "/api/rolemenus", None),
@@ -355,3 +358,170 @@ async def test_a_label_past_the_limit_and_a_twenty_sixth_option_are_refused(clie
     assert too_many.status_code == 400
     assert "at most 25 roles" in too_many.json()["message"]
     assert client.get("/api/rolemenus").json()[0]["options"] == []
+
+
+REQUEST_ROUTES = [
+    ("GET", "/api/rolemenus/requests", None),
+    ("POST", "/api/rolemenus/requests/1/approve", {}),
+    ("POST", "/api/rolemenus/requests/1/deny", {"reason": "no"}),
+]
+
+
+@pytest.mark.parametrize(("method", "route", "payload"), REQUEST_ROUTES)
+def test_every_request_route_needs_a_staff_session(client, sign_in, method, route, payload):
+    assert call(client, method, route, payload).status_code == 401
+    sign_in(client, uid=1234, staff=False)
+    assert call(client, method, route, payload).status_code == 403
+
+
+async def a_request(client, web, wf, *, expires=None, role_id=None):
+    """A menu that asks first, a member who asked, and the row the routes act on."""
+    client.post(
+        "/api/rolemenus",
+        json={"name": "runner", "title": "Runner", "approval": True, "expires_days": expires},
+    )
+    wanted = role_id if role_id is not None else wf.STAFF_ROLE_ID
+    client.put(
+        "/api/rolemenus/runner",
+        json={"options": [{"role_id": str(wanted), "label": "Runner"}]},
+    )
+    menu = await get_menu(web.db, wf.GUILD_ID, "runner")
+    return await grants.create_request(web.db, wf.GUILD_ID, menu["id"], MEMBER, wanted)
+
+
+async def test_a_menu_remembers_approval_and_its_two_clocks(client, sign_in, web, wf):
+    sign_in(client)
+
+    made = client.post(
+        "/api/rolemenus",
+        json={
+            "name": "runner",
+            "title": "Runner",
+            "approval": True,
+            "expires_days": 7,
+            "retry_days": 14,
+        },
+    ).json()
+
+    assert (made["approval"], made["expires_days"], made["retry_days"]) == (True, 7, 14)
+    edited = client.put(
+        "/api/rolemenus/runner", json={"approval": False, "expires_days": 0}
+    ).json()
+    assert edited["approval"] is False and edited["expires_days"] is None
+    assert edited["retry_days"] == 14
+
+
+def test_a_menu_edit_that_says_nothing_about_the_clocks_leaves_them_alone(client, sign_in, wf):
+    sign_in(client)
+    client.post(
+        "/api/rolemenus",
+        json={"name": "runner", "title": "Runner", "approval": True, "expires_days": 7},
+    )
+
+    edited = client.put("/api/rolemenus/runner", json={"title": "Runner status"}).json()
+
+    assert edited["approval"] is True and edited["expires_days"] == 7
+
+
+def test_approval_and_days_that_arrive_in_the_wrong_shape_are_refused(client, sign_in):
+    sign_in(client)
+
+    bad_approval = client.post(
+        "/api/rolemenus", json={"name": "a", "title": "A", "approval": "yes"}
+    )
+    bad_days = client.post(
+        "/api/rolemenus", json={"name": "b", "title": "B", "expires_days": "a week"}
+    )
+
+    assert bad_approval.status_code == 400 and bad_approval.json()["error"] == "bad_approval"
+    assert bad_days.status_code == 400 and bad_days.json()["error"] == "bad_days"
+    assert client.get("/api/rolemenus").json() == []
+
+
+async def test_the_queue_lists_pending_requests_with_names(client, sign_in, web, wf):
+    sign_in(client)
+    wf.member(web.guild, MEMBER, name="ada")
+    request_id = await a_request(client, web, wf)
+
+    rows = client.get("/api/rolemenus/requests").json()
+
+    assert [row["id"] for row in rows] == [request_id]
+    assert rows[0]["status"] == "pending" and rows[0]["user_name"] == "Ada"
+    assert rows[0]["role_name"] == "Aunties / Uncles"
+    assert rows[0]["user_id"] == str(MEMBER) and rows[0]["decided_by_id"] is None
+
+
+async def test_the_queue_filters_by_status_and_names_an_unknown_one(client, sign_in, web, wf):
+    sign_in(client)
+    wf.member(web.guild, MEMBER, name="ada")
+    await a_request(client, web, wf)
+
+    assert client.get("/api/rolemenus/requests?status=denied").json() == []
+    unknown = client.get("/api/rolemenus/requests?status=maybe")
+    assert unknown.status_code == 400 and unknown.json()["error"] == "unknown_status"
+    assert "pending, approved" in unknown.json()["message"]
+
+
+async def test_approving_from_the_page_hands_the_role_over_and_logs_it(client, sign_in, web, wf):
+    sign_in(client)
+    member = wf.member(web.guild, MEMBER, name="ada")
+    request_id = await a_request(client, web, wf, expires=7)
+
+    body = client.post(f"/api/rolemenus/requests/{request_id}/approve", json={}).json()
+
+    assert body["request"]["status"] == "approved"
+    assert body["request"]["decided_by_id"] == "7"
+    assert "Approved" in body["message"]
+    assert member.edits and wf.STAFF_ROLE_ID in member.edits[0]
+    grant = await grants.open_grant(web.db, wf.GUILD_ID, MEMBER, wf.STAFF_ROLE_ID)
+    assert grant["expires_at"] is not None and grant["source"] == "approval"
+    assert "web.role.approved" in await wf.kinds_in(web.db)
+
+
+async def test_the_days_in_the_body_beat_the_menus_own_number(client, sign_in, web, wf):
+    sign_in(client)
+    wf.member(web.guild, MEMBER, name="ada")
+    request_id = await a_request(client, web, wf, expires=7)
+
+    client.post(f"/api/rolemenus/requests/{request_id}/approve", json={"days": 0})
+
+    grant = await grants.open_grant(web.db, wf.GUILD_ID, MEMBER, wf.STAFF_ROLE_ID)
+    assert grant["expires_at"] is None
+
+
+async def test_denying_needs_a_reason_and_sends_it_on(client, sign_in, web, wf):
+    sign_in(client)
+    member = wf.member(web.guild, MEMBER, name="ada")
+    request_id = await a_request(client, web, wf)
+
+    empty = client.post(f"/api/rolemenus/requests/{request_id}/deny", json={"reason": " "})
+    body = client.post(
+        f"/api/rolemenus/requests/{request_id}/deny", json={"reason": "not this month"}
+    ).json()
+
+    assert empty.status_code == 400 and empty.json()["error"] == "no_reason"
+    assert body["request"]["status"] == "denied"
+    assert body["request"]["deny_reason"] == "not this month"
+    assert member.edits == [] and "not this month" in member.dms[0]
+    assert "web.role.denied" in await wf.kinds_in(web.db)
+
+
+async def test_a_second_decision_is_refused_rather_than_repeated(client, sign_in, web, wf):
+    sign_in(client)
+    wf.member(web.guild, MEMBER, name="ada")
+    request_id = await a_request(client, web, wf)
+    client.post(f"/api/rolemenus/requests/{request_id}/approve", json={})
+
+    again = client.post(f"/api/rolemenus/requests/{request_id}/deny", json={"reason": "no"})
+
+    assert again.status_code == 409 and again.json()["error"] == "not_decided"
+    assert "already **approved**" in again.json()["message"]
+
+
+def test_a_request_nobody_has_is_refused_with_a_sentence(client, sign_in):
+    sign_in(client)
+
+    response = client.post("/api/rolemenus/requests/404/approve", json={})
+
+    assert response.status_code == 409
+    assert "no record of that request" in response.json()["message"]

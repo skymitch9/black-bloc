@@ -5,29 +5,36 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
+from ... import rolegrants as grants
 from ...cogs.community.role_menus import (
     MODES,
     ROLE_MENUS_OFF,
     STAFF_MODE,
+    UNSET,
     MenuLimitError,
     add_option,
+    apply_request_decision,
     check_description,
     check_label,
     check_option_count,
     check_title,
     create_menu,
     delete_menu,
+    expires_days_of,
     get_menu,
     get_options,
     list_menus,
+    needs_approval,
     picking_is_on,
     post_panel,
     remove_option,
+    retry_days_of,
     update_menu,
 )
 from ..auth import Refused, staff_dependency
-from ..names import as_id
+from ..names import as_id, resolve_one
 from ..writes import (
+    actor_for,
     guard_of,
     note,
     refuse_guarded,
@@ -79,6 +86,21 @@ BAD_OPTION = (
     "changed. It is a fault in the page rather than in what you picked — reload the role menus "
     "page and try again."
 )
+UNKNOWN_STATUS = (
+    "**{given}** is not a state a role request can be in, so nothing was listed. They are {known}."
+)
+BAD_APPROVAL = (
+    "**{given}** is not on or off, so nothing was changed. It is a fault in the page rather than "
+    "in what you picked — reload the role menus page and try again."
+)
+BAD_DAYS = (
+    "**{given}** is not a number of days, so nothing was changed. Send a whole number from 0 to "
+    "{limit} — 0 means the role never runs out."
+).replace("{limit}", str(grants.DAYS_MAX))
+DENY_NEEDS_A_REASON = (
+    "A denied request needs one line the member is sent, so nothing was done. Say why and send "
+    "it again."
+)
 
 
 def option_row(row: Any) -> dict[str, Any]:
@@ -98,8 +120,64 @@ def menu_row(menu: Any, options: Any) -> dict[str, Any]:
         "mode": menu["mode"],
         "channel_id": str(menu["channel_id"]) if menu["channel_id"] else None,
         "message_id": str(menu["message_id"]) if menu["message_id"] else None,
+        "approval": needs_approval(menu),
+        "expires_days": expires_days_of(menu),
+        "retry_days": retry_days_of(menu),
         "options": [option_row(row) for row in options],
     }
+
+
+def request_row(guild: Any, row: Any) -> dict[str, Any]:
+    by = row["decided_by"]
+    return {
+        "id": row["id"],
+        "menu_id": str(row["menu_id"]),
+        "user_id": str(row["user_id"]),
+        "user_name": resolve_one(guild, row["user_id"])["display_name"],
+        "role_id": str(row["role_id"]),
+        "role_name": resolve_one(guild, row["role_id"])["display_name"],
+        "requested_at": row["requested_at"],
+        "status": row["status"],
+        "decided_by_id": str(by) if by else None,
+        "decided_by_name": resolve_one(guild, by)["display_name"] if by else None,
+        "decided_at": row["decided_at"],
+        "deny_reason": row["deny_reason"],
+    }
+
+
+def wanted_statuses(given: Any) -> tuple[str, ...]:
+    wanted = tuple(part for part in str(given or "").split(",") if part)
+    for part in wanted:
+        if part not in grants.REQUEST_STATUSES:
+            raise Refused(
+                400,
+                "unknown_status",
+                UNKNOWN_STATUS.format(
+                    given=part, known=", ".join(grants.REQUEST_STATUSES)
+                ),
+            )
+    return wanted or grants.REQUEST_STATUSES
+
+
+def wanted_approval(given: Any) -> bool | None:
+    if given is None:
+        return None
+    if not isinstance(given, bool):
+        raise Refused(400, "bad_approval", BAD_APPROVAL.format(given=str(given)[:40]))
+    return given
+
+
+def wanted_days(given: Any, *, blank: Any) -> Any:
+    """`blank` is what an absent field means: UNSET to leave it, None to clear it."""
+    if given is None:
+        return blank
+    try:
+        number = int(given)
+    except (TypeError, ValueError):
+        raise Refused(400, "bad_days", BAD_DAYS.format(given=str(given)[:40])) from None
+    if number < 0 or number > grants.DAYS_MAX:
+        raise Refused(400, "bad_days", BAD_DAYS.format(given=str(given)[:40]))
+    return number
 
 
 def checked_mode(given: Any) -> str | None:
@@ -183,6 +261,57 @@ def build_router(bot: Any) -> APIRouter:
             for menu in await list_menus(bot.db, guild.id)
         ]
 
+    @router.get("/requests")
+    async def rolemenu_requests(status: str = "") -> list[dict[str, Any]]:
+        guild = require_guild(bot)
+        require_db(bot)
+        rows = await grants.requests_by_status(bot.db, guild.id, wanted_statuses(status))
+        return [request_row(guild, row) for row in rows]
+
+    async def _decide(
+        request: Request, request_id: int, status: str, reason: Any, days: Any
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        said, fresh = await apply_request_decision(
+            bot,
+            guild,
+            request_id,
+            status,
+            actor_for(bot, who, guild),
+            reason=reason,
+            days=days,
+        )
+        if fresh is None:
+            raise Refused(409, "not_decided", said)
+        await note(
+            bot,
+            guild,
+            f"web.role.{status}",
+            who,
+            target=fresh["user_id"],
+            reason=reason,
+            details={"request_id": request_id, "role_id": fresh["role_id"]},
+        )
+        return {"request": request_row(guild, fresh), "message": said}
+
+    @router.post("/requests/{request_id}/approve")
+    async def request_approve(
+        request: Request, request_id: int, payload: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        days = wanted_days((payload or {}).get("days"), blank=None)
+        return await _decide(request, request_id, grants.APPROVED, None, days)
+
+    @router.post("/requests/{request_id}/deny")
+    async def request_deny(
+        request: Request, request_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        reason = grants.clamp(payload.get("reason"), grants.REASON_LIMIT)
+        if not reason:
+            raise Refused(400, "no_reason", DENY_NEEDS_A_REASON)
+        return await _decide(request, request_id, grants.DENIED, reason, None)
+
     @router.post("")
     async def rolemenu_create(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
         who = await writer(request)
@@ -194,7 +323,17 @@ def build_router(bot: Any) -> APIRouter:
             raise Refused(400, "bad_request", NEEDS_A_NAME)
         mode = checked_mode(payload.get("mode")) or "multiple"
         description = wanted_description(payload.get("description"))
-        menu_id = await create_menu(bot.db, guild.id, name, title, description or None, mode)
+        menu_id = await create_menu(
+            bot.db,
+            guild.id,
+            name,
+            title,
+            description or None,
+            mode,
+            approval=wanted_approval(payload.get("approval")),
+            expires_days=wanted_days(payload.get("expires_days"), blank=None),
+            retry_days=wanted_days(payload.get("retry_days"), blank=None),
+        )
         if menu_id is None:
             raise Refused(400, "name_taken", NAME_TAKEN.format(name=name))
         await note(bot, guild, "web.rolemenu.create", who, details={"menu": name, "mode": mode})
@@ -215,7 +354,15 @@ def build_router(bot: Any) -> APIRouter:
         given = payload.get("options")
         options = wanted_options(guild, given) if isinstance(given, list) else None
         await update_menu(
-            bot.db, guild.id, name, title=title, description=description, mode=mode
+            bot.db,
+            guild.id,
+            name,
+            title=title,
+            description=description,
+            mode=mode,
+            approval=wanted_approval(payload.get("approval")),
+            expires_days=wanted_days(payload.get("expires_days"), blank=UNSET),
+            retry_days=wanted_days(payload.get("retry_days"), blank=None),
         )
         if options is not None:
             await sync_options(bot, menu, options)
