@@ -41,6 +41,7 @@ from ...settings_store import (
 log = logging.getLogger(__name__)
 
 LOOP_MINUTES = 5
+IMPORT_HOURS = 24
 NEXT_LIMIT = 5
 MESSAGE_LIMIT = 1900
 CANDIDATES_SHOWN = 3
@@ -62,8 +63,8 @@ OPTED_OUT = (
 OPTED_IN = "You are opted back in. Black Bloc will post on the day again."
 ALREADY_OPTED = "You were already opted {state}, so nothing changed."
 NOBODY_YET = (
-    "Nobody has a birthday stored yet. People add their own with `/birthday set`, and "
-    "`/birthday import` brings over the 39 rows from Birthday Bot."
+    "Nobody has a birthday stored yet. People add their own with `/birthday set`, and the "
+    "Birthday Bot list is brought over automatically once a day."
 )
 NONE_THIS_MONTH = "Nobody has a birthday stored in **{month}**."
 NOTHING_UPCOMING = (
@@ -77,11 +78,6 @@ ROLE_NOT_SET = (
     "There was no birthday role set, so nothing changed. `/settings set-role birthday_role_id` "
     "is how one is chosen."
 )
-IMPORT_EMPTY = (
-    "The seed file that ships with Black Bloc has no rows in it, so nothing was imported. That "
-    "is a packaging fault rather than a Discord one — tell a Lead."
-)
-
 
 def _row_value(row: Any, key: str, fallback: Any = None) -> Any:
     if row is None:
@@ -292,11 +288,15 @@ class Birthdays(commands.Cog):
         self._said: dict[tuple[int, str], str] = {}
         self.last_run_at: str | None = None
         self.last_error: str | None = None
+        self.last_import_at: str | None = None
+        self.last_import_error: str | None = None
 
     def loop_health(self, name: str) -> tuple[str | None, str | None]:
-        if name != "_sweep":
-            return (None, None)
-        return (self.last_run_at, self.last_error)
+        if name == "_sweep":
+            return (self.last_run_at, self.last_error)
+        if name == "_import_loop":
+            return (self.last_import_at, self.last_import_error)
+        return (None, None)
 
     birthday = app_commands.Group(name="birthday", description="Birthday wishes on the day")
     birthday_role = app_commands.Group(
@@ -307,9 +307,11 @@ class Birthdays(commands.Cog):
         if not self.bot.db.is_connected:
             return
         self._sweep.start()
+        self._import_loop.start()
 
     async def cog_unload(self) -> None:
         self._sweep.cancel()
+        self._import_loop.cancel()
 
     @tasks.loop(minutes=LOOP_MINUTES)
     async def _sweep(self) -> None:
@@ -335,10 +337,63 @@ class Birthdays(commands.Cog):
         log.error("birthdays: the sweep stopped; restarting it", exc_info=exc)
         self._sweep.restart()
 
+    @tasks.loop(hours=IMPORT_HOURS)
+    async def _import_loop(self) -> None:
+        if not self.bot.db.is_connected:
+            return
+        try:
+            await self.import_once()
+        except Exception as exc:
+            self.last_import_error = f"{type(exc).__name__}: {exc}"
+            log.exception("birthdays: the daily import failed")
+            return
+        self.last_import_error = None
+        self.last_import_at = datetime.now(UTC).isoformat()
+
+    @_import_loop.before_loop
+    async def _before_import(self) -> None:
+        await self.bot.wait_until_ready()
+
+    @_import_loop.error
+    async def _import_stopped(self, exc: BaseException) -> None:
+        """The loop stops for the life of the process unless it is started again."""
+        self.last_import_error = f"{type(exc).__name__}: {exc}"
+        log.error("birthdays: the daily import stopped; restarting it", exc_info=exc)
+        self._import_loop.restart()
+
+    async def import_once(self) -> None:
+        """One pass of the Birthday Bot seed; the log channel only hears about new rows."""
+        rows = load_import_rows()
+        if not rows:
+            log.warning("birthdays: the seed file has no rows, so there was nothing to import")
+            return
+        as_of = import_as_of_year()
+        for guild in list(getattr(self.bot, "guilds", ())):
+            if getattr(guild, "unavailable", False):
+                log.info("birthdays: import skipped %s — the server is unavailable", guild.id)
+                continue
+            members = await self.members_of(guild)
+            result = await self._import(guild, rows, as_of, members)
+            counts = {key: len(value) for key, value in result.items()}
+            if not result["imported"]:
+                log.info("birthdays: the daily import took nothing new — %s", counts)
+                continue
+            await log_action(
+                self.bot,
+                guild,
+                "birthday.import",
+                actor=None,
+                details=counts | {"searched": len(members), "trigger": "daily"},
+            )
+
     @commands.Cog.listener()
     async def on_ready(self) -> None:
-        if self.bot.db.is_connected and not self._sweep.is_running():
+        if not self.bot.db.is_connected:
+            return
+        if not self._sweep.is_running():
             self._sweep.start()
+        if not self._import_loop.is_running():
+            self._import_loop.start()
 
     async def run_once(self, now: datetime | None = None) -> None:
         """One pass: today's birthdays announced once, yesterday's role taken back."""
@@ -853,37 +908,11 @@ class Birthdays(commands.Cog):
             f"**staff** — {staff_roles_sentence(store.staff_roles(guild))}",
             f"**last sweep** — {ran} (every {LOOP_MINUTES} minutes)",
             f"**last error** — {self.last_error or 'none'}",
+            f"**last import** — {self.last_import_at or 'not yet'} (every {IMPORT_HOURS} hours)",
+            f"**last import error** — {self.last_import_error or 'none'}",
         ]
         await interaction.response.send_message(
             "\n".join(lines), ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-        )
-
-    @birthday.command(name="import", description="Bring the Birthday Bot list over (staff)")
-    async def import_seed(self, interaction: discord.Interaction) -> None:
-        if not await require_staff(interaction):
-            return
-        if not await self._ready(interaction):
-            return
-        rows = load_import_rows()
-        if not rows:
-            await interaction.response.send_message(IMPORT_EMPTY, ephemeral=True)
-            return
-        await interaction.response.defer(ephemeral=True)
-        as_of = import_as_of_year()
-        members = await self.members_of(interaction.guild)
-        result = await self._import(interaction.guild, rows, as_of, members)
-        pages = chunked(report_lines(result, as_of, len(members)))
-        for page in pages:
-            await interaction.followup.send(
-                page, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-            )
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "birthday.import",
-            actor=interaction.user,
-            details={key: len(value) for key, value in result.items()}
-            | {"searched": len(members)},
         )
 
     async def members_of(self, guild: Any) -> list[Any]:

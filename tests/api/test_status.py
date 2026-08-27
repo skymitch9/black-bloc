@@ -301,7 +301,11 @@ def _record_key(attr, key):
 REAL_COGS = [
     ("black_bloc.cogs.presence", "Presence", {"status": _record("last_ok_at")}),
     ("black_bloc.cogs.content.golive", "GoLive", {"poller": _record("last_poll_ok_at")}),
-    ("black_bloc.cogs.community.birthdays", "Birthdays", {"_sweep": _record("last_run_at")}),
+    (
+        "black_bloc.cogs.community.birthdays",
+        "Birthdays",
+        {"_sweep": _record("last_run_at"), "_import_loop": _record("last_import_at")},
+    ),
     (
         "black_bloc.cogs.community.events",
         "Events",

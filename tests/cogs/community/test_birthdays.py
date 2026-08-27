@@ -1,10 +1,12 @@
 import asyncio
+import json
 from datetime import UTC, datetime
 
 import discord
 import pytest
 
 from black_bloc.birthdays import ImportRow, local_today, next_occurrence
+from black_bloc.cogs.community import birthdays as birthdays_cog
 from black_bloc.cogs.community.birthdays import (
     Birthdays,
     chunked,
@@ -833,28 +835,93 @@ async def test_a_half_filled_member_cache_is_chunked_before_anyone_is_matched(bo
     assert bot.guild.queries == []
 
 
-async def test_the_import_command_defers_and_says_how_many_members_it_searched(
-    bot, cog, birthday_person
+def seed(monkeypatch, rows, as_of=2026):
+    monkeypatch.setattr(birthdays_cog, "load_import_rows", lambda *a, **k: list(rows))
+    monkeypatch.setattr(birthdays_cog, "import_as_of_year", lambda *a, **k: as_of)
+
+
+def test_the_import_is_no_longer_a_slash_command():
+    assert "import" not in {command.name for command in Birthdays.birthday.commands}
+    assert not hasattr(Birthdays, "import_seed")
+
+
+async def test_the_daily_loop_brings_the_seed_over_and_records_that_it_ran(
+    bot, cog, monkeypatch
 ):
-    give_staff(bot, birthday_person)
-    interaction = FakeInteraction(bot, birthday_person)
+    pt = FakeMember(bot.guild, user_id=2001, display_name="PT")
+    seed(monkeypatch, [ImportRow("[Tired of Planes] PT", 8, 10, 39)])
 
-    await cog.import_seed.callback(cog, interaction)
+    await cog._import_loop()
 
-    assert interaction.response.messages[0]["deferred"] is True
-    assert "imported" in interaction.texts[0]
-    assert f"**{len(bot.guild.members)}** members" in interaction.texts[0]
-    assert bot.guild.queries == []
+    row = await get_birthday(bot.db, pt.id)
+    assert (row["month"], row["day"], row["source"]) == (8, 10, "import")
+    assert cog.last_import_at is not None
+    assert cog.last_import_error is None
     assert await action_kinds(bot.db) == ["birthday.import"]
-
-
-async def test_the_import_command_is_staff_only(bot, cog, birthday_person):
-    interaction = FakeInteraction(bot, birthday_person)
-
-    await cog.import_seed.callback(cog, interaction)
-
-    assert "staff only" in interaction.sent
+    details = json.loads((await details_for(bot.db, "birthday.import"))[0])
+    assert details["imported"] == 1
+    assert details["trigger"] == "daily"
+    assert details["searched"] == len(bot.guild.members)
     assert bot.guild.queries == []
+
+
+async def test_a_second_daily_run_that_takes_nothing_new_writes_no_log_line(
+    bot, cog, monkeypatch
+):
+    """A daily `0 imported` line in the log channel is noise, so it stays in the process log."""
+    FakeMember(bot.guild, user_id=2001, display_name="PT")
+    seed(monkeypatch, [ImportRow("[Tired of Planes] PT", 8, 10, 39)])
+
+    await cog._import_loop()
+    await cog._import_loop()
+
+    assert await action_kinds(bot.db) == ["birthday.import"]
+    assert len(await rows_for_guild(bot.db, GUILD)) == 1
+    assert cog.last_import_error is None
+
+
+async def test_an_empty_seed_file_logs_nothing_and_does_not_raise(bot, cog, monkeypatch):
+    seed(monkeypatch, [])
+
+    await cog._import_loop()
+
+    assert await action_kinds(bot.db) == []
+    assert await rows_for_guild(bot.db, GUILD) == []
+    assert cog.last_import_error is None
+    assert cog.last_import_at is not None
+
+
+async def test_an_import_that_throws_is_recorded_and_does_not_kill_the_loop(
+    bot, cog, monkeypatch
+):
+    async def boom(*args, **kwargs):
+        raise RuntimeError("nope")
+
+    seed(monkeypatch, [ImportRow("PT", 8, 10, None)])
+    monkeypatch.setattr(cog, "_import", boom)
+
+    await cog._import_loop()
+
+    assert cog.last_import_error == "RuntimeError: nope"
+    assert cog.last_import_at is None
+    assert await action_kinds(bot.db) == []
+
+
+async def test_the_daily_import_leaves_an_unavailable_server_alone(bot, cog, monkeypatch):
+    FakeMember(bot.guild, user_id=2001, display_name="PT")
+    seed(monkeypatch, [ImportRow("[Tired of Planes] PT", 8, 10, 39)])
+    bot.guild.unavailable = True
+
+    await cog._import_loop()
+
+    assert await rows_for_guild(bot.db, GUILD) == []
+    assert cog.last_import_error is None
+
+
+async def test_an_import_loop_that_stops_is_recorded_and_started_again(bot, cog):
+    await cog._import_stopped(RuntimeError("gateway went away"))
+
+    assert cog.last_import_error == "RuntimeError: gateway went away"
 
 
 async def test_the_report_counts_every_bucket_and_carries_the_age_caveat():
@@ -905,18 +972,20 @@ async def test_commands_say_so_when_the_database_is_not_there(bot, cog, birthday
     assert "database" in interaction.sent
 
 
-async def test_the_loop_is_registered_on_load_and_cancelled_on_unload(bot, cog):
+async def test_the_loops_are_registered_on_load_and_cancelled_on_unload(bot, cog):
     await cog.cog_load()
     assert cog._sweep.is_running()
+    assert cog._import_loop.is_running()
 
     await cog.cog_unload()
     await asyncio.sleep(0)
     await asyncio.sleep(0)
 
     assert not cog._sweep.is_running()
+    assert not cog._import_loop.is_running()
 
 
-async def test_the_loop_is_started_from_on_ready_when_the_database_was_late(bot, cog):
+async def test_the_loops_are_started_from_on_ready_when_the_database_was_late(bot, cog):
     class Closed:
         is_connected = False
 
@@ -924,10 +993,12 @@ async def test_the_loop_is_started_from_on_ready_when_the_database_was_late(bot,
     bot.db = Closed()
     await cog.cog_load()
     assert not cog._sweep.is_running()
+    assert not cog._import_loop.is_running()
 
     bot.db = live
     await cog.on_ready()
     assert cog._sweep.is_running()
+    assert cog._import_loop.is_running()
 
     await cog.cog_unload()
     await asyncio.sleep(0)
