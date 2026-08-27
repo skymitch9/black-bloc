@@ -8,6 +8,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from ...actionlog import log_action
+from ...modcases import pages_under_limit
 from ...settings_store import require_staff
 
 log = logging.getLogger(__name__)
@@ -110,6 +111,10 @@ NOTHING_TO_UNASSIGN = (
     "**{name}** has none of the roles on **{menu}**, so there is nothing to take off. "
     "`/rolemenu assign {menu} @member` gives them one."
 )
+NO_MENUS_YET = (
+    "This server has no role menus yet. Make one with `/rolemenu create`, or bring over the six "
+    "old ones with `/rolemenu seed-from-carl`."
+)
 SEED_EMOJI_NOTE = (
     "A menu that already exists is left exactly as it is, options and all — to pick up the "
     "Marathons emoji on `event-alerts`, delete it with `/rolemenu delete event-alerts` and run "
@@ -170,6 +175,15 @@ def summary(added: list[str], removed: list[str]) -> str:
     if not parts:
         return "Nothing changed — you already had exactly the roles you picked."
     return " · ".join(parts)
+
+
+def menu_heading(menu: Any) -> str:
+    posted = "posted" if menu["message_id"] else "not posted"
+    return f"**{menu['name']}** — {menu['title']} ({menu['mode']}, {posted})"
+
+
+def option_line(row: Any) -> str:
+    return f"{row['emoji'] or '•'} {row['label']} — <@&{row['role_id']}>"
 
 
 def panel_embed(menu: Any, options: Any) -> discord.Embed:
@@ -564,11 +578,7 @@ class RoleMenus(commands.Cog):
             return
         menus = await list_menus(self.bot.db, interaction.guild.id)
         if not menus:
-            await interaction.response.send_message(
-                "This server has no role menus yet. Make one with `/rolemenu create`, or "
-                "bring over the six old ones with `/rolemenu seed-from-carl`.",
-                ephemeral=True,
-            )
+            await interaction.response.send_message(NO_MENUS_YET, ephemeral=True)
             return
         lines = []
         for menu in menus:
@@ -586,11 +596,35 @@ class RoleMenus(commands.Cog):
             await interaction.response.send_message(self._no_such_menu(name), ephemeral=True)
             return
         options = await get_options(self.bot.db, menu["id"])
-        lines = [f"**{menu['name']}** — {menu['title']} ({menu['mode']})"]
-        lines += [f"{row['emoji'] or '•'} {row['label']} — <@&{row['role_id']}>" for row in options]
+        lines = [menu_heading(menu), *(option_line(row) for row in options)]
         if not options:
             lines.append(f"No roles yet. Add one with `/rolemenu add {name} <role>`.")
-        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+        await interaction.response.send_message(
+            "\n".join(lines), ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+        )
+
+    @rolemenu.command(
+        name="showall", description="Show every role menu and every option on it"
+    )
+    async def showall(self, interaction: discord.Interaction) -> None:
+        if not await require_staff(interaction):
+            return
+        menus = await list_menus(self.bot.db, interaction.guild.id)
+        if not menus:
+            await interaction.response.send_message(NO_MENUS_YET, ephemeral=True)
+            return
+        lines: list[str] = []
+        for menu in menus:
+            options = await get_options(self.bot.db, menu["id"])
+            lines.append(menu_heading(menu))
+            lines += [option_line(row) for row in options]
+            if not options:
+                lines.append(f"• no roles yet — `/rolemenu add {menu['name']} <role>`")
+        for index, page in enumerate(pages_under_limit(lines)):
+            answer = interaction.followup.send if index else interaction.response.send_message
+            await answer(
+                page, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+            )
 
     @rolemenu.command(name="post", description="Post or refresh a role menu panel")
     @app_commands.describe(channel="Where to post; defaults to the role menu channel setting")

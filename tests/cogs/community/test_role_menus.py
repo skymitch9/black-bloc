@@ -4,6 +4,7 @@ import pytest
 from black_bloc.cogs.community.role_menus import (
     JOY_GAMING,
     MODES,
+    NO_MENUS_YET,
     SEED,
     RoleMenus,
     RoleMenuView,
@@ -16,6 +17,8 @@ from black_bloc.cogs.community.role_menus import (
     get_options,
     list_menus,
     max_values_for,
+    menu_heading,
+    option_line,
     panel_embed,
     parse_custom_id,
     posted_menus,
@@ -189,6 +192,14 @@ class FakeResponse:
         self.messages.append({"content": content, "ephemeral": ephemeral, **kwargs})
 
 
+class FakeFollowup:
+    def __init__(self, response):
+        self.response = response
+
+    async def send(self, content=None, ephemeral=False, **kwargs):
+        self.response.messages.append({"content": content, "ephemeral": ephemeral, **kwargs})
+
+
 class FakeInteraction:
     def __init__(self, bot, user):
         self.client = bot
@@ -197,6 +208,11 @@ class FakeInteraction:
         self.guild_id = bot.guild.id
         self.channel_id = TEST_CHANNEL
         self.response = FakeResponse()
+        self.followup = FakeFollowup(self.response)
+
+    @property
+    def said(self):
+        return [m["content"] for m in self.response.messages]
 
     @property
     def sent(self):
@@ -463,3 +479,55 @@ def test_the_panel_renders_a_custom_emoji_option():
     options = [{"role_id": 1, "label": "Marathons", "emoji": JOY_GAMING}]
     select = RoleMenuView(9, options, "multiple").children[0]
     assert select.options[0].emoji.id == 1337948924844965931
+
+
+async def test_showall_lists_every_menu_with_its_options_and_never_pings(bot, db, lead):
+    await staff_menu(db)
+    posted_id = await create_menu(db, GUILD, "pronouns", "Pronouns", None, "multiple")
+    await add_option(db, posted_id, 20, "He/Him", "❤️")
+    await add_option(db, posted_id, 21, "She/Her")
+    await set_message(db, posted_id, 500, 600)
+    await create_menu(db, GUILD, "empty", "Nothing here yet")
+    interaction = FakeInteraction(bot, lead)
+
+    await RoleMenus.showall.callback(RoleMenus(bot), interaction)
+
+    said = "\n".join(interaction.said)
+    assert "**pronouns** — Pronouns (multiple, posted)" in said
+    assert "**runner-status** — Runner status (staff, not posted)" in said
+    assert "❤️ He/Him — <@&20>" in said and "• She/Her — <@&21>" in said
+    assert "• Runner — <@&10>" in said and "• Live Runner — <@&11>" in said
+    assert "no roles yet" in said
+    assert all(m["ephemeral"] for m in interaction.response.messages)
+    assert all(m["allowed_mentions"].roles is False for m in interaction.response.messages)
+
+
+async def test_showall_splits_a_long_list_over_several_messages(bot, db, lead):
+    menu_id = await create_menu(db, GUILD, "big", "Big")
+    for role_id in range(100):
+        await add_option(db, menu_id, role_id, f"role name number {role_id} " + "x" * 40)
+    interaction = FakeInteraction(bot, lead)
+
+    await RoleMenus.showall.callback(RoleMenus(bot), interaction)
+
+    assert len(interaction.said) > 1
+    assert all(len(page) <= 1900 for page in interaction.said)
+
+
+async def test_showall_is_staff_only_and_says_so_when_there_is_nothing(bot, db, lead):
+    stranger = FakeMember(bot.guild, user_id=900)
+    refused = FakeInteraction(bot, stranger)
+    await RoleMenus.showall.callback(RoleMenus(bot), refused)
+    assert "staff only" in refused.sent
+
+    empty = FakeInteraction(bot, lead)
+    await RoleMenus.showall.callback(RoleMenus(bot), empty)
+    assert empty.sent == NO_MENUS_YET
+
+
+def test_a_menu_heading_and_an_option_line_have_one_home_each():
+    menu = {"name": "pronouns", "title": "Pronouns", "mode": "multiple", "message_id": None}
+    assert menu_heading(menu) == "**pronouns** — Pronouns (multiple, not posted)"
+    assert menu_heading(menu | {"message_id": 5}).endswith("(multiple, posted)")
+    assert option_line({"emoji": None, "label": "Runner", "role_id": 10}) == "• Runner — <@&10>"
+    assert option_line({"emoji": "❤️", "label": "He/Him", "role_id": 1}) == "❤️ He/Him — <@&1>"

@@ -48,22 +48,22 @@ NOT_OPTED_OUT = (
     "You were not opted out, so nothing changed — Black Bloc already announces your streams."
 )
 BAD_LOGIN = (
-    "That does not look like a Twitch name, so nothing was linked. Use the name from your "
-    "channel address (the part after twitch.tv/), for example `blackbloc`."
+    "That does not look like a Twitch channel name, so nothing was linked. Use the channel name "
+    "from your channel address (the part after twitch.tv/), for example `blackbloc`."
 )
 NOT_LINKED = (
     "You had no Twitch channel linked, so nothing changed. Link one with `/twitch link "
-    "<your twitch name>`."
+    "<your twitch channel name>`."
 )
 LINK_NOT_CHECKED = (
-    "Linked **{login}** to you, but Twitch could not be reached to check that the name exists, "
-    "so it has not been verified. If announcements do not fill in your game and title, run "
-    "`/twitch link` again later to re-check it."
+    "Linked **{channel}** to you, but Twitch could not be reached to check that the channel name "
+    "exists, so it has not been verified. If announcements do not fill in your game and title, "
+    "run `/twitch link` again later to re-check it."
 )
 LINK_TAKEN = (
-    "**{login}** is already linked to another member here, so nothing was changed. A Twitch name "
-    "can only belong to one member — if that channel is yours, ask a Lead to remove the other "
-    "link first."
+    "**{channel}** is already linked to another member here, so nothing was changed. A Twitch "
+    "channel name can only belong to one member — if that channel is yours, ask a Lead to remove "
+    "the other link first."
 )
 
 
@@ -765,19 +765,19 @@ class GoLive(commands.Cog):
             details={"text": text},
         )
 
-    @twitch.command(name="link", description="Tell Black Bloc your Twitch channel")
-    @app_commands.describe(login="Your Twitch name — the part after twitch.tv/ in your address")
-    async def link(self, interaction: discord.Interaction, login: str) -> None:
+    @twitch.command(name="link", description="Tell Black Bloc your Twitch channel name")
+    @app_commands.describe(channel="Your Twitch channel name (the part after twitch.tv/)")
+    async def link(self, interaction: discord.Interaction, channel: str) -> None:
         if not await self._database_ready(interaction):
             return
-        cleaned = clean_login(login)
+        cleaned = clean_login(channel)
         if cleaned is None:
             await interaction.response.send_message(BAD_LOGIN, ephemeral=True)
             return
         owner = await link_owner(self.bot.db, cleaned)
         if owner is not None and owner != interaction.user.id:
             await interaction.response.send_message(
-                LINK_TAKEN.format(login=cleaned),
+                LINK_TAKEN.format(channel=cleaned),
                 ephemeral=True,
                 allowed_mentions=discord.AllowedMentions.none(),
             )
@@ -808,7 +808,7 @@ class GoLive(commands.Cog):
                 "`/twitch unlink` undoes it."
             )
             if checked
-            else LINK_NOT_CHECKED.format(login=cleaned),
+            else LINK_NOT_CHECKED.format(channel=cleaned),
             ephemeral=True,
         )
         await self._log_command(

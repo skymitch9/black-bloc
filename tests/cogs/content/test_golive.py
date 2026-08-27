@@ -589,7 +589,7 @@ async def test_link_and_unlink_commands(cog, bot, member, db):
 
     interaction = FakeInteraction(bot, member, bot.guild)
     await GoLive.link.callback(cog, interaction, "not a login")
-    assert "does not look like a Twitch name" in interaction.sent
+    assert "does not look like a Twitch channel name" in interaction.sent
 
     interaction = FakeInteraction(bot, member, bot.guild)
     await GoLive.unlink.callback(cog, interaction)
@@ -896,7 +896,7 @@ async def test_link_says_so_when_twitch_could_not_be_checked(cog, bot, member, d
 
     await GoLive.link.callback(cog, interaction, "alice")
 
-    assert "could not be reached to check that the name exists" in interaction.sent
+    assert "could not be reached to check that the channel name exists" in interaction.sent
     assert (await get_link(db, member.id))["twitch_login"] == "alice"
 
 
@@ -929,3 +929,22 @@ async def test_a_command_says_so_when_the_database_is_unreachable(cog, bot, memb
 
 async def _always_staff(interaction):
     return True
+
+
+def test_the_link_command_asks_for_a_channel_name_and_never_says_login():
+    assert set(GoLive.link._params) == {"channel"}
+    assert str(GoLive.link._params["channel"].description) == (
+        "Your Twitch channel name (the part after twitch.tv/)"
+    )
+    said = " ".join(
+        [
+            str(GoLive.link.description),
+            str(GoLive.link._params["channel"].description),
+            cog_module.BAD_LOGIN,
+            cog_module.NOT_LINKED,
+            cog_module.LINK_NOT_CHECKED,
+            cog_module.LINK_TAKEN,
+        ]
+    )
+    assert "login" not in said.lower()
+    assert "channel name" in said
