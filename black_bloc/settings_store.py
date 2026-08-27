@@ -10,7 +10,7 @@ from .storage.db import Database
 
 log = logging.getLogger(__name__)
 
-GOLIVE_CHANNEL_ID = 1225457308230746202
+LIVE_NOW_CHANNEL_ID = 1225457308230746202
 GOLIVE_TEMPLATE = (
     "REGULATORS! Mount up! **{name}** is currently streaming **{game}**! "
     "Check it out: {url}"
@@ -22,6 +22,10 @@ TEMPVOICE_NAME_TEMPLATE = "{user}'s bloc"
 TEMPVOICE_MODES = ("off", "on")
 HONEYPOT_MODES = ("off", "shadow", "on")
 HONEYPOT_PURGE_MAX_DAYS = 7
+
+EVENTS_MODES = ("off", "shadow", "on")
+EVENTS_RETENTION_DAYS = 7
+EVENTS_RETENTION_MAX_DAYS = 365
 
 KEY_TYPES: dict[str, str] = {
     "log_channel_id": "channel",
@@ -44,15 +48,36 @@ KEY_TYPES: dict[str, str] = {
     "honeypot_channel_ids": "channels",
     "honeypot_purge_days": "int",
     "honeypot_exempt_role_ids": "roles",
+    "events_mode": "enum",
+    "events_category_id": "channel",
+    "events_announce_channel_id": "channel",
+    "events_ping_role_id": "role",
+    "events_create_scheduled": "bool",
+    "events_channel_retention_days": "int",
 }
 
 KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "golive_mode": GOLIVE_MODES,
     "tempvoice_mode": TEMPVOICE_MODES,
     "honeypot_mode": HONEYPOT_MODES,
+    "events_mode": EVENTS_MODES,
 }
 
-KEY_MAX: dict[str, int] = {"honeypot_purge_days": HONEYPOT_PURGE_MAX_DAYS}
+KEY_MAX: dict[str, int] = {
+    "honeypot_purge_days": HONEYPOT_PURGE_MAX_DAYS,
+    "events_channel_retention_days": EVENTS_RETENTION_MAX_DAYS,
+}
+
+KEY_MAX_REASON: dict[str, str] = {
+    "honeypot_purge_days": (
+        "Discord itself refuses to delete more than {limit} days of a banned account's "
+        "messages, and a bigger number would make every ban fail."
+    ),
+    "events_channel_retention_days": (
+        "A finished event's channel kept for more than {limit} days is a channel nobody will "
+        "ever tidy up. Set it to 0 to delete one as soon as the event is over."
+    ),
+}
 
 KEY_HELP: dict[str, str] = {
     "log_channel_id": "where Black Bloc posts what it did",
@@ -78,6 +103,15 @@ KEY_HELP: dict[str, str] = {
         f"{HONEYPOT_PURGE_MAX_DAYS}"
     ),
     "honeypot_exempt_role_ids": "roles the trap ignores; staff are always ignored too",
+    "events_mode": "off, shadow (no public announcement) or on (announce approved events)",
+    "events_category_id": "the category review channels are made in; /event settings sets it",
+    "events_announce_channel_id": "where an approved event is announced and pinged when it starts",
+    "events_ping_role_id": "role mentioned when an event is announced and when it starts",
+    "events_create_scheduled": "true to make a real Discord scheduled event when one is approved",
+    "events_channel_retention_days": (
+        f"days a finished event's channel is kept before deletion, 0 to "
+        f"{EVENTS_RETENTION_MAX_DAYS}"
+    ),
 }
 
 
@@ -138,10 +172,9 @@ def coerce_value(key: str, value: Any) -> Any:
             raise SettingError(f"{key!r} cannot be negative.")
         limit = KEY_MAX.get(key)
         if limit is not None and value > limit:
+            why = KEY_MAX_REASON.get(key, "").format(limit=limit)
             raise SettingError(
-                f"{key!r} cannot be more than {limit}, so nothing was changed. Discord itself "
-                f"refuses to delete more than {limit} days of a banned account's messages, and a "
-                f"bigger number would make every ban fail."
+                f"{key!r} cannot be more than {limit}, so nothing was changed. {why}".strip()
             )
         return value
     if kind == "bool":
@@ -264,7 +297,7 @@ class SettingsStore:
         if key == "golive_channel_id":
             if self.settings.test_mode:
                 return self.settings.test_channel_id
-            return GOLIVE_CHANNEL_ID
+            return LIVE_NOW_CHANNEL_ID
         if key == "golive_mode":
             return "shadow"
         if key == "golive_template":
@@ -283,6 +316,16 @@ class SettingsStore:
             return "shadow"
         if key == "honeypot_purge_days":
             return 1
+        if key == "events_mode":
+            return "on"
+        if key == "events_announce_channel_id":
+            if self.settings.test_mode:
+                return self.settings.test_channel_id
+            return LIVE_NOW_CHANNEL_ID
+        if key == "events_create_scheduled":
+            return True
+        if key == "events_channel_retention_days":
+            return EVENTS_RETENTION_DAYS
         if KEY_TYPES.get(key) in ("channels", "roles"):
             return []
         return None

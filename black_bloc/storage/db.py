@@ -120,6 +120,28 @@ CREATE TABLE IF NOT EXISTS user_timezones (
     tz      TEXT NOT NULL,
     set_at  TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS events (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id           INTEGER NOT NULL,
+    requester_id       INTEGER NOT NULL,
+    title              TEXT    NOT NULL,
+    description        TEXT,
+    location           TEXT,
+    starts_at          TEXT    NOT NULL,
+    ends_at            TEXT,
+    status             TEXT    NOT NULL DEFAULT 'pending',
+    review_channel_id  INTEGER,
+    review_message_id  INTEGER,
+    scheduled_event_id INTEGER,
+    announce_message_id INTEGER,
+    decided_by         INTEGER,
+    decided_at         TEXT,
+    deny_reason        TEXT,
+    created_at         TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS events_by_status ON events(guild_id, status, starts_at);
 """
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (

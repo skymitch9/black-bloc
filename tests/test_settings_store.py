@@ -2,10 +2,12 @@ import pytest
 
 from black_bloc.config import load_settings
 from black_bloc.settings_store import (
-    GOLIVE_CHANNEL_ID,
+    EVENTS_RETENTION_DAYS,
+    EVENTS_RETENTION_MAX_DAYS,
     GOLIVE_TEMPLATE,
     HONEYPOT_PURGE_MAX_DAYS,
     KEY_TYPES,
+    LIVE_NOW_CHANNEL_ID,
     MEMBER_ROLE_ID,
     TEMPVOICE_NAME_TEMPLATE,
     SettingError,
@@ -204,7 +206,7 @@ async def test_golive_channel_defaults_to_live_now_once_test_mode_is_off(tmp_pat
     try:
         s = SettingsStore(db, settings)
         await s.load()
-        assert s.get(1, "golive_channel_id") == GOLIVE_CHANNEL_ID
+        assert s.get(1, "golive_channel_id") == LIVE_NOW_CHANNEL_ID
     finally:
         await db.close()
 
@@ -311,6 +313,45 @@ def test_list_settings_parse_and_display():
         parse_value("tempvoice_creator_ids", "general")
     assert display_value("tempvoice_creator_ids", [5, 6]) == "<#5>, <#6>"
     assert display_value("tempvoice_creator_ids", []) == "not set"
+
+
+async def test_events_defaults(store):
+    assert store.get(1, "events_mode") == "on"
+    assert store.get(1, "events_announce_channel_id") == TEST_CH
+    assert store.get(1, "events_create_scheduled") is True
+    assert store.get(1, "events_channel_retention_days") == EVENTS_RETENTION_DAYS
+    assert store.get(1, "events_category_id") is None
+    assert store.get(1, "events_ping_role_id") is None
+
+
+async def test_the_announce_channel_becomes_live_now_once_test_mode_is_off(tmp_path, monkeypatch):
+    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
+    settings = load_settings(_env_file=None, test_mode=False, test_channel_id=None)
+    db = Database(tmp_path / "e.sqlite3")
+    await db.connect()
+    try:
+        s = SettingsStore(db, settings)
+        await s.load()
+        assert s.get(1, "events_announce_channel_id") == LIVE_NOW_CHANNEL_ID
+    finally:
+        await db.close()
+
+
+def test_the_create_scheduled_toggle_is_a_real_boolean():
+    assert coerce_value("events_create_scheduled", False) is False
+    assert parse_value("events_create_scheduled", "off") is False
+    assert parse_value("events_create_scheduled", "yes") is True
+    with pytest.raises(SettingError, match="true or false"):
+        coerce_value("events_create_scheduled", 1)
+    with pytest.raises(SettingError, match="true or false"):
+        parse_value("events_create_scheduled", "sometimes")
+
+
+def test_retention_is_capped_with_its_own_sentence_not_the_ban_one():
+    assert coerce_value("events_channel_retention_days", 0) == 0
+    with pytest.raises(SettingError, match="tidy up") as caught:
+        coerce_value("events_channel_retention_days", EVENTS_RETENTION_MAX_DAYS + 1)
+    assert "banned account" not in str(caught.value)
 
 
 def test_staff_refusal_names_the_channel(tmp_path, monkeypatch):
