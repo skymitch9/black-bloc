@@ -315,6 +315,11 @@ REAL_COGS = [
         },
     ),
     (
+        "black_bloc.cogs.community.role_menus",
+        "RoleMenus",
+        {"_expiry_loop": _record_key("last_ok_at", "expiry")},
+    ),
+    (
         "black_bloc.cogs.community.tempvoice",
         "TempVoice",
         {"_reconcile_loop": _record("last_ok_at")},

@@ -223,6 +223,15 @@ async def open_requests_for(db: Any, guild_id: int, user_id: int) -> list[Any]:
     return list(await cur.fetchall())
 
 
+async def open_request_for_role(db: Any, guild_id: int, user_id: int, role_id: int) -> Any:
+    cur = await db.conn.execute(
+        "SELECT * FROM role_requests WHERE guild_id = ? AND user_id = ? AND role_id = ? "
+        "AND status = ? ORDER BY id DESC LIMIT 1",
+        (guild_id, user_id, role_id, PENDING),
+    )
+    return await cur.fetchone()
+
+
 async def last_denial(db: Any, menu_id: int, user_id: int, role_id: int) -> Any:
     cur = await db.conn.execute(
         "SELECT * FROM role_requests WHERE menu_id = ? AND user_id = ? AND role_id = ? "
