@@ -1,10 +1,12 @@
 import asyncio
+import json
 from datetime import UTC, datetime, timedelta
 
 import discord
 import pytest
 
 from black_bloc.cogs.community.tempvoice import (
+    MEMBER_MEMORY_MAX,
     RECONCILE_GRACE_SECONDS,
     RECONCILE_MINUTES,
     RENAMED_TOO_OFTEN,
@@ -12,6 +14,7 @@ from black_bloc.cogs.community.tempvoice import (
     TempVoice,
     TempVoicePanel,
     add_channel,
+    apply_remembered_members,
     bottom_position,
     category_overwrites,
     channel_name,
@@ -29,6 +32,7 @@ from black_bloc.cogs.community.tempvoice import (
     get_row,
     get_row_by_panel,
     guild_bitrate_ceiling,
+    id_list,
     is_panel_owner,
     is_stale,
     lobbies_by_name,
@@ -42,11 +46,13 @@ from black_bloc.cogs.community.tempvoice import (
     parse_limit,
     pick_row,
     region_choices,
+    remembered_lines,
     rows_for_guild,
     save_prefs,
     set_owner,
     set_panel_message,
     spawn_position,
+    with_member,
 )
 from black_bloc.config import load_settings
 from black_bloc.settings_store import (
@@ -216,12 +222,14 @@ class FakeGuild:
         overwrites=None,
         user_limit=0,
         bitrate=None,
+        rtc_region=None,
         reason=None,
     ):
         self._next_id += 1
         channel = FakeVoice(self._next_id, self, category, position, name=name)
         channel.user_limit = user_limit
         channel.bitrate = bitrate or 0
+        channel.rtc_region = rtc_region
         channel.given_overwrites = overwrites
         self.add(channel)
         self.created.append(channel)
@@ -1361,7 +1369,7 @@ def test_the_voice_group_carries_every_control_the_panel_has_and_more():
 
     assert sorted(command.name for command in groups["voice"].commands) == [
         "ban", "bitrate", "claim", "hide", "info", "kick", "limit", "lock", "permit", "region",
-        "rename", "show", "transfer", "unban", "unlock", "unpermit",
+        "rename", "reset", "show", "transfer", "unban", "unlock", "unpermit",
     ]
     region = next(c for c in groups["voice"].commands if c.name == "region")
     assert region._params["region"].autocomplete is not None
@@ -1692,3 +1700,127 @@ async def test_status_names_the_lobbies_black_bloc_is_not_keeping_track_of(cog, 
     assert "not kept track of" in interaction.sent
     assert "`/tempvoice setup`" in interaction.sent
     assert interaction.response.messages[-1]["allowed_mentions"].everyone is False
+
+
+def test_a_stored_id_list_survives_junk_and_never_grows_forever():
+    assert id_list('[1, "2", 2, null, "no"]') == [1, 2]
+    assert id_list("not json") == [] and id_list(None) == [] and id_list('{"a": 1}') == []
+
+    assert id_list(with_member('[7]', 8, True)) == [7, 8]
+    assert id_list(with_member('[7, 8]', 8, False)) == [7]
+    assert id_list(with_member('[8]', 8, True)) == [8]
+    assert len(id_list(with_member(json.dumps(list(range(200))), 999, True))) == MEMBER_MEMORY_MAX
+
+
+def test_the_remembered_lists_skip_the_owner_and_anyone_who_left():
+    guild = FakeGuild()
+    owner = FakeMember(guild, user_id=USER)
+    guest = FakeMember(guild, user_id=USER + 1, display_name="Bo")
+    shut_out = FakeMember(guild, user_id=USER + 2, display_name="Cass")
+
+    found = apply_remembered_members(
+        {}, guild, [guest.id, owner.id, 4242], [shut_out.id], owner.id
+    )
+
+    assert found[guest].connect is True and found[guest].view_channel is True
+    assert found[shut_out].connect is False and found[shut_out].view_channel is False
+    assert owner not in found and len(found) == 2
+
+
+async def test_permit_and_ban_are_remembered_and_put_back_on_the_next_channel(
+    cog, bot, creator, member, db
+):
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+    guest = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
+    pest = FakeMember(bot.guild, user_id=USER + 2, display_name="Cass")
+
+    await cog.voice_permit.callback(cog, FakeInteraction(bot, member), guest)
+    await cog.voice_ban.callback(cog, FakeInteraction(bot, member), pest)
+
+    prefs = await get_prefs(db, member.id)
+    assert id_list(prefs["permitted_ids"]) == [guest.id]
+    assert id_list(prefs["banned_ids"]) == [pest.id]
+
+    made.members.clear()
+    await cog._maybe_delete(bot.guild, made)
+    await cog._maybe_create(member, creator)
+
+    given = bot.guild.created[1].given_overwrites
+    assert given[guest].connect is True
+    assert given[pest].connect is False and given[pest].view_channel is False
+
+
+async def test_unpermit_and_unban_are_forgotten_for_next_time_too(cog, bot, creator, member, db):
+    await cog._maybe_create(member, creator)
+    guest = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
+    pest = FakeMember(bot.guild, user_id=USER + 2, display_name="Cass")
+    await cog.voice_permit.callback(cog, FakeInteraction(bot, member), guest)
+    await cog.voice_ban.callback(cog, FakeInteraction(bot, member), pest)
+
+    await cog.voice_unpermit.callback(cog, FakeInteraction(bot, member), guest)
+    await cog.voice_unban.callback(cog, FakeInteraction(bot, member), pest)
+
+    prefs = await get_prefs(db, member.id)
+    assert id_list(prefs["permitted_ids"]) == [] and id_list(prefs["banned_ids"]) == []
+
+
+async def test_a_remembered_region_is_used_for_the_next_channel(cog, bot, creator, member, db):
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+
+    await cog.voice_region.callback(cog, FakeInteraction(bot, member), "us-west")
+
+    assert (await get_prefs(db, member.id))["region"] == "us-west"
+
+    made.members.clear()
+    await cog._maybe_delete(bot.guild, made)
+    await cog._maybe_create(member, creator)
+
+    assert bot.guild.created[1].rtc_region == "us-west"
+
+    await cog.voice_region.callback(cog, FakeInteraction(bot, member), "auto")
+    second = bot.guild.created[1]
+    second.members.clear()
+    await cog._maybe_delete(bot.guild, second)
+    await cog._maybe_create(member, creator)
+
+    assert bot.guild.created[2].rtc_region is None
+
+
+async def test_voice_reset_forgets_everything_and_says_so(cog, bot, creator, member, db):
+    await cog._maybe_create(member, creator)
+    await cog.voice_rename.callback(cog, FakeInteraction(bot, member), "The Pit")
+    nothing_yet = FakeInteraction(bot, FakeMember(bot.guild, user_id=USER + 5, display_name="Dee"))
+
+    await cog.voice_reset.callback(cog, nothing_yet)
+    assert "nothing to forget" in nothing_yet.sent
+
+    interaction = FakeInteraction(bot, member)
+    await cog.voice_reset.callback(cog, interaction)
+
+    assert await get_prefs(db, member.id) is None
+    assert "Forgotten" in interaction.sent
+    assert "tempvoice.prefs_reset" in await action_kinds(db)
+    assert bot.guild.created[0].name == "The Pit"
+
+
+async def test_voice_info_says_what_is_remembered(cog, bot, creator, member, db):
+    await cog._maybe_create(member, creator)
+    guest = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
+    await cog.voice_permit.callback(cog, FakeInteraction(bot, member), guest)
+    await cog.voice_region.callback(cog, FakeInteraction(bot, member), "us-west")
+    interaction = FakeInteraction(bot, member)
+
+    await cog.voice_info.callback(cog, interaction)
+
+    assert "remembered for next time" in interaction.sent
+    assert "us-west" in interaction.sent and f"<@{guest.id}>" in interaction.sent
+    assert "`/voice reset`" in interaction.sent
+    assert interaction.response.messages[-1]["allowed_mentions"].everyone is False
+
+
+def test_remembered_lines_say_so_when_nothing_is_remembered_yet():
+    said = "\n".join(remembered_lines(None))
+
+    assert "nothing yet" in said and "kept" in said

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import UTC, datetime
 from typing import Any, NamedTuple
@@ -30,6 +31,10 @@ NAME_LIMIT = 100
 LOCKS_ATTR = "_tempvoice_channel_locks"
 MIN_BITRATE = 8
 MAX_BITRATE = 96
+MEMBER_MEMORY_MAX = 50
+PERMITTED = "permitted"
+BANNED = "banned"
+FORGOTTEN = "forgotten"
 AUTO_REGION = "auto"
 VOICE_REGIONS = (
     AUTO_REGION,
@@ -118,6 +123,16 @@ CLAIM_NEEDS_A_CHANNEL = (
 CANNOT_SET_REGION = (
     "Discord would not use **{region}** as this channel's voice region, so nothing changed. Pick "
     "one from the list, or **auto** to let Discord choose the closest server."
+)
+PREFS_CLEARED = (
+    "Forgotten. Your next temporary channel starts from the server's defaults — name, limit, "
+    "lock, hidden, bitrate, region, and everyone you had let in or shut out by name. The channel "
+    "you are in now is not changed; `/voice info` shows it."
+)
+NOTHING_REMEMBERED = (
+    "There was nothing to forget — Black Bloc keeps no voice settings for you yet. It starts "
+    "remembering the first time you rename, cap, lock, hide, permit or ban in one of your "
+    "channels."
 )
 REPAIRED = (
     "Black Bloc repaired the join-to-create channel it already had — {where} — instead of making "
@@ -418,10 +433,22 @@ async def save_prefs(
     locked: bool | None = None,
     hidden: bool | None = None,
     bitrate: int | None = None,
+    region: str | None = None,
+    permitted_ids: str | None = None,
+    banned_ids: str | None = None,
 ) -> None:
     """Remember one setting for next time; the others keep whatever they already were."""
     row = await get_prefs(db, user_id)
-    current = {"name": None, "user_limit": None, "locked": 0, "hidden": 0, "bitrate": None}
+    current: dict[str, Any] = {
+        "name": None,
+        "user_limit": None,
+        "locked": 0,
+        "hidden": 0,
+        "bitrate": None,
+        "region": None,
+        "permitted_ids": None,
+        "banned_ids": None,
+    }
     if row is not None:
         current = {key: pref(row, key) for key in current}
     given = {
@@ -430,11 +457,14 @@ async def save_prefs(
         "locked": locked,
         "hidden": hidden,
         "bitrate": bitrate,
+        "region": region,
+        "permitted_ids": permitted_ids,
+        "banned_ids": banned_ids,
     }
     merged = {key: (current[key] if value is None else value) for key, value in given.items()}
     await db.conn.execute(
         "INSERT OR REPLACE INTO tempvoice_prefs(user_id, name, user_limit, locked, hidden, "
-        "bitrate) VALUES (?, ?, ?, ?, ?, ?)",
+        "bitrate, region, permitted_ids, banned_ids) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             user_id,
             merged["name"],
@@ -442,9 +472,76 @@ async def save_prefs(
             int(bool(merged["locked"])),
             int(bool(merged["hidden"])),
             merged["bitrate"],
+            merged["region"],
+            merged["permitted_ids"],
+            merged["banned_ids"],
         ),
     )
     await db.conn.commit()
+
+
+async def clear_prefs(db: Any, user_id: int) -> bool:
+    """Forget everything remembered for one member; False when there was nothing to forget."""
+    cur = await db.conn.execute(
+        "DELETE FROM tempvoice_prefs WHERE user_id = ?", (int(user_id),)
+    )
+    await db.conn.commit()
+    return bool(cur.rowcount)
+
+
+def id_list(raw: Any) -> list[int]:
+    """The member ids in a stored JSON list, skipping anything that is not one."""
+    found = raw
+    if isinstance(raw, str):
+        try:
+            found = json.loads(raw)
+        except ValueError:
+            return []
+    if not isinstance(found, list):
+        return []
+    ids: list[int] = []
+    for item in found:
+        try:
+            value = int(item)
+        except (TypeError, ValueError):
+            continue
+        if value not in ids:
+            ids.append(value)
+    return ids
+
+
+def with_member(raw: Any, user_id: Any, keep: bool) -> str:
+    ids = [found for found in id_list(raw) if found != int(user_id)]
+    if keep:
+        ids.append(int(user_id))
+    return json.dumps(ids[-MEMBER_MEMORY_MAX:])
+
+
+async def remember_access(db: Any, owner_id: Any, target_id: Any, state: str) -> None:
+    row = await get_prefs(db, int(owner_id))
+    await save_prefs(
+        db,
+        int(owner_id),
+        permitted_ids=with_member(pref(row, "permitted_ids"), target_id, state == PERMITTED),
+        banned_ids=with_member(pref(row, "banned_ids"), target_id, state == BANNED),
+    )
+
+
+def apply_remembered_members(
+    overwrites: dict[Any, Any], guild: Any, permitted: Any, banned: Any, owner_id: Any
+) -> dict[Any, Any]:
+    """Put back who this owner let in and who they shut out; anyone no longer here is skipped."""
+    wanted = [(user_id, True) for user_id in permitted] + [(user_id, False) for user_id in banned]
+    for user_id, allowed in wanted:
+        if int(user_id) == int(owner_id):
+            continue
+        member = guild.get_member(int(user_id))
+        if member is None:
+            continue
+        overwrites[member] = discord.PermissionOverwrite(
+            view_channel=allowed, connect=allowed
+        )
+    return overwrites
 
 
 def pref(row: Any, key: str) -> Any:
@@ -813,8 +910,10 @@ async def do_ban(interaction: discord.Interaction, channel: Any, row: Any, targe
     if target.id in connected_ids(channel):
         await move_out(interaction, target)
     await panel_log(interaction, "ban", channel.id, target_id=target.id)
+    await remember_access(interaction.client.db, row["owner_id"], target.id, BANNED)
     return (
-        f"**{target.display_name}** can no longer join this channel. Unban undoes it."
+        f"**{target.display_name}** can no longer join this channel, now or in your next one. "
+        "Unban undoes it."
     )
 
 
@@ -830,7 +929,8 @@ async def do_permit(interaction: discord.Interaction, channel: Any, row: Any, ta
         )
         return CANNOT_EDIT
     await panel_log(interaction, "permit", channel.id, target_id=target.id)
-    return f"**{target.display_name}** can join this channel now."
+    await remember_access(interaction.client.db, row["owner_id"], target.id, PERMITTED)
+    return f"**{target.display_name}** can join this channel now, and your next one."
 
 
 async def do_forget_member(
@@ -855,6 +955,7 @@ async def do_forget_member(
             )
             return CANNOT_EDIT
     await panel_log(interaction, kind, channel.id, target_id=target.id)
+    await remember_access(interaction.client.db, row["owner_id"], target.id, FORGOTTEN)
     if kind == "unban":
         return f"**{target.display_name}** may join this channel again."
     return (
@@ -929,6 +1030,32 @@ def info_lines(channel: Any, row: Any, role_ids: Any) -> list[str]:
     ]
 
 
+def remembered_lines(prefs: Any) -> list[str]:
+    """What the next channel this member makes will start from."""
+    if prefs is None:
+        return [
+            "",
+            "**remembered for next time** — nothing yet. Anything you change here is kept and "
+            "put back on your next channel.",
+        ]
+    limit = pref(prefs, "user_limit")
+    bitrate = pref(prefs, "bitrate")
+    region = pref(prefs, "region")
+    return [
+        "",
+        "**remembered for next time**",
+        f"• name — {pref(prefs, 'name') or 'the server default'}",
+        f"• limit — {'no limit' if not limit else f'{int(limit)} people'}",
+        f"• locked — {'yes' if pref(prefs, 'locked') else 'no'}"
+        f" · hidden — {'yes' if pref(prefs, 'hidden') else 'no'}",
+        f"• bitrate — {f'{int(bitrate) // 1000} kbps' if bitrate else 'whatever the server gives'}",
+        f"• region — {'automatic' if not region or region == AUTO_REGION else region}",
+        f"• let in by name — {mentions(id_list(pref(prefs, 'permitted_ids')))}",
+        f"• kept out by name — {mentions(id_list(pref(prefs, 'banned_ids')))}",
+        "`/voice reset` forgets all of it.",
+    ]
+
+
 async def do_bitrate(interaction: discord.Interaction, channel: Any, row: Any, kbps: int) -> str:
     bits = clamp_bitrate(kbps, guild_bitrate_ceiling(channel.guild))
     try:
@@ -956,9 +1083,10 @@ async def do_region(interaction: discord.Interaction, channel: Any, row: Any, re
         await panel_log(interaction, "region_failed", channel.id, region=wanted, reason=str(exc))
         return CANNOT_SET_REGION.format(region=wanted)
     await panel_log(interaction, "region", channel.id, region=wanted)
+    await save_prefs(interaction.client.db, row["owner_id"], region=wanted)
     if wanted == AUTO_REGION:
         return "Voice region is **automatic** again — Discord picks the closest server."
-    return f"Voice region set to **{wanted}**."
+    return f"Voice region set to **{wanted}**, and remembered for next time."
 
 
 async def do_transfer(interaction: discord.Interaction, channel: Any, row: Any, target: Any) -> str:
@@ -1328,19 +1456,29 @@ class TempVoice(commands.Cog):
             extra["bitrate"] = clamp_bitrate(
                 int(remembered) // 1000, guild_bitrate_ceiling(guild)
             )
+        region = pref(prefs, "region")
+        if region and region != AUTO_REGION:
+            extra["rtc_region"] = region
+        overwrites = apply_remembered_members(
+            owner_overwrites(
+                guild,
+                member,
+                locked=bool(pref(prefs, "locked")),
+                hidden=bool(pref(prefs, "hidden")),
+                category=creator.category,
+                allow=self._join_roles(guild),
+            ),
+            guild,
+            id_list(pref(prefs, "permitted_ids")),
+            id_list(pref(prefs, "banned_ids")),
+            member.id,
+        )
         try:
             channel = await guild.create_voice_channel(
                 name,
                 category=creator.category,
                 position=spawn_position(creator.position),
-                overwrites=owner_overwrites(
-                    guild,
-                    member,
-                    locked=bool(pref(prefs, "locked")),
-                    hidden=bool(pref(prefs, "hidden")),
-                    category=creator.category,
-                    allow=self._join_roles(guild),
-                ),
+                overwrites=overwrites,
                 user_limit=int(pref(prefs, "user_limit") or 0),
                 reason=f"Black Bloc temp voice for {member}",
                 **extra,
@@ -1583,24 +1721,28 @@ class TempVoice(commands.Cog):
             details={"mode": mode.value},
         )
 
-    async def _voice_target(
-        self, interaction: discord.Interaction, *, owner_only: bool = True
-    ) -> Target | None:
-        """The temp channel this command acts on, or None once the caller has been answered."""
+    async def _voice_allowed(self, interaction: discord.Interaction) -> bool:
+        """The half of the `/voice` gate that needs no channel: guild, role, database."""
         if interaction.guild is None:
             await interaction.response.send_message(GUILD_ONLY, ephemeral=True)
-            return None
-        store = self.bot.store
-        role_id = store.get(interaction.guild.id, "tempvoice_allowed_role_id")
+            return False
+        role_id = self.bot.store.get(interaction.guild.id, "tempvoice_allowed_role_id")
         if not may_use_voice(role_id, interaction.user):
             await interaction.response.send_message(
                 VOICE_NEEDS_ROLE.format(role_id=role_id),
                 ephemeral=True,
                 allowed_mentions=discord.AllowedMentions.none(),
             )
+            return False
+        return await self._database_ready(interaction)
+
+    async def _voice_target(
+        self, interaction: discord.Interaction, *, owner_only: bool = True
+    ) -> Target | None:
+        """The temp channel this command acts on, or None once the caller has been answered."""
+        if not await self._voice_allowed(interaction):
             return None
-        if not await self._database_ready(interaction):
-            return None
+        store = self.bot.store
         rows = await rows_for_guild(self.bot.db, interaction.guild.id)
         here = getattr(getattr(interaction.user, "voice", None), "channel", None)
         row = pick_row(rows, interaction.user.id, getattr(here, "id", None), owner_only=owner_only)
@@ -1719,8 +1861,30 @@ class TempVoice(commands.Cog):
             return
         role_ids = [getattr(role, "id", 0) for role in getattr(interaction.guild, "roles", ())]
         role_ids.append(getattr(interaction.guild.default_role, "id", 0))
+        prefs = await get_prefs(self.bot.db, interaction.user.id)
         await interaction.response.send_message(
-            "\n".join(info_lines(found.channel, found.row, role_ids)),
+            "\n".join(info_lines(found.channel, found.row, role_ids) + remembered_lines(prefs)),
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    @voice.command(
+        name="reset", description="Forget the settings Black Bloc keeps for your voice channels"
+    )
+    async def voice_reset(self, interaction: discord.Interaction) -> None:
+        if not await self._voice_allowed(interaction):
+            return
+        cleared = await clear_prefs(self.bot.db, interaction.user.id)
+        if cleared:
+            await log_action(
+                self.bot,
+                interaction.guild,
+                "tempvoice.prefs_reset",
+                actor=interaction.user,
+                target=interaction.user,
+            )
+        await interaction.response.send_message(
+            PREFS_CLEARED if cleared else NOTHING_REMEMBERED,
             ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
         )

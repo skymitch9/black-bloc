@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -97,12 +97,15 @@ CREATE TABLE IF NOT EXISTS tempvoice_channels (
 );
 
 CREATE TABLE IF NOT EXISTS tempvoice_prefs (
-    user_id    INTEGER PRIMARY KEY,
-    name       TEXT,
-    user_limit INTEGER,
-    locked     INTEGER DEFAULT 0,
-    hidden     INTEGER DEFAULT 0,
-    bitrate    INTEGER
+    user_id       INTEGER PRIMARY KEY,
+    name          TEXT,
+    user_limit    INTEGER,
+    locked        INTEGER DEFAULT 0,
+    hidden        INTEGER DEFAULT 0,
+    bitrate       INTEGER,
+    region        TEXT,
+    permitted_ids TEXT,
+    banned_ids    TEXT
 );
 
 CREATE TABLE IF NOT EXISTS honeypot_hits (
@@ -233,6 +236,9 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("mod_cases", "channel_id", "INTEGER"),
     ("tempvoice_channels", "panel_channel_id", "INTEGER"),
     ("tempvoice_prefs", "bitrate", "INTEGER"),
+    ("tempvoice_prefs", "region", "TEXT"),
+    ("tempvoice_prefs", "permitted_ids", "TEXT"),
+    ("tempvoice_prefs", "banned_ids", "TEXT"),
 )
 
 MOD_CASES_CARRIED_OVER = (
