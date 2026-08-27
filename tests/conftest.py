@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 from black_bloc.api.auth import SESSION_COOKIE, SESSION_TTL_SECONDS, sign_session
+from black_bloc.api.server import SAME_ORIGIN, SAME_SITE_HEADER
 from black_bloc.config import load_settings
 from black_bloc.settings_store import member_is_staff
 
@@ -16,10 +17,13 @@ def settings(tmp_path, monkeypatch):
     return load_settings(_env_file=None, database_path=tmp_path / "test.sqlite3")
 
 
-API_SECRET = "test-session-secret"
+# At least SESSION_SECRET_MIN characters, or site_login_configured stays False
+# and every sign-in route answers login_unavailable.
+API_SECRET = "test-session-secret-long-enough-to-sign"
 # https, because a __Host- cookie needs Secure and http.cookiejar refuses to
 # return a Secure cookie over http — the tests would never carry a session.
 API_ORIGIN = "https://testserver"
+SAME_SITE = {SAME_SITE_HEADER: SAME_ORIGIN}
 API_GUILD_ID = 4242
 STAFF_ROLE_ID = 11
 PLAIN_ROLE_ID = 22
@@ -139,6 +143,7 @@ def fakes():
         Database=FakeDatabase,
         SECRET=API_SECRET,
         ORIGIN=API_ORIGIN,
+        SAME_SITE=SAME_SITE,
         GUILD_ID=API_GUILD_ID,
         STAFF_ROLE_ID=STAFF_ROLE_ID,
         PLAIN_ROLE_ID=PLAIN_ROLE_ID,

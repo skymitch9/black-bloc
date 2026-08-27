@@ -1,9 +1,25 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from pydantic import Field, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+log = logging.getLogger(__name__)
+
+SAMESITE_CHOICES = ("lax", "strict")
+SESSION_SECRET_MIN = 32
+
+BAD_SAMESITE = (
+    "SESSION_COOKIE_SAMESITE is {given!r}; it is 'lax' or 'strict'. 'none' would let another "
+    "site send your sign-in cookie with its own requests, which is the one thing the setting "
+    "exists to stop."
+)
+SHORT_SECRET = (
+    "SESSION_SECRET is %d characters, so signing in stays switched off — it needs at least %d. "
+    "Make one with: python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+)
 
 
 class ConfigError(RuntimeError):
@@ -59,13 +75,33 @@ class Settings(BaseSettings):
             return None
         return v
 
+    @field_validator("session_cookie_samesite")
+    @classmethod
+    def _samesite_choice(cls, v):
+        given = str(v).strip().lower()
+        if given not in SAMESITE_CHOICES:
+            raise ValueError(BAD_SAMESITE.format(given=str(v)))
+        return given
+
+    @field_validator("session_secret")
+    @classmethod
+    def _secret_long_enough(cls, v):
+        if v is not None and len(v) < SESSION_SECRET_MIN:
+            log.warning(SHORT_SECRET, len(v), SESSION_SECRET_MIN)
+        return v
+
     @property
     def twitch_configured(self) -> bool:
         return bool(self.twitch_client_id and self.twitch_client_secret)
 
     @property
     def site_login_configured(self) -> bool:
-        return bool(self.discord_client_id and self.discord_client_secret and self.session_secret)
+        return bool(
+            self.discord_client_id
+            and self.discord_client_secret
+            and self.session_secret
+            and len(self.session_secret) >= SESSION_SECRET_MIN
+        )
 
     @property
     def origin(self) -> str:

@@ -7,6 +7,7 @@ from typing import Any
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .. import __version__
@@ -27,6 +28,46 @@ SECURITY_HEADERS = {
     "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
 }
+NO_STORE_HEADERS = {"Cache-Control": "no-store", "Pragma": "no-cache"}
+
+API_PREFIX = "/api"
+SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+SAME_SITE_HEADER = "sec-fetch-site"
+SAME_ORIGIN = "same-origin"
+JSON_MEDIA_TYPE = "application/json"
+
+CROSS_SITE = (
+    "That change did not come from the Black Bloc dashboard, so nothing was done. Another site "
+    "cannot make changes here in your name, and this is the check that stops it — open the "
+    "dashboard yourself and try again."
+)
+NOT_JSON = (
+    "That change did not arrive the way the dashboard sends one, so nothing was done. It is a "
+    "fault in the page rather than in what you typed — reload the dashboard and try again."
+)
+
+
+def same_site(request: Request, origin: str) -> bool:
+    """The browser's own answer first; an exact Origin match when it sends none."""
+    if request.headers.get(SAME_SITE_HEADER) == SAME_ORIGIN:
+        return True
+    return request.headers.get("origin") == origin
+
+
+def has_body(request: Request) -> bool:
+    if request.headers.get("transfer-encoding"):
+        return True
+    try:
+        return int(request.headers.get("content-length") or 0) > 0
+    except ValueError:
+        return True
+
+
+def json_bodied(request: Request) -> bool:
+    given = request.headers.get("content-type")
+    if given is None:
+        return not has_body(request)
+    return given.split(";")[0].strip().lower() == JSON_MEDIA_TYPE
 
 
 def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
@@ -39,10 +80,25 @@ def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
     )
 
     @app.middleware("http")
+    async def same_site_writes(request: Request, call_next: Any) -> Any:
+        if request.url.path.startswith(API_PREFIX) and request.method not in SAFE_METHODS:
+            if not same_site(request, bot.settings.origin):
+                log.warning(
+                    "api: refused a cross-site %s %s", request.method, request.url.path
+                )
+                return JSONResponse({"error": "cross_site", "message": CROSS_SITE}, 403)
+            if not json_bodied(request):
+                return JSONResponse({"error": "not_json", "message": NOT_JSON}, 415)
+        return await call_next(request)
+
+    @app.middleware("http")
     async def security_headers(request: Request, call_next: Any) -> Any:
         response = await call_next(request)
         for name, value in SECURITY_HEADERS.items():
             response.headers.setdefault(name, value)
+        if request.url.path.startswith(API_PREFIX):
+            for name, value in NO_STORE_HEADERS.items():
+                response.headers[name] = value
         return response
 
     @app.middleware("http")

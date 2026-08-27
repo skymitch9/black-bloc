@@ -19,7 +19,7 @@ from black_bloc.api.auth import (
     role_ids_from,
     sign_session,
 )
-from black_bloc.api.server import create_app
+from black_bloc.api.server import SAME_ORIGIN, SAME_SITE_HEADER, create_app
 
 USER_ID = 7
 
@@ -57,6 +57,7 @@ def client_for(bot, discord: FakeDiscord | None = None) -> TestClient:
         create_app(bot, oauth_request=discord),
         follow_redirects=False,
         base_url="https://testserver",
+        headers={SAME_SITE_HEADER: SAME_ORIGIN},
     )
 
 

@@ -1,14 +1,22 @@
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
-from black_bloc.api.server import SECURITY_HEADERS, create_app
+from black_bloc.api.server import (
+    NO_STORE_HEADERS,
+    SAME_ORIGIN,
+    SAME_SITE_HEADER,
+    SECURITY_HEADERS,
+    create_app,
+)
 
 ORIGIN = "https://testserver"
+SAME_SITE = {SAME_SITE_HEADER: SAME_ORIGIN}
 
 
-def client_for(bot):
-    return TestClient(create_app(bot), base_url=ORIGIN)
+def client_for(bot, **kwargs):
+    return TestClient(create_app(bot), base_url=ORIGIN, headers=SAME_SITE, **kwargs)
 
 
 def test_health(bot):
@@ -71,3 +79,103 @@ def test_a_refusal_never_leaks_a_bare_status(bot):
     body = client_for(bot).get("/api/status").json()
     assert set(body) == {"error", "message"}
     assert body["message"].endswith(".")
+
+
+WRITE_ROUTES = (
+    "/api/honeypot/setup",
+    "/api/tempvoice/setup",
+    "/api/birthdays/import",
+    "/api/mod/cases/1/apply",
+)
+
+
+def web_client(web, **headers):
+    """No default headers, so each test says exactly what the browser sent."""
+    return TestClient(create_app(web), base_url=ORIGIN, headers=headers or None)
+
+
+@pytest.mark.parametrize("path", WRITE_ROUTES)
+def test_a_form_post_from_another_site_never_reaches_a_handler(web, sign_in, path):
+    client = web_client(web, **{SAME_SITE_HEADER: "cross-site", "origin": "https://evil.test"})
+    sign_in(client)
+
+    response = client.post(path, data={"user_id": "7", "confirm": "yes"})
+
+    assert response.status_code == 403
+    assert response.json()["error"] == "cross_site"
+    assert response.json()["message"].endswith(".")
+
+
+async def test_a_cross_site_write_leaves_no_trace_in_the_log(web, sign_in, wf):
+    client = web_client(web, origin="https://evil.test")
+    sign_in(client)
+
+    assert client.post("/api/rolemenus", json={"name": "c", "title": "C"}).status_code == 403
+    assert await wf.kinds_in(web.db) == []
+
+
+def test_a_same_site_form_post_is_refused_before_the_handler_reads_it(web, sign_in):
+    client = web_client(web, **{SAME_SITE_HEADER: SAME_ORIGIN})
+    sign_in(client)
+
+    response = client.post("/api/rolemenus", data={"name": "c", "title": "C"})
+
+    assert response.status_code == 415
+    assert response.json()["error"] == "not_json"
+    assert response.json()["message"].endswith(".")
+
+
+def test_a_same_origin_json_write_still_works(web, sign_in):
+    client = web_client(web, **{SAME_SITE_HEADER: SAME_ORIGIN})
+    sign_in(client)
+
+    made = client.post("/api/rolemenus", json={"name": "colours", "title": "Colours"})
+
+    assert made.status_code == 200
+    assert made.json()["name"] == "colours"
+
+
+def test_an_exact_origin_stands_in_for_a_browser_that_sends_no_fetch_metadata(web, sign_in):
+    client = web_client(web, origin=ORIGIN)
+    sign_in(client)
+
+    assert client.post("/api/rolemenus", json={"name": "c", "title": "C"}).status_code == 200
+
+
+def test_a_write_with_neither_header_is_refused(web, sign_in):
+    client = web_client(web)
+    sign_in(client)
+
+    assert client.post("/api/rolemenus", json={"name": "c", "title": "C"}).status_code == 403
+
+
+def test_reads_are_never_blocked_by_the_same_site_check(web, sign_in):
+    client = web_client(web, origin="https://evil.test")
+    sign_in(client)
+
+    assert client.get("/api/rolemenus").status_code == 200
+
+
+def test_logout_is_not_exempt(web, sign_in):
+    refused = web_client(web, origin="https://evil.test")
+    sign_in(refused)
+    assert refused.post("/api/auth/logout").status_code == 403
+
+    allowed = web_client(web, **{SAME_SITE_HEADER: SAME_ORIGIN})
+    sign_in(allowed)
+    assert allowed.post("/api/auth/logout").status_code == 200
+
+
+def test_a_bodyless_delete_needs_no_content_type(client, sign_in):
+    sign_in(client)
+    client.post("/api/rolemenus", json={"name": "colours", "title": "Colours"})
+
+    assert client.delete("/api/rolemenus/colours").status_code == 200
+
+
+def test_every_api_answer_is_no_store_and_the_page_is_not(bot):
+    for path in ("/api/status", "/api/auth/me"):
+        headers = client_for(bot).get(path).headers
+        for name, value in NO_STORE_HEADERS.items():
+            assert headers[name] == value, path
+    assert "no-store" not in client_for(bot).get("/").headers.get("Cache-Control", "")

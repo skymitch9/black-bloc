@@ -1,6 +1,6 @@
 import pytest
 
-from black_bloc.config import ConfigError, load_settings
+from black_bloc.config import SESSION_SECRET_MIN, ConfigError, load_settings
 
 
 def test_defaults_without_env(monkeypatch):
@@ -49,3 +49,31 @@ def test_twitch_is_configured_only_with_both_halves(monkeypatch):
     assert load_settings(_env_file=None).twitch_configured is False
     monkeypatch.setenv("TWITCH_CLIENT_SECRET", "shh")
     assert load_settings(_env_file=None).twitch_configured is True
+
+
+def test_a_samesite_of_none_is_refused_with_a_sentence(monkeypatch):
+    monkeypatch.setenv("SESSION_COOKIE_SAMESITE", "none")
+    with pytest.raises(ConfigError, match="lax") as raised:
+        load_settings(_env_file=None)
+    assert "another site" in str(raised.value)
+
+
+def test_samesite_is_taken_in_any_case_and_only_the_two_choices(monkeypatch):
+    monkeypatch.setenv("SESSION_COOKIE_SAMESITE", "STRICT")
+    assert load_settings(_env_file=None).session_cookie_samesite == "strict"
+    monkeypatch.setenv("SESSION_COOKIE_SAMESITE", "sideways")
+    with pytest.raises(ConfigError):
+        load_settings(_env_file=None)
+
+
+def test_a_short_session_secret_disables_sign_in_and_warns(monkeypatch, caplog):
+    for name in ("DISCORD_CLIENT_ID", "DISCORD_CLIENT_SECRET"):
+        monkeypatch.setenv(name, "set")
+    monkeypatch.setenv("SESSION_SECRET", "x" * (SESSION_SECRET_MIN - 1))
+    with caplog.at_level("WARNING"):
+        short = load_settings(_env_file=None)
+    assert short.site_login_configured is False
+    assert "SESSION_SECRET" in caplog.text
+
+    monkeypatch.setenv("SESSION_SECRET", "x" * SESSION_SECRET_MIN)
+    assert load_settings(_env_file=None).site_login_configured is True

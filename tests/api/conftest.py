@@ -7,13 +7,14 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from black_bloc.api.server import create_app
+from black_bloc.api.server import SAME_ORIGIN, SAME_SITE_HEADER, create_app
 from black_bloc.config import load_settings
 from black_bloc.settings_store import SettingsStore
 from black_bloc.storage.db import Database
 
-SECRET = "test-session-secret"
+SECRET = "test-session-secret-long-enough-to-sign"
 ORIGIN = "https://testserver"
+SAME_SITE = {SAME_SITE_HEADER: SAME_ORIGIN}
 GUILD_ID = 4242
 STAFF_ROLE_ID = 11
 PLAIN_ROLE_ID = 22
@@ -314,7 +315,8 @@ async def web(web_settings, guild, web_db):
 
 @pytest.fixture
 def client(web):
-    return TestClient(create_app(web), base_url=ORIGIN)
+    """The header a browser sends from the dashboard's own page; without it every write is 403."""
+    return TestClient(create_app(web), base_url=ORIGIN, headers=SAME_SITE)
 
 
 def member(guild: Any, user_id: int, *, name: str = "", staff: bool = False) -> WebMember:
@@ -341,6 +343,7 @@ def wf():
         kinds_in=kinds_in,
         SECRET=SECRET,
         ORIGIN=ORIGIN,
+        SAME_SITE=SAME_SITE,
         GUILD_ID=GUILD_ID,
         STAFF_ROLE_ID=STAFF_ROLE_ID,
         PLAIN_ROLE_ID=PLAIN_ROLE_ID,
