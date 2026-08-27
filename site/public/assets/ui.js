@@ -868,9 +868,16 @@ export async function settingsPanel(specs, { onSaved = null, empty = 'This part 
   ]);
 }
 
-export async function namespaceSettings(namespace, { title = 'Settings', note = null, onSaved = null } = {}) {
+/** `omit` is how a key that has its own editor higher up the page keeps one home. */
+export async function namespaceSettings(namespace, {
+  title = 'Settings',
+  note = null,
+  onSaved = null,
+  omit = [],
+} = {}) {
   const payload = await settings();
-  const specs = settingsNamespace(payload, namespace);
+  const skip = new Set(omit);
+  const specs = settingsNamespace(payload, namespace).filter((spec) => !skip.has(spec.key));
   const group = section(title, note, { count: specs.length || null });
   group.body.append(await settingsPanel(specs, {
     onSaved,
