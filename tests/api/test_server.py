@@ -1,8 +1,10 @@
+import re
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
+from black_bloc.api.assets import NO_STORE, REVALIDATE
 from black_bloc.api.server import (
     NO_STORE_HEADERS,
     SAME_ORIGIN,
@@ -74,6 +76,21 @@ def test_every_page_asks_for_the_favicon_this_app_can_actually_serve(bot):
 
     assert response.status_code == 200
     assert response.content[:4] == b"\x00\x00\x01\x00"
+
+
+def test_every_page_carries_the_build_id_on_every_asset_it_asks_for(bot):
+    """Returning browsers rendered a deploy-old site.css until a hard reload."""
+    client = client_for(bot)
+    for page in sorted(Path(bot.settings.site_root).glob("*.html")):
+        html = client.get(f"/{page.name}").text
+        assert re.search(r'(?:href|src)="/assets/[^"?#]+"', html) is None, page
+        assert "?v=" in html, page
+
+
+def test_the_page_is_never_stored_and_the_assets_are_revalidated(bot):
+    client = client_for(bot)
+    assert client.get("/index.html").headers["Cache-Control"] == NO_STORE
+    assert client.get("/assets/app.js").headers["Cache-Control"] == REVALIDATE
 
 
 def test_the_api_still_runs_when_the_page_is_not_on_disk(bot, tmp_path):
@@ -186,9 +203,8 @@ def test_a_bodyless_delete_needs_no_content_type(client, sign_in):
     assert client.delete("/api/rolemenus/colours").status_code == 200
 
 
-def test_every_api_answer_is_no_store_and_the_page_is_not(bot):
+def test_every_api_answer_is_no_store(bot):
     for path in ("/api/status", "/api/auth/me"):
         headers = client_for(bot).get(path).headers
         for name, value in NO_STORE_HEADERS.items():
             assert headers[name] == value, path
-    assert "no-store" not in client_for(bot).get("/").headers.get("Cache-Control", "")

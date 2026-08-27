@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -20,6 +21,40 @@ const TYPES = {
   '.png': 'image/png',
   '.ico': 'image/x-icon',
 };
+
+// Mirrors black_bloc/api/assets.py: one build id over the bytes of everything the site
+// serves, stamped into every /assets URL, HTML never stored and assets revalidated.
+const MOCK_VERSION = '0.8.0-mock';
+const DIGEST_CHARS = 12;
+const ASSET_URL = /(href|src)="(\/assets\/[^"?#]+)"/g;
+const NO_STORE = 'no-store';
+const REVALIDATE = 'no-cache';
+
+async function filesUnder(root) {
+  const found = [];
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    const full = join(root, entry.name);
+    if (entry.isDirectory()) found.push(...await filesUnder(full));
+    else if (entry.isFile()) found.push(full);
+  }
+  return found;
+}
+
+async function buildId() {
+  const digest = createHash('sha256').update(MOCK_VERSION);
+  const files = (await filesUnder(PUBLIC)).sort();
+  for (const file of files) {
+    digest.update(file.slice(PUBLIC.length + 1).split('\\').join('/'));
+    digest.update(await readFile(file));
+  }
+  return `${MOCK_VERSION}-${digest.digest('hex').slice(0, DIGEST_CHARS)}`;
+}
+
+const BUILD = await buildId();
+
+function stamp(html) {
+  return html.replace(ASSET_URL, (whole, attr, url) => `${attr}="${url}?v=${BUILD}"`);
+}
 
 const NOT_SIGNED_IN = 'You are not signed in yet. Sign in with the Discord account you moderate Black in a Flash! with.';
 const NOT_STAFF = 'This dashboard is for the mods and admins of Black in a Flash!. Your Discord account is signed in, but it does not hold a staff role. Ask a Lead for the role.';
@@ -1363,10 +1398,11 @@ async function serveStatic(request, response, path, asked) {
   try {
     const info = await stat(target);
     if (info.isDirectory()) throw new Error('directory');
-    const body = await readFile(target);
+    const html = extname(target) === '.html';
+    const body = html ? stamp(await readFile(target, 'utf8')) : await readFile(target);
     response.writeHead(200, {
       'content-type': TYPES[extname(target)] || 'application/octet-stream',
-      'cache-control': 'no-store',
+      'cache-control': html ? NO_STORE : REVALIDATE,
       ...cookie,
     });
     response.end(body);

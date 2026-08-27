@@ -8,10 +8,10 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 
 from .. import __version__
 from . import auth, ref, settings_api, status
+from .assets import NO_STORE, SiteFiles, build_id
 from .auth import Refused, refused_handler, validation_handler
 from .status import latency_ms
 from .tools import (
@@ -38,7 +38,7 @@ SECURITY_HEADERS = {
     "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
 }
-NO_STORE_HEADERS = {"Cache-Control": "no-store", "Pragma": "no-cache"}
+NO_STORE_HEADERS = {"Cache-Control": NO_STORE, "Pragma": "no-cache"}
 
 API_PREFIX = "/api"
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
@@ -145,7 +145,9 @@ def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
 
     root = Path(bot.settings.site_root)
     if root.is_dir():
-        app.mount("/", StaticFiles(directory=root, html=True), name="site")
+        build = build_id(root)
+        log.info("site: build id %s", build)
+        app.mount("/", SiteFiles(directory=root, build=build), name="site")
     else:
         log.warning("api: %s is not a directory — serving the API without the page", root)
     return app

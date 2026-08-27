@@ -111,6 +111,16 @@ async function checkPages() {
     }
     if (!html.includes('id="dash"')) fail(`GET ${page}`, 'has no #dash for a page module to fill');
     if (!html.includes('id="tabnav"')) fail(`GET ${page}`, 'has no #tabnav for the shared nav');
+    if (/(?:href|src)="\/assets\/[^"?#]+"/.test(html)) {
+      fail(`GET ${page}`, 'serves an /assets URL with no ?v= build id, so a deploy leaves it cached');
+    }
+    if (response.headers.get('cache-control') !== 'no-store') {
+      fail(`GET ${page}`, `answered cache-control ${response.headers.get('cache-control')}, not no-store`);
+    }
+  }
+  const asset = await fetch(`${BASE}/assets/site.css`);
+  if (asset.headers.get('cache-control') !== 'no-cache') {
+    fail('GET /assets/site.css', `answered cache-control ${asset.headers.get('cache-control')}, not no-cache`);
   }
 }
 
