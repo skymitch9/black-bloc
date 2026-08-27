@@ -145,7 +145,9 @@ async function load() {
 
   const hasMore = payload && payload.pages ? state.page < payload.pages : rows.length >= 10;
 
-  const cases = section('Cases', state.userName ? `Filtered to ${state.userName}.` : null);
+  const cases = section('Cases', state.userName ? `Filtered to ${state.userName}.` : null, {
+    count: rows.length,
+  });
   cases.body.append(
     picker.node,
     casesTable,
@@ -159,12 +161,18 @@ async function load() {
       },
     }),
   );
-  if (state.openCase !== null) cases.body.append(await caseDetail(state.openCase));
 
   const act = section('Action bar', 'Every one of these is the same code path as the slash command, and lands in the same case table.');
   act.body.append(actionBar());
 
-  document.getElementById('dash').replaceChildren(act.node, cases.node);
+  const nodes = [act.node, cases.node];
+  if (state.openCase !== null) {
+    const detail = section(`Case ${state.openCase}`, null, { id: 'case', open: true });
+    detail.body.append(await caseDetail(state.openCase));
+    nodes.push(detail.node);
+  }
+
+  document.getElementById('dash').replaceChildren(...nodes);
 }
 
 refresh = start({

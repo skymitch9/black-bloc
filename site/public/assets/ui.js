@@ -110,7 +110,41 @@ export function filterRows(root, query) {
   return { shown, total };
 }
 
-export function section(title, note, { count = null, id = null } = {}) {
+/**
+ * A search box over a box of cards rather than over table rows — the automod
+ * rule book and the twelve months of birthdays are both piles of cards, and
+ * one filter over the pile beats a box on each card in it. The "nothing
+ * matches" line is put inside `root` so it lands under the cards it is about.
+ */
+export function searchOver(root, {
+  label = 'Search',
+  placeholder = 'type to filter',
+  selector = '.card',
+  noun = 'card(s)',
+  empty = 'Nothing here matches what you typed.',
+} = {}) {
+  const said = el('span', { class: 'table-count' });
+  const none = sayNothing(empty);
+  none.hidden = true;
+  root.append(none);
+  const paint = (query) => {
+    let shown = 0;
+    let total = 0;
+    for (const node of root.querySelectorAll(selector)) {
+      total += 1;
+      const hit = query === '' || node.textContent.toLowerCase().includes(query);
+      node.hidden = !hit;
+      if (hit) shown += 1;
+    }
+    said.textContent = query === '' ? `${total} ${noun}` : `${shown} of ${total}`;
+    none.hidden = shown > 0;
+  };
+  const input = searchBox({ label, placeholder, onQuery: paint });
+  paint('');
+  return el('div', { class: 'table-tools' }, [input, said]);
+}
+
+export function section(title, note, { count = null, id = null, open = false } = {}) {
   const body = el('div', { class: 'section-body' });
   const slug = id || slugOf(title);
   const countNode = el('span', { class: 'sect-count', hidden: true });
@@ -131,6 +165,7 @@ export function section(title, note, { count = null, id = null } = {}) {
     id: `sect-${slug}`,
     'data-sect': slug,
     'data-title': title,
+    'data-open': open ? '1' : undefined,
   }, [details]);
 
   const setCount = (value) => {

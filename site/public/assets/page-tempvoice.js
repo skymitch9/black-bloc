@@ -50,7 +50,9 @@ async function load() {
     say,
   ]);
 
-  const one = section('Open now', 'These are live from Discord, not a stored guess.');
+  const one = section('Open now', 'These are live from Discord, not a stored guess.', {
+    count: rows.length,
+  });
   one.body.append(list);
   const two = section('Setup');
   two.body.append(setup);

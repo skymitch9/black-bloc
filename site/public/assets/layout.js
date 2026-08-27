@@ -63,10 +63,20 @@ function paintCount(node) {
   return found;
 }
 
+/**
+ * First section open, the rest shut, unless this page remembers otherwise.
+ * data-open="1" outranks both: it marks a panel the person just asked for —
+ * an opened case, a ticket, the menu editor — and shutting that would undo
+ * the click that made it.
+ */
 function apply(sections, saved) {
   sections.forEach((node, at) => {
     const details = node.querySelector('details.sect-card');
     if (!details) return;
+    if (node.getAttribute('data-open') === '1') {
+      details.open = true;
+      return;
+    }
     const slug = node.getAttribute('data-sect');
     const known = saved && slug in saved ? saved[slug] === true : null;
     details.open = known === null ? at === 0 : known;

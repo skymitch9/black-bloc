@@ -98,8 +98,12 @@ async function load() {
     { label: '', cell: (row) => decide(row, say) },
   ], rows, { empty: 'Nothing matches that.' });
 
-  const one = section('Queue', 'Approve, deny and cancel go through the same lock and the same allowed-transition check as the buttons in Discord.');
-  one.body.append(field('Show', status), queue, say);
+  const one = section(
+    'Queue',
+    'Approve, deny and cancel go through the same lock and the same allowed-transition check as the buttons in Discord.',
+    { count: rows.length },
+  );
+  one.body.append(bar([field('Show', status)], { sticky: true }), queue, say);
 
   document.getElementById('dash').replaceChildren(one.node, await namespaceSettings('events'));
 }

@@ -15,6 +15,7 @@ import {
   notice,
   run,
   sayNothing,
+  searchOver,
   section,
   table,
 } from './ui.js';
@@ -118,14 +119,29 @@ async function load() {
         if (done.ok) refresh();
       }, { tone: 'danger' }),
     },
-  ], list.slice().sort((a, b) => a.day - b.day));
+    // One filter over all twelve months, not a box on each — a month with two
+    // people in it does not need its own search.
+  ], list.slice().sort((a, b) => a.day - b.day), { search: false });
 
-  const months = section('By month', `${rows.length} birthday(s) stored.`);
-  if (rows.length === 0) months.body.append(sayNothing('No birthdays are stored yet.'));
-  for (let at = 1; at <= 12; at += 1) {
-    const list = byMonth.get(at);
-    if (!list || list.length === 0) continue;
-    months.body.append(card(MONTHS[at - 1], [monthTable(list)]));
+  const months = section('By month', `${rows.length} birthday(s) stored.`, { count: rows.length });
+  if (rows.length === 0) {
+    months.body.append(sayNothing('No birthdays are stored yet.'));
+  } else {
+    const box = el('div', { class: 'section-body' });
+    for (let at = 1; at <= 12; at += 1) {
+      const list = byMonth.get(at);
+      if (!list || list.length === 0) continue;
+      box.append(card(MONTHS[at - 1], [monthTable(list)]));
+    }
+    months.body.append(
+      searchOver(box, {
+        label: 'Search the birthday list',
+        placeholder: 'a name, a month or a day',
+        noun: 'month(s)',
+        empty: 'No month has anybody matching that.',
+      }),
+      box,
+    );
   }
   months.body.append(say);
 

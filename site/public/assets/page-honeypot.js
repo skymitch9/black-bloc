@@ -77,7 +77,11 @@ async function load() {
     ]),
   ]);
 
-  const one = section('Hits', 'In shadow the trap only writes down what it would have done; Ban now is how a shadow hit gets carried out.');
+  const one = section(
+    'Hits',
+    'In shadow the trap only writes down what it would have done; Ban now is how a shadow hit gets carried out.',
+    { count: rows.length },
+  );
   one.body.append(list, say);
   const two = section('Trap channels');
   two.body.append(setup);

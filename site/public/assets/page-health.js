@@ -107,11 +107,13 @@ async function load() {
   const notes = notesOf(status).concat(notesOf(log));
   const one = section('Health');
   one.body.append(health(status));
-  const two = section('Features', 'Every feature’s mode, read from the settings the slash commands write.');
+  const two = section('Features', 'Every feature’s mode, read from the settings the slash commands write.', {
+    count: (status.features || []).length || null,
+  });
   two.body.append(features(status));
-  const three = section('Loops');
+  const three = section('Loops', null, { count: (status.loops || []).length || null });
   three.body.append(loops(status));
-  const four = section('Last 50 actions');
+  const four = section('Last 50 actions', null, { count: items.length });
   four.body.append(actions(items));
 
   document.getElementById('dash').replaceChildren(

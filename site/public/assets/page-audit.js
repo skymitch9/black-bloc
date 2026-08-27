@@ -63,7 +63,9 @@ async function load() {
     refresh();
   }, { tone: 'quiet' });
 
-  const one = section('Settings audit', 'Every settings change, whoever made it and however they made it.');
+  const one = section('Settings audit', 'Every settings change, whoever made it and however they made it.', {
+    count: auditRows.length,
+  });
   one.body.append(settingsTable(auditRows));
 
   const two = section(
@@ -71,9 +73,10 @@ async function load() {
     kindFilter
       ? 'Filtered by the kind you typed; the bot decides how loosely that matches.'
       : 'Web writes log a web.* kind, so the log tells a dashboard change apart from a slash command.',
+    { count: actionRows.length, id: 'actions' },
   );
   two.body.append(
-    el('div', { class: 'formrow' }, [field('Action kind', kind), bar([apply, clear])]),
+    bar([field('Action kind', kind), apply, clear], { sticky: true }),
     actionsTable(actionRows),
   );
 

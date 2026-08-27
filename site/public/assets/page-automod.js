@@ -10,6 +10,7 @@ import {
   notice,
   run,
   sayNothing,
+  searchOver,
   section,
   settingRow,
 } from './ui.js';
@@ -62,7 +63,7 @@ function ruleCard(rule) {
     if (done.ok) refresh();
   });
 
-  return card(rule.name, [
+  const node = card(rule.name, [
     rule.help ? el('p', { class: 'field-help', text: rule.help }) : null,
     el('div', { class: 'formrow' }, [
       field('Enabled', enabled),
@@ -75,6 +76,8 @@ function ruleCard(rule) {
     bar([save]),
     say,
   ]);
+  node.setAttribute('data-rule', rule.name);
+  return node;
 }
 
 async function load() {
@@ -92,12 +95,27 @@ async function load() {
     ? await settingRow(mode, { onSaved: () => refresh() })
     : sayNothing('The bot did not report an automod_mode key, so this switch is not shown rather than guessed at.'));
 
-  const book = section('Rules', 'Each rule is a burst counter: how many in how long, and what happens then.');
-  book.body.append(rules.length
-    ? el('div', { class: 'settings-grid' }, rules.map(ruleCard))
-    : sayNothing('Automod reports no rules at all.'));
+  const book = section('Rules', 'Each rule is a burst counter: how many in how long, and what happens then.', {
+    count: rules.length || null,
+  });
+  if (rules.length) {
+    const box = el('div', { class: 'settings-grid' }, rules.map(ruleCard));
+    book.body.append(
+      searchOver(box, {
+        label: 'Search the rule book',
+        placeholder: 'a rule name, or what it does — spam, caps, invite',
+        noun: 'rule(s)',
+        empty: 'No rule matches what you typed.',
+      }),
+      box,
+    );
+  } else {
+    book.body.append(sayNothing('Automod reports no rules at all.'));
+  }
 
-  const exemptions = section('Exemptions', 'Staff are always exempt on top of whatever is listed here.');
+  const exemptions = section('Exemptions', 'Staff are always exempt on top of whatever is listed here.', {
+    count: exempt.length || null,
+  });
   for (const spec of exempt) exemptions.body.append(await settingRow(spec));
   if (exempt.length === 0) exemptions.body.append(sayNothing('No exemption keys are registered.'));
 
