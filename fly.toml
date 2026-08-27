@@ -1,5 +1,5 @@
-# Fly.io app definition — UNVERIFIED: written 2026-08-26, not yet deployed.
-# `fly launch --no-deploy` will offer to rewrite this; keep the [mounts] block.
+# Fly.io app definition — deployed 2026-08-26 (machine 85e744c4d959d8, lax).
+# Do not run `fly launch`; it rewrites this file. Deploy with --ha=false.
 # Runbook: docs/access/deploy.md
 
 app = "black-bloc"
