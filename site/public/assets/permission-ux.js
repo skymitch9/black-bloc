@@ -6,8 +6,10 @@
  * dependency in either direction. A sixth estate theme reaches this site only
  * if somebody copies this file in again.
  *
- * The BODY below is the estate file verbatim, so a future re-copy stays
- * diffable. Its comments still describe the estate's own pages and repos;
+ * ⚠️ The BODY below is the estate file verbatim EXCEPT for one hunk marked
+ * "BLACK BLOC EDIT" (a non-string `detail` is not a sentence). Keep that
+ * marker so a future re-copy is a three-line reapply rather than a diff
+ * nobody can read. Its comments still describe the estate's own pages and repos;
  * none of that applies here. What matters is behaviour, and none of these
  * files opens a socket: they read localStorage and stamp attributes. This
  * page talks to its own origin and to the API origin, and to nothing else.
@@ -62,7 +64,11 @@ export function describeHttpFailure(status, body, opts) {
     const need = o.need ? ` That needs ${o.need}.` : '';
     return `You don't have permission to do that.${need} Ask an admin.`;
   }
-  const serverSaid = body && (body.detail || body.error);
-  if (serverSaid) return o.fallback ? `${o.fallback} (${serverSaid})` : String(serverSaid);
+  // BLACK BLOC EDIT: only a STRING is a sentence. FastAPI's validation errors
+  // put a list of objects in `detail`, and String()-ing that shows a person
+  // "[object Object]" — which is a bare status wearing a hat.
+  const said = body && (body.detail ?? body.error);
+  const serverSaid = typeof said === 'string' && said.trim() ? said : null;
+  if (serverSaid) return o.fallback ? `${o.fallback} (${serverSaid})` : serverSaid;
   return o.fallback || 'Something went wrong on the server. Try again shortly.';
 }

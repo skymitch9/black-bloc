@@ -60,6 +60,13 @@ def test_the_api_still_runs_when_the_page_is_not_on_disk(bot, tmp_path):
     assert client_for(bot).get("/health").status_code == 200
 
 
+def test_the_schema_and_the_docs_are_not_published(bot):
+    """This app is the public front door now — its route list is not a page."""
+    client = client_for(bot)
+    for path in ("/openapi.json", "/docs", "/redoc"):
+        assert client.get(path).status_code == 404, path
+
+
 def test_a_refusal_never_leaks_a_bare_status(bot):
     body = client_for(bot).get("/api/status").json()
     assert set(body) == {"error", "message"}

@@ -25,6 +25,9 @@ SESSION_COOKIE = "__Host-bb_session"
 STATE_COOKIE = "__Host-bb_state"
 STATE_TTL_SECONDS = 600
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
+LOGIN_RATE = 10
+LOGIN_WINDOW_SECONDS = 60
+BUCKET_MAX_KEYS = 4096
 
 NOT_SIGNED_IN = (
     "You are not signed in, so there is nothing to show yet. Sign in with the Discord account "
@@ -52,6 +55,14 @@ LOGIN_FAILED = (
     "Discord could not complete the sign-in, so nobody was signed in. This is a fault on the way "
     "to Discord and not a permission problem — try again in a moment."
 )
+SLOW_DOWN = (
+    "That is more sign-in attempts than Black Bloc will take in a minute, so this one was not "
+    "started. Nothing is wrong with your account — wait a minute and try again."
+)
+BAD_REQUEST = (
+    "That request did not make sense to Black Bloc, so nothing was done. It is a fault in the "
+    "link or the page rather than a problem with your access — start again from this page."
+)
 
 
 class OAuthError(RuntimeError):
@@ -68,11 +79,13 @@ class Refused(Exception):
         self.message = message
 
 
-async def refused_handler(request: Request, exc: Exception) -> JSONResponse:
-    refused = exc if isinstance(exc, Refused) else Refused(500, "server_error", LOGIN_FAILED)
-    return JSONResponse(
-        {"error": refused.error, "message": refused.message}, status_code=refused.status
-    )
+async def refused_handler(request: Request, exc: Refused) -> JSONResponse:
+    return JSONResponse({"error": exc.error, "message": exc.message}, status_code=exc.status)
+
+
+async def validation_handler(request: Request, exc: Exception) -> JSONResponse:
+    """A malformed query string is a sentence, not FastAPI's `detail` list."""
+    return JSONResponse({"error": "bad_request", "message": BAD_REQUEST}, status_code=400)
 
 
 def _b64e(raw: bytes) -> str:
@@ -301,6 +314,39 @@ class DiscordOAuth:
         return payload
 
 
+def client_ip(request: Request) -> str:
+    """Fly's own header first; it is the one the proxy sets and a caller cannot forge."""
+    for header in ("fly-client-ip", "x-forwarded-for"):
+        value = request.headers.get(header)
+        if value:
+            return value.split(",")[0].strip()
+    return getattr(request.client, "host", None) or "unknown"
+
+
+class TokenBucket:
+    """LOGIN_RATE attempts a minute per client IP, refilled continuously."""
+
+    def __init__(self, limit: int = LOGIN_RATE, window: float = LOGIN_WINDOW_SECONDS) -> None:
+        self.limit = limit
+        self.window = window
+        self._seen: dict[str, tuple[float, float]] = {}
+
+    def take(self, key: str, *, now: float | None = None) -> bool:
+        at = time.time() if now is None else now
+        tokens, stamp = self._seen.get(key, (float(self.limit), at))
+        tokens = min(float(self.limit), tokens + (at - stamp) * self.limit / self.window)
+        allowed = tokens >= 1
+        self._seen[key] = (tokens - 1 if allowed else tokens, at)
+        self._prune(at)
+        return allowed
+
+    def _prune(self, at: float) -> None:
+        if len(self._seen) <= BUCKET_MAX_KEYS:
+            return
+        for key in [k for k, (_, stamp) in self._seen.items() if stamp < at - self.window]:
+            del self._seen[key]
+
+
 def state_matches(given: str | None, expected: str | None) -> bool:
     if not given or not expected:
         return False
@@ -319,6 +365,13 @@ def display_name(identity: dict[str, Any]) -> str:
 def build_router(bot: Any, *, oauth_request: Any = None) -> APIRouter:
     router = APIRouter(prefix="/api/auth", tags=["auth"])
     settings = bot.settings
+    attempts = TokenBucket()
+
+    def _rate_limit(request: Request) -> None:
+        who = client_ip(request)
+        if not attempts.take(who):
+            log.warning("auth: rate-limited %s", who)
+            raise Refused(429, "slow_down", SLOW_DOWN)
 
     def _client() -> DiscordOAuth:
         return DiscordOAuth(
@@ -332,7 +385,8 @@ def build_router(bot: Any, *, oauth_request: Any = None) -> APIRouter:
         return RedirectResponse(f"{settings.origin}/?signin={outcome}", status_code=303)
 
     @router.get("/login")
-    async def login() -> Any:
+    async def login(request: Request) -> Any:
+        _rate_limit(request)
         if not settings.site_login_configured:
             raise Refused(503, "login_unavailable", LOGIN_UNAVAILABLE)
         state = secrets.token_urlsafe(24)
@@ -359,13 +413,16 @@ def build_router(bot: Any, *, oauth_request: Any = None) -> APIRouter:
         state: str | None = None,
         error: str | None = None,
     ) -> Any:
+        _rate_limit(request)
         if not settings.site_login_configured:
             raise Refused(503, "login_unavailable", LOGIN_UNAVAILABLE)
         if error or not code:
             return _home("denied")
         if not state_matches(state, request.cookies.get(STATE_COOKIE)):
             log.warning("auth: callback rejected — the state cookie did not match")
-            return _home("state")
+            rejected = _home("state")
+            rejected.delete_cookie(STATE_COOKIE, **cookie_kwargs(settings))
+            return rejected
 
         client = _client()
         member: dict[str, Any] | None = None
@@ -436,12 +493,15 @@ def build_router(bot: Any, *, oauth_request: Any = None) -> APIRouter:
 __all__ = [
     "NOT_STAFF",
     "SESSION_COOKIE",
+    "SLOW_DOWN",
     "STAFF_UNKNOWN",
     "STATE_COOKIE",
     "DiscordOAuth",
     "OAuthError",
     "Refused",
+    "TokenBucket",
     "build_router",
+    "client_ip",
     "current_session",
     "guild_of",
     "is_admitted",
@@ -452,4 +512,5 @@ __all__ = [
     "sign_session",
     "staff_dependency",
     "state_matches",
+    "validation_handler",
 ]

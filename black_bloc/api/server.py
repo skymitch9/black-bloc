@@ -6,11 +6,12 @@ from typing import Any
 
 import uvicorn
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 
 from .. import __version__
 from . import auth, status
-from .auth import Refused, refused_handler
+from .auth import Refused, refused_handler, validation_handler
 from .status import latency_ms
 
 log = logging.getLogger(__name__)
@@ -28,13 +29,25 @@ SECURITY_HEADERS = {
 
 
 def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
-    app = FastAPI(title="Black Bloc API", version=__version__, docs_url=None, redoc_url=None)
+    app = FastAPI(
+        title="Black Bloc API",
+        version=__version__,
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+    )
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next: Any) -> Any:
         response = await call_next(request)
         for name, value in SECURITY_HEADERS.items():
             response.headers.setdefault(name, value)
+        return response
+
+    @app.middleware("http")
+    async def access_log(request: Request, call_next: Any) -> Any:
+        response = await call_next(request)
+        log.info("%s %s %d", request.method, request.url.path, response.status_code)
         return response
 
     @app.get("/health")
@@ -48,6 +61,7 @@ def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
         }
 
     app.add_exception_handler(Refused, refused_handler)
+    app.add_exception_handler(RequestValidationError, validation_handler)
     app.include_router(auth.build_router(bot, oauth_request=oauth_request))
     app.include_router(status.build_router(bot))
 
@@ -66,6 +80,8 @@ async def start_api(bot: Any) -> None:
         host=settings.api_host,
         port=settings.api_port,
         log_level=settings.log_level.lower(),
+        access_log=False,
+        forwarded_allow_ips="*",
     )
     server = uvicorn.Server(config)
     log.info("API listening on http://%s:%d", settings.api_host, settings.api_port)

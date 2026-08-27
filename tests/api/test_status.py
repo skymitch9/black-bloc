@@ -7,8 +7,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from black_bloc.api.server import create_app
-from black_bloc.api.status import loop_health, mode_keys, open_counts
-from black_bloc.settings_store import KEY_TYPES
+from black_bloc.api.status import DB_UNREACHABLE, loop_health, mode_keys, open_counts
+from black_bloc.settings_store import DB_UNAVAILABLE, KEY_TYPES
 from black_bloc.storage.db import Database
 
 
@@ -158,9 +158,37 @@ async def test_actions_returns_the_last_rows_newest_first(bot, db, sign_in, fake
     sign_in(client)
     body = client.get("/api/actions", params={"limit": 2}).json()
     assert [row["kind"] for row in body["actions"]] == ["kind.2", "kind.1"]
-    assert body["actions"][0]["details"] == {"n": 2}
     assert body["actions"][0]["actor_id"] == "9"
     assert body["limit"] == 2
+
+
+async def test_actions_withholds_details_unless_they_are_asked_for(bot, db, sign_in, fakes):
+    """F13: the blob can hold anything a feature put in it; the page never shows it."""
+    await db.conn.execute(
+        "INSERT INTO action_log(guild_id, at, kind, actor_id, reason, details) "
+        "VALUES (?, '2026-08-26T00:00:00+00:00', 'k', 9, 'because', ?)",
+        (fakes.GUILD_ID, json.dumps({"secretish": "value"})),
+    )
+    await db.conn.commit()
+    bot.db = db
+
+    client = client_for(bot)
+    sign_in(client)
+    assert "details" not in client.get("/api/actions").json()["actions"][0]
+    asked = client.get("/api/actions", params={"details": 1}).json()
+    assert asked["actions"][0]["details"] == {"secretish": "value"}
+
+
+def test_a_malformed_query_string_is_a_sentence(bot, sign_in):
+    """F11: FastAPI's own `detail` list is not something a person can read."""
+    client = client_for(bot)
+    sign_in(client)
+    response = client.get("/api/actions", params={"limit": "all of them"})
+    assert response.status_code == 400
+    body = response.json()
+    assert set(body) == {"error", "message"}
+    assert body["error"] == "bad_request"
+    assert body["message"].endswith(".")
 
 
 async def test_actions_clamps_a_silly_limit(bot, db, sign_in):
@@ -172,12 +200,15 @@ async def test_actions_clamps_a_silly_limit(bot, db, sign_in):
 
 
 def test_actions_says_the_database_is_unreachable_rather_than_returning_nothing(bot, sign_in):
+    """F12: the API's own read-shaped sentence, not the slash commands' write-shaped one."""
     client = client_for(bot)
     sign_in(client)
     response = client.get("/api/actions")
     assert response.status_code == 503
     assert response.json()["error"] == "database_unavailable"
-    assert "cannot reach its own database" in response.json()["message"]
+    assert response.json()["message"] == DB_UNREACHABLE
+    assert "nothing was changed" not in response.json()["message"]
+    assert response.json()["message"] != DB_UNAVAILABLE
 
 
 def test_loop_health_reports_running_and_the_health_a_cog_records(bot):

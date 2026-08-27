@@ -7,9 +7,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from black_bloc.api.auth import (
+    BUCKET_MAX_KEYS,
+    LOGIN_RATE,
     SESSION_COOKIE,
     STATE_COOKIE,
     Refused,
+    TokenBucket,
     current_session,
     is_admitted,
     read_session,
@@ -273,6 +276,72 @@ def test_a_non_ascii_state_is_a_mismatch_not_a_crash(bot):
     done = client.get("/api/auth/callback", params={"code": "abc", "state": "sté"})
     assert done.status_code == 303
     assert done.headers["location"].endswith("?signin=state")
+
+
+def test_a_rejected_state_clears_the_state_cookie(bot):
+    """F13: a state that did not match is spent — leaving it invites a replay."""
+    client = client_for(bot)
+    start_login(client)
+    done = client.get("/api/auth/callback", params={"code": "abc", "state": "forged"})
+    cleared = set_cookie(done, STATE_COOKIE)
+    assert "Max-Age=0" in cleared or "expires=Thu, 01 Jan 1970" in cleared
+    assert "; Secure" in cleared and "; Path=/" in cleared
+
+
+def login(client, headers: dict[str, str]):
+    return client.get("/api/auth/login", headers=headers)
+
+
+def test_sign_in_is_rate_limited_per_client_ip(bot):
+    """F4: ten a minute, and the eleventh is a sentence, not a bare 429."""
+    client = client_for(bot)
+    mine = {"Fly-Client-IP": "1.2.3.4"}
+    for _ in range(LOGIN_RATE):
+        assert login(client, mine).status_code == 303
+    refused = login(client, mine)
+    assert refused.status_code == 429
+    assert refused.json()["error"] == "slow_down"
+    assert "wait a minute" in refused.json()["message"]
+    assert login(client, {"Fly-Client-IP": "5.6.7.8"}).status_code == 303
+
+
+def test_the_callback_shares_the_limit(bot):
+    client = client_for(bot)
+    mine = {"Fly-Client-IP": "1.2.3.4"}
+    for _ in range(LOGIN_RATE):
+        login(client, mine)
+    refused = client.get("/api/auth/callback", params={"code": "abc"}, headers=mine)
+    assert refused.status_code == 429
+    assert refused.json()["error"] == "slow_down"
+
+
+def test_the_bucket_refills_and_cannot_grow_without_bound():
+    bucket = TokenBucket(limit=2, window=60)
+    assert bucket.take("a", now=0) and bucket.take("a", now=0)
+    assert not bucket.take("a", now=0)
+    assert bucket.take("a", now=31)
+    for n in range(BUCKET_MAX_KEYS + 500):
+        bucket.take(str(n), now=10_000)
+    crowded = len(bucket._seen)
+    for n in range(20_000, 20_100):
+        bucket.take(str(n), now=20_000)
+    assert len(bucket._seen) < crowded
+
+
+def test_a_forged_forwarded_header_cannot_mint_a_new_bucket(bot):
+    """Fly's proxy sets Fly-Client-IP; X-Forwarded-For is the caller's to write."""
+    client = client_for(bot)
+    for n in range(LOGIN_RATE):
+        login(client, {"Fly-Client-IP": "1.2.3.4", "X-Forwarded-For": f"9.9.9.{n}"})
+    refused = login(client, {"Fly-Client-IP": "1.2.3.4", "X-Forwarded-For": "9.9.9.99"})
+    assert refused.status_code == 429
+
+
+def test_the_forwarded_header_is_used_when_fly_sets_none(bot):
+    client = client_for(bot)
+    for _ in range(LOGIN_RATE):
+        login(client, {"X-Forwarded-For": "7.7.7.7, 10.0.0.1"})
+    assert login(client, {"X-Forwarded-For": "7.7.7.7"}).status_code == 429
 
 
 @pytest.mark.parametrize("raw", ["bódy.deadbeef", "body.mác", "é.é"])

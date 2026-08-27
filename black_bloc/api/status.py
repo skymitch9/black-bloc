@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends
 
 from .. import __version__
 from ..events import OPEN_STATUSES
-from ..settings_store import DB_UNAVAILABLE, KEY_TYPES
+from ..settings_store import KEY_TYPES
 from .auth import Refused, guild_of, staff_dependency
 
 log = logging.getLogger(__name__)
@@ -26,6 +26,10 @@ NO_GUILD = (
 COUNTS_UNAVAILABLE = (
     "The open counts could not be read because Black Bloc cannot reach its own database right "
     "now. They are left blank rather than shown as zero."
+)
+DB_UNREACHABLE = (
+    "Black Bloc's database is not reachable right now, so this page cannot load its data; try "
+    "again in a minute."
 )
 
 
@@ -144,24 +148,29 @@ def _details(raw: Any) -> Any:
         return str(raw)
 
 
-async def recent_actions(bot: Any, guild_id: int, limit: int) -> list[dict[str, Any]]:
+def _action(row: Any, with_details: bool) -> dict[str, Any]:
+    found = {
+        "id": row["id"],
+        "at": row["at"],
+        "kind": row["kind"],
+        "actor_id": str(row["actor_id"]) if row["actor_id"] is not None else None,
+        "target_id": str(row["target_id"]) if row["target_id"] is not None else None,
+        "reason": row["reason"],
+    }
+    if with_details:
+        found["details"] = _details(row["details"])
+    return found
+
+
+async def recent_actions(
+    bot: Any, guild_id: int, limit: int, *, with_details: bool = False
+) -> list[dict[str, Any]]:
     cur = await bot.db.conn.execute(
         "SELECT id, at, kind, actor_id, target_id, reason, details FROM action_log "
         "WHERE guild_id = ? ORDER BY id DESC LIMIT ?",
         (guild_id, limit),
     )
-    return [
-        {
-            "id": row["id"],
-            "at": row["at"],
-            "kind": row["kind"],
-            "actor_id": str(row["actor_id"]) if row["actor_id"] is not None else None,
-            "target_id": str(row["target_id"]) if row["target_id"] is not None else None,
-            "reason": row["reason"],
-            "details": _details(row["details"]),
-        }
-        for row in await cur.fetchall()
-    ]
+    return [_action(row, with_details) for row in await cur.fetchall()]
 
 
 def build_router(bot: Any) -> APIRouter:
@@ -204,14 +213,15 @@ def build_router(bot: Any) -> APIRouter:
         }
 
     @router.get("/actions")
-    async def actions(limit: int = ACTIONS_DEFAULT_LIMIT) -> dict[str, Any]:
+    async def actions(limit: int = ACTIONS_DEFAULT_LIMIT, details: int = 0) -> dict[str, Any]:
         limit = max(1, min(limit, ACTIONS_MAX_LIMIT))
         guild = guild_of(bot)
         if guild is None:
             return {"actions": [], "limit": limit, "notes": [NO_GUILD]}
         db = getattr(bot, "db", None)
         if db is None or not db.is_connected:
-            raise Refused(503, "database_unavailable", DB_UNAVAILABLE)
-        return {"actions": await recent_actions(bot, guild.id, limit), "limit": limit, "notes": []}
+            raise Refused(503, "database_unavailable", DB_UNREACHABLE)
+        rows = await recent_actions(bot, guild.id, limit, with_details=bool(details))
+        return {"actions": rows, "limit": limit, "notes": []}
 
     return router

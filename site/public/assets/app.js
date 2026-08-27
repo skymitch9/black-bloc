@@ -67,12 +67,25 @@ function refuse({ title, message, note = null, state = null, canSignIn = false, 
 
 class Outage extends Error {}
 
+// A bot that accepts the connection and then never answers looks identical to
+// a working page that never finishes loading. Ten seconds, then the outage
+// state with its retry button.
+const TIMEOUT_MS = 10000;
+
 async function api(path, options = {}) {
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), TIMEOUT_MS);
   let response;
   try {
-    response = await fetch(`${API}${path}`, { credentials: 'same-origin', ...options });
+    response = await fetch(`${API}${path}`, {
+      credentials: 'same-origin',
+      signal: abort.signal,
+      ...options,
+    });
   } catch (e) {
     throw new Outage(String(e));
+  } finally {
+    clearTimeout(timer);
   }
   let body = null;
   try { body = await response.json(); } catch (e) { body = null; }
@@ -270,7 +283,10 @@ function renderActions(payload) {
 // ---- the boot sequence -----------------------------------------------------
 
 async function loadDashboard() {
-  const [status, actions] = await Promise.all([api('/api/status'), api('/api/actions?limit=50')]);
+    const [status, actions] = await Promise.all([
+    api('/api/status'),
+    api('/api/actions?limit=50'),
+  ]);
   renderHealth(status);
   renderFeatures(status);
   renderLoops(status);
@@ -319,6 +335,9 @@ function returnedFromDiscord() {
 
 async function boot() {
   const complaint = returnedFromDiscord();
+  // Before the first await, so a slow or dead API shows the "Checking…" row
+  // rather than a blank page for ten seconds.
+  show('gate');
   try {
     const me = await api('/api/auth/me');
     if (me.state === 'staff_unknown') {
