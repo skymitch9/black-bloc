@@ -8,6 +8,7 @@ from discord.ext import commands
 
 from .. import __version__
 from ..actionlog import log_action
+from ..command_visibility import hidden_names
 from ..modcases import pages_under_limit
 from ..settings_store import (
     KEY_HELP,
@@ -106,7 +107,13 @@ class Core(commands.Cog):
     async def help_command(
         self, interaction: discord.Interaction, filter: str | None = None
     ) -> None:
-        entries = tree_commands(self.bot.tree, self._help_guild(interaction))
+        guild = self._help_guild(interaction)
+        hidden = hidden_names(self.bot, getattr(guild, "id", None))
+        entries = [
+            command
+            for command in tree_commands(self.bot.tree, guild)
+            if command.name not in hidden
+        ]
         lines = help_lines(entries, filter or "")
         if not lines:
             await interaction.response.send_message(

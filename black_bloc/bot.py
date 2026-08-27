@@ -8,6 +8,7 @@ from discord.ext import commands
 
 from .command_errors import install as install_error_handler
 from .command_sync import sync_dev_guild
+from .command_visibility import install as install_visibility
 from .config import Settings
 from .guard import TestModeGuard
 from .intents import build_intents
@@ -57,6 +58,7 @@ class BlackBlocBot(commands.Bot):
         log.info("invite URL: %s", invite_url(self))
         await self._load_cogs()
         await sync_dev_guild(self, self.settings.dev_guild_id)
+        install_visibility(self)
         self._start_api()
 
     async def _load_cogs(self) -> None:
@@ -76,6 +78,9 @@ class BlackBlocBot(commands.Bot):
         log.info("logged in as %s (%s); %d guild(s)", self.user, self.user.id, len(self.guilds))
 
     async def close(self) -> None:
+        visibility = getattr(self, "command_visibility", None)
+        if visibility is not None and visibility.task is not None:
+            visibility.task.cancel()
         for task in self._background:
             task.cancel()
         await self.db.close()

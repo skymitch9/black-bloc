@@ -24,10 +24,13 @@ import {
 
 const MODE_KEY = 'rolemenu_mode';
 const STAYS_POSTED = 'Panels stay posted; members see “turned off” until you switch this on, so ' +
-  'turning it back on is instant. Staff can still build and edit menus while it is off.';
-const TURNED_ON = 'On. Every panel already posted hands out roles again straight away.';
+  'turning it back on is instant. Staff can still build and edit menus from here while it is ' +
+  'off — but turning this off also hides the /rolemenu commands in Discord until it is back on.';
+const TURNED_ON = 'On. Every panel already posted hands out roles again straight away, and the ' +
+  '/rolemenu commands come back within about five seconds.';
 const TURNED_OFF = 'Off. The panels stay where they are; a click on one now says role menus are ' +
-  'turned off and changes nobody’s roles.';
+  'turned off and changes nobody’s roles. The /rolemenu commands disappear from Discord within ' +
+  'about five seconds.';
 const NO_KEY = 'The bot did not report a rolemenu_mode key, so this switch is not shown rather ' +
   'than guessed at.';
 

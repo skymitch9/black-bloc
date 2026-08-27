@@ -483,6 +483,38 @@ async def test_a_setting_can_be_unset_again(store):
         await store.clear(1, "nonsense_id")
 
 
+async def test_a_change_hook_hears_every_set_and_clear_of_its_own_key(store):
+    heard = []
+    store.on_change("rolemenu_mode", lambda *seen: heard.append(seen))
+
+    await store.set(1, "rolemenu_mode", "on", by=9)
+    await store.set(1, "birthday_role_id", 42)
+    await store.clear(1, "rolemenu_mode", by=9)
+    await store.clear(1, "rolemenu_mode")
+
+    assert heard == [(1, "rolemenu_mode", "on", 9), (1, "rolemenu_mode", "off", 9)]
+
+
+async def test_a_change_hook_may_be_async_and_a_broken_one_does_not_stop_the_write(store):
+    heard = []
+
+    async def slow(guild_id, key, value, by):
+        heard.append(value)
+
+    def broken(guild_id, key, value, by):
+        raise RuntimeError("no")
+
+    store.on_change("rolemenu_mode", broken)
+    store.on_change("rolemenu_mode", slow)
+
+    await store.set(1, "rolemenu_mode", "on")
+
+    assert heard == ["on"]
+    assert store.get(1, "rolemenu_mode") == "on"
+    with pytest.raises(SettingError, match="not a Black Bloc setting"):
+        store.on_change("nonsense_mode", broken)
+
+
 async def test_modmail_defaults_point_nowhere_real_while_test_mode_is_on(store):
     assert store.get(1, "modmail_enabled") is False
     assert store.get(1, "modmail_mode") == CHANNEL_MODE

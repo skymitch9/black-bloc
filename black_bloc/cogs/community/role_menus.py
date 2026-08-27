@@ -96,7 +96,16 @@ SEED: tuple[tuple[str, str, str, tuple[tuple[str, str, int], ...]], ...] = (
 
 ROLE_MENUS_OFF = (
     "Role menus are turned off right now, so nothing was changed. A Lead can turn them back on "
-    "from the dashboard's Role menus tab or with `/rolemenu mode on`."
+    "from the dashboard's Role menus tab or with `/settings set-value rolemenu_mode on`."
+)
+MODE_ON = (
+    "Every panel already posted works again straight away, and the `/rolemenu` commands come "
+    "back in a few seconds."
+)
+MODE_OFF = (
+    "The panels stay where they are; a click now says they are turned off. The `/rolemenu` "
+    "commands disappear from Discord in a few seconds — the dashboard's Role menus tab and "
+    "`/settings set-value rolemenu_mode on` bring them back."
 )
 NOT_IN_GUILD = (
     "Role menus only work inside the server, and this click did not come from one, so no "
@@ -880,11 +889,7 @@ class RoleMenus(commands.Cog):
         )
         await interaction.response.send_message(
             f"Picking roles from the panels is now **{mode.value}**. "
-            + (
-                "Every panel already posted works again straight away."
-                if mode.value == "on"
-                else "The panels stay where they are; a click now says they are turned off."
-            ),
+            + (MODE_ON if mode.value == "on" else MODE_OFF),
             ephemeral=True,
         )
         await log_action(

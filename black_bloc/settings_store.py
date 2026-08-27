@@ -4,6 +4,7 @@ import json
 import logging
 import re
 from datetime import UTC, datetime
+from inspect import isawaitable
 from typing import Any
 
 from .automod import (
@@ -221,7 +222,10 @@ KEY_HELP: dict[str, str] = {
     "mod_dm_on_action": "what a punished member is told: none, server_action, server_action_reason",
     "bot_bio": "the About Me on Black Bloc's own profile, dashboard link and all",
     "status_prefix": "what goes in front of the member count in Black Bloc's status",
-    "rolemenu_mode": "whether members can pick roles from the posted panels",
+    "rolemenu_mode": (
+        "whether members can pick roles from the posted panels; off also hides the /rolemenu "
+        "commands"
+    ),
 }
 
 
@@ -445,6 +449,24 @@ class SettingsStore:
         self.db = db
         self.settings = settings
         self._cache: dict[tuple[int, str], Any] = {}
+        self._hooks: dict[str, list[Any]] = {}
+
+    def on_change(self, key: str, callback: Any) -> None:
+        """Call `callback(guild_id, key, value, by)` whenever this key is set or cleared."""
+        if key not in KEY_TYPES:
+            raise SettingError(f"{key!r} is not a Black Bloc setting.")
+        self._hooks.setdefault(key, []).append(callback)
+
+    async def _changed(self, guild_id: int, key: str, value: Any, by: int | None) -> None:
+        for callback in self._hooks.get(key, ()):
+            try:
+                result = callback(guild_id, key, value, by)
+                if isawaitable(result):
+                    await result
+            except Exception as exc:
+                log.warning(
+                    "settings hook for %s failed — %s: %s", key, type(exc).__name__, exc
+                )
 
     def default(self, key: str) -> Any:
         if key == "staff_channel_id":
@@ -564,6 +586,7 @@ class SettingsStore:
         )
         await self.db.conn.commit()
         self._cache[(guild_id, key)] = stored
+        await self._changed(guild_id, key, stored, by)
         return stored
 
     async def clear(self, guild_id: int, key: str, *, by: int | None = None) -> bool:
@@ -578,6 +601,7 @@ class SettingsStore:
         cleared = bool(cur.rowcount)
         if cleared:
             log.info("settings cleared: %s for guild %s by %s", key, guild_id, by)
+            await self._changed(guild_id, key, self.default(key), by)
         return cleared
 
     def staff_roles(self, guild: Any) -> list[Any]:
