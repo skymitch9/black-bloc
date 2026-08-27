@@ -63,9 +63,17 @@ class WebMember:
         self.display_avatar = SimpleNamespace(url=f"https://cdn.test/{user_id}.png")
         self.dms: list[str] = []
         self.timeouts: list[Any] = []
+        self.edits: list[list[int]] = []
+        self.edit_raises: Any = None
 
     async def send(self, content=None, **kwargs) -> None:
         self.dms.append(content)
+
+    async def edit(self, roles=None, reason=None) -> None:
+        if self.edit_raises is not None:
+            raise self.edit_raises
+        self.edits.append([role.id for role in roles])
+        self.roles = list(roles)
 
     async def timeout(self, until, reason=None) -> None:
         self.timeouts.append((until, reason))

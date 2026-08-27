@@ -1,8 +1,15 @@
+import re
+from datetime import UTC, datetime
+from types import SimpleNamespace
+
 import discord
 import pytest
 from discord import app_commands
 
+from black_bloc import rolegrants as grants
 from black_bloc.cogs.community.role_menus import (
+    APPROVAL_CHANNEL_KEY,
+    APPROVER_ROLE_KEY,
     DESCRIPTION_MAX,
     JOY_GAMING,
     LABEL_MAX,
@@ -13,30 +20,41 @@ from black_bloc.cogs.community.role_menus import (
     ROLE_MENUS_OFF,
     SEED,
     TITLE_MAX,
+    UNSET,
     MenuLimitError,
+    RequestApproveModal,
+    RequestButton,
+    RequestDenyModal,
     RoleMenus,
     RoleMenuView,
     StaffAssignSelect,
     add_option,
+    audit_actor,
+    card_target,
     clear_message,
     create_menu,
     custom_id,
     delete_menu,
+    expires_days_of,
     get_menu,
     get_options,
     list_menus,
     max_values_for,
     menu_heading,
+    needs_approval,
     option_line,
     panel_embed,
     parse_custom_id,
+    positive_days,
     posted_menus,
     remove_option,
+    retry_days_of,
     role_diff,
     seed_default_menus,
     select_emoji,
     set_message,
     summary,
+    timed_menu_owns,
     unposted_menus,
     update_menu,
 )
@@ -47,6 +65,7 @@ from black_bloc.storage.db import Database
 GUILD = 7
 TEST_CHANNEL = 111
 LOG_CHANNEL = 222
+STAFF_CHANNEL = 333
 
 
 @pytest.fixture
@@ -155,27 +174,67 @@ class FakePerms:
         self.manage_guild = manage_guild
 
 
+class FakeMessage:
+    def __init__(self, message_id, channel, **kwargs):
+        self.id = message_id
+        self.channel = channel
+        self.kwargs = kwargs
+
+    async def edit(self, **kwargs):
+        self.kwargs |= kwargs
+
+
 class FakeChannel:
     def __init__(self, channel_id):
         self.id = channel_id
         self.overwrites = {}
         self.messages = []
+        self.send_raises = None
 
     async def send(self, content=None, **kwargs):
-        self.messages.append({"content": content, **kwargs})
-        return self
+        if self.send_raises is not None:
+            raise self.send_raises
+        message = FakeMessage(self.id * 100 + len(self.messages), self, content=content, **kwargs)
+        self.messages.append(message)
+        return message
+
+    def get_partial_message(self, message_id):
+        found = next((m for m in self.messages if m.id == message_id), None)
+        if found is None:
+            raise LookupError(message_id)
+        return found
 
 
 class FakeGuild:
     def __init__(self):
         self.id = GUILD
-        self.channels = {LOG_CHANNEL: FakeChannel(LOG_CHANNEL)}
+        self.name = "Black in a Flash!"
+        self.channels = {
+            LOG_CHANNEL: FakeChannel(LOG_CHANNEL),
+            TEST_CHANNEL: FakeChannel(TEST_CHANNEL),
+            STAFF_CHANNEL: FakeChannel(STAFF_CHANNEL),
+        }
+        self.members = {}
+        self.me = None
+        self.audit_entries = []
 
     def get_channel(self, channel_id):
         return self.channels.get(channel_id)
 
     def get_role(self, role_id):
         return FakeRole(role_id)
+
+    def get_member(self, user_id):
+        return self.members.get(user_id)
+
+    def audit_logs(self, limit=1, action=None):
+        entries = list(self.audit_entries)
+
+        async def walk():
+            for entry in entries:
+                yield entry
+
+        return walk()
 
 
 class FakeMember:
@@ -188,6 +247,8 @@ class FakeMember:
         self.guild_permissions = FakePerms(manage_guild=manage_guild)
         self.edits = []
         self.edit_raises = None
+        self.dms = []
+        guild.members[user_id] = self
 
     async def edit(self, roles=None, reason=None):
         if self.edit_raises is not None:
@@ -195,10 +256,14 @@ class FakeMember:
         self.edits.append([r.id for r in roles])
         self.roles = list(roles)
 
+    async def send(self, content=None, **kwargs):
+        self.dms.append(content)
+
 
 class FakeGuard:
     def __init__(self, allowed=TEST_CHANNEL):
         self.allowed = allowed
+        self.test_channel_id = TEST_CHANNEL
 
     def allows_channel(self, channel_id):
         return channel_id == self.allowed
@@ -212,18 +277,34 @@ class FakeBot:
         self.db = db
         self.store = store
         self.guild = guild
+        self.guilds = [guild]
         self.guard = None
 
     def get_channel(self, channel_id):
         return self.guild.get_channel(channel_id)
 
+    def get_guild(self, guild_id):
+        return self.guild if guild_id == self.guild.id else None
+
 
 class FakeResponse:
     def __init__(self):
         self.messages = []
+        self.modals = []
+        self.deferred = False
 
     async def send_message(self, content=None, ephemeral=False, **kwargs):
         self.messages.append({"content": content, "ephemeral": ephemeral, **kwargs})
+
+    async def defer(self, ephemeral=False):
+        self.deferred = True
+
+    async def send_modal(self, modal):
+        self.modals.append(modal)
+        self.deferred = True
+
+    def is_done(self):
+        return self.deferred or bool(self.messages)
 
 
 class FakeFollowup:
@@ -742,3 +823,686 @@ async def test_a_full_menu_can_still_have_an_existing_option_relabelled(db):
     options = await get_options(db, menu_id)
     assert len(options) == OPTIONS_MAX
     assert options[0]["label"] == "renamed"
+
+
+async def approval_menu(db, name="runner-status", *, expires=None, retry=7):
+    menu_id = await create_menu(
+        db,
+        GUILD,
+        name,
+        "Runner status",
+        None,
+        "multiple",
+        approval=True,
+        expires_days=expires,
+        retry_days=retry,
+    )
+    await add_option(db, menu_id, 10, "Runner")
+    await add_option(db, menu_id, 11, "Live Runner")
+    return menu_id
+
+
+async def pick(bot, db, menu_id, member, values):
+    select = RoleMenuView(menu_id, await get_options(db, menu_id), "multiple").children[0]
+    select._values = list(values)
+    interaction = FakeInteraction(bot, member)
+    await select.callback(interaction)
+    return interaction
+
+
+async def requests_in(db):
+    cur = await db.conn.execute("SELECT * FROM role_requests ORDER BY id")
+    return list(await cur.fetchall())
+
+
+def cards_in(bot, channel_id=TEST_CHANNEL):
+    return bot.guild.get_channel(channel_id).messages
+
+
+async def click(bot, request_id, action, user):
+    button = RequestButton(request_id, action)
+    interaction = FakeInteraction(bot, user)
+    await button.callback(interaction)
+    return interaction
+
+
+async def deny(bot, db, request_id, user, reason):
+    interaction = await click(bot, request_id, "deny", user)
+    modal = interaction.response.modals[0]
+    modal.reason._value = reason
+    await modal.on_submit(interaction)
+    return interaction
+
+
+async def test_a_pick_on_an_approval_menu_asks_staff_and_changes_no_roles(bot, db, clicker):
+    menu_id = await approval_menu(db)
+
+    interaction = await pick(bot, db, menu_id, clicker, ["10"])
+
+    assert clicker.edits == []
+    assert "Sent to staff for approval" in interaction.sent
+    rows = await requests_in(db)
+    assert len(rows) == 1
+    assert (rows[0]["status"], rows[0]["role_id"], rows[0]["user_id"]) == ("pending", 10, 900)
+    assert "role.requested" in await action_kinds(db)
+    assert len(cards_in(bot)) == 1
+
+
+async def test_the_request_card_carries_two_buttons_and_pings_the_approver_role(bot, db, clicker):
+    menu_id = await approval_menu(db, expires=7)
+    await bot.store.set(GUILD, APPROVER_ROLE_KEY, 55)
+
+    await pick(bot, db, menu_id, clicker, ["10"])
+
+    card = cards_in(bot)[0]
+    assert card.kwargs["content"] == "<@&55>"
+    assert [item.custom_id for item in card.kwargs["view"].children] == [
+        "rolereq:1:approve",
+        "rolereq:1:deny",
+    ]
+    assert card.kwargs["allowed_mentions"].roles == [discord.Object(id=55)]
+    fields = {field.name: field.value for field in card.kwargs["embed"].fields}
+    assert fields["Role"] == "Runner" and fields["Lasts"] == "7 day(s)"
+    assert fields["Status"] == "pending"
+
+
+async def test_picking_a_pending_role_again_takes_the_request_back(bot, db, clicker):
+    menu_id = await approval_menu(db)
+    await pick(bot, db, menu_id, clicker, ["10"])
+
+    interaction = await pick(bot, db, menu_id, clicker, ["10"])
+
+    assert "taken back" in interaction.sent
+    assert (await requests_in(db))[0]["status"] == "withdrawn"
+    assert "role.withdrawn" in await action_kinds(db)
+    assert cards_in(bot)[0].kwargs["view"] is None
+
+
+async def test_a_second_ask_while_one_is_open_is_refused_with_a_sentence(bot, db, clicker):
+    from black_bloc.cogs.community.role_menus import submit_request
+
+    menu_id = await approval_menu(db)
+    menu = await get_menu(db, GUILD, "runner-status")
+    await pick(bot, db, menu_id, clicker, ["10"])
+
+    said = await submit_request(bot, bot.guild, clicker, menu, 10)
+
+    assert "already asked" in said
+    assert len(await requests_in(db)) == 1
+
+
+async def test_a_denial_inside_the_retry_window_refuses_and_names_the_day(bot, db, clicker, lead):
+    menu_id = await approval_menu(db, retry=7)
+    await pick(bot, db, menu_id, clicker, ["10"])
+    await deny(bot, db, 1, lead, "not this month")
+
+    interaction = await pick(bot, db, menu_id, clicker, ["10"])
+
+    assert "Staff said no" in interaction.sent and "you can ask again" in interaction.sent
+    assert len(await requests_in(db)) == 1
+
+
+async def test_a_denial_outside_the_retry_window_lets_them_ask_again(bot, db, clicker, lead):
+    menu_id = await approval_menu(db, retry=0)
+    await pick(bot, db, menu_id, clicker, ["10"])
+    await deny(bot, db, 1, lead, "not this month")
+
+    interaction = await pick(bot, db, menu_id, clicker, ["10"])
+
+    assert "Sent to staff for approval" in interaction.sent
+    assert [row["status"] for row in await requests_in(db)] == ["denied", "pending"]
+
+
+async def test_approve_hands_the_role_over_dms_the_member_and_closes_the_card(
+    bot, db, clicker, lead
+):
+    menu_id = await approval_menu(db)
+    await pick(bot, db, menu_id, clicker, ["10"])
+
+    interaction = await click(bot, 1, "approve", lead)
+
+    assert clicker.edits == [[99, 10]]
+    assert "Approved" in interaction.sent
+    assert (await requests_in(db))[0]["status"] == "approved"
+    grant = await grants.open_grant(db, GUILD, clicker.id, 10)
+    assert grant["source"] == "approval" and grant["expires_at"] is None
+    assert clicker.dms and "Staff approved **Runner**" in clicker.dms[0]
+    assert "role.approved" in await action_kinds(db)
+    assert cards_in(bot)[0].kwargs["view"] is None
+
+
+async def test_an_approval_on_a_timed_menu_asks_for_the_days_first(bot, db, clicker, lead):
+    menu_id = await approval_menu(db, expires=7)
+    await pick(bot, db, menu_id, clicker, ["10"])
+
+    interaction = await click(bot, 1, "approve", lead)
+
+    modal = interaction.response.modals[0]
+    assert isinstance(modal, RequestApproveModal) and modal.days.default == "7"
+    modal.days._value = "3"
+    await modal.on_submit(interaction)
+
+    grant = await grants.open_grant(db, GUILD, clicker.id, 10)
+    assert (grants.parse_ts(grant["expires_at"]) - datetime.now(UTC)).days == 2
+    assert "It runs out" in clicker.dms[0]
+
+
+async def test_a_blank_days_box_keeps_the_menus_own_number(bot, db, clicker, lead):
+    menu_id = await approval_menu(db, expires=7)
+    await pick(bot, db, menu_id, clicker, ["10"])
+    interaction = await click(bot, 1, "approve", lead)
+
+    await interaction.response.modals[0].on_submit(interaction)
+
+    grant = await grants.open_grant(db, GUILD, clicker.id, 10)
+    assert (grants.parse_ts(grant["expires_at"]) - datetime.now(UTC)).days == 6
+
+
+async def test_zero_days_means_the_role_never_runs_out(bot, db, clicker, lead):
+    menu_id = await approval_menu(db, expires=7)
+    await pick(bot, db, menu_id, clicker, ["10"])
+    interaction = await click(bot, 1, "approve", lead)
+    modal = interaction.response.modals[0]
+    modal.days._value = "0"
+
+    await modal.on_submit(interaction)
+
+    assert (await grants.open_grant(db, GUILD, clicker.id, 10))["expires_at"] is None
+
+
+async def test_days_that_are_not_a_number_decide_nothing(bot, db, clicker, lead):
+    menu_id = await approval_menu(db, expires=7)
+    await pick(bot, db, menu_id, clicker, ["10"])
+    interaction = await click(bot, 1, "approve", lead)
+    modal = interaction.response.modals[0]
+    modal.days._value = "a fortnight"
+
+    await modal.on_submit(interaction)
+
+    assert "is not a number of days" in interaction.sent
+    assert (await requests_in(db))[0]["status"] == "pending"
+    assert clicker.edits == []
+
+
+async def test_deny_takes_a_reason_and_tells_the_member_when_they_may_ask_again(
+    bot, db, clicker, lead
+):
+    menu_id = await approval_menu(db, retry=7)
+    await pick(bot, db, menu_id, clicker, ["10"])
+
+    interaction = await deny(bot, db, 1, lead, "not this month")
+
+    row = (await requests_in(db))[0]
+    assert row["status"] == "denied" and row["deny_reason"] == "not this month"
+    assert clicker.edits == []
+    assert "Denied" in interaction.sent
+    assert "not this month" in clicker.dms[0] and "You can ask again" in clicker.dms[0]
+    assert "role.denied" in await action_kinds(db)
+
+
+async def test_only_the_first_decision_lands(bot, db, clicker, lead):
+    menu_id = await approval_menu(db)
+    await pick(bot, db, menu_id, clicker, ["10"])
+    await click(bot, 1, "approve", lead)
+
+    second = await click(bot, 1, "approve", lead)
+
+    assert "already **approved**" in second.sent
+    assert clicker.edits == [[99, 10]]
+
+
+async def test_deciding_is_staff_only(bot, db, clicker):
+    menu_id = await approval_menu(db)
+    await pick(bot, db, menu_id, clicker, ["10"])
+    stranger = FakeMember(bot.guild, user_id=901)
+
+    interaction = await click(bot, 1, "approve", stranger)
+
+    assert "staff only" in interaction.sent
+    assert (await requests_in(db))[0]["status"] == "pending"
+
+
+async def test_a_request_nobody_has_is_answered_with_a_sentence(bot, db, lead):
+    interaction = await click(bot, 99, "approve", lead)
+
+    assert "no record of that request" in interaction.sent
+
+
+async def test_the_card_falls_back_to_the_test_channel_and_the_log_says_so(bot, db, clicker):
+    menu_id = await approval_menu(db)
+    await bot.store.set(GUILD, APPROVAL_CHANNEL_KEY, STAFF_CHANNEL)
+    bot.guard = FakeGuard(allowed=TEST_CHANNEL)
+
+    interaction = await pick(bot, db, menu_id, clicker, ["10"])
+
+    assert cards_in(bot, STAFF_CHANNEL) == [] and len(cards_in(bot, TEST_CHANNEL)) == 1
+    assert "Test mode is on" in interaction.sent
+    cur = await db.conn.execute("SELECT details FROM action_log WHERE kind = 'role.requested'")
+    assert '"card": "test_channel"' in (await cur.fetchone())["details"]
+
+
+async def test_a_card_that_cannot_be_posted_is_a_failure_line_not_a_silent_one(bot, db, clicker):
+    menu_id = await approval_menu(db)
+    bot.guild.get_channel(TEST_CHANNEL).send_raises = RuntimeError("discord said no")
+
+    interaction = await pick(bot, db, menu_id, clicker, ["10"])
+
+    assert "could not post the card" in interaction.sent
+    assert (await requests_in(db))[0]["status"] == "pending"
+    assert "role.request_card_failed" in await action_kinds(db)
+
+
+async def test_no_approval_channel_at_all_is_named_rather_than_guessed(bot, db, clicker):
+    menu_id = await approval_menu(db)
+    await bot.store.set(GUILD, "staff_channel_id", 4040)
+
+    await pick(bot, db, menu_id, clicker, ["10"])
+
+    cur = await db.conn.execute(
+        "SELECT details FROM action_log WHERE kind = 'role.request_card_failed'"
+    )
+    assert '"reason": "no_approval_channel"' in (await cur.fetchone())["details"]
+
+
+async def test_giving_up_a_held_role_on_an_approval_menu_needs_nobodys_permission(
+    bot, db, monkeypatch
+):
+    monkeypatch.setattr(discord, "Member", FakeMember)
+    menu_id = await approval_menu(db)
+    member = FakeMember(bot.guild, user_id=900, roles=(10, 99))
+
+    interaction = await pick(bot, db, menu_id, member, [])
+
+    assert member.edits == [[99]]
+    assert "Removed: Runner" in interaction.sent
+    assert await requests_in(db) == []
+
+
+async def test_a_grant_is_written_for_an_ordinary_menu_pick_on_a_timed_menu(bot, db, clicker):
+    menu_id = await create_menu(db, GUILD, "timed", "Timed", None, "multiple", expires_days=7)
+    await add_option(db, menu_id, 1, "He/Him")
+
+    await pick(bot, db, menu_id, clicker, ["1"])
+
+    grant = await grants.open_grant(db, GUILD, clicker.id, 1)
+    assert grant["source"] == "menu" and grant["expires_at"] is not None
+
+
+async def test_giving_a_menu_role_back_closes_its_grant(bot, db, clicker):
+    menu_id = await create_menu(db, GUILD, "timed", "Timed", None, "multiple", expires_days=7)
+    await add_option(db, menu_id, 1, "He/Him")
+    await pick(bot, db, menu_id, clicker, ["1"])
+
+    await pick(bot, db, menu_id, clicker, [])
+
+    assert await grants.open_grant(db, GUILD, clicker.id, 1) is None
+    assert (await grants.grants_for(db, GUILD))[0]["removed_reason"] == "given_up"
+
+
+async def test_a_staff_assign_starts_the_menus_clock(bot, db, lead):
+    menu_id = await create_menu(db, GUILD, "timed", "Timed", None, "staff", expires_days=7)
+    await add_option(db, menu_id, 10, "Runner")
+    target = FakeMember(bot.guild, user_id=900)
+    select = StaffAssignSelect(menu_id, await get_options(db, menu_id), target, remove=False)
+    select._values = ["10"]
+
+    await select.callback(FakeInteraction(bot, lead))
+
+    grant = await grants.open_grant(db, GUILD, 900, 10)
+    assert grant["source"] == "staff" and grant["granted_by"] == lead.id
+
+
+async def test_a_deleted_menu_takes_its_pending_requests_with_it(bot, db, clicker):
+    menu_id = await approval_menu(db)
+    await pick(bot, db, menu_id, clicker, ["10"])
+
+    await delete_menu(db, GUILD, "runner-status")
+
+    assert (await requests_in(db))[0]["status"] == "withdrawn"
+
+
+async def test_a_panel_says_what_picking_a_role_will_actually_do(db):
+    menu_id = await approval_menu(db, expires=7)
+    menu = await get_menu(db, GUILD, "runner-status")
+
+    embed = panel_embed(menu, await get_options(db, menu_id))
+
+    note = embed.fields[1].value
+    assert "asks staff first" in note and "lasts 7 day(s)" in note
+
+
+def test_a_menu_row_without_the_new_columns_still_renders():
+    menu = {"title": "Pronouns", "description": None}
+    embed = panel_embed(menu, [{"role_id": 1, "label": "He/Him", "emoji": None}])
+    assert len(embed.fields) == 1
+    assert needs_approval(menu) is False and expires_days_of(menu) is None
+    assert retry_days_of(menu) == 7
+
+
+def test_days_that_mean_no_end_date_all_read_the_same_way():
+    assert positive_days(7) == 7
+    assert positive_days(0) is None and positive_days(-1) is None
+    assert positive_days(None) is None and positive_days("soon") is None
+
+
+async def test_editing_a_menu_turns_approval_on_and_sets_the_clocks(bot, db, lead):
+    await create_menu(db, GUILD, "runner-status", "Runner status")
+    interaction = FakeInteraction(bot, lead)
+
+    await RoleMenus.edit.callback(RoleMenus(bot), interaction, "runner-status", True, 7, 14)
+
+    menu = await get_menu(db, GUILD, "runner-status")
+    assert needs_approval(menu) and expires_days_of(menu) == 7 and retry_days_of(menu) == 14
+    assert "approval on" in interaction.sent and "7 day(s)" in interaction.sent
+    assert "role_menu.edit" in await action_kinds(db)
+
+
+async def test_editing_with_zero_days_clears_the_end_date(bot, db, lead):
+    await create_menu(db, GUILD, "runner-status", "Runner status", expires_days=7)
+
+    await RoleMenus.edit.callback(
+        RoleMenus(bot), FakeInteraction(bot, lead), "runner-status", None, 0, None
+    )
+
+    assert expires_days_of(await get_menu(db, GUILD, "runner-status")) is None
+
+
+async def test_editing_a_menu_nobody_has_says_so(bot, db, lead):
+    interaction = FakeInteraction(bot, lead)
+
+    await RoleMenus.edit.callback(RoleMenus(bot), interaction, "ghost", True, None, None)
+
+    assert "no role menu called **ghost**" in interaction.sent
+
+
+async def test_editing_is_staff_only(bot, db):
+    await create_menu(db, GUILD, "runner-status", "Runner status")
+    stranger = FakeInteraction(bot, FakeMember(bot.guild, user_id=901))
+
+    await RoleMenus.edit.callback(RoleMenus(bot), stranger, "runner-status", True, None, None)
+
+    assert "staff only" in stranger.sent
+    assert not needs_approval(await get_menu(db, GUILD, "runner-status"))
+
+
+async def test_an_update_leaves_the_columns_it_was_not_given(db):
+    await create_menu(db, GUILD, "m", "M", approval=True, expires_days=7, retry_days=14)
+
+    await update_menu(db, GUILD, "m", title="Menu")
+
+    menu = await get_menu(db, GUILD, "m")
+    assert menu["title"] == "Menu"
+    assert needs_approval(menu) and expires_days_of(menu) == 7 and retry_days_of(menu) == 14
+    assert UNSET is not None
+
+
+async def test_role_grant_hands_the_role_over_and_starts_the_clock(bot, db, lead):
+    member = FakeMember(bot.guild, user_id=900, display_name="Bo")
+    interaction = FakeInteraction(bot, lead)
+
+    await RoleMenus.role_grant.callback(
+        RoleMenus(bot), interaction, member, FakeRole(10), 7, "for the marathon"
+    )
+
+    assert member.edits == [[10]]
+    grant = await grants.open_grant(db, GUILD, 900, 10)
+    assert grant["source"] == "staff" and grant["expires_at"] is not None
+    assert "**Bo** has **role-10**" in interaction.sent
+    assert "role.granted" in await action_kinds(db)
+
+
+async def test_role_grant_on_a_role_they_already_have_only_starts_the_clock(bot, db, lead):
+    member = FakeMember(bot.guild, user_id=900, display_name="Bo", roles=(10,))
+    interaction = FakeInteraction(bot, lead)
+
+    await RoleMenus.role_grant.callback(RoleMenus(bot), interaction, member, FakeRole(10), 7, None)
+
+    assert member.edits == []
+    assert await grants.open_grant(db, GUILD, 900, 10) is not None
+    assert "only keeping time on it now" in interaction.sent
+
+
+async def test_role_grant_refuses_when_a_clock_is_already_running(bot, db, lead):
+    member = FakeMember(bot.guild, user_id=900, display_name="Bo", roles=(10,))
+    await grants.add_grant(db, GUILD, 900, 10, "staff", until=grants.expires_at(3))
+    interaction = FakeInteraction(bot, lead)
+
+    await RoleMenus.role_grant.callback(RoleMenus(bot), interaction, member, FakeRole(10), 7, None)
+
+    assert "already has" in interaction.sent and "/role extend" in interaction.sent
+    assert len(await grants.grants_for(db, GUILD)) == 1
+
+
+async def test_role_grant_is_staff_only(bot, db):
+    member = FakeMember(bot.guild, user_id=900)
+    stranger = FakeInteraction(bot, FakeMember(bot.guild, user_id=901))
+
+    await RoleMenus.role_grant.callback(RoleMenus(bot), stranger, member, FakeRole(10), 7, None)
+
+    assert "staff only" in stranger.sent
+    assert await grants.grants_for(db, GUILD) == []
+
+
+async def test_role_extend_pushes_the_end_date_back(bot, db, lead):
+    member = FakeMember(bot.guild, user_id=900, display_name="Bo", roles=(10,))
+    grant_id = await grants.add_grant(db, GUILD, 900, 10, "staff", until=grants.expires_at(3))
+    interaction = FakeInteraction(bot, lead)
+
+    await RoleMenus.role_extend.callback(RoleMenus(bot), interaction, member, FakeRole(10), 4)
+
+    row = await grants.get_grant(db, grant_id)
+    assert (grants.parse_ts(row["expires_at"]) - datetime.now(UTC)).days == 6
+    assert "now runs out" in interaction.sent
+    assert "role.extended" in await action_kinds(db)
+
+
+async def test_role_extend_says_so_when_there_is_no_clock_to_push(bot, db, lead):
+    member = FakeMember(bot.guild, user_id=900, display_name="Bo")
+    interaction = FakeInteraction(bot, lead)
+
+    await RoleMenus.role_extend.callback(RoleMenus(bot), interaction, member, FakeRole(10), 4)
+
+    assert "not keeping time" in interaction.sent
+
+
+async def test_role_extend_says_so_when_the_grant_has_no_end_date(bot, db, lead):
+    member = FakeMember(bot.guild, user_id=900, display_name="Bo")
+    await grants.add_grant(db, GUILD, 900, 10, "staff")
+    interaction = FakeInteraction(bot, lead)
+
+    await RoleMenus.role_extend.callback(RoleMenus(bot), interaction, member, FakeRole(10), 4)
+
+    assert "no end date" in interaction.sent
+
+
+async def test_a_grant_that_is_due_comes_off_and_the_member_is_told(bot, db):
+    member = FakeMember(bot.guild, user_id=900, roles=(10, 99))
+    await grants.add_grant(db, GUILD, 900, 10, "approval", until="2020-01-01T00:00:00+00:00")
+
+    await RoleMenus(bot).run_due_grants()
+
+    assert member.edits == [[99]]
+    assert await grants.open_grant(db, GUILD, 900, 10) is None
+    assert (await grants.grants_for(db, GUILD))[0]["removed_reason"] == "expired"
+    assert member.dms and "ran out today" in member.dms[0]
+    assert "role.expired" in await action_kinds(db)
+
+
+async def test_a_grant_whose_role_already_went_is_closed_without_an_edit(bot, db):
+    member = FakeMember(bot.guild, user_id=900, roles=(99,))
+    await grants.add_grant(db, GUILD, 900, 10, "approval", until="2020-01-01T00:00:00+00:00")
+
+    await RoleMenus(bot).run_due_grants()
+
+    assert member.edits == []
+    assert await grants.open_grant(db, GUILD, 900, 10) is None
+    assert "role.expired" in await action_kinds(db)
+
+
+async def test_a_refused_removal_leaves_the_grant_open_for_the_next_pass(bot, db):
+    member = FakeMember(bot.guild, user_id=900, roles=(10,))
+    member.edit_raises = discord.HTTPException(_Refused(403), "no")
+    await grants.add_grant(db, GUILD, 900, 10, "approval", until="2020-01-01T00:00:00+00:00")
+
+    await RoleMenus(bot).run_due_grants()
+
+    assert await grants.open_grant(db, GUILD, 900, 10) is not None
+    kinds = await action_kinds(db)
+    assert "role.expire_failed" in kinds and "role.expired" not in kinds
+
+
+async def test_a_grant_for_a_member_who_left_is_closed_rather_than_retried_forever(bot, db):
+    await grants.add_grant(db, GUILD, 900, 10, "approval", until="2020-01-01T00:00:00+00:00")
+
+    await RoleMenus(bot).run_due_grants()
+
+    assert await grants.open_grant(db, GUILD, 900, 10) is None
+
+
+async def test_a_role_added_by_hand_is_logged_and_settles_the_request(bot, db, clicker):
+    menu_id = await approval_menu(db, expires=7)
+    await pick(bot, db, menu_id, clicker, ["10"])
+    before = FakeMember(bot.guild, user_id=900, roles=(99,))
+    after = FakeMember(bot.guild, user_id=900, roles=(99, 10))
+
+    await RoleMenus(bot).on_member_update(before, after)
+
+    assert "role.changed_by_hand" in await action_kinds(db)
+    assert (await requests_in(db))[0]["status"] == "granted_by_hand"
+    grant = await grants.open_grant(db, GUILD, 900, 10)
+    assert grant["source"] == "manual" and grant["expires_at"] is None
+    assert cards_in(bot)[0].kwargs["view"] is None
+    assert await timed_menu_owns(db, GUILD, 10) is True
+
+
+async def test_a_role_the_bot_added_itself_is_not_reported_as_by_hand(bot, db, clicker, lead):
+    menu_id = await approval_menu(db)
+    await pick(bot, db, menu_id, clicker, ["10"])
+    await click(bot, 1, "approve", lead)
+    before = FakeMember(bot.guild, user_id=900, roles=(99,))
+    after = FakeMember(bot.guild, user_id=900, roles=(99, 10))
+
+    await RoleMenus(bot).on_member_update(before, after)
+
+    assert "role.changed_by_hand" not in await action_kinds(db)
+
+
+async def test_a_role_taken_off_by_hand_closes_its_grant(bot, db):
+    await grants.add_grant(db, GUILD, 900, 10, "approval", until=grants.expires_at(7))
+    before = FakeMember(bot.guild, user_id=900, roles=(10,))
+    after = FakeMember(bot.guild, user_id=900, roles=())
+
+    await RoleMenus(bot).on_member_update(before, after)
+
+    assert await grants.open_grant(db, GUILD, 900, 10) is None
+    assert (await grants.grants_for(db, GUILD))[0]["removed_reason"] == "by_hand"
+    assert "role.changed_by_hand" in await action_kinds(db)
+
+
+async def test_a_manual_add_of_an_untimed_role_keeps_no_clock(bot, db):
+    menu_id = await create_menu(db, GUILD, "plain", "Plain")
+    await add_option(db, menu_id, 10, "Runner")
+    before = FakeMember(bot.guild, user_id=900, roles=())
+    after = FakeMember(bot.guild, user_id=900, roles=(10,))
+
+    await RoleMenus(bot).on_member_update(before, after)
+
+    assert await grants.open_grant(db, GUILD, 900, 10) is None
+    assert await timed_menu_owns(db, GUILD, 10) is False
+
+
+async def test_nothing_is_logged_when_no_roles_moved(bot, db):
+    member = FakeMember(bot.guild, user_id=900, roles=(10,))
+
+    await RoleMenus(bot).on_member_update(member, member)
+
+    assert await action_kinds(db) == []
+
+
+class FakeAuditEntry:
+    def __init__(self, target, user):
+        self.target = target
+        self.user = user
+
+
+async def test_the_audit_log_names_the_actor_when_black_bloc_may_read_it(bot, lead):
+    member = FakeMember(bot.guild, user_id=900)
+    bot.guild.me = SimpleNamespace(guild_permissions=SimpleNamespace(view_audit_log=True))
+    bot.guild.audit_entries = [FakeAuditEntry(member, lead)]
+
+    assert await audit_actor(bot.guild, member) is lead
+
+
+async def test_without_the_permission_the_actor_is_none_rather_than_a_guess(bot, lead):
+    member = FakeMember(bot.guild, user_id=900)
+    bot.guild.me = SimpleNamespace(guild_permissions=SimpleNamespace(view_audit_log=False))
+    bot.guild.audit_entries = [FakeAuditEntry(member, lead)]
+
+    assert await audit_actor(bot.guild, member) is None
+    bot.guild.me = None
+    assert await audit_actor(bot.guild, member) is None
+
+
+async def test_the_sweep_corrects_records_and_never_touches_the_member(bot, db, clicker):
+    menu_id = await approval_menu(db)
+    await pick(bot, db, menu_id, clicker, ["11"])
+    await grants.add_grant(db, GUILD, 900, 10, "approval")
+    clicker.roles = [FakeRole(99), FakeRole(11)]
+
+    await RoleMenus(bot).reconcile_records()
+
+    assert clicker.edits == []
+    assert await grants.open_grant(db, GUILD, 900, 10) is None
+    assert (await requests_in(db))[0]["status"] == "granted_by_hand"
+    assert "role.reconciled" in await action_kinds(db)
+
+
+async def test_the_sweep_says_nothing_when_the_records_already_match(bot, db, clicker):
+    await grants.add_grant(db, GUILD, 900, 99, "approval")
+
+    await RoleMenus(bot).reconcile_records()
+
+    assert "role.reconciled" not in await action_kinds(db)
+
+
+async def test_the_sweep_leaves_an_unavailable_guild_alone(bot, db):
+    FakeMember(bot.guild, user_id=900, roles=())
+    await grants.add_grant(db, GUILD, 900, 10, "approval")
+    bot.guild.unavailable = True
+
+    await RoleMenus(bot).reconcile_records()
+
+    assert await grants.open_grant(db, GUILD, 900, 10) is not None
+
+
+def test_the_card_goes_to_the_test_channel_only_while_the_guard_would_refuse(bot):
+    staff = bot.guild.get_channel(STAFF_CHANNEL)
+
+    assert card_target(bot, staff) == (staff, "approval_channel")
+    assert card_target(bot, None) == (None, "no_approval_channel")
+
+    bot.guard = FakeGuard(allowed=TEST_CHANNEL)
+    assert card_target(bot, staff)[1] == "test_channel"
+    assert card_target(bot, bot.guild.get_channel(TEST_CHANNEL))[1] == "approval_channel"
+
+
+def test_the_request_buttons_survive_a_restart_by_their_custom_id():
+    button = RequestButton(12, "approve")
+
+    assert button.custom_id == "rolereq:12:approve"
+    match = button.template.fullmatch("rolereq:12:deny")
+    assert match["request_id"] == "12" and match["action"] == "deny"
+    assert re.fullmatch(button.template, "rolereq:12:maybe") is None
+    assert issubclass(RequestDenyModal, discord.ui.Modal)
+    assert issubclass(RequestApproveModal, discord.ui.Modal)
+
+
+def test_the_expiry_loop_reports_its_own_health(bot):
+    cog = RoleMenus(bot)
+
+    assert cog.loop_health("_expiry_loop") == (None, None)
+    assert cog.loop_health("not_a_loop_here") == (None, None)
+
+    cog.last_ok_at["expiry"] = "2026-08-27T00:00:00+00:00"
+    cog.last_error["expiry"] = "boom"
+    assert cog.loop_health("_expiry_loop") == ("2026-08-27T00:00:00+00:00", "boom")

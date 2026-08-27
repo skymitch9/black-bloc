@@ -123,6 +123,8 @@ KEY_TYPES: dict[str, str] = {
     "rolemenu_mode": "enum",
     "chat_mode": "enum",
     "chat_cooldown_seconds": "int",
+    "rolemenu_approval_channel_id": "channel",
+    "rolemenu_approver_role_id": "role",
 }
 
 KEY_CHOICES: dict[str, tuple[str, ...]] = {
@@ -255,6 +257,12 @@ KEY_HELP: dict[str, str] = {
     "chat_cooldown_seconds": (
         f"seconds before the same person gets another @-mention reply, "
         f"{CHAT_COOLDOWN_MIN_SECONDS} to {CHAT_COOLDOWN_MAX_SECONDS}"
+    ),
+    "rolemenu_approval_channel_id": (
+        "where a role request waits for Approve or Deny; blank uses staff_channel_id"
+    ),
+    "rolemenu_approver_role_id": (
+        "role mentioned when a role request arrives; blank pings nobody"
     ),
 }
 

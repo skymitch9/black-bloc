@@ -12,10 +12,11 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 12
+        assert SCHEMA_VERSION == 13
         cur = await db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = {r["name"] for r in await cur.fetchall()}
         assert {"settings", "action_log", "role_menus", "role_menu_options"} <= tables
+        assert {"role_requests", "role_grants"} <= tables
         assert {"golive_links", "golive_optout", "golive_sessions"} <= tables
         assert {"tempvoice_channels", "tempvoice_prefs", "honeypot_hits"} <= tables
         assert {"user_timezones", "events", "mod_cases"} <= tables
@@ -146,6 +147,57 @@ async def test_duplicate_open_sessions_are_closed_before_the_index_is_built(tmp_
             "SELECT COUNT(*) AS n FROM golive_sessions WHERE ended_at IS NULL"
         )
         assert (await cur.fetchone())["n"] == 1
+    finally:
+        await again.close()
+
+
+async def open_role_request(db, user_id, menu_id=3, role_id=10):
+    await db.conn.execute(
+        "INSERT INTO role_requests(guild_id, menu_id, user_id, role_id, requested_at, status) "
+        "VALUES (1, ?, ?, ?, '2026-08-27T00:00:00+00:00', 'pending')",
+        (menu_id, user_id, role_id),
+    )
+    await db.conn.commit()
+
+
+async def test_only_one_role_request_per_member_and_role_may_be_open(tmp_path):
+    db = Database(tmp_path / "t.sqlite3")
+    await db.connect()
+    try:
+        await open_role_request(db, 900)
+        with pytest.raises(sqlite3.IntegrityError):
+            await open_role_request(db, 900)
+        await open_role_request(db, 900, role_id=11)
+        await db.conn.execute("UPDATE role_requests SET status = 'denied' WHERE role_id = 10")
+        await db.conn.commit()
+        await open_role_request(db, 900)
+    finally:
+        await db.close()
+
+
+async def test_a_role_menu_gains_the_approval_columns_on_an_older_file(tmp_path):
+    path = tmp_path / "old.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute(
+        "INSERT INTO role_menus(guild_id, name, title, mode) "
+        "VALUES (1, 'runner', 'Runner', 'staff')"
+    )
+    for column in ("approval", "expires_days", "retry_days"):
+        await db.conn.execute(f"ALTER TABLE role_menus DROP COLUMN {column}")
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("PRAGMA table_info(role_menus)")
+        names = [row["name"] for row in await cur.fetchall()]
+        assert {"approval", "expires_days", "retry_days"} <= set(names)
+        assert names.count("approval") == 1
+        cur = await again.conn.execute("SELECT * FROM role_menus WHERE name = 'runner'")
+        row = await cur.fetchone()
+        assert (row["approval"], row["expires_days"], row["retry_days"]) == (0, None, 7)
     finally:
         await again.close()
 
