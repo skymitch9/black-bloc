@@ -28,9 +28,10 @@ from .tools import (
 
 log = logging.getLogger(__name__)
 
+AVATAR_HOSTS = "https://cdn.discordapp.com https://media.discordapp.net"
 CSP = (
-    "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; "
-    "frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+    f"default-src 'self'; img-src 'self' data: {AVATAR_HOSTS}; style-src 'self'; "
+    "script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
 )
 SECURITY_HEADERS = {
     "Strict-Transport-Security": "max-age=31536000",

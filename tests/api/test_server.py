@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from black_bloc.api.assets import NO_STORE, REVALIDATE
 from black_bloc.api.server import (
+    AVATAR_HOSTS,
     NO_STORE_HEADERS,
     SAME_ORIGIN,
     SAME_SITE_HEADER,
@@ -56,6 +57,17 @@ def test_the_csp_allows_no_inline_script_and_no_third_party(bot):
     csp = client_for(bot).get("/health").headers["Content-Security-Policy"]
     assert "unsafe-inline" not in csp and "unsafe-eval" not in csp
     assert "frame-ancestors 'none'" in csp
+    assert "discordapp" not in csp.split("img-src", 1)[0]
+
+
+def test_the_csp_lets_discord_avatars_load_and_nothing_else_off_site(bot):
+    """`img-src 'self' data:` alone made every Members avatar a broken image."""
+    csp = client_for(bot).get("/health").headers["Content-Security-Policy"]
+
+    images = csp.split("img-src ", 1)[1].split(";", 1)[0]
+
+    assert images == f"'self' data: {AVATAR_HOSTS}"
+    assert "https:" not in csp.replace(AVATAR_HOSTS, "")
 
 
 def test_the_page_is_served_from_this_app_at_the_root(bot):
