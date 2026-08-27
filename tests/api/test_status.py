@@ -132,12 +132,19 @@ def test_every_mode_key_in_the_registry_is_reported():
         "modmail_mode",
         "automod_mode",
         "rolemenu_mode",
+        "poll_mode",
     }
 
 
 def test_the_go_live_end_switch_is_not_offered_as_a_feature_of_its_own():
     assert "golive_end_mode" in KEY_TYPES
     assert "golive_end_mode" not in mode_keys()
+
+
+def test_the_poll_review_switch_is_not_a_feature_but_polls_themselves_are():
+    assert "poll_review_mode" in KEY_TYPES
+    assert "poll_review_mode" not in mode_keys()
+    assert "poll_mode" in mode_keys()
 
 
 def test_status_leaves_the_counts_blank_rather_than_claiming_zero(bot, sign_in):

@@ -24,6 +24,13 @@ from black_bloc.settings_store import (
     MEMBER_ROLE_ID,
     MODMAIL_CATEGORY_ID,
     MODMAIL_LOG_CHANNEL_ID,
+    POLL_ARCHIVE_DAYS,
+    POLL_ARCHIVE_MAX_DAYS,
+    POLL_DEFAULT_HOURS,
+    POLL_MAX_HOURS,
+    POLL_MIN_HOURS,
+    POLL_REMINDER_MAX_MINUTES,
+    POLL_REMINDER_MINUTES,
     TEMPVOICE_NAME_TEMPLATE,
     THREAD_MODE,
     SettingError,
@@ -677,3 +684,72 @@ def test_a_gate_further_away_is_left_unmarked_rather_than_guessed_at():
 def test_an_explicit_staff_only_extra_beats_reading_the_body():
     assert is_staff_command(FakeCommand(no_gate_at_all, extras={"staff_only": True})) is True
     assert is_staff_command(FakeCommand(gate_in_the_body, extras={"staff_only": False})) is False
+
+
+async def test_polls_ship_on_with_staff_creating_them_and_no_review(store):
+    assert store.get(1, "poll_mode") == "on"
+    assert store.get(1, "poll_who_can_create") == "staff"
+    assert store.get(1, "poll_review_mode") == "off"
+    assert store.get(1, "poll_default_hours") == POLL_DEFAULT_HOURS
+    assert store.get(1, "poll_reminder_minutes") == POLL_REMINDER_MINUTES
+    assert store.get(1, "poll_auto_thread") is False
+    assert store.get(1, "poll_archive_days") == POLL_ARCHIVE_DAYS
+    assert store.get(1, "poll_archive_drop_votes") is True
+    assert store.get(1, "poll_ping_role_id") is None
+
+
+async def test_a_dashboard_poll_lands_in_the_test_channel_while_test_mode_is_on(store):
+    assert store.get(1, "poll_channel_id") == TEST_CH
+
+
+def test_a_poll_length_discord_cannot_express_is_refused_at_the_validator():
+    assert coerce_value("poll_default_hours", POLL_MIN_HOURS) == POLL_MIN_HOURS
+    assert coerce_value("poll_default_hours", POLL_MAX_HOURS) == POLL_MAX_HOURS
+    with pytest.raises(SettingError) as caught:
+        coerce_value("poll_default_hours", POLL_MAX_HOURS + 1)
+    assert "32 days" in str(caught.value)
+    with pytest.raises(SettingError):
+        coerce_value("poll_default_hours", 0)
+
+
+def test_a_poll_reminder_may_be_off_but_not_a_fortnight_out():
+    assert coerce_value("poll_reminder_minutes", 0) == 0
+    with pytest.raises(SettingError):
+        coerce_value("poll_reminder_minutes", POLL_REMINDER_MAX_MINUTES + 1)
+
+
+def test_an_archive_that_fires_the_same_day_is_refused_with_the_reason():
+    with pytest.raises(SettingError) as caught:
+        coerce_value("poll_archive_days", 0)
+    assert "before anybody has read it" in str(caught.value)
+    with pytest.raises(SettingError):
+        coerce_value("poll_archive_days", POLL_ARCHIVE_MAX_DAYS + 1)
+
+
+def test_the_poll_switches_only_take_the_words_they_document():
+    assert coerce_value("poll_mode", "on") == "on"
+    assert coerce_value("poll_review_mode", "on") == "on"
+    assert coerce_value("poll_who_can_create", "everyone") == "everyone"
+    for key, bad in (
+        ("poll_mode", "shadow"),
+        ("poll_review_mode", "maybe"),
+        ("poll_who_can_create", "role"),
+    ):
+        with pytest.raises(SettingError):
+            coerce_value(key, bad)
+
+
+def test_every_poll_key_is_typed_so_the_dashboard_can_render_it():
+    for key in (
+        "poll_mode",
+        "poll_who_can_create",
+        "poll_review_mode",
+        "poll_default_hours",
+        "poll_channel_id",
+        "poll_ping_role_id",
+        "poll_reminder_minutes",
+        "poll_auto_thread",
+        "poll_archive_days",
+        "poll_archive_drop_votes",
+    ):
+        assert key in KEY_TYPES

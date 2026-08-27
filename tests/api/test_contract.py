@@ -11,6 +11,8 @@ from black_bloc import rolegrants as grants
 from black_bloc.api.settings_api import grouped
 from black_bloc.cogs.community.birthdays import save_birthday
 from black_bloc.cogs.community.events import create_event
+from black_bloc.cogs.community.polls import add_options as add_poll_options
+from black_bloc.cogs.community.polls import create_poll, options_of, record_vote, set_posted
 from black_bloc.cogs.community.role_menus import add_option, create_menu, get_menu
 from black_bloc.cogs.community.tempvoice import add_channel
 from black_bloc.cogs.content.golive import set_link, set_optout, start_session
@@ -91,6 +93,26 @@ def check(where: str, payload, spec: dict) -> None:
         )
 
 
+async def make_poll(db, guild_id: int, question: str, status: str) -> int:
+    poll_id = await create_poll(
+        db,
+        guild_id,
+        MEMBER_ID,
+        question=question,
+        kind="single",
+        surface="native",
+        multi=False,
+        anonymous=False,
+        results="live",
+        hours=24,
+        channel_id=None,
+        ping_role_id=None,
+        status=status,
+    )
+    await add_poll_options(db, poll_id, ["Saturday", "Sunday"])
+    return poll_id
+
+
 @pytest.fixture
 async def seeded(client, sign_in, web, guild, wf):
     """One of everything the contract's routes read, so no route answers empty."""
@@ -166,6 +188,16 @@ async def seeded(client, sign_in, web, guild, wf):
     request_id = await grants.create_request(
         db, guild_id, runner["id"], MEMBER_ID, wf.STAFF_ROLE_ID
     )
+    poll_id = await make_poll(db, guild_id, "Best day for the cookout?", "open")
+    await set_posted(
+        db,
+        poll_id,
+        channel_id=wf.TEST_CHANNEL_ID,
+        message_id=830001,
+        finishes_at=datetime.now(UTC) + timedelta(hours=20),
+    )
+    await record_vote(db, poll_id, (await options_of(db, poll_id))[0]["id"], MEMBER_ID)
+    poll_request_id = await make_poll(db, guild_id, "Movie night?", "pending_review")
     grant_id = await grants.add_grant(
         db,
         guild_id,
@@ -186,6 +218,8 @@ async def seeded(client, sign_in, web, guild, wf):
         "plain_role_id": str(wf.PLAIN_ROLE_ID),
         "request_id": str(request_id),
         "grant_id": str(grant_id),
+        "poll_id": str(poll_id),
+        "poll_request_id": str(poll_request_id),
     }
 
 

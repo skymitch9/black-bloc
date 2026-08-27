@@ -12,7 +12,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 13
+        assert SCHEMA_VERSION == 14
         cur = await db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = {r["name"] for r in await cur.fetchall()}
         assert {"settings", "action_log", "role_menus", "role_menu_options"} <= tables
@@ -35,6 +35,84 @@ async def test_connect_bootstraps_schema(tmp_path):
             "modmail_blocks",
             "modmail_snippets",
         } <= tables
+        assert {"polls", "poll_options", "poll_votes", "poll_results"} <= tables
+    finally:
+        await db.close()
+
+
+async def test_a_poll_row_carries_every_column_phase_10_stores(tmp_path):
+    db = Database(tmp_path / "p.sqlite3")
+    await db.connect()
+    try:
+        cur = await db.conn.execute("PRAGMA table_info(polls)")
+        columns = {row["name"] for row in await cur.fetchall()}
+        assert {"guild_id", "creator_id", "question", "kind", "surface", "multi"} <= columns
+        assert {"anonymous", "results", "hours", "auto_thread", "ping_role_id"} <= columns
+        assert "status" in columns
+        assert {"channel_id", "message_id", "thread_id", "closes_at", "reminded_at"} <= columns
+        assert {"closed_at", "archived_at", "total_votes"} <= columns
+        assert {"recurrence", "recur_at", "recur_tz", "recur_next_at", "schedule_id"} <= columns
+        assert {"review_channel_id", "review_message_id", "decided_by", "decided_at"} <= columns
+        assert {"deny_reason", "created_at"} <= columns
+    finally:
+        await db.close()
+
+
+async def add_poll_option(db, poll_id, position, label="Yes"):
+    await db.conn.execute(
+        "INSERT INTO poll_options(poll_id, position, label) VALUES (?, ?, ?)",
+        (poll_id, position, label),
+    )
+    await db.conn.commit()
+
+
+async def test_two_options_cannot_share_one_slot_on_a_poll(tmp_path):
+    db = Database(tmp_path / "p.sqlite3")
+    await db.connect()
+    try:
+        await add_poll_option(db, 1, 0)
+        await add_poll_option(db, 2, 0)
+        with pytest.raises(sqlite3.IntegrityError):
+            await add_poll_option(db, 1, 0, label="No")
+    finally:
+        await db.close()
+
+
+async def add_poll_vote(db, poll_id, option_id, user_id):
+    await db.conn.execute(
+        "INSERT INTO poll_votes(poll_id, option_id, user_id, at) VALUES (?, ?, ?, ?)",
+        (poll_id, option_id, user_id, "2026-08-27T00:00:00+00:00"),
+    )
+    await db.conn.commit()
+
+
+async def test_one_member_votes_once_per_option(tmp_path):
+    db = Database(tmp_path / "p.sqlite3")
+    await db.connect()
+    try:
+        await add_poll_vote(db, 1, 1, 900)
+        await add_poll_vote(db, 1, 2, 900)
+        await add_poll_vote(db, 2, 1, 900)
+        with pytest.raises(sqlite3.IntegrityError):
+            await add_poll_vote(db, 1, 1, 900)
+    finally:
+        await db.close()
+
+
+async def test_a_poll_keeps_one_result_row_forever(tmp_path):
+    db = Database(tmp_path / "p.sqlite3")
+    await db.connect()
+    try:
+        await db.conn.execute(
+            "INSERT INTO poll_results(poll_id, closed_at, total_votes, counts) "
+            "VALUES (1, '2026-08-27T00:00:00+00:00', 3, '[]')"
+        )
+        await db.conn.commit()
+        with pytest.raises(sqlite3.IntegrityError):
+            await db.conn.execute(
+                "INSERT INTO poll_results(poll_id, closed_at, total_votes, counts) "
+                "VALUES (1, '2026-08-28T00:00:00+00:00', 4, '[]')"
+            )
     finally:
         await db.close()
 

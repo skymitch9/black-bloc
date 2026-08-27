@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -262,6 +262,76 @@ CREATE TABLE IF NOT EXISTS mod_cases (
 
 CREATE INDEX IF NOT EXISTS mod_cases_by_user ON mod_cases(guild_id, user_id, id);
 CREATE INDEX IF NOT EXISTS mod_cases_by_kind ON mod_cases(guild_id, kind, at);
+
+CREATE TABLE IF NOT EXISTS polls (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id          INTEGER NOT NULL,
+    creator_id        INTEGER NOT NULL,
+    question          TEXT    NOT NULL,
+    kind              TEXT    NOT NULL DEFAULT 'single',
+    surface           TEXT    NOT NULL DEFAULT 'native',
+    multi             INTEGER NOT NULL DEFAULT 0,
+    anonymous         INTEGER NOT NULL DEFAULT 0,
+    results           TEXT    NOT NULL DEFAULT 'live',
+    hours             INTEGER NOT NULL DEFAULT 24,
+    auto_thread       INTEGER NOT NULL DEFAULT 0,
+    channel_id        INTEGER,
+    message_id        INTEGER,
+    thread_id         INTEGER,
+    ping_role_id      INTEGER,
+    status            TEXT    NOT NULL DEFAULT 'draft',
+    opens_at          TEXT,
+    closes_at         TEXT,
+    reminded_at       TEXT,
+    closed_at         TEXT,
+    archived_at       TEXT,
+    total_votes       INTEGER,
+    recurrence        TEXT,
+    recur_at          TEXT,
+    recur_tz          TEXT,
+    recur_next_at     TEXT,
+    schedule_id       INTEGER,
+    review_channel_id INTEGER,
+    review_message_id INTEGER,
+    decided_by        INTEGER,
+    decided_at        TEXT,
+    deny_reason       TEXT,
+    created_at        TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS polls_by_status ON polls(guild_id, status, closes_at);
+
+CREATE TABLE IF NOT EXISTS poll_options (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    poll_id     INTEGER NOT NULL,
+    position    INTEGER NOT NULL,
+    answer_id   INTEGER,
+    label       TEXT    NOT NULL,
+    emoji       TEXT,
+    value       TEXT,
+    final_votes INTEGER
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS poll_options_slot ON poll_options(poll_id, position);
+
+CREATE TABLE IF NOT EXISTS poll_votes (
+    poll_id   INTEGER NOT NULL,
+    option_id INTEGER,
+    user_id   INTEGER NOT NULL,
+    answer    TEXT,
+    at        TEXT    NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS poll_votes_one ON poll_votes(poll_id, option_id, user_id);
+
+CREATE TABLE IF NOT EXISTS poll_results (
+    poll_id         INTEGER PRIMARY KEY,
+    closed_at       TEXT    NOT NULL,
+    total_votes     INTEGER NOT NULL DEFAULT 0,
+    winner_position INTEGER,
+    counts          TEXT    NOT NULL,
+    votes_dropped   INTEGER NOT NULL DEFAULT 0
+);
 """
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (

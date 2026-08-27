@@ -718,6 +718,163 @@
     },
     {
       "method": "GET",
+      "path": "/api/polls?status=open&page=1&per_page=25",
+      "read_by": [
+        "10b page-polls.js"
+      ],
+      "shape": "object",
+      "keys": [
+        "polls",
+        "total",
+        "shown",
+        "page",
+        "per_page",
+        "notes"
+      ],
+      "rows": {
+        "polls": [
+          "id",
+          "question",
+          "kind",
+          "surface",
+          "status",
+          "results",
+          "multi",
+          "anonymous",
+          "auto_thread",
+          "hours",
+          "creator_id",
+          "creator_name",
+          "channel_id",
+          "message_id",
+          "thread_id",
+          "ping_role_id",
+          "opens_at",
+          "closes_at",
+          "reminded_at",
+          "closed_at",
+          "archived_at",
+          "total_votes",
+          "decided_by_id",
+          "decided_by_name",
+          "decided_at",
+          "deny_reason",
+          "created_at",
+          "options",
+          "winner_position",
+          "votes_dropped"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/polls/requests",
+      "read_by": [
+        "10b page-polls.js review queue"
+      ],
+      "shape": "list",
+      "keys": [
+        "id",
+        "question",
+        "kind",
+        "status",
+        "hours",
+        "creator_id",
+        "creator_name",
+        "options",
+        "created_at"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/polls/{poll_id}",
+      "read_by": [
+        "10b page-polls.js one poll"
+      ],
+      "shape": "object",
+      "keys": [
+        "poll",
+        "votes"
+      ],
+      "nested": {
+        "poll": [
+          "id",
+          "question",
+          "status",
+          "options",
+          "winner_position",
+          "total_votes",
+          "anonymous",
+          "creator_id",
+          "creator_name"
+        ]
+      },
+      "rows": {
+        "votes": [
+          "user_id",
+          "user_name",
+          "position",
+          "label",
+          "at"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/polls/{poll_id}/end",
+      "body": {},
+      "read_by": [
+        "10b page-polls.js"
+      ],
+      "shape": "object",
+      "keys": [
+        "poll",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/polls/{poll_id}/cancel",
+      "body": {},
+      "read_by": [
+        "10b page-polls.js"
+      ],
+      "shape": "object",
+      "keys": [
+        "poll",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/polls/requests/{poll_request_id}/approve",
+      "body": {},
+      "read_by": [
+        "10b page-polls.js review queue"
+      ],
+      "shape": "object",
+      "keys": [
+        "poll",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/polls/requests/{poll_request_id}/deny",
+      "body": {
+        "reason": "not this time"
+      },
+      "read_by": [
+        "10b page-polls.js review queue"
+      ],
+      "shape": "object",
+      "keys": [
+        "poll",
+        "message"
+      ]
+    },
+    {
+      "method": "GET",
       "path": "/api/birthdays",
       "read_by": [
         "page-birthdays.js"
@@ -1290,6 +1447,10 @@
     "web.event.approved",
     "web.event.denied",
     "web.event.cancel",
+    "web.poll.approved",
+    "web.poll.denied",
+    "web.poll.end",
+    "web.poll.cancel",
     "web.birthday.set",
     "web.birthday.optin",
     "web.birthday.clear",

@@ -190,6 +190,16 @@ const SETTING_SPECS = [
   ['events_create_scheduled', 'bool', true, false, 'true to make a real Discord scheduled event when one is approved'],
   ['events_channel_retention_days', 'int', 7, 7, 'days a finished event’s channel is kept before deletion, 1 to 365', null, 365, 1],
   ['events_max_late_minutes', 'int', 30, 30, 'minutes an event may start late and still be announced', null, 1440],
+  ['poll_mode', 'enum', 'on', 'on', 'off, or on (members and staff can run polls with /poll create)', ['off', 'on']],
+  ['poll_who_can_create', 'enum', 'staff', 'staff', 'who may run /poll create: staff, or everyone', ['staff', 'everyone']],
+  ['poll_review_mode', 'enum', 'off', 'off', 'off posts a poll straight away; on holds it for a staff Approve or Deny first', ['off', 'on']],
+  ['poll_default_hours', 'int', 24, 24, 'hours a poll stays open when nobody says otherwise, 1 to 768 (32 days)', null, 768, 1],
+  ['poll_channel_id', 'channel', null, null, 'where a poll made from the dashboard goes'],
+  ['poll_ping_role_id', 'role', null, null, 'role mentioned when a poll opens; blank pings nobody'],
+  ['poll_reminder_minutes', 'int', 60, 60, 'minutes before a poll closes that Black Bloc posts a last call, 0 to say nothing', null, 10080],
+  ['poll_auto_thread', 'bool', false, false, 'true to open a discussion thread under every poll'],
+  ['poll_archive_days', 'int', 365, 365, 'days a closed poll stays on the list before it moves to the archive', null, 3650, 1],
+  ['poll_archive_drop_votes', 'bool', true, true, 'true to forget who voted when a poll is archived; the totals are kept either way'],
   ['birthday_mode', 'enum', 'shadow', 'off', 'off, shadow (log only) or on (post birthday wishes)', ['off', 'shadow', 'on']],
   ['birthday_channel_id', 'channel', '800000000000000002', null, 'where birthday wishes are posted'],
   ['birthday_template', 'text', 'Happy birthday {name}!', 'Happy birthday {name}!', 'the birthday wording; {name} and {age}'],
@@ -320,6 +330,15 @@ function seedState() {
     { id: 3, requester_id: MEMBERS[3].id, title: 'Movie night', description: 'Bring snacks.', location: 'Voice: general', starts_at: minutesAgo(-2880), ends_at: null, status: 'pending', created_at: minutesAgo(60), decided_by: null, decided_at: null, deny_reason: null },
     { id: 2, requester_id: MEMBERS[1].id, title: 'Speedrun race', description: null, location: 'Twitch', starts_at: minutesAgo(-10080), ends_at: null, status: 'approved', created_at: minutesAgo(4000), decided_by: STAFF.id, decided_at: minutesAgo(3900), deny_reason: null },
     { id: 1, requester_id: MEMBERS[4].id, title: 'Crypto giveaway', description: 'trust me', location: 'DM', starts_at: minutesAgo(-500), ends_at: null, status: 'denied', created_at: minutesAgo(6000), decided_by: STAFF.id, decided_at: minutesAgo(5900), deny_reason: 'This is a scam.' },
+  ],
+  polls: [
+    { id: 3, creator_id: MEMBERS[3].id, question: 'Best day for the cookout?', kind: 'single', surface: 'native', status: 'open', results: 'live', multi: false, anonymous: false, auto_thread: false, hours: 24, channel_id: '800000000000000003', message_id: '830000000000000001', thread_id: null, ping_role_id: null, opens_at: minutesAgo(120), closes_at: minutesAgo(-1320), reminded_at: null, closed_at: null, archived_at: null, total_votes: null, decided_by: null, decided_at: null, deny_reason: null, created_at: minutesAgo(125), votes_dropped: 0, options: [{ position: 0, label: 'Saturday', votes: 22 }, { position: 1, label: 'Sunday', votes: 13 }, { position: 2, label: 'Friday', votes: 6 }] },
+    { id: 2, creator_id: MEMBERS[1].id, question: 'Movie night or game night?', kind: 'single', surface: 'native', status: 'pending_review', results: 'live', multi: false, anonymous: false, auto_thread: false, hours: 48, channel_id: '800000000000000003', message_id: null, thread_id: null, ping_role_id: null, opens_at: null, closes_at: null, reminded_at: null, closed_at: null, archived_at: null, total_votes: null, decided_by: null, decided_at: null, deny_reason: null, created_at: minutesAgo(40), votes_dropped: 0, options: [{ position: 0, label: 'Movie night', votes: 0 }, { position: 1, label: 'Game night', votes: 0 }] },
+    { id: 1, creator_id: STAFF.id, question: 'Keep the Thursday raid slot?', kind: 'yesno', surface: 'native', status: 'closed', results: 'live', multi: false, anonymous: false, auto_thread: false, hours: 24, channel_id: '800000000000000003', message_id: '830000000000000000', thread_id: null, ping_role_id: null, opens_at: minutesAgo(4000), closes_at: minutesAgo(2560), reminded_at: minutesAgo(2620), closed_at: minutesAgo(2560), archived_at: null, total_votes: 18, decided_by: null, decided_at: null, deny_reason: null, created_at: minutesAgo(4010), votes_dropped: 0, options: [{ position: 0, label: 'Yes', votes: 14 }, { position: 1, label: 'No', votes: 4 }] },
+  ],
+  pollVotes: [
+    { poll_id: 3, position: 0, label: 'Saturday', user_id: MEMBERS[1].id, at: minutesAgo(100) },
+    { poll_id: 3, position: 1, label: 'Sunday', user_id: MEMBERS[2].id, at: minutesAgo(90) },
   ],
   birthdays: [
     { user_id: MEMBERS[1].id, month: 2, day: 14, year: 1996, opted_in: true, source: 'self', set_at: minutesAgo(9000) },
@@ -1341,6 +1360,191 @@ route('POST', '/api/events/:id/cancel', (context) => {
   return { event: eventRow(event), message: 'Cancelled.' };
 });
 
+// Polls (Phase 10a). The create form is 10b, so there is no POST /api/polls here either.
+const POLL_STATUSES = ['draft', 'pending_review', 'open', 'closed', 'archived', 'denied', 'cancelled'];
+const POLL_PER_PAGE = 25;
+const POLL_PER_PAGE_MAX = 100;
+const NO_POLL_CREATE_YET = 'Starting a poll from the dashboard arrives with the next update — the create form and the panel surface ship together. Use `/poll create` in Discord until then.';
+
+function pollWinner(row) {
+  const best = Math.max(0, ...row.options.map((option) => option.votes));
+  const top = row.options.filter((option) => option.votes === best && best > 0);
+  return top.length === 1 ? top[0].position : null;
+}
+
+function pollRow(row) {
+  return {
+    id: row.id,
+    question: row.question,
+    kind: row.kind,
+    surface: row.surface,
+    status: row.status,
+    results: row.results,
+    multi: Boolean(row.multi),
+    anonymous: Boolean(row.anonymous),
+    auto_thread: Boolean(row.auto_thread),
+    hours: row.hours,
+    creator_id: String(row.creator_id),
+    creator_name: memberName(row.creator_id),
+    channel_id: row.channel_id,
+    message_id: row.message_id,
+    thread_id: row.thread_id,
+    ping_role_id: row.ping_role_id,
+    opens_at: row.opens_at,
+    closes_at: row.closes_at,
+    reminded_at: row.reminded_at,
+    closed_at: row.closed_at,
+    archived_at: row.archived_at,
+    total_votes: row.total_votes,
+    decided_by_id: row.decided_by === null || row.decided_by === undefined ? null : String(row.decided_by),
+    decided_by_name: memberName(row.decided_by),
+    decided_at: row.decided_at,
+    deny_reason: row.deny_reason,
+    created_at: row.created_at,
+    options: row.options.map((option) => ({ ...option })),
+    winner_position: pollWinner(row),
+    votes_dropped: row.votes_dropped || 0,
+  };
+}
+
+function pollVoteRow(vote) {
+  return {
+    user_id: String(vote.user_id),
+    user_name: memberName(vote.user_id),
+    position: vote.position,
+    label: vote.label,
+    at: vote.at,
+  };
+}
+
+function pollOf(id) {
+  const found = state.polls.find((row) => String(row.id) === String(id));
+  if (!found) throw new Refused(404, 'no_such_poll', `Black Bloc has no poll #${id} any more, so nothing was done. The polls page lists the ones it has.`);
+  return found;
+}
+
+route('GET', '/api/polls', (context) => {
+  requireStaff(context.session);
+  const wanted = String(context.url.searchParams.get('status') || '').split(',').filter(Boolean);
+  for (const part of wanted) {
+    if (!POLL_STATUSES.includes(part)) {
+      throw new Refused(400, 'unknown_status', `${part} is not a state a poll can be in, so nothing was listed. They are ${POLL_STATUSES.join(', ')}.`);
+    }
+  }
+  const rows = wanted.length ? state.polls.filter((row) => wanted.includes(row.status)) : state.polls;
+  const page = Math.max(1, Number(context.url.searchParams.get('page') || 1) || 1);
+  const perPage = Math.min(POLL_PER_PAGE_MAX, Math.max(1, Number(context.url.searchParams.get('per_page') || POLL_PER_PAGE) || POLL_PER_PAGE));
+  const window = rows.slice((page - 1) * perPage, page * perPage);
+  return {
+    polls: window.map(pollRow),
+    total: rows.length,
+    shown: window.length,
+    page,
+    per_page: perPage,
+    notes: [NO_POLL_CREATE_YET],
+  };
+});
+
+route('GET', '/api/polls/requests', (context) => {
+  requireStaff(context.session);
+  return state.polls.filter((row) => row.status === 'pending_review').map(pollRow);
+});
+
+route('POST', '/api/polls/requests/:id/approve', (context) => {
+  requireStaff(context.session);
+  const poll = pollOf(context.params.id);
+  if (poll.status !== 'pending_review') {
+    throw new Refused(409, 'not_waiting', `Poll #${poll.id} is ${poll.status}, so it is not waiting on a decision any more.`);
+  }
+  // No guard() here on purpose: black_bloc/api/tools/polls.py refuses in test mode only when
+  // the poll's own channel is not the test channel, and every fixture poll is in it.
+  poll.status = 'open';
+  poll.decided_by = STAFF.id;
+  poll.decided_at = now();
+  poll.opens_at = now();
+  poll.message_id = '830000000000000009';
+  logAction('web.poll.approved', { target_id: poll.creator_id, details: { poll_id: poll.id } });
+  return { poll: pollRow(poll), message: `Approved and posted: https://discord.test/${poll.message_id}` };
+});
+
+route('POST', '/api/polls/requests/:id/deny', async (context) => {
+  requireStaff(context.session);
+  const poll = pollOf(context.params.id);
+  const body = await context.body();
+  if (!String(body.reason || '').trim()) {
+    throw new Refused(400, 'no_reason', 'A denied poll needs one line the person who asked is sent, so nothing was done. Say why and send it again.');
+  }
+  if (poll.status !== 'pending_review') {
+    throw new Refused(409, 'not_waiting', `Poll #${poll.id} is ${poll.status}, so it is not waiting on a decision any more.`);
+  }
+  poll.status = 'denied';
+  poll.deny_reason = body.reason;
+  poll.decided_by = STAFF.id;
+  poll.decided_at = now();
+  poll.closed_at = now();
+  logAction('web.poll.denied', { target_id: poll.creator_id, reason: body.reason, details: { poll_id: poll.id } });
+  return { poll: pollRow(poll), message: 'Denied, and the person who asked has been told why.' };
+});
+
+route('GET', '/api/polls/:id', (context) => {
+  requireStaff(context.session);
+  const poll = pollOf(context.params.id);
+  const votes = poll.anonymous ? [] : state.pollVotes.filter((vote) => vote.poll_id === poll.id);
+  return { poll: pollRow(poll), votes: votes.map(pollVoteRow) };
+});
+
+route('POST', '/api/polls/:id/end', (context) => {
+  requireStaff(context.session);
+  const poll = pollOf(context.params.id);
+  if (poll.status !== 'open') {
+    throw new Refused(409, 'not_closeable', `Poll #${poll.id} is ${poll.status} already, so there was nothing to close.`);
+  }
+  poll.status = 'closed';
+  poll.closed_at = now();
+  poll.total_votes = poll.options.reduce((sum, option) => sum + option.votes, 0);
+  logAction('web.poll.end', { target_id: poll.creator_id, details: { poll_id: poll.id } });
+  return { poll: pollRow(poll), message: `Poll #${poll.id} is closed and the result is posted.` };
+});
+
+route('POST', '/api/polls/:id/cancel', (context) => {
+  requireStaff(context.session);
+  const poll = pollOf(context.params.id);
+  if (!['draft', 'pending_review', 'open'].includes(poll.status)) {
+    throw new Refused(409, 'not_cancellable', `Poll #${poll.id} is ${poll.status} already, so there was nothing to cancel.`);
+  }
+  poll.status = 'cancelled';
+  poll.closed_at = now();
+  logAction('web.poll.cancel', { target_id: poll.creator_id, details: { poll_id: poll.id } });
+  return { poll: pollRow(poll), message: `Poll #${poll.id} is cancelled. No result was published.` };
+});
+
+route('GET', '/api/polls/:id/export.csv', (context) => {
+  // NOT in contract.json: check.mjs reads JSON shapes, and this one answers text/csv.
+  requireStaff(context.session);
+  const poll = pollOf(context.params.id);
+  const lines = [
+    'poll_id,question,status,closed_at,total_votes',
+    `${poll.id},"${poll.question}",${poll.status},${poll.closed_at || ''},${poll.total_votes || 0}`,
+    '',
+    'position,option,votes',
+    ...poll.options.map((option) => `${option.position},"${option.label}",${option.votes}`),
+    '',
+  ];
+  if (poll.anonymous) {
+    lines.push('note,"This poll was run without a voter list, so there is nothing per-person to export."');
+  } else {
+    lines.push('user_id,user_name,position,option,at');
+    for (const vote of state.pollVotes.filter((row) => row.poll_id === poll.id)) {
+      lines.push(`${vote.user_id},"${memberName(vote.user_id)}",${vote.position},"${vote.label}",${vote.at}`);
+    }
+  }
+  return {
+    status: 200,
+    body: `${lines.join('\n')}\n`,
+    headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="poll-${poll.id}.csv"` },
+  };
+});
+
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 function birthdayRow(row) {
@@ -1779,7 +1983,8 @@ route('DELETE', '/api/modmail/blocks/:user_id', (context) => {
 });
 
 function send(response, status, body, headers = {}) {
-  const payload = body === null ? '' : JSON.stringify(body);
+  // A string body is already the bytes to send (the CSV export); everything else is JSON.
+  const payload = body === null ? '' : typeof body === 'string' ? body : JSON.stringify(body);
   response.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
     'cache-control': 'no-store',
