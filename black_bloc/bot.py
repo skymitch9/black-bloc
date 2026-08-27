@@ -10,6 +10,7 @@ from .config import Settings
 from .guard import TestModeGuard
 from .intents import build_intents
 from .invite import invite_url
+from .settings_store import SettingsStore
 from .storage.db import Database
 
 log = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ class BlackBlocBot(commands.Bot):
         )
         self.settings = settings
         self.db = Database(settings.database_path)
+        self.store = SettingsStore(self.db, settings)
         self._background: list[asyncio.Task] = []
         self.guard: TestModeGuard | None = None
         if settings.test_mode:
@@ -34,6 +36,7 @@ class BlackBlocBot(commands.Bot):
 
     async def setup_hook(self) -> None:
         await self.db.connect()
+        await self.store.load()
         log.info("database ready at %s", self.settings.database_path)
         log.info("invite URL: %s", invite_url(self))
         await self._load_cogs()
