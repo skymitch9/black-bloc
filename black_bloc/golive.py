@@ -7,14 +7,13 @@ from typing import Any
 
 import discord
 
-from .settings_store import GOLIVE_TEMPLATE
+from .settings_store import GOLIVE_END_SUFFIX, GOLIVE_TEMPLATE
 
 log = logging.getLogger(__name__)
 
 GAME_FALLBACK = "something"
 TWITCH = "Twitch"
 YOUTUBE = "YouTube"
-END_SUFFIX = " — stream ended"
 END_GRACE_SECONDS = 120
 POLL_SECONDS = 60
 
@@ -26,7 +25,8 @@ EMBED_GAME_FIELD = "Game"
 EMBED_FOOTER = "Black Bloc · via {source}"
 EMBED_SOURCE_TWITCH = "Twitch"
 EMBED_SOURCE_PRESENCE = "Discord activity"
-EMBED_END_FOOTER = "· stream ended"
+EMBED_END_MARK = "·"
+END_TRIM = " \t—–-·|,;:"
 LIVE_VERB = "is now live"
 ENDED_VERB = "was live"
 AUTHOR_LIMIT = 256
@@ -207,14 +207,29 @@ def announcement_embed(
     return embed
 
 
-def ended_embed(embed: Any, name: str, platform: str | None) -> discord.Embed:
+def end_marker(suffix: str | None) -> str:
+    """The stream-ended wording with its leading separator taken off, for the footer."""
+    return (suffix or "").strip(END_TRIM)
+
+
+def ended_footer(footer: str, suffix: str | None) -> str:
+    marker = end_marker(suffix)
+    if not marker:
+        return footer
+    tail = f"{EMBED_END_MARK} {marker}"
+    if footer.endswith(tail):
+        return footer
+    return f"{footer} {tail}" if footer else tail
+
+
+def ended_embed(
+    embed: Any, name: str, platform: str | None, suffix: str | None = GOLIVE_END_SUFFIX
+) -> discord.Embed:
     """The same card once the stream is over; the art and the link stay put."""
     finished = discord.Embed.from_dict(embed.to_dict())
     finished.set_author(name=author_line(name, platform, ended=True))
     footer = _text(getattr(getattr(embed, "footer", None), "text", None)) or ""
-    if not footer.endswith(EMBED_END_FOOTER):
-        footer = f"{footer} {EMBED_END_FOOTER}" if footer else EMBED_END_FOOTER
-    finished.set_footer(text=footer)
+    finished.set_footer(text=ended_footer(footer, suffix) or None)
     return finished
 
 
@@ -293,7 +308,8 @@ def passes_role_filters(
     return True
 
 
-def ended_text(text: str) -> str:
-    if text.endswith(END_SUFFIX):
+def ended_text(text: str, suffix: str | None = GOLIVE_END_SUFFIX) -> str:
+    tail = suffix or ""
+    if not tail.strip() or text.endswith(tail):
         return text
-    return text + END_SUFFIX
+    return text + tail
