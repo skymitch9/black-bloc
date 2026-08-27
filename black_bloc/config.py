@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     api_enabled: bool = False
     api_host: str = "127.0.0.1"
     api_port: int = 8080
+    site_root: Path = Path("site/public")
 
     twitch_client_id: str | None = Field(
         default=None, description="Twitch application client id (go-live fallback path)"
@@ -41,8 +42,15 @@ class Settings(BaseSettings):
     test_mode: bool = True
     test_channel_id: int | None = None
 
+    site_origin: str = "https://blackbloc.heygabi.ai"
+    session_cookie_samesite: str = "lax"
+    discord_client_id: str | None = None
+    discord_client_secret: str | None = None
+    session_secret: str | None = None
+
     @field_validator(
         "dev_guild_id", "test_channel_id", "twitch_client_id", "twitch_client_secret",
+        "discord_client_id", "discord_client_secret", "session_secret",
         mode="before",
     )
     @classmethod
@@ -54,6 +62,18 @@ class Settings(BaseSettings):
     @property
     def twitch_configured(self) -> bool:
         return bool(self.twitch_client_id and self.twitch_client_secret)
+
+    @property
+    def site_login_configured(self) -> bool:
+        return bool(self.discord_client_id and self.discord_client_secret and self.session_secret)
+
+    @property
+    def origin(self) -> str:
+        return self.site_origin.rstrip("/")
+
+    @property
+    def oauth_redirect_uri(self) -> str:
+        return f"{self.origin}/api/auth/callback"
 
     def validate_test_mode(self) -> None:
         if self.test_mode and not self.test_channel_id:

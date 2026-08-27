@@ -241,6 +241,11 @@ class Birthdays(commands.Cog):
         self.last_run_at: str | None = None
         self.last_error: str | None = None
 
+    def loop_health(self, name: str) -> tuple[str | None, str | None]:
+        if name != "_sweep":
+            return (None, None)
+        return (self.last_run_at, self.last_error)
+
     birthday = app_commands.Group(name="birthday", description="Birthday wishes on the day")
     birthday_role = app_commands.Group(
         name="role", description="The role given for the day", parent=birthday

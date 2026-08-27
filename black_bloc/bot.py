@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import UTC, datetime
 
 from discord.ext import commands
 
@@ -38,6 +39,7 @@ class BlackBlocBot(commands.Bot):
             help_command=None,
         )
         self.settings = settings
+        self.started_at = datetime.now(UTC)
         self.db = Database(settings.database_path)
         self.store = SettingsStore(self.db, settings)
         self._background: list[asyncio.Task] = []

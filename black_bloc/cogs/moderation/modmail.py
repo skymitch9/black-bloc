@@ -580,6 +580,11 @@ class Modmail(commands.Cog):
         self.last_ok_at: str | None = None
         self.last_error: str | None = None
 
+    def loop_health(self, name: str) -> tuple[str | None, str | None]:
+        if name != "_reconcile_loop":
+            return (None, None)
+        return (self.last_ok_at, self.last_error)
+
     modmail = app_commands.Group(name="modmail", description="Run the modmail inbox")
 
     @commands.Cog.listener()

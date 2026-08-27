@@ -901,6 +901,12 @@ class Events(commands.Cog):
         self._golive_loop.cancel()
         self._reconcile_loop.cancel()
 
+    def loop_health(self, name: str) -> tuple[str | None, str | None]:
+        key = name.removeprefix("_").removesuffix("_loop")
+        if key not in LOOP_NAMES:
+            return (None, None)
+        return (self.last_ok_at[key], self.last_error[key])
+
     def loop_failed(self, name: str, exc: BaseException, loop: Any) -> None:
         """A loop that raised is restarted, and its failure is on the record until it is not."""
         self.last_error[name] = f"{now_iso()} · {type(exc).__name__}: {exc}"

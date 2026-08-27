@@ -11,16 +11,25 @@ primary_region = "lax"   # nearest to Phoenix; Fly has no phx region
 [env]
   DATABASE_PATH = "/data/black_bloc.sqlite3"
   LOG_LEVEL = "INFO"
-  API_ENABLED = "false"
+  API_ENABLED = "true"
+  API_HOST = "0.0.0.0"
 
 # Persistent disk for SQLite. Create once: fly volumes create black_bloc_data --size 1
 [mounts]
   source = "black_bloc_data"
   destination = "/data"
 
-# No [http_service] on purpose: the bot only makes an OUTBOUND websocket to
-# Discord, and a service section would enable auto-stop on idle, which would
-# kill the gateway connection. Add one only when the API is exposed publicly.
+# The dashboard API (black_bloc/api). ⚠️ auto_stop_machines, auto_start_machines
+# and min_machines_running are LOAD-BEARING, not tuning: this machine also holds
+# the persistent OUTBOUND gateway websocket, and Fly's default auto-stop-on-idle
+# would kill it — an idle HTTP service is not an idle bot. Never let a later
+# `fly launch` or a "sensible defaults" edit flip these three.
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = false
+  min_machines_running = 1
 
 [[vm]]
   size = "shared-cpu-1x"

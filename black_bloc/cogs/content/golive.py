@@ -246,6 +246,11 @@ class GoLive(commands.Cog):
     golive = app_commands.Group(name="golive", description="Go-live announcements")
     twitch = app_commands.Group(name="twitch", description="Link your Twitch channel")
 
+    def loop_health(self, name: str) -> tuple[str | None, str | None]:
+        if name != "poller":
+            return (None, None)
+        return (self.last_poll_ok_at, self.last_poll_error)
+
     async def cog_load(self) -> None:
         settings = self.bot.settings
         if settings.twitch_configured:

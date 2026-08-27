@@ -12,6 +12,9 @@ COPY pyproject.toml README.md ./
 COPY black_bloc ./black_bloc
 RUN pip install --no-cache-dir .
 
+# The status page is served by this same app under one hostname (SITE_ROOT).
+COPY site/public ./site/public
+
 # SQLite lives on a mounted volume so it survives redeploys.
 VOLUME ["/data"]
 
