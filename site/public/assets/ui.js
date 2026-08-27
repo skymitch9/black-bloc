@@ -75,7 +75,7 @@ export function shortWhen(iso) {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const days = Math.round((today - day) / 86400000);
   let text;
-  if (days === 0) text = at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (days === 0) text = at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
   else if (days === 1) text = 'Yesterday';
   else text = at.toLocaleDateString([], { month: 'short', day: 'numeric' });
   return { text, title: at.toLocaleString() };
@@ -541,14 +541,23 @@ export function memberPicker({ label = 'Member', onPick = null } = {}) {
 }
 
 function jsonText(value) {
+  if (value === null || value === undefined) return '';
   try {
-    return JSON.stringify(value === null || value === undefined ? {} : value, null, 2);
+    return JSON.stringify(value, null, 2);
   } catch (e) {
     return String(value);
   }
 }
 
 const SEG_MAX = 3;
+const SEG_FIRST = ['on', 'shadow', 'off'];
+
+/** The mock reads ON · SHADOW · OFF; the registry lists them the other way. */
+function segOrder(choices) {
+  const known = choices.filter((choice) => SEG_FIRST.includes(String(choice)));
+  if (known.length !== choices.length) return choices;
+  return SEG_FIRST.filter((one) => choices.map(String).includes(one));
+}
 
 /**
  * The mock's three-segment control: ON / SHADOW / OFF for a mode key, and the
@@ -601,7 +610,7 @@ async function control(spec, onChange) {
     const choices = spec.choices || [];
     if (choices.length && choices.length <= SEG_MAX) {
       const node = segment(
-        choices.map((choice) => ({ value: choice, label: String(choice) })),
+        segOrder(choices).map((choice) => ({ value: choice, label: String(choice) })),
         spec.value,
         { onChange },
       );
@@ -626,19 +635,20 @@ async function control(spec, onChange) {
     return { node: input, read: (n) => (n.value === '' ? null : Number(n.value)) };
   }
   if (kind === 'color') {
+    const hex = (value) => (typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : null);
     const input = el('input', {
       class: 'input color',
       type: 'color',
-      value: typeof spec.value === 'string' && /^#[0-9a-fA-F]{6}$/.test(spec.value) ? spec.value : '#4eefff',
+      value: hex(spec.value) || hex(spec.default) || '#000000',
     });
     return { node: input, read: (n) => n.value };
   }
   if (kind === 'json') {
-    const area = el('textarea', { class: 'input area mono', rows: '10', spellcheck: 'false' });
+    const area = el('textarea', { class: 'input area mono', rows: '6', spellcheck: 'false' });
     area.value = jsonText(spec.value);
     return {
       node: area,
-      read: (n) => JSON.parse(n.value),
+      read: (n) => (n.value.trim() === '' ? null : JSON.parse(n.value)),
     };
   }
   const input = el('input', {

@@ -290,6 +290,8 @@ body { overflow: hidden; }
 .card-head h3 { flex-grow: 1; margin: 0; font-size: 14px; font-weight: 600; }
 .card-head .bar { margin: 0; gap: .4rem; }
 .card-count { color: var(--et-muted); font-family: var(--et-font-mono); font-size: 11px; }
+.card-head a { color: var(--et-accent); font-size: 12px; text-decoration: none; }
+.card-head a:hover { text-decoration: underline; }
 .card-body { display: grid; gap: 12px; padding: 12px 16px; }
 .card-body:empty { display: none; }
 .card > .card-body:only-child { padding: 12px 16px; }
@@ -627,7 +629,12 @@ button.grid-row:focus-visible { outline: 2px solid var(--et-accent); outline-off
 .setrow-head { display: flex; flex-direction: column; gap: 1px; flex-grow: 1; min-width: 0; }
 .setrow-label { font-size: 14px; font-weight: 500; }
 .setrow-key { color: var(--et-muted); font-family: var(--et-font-mono); font-size: 11px; overflow-wrap: anywhere; }
-.setrow-control { flex: none; width: 218px; max-width: 100%; }
+.setrow-control { flex: none; width: 218px; max-width: 100%; min-width: 0; }
+/* A three-segment control with long choice names needs its own width; every
+   other control keeps the mock's 218px slot. */
+.setrow-control:has(.seg) { width: auto; }
+.setrow-control .input.area { min-height: 5rem; }
+.setrow-control select[multiple] { height: 5.5rem; }
 .setrow-mark {
   flex: none;
   color: var(--et-warn);
@@ -727,6 +734,13 @@ select.input[multiple] { padding: .3em; }
 }
 .btn.small { min-height: 28px; padding: 4px 10px; font-size: 12px; }
 a.btn { text-decoration: none; }
+/* A theme whose primary button is a borderless fill (discord) leaves the quiet
+   variants with no edge at all — on a surface-coloured ground that is an
+   invisible control, so the secondary tiers get their own hairline back. */
+.btn.quiet,
+.btn.warn,
+.btn.danger { border: 1px solid var(--et-hairline); }
+.btn.warn { border-color: color-mix(in srgb, var(--et-warn) 45%, var(--et-hairline)); }
 .btn.danger { border-color: color-mix(in srgb, var(--et-danger) 45%, var(--et-hairline)); }
 
 .field { display: grid; gap: 4px; margin: 0 0 8px; }

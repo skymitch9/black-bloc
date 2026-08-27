@@ -1,14 +1,16 @@
 import { api, listOf, names, notesOf } from './api.js';
 import { FEATURE_TABS, start, tabHref } from './app.js';
-import { shellStatus } from './shell.js';
+import { GROUPS, shellStatus } from './shell.js';
 import { card, el, icon, idsIn, nameNode, sayNothing, shortWhen } from './ui.js';
 
+const many = (n, one, more) => `${n} ${Number(n) === 1 ? one : more}`;
+
 const OPEN_NOTE = {
-  rolemenu: (open) => `${open.role_menus_posted} posted`,
-  tempvoice: (open) => `${open.temp_channels} rooms open`,
-  honeypot: (open) => `${open.honeypot_hits_7d} trips in 7 days`,
-  events: (open) => `${open.open_events} waiting`,
-  modmail: (open) => `${open.open_modmail} open tickets`,
+  rolemenu: (open) => `${many(open.role_menus_posted, 'menu', 'menus')} posted`,
+  tempvoice: (open) => `${many(open.temp_channels, 'room', 'rooms')} open`,
+  honeypot: (open) => `${many(open.honeypot_hits_7d, 'trip', 'trips')} in 7 days`,
+  events: (open) => `${many(open.open_events, 'event', 'events')} waiting`,
+  modmail: (open) => `${many(open.open_modmail, 'open ticket', 'open tickets')}`,
 };
 
 const MODE_NOTE = {
@@ -25,8 +27,26 @@ const NEEDS = [
   { key: 'honeypot_hits_7d', tone: 'danger', tab: 'honeypot', say: (n) => `${n} honeypot trip${n === 1 ? '' : 's'} in 7 days` },
 ];
 
+/**
+ * The sidebar already carries a human name for every feature; the raw feature
+ * id ("golive", "rolemenu") is never what a person should read.
+ */
+const NAV_LABEL = new Map(GROUPS.flatMap((group) => group.items
+  .filter((item) => item.feature)
+  .map((item) => [item.feature, item.label])));
+const NAV_AT = [...NAV_LABEL.keys()];
+
 function title(feature) {
-  return String(feature).replace(/^./, (c) => c.toUpperCase());
+  return NAV_LABEL.get(feature) || String(feature).replace(/^./, (c) => c.toUpperCase());
+}
+
+/** Show the features in the order the sidebar lists them, not registry order. */
+function inNavOrder(rows) {
+  return [...rows].sort((a, b) => {
+    const at = NAV_AT.indexOf(a.feature);
+    const bt = NAV_AT.indexOf(b.feature);
+    return (at < 0 ? NAV_AT.length : at) - (bt < 0 ? NAV_AT.length : bt);
+  });
 }
 
 function pillMode(mode) {
@@ -64,7 +84,7 @@ function featuresCard(status) {
   if (rows.length === 0) {
     return card('Features', [sayNothing('No feature reports a mode yet.')], { flush: true });
   }
-  return card('Features', rows.map((row) => featureRow(row, status.open)), {
+  return card('Features', inNavOrder(rows).map((row) => featureRow(row, status.open)), {
     count: rows.length,
     flush: true,
   });
@@ -90,11 +110,22 @@ function needsCard(status) {
   return card('Needs a human', rows, { count: rows.length, flush: true });
 }
 
+/**
+ * `web.modmail.snippet` reads as "modmail snippet", not "snippet": the leading
+ * `web.` says only where the click came from, and the segments after it are the
+ * sentence. `would_` and `_failed` carry the shadow and failure tones.
+ */
 function verbOf(kind) {
-  const last = String(kind || '').split('.').pop();
+  const parts = String(kind || '').split('.').filter(Boolean);
+  if (parts[0] === 'web') parts.shift();
+  const last = parts[parts.length - 1] || '';
   const would = last.startsWith('would_');
-  const stem = (would ? last.slice('would_'.length) : last).replace(/_/g, ' ');
-  return { would, stem, failed: last.endsWith('failed') };
+  if (would) parts[parts.length - 1] = last.slice('would_'.length);
+  return {
+    would,
+    failed: last.endsWith('failed'),
+    stem: parts.join(' ').replace(/_/g, ' ').trim() || String(kind),
+  };
 }
 
 function sentence(row) {

@@ -233,7 +233,7 @@ function actionBar() {
     if (done.ok) refresh();
   }, { tone: 'warn', small: false });
 
-  return card('Take an action', [
+  return card(null, [
     picker.node,
     el('div', { class: 'formrow' }, [field('What', kind), field('Reason', reason)]),
     lengthField,
