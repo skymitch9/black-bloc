@@ -34,6 +34,22 @@ async def test_send_to_test_channel_passes_through(guarded_bot, monkeypatch):
     await guarded_bot.close()
 
 
+async def test_edit_outside_test_channel_is_refused(guarded_bot):
+    with pytest.raises(TestModeViolation):
+        guarded_bot.http.edit_message(OTHER_CH, 1, params=None)
+    await guarded_bot.close()
+
+
+async def test_edit_in_test_channel_passes_through(guarded_bot, monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        guarded_bot.guard, "_original_edit", lambda cid, *a, **k: seen.append(cid)
+    )
+    guarded_bot.http.edit_message(TEST_CH, 1, params=None)
+    assert seen == [TEST_CH]
+    await guarded_bot.close()
+
+
 class _Interaction:
     def __init__(self, guild_id, channel_id):
         self.guild_id = guild_id

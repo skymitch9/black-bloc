@@ -17,6 +17,7 @@ class TestModeGuard:
         self.bot = bot
         self.test_channel_id = test_channel_id
         self._original_send: Any = None
+        self._original_edit: Any = None
 
     def _is_dm(self, channel_id: int) -> bool:
         ch = self.bot.get_channel(channel_id)
@@ -41,6 +42,7 @@ class TestModeGuard:
     def install(self) -> None:
         http = self.bot.http
         self._original_send = http.send_message
+        self._original_edit = http.edit_message
         guard = self
 
         def gated_send_message(channel_id: int, *args: Any, **kwargs: Any):
@@ -53,7 +55,18 @@ class TestModeGuard:
                 raise TestModeViolation(f"test mode: channel {channel_id} is not the test channel")
             return guard._original_send(channel_id, *args, **kwargs)
 
+        def gated_edit_message(channel_id: int, *args: Any, **kwargs: Any):
+            if not guard.allows_channel(int(channel_id)):
+                log.error(
+                    "TEST MODE: refused to edit a message in channel %s (allowed: %s or DMs)",
+                    channel_id,
+                    guard.test_channel_id,
+                )
+                raise TestModeViolation(f"test mode: channel {channel_id} is not the test channel")
+            return guard._original_edit(channel_id, *args, **kwargs)
+
         http.send_message = gated_send_message  # type: ignore[method-assign]
+        http.edit_message = gated_edit_message  # type: ignore[method-assign]
 
         tree = getattr(self.bot, "tree", None)
         if tree is not None:
