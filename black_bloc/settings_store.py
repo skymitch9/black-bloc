@@ -17,6 +17,8 @@ from .automod import (
 )
 from .config import Settings
 from .emoji import SKIN_TONE_DEFAULT, SKIN_TONE_NAMES
+from .polls import MAX_HOURS as POLL_MAX_HOURS
+from .polls import MIN_HOURS as POLL_MIN_HOURS
 from .storage.db import Database
 
 log = logging.getLogger(__name__)
@@ -47,6 +49,16 @@ EVENTS_RETENTION_MIN_DAYS = 1
 EVENTS_RETENTION_MAX_DAYS = 365
 EVENTS_MAX_LATE_MINUTES = 15
 EVENTS_LATE_CEILING_MINUTES = 24 * 60
+
+POLL_MODES = ("off", "on")
+POLL_REVIEW_MODES = ("off", "on")
+POLL_CREATORS = ("staff", "everyone")
+POLL_DEFAULT_HOURS = 24
+POLL_REMINDER_MINUTES = 60
+POLL_REMINDER_MAX_MINUTES = 7 * 24 * 60
+POLL_ARCHIVE_DAYS = 365
+POLL_ARCHIVE_MIN_DAYS = 1
+POLL_ARCHIVE_MAX_DAYS = 10 * 365
 
 BIRTHDAY_CHANNEL_ID = 1411816390414962700
 BIRTHDAY_TEMPLATE = "Happy Birthday **{name}**!"
@@ -105,6 +117,16 @@ KEY_TYPES: dict[str, str] = {
     "events_create_scheduled": "bool",
     "events_channel_retention_days": "int",
     "events_max_late_minutes": "int",
+    "poll_mode": "enum",
+    "poll_who_can_create": "enum",
+    "poll_review_mode": "enum",
+    "poll_default_hours": "int",
+    "poll_channel_id": "channel",
+    "poll_ping_role_id": "role",
+    "poll_reminder_minutes": "int",
+    "poll_auto_thread": "bool",
+    "poll_archive_days": "int",
+    "poll_archive_drop_votes": "bool",
     "birthday_mode": "enum",
     "birthday_channel_id": "channel",
     "birthday_template": "text",
@@ -139,6 +161,9 @@ KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "tempvoice_mode": TEMPVOICE_MODES,
     "honeypot_mode": HONEYPOT_MODES,
     "events_mode": EVENTS_MODES,
+    "poll_mode": POLL_MODES,
+    "poll_review_mode": POLL_REVIEW_MODES,
+    "poll_who_can_create": POLL_CREATORS,
     "birthday_mode": BIRTHDAY_MODES,
     "modmail_mode": MODMAIL_MODES,
     "automod_mode": AUTOMOD_MODES,
@@ -154,11 +179,16 @@ KEY_MAX: dict[str, int] = {
     "events_max_late_minutes": EVENTS_LATE_CEILING_MINUTES,
     "automod_warn_threshold": WARN_THRESHOLD_MAX,
     "chat_cooldown_seconds": CHAT_COOLDOWN_MAX_SECONDS,
+    "poll_default_hours": POLL_MAX_HOURS,
+    "poll_reminder_minutes": POLL_REMINDER_MAX_MINUTES,
+    "poll_archive_days": POLL_ARCHIVE_MAX_DAYS,
 }
 
 KEY_MIN: dict[str, int] = {
     "events_channel_retention_days": EVENTS_RETENTION_MIN_DAYS,
     "chat_cooldown_seconds": CHAT_COOLDOWN_MIN_SECONDS,
+    "poll_default_hours": POLL_MIN_HOURS,
+    "poll_archive_days": POLL_ARCHIVE_MIN_DAYS,
 }
 
 KEY_MIN_REASON: dict[str, str] = {
@@ -169,6 +199,14 @@ KEY_MIN_REASON: dict[str, str] = {
     "chat_cooldown_seconds": (
         "A gap shorter than {limit} seconds lets one person hold Black Bloc in a back-and-forth "
         "that fills the channel. Set `chat_mode` to off if you want it quiet altogether."
+    ),
+    "poll_default_hours": (
+        "Discord counts a poll's length in whole hours and will not take less than {limit}, so "
+        "a shorter one could never be posted."
+    ),
+    "poll_archive_days": (
+        "Archiving a poll the day it closes hides the result before anybody has read it, so the "
+        "shortest Black Bloc will wait is {limit} day."
     ),
 }
 
@@ -192,6 +230,18 @@ KEY_MAX_REASON: dict[str, str] = {
     "chat_cooldown_seconds": (
         "A gap longer than {limit} seconds means most people never get an answer at all, which "
         "reads as a broken bot rather than a quiet one."
+    ),
+    "poll_default_hours": (
+        "Discord closes every poll within 32 days, so {limit} hours is the longest one there is."
+    ),
+    "poll_reminder_minutes": (
+        "A last call more than {limit} minutes before a poll closes is not a last call. Set it "
+        "to 0 if you would rather Black Bloc said nothing."
+    ),
+    "poll_archive_days": (
+        "A poll kept out of the archive for more than {limit} days is one nobody will ever "
+        "tidy away. Nothing is deleted at the archive except the per-voter rows, and only when "
+        "`poll_archive_drop_votes` says so."
     ),
 }
 
@@ -243,6 +293,31 @@ KEY_HELP: dict[str, str] = {
     "events_max_late_minutes": (
         "minutes an event may start late and still be announced; later than that it goes live "
         "quietly"
+    ),
+    "poll_mode": "off, or on (members and staff can run polls with /poll create)",
+    "poll_who_can_create": "who may run /poll create: staff, or everyone",
+    "poll_review_mode": (
+        "off posts a poll straight away; on holds it for a staff Approve or Deny first"
+    ),
+    "poll_default_hours": (
+        f"hours a poll stays open when nobody says otherwise, {POLL_MIN_HOURS} to "
+        f"{POLL_MAX_HOURS} (32 days)"
+    ),
+    "poll_channel_id": (
+        "where a poll made from the dashboard goes; a slash command posts in its own channel"
+    ),
+    "poll_ping_role_id": "role mentioned when a poll opens; blank pings nobody",
+    "poll_reminder_minutes": (
+        f"minutes before a poll closes that Black Bloc posts a last call, 0 to say nothing, up "
+        f"to {POLL_REMINDER_MAX_MINUTES}"
+    ),
+    "poll_auto_thread": "true to open a discussion thread under every poll",
+    "poll_archive_days": (
+        f"days a closed poll stays on the list before it moves to the archive, "
+        f"{POLL_ARCHIVE_MIN_DAYS} to {POLL_ARCHIVE_MAX_DAYS}"
+    ),
+    "poll_archive_drop_votes": (
+        "true to forget who voted when a poll is archived; the totals are kept either way"
     ),
     "birthday_mode": "off, shadow (log only) or on (post birthday wishes)",
     "birthday_channel_id": "where birthday wishes are posted",
@@ -572,6 +647,24 @@ class SettingsStore:
             return EVENTS_RETENTION_DAYS
         if key == "events_max_late_minutes":
             return EVENTS_MAX_LATE_MINUTES
+        if key == "poll_mode":
+            return "on"
+        if key == "poll_who_can_create":
+            return "staff"
+        if key == "poll_review_mode":
+            return "off"
+        if key == "poll_default_hours":
+            return POLL_DEFAULT_HOURS
+        if key == "poll_channel_id":
+            return self.settings.test_channel_id if self.settings.test_mode else None
+        if key == "poll_reminder_minutes":
+            return POLL_REMINDER_MINUTES
+        if key == "poll_auto_thread":
+            return False
+        if key == "poll_archive_days":
+            return POLL_ARCHIVE_DAYS
+        if key == "poll_archive_drop_votes":
+            return True
         if key == "birthday_mode":
             return "shadow"
         if key == "birthday_channel_id":
