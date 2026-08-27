@@ -19,6 +19,7 @@ from black_bloc.settings_store import (
     GOLIVE_END_SUFFIX,
     GOLIVE_TEMPLATE,
     HONEYPOT_PURGE_MAX_DAYS,
+    KEY_HELP,
     KEY_TYPES,
     LIVE_NOW_CHANNEL_ID,
     MEMBER_ROLE_ID,
@@ -753,3 +754,32 @@ def test_every_poll_key_is_typed_so_the_dashboard_can_render_it():
         "poll_archive_drop_votes",
     ):
         assert key in KEY_TYPES
+
+
+async def test_the_chat_manners_keys_are_typed_explained_and_defaulted(store):
+    """None of them ends in _mode, so none of them shows up as a feature switch."""
+    for key in (
+        "chat_ignore_channels",
+        "chat_greeting_reaction",
+        "chat_reply_in_threads",
+        "chat_route_ping_staff",
+    ):
+        assert key in KEY_TYPES and KEY_HELP.get(key)
+        assert not key.endswith("_mode")
+    assert store.get(7, "chat_ignore_channels") == []
+    assert store.get(7, "chat_greeting_reaction") is False
+    assert store.get(7, "chat_reply_in_threads") is True
+    assert store.get(7, "chat_route_ping_staff") is False
+
+
+def test_the_chat_manners_keys_refuse_the_wrong_shape():
+    assert coerce_value("chat_ignore_channels", [12, 12, 13]) == [12, 13]
+    assert coerce_value("chat_greeting_reaction", True) is True
+    for key, bad in (
+        ("chat_ignore_channels", "12"),
+        ("chat_greeting_reaction", "on"),
+        ("chat_reply_in_threads", 1),
+        ("chat_route_ping_staff", "yes"),
+    ):
+        with pytest.raises(SettingError):
+            coerce_value(key, bad)

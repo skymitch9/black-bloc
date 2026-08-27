@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -332,6 +332,33 @@ CREATE TABLE IF NOT EXISTS poll_results (
     counts          TEXT    NOT NULL,
     votes_dropped   INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS chat_intents (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id   INTEGER NOT NULL,
+    name       TEXT    NOT NULL,
+    triggers   TEXT    NOT NULL DEFAULT '[]',
+    kind       TEXT    NOT NULL DEFAULT 'canned'
+               CHECK (kind IN ('canned', 'data', 'route')),
+    enabled    INTEGER NOT NULL DEFAULT 1,
+    sort       INTEGER NOT NULL DEFAULT 0,
+    created_by INTEGER,
+    updated_at TEXT    NOT NULL,
+    UNIQUE (guild_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS chat_lines (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    intent_id  INTEGER NOT NULL REFERENCES chat_intents(id) ON DELETE CASCADE,
+    text       TEXT    NOT NULL,
+    slot       TEXT    NOT NULL DEFAULT 'filled'
+               CHECK (slot IN ('filled', 'empty', 'attendee')),
+    enabled    INTEGER NOT NULL DEFAULT 1,
+    created_by INTEGER,
+    updated_at TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS chat_lines_by_intent ON chat_lines(intent_id, id);
 """
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (

@@ -152,6 +152,10 @@ KEY_TYPES: dict[str, str] = {
     "rolemenu_mode": "enum",
     "chat_mode": "enum",
     "chat_cooldown_seconds": "int",
+    "chat_ignore_channels": "channels",
+    "chat_greeting_reaction": "bool",
+    "chat_reply_in_threads": "bool",
+    "chat_route_ping_staff": "bool",
     "rolemenu_approval_channel_id": "channel",
     "rolemenu_approver_role_id": "role",
     "emoji_skin_tone": "enum",
@@ -354,6 +358,16 @@ KEY_HELP: dict[str, str] = {
     "chat_cooldown_seconds": (
         f"seconds before the same person gets another @-mention reply, "
         f"{CHAT_COOLDOWN_MIN_SECONDS} to {CHAT_COOLDOWN_MAX_SECONDS}"
+    ),
+    "chat_ignore_channels": "channels Black Bloc never answers an @-mention in",
+    "chat_greeting_reaction": (
+        "true to answer a bare hello with a wave reaction instead of a sentence; anything "
+        "longer still gets a reply"
+    ),
+    "chat_reply_in_threads": "true to answer @-mentions inside threads as well as channels",
+    "chat_route_ping_staff": (
+        "true to drop one line in the staff channel when somebody asks the bot for a mod; only "
+        "used while modmail_enabled is true"
     ),
     "rolemenu_approval_channel_id": (
         "where a role request waits for Approve or Deny; blank uses staff_channel_id"
@@ -716,6 +730,12 @@ class SettingsStore:
             return "on"
         if key == "chat_cooldown_seconds":
             return CHAT_COOLDOWN_SECONDS
+        if key == "chat_greeting_reaction":
+            return False
+        if key == "chat_reply_in_threads":
+            return True
+        if key == "chat_route_ping_staff":
+            return False
         if key == "emoji_skin_tone":
             return SKIN_TONE_DEFAULT
         if KEY_TYPES.get(key) in ("channels", "roles"):

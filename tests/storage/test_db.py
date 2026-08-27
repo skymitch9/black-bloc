@@ -12,7 +12,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 14
+        assert SCHEMA_VERSION == 15
         cur = await db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = {r["name"] for r in await cur.fetchall()}
         assert {"settings", "action_log", "role_menus", "role_menu_options"} <= tables
@@ -36,6 +36,60 @@ async def test_connect_bootstraps_schema(tmp_path):
             "modmail_snippets",
         } <= tables
         assert {"polls", "poll_options", "poll_votes", "poll_results"} <= tables
+        assert {"chat_intents", "chat_lines"} <= tables
+    finally:
+        await db.close()
+
+
+async def test_a_chat_intent_and_its_lines_carry_what_the_chat_page_edits(tmp_path):
+    db = Database(tmp_path / "c.sqlite3")
+    await db.connect()
+    try:
+        cur = await db.conn.execute("PRAGMA table_info(chat_intents)")
+        columns = {row["name"] for row in await cur.fetchall()}
+        assert {"id", "guild_id", "name", "triggers", "kind"} <= columns
+        assert {"enabled", "sort", "created_by", "updated_at"} <= columns
+        cur = await db.conn.execute("PRAGMA table_info(chat_lines)")
+        columns = {row["name"] for row in await cur.fetchall()}
+        assert {"id", "intent_id", "text", "slot", "enabled", "created_by", "updated_at"} <= columns
+    finally:
+        await db.close()
+
+
+async def test_one_guild_cannot_hold_two_intents_of_the_same_name(tmp_path):
+    db = Database(tmp_path / "c.sqlite3")
+    await db.connect()
+    try:
+        await db.conn.execute(
+            "INSERT INTO chat_intents(guild_id, name, triggers, kind, updated_at) "
+            "VALUES (7, 'greeting', '[]', 'canned', 'now')"
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            await db.conn.execute(
+                "INSERT INTO chat_intents(guild_id, name, triggers, kind, updated_at) "
+                "VALUES (7, 'greeting', '[]', 'canned', 'now')"
+            )
+    finally:
+        await db.close()
+
+
+async def test_a_deleted_intent_takes_its_lines_with_it(tmp_path):
+    """The lines are a child table, so a delete cannot leave orphans behind."""
+    db = Database(tmp_path / "c.sqlite3")
+    await db.connect()
+    try:
+        cur = await db.conn.execute(
+            "INSERT INTO chat_intents(guild_id, name, triggers, kind, updated_at) "
+            "VALUES (7, 'cookout', '[]', 'canned', 'now')"
+        )
+        intent_id = cur.lastrowid
+        await db.conn.execute(
+            "INSERT INTO chat_lines(intent_id, text, updated_at) VALUES (?, 'hi', 'now')",
+            (intent_id,),
+        )
+        await db.conn.execute("DELETE FROM chat_intents WHERE id = ?", (intent_id,))
+        cur = await db.conn.execute("SELECT COUNT(*) AS n FROM chat_lines")
+        assert (await cur.fetchone())["n"] == 0
     finally:
         await db.close()
 
