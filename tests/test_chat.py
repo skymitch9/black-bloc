@@ -1,23 +1,58 @@
 import random
+import re
 from types import SimpleNamespace
 
 import pytest
 
 from black_bloc.chat import (
+    ATTENDEE,
     ATTENDEE_LINES,
+    BUILTIN_KINDS,
+    BUILTIN_NAMES,
+    BUILTIN_ORDER,
+    CANNED,
+    DATA,
+    DATA_INTENTS,
+    DATA_LINES,
+    EMPTY,
+    FILLED,
     INTENTS,
     LINE_LIMIT,
     LINES,
     ORDER,
+    ROUTE,
+    ROUTE_INTENTS,
+    ROUTE_LINES,
     UNKNOWN,
+    ChatError,
+    add_line,
     attendees_for,
+    bare_greeting,
     classify,
+    clean_name,
+    clean_slot,
+    clean_text,
+    clean_triggers,
+    create_intent,
     display_name,
+    guild_intents,
+    invalidate,
+    kind_of,
+    lines_for,
+    list_intents,
+    loaded_intents,
     normalise,
+    pool,
+    render,
     reply_for,
     respond,
+    seed_defaults,
+    tokens_of,
+    update_intent,
+    update_line,
 )
 from black_bloc.emoji import SKIN_TONES
+from black_bloc.storage.db import Database
 
 WAVE = "\U0001f44b"
 HEART = "\U0001f5a4"
@@ -176,8 +211,8 @@ def test_attendees_come_from_the_members_guild_then_the_bots():
     assert attendees_for(FakeMember(display="Nia"), FakeBot()) is None
 
 
-def test_reply_for_is_the_one_seam_and_answers_in_the_bots_voice():
-    said = reply_for("<@1> hi", FakeMember(display="Nia"), FakeBot(), rng=random.Random(0))
+async def test_reply_for_is_the_one_seam_and_answers_in_the_bots_voice():
+    said = await reply_for("<@1> hi", FakeMember(display="Nia"), FakeBot(), rng=random.Random(0))
     assert "Nia" in said
     assert len(said) <= LINE_LIMIT
 
@@ -194,37 +229,37 @@ class TonedBot(FakeBot):
         self.store = SimpleNamespace(get=lambda guild_id, key: tone)
 
 
-def test_a_gesture_in_a_line_comes_out_dark_by_default():
+async def test_a_gesture_in_a_line_comes_out_dark_by_default():
     member = FakeMember(display="Nia", guild=FakeGuild())
 
-    said = reply_for("<@1> hi", member, FakeBot(), rng=PicksTheGesture)
+    said = await reply_for("<@1> hi", member, FakeBot(), rng=PicksTheGesture)
 
     assert WAVE + DARK in said and WAVE + " " not in said
 
 
-def test_a_guild_that_picked_another_tone_gets_it():
+async def test_a_guild_that_picked_another_tone_gets_it():
     member = FakeMember(display="Nia", guild=FakeGuild())
 
-    said = reply_for("<@1> hi", member, TonedBot("light"), rng=PicksTheGesture)
+    said = await reply_for("<@1> hi", member, TonedBot("light"), rng=PicksTheGesture)
 
     assert WAVE + SKIN_TONES["light"] in said
 
 
-def test_tone_none_leaves_the_gesture_bare():
+async def test_tone_none_leaves_the_gesture_bare():
     member = FakeMember(display="Nia", guild=FakeGuild())
 
-    said = reply_for("<@1> hi", member, TonedBot("none"), rng=PicksTheGesture)
+    said = await reply_for("<@1> hi", member, TonedBot("none"), rng=PicksTheGesture)
 
     assert WAVE in said and not any(mark in said for mark in SKIN_TONES.values() if mark)
 
 
-def test_a_heart_in_a_line_is_left_exactly_as_written():
+async def test_a_heart_in_a_line_is_left_exactly_as_written():
     picks_the_heart = SimpleNamespace(
         choice=lambda options: next(line for line in options if HEART in line)
     )
     member = FakeMember(display="Nia", guild=FakeGuild())
 
-    said = reply_for("<@1> love you", member, FakeBot(), rng=picks_the_heart)
+    said = await reply_for("<@1> love you", member, FakeBot(), rng=picks_the_heart)
 
     assert HEART in said and DARK not in said
 
@@ -233,4 +268,308 @@ def test_no_line_is_written_with_a_tone_already_on_it():
     """The tone is a setting applied at send time, so the tables stay bare."""
     written = [line for lines in LINES.values() for line in lines]
     written += [line for lines in ATTENDEE_LINES.values() for line in lines]
+    for table in (DATA_LINES, ROUTE_LINES):
+        written += [line for slots in table.values() for lines in slots.values() for line in lines]
     assert not any(mark in line for line in written for mark in SKIN_TONES.values() if mark)
+
+
+GUILD = 7
+
+
+class StoredBot(FakeBot):
+    """A bot with a database, which is all `guild_intents` needs to read a guild's rows."""
+
+    def __init__(self, db, guilds=()):
+        super().__init__(guilds=guilds)
+        self.db = db
+
+
+@pytest.fixture
+async def db(tmp_path):
+    database = Database(tmp_path / "chat.sqlite3")
+    await database.connect()
+    try:
+        yield database
+    finally:
+        await database.close()
+
+
+async def rows(db, guild_id=GUILD):
+    return await loaded_intents(db, guild_id)
+
+
+async def named(db, name, guild_id=GUILD):
+    return next(row for row in await list_intents(db, guild_id) if row["name"] == name)
+
+
+async def test_the_seed_puts_every_built_in_intent_in_reach_of_the_page(db):
+    made = await seed_defaults(db, GUILD, by=1)
+
+    stored = {row["name"]: row for row in await rows(db)}
+    assert made == len(stored) == len(BUILTIN_ORDER) + 1
+    assert set(stored) == set(BUILTIN_ORDER) | {UNKNOWN}
+    assert stored["greeting"]["kind"] == CANNED
+    assert stored["who_is_live"]["kind"] == DATA
+    assert stored["need_a_mod"]["kind"] == ROUTE
+    assert stored["greeting"]["triggers"] == INTENTS["greeting"]
+    assert set(stored["greeting"]["lines"][FILLED]) == set(LINES["greeting"])
+    assert set(stored["greeting"]["lines"][ATTENDEE]) == set(ATTENDEE_LINES["greeting"])
+
+
+async def test_every_data_and_route_intent_is_seeded_with_both_states(db):
+    await seed_defaults(db, GUILD)
+
+    stored = {row["name"]: row for row in await rows(db)}
+    for name in (*DATA_INTENTS, *ROUTE_INTENTS):
+        assert stored[name]["lines"][FILLED], name
+        assert stored[name]["lines"][EMPTY], name
+
+
+async def test_seeding_twice_changes_nothing_and_leaves_edits_alone(db):
+    await seed_defaults(db, GUILD)
+    before = {row["name"]: row["id"] for row in await rows(db)}
+    greeting = await named(db, "greeting")
+    line = (await lines_for(db, greeting["id"]))[0]
+    await update_line(db, line["id"], text="Edited hello, {name}.")
+
+    assert await seed_defaults(db, GUILD) == 0
+
+    assert {row["name"]: row["id"] for row in await rows(db)} == before
+    stored = {row["name"]: row for row in await rows(db)}
+    assert "Edited hello, {name}." in stored["greeting"]["lines"][FILLED]
+
+
+async def test_a_second_guild_gets_its_own_copy(db):
+    await seed_defaults(db, GUILD)
+    assert await seed_defaults(db, 8) == len(BUILTIN_ORDER) + 1
+    assert len(await rows(db, 8)) == len(BUILTIN_ORDER) + 1
+
+
+def test_with_no_rows_at_all_the_code_tables_still_answer():
+    assert classify("hi there", ()) == "greeting"
+    assert respond("greeting", name="Nia", rng=random.Random(0), intents=()) in [
+        line.format(name="Nia", attendees=None) for line in LINES["greeting"]
+    ]
+
+
+async def test_an_intent_whose_lines_are_all_disabled_falls_back_to_the_code_table(db):
+    await seed_defaults(db, GUILD)
+    greeting = await named(db, "greeting")
+    for line in await lines_for(db, greeting["id"]):
+        await update_line(db, line["id"], enabled=False)
+
+    said = respond("greeting", name="Nia", rng=random.Random(0), intents=await rows(db))
+
+    assert said in [line.format(name="Nia", attendees=None) for line in LINES["greeting"]]
+
+
+async def test_a_guilds_own_line_is_used_over_the_code_one(db):
+    await seed_defaults(db, GUILD)
+    greeting = await named(db, "greeting")
+    for line in await lines_for(db, greeting["id"]):
+        await update_line(db, line["id"], enabled=False)
+    await add_line(db, greeting["id"], "Only line, {name}.")
+
+    assert respond("greeting", name="Nia", intents=await rows(db)) == "Only line, Nia."
+
+
+async def test_turning_off_the_head_count_lines_actually_turns_them_off(db):
+    """The code table is the fallback for an ANSWER, never for the optional extras."""
+    await seed_defaults(db, GUILD)
+    greeting = await named(db, "greeting")
+    for line in await lines_for(db, greeting["id"]):
+        if line["slot"] == ATTENDEE:
+            await update_line(db, line["id"], enabled=False)
+
+    stored = await rows(db)
+
+    assert not any(
+        "{attendees}" in line for line in pool("greeting", 12, stored)
+    )
+    assert "{attendees}" in " ".join(pool("greeting", 12, ()))
+
+
+async def test_a_custom_intent_beats_a_built_in_one(db):
+    await seed_defaults(db, GUILD)
+    made = await create_intent(db, GUILD, "cookout_hours", ["hi", "when is the cookout"])
+    await add_line(db, made, "Doors at six, {name}.")
+
+    stored = await rows(db)
+
+    assert classify("hi", stored) == "cookout_hours"
+    assert respond("cookout_hours", name="Nia", intents=stored) == "Doors at six, Nia."
+
+
+async def test_custom_intents_are_tried_in_the_order_staff_put_them_in(db):
+    later = await create_intent(db, GUILD, "second", ["cookout"], sort=5)
+    await add_line(db, later, "second")
+    sooner = await create_intent(db, GUILD, "first", ["cookout"], sort=1)
+    await add_line(db, sooner, "first")
+
+    assert classify("is there a cookout", await rows(db)) == "first"
+
+
+async def test_a_custom_intent_with_nothing_to_say_is_skipped(db):
+    """An empty intent must not swallow a message a built-in could still answer."""
+    await create_intent(db, GUILD, "empty_one", ["hi"])
+
+    assert classify("hi", await rows(db)) == "greeting"
+
+
+async def test_a_disabled_built_in_falls_through_to_the_next_one(db):
+    await seed_defaults(db, GUILD)
+    await update_intent(db, (await named(db, "greeting"))["id"], enabled=False)
+
+    assert classify("hi", await rows(db)) == UNKNOWN
+
+
+async def test_a_disabled_love_intent_stops_the_heart_shortcut_too(db):
+    await seed_defaults(db, GUILD)
+    await update_intent(db, (await named(db, "love"))["id"], enabled=False)
+
+    assert classify("❤", await rows(db)) == UNKNOWN
+
+
+async def test_edited_triggers_are_what_classification_reads(db):
+    await seed_defaults(db, GUILD)
+    await update_intent(db, (await named(db, "greeting"))["id"], triggers=["ahoy"])
+
+    stored = await rows(db)
+
+    assert classify("ahoy", stored) == "greeting"
+    assert classify("hi", stored) == UNKNOWN
+
+
+def test_the_built_in_tables_all_line_up():
+    assert set(BUILTIN_ORDER) | {UNKNOWN} == set(BUILTIN_NAMES)
+    assert set(BUILTIN_KINDS) == set(BUILTIN_NAMES)
+    assert set(DATA_INTENTS) == set(DATA_LINES)
+    assert set(ROUTE_INTENTS) == set(ROUTE_LINES)
+
+
+@pytest.mark.parametrize(
+    "text, intent",
+    [
+        ("whos live right now", "who_is_live"),
+        ("anyone streaming", "who_is_live"),
+        ("whats next", "whats_next"),
+        ("when is the next thing", "whats_next"),
+        ("any birthdays coming", "birthdays"),
+        ("whose birthday is it", "birthdays"),
+        ("how many of us are here", "head_count"),
+        ("member count", "head_count"),
+        ("what roles can i pick", "my_roles"),
+        ("my roles", "my_roles"),
+        ("what time is that for me", "time_for_me"),
+        ("in my time zone", "time_for_me"),
+        ("i need a mod", "need_a_mod"),
+        ("staff please", "need_a_mod"),
+        ("help me", "need_a_mod"),
+    ],
+)
+def test_the_data_and_route_phrases_land_on_their_own_intents(text, intent):
+    assert classify(text) == intent
+
+
+def test_a_birthday_question_is_not_read_as_the_next_event():
+    """`when is the next` is a whats_next phrase, so birthdays has to be asked first."""
+    assert classify("when is the next birthday") == "birthdays"
+
+
+def test_every_token_a_seeded_line_uses_is_one_the_page_advertises():
+    """The token help is a promise: a chip the page shows has to render."""
+    for table in (DATA_LINES, ROUTE_LINES):
+        for intent, slots in table.items():
+            allowed = {"name", "attendees"} | {one.strip("{}") for one in tokens_of(intent)}
+            for lines in slots.values():
+                for line in lines:
+                    used = set(re.findall(r"\{([a-z_]+)\}", line))
+                    assert used <= allowed, f"{intent}: {sorted(used - allowed)}"
+
+
+def test_a_canned_intent_advertises_no_tokens_of_its_own():
+    assert tokens_of("greeting") == ()
+    assert tokens_of("head_count") == ("{count}",)
+    assert tokens_of("nothing_like_it") == ()
+
+
+def test_the_kind_of_an_intent_is_known_without_any_rows():
+    assert kind_of("greeting") == CANNED
+    assert kind_of("head_count") == DATA
+    assert kind_of("need_a_mod") == ROUTE
+    assert kind_of("nothing_like_it") == CANNED
+
+
+def test_a_data_line_renders_its_own_tokens():
+    said = respond(
+        "head_count", name="Nia", slot=FILLED, tokens={"count": 412}, rng=random.Random(0)
+    )
+    assert "412" in said and "Nia" in said
+
+
+def test_an_empty_state_uses_the_empty_line_rather_than_the_filled_one():
+    said = respond("who_is_live", name="Nia", slot=EMPTY, rng=random.Random(0))
+    assert said in [line.format(name="Nia") for line in DATA_LINES["who_is_live"][EMPTY]]
+
+
+def test_a_token_nobody_filled_in_is_left_as_typed_rather_than_raising():
+    assert render("Doors at {when}, {name}.", {"name": "Nia"}) == "Doors at {when}, Nia."
+
+
+def test_a_line_with_broken_bracing_is_sent_as_written():
+    assert render("half a {token", {"name": "Nia"}) == "half a {token"
+
+
+def test_a_bare_hello_is_told_apart_from_a_sentence_that_starts_with_one():
+    assert bare_greeting("<@1> hi") is True
+    assert bare_greeting("  Hey!  ") is True
+    assert bare_greeting("<@1> hi, when is the cookout") is False
+    assert bare_greeting("") is False
+
+
+async def test_the_cache_is_read_once_and_dropped_when_something_is_saved(db):
+    bot = StoredBot(db)
+    await seed_defaults(db, GUILD)
+
+    first = await guild_intents(bot, GUILD)
+    await update_intent(db, (await named(db, "greeting"))["id"], triggers=["ahoy"])
+
+    assert await guild_intents(bot, GUILD) is first
+    invalidate(bot, GUILD)
+    assert classify("ahoy", await guild_intents(bot, GUILD)) == "greeting"
+
+
+async def test_a_dm_and_a_bot_with_no_database_both_read_no_rows(db):
+    assert await guild_intents(StoredBot(db), None) == ()
+    assert await guild_intents(FakeBot(), GUILD) == ()
+
+
+def test_a_new_intents_name_has_to_be_one_black_bloc_can_store():
+    assert clean_name(" Cookout Hours ") == "cookout_hours"
+    for given in ("", "9lives", "hey there!", "x" * 61):
+        with pytest.raises(ChatError):
+            clean_name(given)
+
+
+def test_a_new_intent_cannot_take_a_built_in_name():
+    with pytest.raises(ChatError) as caught:
+        clean_name("greeting")
+    assert "greeting" in str(caught.value)
+
+
+def test_triggers_are_tidied_de_duplicated_and_capped():
+    assert clean_triggers([" hi ", "hi", "good  morning"]) == ["hi", "good morning"]
+    assert clean_triggers("hi, there") == ["hi", "there"]
+    for given in ([], [""], ["x" * 61], [f"p{n}" for n in range(41)]):
+        with pytest.raises(ChatError):
+            clean_triggers(given)
+
+
+def test_a_line_needs_words_and_a_slot_has_to_be_one_of_three():
+    assert clean_text("  hello  ") == "hello"
+    assert clean_slot(None) == FILLED
+    for given in ("   ", "x" * 501):
+        with pytest.raises(ChatError):
+            clean_text(given)
+    with pytest.raises(ChatError):
+        clean_slot("somewhere")

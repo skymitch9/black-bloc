@@ -1510,6 +1510,190 @@
         "unblocked",
         "user_id"
       ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/chat/intents",
+      "read_by": [
+        "11b page-chat.js"
+      ],
+      "shape": "object",
+      "keys": [
+        "intents",
+        "settings",
+        "slots",
+        "notes"
+      ],
+      "rows": {
+        "intents": [
+          "id",
+          "name",
+          "kind",
+          "enabled",
+          "sort",
+          "triggers",
+          "builtin",
+          "tokens",
+          "created_by",
+          "updated_at",
+          "lines"
+        ],
+        "settings": [
+          "key",
+          "type",
+          "value",
+          "default",
+          "help"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/intents",
+      "body": {
+        "name": "contract_intent",
+        "triggers": [
+          "contract check"
+        ],
+        "text": "Hello from the contract."
+      },
+      "read_by": [
+        "11b page-chat.js new intent form"
+      ],
+      "shape": "object",
+      "keys": [
+        "intent",
+        "message"
+      ],
+      "nested": {
+        "intent": [
+          "id",
+          "name",
+          "kind",
+          "triggers",
+          "enabled",
+          "builtin",
+          "tokens",
+          "lines"
+        ]
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chat/intents/{chat_intent_id}",
+      "body": {
+        "enabled": true
+      },
+      "read_by": [
+        "11b page-chat.js intent card"
+      ],
+      "shape": "object",
+      "keys": [
+        "intent",
+        "message"
+      ],
+      "nested": {
+        "intent": [
+          "id",
+          "name",
+          "triggers",
+          "enabled",
+          "sort",
+          "lines"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/intents/{chat_intent_id}/lines",
+      "body": {
+        "text": "Another way of saying it, {name}."
+      },
+      "read_by": [
+        "11b page-chat.js line list"
+      ],
+      "shape": "object",
+      "keys": [
+        "line",
+        "message"
+      ],
+      "nested": {
+        "line": [
+          "id",
+          "intent_id",
+          "text",
+          "slot",
+          "enabled",
+          "updated_at"
+        ]
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chat/lines/{chat_line_id}",
+      "body": {
+        "text": "Edited on the contract run."
+      },
+      "read_by": [
+        "11b page-chat.js line list"
+      ],
+      "shape": "object",
+      "keys": [
+        "line",
+        "message"
+      ],
+      "nested": {
+        "line": [
+          "id",
+          "intent_id",
+          "text",
+          "slot",
+          "enabled"
+        ]
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/chat/lines/{chat_line_id}",
+      "read_by": [
+        "11b page-chat.js line list"
+      ],
+      "shape": "object",
+      "keys": [
+        "removed",
+        "line_id",
+        "message"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/chat/intents/{chat_intent_id}",
+      "read_by": [
+        "11b page-chat.js intent card"
+      ],
+      "shape": "object",
+      "keys": [
+        "removed",
+        "intent_id",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/try",
+      "body": {
+        "text": "hi there"
+      },
+      "read_by": [
+        "11b page-chat.js Try it box"
+      ],
+      "shape": "object",
+      "keys": [
+        "intent",
+        "kind",
+        "slot",
+        "line"
+      ]
     }
   ],
   "pages": [
@@ -1577,6 +1761,12 @@
     "web.poll.created",
     "web.poll.recur_paused",
     "web.poll.recur_resumed",
-    "web.poll.recur_deleted"
+    "web.poll.recur_deleted",
+    "web.chat.intent_created",
+    "web.chat.intent_edited",
+    "web.chat.intent_deleted",
+    "web.chat.line_added",
+    "web.chat.line_edited",
+    "web.chat.line_deleted"
   ]
 }
