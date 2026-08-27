@@ -10,7 +10,13 @@ from discord.utils import MISSING
 from fastapi.testclient import TestClient
 
 from black_bloc.api.server import create_app
-from black_bloc.api.status import DB_UNREACHABLE, loop_health, mode_keys, open_counts
+from black_bloc.api.status import (
+    DB_UNREACHABLE,
+    NOT_A_FEATURE,
+    loop_health,
+    mode_keys,
+    open_counts,
+)
 from black_bloc.settings_store import DB_UNAVAILABLE, KEY_TYPES
 from black_bloc.storage.db import Database
 
@@ -109,12 +115,14 @@ def test_status_reports_the_bot_and_every_feature_mode(bot, sign_in, fakes):
     assert body["bot"]["version"]
     assert body["guild"]["id"] == str(fakes.GUILD_ID)
     modes = {row["key"]: row["mode"] for row in body["features"]}
-    assert set(modes) == {key for key in KEY_TYPES if key.endswith("_mode")}
+    assert set(modes) == set(mode_keys())
     assert modes["golive_mode"] == "shadow"
 
 
 def test_every_mode_key_in_the_registry_is_reported():
-    assert mode_keys() == [key for key in KEY_TYPES if key.endswith("_mode")]
+    assert mode_keys() == [
+        key for key in KEY_TYPES if key.endswith("_mode") and key not in NOT_A_FEATURE
+    ]
     assert set(mode_keys()) >= {
         "golive_mode",
         "tempvoice_mode",
@@ -125,6 +133,11 @@ def test_every_mode_key_in_the_registry_is_reported():
         "automod_mode",
         "rolemenu_mode",
     }
+
+
+def test_the_go_live_end_switch_is_not_offered_as_a_feature_of_its_own():
+    assert "golive_end_mode" in KEY_TYPES
+    assert "golive_end_mode" not in mode_keys()
 
 
 def test_status_leaves_the_counts_blank_rather_than_claiming_zero(bot, sign_in):

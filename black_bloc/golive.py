@@ -7,7 +7,7 @@ from typing import Any
 
 import discord
 
-from .settings_store import GOLIVE_END_SUFFIX, GOLIVE_TEMPLATE
+from .settings_store import GOLIVE_END_EDIT, GOLIVE_END_SUFFIX, GOLIVE_TEMPLATE
 
 log = logging.getLogger(__name__)
 
@@ -26,6 +26,7 @@ EMBED_FOOTER = "Black Bloc · via {source}"
 EMBED_SOURCE_TWITCH = "Twitch"
 EMBED_SOURCE_PRESENCE = "Discord activity"
 EMBED_END_MARK = "·"
+ANNOUNCEMENT_LEFT = "left"
 END_TRIM = " \t—–-·|,;:"
 LIVE_VERB = "is now live"
 ENDED_VERB = "was live"
@@ -306,6 +307,15 @@ def passes_role_filters(
     if ignore_role_id and int(ignore_role_id) in held:
         return False
     return True
+
+
+def edits_on_end(end_mode: Any) -> bool:
+    """True only for the one mode that touches the announcement once the stream is over."""
+    return end_mode == GOLIVE_END_EDIT
+
+
+def end_details(end_mode: Any) -> dict[str, str]:
+    return {} if edits_on_end(end_mode) else {"announcement": ANNOUNCEMENT_LEFT}
 
 
 def ended_text(text: str, suffix: str | None = GOLIVE_END_SUFFIX) -> str:

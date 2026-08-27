@@ -27,6 +27,9 @@ GOLIVE_TEMPLATE = (
     "Check it out: {url}"
 )
 GOLIVE_MODES = ("off", "shadow", "on")
+GOLIVE_END_OFF = "off"
+GOLIVE_END_EDIT = "edit"
+GOLIVE_END_MODES = (GOLIVE_END_OFF, GOLIVE_END_EDIT)
 GOLIVE_END_SUFFIX = " — stream ended"
 
 ROLEMENU_MODES = ("off", "on")
@@ -77,6 +80,7 @@ KEY_TYPES: dict[str, str] = {
     "golive_mode": "enum",
     "golive_channel_id": "channel",
     "golive_template": "text",
+    "golive_end_mode": "enum",
     "golive_end_suffix": "text",
     "golive_live_role_id": "role",
     "golive_require_role_id": "role",
@@ -131,6 +135,7 @@ KEY_TYPES: dict[str, str] = {
 
 KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "golive_mode": GOLIVE_MODES,
+    "golive_end_mode": GOLIVE_END_MODES,
     "tempvoice_mode": TEMPVOICE_MODES,
     "honeypot_mode": HONEYPOT_MODES,
     "events_mode": EVENTS_MODES,
@@ -197,7 +202,14 @@ KEY_HELP: dict[str, str] = {
     "golive_mode": "off, shadow (log only) or on (post go-live announcements)",
     "golive_channel_id": "where go-live announcements are posted",
     "golive_template": "the announcement wording; {name} {game} {title} {url} {platform}",
-    "golive_end_suffix": "what is added to an announcement once the stream has ended",
+    "golive_end_mode": (
+        "what happens to the announcement when the stream ends: off leaves it as posted, "
+        "edit appends the ended wording and marks the card"
+    ),
+    "golive_end_suffix": (
+        "what is added to an announcement once the stream has ended; only used when "
+        "golive_end_mode is edit"
+    ),
     "golive_live_role_id": "role given while someone is streaming",
     "golive_require_role_id": "only announce people who have this role",
     "golive_ignore_role_id": "never announce people who have this role",
@@ -526,6 +538,8 @@ class SettingsStore:
             return "shadow"
         if key == "golive_template":
             return GOLIVE_TEMPLATE
+        if key == "golive_end_mode":
+            return GOLIVE_END_OFF
         if key == "golive_end_suffix":
             return GOLIVE_END_SUFFIX
         if key == "golive_cooldown_minutes":

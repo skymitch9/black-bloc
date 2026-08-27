@@ -19,7 +19,9 @@ from ...golive import (
     YOUTUBE,
     StreamInfo,
     announcement_embed,
+    edits_on_end,
     embed_summary,
+    end_details,
     ended_embed,
     ended_text,
     enriched,
@@ -341,6 +343,7 @@ class GoLive(commands.Cog):
 
     async def _close_session(self, guild: Any, row: Any, reason: str) -> None:
         member = guild.get_member(row["user_id"])
+        end_mode = self._end_mode(guild.id)
         await end_session(self.bot.db, row["id"], now_iso())
         await self._remove_live_role(guild, member, row)
         await log_action(
@@ -348,9 +351,10 @@ class GoLive(commands.Cog):
             guild,
             "golive.end",
             target=member if member is not None else row["user_id"],
-            details={"session_id": row["id"], "source": row["source"], "reason": reason},
+            details={"session_id": row["id"], "source": row["source"], "reason": reason}
+            | end_details(end_mode),
         )
-        await self._mark_ended(guild, row)
+        await self._mark_ended(guild, row, end_mode)
 
     async def cog_unload(self) -> None:
         self.poller.cancel()
@@ -450,6 +454,7 @@ class GoLive(commands.Cog):
         row = await open_session_for(self.bot.db, guild.id, member.id, source)
         if row is None:
             return
+        end_mode = self._end_mode(guild.id)
         await end_session(self.bot.db, row["id"], now_iso())
         await self._remove_live_role(guild, member, row)
         await log_action(
@@ -457,13 +462,13 @@ class GoLive(commands.Cog):
             guild,
             "golive.end",
             target=member,
-            details={"session_id": row["id"], "source": row["source"]},
+            details={"session_id": row["id"], "source": row["source"]} | end_details(end_mode),
         )
-        await self._mark_ended(guild, row)
+        await self._mark_ended(guild, row, end_mode)
 
-    async def _mark_ended(self, guild: Any, row: Any) -> None:
+    async def _mark_ended(self, guild: Any, row: Any, end_mode: str) -> None:
         message_id = row["announced_message_id"]
-        if not message_id:
+        if not edits_on_end(end_mode) or not message_id:
             return
         channel = self._channel(guild)
         if channel is None:
@@ -644,6 +649,9 @@ class GoLive(commands.Cog):
 
     def _mode(self, guild_id: int) -> str:
         return self.bot.store.get(guild_id, "golive_mode")
+
+    def _end_mode(self, guild_id: int) -> str:
+        return self.bot.store.get(guild_id, "golive_end_mode")
 
     def _may_change_roles(self, guild_id: int) -> bool:
         return self._mode(guild_id) == "on" and getattr(self.bot, "guard", None) is None

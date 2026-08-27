@@ -19,6 +19,7 @@ from .names import as_id, named
 log = logging.getLogger(__name__)
 
 HONEYPOT_WINDOW_DAYS = 7
+NOT_A_FEATURE = ("golive_end_mode",)
 ACTIONS_DEFAULT_LIMIT = 50
 ACTIONS_MAX_LIMIT = 200
 
@@ -53,7 +54,8 @@ def latency_ms(bot: Any) -> int | None:
 
 
 def mode_keys() -> list[str]:
-    return [key for key in KEY_TYPES if key.endswith("_mode")]
+    """The feature switches only; a `_mode` key that names no feature is not one."""
+    return [key for key in KEY_TYPES if key.endswith("_mode") and key not in NOT_A_FEATURE]
 
 
 def feature_modes(store: Any, guild_id: int) -> list[dict[str, Any]]:
