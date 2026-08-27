@@ -146,6 +146,7 @@ CREATE INDEX IF NOT EXISTS events_by_status ON events(guild_id, status, starts_a
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("golive_sessions", "live_role_added", "INTEGER NOT NULL DEFAULT 0"),
+    ("events", "card_channel_id", "INTEGER"),
 )
 
 CLOSE_DUPLICATE_OPEN_SESSIONS = """

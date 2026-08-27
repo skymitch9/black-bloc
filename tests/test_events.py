@@ -15,6 +15,7 @@ from black_bloc.events import (
     PENDING,
     STATUSES,
     SWEPT_STATUSES,
+    TERMINAL_STATUSES,
     TITLE_LIMIT,
     TRANSITIONS,
     announce_text,
@@ -254,3 +255,9 @@ def test_the_announcement_keeps_its_ping_prefix_whichever_wording_it_uses():
 def test_the_statuses_a_finished_channel_sweep_covers_are_the_settled_ones():
     assert set(SWEPT_STATUSES) == {DONE, DENIED, CANCELLED}
     assert not set(SWEPT_STATUSES) & set(OPEN_STATUSES)
+
+
+def test_the_terminal_statuses_are_exactly_the_ones_nothing_leaves():
+    assert set(TERMINAL_STATUSES) == {DENIED, DONE, CANCELLED}
+    for status in TERMINAL_STATUSES:
+        assert TRANSITIONS[status] == ()

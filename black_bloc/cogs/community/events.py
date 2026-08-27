@@ -11,7 +11,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 from ...actionlog import log_action
-from ...command_errors import AnswersErrors, SafeDynamicItem
+from ...command_errors import NETWORK_ERRORS, AnswersErrors, SafeDynamicItem
 from ...events import (
     APPROVED,
     BAD_DURATION,
@@ -27,6 +27,7 @@ from ...events import (
     PENDING,
     START_IN_THE_PAST,
     SWEPT_STATUSES,
+    TERMINAL_STATUSES,
     TITLE_LIMIT,
     announce_text,
     build_card,
@@ -52,9 +53,12 @@ from ...settings_store import (
     staff_roles_sentence,
 )
 from ...timezones import (
+    AMBIGUOUS,
     CHOICE_LIMIT,
     DEFAULT_TZ,
+    GAP,
     START_EXAMPLE,
+    clock_trouble,
     get_timezone,
     is_known,
     local_time,
@@ -94,9 +98,27 @@ EVENTS_OFF = (
     "back on with `/event settings` — ask one if you have something to run."
 )
 NO_TEST_CHANNEL = (
-    "Black Bloc is in test mode and cannot see its test channel, so no event channel was made. "
-    "Set TEST_CHANNEL_ID to a channel the bot can read, restart it, then try again."
+    "Black Bloc is in test mode and cannot work out where a review channel would be allowed, so "
+    "nothing was submitted. Its test channel has to exist AND has to sit inside a category — set "
+    "TEST_CHANNEL_ID to a channel the bot can read, put that channel in a category, restart it, "
+    "then try again."
 )
+NO_TITLE = (
+    "An event needs a name, so nothing was submitted. Put something in the Title box — it is the "
+    "heading everybody sees on the card."
+)
+DST_GAP = (
+    "**{given}** never happens in **{tz}** — the clocks jump forward over that hour, so nothing "
+    "was submitted. Pick a time before or after the hour that is skipped, or run `/timezone set` "
+    "if that zone is not the one you are in."
+)
+DST_AMBIGUOUS = (
+    "**{given}** happens twice in **{tz}** — the clocks go back and that hour runs again, so "
+    "Black Bloc will not guess which of the two you meant and nothing was submitted. Pick a time "
+    "an hour either side of it."
+)
+MODAL_ZONE_HINT = "{example} — read in {tz}; /timezone set changes it"
+CANCELLED_ANNOUNCEMENT = "**{title}** is cancelled and is no longer happening."
 NO_CATEGORY = (
     "Black Bloc has nowhere to put the review channel, so nothing was submitted. A Lead points it "
     "at a category with `/event settings category:<the Events category>`, then this works."
@@ -237,10 +259,17 @@ async def due_events(db: Any, status: str, column: str, before: str) -> list[Any
     return list(await cur.fetchall())
 
 
-async def set_review(db: Any, event_id: int, channel_id: int, message_id: int | None) -> None:
+async def set_review(
+    db: Any,
+    event_id: int,
+    channel_id: int | None,
+    message_id: int | None,
+    card_channel_id: int | None = None,
+) -> None:
     await db.conn.execute(
-        "UPDATE events SET review_channel_id = ?, review_message_id = ? WHERE id = ?",
-        (channel_id, message_id, event_id),
+        "UPDATE events SET review_channel_id = ?, review_message_id = ?, card_channel_id = ? "
+        "WHERE id = ?",
+        (channel_id, message_id, card_channel_id, event_id),
     )
     await db.conn.commit()
 
@@ -299,6 +328,13 @@ def event_lock(bot: Any, event_id: int) -> asyncio.Lock:
     return lock
 
 
+def drop_lock(bot: Any, event_id: int) -> None:
+    """A settled event will never be raced again, so its lock stops being kept."""
+    locks = getattr(bot, LOCKS_ATTR, None)
+    if locks is not None:
+        locks.pop(event_id, None)
+
+
 def decision_id(event_id: int, action: str) -> str:
     return f"event:{event_id}:{action}"
 
@@ -345,9 +381,10 @@ def events_category(bot: Any, guild: Any) -> tuple[Any, str]:
     guard = getattr(bot, "guard", None)
     if guard is not None:
         test_channel = bot.get_channel(guard.test_channel_id) if guard.test_channel_id else None
-        if test_channel is None:
+        category = getattr(test_channel, "category", None)
+        if test_channel is None or category is None:
             return None, "no_test_channel"
-        return test_channel.category, "test_category"
+        return category, "test_category"
     category_id = bot.store.get(guild.id, "events_category_id")
     if not category_id:
         return None, "no_category"
@@ -429,7 +466,7 @@ async def rename_channel(bot: Any, guild: Any, row: Any, status: str, user_name:
         return
     try:
         await channel.edit(name=wanted, reason=f"Black Bloc event {row['id']}")
-    except discord.HTTPException as exc:
+    except NETWORK_ERRORS as exc:
         log.warning("events: could not rename %s to %s: %s", channel.id, wanted, exc)
         await log_action(
             bot,
@@ -474,7 +511,7 @@ async def create_scheduled_event(bot: Any, guild: Any, row: Any) -> tuple[Any, s
             privacy_level=discord.PrivacyLevel.guild_only,
             reason=f"Black Bloc event {row['id']}",
         )
-    except discord.HTTPException as exc:
+    except NETWORK_ERRORS as exc:
         log.warning("events: could not make a scheduled event for %s: %s", row["id"], exc)
         await log_action(
             bot,
@@ -522,7 +559,7 @@ async def cancel_scheduled_event(bot: Any, guild: Any, row: Any) -> None:
             await event.end(reason=reason)
         else:
             await event.cancel(reason=reason)
-    except (discord.HTTPException, ValueError) as exc:
+    except NETWORK_ERRORS as exc:
         log.warning("events: could not cancel scheduled event %s: %s", scheduled_id, exc)
         await log_action(
             bot,
@@ -574,6 +611,48 @@ async def post_to_announce(
     return message.id
 
 
+async def edit_announcement(bot: Any, guild: Any, row: Any) -> None:
+    """A public post must stop advertising an event that is off."""
+    message_id = row["announce_message_id"]
+    if not message_id:
+        return
+    channel_id = bot.store.get(guild.id, "events_announce_channel_id")
+    channel = bot.get_channel(channel_id) if channel_id else None
+    details = {"event_id": row["id"], "message_id": message_id}
+    if channel is None:
+        await log_action(
+            bot,
+            guild,
+            "event.edit_announcement_failed",
+            details=details | {"reason": "no_channel"},
+        )
+        return
+    guard = getattr(bot, "guard", None)
+    if guard is not None and not guard.allows_channel(channel):
+        await log_action(bot, guild, "event.would_edit_announcement", details=details)
+        return
+    partial = getattr(channel, "get_partial_message", None)
+    try:
+        message = (
+            partial(message_id) if partial is not None else await channel.fetch_message(message_id)
+        )
+        await message.edit(
+            content=CANCELLED_ANNOUNCEMENT.format(title=clamp(row["title"], TITLE_LIMIT)),
+            embed=card_for(row),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+    except NETWORK_ERRORS as exc:
+        log.warning("events: could not edit the announcement for %s: %s", row["id"], exc)
+        await log_action(
+            bot,
+            guild,
+            "event.edit_announcement_failed",
+            details=details | {"reason": f"{type(exc).__name__}: {exc}"},
+        )
+        return
+    await log_action(bot, guild, "event.announcement_edited", details=details)
+
+
 async def decide(
     interaction: discord.Interaction, event_id: int, status: str, reason: str | None = None
 ) -> None:
@@ -594,6 +673,8 @@ async def decide(
         await set_status(
             bot.db, event_id, status, decided_by=interaction.user.id, deny_reason=reason
         )
+        if status in TERMINAL_STATUSES:
+            drop_lock(bot, event_id)
         await log_action(
             bot,
             guild,
@@ -782,6 +863,7 @@ class EventModal(AnswersErrors, discord.ui.Modal, title="Propose an event"):
         super().__init__()
         self.cog = cog
         self.tz_name = tz_name
+        self.start.placeholder = MODAL_ZONE_HINT.format(example=START_EXAMPLE, tz=tz_name)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         await self.cog.submit(
@@ -910,6 +992,7 @@ class Events(commands.Cog):
     async def _missed(self, guild: Any, row: Any) -> None:
         """An approved event whose end has already gone by is never announced, only recorded."""
         await set_status(self.bot.db, row["id"], DONE)
+        drop_lock(self.bot, row["id"])
         await log_action(
             self.bot,
             guild,
@@ -940,6 +1023,7 @@ class Events(commands.Cog):
             if fresh is None or not can_transition(fresh["status"], DONE):
                 return
             await set_status(self.bot.db, fresh["id"], DONE)
+            drop_lock(self.bot, fresh["id"])
             await log_action(
                 self.bot,
                 guild,
@@ -960,11 +1044,17 @@ class Events(commands.Cog):
         """Events whose review channel has gone are cancelled; finished ones are tidied away."""
         now = datetime.now(UTC)
         for guild in list(getattr(self.bot, "guilds", ())):
+            if getattr(guild, "unavailable", False):
+                log.info("events: %s is unavailable, so nothing about it is reconciled", guild.id)
+                continue
             for row in await events_by_status(self.bot.db, guild.id, OPEN_STATUSES):
                 await self._recheck(guild, row, now)
             await self._sweep_finished(guild, now)
 
     async def _recheck(self, guild: Any, row: Any, now: datetime) -> None:
+        if parse_ts(row["starts_at"]) is None:
+            await self._cancel(guild, row, "unreadable_start")
+            return
         channel_id = row["review_channel_id"]
         if channel_id is None:
             created = parse_ts(row["created_at"])
@@ -972,8 +1062,19 @@ class Events(commands.Cog):
                 return
             await self._cancel(guild, row, "never_got_a_channel")
             return
-        if guild.get_channel(channel_id) is None:
-            await self._cancel(guild, row, "review_channel_gone")
+        if guild.get_channel(channel_id) is not None:
+            self._missing_since.pop(row["id"], None)
+            return
+        if row["id"] not in self._missing_since:
+            self._missing_since[row["id"]] = now_iso()
+            log.info(
+                "events: channel %s for event %s is missing; deciding at the next pass",
+                channel_id,
+                row["id"],
+            )
+            return
+        self._missing_since.pop(row["id"], None)
+        await self._cancel(guild, row, "review_channel_gone")
 
     async def _cancel(self, guild: Any, row: Any, reason: str, *, by: int | None = None) -> None:
         async with event_lock(self.bot, row["id"]):
@@ -981,6 +1082,7 @@ class Events(commands.Cog):
             if fresh is None or not can_transition(fresh["status"], CANCELLED):
                 return
             await set_status(self.bot.db, fresh["id"], CANCELLED)
+            drop_lock(self.bot, fresh["id"])
             await log_action(
                 self.bot,
                 guild,
@@ -990,9 +1092,10 @@ class Events(commands.Cog):
                 details={"event_id": fresh["id"], "title": fresh["title"]},
             )
             await cancel_scheduled_event(self.bot, guild, fresh)
+            fresh = await get_event(self.bot.db, row["id"])
+            await edit_announcement(self.bot, guild, fresh)
             if by == fresh["requester_id"]:
                 return
-            fresh = await get_event(self.bot.db, row["id"])
             await tell_or_log(
                 self.bot,
                 guild,
@@ -1027,10 +1130,16 @@ class Events(commands.Cog):
                 continue
             try:
                 await channel.delete(reason=f"Black Bloc event {row['id']}: kept {days} day(s)")
-            except discord.HTTPException as exc:
+            except NETWORK_ERRORS as exc:
                 log.warning("events: could not delete %s: %s", channel.id, exc)
                 continue
-            await set_review(self.bot.db, row["id"], None, row["review_message_id"])
+            await set_review(
+                self.bot.db,
+                row["id"],
+                None,
+                row["review_message_id"],
+                row["card_channel_id"],
+            )
             await log_action(
                 self.bot,
                 guild,
@@ -1043,14 +1152,13 @@ class Events(commands.Cog):
         if not self.bot.db.is_connected:
             return
         guild = channel.guild
-        if channel.id == self.bot.store.get(guild.id, "events_category_id"):
-            await self.bot.store.clear(guild.id, "events_category_id")
-            await log_action(
-                self.bot,
-                guild,
-                "event.category_forgotten",
-                details={"channel_id": channel.id},
-            )
+        for key, kind in (
+            ("events_category_id", "event.category_forgotten"),
+            ("events_announce_channel_id", "event.announce_channel_forgotten"),
+        ):
+            if channel.id == self.bot.store.get(guild.id, key):
+                await self.bot.store.clear(guild.id, key)
+                await log_action(self.bot, guild, kind, details={"channel_id": channel.id})
         row = await event_for_channel(self.bot.db, channel.id)
         if row is not None and row["status"] in OPEN_STATUSES:
             await self._cancel(guild, row, "review_channel_deleted")
@@ -1090,9 +1198,19 @@ class Events(commands.Cog):
         location: str,
     ) -> None:
         """What the modal does once it is filled in: one row, one channel, one card."""
+        if not title:
+            await answer(interaction, NO_TITLE)
+            return
         starts = parse_start(start, tz_name)
         if starts is None:
             await answer(interaction, start_error(start, tz_name, START_EXAMPLE))
+            return
+        trouble = clock_trouble(start, tz_name)
+        if trouble == GAP:
+            await answer(interaction, DST_GAP.format(given=clamp(start, 80), tz=tz_name))
+            return
+        if trouble == AMBIGUOUS:
+            await answer(interaction, DST_AMBIGUOUS.format(given=clamp(start, 80), tz=tz_name))
             return
         if starts <= datetime.now(UTC):
             await answer(
@@ -1166,7 +1284,7 @@ class Events(commands.Cog):
                 overwrites=review_overwrites(guild, staff, getattr(guild, "me", None)),
                 reason=f"Black Bloc event {row['id']}",
             )
-        except discord.HTTPException as exc:
+        except NETWORK_ERRORS as exc:
             log.warning("events: could not make a review channel for %s: %s", row["id"], exc)
             await set_status(self.bot.db, row["id"], CANCELLED)
             await log_action(
@@ -1205,7 +1323,7 @@ class Events(commands.Cog):
                 details={"event_id": row["id"], "reason": f"{type(exc).__name__}: {exc}"},
             )
             return None
-        await set_review(self.bot.db, row["id"], channel.id, message.id)
+        await set_review(self.bot.db, row["id"], channel.id, message.id, target.id)
         return target.id
 
     @event.command(name="list", description="Show the events waiting on a decision")
@@ -1294,6 +1412,8 @@ class Events(commands.Cog):
         max_late_minutes="Minutes an event may start late and still be announced",
         mode="off, shadow (no public announcement) or on",
         clear_ping_role="Stop mentioning any role",
+        clear_category="Forget the category review channels are made in",
+        clear_announce_channel="Forget where approved events are announced",
     )
     @app_commands.choices(
         mode=[app_commands.Choice(name=name, value=name) for name in EVENTS_MODES]
@@ -1311,6 +1431,8 @@ class Events(commands.Cog):
         max_late_minutes: app_commands.Range[int, 0, EVENTS_LATE_CEILING_MINUTES] | None = None,
         mode: app_commands.Choice[str] | None = None,
         clear_ping_role: bool = False,
+        clear_category: bool = False,
+        clear_announce_channel: bool = False,
     ) -> None:
         if not await require_staff(interaction):
             return
@@ -1330,9 +1452,14 @@ class Events(commands.Cog):
         ):
             if value is not None:
                 changed[key] = await store.set(guild.id, key, value, by=interaction.user.id)
-        if clear_ping_role:
-            await store.clear(guild.id, "events_ping_role_id")
-            changed["events_ping_role_id"] = None
+        for wanted, key in (
+            (clear_ping_role, "events_ping_role_id"),
+            (clear_category, "events_category_id"),
+            (clear_announce_channel, "events_announce_channel_id"),
+        ):
+            if wanted:
+                await store.clear(guild.id, key)
+                changed[key] = None
         category_id = store.get(guild.id, "events_category_id")
         announce_id = store.get(guild.id, "events_announce_channel_id")
         role_id = store.get(guild.id, "events_ping_role_id")

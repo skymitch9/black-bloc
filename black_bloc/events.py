@@ -39,6 +39,8 @@ TRANSITIONS: dict[str, tuple[str, ...]] = {
     CANCELLED: (),
 }
 
+TERMINAL_STATUSES = tuple(status for status, allowed in TRANSITIONS.items() if not allowed)
+
 COLOURS: dict[str, int] = {
     PENDING: 0x5865F2,
     APPROVED: 0x57F287,

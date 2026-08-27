@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
+import aiohttp
 import discord
 from discord import app_commands
 
@@ -11,6 +13,14 @@ log = logging.getLogger(__name__)
 COMMAND_FAILED = (
     "Black Bloc hit an error running that command; it has been logged. Try again, and tell a "
     "Lead if it keeps happening."
+)
+
+NETWORK_ERRORS: tuple[type[BaseException], ...] = (
+    discord.HTTPException,
+    aiohttp.ClientError,
+    asyncio.TimeoutError,
+    OSError,
+    ValueError,
 )
 
 

@@ -11,6 +11,8 @@ DEFAULT_TZ = "America/Phoenix"
 START_FORMAT = "%Y-%m-%d %H:%M"
 START_EXAMPLE = "2026-09-14 19:30"
 CHOICE_LIMIT = 25
+GAP = "gap"
+AMBIGUOUS = "ambiguous"
 
 
 def zone(name: Any) -> ZoneInfo | None:
@@ -50,6 +52,23 @@ def parse_start(text: Any, tz_name: Any) -> datetime | None:
     except ValueError:
         return None
     return naive.replace(tzinfo=zi).astimezone(UTC)
+
+
+def clock_trouble(text: Any, tz_name: Any) -> str | None:
+    """Whether the clocks skipped that local time, or ran through it twice."""
+    zi = zone(tz_name)
+    if zi is None:
+        return None
+    try:
+        naive = datetime.strptime(str(text or "").strip(), START_FORMAT)
+    except ValueError:
+        return None
+    early = naive.replace(tzinfo=zi)
+    if early.astimezone(UTC).astimezone(zi).replace(tzinfo=None) != naive:
+        return GAP
+    if early.utcoffset() != naive.replace(tzinfo=zi, fold=1).utcoffset():
+        return AMBIGUOUS
+    return None
 
 
 def local_time(tz_name: Any, now: datetime | None = None) -> str:

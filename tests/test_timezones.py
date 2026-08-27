@@ -4,9 +4,12 @@ import pytest
 
 from black_bloc.storage.db import Database
 from black_bloc.timezones import (
+    AMBIGUOUS,
     CHOICE_LIMIT,
     DEFAULT_TZ,
+    GAP,
     START_EXAMPLE,
+    clock_trouble,
     get_timezone,
     is_known,
     known_timezones,
@@ -126,3 +129,20 @@ async def test_a_stored_zone_this_machine_cannot_resolve_falls_back_to_the_defau
 
     assert await stored_timezone(db, USER) is None
     assert await get_timezone(db, USER) == DEFAULT_TZ
+
+
+def test_a_local_time_the_clocks_skip_is_named_a_gap():
+    assert clock_trouble("2027-03-14 02:30", "America/New_York") == GAP
+    assert clock_trouble("2027-03-28 01:30", "Europe/London") == GAP
+
+
+def test_a_local_time_the_clocks_run_through_twice_is_named_ambiguous():
+    assert clock_trouble("2027-11-07 01:30", "America/New_York") == AMBIGUOUS
+    assert clock_trouble("2027-10-31 01:30", "Europe/London") == AMBIGUOUS
+
+
+def test_an_ordinary_time_has_no_trouble_at_all():
+    assert clock_trouble("2027-09-14 19:30", "America/New_York") is None
+    assert clock_trouble("2027-03-14 02:30", "America/Phoenix") is None
+    assert clock_trouble("next tuesday", "America/New_York") is None
+    assert clock_trouble("2027-09-14 19:30", "Middle/Earth") is None

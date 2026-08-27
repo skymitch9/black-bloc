@@ -89,3 +89,21 @@ async def test_duplicate_open_sessions_are_closed_before_the_index_is_built(tmp_
         assert (await cur.fetchone())["n"] == 1
     finally:
         await again.close()
+
+
+async def test_an_events_row_gains_a_card_channel_column_on_an_older_file(tmp_path):
+    path = tmp_path / "old.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("ALTER TABLE events DROP COLUMN card_channel_id")
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("PRAGMA table_info(events)")
+        names = {row["name"] for row in await cur.fetchall()}
+        assert "card_channel_id" in names
+    finally:
+        await again.close()

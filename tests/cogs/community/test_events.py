@@ -810,13 +810,27 @@ async def test_an_event_that_is_over_becomes_done_and_its_channel_is_renamed(cog
     assert "event.done" in await action_kinds(db)
 
 
-async def test_a_review_channel_that_is_gone_cancels_its_event(cog, bot, db):
+async def test_a_review_channel_that_is_gone_twice_running_cancels_its_event(cog, bot, db):
     event_id = await store_event(db, channel_id=4242)
+
+    await cog.reconcile_events()
+    assert (await get_event(db, event_id))["status"] == PENDING
 
     await cog.reconcile_events()
 
     assert (await get_event(db, event_id))["status"] == CANCELLED
     assert "event.cancelled" in await action_kinds(db)
+
+
+async def test_a_channel_that_comes_back_before_the_second_pass_is_not_cancelled(cog, bot, db):
+    event_id = await store_event(db, channel_id=700)
+
+    await cog.reconcile_events()
+    bot.guild.add(FakeText(700, name="pending-alice-block-party"))
+    await cog.reconcile_events()
+    await cog.reconcile_events()
+
+    assert (await get_event(db, event_id))["status"] == PENDING
 
 
 async def test_an_event_whose_channel_is_still_there_is_left_alone(cog, bot, db):
@@ -1404,3 +1418,171 @@ async def test_settings_can_change_how_late_an_announcement_may_be(cog, bot, lea
 
     assert bot.store.get(GUILD, "events_max_late_minutes") == 45
     assert "45 minute(s)" in interaction.sent
+
+
+async def test_an_unavailable_guild_is_left_entirely_alone(cog, bot, db):
+    event_id = await store_event(db, channel_id=4242)
+    bot.guild.unavailable = True
+
+    await cog.reconcile_events()
+    await cog.reconcile_events()
+
+    assert (await get_event(db, event_id))["status"] == PENDING
+    assert await action_kinds(db) == []
+
+
+async def test_an_event_whose_start_cannot_be_read_is_cancelled_and_the_requester_told(
+    cog, bot, member, db
+):
+    channel = bot.guild.add(FakeText(700, name="pending-alice-block-party"))
+    event_id = await store_event(db, channel_id=channel.id)
+    await db.conn.execute("UPDATE events SET starts_at = 'whenever' WHERE id = ?", (event_id,))
+    await db.conn.commit()
+
+    await cog.reconcile_events()
+
+    assert (await get_event(db, event_id))["status"] == CANCELLED
+    assert "could not read the start time" in member.dms[-1]["content"]
+
+
+async def test_cancelling_an_approved_event_edits_its_announcement(cog, bot, member, lead, db):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    await approve(bot, lead, row["id"])
+    announced = bot.guild.get_channel(TEST_CHANNEL).messages[-1]
+
+    await cog._cancel(bot.guild, await get_event(db, row["id"]), "review_channel_gone")
+
+    assert "is cancelled" in announced.edits[-1]["content"]
+    assert "event.announcement_edited" in await action_kinds(db)
+
+
+async def test_an_announcement_in_a_channel_the_guard_refuses_is_logged_not_edited(
+    cog, bot, member, lead, db
+):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    await approve(bot, lead, row["id"])
+    announced = bot.guild.get_channel(TEST_CHANNEL).messages[-1]
+    bot.guard = FakeGuard(test_channel_id=999, category_id=None)
+
+    await cog._cancel(bot.guild, await get_event(db, row["id"]), "review_channel_gone")
+
+    assert announced.edits == []
+    assert "event.would_edit_announcement" in await action_kinds(db)
+
+
+async def test_an_event_that_was_never_announced_edits_nothing(cog, bot, member, db):
+    event_id = await store_event(db, channel_id=4242)
+
+    await cog._cancel(bot.guild, await get_event(db, event_id), "review_channel_gone")
+
+    kinds = await action_kinds(db)
+    assert "event.announcement_edited" not in kinds
+    assert "event.edit_announcement_failed" not in kinds
+
+
+async def test_in_test_mode_the_card_channel_is_recorded_beside_the_message(cog, bot, member, db):
+    bot.guard = FakeGuard()
+
+    await submit(cog, bot, member)
+
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    assert row["review_channel_id"] == bot.guild.created[0].id
+    assert row["card_channel_id"] == TEST_CHANNEL
+    assert row["review_message_id"] is not None
+
+
+async def test_the_card_channel_is_the_review_channel_when_the_guard_is_off(cog, bot, member, db):
+    await submit(cog, bot, member)
+
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    assert row["card_channel_id"] == row["review_channel_id"]
+
+
+async def test_a_test_channel_with_no_category_refuses_rather_than_making_a_loose_channel(
+    cog, bot, member, db
+):
+    bot.guild.get_channel(TEST_CHANNEL).category = None
+    bot.guild.get_channel(TEST_CHANNEL).category_id = None
+    bot.guard = FakeGuard()
+
+    interaction = await submit(cog, bot, member)
+
+    assert bot.guild.created == []
+    assert "TEST_CHANNEL_ID" in interaction.sent
+
+
+async def test_a_title_that_is_only_spaces_is_refused(cog, bot, member, db):
+    interaction = await submit(cog, bot, member, title="   ")
+
+    assert await events_by_status(db, GUILD, (PENDING,)) == []
+    assert "needs a name" in interaction.sent
+
+
+async def test_a_local_time_the_clocks_skip_is_refused_by_name(cog, bot, member, db):
+    interaction = await submit(
+        cog, bot, member, tz="America/New_York", start="2027-03-14 02:30"
+    )
+
+    assert await events_by_status(db, GUILD, (PENDING,)) == []
+    assert "never happens" in interaction.sent and "America/New_York" in interaction.sent
+
+
+async def test_a_local_time_that_happens_twice_is_refused_by_name(cog, bot, member, db):
+    interaction = await submit(
+        cog, bot, member, tz="America/New_York", start="2027-11-07 01:30"
+    )
+
+    assert await events_by_status(db, GUILD, (PENDING,)) == []
+    assert "happens twice" in interaction.sent
+
+
+async def test_the_modal_says_which_zone_the_time_is_read_in(cog, bot, member):
+    interaction = FakeInteraction(bot, member)
+
+    await cog.event_create.callback(cog, interaction)
+
+    modal = interaction.response.modals[0]
+    assert DEFAULT_TZ in modal.start.placeholder
+    assert "/timezone set" in modal.start.placeholder
+
+
+async def test_a_settled_event_stops_being_kept_a_lock(cog, bot, member, lead, db):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+
+    await deny(bot, lead, row["id"], message=bot.guild.created[0].messages[0])
+
+    assert row["id"] not in getattr(bot, "_event_locks", {})
+
+
+async def test_an_approved_event_keeps_its_lock_until_it_is_over(cog, bot, member, lead, db):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+
+    await approve(bot, lead, row["id"])
+
+    assert row["id"] in getattr(bot, "_event_locks", {})
+
+
+async def test_deleting_the_announce_channel_makes_black_bloc_forget_it(cog, bot, db):
+    await bot.store.set(GUILD, "events_announce_channel_id", 900)
+    gone = bot.guild.add(FakeText(900, name="live-now"))
+
+    await cog.on_guild_channel_delete(gone)
+
+    assert bot.store.get(GUILD, "events_announce_channel_id") == TEST_CHANNEL
+    assert "event.announce_channel_forgotten" in await action_kinds(db)
+
+
+async def test_settings_can_forget_the_category_and_the_announce_channel(cog, bot, lead, db):
+    await bot.store.set(GUILD, "events_announce_channel_id", 900)
+
+    interaction = FakeInteraction(bot, lead)
+    await cog.event_settings.callback(
+        cog, interaction, clear_category=True, clear_announce_channel=True
+    )
+
+    assert bot.store.get(GUILD, "events_category_id") is None
+    assert bot.store.get(GUILD, "events_announce_channel_id") == TEST_CHANNEL
