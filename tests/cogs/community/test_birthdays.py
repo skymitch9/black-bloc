@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 import discord
 import pytest
 
-from black_bloc.birthdays import ImportRow
+from black_bloc.birthdays import ImportRow, local_today, next_occurrence
 from black_bloc.cogs.community.birthdays import (
     Birthdays,
     chunked,
@@ -15,7 +15,7 @@ from black_bloc.cogs.community.birthdays import (
     stored_counts,
 )
 from black_bloc.config import load_settings
-from black_bloc.settings_store import SettingsStore
+from black_bloc.settings_store import BIRTHDAY_TZ, SettingsStore
 from black_bloc.storage.db import Database
 
 GUILD = 7
@@ -83,7 +83,8 @@ class FakeMember:
         self.guild_permissions = FakePerms(manage_guild=manage_guild)
         self.role_calls = []
         self.role_raises = None
-        guild.members[user_id] = self
+        self.global_name = None
+        guild.member_cache[user_id] = self
 
     async def add_roles(self, role, reason=None):
         if self.role_raises is not None:
@@ -103,11 +104,24 @@ class FakeGuild:
         self.id = GUILD
         self.name = "Black Bloc"
         self.channels = {}
-        self.members = {}
+        self.member_cache = {}
         self.roles = []
         self.queries = []
         self.query_answer = {}
         self.query_raises = None
+        self.member_count = 0
+        self.chunks = 0
+        self.hidden = []
+
+    @property
+    def members(self):
+        return list(self.member_cache.values())
+
+    async def chunk(self):
+        self.chunks += 1
+        for member in self.hidden:
+            self.member_cache[member.id] = member
+        self.hidden = []
 
     def add(self, channel):
         channel.guild = self
@@ -118,7 +132,7 @@ class FakeGuild:
         return self.channels.get(channel_id)
 
     def get_member(self, user_id):
-        return self.members.get(user_id)
+        return self.member_cache.get(user_id)
 
     def get_role(self, role_id):
         return next((r for r in self.roles if r.id == role_id), None)
@@ -386,6 +400,81 @@ async def test_the_role_is_never_added_in_test_mode(bot, cog, birthday_person):
     assert (await get_birthday(bot.db, USER))["role_added"] == 0
 
 
+async def test_shadow_never_really_gives_the_role_out(bot, cog, birthday_person):
+    bot.guild.roles.append(FakeRole(CAKE_ROLE))
+    await bot.store.set(GUILD, "birthday_role_id", CAKE_ROLE)
+    await stored(bot)
+
+    await cog.run_once(MORNING)
+
+    assert birthday_person.role_calls == []
+    assert await action_kinds(bot.db) == ["birthday.would_announce", "birthday.would_add_role"]
+    row = await get_birthday(bot.db, USER)
+    assert row["role_added"] == 0 and row["role_added_id"] is None
+
+
+async def test_the_role_that_comes_off_is_the_one_that_went_on(bot, cog, birthday_person):
+    bot.guild.roles.append(FakeRole(CAKE_ROLE))
+    await bot.store.set(GUILD, "birthday_mode", "on")
+    await bot.store.set(GUILD, "birthday_role_id", CAKE_ROLE)
+    await stored(bot)
+    await cog.run_once(MORNING)
+    assert (await get_birthday(bot.db, USER))["role_added_id"] == CAKE_ROLE
+
+    other = 888
+    bot.guild.roles.append(FakeRole(other))
+    await bot.store.set(GUILD, "birthday_role_id", other)
+    await cog.run_once(NEXT_DAY)
+
+    assert birthday_person.role_calls[-1] == ("remove", CAKE_ROLE, "Black Bloc birthday")
+    row = await get_birthday(bot.db, USER)
+    assert row["role_added"] == 0 and row["role_added_id"] is None
+
+
+async def test_a_role_whose_setting_was_cleared_still_comes_off(bot, cog, birthday_person):
+    bot.guild.roles.append(FakeRole(CAKE_ROLE))
+    await bot.store.set(GUILD, "birthday_mode", "on")
+    await bot.store.set(GUILD, "birthday_role_id", CAKE_ROLE)
+    await stored(bot)
+    await cog.run_once(MORNING)
+
+    bot.guild.roles.clear()
+    await cog.run_once(NEXT_DAY)
+
+    assert birthday_person.role_calls[-1] == ("remove", CAKE_ROLE, "Black Bloc birthday")
+    assert (await get_birthday(bot.db, USER))["role_added"] == 0
+
+
+async def test_removing_your_birthday_hands_the_role_back_first(bot, cog, birthday_person):
+    bot.guild.roles.append(FakeRole(CAKE_ROLE))
+    await bot.store.set(GUILD, "birthday_mode", "on")
+    await bot.store.set(GUILD, "birthday_role_id", CAKE_ROLE)
+    await stored(bot)
+    await cog.run_once(MORNING)
+    interaction = FakeInteraction(bot, birthday_person)
+
+    await cog.remove.callback(cog, interaction)
+
+    assert birthday_person.role_calls[-1] == ("remove", CAKE_ROLE, "Black Bloc birthday")
+    assert await get_birthday(bot.db, USER) is None
+    assert "forgotten" in interaction.sent
+
+
+async def test_opting_out_on_your_birthday_hands_the_role_back(bot, cog, birthday_person):
+    bot.guild.roles.append(FakeRole(CAKE_ROLE))
+    await bot.store.set(GUILD, "birthday_mode", "on")
+    await bot.store.set(GUILD, "birthday_role_id", CAKE_ROLE)
+    await stored(bot)
+    await cog.run_once(MORNING)
+    interaction = FakeInteraction(bot, birthday_person)
+
+    await cog.optout.callback(cog, interaction)
+
+    assert birthday_person.role_calls[-1] == ("remove", CAKE_ROLE, "Black Bloc birthday")
+    row = await get_birthday(bot.db, USER)
+    assert row["opted_in"] == 0 and row["role_added"] == 0
+
+
 async def test_the_role_goes_on_for_the_day_and_comes_off_after(bot, cog, birthday_person):
     bot.guild.roles.append(FakeRole(CAKE_ROLE))
     await bot.store.set(GUILD, "birthday_mode", "on")
@@ -582,6 +671,18 @@ async def test_show_and_next_render_hammertime_and_never_ping(bot, cog, birthday
     assert interaction.response.messages[-1]["allowed_mentions"].users is False
 
 
+async def test_show_gives_the_age_at_the_next_birthday_not_this_year(bot, cog, birthday_person):
+    await bot.store.set(GUILD, "birthday_show_age", True)
+    await stored(bot, month=1, day=2, year=1990)
+    interaction = FakeInteraction(bot, birthday_person)
+
+    await cog.show.callback(cog, interaction, None)
+
+    when = next_occurrence(1, 2, BIRTHDAY_TZ)
+    assert when.date() >= local_today(BIRTHDAY_TZ)
+    assert f"turning {when.year - 1990}" in interaction.sent
+
+
 async def test_show_says_when_someone_is_opted_out(bot, cog, birthday_person):
     await stored(bot)
     await bot.db.conn.execute("UPDATE birthdays SET opted_in = 0")
@@ -657,60 +758,69 @@ async def test_status_shows_health_not_just_liveness(bot, cog, birthday_person):
     assert "role(s)" in text
 
 
-async def test_import_resolves_names_reports_the_rest_and_reruns_clean(
-    bot, cog, birthday_person
-):
-    give_staff(bot, birthday_person)
+async def test_import_matches_the_member_list_including_tagged_nicknames(bot, cog):
+    shin = FakeMember(bot.guild, user_id=2000, display_name="[Straight Hands] ShinDarkShadow")
     pt = FakeMember(bot.guild, user_id=2001, display_name="PT")
     nadia = FakeMember(bot.guild, user_id=2002, display_name="nadia")
-    twin_a = FakeMember(bot.guild, user_id=2003, display_name="Prez")
-    twin_b = FakeMember(bot.guild, user_id=2004, display_name="Prez")
-    bot.guild.query_answer = {"PT": [pt], "nadia": [nadia], "Prez": [twin_a, twin_b]}
+    FakeMember(bot.guild, user_id=2003, display_name="Prez")
+    FakeMember(bot.guild, user_id=2004, display_name="Prez")
     rows = [
+        ImportRow("[Straight Hands] ShinDarkShadow", 1, 2, None),
         ImportRow("[Tired of Planes] PT", 8, 10, 39),
         ImportRow("(Umazing) nadia", 7, 26, None),
         ImportRow("Prez", 6, 17, 39),
         ImportRow("ghost", 1, 1, None),
     ]
 
-    result = await cog._import(bot.guild, rows, 2026, birthday_person)
+    result = await cog._import(bot.guild, rows, 2026, bot.guild.members)
 
-    assert len(result["imported"]) == 2
+    assert len(result["imported"]) == 3
+    assert f"<@{shin.id}>" in result["imported"][0]
+    assert f"<@{pt.id}>" in result["imported"][1]
+    assert f"<@{nadia.id}>" in result["imported"][2]
     assert len(result["ambiguous"]) == 1 and "Prez" in result["ambiguous"][0]
     assert result["not_found"] == ["ghost — January 1"]
+    assert bot.guild.queries == []
     stored_pt = await get_birthday(bot.db, 2001)
     assert (stored_pt["month"], stored_pt["day"], stored_pt["year"]) == (8, 10, 1987)
     assert stored_pt["source"] == "import"
 
-    again = await cog._import(bot.guild, rows, 2026, birthday_person)
+    again = await cog._import(bot.guild, rows, 2026, bot.guild.members)
     assert again["imported"] == []
-    assert len(again["already"]) == 2
-    assert len(await rows_for_guild(bot.db, GUILD)) == 2
+    assert len(again["already"]) == 3
+    assert len(await rows_for_guild(bot.db, GUILD)) == 3
 
 
-async def test_import_never_overwrites_what_someone_set_themselves(bot, cog, birthday_person):
+async def test_import_never_overwrites_what_someone_set_themselves(bot, cog):
     pt = FakeMember(bot.guild, user_id=2001, display_name="PT")
-    bot.guild.query_answer = {"PT": [pt]}
     await save_birthday(bot.db, GUILD, pt.id, 3, 3, None, "self")
 
     rows = [ImportRow("[Tired of Planes] PT", 8, 10, 39)]
-    result = await cog._import(bot.guild, rows, 2026, None)
+    result = await cog._import(bot.guild, rows, 2026, bot.guild.members)
 
     row = await get_birthday(bot.db, 2001)
     assert (row["month"], row["day"], row["source"]) == (3, 3, "self")
     assert "kept the self entry" in result["already"][0]
 
 
-async def test_a_member_search_that_fails_is_reported_not_guessed(bot, cog):
-    bot.guild.query_raises = refused()
+async def test_a_half_filled_member_cache_is_chunked_before_anyone_is_matched(bot, cog):
+    late = FakeMember(bot.guild, user_id=2001, display_name="PT")
+    bot.guild.member_cache.pop(late.id)
+    bot.guild.hidden = [late]
+    bot.guild.member_count = 1
 
-    result = await cog._import(bot.guild, [ImportRow("PT", 8, 10, None)], 2026, None)
+    members = await cog.members_of(bot.guild)
+    result = await cog._import(bot.guild, [ImportRow("PT", 8, 10, None)], 2026, members)
 
-    assert "Discord would not answer" in result["not_found"][0]
-    assert await rows_for_guild(bot.db, GUILD) == []
+    assert bot.guild.chunks == 1
+    assert [m.id for m in members] == [late.id]
+    assert len(result["imported"]) == 1
+    assert bot.guild.queries == []
 
 
-async def test_the_import_command_defers_before_the_lookups(bot, cog, birthday_person):
+async def test_the_import_command_defers_and_says_how_many_members_it_searched(
+    bot, cog, birthday_person
+):
     give_staff(bot, birthday_person)
     interaction = FakeInteraction(bot, birthday_person)
 
@@ -718,7 +828,8 @@ async def test_the_import_command_defers_before_the_lookups(bot, cog, birthday_p
 
     assert interaction.response.messages[0]["deferred"] is True
     assert "imported" in interaction.texts[0]
-    assert len(bot.guild.queries) == 39
+    assert f"**{len(bot.guild.members)}** members" in interaction.texts[0]
+    assert bot.guild.queries == []
     assert await action_kinds(bot.db) == ["birthday.import"]
 
 
@@ -738,8 +849,9 @@ async def test_the_report_counts_every_bucket_and_carries_the_age_caveat():
         "ambiguous": ["c"],
         "not_found": ["d"],
     }
-    text = "\n".join(report_lines(result, 2026))
+    text = "\n".join(report_lines(result, 2026, 412))
     assert "**1 imported** · 1 already stored · 1 ambiguous · 1 not found" in text
+    assert "**412** members" in text
     assert "a year out" in text
     assert "2026 export" in text
 

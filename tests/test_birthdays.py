@@ -143,6 +143,9 @@ def test_age_is_the_years_they_turn_this_year():
     assert age("", today) is None
     assert age("nope", today) is None
     assert age(2030, today) is None
+    ahead = next_occurrence(1, 2, PHOENIX, datetime(2026, 8, 26, 12, 0, tzinfo=UTC))
+    assert age(1990, ahead.date()) == 37
+    assert age(1990, today) == 36
     assert year_from_age(39, 2026) == 1987
     assert year_from_age(None, 2026) is None
     assert year_from_age(-2, 2026) is None
@@ -175,10 +178,19 @@ def test_bracket_and_paren_prefixes_are_stripped():
 def test_scoring_is_three_two_one():
     assert score_member("PT", "PT", "pt_the_pilot") == 3
     assert score_member("PT", "Something", "pt") == 2
-    assert score_member("PT", "[40] PT", "someone") == 1
+    assert score_member("PT", "Something", "someone", "pt") == 2
+    assert score_member("PT", "[40] PT", "someone") == 2
+    assert score_member("PT", "PTolemy", "someone") == 1
     assert score_member("PT", "nobody", "nobody") == 0
     assert score_member("", "PT", "PT") == 0
     assert score_member("pt", "PT", "x") == 3
+
+
+def test_a_tagged_nickname_is_matched_on_the_name_inside_the_tag():
+    row = ImportRow("[Straight Hands] ShinDarkShadow", 1, 2, None)
+    tagged = FakeMember(11, "[Straight Hands] ShinDarkShadow", "shin_dark")
+    assert score_member("ShinDarkShadow", tagged.display_name, tagged.name) == 2
+    assert resolve(row, [tagged]).member_id == 11
 
 
 def test_a_unique_best_of_two_or_more_imports_and_everything_else_is_reported():
@@ -194,8 +206,11 @@ def test_a_unique_best_of_two_or_more_imports_and_everything_else_is_reported():
     assert ambiguous.status == "ambiguous" and len(ambiguous.candidates) == 2
     assert ambiguous.member_id is None
 
-    weak = resolve(row, [FakeMember(6, "[40] PT")])
-    assert weak.status == "ambiguous" and weak.candidates[0].user_id == 6
+    tagged = resolve(row, [FakeMember(6, "[40] PT")])
+    assert tagged.status == "matched" and tagged.member_id == 6
+
+    weak = resolve(row, [FakeMember(10, "PTolemy")])
+    assert weak.status == "ambiguous" and weak.candidates[0].user_id == 10
 
     assert resolve(row, [FakeMember(7, "nobody")]).status == "not_found"
     assert resolve(row, []).status == "not_found"
@@ -209,7 +224,7 @@ def test_the_paren_shape_resolves_the_same_way():
 def test_candidates_come_back_best_first():
     hits = score_members("PT", [FakeMember(1, "[40] PT"), FakeMember(2, "PT")])
     assert [c.user_id for c in hits] == [2, 1]
-    assert [c.score for c in hits] == [3, 1]
+    assert [c.score for c in hits] == [3, 2]
 
 
 def test_the_export_parser_reads_the_table_and_splits_a_shared_day():

@@ -131,6 +131,7 @@ CREATE TABLE IF NOT EXISTS birthdays (
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("golive_sessions", "live_role_added", "INTEGER NOT NULL DEFAULT 0"),
+    ("birthdays", "role_added_id", "INTEGER"),
 )
 
 CLOSE_DUPLICATE_OPEN_SESSIONS = """

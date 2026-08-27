@@ -240,18 +240,22 @@ def _norm(value: Any) -> str:
     return " ".join(str(value or "").split()).casefold()
 
 
-def score_member(query: str, display_name: Any, username: Any) -> int:
+def score_member(
+    query: str, display_name: Any, username: Any, global_name: Any = None
+) -> int:
     """3 for the same display name, 2 for the same username, 1 for containing the name."""
     wanted = _norm(query)
     if not wanted:
         return 0
     display = _norm(display_name)
+    plain = _norm(strip_tags(display_name))
     user = _norm(username)
+    globally = _norm(global_name)
     if display == wanted:
         return EXACT_DISPLAY_SCORE
-    if user == wanted:
+    if wanted in (plain, user, globally):
         return EXACT_USERNAME_SCORE
-    if wanted in display or wanted in user:
+    if any(value and wanted in value for value in (display, plain, user, globally)):
         return CONTAINS_SCORE
     return 0
 
@@ -263,7 +267,10 @@ def score_members(query: str, members: Any) -> list[Candidate]:
             display_name=str(getattr(member, "display_name", "")),
             username=str(getattr(member, "name", "")),
             score=score_member(
-                query, getattr(member, "display_name", None), getattr(member, "name", None)
+                query,
+                getattr(member, "display_name", None),
+                getattr(member, "name", None),
+                getattr(member, "global_name", None),
             ),
         )
         for member in members or ()

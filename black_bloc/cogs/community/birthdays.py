@@ -26,7 +26,6 @@ from ...birthdays import (
     render_description,
     resolve,
     stamp,
-    strip_tags,
     year_from_age,
     year_problem,
 )
@@ -73,7 +72,6 @@ IMPORT_EMPTY = (
     "The seed file that ships with Black Bloc has no rows in it, so nothing was imported. That "
     "is a packaging fault rather than a Discord one — tell a Lead."
 )
-LOOKUP_FAILED = "Discord would not answer a member search"
 
 
 def _row_value(row: Any, key: str, fallback: Any = None) -> Any:
@@ -141,10 +139,13 @@ async def mark_announced(db: Any, user_id: int, day_text: str) -> None:
     await db.conn.commit()
 
 
-async def set_role_added(db: Any, user_id: int, added: bool) -> None:
+async def set_role_added(
+    db: Any, user_id: int, added: bool, role_id: int | None = None
+) -> None:
+    """Record that the role went on, and which role it was, so it can come off again."""
     await db.conn.execute(
-        "UPDATE birthdays SET role_added = ? WHERE user_id = ?",
-        (1 if added else 0, int(user_id)),
+        "UPDATE birthdays SET role_added = ?, role_added_id = ? WHERE user_id = ?",
+        (1 if added else 0, int(role_id) if added and role_id else None, int(user_id)),
     )
     await db.conn.commit()
 
@@ -199,10 +200,11 @@ def candidate_text(match: Any) -> str:
     return shown + (f" and {more} more" if more > 0 else "")
 
 
-def report_lines(result: dict[str, list[str]], as_of_year: int) -> list[str]:
+def report_lines(result: dict[str, list[str]], as_of_year: int, searched: int = 0) -> list[str]:
     lines = [
         f"**{len(result['imported'])} imported** · {len(result['already'])} already stored · "
         f"{len(result['ambiguous'])} ambiguous · {len(result['not_found'])} not found",
+        f"Matched against the **{searched}** members Black Bloc can see in this server.",
     ]
     if result["imported"]:
         lines.append(
@@ -213,7 +215,7 @@ def report_lines(result: dict[str, list[str]], as_of_year: int) -> list[str]:
         ("Imported", "imported"),
         ("Already stored, left alone", "already"),
         ("Ambiguous — set these by hand with `/birthday set-for`", "ambiguous"),
-        ("Not found — nobody matched, or Discord would not answer", "not_found"),
+        ("Not found — nobody in the server matched", "not_found"),
     ):
         if not result[key]:
             continue
@@ -326,7 +328,7 @@ class Birthdays(commands.Cog):
             target=member,
             details=details | ({"reason": failure} if failure else {}),
         )
-        await self._give_role(guild, member, today_text)
+        await self._give_role(guild, member, mode, today_text)
 
     async def _post(self, guild: Any, embed: discord.Embed) -> str | None:
         """None when the wish was posted; otherwise why it was not."""
@@ -358,18 +360,18 @@ class Birthdays(commands.Cog):
             log.warning("birthdays: role %s is not in this server", role_id)
         return role
 
-    async def _give_role(self, guild: Any, member: Any, today_text: str) -> None:
+    async def _give_role(self, guild: Any, member: Any, mode: str, today_text: str) -> None:
         role = self._role(guild)
         if role is None:
             return
-        if getattr(self.bot, "guard", None) is not None:
-            log.info("birthdays: TEST MODE — would give %s the birthday role", member.id)
+        if mode != "on" or getattr(self.bot, "guard", None) is not None:
+            log.info("birthdays: would give %s the birthday role (mode %s)", member.id, mode)
             await log_action(
                 self.bot,
                 guild,
                 "birthday.would_add_role",
                 target=member,
-                details={"role_id": role.id, "local_date": today_text},
+                details={"role_id": role.id, "mode": mode, "local_date": today_text},
             )
             return
         try:
@@ -384,16 +386,18 @@ class Birthdays(commands.Cog):
                 details={"role_id": role.id, "reason": f"{type(exc).__name__}: {exc}"},
             )
             return
-        await set_role_added(self.bot.db, member.id, True)
+        await set_role_added(self.bot.db, member.id, True, role.id)
         await log_action(
             self.bot, guild, "birthday.add_role", target=member, details={"role_id": role.id}
         )
 
     async def _take_role_back(self, guild: Any, row: Any, today: date) -> None:
-        """The day is over, so the role goes — whatever the mode says now."""
+        """The day is over, so the role that went on comes off — whatever the mode says now."""
+        role_id = _row_value(row, "role_added_id") or self.bot.store.get(
+            guild.id, "birthday_role_id"
+        )
         member = guild.get_member(row["user_id"])
-        role = self._role(guild)
-        if member is None or role is None:
+        if member is None or not role_id:
             await set_role_added(self.bot.db, row["user_id"], False)
             return
         if getattr(self.bot, "guard", None) is not None:
@@ -403,11 +407,11 @@ class Birthdays(commands.Cog):
                 guild,
                 "birthday.would_remove_role",
                 target=member,
-                details={"role_id": role.id},
+                details={"role_id": role_id},
             )
             return
         try:
-            await member.remove_roles(role, reason=ROLE_REASON)
+            await member.remove_roles(discord.Object(id=int(role_id)), reason=ROLE_REASON)
         except discord.HTTPException as exc:
             log.warning("birthdays: could not take the birthday role off %s: %s", member.id, exc)
             if self._say_once(row["user_id"], "remove_role_failed", today.isoformat()):
@@ -416,13 +420,18 @@ class Birthdays(commands.Cog):
                     guild,
                     "birthday.remove_role_failed",
                     target=member,
-                    details={"role_id": role.id, "reason": f"{type(exc).__name__}: {exc}"},
+                    details={"role_id": role_id, "reason": f"{type(exc).__name__}: {exc}"},
                 )
             return
         await set_role_added(self.bot.db, row["user_id"], False)
         await log_action(
-            self.bot, guild, "birthday.remove_role", target=member, details={"role_id": role.id}
+            self.bot, guild, "birthday.remove_role", target=member, details={"role_id": role_id}
         )
+
+    async def _return_role(self, guild: Any, row: Any) -> None:
+        if not _row_value(row, "role_added", 0):
+            return
+        await self._take_role_back(guild, row, local_today(await self._zone_of(row["user_id"])))
 
     def _say_once(self, user_id: int, kind: str, day_text: str) -> bool:
         key = (int(user_id), kind)
@@ -530,9 +539,13 @@ class Birthdays(commands.Cog):
     async def remove(self, interaction: discord.Interaction) -> None:
         if not await self._ready(interaction):
             return
-        if not await delete_birthday(self.bot.db, interaction.user.id):
-            await interaction.response.send_message(NOT_STORED, ephemeral=True)
-            return
+        async with self._lock(interaction.user.id):
+            row = await get_birthday(self.bot.db, interaction.user.id)
+            if row is None:
+                await interaction.response.send_message(NOT_STORED, ephemeral=True)
+                return
+            await self._return_role(interaction.guild, row)
+            await delete_birthday(self.bot.db, interaction.user.id)
         await interaction.response.send_message(REMOVED, ephemeral=True)
         await log_action(
             self.bot, interaction.guild, "birthday.remove", actor=interaction.user
@@ -558,7 +571,10 @@ class Birthdays(commands.Cog):
                 ALREADY_OPTED.format(state="in" if opted_in else "out"), ephemeral=True
             )
             return
-        await set_opted_in(self.bot.db, interaction.user.id, opted_in)
+        async with self._lock(interaction.user.id):
+            await set_opted_in(self.bot.db, interaction.user.id, opted_in)
+            if not opted_in:
+                await self._return_role(interaction.guild, row)
         await interaction.response.send_message(
             OPTED_IN if opted_in else OPTED_OUT, ephemeral=True
         )
@@ -590,7 +606,7 @@ class Birthdays(commands.Cog):
         zone = await self._zone_of(member.id)
         when = next_occurrence(row["month"], row["day"], zone)
         years = (
-            age(row["year"], local_today(zone))
+            age(row["year"], when.date())
             if row["year"] and self.bot.store.get(interaction.guild.id, "birthday_show_age")
             else None
         )
@@ -738,8 +754,9 @@ class Birthdays(commands.Cog):
             return
         await interaction.response.defer(ephemeral=True)
         as_of = import_as_of_year()
-        result = await self._import(interaction.guild, rows, as_of, interaction.user)
-        pages = chunked(report_lines(result, as_of))
+        members = await self.members_of(interaction.guild)
+        result = await self._import(interaction.guild, rows, as_of, members)
+        pages = chunked(report_lines(result, as_of, len(members)))
         for page in pages:
             await interaction.followup.send(
                 page, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
@@ -749,11 +766,24 @@ class Birthdays(commands.Cog):
             interaction.guild,
             "birthday.import",
             actor=interaction.user,
-            details={key: len(value) for key, value in result.items()},
+            details={key: len(value) for key, value in result.items()}
+            | {"searched": len(members)},
         )
 
+    async def members_of(self, guild: Any) -> list[Any]:
+        """Every member Black Bloc can see, chunking first when the cache is short."""
+        members = list(getattr(guild, "members", ()) or ())
+        expected = int(getattr(guild, "member_count", 0) or 0)
+        if expected and len(members) < expected:
+            try:
+                await guild.chunk()
+            except Exception as exc:
+                log.warning("birthdays: could not fill the member cache (%s)", exc)
+            members = list(getattr(guild, "members", ()) or ())
+        return members
+
     async def _import(
-        self, guild: Any, rows: list[Any], as_of: int, actor: Any
+        self, guild: Any, rows: list[Any], as_of: int, members: list[Any]
     ) -> dict[str, list[str]]:
         result: dict[str, list[str]] = {
             "imported": [],
@@ -763,12 +793,6 @@ class Birthdays(commands.Cog):
         }
         for row in rows:
             where = f"{row.display_name} — {month_day_text(row.month, row.day)}"
-            try:
-                members = await guild.query_members(query=strip_tags(row.display_name), limit=10)
-            except Exception as exc:
-                log.warning("birthdays: member search for %r failed: %s", row.display_name, exc)
-                result["not_found"].append(f"{where} ({LOOKUP_FAILED})")
-                continue
             match = resolve(row, members)
             if match.status == "not_found":
                 result["not_found"].append(where)
