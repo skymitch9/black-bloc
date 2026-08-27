@@ -348,7 +348,7 @@ class SettingsStore:
         if key == "modmail_mode":
             return CHANNEL_MODE
         if key == "modmail_category_id":
-            return MODMAIL_CATEGORY_ID
+            return None if self.settings.test_mode else MODMAIL_CATEGORY_ID
         if key == "modmail_log_channel_id":
             if self.settings.test_mode:
                 return self.settings.test_channel_id

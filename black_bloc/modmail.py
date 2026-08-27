@@ -28,6 +28,7 @@ CONTENT_LIMIT = 3800
 FIELD_LIMIT = 1024
 NAME_LIMIT = 100
 SNIPPET_NAME_LIMIT = 40
+MESSAGE_LIMIT = 1900
 TRANSCRIPT_BYTES = 7_000_000
 TRUNCATED_MARK = "\n\n… truncated — this ticket is longer than one transcript file can hold.\n"
 UNDELIVERED_MARK = "(not delivered)"
@@ -48,6 +49,22 @@ TRANSCRIPT_NAME = "modmail-ticket-{ticket_id}.txt"
 NO_TEXT = "(no text)"
 
 SNIPPET_NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,39}$")
+
+
+def chunk_lines(lines: Any, limit: int = MESSAGE_LIMIT) -> list[str]:
+    """Discord refuses a message over 2000 characters, so a long list becomes several."""
+    chunks: list[str] = []
+    current = ""
+    for line in lines or ():
+        piece = clamp(line, limit)
+        if current and len(current) + 1 + len(piece) > limit:
+            chunks.append(current)
+            current = piece
+        else:
+            current = f"{current}\n{piece}" if current else piece
+    if current:
+        chunks.append(current)
+    return chunks
 
 
 def field_of(row: Any, key: str, default: Any = None) -> Any:

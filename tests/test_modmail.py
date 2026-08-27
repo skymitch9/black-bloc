@@ -9,6 +9,7 @@ from black_bloc.modmail import (
     TRUNCATED_MARK,
     UNDELIVERED_MARK,
     attachment_urls,
+    chunk_lines,
     clamp_bytes,
     closing_dm,
     count_directions,
@@ -285,3 +286,25 @@ def test_a_reply_that_never_reached_the_member_is_marked_in_the_transcript():
 
     assert UNDELIVERED_MARK in text
     assert text.count(UNDELIVERED_MARK) == 1
+
+
+def test_the_transcript_header_warns_that_attachment_links_die():
+    text = transcript_text(
+        [row(IN, "see this", attachments='["https://cdn/proof.png"]')],
+        ticket_id=TICKET,
+        user_id=USER,
+        user_label="Alice",
+        guild_name="Server",
+    )
+
+    assert "24 hours" in text
+
+
+def test_a_long_list_is_cut_into_messages_discord_will_take():
+    chunks = chunk_lines([f"line {n} " + "x" * 200 for n in range(40)])
+
+    assert len(chunks) > 1
+    assert all(len(chunk) <= 1900 for chunk in chunks)
+    assert chunks[0].startswith("line 0")
+    assert chunk_lines([]) == []
+    assert chunk_lines(["one", "two"]) == ["one\ntwo"]

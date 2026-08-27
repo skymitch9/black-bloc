@@ -833,14 +833,34 @@ async def test_a_thread_ticket_is_archived_and_locked_not_deleted(cog, bot, memb
     assert thread.archived is True and thread.locked is True and thread.deleted is False
 
 
-async def test_a_ticket_whose_channel_has_gone_is_closed_by_the_reconciler(cog, bot, member, db):
+async def test_a_ticket_whose_channel_has_gone_is_closed_on_the_second_miss(cog, bot, member, db):
     ticket = await open_one(cog, bot, member)
     bot.guild.channels.pop(ticket["channel_id"])
+    before = len(member.dms)
+
+    await cog.reconcile_tickets()
+    assert (await get_ticket(db, ticket["id"]))["status"] == "open"
 
     await cog.reconcile_tickets()
 
     row = await get_ticket(db, ticket["id"])
     assert row["status"] == "closed" and row["close_reason"] == "ticket_channel_gone"
+    assert "has been closed" in member.dms[-1]["content"]
+    assert len(member.dms) == before + 1
+
+
+async def test_a_channel_that_comes_back_between_two_ticks_is_left_open(cog, bot, member, db):
+    ticket = await open_one(cog, bot, member)
+    channel = bot.guild.channels.pop(ticket["channel_id"])
+
+    await cog.reconcile_tickets()
+    bot.guild.channels[channel.id] = channel
+    await cog.reconcile_tickets()
+    bot.guild.channels.pop(channel.id)
+    await cog.reconcile_tickets()
+
+    assert (await get_ticket(db, ticket["id"]))["status"] == "open"
+    assert cog.last_ok_at is not None
 
 
 async def test_a_ticket_that_never_got_a_channel_is_left_alone_inside_the_grace(cog, bot, db):
@@ -1108,6 +1128,125 @@ async def test_every_management_command_defers_before_it_answers(cog, bot, membe
         await callback(cog, interaction, **kwargs)
         assert interaction.response.messages[0].get("deferred") is True, callback
         assert interaction.sent is not None, callback
+
+
+async def test_an_unavailable_guild_is_never_reconciled(cog, bot, member, db):
+    ticket = await open_one(cog, bot, member)
+    bot.guild.channels.pop(ticket["channel_id"])
+    bot.guild.unavailable = True
+
+    await cog.reconcile_tickets()
+    await cog.reconcile_tickets()
+    await cog.reconcile_tickets()
+
+    assert (await get_ticket(db, ticket["id"]))["status"] == "open"
+
+
+async def test_a_loop_that_raised_records_the_error_and_asks_to_be_restarted(cog):
+    await cog._reconcile_error(RuntimeError("boom"))
+
+    assert "boom" in cog.last_error and "RuntimeError" in cog.last_error
+
+
+async def test_on_ready_starts_the_loop_when_cog_load_never_did(cog, bot):
+    await cog.on_ready()
+
+    try:
+        assert cog._reconcile_loop.is_running() is True
+        assert cog.last_ok_at is not None
+    finally:
+        await cog.cog_unload()
+
+
+async def test_status_shows_the_reconcilers_health_not_just_its_liveness(cog, bot, lead):
+    await cog.reconcile_tickets()
+    cog.last_error = "HTTPException: 500"
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.modmail_status.callback(cog, interaction)
+
+    said = " ".join(m["content"] or "" for m in interaction.response.messages)
+    assert "last ok" in said and cog.last_ok_at in said
+    assert "HTTPException: 500" in said
+
+
+async def test_a_reply_into_an_archived_thread_unarchives_it_first(cog, bot, member, lead, db):
+    bot.guard = FakeGuard()
+    await bot.store.set(GUILD, "modmail_mode", THREAD_MODE)
+    await cog.on_message(dm_from(member))
+    ticket = await open_ticket_for(db, GUILD, member.id)
+    thread = bot.guild.threads[ticket["thread_id"]]
+    thread.archived = True
+    bot.guard = None
+    await bot.store.set(GUILD, "modmail_category_id", CATEGORY)
+
+    await cog.reply.callback(cog, FakeInteraction(bot, lead), text="still here")
+
+    assert thread.archived is False
+    assert thread.messages[-1].kwargs["embed"].description == "still here"
+
+
+async def test_a_ticket_number_written_in_exotic_digits_is_refused(cog, bot, member, lead):
+    await open_one(cog, bot, member)
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.reply.callback(cog, interaction, text="hi", ticket="²")
+
+    assert "not a ticket number" in interaction.sent
+
+
+async def test_forget_clears_one_place_and_says_which(cog, bot, lead, db):
+    await live(bot)
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.modmail_forget.callback(
+        cog, interaction, setting=discord.app_commands.Choice(name="category", value="category")
+    )
+
+    assert bot.store.get(GUILD, "modmail_category_id") is None
+    assert "modmail_category_id" in interaction.sent
+    assert "modmail.forgotten" in await action_kinds(db)
+
+
+async def test_a_member_who_leaves_is_noted_in_the_ticket_which_stays_open(cog, bot, member, db):
+    ticket = await open_one(cog, bot, member)
+
+    await cog.on_member_remove(member)
+
+    rows = await ticket_messages(db, ticket["id"])
+    assert rows[-1]["direction"] == NOTE and "left the server" in rows[-1]["content"]
+    assert (await get_ticket(db, ticket["id"]))["status"] == "open"
+    assert "modmail.member_left" in await action_kinds(db)
+
+
+async def test_a_snippet_is_never_overwritten_by_accident(cog, bot, lead, db):
+    await cog.snippet_add.callback(cog, FakeInteraction(bot, lead), name="appeal", content="one")
+    clash = FakeInteraction(bot, lead)
+
+    await cog.snippet_add.callback(cog, clash, name="appeal", content="two")
+    forced = FakeInteraction(bot, lead)
+    await cog.snippet_add.callback(
+        cog, forced, name="appeal", content="two", overwrite=True
+    )
+
+    assert "already a snippet" in clash.sent and "saved" in forced.sent
+    cur = await db.conn.execute("SELECT content FROM modmail_snippets WHERE name = 'appeal'")
+    assert (await cur.fetchone())["content"] == "two"
+
+
+async def test_a_message_that_starts_by_mentioning_the_bot_is_not_a_reply(
+    cog, bot, member, lead, db
+):
+    ticket = await open_one(cog, bot, member)
+    channel = bot.guild.get_channel(ticket["channel_id"])
+    lead.roles = [FakeRole(STAFF_ROLE)]
+    bot.user = FakeRole(4242, "Black Bloc")
+    before = len(member.dms)
+
+    await cog.on_message(guild_message(channel, lead, "<@4242> status?"))
+
+    assert len(await ticket_messages(db, ticket["id"])) == 1
+    assert len(member.dms) == before
 
 
 async def test_a_stored_message_keeps_its_direction_and_anonymity(db):
