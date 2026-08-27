@@ -11,11 +11,16 @@
 html, body { height: 100%; }
 body { overflow: hidden; }
 
+/* The mock's base is 14px, not the estate's 17px reading size: this is a
+   console, and every size below is quoted from it. Anything without a size of
+   its own inherits the mock's body rather than the shell's. */
 .shell {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
   height: 100dvh;
   overflow: hidden;
+  font-size: 14px;
+  line-height: 1.45;
 }
 
 .side {
@@ -287,7 +292,16 @@ body { overflow: hidden; }
   padding: 12px 16px;
   border-bottom: 1px solid var(--et-hairline);
 }
-.card-head h3 { flex-grow: 1; margin: 0; font-size: 14px; font-weight: 600; }
+.card-head h3 {
+  flex-grow: 1;
+  margin: 0;
+  font-family: var(--et-font);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: normal;
+  color: var(--et-fg);
+}
+.card-body p { margin: 0; }
 .card-head .bar { margin: 0; gap: .4rem; }
 .card-count { color: var(--et-muted); font-family: var(--et-font-mono); font-size: 11px; }
 .card-head a { color: var(--et-accent); font-size: 12px; text-decoration: none; }
@@ -412,6 +426,7 @@ details:not([open]) > .sect-summary .sect-mark { transform: rotate(-90deg); }
 .sect-inner { padding: 12px 16px; }
 .sect-inner > .section-note { margin: 0 0 .6rem; }
 .section-body { display: grid; gap: 12px; }
+.section-note { margin: 0 0 12px; font-size: 12px; }
 .sect-inner.flush { padding: 0; }
 .sect-inner.flush > .section-note { margin: 0; padding: 8px 14px; border-bottom: 1px solid var(--et-hairline); }
 .sect-inner.flush > .section-body { display: block; gap: 0; }

@@ -261,7 +261,7 @@ async function caseDetail(id) {
     if (done.ok) refresh();
   });
 
-  return card(`Case ${row.id}`, [
+  return card(null, [
     el('div', { class: 'formrow' }, [
       el('p', {}, ['Member: ', nameNode(row.user_id, row.user_name)]),
       el('p', {}, ['Moderator: ', nameNode(row.moderator_id, row.moderator_name)]),
