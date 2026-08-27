@@ -5,6 +5,7 @@ import { forgetShellStatus, mountShell, paintShell, renderNav } from './shell.js
 export const TABS = [
   { tab: 'overview', href: '/index.html', label: 'Overview' },
   { tab: 'moderation', href: '/moderation.html', label: 'Moderation' },
+  { tab: 'members', href: '/members.html', label: 'Members' },
   { tab: 'automod', href: '/automod.html', label: 'Automod' },
   { tab: 'modmail', href: '/modmail.html', label: 'Modmail' },
   { tab: 'events', href: '/events.html', label: 'Events' },

@@ -671,6 +671,14 @@ details:not([open]) > .sect-summary .sect-mark { transform: rotate(-90deg); }
   text-transform: none;
 }
 .grid-table .grid-row:nth-of-type(even) { background: var(--et-table-stripe); }
+/* Members is the same grid with its own five columns, and it starts narrower
+   because an avatar and a name need less room than a case's six cells. */
+.grid-table.members { min-width: 720px; }
+.grid-table.members .grid-row {
+  grid-template-columns: minmax(0, 1.5fr) 140px minmax(0, 1.6fr) 72px 24px;
+}
+a.grid-row:hover { background: var(--et-row-hover); }
+a.grid-row:focus-visible { outline: var(--et-focus-ring); outline-offset: -2px; }
 button.grid-row {
   width: 100%;
   border: 0;

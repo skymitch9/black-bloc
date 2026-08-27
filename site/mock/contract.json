@@ -4,390 +4,974 @@
     {
       "method": "GET",
       "path": "/api/status",
-      "read_by": ["page-overview.js", "page-health.js"],
+      "read_by": [
+        "page-overview.js",
+        "page-health.js"
+      ],
       "shape": "object",
-      "keys": ["bot", "guild", "features", "loops", "open", "notes", "checked_at"],
+      "keys": [
+        "bot",
+        "guild",
+        "features",
+        "loops",
+        "open",
+        "notes",
+        "checked_at"
+      ],
       "nested": {
-        "bot": ["ready", "latency_ms", "guilds", "uptime_seconds", "started_at", "version", "test_mode"],
-        "open": ["role_menus_posted", "temp_channels", "honeypot_hits_7d", "open_events", "open_modmail"]
+        "bot": [
+          "ready",
+          "latency_ms",
+          "guilds",
+          "uptime_seconds",
+          "started_at",
+          "version",
+          "test_mode"
+        ],
+        "open": [
+          "role_menus_posted",
+          "temp_channels",
+          "honeypot_hits_7d",
+          "open_events",
+          "open_modmail"
+        ]
       },
       "rows": {
-        "features": ["key", "feature", "mode"],
-        "loops": ["cog", "name", "running", "failed", "state", "next_iteration", "last_ok_at", "last_error"]
+        "features": [
+          "key",
+          "feature",
+          "mode"
+        ],
+        "loops": [
+          "cog",
+          "name",
+          "running",
+          "failed",
+          "state",
+          "next_iteration",
+          "last_ok_at",
+          "last_error"
+        ]
       }
     },
     {
       "method": "GET",
       "path": "/api/actions?limit=10",
-      "read_by": ["page-overview.js", "page-health.js", "page-audit.js"],
+      "read_by": [
+        "page-overview.js",
+        "page-health.js",
+        "page-audit.js"
+      ],
       "shape": "object",
-      "keys": ["actions", "limit", "notes"],
+      "keys": [
+        "actions",
+        "limit",
+        "notes"
+      ],
       "rows": {
-        "actions": ["id", "at", "kind", "actor_id", "actor_name", "target_id", "target_name", "reason"]
+        "actions": [
+          "id",
+          "at",
+          "kind",
+          "actor_id",
+          "actor_name",
+          "target_id",
+          "target_name",
+          "reason"
+        ]
       }
     },
     {
       "method": "GET",
       "path": "/api/ref/channels",
-      "read_by": ["ui.js"],
+      "read_by": [
+        "ui.js"
+      ],
       "shape": "list",
-      "keys": ["id", "name", "type", "category_id", "position"]
+      "keys": [
+        "id",
+        "name",
+        "type",
+        "category_id",
+        "position"
+      ]
     },
     {
       "method": "GET",
       "path": "/api/ref/roles",
-      "read_by": ["ui.js"],
+      "read_by": [
+        "ui.js"
+      ],
       "shape": "list",
-      "keys": ["id", "name", "color", "position", "managed"]
+      "keys": [
+        "id",
+        "name",
+        "color",
+        "position",
+        "managed"
+      ]
     },
     {
       "method": "GET",
       "path": "/api/ref/members?q=&limit=25",
-      "read_by": ["ui.js"],
+      "read_by": [
+        "ui.js"
+      ],
       "shape": "list",
-      "keys": ["id", "name", "display_name", "avatar_url"]
+      "keys": [
+        "id",
+        "name",
+        "display_name",
+        "avatar_url"
+      ]
     },
     {
       "method": "GET",
       "path": "/api/ref/names?ids={member_id}",
-      "read_by": ["api.js"],
+      "read_by": [
+        "api.js"
+      ],
       "shape": "map",
-      "keys": ["name", "display_name", "kind"]
+      "keys": [
+        "name",
+        "display_name",
+        "kind"
+      ]
     },
     {
       "method": "GET",
       "path": "/api/settings",
-      "read_by": ["page-settings.js", "page-rolemenus.js", "ui.js"],
+      "read_by": [
+        "page-settings.js",
+        "page-rolemenus.js",
+        "ui.js"
+      ],
       "shape": "namespaces",
-      "keys": ["key", "type", "value", "default", "help"],
-      "namespaces": ["core", "automod", "birthday", "events", "golive", "honeypot", "modmail", "rolemenu", "tempvoice"],
-      "no_namespaces": ["mod", "modlog"]
+      "keys": [
+        "key",
+        "type",
+        "value",
+        "default",
+        "help"
+      ],
+      "namespaces": [
+        "core",
+        "automod",
+        "birthday",
+        "events",
+        "golive",
+        "honeypot",
+        "modmail",
+        "rolemenu",
+        "tempvoice"
+      ],
+      "no_namespaces": [
+        "mod",
+        "modlog"
+      ]
     },
     {
       "method": "PUT",
       "path": "/api/settings/birthday_show_age",
-      "body": {"value": true},
-      "read_by": ["ui.js settingRow"],
+      "body": {
+        "value": true
+      },
+      "read_by": [
+        "ui.js settingRow"
+      ],
       "shape": "object",
-      "keys": ["key", "type", "value", "default", "help"]
+      "keys": [
+        "key",
+        "type",
+        "value",
+        "default",
+        "help"
+      ]
     },
     {
       "method": "DELETE",
       "path": "/api/settings/birthday_show_age",
-      "read_by": ["ui.js settingRow"],
+      "read_by": [
+        "ui.js settingRow"
+      ],
       "shape": "object",
-      "keys": ["key", "type", "value", "default", "help", "cleared"]
+      "keys": [
+        "key",
+        "type",
+        "value",
+        "default",
+        "help",
+        "cleared"
+      ]
     },
     {
       "method": "GET",
       "path": "/api/settings/audit?limit=100",
-      "read_by": ["page-audit.js"],
+      "read_by": [
+        "page-audit.js"
+      ],
       "shape": "object",
-      "keys": ["audit", "limit"],
+      "keys": [
+        "audit",
+        "limit"
+      ],
       "rows": {
-        "audit": ["key", "namespace", "value", "updated_by_id", "updated_by_name", "updated_at"]
+        "audit": [
+          "key",
+          "namespace",
+          "value",
+          "updated_by_id",
+          "updated_by_name",
+          "updated_at"
+        ]
       }
     },
     {
       "method": "GET",
       "path": "/api/rolemenus",
-      "read_by": ["page-rolemenus.js"],
+      "read_by": [
+        "page-rolemenus.js"
+      ],
       "shape": "list",
-      "keys": ["name", "title", "description", "mode", "channel_id", "message_id", "options"],
-      "rows": {"options": ["role_id", "label", "emoji", "position"]}
+      "keys": [
+        "name",
+        "title",
+        "description",
+        "mode",
+        "channel_id",
+        "message_id",
+        "options"
+      ],
+      "rows": {
+        "options": [
+          "role_id",
+          "label",
+          "emoji",
+          "position"
+        ]
+      }
     },
     {
       "method": "POST",
       "path": "/api/rolemenus",
-      "body": {"name": "contract-new", "title": "Contract", "mode": "multiple"},
-      "read_by": ["page-rolemenus.js editor"],
+      "body": {
+        "name": "contract-new",
+        "title": "Contract",
+        "mode": "multiple"
+      },
+      "read_by": [
+        "page-rolemenus.js editor"
+      ],
       "shape": "object",
-      "keys": ["name", "title", "description", "mode", "channel_id", "message_id", "options"]
+      "keys": [
+        "name",
+        "title",
+        "description",
+        "mode",
+        "channel_id",
+        "message_id",
+        "options"
+      ]
     },
     {
       "method": "PUT",
       "path": "/api/rolemenus/contract",
-      "body": {"title": "Contract", "mode": "multiple", "options": []},
-      "read_by": ["page-rolemenus.js editor"],
+      "body": {
+        "title": "Contract",
+        "mode": "multiple",
+        "options": []
+      },
+      "read_by": [
+        "page-rolemenus.js editor"
+      ],
       "shape": "object",
-      "keys": ["name", "title", "description", "mode", "channel_id", "message_id", "options"]
+      "keys": [
+        "name",
+        "title",
+        "description",
+        "mode",
+        "channel_id",
+        "message_id",
+        "options"
+      ]
     },
     {
       "method": "POST",
       "path": "/api/rolemenus/contract/post",
-      "body": {"channel_id": "{test_channel_id}"},
+      "body": {
+        "channel_id": "{test_channel_id}"
+      },
       "needs": "one option",
-      "read_by": ["page-rolemenus.js postCard"],
+      "read_by": [
+        "page-rolemenus.js postCard"
+      ],
       "shape": "object",
-      "keys": ["posted", "name", "channel_id", "message_id"]
+      "keys": [
+        "posted",
+        "name",
+        "channel_id",
+        "message_id"
+      ]
     },
     {
       "method": "DELETE",
       "path": "/api/rolemenus/contract",
-      "read_by": ["page-rolemenus.js"],
+      "read_by": [
+        "page-rolemenus.js"
+      ],
       "shape": "object",
-      "keys": ["deleted", "name"]
+      "keys": [
+        "deleted",
+        "name"
+      ]
     },
     {
       "method": "GET",
       "path": "/api/golive/links",
-      "read_by": ["page-golive.js"],
+      "read_by": [
+        "page-golive.js"
+      ],
       "shape": "list",
-      "keys": ["user_id", "user_name", "twitch_login", "twitch_user_id", "linked_at"]
+      "keys": [
+        "user_id",
+        "user_name",
+        "twitch_login",
+        "twitch_user_id",
+        "linked_at"
+      ]
     },
     {
       "method": "GET",
       "path": "/api/golive/optouts",
-      "read_by": ["page-golive.js"],
+      "read_by": [
+        "page-golive.js"
+      ],
       "shape": "list",
-      "keys": ["user_id", "user_name", "at"]
+      "keys": [
+        "user_id",
+        "user_name",
+        "at"
+      ]
     },
     {
       "method": "GET",
       "path": "/api/golive/sessions?limit=50",
-      "read_by": ["page-golive.js"],
+      "read_by": [
+        "page-golive.js"
+      ],
       "shape": "list",
-      "keys": ["user_id", "user_name", "id", "source", "url", "game", "title", "started_at", "ended_at", "mode", "announced_message_id"]
+      "keys": [
+        "user_id",
+        "user_name",
+        "id",
+        "source",
+        "url",
+        "game",
+        "title",
+        "started_at",
+        "ended_at",
+        "mode",
+        "announced_message_id"
+      ]
     },
     {
       "method": "DELETE",
       "path": "/api/golive/links/{member_id}",
-      "read_by": ["page-golive.js"],
+      "read_by": [
+        "page-golive.js"
+      ],
       "shape": "object",
-      "keys": ["unlinked", "user_id"]
+      "keys": [
+        "unlinked",
+        "user_id"
+      ]
     },
     {
       "method": "GET",
       "path": "/api/events?status=pending",
-      "read_by": ["page-events.js"],
+      "read_by": [
+        "page-events.js"
+      ],
       "shape": "list",
-      "keys": ["id", "title", "description", "location", "starts_at", "ends_at", "minutes", "status", "requester_id", "requester_name", "decided_by_id", "decided_by_name", "decided_at", "deny_reason", "review_channel_id", "created_at"]
+      "keys": [
+        "id",
+        "title",
+        "description",
+        "location",
+        "starts_at",
+        "ends_at",
+        "minutes",
+        "status",
+        "requester_id",
+        "requester_name",
+        "decided_by_id",
+        "decided_by_name",
+        "decided_at",
+        "deny_reason",
+        "review_channel_id",
+        "created_at"
+      ]
     },
     {
       "method": "POST",
       "path": "/api/events/{event_id}/approve",
-      "read_by": ["page-events.js"],
+      "read_by": [
+        "page-events.js"
+      ],
       "shape": "object",
-      "keys": ["event", "message"],
-      "nested": {"event": ["id", "title", "status", "requester_id", "requester_name", "decided_by_id", "decided_by_name", "deny_reason"]}
+      "keys": [
+        "event",
+        "message"
+      ],
+      "nested": {
+        "event": [
+          "id",
+          "title",
+          "status",
+          "requester_id",
+          "requester_name",
+          "decided_by_id",
+          "decided_by_name",
+          "deny_reason"
+        ]
+      }
     },
     {
       "method": "POST",
       "path": "/api/events/{event_id}/deny",
-      "body": {"reason": "not this time"},
-      "read_by": ["page-events.js"],
+      "body": {
+        "reason": "not this time"
+      },
+      "read_by": [
+        "page-events.js"
+      ],
       "shape": "object",
-      "keys": ["event", "message"]
+      "keys": [
+        "event",
+        "message"
+      ]
     },
     {
       "method": "POST",
       "path": "/api/events/{event_id}/cancel",
       "body": {},
-      "read_by": ["page-events.js"],
+      "read_by": [
+        "page-events.js"
+      ],
       "shape": "object",
-      "keys": ["event", "message"]
+      "keys": [
+        "event",
+        "message"
+      ]
     },
     {
       "method": "GET",
       "path": "/api/birthdays",
-      "read_by": ["page-birthdays.js"],
+      "read_by": [
+        "page-birthdays.js"
+      ],
       "shape": "list",
-      "keys": ["user_id", "user_name", "month", "day", "year", "when", "opted_in", "source", "set_at", "last_announced_on"]
+      "keys": [
+        "user_id",
+        "user_name",
+        "month",
+        "day",
+        "year",
+        "when",
+        "opted_in",
+        "source",
+        "set_at",
+        "last_announced_on"
+      ]
     },
     {
       "method": "PUT",
       "path": "/api/birthdays/{member_id}",
-      "body": {"month": 3, "day": 4, "year": null},
-      "read_by": ["page-birthdays.js setCard"],
+      "body": {
+        "month": 3,
+        "day": 4,
+        "year": null
+      },
+      "read_by": [
+        "page-birthdays.js setCard"
+      ],
       "shape": "object",
-      "keys": ["user_id", "user_name", "month", "day", "year", "when", "opted_in", "source", "set_at", "last_announced_on"]
+      "keys": [
+        "user_id",
+        "user_name",
+        "month",
+        "day",
+        "year",
+        "when",
+        "opted_in",
+        "source",
+        "set_at",
+        "last_announced_on"
+      ]
     },
     {
       "method": "POST",
       "path": "/api/birthdays/import",
       "body": {},
-      "read_by": ["page-birthdays.js importCard"],
+      "read_by": [
+        "page-birthdays.js importCard"
+      ],
       "shape": "object",
-      "keys": ["counts", "searched", "as_of_year", "report", "notes"],
+      "keys": [
+        "counts",
+        "searched",
+        "as_of_year",
+        "report",
+        "notes"
+      ],
       "nested": {
-        "counts": ["imported", "already", "ambiguous", "not_found"],
-        "report": ["imported", "already", "ambiguous", "not_found"]
+        "counts": [
+          "imported",
+          "already",
+          "ambiguous",
+          "not_found"
+        ],
+        "report": [
+          "imported",
+          "already",
+          "ambiguous",
+          "not_found"
+        ]
       }
     },
     {
       "method": "DELETE",
       "path": "/api/birthdays/{member_id}",
-      "read_by": ["page-birthdays.js"],
+      "read_by": [
+        "page-birthdays.js"
+      ],
       "shape": "object",
-      "keys": ["removed", "user_id"]
+      "keys": [
+        "removed",
+        "user_id"
+      ]
     },
     {
       "method": "GET",
       "path": "/api/tempvoice/channels",
-      "read_by": ["page-tempvoice.js"],
+      "read_by": [
+        "page-tempvoice.js"
+      ],
       "shape": "list",
-      "keys": ["channel_id", "name", "gone", "owner_id", "owner_name", "creator_id", "created_at", "connected"]
+      "keys": [
+        "channel_id",
+        "name",
+        "gone",
+        "owner_id",
+        "owner_name",
+        "creator_id",
+        "created_at",
+        "connected"
+      ]
     },
     {
       "method": "POST",
       "path": "/api/tempvoice/setup",
       "body": {},
-      "read_by": ["page-tempvoice.js"],
+      "read_by": [
+        "page-tempvoice.js"
+      ],
       "shape": "object",
-      "keys": ["created", "outcome", "message"]
+      "keys": [
+        "created",
+        "outcome",
+        "message"
+      ]
     },
     {
       "method": "GET",
       "path": "/api/honeypot/hits?limit=50",
-      "read_by": ["page-honeypot.js"],
+      "read_by": [
+        "page-honeypot.js"
+      ],
       "shape": "list",
-      "keys": ["id", "user_id", "user_name", "channel_id", "channel_name", "message_id", "content", "at", "mode", "action"]
+      "keys": [
+        "id",
+        "user_id",
+        "user_name",
+        "channel_id",
+        "channel_name",
+        "message_id",
+        "content",
+        "at",
+        "mode",
+        "action"
+      ]
     },
     {
       "method": "POST",
       "path": "/api/honeypot/hits/{hit_id}/ban",
       "body": {},
-      "read_by": ["page-honeypot.js"],
+      "read_by": [
+        "page-honeypot.js"
+      ],
       "shape": "object",
-      "keys": ["banned", "hit_id", "message"]
+      "keys": [
+        "banned",
+        "hit_id",
+        "message"
+      ]
     },
     {
       "method": "POST",
       "path": "/api/honeypot/setup",
       "body": {},
-      "read_by": ["page-honeypot.js"],
+      "read_by": [
+        "page-honeypot.js"
+      ],
       "shape": "object",
-      "keys": ["created", "message"]
+      "keys": [
+        "created",
+        "message"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/members?filter=all&page=1&per_page=50&sort=joined_desc",
+      "read_by": [
+        "page-members.js",
+        "page-moderation.js statStrip",
+        "shell.js memberCount"
+      ],
+      "shape": "object",
+      "keys": [
+        "total",
+        "humans",
+        "bots",
+        "staff",
+        "new_7d",
+        "page",
+        "per_page",
+        "shown",
+        "members"
+      ],
+      "rows": {
+        "members": [
+          "id",
+          "name",
+          "username",
+          "bot",
+          "joined_at",
+          "roles",
+          "staff",
+          "cases",
+          "avatar"
+        ]
+      }
     },
     {
       "method": "GET",
       "path": "/api/mod/cases?page=1",
-      "read_by": ["page-moderation.js"],
+      "read_by": [
+        "page-moderation.js"
+      ],
       "shape": "object",
-      "keys": ["cases", "total", "page", "pages", "per_page"],
+      "keys": [
+        "cases",
+        "total",
+        "page",
+        "pages",
+        "per_page"
+      ],
       "rows": {
-        "cases": ["id", "kind", "user_id", "user_name", "moderator_id", "moderator_name", "reason", "duration_s", "at", "mode", "applied", "actions", "done", "failed", "channel_id"]
+        "cases": [
+          "id",
+          "kind",
+          "user_id",
+          "user_name",
+          "moderator_id",
+          "moderator_name",
+          "reason",
+          "duration_s",
+          "at",
+          "mode",
+          "applied",
+          "actions",
+          "done",
+          "failed",
+          "channel_id"
+        ]
       }
     },
     {
       "method": "GET",
       "path": "/api/mod/cases/{case_id}",
-      "read_by": ["page-moderation.js caseDetail"],
+      "read_by": [
+        "page-moderation.js caseDetail"
+      ],
       "shape": "object",
-      "keys": ["id", "kind", "user_id", "user_name", "moderator_id", "moderator_name", "reason", "duration_s", "at", "mode", "applied", "actions", "done", "failed", "channel_id"]
+      "keys": [
+        "id",
+        "kind",
+        "user_id",
+        "user_name",
+        "moderator_id",
+        "moderator_name",
+        "reason",
+        "duration_s",
+        "at",
+        "mode",
+        "applied",
+        "actions",
+        "done",
+        "failed",
+        "channel_id"
+      ]
     },
     {
       "method": "POST",
       "path": "/api/mod/cases/{case_id}/apply",
       "body": {},
-      "read_by": ["page-moderation.js caseDetail"],
+      "read_by": [
+        "page-moderation.js caseDetail"
+      ],
       "shape": "object",
-      "keys": ["applied", "case_id", "message"]
+      "keys": [
+        "applied",
+        "case_id",
+        "message"
+      ]
     },
     {
       "method": "POST",
       "path": "/api/mod/warn",
-      "body": {"user_id": "{member_id}", "reason": "contract check"},
-      "read_by": ["page-moderation.js actionBar"],
+      "body": {
+        "user_id": "{member_id}",
+        "reason": "contract check"
+      },
+      "read_by": [
+        "page-moderation.js actionBar"
+      ],
       "shape": "object",
-      "keys": ["done", "kind", "user_id", "message"]
+      "keys": [
+        "done",
+        "kind",
+        "user_id",
+        "message"
+      ]
     },
     {
       "method": "GET",
       "path": "/api/mod/rules",
-      "read_by": ["page-automod.js"],
+      "read_by": [
+        "page-automod.js"
+      ],
       "shape": "list",
-      "keys": ["name", "help", "enabled", "window_s", "threshold", "actions", "timeout_s"]
+      "keys": [
+        "name",
+        "help",
+        "enabled",
+        "window_s",
+        "threshold",
+        "actions",
+        "timeout_s"
+      ]
     },
     {
       "method": "PUT",
       "path": "/api/mod/rules/caps",
-      "body": {"enabled": false},
-      "read_by": ["page-automod.js ruleCard"],
+      "body": {
+        "enabled": false
+      },
+      "read_by": [
+        "page-automod.js ruleCard"
+      ],
       "shape": "object",
-      "keys": ["name", "help", "enabled", "window_s", "threshold", "actions", "timeout_s"]
+      "keys": [
+        "name",
+        "help",
+        "enabled",
+        "window_s",
+        "threshold",
+        "actions",
+        "timeout_s"
+      ]
     },
     {
       "method": "GET",
       "path": "/api/modmail/tickets?status=open",
-      "read_by": ["page-modmail.js"],
+      "read_by": [
+        "page-modmail.js"
+      ],
       "shape": "list",
-      "keys": ["id", "user_id", "user_name", "mode", "status", "channel_id", "thread_id", "opened_at", "closed_at", "closed_by_id", "closed_by_name", "close_reason"]
+      "keys": [
+        "id",
+        "user_id",
+        "user_name",
+        "mode",
+        "status",
+        "channel_id",
+        "thread_id",
+        "opened_at",
+        "closed_at",
+        "closed_by_id",
+        "closed_by_name",
+        "close_reason"
+      ]
     },
     {
       "method": "GET",
       "path": "/api/modmail/tickets/{ticket_id}",
-      "read_by": ["page-modmail.js ticketView"],
+      "read_by": [
+        "page-modmail.js ticketView"
+      ],
       "shape": "object",
-      "keys": ["id", "user_id", "user_name", "status", "opened_at", "closed_by_id", "closed_by_name", "messages"],
+      "keys": [
+        "id",
+        "user_id",
+        "user_name",
+        "status",
+        "opened_at",
+        "closed_by_id",
+        "closed_by_name",
+        "messages"
+      ],
       "rows": {
-        "messages": ["id", "at", "author_id", "author_name", "direction", "anonymous", "content", "attachments", "delivered"]
+        "messages": [
+          "id",
+          "at",
+          "author_id",
+          "author_name",
+          "direction",
+          "anonymous",
+          "content",
+          "attachments",
+          "delivered"
+        ]
       }
     },
     {
       "method": "POST",
       "path": "/api/modmail/tickets/{ticket_id}/reply",
-      "body": {"text": "contract check", "anonymous": false},
-      "read_by": ["page-modmail.js ticketView"],
+      "body": {
+        "text": "contract check",
+        "anonymous": false
+      },
+      "read_by": [
+        "page-modmail.js ticketView"
+      ],
       "shape": "object",
-      "keys": ["sent", "ticket_id", "message"]
+      "keys": [
+        "sent",
+        "ticket_id",
+        "message"
+      ]
     },
     {
       "method": "POST",
       "path": "/api/modmail/tickets/{ticket_id}/close",
-      "body": {"reason": "contract check", "silent": true},
-      "read_by": ["page-modmail.js ticketView"],
+      "body": {
+        "reason": "contract check",
+        "silent": true
+      },
+      "read_by": [
+        "page-modmail.js ticketView"
+      ],
       "shape": "object",
-      "keys": ["closed", "ticket", "transcript"]
+      "keys": [
+        "closed",
+        "ticket",
+        "transcript"
+      ]
     },
     {
       "method": "GET",
       "path": "/api/modmail/snippets",
-      "read_by": ["page-modmail.js snippetsCard"],
+      "read_by": [
+        "page-modmail.js snippetsCard"
+      ],
       "shape": "list",
-      "keys": ["name", "content", "by_id", "by_name", "at"]
+      "keys": [
+        "name",
+        "content",
+        "by_id",
+        "by_name",
+        "at"
+      ]
     },
     {
       "method": "POST",
       "path": "/api/modmail/snippets",
-      "body": {"name": "contract", "content": "hello"},
-      "read_by": ["page-modmail.js snippetsCard"],
+      "body": {
+        "name": "contract",
+        "content": "hello"
+      },
+      "read_by": [
+        "page-modmail.js snippetsCard"
+      ],
       "shape": "object",
-      "keys": ["saved", "name", "content"]
+      "keys": [
+        "saved",
+        "name",
+        "content"
+      ]
     },
     {
       "method": "DELETE",
       "path": "/api/modmail/snippets/contract",
-      "read_by": ["page-modmail.js snippetsCard"],
+      "read_by": [
+        "page-modmail.js snippetsCard"
+      ],
       "shape": "object",
-      "keys": ["removed", "name"]
+      "keys": [
+        "removed",
+        "name"
+      ]
     },
     {
       "method": "GET",
       "path": "/api/modmail/blocks",
-      "read_by": ["page-modmail.js blocksCard"],
+      "read_by": [
+        "page-modmail.js blocksCard"
+      ],
       "shape": "list",
-      "keys": ["user_id", "user_name", "by_id", "by_name", "reason", "at"]
+      "keys": [
+        "user_id",
+        "user_name",
+        "by_id",
+        "by_name",
+        "reason",
+        "at"
+      ]
     },
     {
       "method": "POST",
       "path": "/api/modmail/blocks",
-      "body": {"user_id": "{member_id}", "reason": "contract check"},
-      "read_by": ["page-modmail.js blocksCard"],
+      "body": {
+        "user_id": "{member_id}",
+        "reason": "contract check"
+      },
+      "read_by": [
+        "page-modmail.js blocksCard"
+      ],
       "shape": "object",
-      "keys": ["blocked", "user_id"]
+      "keys": [
+        "blocked",
+        "user_id"
+      ]
     },
     {
       "method": "DELETE",
       "path": "/api/modmail/blocks/{member_id}",
-      "read_by": ["page-modmail.js blocksCard"],
+      "read_by": [
+        "page-modmail.js blocksCard"
+      ],
       "shape": "object",
-      "keys": ["unblocked", "user_id"]
+      "keys": [
+        "unblocked",
+        "user_id"
+      ]
     }
   ],
   "pages": [
     "/index.html",
     "/moderation.html",
+    "/members.html",
     "/automod.html",
     "/modmail.html",
     "/events.html",

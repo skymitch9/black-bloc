@@ -67,6 +67,62 @@ const MEMBERS = [
 
 const STAFF = MEMBERS[0];
 
+// The whole server roster the Members tab pages through — the eight above keep their ids
+// (the cases, birthdays and hits all point at them) and the rest are filler with bots, staff
+// and a handful of joins inside the last week, so every chip has something to show.
+const STAFF_ROLE_IDS = ['900000000000000002', '900000000000000001'];
+const MEMBER_ROLE_ID = '900000000000000005';
+const BOOSTER_ROLE_ID = '900000000000000006';
+const LIVE_ROLE_ID = '900000000000000003';
+
+const FILLER_NAMES = [
+  'ash', 'bex', 'cato', 'dee', 'echo', 'fen', 'gus', 'hana', 'ines', 'jory',
+  'kit', 'lark', 'mika', 'noor', 'opal', 'pim', 'quill', 'rue', 'sable', 'tovi',
+  'uma', 'vale', 'wren', 'xan', 'yuki', 'zev', 'bramble', 'cinder', 'dune', 'ember',
+  'flint', 'gale', 'harbour', 'indigo', 'juniper', 'kestrel', 'linnet', 'moss', 'nettle', 'onyx',
+  'plover', 'quartz', 'rowan', 'sorrel', 'teal', 'umber', 'vetch', 'willow',
+];
+const BOT_NAMES = ['MEE6', 'Carl-bot', 'Dyno', 'Statbot'];
+
+function rosterRow(at, name, display, { bot = false, minutes, roles }) {
+  return {
+    id: String(700000000000000001n + BigInt(at)),
+    name,
+    display_name: display,
+    bot,
+    joined_at: minutesAgo(minutes),
+    role_ids: roles,
+    avatar_url: null,
+  };
+}
+
+const ROSTER = [
+  ...MEMBERS.map((member, at) => ({
+    ...member,
+    bot: false,
+    joined_at: minutesAgo([600000, 420000, 300000, 200000, 5000, 120000, 90000, 400000][at]),
+    role_ids: at === 0
+      ? [STAFF_ROLE_IDS[0], MEMBER_ROLE_ID]
+      : at === 1
+        ? [STAFF_ROLE_IDS[1], MEMBER_ROLE_ID]
+        : at === 2
+          ? [STAFF_ROLE_IDS[1], LIVE_ROLE_ID, MEMBER_ROLE_ID]
+          : [MEMBER_ROLE_ID],
+  })),
+  ...BOT_NAMES.map((name, at) => rosterRow(100 + at, name.toLowerCase(), name, {
+    bot: true,
+    minutes: 500000 - at * 40000,
+    roles: [MEMBER_ROLE_ID],
+  })),
+  ...FILLER_NAMES.map((name, at) => rosterRow(200 + at, `${name}${at}`, name[0].toUpperCase() + name.slice(1), {
+    // The last five joined inside the week, so "New this week" is never an empty chip.
+    minutes: at >= FILLER_NAMES.length - 5
+      ? 120 + (at - (FILLER_NAMES.length - 5)) * 900
+      : 20000 + at * 3100,
+    roles: at % 7 === 0 ? [BOOSTER_ROLE_ID, MEMBER_ROLE_ID] : [MEMBER_ROLE_ID],
+  })),
+];
+
 const SETTING_SPECS = [
   ['log_channel_id', 'channel', '800000000000000004', null, 'where Black Bloc posts what it did'],
   ['staff_channel_id', 'channel', '800000000000000005', null, 'the channel whose viewers count as staff'],
@@ -569,6 +625,72 @@ route('GET', '/api/ref/members', (context) => {
   return MEMBERS
     .filter((member) => !query || member.name.toLowerCase().includes(query) || member.display_name.toLowerCase().includes(query))
     .slice(0, limit);
+});
+
+const NEW_MS = 7 * 24 * 60 * 60 * 1000;
+const MEMBERS_PER_PAGE = 50;
+
+function rosterRoles(row) {
+  return row.role_ids
+    .map((id) => ROLES.find((role) => role.id === id))
+    .filter(Boolean)
+    .sort((a, b) => b.position - a.position)
+    .slice(0, 5)
+    .map((role) => ({ id: role.id, name: role.name, color: role.color }));
+}
+
+function isStaffRow(row) {
+  return !row.bot && row.role_ids.some((id) => STAFF_ROLE_IDS.includes(id));
+}
+
+function isNewRow(row) {
+  return Date.now() - new Date(row.joined_at).getTime() <= NEW_MS;
+}
+
+route('GET', '/api/members', (context) => {
+  requireStaff(context.session);
+  const params = context.url.searchParams;
+  const query = (params.get('q') || '').trim().toLowerCase();
+  const wanted = ['all', 'staff', 'bots', 'new'].includes(params.get('filter')) ? params.get('filter') : 'all';
+  const sort = ['joined_desc', 'joined_asc', 'name'].includes(params.get('sort')) ? params.get('sort') : 'joined_desc';
+  const page = Math.max(1, Number(params.get('page') || 1) || 1);
+  const perPage = Math.max(1, Math.min(Number(params.get('per_page') || MEMBERS_PER_PAGE) || MEMBERS_PER_PAGE, 100));
+
+  let found = ROSTER.filter((row) => !query
+    || row.display_name.toLowerCase().includes(query)
+    || row.name.toLowerCase().includes(query));
+  if (wanted === 'staff') found = found.filter(isStaffRow);
+  if (wanted === 'bots') found = found.filter((row) => row.bot);
+  if (wanted === 'new') found = found.filter(isNewRow);
+
+  if (sort === 'name') found = [...found].sort((a, b) => a.display_name.toLowerCase().localeCompare(b.display_name.toLowerCase()));
+  else {
+    found = [...found].sort((a, b) => new Date(a.joined_at) - new Date(b.joined_at));
+    if (sort === 'joined_desc') found.reverse();
+  }
+
+  const shown = found.slice((page - 1) * perPage, page * perPage);
+  return {
+    total: ROSTER.length,
+    humans: ROSTER.filter((row) => !row.bot).length,
+    bots: ROSTER.filter((row) => row.bot).length,
+    staff: ROSTER.filter(isStaffRow).length,
+    new_7d: ROSTER.filter(isNewRow).length,
+    page,
+    per_page: perPage,
+    shown: shown.length,
+    members: shown.map((row) => ({
+      id: row.id,
+      name: row.display_name,
+      username: row.name,
+      bot: row.bot,
+      joined_at: row.joined_at,
+      roles: rosterRoles(row),
+      staff: isStaffRow(row),
+      cases: state.cases.filter((one) => one.user_id === row.id).length,
+      avatar: row.avatar_url,
+    })),
+  };
 });
 
 route('GET', '/api/ref/names', (context) => {

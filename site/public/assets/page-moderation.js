@@ -1,6 +1,6 @@
 import { api, listOf, names, send } from './api.js';
-import { start } from './app.js';
-import { shellStatus } from './shell.js';
+import { start, tabHref } from './app.js';
+import { memberTally, shellStatus } from './shell.js';
 import {
   ask,
   badge,
@@ -44,7 +44,20 @@ const STATS = [
 
 const COLUMNS = ['Case', 'Member', 'Type', 'Reason', 'By', 'When', ''];
 
-const state = { page: 1, userFilter: null, userName: null, openCase: null, kind: 'all', query: '' };
+/** `moderation.html?member=<id>` is how the Members tab hands a row over. */
+function askedFor() {
+  const wanted = new URLSearchParams(location.search).get('member');
+  return wanted && /^\d+$/.test(wanted) ? wanted : null;
+}
+
+const state = {
+  page: 1,
+  userFilter: askedFor(),
+  userName: null,
+  openCase: null,
+  kind: 'all',
+  query: '',
+};
 
 let refresh = () => {};
 
@@ -66,16 +79,30 @@ function modePills(status) {
   return nodes;
 }
 
-function statStrip(payload, rows) {
-  const tiles = STATS.map(([label, kind]) => {
-    const value = kind === null
+function statTile(label, value, href = null) {
+  const blank = value === null || Number(value) === 0;
+  return el(href ? 'a' : 'div', { class: 'stat', href: href || undefined }, [
+    el('span', {
+      class: 'stat-value',
+      'data-blank': blank ? 'true' : undefined,
+      text: value === null ? '—' : String(value),
+    }),
+    el('span', { class: 'stat-label', text: label }),
+  ]);
+}
+
+function statStrip(payload, rows, tally) {
+  const tiles = STATS.map(([label, kind]) => statTile(
+    label,
+    kind === null
       ? (payload && payload.total !== undefined && payload.total !== null ? payload.total : rows.length)
-      : rows.filter((row) => String(row.kind) === kind).length;
-    return el('div', { class: 'stat' }, [
-      el('span', { class: 'stat-value', 'data-blank': Number(value) === 0 ? 'true' : undefined, text: String(value) }),
-      el('span', { class: 'stat-label', text: label }),
-    ]);
-  });
+      : rows.filter((row) => String(row.kind) === kind).length,
+  ));
+  tiles.push(statTile(
+    'Members',
+    tally && typeof tally.total === 'number' ? tally.total : null,
+    tabHref('members'),
+  ));
   return el('div', { class: 'statgrid' }, tiles);
 }
 
@@ -281,9 +308,10 @@ async function caseDetail(id) {
 async function load() {
   const query = new URLSearchParams({ page: String(state.page) });
   if (state.userFilter) query.set('user_id', state.userFilter);
-  const [status, payload] = await Promise.all([
+  const [status, payload, tally] = await Promise.all([
     shellStatus(),
     api(`/api/mod/cases?${query.toString()}`),
+    memberTally(),
   ]);
   const rows = listOf(payload, 'cases');
   await names(idsIn(rows, ['user_id', 'moderator_id']));
@@ -305,13 +333,21 @@ async function load() {
   const act = section('Take an action', 'Every one of these is the same code path as the slash command, and lands in the same case table.');
   act.body.append(actionBar());
 
+  if (state.userFilter && !state.userName) {
+    const first = rows.find((row) => String(row.user_id) === String(state.userFilter));
+    state.userName = (first && first.user_name) || null;
+  }
+  const filtered = state.userFilter
+    ? `Filtered to ${state.userName || `Discord id ${state.userFilter}`}.`
+    : null;
   const only = section(
     'Only one member',
-    state.userName ? `Filtered to ${state.userName}.` : 'Ask the bot for one member’s cases instead of the whole page.',
+    filtered || 'Ask the bot for one member’s cases instead of the whole page.',
+    { open: Boolean(state.userFilter) },
   );
   only.body.append(picker.node);
 
-  const nodes = [statStrip(payload, rows), casesCard(payload, rows), act.node, only.node];
+  const nodes = [statStrip(payload, rows, tally), casesCard(payload, rows), act.node, only.node];
   if (state.openCase !== null) {
     const detail = section(`Case ${state.openCase}`, null, { id: 'case', open: true });
     detail.body.append(await caseDetail(state.openCase));

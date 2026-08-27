@@ -14,6 +14,7 @@ export const GROUPS = [
     head: 'Moderation',
     items: [
       { tab: 'moderation', label: 'Moderation' },
+      { tab: 'members', label: 'Members', count: 'members' },
       { tab: 'automod', label: 'Automod', feature: 'automod' },
       { tab: 'honeypot', label: 'Honeypot', feature: 'honeypot' },
       { tab: 'modmail', label: 'Modmail', feature: 'modmail' },
@@ -38,14 +39,21 @@ export const GROUPS = [
 const at = (id) => document.getElementById(id);
 
 let statusOnce = null;
+let membersOnce = null;
 
 export function shellStatus() {
   if (statusOnce === null) statusOnce = api('/api/status').catch(() => null);
   return statusOnce;
 }
 
+export function memberTally() {
+  if (membersOnce === null) membersOnce = api('/api/members?per_page=1').catch(() => null);
+  return membersOnce;
+}
+
 export function forgetShellStatus() {
   statusOnce = null;
+  membersOnce = null;
 }
 
 export function renderNav(current, hrefFor) {
@@ -62,6 +70,7 @@ export function renderNav(current, hrefFor) {
     }, [
       el('span', { class: 'nav-label', text: item.label }),
       item.feature ? el('span', { class: 'nav-dot', 'data-tab': item.tab, hidden: true }) : null,
+      item.count ? el('span', { class: 'nav-count', 'data-count': item.count, hidden: true }) : null,
     ])),
   ])));
 }
@@ -172,11 +181,25 @@ export function mountShell() {
   wireSidebar();
 }
 
+function paintCounts(tally) {
+  const total = tally && typeof tally.total === 'number' ? tally.total : null;
+  for (const node of document.querySelectorAll('.nav-count[data-count="members"]')) {
+    if (total === null) {
+      node.hidden = true;
+      continue;
+    }
+    node.textContent = String(total);
+    node.setAttribute('title', `${total} member${total === 1 ? '' : 's'} in the server`);
+    node.hidden = false;
+  }
+}
+
 export async function paintShell(me) {
   paintUser(me);
-  const status = await shellStatus();
+  const [status, tally] = await Promise.all([shellStatus(), memberTally()]);
   paintDots(status);
   paintHealth(status);
   paintGuild(status, me);
+  paintCounts(tally);
   return status;
 }

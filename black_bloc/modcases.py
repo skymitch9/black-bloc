@@ -334,6 +334,20 @@ async def count_cases(db: Any, guild_id: int, user_id: int) -> int:
     return int(row["n"]) if row else 0
 
 
+async def count_cases_for(db: Any, guild_id: int, user_ids: Any) -> dict[int, int]:
+    """One grouped query for a page of members, never one query per row."""
+    wanted = list(dict.fromkeys(int(one) for one in user_ids or ()))
+    if not wanted or db is None or not getattr(db, "is_connected", False):
+        return {}
+    holes = ", ".join("?" for _ in wanted)
+    cur = await db.conn.execute(
+        f"SELECT user_id, COUNT(*) AS n FROM mod_cases WHERE guild_id = ? AND user_id IN ({holes})"
+        " GROUP BY user_id",
+        (int(guild_id), *wanted),
+    )
+    return {int(row["user_id"]): int(row["n"]) for row in await cur.fetchall()}
+
+
 async def warn_count(db: Any, guild_id: int, user_id: int) -> int:
     cur = await db.conn.execute(
         "SELECT COUNT(*) AS n FROM mod_cases WHERE guild_id = ? AND user_id = ? AND ("
