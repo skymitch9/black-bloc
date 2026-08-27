@@ -61,13 +61,17 @@ async function load() {
   await names(idsIn(rows, ['actor_id', 'target_id']));
 
   const notes = notesOf(status).concat(notesOf(actions));
-  const feature = section('Modes', 'Click one to open the tab that changes it.');
+  const feature = section('Modes', 'Click one to open the tab that changes it.', {
+    count: (status.features || []).length || null,
+  });
   feature.body.append(modes(status));
 
-  const open = section('Open now');
+  const open = section('Open now', null, {
+    count: status.open ? Object.keys(COUNT_LABELS).filter((key) => key in status.open).length : null,
+  });
   open.body.append(counts(status));
 
-  const recent = section('Last 10 actions');
+  const recent = section('Last 10 actions', null, { count: rows.length });
   recent.body.append(actionRows(rows));
 
   document.getElementById('dash').replaceChildren(

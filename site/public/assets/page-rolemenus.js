@@ -15,6 +15,8 @@ import {
   readSelect,
   roleSelect,
   run,
+  sayNothing,
+  searchOver,
   section,
   table,
 } from './ui.js';
@@ -85,6 +87,12 @@ async function editor(menu) {
     }
   }, { small: false });
 
+  const close = button('Close editor', () => {
+    state.editing = null;
+    state.creating = false;
+    refresh();
+  }, { tone: 'quiet' });
+
   return card(menu ? `Editing ${menu.name}` : 'New menu', [
     el('div', { class: 'formrow' }, [
       field('Name', name, menu ? 'A menu keeps its name for life; make a new one to rename it.' : 'Short, no spaces — this is how the slash commands find it.'),
@@ -94,17 +102,9 @@ async function editor(menu) {
     ]),
     el('h3', { text: 'Options' }),
     list,
-    bar([
-      button('Add option', () => addOption(null), { tone: 'quiet' }),
-      save,
-      button('Close editor', () => {
-        state.editing = null;
-        state.creating = false;
-        refresh();
-      }, { tone: 'quiet' }),
-    ]),
+    bar([button('Add option', () => addOption(null), { tone: 'quiet' })]),
     say,
-  ]);
+  ], { actions: [save, close] });
 }
 
 async function postCard(menu, say) {
@@ -182,26 +182,53 @@ async function load() {
     },
   ], menus, { empty: 'No role menus exist yet.' });
 
-  const one = section('Menus');
-  one.body.append(list, say);
-  for (const menu of menus) {
-    one.body.append(card(`Post ${menu.name}`, [await postCard(menu, say)]));
-  }
-  one.body.append(bar([
-    button('New menu', () => {
-      state.creating = true;
-      state.editing = null;
-      refresh();
-    }, { small: false }),
-  ]));
+  const one = section('Menus', null, { count: menus.length });
+  one.body.append(
+    bar([
+      button('New menu', () => {
+        state.creating = true;
+        state.editing = null;
+        refresh();
+      }, { small: false }),
+    ], { sticky: true }),
+    list,
+    say,
+  );
 
-  if (state.creating) one.body.append(await editor(null));
-  else if (state.editing) {
+  const two = section('Post a menu', 'Posting again makes a new message; the old one stops handing out roles.', {
+    count: menus.length || null,
+  });
+  if (menus.length === 0) {
+    two.body.append(sayNothing('There is no menu to post yet.'));
+  } else {
+    const box = el('div', { class: 'section-body' });
+    for (const menu of menus) box.append(card(`Post ${menu.name}`, [await postCard(menu, say)]));
+    two.body.append(
+      searchOver(box, {
+        label: 'Search the menus',
+        placeholder: 'part of a menu name',
+        noun: 'menu(s)',
+        empty: 'No menu matches what you typed.',
+      }),
+      box,
+    );
+  }
+
+  const nodes = [one.node, two.node];
+  if (state.creating) {
+    const made = section('New menu', null, { id: 'editor', open: true });
+    made.body.append(await editor(null));
+    nodes.push(made.node);
+  } else if (state.editing) {
     const menu = menus.find((entry) => entry.name === state.editing);
-    if (menu) one.body.append(await editor(menu));
+    if (menu) {
+      const made = section(`Editing ${menu.name}`, null, { id: 'editor', open: true });
+      made.body.append(await editor(menu));
+      nodes.push(made.node);
+    }
   }
 
-  document.getElementById('dash').replaceChildren(one.node);
+  document.getElementById('dash').replaceChildren(...nodes);
 }
 
 refresh = start({

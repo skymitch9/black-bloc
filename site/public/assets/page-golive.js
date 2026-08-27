@@ -81,11 +81,13 @@ async function load() {
     { label: 'Mode then', cell: (row) => badge(row.mode, row.mode === 'on' ? 'ok' : 'warn') },
   ], sessions, { empty: 'No streams have been seen yet.' });
 
-  const one = section('Twitch links');
+  const one = section('Twitch links', null, { count: links.length });
   one.body.append(linkTable, say);
-  const two = section('Opt-outs', 'These members are never announced, whatever else is set.');
+  const two = section('Opt-outs', 'These members are never announced, whatever else is set.', {
+    count: optouts.length,
+  });
   two.body.append(optoutTable);
-  const three = section('Recent streams');
+  const three = section('Recent streams', null, { count: sessions.length });
   three.body.append(sessionTable);
 
   const template = settingsNamespace(allSettings, 'golive').find((spec) => spec.key === 'golive_template');

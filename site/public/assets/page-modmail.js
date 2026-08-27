@@ -206,16 +206,30 @@ async function load() {
     },
   ], tickets, { empty: 'No tickets match that.' });
 
-  const one = section('Tickets');
-  one.body.append(field('Show', status), list);
-  if (state.open !== null) one.body.append(await ticketView(state.open));
+  const one = section('Tickets', null, { count: tickets.length });
+  one.body.append(bar([field('Show', status)], { sticky: true }), list);
 
-  const two = section('Snippets and blocks');
-  two.body.append(snippetsCard(snippets), blocksCard(blocks));
+  const nodes = [one.node];
+  if (state.open !== null) {
+    const view = section(`Ticket ${state.open}`, null, { id: 'ticket', open: true });
+    view.body.append(await ticketView(state.open));
+    nodes.push(view.node);
+  }
+
+  const two = section('Snippets', 'Canned replies staff can send without retyping them.', {
+    count: snippets.length,
+  });
+  two.body.append(snippetsCard(snippets));
+
+  const three = section('Blocks', 'A blocked member’s DMs stop opening tickets, and they are not told.', {
+    count: blocks.length,
+  });
+  three.body.append(blocksCard(blocks));
 
   document.getElementById('dash').replaceChildren(
-    one.node,
+    ...nodes,
     two.node,
+    three.node,
     await namespaceSettings('modmail'),
   );
 }
