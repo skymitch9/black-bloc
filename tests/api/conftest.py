@@ -94,6 +94,9 @@ class WebMessage:
     async def pin(self, reason: str | None = None) -> None:
         self.pinned = True
 
+    async def delete(self) -> None:
+        self.channel.messages = [m for m in self.channel.messages if m.id != self.id]
+
 
 class WebChannel:
     def __init__(

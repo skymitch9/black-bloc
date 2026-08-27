@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from black_bloc import rolegrants as grants
 from black_bloc.modcases import add_case
 
 ROUTE = "/api/members"
@@ -207,3 +208,55 @@ async def test_the_total_is_discords_own_count_not_what_the_cache_happens_to_hol
 
     assert found["total"] == 900
     assert found["shown"] == 6, "the page still shows what the cache actually has"
+
+
+async def test_a_role_chip_carries_the_end_date_of_an_open_timed_grant(
+    client, sign_in, roster, web, wf
+):
+    sign_in(client)
+    until = grants.expires_at(7)
+    await grants.add_grant(
+        web.db, wf.GUILD_ID, 21, wf.PLAIN_ROLE_ID, grants.STAFF, granted_by=7, until=until
+    )
+
+    row = next(one for one in client.get(ROUTE).json()["members"] if one["username"] == "ada")
+    chip = next(one for one in row["roles"] if one["id"] == str(wf.PLAIN_ROLE_ID))
+
+    assert chip["expires_at"] == until
+    others = [
+        one
+        for member in client.get(ROUTE).json()["members"]
+        if member["username"] != "ada"
+        for one in member["roles"]
+    ]
+    assert all(one["expires_at"] is None for one in others)
+
+
+async def test_a_grant_that_has_ended_leaves_no_clock_on_the_chip(client, sign_in, roster, web, wf):
+    """A closed grant is history, not a countdown — the chip must not keep counting."""
+    sign_in(client)
+    grant_id = await grants.add_grant(
+        web.db,
+        wf.GUILD_ID,
+        21,
+        wf.PLAIN_ROLE_ID,
+        grants.STAFF,
+        granted_by=7,
+        until=grants.expires_at(7),
+    )
+    await grants.end_grant(web.db, grant_id, grants.ENDED_BY_STAFF)
+
+    row = next(one for one in client.get(ROUTE).json()["members"] if one["username"] == "ada")
+
+    assert all(one["expires_at"] is None for one in row["roles"])
+
+
+async def test_a_grant_with_no_end_date_is_not_reported_as_one(client, sign_in, roster, web, wf):
+    sign_in(client)
+    await grants.add_grant(
+        web.db, wf.GUILD_ID, 21, wf.PLAIN_ROLE_ID, grants.STAFF, granted_by=7, until=None
+    )
+
+    row = next(one for one in client.get(ROUTE).json()["members"] if one["username"] == "ada")
+
+    assert all(one["expires_at"] is None for one in row["roles"])
