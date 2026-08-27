@@ -29,6 +29,7 @@ export const GROUPS = [
       { tab: 'tempvoice', label: 'Temp voice', feature: 'tempvoice' },
       { tab: 'rolemenus', label: 'Role menus', feature: 'rolemenu', count: 'requests' },
       { tab: 'polls', label: 'Polls', feature: 'poll', count: 'polls' },
+      { tab: 'chat', label: 'Chat', feature: 'chat' },
     ],
   },
   {
