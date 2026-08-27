@@ -29,6 +29,7 @@ KEY_TYPES: dict[str, str] = {
     "golive_ignore_role_id": "role",
     "golive_cooldown_minutes": "int",
     "golive_ping_role_id": "role",
+    "golive_max_session_hours": "int",
 }
 
 KEY_CHOICES: dict[str, tuple[str, ...]] = {
@@ -47,6 +48,7 @@ KEY_HELP: dict[str, str] = {
     "golive_ignore_role_id": "never announce people who have this role",
     "golive_cooldown_minutes": "minutes before the same person is announced again",
     "golive_ping_role_id": "role mentioned in front of every go-live announcement",
+    "golive_max_session_hours": "hours before a stream still marked live is closed anyway",
 }
 
 
@@ -182,6 +184,8 @@ class SettingsStore:
             return GOLIVE_TEMPLATE
         if key == "golive_cooldown_minutes":
             return 60
+        if key == "golive_max_session_hours":
+            return 12
         return None
 
     async def load(self) -> None:

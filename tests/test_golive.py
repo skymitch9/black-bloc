@@ -132,7 +132,13 @@ def test_render_prefixes_the_ping_role_when_one_is_set():
 def test_render_survives_an_unknown_placeholder():
     info = StreamInfo(url="u", game="g")
     assert render("{name} {nope}", info, FakeMember("Alice")) == "Alice {nope}"
-    assert render("{unbalanced", info) == "{unbalanced"
+
+
+def test_a_broken_template_falls_back_to_the_default():
+    info = StreamInfo(url="u", game="g")
+    assert render("{unbalanced", info, FakeMember("Alice")) == render(
+        GOLIVE_TEMPLATE, info, FakeMember("Alice")
+    )
 
 
 def test_render_fills_title_and_url():
@@ -164,8 +170,9 @@ def test_a_zero_cooldown_always_allows_a_closed_session():
     assert should_announce(NOW, session(NOW.isoformat()), 0) is True
 
 
-def test_should_announce_treats_an_unparseable_end_as_still_open():
-    assert should_announce(NOW, session("not-a-date"), 60) is False
+def test_should_announce_treats_an_unparseable_end_as_ended():
+    assert should_announce(NOW, session("not-a-date"), 60) is True
+    assert should_announce(NOW, session(""), 60) is False
 
 
 def test_parse_ts_assumes_utc_for_a_naive_timestamp():

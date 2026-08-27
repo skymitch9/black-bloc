@@ -5,6 +5,7 @@ import logging
 
 from discord.ext import commands
 
+from .command_errors import install as install_error_handler
 from .command_sync import sync_dev_guild
 from .config import Settings
 from .guard import TestModeGuard
@@ -39,6 +40,7 @@ class BlackBlocBot(commands.Bot):
             self.guard.install()
 
     async def setup_hook(self) -> None:
+        install_error_handler(self)
         await self.db.connect()
         await self.store.load()
         log.info("database ready at %s", self.settings.database_path)

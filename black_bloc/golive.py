@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import discord
 
+from .settings_store import GOLIVE_TEMPLATE
+
+log = logging.getLogger(__name__)
+
 GAME_FALLBACK = "something"
 END_SUFFIX = " — stream ended"
 END_GRACE_SECONDS = 120
 POLL_SECONDS = 60
-MODES = ("off", "shadow", "on")
 
 
 @dataclass(frozen=True)
@@ -114,8 +118,11 @@ def render(
     )
     try:
         text = template.format_map(fields)
-    except (IndexError, ValueError):
-        text = template
+    except Exception as exc:
+        log.warning(
+            "go-live: template %r could not be rendered (%s); using the default", template, exc
+        )
+        text = GOLIVE_TEMPLATE.format_map(fields)
     if ping_role_id:
         return f"<@&{ping_role_id}> {text}"
     return text
@@ -139,9 +146,15 @@ def should_announce(now: datetime, last_session: Any, cooldown_minutes: int) -> 
     """False while a session is open, and until the cooldown has passed since the last one."""
     if last_session is None:
         return True
-    ended = parse_ts(last_session["ended_at"])
-    if ended is None:
+    raw = last_session["ended_at"]
+    if raw is None or str(raw).strip() == "":
         return False
+    ended = parse_ts(raw)
+    if ended is None:
+        log.warning(
+            "go-live: session ended_at %r is unreadable; treating the session as ended", raw
+        )
+        return True
     return now - ended >= timedelta(minutes=max(0, int(cooldown_minutes)))
 
 

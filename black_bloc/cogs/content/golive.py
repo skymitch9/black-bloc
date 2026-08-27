@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC, datetime
+import sqlite3
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import discord
@@ -19,6 +21,7 @@ from ...golive import (
     extract_stream,
     from_twitch,
     now_iso,
+    parse_ts,
     passes_role_filters,
     render,
     should_announce,
@@ -52,10 +55,40 @@ NOT_LINKED = (
     "You had no Twitch channel linked, so nothing changed. Link one with `/twitch link "
     "<your twitch name>`."
 )
+DB_UNAVAILABLE = (
+    "Black Bloc cannot reach its own database right now, so nothing was changed. It needs the "
+    "bot to finish starting up — wait a moment and run the command again, and tell a Lead if it "
+    "keeps happening."
+)
+LINK_NOT_CHECKED = (
+    "Linked **{login}** to you, but Twitch could not be reached to check that the name exists, "
+    "so it has not been verified. If announcements do not fill in your game and title, run "
+    "`/twitch link` again later to re-check it."
+)
+LINK_TAKEN = (
+    "**{login}** is already linked to another member here, so nothing was changed. A Twitch name "
+    "can only belong to one member — if that channel is yours, ask a Lead to remove the other "
+    "link first."
+)
 
 
 def _row_value(row: Any, key: str) -> Any:
-    return row[key] if row is not None else None
+    if row is None:
+        return None
+    try:
+        return row[key]
+    except (IndexError, KeyError):
+        return None
+
+
+@dataclass(frozen=True)
+class PostResult:
+    message: Any = None
+    reason: str | None = None
+
+    @property
+    def ok(self) -> bool:
+        return self.message is not None
 
 
 async def set_link(db: Any, user_id: int, login: str, twitch_user_id: str | None = None) -> None:
@@ -75,6 +108,15 @@ async def get_link(db: Any, user_id: int) -> Any:
 async def all_links(db: Any) -> list[Any]:
     cur = await db.conn.execute("SELECT * FROM golive_links ORDER BY twitch_login")
     return list(await cur.fetchall())
+
+
+async def link_owner(db: Any, login: str) -> int | None:
+    cur = await db.conn.execute(
+        "SELECT user_id FROM golive_links WHERE twitch_login = ? ORDER BY user_id LIMIT 1",
+        (login,),
+    )
+    row = await cur.fetchone()
+    return int(row["user_id"]) if row else None
 
 
 async def remove_link(db: Any, user_id: int) -> bool:
@@ -104,13 +146,29 @@ async def is_opted_out(db: Any, user_id: int) -> bool:
 async def start_session(
     db: Any, guild_id: int, user_id: int, source: str, info: StreamInfo, mode: str
 ) -> int | None:
-    cur = await db.conn.execute(
-        "INSERT INTO golive_sessions(guild_id, user_id, source, url, game, title, started_at, "
-        "mode) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (guild_id, user_id, source, info.url, info.game, info.title, now_iso(), mode),
-    )
+    try:
+        cur = await db.conn.execute(
+            "INSERT INTO golive_sessions(guild_id, user_id, source, url, game, title, started_at, "
+            "mode) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (guild_id, user_id, source, info.url, info.game, info.title, now_iso(), mode),
+        )
+    except sqlite3.IntegrityError:
+        log.info("go-live: a session for %s is already open; not starting a second", user_id)
+        return None
     await db.conn.commit()
     return cur.lastrowid
+
+
+async def discard_session(db: Any, session_id: int) -> None:
+    await db.conn.execute("DELETE FROM golive_sessions WHERE id = ?", (session_id,))
+    await db.conn.commit()
+
+
+async def set_live_role_added(db: Any, session_id: int) -> None:
+    await db.conn.execute(
+        "UPDATE golive_sessions SET live_role_added = 1 WHERE id = ?", (session_id,)
+    )
+    await db.conn.commit()
 
 
 async def latest_session(db: Any, guild_id: int, user_id: int) -> Any:
@@ -186,18 +244,65 @@ class GoLive(commands.Cog):
         self.bot = bot
         self.helix: TwitchClient | None = None
         self._end_tasks: dict[int, asyncio.Task] = {}
+        self._locks: dict[int, asyncio.Lock] = {}
+        self.last_poll_ok_at: str | None = None
+        self.last_poll_error: str | None = None
 
     golive = app_commands.Group(name="golive", description="Go-live announcements")
     twitch = app_commands.Group(name="twitch", description="Link your Twitch channel")
 
     async def cog_load(self) -> None:
         settings = self.bot.settings
-        if not settings.twitch_configured:
+        if settings.twitch_configured:
+            self.helix = TwitchClient(settings.twitch_client_id, settings.twitch_client_secret)
+        else:
             log.info(TWITCH_OFF)
+        if not self.bot.db.is_connected:
             return
-        self.helix = TwitchClient(settings.twitch_client_id, settings.twitch_client_secret)
-        if self.bot.db.is_connected:
+        await self.reconcile_open_sessions()
+        if self.helix is not None:
             self.poller.start()
+
+    async def reconcile_open_sessions(self) -> None:
+        """Close every session a stop left open, keeping the ones still genuinely live."""
+        for guild in list(getattr(self.bot, "guilds", ())):
+            for row in await open_sessions(self.bot.db, guild.id):
+                if await self._still_live(guild, row):
+                    continue
+                await self._close_session(guild, row, "reconciled_on_start")
+
+    async def _still_live(self, guild: Any, row: Any) -> bool:
+        member = guild.get_member(row["user_id"])
+        if member is not None and extract_stream(getattr(member, "activities", ())) is not None:
+            return True
+        if row["source"] != "twitch" or self.helix is None:
+            return False
+        login = _row_value(await get_link(self.bot.db, row["user_id"]), "twitch_login")
+        login = login or twitch_login_from_url(row["url"])
+        if not login:
+            return False
+        try:
+            return bool(await self.helix.get_streams([login]))
+        except TwitchError as exc:
+            log.warning(
+                "go-live: could not check whether %s is still live (%s); leaving the session open",
+                login,
+                exc,
+            )
+            return True
+
+    async def _close_session(self, guild: Any, row: Any, reason: str) -> None:
+        member = guild.get_member(row["user_id"])
+        await end_session(self.bot.db, row["id"], now_iso())
+        await self._remove_live_role(guild, member, row)
+        await log_action(
+            self.bot,
+            guild,
+            "golive.end",
+            target=member if member is not None else row["user_id"],
+            details={"session_id": row["id"], "source": row["source"], "reason": reason},
+        )
+        await self._mark_ended(guild, row)
 
     async def cog_unload(self) -> None:
         self.poller.cancel()
@@ -221,6 +326,10 @@ class GoLive(commands.Cog):
             self._schedule_end(after)
 
     async def _go_live(self, member: Any, info: StreamInfo, source: str) -> None:
+        async with self._lock(member.id):
+            await self._go_live_once(member, info, source)
+
+    async def _go_live_once(self, member: Any, info: StreamInfo, source: str) -> None:
         guild = member.guild
         mode = self._mode(guild.id)
         if mode == "off" or member.bot or not self.bot.db.is_connected:
@@ -241,30 +350,44 @@ class GoLive(commands.Cog):
         if source == "presence":
             info = await self._enrich(member, info)
         session_id = await start_session(self.bot.db, guild.id, member.id, source, info, mode)
+        if session_id is None:
+            return
         text = render(
             store.get(guild.id, "golive_template"),
             info,
             member,
             ping_role_id=store.get(guild.id, "golive_ping_role_id"),
         )
-        message = await self._post(guild, text) if mode == "on" else None
-        if message is not None:
-            await set_announced(self.bot.db, session_id, message.id)
+        result = await self._post(guild, text) if mode == "on" else PostResult(reason="shadow")
+        if result.ok:
+            await set_announced(self.bot.db, session_id, result.message.id)
+        details = {
+            "source": source,
+            "mode": mode,
+            "session_id": session_id,
+            "url": info.url,
+            "game": info.game,
+            "text": text,
+        }
+        if not result.ok and result.reason not in ("shadow", "test_mode"):
+            await log_action(
+                self.bot,
+                guild,
+                "golive.post_failed",
+                target=member,
+                details=details | {"reason": result.reason},
+            )
+            await discard_session(self.bot.db, session_id)
+            return
         await log_action(
             self.bot,
             guild,
-            "golive.announce" if message is not None else "golive.would_announce",
+            "golive.announce" if result.ok else "golive.would_announce",
             target=member,
-            details={
-                "source": source,
-                "mode": mode,
-                "session_id": session_id,
-                "url": info.url,
-                "game": info.game,
-                "text": text,
-            },
+            details=details,
         )
-        await self._live_role(guild, member, add=True)
+        if await self._live_role(guild, member, add=True):
+            await set_live_role_added(self.bot.db, session_id)
 
     async def _end_live(self, guild: Any, member: Any, source: str | None) -> None:
         if not self.bot.db.is_connected:
@@ -273,8 +396,7 @@ class GoLive(commands.Cog):
         if row is None:
             return
         await end_session(self.bot.db, row["id"], now_iso())
-        await self._mark_ended(guild, row)
-        await self._live_role(guild, member, add=False)
+        await self._remove_live_role(guild, member, row)
         await log_action(
             self.bot,
             guild,
@@ -282,6 +404,7 @@ class GoLive(commands.Cog):
             target=member,
             details={"session_id": row["id"], "source": row["source"]},
         )
+        await self._mark_ended(guild, row)
 
     async def _mark_ended(self, guild: Any, row: Any) -> None:
         message_id = row["announced_message_id"]
@@ -292,9 +415,17 @@ class GoLive(commands.Cog):
             return
         try:
             message = await channel.fetch_message(message_id)
-            await message.edit(content=ended_text(message.content))
-        except discord.HTTPException as exc:
-            log.info("go-live: could not mark message %s as ended (%s)", message_id, exc)
+            await message.edit(
+                content=ended_text(message.content),
+                allowed_mentions=self._mentions(guild.id),
+            )
+        except Exception as exc:
+            log.info(
+                "go-live: could not mark message %s as ended (%s: %s)",
+                message_id,
+                type(exc).__name__,
+                exc,
+            )
 
     async def _enrich(self, member: Any, info: StreamInfo) -> StreamInfo:
         if self.helix is None or (info.game and info.title):
@@ -310,33 +441,34 @@ class GoLive(commands.Cog):
             return info
         return enriched(info, streams[0] if streams else None)
 
-    async def _post(self, guild: Any, text: str) -> Any:
+    async def _post(self, guild: Any, text: str) -> PostResult:
         channel_id = self.bot.store.get(guild.id, "golive_channel_id")
         if not channel_id:
             log.warning("go-live: not posted — golive_channel_id is not set")
-            return None
+            return PostResult(reason="no_channel_configured")
         guard = getattr(self.bot, "guard", None)
         if guard is not None and not guard.allows_channel(channel_id):
             log.warning("go-live: TEST MODE — refused to post to channel %s", channel_id)
-            return None
+            return PostResult(reason="test_mode")
         channel = self._channel(guild)
         if channel is None:
             log.warning("go-live: not posted — channel %s is not visible", channel_id)
-            return None
+            return PostResult(reason="channel_not_visible")
         try:
-            return await channel.send(text)
-        except discord.HTTPException as exc:
+            message = await channel.send(text, allowed_mentions=self._mentions(guild.id))
+        except Exception as exc:
             log.warning("go-live: not posted — %s: %s", type(exc).__name__, exc)
-            return None
+            return PostResult(reason=f"{type(exc).__name__}: {exc}")
+        return PostResult(message=message)
 
-    async def _live_role(self, guild: Any, member: Any, *, add: bool) -> None:
+    async def _live_role(self, guild: Any, member: Any, *, add: bool) -> bool:
         role_id = self.bot.store.get(guild.id, "golive_live_role_id")
         if not role_id:
-            return
+            return False
         role = guild.get_role(role_id)
         if role is None:
             log.warning("go-live: live role %s is not in this server", role_id)
-            return
+            return False
         if not self._may_change_roles(guild.id):
             log.info(
                 "go-live: would %s the live role %s for %s",
@@ -351,7 +483,7 @@ class GoLive(commands.Cog):
                 target=member,
                 details={"role_id": role_id},
             )
-            return
+            return False
         try:
             if add:
                 await member.add_roles(role, reason="Black Bloc go-live")
@@ -359,7 +491,7 @@ class GoLive(commands.Cog):
                 await member.remove_roles(role, reason="Black Bloc go-live")
         except discord.HTTPException as exc:
             log.warning("go-live: could not change the live role for %s: %s", member.id, exc)
-            return
+            return False
         await log_action(
             self.bot,
             guild,
@@ -367,6 +499,58 @@ class GoLive(commands.Cog):
             target=member,
             details={"role_id": role_id},
         )
+        return True
+
+    async def _remove_live_role(self, guild: Any, member: Any, row: Any) -> None:
+        if not _row_value(row, "live_role_added"):
+            return
+        role_id = self.bot.store.get(guild.id, "golive_live_role_id")
+        role = guild.get_role(role_id) if role_id else None
+        stuck = None
+        if role is None:
+            stuck = "role_missing"
+        elif member is None:
+            stuck = "member_not_visible"
+        elif getattr(self.bot, "guard", None) is not None:
+            stuck = "test_mode"
+        if stuck is None:
+            try:
+                await member.remove_roles(role, reason="Black Bloc go-live ended")
+            except discord.HTTPException as exc:
+                stuck = f"{type(exc).__name__}: {exc}"
+        if stuck is None:
+            await log_action(
+                self.bot,
+                guild,
+                "golive.remove_role",
+                target=member,
+                details={"role_id": role_id},
+            )
+            return
+        log.warning(
+            "go-live: the live role %s is stuck on %s (%s)", role_id, row["user_id"], stuck
+        )
+        await log_action(
+            self.bot,
+            guild,
+            "golive.role_stuck",
+            target=member if member is not None else row["user_id"],
+            details={"role_id": role_id, "user_id": row["user_id"], "reason": stuck},
+        )
+
+    def _mentions(self, guild_id: int) -> discord.AllowedMentions:
+        ping_role_id = self.bot.store.get(guild_id, "golive_ping_role_id")
+        return discord.AllowedMentions(
+            everyone=False,
+            users=False,
+            roles=[discord.Object(ping_role_id)] if ping_role_id else False,
+        )
+
+    def _lock(self, user_id: int) -> asyncio.Lock:
+        lock = self._locks.get(user_id)
+        if lock is None:
+            lock = self._locks[user_id] = asyncio.Lock()
+        return lock
 
     def _mode(self, guild_id: int) -> str:
         return self.bot.store.get(guild_id, "golive_mode")
@@ -414,25 +598,64 @@ class GoLive(commands.Cog):
     async def poller(self) -> None:
         try:
             await self.poll_once()
-        except Exception:
+        except Exception as exc:
+            self.last_poll_error = f"{type(exc).__name__}: {exc}"
             log.exception("go-live: the Twitch poll failed")
 
     @poller.before_loop
     async def _before_poller(self) -> None:
         await self.bot.wait_until_ready()
 
+    async def age_out_sessions(self) -> None:
+        """Close sessions still open long past any plausible stream, so nobody wedges."""
+        for guild in list(getattr(self.bot, "guilds", ())):
+            hours = self.bot.store.get(guild.id, "golive_max_session_hours")
+            if not hours:
+                continue
+            cutoff = datetime.now(UTC) - timedelta(hours=int(hours))
+            for row in await open_sessions(self.bot.db, guild.id):
+                started = parse_ts(row["started_at"])
+                if started is not None and started > cutoff:
+                    continue
+                log.warning(
+                    "go-live: session %s has been open since %s; closing it",
+                    row["id"],
+                    row["started_at"],
+                )
+                await self._close_session(guild, row, "aged_out")
+
     async def poll_once(self) -> None:
         """One Twitch sweep: live logins with no open session go live, gone ones end."""
-        if self.helix is None or not self.bot.db.is_connected:
+        if not self.bot.db.is_connected:
             return
-        by_login = {row["twitch_login"]: row["user_id"] for row in await all_links(self.bot.db)}
+        await self.age_out_sessions()
+        if self.helix is None:
+            return
+        by_login: dict[str, int] = {}
+        for row in await all_links(self.bot.db):
+            login = row["twitch_login"]
+            if login in by_login:
+                log.warning(
+                    "go-live: twitch login %s is linked to both %s and %s; only the first is "
+                    "polled",
+                    login,
+                    by_login[login],
+                    row["user_id"],
+                )
+                continue
+            by_login[login] = row["user_id"]
         if not by_login:
+            self.last_poll_ok_at = now_iso()
+            self.last_poll_error = None
             return
         try:
             streams = await self.helix.get_streams(list(by_login))
         except TwitchError as exc:
+            self.last_poll_error = str(exc)
             log.warning("go-live: Twitch poll failed: %s", exc)
             return
+        self.last_poll_ok_at = now_iso()
+        self.last_poll_error = None
         live = {stream.user_login: stream for stream in streams}
         for login, user_id in by_login.items():
             member = self._find_member(user_id)
@@ -446,14 +669,25 @@ class GoLive(commands.Cog):
             elif await open_session_for(self.bot.db, guild_id, user_id, "twitch") is not None:
                 await self._end_live(member.guild, member, "twitch")
 
+    async def _database_ready(self, interaction: discord.Interaction) -> bool:
+        if self.bot.db.is_connected:
+            return True
+        log.warning("go-live: refused a command — the database is not connected")
+        await interaction.response.send_message(DB_UNAVAILABLE, ephemeral=True)
+        return False
+
     @golive.command(name="optout", description="Stop Black Bloc announcing your streams")
     async def optout(self, interaction: discord.Interaction) -> None:
+        if not await self._database_ready(interaction):
+            return
         await set_optout(self.bot.db, interaction.user.id)
         await interaction.response.send_message(OPTED_OUT, ephemeral=True)
         await self._log_command(interaction, "golive.optout")
 
     @golive.command(name="optin", description="Let Black Bloc announce your streams again")
     async def optin(self, interaction: discord.Interaction) -> None:
+        if not await self._database_ready(interaction):
+            return
         cleared = await clear_optout(self.bot.db, interaction.user.id)
         await interaction.response.send_message(
             OPTED_IN if cleared else NOT_OPTED_OUT, ephemeral=True
@@ -464,6 +698,8 @@ class GoLive(commands.Cog):
     @golive.command(name="status", description="Show how the go-live feed is set up")
     async def status(self, interaction: discord.Interaction) -> None:
         if not await require_staff(interaction):
+            return
+        if not await self._database_ready(interaction):
             return
         guild = interaction.guild
         store = self.bot.store
@@ -477,6 +713,8 @@ class GoLive(commands.Cog):
             f"**channel** — {f'<#{channel_id}>' if channel_id else 'not set'}",
             f"**cooldown** — {store.get(guild.id, 'golive_cooldown_minutes')} minute(s)",
             f"**twitch polling** — {polling}",
+            f"**last good poll** — {self.last_poll_ok_at or 'never'}",
+            f"**last poll error** — {self.last_poll_error or 'none'}",
             f"**links** — {totals['links']} · **opt-outs** — {totals['optouts']} · "
             f"**live now** — {totals['open_sessions']}",
         ]
@@ -515,13 +753,10 @@ class GoLive(commands.Cog):
         info = extract_stream(getattr(interaction.user, "activities", ())) or StreamInfo(
             url="https://www.twitch.tv/blackbloc", title="a test stream", platform="Twitch"
         )
-        text = render(
-            store.get(guild.id, "golive_template"),
-            info,
-            interaction.user,
-            ping_role_id=store.get(guild.id, "golive_ping_role_id"),
+        text = render(store.get(guild.id, "golive_template"), info, interaction.user)
+        await interaction.response.send_message(
+            text, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
         )
-        await interaction.response.send_message(text)
         await log_action(
             self.bot,
             guild,
@@ -533,11 +768,22 @@ class GoLive(commands.Cog):
     @twitch.command(name="link", description="Tell Black Bloc your Twitch channel")
     @app_commands.describe(login="Your Twitch name — the part after twitch.tv/ in your address")
     async def link(self, interaction: discord.Interaction, login: str) -> None:
+        if not await self._database_ready(interaction):
+            return
         cleaned = clean_login(login)
         if cleaned is None:
             await interaction.response.send_message(BAD_LOGIN, ephemeral=True)
             return
+        owner = await link_owner(self.bot.db, cleaned)
+        if owner is not None and owner != interaction.user.id:
+            await interaction.response.send_message(
+                LINK_TAKEN.format(login=cleaned),
+                ephemeral=True,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+            return
         twitch_user_id = None
+        checked = self.helix is None
         if self.helix is not None:
             try:
                 users = await self.helix.get_users([cleaned])
@@ -552,18 +798,27 @@ class GoLive(commands.Cog):
                 )
                 return
             if users:
+                checked = True
                 twitch_user_id = users[0].id
         await set_link(self.bot.db, interaction.user.id, cleaned, twitch_user_id)
         await interaction.response.send_message(
-            f"Linked **{cleaned}** to you. Black Bloc will use it to fill in the game and title "
-            "when you go live, and to spot streams Discord does not show. `/twitch unlink` "
-            "undoes it.",
+            (
+                f"Linked **{cleaned}** to you. Black Bloc will use it to fill in the game and "
+                "title when you go live, and to spot streams Discord does not show. "
+                "`/twitch unlink` undoes it."
+            )
+            if checked
+            else LINK_NOT_CHECKED.format(login=cleaned),
             ephemeral=True,
         )
-        await self._log_command(interaction, "golive.link", details={"login": cleaned})
+        await self._log_command(
+            interaction, "golive.link", details={"login": cleaned, "checked": checked}
+        )
 
     @twitch.command(name="unlink", description="Forget your Twitch channel")
     async def unlink(self, interaction: discord.Interaction) -> None:
+        if not await self._database_ready(interaction):
+            return
         removed = await remove_link(self.bot.db, interaction.user.id)
         if not removed:
             await interaction.response.send_message(NOT_LINKED, ephemeral=True)

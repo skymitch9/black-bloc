@@ -9,6 +9,7 @@ log = logging.getLogger(__name__)
 TOKEN_URL = "https://id.twitch.tv/oauth2/token"
 HELIX_URL = "https://api.twitch.tv/helix"
 BATCH_SIZE = 100
+REQUEST_TIMEOUT_SECONDS = 15
 
 
 class TwitchError(RuntimeError):
@@ -80,15 +81,20 @@ class TwitchClient:
         import aiohttp
 
         if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession()
-        async with self._session.request(
-            method, url, headers=headers, params=params, data=data
-        ) as response:
-            try:
-                payload = await response.json(content_type=None)
-            except Exception:
-                payload = {}
-            return response.status, payload if isinstance(payload, dict) else {}
+            self._session = aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SECONDS)
+            )
+        try:
+            async with self._session.request(
+                method, url, headers=headers, params=params, data=data
+            ) as response:
+                try:
+                    payload = await response.json(content_type=None)
+                except Exception:
+                    payload = {}
+                return response.status, payload if isinstance(payload, dict) else {}
+        except (TimeoutError, aiohttp.ClientError, OSError) as exc:
+            raise TwitchError(f"twitch unreachable: {type(exc).__name__}: {exc}") from exc
 
     async def close(self) -> None:
         if self._session is not None and not self._session.closed:

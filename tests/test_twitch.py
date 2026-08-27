@@ -1,7 +1,9 @@
+import aiohttp
 import pytest
 
 from black_bloc.twitch import (
     HELIX_URL,
+    REQUEST_TIMEOUT_SECONDS,
     TOKEN_URL,
     TwitchClient,
     TwitchError,
@@ -142,3 +144,41 @@ async def test_helix_failure_raises():
     client = TwitchClient("id", "secret", request=http)
     with pytest.raises(TwitchError, match="500"):
         await client.get_streams(["alice"])
+
+
+class DeadSession:
+    closed = False
+
+    def __init__(self, exc):
+        self.exc = exc
+
+    def request(self, *args, **kwargs):
+        raise self.exc
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [
+        OSError("no route to host"),
+        aiohttp.ClientError("connection reset"),
+        TimeoutError(),
+    ],
+)
+async def test_a_network_failure_becomes_a_twitch_error(exc):
+    client = TwitchClient("id", "secret")
+    client._session = DeadSession(exc)
+
+    with pytest.raises(TwitchError, match="twitch unreachable"):
+        await client._aiohttp_request("GET", f"{HELIX_URL}/streams")
+
+
+async def test_a_network_failure_reaches_the_caller_of_get_streams():
+    client = TwitchClient("id", "secret")
+    client._session = DeadSession(OSError("no route to host"))
+
+    with pytest.raises(TwitchError, match="twitch unreachable"):
+        await client.get_streams(["alice"])
+
+
+def test_requests_carry_a_timeout():
+    assert REQUEST_TIMEOUT_SECONDS == 15

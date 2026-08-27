@@ -1,3 +1,5 @@
+import asyncio
+import json
 from datetime import UTC, datetime, timedelta
 
 import discord
@@ -26,7 +28,7 @@ from black_bloc.config import load_settings
 from black_bloc.golive import StreamInfo
 from black_bloc.settings_store import SettingsStore
 from black_bloc.storage.db import Database
-from black_bloc.twitch import TwitchStream
+from black_bloc.twitch import TwitchError, TwitchStream
 
 GUILD = 7
 CHANNEL = 111
@@ -36,12 +38,15 @@ USER = 900
 
 
 class FakeMessage:
-    def __init__(self, message_id, content):
+    def __init__(self, message_id, content, **kwargs):
         self.id = message_id
         self.content = content
+        self.kwargs = kwargs
+        self.edits = []
 
     async def edit(self, content=None, **kwargs):
         self.content = content
+        self.edits.append(kwargs)
 
 
 class FakeChannel:
@@ -50,7 +55,7 @@ class FakeChannel:
         self.messages = []
 
     async def send(self, content=None, **kwargs):
-        message = FakeMessage(len(self.messages) + 1, content or "")
+        message = FakeMessage(len(self.messages) + 1, content or "", **kwargs)
         self.messages.append(message)
         return message
 
@@ -155,16 +160,21 @@ class FakeInteraction:
 
 
 class FakeHelix:
-    def __init__(self, streams=(), users=()):
+    def __init__(self, streams=(), users=(), raises=None):
         self.streams = list(streams)
         self.users = list(users)
+        self.raises = raises
         self.stream_calls = []
 
     async def get_streams(self, logins):
         self.stream_calls.append(list(logins))
+        if self.raises is not None:
+            raise self.raises
         return [s for s in self.streams if s.user_login in {x.lower() for x in logins}]
 
     async def get_users(self, logins):
+        if self.raises is not None:
+            raise self.raises
         return [u for u in self.users if u.login in {x.lower() for x in logins}]
 
     async def close(self):
@@ -600,14 +610,18 @@ async def test_link_refuses_a_login_twitch_does_not_know(cog, bot, member, db):
     assert await get_link(db, member.id) is None
 
 
-async def test_golive_test_renders_into_the_channel(cog, bot, member, db, monkeypatch):
+async def test_golive_test_previews_ephemerally_without_the_ping_role(
+    cog, bot, member, db, monkeypatch
+):
     monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    await bot.store.set(GUILD, "golive_ping_role_id", 77)
     interaction = FakeInteraction(bot, member, bot.guild)
 
     await GoLive.test.callback(cog, interaction)
 
     assert interaction.sent.startswith("REGULATORS! Mount up! **Alice**")
-    assert interaction.response.messages[0]["ephemeral"] is False
+    assert "<@&77>" not in interaction.sent
+    assert interaction.response.messages[0]["ephemeral"] is True
     assert await open_sessions(db, GUILD) == []
     assert "golive.test" in await action_kinds(db)
 
@@ -633,6 +647,284 @@ async def test_golive_status_reports_the_setup(cog, bot, member, db, monkeypatch
     assert f"<#{CHANNEL}>" in interaction.sent
     assert "no Twitch credentials" in interaction.sent
     assert "**links** — 1" in interaction.sent
+
+
+async def test_reconcile_on_start_closes_a_session_nothing_is_streaming(cog, bot, member, db):
+    await start_session(db, GUILD, member.id, "presence", StreamInfo(url="u"), "on")
+
+    await cog.reconcile_open_sessions()
+
+    assert await open_session_for(db, GUILD, member.id) is None
+    details = json.loads(await action_details(db, "golive.end"))
+    assert details["reason"] == "reconciled_on_start"
+
+
+async def test_reconcile_on_start_keeps_a_member_who_is_still_streaming(cog, bot, db):
+    live = FakeMember(bot.guild, activities=(streaming_activity(),))
+    await start_session(db, GUILD, live.id, "presence", StreamInfo(url="u"), "on")
+
+    await cog.reconcile_open_sessions()
+
+    assert await open_session_for(db, GUILD, live.id) is not None
+
+
+async def test_reconcile_on_start_asks_twitch_about_a_twitch_session(cog, bot, member, db):
+    await set_link(db, member.id, "alice")
+    await start_session(
+        db, GUILD, member.id, "twitch", StreamInfo(url="https://www.twitch.tv/alice"), "on"
+    )
+    cog.helix = FakeHelix(streams=[twitch_stream()])
+
+    await cog.reconcile_open_sessions()
+
+    assert await open_session_for(db, GUILD, member.id) is not None
+
+
+async def test_an_unreadable_start_time_is_aged_out_rather_than_wedging(cog, bot, member, db):
+    session_id = await start_session(db, GUILD, member.id, "presence", StreamInfo(url="u"), "on")
+    await db.conn.execute(
+        "UPDATE golive_sessions SET started_at = ? WHERE id = ?", ("not-a-date", session_id)
+    )
+    await db.conn.commit()
+
+    await cog.poll_once()
+
+    assert await open_session_for(db, GUILD, member.id) is None
+
+
+async def test_the_poll_tick_ages_out_a_session_that_never_ended(cog, bot, member, db):
+    session_id = await start_session(db, GUILD, member.id, "presence", StreamInfo(url="u"), "on")
+    long_ago = (datetime.now(UTC) - timedelta(hours=13)).isoformat()
+    await db.conn.execute(
+        "UPDATE golive_sessions SET started_at = ? WHERE id = ?", (long_ago, session_id)
+    )
+    await db.conn.commit()
+
+    await cog.poll_once()
+
+    assert await open_session_for(db, GUILD, member.id) is None
+    assert json.loads(await action_details(db, "golive.end"))["reason"] == "aged_out"
+
+
+async def test_a_stale_session_no_longer_wedges_the_next_announcement(cog, bot, member, db):
+    await bot.store.set(GUILD, "golive_mode", "on")
+    await start_session(db, GUILD, member.id, "presence", StreamInfo(url="u"), "on")
+
+    await cog.reconcile_open_sessions()
+    await bot.store.set(GUILD, "golive_cooldown_minutes", 0)
+    await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
+
+    assert len(bot.guild.channel.messages) == 1
+
+
+async def test_the_live_role_is_removed_even_after_the_mode_changes(cog, bot, member, db):
+    await bot.store.set(GUILD, "golive_mode", "on")
+    await bot.store.set(GUILD, "golive_live_role_id", LIVE_ROLE)
+    bot.guard = None
+    await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
+    assert member.added == [LIVE_ROLE]
+    assert (await open_session_for(db, GUILD, member.id))["live_role_added"] == 1
+
+    await bot.store.set(GUILD, "golive_mode", "shadow")
+    await cog._end_live(bot.guild, member, "presence")
+
+    assert member.removed == [LIVE_ROLE]
+    assert "golive.remove_role" in await action_kinds(db)
+
+
+async def test_a_role_that_cannot_be_removed_is_logged_as_stuck(cog, bot, member, db):
+    await bot.store.set(GUILD, "golive_mode", "on")
+    await bot.store.set(GUILD, "golive_live_role_id", LIVE_ROLE)
+    bot.guard = None
+    await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
+
+    bot.guard = FakeGuard()
+    await cog._end_live(bot.guild, member, "presence")
+
+    assert member.removed == []
+    details = json.loads(await action_details(db, "golive.role_stuck"))
+    assert details["role_id"] == LIVE_ROLE and details["user_id"] == member.id
+
+
+async def test_a_session_with_no_role_added_removes_nothing(cog, bot, member, db):
+    await bot.store.set(GUILD, "golive_live_role_id", LIVE_ROLE)
+    bot.guard = None
+    await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
+
+    await cog._end_live(bot.guild, member, "presence")
+
+    assert member.removed == []
+    assert "golive.role_stuck" not in await action_kinds(db)
+
+
+async def test_a_failed_post_is_logged_and_leaves_no_cooldown(cog, bot, member, db):
+    await bot.store.set(GUILD, "golive_mode", "on")
+    await bot.store.set(GUILD, "golive_channel_id", 999)
+    bot.guard = None
+
+    await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
+
+    kinds = await action_kinds(db)
+    assert "golive.post_failed" in kinds and "golive.would_announce" not in kinds
+    assert json.loads(await action_details(db, "golive.post_failed"))["reason"] == (
+        "channel_not_visible"
+    )
+    assert await latest_session(db, GUILD, member.id) is None
+
+    await bot.store.set(GUILD, "golive_channel_id", CHANNEL)
+    await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
+
+    assert len(bot.guild.channel.messages) == 1
+
+
+async def test_the_announcement_only_allows_the_ping_role_to_be_mentioned(cog, bot, member):
+    await bot.store.set(GUILD, "golive_mode", "on")
+    await bot.store.set(GUILD, "golive_ping_role_id", 77)
+
+    await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
+
+    mentions = bot.guild.channel.messages[0].kwargs["allowed_mentions"]
+    assert mentions.everyone is False and mentions.users is False
+    assert [role.id for role in mentions.roles] == [77]
+
+
+async def test_the_end_edit_also_carries_allowed_mentions(cog, bot, member):
+    await bot.store.set(GUILD, "golive_mode", "on")
+    await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
+
+    await cog._end_live(bot.guild, member, "presence")
+
+    assert bot.guild.channel.messages[0].edits[0]["allowed_mentions"].everyone is False
+
+
+async def test_two_concurrent_go_lives_produce_one_session(cog, bot, member, db):
+    await bot.store.set(GUILD, "golive_mode", "on")
+    info = StreamInfo(url="u", game="Celeste")
+
+    await asyncio.gather(
+        cog._go_live(member, info, "presence"),
+        cog._go_live(member, info, "twitch"),
+    )
+
+    assert len(await open_sessions(db, GUILD)) == 1
+    assert len(bot.guild.channel.messages) == 1
+
+
+async def test_the_per_user_lock_serialises_two_go_lives_without_the_index(cog, bot, member, db):
+    await db.conn.execute("DROP INDEX golive_open_session")
+    await bot.store.set(GUILD, "golive_mode", "on")
+    info = StreamInfo(url="u", game="Celeste")
+
+    await asyncio.gather(
+        cog._go_live(member, info, "presence"),
+        cog._go_live(member, info, "twitch"),
+    )
+
+    assert len(await open_sessions(db, GUILD)) == 1
+    assert len(bot.guild.channel.messages) == 1
+
+
+async def test_a_second_open_session_is_refused_by_the_database(db):
+    assert await start_session(db, GUILD, USER, "presence", StreamInfo(), "on") is not None
+    assert await start_session(db, GUILD, USER, "twitch", StreamInfo(), "on") is None
+
+
+async def test_a_failed_end_edit_does_not_abort_the_role_or_the_log(cog, bot, member, db):
+    await bot.store.set(GUILD, "golive_mode", "on")
+    await bot.store.set(GUILD, "golive_live_role_id", LIVE_ROLE)
+    bot.guard = None
+    await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
+    bot.guild.channel.messages.clear()
+
+    await cog._end_live(bot.guild, member, "presence")
+
+    assert member.removed == [LIVE_ROLE]
+    assert "golive.end" in await action_kinds(db)
+    assert await open_session_for(db, GUILD, member.id) is None
+
+
+async def test_status_reports_the_last_poll_error(cog, bot, member, db, monkeypatch):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    await set_link(db, member.id, "alice")
+    cog.helix = FakeHelix(raises=TwitchError("twitch unreachable: boom"))
+    await cog.poll_once()
+
+    interaction = FakeInteraction(bot, member, bot.guild)
+    await GoLive.status.callback(cog, interaction)
+
+    assert "**last poll error** — twitch unreachable: boom" in interaction.sent
+    assert "**last good poll** — never" in interaction.sent
+
+
+async def test_status_reports_a_good_poll(cog, bot, member, db, monkeypatch):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    await set_link(db, member.id, "alice")
+    cog.helix = FakeHelix(streams=[])
+    await cog.poll_once()
+
+    interaction = FakeInteraction(bot, member, bot.guild)
+    await GoLive.status.callback(cog, interaction)
+
+    assert "**last poll error** — none" in interaction.sent
+    assert "**last good poll** — never" not in interaction.sent
+
+
+async def test_link_refuses_a_login_another_member_already_uses(cog, bot, db):
+    theirs = FakeMember(bot.guild, user_id=1)
+    mine = FakeMember(bot.guild, user_id=2)
+    await set_link(db, theirs.id, "alice")
+    interaction = FakeInteraction(bot, mine, bot.guild)
+
+    await GoLive.link.callback(cog, interaction, "Alice")
+
+    assert "already linked to another member" in interaction.sent
+    assert await get_link(db, mine.id) is None
+
+
+async def test_relinking_your_own_login_still_works(cog, bot, member, db):
+    await set_link(db, member.id, "alice")
+    interaction = FakeInteraction(bot, member, bot.guild)
+
+    await GoLive.link.callback(cog, interaction, "alice")
+
+    assert "Linked **alice**" in interaction.sent
+
+
+async def test_link_says_so_when_twitch_could_not_be_checked(cog, bot, member, db):
+    cog.helix = FakeHelix(raises=TwitchError("twitch unreachable: boom"))
+    interaction = FakeInteraction(bot, member, bot.guild)
+
+    await GoLive.link.callback(cog, interaction, "alice")
+
+    assert "could not be reached to check that the name exists" in interaction.sent
+    assert (await get_link(db, member.id))["twitch_login"] == "alice"
+
+
+async def test_the_poller_warns_about_two_members_on_the_same_login(cog, bot, db, caplog):
+    first = FakeMember(bot.guild, user_id=1)
+    second = FakeMember(bot.guild, user_id=2)
+    await set_link(db, first.id, "alice")
+    await db.conn.execute(
+        "INSERT INTO golive_links(user_id, twitch_login, linked_at) VALUES (?, 'alice', 'x')",
+        (second.id,),
+    )
+    await db.conn.commit()
+    cog.helix = FakeHelix(streams=[twitch_stream()])
+
+    with caplog.at_level("WARNING"):
+        await cog.poll_once()
+
+    assert "linked to both" in caplog.text
+    assert len(await open_sessions(db, GUILD)) == 1
+
+
+async def test_a_command_says_so_when_the_database_is_unreachable(cog, bot, member, db):
+    await db.close()
+    interaction = FakeInteraction(bot, member, bot.guild)
+
+    await GoLive.optout.callback(cog, interaction)
+
+    assert "cannot reach its own database" in interaction.sent
 
 
 async def _always_staff(interaction):

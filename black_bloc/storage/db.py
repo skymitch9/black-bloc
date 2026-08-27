@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import logging
+from datetime import UTC, datetime
 from pathlib import Path
 
 import aiosqlite
+
+log = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 3
 
@@ -78,6 +82,20 @@ CREATE TABLE IF NOT EXISTS golive_sessions (
     announced_message_id  INTEGER,
     mode                  TEXT    NOT NULL
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS golive_open_session
+    ON golive_sessions(guild_id, user_id) WHERE ended_at IS NULL;
+"""
+
+ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    ("golive_sessions", "live_role_added", "INTEGER NOT NULL DEFAULT 0"),
+)
+
+CLOSE_DUPLICATE_OPEN_SESSIONS = """
+UPDATE golive_sessions SET ended_at = ?
+WHERE ended_at IS NULL AND id NOT IN (
+    SELECT MAX(id) FROM golive_sessions WHERE ended_at IS NULL GROUP BY guild_id, user_id
+)
 """
 
 
@@ -102,12 +120,39 @@ class Database:
         self._conn.row_factory = aiosqlite.Row
         await self._conn.execute("PRAGMA journal_mode=WAL")
         await self._conn.execute("PRAGMA foreign_keys=ON")
+        await self._close_duplicate_open_sessions()
         await self._conn.executescript(SCHEMA)
+        await self._add_missing_columns()
         await self._conn.execute(
             "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', ?)",
             (str(SCHEMA_VERSION),),
         )
         await self._conn.commit()
+
+    async def _table_columns(self, table: str) -> set[str]:
+        cur = await self.conn.execute(f"PRAGMA table_info({table})")
+        return {str(row["name"]) for row in await cur.fetchall()}
+
+    async def _close_duplicate_open_sessions(self) -> None:
+        if not await self._table_columns("golive_sessions"):
+            return
+        cur = await self.conn.execute(
+            CLOSE_DUPLICATE_OPEN_SESSIONS, (datetime.now(UTC).isoformat(),)
+        )
+        if cur.rowcount and cur.rowcount > 0:
+            log.warning(
+                "database: closed %d duplicate open go-live session(s) before indexing them",
+                cur.rowcount,
+            )
+
+    async def _add_missing_columns(self) -> None:
+        for table, column, declaration in ADDED_COLUMNS:
+            present = await self._table_columns(table)
+            if present and column not in present:
+                await self.conn.execute(
+                    f"ALTER TABLE {table} ADD COLUMN {column} {declaration}"
+                )
+                log.info("database: added %s.%s", table, column)
 
     async def close(self) -> None:
         if self._conn is not None:
