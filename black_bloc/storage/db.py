@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -45,8 +45,47 @@ CREATE TABLE IF NOT EXISTS role_menus (
     mode        TEXT    NOT NULL DEFAULT 'multiple',
     message_id  INTEGER,
     channel_id  INTEGER,
+    approval     INTEGER NOT NULL DEFAULT 0,
+    expires_days INTEGER,
+    retry_days   INTEGER NOT NULL DEFAULT 7,
     UNIQUE (guild_id, name)
 );
+
+CREATE TABLE IF NOT EXISTS role_requests (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id     INTEGER NOT NULL,
+    menu_id      INTEGER NOT NULL,
+    user_id      INTEGER NOT NULL,
+    role_id      INTEGER NOT NULL,
+    requested_at TEXT    NOT NULL,
+    status       TEXT    NOT NULL DEFAULT 'pending',
+    decided_by   INTEGER,
+    decided_at   TEXT,
+    deny_reason  TEXT,
+    message_id   INTEGER,
+    channel_id   INTEGER
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS role_requests_one_open
+    ON role_requests(menu_id, user_id, role_id) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS role_requests_by_status
+    ON role_requests(guild_id, status, id);
+
+CREATE TABLE IF NOT EXISTS role_grants (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id       INTEGER NOT NULL,
+    user_id        INTEGER NOT NULL,
+    role_id        INTEGER NOT NULL,
+    source         TEXT    NOT NULL,
+    granted_by     INTEGER,
+    granted_at     TEXT    NOT NULL,
+    expires_at     TEXT,
+    removed_at     TEXT,
+    removed_reason TEXT
+);
+
+CREATE INDEX IF NOT EXISTS role_grants_due ON role_grants(expires_at, removed_at);
+CREATE INDEX IF NOT EXISTS role_grants_by_member ON role_grants(guild_id, user_id, role_id);
 
 CREATE TABLE IF NOT EXISTS role_menu_options (
     menu_id  INTEGER NOT NULL REFERENCES role_menus(id) ON DELETE CASCADE,
@@ -226,6 +265,9 @@ CREATE INDEX IF NOT EXISTS mod_cases_by_kind ON mod_cases(guild_id, kind, at);
 """
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    ("role_menus", "approval", "INTEGER NOT NULL DEFAULT 0"),
+    ("role_menus", "expires_days", "INTEGER"),
+    ("role_menus", "retry_days", "INTEGER NOT NULL DEFAULT 7"),
     ("golive_sessions", "live_role_added", "INTEGER NOT NULL DEFAULT 0"),
     ("golive_sessions", "platform", "TEXT"),
     ("events", "card_channel_id", "INTEGER"),

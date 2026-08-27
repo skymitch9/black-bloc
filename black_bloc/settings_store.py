@@ -114,6 +114,8 @@ KEY_TYPES: dict[str, str] = {
     "bot_bio": "text",
     "status_prefix": "text",
     "rolemenu_mode": "enum",
+    "rolemenu_approval_channel_id": "channel",
+    "rolemenu_approver_role_id": "role",
 }
 
 KEY_CHOICES: dict[str, tuple[str, ...]] = {
@@ -229,6 +231,12 @@ KEY_HELP: dict[str, str] = {
     "rolemenu_mode": (
         "whether members can pick roles from the panels; off takes them down and hides the "
         "/rolemenu commands, on posts them again"
+    ),
+    "rolemenu_approval_channel_id": (
+        "where a role request waits for Approve or Deny; blank uses staff_channel_id"
+    ),
+    "rolemenu_approver_role_id": (
+        "role mentioned when a role request arrives; blank pings nobody"
     ),
 }
 
