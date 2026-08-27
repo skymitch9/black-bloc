@@ -7,7 +7,6 @@ from typing import Any
 
 from .automod import (
     AUTOMOD_MODES,
-    CARL_MODLOG_CHANNEL_ID,
     MOD_DM_STYLES,
     WARN_THRESHOLD_DEFAULT,
     RuleError,
@@ -37,6 +36,7 @@ EVENTS_RETENTION_DAYS = 7
 EVENTS_RETENTION_MAX_DAYS = 365
 
 WARN_THRESHOLD_MAX = 100
+CARL_MODLOG_CHANNEL_ID = 1285782812229763092
 
 KEY_TYPES: dict[str, str] = {
     "log_channel_id": "channel",

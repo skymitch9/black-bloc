@@ -26,7 +26,6 @@ TIMEOUT_MAX_SECONDS = 28 * 24 * 3600
 CAPS_MIN_LETTERS = 8
 WORDS_MAX = 200
 WARN_THRESHOLD_DEFAULT = 8
-CARL_MODLOG_CHANNEL_ID = 1285782812229763092
 PARITY_TOLERANCE_SECONDS = 120
 PARITY_MAX_DAYS = 30
 
@@ -89,7 +88,8 @@ INVITE_PATTERN = re.compile(
     r"(?:discord(?:app)?\.com/invite|discord\.gg|discord\.me|dsc\.gg)/[A-Za-z0-9-]+",
     re.IGNORECASE,
 )
-CARL_USER_PATTERN = re.compile(r"\((?:ID:\s*)?(\d{15,25})\)|<@!?(\d{15,25})>|\b(\d{15,25})\b")
+CARL_USER_PATTERN = re.compile(r"\((?:ID:\s*)?(\d{15,25})\)|<@!?(\d{15,25})>")
+EVERYONE_PATTERN = re.compile(r"@(?:everyone|here)")
 
 UNKNOWN_RULE = (
     "**{given}** is not one of Black Bloc's automod rules, so nothing was changed. The rules are: "
@@ -104,10 +104,6 @@ BAD_ACTIONS = (
     "`delete`, `warn` and `timeout`, written as a comma-separated list; leave it empty for a rule "
     "that only logs."
 )
-TIMEOUT_TOO_LONG = (
-    "Discord itself refuses a timeout longer than 28 days, so nothing was changed. Pick a length "
-    "up to 28d — a longer punishment has to be a ban."
-)
 
 
 class RuleError(ValueError):
@@ -121,6 +117,7 @@ class MessageFacts:
     message_id: int
     created_at: datetime
     mention_ids: tuple[int, ...] = ()
+    everyone_count: int = 0
     links: tuple[str, ...] = ()
     invite_count: int = 0
     attachment_count: int = 0
@@ -171,6 +168,9 @@ class WindowState:
                 entries.popleft()
             if not entries:
                 del self.hits[key]
+
+    def clear(self, rule: str, user_id: int) -> None:
+        self.hits.pop((rule, int(user_id)), None)
 
     def forget(self, user_id: int) -> None:
         for key in [k for k in self.hits if k[1] == int(user_id)]:
@@ -321,7 +321,8 @@ def facts_from(message: Any) -> MessageFacts:
         channel_id=int(getattr(message.channel, "id", 0)),
         message_id=int(getattr(message, "id", 0)),
         created_at=created,
-        mention_ids=tuple(dict.fromkeys(mentions)),
+        mention_ids=tuple(mentions),
+        everyone_count=len(EVERYONE_PATTERN.findall(content)),
         links=tuple(URL_PATTERN.findall(content)),
         invite_count=len(INVITE_PATTERN.findall(content)),
         attachment_count=len(list(getattr(message, "attachments", ()) or ())),
@@ -342,7 +343,7 @@ def matched_words(content: Any, words: Any) -> list[str]:
 
 def _tokens(name: str, cfg: dict[str, Any], facts: MessageFacts) -> list[Any]:
     if name == "mention_spam":
-        return list(facts.mention_ids)
+        return list(facts.mention_ids) + ["@everyone"] * facts.everyone_count
     if name == "slowmode":
         return [facts.message_id]
     if name == "linkspam":
@@ -389,17 +390,18 @@ def _rule_verdict(
         count = len(tokens)
         message_ids: tuple[int, ...] = (facts.message_id,)
     else:
+        if not tokens:
+            return None
         state.record(
             name, facts.author_id, [Hit(facts.created_at, facts.message_id, t) for t in tokens]
         )
         hits = state.window(name, facts.author_id, now - timedelta(seconds=window_s))
-        if name == "mention_spam":
-            count = len({hit.token for hit in hits})
-        else:
-            count = len(hits)
+        count = len(hits)
         message_ids = tuple(dict.fromkeys(hit.message_id for hit in hits))
     if count < cfg["threshold"]:
         return None
+    if window_s > 0:
+        state.clear(name, facts.author_id)
     return Verdict(
         rule=name,
         actions=tuple(cfg["actions"]),

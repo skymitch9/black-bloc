@@ -25,6 +25,7 @@ from ...modcases import (
     dm_text,
     duration_error,
     get_case,
+    pages_under_limit,
     parse_duration,
     refusal_in_test_mode,
     send_modlog,
@@ -112,7 +113,7 @@ class ModCommands(commands.Cog):
     async def _record(
         self,
         guild: Any,
-        user_id: int,
+        user_id: int | None,
         kind: str,
         *,
         moderator: Any = None,
@@ -121,6 +122,7 @@ class ModCommands(commands.Cog):
         applied: bool = True,
         mode: str = "on",
         detail: Any = None,
+        channel_id: int | None = None,
     ) -> int | None:
         case_id = await add_case(
             self.bot.db,
@@ -132,6 +134,7 @@ class ModCommands(commands.Cog):
             duration_s=duration_s,
             mode=mode,
             applied=applied,
+            channel_id=channel_id,
         )
         message_id = await send_modlog(
             self.bot,
@@ -146,6 +149,7 @@ class ModCommands(commands.Cog):
                 applied=applied,
                 mode=mode,
                 detail=detail,
+                channel_id=channel_id,
             ),
         )
         await set_case_log_message(self.bot.db, case_id, message_id)
@@ -161,6 +165,7 @@ class ModCommands(commands.Cog):
         reason: Any = None,
         duration_s: int | None = None,
         deferred: bool = False,
+        channel_id: int | None = None,
     ) -> None:
         guild = interaction.guild
         case_id = await self._record(
@@ -172,6 +177,7 @@ class ModCommands(commands.Cog):
             duration_s=duration_s,
             applied=False,
             mode="test_mode",
+            channel_id=channel_id,
         )
         await log_action(
             self.bot,
@@ -185,10 +191,18 @@ class ModCommands(commands.Cog):
         answer = interaction.followup.send if deferred else interaction.response.send_message
         await answer(refusal_in_test_mode(wording), ephemeral=True)
 
-    async def _tell(self, guild: Any, member: Any, kind: str, reason: Any) -> None:
+    async def _tell(
+        self, guild: Any, member: Any, kind: str, reason: Any, duration_s: Any = None
+    ) -> None:
         await dm_member(
-            member, dm_text(self.bot.store.get(guild.id, "mod_dm_on_action"), guild.name, kind,
-                            reason)
+            member,
+            dm_text(
+                self.bot.store.get(guild.id, "mod_dm_on_action"),
+                guild.name,
+                kind,
+                reason,
+                duration_s=duration_s,
+            ),
         )
 
     @app_commands.command(name="warn", description="Warn a member and record it")
@@ -258,7 +272,6 @@ class ModCommands(commands.Cog):
             )
             return
         guild = interaction.guild
-        await self._tell(guild, member, "timeout", reason)
         try:
             await member.timeout(
                 timedelta(seconds=clamp_timeout(seconds)), reason=self._audit(interaction, reason)
@@ -266,6 +279,7 @@ class ModCommands(commands.Cog):
         except discord.HTTPException as exc:
             await self._failed(interaction, member, "timeout", reason, exc)
             return
+        await self._tell(guild, member, "timeout", reason, duration_s=clamp_timeout(seconds))
         case_id = await self._record(
             guild,
             member.id,
@@ -296,6 +310,11 @@ class ModCommands(commands.Cog):
         self, interaction: discord.Interaction, member: discord.Member, reason: str | None = None
     ) -> None:
         if not await self._ready(interaction):
+            return
+        if self._in_test_mode():
+            await self._refuse_in_test_mode(
+                interaction, member, "untimeout", "lift anyone's timeout", reason=reason
+            )
             return
         guild = interaction.guild
         try:
@@ -424,6 +443,11 @@ class ModCommands(commands.Cog):
                 NOT_AN_ID.format(given=user_id), ephemeral=True
             )
             return
+        if self._in_test_mode():
+            await self._refuse_in_test_mode(
+                interaction, int(digits), "unban", "lift anyone's ban", reason=reason
+            )
+            return
         guild = interaction.guild
         try:
             await guild.unban(
@@ -475,10 +499,15 @@ class ModCommands(commands.Cog):
             return
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
-        target_id = member.id if member is not None else interaction.user.id
+        target_id = member.id if member is not None else None
         if self._in_test_mode():
             await self._refuse_in_test_mode(
-                interaction, target_id, "purge", "delete anyone's messages", deferred=True
+                interaction,
+                target_id,
+                "purge",
+                "delete anyone's messages",
+                deferred=True,
+                channel_id=interaction.channel_id,
             )
             return
         check = (lambda m: m.author.id == member.id) if member is not None else None
@@ -505,6 +534,7 @@ class ModCommands(commands.Cog):
             "purge",
             moderator=interaction.user,
             detail=f"{len(deleted)} message(s) in <#{interaction.channel_id}>",
+            channel_id=interaction.channel_id,
         )
         await log_action(
             self.bot,
@@ -573,9 +603,16 @@ class ModCommands(commands.Cog):
         lines += [case_line(row) for row in rows]
         if wanted < pages:
             lines.append(f"`/cases member:{member.display_name} page:{wanted + 1}` for more.")
-        await interaction.response.send_message(
-            "\n".join(lines), ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-        )
+        await self._say_in_chunks(interaction, pages_under_limit(lines))
+
+    async def _say_in_chunks(
+        self, interaction: discord.Interaction, chunks: list[str]
+    ) -> None:
+        for index, chunk in enumerate(chunks):
+            answer = interaction.followup.send if index else interaction.response.send_message
+            await answer(
+                chunk, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+            )
 
     def _audit(self, interaction: discord.Interaction, reason: Any) -> str:
         who = getattr(interaction.user, "display_name", interaction.user.id)

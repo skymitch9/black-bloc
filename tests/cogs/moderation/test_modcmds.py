@@ -5,7 +5,7 @@ import pytest
 
 from black_bloc.cogs.moderation.modcmds import ModCommands
 from black_bloc.config import load_settings
-from black_bloc.modcases import add_case
+from black_bloc.modcases import CASES_PER_PAGE, add_case
 from black_bloc.settings_store import SettingsStore
 from black_bloc.storage.db import Database
 
@@ -345,20 +345,44 @@ async def test_timeout_reads_the_duration_and_clamps_at_twenty_eight_days(cog, b
     assert "not a length" in nonsense.sent
 
 
-async def test_a_timeout_discord_refuses_is_its_own_log_kind(cog, bot, lead, target, db):
+async def test_a_timeout_discord_refuses_is_its_own_log_kind_and_dms_nobody(cog, bot, lead, target,
+                                                                           db):
     target.timeout_raises = refused()
     interaction = FakeInteraction(bot, lead)
 
     await cog.timeout.callback(cog, interaction, target, "10m", "spam")
 
     assert "Moderate Members" in interaction.sent
+    assert target.dms == []
     kinds = await action_kinds(db)
     assert "mod.timeout_failed" in kinds and "mod.would_timeout" not in kinds
     assert await cases(db) == []
 
 
-async def test_untimeout_lifts_it_and_is_allowed_in_test_mode(cog, bot, lead, target, db):
+async def test_a_timeout_that_worked_tells_the_member_how_long_it_is(cog, bot, lead, target):
+    await cog.timeout.callback(cog, FakeInteraction(bot, lead), target, "10m", "spam")
+
+    assert target.dms and "timed out" in target.dms[0] and "10m" in target.dms[0]
+
+
+async def test_untimeout_and_unban_are_refused_in_test_mode(cog, bot, lead, target, db):
     bot.guard = FakeGuard()
+    lifted = FakeInteraction(bot, lead)
+    unbanned = FakeInteraction(bot, lead)
+
+    await cog.untimeout.callback(cog, lifted, target, "sorry")
+    await cog.unban.callback(cog, unbanned, "123456789012345678", "appealed")
+
+    assert target.timeouts == [] and bot.guild.unbans == []
+    assert "test mode" in lifted.sent and "test mode" in unbanned.sent
+    assert [(r["kind"], r["applied"]) for r in await cases(db)] == [
+        ("untimeout", 0),
+        ("unban", 0),
+    ]
+    assert await action_kinds(db) == ["mod.would_untimeout", "mod.would_unban"]
+
+
+async def test_untimeout_lifts_it_once_test_mode_is_off(cog, bot, lead, target, db):
     interaction = FakeInteraction(bot, lead)
 
     await cog.untimeout.callback(cog, interaction, target, "sorry")
@@ -433,6 +457,20 @@ async def test_purge_defers_before_it_deletes_and_refuses_a_silly_number(cog, bo
     assert silly.response.messages[0].get("deferred") is None
 
 
+async def test_an_untargeted_purge_is_filed_against_the_channel(cog, bot, lead, target, db):
+    await cog.purge.callback(cog, FakeInteraction(bot, lead), 5, None)
+
+    rows = await cases(db)
+    assert [(r["kind"], r["user_id"], r["channel_id"]) for r in rows] == [
+        ("purge", None, TEST_CHANNEL)
+    ]
+    assert cards(bot)[-1].kwargs["embed"].fields[0].name == "Channel"
+
+    theirs = FakeInteraction(bot, lead)
+    await cog.cases.callback(cog, theirs, lead, 1)
+    assert "no cases" in theirs.sent
+
+
 async def test_a_purge_discord_refuses_says_what_it_needs(cog, bot, lead, db):
     bot.guild.get_channel(TEST_CHANNEL).purge_raises = refused()
     interaction = FakeInteraction(bot, lead)
@@ -478,6 +516,22 @@ async def test_cases_pages_and_says_when_there_are_none(cog, bot, lead, target, 
     await cog.cases.callback(cog, second, target, 9)
     assert "page 2 of 2" in second.sent
     assert second.sent.count("`warn`") == 2
+
+
+async def test_a_page_of_long_reasons_is_cut_and_split_so_discord_takes_it(cog, bot, lead, target,
+                                                                          db):
+    for index in range(CASES_PER_PAGE):
+        await add_case(
+            db, GUILD, target.id, "warn", moderator_id=lead.id, reason=f"{index} " + "x" * 400
+        )
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.cases.callback(cog, interaction, target, 1)
+
+    said = [message["content"] for message in interaction.response.messages]
+    assert all(len(chunk) <= 1900 for chunk in said)
+    assert said[0].count("…") == CASES_PER_PAGE
+    assert "x" * 200 not in said[0]
 
 
 async def test_every_command_is_staff_only(cog, bot, target):

@@ -5,15 +5,17 @@ from datetime import UTC, datetime, timedelta
 import discord
 import pytest
 
+from black_bloc.cogs.moderation import automod as automod_cog
 from black_bloc.cogs.moderation.automod import (
     APPLY_TEMPLATE,
+    PARITY_HISTORY_LIMIT,
     ApplyNowButton,
     AutoMod,
     apply_custom_id,
     user_lock,
 )
 from black_bloc.config import load_settings
-from black_bloc.modcases import add_case, get_case
+from black_bloc.modcases import add_case, get_case, set_case_log_message
 from black_bloc.settings_store import SettingsStore
 from black_bloc.storage.db import Database
 
@@ -22,6 +24,7 @@ TEST_CHANNEL = 111
 LOG_CHANNEL = 222
 ELSEWHERE = 444
 HONEYPOT = 555
+STAFF_CHANNEL = 666
 STAFF_ROLE = 600
 EXEMPT_ROLE = 601
 USER = 900
@@ -63,6 +66,22 @@ class FakeMessage:
         self.kwargs = kwargs
 
 
+class FakePartialMessage:
+    def __init__(self, channel, message_id):
+        self.channel = channel
+        self.id = message_id
+
+    async def delete(self):
+        known = self.channel.sent_messages.get(self.id)
+        if known is not None:
+            await known.delete()
+        else:
+            self.channel.deleted.append(self.id)
+
+    async def edit(self, **kwargs):
+        self.channel.edits.append({"message_id": self.id, **kwargs})
+
+
 class FakeChannel:
     def __init__(self, channel_id, name="channel", parent_id=None):
         self.id = channel_id
@@ -73,9 +92,15 @@ class FakeChannel:
         self.messages = []
         self.history_items = []
         self.history_raises = None
+        self.sent_messages = {}
+        self.deleted = []
+        self.edits = []
 
     def permissions_for(self, role):
         return FakePerms(view_channel=role.id in self.visible_to)
+
+    def get_partial_message(self, message_id):
+        return FakePartialMessage(self, int(message_id))
 
     async def send(self, content=None, **kwargs):
         message = FakeMessage(len(self.messages) + 1, content or "", **kwargs)
@@ -283,6 +308,7 @@ async def bot(db, monkeypatch):
     guild.add(FakeChannel(LOG_CHANNEL, name="log"))
     guild.add(FakeChannel(ELSEWHERE, name="general"))
     guild.add(FakeChannel(HONEYPOT, name="trap"))
+    guild.add(FakeChannel(STAFF_CHANNEL, name="staff"))
     return FakeBot(db, store, settings, guild)
 
 
@@ -301,10 +327,10 @@ def lead(bot):
     return FakeMember(bot.guild, user_id=1, manage_guild=True)
 
 
-def give_staff(bot, role_id=STAFF_ROLE):
+def give_staff(bot, role_id=STAFF_ROLE, channel_id=TEST_CHANNEL):
     role = FakeRole(role_id)
     bot.guild.roles.append(role)
-    bot.guild.get_channel(TEST_CHANNEL).visible_to.add(role_id)
+    bot.guild.get_channel(channel_id).visible_to.add(role_id)
     return role
 
 
@@ -313,7 +339,7 @@ def spam(bot, author, channel_id=TEST_CHANNEL, message_id=5):
         bot.guild,
         author,
         bot.guild.get_channel(channel_id),
-        content="@here @there",
+        content="look at this",
         mentions=(1, 2, 3, 4, 5),
         message_id=message_id,
     )
@@ -352,8 +378,12 @@ async def test_on_mode_deletes_dms_and_times_out(cog, bot, spammer, db):
     assert post.deleted is True
     assert spammer.timeouts and spammer.timeouts[0][0] == timedelta(seconds=300)
     assert "5 mentions in 30s" in spammer.timeouts[0][1]
-    assert spammer.dms and "warned by the automatic filter" in spammer.dms[0]
-    assert [r["applied"] for r in await cases(db)] == [1]
+    assert spammer.dms and "timed out by the automatic filter" in spammer.dms[0]
+    assert "5m" in spammer.dms[0]
+    rows = await cases(db)
+    assert [r["applied"] for r in rows] == [1]
+    assert rows[0]["done"] == '["delete", "warn", "timeout"]'
+    assert rows[0]["message_id"] == post.id and rows[0]["channel_id"] == TEST_CHANNEL
     kinds = await action_kinds(db)
     assert kinds == ["automod.deleted", "automod.warned", "automod.timed_out"]
     assert cards(bot)[-1].kwargs.get("view") is None
@@ -389,7 +419,13 @@ async def test_a_timeout_discord_refuses_is_never_confused_with_a_dry_run(cog, b
 
     kinds = await action_kinds(db)
     assert "automod.timeout_failed" in kinds and "automod.would_timeout" not in kinds
-    assert [r["applied"] for r in await cases(db)] == [0]
+    rows = await cases(db)
+    assert [r["applied"] for r in rows] == [1]
+    assert rows[0]["done"] == '["delete", "warn"]' and rows[0]["failed"] == '["timeout"]'
+    card = cards(bot)[-1]
+    assert card.kwargs.get("view") is None
+    names = [field.name for field in card.kwargs["embed"].fields]
+    assert "Done" in names and "Refused" in names and "Not done" not in names
 
 
 async def test_a_message_that_cannot_be_deleted_is_still_acted_on(cog, bot, spammer, db):
@@ -404,7 +440,19 @@ async def test_a_message_that_cannot_be_deleted_is_still_acted_on(cog, bot, spam
     assert spammer.timeouts != []
 
 
-async def test_a_log_only_rule_records_a_case_with_no_button(cog, bot, spammer, db):
+async def test_a_delete_is_refused_while_the_guard_is_installed(bot, spammer):
+    post = spam(bot, spammer)
+    bot.guard = FakeGuard()
+
+    failure = await automod_cog.do_delete(bot, post)
+
+    assert failure == "test_mode" and post.deleted is False
+
+    bot.guard = None
+    assert await automod_cog.do_delete(bot, post) is None and post.deleted is True
+
+
+async def test_a_log_only_rule_is_a_log_line_and_nothing_else(cog, bot, spammer, db):
     book = dict(bot.store.get(GUILD, "automod_rules"))
     book["mention_spam"] = {"enabled": False}
     await bot.store.set(GUILD, "automod_rules", book)
@@ -414,9 +462,9 @@ async def test_a_log_only_rule_records_a_case_with_no_button(cog, bot, spammer, 
 
     await cog.on_message(post)
 
-    assert [r["kind"] for r in await cases(db)] == ["automod"]
-    assert await action_kinds(db) == ["automod.detected"]
-    assert cards(bot)[-1].kwargs.get("view") is None
+    assert await cases(db) == []
+    assert await action_kinds(db) == ["automod.observed"]
+    assert cards(bot) == []
 
 
 async def test_staff_bots_exempt_roles_and_exempt_channels_never_reach_the_engine(cog, bot, db):
@@ -510,11 +558,19 @@ async def test_the_apply_button_custom_id_matches_its_template():
     assert ApplyNowButton(12).item.custom_id == "automod:apply:12"
 
 
+async def shadow_case(db, **changes):
+    fields = {
+        "reason": "5 mentions in 30s",
+        "duration_s": 300,
+        "mode": "shadow",
+        "applied": False,
+        "actions": ["warn", "timeout"],
+    }
+    return await add_case(db, GUILD, USER, "automod", **(fields | changes))
+
+
 async def test_the_apply_button_is_staff_only(bot, spammer, db):
-    case_id = await add_case(
-        db, GUILD, USER, "automod", reason="5 mentions in 30s", duration_s=300,
-        mode="shadow", applied=False,
-    )
+    case_id = await shadow_case(db)
 
     await ApplyNowButton(case_id).callback(FakeInteraction(bot, spammer))
 
@@ -522,10 +578,7 @@ async def test_the_apply_button_is_staff_only(bot, spammer, db):
 
 
 async def test_the_apply_button_times_the_member_out(bot, spammer, lead, db):
-    case_id = await add_case(
-        db, GUILD, USER, "automod", reason="5 mentions in 30s", duration_s=300,
-        mode="shadow", applied=False,
-    )
+    case_id = await shadow_case(db)
     interaction = FakeInteraction(bot, lead)
 
     await ApplyNowButton(case_id).callback(interaction)
@@ -533,16 +586,75 @@ async def test_the_apply_button_times_the_member_out(bot, spammer, lead, db):
     assert spammer.timeouts and spammer.timeouts[0][0] == timedelta(seconds=300)
     assert spammer.dms != []
     assert (await get_case(db, case_id))["applied"] == 1
+    assert interaction.response.messages[0].get("deferred") is True
     assert "Applied case" in interaction.sent
     kinds = await action_kinds(db)
     assert "automod.warned" in kinds and "automod.timed_out" in kinds
 
 
+async def test_the_apply_button_applies_exactly_what_the_rule_asked_for(bot, spammer, lead, db):
+    post = spam(bot, spammer)
+    bot.guild.get_channel(TEST_CHANNEL).sent_messages[post.id] = post
+    case_id = await shadow_case(
+        db, actions=["delete", "warn"], duration_s=None, message_id=post.id,
+        channel_id=TEST_CHANNEL,
+    )
+
+    await ApplyNowButton(case_id).callback(FakeInteraction(bot, lead))
+
+    assert post.deleted is True and spammer.timeouts == []
+    assert (await get_case(db, case_id))["done"] == '["delete", "warn"]'
+
+
+async def test_the_second_staffer_to_click_is_told_somebody_beat_them_to_it(
+    bot, spammer, lead, db, monkeypatch
+):
+    case_id = await shadow_case(db)
+    first = FakeInteraction(bot, lead)
+    second = FakeInteraction(bot, lead)
+
+    await ApplyNowButton(case_id).callback(first)
+    stale = dict(await get_case(db, case_id)) | {"applied": 0}
+
+    async def read_a_stale_row(_db, _case_id):
+        return stale
+
+    monkeypatch.setattr(automod_cog, "get_case", read_a_stale_row)
+    await ApplyNowButton(case_id).callback(second)
+
+    assert "Applied case" in first.sent
+    assert "Someone just applied this case" in second.sent
+    assert len(spammer.timeouts) == 1
+
+
+async def test_a_click_that_discord_refuses_leaves_the_case_open(bot, spammer, lead, db):
+    spammer.timeout_raises = refused()
+    case_id = await shadow_case(db, actions=["timeout"])
+    interaction = FakeInteraction(bot, lead)
+
+    await ApplyNowButton(case_id).callback(interaction)
+
+    assert "Moderate Members" in interaction.sent
+    assert (await get_case(db, case_id))["applied"] == 0
+    assert "automod.timeout_failed" in await action_kinds(db)
+
+
+async def test_a_successful_click_rewrites_the_shadow_card(bot, spammer, lead, db):
+    case_id = await shadow_case(db)
+    channel = bot.guild.get_channel(TEST_CHANNEL)
+    card = await channel.send(embed=object(), view=object())
+    await set_case_log_message(db, case_id, card.id)
+
+    await ApplyNowButton(case_id).callback(FakeInteraction(bot, lead))
+
+    edit = channel.edits[-1]
+    assert edit["message_id"] == card.id and edit["view"] is None
+    assert f"<@{lead.id}>" in edit["embed"].description
+
+
 async def test_the_apply_button_refuses_in_test_mode_with_a_sentence(bot, spammer, lead, db):
     bot.guard = FakeGuard()
-    case_id = await add_case(
-        db, GUILD, USER, "automod", duration_s=300, mode="shadow", applied=False
-    )
+    case_id = await shadow_case(db)
     interaction = FakeInteraction(bot, lead)
 
     await ApplyNowButton(case_id).callback(interaction)
@@ -564,7 +676,21 @@ async def test_the_apply_button_says_so_when_it_is_already_applied_or_gone(bot, 
     assert "no record" in missing.sent
 
 
+async def test_arming_automod_is_refused_while_the_staff_channel_is_the_test_channel(
+    cog, bot, lead
+):
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.mode.callback(
+        cog, interaction, discord.app_commands.Choice(name="on", value="on")
+    )
+
+    assert bot.store.get(GUILD, "automod_mode") == "shadow"
+    assert "still the test channel" in interaction.sent
+
+
 async def test_arming_automod_is_refused_while_no_staff_role_resolves(cog, bot, lead):
+    await bot.store.set(GUILD, "staff_channel_id", STAFF_CHANNEL)
     interaction = FakeInteraction(bot, lead)
 
     await cog.mode.callback(
@@ -574,7 +700,7 @@ async def test_arming_automod_is_refused_while_no_staff_role_resolves(cog, bot, 
     assert bot.store.get(GUILD, "automod_mode") == "shadow"
     assert "staff_channel_id" in interaction.sent
 
-    give_staff(bot)
+    give_staff(bot, channel_id=STAFF_CHANNEL)
     again = FakeInteraction(bot, lead)
     await cog.mode.callback(cog, again, discord.app_commands.Choice(name="on", value="on"))
     assert bot.store.get(GUILD, "automod_mode") == "on"
@@ -691,15 +817,42 @@ async def test_exempt_roles_and_channels_are_added_and_removed(cog, bot, lead, d
 async def test_parity_counts_agreement_against_carls_log(cog, bot, lead, db):
     carl_channel = bot.guild.add(FakeChannel(999, name="carlbot-logs"))
     await bot.store.set(GUILD, "carl_modlog_channel_id", 999)
-    await add_case(db, GUILD, SNOWFLAKE, "automod", mode="shadow", applied=False)
+    await add_case(
+        db, GUILD, SNOWFLAKE, "automod", mode="shadow", applied=False,
+        actions=["warn", "timeout"],
+    )
+    await add_case(db, GUILD, SNOWFLAKE, "automod", mode="shadow", applied=False, actions=[])
     carl_channel.history_items = [FakeCarlPost(SNOWFLAKE, datetime.now(UTC))]
     interaction = FakeInteraction(bot, lead)
 
     await cog.parity.callback(cog, interaction, 7)
 
+    assert "saw **1** verdict(s)" in interaction.sent
     assert "**1** agree" in interaction.sent
     assert "**0** Carl-only" in interaction.sent
     assert "**0** Bloc-only" in interaction.sent
+
+
+async def test_parity_refuses_to_compare_a_channel_with_itself(cog, bot, lead):
+    await bot.store.set(GUILD, "carl_modlog_channel_id", TEST_CHANNEL)
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.parity.callback(cog, interaction, 7)
+
+    assert "the same channel" in interaction.sent
+
+
+async def test_parity_says_so_when_the_window_was_truncated(cog, bot, lead, db):
+    carl_channel = bot.guild.add(FakeChannel(999, name="carlbot-logs"))
+    await bot.store.set(GUILD, "carl_modlog_channel_id", 999)
+    carl_channel.history_items = [
+        FakeCarlPost(SNOWFLAKE, datetime.now(UTC)) for _ in range(PARITY_HISTORY_LIMIT)
+    ]
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.parity.callback(cog, interaction, 7)
+
+    assert "truncated" in interaction.sent and str(PARITY_HISTORY_LIMIT) in interaction.sent
 
 
 async def test_parity_says_what_it_needs_when_discord_refuses_the_history(cog, bot, lead, db):
@@ -731,6 +884,80 @@ async def test_parity_defers_before_reading_history(cog, bot, lead):
     await cog.parity.callback(cog, interaction, 7)
 
     assert interaction.response.messages[0].get("deferred") is True
+
+
+async def test_every_message_that_fed_the_window_is_deleted(cog, bot, spammer, db):
+    await bot.store.set(GUILD, "automod_mode", "on")
+    book = dict(bot.store.get(GUILD, "automod_rules"))
+    book["mention_spam"] = {"threshold": 6}
+    await bot.store.set(GUILD, "automod_rules", book)
+    channel = bot.guild.get_channel(TEST_CHANNEL)
+    first = FakePost(bot.guild, spammer, channel, content="one", mentions=(1, 2, 3), message_id=5)
+    second = FakePost(bot.guild, spammer, channel, content="two", mentions=(4, 5, 6), message_id=6)
+    channel.sent_messages[first.id] = first
+
+    await cog.on_message(first)
+    await cog.on_message(second)
+
+    assert first.deleted is True and second.deleted is True
+    assert "automod.deleted" in await action_kinds(db)
+
+
+async def test_a_message_that_cannot_be_found_again_is_logged_not_fatal(cog, bot, spammer, db):
+    await bot.store.set(GUILD, "automod_mode", "on")
+    channel = bot.guild.get_channel(TEST_CHANNEL)
+    post = spam(bot, spammer)
+    gone = FakePost(bot.guild, spammer, channel, content="gone", mentions=(9,), message_id=6)
+    gone.delete_raises = refused()
+    channel.sent_messages[gone.id] = gone
+
+    await cog.on_message(gone)
+    await cog.on_message(post)
+
+    kinds = await action_kinds(db)
+    assert "automod.delete_failed" in kinds and "automod.deleted" in kinds
+
+
+async def test_an_apology_after_the_verdict_is_not_a_second_verdict(cog, bot, spammer, db):
+    await cog.on_message(spam(bot, spammer))
+    assert len(await cases(db)) == 1
+
+    await cog.on_message(
+        FakePost(
+            bot.guild,
+            spammer,
+            bot.guild.get_channel(TEST_CHANNEL),
+            content="sorry everyone",
+            message_id=6,
+        )
+    )
+
+    assert len(await cases(db)) == 1
+
+
+async def test_an_edit_is_read_as_a_new_fact_only_when_the_words_changed(cog, bot, spammer, db):
+    quiet = FakePost(
+        bot.guild, spammer, bot.guild.get_channel(TEST_CHANNEL), content="hello", message_id=5
+    )
+    loud = spam(bot, spammer, message_id=5)
+
+    await cog.on_message_edit(quiet, quiet)
+    assert await cases(db) == []
+
+    await cog.on_message_edit(quiet, loud)
+    assert len(await cases(db)) == 1
+
+
+async def test_staff_is_resolved_once_a_minute_not_once_a_message(cog, bot, spammer):
+    give_staff(bot)
+    seen = []
+    original = bot.store.staff_role_ids
+    bot.store.staff_role_ids = lambda guild: seen.append(guild.id) or original(guild)
+
+    await cog.on_message(spam(bot, spammer, message_id=5))
+    await cog.on_message(spam(bot, spammer, message_id=6))
+
+    assert len(seen) == 1
 
 
 async def test_the_cog_registers_its_button_on_load(cog, bot):

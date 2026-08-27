@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import time
 from datetime import timedelta
 from typing import Any
 
@@ -29,19 +30,26 @@ from ...automod import (
     parse_carl_entry,
     rule_config,
 )
+from ...command_errors import SafeDynamicItem
 from ...golive import parse_ts
 from ...modcases import (
+    ALREADY_APPLIED_BY_SOMEBODY,
     add_case,
+    applied_by,
+    armed_verdicts_since,
     case_embed,
+    claim_case,
     clamp_timeout,
     dm_member,
     dm_text,
+    edit_case_card,
+    from_list_json,
     get_case,
     refusal_in_test_mode,
+    row_value,
     send_modlog,
-    set_case_applied,
     set_case_log_message,
-    shadow_verdicts_since,
+    set_case_outcome,
     within_days,
 )
 from ...settings_store import DB_UNAVAILABLE, require_staff, staff_roles_sentence
@@ -52,6 +60,7 @@ MESSAGE_TYPES = (discord.MessageType.default, discord.MessageType.reply)
 APPLY_TEMPLATE = r"automod:apply:(?P<case_id>[0-9]+)"
 RULE_FIELDS = ("enabled", "window_s", "threshold", "actions", "timeout_s", "words")
 PARITY_HISTORY_LIMIT = 500
+STAFF_CACHE_SECONDS = 60
 
 NO_STAFF_ROLES = (
     "Black Bloc cannot work out who counts as staff, so automod was left as it was. Nobody but "
@@ -70,10 +79,6 @@ NO_SUCH_CASE = (
 ALREADY_APPLIED = (
     "That verdict has already been applied, so nothing changed. `/case {case_id}` shows what "
     "happened."
-)
-NOTHING_TO_APPLY = (
-    "That verdict had no punishment attached — it was a rule that only logs — so there is "
-    "nothing to apply. `/automod rule set` is what arms a rule."
 )
 TIMEOUT_REFUSED = (
     "Discord refused the timeout, so nothing was done to them. Black Bloc needs the Moderate "
@@ -111,21 +116,46 @@ PARITY_TEST_MODE = (
     "Black Bloc is in test mode, so automod only ever saw the test channel — expect Carl-only to "
     "be the real cases and Bloc-only to be zero."
 )
+PARITY_SAME_CHANNEL = (
+    "`carl_modlog_channel_id` and `modlog_channel_id` are the same channel, so parity would count "
+    "Black Bloc's own cards as Carl-bot's cases and report nonsense. Point "
+    "`carl_modlog_channel_id` at the channel **Carl** posts in with `/settings set "
+    "carl_modlog_channel_id`, then run this again."
+)
+PARITY_TRUNCATED = (
+    "⚠️ Only the first {limit} posts in that window were read, so the window is truncated — ask "
+    "for fewer days to compare all of it."
+)
+STAFF_IS_THE_TEST_CHANNEL = (
+    "`staff_channel_id` is still the test channel, so everybody who can see it would count as "
+    "staff and automod would punish nobody. Set a real staff channel first with `/settings set "
+    "staff_channel_id`, check `/automod status` lists the roles you expect, then arm it again."
+)
 
 
 def apply_custom_id(case_id: int) -> str:
     return f"automod:apply:{case_id}"
 
 
+def _lock(bot: Any, attribute: str, key: int) -> asyncio.Lock:
+    locks = getattr(bot, attribute, None)
+    if locks is None:
+        locks = {}
+        setattr(bot, attribute, locks)
+    lock = locks.get(int(key))
+    if lock is None:
+        lock = locks[int(key)] = asyncio.Lock()
+    return lock
+
+
 def user_lock(bot: Any, user_id: int) -> asyncio.Lock:
     """One lock per member, on the BOT — a button click never arrives with a cog."""
-    locks = getattr(bot, "_automod_locks", None)
-    if locks is None:
-        locks = bot._automod_locks = {}
-    lock = locks.get(int(user_id))
-    if lock is None:
-        lock = locks[int(user_id)] = asyncio.Lock()
-    return lock
+    return _lock(bot, "_automod_locks", user_id)
+
+
+def case_lock(bot: Any, case_id: int) -> asyncio.Lock:
+    """One lock per case: two staffers clicking Apply now race over the row, not over each other."""
+    return _lock(bot, "_automod_case_locks", case_id)
 
 
 def verdict_details(verdict: Verdict, case_id: Any) -> dict[str, Any]:
@@ -137,14 +167,31 @@ def verdict_details(verdict: Verdict, case_id: Any) -> dict[str, Any]:
     }
 
 
-async def do_delete(message: Any) -> str | None:
-    """None when the message is gone; otherwise why it is still there."""
+async def do_delete(bot: Any, message: Any) -> str | None:
+    """None when the message is gone; 'test_mode' or the failure otherwise."""
+    if getattr(bot, "guard", None) is not None:
+        log.warning("automod: TEST MODE — refused to delete %s", getattr(message, "id", "?"))
+        return "test_mode"
     try:
         await message.delete()
     except discord.HTTPException as exc:
         log.warning("automod: could not delete %s: %s", getattr(message, "id", "?"), exc)
         return f"{type(exc).__name__}: {exc}"
     return None
+
+
+def contributing_messages(channel: Any, message: Any, message_ids: tuple[int, ...]) -> list[Any]:
+    """Every message that put a token in the window, as something that can be deleted."""
+    partial = getattr(channel, "get_partial_message", None)
+    found: list[Any] = []
+    for message_id in message_ids or ():
+        if message is not None and message_id == getattr(message, "id", None):
+            found.append(message)
+        elif partial is not None:
+            found.append(partial(int(message_id)))
+    if not found and message is not None:
+        found.append(message)
+    return found
 
 
 async def do_timeout(bot: Any, member: Any, seconds: int, reason: str) -> str | None:
@@ -172,36 +219,47 @@ async def punish(
     timeout_s: int,
     reason: str,
     case_id: Any,
-    message: Any = None,
+    messages: list[Any] | None = None,
     actor: Any = None,
 ) -> tuple[list[str], list[str]]:
     """Carry out one verdict's actions; returns what was done and what was refused."""
     done: list[str] = []
     refused: list[str] = []
     details = {"case_id": case_id, "why": reason}
-    if "delete" in actions and message is not None:
-        failure = await do_delete(message)
-        if failure is None:
-            done.append("delete")
-            await log_action(
-                bot, guild, "automod.deleted", actor=actor, target=member, details=details
-            )
-        else:
-            refused.append("delete")
-            await log_action(
-                bot,
-                guild,
-                "automod.delete_failed",
-                actor=actor,
-                target=member,
-                details=details | {"reason": failure},
-            )
+    if "delete" in actions and messages:
+        for one in messages:
+            failure = await do_delete(bot, one)
+            where = details | {"message_id": getattr(one, "id", None)}
+            if failure is None:
+                if "delete" not in done:
+                    done.append("delete")
+                await log_action(
+                    bot, guild, "automod.deleted", actor=actor, target=member, details=where
+                )
+            elif failure == "test_mode":
+                if "test_mode" not in refused:
+                    refused.append("test_mode")
+                await log_action(
+                    bot,
+                    guild,
+                    "automod.would_delete",
+                    actor=actor,
+                    target=member,
+                    details=where | {"reason": "test_mode"},
+                )
+            else:
+                if "delete" not in refused:
+                    refused.append("delete")
+                await log_action(
+                    bot,
+                    guild,
+                    "automod.delete_failed",
+                    actor=actor,
+                    target=member,
+                    details=where | {"reason": failure},
+                )
     if "warn" in actions:
         done.append("warn")
-        await dm_member(
-            member, dm_text(bot.store.get(guild.id, "mod_dm_on_action"), guild.name, "automod",
-                            reason)
-        )
         await log_action(
             bot, guild, "automod.warned", actor=actor, target=member, reason=reason, details=details
         )
@@ -240,10 +298,24 @@ async def punish(
                 reason=reason,
                 details=details | {"reason": failure},
             )
+    if "warn" in actions:
+        timed_out = "timeout" in done
+        await dm_member(
+            member,
+            dm_text(
+                bot.store.get(guild.id, "mod_dm_on_action"),
+                guild.name,
+                "automod_timeout" if timed_out else "automod",
+                reason,
+                duration_s=clamp_timeout(timeout_s) if timed_out else None,
+            ),
+        )
     return done, refused
 
 
-class ApplyNowButton(discord.ui.DynamicItem[discord.ui.Button], template=APPLY_TEMPLATE):
+class ApplyNowButton(
+    SafeDynamicItem, discord.ui.DynamicItem[discord.ui.Button], template=APPLY_TEMPLATE
+):
     def __init__(self, case_id: int) -> None:
         self.case_id = case_id
         super().__init__(
@@ -258,7 +330,7 @@ class ApplyNowButton(discord.ui.DynamicItem[discord.ui.Button], template=APPLY_T
     async def from_custom_id(cls, interaction: discord.Interaction, item: Any, match: re.Match):
         return cls(int(match["case_id"]))
 
-    async def callback(self, interaction: discord.Interaction) -> None:
+    async def on_click(self, interaction: discord.Interaction) -> None:
         bot = interaction.client
         if not await require_staff(interaction):
             return
@@ -266,7 +338,7 @@ class ApplyNowButton(discord.ui.DynamicItem[discord.ui.Button], template=APPLY_T
             await interaction.response.send_message(DB_UNAVAILABLE, ephemeral=True)
             return
         guild = interaction.guild
-        async with user_lock(bot, interaction.user.id):
+        async with case_lock(bot, self.case_id):
             case = await get_case(bot.db, self.case_id)
             if case is None:
                 await interaction.response.send_message(NO_SUCH_CASE, ephemeral=True)
@@ -283,7 +355,16 @@ class ApplyNowButton(discord.ui.DynamicItem[discord.ui.Button], template=APPLY_T
                     ephemeral=True,
                 )
                 return
-            actions: tuple[str, ...] = ("warn",) if not case["duration_s"] else ("warn", "timeout")
+            actions = tuple(from_list_json(row_value(case, "actions"))) or ("warn",)
+            if getattr(bot, "guard", None) is not None:
+                await self._would_have(bot, guild, case, actions, interaction)
+                return
+            await interaction.response.defer(ephemeral=True)
+            if not await claim_case(bot.db, self.case_id):
+                await interaction.followup.send(
+                    ALREADY_APPLIED_BY_SOMEBODY.format(case_id=self.case_id), ephemeral=True
+                )
+                return
             done, refused = await punish(
                 bot,
                 guild,
@@ -292,28 +373,71 @@ class ApplyNowButton(discord.ui.DynamicItem[discord.ui.Button], template=APPLY_T
                 timeout_s=int(case["duration_s"] or 0),
                 reason=str(case["reason"] or "automod"),
                 case_id=self.case_id,
+                messages=self._message_to_delete(bot, case, actions),
                 actor=interaction.user,
             )
-            if "test_mode" in refused:
-                await interaction.response.send_message(
-                    refusal_in_test_mode("time out"), ephemeral=True
-                )
+            await set_case_outcome(bot.db, self.case_id, done, refused)
+            if not done:
+                await interaction.followup.send(TIMEOUT_REFUSED, ephemeral=True)
                 return
-            if "timeout" in refused:
-                await interaction.response.send_message(TIMEOUT_REFUSED, ephemeral=True)
-                return
-            await set_case_applied(bot.db, self.case_id, True)
-            await interaction.response.send_message(
+            await self._rewrite_card(bot, guild, case, done, refused, interaction.user)
+            await interaction.followup.send(
                 f"Applied case **#{self.case_id}** — {', '.join(done)}.",
                 ephemeral=True,
                 allowed_mentions=discord.AllowedMentions.none(),
             )
+
+    def _message_to_delete(self, bot: Any, case: Any, actions: tuple[str, ...]) -> list[Any]:
+        message_id = row_value(case, "message_id")
+        channel_id = row_value(case, "channel_id")
+        if "delete" not in actions or not message_id or not channel_id:
+            return []
+        channel = bot.get_channel(channel_id)
+        return contributing_messages(channel, None, (int(message_id),))
+
+    async def _would_have(
+        self,
+        bot: Any,
+        guild: Any,
+        case: Any,
+        actions: tuple[str, ...],
+        interaction: discord.Interaction,
+    ) -> None:
+        for action in actions:
+            await log_action(
+                bot,
+                guild,
+                f"automod.would_{action}",
+                actor=interaction.user,
+                target=case["user_id"],
+                reason=str(case["reason"] or "automod"),
+                details={"case_id": self.case_id, "reason": "test_mode"},
+            )
+        await interaction.response.send_message(refusal_in_test_mode("time out"), ephemeral=True)
+
+    async def _rewrite_card(
+        self, bot: Any, guild: Any, case: Any, done: list[str], refused: list[str], moderator: Any
+    ) -> None:
+        embed = case_embed(
+            case_id=self.case_id,
+            kind="automod",
+            user_id=case["user_id"],
+            reason=case["reason"],
+            duration_s=case["duration_s"],
+            applied=True,
+            mode=case["mode"],
+            done=done,
+            failed=refused,
+        )
+        applied_by(embed, getattr(moderator, "id", moderator))
+        await edit_case_card(bot, guild, case, embed)
 
 
 class AutoMod(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self.state = WindowState()
+        self._staff: dict[int, tuple[float, set[int]]] = {}
 
     automod = app_commands.Group(
         name="automod", description="The rules that watch what people post"
@@ -352,7 +476,7 @@ class AutoMod(commands.Cog):
             return
         if exempt_reason(
             message.author,
-            store.staff_role_ids(guild),
+            self._staff_role_ids(guild),
             set(store.get(guild.id, "automod_exempt_role_ids") or []),
         ):
             return
@@ -362,6 +486,22 @@ class AutoMod(commands.Cog):
         async with user_lock(self.bot, message.author.id):
             for verdict in verdicts:
                 await self._answer_for(message, mode, verdict)
+
+    @commands.Cog.listener()
+    async def on_message_edit(self, before: discord.Message, after: discord.Message) -> None:
+        if str(getattr(before, "content", "") or "") == str(getattr(after, "content", "") or ""):
+            return
+        await self.on_message(after)
+
+    def _staff_role_ids(self, guild: Any) -> set[int]:
+        """Resolving staff walks every role's permissions; a message event cannot afford that."""
+        cached = self._staff.get(guild.id)
+        now = time.monotonic()
+        if cached is not None and now - cached[0] < STAFF_CACHE_SECONDS:
+            return cached[1]
+        ids = self.bot.store.staff_role_ids(guild)
+        self._staff[guild.id] = (now, ids)
+        return ids
 
     def _may_read(self, channel: Any) -> bool:
         """While the guard is on the engine only ever sees the test channel."""
@@ -373,7 +513,16 @@ class AutoMod(commands.Cog):
     async def _answer_for(self, message: discord.Message, mode: str, verdict: Verdict) -> None:
         guild = message.guild
         author = message.author
-        armed = mode == "on" and bool(verdict.actions)
+        if not verdict.actions:
+            await log_action(
+                self.bot,
+                guild,
+                "automod.observed",
+                target=author,
+                reason=verdict.sentence,
+                details=verdict_details(verdict, None),
+            )
+            return
         timeout_s = verdict.timeout_s if "timeout" in verdict.actions else None
         case_id = await add_case(
             self.bot.db,
@@ -384,10 +533,14 @@ class AutoMod(commands.Cog):
             duration_s=timeout_s,
             mode=mode,
             applied=False,
+            actions=list(verdict.actions),
+            message_id=message.id,
+            channel_id=getattr(message.channel, "id", None),
         )
         details = verdict_details(verdict, case_id)
-        applied = False
-        if armed:
+        done: list[str] = []
+        refused: list[str] = []
+        if mode == "on" and getattr(self.bot, "guard", None) is None:
             done, refused = await punish(
                 self.bot,
                 guild,
@@ -396,12 +549,10 @@ class AutoMod(commands.Cog):
                 timeout_s=verdict.timeout_s,
                 reason=verdict.sentence,
                 case_id=case_id,
-                message=message,
+                messages=contributing_messages(message.channel, message, verdict.message_ids),
             )
-            applied = bool(done) and not refused
-            if applied:
-                await set_case_applied(self.bot.db, case_id, True)
-        elif verdict.actions:
+            await set_case_outcome(self.bot.db, case_id, done, refused)
+        else:
             for action in verdict.actions:
                 await log_action(
                     self.bot,
@@ -411,16 +562,7 @@ class AutoMod(commands.Cog):
                     reason=verdict.sentence,
                     details=details,
                 )
-        else:
-            await log_action(
-                self.bot,
-                guild,
-                "automod.detected",
-                target=author,
-                reason=verdict.sentence,
-                details=details,
-            )
-        await self._post_case(guild, author, verdict, case_id, mode, applied=applied)
+        await self._post_case(guild, author, verdict, case_id, mode, done=done, refused=refused)
 
     async def _post_case(
         self,
@@ -430,7 +572,8 @@ class AutoMod(commands.Cog):
         case_id: Any,
         mode: str,
         *,
-        applied: bool,
+        done: list[str],
+        refused: list[str],
     ) -> None:
         embed = case_embed(
             case_id=case_id,
@@ -438,12 +581,14 @@ class AutoMod(commands.Cog):
             user_id=author.id,
             reason=verdict.sentence,
             duration_s=verdict.timeout_s if "timeout" in verdict.actions else None,
-            applied=applied,
-            mode=mode,
+            applied=bool(done),
+            mode="test mode" if getattr(self.bot, "guard", None) is not None else mode,
             detail=f"{verdict.rule} — {', '.join(verdict.actions) or 'log only'}",
+            done=done,
+            failed=[item for item in refused if item != "test_mode"],
         )
         view = None
-        if not applied and verdict.actions and case_id is not None:
+        if not done and case_id is not None:
             view = discord.ui.View(timeout=None)
             view.add_item(ApplyNowButton(case_id))
         message_id = await send_modlog(self.bot, guild, embed, view)
@@ -507,9 +652,18 @@ class AutoMod(commands.Cog):
     ) -> None:
         if not await require_staff(interaction):
             return
-        if mode.value == "on" and not self.bot.store.staff_roles(interaction.guild):
-            await interaction.response.send_message(NO_STAFF_ROLES, ephemeral=True)
-            return
+        if mode.value == "on":
+            store = self.bot.store
+            if store.get(interaction.guild.id, "staff_channel_id") == (
+                self.bot.settings.test_channel_id
+            ):
+                await interaction.response.send_message(
+                    STAFF_IS_THE_TEST_CHANNEL, ephemeral=True
+                )
+                return
+            if not store.staff_roles(interaction.guild):
+                await interaction.response.send_message(NO_STAFF_ROLES, ephemeral=True)
+                return
         await self.bot.store.set(
             interaction.guild.id, "automod_mode", mode.value, by=interaction.user.id
         )
@@ -673,6 +827,9 @@ class AutoMod(commands.Cog):
         guild = interaction.guild
         store = self.bot.store
         channel_id = store.get(guild.id, "carl_modlog_channel_id")
+        if channel_id and channel_id == store.get(guild.id, "modlog_channel_id"):
+            await interaction.response.send_message(PARITY_SAME_CHANNEL, ephemeral=True)
+            return
         channel = (
             (self.bot.get_channel(channel_id) or guild.get_channel(channel_id))
             if channel_id
@@ -684,8 +841,10 @@ class AutoMod(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         since = within_days(days, PARITY_MAX_DAYS)
         carl: list[tuple[int, Any]] = []
+        read = 0
         try:
             async for post in channel.history(limit=PARITY_HISTORY_LIMIT, after=since):
+                read += 1
                 user_id, when = parse_carl_entry(post)
                 if user_id is not None:
                     carl.append((user_id, when))
@@ -705,7 +864,7 @@ class AutoMod(commands.Cog):
                 allowed_mentions=discord.AllowedMentions.none(),
             )
             return
-        rows = await shadow_verdicts_since(self.bot.db, guild.id, since)
+        rows = await armed_verdicts_since(self.bot.db, guild.id, since)
         bloc = [(user_id, parse_ts(at)) for user_id, at in rows]
         report = parity_report(bloc, carl)
         lines = [
@@ -714,6 +873,8 @@ class AutoMod(commands.Cog):
             ),
             PARITY_VERDICT.format(**report),
         ]
+        if read >= PARITY_HISTORY_LIMIT:
+            lines.insert(1, PARITY_TRUNCATED.format(limit=PARITY_HISTORY_LIMIT))
         if getattr(self.bot, "guard", None) is not None:
             lines.append(PARITY_TEST_MODE)
         await interaction.followup.send(

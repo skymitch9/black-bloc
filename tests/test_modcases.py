@@ -5,10 +5,13 @@ import pytest
 from black_bloc.automod import TIMEOUT_MAX_SECONDS
 from black_bloc.modcases import (
     BAN_PURGE_MAX_DAYS,
+    LINE_REASON_LIMIT,
     add_case,
+    armed_verdicts_since,
     case_embed,
     case_line,
     cases_for,
+    claim_case,
     clamp_purge_days,
     clamp_timeout,
     count_cases,
@@ -17,11 +20,11 @@ from black_bloc.modcases import (
     dm_text,
     duration_error,
     get_case,
+    pages_under_limit,
     parse_duration,
     refusal_in_test_mode,
-    set_case_applied,
     set_case_log_message,
-    shadow_verdicts_since,
+    set_case_outcome,
     warn_count,
     within_days,
 )
@@ -138,19 +141,49 @@ async def test_cases_round_trip_and_count(db):
     assert [r["id"] for r in await cases_for(db, GUILD, USER, 10)] == [second, first]
     assert await warn_count(db, GUILD, USER) == 1
 
-    await set_case_applied(db, second, True)
+    await set_case_outcome(db, second, ["warn", "timeout"], [])
     assert await warn_count(db, GUILD, USER) == 2
+    assert (await get_case(db, second))["applied"] == 1
     assert await count_cases(db, GUILD, USER + 1) == 0
 
 
-async def test_shadow_verdicts_are_readable_for_parity(db):
-    await add_case(db, GUILD, USER, "automod", mode="shadow", applied=False)
+async def test_only_one_click_ever_applies_a_case(db):
+    case_id = await add_case(db, GUILD, USER, "automod", mode="shadow", applied=False)
+
+    assert await claim_case(db, case_id) is True
+    assert await claim_case(db, case_id) is False
+    assert (await get_case(db, case_id))["applied"] == 1
+
+    await set_case_outcome(db, case_id, [], ["timeout"])
+
+    assert (await get_case(db, case_id))["applied"] == 0
+    assert await claim_case(db, case_id) is True
+
+
+async def test_parity_only_counts_verdicts_of_armed_rules(db):
+    await add_case(
+        db, GUILD, USER, "automod", mode="shadow", applied=False, actions=["warn", "timeout"]
+    )
+    await add_case(db, GUILD, USER, "automod", mode="shadow", applied=False, actions=[])
     await add_case(db, GUILD, USER, "warn", moderator_id=MOD)
 
-    found = await shadow_verdicts_since(db, GUILD, datetime(2020, 1, 1, tzinfo=UTC))
+    found = await armed_verdicts_since(db, GUILD, datetime(2020, 1, 1, tzinfo=UTC))
 
     assert [user_id for user_id, _ in found] == [USER]
-    assert await shadow_verdicts_since(db, GUILD, datetime(2999, 1, 1, tzinfo=UTC)) == []
+    assert await armed_verdicts_since(db, GUILD, datetime(2999, 1, 1, tzinfo=UTC)) == []
+
+
+async def test_a_case_can_belong_to_a_channel_rather_than_a_member(db):
+    case_id = await add_case(db, GUILD, None, "purge", moderator_id=MOD, channel_id=555)
+
+    row = await get_case(db, case_id)
+
+    assert row["user_id"] is None and row["channel_id"] == 555
+    assert await cases_for(db, GUILD, USER, 10) == []
+    assert await count_cases(db, GUILD, USER) == 0
+    assert case_embed(case_id=case_id, kind="purge", user_id=None, channel_id=555).fields[
+        0
+    ].value == "<#555>"
 
 
 async def test_a_case_line_names_the_case_the_kind_and_whether_it_happened(db):
@@ -162,6 +195,47 @@ async def test_a_case_line_names_the_case_the_kind_and_whether_it_happened(db):
 
     assert f"#{case_id}" in line and "automod" in line and "(not done)" in line
     assert "5 mentions in 30s" in line
+
+
+async def test_a_long_reason_is_cut_and_a_long_list_is_split_into_messages(db):
+    case_id = await add_case(db, GUILD, USER, "warn", moderator_id=MOD, reason="x" * 400)
+
+    line = case_line(await get_case(db, case_id))
+
+    assert len(line) < 200 and line.endswith("…")
+
+    pages = pages_under_limit([f"**#{n}** `warn` " + "y" * 150 for n in range(40)])
+
+    assert len(pages) > 1
+    assert all(len(page) <= 1900 for page in pages)
+    assert pages_under_limit([]) == [""]
+    assert LINE_REASON_LIMIT == 120
+
+
+def test_the_card_says_what_actually_happened_when_only_half_of_it_did():
+    embed = case_embed(
+        case_id=9,
+        kind="automod",
+        user_id=USER,
+        reason="5 mentions in 30s",
+        applied=True,
+        done=["warn"],
+        failed=["timeout"],
+    )
+
+    names = [field.name for field in embed.fields]
+    assert "Done" in names and "Refused" in names and "Not done" not in names
+    assert embed.fields[names.index("Done")].value == "warn"
+    assert "timeout" in embed.fields[names.index("Refused")].value
+
+
+def test_the_automod_dm_says_it_was_a_timeout_and_for_how_long():
+    said = dm_text("server_action_reason", "Black Bloc", "automod_timeout", "spam", duration_s=300)
+
+    assert "timed out by the automatic filter" in said and "5m" in said
+    assert "warned by the automatic filter" in dm_text(
+        "server_action", "Black Bloc", "automod", "spam"
+    )
 
 
 def test_the_refusals_are_sentences_not_status_codes():

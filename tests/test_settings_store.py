@@ -1,8 +1,9 @@
 import pytest
 
-from black_bloc.automod import CARL_MODLOG_CHANNEL_ID, validate_rules
+from black_bloc.automod import validate_rules
 from black_bloc.config import load_settings
 from black_bloc.settings_store import (
+    CARL_MODLOG_CHANNEL_ID,
     EVENTS_RETENTION_DAYS,
     EVENTS_RETENTION_MAX_DAYS,
     GOLIVE_TEMPLATE,

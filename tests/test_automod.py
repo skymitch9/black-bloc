@@ -151,13 +151,41 @@ def test_five_mentions_in_thirty_seconds_fires_and_thirty_one_does_not():
     assert late == []
 
 
-def test_the_same_person_mentioned_five_times_is_one_mention():
+def test_every_mention_counts_even_the_same_person_five_times():
     state = WindowState()
     book = only("mention_spam")
     for index in range(5):
         at = START + timedelta(seconds=index)
         verdicts = evaluate(facts_from(mention_message([7], at, index)), state, book, now=at)
-    assert verdicts == []
+    assert [v.rule for v in verdicts] == ["mention_spam"]
+    assert verdicts[0].sentence == "5 mentions in 30s"
+
+
+def test_everyone_and_here_each_count_as_one_mention():
+    state = WindowState()
+    book = only("mention_spam")
+    message = FakeMessage(content="@everyone @here @everyone @here @everyone", at=START)
+
+    verdicts = evaluate(facts_from(message), state, book, now=START)
+
+    assert [v.rule for v in verdicts] == ["mention_spam"]
+    assert verdicts[0].sentence == "5 mentions in 30s"
+    assert facts_from(FakeMessage(content="mail me at me@everyone.test")).everyone_count == 1
+
+
+def test_a_verdict_fires_once_and_the_next_message_starts_the_window_again():
+    state = WindowState()
+    book = only("mention_spam")
+    for index in range(5):
+        at = START + timedelta(seconds=index)
+        evaluate(facts_from(mention_message([index], at, index)), state, book, now=at)
+
+    apology = FakeMessage(content="sorry", at=START + timedelta(seconds=6), message_id=99)
+    after = evaluate(facts_from(apology), state, book, now=START + timedelta(seconds=6))
+    assert after == []
+
+    one_more = mention_message([9], START + timedelta(seconds=7), 100)
+    assert evaluate(facts_from(one_more), state, book, now=START + timedelta(seconds=7)) == []
 
 
 def test_one_message_mentioning_five_people_fires():
