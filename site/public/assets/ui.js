@@ -643,6 +643,11 @@ async function control(spec, onChange) {
     });
     return { node: input, read: (n) => n.value };
   }
+  if (kind === 'longtext') {
+    const area = el('textarea', { class: 'input area', rows: '3' });
+    area.value = spec.value === null || spec.value === undefined ? '' : String(spec.value);
+    return { node: area, read: (n) => (n.value === '' ? null : n.value) };
+  }
   if (kind === 'json') {
     const area = el('textarea', { class: 'input area mono', rows: '6', spellcheck: 'false' });
     area.value = jsonText(spec.value);

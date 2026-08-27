@@ -4,6 +4,7 @@ from discord import app_commands
 
 from black_bloc.bot import COGS, BlackBlocBot
 from black_bloc.cogs.core import (
+    CHOICE_LIMIT,
     CLEARABLE_KEYS,
     VALUE_KEYS,
     Core,
@@ -174,7 +175,36 @@ def test_the_choices_cover_every_key_and_fit_discords_limit():
     assert "birthday_color" in VALUE_KEYS
     assert "bot_bio" in VALUE_KEYS and "status_prefix" in VALUE_KEYS
     assert len(CLEARABLE_KEYS) <= 25
-    assert len(VALUE_KEYS) <= 25
+
+
+async def test_set_value_takes_a_typed_key_because_the_registry_outgrew_25_choices(bot, cog):
+    """Discord caps a choice list at 25; VALUE_KEYS passed it, so the key autocompletes."""
+    interaction = FakeInteraction(bot, FakeMember(bot.guild, user_id=1, manage_guild=True))
+
+    await cog.settings_set_value.callback(cog, interaction, "golive_end_suffix", "(over)")
+
+    assert bot.store.get(GUILD, "golive_end_suffix") == "(over)"
+    assert "golive_end_suffix" in interaction.response.messages[0]["content"]
+
+
+async def test_set_value_refuses_a_key_it_does_not_have_in_words(bot, cog):
+    interaction = FakeInteraction(bot, FakeMember(bot.guild, user_id=1, manage_guild=True))
+
+    await cog.settings_set_value.callback(cog, interaction, "not_a_setting", "x")
+
+    said = interaction.response.messages[0]["content"]
+    assert "not_a_setting" in said and "nothing was changed" in said
+
+
+async def test_the_key_autocomplete_filters_and_stays_inside_discords_limit(bot, cog):
+    interaction = FakeInteraction(bot, FakeMember(bot.guild, user_id=1, manage_guild=True))
+
+    found = await cog.value_key_names(interaction, "golive")
+    everything = await cog.value_key_names(interaction, "")
+
+    assert [choice.value for choice in found] == [k for k in VALUE_KEYS if "golive" in k]
+    assert all(len(choice.name) <= 100 for choice in everything)
+    assert len(everything) <= CHOICE_LIMIT
 
 
 async def test_settings_show_is_split_into_messages_discord_will_take(bot, cog):

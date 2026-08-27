@@ -26,6 +26,11 @@ VALUE_KEYS = [
     key for key, kind in KEY_TYPES.items() if kind in ("enum", "int", "text", "bool", "color")
 ]
 CLEARABLE_KEYS = [key for key, kind in KEY_TYPES.items() if kind in ("channel", "role")]
+CHOICE_LIMIT = 25
+UNKNOWN_VALUE_KEY = (
+    "**{given}** is not a setting `/settings set-value` can change, so nothing was changed. "
+    "Start typing and pick one from the list it offers."
+)
 CLEARED = "**{key}** is no longer set, so Black Bloc is back to its own default for it."
 NOT_SET = "**{key}** was not set for this server, so nothing changed."
 STAFF_SUFFIX = " (staff)"
@@ -219,30 +224,41 @@ class Core(commands.Cog):
         name="set-value", description="Set a Black Bloc setting that is not a channel or a role"
     )
     @app_commands.describe(key="Which setting to change", value="The new value")
-    @app_commands.choices(key=[app_commands.Choice(name=name, value=name) for name in VALUE_KEYS])
     async def settings_set_value(
-        self, interaction: discord.Interaction, key: app_commands.Choice[str], value: str
+        self, interaction: discord.Interaction, key: str, value: str
     ) -> None:
         if not await require_staff(interaction):
             return
-        try:
-            parsed = parse_value(key.value, value)
-            await self.bot.store.set(
-                interaction.guild.id, key.value, parsed, by=interaction.user.id
+        if key not in VALUE_KEYS:
+            await interaction.response.send_message(
+                UNKNOWN_VALUE_KEY.format(given=key[:60]), ephemeral=True
             )
+            return
+        try:
+            parsed = parse_value(key, value)
+            await self.bot.store.set(interaction.guild.id, key, parsed, by=interaction.user.id)
         except SettingError as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
             return
-        await interaction.response.send_message(
-            f"**{key.value}** is now `{parsed}`.", ephemeral=True
-        )
+        await interaction.response.send_message(f"**{key}** is now `{parsed}`.", ephemeral=True)
         await log_action(
             self.bot,
             interaction.guild,
             "settings.set",
             actor=interaction.user,
-            details={"key": key.value, "value": parsed},
+            details={"key": key, "value": parsed},
         )
+
+    @settings_set_value.autocomplete("key")
+    async def value_key_names(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        lowered = (current or "").lower()
+        return [
+            app_commands.Choice(name=f"{name} — {KEY_HELP.get(name, '')}"[:100], value=name)
+            for name in VALUE_KEYS
+            if lowered in name
+        ][:CHOICE_LIMIT]
 
     @settings.command(name="clear", description="Unset one channel or role setting")
     @app_commands.describe(key="Which setting to unset")

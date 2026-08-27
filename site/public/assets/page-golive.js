@@ -1,4 +1,4 @@
-import { api, listOf, names, settings, settingsNamespace } from './api.js';
+import { api, listOf, names, refRoles, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
 import {
   ask,
@@ -12,25 +12,118 @@ import {
   notice,
   run,
   section,
+  settingsEditor,
   table,
   when,
 } from './ui.js';
 
 let refresh = () => {};
 
+const TEMPLATE_KEY = 'golive_template';
+const PING_KEY = 'golive_ping_role_id';
+const GAME_FALLBACK = 'something';
+const DEFAULT_TEMPLATE = 'the default wording';
+
 const SAMPLE = {
-  '{name}': 'Casey',
-  '{game}': 'Lethal Company',
-  '{title}': 'late night runs',
-  '{url}': 'https://twitch.tv/caseyfast',
+  name: 'Casey',
+  game: 'Lethal Company',
+  title: 'late night runs',
+  url: 'https://twitch.tv/caseyfast',
+  platform: 'Twitch',
 };
 
-function previewCard(template) {
-  const filled = Object.entries(SAMPLE).reduce((text, [token, value]) => text.split(token).join(value), String(template || ''));
+const TOKEN = /\{\{|\}\}|\{([^{}]*)\}/g;
+
+/**
+ * The same answer `black_bloc/golive.py:render` gives: known tokens are
+ * filled in, an unknown one survives literally, and a template Python's
+ * format_map could not read at all comes back null so the caller can say the
+ * default would be posted instead of pretending this wording works.
+ */
+function fill(template, values) {
+  const text = String(template === null || template === undefined ? '' : template);
+  if (/[{}]/.test(text.replace(TOKEN, ''))) return null;
+  return text.replace(TOKEN, (whole, token) => {
+    if (whole === '{{') return '{';
+    if (whole === '}}') return '}';
+    return token in values ? values[token] : whole;
+  });
+}
+
+async function pingPrefix(specs) {
+  const spec = specs.find((one) => one.key === PING_KEY);
+  if (!spec || !spec.value) return '';
+  try {
+    const role = (await refRoles()).find((one) => String(one.id) === String(spec.value));
+    return role ? `@${role.name} ` : `@${spec.value} `;
+  } catch (e) {
+    return `@${spec.value} `;
+  }
+}
+
+function wordingCard(row, prefix, endSuffix) {
+  const say = notice();
+  const shown = el('p', { class: 'preview' });
+  const ended = el('p', { class: 'preview' });
+  const playing = el('input', { class: 'input switch', type: 'checkbox', checked: true });
+  const values = () => ({ ...SAMPLE, game: playing.checked ? SAMPLE.game : GAME_FALLBACK });
+
+  const paint = () => {
+    const found = row.read();
+    const filled = found.ok ? fill(found.value, values()) : null;
+    if (filled === null) {
+      shown.textContent = `Black Bloc cannot read this wording, so it would post ${DEFAULT_TEMPLATE} instead.`;
+      ended.textContent = '';
+      say.say('Every { needs a matching }. Empty the box to put the wording back to its default.', 'warn');
+      return;
+    }
+    shown.textContent = `${prefix}${filled}`;
+    ended.textContent = `${prefix}${filled}${endSuffix}`;
+    say.say('');
+  };
+
+  const control = row.node.querySelector('.setrow-control');
+  if (control) {
+    control.addEventListener('input', paint);
+    control.addEventListener('change', paint);
+  }
+  playing.addEventListener('change', paint);
+  paint();
+
   return card('What an announcement looks like', [
-    el('p', { class: 'field-help', text: 'Filled in with a made-up stream, so nothing here is posted anywhere.' }),
-    el('p', { class: 'preview', text: filled || 'golive_template is not set, so nothing would be posted.' }),
+    el('div', { class: 'formrow' }, [
+      el('div', { class: 'field' }, [
+        el('label', { class: 'field-label', text: 'Playing a game' }),
+        playing,
+        el('p', { class: 'field-help', text: `Off shows what an empty game reads as: “${GAME_FALLBACK}”.` }),
+      ]),
+    ]),
+    shown,
+    el('p', { class: 'field-help', text: 'And once the stream has ended:' }),
+    ended,
+    say,
   ]);
+}
+
+async function wordingSection(specs) {
+  const wording = section('Announcement wording');
+  const spec = specs.find((one) => one.key === TEMPLATE_KEY);
+  if (!spec) {
+    wording.body.append(el('p', {
+      class: 'say-nothing',
+      text: 'The bot did not report a golive_template key, so this editor is not shown rather than guessed at.',
+    }));
+    return wording.node;
+  }
+  const editor = await settingsEditor([{ ...spec, type: 'longtext' }]);
+  const prefix = await pingPrefix(specs);
+  const suffix = specs.find((one) => one.key === 'golive_end_suffix');
+  wording.body.append(
+    editor.rows[0].node,
+    wordingCard(editor.rows[0], prefix, suffix ? String(suffix.value || '') : ''),
+    editor.bar,
+  );
+  return wording.node;
 }
 
 async function load() {
@@ -90,16 +183,14 @@ async function load() {
   const three = section('Recent streams', null, { count: sessions.length });
   three.body.append(sessionTable);
 
-  const template = settingsNamespace(allSettings, 'golive').find((spec) => spec.key === 'golive_template');
-  const four = section('Announcement wording');
-  four.body.append(previewCard(template ? template.value : null));
+  const golive = settingsNamespace(allSettings, 'golive');
 
   document.getElementById('dash').replaceChildren(
     one.node,
     two.node,
     three.node,
-    four.node,
-    await namespaceSettings('golive', { onSaved: () => refresh() }),
+    await wordingSection(golive),
+    await namespaceSettings('golive', { onSaved: () => refresh(), omit: [TEMPLATE_KEY] }),
   );
 }
 
