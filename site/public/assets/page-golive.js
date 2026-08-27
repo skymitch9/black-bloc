@@ -10,6 +10,7 @@ import {
   field,
   idsIn,
   memberPicker,
+  modeSwitch,
   nameNode,
   namespaceSettings,
   notice,
@@ -26,8 +27,18 @@ let refresh = () => {};
 
 const TEMPLATE_KEY = 'golive_template';
 const PING_KEY = 'golive_ping_role_id';
+const END_MODE_KEY = 'golive_end_mode';
+const END_SUFFIX_KEY = 'golive_end_suffix';
+const END_EDIT = 'edit';
 const GAME_FALLBACK = 'something';
 const DEFAULT_TEMPLATE = 'the default wording';
+
+const END_LEAD = 'And once the stream has ended:';
+const END_LEFT = 'Announcements are left as posted when a stream ends — turn golive_end_mode to '
+  + 'edit to mark them.';
+const END_UNKNOWN = 'The bot did not report a golive_end_mode key, so what happens once a stream '
+  + 'ends is not shown rather than guessed at.';
+const END_HELP = 'edit adds the wording below to the announcement; off leaves it as posted.';
 
 const SAMPLE = {
   name: 'Casey',
@@ -95,10 +106,21 @@ function optoutCard(say) {
   return card('Opt somebody out', [picker.node, bar([go])]);
 }
 
-async function wordingCard(spec, prefix, endSuffix) {
+async function wordingCard(spec, prefix, endSpec, endSuffix) {
   const shown = el('p', { class: 'preview' });
   const ended = el('p', { class: 'preview' });
+  const lead = el('p', { class: 'field-help', text: END_LEAD });
+  const otherwise = el('p', { class: 'field-help', text: endSpec ? END_LEFT : END_UNKNOWN });
   const playing = el('input', { class: 'input switch', type: 'checkbox', checked: true });
+
+  let endMode = endSpec ? String(endSpec.value ?? '') : null;
+  const showEnd = () => {
+    const editing = endMode === END_EDIT;
+    lead.hidden = !editing;
+    ended.hidden = !editing;
+    otherwise.hidden = editing;
+  };
+
   const made = await templateEditor(spec, {
     controls: [playing],
     sample: () => ({ ...SAMPLE, game: playing.checked ? SAMPLE.game : GAME_FALLBACK }),
@@ -110,13 +132,25 @@ async function wordingCard(spec, prefix, endSuffix) {
     },
   });
 
+  const end = endSpec === null ? null : modeSwitch(endSpec, {
+    label: 'The stream-end wording',
+    onSaved: (key, value) => {
+      endMode = String(value);
+      showEnd();
+    },
+  });
+  showEnd();
+
   const preview = card('What an announcement looks like', [
     el('div', { class: 'formrow' }, [
       field('Playing a game', playing, `Off shows what an empty game reads as: “${GAME_FALLBACK}”.`),
+      end ? field('When a stream ends', end.node, END_HELP) : null,
     ]),
     shown,
-    el('p', { class: 'field-help', text: 'And once the stream has ended:' }),
+    lead,
     ended,
+    otherwise,
+    end ? end.say : null,
     made.say,
   ]);
   return [made.row.node, preview, made.editor.bar];
@@ -133,8 +167,11 @@ async function wordingSection(specs) {
     return wording.node;
   }
   const prefix = await pingPrefix(specs);
-  const suffix = specs.find((one) => one.key === 'golive_end_suffix');
-  wording.body.append(...await wordingCard(spec, prefix, suffix ? String(suffix.value || '') : ''));
+  const suffix = specs.find((one) => one.key === END_SUFFIX_KEY);
+  const endSpec = specs.find((one) => one.key === END_MODE_KEY) || null;
+  wording.body.append(
+    ...await wordingCard(spec, prefix, endSpec, suffix ? String(suffix.value || '') : ''),
+  );
   return wording.node;
 }
 
@@ -220,7 +257,7 @@ async function load() {
     two.node,
     three.node,
     await wordingSection(golive),
-    await namespaceSettings('golive', { onSaved: () => refresh(), omit: [TEMPLATE_KEY] }),
+    await namespaceSettings('golive', { onSaved: () => refresh(), omit: [TEMPLATE_KEY, END_MODE_KEY] }),
   );
 }
 

@@ -166,7 +166,8 @@ const SETTING_SPECS = [
   ['golive_mode', 'enum', 'shadow', 'off', 'off, shadow (log only) or on (post go-live announcements)', ['off', 'shadow', 'on']],
   ['golive_channel_id', 'channel', '800000000000000006', null, 'where go-live announcements are posted'],
   ['golive_template', 'text', '{name} is live playing {game} — {title} {url}', '{name} is live: {url}', 'the announcement wording; {name} {game} {title} {url} {platform}'],
-  ['golive_end_suffix', 'text', ' — stream ended', ' — stream ended', 'what is added to an announcement once the stream has ended'],
+  ['golive_end_mode', 'enum', 'off', 'off', 'what happens to the announcement when the stream ends: off leaves it as posted, edit appends the ended wording and marks the card', ['off', 'edit']],
+  ['golive_end_suffix', 'text', ' — stream ended', ' — stream ended', 'what is added to an announcement once the stream has ended; only used when golive_end_mode is edit'],
   ['golive_live_role_id', 'role', '900000000000000003', null, 'role given while someone is streaming'],
   ['golive_require_role_id', 'role', null, null, 'only announce people who have this role'],
   ['golive_ignore_role_id', 'role', null, null, 'never announce people who have this role'],
@@ -412,6 +413,7 @@ function seedActions() {
 let state = seedState();
 
 const CORE_KEYS = ['log_channel_id', 'staff_channel_id', 'role_menu_channel_id'];
+const NOT_A_FEATURE = ['golive_end_mode'];
 const NAMESPACE_OVERRIDE = {
   modlog_channel_id: 'automod',
   mod_dm_on_action: 'automod',
@@ -528,7 +530,7 @@ function meBody(session) {
 function statusBody() {
   const features = SETTING_SPECS
     .map(([key]) => key)
-    .filter((key) => key.endsWith('_mode'))
+    .filter((key) => key.endsWith('_mode') && !NOT_A_FEATURE.includes(key))
     .map((key) => ({ key, feature: key.slice(0, -'_mode'.length), mode: state.settings.get(key) ?? null }));
   return {
     bot: {
