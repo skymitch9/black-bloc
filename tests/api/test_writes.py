@@ -4,12 +4,14 @@ import pytest
 
 from black_bloc.api.auth import Refused
 from black_bloc.api.writes import (
+    READ_RATE,
     WRITE_RATE,
     WebActor,
     actor_for,
     bucket_for,
     guard_of,
     note,
+    read_bucket_for,
     refuse_guarded,
     require_cog,
     require_db,
@@ -90,3 +92,49 @@ async def test_note_writes_one_web_line_with_the_session_as_the_actor(web, wf):
     row = await cur.fetchone()
     assert (row["kind"], row["actor_id"], row["target_id"]) == ("web.settings.set", 7, 9)
     assert await wf.kinds_in(web.db) == ["web.settings.set"]
+
+
+def test_reads_and_writes_have_separate_buckets(web):
+    assert read_bucket_for(web) is read_bucket_for(web)
+    assert read_bucket_for(web) is not bucket_for(web)
+    assert read_bucket_for(web).limit == READ_RATE
+
+
+def drain_reads(web, uid: str = "7") -> None:
+    """The bucket refills as the clock runs, so 300 real requests never quite empty it."""
+    bucket = read_bucket_for(web)
+    for _ in range(READ_RATE):
+        bucket.take(uid)
+
+
+@pytest.mark.parametrize(
+    "route", ["/api/ref/roles", "/api/ref/channels", "/api/actions", "/api/mod/cases"]
+)
+def test_a_read_flood_is_a_sentence_not_a_bare_429(client, sign_in, web, route):
+    """One bucket per session across all four, so a loop on any of them is bounded."""
+    sign_in(client)
+    assert client.get(route).status_code == 200
+    drain_reads(web)
+
+    refused = client.get(route)
+
+    assert refused.status_code == 429
+    assert refused.json()["error"] == "slow_down"
+    assert "wait a minute" in refused.json()["message"]
+
+
+def test_the_read_limit_does_not_spend_the_write_allowance(client, sign_in, web):
+    sign_in(client)
+    drain_reads(web)
+
+    assert client.get("/api/ref/roles").status_code == 429
+    assert client.post("/api/rolemenus", json={"name": "c", "title": "C"}).status_code == 200
+
+
+def test_another_session_is_not_slowed_down_by_this_ones_reads(client, sign_in, web):
+    sign_in(client)
+    drain_reads(web)
+    assert client.get("/api/ref/roles").status_code == 429
+
+    sign_in(client, uid=8)
+    assert client.get("/api/ref/roles").status_code == 200

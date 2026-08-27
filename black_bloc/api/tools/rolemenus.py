@@ -8,7 +8,12 @@ from fastapi import APIRouter, Depends, Request
 from ...cogs.community.role_menus import (
     MODES,
     STAFF_MODE,
+    MenuLimitError,
     add_option,
+    check_description,
+    check_label,
+    check_option_count,
+    check_title,
     create_menu,
     delete_menu,
     get_menu,
@@ -67,6 +72,11 @@ NO_SUCH_CHANNEL = (
     "**{channel_id}** is not a channel Black Bloc can see, so nothing was posted. Pick one from "
     "the list and try again."
 )
+BAD_OPTION = (
+    "One of the roles on that menu arrived in a shape Black Bloc could not read, so nothing was "
+    "changed. It is a fault in the page rather than in what you picked — reload the role menus "
+    "page and try again."
+)
 
 
 def option_row(row: Any) -> dict[str, Any]:
@@ -108,6 +118,37 @@ def wanted_role(guild: Any, role_id: Any) -> Any:
     return role
 
 
+def within_limits(check: Any, value: Any) -> Any:
+    try:
+        return check(value)
+    except MenuLimitError as exc:
+        raise Refused(400, "too_long", str(exc)) from None
+
+
+def wanted_title(given: Any) -> str:
+    return within_limits(check_title, str(given or "").strip())
+
+
+def wanted_description(given: Any) -> str | None:
+    """None means 'leave it as it is'; the empty string is how a description is cleared."""
+    if given is None:
+        return None
+    return within_limits(check_description, str(given).strip())
+
+
+def wanted_option(guild: Any, item: Any) -> tuple[Any, str, Any]:
+    if not isinstance(item, dict):
+        raise Refused(400, "bad_option", BAD_OPTION)
+    role = wanted_role(guild, item.get("role_id"))
+    label = within_limits(check_label, str(item.get("label") or role.name))
+    return role, label, item.get("emoji")
+
+
+def wanted_options(guild: Any, items: Any) -> list[tuple[Any, str, Any]]:
+    within_limits(check_option_count, len(items))
+    return [wanted_option(guild, item) for item in items]
+
+
 async def read_menu(bot: Any, guild: Any, name: str) -> tuple[Any, list[Any]]:
     menu = await get_menu(bot.db, guild.id, name)
     if menu is None:
@@ -115,15 +156,11 @@ async def read_menu(bot: Any, guild: Any, name: str) -> tuple[Any, list[Any]]:
     return menu, await get_options(bot.db, menu["id"])
 
 
-async def sync_options(bot: Any, guild: Any, menu: Any, wanted: Any) -> None:
-    """The menu ends up holding exactly the options the page sent, in that order."""
-    kept: list[int] = []
-    for item in wanted:
-        role = wanted_role(guild, item.get("role_id"))
-        await add_option(
-            bot.db, menu["id"], role.id, str(item.get("label") or role.name), item.get("emoji")
-        )
-        kept.append(role.id)
+async def sync_options(bot: Any, menu: Any, wanted: list[tuple[Any, str, Any]]) -> None:
+    """The menu ends up holding exactly the options `wanted_options` passed, in that order."""
+    for role, label, emoji in wanted:
+        await add_option(bot.db, menu["id"], role.id, label, emoji)
+    kept = {role.id for role, _, _ in wanted}
     for row in await get_options(bot.db, menu["id"]):
         if row["role_id"] not in kept:
             await remove_option(bot.db, menu["id"], row["role_id"])
@@ -150,13 +187,12 @@ def build_router(bot: Any) -> APIRouter:
         guild = require_guild(bot)
         require_db(bot)
         name = str(payload.get("name") or "").strip()
-        title = str(payload.get("title") or "").strip()
+        title = wanted_title(payload.get("title"))
         if not name or not title:
             raise Refused(400, "bad_request", NEEDS_A_NAME)
         mode = checked_mode(payload.get("mode")) or "multiple"
-        menu_id = await create_menu(
-            bot.db, guild.id, name, title, payload.get("description") or None, mode
-        )
+        description = wanted_description(payload.get("description"))
+        menu_id = await create_menu(bot.db, guild.id, name, title, description or None, mode)
         if menu_id is None:
             raise Refused(400, "name_taken", NAME_TAKEN.format(name=name))
         await note(bot, guild, "web.rolemenu.create", who, details={"menu": name, "mode": mode})
@@ -172,16 +208,15 @@ def build_router(bot: Any) -> APIRouter:
         require_db(bot)
         menu, _ = await read_menu(bot, guild, name)
         mode = checked_mode(payload.get("mode"))
+        title = wanted_title(payload.get("title")) if payload.get("title") else None
+        description = wanted_description(payload.get("description"))
+        given = payload.get("options")
+        options = wanted_options(guild, given) if isinstance(given, list) else None
         await update_menu(
-            bot.db,
-            guild.id,
-            name,
-            title=str(payload["title"]).strip() if payload.get("title") else None,
-            description=payload.get("description"),
-            mode=mode,
+            bot.db, guild.id, name, title=title, description=description, mode=mode
         )
-        if isinstance(payload.get("options"), list):
-            await sync_options(bot, guild, menu, payload["options"])
+        if options is not None:
+            await sync_options(bot, menu, options)
         await note(bot, guild, "web.rolemenu.edit", who, details={"menu": name})
         fresh, options = await read_menu(bot, guild, name)
         return menu_row(fresh, options)

@@ -17,6 +17,11 @@ MODES = ("multiple", "single", "staff")
 STAFF_MODE = "staff"
 JOY_GAMING = "<:JoyGAMING:1337948924844965931>"
 
+TITLE_MAX = 256
+DESCRIPTION_MAX = 4096
+LABEL_MAX = 100
+OPTIONS_MAX = 25
+
 SEED: tuple[tuple[str, str, str, tuple[tuple[str, str, int], ...]], ...] = (
     (
         "pronouns",
@@ -122,6 +127,44 @@ SEED_EMOJI_NOTE = (
 )
 
 
+TOO_LONG = (
+    "That {what} is {given} characters and Discord will not show more than {limit}, so nothing "
+    "was changed. Shorten it and try again — Black Bloc will not cut down words you typed."
+)
+TOO_MANY_OPTIONS = (
+    "A role menu shows at most {limit} roles and that one would have {given}, so nothing was "
+    "changed. Split it into two menus."
+)
+
+
+class MenuLimitError(ValueError):
+    """A heading, line, label or option list is longer than Discord will show."""
+
+
+def check_length(what: str, value: str, limit: int) -> str:
+    if len(value) > limit:
+        raise MenuLimitError(TOO_LONG.format(what=what, given=len(value), limit=limit))
+    return value
+
+
+def check_title(value: Any) -> str:
+    return check_length("heading", str(value), TITLE_MAX)
+
+
+def check_description(value: Any) -> str:
+    return check_length("line under the heading", str(value), DESCRIPTION_MAX)
+
+
+def check_label(value: Any) -> str:
+    return check_length("option label", str(value), LABEL_MAX)
+
+
+def check_option_count(count: int) -> int:
+    if count > OPTIONS_MAX:
+        raise MenuLimitError(TOO_MANY_OPTIONS.format(limit=OPTIONS_MAX, given=count))
+    return count
+
+
 def custom_id(menu_id: int) -> str:
     return f"rolemenu:{menu_id}"
 
@@ -225,6 +268,9 @@ async def create_menu(
     """The menu's row id, or None when that name is already taken in this guild."""
     if mode not in MODES:
         raise ValueError(f"mode must be one of {MODES}")
+    check_title(title)
+    if description is not None:
+        check_description(description)
     if await get_menu(db, guild_id, name) is not None:
         return None
     cur = await db.conn.execute(
@@ -250,6 +296,10 @@ async def update_menu(
         return False
     if mode is not None and mode not in MODES:
         raise ValueError(f"mode must be one of {MODES}")
+    if title is not None:
+        check_title(title)
+    if description is not None:
+        check_description(description)
     await db.conn.execute(
         "UPDATE role_menus SET title = COALESCE(?, title), description = ?, "
         "mode = COALESCE(?, mode) WHERE id = ?",
@@ -284,6 +334,7 @@ async def get_options(db: Any, menu_id: int) -> list[Any]:
 async def add_option(
     db: Any, menu_id: int, role_id: int, label: str, emoji: str | None = None
 ) -> None:
+    check_label(label)
     cur = await db.conn.execute(
         "SELECT position FROM role_menu_options WHERE menu_id = ? AND role_id = ?",
         (menu_id, role_id),
@@ -293,7 +344,7 @@ async def add_option(
         cur = await db.conn.execute(
             "SELECT COUNT(*) AS n FROM role_menu_options WHERE menu_id = ?", (menu_id,)
         )
-        position = (await cur.fetchone())["n"]
+        position = check_option_count((await cur.fetchone())["n"] + 1) - 1
     else:
         position = existing["position"]
     await db.conn.execute(
@@ -549,9 +600,13 @@ class RoleMenus(commands.Cog):
         if not await require_staff(interaction):
             return
         chosen = mode.value if mode else "multiple"
-        menu_id = await create_menu(
-            self.bot.db, interaction.guild.id, name, title, description, chosen
-        )
+        try:
+            menu_id = await create_menu(
+                self.bot.db, interaction.guild.id, name, title, description, chosen
+            )
+        except MenuLimitError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            return
         if menu_id is None:
             await interaction.response.send_message(
                 f"This server already has a role menu called **{name}**, so nothing was "
@@ -595,7 +650,11 @@ class RoleMenus(commands.Cog):
                 ephemeral=True,
             )
             return
-        await add_option(self.bot.db, menu["id"], role.id, label or role.name, emoji)
+        try:
+            await add_option(self.bot.db, menu["id"], role.id, label or role.name, emoji)
+        except MenuLimitError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            return
         await interaction.response.send_message(
             f"Added **{label or role.name}** to **{name}**. Run `/rolemenu post {name}` to "
             "refresh the panel.",

@@ -15,9 +15,17 @@ WRITE_RATE = 60
 WRITE_WINDOW_SECONDS = 60
 BUCKET_ATTR = "_api_write_bucket"
 
+READ_RATE = 300
+READ_WINDOW_SECONDS = 60
+READ_BUCKET_ATTR = "_api_read_bucket"
+
 TOO_MANY_WRITES = (
     "That is more changes than Black Bloc will take in a minute, so this one was not made. "
     "Nothing is wrong with your account — wait a minute and try again."
+)
+TOO_MANY_READS = (
+    "That is more of this than Black Bloc will look up in a minute, so it was not loaded. "
+    "Nothing is wrong with your account — wait a minute and open the page again."
 )
 NO_GUILD = (
     "Black Bloc is not in a server it can change anything in yet, so nothing was done. That is a "
@@ -46,13 +54,21 @@ class WebActor:
         return self.display_name
 
 
+def _bucket(bot: Any, attr: str, rate: int, window: float) -> TokenBucket:
+    bucket = getattr(bot, attr, None)
+    if bucket is None:
+        bucket = TokenBucket(rate, window)
+        setattr(bot, attr, bucket)
+    return bucket
+
+
 def bucket_for(bot: Any) -> TokenBucket:
     """One bucket per bot, so the limit is per session and not per router."""
-    bucket = getattr(bot, BUCKET_ATTR, None)
-    if bucket is None:
-        bucket = TokenBucket(WRITE_RATE, WRITE_WINDOW_SECONDS)
-        setattr(bot, BUCKET_ATTR, bucket)
-    return bucket
+    return _bucket(bot, BUCKET_ATTR, WRITE_RATE, WRITE_WINDOW_SECONDS)
+
+
+def read_bucket_for(bot: Any) -> TokenBucket:
+    return _bucket(bot, READ_BUCKET_ATTR, READ_RATE, READ_WINDOW_SECONDS)
 
 
 def writer_dependency(bot: Any):
@@ -63,6 +79,19 @@ def writer_dependency(bot: Any):
         if not bucket_for(bot).take(str(who["id"])):
             log.warning("api: rate-limited writes from %s", who["id"])
             raise Refused(429, "slow_down", TOO_MANY_WRITES)
+        return who
+
+    return dependency
+
+
+def reader_dependency(bot: Any):
+    staff = staff_dependency(bot)
+
+    async def dependency(request: Request) -> dict[str, Any]:
+        who = await staff(request)
+        if not read_bucket_for(bot).take(str(who["id"])):
+            log.warning("api: rate-limited reads from %s", who["id"])
+            raise Refused(429, "slow_down", TOO_MANY_READS)
         return who
 
     return dependency
@@ -139,6 +168,8 @@ async def note(
 __all__ = [
     "FEATURE_OFF",
     "NO_GUILD",
+    "READ_RATE",
+    "TOO_MANY_READS",
     "TOO_MANY_WRITES",
     "WRITE_RATE",
     "WebActor",
@@ -146,6 +177,8 @@ __all__ = [
     "bucket_for",
     "guard_of",
     "note",
+    "read_bucket_for",
+    "reader_dependency",
     "refuse_guarded",
     "require_cog",
     "require_db",

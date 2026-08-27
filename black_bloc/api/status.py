@@ -205,6 +205,9 @@ async def recent_actions(
 
 
 def build_router(bot: Any) -> APIRouter:
+    from .writes import reader_dependency
+
+    reader = reader_dependency(bot)
     router = APIRouter(
         prefix="/api", tags=["status"], dependencies=[Depends(staff_dependency(bot))]
     )
@@ -243,7 +246,7 @@ def build_router(bot: Any) -> APIRouter:
             "checked_at": datetime.now(UTC).isoformat(),
         }
 
-    @router.get("/actions")
+    @router.get("/actions", dependencies=[Depends(reader)])
     async def actions(
         limit: int = ACTIONS_DEFAULT_LIMIT,
         details: int = 0,

@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
-from .auth import guild_of, staff_dependency
+from .auth import guild_of
 from .names import (
     MEMBER_SEARCH_LIMIT,
     channels,
@@ -14,13 +14,14 @@ from .names import (
     roles,
     search_members,
 )
+from .writes import reader_dependency
 
 log = logging.getLogger(__name__)
 
 
 def build_router(bot: Any) -> APIRouter:
     router = APIRouter(
-        prefix="/api/ref", tags=["ref"], dependencies=[Depends(staff_dependency(bot))]
+        prefix="/api/ref", tags=["ref"], dependencies=[Depends(reader_dependency(bot))]
     )
 
     @router.get("/channels")

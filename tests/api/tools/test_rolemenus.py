@@ -2,7 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from black_bloc.cogs.community.role_menus import get_menu, get_options
+from black_bloc.cogs.community.role_menus import (
+    DESCRIPTION_MAX,
+    LABEL_MAX,
+    OPTIONS_MAX,
+    TITLE_MAX,
+    get_menu,
+    get_options,
+)
 
 ROUTES = [
     ("GET", "/api/rolemenus", None),
@@ -225,3 +232,91 @@ async def test_the_default_channel_setting_is_used_when_none_is_given(client, si
     response = client.post("/api/rolemenus/colours/post", json={})
 
     assert response.json()["channel_id"] == str(wf.TEST_CHANNEL_ID)
+
+
+async def test_an_option_that_is_not_an_object_is_refused_before_anything_is_written(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    await a_menu(client, wf)
+
+    response = client.put(
+        "/api/rolemenus/colours",
+        json={"title": "Changed", "options": [str(wf.PLAIN_ROLE_ID)]},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "bad_option"
+    assert client.get("/api/rolemenus").json()[0]["title"] == "Pick a colour"
+
+
+async def test_a_description_that_is_not_text_is_coerced_before_any_write(client, sign_in, wf):
+    sign_in(client)
+    await a_menu(client, wf)
+
+    updated = client.put("/api/rolemenus/colours", json={"description": 7}).json()
+
+    assert updated["description"] == "7"
+
+
+async def test_a_bad_role_late_in_the_list_leaves_the_heading_alone(client, sign_in, wf):
+    """Checklist 12: the whole body is checked, then written — never half-written."""
+    sign_in(client)
+    await a_menu(client, wf)
+
+    response = client.put(
+        "/api/rolemenus/colours",
+        json={
+            "title": "Changed",
+            "options": [
+                {"role_id": str(wf.PLAIN_ROLE_ID), "label": "Member"},
+                {"role_id": "999999", "label": "Ghost"},
+            ],
+        },
+    )
+
+    assert response.status_code == 400
+    listed = client.get("/api/rolemenus").json()[0]
+    assert listed["title"] == "Pick a colour"
+    assert listed["options"] == []
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("title", "t" * (TITLE_MAX + 1)), ("description", "d" * (DESCRIPTION_MAX + 1))],
+)
+def test_a_heading_or_line_past_discords_limit_is_refused_with_the_reason(
+    client, sign_in, field, value
+):
+    sign_in(client)
+
+    response = client.post("/api/rolemenus", json={"name": "c", "title": "C", field: value})
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "too_long"
+    assert "will not show more than" in response.json()["message"]
+    assert client.get("/api/rolemenus").json() == []
+
+
+async def test_a_label_past_the_limit_and_a_twenty_sixth_option_are_refused(client, sign_in, wf):
+    sign_in(client)
+    await a_menu(client, wf)
+
+    long_label = client.put(
+        "/api/rolemenus/colours",
+        json={"options": [{"role_id": str(wf.PLAIN_ROLE_ID), "label": "l" * (LABEL_MAX + 1)}]},
+    )
+    too_many = client.put(
+        "/api/rolemenus/colours",
+        json={
+            "options": [
+                {"role_id": str(wf.PLAIN_ROLE_ID), "label": f"Member {n}"}
+                for n in range(OPTIONS_MAX + 1)
+            ]
+        },
+    )
+
+    assert long_label.status_code == 400 and long_label.json()["error"] == "too_long"
+    assert too_many.status_code == 400
+    assert "at most 25 roles" in too_many.json()["message"]
+    assert client.get("/api/rolemenus").json()[0]["options"] == []

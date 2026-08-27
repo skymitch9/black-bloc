@@ -45,6 +45,7 @@ from ..writes import (
     actor_for,
     guard_of,
     note,
+    reader_dependency,
     refuse_guarded,
     require_db,
     require_guild,
@@ -56,6 +57,7 @@ log = logging.getLogger(__name__)
 
 PARITY_DEFAULT_DAYS = 7
 REASON_LIMIT = 500
+PURGE_DAYS_MAX = 7
 
 WORDING = {
     "timeout": "time out",
@@ -81,6 +83,23 @@ APPLY_REFUSED = {
     "refused": (502, "discord_refused"),
 }
 NO_REASON = "no reason given"
+BAD_PURGE_DAYS = (
+    "**{given}** is not a number of days of messages to delete, so nobody was banned. It is a "
+    "whole number from 0 to 7 — Discord will not delete more than a week of a banned member's "
+    "messages."
+)
+
+
+def wanted_purge_days(given: Any) -> int:
+    if given is None or given == "":
+        return 0
+    try:
+        days = int(str(given).strip())
+    except (TypeError, ValueError):
+        days = None
+    if days is None or not 0 <= days <= PURGE_DAYS_MAX:
+        raise Refused(400, "bad_purge_days", BAD_PURGE_DAYS.format(given=str(given)[:40]))
+    return days
 
 
 def case_row(guild: Any, row: Any) -> dict[str, Any]:
@@ -115,6 +134,7 @@ def rule_row(rules: Any, name: str) -> dict[str, Any]:
 
 def build_router(bot: Any) -> APIRouter:
     writer = writer_dependency(bot)
+    reader = reader_dependency(bot)
     router = APIRouter(
         prefix="/api/mod", tags=["mod"], dependencies=[Depends(staff_dependency(bot))]
     )
@@ -133,12 +153,15 @@ def build_router(bot: Any) -> APIRouter:
         reason = str(payload.get("reason") or "").strip()[:REASON_LIMIT] or None
         actor = actor_for(bot, who, guild)
         seconds = None
+        purge_days = 0
         if kind == "timeout":
             seconds = parse_duration(payload.get("duration"))
             if seconds is None:
                 raise Refused(400, "bad_duration", duration_error(payload.get("duration")))
             if seconds > TIMEOUT_MAX_SECONDS:
                 raise Refused(400, "too_long", TIMEOUT_TOO_LONG)
+        if kind == "ban":
+            purge_days = wanted_purge_days(payload.get("purge_days"))
         if kind != "warn" and guard_of(bot) is not None:
             await _refuse_under_guard(guild, user_id, kind, actor, reason)
         member = guild.get_member(user_id)
@@ -153,9 +176,7 @@ def build_router(bot: Any) -> APIRouter:
         elif kind == "kick":
             said = await kick_member(bot, guild, member, actor, reason)
         elif kind == "ban":
-            said = await ban_member(
-                bot, guild, member, actor, reason, int(payload.get("purge_days") or 0)
-            )
+            said = await ban_member(bot, guild, member, actor, reason, purge_days)
         else:
             said = await unban_member(bot, guild, user_id, actor, reason)
             if said == NOT_BANNED.format(user_id=user_id):
@@ -165,7 +186,7 @@ def build_router(bot: Any) -> APIRouter:
         await note(bot, guild, f"web.mod.{kind}", who, target=user_id, reason=reason)
         return {"done": True, "kind": kind, "user_id": str(user_id), "message": said}
 
-    @router.get("/cases")
+    @router.get("/cases", dependencies=[Depends(reader)])
     async def mod_cases(user_id: str = "", page: int = 1) -> dict[str, Any]:
         guild = require_guild(bot)
         require_db(bot)

@@ -306,3 +306,32 @@ async def test_parity_counts_both_sides(client, sign_in, web, guild, wf):
     assert body["report"] == {"agree": 0, "carl_only": 0, "bloc_only": 0}
     assert body["truncated"] is False
     assert body["test_mode"] is False
+
+
+@pytest.mark.parametrize("given", ["seven", "3.5", "-1", "8", True, {"days": 1}])
+async def test_purge_days_nobody_can_read_is_a_sentence_and_nobody_is_banned(
+    client, sign_in, web, guild, wf, given
+):
+    """It was int(payload.get(...)) — a word there was a 500, and a 500 is a bare status."""
+    wf.member(guild, 21, name="spammer")
+    sign_in(client)
+
+    response = client.post("/api/mod/ban", json={"user_id": "21", "purge_days": given})
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "bad_purge_days"
+    assert "0 to 7" in response.json()["message"]
+    assert guild.bans == []
+    assert await wf.kinds_in(web.db) == []
+
+
+@pytest.mark.parametrize(("given", "seconds"), [(None, 0), ("", 0), (0, 0), ("7", 7 * 86400)])
+async def test_purge_days_takes_the_numbers_discord_takes(
+    client, sign_in, guild, wf, given, seconds
+):
+    wf.member(guild, 21, name="spammer")
+    sign_in(client)
+
+    body = {"user_id": "21"} if given is None else {"user_id": "21", "purge_days": given}
+    assert client.post("/api/mod/ban", json=body).status_code == 200
+    assert guild.bans[0][2] == seconds

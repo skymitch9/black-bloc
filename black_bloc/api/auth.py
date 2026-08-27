@@ -333,18 +333,13 @@ class TokenBucket:
 
     def take(self, key: str, *, now: float | None = None) -> bool:
         at = time.time() if now is None else now
-        tokens, stamp = self._seen.get(key, (float(self.limit), at))
+        tokens, stamp = self._seen.pop(key, (float(self.limit), at))
         tokens = min(float(self.limit), tokens + (at - stamp) * self.limit / self.window)
         allowed = tokens >= 1
         self._seen[key] = (tokens - 1 if allowed else tokens, at)
-        self._prune(at)
+        while len(self._seen) > BUCKET_MAX_KEYS:
+            del self._seen[next(iter(self._seen))]
         return allowed
-
-    def _prune(self, at: float) -> None:
-        if len(self._seen) <= BUCKET_MAX_KEYS:
-            return
-        for key in [k for k, (_, stamp) in self._seen.items() if stamp < at - self.window]:
-            del self._seen[key]
 
 
 def state_matches(given: str | None, expected: str | None) -> bool:

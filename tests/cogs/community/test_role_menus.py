@@ -2,10 +2,15 @@ import discord
 import pytest
 
 from black_bloc.cogs.community.role_menus import (
+    DESCRIPTION_MAX,
     JOY_GAMING,
+    LABEL_MAX,
     MODES,
     NO_MENUS_YET,
+    OPTIONS_MAX,
     SEED,
+    TITLE_MAX,
+    MenuLimitError,
     RoleMenus,
     RoleMenuView,
     StaffAssignSelect,
@@ -28,6 +33,7 @@ from black_bloc.cogs.community.role_menus import (
     select_emoji,
     set_message,
     summary,
+    update_menu,
 )
 from black_bloc.config import load_settings
 from black_bloc.settings_store import SettingsStore
@@ -503,9 +509,12 @@ async def test_showall_lists_every_menu_with_its_options_and_never_pings(bot, db
 
 
 async def test_showall_splits_a_long_list_over_several_messages(bot, db, lead):
-    menu_id = await create_menu(db, GUILD, "big", "Big")
-    for role_id in range(100):
-        await add_option(db, menu_id, role_id, f"role name number {role_id} " + "x" * 40)
+    """Four full menus rather than one over-full one — Discord shows 25 options at most."""
+    for menu in range(4):
+        menu_id = await create_menu(db, GUILD, f"big{menu}", "Big")
+        for option in range(OPTIONS_MAX):
+            role_id = menu * OPTIONS_MAX + option
+            await add_option(db, menu_id, role_id, f"role name number {role_id} " + "x" * 40)
     interaction = FakeInteraction(bot, lead)
 
     await RoleMenus.showall.callback(RoleMenus(bot), interaction)
@@ -531,3 +540,53 @@ def test_a_menu_heading_and_an_option_line_have_one_home_each():
     assert menu_heading(menu | {"message_id": 5}).endswith("(multiple, posted)")
     assert option_line({"emoji": None, "label": "Runner", "role_id": 10}) == "• Runner — <@&10>"
     assert option_line({"emoji": "❤️", "label": "He/Him", "role_id": 1}) == "❤️ He/Him — <@&1>"
+
+
+async def test_a_heading_or_a_line_over_discords_limit_is_refused_not_cut_down(db):
+    """The staffer's own words are never truncated behind their back (checklist 22)."""
+    with pytest.raises(MenuLimitError, match="256"):
+        await create_menu(db, GUILD, "long", "t" * (TITLE_MAX + 1))
+    with pytest.raises(MenuLimitError, match="4096"):
+        await create_menu(db, GUILD, "long", "Fine", "d" * (DESCRIPTION_MAX + 1))
+
+    assert await create_menu(db, GUILD, "long", "t" * TITLE_MAX) is not None
+    assert await get_menu(db, GUILD, "long") is not None
+
+
+async def test_an_update_over_the_limit_changes_nothing(db):
+    menu_id = await create_menu(db, GUILD, "colours", "Colours", "one each")
+
+    with pytest.raises(MenuLimitError):
+        await update_menu(db, GUILD, "colours", title="t" * (TITLE_MAX + 1))
+    with pytest.raises(MenuLimitError):
+        await update_menu(db, GUILD, "colours", description="d" * (DESCRIPTION_MAX + 1))
+
+    menu = await get_menu(db, GUILD, "colours")
+    assert (menu["id"], menu["title"], menu["description"]) == (menu_id, "Colours", "one each")
+
+
+async def test_a_label_over_the_limit_and_a_twenty_sixth_option_are_both_refused(db):
+    menu_id = await create_menu(db, GUILD, "colours", "Colours")
+
+    with pytest.raises(MenuLimitError, match="100"):
+        await add_option(db, menu_id, 1, "l" * (LABEL_MAX + 1))
+
+    for role_id in range(OPTIONS_MAX):
+        await add_option(db, menu_id, role_id, f"role {role_id}")
+    with pytest.raises(MenuLimitError, match="25"):
+        await add_option(db, menu_id, 999, "one too many")
+
+    assert len(await get_options(db, menu_id)) == OPTIONS_MAX
+
+
+async def test_a_full_menu_can_still_have_an_existing_option_relabelled(db):
+    """The count only bounds NEW rows; editing one of the 25 must not be refused."""
+    menu_id = await create_menu(db, GUILD, "colours", "Colours")
+    for role_id in range(OPTIONS_MAX):
+        await add_option(db, menu_id, role_id, f"role {role_id}")
+
+    await add_option(db, menu_id, 0, "renamed")
+
+    options = await get_options(db, menu_id)
+    assert len(options) == OPTIONS_MAX
+    assert options[0]["label"] == "renamed"

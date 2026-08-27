@@ -115,11 +115,16 @@ async function checkPages() {
 }
 
 async function post(path, body) {
-  return fetch(`${BASE}${path}`, {
-    method: 'POST',
-    headers: { cookie: 'mock_as=staff', 'content-type': 'application/json' },
-    body: JSON.stringify(body || {}),
-  });
+  return send('POST', path, body || {});
+}
+
+function send(method, path, body) {
+  const init = { method, headers: { cookie: 'mock_as=staff' } };
+  if (body !== undefined) {
+    init.headers['content-type'] = 'application/json';
+    init.body = JSON.stringify(body);
+  }
+  return fetch(`${BASE}${path}`, init);
 }
 
 async function seed() {
@@ -140,8 +145,46 @@ async function seed() {
   await post('/api/modmail/blocks', { user_id: IDS.member_id, reason: 'contract check' });
 }
 
+// The routes the REAL API refuses while test mode is on, and the two it does not. A reply
+// DMs the member and a warn only writes a case, so black_bloc's own guard never sees them.
+const GUARDED = [
+  ['POST', '/api/rolemenus/contract/post', { channel_id: '{test_channel_id}' }],
+  ['POST', '/api/tempvoice/setup', {}],
+  ['POST', '/api/honeypot/setup', {}],
+  ['POST', '/api/honeypot/hits/{hit_id}/ban', {}],
+  ['POST', '/api/mod/cases/{case_id}/apply', {}],
+  ['POST', '/api/modmail/tickets/{ticket_id}/close', {}],
+];
+const UNGUARDED = [
+  ['POST', '/api/modmail/tickets/{ticket_id}/reply', { text: 'hello' }],
+  ['POST', '/api/mod/warn', { user_id: '{member_id}', reason: 'contract check' }],
+];
+
+async function setGuard(on) {
+  await post('/api/mock/guard', { on });
+}
+
+async function checkGuard() {
+  await setGuard(true);
+  for (const [method, path, body] of GUARDED) {
+    await seed();
+    const response = await send(method, fill(path), body);
+    if (response.status !== 409) {
+      fail(`${method} ${fill(path)}`, `answered ${response.status}, not the guard's 409`);
+    }
+  }
+  for (const [method, path, body] of UNGUARDED) {
+    await seed();
+    const response = await send(method, fill(path), body);
+    if (response.status === 409) {
+      fail(`${method} ${fill(path)}`, 'refused with 409; the real API allows this in test mode');
+    }
+  }
+}
+
 async function checkRoutes() {
-  // MOCK_TEST_MODE=0 must be set on the server, or every destructive write 409s by design.
+  // The guard is off for this pass: every route has to answer so its shape can be read.
+  await setGuard(false);
   for (const spec of contract.routes) {
     await seed();
     const path = fill(spec.path);
@@ -191,8 +234,10 @@ async function checkActionKinds() {
 
 process.stdout.write(`check: ${BASE} against ${HERE}contract.json\n`);
 await checkPages();
+await checkGuard();
 await checkRoutes();
 await checkActionKinds();
+await setGuard(true);
 
 if (failures.length) {
   process.stdout.write(`check: ${failures.length} problem(s)\n`);

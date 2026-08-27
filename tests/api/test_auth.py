@@ -323,10 +323,23 @@ def test_the_bucket_refills_and_cannot_grow_without_bound():
     assert bucket.take("a", now=31)
     for n in range(BUCKET_MAX_KEYS + 500):
         bucket.take(str(n), now=10_000)
-    crowded = len(bucket._seen)
-    for n in range(20_000, 20_100):
-        bucket.take(str(n), now=20_000)
-    assert len(bucket._seen) < crowded
+    assert len(bucket._seen) == BUCKET_MAX_KEYS
+    assert "0" not in bucket._seen
+    assert str(BUCKET_MAX_KEYS + 499) in bucket._seen
+
+
+def test_a_flood_of_spoofed_keys_evicts_the_oldest_not_the_one_in_use():
+    """A header a caller can write must not be able to buy anybody a fresh allowance."""
+    bucket = TokenBucket(limit=1, window=60)
+    assert bucket.take("mine", now=0)
+    for n in range(BUCKET_MAX_KEYS - 1):
+        bucket.take(f"spoofed-{n}", now=0)
+    bucket.take("mine", now=0)
+    for n in range(BUCKET_MAX_KEYS):
+        bucket.take(f"more-{n}", now=0)
+
+    assert len(bucket._seen) == BUCKET_MAX_KEYS
+    assert "spoofed-0" not in bucket._seen
 
 
 def test_a_forged_forwarded_header_cannot_mint_a_new_bucket(bot):

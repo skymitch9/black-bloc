@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const PUBLIC = resolve(HERE, '..', 'public');
 const PORT = Number(process.env.MOCK_PORT || 8788);
-const TEST_MODE = process.env.MOCK_TEST_MODE !== '0';
+let testMode = process.env.MOCK_TEST_MODE !== '0';
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -351,7 +351,10 @@ function requireStaff(session) {
 }
 
 function guard(what) {
-  if (TEST_MODE) throw new Refused(409, 'test_mode', `${GUARD} (${what})`);
+  // Only where the REAL API refuses in test mode. A modmail reply and a warn are not on that
+  // list: black_bloc/api/tools/mod.py lets warn past the guard and tools/modmail.py's reply
+  // route never asks it, so refusing them here would teach the pages a rule the bot has not got.
+  if (testMode) throw new Refused(409, 'test_mode', `${GUARD} (${what})`);
 }
 
 function meBody(session) {
@@ -381,7 +384,7 @@ function statusBody() {
       uptime_seconds: 93720,
       started_at: minutesAgo(1562),
       version: '0.8.0-mock',
-      test_mode: TEST_MODE,
+      test_mode: testMode,
     },
     guild: { id: '600000000000000001', name: 'Black in a Flash!' },
     features,
@@ -485,6 +488,14 @@ route('POST', '/api/mock/reset', () => {
   // same fixture, the way each pytest case gets a fresh database.
   state = seedState();
   return { reset: true };
+});
+
+route('POST', '/api/mock/guard', async (context) => {
+  // NOT part of the contract either: check.mjs turns the guard off to read the shapes of the
+  // routes the guard refuses, then turns it back on. The default is still MOCK_TEST_MODE.
+  const body = await context.body();
+  testMode = body.on !== false;
+  return { test_mode: testMode };
 });
 
 route('GET', '/api/auth/me', (context) => meBody(context.session));
@@ -1046,11 +1057,11 @@ route('GET', '/api/mod/parity', (context) => {
     carl: report.agree + report.carl_only,
     report,
     truncated: false,
-    test_mode: TEST_MODE,
+    test_mode: testMode,
     notes: [
       `Last **${days}** days: Black Bloc would have acted **${report.agree + report.bloc_only}** times, Carl-bot **${report.agree + report.carl_only}**.`,
       `**${report.agree}** agreed · **${report.carl_only}** Carl only · **${report.bloc_only}** Black Bloc only.`,
-      ...(TEST_MODE ? ['Test mode is on, so Black Bloc has not actually acted on any of these.'] : []),
+      ...(testMode ? ['Test mode is on, so Black Bloc has not actually acted on any of these.'] : []),
     ],
   };
 });
@@ -1111,7 +1122,6 @@ route('POST', '/api/modmail/tickets/:id/reply', async (context) => {
   const body = await context.body();
   if (!String(body.text || '').trim()) throw new Refused(400, 'bad_value', 'An empty reply would tell them nothing.');
   if (ticket.status !== 'open') throw new Refused(409, 'closed', 'That ticket is closed, so the member would never see the reply.');
-  guard('replying to a modmail ticket');
   const message = {
     id: state.nextMessage++,
     at: now(),
@@ -1285,5 +1295,5 @@ const server = createServer(async (request, response) => {
 
 server.listen(PORT, () => {
   process.stdout.write(`mock: http://127.0.0.1:${PORT} serving ${PUBLIC}\n`);
-  process.stdout.write(`mock: TEST_MODE ${TEST_MODE ? 'on (destructive writes refuse with 409)' : 'off'}\n`);
+  process.stdout.write(`mock: TEST_MODE ${testMode ? 'on (destructive writes refuse with 409)' : 'off'}\n`);
 });
