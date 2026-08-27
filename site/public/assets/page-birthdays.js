@@ -2,18 +2,19 @@ import { api, listOf, names, notesOf, send, settings, settingsNamespace } from '
 import { start } from './app.js';
 import {
   ask,
-  badge,
   bar,
   button,
   card,
   el,
   field,
   idsIn,
+  keepSaying,
   memberPicker,
   nameNode,
   namespaceSettings,
   notice,
   run,
+  sayAgain,
   sayNothing,
   searchOver,
   section,
@@ -138,7 +139,22 @@ async function load() {
     { label: 'Day', cell: (row) => String(row.day), className: 'mono' },
     { label: 'Member', cell: (row) => nameNode(row.user_id, row.user_name) },
     { label: 'Year', cell: (row) => (row.year ? String(row.year) : null) },
-    { label: 'Wished', cell: (row) => (row.opted_in === false ? badge('opted out', 'warn') : badge('yes', 'ok')) },
+    {
+      label: 'Wished',
+      cell: (row) => button(row.opted_in === false ? 'opted out' : 'yes', async () => {
+        const done = await run(
+          say,
+          () => send(`/api/birthdays/${encodeURIComponent(row.user_id)}/optin`, 'POST', {
+            opted_in: row.opted_in === false,
+          }),
+          (found) => found?.message || 'Changed.',
+        );
+        if (done.ok) {
+          keepSaying('birthdays.months', say);
+          refresh();
+        }
+      }, { tone: row.opted_in === false ? 'warn' : 'quiet' }),
+    },
     { label: 'From', cell: (row) => row.source },
     {
       label: '',
@@ -150,7 +166,10 @@ async function load() {
         });
         if (!sure) return;
         const done = await run(say, () => api(`/api/birthdays/${encodeURIComponent(row.user_id)}`, { method: 'DELETE' }), 'Removed.');
-        if (done.ok) refresh();
+        if (done.ok) {
+          keepSaying('birthdays.months', say);
+          refresh();
+        }
       }, { tone: 'danger' }),
     },
     // One filter over all twelve months, not a box on each — a month with two
@@ -177,7 +196,7 @@ async function load() {
       box,
     );
   }
-  months.body.append(say);
+  months.body.append(sayAgain('birthdays.months', say));
 
   const add = section('Add or change one');
   add.body.append(setCard(), importCard());

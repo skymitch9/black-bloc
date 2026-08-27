@@ -987,3 +987,23 @@ export async function run(say, work, okText) {
     return { ok: false, found: null };
   }
 }
+
+const outcomes = new Map();
+
+/**
+ * A write that reloads the page would throw away the sentence saying what it
+ * did, because the reload replaces the notice it was written into. `keepSaying`
+ * parks it under a name and `sayAgain` puts it back on the notice the reload
+ * built, so the outcome survives its own refresh.
+ */
+export function keepSaying(where, say) {
+  outcomes.set(where, { text: say.textContent, tone: say.getAttribute('data-tone') || 'ok' });
+}
+
+export function sayAgain(where, say) {
+  const found = outcomes.get(where);
+  if (!found) return say;
+  outcomes.delete(where);
+  say.say(found.text, found.tone);
+  return say;
+}

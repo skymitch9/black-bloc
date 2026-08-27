@@ -873,9 +873,73 @@ route('DELETE', '/api/golive/links/:user_id', (context) => {
   return { unlinked: true, user_id: context.params.user_id };
 });
 
+route('POST', '/api/golive/links', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const userId = String(body.user_id || '');
+  const given = String(body.twitch_login || '');
+  const login = given.trim().toLowerCase().replace(/^.*twitch\.tv\//, '').split(/[?/]/)[0].replace(/^@/, '');
+  if (!userId) throw new Refused(400, 'bad_request', 'Pick the member this is about first.');
+  if (!login || login.length > 25 || !/^[a-z0-9_]+$/.test(login)) {
+    throw new Refused(400, 'bad_login', `**${given || 'nothing'}** is not a Twitch channel name Black Bloc can use, so nothing was linked. Give the name out of the channel's own address — letters, numbers and underscores, 25 at most.`);
+  }
+  const owner = state.golive.links.find((link) => link.twitch_login === login);
+  if (owner && owner.user_id !== userId) {
+    throw new Refused(409, 'link_taken', `**${login}** is already linked to another member here, so nothing was changed. A Twitch channel name can only belong to one member — if that channel is yours, ask a Lead to remove the other link first.`);
+  }
+  const row = { user_id: userId, twitch_login: login, twitch_user_id: null, linked_at: now() };
+  const at = state.golive.links.findIndex((link) => link.user_id === userId);
+  if (at >= 0) state.golive.links[at] = row;
+  else state.golive.links.unshift(row);
+  logAction('web.golive.link', { target_id: userId, details: { login } });
+  return {
+    user_id: userId,
+    user_name: memberName(userId),
+    twitch_login: login,
+    twitch_user_id: null,
+    linked_at: row.linked_at,
+    checked: false,
+    message: `**${memberName(userId) || userId}** is linked to twitch.tv/${login}. Black Bloc did not check that channel exists — it finds that out the first time it looks for a stream.`,
+  };
+});
+
 route('GET', '/api/golive/optouts', (context) => {
   requireStaff(context.session);
   return state.golive.optouts.map((row) => ({ user_id: String(row.user_id), user_name: memberName(row.user_id), at: row.at }));
+});
+
+route('POST', '/api/golive/optouts', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const userId = String(body.user_id || '');
+  if (!userId) throw new Refused(400, 'bad_request', 'Pick the member this is about first.');
+  const at = state.golive.optouts.findIndex((row) => row.user_id === userId);
+  const row = { user_id: userId, at: now() };
+  if (at >= 0) state.golive.optouts[at] = row;
+  else state.golive.optouts.unshift(row);
+  logAction('web.golive.optout', { target_id: userId });
+  return {
+    user_id: userId,
+    user_name: memberName(userId),
+    opted_out: true,
+    message: `**${memberName(userId) || userId}** is opted out, so no stream of theirs is announced from now on.`,
+  };
+});
+
+route('DELETE', '/api/golive/optouts/:user_id', (context) => {
+  requireStaff(context.session);
+  const at = state.golive.optouts.findIndex((row) => row.user_id === context.params.user_id);
+  if (at < 0) {
+    throw new Refused(404, 'not_opted_out', `**${context.params.user_id}** was not opted out, so there was nothing to undo. The opt-outs table lists everyone who is.`);
+  }
+  state.golive.optouts.splice(at, 1);
+  logAction('web.golive.optin', { target_id: context.params.user_id });
+  return {
+    user_id: context.params.user_id,
+    user_name: memberName(context.params.user_id),
+    opted_out: false,
+    message: `**${memberName(context.params.user_id) || context.params.user_id}** is no longer opted out, so their streams can be announced again.`,
+  };
 });
 
 route('GET', '/api/golive/sessions', (context) => {
@@ -1012,6 +1076,22 @@ route('PUT', '/api/birthdays/:user_id', async (context) => {
   if (!existing) state.birthdays.push(row);
   logAction('web.birthday.set', { target_id: row.user_id, details: { month, day, year: row.year } });
   return birthdayRow(row);
+});
+
+route('POST', '/api/birthdays/:user_id/optin', async (context) => {
+  requireStaff(context.session);
+  const row = state.birthdays.find((one) => one.user_id === context.params.user_id);
+  if (!row) throw new Refused(404, 'no_birthday', `Black Bloc has no birthday stored for **${context.params.user_id}**, so there was nothing to change.`);
+  const body = await context.body();
+  row.opted_in = body.opted_in !== false;
+  logAction('web.birthday.optin', { target_id: row.user_id, details: { opted_in: row.opted_in } });
+  const name = memberName(row.user_id) || row.user_id;
+  return {
+    ...birthdayRow(row),
+    message: row.opted_in
+      ? `**${name}** gets a birthday wish again.`
+      : `**${name}** is opted out, so Black Bloc says nothing on their birthday.`,
+  };
 });
 
 route('DELETE', '/api/birthdays/:user_id', (context) => {

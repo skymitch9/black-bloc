@@ -1,16 +1,21 @@
-import { api, listOf, names, refRoles, settings, settingsNamespace } from './api.js';
+import { api, listOf, names, refRoles, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
 import {
   ask,
   badge,
+  bar,
   button,
   card,
   el,
+  field,
   idsIn,
+  memberPicker,
   nameNode,
   namespaceSettings,
   notice,
   run,
+  keepSaying,
+  sayAgain,
   section,
   table,
   templateEditor,
@@ -41,6 +46,53 @@ async function pingPrefix(specs) {
   } catch (e) {
     return `@${spec.value} `;
   }
+}
+
+/** B2: link a member to a Twitch channel without waiting for them to do it. */
+function linkCard(say) {
+  const picker = memberPicker({ label: 'Member' });
+  const login = el('input', { class: 'input', type: 'text', placeholder: 'the name in twitch.tv/…' });
+  const go = button('Link them', async () => {
+    if (!picker.id) {
+      say.say('Pick the member this is about first.', 'warn');
+      return;
+    }
+    const done = await run(
+      say,
+      () => send('/api/golive/links', 'POST', { user_id: picker.id, twitch_login: login.value.trim() }),
+      (found) => found?.message || 'Linked.',
+    );
+    if (done.ok) {
+      keepSaying('golive.links', say);
+      refresh();
+    }
+  }, { tone: 'warn' });
+  return card('Link a member', [
+    picker.node,
+    el('div', { class: 'formrow' }, [field('Twitch channel', login)]),
+    bar([go]),
+  ]);
+}
+
+/** B1: opt somebody out, or take the opt-out away again. */
+function optoutCard(say) {
+  const picker = memberPicker({ label: 'Member' });
+  const go = button('Opt them out', async () => {
+    if (!picker.id) {
+      say.say('Pick the member this is about first.', 'warn');
+      return;
+    }
+    const done = await run(
+      say,
+      () => send('/api/golive/optouts', 'POST', { user_id: picker.id }),
+      (found) => found?.message || 'Opted out.',
+    );
+    if (done.ok) {
+      keepSaying('golive.optouts', say);
+      refresh();
+    }
+  }, { tone: 'warn' });
+  return card('Opt somebody out', [picker.node, bar([go])]);
 }
 
 async function wordingCard(spec, prefix, endSuffix) {
@@ -118,14 +170,32 @@ async function load() {
         });
         if (!sure) return;
         const done = await run(say, () => api(`/api/golive/links/${encodeURIComponent(row.user_id)}`, { method: 'DELETE' }), 'Unlinked.');
-        if (done.ok) refresh();
+        if (done.ok) {
+          keepSaying('golive.links', say);
+          refresh();
+        }
       }, { tone: 'danger' }),
     },
   ], links, { empty: 'Nobody has linked a Twitch account.' });
 
+  const optoutSay = notice();
   const optoutTable = table([
     { label: 'Member', cell: (row) => nameNode(row.user_id, row.user_name) },
     { label: 'Since', cell: (row) => when(row.at), className: 'mono' },
+    {
+      label: '',
+      cell: (row) => button('Announce them again', async () => {
+        const done = await run(
+          optoutSay,
+          () => api(`/api/golive/optouts/${encodeURIComponent(row.user_id)}`, { method: 'DELETE' }),
+          (found) => found?.message || 'The opt-out is gone.',
+        );
+        if (done.ok) {
+          keepSaying('golive.optouts', optoutSay);
+          refresh();
+        }
+      }, { tone: 'quiet' }),
+    },
   ], optouts, { empty: 'Nobody has opted out.' });
 
   const sessionTable = table([
@@ -139,11 +209,11 @@ async function load() {
   ], sessions, { empty: 'No streams have been seen yet.' });
 
   const one = section('Twitch links', null, { count: links.length });
-  one.body.append(linkTable, say);
+  one.body.append(linkTable, linkCard(say), sayAgain('golive.links', say));
   const two = section('Opt-outs', 'These members are never announced, whatever else is set.', {
     count: optouts.length,
   });
-  two.body.append(optoutTable);
+  two.body.append(optoutTable, optoutCard(optoutSay), sayAgain('golive.optouts', optoutSay));
   const three = section('Recent streams', null, { count: sessions.length });
   three.body.append(sessionTable);
 

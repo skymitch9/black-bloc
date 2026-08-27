@@ -7,10 +7,12 @@ import {
   card,
   el,
   idsIn,
+  keepSaying,
   nameNode,
   namespaceSettings,
   notice,
   run,
+  sayAgain,
   sayNothing,
   section,
   table,
@@ -72,7 +74,10 @@ async function lobbyLine(ids, say) {
         () => send('/api/tempvoice/forget', 'POST', { channel_id: String(id) }),
         (found2) => found2.message || 'Forgotten.',
       );
-      if (done.ok) refresh();
+      if (done.ok) {
+        keepSaying('tempvoice.setup', say);
+        refresh();
+      }
     }, { tone: 'danger' }));
   });
   return line;
@@ -112,10 +117,13 @@ async function load() {
         });
         if (!sure) return;
         const done = await run(say, () => send('/api/tempvoice/setup', 'POST', {}), 'Setup ran. The channel list below is refreshed.');
-        if (done.ok) refresh();
+        if (done.ok) {
+          keepSaying('tempvoice.setup', say);
+          refresh();
+        }
       }, { tone: 'warn', small: false }),
     ]),
-    say,
+    sayAgain('tempvoice.setup', say),
   ]);
 
   const one = section('Open now', 'These are live from Discord, not a stored guess.', {

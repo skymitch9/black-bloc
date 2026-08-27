@@ -157,6 +157,8 @@ async function seed() {
   });
   await post('/api/modmail/snippets', { name: 'contract', content: 'hello' });
   await post('/api/modmail/blocks', { user_id: IDS.member_id, reason: 'contract check' });
+  // The opt-out the DELETE entry takes away again; the seed's own opt-out is somebody else.
+  await post('/api/golive/optouts', { user_id: IDS.member_id });
 }
 
 // The routes the REAL API refuses while test mode is on, and the two it does not. A reply
