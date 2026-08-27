@@ -5,6 +5,8 @@ import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from discord.ext import tasks
+from discord.utils import MISSING
 from fastapi.testclient import TestClient
 
 from black_bloc.api.server import create_app
@@ -14,34 +16,49 @@ from black_bloc.storage.db import Database
 
 
 def _named(name: str):
-    def coro():
+    async def coro():
         return None
 
     coro.__name__ = name
     return coro
 
 
-class FakeLoop:
+class FakeLoop(tasks.Loop):
+    """A real `tasks.Loop`, because the page finds loops by type now, not by asking the cog."""
+
+    _running = False
+    _broke = False
+
     def __init__(self, name: str, *, running: bool = True, failed: bool = False) -> None:
-        self.coro = _named(name)
+        super().__init__(
+            _named(name),
+            seconds=60,
+            hours=MISSING,
+            minutes=MISSING,
+            time=MISSING,
+            count=None,
+            reconnect=True,
+            name=None,
+        )
         self._running = running
-        self._failed = failed
-        self.next_iteration = datetime(2026, 8, 26, 12, 0, tzinfo=UTC)
+        self._broke = failed
 
     def is_running(self) -> bool:
         return self._running
 
     def failed(self) -> bool:
-        return self._failed
+        return self._broke
+
+    @property
+    def next_iteration(self):
+        return datetime(2026, 8, 26, 12, 0, tzinfo=UTC)
 
 
 class FakeCog:
     def __init__(self, *loops, health: dict | None = None) -> None:
-        self._loops = loops
+        for loop in loops:
+            setattr(self, loop.coro.__name__, loop)
         self._health = health or {}
-
-    def get_tasks(self):
-        return self._loops
 
     def loop_health(self, name: str):
         return self._health.get(name, (None, None))
@@ -263,6 +280,9 @@ def test_loop_health_ignores_a_cog_with_no_loops(bot):
     assert loop_health(bot) == []
 
 
+OK_AT = "2026-08-26T00:00:00+00:00"
+
+
 def _record(attr):
     def set_on(cog, value):
         setattr(cog, attr, value)
@@ -277,37 +297,55 @@ def _record_key(attr, key):
     return set_on
 
 
-REAL_LOOPS = [
-    ("black_bloc.cogs.content.golive", "GoLive", "poller", _record("last_poll_ok_at")),
+REAL_COGS = [
+    ("black_bloc.cogs.presence", "Presence", {"status": _record("last_ok_at")}),
+    ("black_bloc.cogs.content.golive", "GoLive", {"poller": _record("last_poll_ok_at")}),
+    ("black_bloc.cogs.community.birthdays", "Birthdays", {"_sweep": _record("last_run_at")}),
     (
         "black_bloc.cogs.community.events",
         "Events",
-        "_golive_loop",
-        _record_key("last_ok_at", "golive"),
+        {
+            "_golive_loop": _record_key("last_ok_at", "golive"),
+            "_reconcile_loop": _record_key("last_ok_at", "reconcile"),
+        },
     ),
     (
-        "black_bloc.cogs.community.events",
-        "Events",
-        "_reconcile_loop",
-        _record_key("last_ok_at", "reconcile"),
+        "black_bloc.cogs.community.tempvoice",
+        "TempVoice",
+        {"_reconcile_loop": _record("last_ok_at")},
     ),
-    ("black_bloc.cogs.community.birthdays", "Birthdays", "_sweep", _record("last_run_at")),
-    ("black_bloc.cogs.moderation.modmail", "Modmail", "_reconcile_loop", _record("last_ok_at")),
+    (
+        "black_bloc.cogs.moderation.modmail",
+        "Modmail",
+        {"_reconcile_loop": _record("last_ok_at")},
+    ),
 ]
 
 
-@pytest.mark.parametrize(("module", "cog", "loop_name", "record_ok"), REAL_LOOPS)
-def test_the_status_page_reads_the_health_a_real_cog_actually_records(
-    module, cog, loop_name, record_ok
-):
-    """The attribute names are the cog's own; the status page must not guess them."""
+@pytest.mark.parametrize(
+    ("module", "cog", "recorders"), REAL_COGS, ids=[row[1] for row in REAL_COGS]
+)
+def test_every_loop_a_real_cog_owns_reaches_the_health_tab(bot, sign_in, module, cog, recorders):
+    """Discovery finds them by type; the health beside each one is the cog's own record of it."""
     cls = getattr(importlib.import_module(module), cog)
-    assert getattr(cls, loop_name).coro.__name__ == loop_name
-    instance = cls(object())
-    assert instance.loop_health(loop_name) == (None, None)
-    assert instance.loop_health("not_a_loop_here") == (None, None)
-    record_ok(instance, "2026-08-26T00:00:00+00:00")
-    assert instance.loop_health(loop_name)[0] == "2026-08-26T00:00:00+00:00"
+    instance = cls(bot)
+    bot.cogs = {cog: instance}
+    for name, record_ok in recorders.items():
+        assert instance.loop_health(name) == (None, None)
+        assert instance.loop_health("not_a_loop_here") == (None, None)
+        record_ok(instance, OK_AT)
+
+    client = client_for(bot)
+    sign_in(client)
+    rows = {row["name"]: row for row in client.get("/api/status").json()["loops"]}
+
+    assert set(rows) == set(recorders)
+    for name, row in rows.items():
+        assert row["cog"] == cog
+        assert row["last_ok_at"] == OK_AT, name
+        assert row["last_error"] is None
+        assert row["running"] is False
+        assert row["state"] == "danger"
 
 
 def test_no_guild_is_staff_unknown_rather_than_a_report_on_nothing(api_settings, sign_in, fakes):

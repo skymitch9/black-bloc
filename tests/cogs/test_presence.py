@@ -193,8 +193,7 @@ def test_the_answer_says_what_happened_to_both_halves():
 
 
 async def test_the_health_tab_asks_by_the_name_it_derives_from_the_loop(bot, cog):
-    loop = cog.get_tasks()[0]
-    name = loop.coro.__name__
+    name = cog.status.coro.__name__
 
     assert name == "status"
     assert cog.loop_health(name) == (None, None)

@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from discord.ext import tasks
 
 from black_bloc.api.settings_api import grouped
 from black_bloc.cogs.community.birthdays import save_birthday
@@ -21,27 +22,12 @@ CONTRACT = Path(__file__).resolve().parents[2] / "site" / "mock" / "contract.jso
 MEMBER_ID = 21
 
 
-class FakeLoop:
-    def __init__(self) -> None:
-        self.coro = _sweep
-        self.next_iteration = datetime.now(UTC) + timedelta(minutes=5)
-
-    def is_running(self) -> bool:
-        return True
-
-    def failed(self) -> bool:
-        return False
-
-
-async def _sweep() -> None:  # named so loop_health can read a name off it
-    return None
-
-
 class FakeCog:
     """One loop-bearing cog, because /api/status reports nothing without one."""
 
-    def get_tasks(self):
-        return [FakeLoop()]
+    @tasks.loop(minutes=5)
+    async def _sweep(self) -> None:
+        return None
 
     def loop_health(self, name: str):
         return (datetime.now(UTC).isoformat(), None)

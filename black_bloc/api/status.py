@@ -6,6 +6,7 @@ import math
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from discord.ext import tasks
 from fastapi import APIRouter, Depends
 
 from .. import __version__
@@ -83,17 +84,30 @@ def _health(cog: Any, name: str) -> tuple[Any, Any]:
     return (last_ok_at, last_error)
 
 
+def _loops(cog: Any) -> list[tuple[str, Any]]:
+    """Every `tasks.Loop` a cog holds, found by type — never by `dir()`, which fires properties."""
+    names: dict[str, None] = {}
+    for owner in (*type(cog).__mro__, cog):
+        for name, value in (getattr(owner, "__dict__", None) or {}).items():
+            if isinstance(value, tasks.Loop):
+                names[name] = None
+    found: list[tuple[str, Any]] = []
+    seen: set[int] = set()
+    for name in names:
+        loop = getattr(cog, name, None)
+        if isinstance(loop, tasks.Loop) and id(loop) not in seen:
+            seen.add(id(loop))
+            found.append((name, loop))
+    return found
+
+
 def loop_health(bot: Any) -> list[dict[str, Any]]:
     """Every `tasks.loop` on every cog, with the health the cog itself reports."""
     found: list[dict[str, Any]] = []
     for cog_name, cog in (getattr(bot, "cogs", None) or {}).items():
-        getter = getattr(cog, "get_tasks", None)
-        if not callable(getter):
-            continue
-        for loop in getter() or ():
-            name = getattr(getattr(loop, "coro", None), "__name__", "loop")
+        for name, loop in _loops(cog):
             running = bool(loop.is_running())
-            failed = bool(loop.failed()) if callable(getattr(loop, "failed", None)) else False
+            failed = bool(loop.failed())
             last_ok_at, last_error = _health(cog, name)
             found.append(
                 {

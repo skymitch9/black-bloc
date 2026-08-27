@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import UTC, datetime
-from typing import Any
 
 import discord
 from discord import app_commands
@@ -42,9 +41,6 @@ class Presence(commands.Cog):
     presence = app_commands.Group(
         name="presence", description="Black Bloc's own status and About Me"
     )
-
-    def get_tasks(self) -> tuple[Any, ...]:
-        return (self.status,)
 
     def loop_health(self, name: str) -> tuple[str | None, str | None]:
         if name != "status":
