@@ -6,7 +6,18 @@ from discord.ext import commands
 
 from .. import __version__
 from ..actionlog import log_action
-from ..settings_store import KEY_HELP, KEY_TYPES, SettingError, require_staff
+from ..settings_store import (
+    KEY_HELP,
+    KEY_TYPES,
+    SettingError,
+    display_value,
+    parse_value,
+    require_staff,
+)
+
+CHANNEL_KEYS = [key for key, kind in KEY_TYPES.items() if kind == "channel"]
+ROLE_KEYS = [key for key, kind in KEY_TYPES.items() if kind == "role"]
+VALUE_KEYS = [key for key, kind in KEY_TYPES.items() if kind in ("enum", "int", "text", "bool")]
 
 
 class Core(commands.Cog):
@@ -37,14 +48,14 @@ class Core(commands.Cog):
         store = self.bot.store
         lines = []
         for key, value in store.all(interaction.guild.id).items():
-            shown = f"<#{value}>" if value else "not set"
+            shown = display_value(key, value)
             lines.append(f"**{key}** — {shown} ({KEY_HELP[key]})")
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
     @settings.command(name="set", description="Point one Black Bloc setting at a channel")
     @app_commands.describe(key="Which setting to change", channel="The channel it should point at")
     @app_commands.choices(
-        key=[app_commands.Choice(name=name, value=name) for name in KEY_TYPES]
+        key=[app_commands.Choice(name=name, value=name) for name in CHANNEL_KEYS]
     )
     async def settings_set(
         self,
@@ -72,6 +83,64 @@ class Core(commands.Cog):
             actor=interaction.user,
             target=channel,
             details={"key": key.value, "channel_id": channel.id},
+        )
+
+    @settings.command(name="set-role", description="Point one Black Bloc setting at a role")
+    @app_commands.describe(key="Which setting to change", role="The role it should point at")
+    @app_commands.choices(key=[app_commands.Choice(name=name, value=name) for name in ROLE_KEYS])
+    async def settings_set_role(
+        self,
+        interaction: discord.Interaction,
+        key: app_commands.Choice[str],
+        role: discord.Role,
+    ) -> None:
+        if not await require_staff(interaction):
+            return
+        try:
+            await self.bot.store.set(
+                interaction.guild.id, key.value, role.id, by=interaction.user.id
+            )
+        except SettingError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            return
+        await interaction.response.send_message(
+            f"**{key.value}** now points at {role.mention}.", ephemeral=True
+        )
+        await log_action(
+            self.bot,
+            interaction.guild,
+            "settings.set",
+            actor=interaction.user,
+            details={"key": key.value, "role_id": role.id},
+        )
+
+    @settings.command(
+        name="set-value", description="Set a Black Bloc setting that is not a channel or a role"
+    )
+    @app_commands.describe(key="Which setting to change", value="The new value")
+    @app_commands.choices(key=[app_commands.Choice(name=name, value=name) for name in VALUE_KEYS])
+    async def settings_set_value(
+        self, interaction: discord.Interaction, key: app_commands.Choice[str], value: str
+    ) -> None:
+        if not await require_staff(interaction):
+            return
+        try:
+            parsed = parse_value(key.value, value)
+            await self.bot.store.set(
+                interaction.guild.id, key.value, parsed, by=interaction.user.id
+            )
+        except SettingError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            return
+        await interaction.response.send_message(
+            f"**{key.value}** is now `{parsed}`.", ephemeral=True
+        )
+        await log_action(
+            self.bot,
+            interaction.guild,
+            "settings.set",
+            actor=interaction.user,
+            details={"key": key.value, "value": parsed},
         )
 
 

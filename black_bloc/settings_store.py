@@ -10,16 +10,43 @@ from .storage.db import Database
 
 log = logging.getLogger(__name__)
 
+GOLIVE_CHANNEL_ID = 1225457308230746202
+GOLIVE_TEMPLATE = (
+    "REGULATORS! Mount up! **{name}** is currently streaming **{game}**! "
+    "Check it out: {url}"
+)
+GOLIVE_MODES = ("off", "shadow", "on")
+
 KEY_TYPES: dict[str, str] = {
     "log_channel_id": "channel",
     "staff_channel_id": "channel",
     "role_menu_channel_id": "channel",
+    "golive_mode": "enum",
+    "golive_channel_id": "channel",
+    "golive_template": "text",
+    "golive_live_role_id": "role",
+    "golive_require_role_id": "role",
+    "golive_ignore_role_id": "role",
+    "golive_cooldown_minutes": "int",
+    "golive_ping_role_id": "role",
+}
+
+KEY_CHOICES: dict[str, tuple[str, ...]] = {
+    "golive_mode": GOLIVE_MODES,
 }
 
 KEY_HELP: dict[str, str] = {
     "log_channel_id": "where Black Bloc posts what it did",
     "staff_channel_id": "the channel whose viewers count as staff",
     "role_menu_channel_id": "where /rolemenu post goes by default",
+    "golive_mode": "off, shadow (log only) or on (post go-live announcements)",
+    "golive_channel_id": "where go-live announcements are posted",
+    "golive_template": "the announcement wording; {name} {game} {title} {url}",
+    "golive_live_role_id": "role given while someone is streaming",
+    "golive_require_role_id": "only announce people who have this role",
+    "golive_ignore_role_id": "never announce people who have this role",
+    "golive_cooldown_minutes": "minutes before the same person is announced again",
+    "golive_ping_role_id": "role mentioned in front of every go-live announcement",
 }
 
 
@@ -44,7 +71,62 @@ def coerce_value(key: str, value: Any) -> Any:
         if isinstance(raw, bool) or not isinstance(raw, int):
             raise SettingError(f"{key!r} takes a channel, not {value!r}.")
         return raw
+    if kind == "role":
+        raw = getattr(value, "id", value)
+        if isinstance(raw, bool) or not isinstance(raw, int):
+            raise SettingError(f"{key!r} takes a role, not {value!r}.")
+        return raw
+    if kind == "enum":
+        allowed = KEY_CHOICES.get(key, ())
+        if value not in allowed:
+            raise SettingError(
+                f"{key!r} takes one of {', '.join(allowed)}, not {value!r}."
+            )
+        return value
+    if kind == "int":
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise SettingError(f"{key!r} takes a whole number, not {value!r}.")
+        if value < 0:
+            raise SettingError(f"{key!r} cannot be negative.")
+        return value
+    if kind == "bool":
+        if not isinstance(value, bool):
+            raise SettingError(f"{key!r} takes true or false, not {value!r}.")
+        return value
+    if kind == "text":
+        if not isinstance(value, str) or not value.strip():
+            raise SettingError(f"{key!r} takes some text, not {value!r}.")
+        return value
     raise SettingError(f"{key!r} has no validator for type {kind!r}.")
+
+
+def parse_value(key: str, raw: str) -> Any:
+    """Turn one typed-in string into the value `coerce_value` expects."""
+    kind = KEY_TYPES.get(key)
+    text = raw.strip()
+    if kind in ("int", "channel", "role"):
+        digits = text.lstrip("<#@&").rstrip(">")
+        if not digits.isdigit():
+            raise SettingError(f"{key!r} takes a whole number, not {raw!r}.")
+        return int(digits)
+    if kind == "bool":
+        if text.lower() in ("true", "yes", "on"):
+            return True
+        if text.lower() in ("false", "no", "off"):
+            return False
+        raise SettingError(f"{key!r} takes true or false, not {raw!r}.")
+    return text
+
+
+def display_value(key: str, value: Any) -> str:
+    if value is None or value == "":
+        return "not set"
+    kind = KEY_TYPES.get(key)
+    if kind == "channel":
+        return f"<#{value}>"
+    if kind == "role":
+        return f"<@&{value}>"
+    return str(value)
 
 
 def staff_role_ids_from_overwrites(overwrites: Any) -> set[int]:
@@ -90,6 +172,16 @@ class SettingsStore:
             return self.settings.test_channel_id
         if key == "log_channel_id":
             return self.settings.test_channel_id if self.settings.test_mode else None
+        if key == "golive_channel_id":
+            if self.settings.test_mode:
+                return self.settings.test_channel_id
+            return GOLIVE_CHANNEL_ID
+        if key == "golive_mode":
+            return "shadow"
+        if key == "golive_template":
+            return GOLIVE_TEMPLATE
+        if key == "golive_cooldown_minutes":
+            return 60
         return None
 
     async def load(self) -> None:

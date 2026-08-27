@@ -4,7 +4,7 @@ from pathlib import Path
 
 import aiosqlite
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -51,6 +51,32 @@ CREATE TABLE IF NOT EXISTS role_menu_options (
     emoji    TEXT,
     position INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (menu_id, role_id)
+);
+
+CREATE TABLE IF NOT EXISTS golive_links (
+    user_id        INTEGER PRIMARY KEY,
+    twitch_login   TEXT    NOT NULL,
+    twitch_user_id TEXT,
+    linked_at      TEXT    NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS golive_optout (
+    user_id INTEGER PRIMARY KEY,
+    at      TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS golive_sessions (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id              INTEGER NOT NULL,
+    user_id               INTEGER NOT NULL,
+    source                TEXT    NOT NULL,
+    url                   TEXT,
+    game                  TEXT,
+    title                 TEXT,
+    started_at            TEXT    NOT NULL,
+    ended_at              TEXT,
+    announced_message_id  INTEGER,
+    mode                  TEXT    NOT NULL
 );
 """
 
