@@ -23,6 +23,12 @@ TEMPVOICE_MODES = ("off", "on")
 HONEYPOT_MODES = ("off", "shadow", "on")
 HONEYPOT_PURGE_MAX_DAYS = 7
 
+BIRTHDAY_CHANNEL_ID = 1411816390414962700
+BIRTHDAY_TEMPLATE = "Happy Birthday **{name}**!"
+BIRTHDAY_COLOR = "#4eefff"
+BIRTHDAY_TZ = "America/Phoenix"
+BIRTHDAY_MODES = ("off", "shadow", "on")
+
 KEY_TYPES: dict[str, str] = {
     "log_channel_id": "channel",
     "staff_channel_id": "channel",
@@ -44,12 +50,19 @@ KEY_TYPES: dict[str, str] = {
     "honeypot_channel_ids": "channels",
     "honeypot_purge_days": "int",
     "honeypot_exempt_role_ids": "roles",
+    "birthday_mode": "enum",
+    "birthday_channel_id": "channel",
+    "birthday_template": "text",
+    "birthday_color": "text",
+    "birthday_role_id": "role",
+    "birthday_show_age": "bool",
 }
 
 KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "golive_mode": GOLIVE_MODES,
     "tempvoice_mode": TEMPVOICE_MODES,
     "honeypot_mode": HONEYPOT_MODES,
+    "birthday_mode": BIRTHDAY_MODES,
 }
 
 KEY_MAX: dict[str, int] = {"honeypot_purge_days": HONEYPOT_PURGE_MAX_DAYS}
@@ -78,6 +91,12 @@ KEY_HELP: dict[str, str] = {
         f"{HONEYPOT_PURGE_MAX_DAYS}"
     ),
     "honeypot_exempt_role_ids": "roles the trap ignores; staff are always ignored too",
+    "birthday_mode": "off, shadow (log only) or on (post birthday wishes)",
+    "birthday_channel_id": "where birthday wishes are posted",
+    "birthday_template": "the birthday wording; {name} and {age}",
+    "birthday_color": "the birthday embed's colour, as a hex code like #4eefff",
+    "birthday_role_id": "role given for the day and taken back the next; none by default",
+    "birthday_show_age": "true to put {age} in reach for people who stored a birth year",
 }
 
 
@@ -283,6 +302,18 @@ class SettingsStore:
             return "shadow"
         if key == "honeypot_purge_days":
             return 1
+        if key == "birthday_mode":
+            return "shadow"
+        if key == "birthday_channel_id":
+            if self.settings.test_mode:
+                return self.settings.test_channel_id
+            return BIRTHDAY_CHANNEL_ID
+        if key == "birthday_template":
+            return BIRTHDAY_TEMPLATE
+        if key == "birthday_color":
+            return BIRTHDAY_COLOR
+        if key == "birthday_show_age":
+            return False
         if KEY_TYPES.get(key) in ("channels", "roles"):
             return []
         return None

@@ -2,6 +2,9 @@ import pytest
 
 from black_bloc.config import load_settings
 from black_bloc.settings_store import (
+    BIRTHDAY_CHANNEL_ID,
+    BIRTHDAY_COLOR,
+    BIRTHDAY_TEMPLATE,
     GOLIVE_CHANNEL_ID,
     GOLIVE_TEMPLATE,
     HONEYPOT_PURGE_MAX_DAYS,
@@ -311,6 +314,42 @@ def test_list_settings_parse_and_display():
         parse_value("tempvoice_creator_ids", "general")
     assert display_value("tempvoice_creator_ids", [5, 6]) == "<#5>, <#6>"
     assert display_value("tempvoice_creator_ids", []) == "not set"
+
+
+async def test_birthday_defaults(store):
+    assert store.get(1, "birthday_mode") == "shadow"
+    assert store.get(1, "birthday_channel_id") == TEST_CH
+    assert store.get(1, "birthday_template") == BIRTHDAY_TEMPLATE
+    assert store.get(1, "birthday_color") == BIRTHDAY_COLOR
+    assert store.get(1, "birthday_role_id") is None
+    assert store.get(1, "birthday_show_age") is False
+
+
+async def test_the_birthday_channel_defaults_to_the_incumbent_s_once_test_mode_is_off(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
+    settings = load_settings(_env_file=None, test_mode=False, test_channel_id=None)
+    db = Database(tmp_path / "b.sqlite3")
+    await db.connect()
+    try:
+        s = SettingsStore(db, settings)
+        await s.load()
+        assert s.get(1, "birthday_channel_id") == BIRTHDAY_CHANNEL_ID
+    finally:
+        await db.close()
+
+
+def test_the_birthday_values_are_checked_and_parsed():
+    assert coerce_value("birthday_mode", "on") == "on"
+    with pytest.raises(SettingError, match="off, shadow, on"):
+        coerce_value("birthday_mode", "someday")
+    assert coerce_value("birthday_show_age", True) is True
+    with pytest.raises(SettingError, match="true or false"):
+        coerce_value("birthday_show_age", "yes")
+    assert parse_value("birthday_show_age", "yes") is True
+    assert parse_value("birthday_color", " #4eefff ") == "#4eefff"
+    assert coerce_value("birthday_role_id", _Role(6)) == 6
 
 
 def test_staff_refusal_names_the_channel(tmp_path, monkeypatch):
