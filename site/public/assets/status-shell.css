@@ -1,0 +1,817 @@
+/* ===========================================================================
+ * SNAPSHOT — copied from catalog-platform/sites/heygabi-home/public/assets/
+ * on 2026-08-26. Black Bloc's site is entirely DISCONNECTED from heygabi
+ * (owner decision 2026-08-26, docs/info/phase8-design.md): it shares a domain
+ * and nothing else. There is no sync script, no shared deploy, no runtime
+ * dependency in either direction. A sixth estate theme reaches this site only
+ * if somebody copies this file in again.
+ *
+ * The BODY below is the estate file verbatim, so a future re-copy stays
+ * diffable. Its comments still describe the estate's own pages and repos;
+ * none of that applies here. What matters is behaviour, and none of these
+ * files opens a socket: they read localStorage and stamp attributes. This
+ * page talks to its own origin and to the API origin, and to nothing else.
+ * ===========================================================================
+ */
+/*
+ * status-shell.css — the shared skin for the FOUR /status pages
+ * (Health · Processing · Pipelines · Agents), extracted from
+ * status/index.html's inline <style> on 2026-08-18 when the page split.
+ *
+ * ⚠️ IT IS SHARED BECAUSE THE PAGES ARE ONE SURFACE, not four. The owner's
+ * mock asked for "a health page… a page for data processing, a page for
+ * running the pipelines" — one instrument panel with tabs, and an amber dot
+ * has to mean the same thing on every tab or the split has made the estate
+ * harder to read, not easier. Four inline copies would drift within a week;
+ * this file is the mechanism that stops it.
+ *
+ * ⚠️ EVERY RULE BELOW THE MARKER "--- moved verbatim ---" IS THE ORIGINAL
+ * /status CSS, unchanged. Anything genuinely new (the nav, and the three new
+ * pages' own blocks) is written after it and says so. Keeping the seam
+ * visible is what lets a future reader tell "this is how /status always
+ * looked" from "this was invented during the split".
+ *
+ * Tokens only, hairlines, one accent — assets/estate-theme.css owns the
+ * palette and assets/theme.js owns the mode. Nothing here hardcodes a colour.
+ */
+
+/* --- the page nav (NEW 2026-08-18) --------------------------------------
+ * One row of four tabs, present and identical on all four pages, marked
+ * with aria-current="page" on the one you are looking at.
+ *
+ * ⚠️ IT IS PLAIN <a> LINKS IN EACH PAGE'S HTML, never JS-built. A nav that
+ * needs a module to exist disappears on exactly the page whose script died —
+ * which is the page you most need to navigate away from. It also means the
+ * tabs are in the served HTML, so predeploy.checks.json can assert them.
+ */
+.statusnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+  margin: 0 0 var(--et-space-3);
+  padding: .3rem;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-radius: var(--et-radius-lg);
+  background: var(--et-surface);
+}
+.statusnav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: .25em .85em;
+  border-radius: var(--et-radius-pill);
+  color: var(--et-muted);
+  font-size: var(--et-text-small);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.statusnav a:hover { color: var(--et-fg); }
+.statusnav a:focus-visible { outline: 2px solid var(--et-accent); outline-offset: 2px; }
+.statusnav a[aria-current="page"] {
+  background: var(--et-bg, var(--et-surface));
+  border: 1px solid var(--et-hairline);
+  color: var(--et-fg);
+}
+
+/* --- moved verbatim from status/index.html, 2026-08-18 ------------------ */
+/* Working page, same language as /admin: tokens only, hairlines, one accent. */
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--et-bg);
+  background-image: var(--et-bg-texture);
+  background-size: var(--et-bg-texture-size);
+  color: var(--et-fg);
+  font: var(--et-text-body)/1.55 var(--et-font);
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+           env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+main { max-width: 44rem; margin: 0 auto; padding: var(--et-space-4) 1.15rem var(--et-space-5); }
+
+/* ---- back to the front door — owner ask 2026-08-16: "put a more easy to
+   access back to front door button" on this family of pages. First thing in
+   <main>, above the fold on a phone, a real 44px tap target. Same pattern as
+   /todo's gate (.back: arrow SVG + text) so the whole estate shares one
+   "how do I get back" affordance instead of each page inventing its own. */
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  min-height: 44px;
+  margin: 0 0 var(--et-space-1);
+  color: var(--et-muted);
+  font-size: .8125rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  text-decoration: none;
+}
+.back:hover { color: var(--et-fg); }
+.back:focus-visible { outline: 2px solid var(--et-accent); outline-offset: 3px; border-radius: 6px; }
+.back svg { flex: none; transition: transform var(--et-dur-fast) var(--et-ease); }
+.back:hover svg { transform: translateX(-3px); }
+
+h1 {
+  margin: 0 0 .3rem;
+  font-family: var(--et-font-display);
+  font-size: var(--et-text-title);
+  font-weight: 700;
+  letter-spacing: var(--et-title-spacing);
+  text-transform: var(--et-title-case);
+  color: var(--et-heading-color);
+  text-shadow: var(--et-glow-title);
+}
+.sub { margin: 0 0 var(--et-space-3); color: var(--et-muted); font-size: var(--et-text-small); text-wrap: pretty; }
+.sub a { color: var(--et-accent); }
+
+[hidden] { display: none !important; }
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: .8rem;
+  flex-wrap: wrap;
+  margin-bottom: var(--et-space-2);
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+  min-height: 44px;
+  padding: .5em 1.2em;
+  border: var(--et-btn-border);
+  border-radius: var(--et-radius-pill);
+  background: var(--et-btn-bg);
+  color: var(--et-btn-fg);
+  box-shadow: var(--et-btn-shadow);
+  font: 600 var(--et-text-body)/1.2 var(--et-font);
+  cursor: pointer;
+  transition: transform var(--et-dur-fast) var(--et-ease),
+              filter var(--et-dur-fast) var(--et-ease);
+}
+.btn:hover { filter: brightness(1.06); }
+.btn:active { transform: scale(.965); }
+.btn:focus-visible { outline: 2px solid var(--et-accent); outline-offset: 3px; }
+.btn:disabled { opacity: .6; cursor: default; transform: none; }
+.btn.quiet { --et-btn-bg: var(--et-surface); --et-btn-fg: var(--et-fg); }
+.btn.danger { --et-btn-bg: var(--et-surface); --et-btn-fg: var(--et-danger); }
+/* Publishing-tier steps (catalog/publish) — a standing amber tint, not just
+   the danger-red confirm-armed state, so "this ships to the live site" is
+   visible before the first tap, not only after arming it. */
+.btn.warn { --et-btn-bg: var(--et-surface); --et-btn-fg: var(--et-warn); border-color: var(--et-warn); }
+.btn.small { min-height: 34px; padding: .25em .8em; font-size: var(--et-text-small); }
+.btn svg { flex: none; transition: transform var(--et-dur) var(--et-ease); }
+.btn.spinning svg { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Fine-grained pipeline step controls (owner ask 2026-08-16) */
+.step-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+.step-row {
+  display: flex;
+  align-items: center;
+  gap: .7rem;
+  flex-wrap: wrap;
+  padding: .6rem .85rem;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-radius: var(--et-radius);
+  background: var(--et-surface);
+}
+.step-row[data-disabled="true"] { opacity: .72; }
+.step-main { display: flex; align-items: center; gap: .55rem; flex: 1 1 14rem; min-width: 0; }
+.step-name { font-weight: 600; font-size: var(--et-text-small); }
+.step-kind {
+  padding: .05em .55em;
+  border: 1px solid var(--et-hairline);
+  border-radius: var(--et-radius-pill);
+  font-size: var(--et-text-micro);
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--et-muted);
+  white-space: nowrap;
+}
+.step-kind[data-kind="mutating"] { border-color: var(--et-warn); color: var(--et-warn); }
+.step-kind[data-kind="publishing"] { border-color: var(--et-danger); color: var(--et-danger); }
+.step-reason { flex: 1 1 100%; margin: 0; color: var(--et-muted); font-size: var(--et-text-micro); text-wrap: pretty; }
+/* What this step did LAST TIME (the `steps[]` entry off pipeline_status/current).
+   ⚠️ Distinct from .step-reason, which says why the button is disabled RIGHT
+   NOW — two different questions, and merging them would make a stale outcome
+   read as a live blocker. Only `failed` is tinted: every other state, including
+   ones this page has not been taught, stays muted, because inventing a verdict
+   for a word the pipeline owns is how a page starts lying about a run. */
+.step-outcome {
+  flex: 1 1 100%;
+  margin: .15rem 0 0;
+  color: var(--et-muted);
+  font-size: var(--et-text-micro);
+  text-wrap: pretty;
+}
+.step-outcome[data-state="failed"] { color: var(--et-danger); font-weight: 600; }
+.step-outcome[data-state="done"] { color: var(--et-ok); }
+.step-warn-note { color: var(--et-warn); font-size: var(--et-text-micro); font-weight: 600; white-space: nowrap; }
+.step-section-note { margin: .1rem 0 .6rem; }
+.force-upload-note { margin: .5rem 0 0; color: var(--et-muted); font-size: var(--et-text-micro); text-wrap: pretty; }
+.step-list-h {
+  margin: var(--et-space-2) 0 0;
+  font-family: var(--et-font-display);
+  font-size: var(--et-text-body);
+  font-weight: 700;
+  letter-spacing: var(--et-title-spacing);
+  color: var(--et-heading-color);
+}
+
+.auto-note { color: var(--et-muted); font-size: var(--et-text-small); }
+
+/* One accessible line, updated after every refresh, so a screen reader
+   hears a summary once instead of every row every 60 seconds. */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+
+section { margin-bottom: var(--et-space-3); }
+h2 {
+  display: flex;
+  align-items: baseline;
+  gap: .6rem;
+  margin: 0 0 .5rem;
+  font-family: var(--et-font-display);
+  font-size: var(--et-text-heading);
+  font-weight: 700;
+  letter-spacing: var(--et-title-spacing);
+  color: var(--et-heading-color);
+}
+/* ⚠️ THE SHELL DEFINED h1 AND h2 AND STOPPED. Every h3 on the four older
+   status pages fell back to the BROWSER DEFAULT — wrong family, wrong colour,
+   ~1.17em — and /status/api, having no rule to inherit, invented one and
+   picked --et-text-title, the h1 scale, so its card headings rendered LARGER
+   than the section heading above them. One rule fixes both: a missing level in
+   a shared scale does not stay missing, it gets guessed at, differently, per
+   page. Scale is now h1 title (1.75–2.5rem) > h2 heading (1.25–1.5rem) >
+   h3 body (1.0625rem). */
+h3 {
+  margin: 0 0 .4rem;
+  font-family: var(--et-font-display);
+  font-size: var(--et-text-body);
+  font-weight: 700;
+  letter-spacing: var(--et-title-spacing);
+  color: var(--et-heading-color);
+}
+
+.section-note { margin: 0 0 .6rem; color: var(--et-muted); font-size: var(--et-text-small); text-wrap: pretty; }
+
+ul.rows { list-style: none; margin: 0; padding: 0; display: grid; gap: .55rem; }
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: .75rem;
+  padding: .75rem .9rem;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-radius: var(--et-radius-lg);
+  background: var(--et-surface);
+}
+
+.dot {
+  flex: none;
+  width: .7rem;
+  height: .7rem;
+  margin-top: .3rem;
+  border-radius: 50%;
+  background: var(--et-muted);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--et-muted) 18%, transparent);
+}
+.row[data-state="ok"]     .dot { background: var(--et-ok);     box-shadow: 0 0 0 3px var(--et-ok-bg); }
+.row[data-state="warn"]   .dot { background: var(--et-warn);   box-shadow: 0 0 0 3px var(--et-warn-bg); }
+.row[data-state="danger"] .dot { background: var(--et-danger); box-shadow: 0 0 0 3px var(--et-danger-bg); }
+.row[data-state="pending"] .dot { animation: pulse-dot 1.4s ease-in-out infinite; }
+@keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+.row-body { flex: 1 1 auto; min-width: 0; }
+.row-head { display: flex; align-items: center; gap: .55rem; flex-wrap: wrap; }
+.row-name { font-weight: 700; }
+
+.badge {
+  padding: .1em .6em;
+  border: 1px solid var(--et-hairline);
+  border-radius: var(--et-radius-pill);
+  font-size: var(--et-text-micro);
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--et-muted);
+  white-space: nowrap;
+}
+.row[data-state="ok"]      .badge { border-color: var(--et-ok);     color: var(--et-ok); }
+.row[data-state="warn"]    .badge { border-color: var(--et-warn);   color: var(--et-warn); }
+.row[data-state="danger"]  .badge { border-color: var(--et-danger); color: var(--et-danger); }
+
+.row-detail { margin: .3rem 0 0; color: var(--et-fg); font-size: var(--et-text-small); text-wrap: pretty; }
+.row-note { margin: .2rem 0 0; color: var(--et-muted); font-size: var(--et-text-micro); text-wrap: pretty; }
+.row-checked { margin: .35rem 0 0; color: var(--et-muted); font-size: var(--et-text-micro); font-family: var(--et-font-mono); }
+
+footer {
+  margin-top: var(--et-space-4);
+  padding-top: var(--et-space-2);
+  border-top: 1px solid var(--et-hairline);
+  color: var(--et-muted);
+  font-size: var(--et-text-small);
+  text-wrap: pretty;
+}
+footer p { margin: 0 0 .5rem; max-width: 46rem; }
+footer a { color: var(--et-accent); }
+code { font-family: var(--et-font-mono); font-size: .9em; }
+
+@media (prefers-reduced-motion: reduce) {
+  .btn.spinning svg, .row[data-state="pending"] .dot { animation: none !important; }
+}
+
+/* --- Operations: sign-in bar + the approver-only section it gates --- */
+.ops-bar {
+  display: flex;
+  align-items: center;
+  gap: .7rem;
+  flex-wrap: wrap;
+  margin: -.2rem 0 var(--et-space-2);
+  font-size: var(--et-text-small);
+  color: var(--et-muted);
+}
+.ops-bar .linkbtn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--et-accent);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.ops-note { margin: 0 0 .6rem; font-size: var(--et-text-small); color: var(--et-muted); text-wrap: pretty; }
+.ops-note[data-tone="warn"] { color: var(--et-warn); }
+
+#ops-section { margin-bottom: var(--et-space-3); }
+#ops-controls { display: grid; gap: .7rem; }
+
+/* The 12-commandments collapsible — native <details>, styled like a row. */
+#commandments-section { margin-bottom: var(--et-space-3); }
+.cmd-details {
+  border: 1px solid var(--et-hairline); border-radius: var(--et-radius);
+  background: var(--et-surface); padding: .55rem .85rem;
+}
+.cmd-details summary {
+  cursor: pointer; font-weight: 600; font-size: var(--et-text-small);
+  color: var(--et-muted); user-select: none; min-height: 32px;
+  display: flex; align-items: center;
+}
+.cmd-details[open] summary { color: var(--et-fg); margin-bottom: .4rem; }
+.cmd-list { margin: 0; padding-left: 1.3rem; font-size: var(--et-text-small); display: grid; gap: .45rem; }
+.cmd-list li { text-wrap: pretty; }
+
+.ops-run {
+  display: flex;
+  align-items: center;
+  gap: .8rem;
+  flex-wrap: wrap;
+  padding: .85rem .95rem;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-radius: var(--et-radius-lg);
+  background: var(--et-surface);
+}
+/* Ingestion pause card (owner order 2026-08-18). Same panel shell as
+   .ops-run / .step-row so it reads as one more control in the same family,
+   with the status dot vocabulary the read-only rows already use — an owner
+   who has learnt "amber means look at me" on this page does not have to
+   learn a second colour language for the one control that stops everything. */
+.ing-card {
+  display: grid;
+  gap: .7rem;
+  padding: .85rem .95rem;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-radius: var(--et-radius-lg);
+  background: var(--et-surface);
+}
+.ing-status { display: flex; align-items: flex-start; gap: .75rem; }
+.ing-status-body { flex: 1 1 auto; min-width: 0; }
+.ing-status[data-state="ok"]      .dot { background: var(--et-ok);     box-shadow: 0 0 0 3px var(--et-ok-bg); }
+.ing-status[data-state="warn"]    .dot { background: var(--et-warn);   box-shadow: 0 0 0 3px var(--et-warn-bg); }
+.ing-status[data-state="danger"]  .dot { background: var(--et-danger); box-shadow: 0 0 0 3px var(--et-danger-bg); }
+.ing-status[data-state="pending"] .dot { animation: pulse-dot 1.4s ease-in-out infinite; }
+.ing-headline { margin: 0; font-weight: 700; text-wrap: pretty; }
+.ing-lines { display: grid; gap: .2rem; margin: .3rem 0 0; }
+.ing-lines p { margin: 0; color: var(--et-muted); font-size: var(--et-text-micro); text-wrap: pretty; }
+.ing-buttons { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+/* The two-answer pause question (owner ask 2026-08-23). ⚠️ `display: flex`
+   here is what `style.display = ''` reverts to when the question is opened —
+   the JS toggles between 'none' and '', so the visible state is defined once,
+   here, rather than hard-coded at both call sites. */
+.ing-pause-choice { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.ing-timer { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+.ing-label { font-size: var(--et-text-small); font-weight: 600; flex: 0 0 auto; }
+.ing-tz {
+  margin-left: .3rem;
+  padding: .05em .55em;
+  border: 1px solid var(--et-hairline);
+  border-radius: var(--et-radius-pill);
+  font-size: var(--et-text-micro);
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--et-muted);
+  white-space: nowrap;
+}
+.ing-input {
+  min-height: 34px;
+  padding: .25em .6em;
+  border: 1px solid var(--et-hairline);
+  border-radius: var(--et-radius);
+  background: var(--et-bg, var(--et-surface));
+  color: var(--et-fg);
+  font: inherit;
+  font-size: var(--et-text-small);
+}
+.ing-input:focus-visible { outline: 2px solid var(--et-accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .ing-status[data-state="pending"] .dot { animation: none !important; }
+}
+
+.ops-run-msg { font-size: var(--et-text-small); color: var(--et-muted); flex: 1 1 16rem; text-wrap: pretty; }
+.ops-run-msg[data-tone="ok"] { color: var(--et-ok); }
+.ops-run-msg[data-tone="warn"] { color: var(--et-danger); }
+
+.lever-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .45rem; }
+.lever-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .8rem;
+  flex-wrap: wrap;
+  padding: .6rem .85rem;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-radius: var(--et-radius);
+  background: var(--et-surface);
+  font-size: var(--et-text-small);
+}
+.lever-item a { color: var(--et-accent); font-weight: 600; }
+.lever-note { color: var(--et-muted); font-size: var(--et-text-micro); }
+
+/* =========================================================================
+ * NEW 2026-08-18 — the three pages the split created.
+ * Everything above this line is the original /status CSS, unchanged.
+ * ========================================================================= */
+
+/* --- the freshness strip -------------------------------------------------
+ * ⚠️ THE MOST IMPORTANT ELEMENT ON THE THREE PUSHED-DATA PAGES, and it is
+ * styled to be read before the data it labels. Each of them renders a
+ * snapshot somebody else published; a page that shows an eight-hour-old board
+ * as confidently as a fresh one is worse than a page with no board at all.
+ * `data-tone` is SET BY THE RENDERER, never guessed here:
+ *   ok      a recent push
+ *   warn    a push old enough to doubt (thresholds live in status/lib/board.js)
+ *   danger  the poll itself FAILED — what is on screen is not current
+ *   none    nothing has ever been pushed
+ */
+.freshstrip {
+  display: flex;
+  align-items: baseline;
+  gap: .5rem;
+  flex-wrap: wrap;
+  margin: 0 0 var(--et-space-2);
+  padding: .5rem .85rem;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-left-width: 3px;
+  border-radius: var(--et-radius);
+  background: var(--et-surface);
+  font-size: var(--et-text-small);
+}
+.freshstrip[data-tone="ok"]     { border-left-color: var(--et-ok); }
+.freshstrip[data-tone="warn"]   { border-left-color: var(--et-warn); }
+.freshstrip[data-tone="danger"] { border-left-color: var(--et-danger); }
+.freshstrip[data-tone="none"]   { border-left-color: var(--et-muted); }
+.freshstrip .fresh-age { font-weight: 700; }
+.freshstrip[data-tone="danger"] .fresh-age { color: var(--et-danger); }
+.freshstrip[data-tone="warn"]   .fresh-age { color: var(--et-warn); }
+.freshstrip .fresh-note { color: var(--et-muted); font-size: var(--et-text-micro); text-wrap: pretty; }
+
+/* --- worded empty state --------------------------------------------------
+ * The owner's standing rule: never a bare empty box. Every list on the three
+ * new pages renders one of these instead of nothing, and the four causes stay
+ * apart (nothing pushed / pushed but this section is empty / the poll failed /
+ * not wired up yet) because their fixes differ.
+ */
+.empty-say {
+  margin: 0;
+  padding: .8rem .95rem;
+  border: 1px dashed var(--et-hairline);
+  border-radius: var(--et-radius);
+  color: var(--et-muted);
+  font-size: var(--et-text-small);
+  text-wrap: pretty;
+}
+
+/* --- Agents: the running-agent cards ------------------------------------- */
+.agent-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .55rem; }
+.agent-row {
+  display: flex;
+  align-items: flex-start;
+  gap: .75rem;
+  padding: .75rem .9rem;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-radius: var(--et-radius-lg);
+  background: var(--et-surface);
+}
+.agent-row[data-state="running"] .dot { background: var(--et-ok); box-shadow: 0 0 0 3px var(--et-ok-bg); animation: pulse-dot 1.4s ease-in-out infinite; }
+.agent-row[data-state="queued"]  .dot { background: var(--et-warn); box-shadow: 0 0 0 3px var(--et-warn-bg); }
+.agent-row[data-state="failed"]  .dot { background: var(--et-danger); box-shadow: 0 0 0 3px var(--et-danger-bg); }
+.agent-row[data-state="landed"]  .dot { background: var(--et-muted); }
+.agent-body { flex: 1 1 auto; min-width: 0; }
+.agent-head { display: flex; align-items: center; gap: .55rem; flex-wrap: wrap; }
+.agent-name { font-weight: 700; }
+.agent-task { margin: .3rem 0 0; font-size: var(--et-text-small); text-wrap: pretty; }
+.agent-meta { margin: .25rem 0 0; color: var(--et-muted); font-size: var(--et-text-micro); font-family: var(--et-font-mono); }
+
+/* --- Agents: the event feed ---------------------------------------------- */
+.feed { list-style: none; margin: 0; padding: 0; display: grid; gap: .3rem; }
+.feed-row {
+  display: flex;
+  align-items: baseline;
+  gap: .6rem;
+  flex-wrap: wrap;
+  padding: .45rem .8rem;
+  border: 1px solid var(--et-hairline);
+  border-left-width: 3px;
+  border-radius: var(--et-radius);
+  background: var(--et-surface);
+  font-size: var(--et-text-small);
+}
+.feed-row[data-kind="dispatched"] { border-left-color: var(--et-accent); }
+.feed-row[data-kind="landed"]     { border-left-color: var(--et-ok); }
+.feed-row[data-kind="failed"]     { border-left-color: var(--et-danger); }
+.feed-row[data-kind="killed"]     { border-left-color: var(--et-warn); }
+.feed-when { color: var(--et-muted); font-family: var(--et-font-mono); font-size: var(--et-text-micro); white-space: nowrap; }
+.feed-what { flex: 1 1 12rem; min-width: 0; text-wrap: pretty; }
+
+/* --- Agents: the usage figures ------------------------------------------- */
+.usage-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: .55rem; }
+.usage-tile {
+  padding: .7rem .85rem;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-radius: var(--et-radius-lg);
+  background: var(--et-surface);
+}
+.usage-label { color: var(--et-muted); font-size: var(--et-text-micro); font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.usage-value { margin: .15rem 0 .35rem; font-family: var(--et-font-display); font-size: var(--et-text-heading); font-weight: 700; line-height: 1; }
+.usage-tile[data-tone="warn"]   .usage-value { color: var(--et-warn); }
+.usage-tile[data-tone="danger"] .usage-value { color: var(--et-danger); }
+.usage-bar { height: 6px; border-radius: 999px; background: color-mix(in srgb, var(--et-muted) 22%, transparent); overflow: hidden; }
+.usage-fill { display: block; height: 100%; background: var(--et-ok); }
+.usage-tile[data-tone="warn"]   .usage-fill { background: var(--et-warn); }
+.usage-tile[data-tone="danger"] .usage-fill { background: var(--et-danger); }
+.usage-sub { margin: .35rem 0 0; color: var(--et-muted); font-size: var(--et-text-micro); text-wrap: pretty; }
+
+/* --- Processing: in-flight books + their progress ------------------------ */
+.proc-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .55rem; }
+.proc-row {
+  padding: .7rem .9rem;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-radius: var(--et-radius-lg);
+  background: var(--et-surface);
+}
+.proc-head { display: flex; align-items: baseline; gap: .55rem; flex-wrap: wrap; }
+.proc-title { font-weight: 700; text-wrap: pretty; }
+.proc-by { color: var(--et-muted); font-size: var(--et-text-small); }
+.proc-lane {
+  padding: .05em .55em;
+  border: 1px solid var(--et-hairline);
+  border-radius: var(--et-radius-pill);
+  font-size: var(--et-text-micro);
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: var(--et-muted);
+  white-space: nowrap;
+}
+.proc-bar { margin: .45rem 0 .25rem; height: 8px; border-radius: 999px; background: color-mix(in srgb, var(--et-muted) 22%, transparent); overflow: hidden; }
+.proc-fill { display: block; height: 100%; background: var(--et-accent); }
+.proc-meta { margin: 0; color: var(--et-muted); font-size: var(--et-text-micro); text-wrap: pretty; }
+/* The owner's own phrase, and it is a LABEL not a status: "joined GABI's
+   knowledge base <date>" is the sentence he asked to see against each book. */
+.proc-joined { color: var(--et-ok); font-weight: 600; }
+
+/* --- Processing: the books that are NOT in the knowledge base -------------
+   The re-queue / front-of-queue rows (owner-approved fine controls, 2026-08-18).
+
+   ⚠️ A FAILED ROW AND A DEFERRED ROW ARE TINTED DIFFERENTLY ON PURPOSE. A
+   failure is something that went wrong; a scanned PDF is waiting on an OCR step
+   that was never built. Giving both the same danger colour would tell the owner
+   twenty-five things are broken when nothing is. */
+.proc-row[data-status='failed'] {
+  border-color: color-mix(in srgb, var(--et-danger) 45%, var(--et-hairline));
+}
+.proc-row[data-status='needs-ocr'] {
+  border-color: color-mix(in srgb, var(--et-muted) 45%, var(--et-hairline));
+}
+.proc-warn { color: var(--et-warn); font-weight: 600; }
+.proc-actions { display: flex; gap: .45rem; flex-wrap: wrap; margin-top: .55rem; }
+/* Small, but never below a 24px pointer target — these sit in a dense list and
+   a cramped button is a mis-click on a control that writes to the pipeline. */
+.proc-btn { font-size: var(--et-text-micro); padding: .3rem .7rem; min-height: 24px; }
+
+/* --- Processing: queue depth per lane ------------------------------------ */
+.queue-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: .5rem; }
+.queue-tile {
+  padding: .6rem .8rem;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-radius: var(--et-radius);
+  background: var(--et-surface);
+}
+.queue-count { font-family: var(--et-font-display); font-size: var(--et-text-heading); font-weight: 700; line-height: 1; }
+.queue-lane { color: var(--et-muted); font-size: var(--et-text-micro); font-weight: 600; }
+
+/* --- GABI Knowledge: the FINISHED count ----------------------------------
+   Owner ask 2026-08-18: "add a completed list not just a queue so we know how
+   many things have been finished." The list already existed at the bottom of
+   the page; this is the half that makes it findable. Sized deliberately larger
+   than a queue tile — the queue is what is waiting, this is what is DONE, and
+   the page should not make the reader hunt for the good news. */
+.proc-complete { margin: 0 0 var(--et-space-3); }
+.complete-headline {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: .5rem;
+  padding: .8rem 1rem;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-radius: var(--et-radius);
+  background: var(--et-surface);
+}
+.complete-count {
+  font-family: var(--et-font-display);
+  font-size: var(--et-text-title);
+  font-weight: 700;
+  line-height: 1;
+}
+.complete-label { color: var(--et-muted); font-weight: 600; }
+/* The show-all control under the finished list. */
+.proc-more { margin-top: .6rem; }
+.proc-more .section-note { margin-top: .35rem; }
+
+/* --- Click-into-logs: a tail hung on the row it explains -----------------
+   Owner ask 2026-08-18: "lets make it so i can see logs for some of this
+   stuff if they arent working by clicking into the health checks."
+   Collapsed by default even on a red row — forty lines of log would push
+   every other row off screen at the moment a reader is comparing them. */
+.row-log { margin-top: .5rem; }
+.row-log > summary {
+  cursor: pointer;
+  color: var(--et-muted);
+  font-size: var(--et-text-small);
+  font-weight: 600;
+}
+.row-log > summary:hover { color: var(--et-fg); }
+.row-log > summary:focus-visible { outline: 2px solid var(--et-accent); outline-offset: 2px; border-radius: 4px; }
+/* --- The archive row: the headline of the Backups section ---------------- */
+.archive-card {
+  padding: .85rem 1rem;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-radius: var(--et-radius);
+  background: var(--et-surface);
+  margin: 0 0 .6rem;
+}
+.archive-card[data-tone="warn"]   { border-color: var(--et-warn, #b8860b); }
+.archive-card[data-tone="nodata"] { opacity: .85; }
+.archive-card .proc-bar { margin: .55rem 0 .2rem; }
+/* A two-column facts table: label left, measured value right. Collapses to one
+   column on a phone, where the labels have to lead. */
+.archive-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: .18rem .7rem;
+  margin: .6rem 0 0;
+  font-size: var(--et-text-small);
+}
+.archive-facts dt { color: var(--et-muted); font-weight: 600; }
+.archive-facts dd { margin: 0; overflow-wrap: anywhere; }
+@media (max-width: 30rem) {
+  .archive-facts { grid-template-columns: 1fr; gap: .05rem; }
+  .archive-facts dd { margin: 0 0 .35rem; }
+}
+
+/* --- Notification preferences: the one control on the Agents page -------- */
+.prefs-list { list-style: none; margin: .4rem 0 0; padding: 0; display: grid; gap: .55rem; }
+.prefs-row {
+  padding: .6rem .75rem;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-radius: var(--et-radius);
+  background: var(--et-surface);
+}
+.prefs-label { display: flex; align-items: center; gap: .55rem; cursor: pointer; }
+.prefs-label input { width: 1rem; height: 1rem; accent-color: var(--et-accent); cursor: pointer; }
+.prefs-name { font-weight: 600; }
+/* The sentence under each switch is not decoration: a toggle whose effect a
+   reader has to guess gets guessed wrong, and this one decides what wakes him. */
+.prefs-detail { margin: .3rem 0 0 1.55rem; color: var(--et-muted); font-size: var(--et-text-small); }
+.prefs-note[data-tone="danger"] { color: var(--et-danger, #b4433a); }
+
+.log-tail {
+  margin: .4rem 0 0;
+  padding: .6rem .7rem;
+  max-height: 22rem;
+  /* Logs are long lines of fixed-width output: scroll the BLOCK, never let it
+     stretch the page sideways. */
+  overflow: auto;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-radius: var(--et-radius);
+  background: var(--et-bg, var(--et-surface));
+  color: var(--et-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--et-text-micro);
+  line-height: 1.45;
+  white-space: pre;
+  tab-size: 2;
+}
+
+/* --- Pipelines: the nightly window clock --------------------------------- */
+.window-card {
+  display: grid;
+  gap: .35rem;
+  padding: .85rem .95rem;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-left-width: 3px;
+  border-radius: var(--et-radius-lg);
+  background: var(--et-surface);
+}
+.window-card[data-state="open"]   { border-left-color: var(--et-ok); }
+.window-card[data-state="closed"] { border-left-color: var(--et-muted); }
+.window-headline { margin: 0; font-weight: 700; text-wrap: pretty; }
+.window-line { margin: 0; color: var(--et-muted); font-size: var(--et-text-micro); text-wrap: pretty; }
+.window-clock { font-family: var(--et-font-mono); color: var(--et-fg); }
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-row[data-state="running"] .dot { animation: none !important; }
+}
+
+/* ═══ SHELF ↔ DRIVE PARITY ══════════════════════════════════════════════════
+   The bar's colour comes from its STATE, never from its percentage. A bar that
+   is green at 38% because 38% is "quite a lot" is decoration; the question is
+   binary — is the server a complete copy of Drive or not — and only in_parity
+   earns green. The two ⚫ states (unknown / never_reported) are deliberately
+   as visible as the red ones: a meter that goes quiet when it stops being fed
+   is the exact failure this surface exists to prevent. */
+.parity-row { margin: .9rem 0 1.1rem; }
+.parity-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: .8rem; flex-wrap: wrap; margin-bottom: .35rem;
+}
+.parity-label { font-weight: 600; font-size: var(--et-text-small); }
+.parity-state { font-family: var(--et-font-mono); font-size: var(--et-text-small); }
+.parity-track {
+  height: 9px; border-radius: 999px; overflow: hidden;
+  background: color-mix(in srgb, var(--et-fg) 12%, transparent);
+}
+.parity-fill {
+  height: 100%; border-radius: 999px;
+  background: var(--et-muted);
+  transition: width .5s ease;
+}
+.parity-detail {
+  margin: .4rem 0 0; color: var(--et-muted);
+  font-size: var(--et-text-small); text-wrap: pretty;
+}
+/* ⚠️ The "nobody counted" line — MUTED on purpose, and never a state colour.
+   It says the shadow-tree count is absent from the last report, which is not a
+   fault in the shelf; it is a gap in what we can see. Dressing it as a warning
+   would put an amber-looking line under a green card over a reporter version,
+   and the household would read it as their books being at risk. `hidden` on the
+   element wins because [hidden] is display:none; this only styles it when
+   status.js unhides it. */
+.parity-shadow-note {
+  margin-top: .25rem;
+  color: color-mix(in srgb, var(--et-muted) 80%, transparent);
+  font-size: var(--et-text-small);
+  font-style: italic;
+}
+/* ⚠️ Only this one is green. */
+.parity-row[data-state="in_parity"]   .parity-fill  { background: var(--et-ok, #3a8d5c); }
+.parity-row[data-state="in_parity"]   .parity-state { color: var(--et-ok, #3a8d5c); }
+.parity-row[data-state="behind"]      .parity-fill  { background: var(--et-warn, #d9a03f); }
+.parity-row[data-state="behind"]      .parity-state { color: var(--et-warn, #d9a03f); }
+/* Shadow-tree drift: files are all on disk but not hardlinked into ABS, so
+   books show Missing. Warn treatment — never the green of a complete copy. */
+.parity-row[data-state="shelf_behind"] .parity-fill  { background: var(--et-warn, #d9a03f); }
+.parity-row[data-state="shelf_behind"] .parity-state { color: var(--et-warn, #d9a03f); }
+.parity-row[data-state="cannot_fit"]  .parity-fill  { background: var(--et-danger, #b3453a); }
+.parity-row[data-state="cannot_fit"]  .parity-state { color: var(--et-danger, #b3453a); }
+/* Never green, never silent: a stale or failed measurement is not a result. */
+.parity-row[data-state="unknown"]        .parity-fill  { background: var(--et-danger, #b3453a); }
+.parity-row[data-state="unknown"]        .parity-state { color: var(--et-danger, #b3453a); }
+.parity-row[data-state="never_reported"] .parity-fill  { background: var(--et-muted); }
+.parity-row[data-state="never_reported"] .parity-state { color: var(--et-muted); }
+@media (prefers-reduced-motion: reduce) { .parity-fill { transition: none; } }
+
+/* ⚠️ The Claude-budget meter rules that lived here were REMOVED 2026-08-21,
+   the same day they shipped: /status/agents owns the usage figures
+   (docs/info/status-pages.md), and that page has its own .usage-tile/.usage-bar
+   set. These were a duplicate stylesheet for a duplicate surface, and they also
+   re-declared .usage-grid, so two rules were fighting over one class.
+   If you are adding usage styling, add it to the agents page's existing rules. */

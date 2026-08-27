@@ -1,0 +1,83 @@
+/*
+ * site.css — the only CSS this site owns. estate-theme.css owns the palette
+ * and status-shell.css owns the shell; this file adds the two things the
+ * shell has no vocabulary for (the action-log table and the mode chips) and
+ * nothing else. Tokens only — no raw colours, no second accent.
+ */
+
+/* status-shell.css styles .btn for <button>; the sign-in control has to be a
+   real <a> because it is a top-level navigation to Discord. */
+a.btn { text-decoration: none; }
+
+.mode-chip {
+  padding: .1em .6em;
+  border: 1px solid var(--et-hairline);
+  border-radius: var(--et-radius-pill);
+  font-size: var(--et-text-micro);
+  font-weight: 700;
+  font-family: var(--et-font-mono);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--et-muted);
+}
+.mode-chip[data-mode="on"]     { border-color: var(--et-ok);     color: var(--et-ok); }
+.mode-chip[data-mode="shadow"] { border-color: var(--et-warn);   color: var(--et-warn); }
+.mode-chip[data-mode="off"]    { border-color: var(--et-hairline); color: var(--et-muted); }
+
+.count {
+  font-family: var(--et-font-mono);
+  font-weight: 700;
+  font-size: var(--et-text-body);
+}
+.count[data-blank="true"] { color: var(--et-muted); font-weight: 400; }
+
+/* A table is the honest shape for the action log, and a table is the one
+   thing that will not fit a phone. It scrolls inside its own box so the page
+   body never scrolls sideways. */
+.table-scroll {
+  overflow-x: auto;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-radius: var(--et-radius-lg);
+  background: var(--et-surface);
+}
+.log-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--et-text-small);
+}
+.log-table th,
+.log-table td {
+  padding: .5rem .7rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--et-hairline);
+  white-space: nowrap;
+}
+.log-table th {
+  font-size: var(--et-text-micro);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--et-muted);
+}
+.log-table tbody tr:last-child td { border-bottom: 0; }
+.log-table td.wrap { white-space: normal; min-width: 12rem; }
+.log-table td.mono { font-family: var(--et-font-mono); }
+.log-table .kind { font-weight: 700; }
+.log-table .kind[data-tone="would"] { color: var(--et-warn); }
+.log-table .kind[data-tone="failed"] { color: var(--et-danger); }
+
+.checked {
+  color: var(--et-muted);
+  font-size: var(--et-text-micro);
+  font-family: var(--et-font-mono);
+}
+
+.say-nothing {
+  margin: 0;
+  padding: .9rem;
+  border: var(--et-border-w) dashed var(--et-hairline);
+  border-radius: var(--et-radius-lg);
+  color: var(--et-muted);
+  font-size: var(--et-text-small);
+  text-wrap: pretty;
+}
