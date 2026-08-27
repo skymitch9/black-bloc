@@ -1,4 +1,4 @@
-import { api, listOf, names, send } from './api.js';
+import { api, listOf, names, send, settings } from './api.js';
 import { start, tabHref } from './app.js';
 import { memberTally, shellStatus } from './shell.js';
 import {
@@ -13,6 +13,7 @@ import {
   icon,
   idsIn,
   memberPicker,
+  modeSwitch,
   nameNode,
   notice,
   pager,
@@ -23,7 +24,7 @@ import {
   when,
 } from './ui.js';
 
-const KINDS = ['warn', 'timeout', 'kick', 'ban', 'unban'];
+const KINDS = ['warn', 'timeout', 'untimeout', 'kick', 'ban', 'unban'];
 const DESTRUCTIVE = ['kick', 'ban', 'unban'];
 const PILL_FEATURES = [['automod', 'Automod'], ['honeypot', 'Honeypot']];
 
@@ -61,20 +62,30 @@ const state = {
 
 let refresh = () => {};
 
-function modePills(status) {
-  const modes = new Map();
-  for (const row of (status && status.features) || []) modes.set(row.feature, row.mode);
+/** The aside's switches: the same control the Overview features card draws. */
+function modeSwitches(status, payload, say) {
+  const rows = new Map();
+  for (const row of (status && status.features) || []) rows.set(row.feature, row);
+  const specs = new Map();
+  for (const group of Object.values(payload || {})) {
+    for (const spec of Array.isArray(group) ? group : []) specs.set(spec.key, spec);
+  }
   const nodes = [];
   for (const [feature, label] of PILL_FEATURES) {
-    if (!modes.has(feature)) continue;
-    const mode = modes.get(feature);
-    const blank = mode === null || mode === undefined || mode === '';
+    const row = rows.get(feature);
+    const spec = row ? specs.get(row.key) : null;
+    if (!row) continue;
     nodes.push(el('span', { class: 'pill-label', text: label }));
-    nodes.push(el('span', {
-      class: 'pill',
-      'data-mode': blank ? 'off' : String(mode),
-      text: blank ? 'not set' : String(mode),
-    }));
+    if (spec && Array.isArray(spec.choices) && spec.choices.length) {
+      nodes.push(modeSwitch(spec, { say, label }).node);
+    } else {
+      const blank = row.mode === null || row.mode === undefined || row.mode === '';
+      nodes.push(el('span', {
+        class: 'pill',
+        'data-mode': blank ? 'off' : String(row.mode),
+        text: blank ? 'not set' : String(row.mode),
+      }));
+    }
   }
   return nodes;
 }
@@ -308,16 +319,18 @@ async function caseDetail(id) {
 async function load() {
   const query = new URLSearchParams({ page: String(state.page) });
   if (state.userFilter) query.set('user_id', state.userFilter);
-  const [status, payload, tally] = await Promise.all([
+  const [status, payload, tally, allSettings] = await Promise.all([
     shellStatus(),
     api(`/api/mod/cases?${query.toString()}`),
     memberTally(),
+    settings(true),
   ]);
   const rows = listOf(payload, 'cases');
   await names(idsIn(rows, ['user_id', 'moderator_id']));
 
+  const asideSay = notice();
   const aside = document.getElementById('page-aside');
-  if (aside) aside.replaceChildren(...modePills(status));
+  if (aside) aside.replaceChildren(...modeSwitches(status, allSettings, asideSay), asideSay);
 
   const picker = memberPicker({
     label: 'Only this member',

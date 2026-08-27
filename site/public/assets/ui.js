@@ -891,6 +891,43 @@ export async function namespaceSettings(namespace, {
   return group.node;
 }
 
+/**
+ * The mode switch the Overview and Moderation rows share: the settings
+ * editor's own three segments, saving on the click because there is no docked
+ * bar out here, and putting the old value back with a sentence when the bot
+ * refuses. `spec` is the row /api/settings reports for the key.
+ */
+export function modeSwitch(spec, { onSaved = null, say = null, label = null } = {}) {
+  const voice = say || notice();
+  const named = label || humanLabel(spec.key);
+  let stored = spec.value === null || spec.value === undefined ? null : String(spec.value);
+  const choices = segOrder(spec.choices || []).map((choice) => ({
+    value: choice,
+    label: String(choice),
+  }));
+  const node = segment(choices, stored, {
+    onChange: async () => {
+      const wanted = node.readValue();
+      if (wanted === stored) return;
+      voice.say('Saving…');
+      try {
+        const reply = await saveSetting(spec.key, wanted);
+        stored = String(storedValue(reply, spec.key) ?? wanted);
+        node.setValue(stored);
+        voice.say(`${named} is now ${stored}.`, 'ok');
+        if (onSaved) onSaved(spec.key, stored);
+      } catch (error) {
+        node.setValue(stored);
+        const said = sentenceFor(error);
+        voice.say(said.text, said.tone);
+      }
+    },
+  });
+  node.setAttribute('data-key', spec.key);
+  node.setAttribute('aria-label', `${named} mode`);
+  return { node, say: voice };
+}
+
 export async function run(say, work, okText) {
   say.say('Working…');
   try {

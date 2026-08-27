@@ -1,7 +1,7 @@
-import { api, listOf, names, notesOf } from './api.js';
+import { api, listOf, names, notesOf, settings } from './api.js';
 import { FEATURE_TABS, start, tabHref } from './app.js';
 import { GROUPS, shellStatus } from './shell.js';
-import { card, el, icon, idsIn, nameNode, sayNothing, shortWhen } from './ui.js';
+import { card, el, icon, idsIn, modeSwitch, nameNode, notice, sayNothing, shortWhen } from './ui.js';
 
 const many = (n, one, more) => `${n} ${Number(n) === 1 ? one : more}`;
 
@@ -11,14 +11,6 @@ const OPEN_NOTE = {
   honeypot: (open) => `${many(open.honeypot_hits_7d, 'trip', 'trips')} in 7 days`,
   events: (open) => `${many(open.open_events, 'event', 'events')} waiting`,
   modmail: (open) => `${many(open.open_modmail, 'open ticket', 'open tickets')}`,
-};
-
-const MODE_NOTE = {
-  on: 'acting on what it sees',
-  shadow: 'logging what it would do, acting on nothing',
-  off: 'not running',
-  channel: 'one channel per ticket',
-  thread: 'private threads in one channel',
 };
 
 const NEEDS = [
@@ -62,32 +54,45 @@ function featureNote(feature, open) {
   return value.startsWith('undefined') ? null : value;
 }
 
-function featureRow(row, open) {
+/** The row's own switch, or the plain badge when the bot registers no key for it. */
+function modeNode(row, specs, say) {
+  const spec = specs.get(row.key);
+  if (!spec || !Array.isArray(spec.choices) || spec.choices.length === 0) {
+    const blank = row.mode === null || row.mode === undefined || row.mode === '';
+    return el('span', { class: 'pill', 'data-mode': pillMode(row.mode), text: blank ? 'not set' : String(row.mode) });
+  }
+  return modeSwitch(spec, { say, label: title(row.feature) }).node;
+}
+
+function featureRow(row, open, specs, say) {
   const tab = FEATURE_TABS[row.feature];
-  const said = featureNote(row.feature, open) || MODE_NOTE[String(row.mode)] || 'no mode set';
-  const blank = row.mode === null || row.mode === undefined || row.mode === '';
-  return el(tab ? 'a' : 'div', {
-    class: 'chip',
+  const said = featureNote(row.feature, open);
+  const name = el('span', { class: 'rowlist-name', text: title(row.feature) });
+  const main = el(tab ? 'a' : 'div', {
+    class: 'rowlist-main',
     href: tab ? tabHref(tab) : undefined,
-  }, [
-    el('div', { class: 'rowlist-main' }, [
-      el('span', { class: 'rowlist-name', text: title(row.feature) }),
-      el('span', { class: 'rowlist-note', text: said }),
-    ]),
-    el('span', { class: 'pill', 'data-mode': pillMode(row.mode), text: blank ? 'not set' : String(row.mode) }),
-    tab ? icon('chevronRight', 16) : null,
+  }, [name, said ? el('span', { class: 'rowlist-note', text: said }) : null]);
+  return el('div', { class: 'chip' }, [
+    main,
+    modeNode(row, specs, say),
+    tab ? el('a', { class: 'chip-go', href: tabHref(tab), 'aria-label': `Open ${title(row.feature)}` }, [icon('chevronRight', 16)]) : null,
   ]);
 }
 
-function featuresCard(status) {
+function featuresCard(status, payload) {
   const rows = (status && status.features) || [];
   if (rows.length === 0) {
     return card('Features', [sayNothing('No feature reports a mode yet.')], { flush: true });
   }
-  return card('Features', inNavOrder(rows).map((row) => featureRow(row, status.open)), {
-    count: rows.length,
-    flush: true,
-  });
+  const specs = new Map();
+  for (const group of Object.values(payload || {})) {
+    for (const spec of Array.isArray(group) ? group : []) specs.set(spec.key, spec);
+  }
+  const say = notice();
+  return card('Features', [
+    ...inNavOrder(rows).map((row) => featureRow(row, status.open, specs, say)),
+    say,
+  ], { count: rows.length, flush: true });
 }
 
 function needsCard(status) {
@@ -159,9 +164,10 @@ function actionsCard(rows) {
 }
 
 async function load() {
-  const [status, actions] = await Promise.all([
+  const [status, actions, payload] = await Promise.all([
     shellStatus(),
     api('/api/actions?limit=10'),
+    settings(true),
   ]);
   const rows = listOf(actions, 'actions');
   await names(idsIn(rows, ['actor_id', 'target_id']));
@@ -170,7 +176,7 @@ async function load() {
   document.getElementById('dash').replaceChildren(
     ...(notes.length ? [el('p', { class: 'section-note', text: notes.join(' ') })] : []),
     el('div', { class: 'twocol' }, [
-      featuresCard(status),
+      featuresCard(status, payload),
       el('div', { class: 'colstack' }, [needsCard(status), actionsCard(rows)]),
     ]),
   );
