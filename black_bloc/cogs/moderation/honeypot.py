@@ -59,6 +59,10 @@ CANNOT_CREATE = (
     "Discord refused to create the channel, so no trap was made. Black Bloc needs the Manage "
     "Channels permission in this server. Ask an admin to give it that, then run this again."
 )
+NO_TEST_CHANNEL_TRAP = (
+    "Black Bloc is in test mode and cannot see its test channel, so no trap was made. Set "
+    "TEST_CHANNEL_ID to a channel the bot can read, restart it, then run this again."
+)
 NOTICE_NOT_POSTED = (
     "The pinned notice was not posted, because test mode keeps Black Bloc out of every channel "
     "but the test one. Post it by hand for now, or run this again once test mode is off."
@@ -181,6 +185,14 @@ async def offered_recently(db: Any, guild_id: int, user_id: int, minutes: int) -
     return await cur.fetchone() is not None
 
 
+async def recent_hits(db: Any, guild_id: int, limit: int = 50) -> list[Any]:
+    cur = await db.conn.execute(
+        "SELECT * FROM honeypot_hits WHERE guild_id = ? ORDER BY id DESC LIMIT ?",
+        (guild_id, int(limit)),
+    )
+    return list(await cur.fetchall())
+
+
 async def hit_counts(db: Any, guild_id: int) -> dict[str, int]:
     cur = await db.conn.execute(
         "SELECT action, COUNT(*) AS n FROM honeypot_hits WHERE guild_id = ? GROUP BY action",
@@ -224,6 +236,137 @@ async def _dm_before_ban(guild: Any, user: Any) -> None:
         log.info("honeypot: could not warn %s before the ban: %s", getattr(user, "id", "?"), exc)
 
 
+async def ban_hit(bot: Any, guild: Any, hit_id: int, actor: Any, by: str) -> tuple[str, str]:
+    """The Ban-now path, for the button and the web alike: (what happened, what to say)."""
+    hit = await get_hit(bot.db, hit_id)
+    if hit is None:
+        return ("no_such_hit", NO_SUCH_HIT)
+    if hit["action"] == "banned":
+        return ("already", ALREADY_BANNED)
+    channel = bot.get_channel(hit["channel_id"])
+    failure = await do_ban(
+        bot,
+        guild,
+        hit["user_id"],
+        getattr(channel, "name", "the trap channel"),
+        int(bot.store.get(guild.id, "honeypot_purge_days") or 0),
+    )
+    if failure == "test_mode":
+        await log_action(
+            bot,
+            guild,
+            "honeypot.would_ban",
+            actor=actor,
+            target=hit["user_id"],
+            details={"hit_id": hit_id, "reason": "test_mode", "by": by},
+        )
+        return ("test_mode", BAN_IN_TEST_MODE)
+    if failure is not None:
+        await set_hit_action(bot.db, hit_id, "ban_failed")
+        await log_action(
+            bot,
+            guild,
+            "honeypot.ban_failed",
+            actor=actor,
+            target=hit["user_id"],
+            details={"hit_id": hit_id, "reason": failure, "by": by},
+        )
+        return ("refused", BAN_REFUSED)
+    await set_hit_action(bot.db, hit_id, "banned")
+    await log_action(
+        bot,
+        guild,
+        "honeypot.banned",
+        actor=actor,
+        target=hit["user_id"],
+        details={"hit_id": hit_id, "by": by},
+    )
+    return ("banned", f"Banned <@{hit['user_id']}> for that trap post.")
+
+
+async def make_trap_channel(
+    bot: Any, guild: Any, actor: Any, name: str | None = None
+) -> tuple[str, str]:
+    """Create the trap channel, for slash and web alike: (what happened, what to say)."""
+    live = [
+        cid
+        for cid in (bot.store.get(guild.id, "honeypot_channel_ids") or [])
+        if guild.get_channel(cid) is not None
+    ]
+    if live:
+        return ("already", ALREADY_A_TRAP.format(where=f"<#{live[0]}>", channel_id=live[0]))
+    category = test_category(bot)
+    if category is False:
+        return ("no_test_channel", NO_TEST_CHANNEL_TRAP)
+    try:
+        channel = await guild.create_text_channel(
+            name or TRAP_NAME,
+            category=category or None,
+            position=len(list(guild.text_channels)),
+            overwrites={
+                guild.default_role: discord.PermissionOverwrite(
+                    view_channel=True,
+                    send_messages=True,
+                    create_public_threads=False,
+                    create_private_threads=False,
+                    send_messages_in_threads=False,
+                    add_reactions=False,
+                    attach_files=False,
+                    embed_links=False,
+                    use_external_emojis=False,
+                )
+            },
+            slowmode_delay=0,
+            reason="Black Bloc honeypot",
+        )
+    except discord.HTTPException as exc:
+        log.warning("honeypot: setup could not create the trap channel: %s", exc)
+        return ("refused", CANNOT_CREATE)
+    ids = list(bot.store.get(guild.id, "honeypot_channel_ids") or [])
+    if channel.id not in ids:
+        ids.append(channel.id)
+    await bot.store.set(guild.id, "honeypot_channel_ids", ids, by=getattr(actor, "id", actor))
+    posted = await post_notice(bot, channel)
+    await log_action(
+        bot,
+        guild,
+        "honeypot.setup",
+        actor=actor,
+        details={"channel_id": channel.id, "notice_posted": posted},
+    )
+    mode = bot.store.get(guild.id, "honeypot_mode")
+    return (
+        "created",
+        f"{channel.mention} is the trap, and the mode is **{mode}**. "
+        + ("Its notice is posted and pinned." if posted else NOTICE_NOT_POSTED),
+    )
+
+
+def test_category(bot: Any) -> Any:
+    """The test channel's category while the guard is on; None when it is off."""
+    guard = getattr(bot, "guard", None)
+    if guard is None:
+        return None
+    channel = bot.get_channel(guard.test_channel_id) if guard.test_channel_id else None
+    if channel is None:
+        return False
+    return channel.category
+
+
+async def post_notice(bot: Any, channel: Any) -> bool:
+    guard = getattr(bot, "guard", None)
+    if guard is not None and not guard.allows_channel(channel.id):
+        log.warning("honeypot: TEST MODE — the trap notice was not posted in %s", channel.id)
+        return False
+    try:
+        message = await channel.send(NOTICE, allowed_mentions=discord.AllowedMentions.none())
+        await message.pin(reason="Black Bloc honeypot")
+    except Exception as exc:
+        log.warning("honeypot: could not post the notice in %s: %s", channel.id, exc)
+        return False
+    return True
+
+
 class BanNowButton(
     SafeDynamicItem, discord.ui.DynamicItem[discord.ui.Button], template=BAN_TEMPLATE
 ):
@@ -248,58 +391,11 @@ class BanNowButton(
         if not bot.db.is_connected:
             await interaction.response.send_message(DB_UNAVAILABLE, ephemeral=True)
             return
-        hit = await get_hit(bot.db, self.hit_id)
-        if hit is None:
-            await interaction.response.send_message(NO_SUCH_HIT, ephemeral=True)
-            return
-        if hit["action"] == "banned":
-            await interaction.response.send_message(ALREADY_BANNED, ephemeral=True)
-            return
-        guild = interaction.guild
-        channel = bot.get_channel(hit["channel_id"])
-        failure = await do_ban(
-            bot,
-            guild,
-            hit["user_id"],
-            getattr(channel, "name", "the trap channel"),
-            int(bot.store.get(guild.id, "honeypot_purge_days") or 0),
+        _, said = await ban_hit(
+            bot, interaction.guild, self.hit_id, interaction.user, "button"
         )
-        if failure == "test_mode":
-            await interaction.response.send_message(BAN_IN_TEST_MODE, ephemeral=True)
-            await log_action(
-                bot,
-                guild,
-                "honeypot.would_ban",
-                actor=interaction.user,
-                target=hit["user_id"],
-                details={"hit_id": self.hit_id, "reason": "test_mode", "by": "button"},
-            )
-            return
-        if failure is not None:
-            await interaction.response.send_message(BAN_REFUSED, ephemeral=True)
-            await set_hit_action(bot.db, self.hit_id, "ban_failed")
-            await log_action(
-                bot,
-                guild,
-                "honeypot.ban_failed",
-                actor=interaction.user,
-                target=hit["user_id"],
-                details={"hit_id": self.hit_id, "reason": failure, "by": "button"},
-            )
-            return
-        await set_hit_action(bot.db, self.hit_id, "banned")
         await interaction.response.send_message(
-            f"Banned <@{hit['user_id']}> for that trap post.",
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-        await log_action(
-            bot,
-            guild,
-            "honeypot.banned",
-            actor=interaction.user,
-            target=hit["user_id"],
-            details={"hit_id": self.hit_id, "by": "button"},
+            said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
         )
 
 
@@ -504,89 +600,16 @@ class Honeypot(commands.Cog):
             return
         if not await self._database_ready(interaction):
             return
-        guild = interaction.guild
-        live = [
-            cid
-            for cid in (self.bot.store.get(guild.id, "honeypot_channel_ids") or [])
-            if guild.get_channel(cid) is not None
-        ]
-        if live:
-            await interaction.response.send_message(
-                ALREADY_A_TRAP.format(where=f"<#{live[0]}>", channel_id=live[0]),
-                ephemeral=True,
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
-            return
-        category = self._test_category()
-        if category is False:
-            await interaction.response.send_message(
-                "Black Bloc is in test mode and cannot see its test channel, so no trap was "
-                "made. Set TEST_CHANNEL_ID to a channel the bot can read, restart it, then run "
-                "this again.",
-                ephemeral=True,
-            )
-            return
         await interaction.response.defer(ephemeral=True)
-        try:
-            channel = await guild.create_text_channel(
-                name or TRAP_NAME,
-                category=category or None,
-                position=len(list(guild.text_channels)),
-                overwrites={
-                    guild.default_role: discord.PermissionOverwrite(
-                        view_channel=True,
-                        send_messages=True,
-                        create_public_threads=False,
-                        create_private_threads=False,
-                        send_messages_in_threads=False,
-                        add_reactions=False,
-                        attach_files=False,
-                        embed_links=False,
-                        use_external_emojis=False,
-                    )
-                },
-                slowmode_delay=0,
-                reason="Black Bloc honeypot",
-            )
-        except discord.HTTPException as exc:
-            log.warning("honeypot: setup could not create the trap channel: %s", exc)
-            await interaction.followup.send(CANNOT_CREATE, ephemeral=True)
-            return
-        ids = list(self.bot.store.get(guild.id, "honeypot_channel_ids") or [])
-        if channel.id not in ids:
-            ids.append(channel.id)
-        await self.bot.store.set(
-            guild.id, "honeypot_channel_ids", ids, by=interaction.user.id
+        _, said = await make_trap_channel(
+            self.bot, interaction.guild, interaction.user, name
         )
-        posted = await self._post_notice(channel)
-        mode = self.bot.store.get(guild.id, "honeypot_mode")
         await interaction.followup.send(
-            f"{channel.mention} is the trap, and the mode is **{mode}**. "
-            + ("Its notice is posted and pinned." if posted else NOTICE_NOT_POSTED),
-            ephemeral=True,
-        )
-        await log_action(
-            self.bot,
-            guild,
-            "honeypot.setup",
-            actor=interaction.user,
-            details={"channel_id": channel.id, "notice_posted": posted},
+            said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
         )
 
     async def _post_notice(self, channel: Any) -> bool:
-        guard = getattr(self.bot, "guard", None)
-        if guard is not None and not guard.allows_channel(channel.id):
-            log.warning("honeypot: TEST MODE — the trap notice was not posted in %s", channel.id)
-            return False
-        try:
-            message = await channel.send(
-                NOTICE, allowed_mentions=discord.AllowedMentions.none()
-            )
-            await message.pin(reason="Black Bloc honeypot")
-        except Exception as exc:
-            log.warning("honeypot: could not post the notice in %s: %s", channel.id, exc)
-            return False
-        return True
+        return await post_notice(self.bot, channel)
 
     def _may_act_in(self, channel: Any) -> bool:
         guard = getattr(self.bot, "guard", None)
@@ -600,16 +623,7 @@ class Honeypot(commands.Cog):
         return getattr(channel, "category_id", None) == getattr(test_channel, "category_id", None)
 
     def _test_category(self) -> Any:
-        """The test channel's category while the guard is on; None when it is off."""
-        guard = getattr(self.bot, "guard", None)
-        if guard is None:
-            return None
-        test_channel = (
-            self.bot.get_channel(guard.test_channel_id) if guard.test_channel_id else None
-        )
-        if test_channel is None:
-            return False
-        return test_channel.category
+        return test_category(self.bot)
 
     @honeypot.command(name="status", description="Show what the trap is set to and has caught")
     async def status(self, interaction: discord.Interaction) -> None:

@@ -133,6 +133,11 @@ async def clear_optout(db: Any, user_id: int) -> bool:
     return cur.rowcount > 0
 
 
+async def all_optouts(db: Any) -> list[Any]:
+    cur = await db.conn.execute("SELECT * FROM golive_optout ORDER BY at DESC")
+    return list(await cur.fetchall())
+
+
 async def is_opted_out(db: Any, user_id: int) -> bool:
     cur = await db.conn.execute("SELECT 1 FROM golive_optout WHERE user_id = ?", (user_id,))
     return await cur.fetchone() is not None
@@ -190,6 +195,14 @@ async def open_sessions(db: Any, guild_id: int) -> list[Any]:
     cur = await db.conn.execute(
         "SELECT * FROM golive_sessions WHERE guild_id = ? AND ended_at IS NULL ORDER BY id",
         (guild_id,),
+    )
+    return list(await cur.fetchall())
+
+
+async def recent_sessions(db: Any, guild_id: int, limit: int = 50) -> list[Any]:
+    cur = await db.conn.execute(
+        "SELECT * FROM golive_sessions WHERE guild_id = ? ORDER BY id DESC LIMIT ?",
+        (guild_id, int(limit)),
     )
     return list(await cur.fetchall())
 

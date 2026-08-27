@@ -338,3 +338,57 @@ def test_status_reports_no_latency_when_the_gateway_has_not_measured_one(bot, si
     assert client.get("/api/status").json()["bot"]["latency_ms"] is None
     bot.latency = float("inf")
     assert client.get("/api/status").json()["bot"]["latency_ms"] is None
+
+
+async def _log(db, guild_id, kind, actor=None, target=None, at="2026-08-26T00:00:00+00:00"):
+    await db.conn.execute(
+        "INSERT INTO action_log(guild_id, at, kind, actor_id, target_id) VALUES (?, ?, ?, ?, ?)",
+        (guild_id, at, kind, actor, target),
+    )
+    await db.conn.commit()
+
+
+async def test_actions_carry_the_names_the_tables_show(bot, db, sign_in, guild, wf):
+    wf.member(guild, 7, name="lead", staff=True)
+    wf.member(guild, 21, name="spammer")
+    await _log(db, wf.GUILD_ID, "web.mod.ban", actor=7, target=21)
+    await _log(db, wf.GUILD_ID, "mod.warned", actor=7, target=999999)
+    bot.db = db
+
+    client = client_for(bot)
+    sign_in(client)
+    rows = client.get("/api/actions").json()["actions"]
+
+    newest, older = rows
+    assert newest["kind"] == "mod.warned" and newest["target_name"] is None
+    assert older["actor_name"] == "Lead" and older["target_name"] == "Spammer"
+    assert older["actor_id"] == "7"
+
+
+async def test_actions_can_be_filtered_by_kind_and_by_member(bot, db, sign_in, guild, wf):
+    await _log(db, wf.GUILD_ID, "web.mod.ban", actor=7, target=21)
+    await _log(db, wf.GUILD_ID, "web.settings.set", actor=7)
+    await _log(db, wf.GUILD_ID, "mod.warned", actor=8, target=22)
+    bot.db = db
+
+    client = client_for(bot)
+    sign_in(client)
+
+    web_only = client.get("/api/actions", params={"kind": "web"}).json()["actions"]
+    one_kind = client.get("/api/actions", params={"kind": "web.mod.ban"}).json()["actions"]
+    theirs = client.get("/api/actions", params={"user_id": "21"}).json()["actions"]
+
+    assert {row["kind"] for row in web_only} == {"web.mod.ban", "web.settings.set"}
+    assert [row["kind"] for row in one_kind] == ["web.mod.ban"]
+    assert [row["kind"] for row in theirs] == ["web.mod.ban"]
+    assert client.get("/api/actions", params={"user_id": "8"}).json()["actions"]
+
+
+async def test_an_actions_filter_that_is_not_an_id_is_a_sentence(bot, db, sign_in):
+    bot.db = db
+    client = client_for(bot)
+    sign_in(client)
+    response = client.get("/api/actions", params={"user_id": "nobody"})
+    assert response.status_code == 400
+    assert set(response.json()) == {"error", "message"}
+    assert "nobody" in response.json()["message"]

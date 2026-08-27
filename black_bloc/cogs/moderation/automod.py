@@ -80,6 +80,7 @@ ALREADY_APPLIED = (
     "That verdict has already been applied, so nothing changed. `/case {case_id}` shows what "
     "happened."
 )
+MEMBER_GONE = "That member has left the server, so there is nothing to apply."
 TIMEOUT_REFUSED = (
     "Discord refused the timeout, so nothing was done to them. Black Bloc needs the Moderate "
     "Members permission and its own role has to sit above theirs in Server Settings → Roles. Ask "
@@ -313,6 +314,147 @@ async def punish(
     return done, refused
 
 
+async def save_rule(
+    bot: Any, guild: Any, name: str, changes: dict[str, Any], actor: Any
+) -> dict[str, Any]:
+    """One rule after the changes; RuleError carries the sentence when they are refused."""
+    if name not in RULE_ORDER:
+        raise RuleError(UNKNOWN_RULE_CHOICE.format(given=name))
+    book = dict(bot.store.get(guild.id, "automod_rules"))
+    book[name] = normalise_rule(name, dict(rule_config(book, name)) | dict(changes))
+    await bot.store.set(guild.id, "automod_rules", book, by=getattr(actor, "id", actor))
+    await log_action(
+        bot,
+        guild,
+        "automod.rule",
+        actor=actor,
+        details={"rule": name} | {key: book[name].get(key) for key in changes},
+    )
+    return book[name]
+
+
+async def gather_parity(bot: Any, guild: Any, days: int) -> dict[str, Any]:
+    """The parity figures, or the one sentence saying why they could not be worked out."""
+    store = bot.store
+    channel_id = store.get(guild.id, "carl_modlog_channel_id")
+    if channel_id and channel_id == store.get(guild.id, "modlog_channel_id"):
+        return {"error": PARITY_SAME_CHANNEL}
+    channel = (
+        (bot.get_channel(channel_id) or guild.get_channel(channel_id)) if channel_id else None
+    )
+    if channel is None:
+        return {"error": NO_CARL_LOG}
+    since = within_days(days, PARITY_MAX_DAYS)
+    carl: list[tuple[int, Any]] = []
+    read = 0
+    try:
+        async for post in channel.history(limit=PARITY_HISTORY_LIMIT, after=since):
+            read += 1
+            user_id, when = parse_carl_entry(post)
+            if user_id is not None:
+                carl.append((user_id, when))
+    except discord.Forbidden:
+        log.warning("automod: parity could not read %s — forbidden", channel_id)
+        return {"error": CARL_LOG_FORBIDDEN.format(channel_id=channel_id)}
+    except discord.HTTPException as exc:
+        log.warning("automod: parity could not read %s — %s", channel_id, exc)
+        return {"error": CARL_LOG_FAILED.format(channel_id=channel_id)}
+    rows = await armed_verdicts_since(bot.db, guild.id, since)
+    bloc = [(user_id, parse_ts(at)) for user_id, at in rows]
+    return {
+        "days": max(1, min(int(days or 1), PARITY_MAX_DAYS)),
+        "bloc": len(bloc),
+        "carl": len(carl),
+        "report": parity_report(bloc, carl),
+        "truncated": read >= PARITY_HISTORY_LIMIT,
+        "test_mode": getattr(bot, "guard", None) is not None,
+    }
+
+
+def parity_lines(found: dict[str, Any]) -> list[str]:
+    lines = [
+        PARITY_HEADER.format(days=found["days"], bloc=found["bloc"], carl=found["carl"]),
+        PARITY_VERDICT.format(**found["report"]),
+    ]
+    if found["truncated"]:
+        lines.insert(1, PARITY_TRUNCATED.format(limit=PARITY_HISTORY_LIMIT))
+    if found["test_mode"]:
+        lines.append(PARITY_TEST_MODE)
+    return lines
+
+
+def message_to_delete(bot: Any, case: Any, actions: tuple[str, ...]) -> list[Any]:
+    message_id = row_value(case, "message_id")
+    channel_id = row_value(case, "channel_id")
+    if "delete" not in actions or not message_id or not channel_id:
+        return []
+    channel = bot.get_channel(channel_id)
+    return contributing_messages(channel, None, (int(message_id),))
+
+
+async def rewrite_card(
+    bot: Any, guild: Any, case: Any, done: list[str], refused: list[str], moderator: Any
+) -> None:
+    embed = case_embed(
+        case_id=case["id"],
+        kind="automod",
+        user_id=case["user_id"],
+        reason=case["reason"],
+        duration_s=case["duration_s"],
+        applied=True,
+        mode=case["mode"],
+        done=done,
+        failed=refused,
+    )
+    applied_by(embed, getattr(moderator, "id", moderator))
+    await edit_case_card(bot, guild, case, embed)
+
+
+async def apply_case(bot: Any, guild: Any, case_id: int, actor: Any) -> tuple[str, str]:
+    """Apply one shadow verdict for real: (what happened, what to say)."""
+    async with case_lock(bot, case_id):
+        case = await get_case(bot.db, case_id)
+        if case is None:
+            return ("no_such_case", NO_SUCH_CASE)
+        if case["applied"]:
+            return ("already", ALREADY_APPLIED.format(case_id=case_id))
+        member = guild.get_member(case["user_id"])
+        if member is None:
+            return ("member_gone", MEMBER_GONE)
+        actions = tuple(from_list_json(row_value(case, "actions"))) or ("warn",)
+        reason = str(case["reason"] or "automod")
+        if getattr(bot, "guard", None) is not None:
+            for action in actions:
+                await log_action(
+                    bot,
+                    guild,
+                    f"automod.would_{action}",
+                    actor=actor,
+                    target=case["user_id"],
+                    reason=reason,
+                    details={"case_id": case_id, "reason": "test_mode"},
+                )
+            return ("test_mode", refusal_in_test_mode("time out"))
+        if not await claim_case(bot.db, case_id):
+            return ("raced", ALREADY_APPLIED_BY_SOMEBODY.format(case_id=case_id))
+        done, refused = await punish(
+            bot,
+            guild,
+            member,
+            actions=actions,
+            timeout_s=int(case["duration_s"] or 0),
+            reason=reason,
+            case_id=case_id,
+            messages=message_to_delete(bot, case, actions),
+            actor=actor,
+        )
+        await set_case_outcome(bot.db, case_id, done, refused)
+        if not done:
+            return ("refused", TIMEOUT_REFUSED)
+        await rewrite_card(bot, guild, case, done, refused, actor)
+        return ("applied", f"Applied case **#{case_id}** — {', '.join(done)}.")
+
+
 class ApplyNowButton(
     SafeDynamicItem, discord.ui.DynamicItem[discord.ui.Button], template=APPLY_TEMPLATE
 ):
@@ -337,100 +479,11 @@ class ApplyNowButton(
         if not bot.db.is_connected:
             await interaction.response.send_message(DB_UNAVAILABLE, ephemeral=True)
             return
-        guild = interaction.guild
-        async with case_lock(bot, self.case_id):
-            case = await get_case(bot.db, self.case_id)
-            if case is None:
-                await interaction.response.send_message(NO_SUCH_CASE, ephemeral=True)
-                return
-            if case["applied"]:
-                await interaction.response.send_message(
-                    ALREADY_APPLIED.format(case_id=self.case_id), ephemeral=True
-                )
-                return
-            member = guild.get_member(case["user_id"])
-            if member is None:
-                await interaction.response.send_message(
-                    "That member has left the server, so there is nothing to apply.",
-                    ephemeral=True,
-                )
-                return
-            actions = tuple(from_list_json(row_value(case, "actions"))) or ("warn",)
-            if getattr(bot, "guard", None) is not None:
-                await self._would_have(bot, guild, case, actions, interaction)
-                return
-            await interaction.response.defer(ephemeral=True)
-            if not await claim_case(bot.db, self.case_id):
-                await interaction.followup.send(
-                    ALREADY_APPLIED_BY_SOMEBODY.format(case_id=self.case_id), ephemeral=True
-                )
-                return
-            done, refused = await punish(
-                bot,
-                guild,
-                member,
-                actions=actions,
-                timeout_s=int(case["duration_s"] or 0),
-                reason=str(case["reason"] or "automod"),
-                case_id=self.case_id,
-                messages=self._message_to_delete(bot, case, actions),
-                actor=interaction.user,
-            )
-            await set_case_outcome(bot.db, self.case_id, done, refused)
-            if not done:
-                await interaction.followup.send(TIMEOUT_REFUSED, ephemeral=True)
-                return
-            await self._rewrite_card(bot, guild, case, done, refused, interaction.user)
-            await interaction.followup.send(
-                f"Applied case **#{self.case_id}** — {', '.join(done)}.",
-                ephemeral=True,
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
-
-    def _message_to_delete(self, bot: Any, case: Any, actions: tuple[str, ...]) -> list[Any]:
-        message_id = row_value(case, "message_id")
-        channel_id = row_value(case, "channel_id")
-        if "delete" not in actions or not message_id or not channel_id:
-            return []
-        channel = bot.get_channel(channel_id)
-        return contributing_messages(channel, None, (int(message_id),))
-
-    async def _would_have(
-        self,
-        bot: Any,
-        guild: Any,
-        case: Any,
-        actions: tuple[str, ...],
-        interaction: discord.Interaction,
-    ) -> None:
-        for action in actions:
-            await log_action(
-                bot,
-                guild,
-                f"automod.would_{action}",
-                actor=interaction.user,
-                target=case["user_id"],
-                reason=str(case["reason"] or "automod"),
-                details={"case_id": self.case_id, "reason": "test_mode"},
-            )
-        await interaction.response.send_message(refusal_in_test_mode("time out"), ephemeral=True)
-
-    async def _rewrite_card(
-        self, bot: Any, guild: Any, case: Any, done: list[str], refused: list[str], moderator: Any
-    ) -> None:
-        embed = case_embed(
-            case_id=self.case_id,
-            kind="automod",
-            user_id=case["user_id"],
-            reason=case["reason"],
-            duration_s=case["duration_s"],
-            applied=True,
-            mode=case["mode"],
-            done=done,
-            failed=refused,
+        await interaction.response.defer(ephemeral=True)
+        _, said = await apply_case(bot, interaction.guild, self.case_id, interaction.user)
+        await interaction.followup.send(
+            said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
         )
-        applied_by(embed, getattr(moderator, "id", moderator))
-        await edit_case_card(bot, guild, case, embed)
 
 
 class AutoMod(commands.Cog):
@@ -727,27 +780,21 @@ class AutoMod(commands.Cog):
                 UNKNOWN_RULE_CHOICE.format(given=name), ephemeral=True
             )
             return
-        guild = interaction.guild
-        book = dict(self.bot.store.get(guild.id, "automod_rules"))
-        current = dict(rule_config(book, name))
         try:
-            current[field] = _typed(field, raw)
-            book[name] = normalise_rule(name, current)
-            await self.bot.store.set(guild.id, "automod_rules", book, by=interaction.user.id)
+            rule = await save_rule(
+                self.bot,
+                interaction.guild,
+                name,
+                {field: _typed(field, raw)},
+                interaction.user,
+            )
         except (RuleError, ValueError) as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
             return
         await interaction.response.send_message(
-            describe_rule(name, book[name]),
+            describe_rule(name, rule),
             ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
-        )
-        await log_action(
-            self.bot,
-            guild,
-            "automod.rule",
-            actor=interaction.user,
-            details={"rule": name, field: book[name].get(field)},
         )
 
     @exempt.command(name="add", description="Let a role or a channel go unwatched")
@@ -824,61 +871,12 @@ class AutoMod(commands.Cog):
             return
         if not await self._database_ready(interaction):
             return
-        guild = interaction.guild
-        store = self.bot.store
-        channel_id = store.get(guild.id, "carl_modlog_channel_id")
-        if channel_id and channel_id == store.get(guild.id, "modlog_channel_id"):
-            await interaction.response.send_message(PARITY_SAME_CHANNEL, ephemeral=True)
-            return
-        channel = (
-            (self.bot.get_channel(channel_id) or guild.get_channel(channel_id))
-            if channel_id
-            else None
-        )
-        if channel is None:
-            await interaction.response.send_message(NO_CARL_LOG, ephemeral=True)
-            return
         await interaction.response.defer(ephemeral=True)
-        since = within_days(days, PARITY_MAX_DAYS)
-        carl: list[tuple[int, Any]] = []
-        read = 0
-        try:
-            async for post in channel.history(limit=PARITY_HISTORY_LIMIT, after=since):
-                read += 1
-                user_id, when = parse_carl_entry(post)
-                if user_id is not None:
-                    carl.append((user_id, when))
-        except discord.Forbidden:
-            log.warning("automod: parity could not read %s — forbidden", channel_id)
-            await interaction.followup.send(
-                CARL_LOG_FORBIDDEN.format(channel_id=channel_id),
-                ephemeral=True,
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
-            return
-        except discord.HTTPException as exc:
-            log.warning("automod: parity could not read %s — %s", channel_id, exc)
-            await interaction.followup.send(
-                CARL_LOG_FAILED.format(channel_id=channel_id),
-                ephemeral=True,
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
-            return
-        rows = await armed_verdicts_since(self.bot.db, guild.id, since)
-        bloc = [(user_id, parse_ts(at)) for user_id, at in rows]
-        report = parity_report(bloc, carl)
-        lines = [
-            PARITY_HEADER.format(
-                days=max(1, min(int(days or 1), PARITY_MAX_DAYS)), bloc=len(bloc), carl=len(carl)
-            ),
-            PARITY_VERDICT.format(**report),
-        ]
-        if read >= PARITY_HISTORY_LIMIT:
-            lines.insert(1, PARITY_TRUNCATED.format(limit=PARITY_HISTORY_LIMIT))
-        if getattr(self.bot, "guard", None) is not None:
-            lines.append(PARITY_TEST_MODE)
+        found = await gather_parity(self.bot, interaction.guild, days)
         await interaction.followup.send(
-            "\n".join(lines), ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+            found["error"] if "error" in found else "\n".join(parity_lines(found)),
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
         )
 
 

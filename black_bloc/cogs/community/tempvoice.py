@@ -356,6 +356,176 @@ def pref(row: Any, key: str) -> Any:
         return None
 
 
+def creator_spot(bot: Any, guild: Any) -> tuple[Any, int, str]:
+    guard = getattr(bot, "guard", None)
+    if guard is not None:
+        test_channel = bot.get_channel(guard.test_channel_id) if guard.test_channel_id else None
+        if test_channel is None:
+            return None, 0, "no_test_channel"
+        category = test_channel.category
+        voice = list(getattr(category, "voice_channels", ())) if category is not None else []
+        return category, bottom_position(c.position for c in voice), "test_category"
+    afk = getattr(guild, "afk_channel", None)
+    if afk is None:
+        afk = next((c for c in guild.voice_channels if c.name == AFK_FALLBACK_NAME), None)
+    if afk is not None:
+        return afk.category, creator_position(afk.position, 0), "above_afk"
+    return None, bottom_position(c.position for c in guild.voice_channels), "bottom"
+
+
+def where_sentence(where: str) -> str:
+    if where == "test_category":
+        return (
+            "Test mode is on, so it went in the test channel's category — join it there to "
+            "try it. Run `/tempvoice setup` again once test mode is off and it will go "
+            "directly above the AFK channel."
+        )
+    if where == "above_afk":
+        return "It sits directly above the AFK channel, as asked."
+    return (
+        "Black Bloc could not find an AFK channel to sit above, so it went to the bottom of "
+        "the list — drag it where you want it."
+    )
+
+
+def may_act_in(bot: Any, channel: Any) -> bool:
+    guard = getattr(bot, "guard", None)
+    if guard is None:
+        return True
+    test_channel = bot.get_channel(guard.test_channel_id) if guard.test_channel_id else None
+    if test_channel is None:
+        return False
+    return getattr(channel, "category_id", None) == getattr(test_channel, "category_id", None)
+
+
+def join_roles(bot: Any, guild: Any) -> list[Any]:
+    """The allowed role and every resolved staff role, as role objects."""
+    found = list(bot.store.staff_roles(guild))
+    role_id = bot.store.get(guild.id, "tempvoice_allowed_role_id")
+    if not role_id:
+        return found
+    allowed = guild.get_role(role_id)
+    if allowed is None:
+        log.warning(
+            "temp voice: the allowed role %s is gone, so it was left out of the overwrites",
+            role_id,
+        )
+        return found
+    if any(getattr(role, "id", None) == role_id for role in found):
+        return found
+    return [allowed, *found]
+
+
+async def repair_creator_channel(
+    bot: Any, guild: Any, actor: Any, live: list[Any], wanted: str, *, adopted: bool = False
+) -> tuple[str, str]:
+    """Put the lobby the server already has back to its name and its own overwrites."""
+    channel = live[0]
+    if not may_act_in(bot, channel):
+        return (
+            "outside_test_category",
+            OUTSIDE_TEST_CATEGORY.format(where=channel.mention),
+        )
+    allow = join_roles(bot, guild)
+    try:
+        await channel.edit(
+            name=wanted,
+            overwrites=creator_overwrites(channel.category, allow, getattr(guild, "me", None)),
+            reason="Black Bloc temp voice: repairing the join-to-create channel",
+        )
+    except discord.HTTPException as exc:
+        log.warning("temp voice: could not repair the lobby %s: %s", channel.id, exc)
+        await log_action(
+            bot,
+            guild,
+            "tempvoice.repair_failed",
+            actor=actor,
+            details={"channel_id": channel.id, "reason": f"{type(exc).__name__}: {exc}"},
+        )
+        return ("repair_refused", CANNOT_REPAIR.format(where=channel.mention))
+    await log_action(
+        bot,
+        guild,
+        "tempvoice.repair",
+        actor=actor,
+        details={"channel_id": channel.id, "name": wanted},
+    )
+    said = (ADOPTED if adopted else REPAIRED).format(
+        where=channel.mention, name=wanted, who=roles_sentence(allow)
+    )
+    if len(live) > 1:
+        said += EXTRA_LOBBIES.format(extras=", ".join(f"<#{other.id}>" for other in live[1:]))
+    return ("adopted" if adopted else "repaired", said)
+
+
+async def adopt_creator_channel(
+    bot: Any, guild: Any, actor: Any, found: list[Any], wanted: str
+) -> tuple[str, str]:
+    """Store a lobby that carries the name but was never written down, then repair it."""
+    ids = list(bot.store.get(guild.id, "tempvoice_creator_ids") or [])
+    ids.extend(channel.id for channel in found if channel.id not in ids)
+    await bot.store.set(
+        guild.id, "tempvoice_creator_ids", ids, by=getattr(actor, "id", actor)
+    )
+    await log_action(
+        bot,
+        guild,
+        "tempvoice.adopt",
+        actor=actor,
+        details={"channel_ids": [channel.id for channel in found], "name": wanted},
+    )
+    return await repair_creator_channel(bot, guild, actor, found, wanted, adopted=True)
+
+
+async def make_creator_channel(
+    bot: Any, guild: Any, actor: Any, name: str | None = None
+) -> tuple[str, str]:
+    """Set up or repair join-to-create, for slash and web alike: (what happened, what to say)."""
+    by = getattr(actor, "id", actor)
+    wanted = (name or "").strip()[:NAME_LIMIT]
+    if wanted:
+        await bot.store.set(guild.id, "tempvoice_creator_name", wanted, by=by)
+    else:
+        wanted = bot.store.get(guild.id, "tempvoice_creator_name")
+    ids = list(bot.store.get(guild.id, "tempvoice_creator_ids") or [])
+    live = [guild.get_channel(cid) for cid in ids if guild.get_channel(cid) is not None]
+    if live:
+        return await repair_creator_channel(bot, guild, actor, live, wanted)
+    category, position, where = creator_spot(bot, guild)
+    if where == "no_test_channel":
+        return ("no_test_channel", NO_TEST_CHANNEL)
+    unknown = lobbies_by_name(category, wanted, ids)
+    if unknown:
+        return await adopt_creator_channel(bot, guild, actor, unknown, wanted)
+    allow = join_roles(bot, guild)
+    try:
+        channel = await guild.create_voice_channel(
+            wanted,
+            category=category,
+            position=position,
+            overwrites=creator_overwrites(category, allow, getattr(guild, "me", None)),
+            reason="Black Bloc temp voice: join-to-create",
+        )
+    except discord.HTTPException as exc:
+        log.warning("temp voice: setup could not create the creator channel: %s", exc)
+        return ("refused", CANNOT_CREATE)
+    if channel.id not in ids:
+        ids.append(channel.id)
+    await bot.store.set(guild.id, "tempvoice_creator_ids", ids, by=by)
+    await log_action(
+        bot,
+        guild,
+        "tempvoice.setup",
+        actor=actor,
+        details={"channel_id": channel.id, "placed": where, "name": wanted},
+    )
+    return (
+        "created",
+        f"**{channel.name}** is ready — {channel.mention}, and {roles_sentence(allow)} can "
+        f"see it and join it. {where_sentence(where)}",
+    )
+
+
 async def panel_context(interaction: discord.Interaction, *, owner_only: bool = True) -> Any:
     """This click's temp-channel row, or None once the clicker has been answered."""
     bot = interaction.client
@@ -931,52 +1101,13 @@ class TempVoice(commands.Cog):
         await set_panel_message(self.bot.db, channel.id, message.id)
 
     def _may_act_in(self, channel: Any) -> bool:
-        guard = getattr(self.bot, "guard", None)
-        if guard is None:
-            return True
-        test_channel = (
-            self.bot.get_channel(guard.test_channel_id) if guard.test_channel_id else None
-        )
-        if test_channel is None:
-            return False
-        return getattr(channel, "category_id", None) == getattr(test_channel, "category_id", None)
+        return may_act_in(self.bot, channel)
 
     def _creator_spot(self, guild: Any) -> tuple[Any, int, str]:
-        guard = getattr(self.bot, "guard", None)
-        if guard is not None:
-            test_channel = (
-                self.bot.get_channel(guard.test_channel_id) if guard.test_channel_id else None
-            )
-            if test_channel is None:
-                return None, 0, "no_test_channel"
-            category = test_channel.category
-            voice = list(getattr(category, "voice_channels", ())) if category is not None else []
-            return category, bottom_position(c.position for c in voice), "test_category"
-        afk = getattr(guild, "afk_channel", None)
-        if afk is None:
-            afk = next(
-                (c for c in guild.voice_channels if c.name == AFK_FALLBACK_NAME), None
-            )
-        if afk is not None:
-            return afk.category, creator_position(afk.position, 0), "above_afk"
-        return None, bottom_position(c.position for c in guild.voice_channels), "bottom"
+        return creator_spot(self.bot, guild)
 
     def _join_roles(self, guild: Any) -> list[Any]:
-        """The allowed role and every resolved staff role, as role objects."""
-        found = list(self.bot.store.staff_roles(guild))
-        role_id = self.bot.store.get(guild.id, "tempvoice_allowed_role_id")
-        if not role_id:
-            return found
-        allowed = guild.get_role(role_id)
-        if allowed is None:
-            log.warning(
-                "temp voice: the allowed role %s is gone, so it was left out of the overwrites",
-                role_id,
-            )
-            return found
-        if any(getattr(role, "id", None) == role_id for role in found):
-            return found
-        return [allowed, *found]
+        return join_roles(self.bot, guild)
 
     def _lock(self, locks: dict[int, asyncio.Lock], key: int) -> asyncio.Lock:
         lock = locks.get(key)
@@ -1000,136 +1131,10 @@ class TempVoice(commands.Cog):
             return
         if not await self._database_ready(interaction):
             return
-        guild = interaction.guild
-        wanted = (name or "").strip()[:NAME_LIMIT]
-        if wanted:
-            await self.bot.store.set(
-                guild.id, "tempvoice_creator_name", wanted, by=interaction.user.id
-            )
-        else:
-            wanted = self.bot.store.get(guild.id, "tempvoice_creator_name")
-        ids = list(self.bot.store.get(guild.id, "tempvoice_creator_ids") or [])
-        live = [guild.get_channel(cid) for cid in ids if guild.get_channel(cid) is not None]
-        if live:
-            await self._repair(interaction, live, wanted)
-            return
-        category, position, where = self._creator_spot(guild)
-        if where == "no_test_channel":
-            await interaction.response.send_message(NO_TEST_CHANNEL, ephemeral=True)
-            return
-        unknown = lobbies_by_name(category, wanted, ids)
-        if unknown:
-            await self._adopt(interaction, unknown, wanted)
-            return
         await interaction.response.defer(ephemeral=True)
-        allow = self._join_roles(guild)
-        try:
-            channel = await guild.create_voice_channel(
-                wanted,
-                category=category,
-                position=position,
-                overwrites=creator_overwrites(category, allow, getattr(guild, "me", None)),
-                reason="Black Bloc temp voice: join-to-create",
-            )
-        except discord.HTTPException as exc:
-            log.warning("temp voice: setup could not create the creator channel: %s", exc)
-            await interaction.followup.send(CANNOT_CREATE, ephemeral=True)
-            return
-        if channel.id not in ids:
-            ids.append(channel.id)
-        await self.bot.store.set(
-            guild.id, "tempvoice_creator_ids", ids, by=interaction.user.id
+        _, said = await make_creator_channel(
+            self.bot, interaction.guild, interaction.user, name
         )
-        await interaction.followup.send(
-            f"**{channel.name}** is ready — {channel.mention}, and {roles_sentence(allow)} can "
-            f"see it and join it. {self._where_sentence(where)}",
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-        await log_action(
-            self.bot,
-            guild,
-            "tempvoice.setup",
-            actor=interaction.user,
-            details={"channel_id": channel.id, "placed": where, "name": wanted},
-        )
-
-    async def _adopt(
-        self, interaction: discord.Interaction, found: list[Any], wanted: str
-    ) -> None:
-        """Store a lobby that carries the name but was never written down, then repair it."""
-        guild = interaction.guild
-        ids = list(self.bot.store.get(guild.id, "tempvoice_creator_ids") or [])
-        ids.extend(channel.id for channel in found if channel.id not in ids)
-        await self.bot.store.set(
-            guild.id, "tempvoice_creator_ids", ids, by=interaction.user.id
-        )
-        await log_action(
-            self.bot,
-            guild,
-            "tempvoice.adopt",
-            actor=interaction.user,
-            details={"channel_ids": [channel.id for channel in found], "name": wanted},
-        )
-        await self._repair(interaction, found, wanted, adopted=True)
-
-    async def _repair(
-        self,
-        interaction: discord.Interaction,
-        live: list[Any],
-        wanted: str,
-        *,
-        adopted: bool = False,
-    ) -> None:
-        """Put the lobby the server already has back to its name and its own overwrites."""
-        guild = interaction.guild
-        channel = live[0]
-        if not self._may_act_in(channel):
-            await interaction.response.send_message(
-                OUTSIDE_TEST_CATEGORY.format(where=channel.mention),
-                ephemeral=True,
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
-            return
-        await interaction.response.defer(ephemeral=True)
-        allow = self._join_roles(guild)
-        try:
-            await channel.edit(
-                name=wanted,
-                overwrites=creator_overwrites(
-                    channel.category, allow, getattr(guild, "me", None)
-                ),
-                reason="Black Bloc temp voice: repairing the join-to-create channel",
-            )
-        except discord.HTTPException as exc:
-            log.warning("temp voice: could not repair the lobby %s: %s", channel.id, exc)
-            await log_action(
-                self.bot,
-                guild,
-                "tempvoice.repair_failed",
-                actor=interaction.user,
-                details={"channel_id": channel.id, "reason": f"{type(exc).__name__}: {exc}"},
-            )
-            await interaction.followup.send(
-                CANNOT_REPAIR.format(where=channel.mention),
-                ephemeral=True,
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
-            return
-        await log_action(
-            self.bot,
-            guild,
-            "tempvoice.repair",
-            actor=interaction.user,
-            details={"channel_id": channel.id, "name": wanted},
-        )
-        said = (ADOPTED if adopted else REPAIRED).format(
-            where=channel.mention, name=wanted, who=roles_sentence(allow)
-        )
-        if len(live) > 1:
-            said += EXTRA_LOBBIES.format(
-                extras=", ".join(f"<#{other.id}>" for other in live[1:])
-            )
         await interaction.followup.send(
             said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
         )
@@ -1236,21 +1241,6 @@ class TempVoice(commands.Cog):
             "tempvoice.mode",
             actor=interaction.user,
             details={"mode": mode.value},
-        )
-
-    @staticmethod
-    def _where_sentence(where: str) -> str:
-        if where == "test_category":
-            return (
-                "Test mode is on, so it went in the test channel's category — join it there to "
-                "try it. Run `/tempvoice setup` again once test mode is off and it will go "
-                "directly above the AFK channel."
-            )
-        if where == "above_afk":
-            return "It sits directly above the AFK channel, as asked."
-        return (
-            "Black Bloc could not find an AFK channel to sit above, so it went to the bottom of "
-            "the list — drag it where you want it."
         )
 
 
