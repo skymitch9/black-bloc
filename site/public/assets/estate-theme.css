@@ -167,6 +167,10 @@
  *            --et-weight-body/-medium/-strong/-heavy
  *            --et-label-transform --et-label-tracking --et-label-weight
  *            --et-title-case --et-title-spacing --et-heading-weight
+ *            --et-nav-head-size/-weight/-color/-space  (the sidebar GROUP
+ *            headings and "On this page" — a header, not a micro-label;
+ *            added 2026-08-27, owner: "its hard to tell which ones are
+ *            header and which are clickable")
  *   shape    --et-radius --et-radius-lg --et-radius-xl --et-radius-pill
  *            --et-border-w --et-hairline-w --et-dot-radius --et-clip-panel
  *   control  --et-control-h --et-control-h-sm --et-control-h-lg
@@ -425,6 +429,10 @@
   --et-weight-strong: 600;
   --et-weight-heavy: 700;
   --et-font-nav: var(--et-font);
+  --et-nav-head-size: var(--et-ui-lg);
+  --et-nav-head-weight: var(--et-weight-strong); /* apple never shouts: semibold, not heavy */
+  --et-nav-head-color: var(--et-fg);
+  --et-nav-head-space: 20px;
   --et-label-transform: none;
   --et-label-tracking: .01em;
   --et-label-weight: 600;
@@ -482,6 +490,10 @@
     --et-weight-strong: 600;
     --et-weight-heavy: 700;
     --et-font-nav: var(--et-font);
+    --et-nav-head-size: var(--et-ui-lg);
+    --et-nav-head-weight: var(--et-weight-strong); /* apple never shouts: semibold, not heavy */
+    --et-nav-head-color: var(--et-fg);
+    --et-nav-head-space: 20px;
     --et-label-transform: none;
     --et-label-tracking: .01em;
     --et-label-weight: 600;
@@ -536,6 +548,10 @@
   --et-weight-strong: 600;
   --et-weight-heavy: 700;
   --et-font-nav: var(--et-font);
+  --et-nav-head-size: var(--et-ui-lg);
+  --et-nav-head-weight: var(--et-weight-strong); /* apple never shouts: semibold, not heavy */
+  --et-nav-head-color: var(--et-fg);
+  --et-nav-head-space: 20px;
   --et-label-transform: none;
   --et-label-tracking: .01em;
   --et-label-weight: 600;
@@ -637,6 +653,10 @@
   --et-weight-strong: 600;
   --et-weight-heavy: 700;
   --et-font-nav: var(--et-font);
+  --et-nav-head-size: var(--et-ui-lg);
+  --et-nav-head-weight: var(--et-weight-heavy);
+  --et-nav-head-color: var(--et-fg);
+  --et-nav-head-space: 20px;
   --et-label-transform: uppercase;
   --et-label-tracking: .06em;
   --et-label-weight: 700;
@@ -699,6 +719,10 @@
   --et-weight-strong: 600;
   --et-weight-heavy: 700;
   --et-font-nav: var(--et-font);
+  --et-nav-head-size: var(--et-ui-lg);
+  --et-nav-head-weight: var(--et-weight-heavy);
+  --et-nav-head-color: var(--et-fg);
+  --et-nav-head-space: 20px;
   --et-label-transform: uppercase;
   --et-label-tracking: .06em;
   --et-label-weight: 700;
@@ -811,6 +835,10 @@
   --et-weight-strong: 700;
   --et-weight-heavy: 700;
   --et-font-nav: var(--et-font-mono);
+  --et-nav-head-size: var(--et-ui-lg);
+  --et-nav-head-weight: var(--et-weight-heavy);
+  --et-nav-head-color: var(--et-accent); /* electric blue, in the uppercase mono the label tokens set */
+  --et-nav-head-space: 22px;
   --et-label-transform: uppercase;
   --et-label-tracking: .14em;
   --et-label-weight: 400;
@@ -877,6 +905,10 @@
   --et-weight-strong: 700;
   --et-weight-heavy: 700;
   --et-font-nav: var(--et-font-mono);
+  --et-nav-head-size: var(--et-ui-lg);
+  --et-nav-head-weight: var(--et-weight-heavy);
+  --et-nav-head-color: var(--et-accent); /* electric blue, in the uppercase mono the label tokens set */
+  --et-nav-head-space: 22px;
   --et-label-transform: uppercase;
   --et-label-tracking: .14em;
   --et-label-weight: 400;
@@ -991,6 +1023,10 @@
   --et-weight-strong: 700;
   --et-weight-heavy: 800;
   --et-font-nav: var(--et-font-label);
+  --et-nav-head-size: var(--et-ui-lg);
+  --et-nav-head-weight: var(--et-heading-weight); /* Luckiest Guy ships ONE weight — --et-heading-weight is 400 here */
+  --et-nav-head-color: var(--et-fg);
+  --et-nav-head-space: 22px;
   --et-label-transform: uppercase;
   --et-label-tracking: .03em;
   --et-label-weight: 400;
@@ -1063,6 +1099,10 @@
   --et-weight-strong: 700;
   --et-weight-heavy: 800;
   --et-font-nav: var(--et-font-label);
+  --et-nav-head-size: var(--et-ui-lg);
+  --et-nav-head-weight: var(--et-heading-weight); /* Luckiest Guy ships ONE weight — --et-heading-weight is 400 here */
+  --et-nav-head-color: var(--et-fg);
+  --et-nav-head-space: 22px;
   --et-label-transform: uppercase;
   --et-label-tracking: .03em;
   --et-label-weight: 400;
@@ -1199,6 +1239,10 @@
   --et-weight-strong: 700;
   --et-weight-heavy: 800;
   --et-font-nav: var(--et-font-label);
+  --et-nav-head-size: var(--et-ui-lg);
+  --et-nav-head-weight: var(--et-heading-weight); /* Luckiest Guy, as retro */
+  --et-nav-head-color: var(--et-fg);
+  --et-nav-head-space: 22px;
   --et-label-transform: uppercase;
   --et-label-tracking: .04em;
   --et-label-weight: 400;
@@ -1275,6 +1319,10 @@
   --et-weight-strong: 700;
   --et-weight-heavy: 800;
   --et-font-nav: var(--et-font-label);
+  --et-nav-head-size: var(--et-ui-lg);
+  --et-nav-head-weight: var(--et-heading-weight); /* Luckiest Guy, as retro */
+  --et-nav-head-color: var(--et-fg);
+  --et-nav-head-space: 22px;
   --et-label-transform: uppercase;
   --et-label-tracking: .04em;
   --et-label-weight: 400;
@@ -1381,6 +1429,10 @@
   --et-weight-strong: 600;
   --et-weight-heavy: 700;
   --et-font-nav: var(--et-font);
+  --et-nav-head-size: var(--et-ui-lg);
+  --et-nav-head-weight: var(--et-weight-heavy);
+  --et-nav-head-color: var(--et-fg);
+  --et-nav-head-space: 20px;
   --et-label-transform: uppercase;
   --et-label-tracking: .08em;
   --et-label-weight: 700;
@@ -1445,6 +1497,10 @@
   --et-weight-strong: 600;
   --et-weight-heavy: 700;
   --et-font-nav: var(--et-font);
+  --et-nav-head-size: var(--et-ui-lg);
+  --et-nav-head-weight: var(--et-weight-heavy);
+  --et-nav-head-color: var(--et-fg);
+  --et-nav-head-space: 20px;
   --et-label-transform: uppercase;
   --et-label-tracking: .08em;
   --et-label-weight: 700;

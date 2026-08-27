@@ -51,24 +51,29 @@ body { overflow: hidden; }
   text-transform: var(--et-label-transform);
 }
 
-.side-scroll { min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.side-scroll { min-height: 0; overflow-y: auto; overflow-x: hidden; padding-bottom: 16px; }
 
 .sidenav {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 16px 8px;
+  gap: 0;
+  padding: 16px 8px 0;
 }
 .nav-group { display: flex; flex-direction: column; gap: 2px; }
+/* A group heading is a HEADER, not a micro-label: body-scale, bold and at
+   full contrast, with its own space above. The four --et-nav-head-* tokens
+   are what let each theme say that in its own voice. */
 .nav-head {
+  margin: var(--et-nav-head-space) 0 0;
   padding: 0 8px 6px;
-  color: var(--et-muted);
+  color: var(--et-nav-head-color);
   font-family: var(--et-font-nav);
-  font-size: var(--et-ui-2xs);
-  font-weight: var(--et-label-weight);
+  font-size: var(--et-nav-head-size);
+  font-weight: var(--et-nav-head-weight);
   letter-spacing: var(--et-label-tracking);
   text-transform: var(--et-label-transform);
 }
+.nav-group:first-child > .nav-head { margin-top: 0; }
 .nav-link {
   display: flex;
   align-items: center;
@@ -1116,13 +1121,13 @@ dialog.ask::backdrop { background: var(--et-transit-bg, rgb(0 0 0 / .55)); }
 /* The mock has no place for the old "On this page" rail, and the sidebar is
    where a sub-feature already reports itself, so the section links live under
    the nav rather than being dropped. */
-.subnav { display: grid; gap: 4px; padding: 0 8px 16px; }
+.subnav { display: grid; gap: 4px; padding: 0 8px; }
 .subnav-head {
-  margin: 0 8px 2px;
-  color: var(--et-muted);
+  margin: var(--et-nav-head-space) 8px 2px;
+  color: var(--et-nav-head-color);
   font-family: var(--et-font-nav);
-  font-size: var(--et-ui-2xs);
-  font-weight: var(--et-label-weight);
+  font-size: var(--et-nav-head-size);
+  font-weight: var(--et-nav-head-weight);
   letter-spacing: var(--et-label-tracking);
   text-transform: var(--et-label-transform);
 }
