@@ -274,6 +274,7 @@ CREATE TABLE IF NOT EXISTS polls (
     anonymous         INTEGER NOT NULL DEFAULT 0,
     results           TEXT    NOT NULL DEFAULT 'live',
     hours             INTEGER NOT NULL DEFAULT 24,
+    auto_thread       INTEGER NOT NULL DEFAULT 0,
     channel_id        INTEGER,
     message_id        INTEGER,
     thread_id         INTEGER,

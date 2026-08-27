@@ -47,7 +47,8 @@ async def test_a_poll_row_carries_every_column_phase_10_stores(tmp_path):
         cur = await db.conn.execute("PRAGMA table_info(polls)")
         columns = {row["name"] for row in await cur.fetchall()}
         assert {"guild_id", "creator_id", "question", "kind", "surface", "multi"} <= columns
-        assert {"anonymous", "results", "hours", "ping_role_id", "status"} <= columns
+        assert {"anonymous", "results", "hours", "auto_thread", "ping_role_id"} <= columns
+        assert "status" in columns
         assert {"channel_id", "message_id", "thread_id", "closes_at", "reminded_at"} <= columns
         assert {"closed_at", "archived_at", "total_votes"} <= columns
         assert {"recurrence", "recur_at", "recur_tz", "recur_next_at", "schedule_id"} <= columns
