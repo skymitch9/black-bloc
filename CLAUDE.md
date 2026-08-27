@@ -18,6 +18,15 @@ Thin on purpose. The living state is in `docs/` — **read `docs/README.md`,
   (`TEST_MODE=true`). Never flip it, never post elsewhere, brief every subagent with this.
 - This is a GATEWAY bot (persistent websocket). It cannot run on Cloudflare
   Workers; hosting is an always-on container — `docs/info/hosting.md`.
+- ⚠️ **Only bot code gets committed (owner, 2026-08-26).** Scan/scrape/inventory
+  scripts and anything that gathers info rather than makes the bot work stay out of
+  git — they live in `scripts/scan/` (gitignored). Never `git add -f` them. Same for
+  tests: only tests of the bot are committed, never tests of research tooling.
+- ⚠️ **Tests mirror the package (owner, 2026-08-26).** `black_bloc/x.py` →
+  `tests/test_x.py`; `black_bloc/storage/db.py` → `tests/storage/test_db.py`;
+  `black_bloc/cogs/moderation/foo.py` → `tests/cogs/moderation/test_foo.py`. One test
+  file per source file, same folder shape, no flat pile. (`--import-mode=importlib`
+  in `pyproject.toml` makes same-named files in different folders work.)
 - `docs/` is **LOCAL ONLY** (gitignored; owner rule 2026-08-26 — peers get curated docs,
   not the working tree). It exists on the owner's machine only; never `git add -f` it.
   Every ask goes on `docs/TODO.md` the moment it is mentioned;
