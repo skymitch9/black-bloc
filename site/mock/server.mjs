@@ -200,6 +200,7 @@ const SETTING_SPECS = [
   ['poll_auto_thread', 'bool', false, false, 'true to open a discussion thread under every poll'],
   ['poll_archive_days', 'int', 365, 365, 'days a closed poll stays on the list before it moves to the archive', null, 3650, 1],
   ['poll_archive_drop_votes', 'bool', true, true, 'true to forget who voted when a poll is archived; the totals are kept either way'],
+  ['poll_date_labels', 'enum', 'plain', 'plain', "how a date poll writes its slots: plain (Sat 30 Aug · 7 pm, in the server's zone) or timestamp (each reader sees their own clock, if Discord renders one in an answer)", ['plain', 'timestamp']],
   ['birthday_mode', 'enum', 'shadow', 'off', 'off, shadow (log only) or on (post birthday wishes)', ['off', 'shadow', 'on']],
   ['birthday_channel_id', 'channel', '800000000000000002', null, 'where birthday wishes are posted'],
   ['birthday_template', 'text', 'Happy birthday {name}!', 'Happy birthday {name}!', 'the birthday wording; {name} and {age}'],
@@ -335,10 +336,20 @@ function seedState() {
     { id: 3, creator_id: MEMBERS[3].id, question: 'Best day for the cookout?', kind: 'single', surface: 'native', status: 'open', results: 'live', multi: false, anonymous: false, auto_thread: false, hours: 24, channel_id: '800000000000000003', message_id: '830000000000000001', thread_id: null, ping_role_id: null, opens_at: minutesAgo(120), closes_at: minutesAgo(-1320), reminded_at: null, closed_at: null, archived_at: null, total_votes: null, decided_by: null, decided_at: null, deny_reason: null, created_at: minutesAgo(125), votes_dropped: 0, options: [{ position: 0, label: 'Saturday', votes: 22 }, { position: 1, label: 'Sunday', votes: 13 }, { position: 2, label: 'Friday', votes: 6 }] },
     { id: 2, creator_id: MEMBERS[1].id, question: 'Movie night or game night?', kind: 'single', surface: 'native', status: 'pending_review', results: 'live', multi: false, anonymous: false, auto_thread: false, hours: 48, channel_id: '800000000000000003', message_id: null, thread_id: null, ping_role_id: null, opens_at: null, closes_at: null, reminded_at: null, closed_at: null, archived_at: null, total_votes: null, decided_by: null, decided_at: null, deny_reason: null, created_at: minutesAgo(40), votes_dropped: 0, options: [{ position: 0, label: 'Movie night', votes: 0 }, { position: 1, label: 'Game night', votes: 0 }] },
     { id: 1, creator_id: STAFF.id, question: 'Keep the Thursday raid slot?', kind: 'yesno', surface: 'native', status: 'closed', results: 'live', multi: false, anonymous: false, auto_thread: false, hours: 24, channel_id: '800000000000000003', message_id: '830000000000000000', thread_id: null, ping_role_id: null, opens_at: minutesAgo(4000), closes_at: minutesAgo(2560), reminded_at: minutesAgo(2620), closed_at: minutesAgo(2560), archived_at: null, total_votes: 18, decided_by: null, decided_at: null, deny_reason: null, created_at: minutesAgo(4010), votes_dropped: 0, options: [{ position: 0, label: 'Yes', votes: 14 }, { position: 1, label: 'No', votes: 4 }] },
+    // One of every surface and status the page has a section for, so nothing renders untested.
+    { id: 9, creator_id: MEMBERS[1].id, question: 'How was the stream?', kind: 'rating', surface: 'panel', status: 'open', results: 'close', multi: false, anonymous: true, auto_thread: false, hours: 12, channel_id: '800000000000000003', message_id: '830000000000000004', thread_id: null, ping_role_id: null, opens_at: minutesAgo(30), closes_at: minutesAgo(-690), reminded_at: null, closed_at: null, archived_at: null, total_votes: null, decided_by: null, decided_at: null, deny_reason: null, created_at: minutesAgo(35), votes_dropped: 0, options: [{ position: 0, label: '1', votes: 0 }, { position: 1, label: '2', votes: 1 }, { position: 2, label: '3', votes: 2 }, { position: 3, label: '4', votes: 5 }, { position: 4, label: '5', votes: 9 }] },
+    { id: 8, creator_id: MEMBERS[3].id, question: 'Which evenings can you make it?', kind: 'date', surface: 'panel', status: 'open', results: 'live', multi: true, anonymous: false, auto_thread: true, hours: 72, channel_id: '800000000000000003', message_id: '830000000000000005', thread_id: '830000000000000006', ping_role_id: '900000000000000005', opens_at: minutesAgo(200), closes_at: minutesAgo(-4120), reminded_at: null, closed_at: null, archived_at: null, total_votes: null, decided_by: null, decided_at: null, deny_reason: null, created_at: minutesAgo(205), votes_dropped: 0, options: [{ position: 0, label: 'Fri 04 Sep · 7 pm', votes: 4 }, { position: 1, label: 'Sat 05 Sep · 7 pm', votes: 7 }, { position: 2, label: 'Sun 06 Sep · 7 pm', votes: 3 }] },
+    { id: 7, creator_id: MEMBERS[2].id, question: 'Rename #general?', kind: 'yesno', surface: 'native', status: 'denied', results: 'live', multi: false, anonymous: false, auto_thread: false, hours: 24, channel_id: '800000000000000003', message_id: null, thread_id: null, ping_role_id: null, opens_at: null, closes_at: null, reminded_at: null, closed_at: minutesAgo(3000), archived_at: null, total_votes: null, decided_by: STAFF.id, decided_at: minutesAgo(3000), deny_reason: 'We settled this in the Leads channel last month.', created_at: minutesAgo(3100), votes_dropped: 0, options: [{ position: 0, label: 'Yes', votes: 0 }, { position: 1, label: 'No', votes: 0 }] },
+    { id: 6, creator_id: MEMBERS[4].id, question: 'Double XP weekend?', kind: 'single', surface: 'native', status: 'cancelled', results: 'live', multi: false, anonymous: false, auto_thread: false, hours: 24, channel_id: '800000000000000003', message_id: '830000000000000007', thread_id: null, ping_role_id: null, opens_at: minutesAgo(5000), closes_at: minutesAgo(4000), reminded_at: null, closed_at: minutesAgo(4600), archived_at: null, total_votes: null, decided_by: null, decided_at: null, deny_reason: null, created_at: minutesAgo(5010), votes_dropped: 0, options: [{ position: 0, label: 'Yes please', votes: 2 }, { position: 1, label: 'No thanks', votes: 1 }] },
+    { id: 5, creator_id: STAFF.id, question: 'Old cookout, which park?', kind: 'single', surface: 'native', status: 'archived', results: 'live', multi: false, anonymous: false, auto_thread: false, hours: 24, channel_id: '800000000000000003', message_id: '830000000000000008', thread_id: null, ping_role_id: null, opens_at: minutesAgo(600000), closes_at: minutesAgo(598000), reminded_at: minutesAgo(598060), closed_at: minutesAgo(598000), archived_at: minutesAgo(1000), total_votes: 31, decided_by: null, decided_at: null, deny_reason: null, created_at: minutesAgo(600100), votes_dropped: 31, options: [{ position: 0, label: 'Encanto', votes: 19 }, { position: 1, label: 'Steele Indian School', votes: 12 }] },
   ],
   pollVotes: [
     { poll_id: 3, position: 0, label: 'Saturday', user_id: MEMBERS[1].id, at: minutesAgo(100) },
     { poll_id: 3, position: 1, label: 'Sunday', user_id: MEMBERS[2].id, at: minutesAgo(90) },
+  ],
+  pollRecurrences: [
+    { id: 4, creator_id: STAFF.id, question: 'Are we running tonight?', kind: 'yesno', surface: 'native', hours: 6, anonymous: false, results: 'live', channel_id: '800000000000000003', cadence: 'daily', at: '19:00', tz: 'America/Phoenix', next_at: daysAhead(1), created_at: minutesAgo(8000), options: [{ position: 0, label: 'Yes', votes: 0 }, { position: 1, label: 'No', votes: 0 }] },
+    { id: 5, creator_id: STAFF.id, question: 'Best day for next week?', kind: 'checkbox', surface: 'native', hours: 48, anonymous: false, results: 'live', channel_id: '800000000000000003', cadence: 'weekly:mon', at: '09:00', tz: 'America/Phoenix', next_at: null, created_at: minutesAgo(9000), options: [{ position: 0, label: 'Friday', votes: 0 }, { position: 1, label: 'Saturday', votes: 0 }] },
   ],
   birthdays: [
     { user_id: MEMBERS[1].id, month: 2, day: 14, year: 1996, opted_in: true, source: 'self', set_at: minutesAgo(9000) },
@@ -397,6 +408,7 @@ function seedState() {
   nextAction: 42,
   nextCase: 10,
   nextMessage: 40,
+  nextPoll: 10,
   actions: seedActions(),
   };
 }
@@ -1360,11 +1372,10 @@ route('POST', '/api/events/:id/cancel', (context) => {
   return { event: eventRow(event), message: 'Cancelled.' };
 });
 
-// Polls (Phase 10a). The create form is 10b, so there is no POST /api/polls here either.
-const POLL_STATUSES = ['draft', 'pending_review', 'open', 'closed', 'archived', 'denied', 'cancelled'];
+// Polls (10a, with 10b's create form, panel surface and recurrences).
+const POLL_STATUSES = ['draft', 'pending_review', 'open', 'closed', 'archived', 'denied', 'cancelled', 'recurring'];
 const POLL_PER_PAGE = 25;
 const POLL_PER_PAGE_MAX = 100;
-const NO_POLL_CREATE_YET = 'Starting a poll from the dashboard arrives with the next update — the create form and the panel surface ship together. Use `/poll create` in Discord until then.';
 
 function pollWinner(row) {
   const best = Math.max(0, ...row.options.map((option) => option.votes));
@@ -1404,7 +1415,54 @@ function pollRow(row) {
     options: row.options.map((option) => ({ ...option })),
     winner_position: pollWinner(row),
     votes_dropped: row.votes_dropped || 0,
+    schedule_id: row.schedule_id === undefined || row.schedule_id === null ? null : String(row.schedule_id),
   };
+}
+
+const WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+const WEEKDAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+/** Mirrors black_bloc/polls.py:describe_cadence, so both halves read the same sentence. */
+function describeCadence(row) {
+  const [kind, detail] = String(row.cadence || '').split(':');
+  if (kind === 'weekly' && WEEKDAYS.includes(detail)) {
+    return `every ${WEEKDAY_NAMES[WEEKDAYS.indexOf(detail)]} at ${row.at} ${row.tz}`;
+  }
+  if (kind === 'monthly' && /^\d+$/.test(detail || '')) {
+    const at = Number(detail);
+    const suffix = at % 100 >= 11 && at % 100 <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[at % 10] || 'th');
+    return `on the ${at}${suffix} of each month at ${row.at} ${row.tz}`;
+  }
+  return `every day at ${row.at} ${row.tz}`;
+}
+
+function pollRecurrenceRow(row) {
+  return {
+    id: row.id,
+    question: row.question,
+    kind: row.kind,
+    surface: row.surface,
+    hours: row.hours,
+    anonymous: Boolean(row.anonymous),
+    results: row.results,
+    creator_id: String(row.creator_id),
+    creator_name: memberName(row.creator_id),
+    channel_id: row.channel_id,
+    cadence: row.cadence,
+    cadence_said: describeCadence(row),
+    at: row.at,
+    tz: row.tz,
+    next_at: row.next_at,
+    paused: row.next_at === null,
+    options: row.options.map((option) => ({ ...option })),
+    created_at: row.created_at,
+  };
+}
+
+function pollRecurrenceOf(id) {
+  const found = state.pollRecurrences.find((row) => String(row.id) === String(id));
+  if (!found) throw new Refused(404, 'no_such_recurrence', `Black Bloc has no repeating poll #${id}, so nothing was done. It may have been deleted already.`);
+  return found;
 }
 
 function pollVoteRow(vote) {
@@ -1431,7 +1489,9 @@ route('GET', '/api/polls', (context) => {
       throw new Refused(400, 'unknown_status', `${part} is not a state a poll can be in, so nothing was listed. They are ${POLL_STATUSES.join(', ')}.`);
     }
   }
-  const rows = wanted.length ? state.polls.filter((row) => wanted.includes(row.status)) : state.polls;
+  const rows = (wanted.length ? state.polls.filter((row) => wanted.includes(row.status)) : state.polls)
+    .slice()
+    .sort((a, b) => b.id - a.id);
   const page = Math.max(1, Number(context.url.searchParams.get('page') || 1) || 1);
   const perPage = Math.min(POLL_PER_PAGE_MAX, Math.max(1, Number(context.url.searchParams.get('per_page') || POLL_PER_PAGE) || POLL_PER_PAGE));
   const window = rows.slice((page - 1) * perPage, page * perPage);
@@ -1441,13 +1501,134 @@ route('GET', '/api/polls', (context) => {
     shown: window.length,
     page,
     per_page: perPage,
-    notes: [NO_POLL_CREATE_YET],
+    notes: [],
   };
 });
+
+route('POST', '/api/polls', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const labels = Array.isArray(body.options)
+    ? body.options.map((one) => String(one).trim()).filter(Boolean)
+    : String(body.options || '').split('|').map((one) => one.trim()).filter(Boolean);
+  const kind = String(body.kind || 'single');
+  const generated = kind === 'yesno' ? ['Yes', 'No'] : kind === 'rating' ? ['1', '2', '3', '4', '5'] : null;
+  const slots = kind === 'date' ? dateSlots(body) : null;
+  const found = slots || generated || labels;
+  if (found.length < 2) {
+    throw new Refused(400, 'poll_refused', 'A poll needs at least 2 options and this one has ' + found.length + ', so nothing was posted. Write them separated by `|` — `Pizza | Tacos | Neither` is three.');
+  }
+  if (found.length > 25) {
+    throw new Refused(400, 'poll_refused', `**${found.length}** options is more than the 25 Black Bloc can put on one poll, so nothing was posted. Cut it to 25 or fewer and run it again.`);
+  }
+  const channelId = body.channel_id || state.settings.get('poll_channel_id');
+  if (!channelId) {
+    throw new Refused(400, 'no_channel', 'Black Bloc has nowhere to put this poll, so nothing was posted. Pick a channel on the form, or set a default one in the Settings section below.');
+  }
+  const anonymous = Boolean(body.anonymous);
+  const results = String(body.results || 'live');
+  const why = anonymous
+    ? "Discord's own polls list everybody who voted, so an **anonymous** one cannot be theirs"
+    : results === 'close'
+      ? "Discord's own polls show the bars as the votes come in and there is no way to hide them"
+      : found.length > 10
+        ? `**${found.length}** options is more than the 10 a Discord poll carries`
+        : null;
+  const holding = state.settings.get('poll_review_mode') === 'on';
+  const made = {
+    id: state.nextPoll++,
+    creator_id: STAFF.id,
+    question: String(body.question || '').trim(),
+    kind,
+    surface: why ? 'panel' : 'native',
+    status: holding ? 'pending_review' : 'open',
+    results,
+    multi: kind === 'checkbox' || kind === 'date',
+    anonymous,
+    auto_thread: Boolean(body.auto_thread),
+    hours: Number(body.hours || 24),
+    channel_id: String(channelId),
+    message_id: holding ? null : '830000000000000010',
+    thread_id: null,
+    ping_role_id: body.ping_role_id || null,
+    opens_at: holding ? null : now(),
+    closes_at: holding ? null : daysAhead(1),
+    reminded_at: null,
+    closed_at: null,
+    archived_at: null,
+    total_votes: null,
+    decided_by: null,
+    decided_at: null,
+    deny_reason: null,
+    created_at: now(),
+    votes_dropped: 0,
+    options: found.map((label, position) => ({ position, label, votes: 0 })),
+  };
+  state.polls.push(made);
+  logAction('web.poll.created', { details: { poll_id: made.id, kind, surface: made.surface } });
+  return {
+    poll: pollRow(made),
+    message: holding
+      ? `**${made.question}** is in — a Lead has to approve it before it posts, and the person who asked is DM'd either way.`
+      : `**${made.question}** is up in <#${channelId}>.`,
+    note: why
+      ? `This one is a Black Bloc panel rather than a Discord poll, because ${why}. People vote with the buttons under it; everything else works the same.`
+      : null,
+  };
+});
+
+/** The same shape black_bloc/polls.py:date_slots writes: plain labels in the server's zone. */
+function dateSlots(body) {
+  const start = new Date(String(body.start || '').replace(' ', 'T'));
+  if (Number.isNaN(start.getTime())) {
+    throw new Refused(400, 'poll_refused', `**${body.start || 'nothing'}** is not a date Black Bloc can read, so nothing was posted. Write it as \`2026-09-05\`, or \`2026-09-05 19:00\` when the time of day matters.`);
+  }
+  const count = Math.max(2, Math.min(25, Number(body.slots || 5)));
+  const step = Math.max(1, Number(body.step || 1));
+  const hours = String(body.step_unit || 'days') === 'hours';
+  const made = [];
+  for (let n = 0; n < count; n += 1) {
+    const at = new Date(start.getTime() + n * step * (hours ? 3600000 : 86400000));
+    const day = at.toUTCString().slice(0, 11).trim().replace(',', '');
+    made.push(hours ? `${day} · ${at.getUTCHours() % 12 || 12} ${at.getUTCHours() < 12 ? 'am' : 'pm'}` : day);
+  }
+  return made;
+}
 
 route('GET', '/api/polls/requests', (context) => {
   requireStaff(context.session);
   return state.polls.filter((row) => row.status === 'pending_review').map(pollRow);
+});
+
+route('GET', '/api/polls/recurrences', (context) => {
+  requireStaff(context.session);
+  return state.pollRecurrences.map(pollRecurrenceRow);
+});
+
+route('POST', '/api/polls/recurrences/:id/pause', async (context) => {
+  requireStaff(context.session);
+  const row = pollRecurrenceOf(context.params.id);
+  const body = await context.body();
+  const pausing = body.paused === undefined ? true : Boolean(body.paused);
+  row.next_at = pausing ? null : daysAhead(1);
+  logAction(pausing ? 'web.poll.recur_paused' : 'web.poll.recur_resumed', { details: { recurrence_id: row.id } });
+  return {
+    recurrence: pollRecurrenceRow(row),
+    message: pausing
+      ? `**${row.question}** is paused. Nothing opens until it is started again.`
+      : `**${row.question}** is running again.`,
+  };
+});
+
+route('DELETE', '/api/polls/recurrences/:id', (context) => {
+  requireStaff(context.session);
+  const row = pollRecurrenceOf(context.params.id);
+  state.pollRecurrences = state.pollRecurrences.filter((one) => one.id !== row.id);
+  logAction('web.poll.recur_deleted', { details: { recurrence_id: row.id, question: row.question } });
+  return {
+    recurrence_id: String(row.id),
+    message: `**${row.question}** will not run again. Polls it already opened are untouched.`,
+  };
 });
 
 route('POST', '/api/polls/requests/:id/approve', (context) => {

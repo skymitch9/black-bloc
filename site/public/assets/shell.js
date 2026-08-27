@@ -28,6 +28,7 @@ export const GROUPS = [
       { tab: 'birthdays', label: 'Birthdays', feature: 'birthday' },
       { tab: 'tempvoice', label: 'Temp voice', feature: 'tempvoice' },
       { tab: 'rolemenus', label: 'Role menus', feature: 'rolemenu', count: 'requests' },
+      { tab: 'polls', label: 'Polls', feature: 'poll', count: 'polls' },
     ],
   },
   {
@@ -41,6 +42,7 @@ const at = (id) => document.getElementById(id);
 let statusOnce = null;
 let membersOnce = null;
 let requestsOnce = null;
+let pollsOnce = null;
 
 export function shellStatus() {
   if (statusOnce === null) statusOnce = api('/api/status').catch(() => null);
@@ -62,10 +64,21 @@ export function requestTally() {
   return requestsOnce;
 }
 
+/** Polls still open, for the badge beside Polls. */
+export function pollTally() {
+  if (pollsOnce === null) {
+    pollsOnce = api('/api/polls?status=open&per_page=1')
+      .then((found) => (found && typeof found.total === 'number' ? found.total : null))
+      .catch(() => null);
+  }
+  return pollsOnce;
+}
+
 export function forgetShellStatus() {
   statusOnce = null;
   membersOnce = null;
   requestsOnce = null;
+  pollsOnce = null;
 }
 
 export function renderNav(current, hrefFor) {
@@ -206,7 +219,7 @@ function paintCount(which, value, said) {
   }
 }
 
-function paintCounts(tally, waiting) {
+function paintCounts(tally, waiting, running) {
   paintCount(
     'members',
     tally && typeof tally.total === 'number' ? tally.total : null,
@@ -218,16 +231,21 @@ function paintCounts(tally, waiting) {
     typeof waiting === 'number' && waiting > 0 ? waiting : null,
     (found) => `${found} role request${found === 1 ? '' : 's'} waiting for staff`,
   );
+  paintCount(
+    'polls',
+    typeof running === 'number' && running > 0 ? running : null,
+    (found) => `${found} poll${found === 1 ? '' : 's'} still open`,
+  );
 }
 
 export async function paintShell(me) {
   paintUser(me);
-  const [status, tally, waiting] = await Promise.all([
-    shellStatus(), memberTally(), requestTally(),
+  const [status, tally, waiting, running] = await Promise.all([
+    shellStatus(), memberTally(), requestTally(), pollTally(),
   ]);
   paintDots(status);
   paintHealth(status);
   paintGuild(status, me);
-  paintCounts(tally, waiting);
+  paintCounts(tally, waiting, running);
   return status;
 }

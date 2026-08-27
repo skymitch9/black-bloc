@@ -15,19 +15,33 @@ from ...cogs.community.polls import (
     cancel_poll,
     close_poll,
     get_poll,
+    get_recurrence,
     options_of,
+    panel_counts,
+    poll_plan,
     polls_by_status,
+    post_poll,
+    recurrences,
     results_of,
+    send_review_card,
+    set_recur_next,
+    set_status,
+    store_poll,
     votes_of,
 )
 from ...polls import (
+    CANCELLED,
     CLOSED,
     DENIED,
+    LIVE,
     OPEN,
+    PANEL,
     PENDING_REVIEW,
     STATUSES,
     clamp,
     counts_from_options,
+    describe_cadence,
+    next_occurrence,
     winners,
 )
 from ..auth import Refused, staff_dependency
@@ -80,9 +94,37 @@ VOTES_WERE_DROPPED = (
     "This poll has been archived and its per-voter rows were dropped, which is what "
     "`poll_archive_drop_votes` asks for. The totals below are kept forever."
 )
-NO_CREATE_YET = (
-    "Starting a poll from the dashboard arrives with the next update — the create form and the "
-    "panel surface ship together. Use `/poll create` in Discord until then."
+NO_CHANNEL_PICKED = (
+    "Black Bloc has nowhere to put this poll, so nothing was posted. Pick a channel on the form, "
+    "or set a default one in the Settings section below."
+)
+COULD_NOT_POST = (
+    "Discord would not take the poll, so nothing went up and the draft is marked cancelled — the "
+    "log says exactly what came back (`{reason}`). Tell a Lead, then start it again."
+)
+CREATED_POSTED = "**{question}** is up in <#{channel_id}>."
+CREATED_HELD = (
+    "**{question}** is in — a Lead has to approve it before it posts, and the person who asked is "
+    "DM'd either way."
+)
+CREATED_NO_CARD = (
+    "**{question}** is in, but Black Bloc could not post the review card — the log says why, and "
+    "a Lead can still decide it from the Pending review section here."
+)
+NO_REVIEW_CHANNEL = (
+    "Staff review is on but Black Bloc has nowhere to send a poll for it, so nothing was saved. "
+    "Point `staff_channel_id` at the staff channel, or turn `poll_review_mode` off."
+)
+RECUR_NOT_A_RECURRENCE = (
+    "Black Bloc has no repeating poll **#{poll_id}**, so nothing was done. It may have been "
+    "deleted already."
+)
+RECUR_PAUSED_SAID = "**{question}** is paused. Nothing opens until it is started again."
+RECUR_RESUMED_SAID = "**{question}** is running again."
+RECUR_DELETED_SAID = "**{question}** will not run again. Polls it already opened are untouched."
+RECUR_UNREADABLE = (
+    "Black Bloc cannot work out when **{question}** would next run, so it was left paused. Delete "
+    "it and set it up again."
 )
 
 
@@ -90,8 +132,10 @@ def _id(value: Any) -> str | None:
     return str(value) if value is not None else None
 
 
-def poll_row(guild: Any, row: Any, options: Any, stored: Any = None) -> dict[str, Any]:
-    counts = counts_from_options(options)
+def poll_row(
+    guild: Any, row: Any, options: Any, stored: Any = None, counts: Any = None
+) -> dict[str, Any]:
+    counts = counts_from_options(options) if counts is None else list(counts)
     top = winners(counts)
     return {
         "id": row["id"],
@@ -126,7 +170,53 @@ def poll_row(guild: Any, row: Any, options: Any, stored: Any = None) -> dict[str
         "options": counts,
         "winner_position": int(top[0]["position"]) if len(top) == 1 else None,
         "votes_dropped": int(stored["votes_dropped"]) if stored is not None else 0,
+        "schedule_id": _id(row["schedule_id"]),
     }
+
+
+def recurrence_row(guild: Any, row: Any, options: Any) -> dict[str, Any]:
+    """A template is not a poll, so it gets a shape of its own rather than a poll with holes."""
+    return {
+        "id": row["id"],
+        "question": row["question"],
+        "kind": row["kind"],
+        "surface": row["surface"],
+        "hours": int(row["hours"]),
+        "anonymous": bool(row["anonymous"]),
+        "results": row["results"],
+        "creator_id": str(row["creator_id"]),
+        "creator_name": resolve_one(guild, row["creator_id"])["display_name"],
+        "channel_id": _id(row["channel_id"]),
+        "cadence": row["recurrence"],
+        "cadence_said": describe_cadence(row["recurrence"], row["recur_at"], row["recur_tz"]),
+        "at": row["recur_at"],
+        "tz": row["recur_tz"],
+        "next_at": row["recur_next_at"],
+        "paused": row["recur_next_at"] is None,
+        "options": [
+            {"position": int(item["position"]), "label": str(item["label"]), "votes": 0}
+            for item in options
+        ],
+        "created_at": row["created_at"],
+    }
+
+
+def wanted_options(payload: Any) -> Any:
+    """The form sends a list; the slash command sends `A | B`. Both mean the same thing."""
+    given = payload.get("options")
+    if isinstance(given, list):
+        return " | ".join(str(one) for one in given)
+    return given
+
+
+def wanted_int(payload: Any, key: str) -> int | None:
+    given = payload.get(key)
+    if given is None or given == "":
+        return None
+    try:
+        return int(given)
+    except (TypeError, ValueError):
+        return None
 
 
 def vote_row(guild: Any, row: Any) -> dict[str, Any]:
@@ -215,9 +305,22 @@ def build_router(bot: Any) -> APIRouter:
     )
 
     async def _shown(guild: Any, row: Any) -> dict[str, Any]:
+        """An open panel's votes are ours, so its numbers come from the rows, not from `final`."""
+        live = None
+        if row["surface"] == PANEL and row["status"] == OPEN:
+            live = (await panel_counts(bot.db, row["id"]))[0]
         return poll_row(
-            guild, row, await options_of(bot.db, row["id"]), await results_of(bot.db, row["id"])
+            guild,
+            row,
+            await options_of(bot.db, row["id"]),
+            await results_of(bot.db, row["id"]),
+            live,
         )
+
+    def _refuse_outside_the_test_channel_id(channel_id: Any) -> None:
+        guard = guard_of(bot)
+        if guard is not None and channel_id and not guard.allows_channel(int(channel_id)):
+            refuse_guarded(guard.refusal_message())
 
     @router.get("")
     async def polls_index(
@@ -234,8 +337,81 @@ def build_router(bot: Any) -> APIRouter:
             "shown": len(window),
             "page": at,
             "per_page": size,
-            "notes": [NO_CREATE_YET],
+            "notes": [],
         }
+
+    @router.post("")
+    async def poll_create(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        plan, refusal = poll_plan(
+            bot.store,
+            guild.id,
+            question=payload.get("question"),
+            kind=payload.get("kind"),
+            options=wanted_options(payload),
+            hours=wanted_int(payload, "hours"),
+            anonymous=bool(payload.get("anonymous")),
+            results=payload.get("results") or LIVE,
+            start=payload.get("start"),
+            slots=wanted_int(payload, "slots"),
+            step=wanted_int(payload, "step"),
+            step_unit=payload.get("step_unit"),
+        )
+        if plan is None:
+            raise Refused(400, "poll_refused", refusal)
+        channel_id = payload.get("channel_id") or bot.store.get(guild.id, "poll_channel_id")
+        if not channel_id:
+            raise Refused(400, "no_channel", NO_CHANNEL_PICKED)
+        _refuse_outside_the_test_channel_id(channel_id)
+        row, reviewing = await store_poll(
+            bot,
+            guild,
+            int(who["id"]),
+            plan,
+            channel_id=int(channel_id),
+            ping_role_id=(
+                int(payload["ping_role_id"])
+                if payload.get("ping_role_id")
+                else bot.store.get(guild.id, "poll_ping_role_id")
+            ),
+            auto_thread=(
+                bool(payload["auto_thread"])
+                if payload.get("auto_thread") is not None
+                else bool(bot.store.get(guild.id, "poll_auto_thread"))
+            ),
+        )
+        said = await _open_or_hold(guild, row, reviewing, int(channel_id))
+        await note(
+            bot,
+            guild,
+            "web.poll.created",
+            who,
+            details={"poll_id": row["id"], "kind": plan["kind"], "surface": plan["surface"]},
+        )
+        fresh = await get_poll(bot.db, row["id"])
+        return {
+            "poll": await _shown(guild, fresh),
+            "message": said,
+            "note": plan["note"],
+        }
+
+    async def _open_or_hold(guild: Any, row: Any, reviewing: bool, channel_id: int) -> str:
+        if reviewing:
+            target, card = await send_review_card(bot, guild, row)
+            if target is None:
+                await set_status(bot.db, row["id"], CANCELLED, closed=True)
+                raise Refused(409, "no_review_channel", NO_REVIEW_CHANNEL)
+            said = CREATED_HELD if card is not None else CREATED_NO_CARD
+            return said.format(question=clamp(row["question"], 80))
+        message, why_not = await post_poll(bot, guild, row)
+        if message is None:
+            await set_status(bot.db, row["id"], CANCELLED, closed=True)
+            raise Refused(409, "not_posted", COULD_NOT_POST.format(reason=why_not))
+        return CREATED_POSTED.format(
+            question=clamp(row["question"], 80), channel_id=channel_id
+        )
 
     @router.get("/requests")
     async def poll_requests() -> list[dict[str, Any]]:
@@ -243,6 +419,79 @@ def build_router(bot: Any) -> APIRouter:
         require_db(bot)
         rows = await polls_by_status(bot.db, guild.id, (PENDING_REVIEW,))
         return [await _shown(guild, row) for row in rows]
+
+    @router.get("/recurrences")
+    async def poll_recurrences() -> list[dict[str, Any]]:
+        guild = require_guild(bot)
+        require_db(bot)
+        return [
+            recurrence_row(guild, row, await options_of(bot.db, row["id"]))
+            for row in await recurrences(bot.db, guild.id)
+        ]
+
+    async def _wanted_recurrence(guild: Any, poll_id: int) -> Any:
+        row = await get_recurrence(bot.db, guild.id, poll_id)
+        if row is None:
+            raise Refused(
+                404, "no_such_recurrence", RECUR_NOT_A_RECURRENCE.format(poll_id=poll_id)
+            )
+        return row
+
+    @router.post("/recurrences/{poll_id}/pause")
+    async def poll_recurrence_pause(
+        request: Request, poll_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        row = await _wanted_recurrence(guild, poll_id)
+        wanted = payload.get("paused")
+        pausing = True if wanted is None else bool(wanted)
+        following = (
+            None
+            if pausing
+            else next_occurrence(row["recurrence"], row["recur_at"], row["recur_tz"])
+        )
+        if not pausing and following is None:
+            raise Refused(
+                409,
+                "unreadable_cadence",
+                RECUR_UNREADABLE.format(question=clamp(row["question"], 80)),
+            )
+        await set_recur_next(bot.db, poll_id, following.isoformat() if following else None)
+        await note(
+            bot,
+            guild,
+            "web.poll.recur_paused" if pausing else "web.poll.recur_resumed",
+            who,
+            details={"recurrence_id": poll_id},
+        )
+        fresh = await get_recurrence(bot.db, guild.id, poll_id)
+        said = RECUR_PAUSED_SAID if pausing else RECUR_RESUMED_SAID
+        return {
+            "recurrence": recurrence_row(guild, fresh, await options_of(bot.db, poll_id)),
+            "message": said.format(question=clamp(row["question"], 80)),
+        }
+
+    @router.delete("/recurrences/{poll_id}")
+    async def poll_recurrence_delete(request: Request, poll_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        row = await _wanted_recurrence(guild, poll_id)
+        await set_recur_next(bot.db, poll_id, None)
+        await set_status(bot.db, poll_id, CANCELLED, closed=True)
+        await note(
+            bot,
+            guild,
+            "web.poll.recur_deleted",
+            who,
+            details={"recurrence_id": poll_id, "question": row["question"]},
+        )
+        return {
+            "recurrence_id": str(poll_id),
+            "message": RECUR_DELETED_SAID.format(question=clamp(row["question"], 80)),
+        }
 
     async def _decide(
         request: Request, poll_id: int, status: str, reason: Any

@@ -1390,6 +1390,31 @@ def card_for(row: Any, options: Any) -> discord.Embed:
     )
 
 
+async def send_review_card(bot: Any, guild: Any, row: Any) -> tuple[Any, Any]:
+    """(where it went, the card) — the one place a poll reaches staff for a decision."""
+    target = card_channel(bot, guild)
+    if target is None:
+        return (None, None)
+    options = await options_of(bot.db, row["id"])
+    try:
+        message = await target.send(
+            embed=card_for(row, options),
+            view=review_view(row["id"]),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+    except Exception as exc:
+        log.warning("polls: could not post the review card for %s: %s", row["id"], exc)
+        await log_action(
+            bot,
+            guild,
+            "poll.card_failed",
+            details={"poll_id": row["id"], "reason": f"{type(exc).__name__}: {exc}"},
+        )
+        return (target, None)
+    await set_review(bot.db, row["id"], target.id, message.id)
+    return (target, message)
+
+
 async def decision_context(interaction: discord.Interaction, poll_id: int) -> Any:
     bot = interaction.client
     guard = getattr(bot, "guard", None)
@@ -1831,41 +1856,21 @@ class Polls(commands.Cog):
     async def _send_for_review(
         self, interaction: discord.Interaction, guild: Any, row: Any, note: str | None = None
     ) -> None:
-        target = card_channel(self.bot, guild)
+        target, message = await send_review_card(self.bot, guild, row)
         if target is None:
             await set_status(self.bot.db, row["id"], CANCELLED, closed=True)
             await answer(interaction, NO_REVIEW_CHANNEL)
             return
-        options = await options_of(self.bot.db, row["id"])
-        try:
-            message = await target.send(
-                embed=card_for(row, options),
-                view=review_view(row["id"]),
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
-        except Exception as exc:
-            log.warning("polls: could not post the review card for %s: %s", row["id"], exc)
-            await log_action(
-                self.bot,
-                guild,
-                "poll.card_failed",
-                details={"poll_id": row["id"], "reason": f"{type(exc).__name__}: {exc}"},
-            )
-            await answer(
-                interaction,
-                SENT_FOR_REVIEW.format(
-                    question=clamp(row["question"], 80),
-                    where=REVIEW_NO_CARD.format(channel=f"<#{target.id}>"),
-                ),
-            )
-            return
-        await set_review(self.bot.db, row["id"], target.id, message.id)
-        said = SENT_FOR_REVIEW.format(
-            question=clamp(row["question"], 80),
-            where=REVIEW_HERE.format(channel=f"<#{target.id}>"),
-        )
+        where = (
+            REVIEW_HERE if message is not None else REVIEW_NO_CARD
+        ).format(channel=f"<#{target.id}>")
+        said = SENT_FOR_REVIEW.format(question=clamp(row["question"], 80), where=where)
         await answer(interaction, f"{said}\n\n{note}" if note else said)
-        await dm(interaction.user, f"Sent for review on **{guild.name}**.", card_for(row, options))
+        if message is not None:
+            options = await options_of(self.bot.db, row["id"])
+            await dm(
+                interaction.user, f"Sent for review on **{guild.name}**.", card_for(row, options)
+            )
 
     async def _wanted(self, interaction: discord.Interaction, poll_id: str) -> Any:
         digits = str(poll_id or "").strip().lstrip("#")

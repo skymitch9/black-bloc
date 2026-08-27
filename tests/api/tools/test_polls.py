@@ -12,10 +12,12 @@ from black_bloc.cogs.community.polls import (
     record_vote,
     save_results,
     set_posted,
+    set_recurrence,
 )
 
 MEMBER_ID = 21
 LEAD_ID = 7
+TEST_CHANNEL = 500
 
 
 async def seed_poll(
@@ -100,8 +102,103 @@ async def test_the_index_pages_and_clamps_what_it_is_asked_for(client, seeded):
     assert client.get("/api/polls?page=wibble").json()["page"] == 1
 
 
-async def test_the_index_says_the_create_form_is_not_here_yet(client, seeded):
-    assert any("next update" in note for note in client.get("/api/polls").json()["notes"])
+def creating(client, **body):
+    asked = {
+        "question": "Pizza or tacos?",
+        "options": ["Pizza", "Tacos"],
+        "hours": 24,
+        "channel_id": str(TEST_CHANNEL),
+    }
+    asked.update(body)
+    return client.post("/api/polls", json=asked)
+
+
+async def test_the_form_posts_a_poll_and_says_where_it_went(client, seeded, web, wf):
+    response = creating(client)
+
+    assert response.status_code == 200
+    made = response.json()
+    assert made["poll"]["status"] == pure.OPEN and made["poll"]["surface"] == pure.NATIVE
+    assert made["note"] is None
+    assert str(TEST_CHANNEL) in made["message"]
+    assert web.guild.get_channel(TEST_CHANNEL).messages[-1].kwargs["poll"] is not None
+
+
+async def test_the_form_refuses_what_the_slash_command_refuses(client, seeded):
+    response = creating(client, options=["Pizza"])
+
+    assert response.status_code == 400
+    assert "at least 2" in response.json()["message"]
+
+
+async def test_the_form_derives_the_panel_and_says_why(client, seeded, web):
+    made = creating(client, anonymous=True).json()
+
+    assert made["poll"]["surface"] == pure.PANEL
+    assert pure.PANEL_BECAUSE_ANONYMOUS in made["note"]
+    posted = web.guild.get_channel(TEST_CHANNEL).messages[-1].kwargs
+    assert "poll" not in posted and posted["view"] is not None
+
+
+async def test_the_form_lays_out_a_date_poll_from_a_start_and_a_count(client, seeded, web):
+    made = creating(
+        client, kind=pure.DATE, options=None, start="2026-09-05", slots=3, step=1,
+        step_unit=pure.STEP_DAYS,
+    ).json()
+
+    assert [item["label"] for item in made["poll"]["options"]] == [
+        "Sat 05 Sep", "Sun 06 Sep", "Mon 07 Sep"
+    ]
+
+
+async def test_the_form_falls_back_to_the_default_channel_and_refuses_with_neither(
+    client, seeded, web, wf
+):
+    await web.store.set(wf.GUILD_ID, "poll_channel_id", TEST_CHANNEL)
+    assert creating(client, channel_id=None).status_code == 200
+
+    await web.store.clear(wf.GUILD_ID, "poll_channel_id")
+    response = creating(client, channel_id=None)
+
+    assert response.status_code == 400
+    assert "nowhere to put" in response.json()["message"]
+
+
+async def test_the_form_will_not_post_outside_the_test_channel(client, seeded, web, wf):
+    web.guard = wf.Guard()
+
+    response = creating(client, channel_id=str(wf.OTHER_CHANNEL_ID))
+
+    assert response.status_code == 409
+    assert "test mode" in response.json()["message"]
+
+
+async def test_the_form_holds_a_poll_when_review_is_on(client, seeded, web, wf):
+    await web.store.set(wf.GUILD_ID, "poll_review_mode", "on")
+    await web.store.set(wf.GUILD_ID, "staff_channel_id", TEST_CHANNEL)
+
+    made = creating(client).json()
+
+    assert made["poll"]["status"] == pure.PENDING_REVIEW
+    assert "approve" in made["message"]
+    assert web.guild.get_channel(TEST_CHANNEL).messages[-1].kwargs.get("view") is not None
+
+
+async def test_creating_from_the_dashboard_leaves_a_web_line_in_the_log(client, seeded, web, wf):
+    creating(client)
+
+    cur = await web.db.conn.execute("SELECT kind FROM action_log ORDER BY id")
+    assert "web.poll.created" in [row["kind"] for row in await cur.fetchall()]
+
+
+async def test_an_open_panel_reports_the_votes_it_holds_rather_than_zeroes(client, seeded, web):
+    made = creating(client, anonymous=True).json()["poll"]
+    option = (await options_of(web.db, int(made["id"])))[0]
+    await record_vote(web.db, int(made["id"]), option["id"], MEMBER_ID)
+
+    again = client.get(f"/api/polls/{made['id']}").json()["poll"]
+
+    assert [item["votes"] for item in again["options"]] == [1, 0]
 
 
 async def test_one_poll_comes_back_with_its_options_and_its_voters(client, seeded, web):
@@ -306,12 +403,89 @@ async def test_the_export_of_an_archived_poll_says_the_voters_were_dropped(clien
     assert "per-voter rows were dropped" in body
 
 
+async def seed_recurrence(db, guild_id, *, cadence="daily", at="09:00", paused=False):
+    poll_id = await create_poll(
+        db,
+        guild_id,
+        MEMBER_ID,
+        question="Are we running tonight?",
+        kind=pure.SINGLE,
+        surface=pure.NATIVE,
+        multi=False,
+        anonymous=False,
+        results=pure.LIVE,
+        hours=24,
+        channel_id=TEST_CHANNEL,
+        ping_role_id=None,
+        status=pure.RECURRING,
+    )
+    await add_options(db, poll_id, ["Yes", "No"])
+    following = None if paused else pure.next_occurrence(cadence, at, "America/Phoenix")
+    await set_recurrence(
+        db, poll_id, cadence, at, "America/Phoenix", following.isoformat() if following else None
+    )
+    return poll_id
+
+
+async def test_the_recurrences_route_names_the_cadence_in_words(client, seeded, web, wf):
+    await seed_recurrence(web.db, wf.GUILD_ID, cadence="weekly:sat", at="19:00")
+
+    rows = client.get("/api/polls/recurrences").json()
+
+    assert len(rows) == 1
+    assert rows[0]["cadence_said"] == "every Saturday at 19:00 America/Phoenix"
+    assert rows[0]["paused"] is False and rows[0]["next_at"] is not None
+
+
+async def test_a_recurrence_never_shows_up_on_the_poll_index(client, seeded, web, wf):
+    await seed_recurrence(web.db, wf.GUILD_ID)
+
+    body = client.get("/api/polls").json()
+
+    assert body["total"] == 2
+    assert pure.RECURRING not in [row["status"] for row in body["polls"]]
+
+
+async def test_pausing_and_starting_a_recurrence_from_the_dashboard(client, seeded, web, wf):
+    recurrence_id = await seed_recurrence(web.db, wf.GUILD_ID)
+
+    paused = client.post(f"/api/polls/recurrences/{recurrence_id}/pause", json={"paused": True})
+    assert paused.json()["recurrence"]["paused"] is True
+
+    started = client.post(f"/api/polls/recurrences/{recurrence_id}/pause", json={"paused": False})
+    assert started.json()["recurrence"]["paused"] is False
+    assert "running again" in started.json()["message"]
+
+
+async def test_deleting_a_recurrence_stops_it_and_says_the_polls_are_untouched(
+    client, seeded, web, wf
+):
+    recurrence_id = await seed_recurrence(web.db, wf.GUILD_ID)
+
+    body = client.delete(f"/api/polls/recurrences/{recurrence_id}").json()
+
+    assert "untouched" in body["message"]
+    assert client.get("/api/polls/recurrences").json() == []
+    assert (await get_poll(web.db, recurrence_id))["status"] == pure.CANCELLED
+
+
+async def test_a_poll_number_that_is_not_a_recurrence_is_a_404(client, seeded):
+    response = client.delete(f"/api/polls/recurrences/{seeded['open']}")
+
+    assert response.status_code == 404
+    assert "no repeating poll" in response.json()["message"]
+
+
 async def test_every_poll_route_is_for_staff_only(client, seeded, sign_in):
     sign_in(client, uid=MEMBER_ID, staff=False)
 
     for method, path in (
         ("GET", "/api/polls"),
+        ("POST", "/api/polls"),
         ("GET", "/api/polls/requests"),
+        ("GET", "/api/polls/recurrences"),
+        ("POST", "/api/polls/recurrences/1/pause"),
+        ("DELETE", "/api/polls/recurrences/1"),
         ("GET", f"/api/polls/{seeded['open']}"),
         ("GET", f"/api/polls/{seeded['open']}/export.csv"),
         ("POST", f"/api/polls/{seeded['open']}/end"),
