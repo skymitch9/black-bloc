@@ -403,6 +403,32 @@ async def require_staff(interaction: Any) -> bool:
     return True
 
 
+def called_names(func: Any) -> tuple[str, ...]:
+    code = getattr(func, "__code__", None)
+    return tuple(getattr(code, "co_names", ()) or ())
+
+
+def is_staff_command(command: Any) -> bool:
+    """True when a command's own body, or a helper it calls, goes through `require_staff`."""
+    extras = getattr(command, "extras", None) or {}
+    if "staff_only" in extras:
+        return bool(extras["staff_only"])
+    gate = require_staff.__name__
+    callback = getattr(command, "callback", None)
+    names = called_names(callback)
+    if gate in names:
+        return True
+    binding = getattr(command, "binding", None)
+    scope = getattr(callback, "__globals__", None) or {}
+    for name in names:
+        helper = getattr(binding, name, None) if binding is not None else None
+        if helper is None:
+            helper = scope.get(name)
+        if helper is not None and gate in called_names(helper):
+            return True
+    return False
+
+
 class SettingsStore:
     def __init__(self, db: Database, settings: Settings) -> None:
         self.db = db

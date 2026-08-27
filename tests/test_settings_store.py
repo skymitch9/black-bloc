@@ -26,8 +26,10 @@ from black_bloc.settings_store import (
     SettingsStore,
     coerce_value,
     display_value,
+    is_staff_command,
     member_is_staff,
     parse_value,
+    require_staff,
     resolved_staff_roles,
     staff_roles_sentence,
 )
@@ -531,3 +533,52 @@ def test_a_rule_book_reads_back_as_a_summary_not_as_json():
     shown = display_value("automod_rules", validate_rules({}))
     assert "mention_spam 5/30s delete+warn+timeout" in shown
     assert "{" not in shown
+
+
+async def gate_in_the_body(interaction):
+    if not await require_staff(interaction):
+        return
+
+
+async def no_gate_at_all(interaction):
+    await interaction.response.send_message("hello")
+
+
+class Cog:
+    async def _ready(self, interaction):
+        return await require_staff(interaction)
+
+    async def _two_hops(self, interaction):
+        return await self._ready(interaction)
+
+
+async def gate_one_call_away(self, interaction):
+    if not await self._ready(interaction):
+        return
+
+
+async def gate_two_calls_away(self, interaction):
+    if not await self._two_hops(interaction):
+        return
+
+
+class FakeCommand:
+    def __init__(self, callback, binding=None, extras=None):
+        self.callback = callback
+        self.binding = binding
+        self.extras = extras or {}
+
+
+def test_a_command_is_staff_when_its_body_or_the_helper_it_calls_asks_require_staff():
+    assert is_staff_command(FakeCommand(gate_in_the_body)) is True
+    assert is_staff_command(FakeCommand(gate_one_call_away, binding=Cog())) is True
+    assert is_staff_command(FakeCommand(no_gate_at_all)) is False
+
+
+def test_a_gate_further_away_is_left_unmarked_rather_than_guessed_at():
+    assert is_staff_command(FakeCommand(gate_two_calls_away, binding=Cog())) is False
+
+
+def test_an_explicit_staff_only_extra_beats_reading_the_body():
+    assert is_staff_command(FakeCommand(no_gate_at_all, extras={"staff_only": True})) is True
+    assert is_staff_command(FakeCommand(gate_in_the_body, extras={"staff_only": False})) is False

@@ -1,9 +1,17 @@
 import discord
 import pytest
+from discord import app_commands
 
-from black_bloc.cogs.core import CLEARABLE_KEYS, VALUE_KEYS, Core
+from black_bloc.bot import COGS, BlackBlocBot
+from black_bloc.cogs.core import (
+    CLEARABLE_KEYS,
+    VALUE_KEYS,
+    Core,
+    help_lines,
+    tree_commands,
+)
 from black_bloc.config import load_settings
-from black_bloc.settings_store import SettingsStore
+from black_bloc.settings_store import SettingsStore, require_staff
 from black_bloc.storage.db import Database
 
 GUILD = 7
@@ -221,3 +229,129 @@ async def test_clearing_something_that_was_never_set_says_so_and_logs_nothing(bo
 
     assert "was not set" in interaction.sent
     assert await kinds(bot.db) == []
+
+
+tempvoice = app_commands.Group(name="tempvoice", description="Temporary voice channels")
+zoo = app_commands.Group(name="zoo", description="Animals", parent=tempvoice)
+
+
+@app_commands.command(name="ping", description="Check that Black Bloc is alive")
+async def a_plain_command(interaction):
+    await interaction.response.send_message("pong")
+
+
+@tempvoice.command(name="setup", description="Create or repair the join-to-create channel")
+async def a_staff_subcommand(interaction):
+    if not await require_staff(interaction):
+        return
+
+
+@tempvoice.command(name="claim", description="Take over an abandoned channel")
+async def an_open_subcommand(interaction):
+    await interaction.response.send_message("yours")
+
+
+@zoo.command(name="feed", description="Feed the animals")
+async def a_nested_subcommand(interaction):
+    await interaction.response.send_message("fed")
+
+
+@app_commands.command(name="here", description="Only this guild has it")
+async def a_guild_only_command(interaction):
+    await interaction.response.send_message("here")
+
+
+class FakeTree:
+    def __init__(self, everywhere, in_this_guild=()):
+        self.everywhere = list(everywhere)
+        self.in_this_guild = list(in_this_guild)
+
+    def get_commands(self, guild=None):
+        return list(self.in_this_guild) if guild is not None else list(self.everywhere)
+
+
+@pytest.fixture
+def helpful(bot):
+    bot.tree = FakeTree([a_plain_command, tempvoice], [a_guild_only_command])
+    return bot
+
+
+def test_help_lines_walk_groups_and_subgroups_under_one_bold_heading():
+    lines = help_lines([a_plain_command, tempvoice])
+
+    assert lines == [
+        "**/ping** — Check that Black Bloc is alive",
+        "**/tempvoice** — Temporary voice channels",
+        "/tempvoice claim — Take over an abandoned channel",
+        "/tempvoice setup — Create or repair the join-to-create channel (staff)",
+        "/tempvoice zoo feed — Feed the animals",
+    ]
+
+
+def test_help_lines_keep_the_heading_when_the_filter_matches_the_group():
+    assert help_lines([a_plain_command, tempvoice], "zoo") == [
+        "**/tempvoice** — Temporary voice channels",
+        "/tempvoice zoo feed — Feed the animals",
+    ]
+    assert help_lines([a_plain_command, tempvoice], "PING") == [
+        "**/ping** — Check that Black Bloc is alive"
+    ]
+    assert help_lines([a_plain_command, tempvoice], "nothing like this") == []
+
+
+async def test_help_answers_with_every_command_including_the_guild_s_own(helpful, cog, member):
+    interaction = FakeInteraction(helpful, member)
+
+    await cog.help_command.callback(cog, interaction, None)
+
+    said = "\n".join(message["content"] for message in interaction.response.messages)
+    assert "**/here** — Only this guild has it" in said
+    assert "/tempvoice setup — Create or repair the join-to-create channel (staff)" in said
+    assert all(message["ephemeral"] for message in interaction.response.messages)
+    assert all(
+        message["allowed_mentions"].everyone is False
+        for message in interaction.response.messages
+    )
+
+
+async def test_help_says_so_when_the_filter_matches_nothing(helpful, cog, member):
+    interaction = FakeInteraction(helpful, member)
+
+    await cog.help_command.callback(cog, interaction, "quidditch")
+
+    assert "No command matches **quidditch**" in interaction.sent
+    assert len(interaction.response.messages) == 1
+
+
+async def test_help_is_split_into_messages_discord_will_take(helpful, cog, member):
+    many = [
+        app_commands.Command(
+            name=f"c{index}",
+            description="A command with a description long enough to fill a page " * 2,
+            callback=a_plain_command.callback,
+        )
+        for index in range(40)
+    ]
+    helpful.tree = FakeTree(many)
+    interaction = FakeInteraction(helpful, member)
+
+    await cog.help_command.callback(cog, interaction, None)
+
+    said = [message["content"] for message in interaction.response.messages]
+    assert len(said) > 1
+    assert all(len(chunk) <= 1900 for chunk in said)
+
+
+async def test_help_marks_the_staff_commands_the_real_bot_registers(settings):
+    black_bloc = BlackBlocBot(settings)
+    for name in COGS:
+        await black_bloc.load_extension(name)
+
+    said = "\n".join(help_lines(tree_commands(black_bloc.tree)))
+    await black_bloc.close()
+
+    assert "**/help** — List every command Black Bloc can run" in said
+    assert "/tempvoice setup — Create or repair the join-to-create channel (staff)" in said
+    assert "/settings show — Show Black Bloc's settings for this server (staff)" in said
+    assert "**/warn** — " in said and "(staff)" in said.split("**/warn** — ")[1].split("\n")[0]
+    assert "**/ping** — Check that Black Bloc is alive" in said

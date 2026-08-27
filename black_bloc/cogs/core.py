@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -12,6 +14,7 @@ from ..settings_store import (
     KEY_TYPES,
     SettingError,
     display_value,
+    is_staff_command,
     parse_value,
     require_staff,
 )
@@ -24,6 +27,61 @@ VALUE_KEYS = [
 CLEARABLE_KEYS = [key for key, kind in KEY_TYPES.items() if kind in ("channel", "role")]
 CLEARED = "**{key}** is no longer set, so Black Bloc is back to its own default for it."
 NOT_SET = "**{key}** was not set for this server, so nothing changed."
+STAFF_SUFFIX = " (staff)"
+HELP_HEADER = (
+    "Every command Black Bloc can run here. The ones marked (staff) need the Manage Server "
+    "permission or a role that can see the staff channel."
+)
+NO_MATCH = (
+    "No command matches **{filter}**, so there is nothing to list. Run `/help` with nothing in "
+    "the filter to see all of them."
+)
+
+
+def command_line(command: Any, path: str, *, heading: bool = False) -> str:
+    shown = f"**{path}**" if heading else path
+    suffix = STAFF_SUFFIX if is_staff_command(command) else ""
+    return f"{shown} — {command.description}{suffix}"
+
+
+def subcommand_lines(command: Any, path: str) -> list[str]:
+    """One line per runnable command, walking groups and their subgroups."""
+    children = sorted(getattr(command, "commands", ()) or (), key=lambda child: child.name)
+    if not children:
+        return [command_line(command, path)]
+    return [line for child in children for line in subcommand_lines(child, f"{path} {child.name}")]
+
+
+def help_lines(entries: Any, wanted: str = "") -> list[str]:
+    """A bold heading per top-level command, then the commands under it, filtered and sorted."""
+    needle = wanted.strip().lower()
+    found: list[str] = []
+    for command in sorted(entries, key=lambda item: item.name):
+        path = f"/{command.name}"
+        heading = command_line(command, path, heading=True)
+        if not (getattr(command, "commands", ()) or ()):
+            if not needle or needle in heading.lower():
+                found.append(heading)
+            continue
+        body = subcommand_lines(command, path)
+        if needle:
+            kept = [line for line in body if needle in line.lower()]
+            if not kept and needle not in heading.lower():
+                continue
+            body = kept or body
+        found.extend([heading, *body])
+    return found
+
+
+def tree_commands(tree: Any, guild: Any = None) -> list[Any]:
+    """The global tree plus the guild-synced copies, one entry per name."""
+    found: dict[str, Any] = {}
+    for command in tree.get_commands():
+        found[command.name] = command
+    if guild is not None:
+        for command in tree.get_commands(guild=guild):
+            found[command.name] = command
+    return list(found.values())
 
 
 class Core(commands.Cog):
@@ -42,6 +100,32 @@ class Core(commands.Cog):
         await interaction.response.send_message(
             f"**Black Bloc** v{__version__} — moderation and content bot.", ephemeral=True
         )
+
+    @app_commands.command(name="help", description="List every command Black Bloc can run")
+    @app_commands.describe(filter="Only list commands whose name or description contains this")
+    async def help_command(
+        self, interaction: discord.Interaction, filter: str | None = None
+    ) -> None:
+        entries = tree_commands(self.bot.tree, self._help_guild(interaction))
+        lines = help_lines(entries, filter or "")
+        if not lines:
+            await interaction.response.send_message(
+                NO_MATCH.format(filter=str(filter)[:80]),
+                ephemeral=True,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+            return
+        for index, chunk in enumerate(pages_under_limit([HELP_HEADER, *lines])):
+            answer = interaction.followup.send if index else interaction.response.send_message
+            await answer(
+                chunk, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+            )
+
+    def _help_guild(self, interaction: discord.Interaction) -> Any:
+        if interaction.guild is not None:
+            return interaction.guild
+        dev_guild_id = getattr(getattr(self.bot, "settings", None), "dev_guild_id", None)
+        return discord.Object(id=dev_guild_id) if dev_guild_id else None
 
     settings = app_commands.Group(
         name="settings", description="Read and change Black Bloc's settings for this server"
