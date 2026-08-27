@@ -229,7 +229,7 @@ function casesCard(payload, rows) {
       count: rows.length,
       onPage: (to) => {
         state.page = Math.max(1, to);
-        refresh();
+        return refresh();
       },
     }),
   ]);

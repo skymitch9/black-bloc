@@ -12,7 +12,13 @@ from black_bloc.api.settings_api import grouped
 from black_bloc.cogs.community.birthdays import save_birthday
 from black_bloc.cogs.community.events import create_event
 from black_bloc.cogs.community.polls import add_options as add_poll_options
-from black_bloc.cogs.community.polls import create_poll, options_of, record_vote, set_posted
+from black_bloc.cogs.community.polls import (
+    create_poll,
+    options_of,
+    record_vote,
+    set_posted,
+    set_recurrence,
+)
 from black_bloc.cogs.community.role_menus import add_option, create_menu, get_menu
 from black_bloc.cogs.community.tempvoice import add_channel
 from black_bloc.cogs.content.golive import set_link, set_optout, start_session
@@ -21,6 +27,7 @@ from black_bloc.cogs.moderation.modmail import add_message, create_ticket, set_t
 from black_bloc.golive import StreamInfo
 from black_bloc.modcases import add_case
 from black_bloc.modmail import IN
+from black_bloc.polls import next_occurrence
 
 CONTRACT = Path(__file__).resolve().parents[2] / "site" / "mock" / "contract.json"
 MEMBER_ID = 21
@@ -198,6 +205,15 @@ async def seeded(client, sign_in, web, guild, wf):
     )
     await record_vote(db, poll_id, (await options_of(db, poll_id))[0]["id"], MEMBER_ID)
     poll_request_id = await make_poll(db, guild_id, "Movie night?", "pending_review")
+    recurrence_id = await make_poll(db, guild_id, "Are we running tonight?", "recurring")
+    await set_recurrence(
+        db,
+        recurrence_id,
+        "daily",
+        "09:00",
+        "America/Phoenix",
+        next_occurrence("daily", "09:00", "America/Phoenix").isoformat(),
+    )
     grant_id = await grants.add_grant(
         db,
         guild_id,
@@ -220,6 +236,7 @@ async def seeded(client, sign_in, web, guild, wf):
         "grant_id": str(grant_id),
         "poll_id": str(poll_id),
         "poll_request_id": str(poll_request_id),
+        "poll_recurrence_id": str(recurrence_id),
     }
 
 

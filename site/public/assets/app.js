@@ -11,6 +11,7 @@ export const TABS = [
   { tab: 'events', href: '/events.html', label: 'Events' },
   { tab: 'golive', href: '/golive.html', label: 'Go-live' },
   { tab: 'rolemenus', href: '/rolemenus.html', label: 'Role menus' },
+  { tab: 'polls', href: '/polls.html', label: 'Polls' },
   { tab: 'birthdays', href: '/birthdays.html', label: 'Birthdays' },
   { tab: 'tempvoice', href: '/tempvoice.html', label: 'Temp voice' },
   { tab: 'honeypot', href: '/honeypot.html', label: 'Honeypot' },
@@ -28,6 +29,7 @@ export const FEATURE_TABS = {
   modmail: 'modmail',
   automod: 'automod',
   rolemenu: 'rolemenus',
+  poll: 'polls',
 };
 
 export function tabHref(tab) {

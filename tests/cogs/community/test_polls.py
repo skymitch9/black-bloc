@@ -7,19 +7,27 @@ from discord import app_commands
 from black_bloc import polls as pure
 from black_bloc.cogs.community.polls import (
     POLL_MINUTES,
+    PollClearVoteButton,
     PollDecisionButton,
     PollDenyModal,
+    PollOpenVoteButton,
     Polls,
+    PollVoteButton,
     add_options,
     archive_poll,
     claim_reminder,
     create_poll,
     get_poll,
+    my_positions,
     options_of,
+    panel_counts,
     poll_for_message,
+    recurrences,
     results_of,
     set_answer_ids,
     set_posted,
+    vote_picker,
+    voter_key,
     votes_of,
 )
 from black_bloc.config import load_settings
@@ -442,31 +450,95 @@ async def test_a_poll_with_one_option_is_refused_and_nothing_is_stored(cog, bot,
     assert bot.guild.get_channel(TEST_CHANNEL).polls == []
 
 
-async def test_an_anonymous_poll_is_refused_rather_than_posted_in_the_open(cog, bot, lead, db):
+async def test_an_anonymous_poll_is_a_panel_and_says_why(cog, bot, lead, db):
     interaction = await make(cog, bot, lead, anonymous=True)
 
-    assert pure.NEXT_UPDATE in interaction.sent
+    row = await get_poll(db, 1)
+    assert row["surface"] == pure.PANEL and row["status"] == pure.OPEN
+    assert pure.PANEL_BECAUSE_ANONYMOUS in interaction.sent
+    assert bot.guild.get_channel(TEST_CHANNEL).messages[0].sent_poll is None
+
+
+async def test_hiding_results_until_close_is_a_panel_with_the_bars_withheld(cog, bot, lead, db):
+    await make(cog, bot, lead, results=choice(pure.AT_CLOSE))
+
+    row = await get_poll(db, 1)
+    assert row["surface"] == pure.PANEL and row["results"] == pure.AT_CLOSE
+    embed = bot.guild.get_channel(TEST_CHANNEL).messages[0].kwargs["embed"]
+    assert "Pizza" in embed.description and pure.FULL not in embed.description
+    assert pure.PANEL_HIDDEN in [field.value for field in embed.fields]
+
+
+async def test_more_than_ten_options_is_a_panel_rather_than_a_discord_poll(cog, bot, lead, db):
+    interaction = await make(cog, bot, lead, options=" | ".join(f"o{n}" for n in range(11)))
+
+    assert (await get_poll(db, 1))["surface"] == pure.PANEL
+    assert "11" in interaction.sent and "10" in interaction.sent
+
+
+async def test_more_options_than_the_panel_carries_is_refused_and_nothing_is_stored(
+    cog, bot, lead, db
+):
+    interaction = await make(cog, bot, lead, options=" | ".join(f"o{n}" for n in range(26)))
+
+    assert "26" in interaction.sent and "25" in interaction.sent
     assert await get_poll(db, 1) is None
 
 
-async def test_hiding_results_until_close_is_refused_with_the_same_promise(cog, bot, lead, db):
-    interaction = await make(cog, bot, lead, results=choice(pure.AT_CLOSE))
+async def test_a_date_poll_of_ten_slots_or_fewer_is_a_native_multi_select(cog, bot, lead, db):
+    await make(
+        cog, bot, lead, kind=choice(pure.DATE), options=None,
+        start="2026-09-05", slots=3, step=1,
+    )
 
-    assert pure.NEXT_UPDATE in interaction.sent
+    row = await get_poll(db, 1)
+    assert row["surface"] == pure.NATIVE and row["multi"] == 1
+    posted = bot.guild.get_channel(TEST_CHANNEL).polls[0].poll
+    assert [a.text for a in posted.answers] == ["Sat 05 Sep", "Sun 06 Sep", "Mon 07 Sep"]
+    assert posted.multiple is True
+    assert [row["value"] for row in await options_of(db, 1)] == [
+        pure.parse_day("2026-09-05").isoformat(),
+        pure.parse_day("2026-09-06").isoformat(),
+        pure.parse_day("2026-09-07").isoformat(),
+    ]
+
+
+async def test_a_date_poll_of_more_than_ten_slots_goes_to_the_panel(cog, bot, lead, db):
+    await make(
+        cog, bot, lead, kind=choice(pure.DATE), options=None,
+        start="2026-09-05", slots=12, step=1,
+    )
+
+    assert (await get_poll(db, 1))["surface"] == pure.PANEL
+    assert len(await options_of(db, 1)) == 12
+
+
+async def test_a_date_poll_writes_timestamps_when_the_server_asks_for_them(cog, bot, lead, db):
+    await bot.store.set(GUILD, "poll_date_labels", pure.DATE_TIMESTAMP)
+
+    await make(
+        cog, bot, lead, kind=choice(pure.DATE), options=None,
+        start="2026-09-05", slots=2, step=1,
+    )
+
+    labels = [row["label"] for row in await options_of(db, 1)]
+    assert all(label.startswith("<t:") and label.endswith(":D>") for label in labels)
+
+
+async def test_a_date_poll_with_a_start_nobody_can_read_is_refused(cog, bot, lead, db):
+    interaction = await make(
+        cog, bot, lead, kind=choice(pure.DATE), options=None,
+        start="next tuesday", slots=3, step=1,
+    )
+
+    assert "not a date" in interaction.sent
     assert await get_poll(db, 1) is None
 
 
-async def test_more_than_ten_options_is_refused_before_discord_sees_it(cog, bot, lead, db):
-    interaction = await make(cog, bot, lead, options=" | ".join(str(n) for n in range(11)))
+async def test_a_date_poll_with_no_start_at_all_says_what_it_needs(cog, bot, lead, db):
+    interaction = await make(cog, bot, lead, kind=choice(pure.DATE), options=None)
 
-    assert pure.NEXT_UPDATE in interaction.sent
-    assert await get_poll(db, 1) is None
-
-
-async def test_a_date_poll_says_it_arrives_with_the_next_update(cog, bot, lead, db):
-    interaction = await make(cog, bot, lead, kind=choice(pure.DATE))
-
-    assert pure.NEXT_UPDATE in interaction.sent
+    assert interaction.sent == pure.DATE_NEEDS_A_START
     assert await get_poll(db, 1) is None
 
 
@@ -1095,12 +1167,371 @@ def test_a_loop_that_raised_is_restarted_and_the_failure_is_on_the_record(cog):
     assert "boom" in cog.last_error["polls"]
 
 
-async def test_the_decision_buttons_are_registered_so_they_survive_a_restart(cog, bot):
+async def test_every_persistent_button_is_registered_so_it_survives_a_restart(cog, bot):
     await cog.cog_load()
     try:
-        assert PollDecisionButton in bot.dynamic
+        for item in (
+            PollDecisionButton, PollVoteButton, PollOpenVoteButton, PollClearVoteButton
+        ):
+            assert item in bot.dynamic
     finally:
         await cog.cog_unload()
+
+
+async def panel(cog, bot, who, **kwargs):
+    """One panel poll, made the only way a panel is reached: by asking for hidden results."""
+    kwargs.setdefault("results", choice(pure.AT_CLOSE))
+    return await make(cog, bot, who, **kwargs)
+
+
+async def press(bot, who, poll_id, position, message=None):
+    interaction = FakeInteraction(bot, who, message=message)
+    await PollVoteButton(poll_id, position).on_click(interaction)
+    return interaction
+
+
+async def test_a_panel_poll_posts_a_button_for_every_option_and_one_to_clear(cog, bot, lead, db):
+    await panel(cog, bot, lead, options="Pizza | Tacos")
+
+    posted = bot.guild.get_channel(TEST_CHANNEL).messages[0]
+    labels = [item.item.label for item in posted.kwargs["view"].children]
+    assert labels == ["Pizza", "Tacos", pure.PANEL_CLEAR]
+    assert posted.sent_poll is None
+
+
+async def test_more_than_five_options_get_one_vote_button_that_opens_a_modal(cog, bot, lead, db):
+    await panel(cog, bot, lead, options=" | ".join(f"o{n}" for n in range(6)))
+
+    posted = bot.guild.get_channel(TEST_CHANNEL).messages[0]
+    labels = [item.item.label for item in posted.kwargs["view"].children]
+    assert labels == [pure.PANEL_VOTE, pure.PANEL_CLEAR]
+
+
+async def test_pressing_an_option_records_the_vote_and_repaints_the_panel(cog, bot, lead, db):
+    await panel(cog, bot, lead, options="Pizza | Tacos")
+    posted = bot.guild.get_channel(TEST_CHANNEL).messages[0]
+
+    interaction = await press(bot, lead, 1, 0)
+
+    assert "Pizza" in interaction.sent
+    counts, voters = await panel_counts(db, 1)
+    assert [row["votes"] for row in counts] == [1, 0] and voters == 1
+    assert posted.edits and posted.edits[-1]["embed"] is not None
+
+
+async def test_a_second_press_on_a_single_choice_poll_moves_the_vote(cog, bot, lead, db):
+    await panel(cog, bot, lead, options="Pizza | Tacos")
+
+    await press(bot, lead, 1, 0)
+    await press(bot, lead, 1, 1)
+
+    counts, voters = await panel_counts(db, 1)
+    assert [row["votes"] for row in counts] == [0, 1] and voters == 1
+
+
+async def test_a_checkbox_panel_adds_and_takes_back_one_option_at_a_time(cog, bot, lead, db):
+    await panel(cog, bot, lead, kind=choice(pure.CHECKBOX), options="A | B | C")
+
+    await press(bot, lead, 1, 0)
+    await press(bot, lead, 1, 2)
+    counts, voters = await panel_counts(db, 1)
+    assert [row["votes"] for row in counts] == [1, 0, 1] and voters == 1
+
+    interaction = await press(bot, lead, 1, 0)
+    counts, _ = await panel_counts(db, 1)
+    assert [row["votes"] for row in counts] == [0, 0, 1]
+    assert "C" in interaction.sent
+
+
+async def test_clearing_a_vote_leaves_nothing_of_that_person_behind(cog, bot, lead, db):
+    await panel(cog, bot, lead, options="Pizza | Tacos")
+    await press(bot, lead, 1, 0)
+
+    interaction = FakeInteraction(bot, lead)
+    await PollClearVoteButton(1).on_click(interaction)
+
+    assert interaction.sent == pure.VOTE_CLEARED
+    assert await panel_counts(db, 1) == ([
+        {"position": 0, "label": "Pizza", "votes": 0},
+        {"position": 1, "label": "Tacos", "votes": 0},
+    ], 0)
+
+
+async def test_a_vote_on_a_closed_panel_is_refused_and_counts_nothing(cog, bot, lead, db):
+    await panel(cog, bot, lead, options="Pizza | Tacos")
+    await cog.poll_end.callback(cog, FakeInteraction(bot, lead), "1")
+
+    interaction = await press(bot, lead, 1, 0)
+
+    assert pure.CLOSED in interaction.sent
+    assert (await panel_counts(db, 1))[1] == 0
+
+
+async def test_a_vote_on_a_poll_black_bloc_has_forgotten_says_so(cog, bot, lead):
+    interaction = await press(bot, lead, 404, 0)
+
+    assert interaction.sent == pure.VOTE_GONE
+
+
+async def test_an_anonymous_panel_keeps_the_count_without_keeping_the_name(cog, bot, lead, db):
+    await make(cog, bot, lead, anonymous=True, options="Pizza | Tacos")
+
+    await press(bot, lead, 1, 0)
+
+    stored = [row["user_id"] for row in await votes_of(db, 1)]
+    assert stored and lead.id not in stored
+    assert (await panel_counts(db, 1))[1] == 1
+    assert await my_positions(db, 1, voter_key(await get_poll(db, 1), lead.id)) == [0]
+
+
+async def test_a_named_panel_keeps_the_voter_so_the_export_can_name_them(cog, bot, lead, db):
+    await panel(cog, bot, lead, options="Pizza | Tacos")
+
+    await press(bot, lead, 1, 0)
+
+    assert [row["user_id"] for row in await votes_of(db, 1)] == [lead.id]
+
+
+async def test_a_hidden_panel_shows_its_bars_only_once_it_has_closed(cog, bot, lead, db):
+    await panel(cog, bot, lead, options="Pizza | Tacos")
+    await press(bot, lead, 1, 0)
+    posted = bot.guild.get_channel(TEST_CHANNEL).messages[0]
+    assert pure.FULL not in posted.edits[-1]["embed"].description
+
+    await cog.poll_end.callback(cog, FakeInteraction(bot, lead), "1")
+
+    assert pure.FULL in posted.edits[-1]["embed"].description
+    assert posted.edits[-1]["view"] is None
+
+
+async def test_closing_a_panel_writes_the_result_from_our_own_rows(cog, bot, lead, member, db):
+    await panel(cog, bot, lead, kind=choice(pure.CHECKBOX), options="A | B")
+    await press(bot, lead, 1, 0)
+    await press(bot, member, 1, 0)
+    await press(bot, member, 1, 1)
+
+    await cog.poll_end.callback(cog, FakeInteraction(bot, lead), "1")
+
+    row = await get_poll(db, 1)
+    assert row["status"] == pure.CLOSED and row["total_votes"] == 2
+    stored = await results_of(db, 1)
+    assert stored["winner_position"] == 0
+    assert [item["final_votes"] for item in await options_of(db, 1)] == [2, 1]
+
+
+async def test_a_panel_is_never_ended_at_discord_because_discord_has_no_poll(cog, bot, lead, db):
+    await panel(cog, bot, lead, options="Pizza | Tacos")
+
+    await cog.poll_end.callback(cog, FakeInteraction(bot, lead), "1")
+
+    assert bot.guild.get_channel(TEST_CHANNEL).messages[0].ended is False
+
+
+async def test_cancelling_a_panel_takes_the_buttons_off_and_publishes_nothing(cog, bot, lead, db):
+    await panel(cog, bot, lead, options="Pizza | Tacos")
+    posted = bot.guild.get_channel(TEST_CHANNEL).messages[0]
+
+    await cog.poll_cancel.callback(cog, FakeInteraction(bot, lead), "1")
+
+    assert (await get_poll(db, 1))["status"] == pure.CANCELLED
+    assert posted.edits[-1]["view"] is None and posted.ended is False
+    assert await results_of(db, 1) is None
+
+
+async def test_the_modal_uses_a_radio_group_for_one_choice_and_checkboxes_for_many(cog, bot, lead):
+    rows = [{"position": n, "label": f"o{n}"} for n in range(6)]
+
+    assert isinstance(vote_picker(rows, multi=False), discord.ui.RadioGroup)
+    assert isinstance(vote_picker(rows, multi=True), discord.ui.CheckboxGroup)
+
+
+async def test_past_ten_options_the_modal_falls_back_to_a_select(cog, bot, lead):
+    rows = [{"position": n, "label": f"o{n}"} for n in range(12)]
+
+    picker = vote_picker(rows, multi=True, standing=[3])
+    assert isinstance(picker, discord.ui.Select)
+    assert picker.max_values == 12 and picker.min_values == 0
+    assert [option.value for option in picker.options if option.default] == ["3"]
+
+
+async def test_the_modal_marks_what_that_person_already_picked(cog, bot, lead, db):
+    await panel(cog, bot, lead, kind=choice(pure.CHECKBOX), options=" | ".join("ABCDEF"))
+    await press(bot, lead, 1, 1)
+
+    interaction = FakeInteraction(bot, lead)
+    await PollOpenVoteButton(1).on_click(interaction)
+
+    picker = interaction.response.modals[0].picker
+    assert [option.value for option in picker.options if option.default] == ["1"]
+
+
+async def test_a_modal_submitted_with_nothing_picked_changes_no_vote(cog, bot, lead, db):
+    await panel(cog, bot, lead, kind=choice(pure.CHECKBOX), options=" | ".join("ABCDEF"))
+    await press(bot, lead, 1, 1)
+    interaction = FakeInteraction(bot, lead)
+    await PollOpenVoteButton(1).on_click(interaction)
+    modal = interaction.response.modals[0]
+
+    again = FakeInteraction(bot, lead)
+    await modal.on_submit(again)
+
+    assert again.sent == pure.PICK_SOMETHING
+    assert (await panel_counts(db, 1))[1] == 1
+
+
+async def recurring(cog, bot, who, **kwargs):
+    """One `/poll recur create`, daily at 09:00 Phoenix unless the caller says otherwise."""
+    interaction = FakeInteraction(bot, who, channel=kwargs.pop("channel", None))
+    await cog.recur_create.callback(
+        cog,
+        interaction,
+        kwargs.pop("question", "Are we running tonight?"),
+        kwargs.pop("every", choice("daily")),
+        kwargs.pop("at", "09:00"),
+        options=kwargs.pop("options", "Yes | No"),
+        **kwargs,
+    )
+    return interaction
+
+
+async def test_a_recurrence_is_stored_as_a_template_and_never_posted_on_the_spot(cog, bot, db):
+    lead = FakeMember(bot.guild, user_id=1, display_name="Lead", manage_guild=True)
+
+    interaction = await recurring(cog, bot, lead)
+
+    row = await get_poll(db, 1)
+    assert row["status"] == pure.RECURRING and row["recurrence"] == "daily"
+    assert (row["recur_at"], row["recur_tz"]) == ("09:00", "America/Phoenix")
+    assert row["recur_next_at"] is not None
+    assert bot.guild.get_channel(TEST_CHANNEL).messages == []
+    assert "every day at 09:00" in interaction.sent
+    assert "poll.recur_created" in await action_kinds(db)
+
+
+async def test_a_template_never_shows_up_where_polls_are_listed(cog, bot, lead, db):
+    await recurring(cog, bot, lead)
+
+    interaction = FakeInteraction(bot, lead)
+    await cog.poll_list.callback(cog, interaction)
+
+    assert interaction.sent == "Nothing is running — `/poll create` starts one."
+
+
+async def test_a_date_poll_is_refused_a_recurrence_because_its_slots_would_go_stale(
+    cog, bot, lead, db
+):
+    interaction = await recurring(cog, bot, lead, kind=choice(pure.DATE))
+
+    assert interaction.sent == pure.RECUR_NOT_A_DATE
+    assert await get_poll(db, 1) is None
+
+
+async def test_a_cadence_nobody_can_read_is_refused_before_anything_is_stored(cog, bot, lead, db):
+    interaction = await recurring(cog, bot, lead, every=choice("weekly"), day="funday")
+
+    assert "day of the week" in interaction.sent
+    assert await get_poll(db, 1) is None
+
+
+async def test_a_member_cannot_set_a_poll_to_repeat(cog, bot, member, db):
+    interaction = FakeInteraction(bot, member)
+    await cog.recur_create.callback(cog, interaction, "Q", choice("daily"), "09:00")
+
+    assert await get_poll(db, 1) is None
+
+
+async def test_a_due_recurrence_opens_one_poll_and_books_the_next_one(cog, bot, lead, db):
+    await recurring(cog, bot, lead)
+    await db.conn.execute("UPDATE polls SET recur_next_at = ? WHERE id = 1", ("2020-01-01T00:00",))
+    await db.conn.commit()
+
+    await cog.run_due_polls()
+
+    made = await get_poll(db, 2)
+    assert made["status"] == pure.OPEN and made["schedule_id"] == 1
+    assert made["question"] == "Are we running tonight?"
+    assert len(bot.guild.get_channel(TEST_CHANNEL).polls) == 1
+    template = await get_poll(db, 1)
+    assert template["status"] == pure.RECURRING
+    assert template["recur_next_at"] > "2020-01-01T00:00"
+    assert "poll.recurred" in await action_kinds(db)
+
+
+async def test_a_second_pass_at_the_same_due_time_opens_nothing_more(cog, bot, lead, db):
+    await recurring(cog, bot, lead)
+    await db.conn.execute("UPDATE polls SET recur_next_at = ? WHERE id = 1", ("2020-01-01T00:00",))
+    await db.conn.commit()
+
+    await cog.run_due_polls()
+    await cog.run_due_polls()
+
+    assert await get_poll(db, 3) is None
+    assert len(bot.guild.get_channel(TEST_CHANNEL).polls) == 1
+
+
+async def test_a_paused_recurrence_is_never_due(cog, bot, lead, db):
+    await recurring(cog, bot, lead)
+
+    interaction = FakeInteraction(bot, lead)
+    await cog.recur_pause.callback(cog, interaction, "1")
+    await cog.run_due_polls()
+
+    assert (await get_poll(db, 1))["recur_next_at"] is None
+    assert "paused" in interaction.sent
+    assert await get_poll(db, 2) is None
+
+
+async def test_starting_a_paused_recurrence_again_books_the_next_one(cog, bot, lead, db):
+    await recurring(cog, bot, lead)
+    await cog.recur_pause.callback(cog, FakeInteraction(bot, lead), "1")
+
+    interaction = FakeInteraction(bot, lead)
+    await cog.recur_pause.callback(cog, interaction, "1", paused=False)
+
+    assert (await get_poll(db, 1))["recur_next_at"] is not None
+    assert "running again" in interaction.sent
+
+
+async def test_deleting_a_recurrence_stops_it_without_touching_what_it_opened(cog, bot, lead, db):
+    await recurring(cog, bot, lead)
+    await db.conn.execute("UPDATE polls SET recur_next_at = ? WHERE id = 1", ("2020-01-01T00:00",))
+    await db.conn.commit()
+    await cog.run_due_polls()
+
+    interaction = FakeInteraction(bot, lead)
+    await cog.recur_delete.callback(cog, interaction, "1")
+
+    assert (await get_poll(db, 1))["status"] == pure.CANCELLED
+    assert (await get_poll(db, 2))["status"] == pure.OPEN
+    assert "will not run again" in interaction.sent
+    assert await recurrences(db, GUILD) == []
+
+
+async def test_a_poll_number_that_is_not_a_recurrence_says_so(cog, bot, lead, db):
+    await make(cog, bot, lead)
+
+    interaction = FakeInteraction(bot, lead)
+    await cog.recur_delete.callback(cog, interaction, "1")
+
+    assert "no repeating poll" in interaction.sent
+    assert (await get_poll(db, 1))["status"] == pure.OPEN
+
+
+async def test_the_list_names_the_cadence_and_says_when_one_is_paused(cog, bot, lead, db):
+    await recurring(cog, bot, lead, every=choice("weekly"), day="sat", at="19:00")
+    await cog.recur_pause.callback(cog, FakeInteraction(bot, lead), "1")
+
+    interaction = FakeInteraction(bot, lead)
+    await cog.recur_list.callback(cog, interaction)
+
+    assert "every Saturday at 19:00" in interaction.sent and "paused" in interaction.sent
+
+
+async def test_nothing_repeating_says_how_to_start_one(cog, bot, lead):
+    interaction = FakeInteraction(bot, lead)
+    await cog.recur_list.callback(cog, interaction)
+
+    assert interaction.sent == pure.RECUR_NONE
 
 
 async def test_forgetting_a_deleted_dashboard_channel(cog, bot, db):

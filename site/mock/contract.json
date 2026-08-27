@@ -767,6 +767,101 @@
       }
     },
     {
+      "method": "POST",
+      "path": "/api/polls",
+      "body": {
+        "question": "Contract poll?",
+        "options": [
+          "Yes",
+          "No"
+        ],
+        "hours": 24,
+        "channel_id": "{test_channel_id}"
+      },
+      "read_by": [
+        "page-polls.js create form"
+      ],
+      "shape": "object",
+      "keys": [
+        "poll",
+        "message",
+        "note"
+      ],
+      "nested": {
+        "poll": [
+          "id",
+          "question",
+          "status",
+          "surface",
+          "options"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/polls/recurrences",
+      "read_by": [
+        "page-polls.js recurring list"
+      ],
+      "shape": "list",
+      "keys": [
+        "id",
+        "question",
+        "kind",
+        "surface",
+        "hours",
+        "anonymous",
+        "results",
+        "creator_id",
+        "creator_name",
+        "channel_id",
+        "cadence",
+        "cadence_said",
+        "at",
+        "tz",
+        "next_at",
+        "paused",
+        "options",
+        "created_at"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/polls/recurrences/{poll_recurrence_id}/pause",
+      "body": {
+        "paused": true
+      },
+      "read_by": [
+        "page-polls.js recurring list"
+      ],
+      "shape": "object",
+      "keys": [
+        "recurrence",
+        "message"
+      ],
+      "nested": {
+        "recurrence": [
+          "id",
+          "question",
+          "cadence_said",
+          "paused",
+          "next_at"
+        ]
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/polls/recurrences/{poll_recurrence_id}",
+      "read_by": [
+        "page-polls.js recurring list"
+      ],
+      "shape": "object",
+      "keys": [
+        "recurrence_id",
+        "message"
+      ]
+    },
+    {
       "method": "GET",
       "path": "/api/polls/requests",
       "read_by": [
@@ -1431,7 +1526,8 @@
     "/honeypot.html",
     "/settings.html",
     "/audit.html",
-    "/health.html"
+    "/health.html",
+    "/polls.html"
   ],
   "action_kinds": [
     "web.settings.set",
@@ -1477,6 +1573,10 @@
     "web.role.denied",
     "web.role.granted",
     "web.role.extended",
-    "web.role.ended"
+    "web.role.ended",
+    "web.poll.created",
+    "web.poll.recur_paused",
+    "web.poll.recur_resumed",
+    "web.poll.recur_deleted"
   ]
 }

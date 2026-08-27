@@ -6,11 +6,14 @@ from typing import Any
 
 import discord
 
+from . import timezones
+
 log = logging.getLogger(__name__)
 
 QUESTION_LIMIT = 300
 LABEL_LIMIT = 55
 MAX_NATIVE_OPTIONS = 10
+MAX_PANEL_OPTIONS = 25
 MIN_OPTIONS = 2
 MIN_HOURS = 1
 MAX_HOURS = 32 * 24
@@ -31,9 +34,13 @@ FREE_TEXT = "text"
 NUMBER = "number"
 RANKED = "ranked"
 NATIVE_KINDS = (SINGLE, CHECKBOX, YESNO, RATING)
-LATER_KINDS = (DATE, FREE_TEXT, NUMBER, RANKED)
-KINDS = NATIVE_KINDS + LATER_KINDS
-GENERATED_KINDS = (YESNO, RATING)
+PANEL_KINDS = (DATE,)
+KNOWN_KINDS = NATIVE_KINDS + PANEL_KINDS
+LATER_KINDS = (FREE_TEXT, NUMBER, RANKED)
+KINDS = KNOWN_KINDS + LATER_KINDS
+GENERATED_KINDS = (YESNO, RATING, DATE)
+MULTI_KINDS = (CHECKBOX, DATE)
+BUTTONS_UP_TO = 5
 
 NATIVE = "native"
 PANEL = "panel"
@@ -43,6 +50,30 @@ LIVE = "live"
 AT_CLOSE = "close"
 RESULTS_CHOICES = (LIVE, AT_CLOSE)
 
+DATE_PLAIN = "plain"
+DATE_TIMESTAMP = "timestamp"
+DATE_LABEL_FORMS = (DATE_PLAIN, DATE_TIMESTAMP)
+MIN_SLOTS = 2
+MAX_SLOTS = MAX_PANEL_OPTIONS
+STEP_HOURS = "hours"
+STEP_DAYS = "days"
+DATE_STEPS = (STEP_HOURS, STEP_DAYS)
+MAX_STEP = 168
+DAY_FORMAT = "%Y-%m-%d"
+DAY_TIME_FORMAT = "%Y-%m-%d %H:%M"
+DAY_LABEL = "%a %d %b"
+
+DAILY = "daily"
+WEEKLY = "weekly"
+MONTHLY = "monthly"
+CADENCES = (DAILY, WEEKLY, MONTHLY)
+WEEKDAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+WEEKDAY_NAMES = (
+    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+)
+MAX_MONTH_DAY = 28
+CLOCK_FORMAT = "%H:%M"
+
 DRAFT = "draft"
 PENDING_REVIEW = "pending_review"
 OPEN = "open"
@@ -50,7 +81,8 @@ CLOSED = "closed"
 ARCHIVED = "archived"
 DENIED = "denied"
 CANCELLED = "cancelled"
-STATUSES = (DRAFT, PENDING_REVIEW, OPEN, CLOSED, ARCHIVED, DENIED, CANCELLED)
+RECURRING = "recurring"
+STATUSES = (DRAFT, PENDING_REVIEW, OPEN, CLOSED, ARCHIVED, DENIED, CANCELLED, RECURRING)
 OPEN_STATUSES = (DRAFT, PENDING_REVIEW, OPEN)
 SETTLED_STATUSES = (CLOSED, CANCELLED, DENIED, ARCHIVED)
 
@@ -62,6 +94,7 @@ TRANSITIONS: dict[str, tuple[str, ...]] = {
     CANCELLED: (ARCHIVED,),
     DENIED: (),
     ARCHIVED: (),
+    RECURRING: (CANCELLED,),
 }
 
 TERMINAL_STATUSES = tuple(status for status, allowed in TRANSITIONS.items() if not allowed)
@@ -74,6 +107,7 @@ COLOURS: dict[str, int] = {
     ARCHIVED: 0x99AAB5,
     DENIED: 0xED4245,
     CANCELLED: 0xED4245,
+    RECURRING: 0x5865F2,
 }
 
 KIND_NAMES: dict[str, str] = {
@@ -88,7 +122,6 @@ KIND_NAMES: dict[str, str] = {
 }
 
 LATER_KIND_NAMES: dict[str, str] = {
-    DATE: "A **date** poll",
     FREE_TEXT: "A **free text** poll",
     NUMBER: "A **number** poll",
     RANKED: "A **ranked choice** poll",
@@ -98,22 +131,24 @@ NEXT_UPDATE = "that kind of poll arrives with the next update"
 
 KIND_NOT_YET = (
     "{what} needs a voting surface Black Bloc does not have yet, so nothing was posted — "
-    f"{NEXT_UPDATE}. Until then a poll can be single choice, checkbox, yes/no or a "
-    "1-5 rating."
+    f"{NEXT_UPDATE}. Until then a poll can be single choice, checkbox, yes/no, a "
+    "1-5 rating or a date."
 )
-ANONYMOUS_NOT_YET = (
-    "Discord's own polls list everybody who voted, so Black Bloc will not label one "
-    "**anonymous** and make a promise it cannot keep — nothing was posted, and "
-    f"{NEXT_UPDATE}. Run it with anonymous off if it cannot wait."
+TOO_MANY = (
+    "**{count}** options is more than the {limit} Black Bloc can put on one poll, so nothing was "
+    "posted. Cut it to {limit} or fewer and run it again."
 )
-HIDDEN_NOT_YET = (
-    "Discord's own polls show the bars as the votes come in and there is no way to hide them, so "
-    "**results at close** could not be honoured and nothing was posted — "
-    f"{NEXT_UPDATE}. Run it with results **live** if it cannot wait."
+
+PANEL_BECAUSE_ANONYMOUS = (
+    "Discord's own polls list everybody who voted, so an **anonymous** one cannot be theirs"
 )
-TOO_MANY_NOT_YET = (
-    "**{count}** options is more than the {limit} a Discord poll can carry, so nothing was "
-    f"posted — {NEXT_UPDATE}. Until then, cut it to {{limit}} options or fewer."
+PANEL_BECAUSE_HIDDEN = (
+    "Discord's own polls show the bars as the votes come in and there is no way to hide them"
+)
+PANEL_BECAUSE_LONG = "**{count}** options is more than the {limit} a Discord poll carries"
+PANEL_SAID = (
+    "This one is a Black Bloc panel rather than a Discord poll, because {why}. People vote with "
+    "the buttons under it; everything else works the same."
 )
 
 NO_QUESTION = (
@@ -140,6 +175,85 @@ BAD_HOURS = (
     "**{given}** is not a length Black Bloc can give a poll, so nothing was posted. Discord "
     "counts poll length in whole hours, from {low} to {high} (32 days)."
 )
+
+BAD_START = (
+    "**{given}** is not a date Black Bloc can read, so nothing was posted. Write it as "
+    "`2026-09-05`, or `2026-09-05 19:00` when the time of day matters."
+)
+BAD_SLOTS = (
+    "A date poll needs between {low} and {high} slots and this one asked for **{given}**, so "
+    "nothing was posted. Say how many with `slots:`."
+)
+BAD_STEP = (
+    "**{given}** is not a gap Black Bloc can leave between two slots, so nothing was posted. It "
+    "counts in whole {unit}, from 1 to {high}."
+)
+BAD_STEP_UNIT = (
+    "**{given}** is not a unit a date poll can step by, so nothing was posted. It is `hours` or "
+    "`days`."
+)
+DATE_NEEDS_A_START = (
+    "A date poll needs a start date, so nothing was posted. Give it one with "
+    "`start:2026-09-05` and Black Bloc lays the slots out from there."
+)
+
+PANEL_HOW_ONE = "Press an option to vote. Pressing a different one moves your vote."
+PANEL_HOW_MANY = "Press everything that works for you. Pressing one again takes it back."
+PANEL_HIDDEN = "Hidden until this closes, so nobody's vote is swayed by the bars."
+PANEL_ANONYMOUS = (
+    "Nobody is told who pressed what — Black Bloc does not keep your name against a vote here."
+)
+PANEL_VOTE = "Vote"
+PANEL_CLEAR = "Clear my vote"
+
+VOTED_ONE = "Your vote is on **{label}**."
+VOTED_MANY = "You have {labels}."
+VOTE_CLEARED = "Your vote is cleared, so nothing of yours counts towards this poll now."
+VOTE_NOT_OPEN = (
+    "That poll is **{status}**, so nothing was counted. The result on the message is the final one."
+)
+VOTE_GONE = (
+    "Black Bloc has no record of that poll any more, so nothing was counted. It may have been "
+    "archived — the polls page on the dashboard keeps the result."
+)
+PICK_SOMETHING = (
+    "Nothing was picked, so nothing changed. Choose at least one option, or use "
+    f"**{PANEL_CLEAR}** to take your vote back."
+)
+
+BAD_CLOCK = (
+    "**{given}** is not a time of day Black Bloc can read, so nothing was saved. Write it on the "
+    "24-hour clock — `09:00`, `19:30`."
+)
+BAD_WEEKDAY = (
+    "**{given}** is not a day of the week, so nothing was saved. A weekly poll runs on one of "
+    "{known}."
+)
+BAD_MONTH_DAY = (
+    "**{given}** is not a day of the month Black Bloc will use, so nothing was saved. It counts "
+    "from 1 to {limit} — every month has those, and a poll set for the 31st would skip February."
+)
+BAD_ZONE = (
+    "**{given}** is not a timezone this machine knows, so nothing was saved. Write it the tzdata "
+    "way — `America/Phoenix`, `Europe/London`."
+)
+RECUR_NOT_A_DATE = (
+    "A **date** poll cannot recur, so nothing was saved — its slots are fixed days, and the second "
+    "time round it would be asking about a day that has been and gone. Run `/poll create "
+    "kind:date` when you need one, or recur a checkbox poll with the days written on it."
+)
+RECUR_NONE = "No poll is set to repeat. `/poll recur create` starts one."
+RECUR_SAVED = "**{question}** will run {cadence}. The first one opens <t:{when}:R>."
+RECUR_PAUSED = "**{question}** is paused. Nothing opens until it is started again."
+RECUR_RESUMED = "**{question}** is running again. The next one opens <t:{when}:R>."
+RECUR_DELETED = "**{question}** will not run again. Polls it already opened are untouched."
+NOT_A_RECURRENCE = (
+    "Black Bloc has no repeating poll **#{poll_id}**, so nothing was done. `/poll recur list` has "
+    "the ones it knows about."
+)
+CADENCE_DAILY = "every day at {clock} {zone}"
+CADENCE_WEEKLY = "every {day} at {clock} {zone}"
+CADENCE_MONTHLY = "on the {day}{ordinal} of each month at {clock} {zone}"
 
 RESULTS_TITLE = "{question}"
 NO_VOTES = "Nobody voted."
@@ -198,32 +312,213 @@ def validate(question: Any, labels: Any, hours: Any) -> str | None:
 
 
 def whole_hours(hours: Any) -> bool:
-    if isinstance(hours, bool) or not isinstance(hours, int):
+    return whole(hours, MIN_HOURS, MAX_HOURS)
+
+
+def parse_day(text: Any, tz_name: Any = timezones.DEFAULT_TZ) -> datetime | None:
+    """`2026-09-05`, or `2026-09-05 19:00`, read in the server's zone and returned as UTC."""
+    zi = timezones.zone(tz_name) or timezones.zone(timezones.DEFAULT_TZ)
+    typed = str(text or "").strip()
+    for shape in (DAY_TIME_FORMAT, DAY_FORMAT):
+        try:
+            naive = datetime.strptime(typed, shape)
+        except ValueError:
+            continue
+        return naive.replace(tzinfo=zi).astimezone(UTC)
+    return None
+
+
+def clock_label(when: datetime) -> str:
+    """`7 pm`, `7:30 pm` — the twelve-hour form, built by hand because Windows has no `%-I`."""
+    hour = when.hour % 12 or 12
+    minute = f":{when.minute:02d}" if when.minute else ""
+    return f"{hour}{minute} {'am' if when.hour < 12 else 'pm'}"
+
+
+def slot_label(
+    when: datetime, *, with_time: bool, form: str = DATE_PLAIN, tz_name: Any = timezones.DEFAULT_TZ
+) -> str:
+    """The answer text for one date slot, in whichever form the server has asked for."""
+    if form == DATE_TIMESTAMP:
+        return f"<t:{int(when.timestamp())}:{'f' if with_time else 'D'}>"
+    zi = timezones.zone(tz_name) or timezones.zone(timezones.DEFAULT_TZ)
+    local = when.astimezone(zi)
+    day = local.strftime(DAY_LABEL)
+    return f"{day} · {clock_label(local)}" if with_time else day
+
+
+def date_trouble(start: Any, slots: Any, step: Any, unit: Any) -> str | None:
+    """The refusal sentence for a date poll's own arguments, or None when they work."""
+    if not str(start or "").strip():
+        return DATE_NEEDS_A_START
+    if parse_day(start) is None:
+        return BAD_START.format(given=clamp(start, 40))
+    if str(unit) not in DATE_STEPS:
+        return BAD_STEP_UNIT.format(given=clamp(unit, 40))
+    if not whole(slots, MIN_SLOTS, MAX_SLOTS):
+        return BAD_SLOTS.format(given=clamp(slots, 40), low=MIN_SLOTS, high=MAX_SLOTS)
+    if not whole(step, 1, MAX_STEP):
+        return BAD_STEP.format(given=clamp(step, 40), unit=unit, high=MAX_STEP)
+    return None
+
+
+def date_slots(
+    start: Any,
+    slots: Any,
+    step: Any,
+    unit: Any = STEP_DAYS,
+    *,
+    form: str = DATE_PLAIN,
+    tz_name: Any = timezones.DEFAULT_TZ,
+) -> list[dict[str, str]]:
+    """One row per candidate slot: the answer text, and the instant it stands for."""
+    first = parse_day(start, tz_name)
+    if first is None:
+        return []
+    gap = timedelta(hours=int(step)) if str(unit) == STEP_HOURS else timedelta(days=int(step))
+    zi = timezones.zone(tz_name) or timezones.zone(timezones.DEFAULT_TZ)
+    with_time = str(unit) == STEP_HOURS or first.astimezone(zi).time() != datetime.min.time()
+    return [
+        {
+            "label": slot_label(first + gap * n, with_time=with_time, form=form, tz_name=tz_name),
+            "value": (first + gap * n).isoformat(),
+        }
+        for n in range(int(slots))
+    ]
+
+
+def parse_clock(text: Any) -> tuple[int, int] | None:
+    try:
+        found = datetime.strptime(str(text or "").strip(), CLOCK_FORMAT)
+    except ValueError:
+        return None
+    return (found.hour, found.minute)
+
+
+def cadence_token(every: Any, day: Any = None) -> str | None:
+    """`daily`, `weekly:sat`, `monthly:12` — one string the row carries and the loop reads."""
+    kind = str(every or "").strip().lower()
+    if kind == DAILY:
+        return DAILY
+    if kind == WEEKLY:
+        wanted = str(day or "").strip().lower()[:3]
+        return f"{WEEKLY}:{wanted}" if wanted in WEEKDAYS else None
+    if kind == MONTHLY:
+        try:
+            at = int(str(day or "").strip())
+        except (TypeError, ValueError):
+            return None
+        return f"{MONTHLY}:{at}" if 1 <= at <= MAX_MONTH_DAY else None
+    return None
+
+
+def cadence_trouble(every: Any, day: Any, at_text: Any, tz_name: Any) -> str | None:
+    """The refusal sentence for a recurrence's own arguments, or None when they work."""
+    kind = str(every or "").strip().lower()
+    if kind == WEEKLY and cadence_token(kind, day) is None:
+        return BAD_WEEKDAY.format(given=clamp(day, 40) or "nothing", known=", ".join(WEEKDAYS))
+    if kind == MONTHLY and cadence_token(kind, day) is None:
+        return BAD_MONTH_DAY.format(given=clamp(day, 40) or "nothing", limit=MAX_MONTH_DAY)
+    if cadence_token(kind, day) is None:
+        return BAD_WEEKDAY.format(given=clamp(every, 40) or "nothing", known=", ".join(CADENCES))
+    if parse_clock(at_text) is None:
+        return BAD_CLOCK.format(given=clamp(at_text, 40) or "nothing")
+    if not timezones.is_known(tz_name):
+        return BAD_ZONE.format(given=clamp(tz_name, 60) or "nothing")
+    return None
+
+
+def next_occurrence(
+    token: Any, at_text: Any, tz_name: Any, after: datetime | None = None
+) -> datetime | None:
+    """The next instant this cadence comes round, read in its own zone and returned as UTC."""
+    clock = parse_clock(at_text)
+    zi = timezones.zone(tz_name)
+    if clock is None or zi is None:
+        return None
+    kind, _, detail = str(token or "").partition(":")
+    moment = (after or datetime.now(UTC)).astimezone(zi)
+    when = moment.replace(hour=clock[0], minute=clock[1], second=0, microsecond=0)
+    if kind == DAILY:
+        if when <= moment:
+            when += timedelta(days=1)
+    elif kind == WEEKLY:
+        if detail not in WEEKDAYS:
+            return None
+        when += timedelta(days=(WEEKDAYS.index(detail) - when.weekday()) % 7)
+        if when <= moment:
+            when += timedelta(days=7)
+    elif kind == MONTHLY:
+        if not detail.isdigit() or not 1 <= int(detail) <= MAX_MONTH_DAY:
+            return None
+        when = when.replace(day=int(detail))
+        if when <= moment:
+            year, month = divmod(when.month, 12)
+            when = when.replace(year=when.year + year, month=month + 1)
+    else:
+        return None
+    return when.astimezone(UTC)
+
+
+def ordinal(number: Any) -> str:
+    value = int(number)
+    if 11 <= value % 100 <= 13:
+        return "th"
+    return {1: "st", 2: "nd", 3: "rd"}.get(value % 10, "th")
+
+
+def describe_cadence(token: Any, at_text: Any, tz_name: Any) -> str:
+    kind, _, detail = str(token or "").partition(":")
+    clock = str(at_text or "?")
+    zone_name = str(tz_name or timezones.DEFAULT_TZ)
+    if kind == WEEKLY and detail in WEEKDAYS:
+        return CADENCE_WEEKLY.format(
+            day=WEEKDAY_NAMES[WEEKDAYS.index(detail)], clock=clock, zone=zone_name
+        )
+    if kind == MONTHLY and detail.isdigit():
+        return CADENCE_MONTHLY.format(
+            day=int(detail), ordinal=ordinal(detail), clock=clock, zone=zone_name
+        )
+    return CADENCE_DAILY.format(clock=clock, zone=zone_name)
+
+
+def whole(value: Any, low: int, high: int) -> bool:
+    if isinstance(value, bool) or not isinstance(value, int):
         return False
-    return MIN_HOURS <= hours <= MAX_HOURS
+    return low <= value <= high
 
 
 def surface_for(kind: str, anonymous: bool, results: str, slot_count: int) -> str:
-    """`native`, or a sentence saying which part of the ask the panel slice owns."""
+    """`native`, `panel`, or a refusal sentence for a kind no surface carries yet."""
     if kind in LATER_KINDS:
         raise NeedsPanel(
             KIND_NOT_YET.format(what=LATER_KIND_NAMES.get(kind, f"A **{kind}** poll"))
         )
-    if kind not in NATIVE_KINDS:
+    if kind not in KNOWN_KINDS:
         raise NeedsPanel(KIND_NOT_YET.format(what=f"A **{clamp(kind, 40)}** poll"))
+    if int(slot_count) > MAX_PANEL_OPTIONS:
+        raise NeedsPanel(TOO_MANY.format(count=int(slot_count), limit=MAX_PANEL_OPTIONS))
+    return PANEL if panel_reason(anonymous, results, slot_count) else NATIVE
+
+
+def panel_reason(anonymous: bool, results: str, slot_count: int) -> str | None:
+    """Why this poll cannot be Discord's own — the first thing that rules native out."""
     if anonymous:
-        raise NeedsPanel(ANONYMOUS_NOT_YET)
+        return PANEL_BECAUSE_ANONYMOUS
     if results == AT_CLOSE:
-        raise NeedsPanel(HIDDEN_NOT_YET)
+        return PANEL_BECAUSE_HIDDEN
     if int(slot_count) > MAX_NATIVE_OPTIONS:
-        raise NeedsPanel(
-            TOO_MANY_NOT_YET.format(count=int(slot_count), limit=MAX_NATIVE_OPTIONS)
-        )
-    return NATIVE
+        return PANEL_BECAUSE_LONG.format(count=int(slot_count), limit=MAX_NATIVE_OPTIONS)
+    return None
+
+
+def panel_note(anonymous: bool, results: str, slot_count: int) -> str | None:
+    why = panel_reason(anonymous, results, slot_count)
+    return PANEL_SAID.format(why=why) if why else None
 
 
 def is_multi(kind: str) -> bool:
-    return kind == CHECKBOX
+    return kind in MULTI_KINDS
 
 
 def closes_at(hours: int, now: datetime | None = None) -> datetime:
@@ -341,6 +636,67 @@ def results_embed(
         embed.add_field(name="Closed", value=str(closed_at), inline=False)
     embed.set_footer(text=f"Poll #{poll_id}")
     return embed
+
+
+def panel_text(counts: Any, voters: Any, *, hidden: bool) -> str:
+    """The block under a panel poll: the bars, or the options with the bars withheld."""
+    if not hidden:
+        return results_text(counts, voters)
+    rows = list(counts or ())
+    if not rows:
+        return NO_VOTES
+    return "\n".join(
+        f"{n}. {clamp(row.get('label'), LABEL_LIMIT)}" for n, row in enumerate(rows, 1)
+    )
+
+
+def panel_embed(
+    *,
+    poll_id: Any,
+    question: str,
+    counts: Any,
+    voters: Any,
+    kind: str = SINGLE,
+    multi: bool = False,
+    anonymous: bool = False,
+    hidden: bool = False,
+    status: str = OPEN,
+    closes_at: datetime | None = None,
+) -> discord.Embed:
+    """The panel's own card. It carries the live totals unless the poll hides them."""
+    withholding = hidden and status == OPEN
+    embed = discord.Embed(
+        title=clamp(question, QUESTION_LIMIT),
+        description=f"```\n{panel_text(counts, voters, hidden=withholding)}\n```",
+        colour=COLOURS.get(status, COLOURS[OPEN]),
+    )
+    counted = max(int(voters or 0), 0)
+    embed.add_field(name="Status", value=status, inline=True)
+    embed.add_field(name="Voters", value=str(counted), inline=True)
+    embed.add_field(name="How", value=PANEL_HOW_MANY if multi else PANEL_HOW_ONE, inline=False)
+    if withholding:
+        embed.add_field(name="Results", value=PANEL_HIDDEN, inline=False)
+    if anonymous:
+        embed.add_field(name="Anonymous", value=PANEL_ANONYMOUS, inline=False)
+    if kind == RATING and not withholding:
+        mean = average_rating(counts)
+        if mean is not None:
+            embed.add_field(
+                name="Average", value=AVERAGE.format(mean=mean, top=RATING_SLOTS), inline=False
+            )
+    if closes_at is not None and status == OPEN:
+        embed.add_field(name="Closes", value=f"<t:{int(closes_at.timestamp())}:R>", inline=False)
+    embed.set_footer(text=f"Poll #{poll_id}")
+    return embed
+
+
+def voted_text(labels: Any, *, multi: bool) -> str:
+    chosen = [clamp(label, LABEL_LIMIT) for label in labels or ()]
+    if not chosen:
+        return VOTE_CLEARED
+    if not multi:
+        return VOTED_ONE.format(label=chosen[0])
+    return VOTED_MANY.format(labels=", ".join(f"**{one}**" for one in chosen))
 
 
 def review_card(

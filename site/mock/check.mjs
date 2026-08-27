@@ -31,6 +31,7 @@ const IDS = {
   grant_id: '5',
   poll_id: '3',
   poll_request_id: '2',
+  poll_recurrence_id: '4',
 };
 
 const failures = [];

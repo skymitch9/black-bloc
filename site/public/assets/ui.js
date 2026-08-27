@@ -478,13 +478,65 @@ export function table(columns, rows, {
   ]);
 }
 
+const PAGER_GAP = 8;
+
+/**
+ * The element that actually scrolls this pager's page. The shell puts
+ * `overflow: hidden` on `body` and `overflow-y: auto` on `.content`, so
+ * `document.scrollingElement` never moves — walking up for a real scroller is
+ * what makes this work on every page rather than only where the window scrolls.
+ */
+function scrollerOf(node) {
+  let found = node.parentElement;
+  while (found && found !== document.documentElement) {
+    const how = getComputedStyle(found).overflowY;
+    if ((how === 'auto' || how === 'scroll') && found.scrollHeight > found.clientHeight) {
+      return found;
+    }
+    found = found.parentElement;
+  }
+  return document.scrollingElement || document.documentElement;
+}
+
+/**
+ * How far down the scroller the list this pager belongs to starts. The top bar
+ * is a SIBLING of the scroller rather than an overlay on top of it, so nothing
+ * covers y=0 inside `.content` and no bar height has to be subtracted here.
+ */
+function listTop(node) {
+  const block = node.closest('.sect, .card, .table-block') || node.parentElement;
+  const scroller = scrollerOf(node);
+  const root = document.scrollingElement || document.documentElement;
+  const base = scroller === root ? 0 : scroller.getBoundingClientRect().top;
+  return { scroller, at: scroller.scrollTop + block.getBoundingClientRect().top - base };
+}
+
+/**
+ * Only when the list has scrolled off the top: a visible list is left alone.
+ * The move is instant rather than smooth on purpose - a smooth scroll is an
+ * animation, and an animation does not run in a tab that is not on screen, so
+ * the one thing this exists to do would silently not happen.
+ */
+function backToTop({ scroller, at }) {
+  const wanted = Math.max(0, at - PAGER_GAP);
+  if (scroller.scrollTop <= wanted + 1) return;
+  scroller.scrollTop = wanted;
+}
+
 export function pager({ page, hasMore, onPage, count = null }) {
   const at = Number(page) || 1;
-  return el('div', { class: 'pager' }, [
-    button('Previous', () => onPage(at - 1), { tone: 'quiet', disabled: at <= 1 }),
+  const node = el('div', { class: 'pager' });
+  const go = async (to) => {
+    const where = listTop(node);
+    await onPage(to);
+    backToTop(where);
+  };
+  node.append(
+    button('Previous', () => go(at - 1), { tone: 'quiet', disabled: at <= 1 }),
     el('span', { class: 'pager-at', text: count === null ? `Page ${at}` : `Page ${at} · ${count} shown` }),
-    button('Next', () => onPage(at + 1), { tone: 'quiet', disabled: !hasMore }),
-  ]);
+    button('Next', () => go(at + 1), { tone: 'quiet', disabled: !hasMore }),
+  );
+  return node;
 }
 
 let dialog = null;

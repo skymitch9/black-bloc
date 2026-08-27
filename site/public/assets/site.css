@@ -1260,3 +1260,59 @@ dialog.ask::backdrop { background: var(--et-transit-bg, rgb(0 0 0 / .55)); }
 [data-theme="apple"] .card-head,
 [data-theme="apple"] .grid-row.head,
 [data-theme="apple"] .log-table thead th { border-bottom-color: var(--et-hairline); }
+
+/* A poll's result, drawn. The name column is capped rather than sized to the
+   longest label so a 55-character answer cannot push the bars off a phone; the
+   track carries the whole width and the fill is the only thing that changes. */
+.pollbars { display: grid; gap: 6px; margin: 8px 0; }
+.pollbar-row {
+  display: grid;
+  grid-template-columns: minmax(0, 10rem) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+.pollbar-name {
+  font-size: var(--et-ui-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pollbar-track {
+  height: 8px;
+  border-radius: var(--et-radius-pill);
+  background: var(--et-shell-inset);
+  border: var(--et-hairline-w) solid var(--et-hairline);
+  overflow: hidden;
+}
+.pollbar-fill {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  background: var(--et-accent);
+  border-radius: var(--et-radius-pill);
+}
+.pollbar-row[data-winner="true"] .pollbar-fill { background: var(--et-ok); }
+.pollbar-row[data-winner="true"] .pollbar-name { font-weight: var(--et-weight-medium); }
+.pollbar-count {
+  color: var(--et-muted);
+  font-size: var(--et-ui-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+@media (max-width: 30rem) {
+  .pollbar-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .pollbar-row .pollbar-track { grid-column: 1 / -1; grid-row: 2; }
+}
+
+/* A segment is only as wide as its buttons. As a bare grid item it stretched to
+   the field's full width and its hairline background painted the rest of the row
+   as a grey bar - visible on Role menus' Approval field before Polls hit it. */
+.field > .seg { justify-self: start; }
+
+/* The options on a review card: a plain numbered list, indented in tokens. */
+.plain-list {
+  margin: 6px 0;
+  padding-left: 1.4rem;
+  color: var(--et-muted);
+  font-size: var(--et-ui-sm);
+}
