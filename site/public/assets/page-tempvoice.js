@@ -11,14 +11,37 @@ import {
   namespaceSettings,
   notice,
   run,
+  sayNothing,
   section,
   table,
+  templateEditor,
   when,
 } from './ui.js';
 
 let refresh = () => {};
 
 const CREATOR_KEY = 'tempvoice_creator_ids';
+const NAME_KEY = 'tempvoice_name_template';
+const SAMPLE = { user: 'Casey' };
+
+/** A7: what a spawned channel would be called, filled in as you type. */
+async function nameCard(spec) {
+  const shown = el('p', { class: 'preview' });
+  const made = await templateEditor(spec, {
+    sample: () => SAMPLE,
+    paint: (filled) => {
+      shown.textContent = filled === null
+        ? 'Black Bloc would fall back to its own default name instead.'
+        : filled;
+    },
+  });
+  const preview = card('What a spawned channel is called', [
+    el('p', { class: 'field-help', text: 'Filled in with a made-up member; {user} is whoever joined the lobby.' }),
+    shown,
+    made.say,
+  ]);
+  return [made.row.node, preview, made.editor.bar];
+}
 
 /** The lobby line: the join-to-create channels by name, each with a Forget. */
 async function lobbyLine(ids, say) {
@@ -61,8 +84,9 @@ async function load() {
     settings(true),
   ]);
   const rows = listOf(payload, 'channels');
-  const creators = settingsNamespace(allSettings, 'tempvoice')
-    .find((spec) => spec.key === CREATOR_KEY);
+  const tempvoice = settingsNamespace(allSettings, 'tempvoice');
+  const creators = tempvoice.find((spec) => spec.key === CREATOR_KEY);
+  const template = tempvoice.find((spec) => spec.key === NAME_KEY);
   const lobbies = (creators && creators.value) || [];
   await names(idsIn(rows, ['channel_id', 'owner_id', 'creator_id']));
 
@@ -101,10 +125,18 @@ async function load() {
   const two = section('Setup');
   two.body.append(setup);
 
+  const naming = section('Channel naming');
+  if (template) {
+    naming.body.append(...await nameCard(template));
+  } else {
+    naming.body.append(sayNothing('The bot did not report a tempvoice_name_template key, so this editor is not shown rather than guessed at.'));
+  }
+
   document.getElementById('dash').replaceChildren(
     one.node,
     two.node,
-    await namespaceSettings('tempvoice', { omit: [CREATOR_KEY] }),
+    naming.node,
+    await namespaceSettings('tempvoice', { omit: [CREATOR_KEY, NAME_KEY] }),
   );
 }
 

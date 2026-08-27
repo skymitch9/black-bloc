@@ -1,4 +1,4 @@
-import { api, listOf, names, notesOf, send } from './api.js';
+import { api, listOf, names, notesOf, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
 import {
   ask,
@@ -18,12 +18,42 @@ import {
   searchOver,
   section,
   table,
+  templateEditor,
 } from './ui.js';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 let refresh = () => {};
 let lastImport = null;
+
+const TEMPLATE_KEY = 'birthday_template';
+const COLOR_KEY = 'birthday_color';
+const SAMPLE = { name: 'Casey', age: '30' };
+
+/** A6: the wording, filled in as you type, in the colour the embed uses. */
+async function wordingCard(spec, color) {
+  const shown = el('p', { class: 'preview' });
+  const swatch = el('span', { class: 'swatch', style: color ? `--swatch: ${color}` : undefined });
+  const made = await templateEditor(spec, {
+    sample: () => SAMPLE,
+    paint: (filled) => {
+      shown.textContent = filled === null
+        ? 'Black Bloc would post its own default wish instead.'
+        : filled;
+    },
+  });
+  const preview = card('What a birthday wish looks like', [
+    el('p', { class: 'field-help' }, [
+      'Filled in with a made-up member. The embed’s colour is ',
+      swatch,
+      color ? ` ${color}` : ' not set',
+      ', from birthday_color.',
+    ]),
+    shown,
+    made.say,
+  ]);
+  return [made.row.node, preview, made.editor.bar];
+}
 
 function setCard() {
   const say = notice();
@@ -90,8 +120,11 @@ function importCard() {
 }
 
 async function load() {
-  const payload = await api('/api/birthdays');
+  const [payload, allSettings] = await Promise.all([api('/api/birthdays'), settings(true)]);
   const rows = listOf(payload, 'birthdays');
+  const birthday = settingsNamespace(allSettings, 'birthday');
+  const template = birthday.find((spec) => spec.key === TEMPLATE_KEY);
+  const color = birthday.find((spec) => spec.key === COLOR_KEY);
   await names(idsIn(rows, ['user_id']));
 
   const say = notice();
@@ -149,7 +182,19 @@ async function load() {
   const add = section('Add or change one');
   add.body.append(setCard(), importCard());
 
-  document.getElementById('dash').replaceChildren(add.node, months.node, await namespaceSettings('birthday'));
+  const wording = section('Birthday wording');
+  if (template) {
+    wording.body.append(...await wordingCard(template, color ? color.value : null));
+  } else {
+    wording.body.append(sayNothing('The bot did not report a birthday_template key, so this editor is not shown rather than guessed at.'));
+  }
+
+  document.getElementById('dash').replaceChildren(
+    add.node,
+    months.node,
+    wording.node,
+    await namespaceSettings('birthday', { omit: [TEMPLATE_KEY] }),
+  );
 }
 
 refresh = start({

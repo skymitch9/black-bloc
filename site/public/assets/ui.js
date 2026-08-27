@@ -891,6 +891,53 @@ export async function namespaceSettings(namespace, {
   return group.node;
 }
 
+const TEMPLATE_TOKEN = /\{\{|\}\}|\{([^{}]*)\}/g;
+
+const UNREADABLE = 'Black Bloc cannot read this wording, so it would use its own default instead. ' +
+  'Every { needs a matching }.';
+
+/**
+ * The answer Python's `str.format_map` gives the bot: known tokens filled in,
+ * an unknown one left standing, `{{` and `}}` unescaped — and null when a
+ * stray brace would have raised, so a caller says the default would be used
+ * rather than pretending this wording works.
+ */
+export function fillTemplate(template, values) {
+  const text = String(template === null || template === undefined ? '' : template);
+  if (/[{}]/.test(text.replace(TEMPLATE_TOKEN, ''))) return null;
+  return text.replace(TEMPLATE_TOKEN, (whole, token) => {
+    if (whole === '{{') return '{';
+    if (whole === '}}') return '}';
+    return token in values ? values[token] : whole;
+  });
+}
+
+/**
+ * A wording key edited with a preview: one settingsEditor row rendered as a
+ * textarea, the docked bar the Settings page uses, and `paint` called with the
+ * filled-in sample every time the text or one of `controls` changes.
+ */
+export async function templateEditor(spec, { sample = () => ({}), paint = null, controls = [] } = {}) {
+  const editor = await settingsEditor([{ ...spec, type: 'longtext' }]);
+  const row = editor.rows[0];
+  const say = notice();
+  const repaint = () => {
+    const found = row.read();
+    const filled = found.ok ? fillTemplate(found.value, sample()) : null;
+    if (filled === null) say.say(UNREADABLE, 'warn');
+    else say.say('');
+    if (paint) paint(filled);
+  };
+  const control = row.node.querySelector('.setrow-control');
+  if (control) {
+    control.addEventListener('input', repaint);
+    control.addEventListener('change', repaint);
+  }
+  for (const one of controls) one.addEventListener('change', repaint);
+  repaint();
+  return { row, editor, say, repaint };
+}
+
 /**
  * The mode switch the Overview and Moderation rows share: the settings
  * editor's own three segments, saving on the click because there is no docked

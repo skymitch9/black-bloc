@@ -545,6 +545,18 @@ a.rowlist-main:focus-visible,
 .chip-go:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; }
 .chipgrid { display: block; }
 
+/* A colour a setting holds, shown beside the wording it paints. The value
+   arrives as --swatch so the rule stays token-shaped. */
+.swatch {
+  display: inline-block;
+  width: 0.75em;
+  height: 0.75em;
+  border: var(--et-border-w) solid var(--et-hairline);
+  border-radius: var(--et-radius-pill);
+  background: var(--swatch, var(--et-muted));
+  vertical-align: baseline;
+}
+
 /* The role swatch a member's roles are shown with. The colour arrives per row
    as --role, so the rule stays token-shaped and the row carries the data. */
 .role-chip {
