@@ -221,6 +221,35 @@ async def create_menu(
     return cur.lastrowid
 
 
+async def update_menu(
+    db: Any,
+    guild_id: int,
+    name: str,
+    *,
+    title: str | None = None,
+    description: Any = None,
+    mode: str | None = None,
+) -> bool:
+    """Change one menu's heading, line or mode; whatever is not given is left alone."""
+    menu = await get_menu(db, guild_id, name)
+    if menu is None:
+        return False
+    if mode is not None and mode not in MODES:
+        raise ValueError(f"mode must be one of {MODES}")
+    await db.conn.execute(
+        "UPDATE role_menus SET title = COALESCE(?, title), description = ?, "
+        "mode = COALESCE(?, mode) WHERE id = ?",
+        (
+            title,
+            menu["description"] if description is None else (description or None),
+            mode,
+            menu["id"],
+        ),
+    )
+    await db.conn.commit()
+    return True
+
+
 async def delete_menu(db: Any, guild_id: int, name: str) -> bool:
     menu = await get_menu(db, guild_id, name)
     if menu is None:
@@ -290,6 +319,30 @@ async def seed_from_carl(db: Any, guild_id: int) -> tuple[list[str], list[str]]:
             await add_option(db, menu_id, role_id, label, emoji)
         created.append(name)
     return created, skipped
+
+
+async def edit_existing(menu: Any, target: Any, embed: discord.Embed, view: Any) -> Any:
+    if not menu["message_id"] or menu["channel_id"] != target.id:
+        return None
+    try:
+        message = await target.fetch_message(menu["message_id"])
+        await message.edit(embed=embed, view=view)
+        return message
+    except discord.HTTPException as exc:
+        log.info("role menu %s: old panel gone (%s); posting a fresh one", menu["name"], exc)
+        return None
+
+
+async def post_panel(bot: Any, menu: Any, options: Any, target: Any) -> Any:
+    """Put one menu's panel in a channel and keep its view alive, for slash and web alike."""
+    view = RoleMenuView(menu["id"], options, menu["mode"])
+    embed = panel_embed(menu, options)
+    message = await edit_existing(menu, target, embed, view)
+    if message is None:
+        message = await target.send(embed=embed, view=view)
+    await set_message(bot.db, menu["id"], target.id, message.id)
+    bot.add_view(view, message_id=message.id)
+    return message
 
 
 async def apply_diff(member: Any, guild: Any, to_add: Any, to_remove: Any, reason: str) -> bool:
@@ -632,13 +685,7 @@ class RoleMenus(commands.Cog):
             await interaction.response.send_message(guard.refusal_message(), ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True)
-        view = RoleMenuView(menu["id"], options, menu["mode"])
-        embed = panel_embed(menu, options)
-        message = await self._edit_existing(menu, target, embed, view)
-        if message is None:
-            message = await target.send(embed=embed, view=view)
-        await set_message(self.bot.db, menu["id"], target.id, message.id)
-        self.bot.add_view(view, message_id=message.id)
+        message = await post_panel(self.bot, menu, options, target)
         await interaction.followup.send(
             f"**{name}** is live in {target.mention}. {message.jump_url}", ephemeral=True
         )
@@ -744,19 +791,6 @@ class RoleMenus(commands.Cog):
         if configured:
             return interaction.guild.get_channel(configured)
         return interaction.channel
-
-    async def _edit_existing(
-        self, menu: Any, target: Any, embed: discord.Embed, view: discord.ui.View
-    ) -> Any:
-        if not menu["message_id"] or menu["channel_id"] != target.id:
-            return None
-        try:
-            message = await target.fetch_message(menu["message_id"])
-            await message.edit(embed=embed, view=view)
-            return message
-        except discord.HTTPException as exc:
-            log.info("role menu %s: old panel gone (%s); posting a fresh one", menu["name"], exc)
-            return None
 
     @staticmethod
     def _no_such_menu(name: str) -> str:

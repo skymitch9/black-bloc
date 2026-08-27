@@ -653,25 +653,55 @@ async def edit_announcement(bot: Any, guild: Any, row: Any) -> None:
     await log_action(bot, guild, "event.announcement_edited", details=details)
 
 
-async def decide(
-    interaction: discord.Interaction, event_id: int, status: str, reason: str | None = None
-) -> None:
-    """Approve or deny, once, whichever mod's click gets the lock first."""
-    bot = interaction.client
-    guild = interaction.guild
+async def cancel_event(
+    bot: Any, guild: Any, row: Any, reason: str, *, by: int | None = None
+) -> bool:
+    """Cancel one event and undo what it left behind; False when it was past cancelling."""
+    async with event_lock(bot, row["id"]):
+        fresh = await get_event(bot.db, row["id"])
+        if fresh is None or not can_transition(fresh["status"], CANCELLED):
+            return False
+        await set_status(bot.db, fresh["id"], CANCELLED)
+        drop_lock(bot, fresh["id"])
+        await log_action(
+            bot,
+            guild,
+            "event.cancelled",
+            target=fresh["requester_id"],
+            reason=reason,
+            details={"event_id": fresh["id"], "title": fresh["title"]},
+        )
+        await cancel_scheduled_event(bot, guild, fresh)
+        fresh = await get_event(bot.db, row["id"])
+        await edit_announcement(bot, guild, fresh)
+        if by == fresh["requester_id"]:
+            return True
+        await tell_or_log(
+            bot,
+            guild,
+            guild.get_member(fresh["requester_id"]),
+            fresh,
+            DM_CANCELLED.format(
+                title=fresh["title"],
+                guild=guild.name,
+                why=CANCEL_WHY.get(reason, CANCEL_WHY_DEFAULT),
+            ),
+        )
+        return True
+
+
+async def apply_decision(
+    bot: Any, guild: Any, event_id: int, status: str, actor: Any, reason: str | None = None
+) -> tuple[str, Any]:
+    """Approve or deny, once, whoever gets the lock first: (what to say, the settled row)."""
     async with event_lock(bot, event_id):
         row = await get_event(bot.db, event_id)
         if row is None:
-            await answer(interaction, NO_SUCH_EVENT)
-            return
+            return (NO_SUCH_EVENT, None)
         if not can_transition(row["status"], status):
-            await answer(
-                interaction,
-                ALREADY_DECIDED.format(event_id=event_id, status=row["status"]),
-            )
-            return
+            return (ALREADY_DECIDED.format(event_id=event_id, status=row["status"]), None)
         await set_status(
-            bot.db, event_id, status, decided_by=interaction.user.id, deny_reason=reason
+            bot.db, event_id, status, decided_by=getattr(actor, "id", actor), deny_reason=reason
         )
         if status in TERMINAL_STATUSES:
             drop_lock(bot, event_id)
@@ -679,7 +709,7 @@ async def decide(
             bot,
             guild,
             f"event.{status}",
-            actor=interaction.user,
+            actor=actor,
             target=row["requester_id"],
             reason=reason,
             details={"event_id": event_id, "title": row["title"]},
@@ -710,11 +740,20 @@ async def decide(
         await _tell_requester(guild, requester, fresh, status, reason)
         name = getattr(requester, "display_name", str(row["requester_id"]))
         await rename_channel(bot, guild, fresh, status, name)
-        await _close_card(interaction, fresh)
         if status == DENIED:
-            await answer(interaction, DENIED_SAID)
-            return
-        await answer(interaction, APPROVED_SAID.format(extra=_approve_extra(why_not, message_id)))
+            return (DENIED_SAID, fresh)
+        return (APPROVED_SAID.format(extra=_approve_extra(why_not, message_id)), fresh)
+
+
+async def decide(
+    interaction: discord.Interaction, event_id: int, status: str, reason: str | None = None
+) -> None:
+    said, fresh = await apply_decision(
+        interaction.client, interaction.guild, event_id, status, interaction.user, reason
+    )
+    if fresh is not None:
+        await _close_card(interaction, fresh)
+    await answer(interaction, said)
 
 
 async def _tell_requester(
@@ -1083,36 +1122,7 @@ class Events(commands.Cog):
         await self._cancel(guild, row, "review_channel_gone")
 
     async def _cancel(self, guild: Any, row: Any, reason: str, *, by: int | None = None) -> None:
-        async with event_lock(self.bot, row["id"]):
-            fresh = await get_event(self.bot.db, row["id"])
-            if fresh is None or not can_transition(fresh["status"], CANCELLED):
-                return
-            await set_status(self.bot.db, fresh["id"], CANCELLED)
-            drop_lock(self.bot, fresh["id"])
-            await log_action(
-                self.bot,
-                guild,
-                "event.cancelled",
-                target=fresh["requester_id"],
-                reason=reason,
-                details={"event_id": fresh["id"], "title": fresh["title"]},
-            )
-            await cancel_scheduled_event(self.bot, guild, fresh)
-            fresh = await get_event(self.bot.db, row["id"])
-            await edit_announcement(self.bot, guild, fresh)
-            if by == fresh["requester_id"]:
-                return
-            await tell_or_log(
-                self.bot,
-                guild,
-                guild.get_member(fresh["requester_id"]),
-                fresh,
-                DM_CANCELLED.format(
-                    title=fresh["title"],
-                    guild=guild.name,
-                    why=CANCEL_WHY.get(reason, CANCEL_WHY_DEFAULT),
-                ),
-            )
+        await cancel_event(self.bot, guild, row, reason, by=by)
 
     async def _sweep_finished(self, guild: Any, now: datetime) -> None:
         days = int(self.bot.store.get(guild.id, "events_channel_retention_days") or 0)
