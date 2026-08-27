@@ -33,3 +33,19 @@ def test_garbage_dev_guild_id_is_a_config_error(monkeypatch):
     monkeypatch.setenv("DEV_GUILD_ID", "not-a-number")
     with pytest.raises(ConfigError, match="dev_guild_id"):
         load_settings(_env_file=None)
+
+
+def test_blank_twitch_credentials_mean_unconfigured(monkeypatch):
+    monkeypatch.setenv("TWITCH_CLIENT_ID", "")
+    monkeypatch.setenv("TWITCH_CLIENT_SECRET", "")
+    s = load_settings(_env_file=None)
+    assert s.twitch_client_id is None and s.twitch_client_secret is None
+    assert s.twitch_configured is False
+
+
+def test_twitch_is_configured_only_with_both_halves(monkeypatch):
+    monkeypatch.setenv("TWITCH_CLIENT_ID", "abc")
+    monkeypatch.delenv("TWITCH_CLIENT_SECRET", raising=False)
+    assert load_settings(_env_file=None).twitch_configured is False
+    monkeypatch.setenv("TWITCH_CLIENT_SECRET", "shh")
+    assert load_settings(_env_file=None).twitch_configured is True

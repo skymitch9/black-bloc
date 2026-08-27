@@ -31,15 +31,29 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
     api_port: int = 8080
 
+    twitch_client_id: str | None = Field(
+        default=None, description="Twitch application client id (go-live fallback path)"
+    )
+    twitch_client_secret: str | None = Field(
+        default=None, description="Twitch application client secret"
+    )
+
     test_mode: bool = True
     test_channel_id: int | None = None
 
-    @field_validator("dev_guild_id", "test_channel_id", mode="before")
+    @field_validator(
+        "dev_guild_id", "test_channel_id", "twitch_client_id", "twitch_client_secret",
+        mode="before",
+    )
     @classmethod
     def _blank_is_none(cls, v):
         if isinstance(v, str) and not v.strip():
             return None
         return v
+
+    @property
+    def twitch_configured(self) -> bool:
+        return bool(self.twitch_client_id and self.twitch_client_secret)
 
     def validate_test_mode(self) -> None:
         if self.test_mode and not self.test_channel_id:
