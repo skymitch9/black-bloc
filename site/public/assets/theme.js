@@ -38,8 +38,8 @@
  * this file plus the CSS beside it.
  *
  * What it does:
- *   - reads localStorage `hg_theme` ('classic'|'apple'|'cyberpunk'|'retro'
- *     |'hearts') and `hg_mode` ('auto'|'light'|'dark'); origin-scoped, so
+ *   - reads localStorage `hg_theme` ('discord'|'classic'|'apple'|'cyberpunk'
+ *     |'retro'|'hearts') and `hg_mode` ('auto'|'light'|'dark'); origin-scoped, so
  *     each site keeps its own choice for free;
  *   - migrates the pre-estate mode keys once (`ab_theme`, `bgc-theme`) —
  *     see LEGACY_MODE_KEYS;
@@ -80,13 +80,14 @@
   // estate-theme.css) and reaches every cog on the estate — the apex pages
   // build their <select> from it below, and React consumers read
   // window.estateTheme.themes. Nothing else may keep a copy of this list.
-  var THEMES = ['classic', 'apple', 'cyberpunk', 'retro', 'hearts'];
+  var THEMES = ['discord', 'classic', 'apple', 'cyberpunk', 'retro', 'hearts'];
 
   // Human names, beside the ids they name, for the same reason: a cog that
   // wrote its own labels would still need editing for theme #6. Unknown ids
   // degrade to a capitalised id rather than showing nothing — an older
   // vendored copy meeting a newer name should look plain, not broken.
   var LABELS = {
+    discord: 'Discord',
     classic: 'Classic',
     apple: 'Apple',
     cyberpunk: 'Cyberpunk',
