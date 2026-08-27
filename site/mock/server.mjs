@@ -405,10 +405,27 @@ function seedState() {
   blocks: [
     { user_id: MEMBERS[4].id, by: STAFF.id, reason: 'opened twelve tickets about nitro', at: minutesAgo(3000) },
   ],
+  chatIntents: [
+    { id: 1, name: 'greeting', kind: 'canned', triggers: ['hi', 'hey', 'hello', 'good morning'], enabled: true, sort: 13, created_by: null, updated_at: minutesAgo(9000), builtin: true },
+    { id: 2, name: 'who_is_live', kind: 'data', triggers: ['whos live', 'who is live', 'anyone live'], enabled: true, sort: 6, created_by: null, updated_at: minutesAgo(9000), builtin: true },
+    { id: 3, name: 'need_a_mod', kind: 'route', triggers: ['i need a mod', 'staff please', 'help me'], enabled: true, sort: 3, created_by: null, updated_at: minutesAgo(9000), builtin: true },
+    { id: 20, name: 'cookout_hours', kind: 'canned', triggers: ['when is the cookout'], enabled: true, sort: 0, created_by: STAFF.id, updated_at: minutesAgo(50), builtin: false },
+  ],
+  chatLines: [
+    { id: 1, intent_id: 1, text: 'Hey {name}! Pull up a chair — the cookout is already going.', slot: 'filled', enabled: true, created_by: null, updated_at: minutesAgo(9000) },
+    { id: 2, intent_id: 1, text: 'Hey {name}! That makes {attendees} of us at the cookout today.', slot: 'attendee', enabled: true, created_by: null, updated_at: minutesAgo(9000) },
+    { id: 3, intent_id: 2, text: 'Live right now, {name}: {who}', slot: 'filled', enabled: true, created_by: null, updated_at: minutesAgo(9000) },
+    { id: 4, intent_id: 2, text: 'Nobody is streaming right now, {name} — the cookout is all off-camera.', slot: 'empty', enabled: true, created_by: null, updated_at: minutesAgo(9000) },
+    { id: 5, intent_id: 3, text: 'DM me and I will open a ticket for staff, {name}.', slot: 'filled', enabled: true, created_by: null, updated_at: minutesAgo(9000) },
+    { id: 6, intent_id: 3, text: 'Staff to ask, {name}: {roles}.', slot: 'empty', enabled: true, created_by: null, updated_at: minutesAgo(9000) },
+    { id: 30, intent_id: 20, text: 'Doors at six, {name}.', slot: 'filled', enabled: true, created_by: STAFF.id, updated_at: minutesAgo(50) },
+  ],
   nextAction: 42,
   nextCase: 10,
   nextMessage: 40,
   nextPoll: 10,
+  nextChatIntent: 21,
+  nextChatLine: 31,
   actions: seedActions(),
   };
 }
@@ -2161,6 +2178,301 @@ route('DELETE', '/api/modmail/blocks/:user_id', (context) => {
   if (at >= 0) state.blocks.splice(at, 1);
   logAction('web.modmail.unblock', { target_id: context.params.user_id });
   return { unblocked: true, user_id: context.params.user_id };
+});
+
+const CHAT_SLOTS = ['filled', 'empty', 'attendee'];
+const CHAT_BUILT_INS = ['insult', 'love', 'thanks', 'need_a_mod', 'birthdays', 'whats_next',
+  'who_is_live', 'head_count', 'my_roles', 'time_for_me', 'what_can_you_do', 'help',
+  'how_are_you', 'greeting', 'unknown'];
+const CHAT_NAME = /^[a-z][a-z0-9_]*$/;
+const CHAT_UNKNOWN_LINE = 'Not sure I follow, {name} — try `/help` for what I can do.';
+const CHAT_NO_SUCH_INTENT = 'Black Bloc has no chat intent **#%s** any more, so nothing was done. The Chat page lists the ones it has.';
+const CHAT_NO_SUCH_LINE = 'Black Bloc has no chat line **#%s** any more, so nothing was done. Somebody may have removed it while this page was open.';
+const CHAT_BUILT_IN_STAYS = 'is one of Black Bloc’s own intents, so it cannot be deleted — turn it off instead and it will stop answering, or edit its triggers and lines to say something else.';
+const CHAT_BUILT_IN_NAME = 'is one of Black Bloc’s own intents and its name is what the bot looks it up by, so the name cannot change. Its triggers, its lines and its on/off switch all can.';
+
+function chatLineRow(row) {
+  return {
+    id: String(row.id),
+    intent_id: String(row.intent_id),
+    text: row.text,
+    slot: row.slot,
+    enabled: row.enabled,
+    created_by: row.created_by === null ? null : String(row.created_by),
+    updated_at: row.updated_at,
+  };
+}
+
+function chatIntentRow(row) {
+  return {
+    id: String(row.id),
+    name: row.name,
+    kind: row.kind,
+    enabled: row.enabled,
+    sort: row.sort,
+    triggers: [...row.triggers],
+    builtin: row.builtin,
+    created_by: row.created_by === null ? null : String(row.created_by),
+    updated_at: row.updated_at,
+    lines: state.chatLines.filter((line) => line.intent_id === row.id).map(chatLineRow),
+  };
+}
+
+function wantedChatIntent(id) {
+  const found = state.chatIntents.find((row) => String(row.id) === String(id));
+  if (!found) throw new Refused(404, 'no_such_intent', CHAT_NO_SUCH_INTENT.replace('%s', id));
+  return found;
+}
+
+function wantedChatLine(id) {
+  const found = state.chatLines.find((row) => String(row.id) === String(id));
+  if (!found) throw new Refused(404, 'no_such_line', CHAT_NO_SUCH_LINE.replace('%s', id));
+  return found;
+}
+
+function chatName(given) {
+  const said = String(given || '').trim().toLowerCase().replace(/[ -]/g, '_');
+  if (said.length > 60) throw new Refused(400, 'chat_refused', 'An intent’s name has to be 60 characters or fewer, so nothing was saved. Shorten it and send it again.');
+  if (!CHAT_NAME.test(said)) throw new Refused(400, 'chat_refused', `An intent’s name is lowercase letters, numbers and underscores — \`cookout_hours\`, say. ${JSON.stringify(String(given || ''))} is not one, so nothing was saved.`);
+  if (CHAT_BUILT_INS.includes(said)) throw new Refused(400, 'chat_refused', `**${said}** is one of Black Bloc’s own intents, so a second one cannot take that name. Edit the built-in one instead, or pick another name.`);
+  return said;
+}
+
+function chatTriggers(given) {
+  const list = Array.isArray(given) ? given : String(given || '').split(',');
+  const found = [];
+  for (const item of list) {
+    const said = String(item).trim().split(/\s+/).filter(Boolean).join(' ');
+    if (!said) continue;
+    if (said.length > 60) throw new Refused(400, 'chat_refused', `A trigger phrase has to be 60 characters or fewer, so nothing was saved. **${said}** is longer than that.`);
+    if (!found.includes(said)) found.push(said);
+  }
+  if (!found.length) throw new Refused(400, 'chat_refused', 'An intent needs at least one trigger phrase, or nothing would ever reach it. Add a phrase and send it again.');
+  if (found.length > 40) throw new Refused(400, 'chat_refused', 'An intent takes at most 40 trigger phrases, so nothing was saved. Trim the list, or split it into two intents.');
+  return found;
+}
+
+function chatText(given) {
+  const said = String(given || '').trim();
+  if (!said) throw new Refused(400, 'chat_refused', 'A line needs some words in it, so nothing was saved.');
+  if (said.length > 500) throw new Refused(400, 'chat_refused', 'A line has to be 500 characters or fewer, so nothing was saved. Discord will take a longer one, but nobody reads it.');
+  return said;
+}
+
+function chatSlot(given) {
+  const said = String(given === undefined || given === null ? 'filled' : given).trim().toLowerCase();
+  if (!CHAT_SLOTS.includes(said)) throw new Refused(400, 'chat_refused', `**${said}** is not somewhere a line can go. They are ${CHAT_SLOTS.join(', ')} — \`filled\` is the ordinary answer, \`empty\` is what a data intent says when there is nothing to report.`);
+  return said;
+}
+
+/** Mirrors black_bloc/chat.py:normalise, so the mock's Try it lands where the bot's would. */
+function chatWords(text) {
+  return String(text || '')
+    .replace(/<@[!&]?\d+>/g, ' ')
+    .toLowerCase()
+    .replace(/['’]/g, '')
+    .replace(/[^0-9a-z ]+/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .join(' ');
+}
+
+function chatMatches(words, triggers) {
+  return triggers.some((phrase) => ` ${words} `.includes(` ${chatWords(phrase)} `));
+}
+
+function chatLinesOf(intentId, slot) {
+  return state.chatLines.filter((line) => line.intent_id === intentId && line.slot === slot && line.enabled);
+}
+
+function chatClassify(text) {
+  const words = chatWords(text);
+  if (!words) return null;
+  const order = [...state.chatIntents]
+    .filter((row) => row.enabled)
+    .sort((a, b) => Number(a.builtin) - Number(b.builtin) || a.sort - b.sort || a.id - b.id);
+  for (const row of order) {
+    if (row.builtin === false && !chatLinesOf(row.id, 'filled').length) continue;
+    if (chatMatches(words, row.triggers)) return row;
+  }
+  return null;
+}
+
+function chatFilled(row) {
+  if (row.kind === 'data' && row.name === 'who_is_live') {
+    return state.golive.sessions.some((one) => one.ended_at === null);
+  }
+  if (row.kind === 'route') return Boolean(state.settings.get('modmail_enabled'));
+  return true;
+}
+
+function chatTokens(row, filled) {
+  const live = state.golive.sessions
+    .filter((one) => one.ended_at === null)
+    .map((one) => `${memberName(one.user_id)} — <${one.url}>`)
+    .join(', ');
+  return {
+    name: STAFF.display_name,
+    attendees: MEMBERS.length,
+    count: filled ? live.split(', ').filter(Boolean).length : 0,
+    who: live || 'nobody',
+    roles: '**Aunties / Uncles**',
+  };
+}
+
+function chatRender(text, tokens) {
+  return String(text).replace(/\{([a-z_]+)\}/g, (whole, key) => (key in tokens ? String(tokens[key]) : whole));
+}
+
+route('GET', '/api/chat/intents', (context) => {
+  requireStaff(context.session);
+  return {
+    intents: state.chatIntents.map(chatIntentRow),
+    slots: [...CHAT_SLOTS],
+    notes: [],
+  };
+});
+
+route('POST', '/api/chat/intents', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const name = chatName(body.name);
+  const triggers = chatTriggers(body.triggers);
+  if (state.chatIntents.some((row) => row.name === name)) {
+    throw new Refused(409, 'name_taken', `This server already has an intent called **${name}**, so nothing was saved. Pick another name, or edit the one that is there.`);
+  }
+  const made = {
+    id: state.nextChatIntent++,
+    name,
+    kind: 'canned',
+    triggers,
+    enabled: body.enabled !== false,
+    sort: Number(body.sort || 0),
+    created_by: STAFF.id,
+    updated_at: now(),
+    builtin: false,
+  };
+  state.chatIntents.push(made);
+  if (body.text) {
+    state.chatLines.push({
+      id: state.nextChatLine++,
+      intent_id: made.id,
+      text: chatText(body.text),
+      slot: 'filled',
+      enabled: true,
+      created_by: STAFF.id,
+      updated_at: now(),
+    });
+  }
+  logAction('web.chat.intent_created', { details: { name } });
+  return { intent: chatIntentRow(made), message: `**${name}** is in. It will answer as soon as it has a line to say.` };
+});
+
+route('PUT', '/api/chat/intents/:id', async (context) => {
+  requireStaff(context.session);
+  const row = wantedChatIntent(context.params.id);
+  const body = await context.body();
+  const changed = [];
+  if (body.name !== undefined && body.name !== null && String(body.name) !== row.name) {
+    if (row.builtin) throw new Refused(409, 'built_in', `**${row.name}** ${CHAT_BUILT_IN_NAME}`);
+    row.name = chatName(body.name);
+    changed.push('name');
+  }
+  if (body.triggers !== undefined && body.triggers !== null) {
+    row.triggers = chatTriggers(body.triggers);
+    changed.push('triggers');
+  }
+  if (body.enabled !== undefined && body.enabled !== null) {
+    row.enabled = Boolean(body.enabled);
+    changed.push('enabled');
+  }
+  if (body.sort !== undefined && body.sort !== null) {
+    row.sort = Number(body.sort);
+    changed.push('sort');
+  }
+  row.updated_at = now();
+  logAction('web.chat.intent_edited', { details: { intent_id: row.id, changed: changed.sort() } });
+  return { intent: chatIntentRow(row), message: `**${row.name}** is saved.` };
+});
+
+route('DELETE', '/api/chat/intents/:id', (context) => {
+  requireStaff(context.session);
+  const row = wantedChatIntent(context.params.id);
+  if (row.builtin) throw new Refused(409, 'built_in', `**${row.name}** ${CHAT_BUILT_IN_STAYS}`);
+  state.chatIntents = state.chatIntents.filter((one) => one.id !== row.id);
+  state.chatLines = state.chatLines.filter((one) => one.intent_id !== row.id);
+  logAction('web.chat.intent_deleted', { details: { name: row.name } });
+  return {
+    removed: true,
+    intent_id: String(row.id),
+    message: `**${row.name}** is gone. Nothing answers to those phrases any more.`,
+  };
+});
+
+route('POST', '/api/chat/intents/:id/lines', async (context) => {
+  requireStaff(context.session);
+  const row = wantedChatIntent(context.params.id);
+  const body = await context.body();
+  const made = {
+    id: state.nextChatLine++,
+    intent_id: row.id,
+    text: chatText(body.text),
+    slot: chatSlot(body.slot),
+    enabled: body.enabled !== false,
+    created_by: STAFF.id,
+    updated_at: now(),
+  };
+  state.chatLines.push(made);
+  logAction('web.chat.line_added', { details: { intent_id: row.id, slot: made.slot } });
+  return { line: chatLineRow(made), message: `That line is in — **${row.name}** may say it from now on.` };
+});
+
+route('PUT', '/api/chat/lines/:id', async (context) => {
+  requireStaff(context.session);
+  const row = wantedChatLine(context.params.id);
+  const body = await context.body();
+  const changed = [];
+  if (body.text !== undefined && body.text !== null) {
+    row.text = chatText(body.text);
+    changed.push('text');
+  }
+  if (body.slot !== undefined && body.slot !== null) {
+    row.slot = chatSlot(body.slot);
+    changed.push('slot');
+  }
+  if (body.enabled !== undefined && body.enabled !== null) {
+    row.enabled = Boolean(body.enabled);
+    changed.push('enabled');
+  }
+  row.updated_at = now();
+  logAction('web.chat.line_edited', { details: { line_id: row.id, changed: changed.sort() } });
+  return { line: chatLineRow(row), message: 'That line is saved.' };
+});
+
+route('DELETE', '/api/chat/lines/:id', (context) => {
+  requireStaff(context.session);
+  const row = wantedChatLine(context.params.id);
+  state.chatLines = state.chatLines.filter((one) => one.id !== row.id);
+  logAction('web.chat.line_deleted', { details: { intent_id: row.intent_id, slot: row.slot } });
+  return { removed: true, line_id: String(row.id), message: 'That line is gone.' };
+});
+
+route('POST', '/api/chat/try', async (context) => {
+  // A dry run, the way black_bloc/api/tools/chat.py does it: nothing is sent anywhere.
+  requireStaff(context.session);
+  const body = await context.body();
+  const text = String(body.text || '').trim();
+  if (!text) throw new Refused(400, 'no_text', 'There is nothing to try yet, so nothing was worked out. Type the sentence somebody would say and send it again.');
+  const row = chatClassify(text);
+  if (!row) {
+    return { intent: 'unknown', kind: 'canned', slot: 'filled', line: chatRender(CHAT_UNKNOWN_LINE, chatTokens({ kind: 'canned' }, true)) };
+  }
+  const filled = chatFilled(row);
+  const slot = row.kind === 'canned' || filled ? 'filled' : 'empty';
+  const lines = chatLinesOf(row.id, slot);
+  const tokens = chatTokens(row, filled);
+  const said = lines.length ? lines[0].text : CHAT_UNKNOWN_LINE;
+  return { intent: row.name, kind: row.kind, slot, line: chatRender(said, tokens) };
 });
 
 function send(response, status, body, headers = {}) {

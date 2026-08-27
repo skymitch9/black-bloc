@@ -9,6 +9,9 @@ from discord.ext import tasks
 
 from black_bloc import rolegrants as grants
 from black_bloc.api.settings_api import grouped
+from black_bloc.chat import add_line as add_chat_line
+from black_bloc.chat import create_intent
+from black_bloc.chat import seed_defaults as seed_chat
 from black_bloc.cogs.community.birthdays import save_birthday
 from black_bloc.cogs.community.events import create_event
 from black_bloc.cogs.community.polls import add_options as add_poll_options
@@ -214,6 +217,11 @@ async def seeded(client, sign_in, web, guild, wf):
         "America/Phoenix",
         next_occurrence("daily", "09:00", "America/Phoenix").isoformat(),
     )
+    await seed_chat(db, guild_id, by=7)
+    chat_intent_id = await create_intent(
+        db, guild_id, "cookout_hours", ["when is the cookout"], by=7
+    )
+    chat_line_id = await add_chat_line(db, chat_intent_id, "Doors at six, {name}.", by=7)
     grant_id = await grants.add_grant(
         db,
         guild_id,
@@ -237,6 +245,8 @@ async def seeded(client, sign_in, web, guild, wf):
         "poll_id": str(poll_id),
         "poll_request_id": str(poll_request_id),
         "poll_recurrence_id": str(recurrence_id),
+        "chat_intent_id": str(chat_intent_id),
+        "chat_line_id": str(chat_line_id),
     }
 
 
