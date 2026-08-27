@@ -105,7 +105,7 @@ async function load() {
   ], rows, { empty: 'No temporary channels are open right now.' });
 
   const setup = card('Setup and repair', [
-    el('p', { class: 'field-help', text: 'Makes the join-to-create channel if it is missing and puts back the permissions it needs. Safe to run twice; it does not delete anybody’s channel.' }),
+    el('p', { class: 'field-help', text: 'Safe to run twice; it does not delete anybody’s channel.' }),
     await lobbyLine(lobbies, say),
     bar([
       button('Run setup', async () => {

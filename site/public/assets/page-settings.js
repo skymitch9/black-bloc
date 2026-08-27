@@ -103,7 +103,7 @@ async function load() {
   target.replaceChildren(
     el('p', {
       class: 'section-note',
-      text: 'Every change goes through the same store the slash commands write to, is recorded on the Audit tab, and the bot picks it up straight away. A row emptied back to nothing is put back to its default.',
+      text: 'Emptying a row puts it back to its default.',
     }),
     share(groups),
     editor.bar,

@@ -25,9 +25,8 @@ import {
 
 const MODE_KEY = 'rolemenu_mode';
 const DEFAULT_CHANNEL_KEY = 'role_menu_channel_id';
-const SWITCH_HELP = 'Turning this off removes the posted panels and hides the /rolemenu ' +
-  'commands; turning it on re-posts every menu in its channel. Nobody loses a role either way, ' +
-  'no menu is changed, and staff can still build and edit menus from here while it is off.';
+const SWITCH_HELP = 'Off takes the panels down and hides the /rolemenu commands; on posts every ' +
+  'menu again, and nobody loses a role either way.';
 const TURNED_ON = 'On. Every menu that has a channel is posted there again, and the /rolemenu ' +
   'commands come back, within about five seconds.';
 const TURNED_OFF = 'Off. The posted panels are removed and the /rolemenu commands disappear from ' +

@@ -100,7 +100,7 @@ async function load() {
 
   const one = section(
     'Queue',
-    'Approve, deny and cancel go through the same lock and the same allowed-transition check as the buttons in Discord.',
+    'The same lock and the same allowed-transition check as the buttons in Discord.',
     { count: rows.length },
   );
   one.body.append(bar([field('Show', status)], { sticky: true }), queue, say);

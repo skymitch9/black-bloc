@@ -343,7 +343,7 @@ async function load() {
     },
   });
 
-  const act = section('Take an action', 'Every one of these is the same code path as the slash command, and lands in the same case table.');
+  const act = section('Take an action', 'The same code path as the slash command, into the same case table.');
   act.body.append(actionBar());
 
   if (state.userFilter && !state.userName) {

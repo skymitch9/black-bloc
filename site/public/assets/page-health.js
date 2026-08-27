@@ -1,6 +1,6 @@
 import { api, listOf, names, notesOf } from './api.js';
 import { start } from './app.js';
-import { duration, el, idsIn, modeChip, nameNode, sayNothing, section, table, when } from './ui.js';
+import { duration, el, idsIn, nameNode, sayNothing, section, table, when } from './ui.js';
 
 const COUNT_LABELS = {
   role_menus_posted: 'Role menus posted',
@@ -12,9 +12,7 @@ const COUNT_LABELS = {
 
 function row({ name, badge = null, badgeTone = null, detail = null, note = null, state = null }) {
   const head = el('div', { class: 'row-head' }, [el('span', { class: 'row-name', text: name })]);
-  if (badge !== null) {
-    head.append(badgeTone === 'mode' ? modeChip(badge) : el('span', { class: 'badge', text: String(badge) }));
-  }
+  if (badge !== null) head.append(el('span', { class: 'badge', text: String(badge) }));
   return el('li', { class: 'row', 'data-state': state || undefined }, [
     el('span', { class: 'dot' }),
     el('div', { class: 'row-body' }, [
@@ -49,17 +47,6 @@ function health(status) {
     }
   }
   return rows(found);
-}
-
-function features(status) {
-  const found = (status.features || []).map((feature) => row({
-    name: feature.feature.replace(/^./, (c) => c.toUpperCase()),
-    badge: feature.mode === null || feature.mode === undefined ? 'not set' : String(feature.mode),
-    badgeTone: 'mode',
-    state: feature.mode === 'on' ? 'ok' : feature.mode === 'shadow' ? 'warn' : null,
-    detail: feature.mode === 'shadow' ? 'Logging what it would do, doing nothing.' : null,
-  }));
-  return found.length ? rows(found) : sayNothing('No features report a mode yet.');
 }
 
 function loops(status) {
@@ -107,10 +94,6 @@ async function load() {
   const notes = notesOf(status).concat(notesOf(log));
   const one = section('Health');
   one.body.append(health(status));
-  const two = section('Features', 'Every feature’s mode, read from the settings the slash commands write.', {
-    count: (status.features || []).length || null,
-  });
-  two.body.append(features(status));
   const three = section('Loops', null, { count: (status.loops || []).length || null });
   three.body.append(loops(status));
   const four = section('Last 50 actions', null, { count: items.length });
@@ -119,7 +102,6 @@ async function load() {
   document.getElementById('dash').replaceChildren(
     ...(notes.length ? [el('p', { class: 'section-note', text: notes.join(' ') })] : []),
     one.node,
-    two.node,
     three.node,
     four.node,
   );

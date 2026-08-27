@@ -89,7 +89,7 @@ async function load() {
 
   const arming = section(
     'Mode',
-    'Arming automod is the one switch that starts deleting messages and timing people out. If the bot refuses, its sentence says what is missing.',
+    'Arming automod is the switch that starts deleting messages and timing people out.',
   );
   arming.body.append(await settingsPanel(mode ? [mode] : [], {
     empty: 'The bot did not report an automod_mode key, so this switch is not shown rather than guessed at.',

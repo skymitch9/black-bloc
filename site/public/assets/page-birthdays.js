@@ -113,7 +113,7 @@ function importCard() {
   }, { tone: 'warn', small: false });
 
   return card('Import from Birthday Bot', [
-    el('p', { class: 'field-help', text: 'The same import the bot runs on its own once a day, with the same report. Safe to run twice — nothing already stored is overwritten.' }),
+    el('p', { class: 'field-help', text: 'Safe to run twice — nothing already stored is overwritten.' }),
     bar([go]),
     say,
     report,

@@ -70,9 +70,7 @@ async function load() {
 
   const two = section(
     kindFilter ? `Actions matching ${kindFilter}` : 'Actions taken from this dashboard',
-    kindFilter
-      ? 'Filtered by the kind you typed; the bot decides how loosely that matches.'
-      : 'Web writes log a web.* kind, so the log tells a dashboard change apart from a slash command.',
+    kindFilter ? 'Filtered by the kind you typed.' : 'A dashboard change logs a web.* kind.',
     { count: actionRows.length, id: 'actions' },
   );
   two.body.append(
