@@ -19,6 +19,7 @@ from ..settings_store import (
     parse_value,
     require_staff,
 )
+from ..timezones import CHOICE_LIMIT
 
 CHANNEL_KEYS = [key for key, kind in KEY_TYPES.items() if kind == "channel"]
 ROLE_KEYS = [key for key, kind in KEY_TYPES.items() if kind == "role"]
@@ -219,30 +220,36 @@ class Core(commands.Cog):
         name="set-value", description="Set a Black Bloc setting that is not a channel or a role"
     )
     @app_commands.describe(key="Which setting to change", value="The new value")
-    @app_commands.choices(key=[app_commands.Choice(name=name, value=name) for name in VALUE_KEYS])
     async def settings_set_value(
-        self, interaction: discord.Interaction, key: app_commands.Choice[str], value: str
+        self, interaction: discord.Interaction, key: str, value: str
     ) -> None:
         if not await require_staff(interaction):
             return
         try:
-            parsed = parse_value(key.value, value)
-            await self.bot.store.set(
-                interaction.guild.id, key.value, parsed, by=interaction.user.id
-            )
+            parsed = parse_value(key, value)
+            await self.bot.store.set(interaction.guild.id, key, parsed, by=interaction.user.id)
         except SettingError as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
             return
-        await interaction.response.send_message(
-            f"**{key.value}** is now `{parsed}`.", ephemeral=True
-        )
+        await interaction.response.send_message(f"**{key}** is now `{parsed}`.", ephemeral=True)
         await log_action(
             self.bot,
             interaction.guild,
             "settings.set",
             actor=interaction.user,
-            details={"key": key.value, "value": parsed},
+            details={"key": key, "value": parsed},
         )
+
+    @settings_set_value.autocomplete("key")
+    async def value_keys(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        lowered = (current or "").lower()
+        return [
+            app_commands.Choice(name=f"{key} — {KEY_HELP.get(key, '')}"[:100], value=key)
+            for key in VALUE_KEYS
+            if lowered in key
+        ][:CHOICE_LIMIT]
 
     @settings.command(name="clear", description="Unset one channel or role setting")
     @app_commands.describe(key="Which setting to unset")

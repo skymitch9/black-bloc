@@ -76,6 +76,7 @@ KEY_TYPES: dict[str, str] = {
     "golive_cooldown_minutes": "int",
     "golive_ping_role_id": "role",
     "golive_max_session_hours": "int",
+    "golive_embed": "bool",
     "tempvoice_mode": "enum",
     "tempvoice_creator_ids": "channels",
     "tempvoice_name_template": "text",
@@ -177,6 +178,9 @@ KEY_HELP: dict[str, str] = {
     "golive_cooldown_minutes": "minutes before the same person is announced again",
     "golive_ping_role_id": "role mentioned in front of every go-live announcement",
     "golive_max_session_hours": "hours before a stream still marked live is closed anyway",
+    "golive_embed": (
+        "post the announcement as an embed with the game's art; off = the sentence only"
+    ),
     "tempvoice_mode": "off, or on (join-to-create makes a temporary voice channel)",
     "tempvoice_creator_ids": "the join-to-create channels; /tempvoice setup fills this in",
     "tempvoice_name_template": "what a spawned channel is called; {user} is the member",
@@ -485,6 +489,8 @@ class SettingsStore:
             return 60
         if key == "golive_max_session_hours":
             return 12
+        if key == "golive_embed":
+            return True
         if key == "tempvoice_mode":
             return "on"
         if key == "tempvoice_name_template":

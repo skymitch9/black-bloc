@@ -4,7 +4,9 @@ from discord import app_commands
 
 from black_bloc.bot import COGS, BlackBlocBot
 from black_bloc.cogs.core import (
+    CHANNEL_KEYS,
     CLEARABLE_KEYS,
+    ROLE_KEYS,
     VALUE_KEYS,
     Core,
     help_lines,
@@ -173,8 +175,42 @@ def test_the_choices_cover_every_key_and_fit_discords_limit():
     assert "birthday_role_id" in CLEARABLE_KEYS and "birthday_channel_id" in CLEARABLE_KEYS
     assert "birthday_color" in VALUE_KEYS
     assert "bot_bio" in VALUE_KEYS and "status_prefix" in VALUE_KEYS
+    assert "golive_embed" in VALUE_KEYS
     assert len(CLEARABLE_KEYS) <= 25
-    assert len(VALUE_KEYS) <= 25
+    assert len(CHANNEL_KEYS) <= 25 and len(ROLE_KEYS) <= 25
+
+
+async def test_the_value_keys_are_suggested_because_there_are_too_many_to_list(bot, cog):
+    """VALUE_KEYS outgrew Discord's 25-choice ceiling, so /settings set-value autocompletes."""
+    assert len(VALUE_KEYS) > 25
+    interaction = FakeInteraction(bot, FakeMember(bot.guild, user_id=1, manage_guild=True))
+
+    everything = await cog.value_keys(interaction, "")
+    golive = await cog.value_keys(interaction, "golive")
+
+    assert len(everything) == 25
+    assert [choice.value for choice in golive] == [k for k in VALUE_KEYS if "golive" in k]
+    assert "golive_embed" in [choice.value for choice in golive]
+    assert all(len(choice.name) <= 100 for choice in everything + golive)
+
+
+async def test_setting_a_value_by_name_still_stores_and_logs(bot, cog, db):
+    interaction = FakeInteraction(bot, FakeMember(bot.guild, user_id=1, manage_guild=True))
+
+    await cog.settings_set_value.callback(cog, interaction, "golive_embed", "false")
+
+    assert bot.store.get(bot.guild.id, "golive_embed") is False
+    assert "golive_embed" in interaction.response.messages[-1]["content"]
+    assert "settings.set" in await kinds(db)
+
+
+async def test_a_misspelt_setting_name_gets_a_sentence_not_a_stack_trace(bot, cog):
+    interaction = FakeInteraction(bot, FakeMember(bot.guild, user_id=1, manage_guild=True))
+
+    await cog.settings_set_value.callback(cog, interaction, "golive_embeds", "false")
+
+    said = interaction.response.messages[-1]["content"]
+    assert "is not a Black Bloc setting" in said and said.startswith("'golive_embeds'")
 
 
 async def test_settings_show_is_split_into_messages_discord_will_take(bot, cog):
