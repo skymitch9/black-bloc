@@ -8,7 +8,6 @@ import pytest
 from black_bloc.cogs.moderation import automod as automod_cog
 from black_bloc.cogs.moderation.automod import (
     APPLY_TEMPLATE,
-    PARITY_HISTORY_LIMIT,
     ApplyNowButton,
     AutoMod,
     apply_custom_id,
@@ -42,9 +41,6 @@ class _Response:
 def refused():
     return discord.HTTPException(_Response(403), "no")
 
-
-def forbidden():
-    return discord.Forbidden(_Response(403), "no")
 
 
 class FakeRole:
@@ -90,8 +86,6 @@ class FakeChannel:
         self.parent_id = parent_id
         self.visible_to = set()
         self.messages = []
-        self.history_items = []
-        self.history_raises = None
         self.sent_messages = {}
         self.deleted = []
         self.edits = []
@@ -106,18 +100,6 @@ class FakeChannel:
         message = FakeMessage(len(self.messages) + 1, content or "", **kwargs)
         self.messages.append(message)
         return message
-
-    def history(self, limit=None, after=None):
-        items = list(self.history_items)
-        raises = self.history_raises
-
-        async def walk():
-            if raises is not None:
-                raise raises
-            for item in items:
-                yield item
-
-        return walk()
 
 
 class FakeGuild:
@@ -253,21 +235,6 @@ class FakeInteraction:
     @property
     def sent(self):
         return self.response.messages[-1]["content"] if self.response.messages else None
-
-
-class FakeEmbed:
-    def __init__(self, description):
-        self.description = description
-        self.title = ""
-        self.fields = []
-        self.footer = None
-
-
-class FakeCarlPost:
-    def __init__(self, user_id, at):
-        self.content = f"Case for member (ID: {user_id})"
-        self.embeds = []
-        self.created_at = at
 
 
 async def action_kinds(db):
@@ -812,78 +779,6 @@ async def test_exempt_roles_and_channels_are_added_and_removed(cog, bot, lead, d
     await cog.exempt_add.callback(cog, empty, None, None)
     assert "Name a role or a channel" in empty.sent
     assert "automod.exempt_add" in await action_kinds(db)
-
-
-async def test_parity_counts_agreement_against_carls_log(cog, bot, lead, db):
-    carl_channel = bot.guild.add(FakeChannel(999, name="carlbot-logs"))
-    await bot.store.set(GUILD, "carl_modlog_channel_id", 999)
-    await add_case(
-        db, GUILD, SNOWFLAKE, "automod", mode="shadow", applied=False,
-        actions=["warn", "timeout"],
-    )
-    await add_case(db, GUILD, SNOWFLAKE, "automod", mode="shadow", applied=False, actions=[])
-    carl_channel.history_items = [FakeCarlPost(SNOWFLAKE, datetime.now(UTC))]
-    interaction = FakeInteraction(bot, lead)
-
-    await cog.parity.callback(cog, interaction, 7)
-
-    assert "saw **1** verdict(s)" in interaction.sent
-    assert "**1** agree" in interaction.sent
-    assert "**0** Carl-only" in interaction.sent
-    assert "**0** Bloc-only" in interaction.sent
-
-
-async def test_parity_refuses_to_compare_a_channel_with_itself(cog, bot, lead):
-    await bot.store.set(GUILD, "carl_modlog_channel_id", TEST_CHANNEL)
-    interaction = FakeInteraction(bot, lead)
-
-    await cog.parity.callback(cog, interaction, 7)
-
-    assert "the same channel" in interaction.sent
-
-
-async def test_parity_says_so_when_the_window_was_truncated(cog, bot, lead, db):
-    carl_channel = bot.guild.add(FakeChannel(999, name="carlbot-logs"))
-    await bot.store.set(GUILD, "carl_modlog_channel_id", 999)
-    carl_channel.history_items = [
-        FakeCarlPost(SNOWFLAKE, datetime.now(UTC)) for _ in range(PARITY_HISTORY_LIMIT)
-    ]
-    interaction = FakeInteraction(bot, lead)
-
-    await cog.parity.callback(cog, interaction, 7)
-
-    assert "truncated" in interaction.sent and str(PARITY_HISTORY_LIMIT) in interaction.sent
-
-
-async def test_parity_says_what_it_needs_when_discord_refuses_the_history(cog, bot, lead, db):
-    carl_channel = bot.guild.add(FakeChannel(999, name="carlbot-logs"))
-    await bot.store.set(GUILD, "carl_modlog_channel_id", 999)
-    carl_channel.history_raises = forbidden()
-    interaction = FakeInteraction(bot, lead)
-
-    await cog.parity.callback(cog, interaction, 7)
-
-    assert "Read Message History" in interaction.sent
-    assert "<#999>" in interaction.sent
-
-
-async def test_parity_says_so_when_it_cannot_see_carls_log_at_all(cog, bot, lead):
-    await bot.store.set(GUILD, "carl_modlog_channel_id", 12345)
-    interaction = FakeInteraction(bot, lead)
-
-    await cog.parity.callback(cog, interaction, 7)
-
-    assert "carl_modlog_channel_id" in interaction.sent
-
-
-async def test_parity_defers_before_reading_history(cog, bot, lead):
-    bot.guild.add(FakeChannel(999, name="carlbot-logs"))
-    await bot.store.set(GUILD, "carl_modlog_channel_id", 999)
-    interaction = FakeInteraction(bot, lead)
-
-    await cog.parity.callback(cog, interaction, 7)
-
-    assert interaction.response.messages[0].get("deferred") is True
 
 
 async def test_every_message_that_fed_the_window_is_deleted(cog, bot, spammer, db):

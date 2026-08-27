@@ -1,4 +1,4 @@
-import { api, listOf, names, notesOf, send } from './api.js';
+import { api, listOf, names, send } from './api.js';
 import { start } from './app.js';
 import {
   ask,
@@ -23,7 +23,7 @@ import {
 const KINDS = ['warn', 'timeout', 'kick', 'ban', 'unban'];
 const DESTRUCTIVE = ['kick', 'ban', 'unban'];
 
-const state = { page: 1, userFilter: null, userName: null, openCase: null, days: 7 };
+const state = { page: 1, userFilter: null, userName: null, openCase: null };
 
 let refresh = () => {};
 
@@ -108,36 +108,6 @@ async function caseDetail(id) {
   ]);
 }
 
-async function parity(days) {
-  const say = notice();
-  const input = el('input', { class: 'input', type: 'number', min: '1', max: '30', value: String(days) });
-  const body = el('div');
-  const paint = (found) => {
-    const report = (found && found.report) || {};
-    body.replaceChildren(el('div', { class: 'tiles' }, [
-      el('div', { class: 'tile' }, [el('div', { class: 'tile-value', text: String(report.agree ?? '—') }), el('div', { class: 'tile-label', text: 'Both saw it' })]),
-      el('div', { class: 'tile' }, [el('div', { class: 'tile-value', text: String(report.carl_only ?? '—') }), el('div', { class: 'tile-label', text: 'Carl only' })]),
-      el('div', { class: 'tile' }, [el('div', { class: 'tile-value', text: String(report.bloc_only ?? '—') }), el('div', { class: 'tile-label', text: 'Black Bloc only' })]),
-    ]));
-    for (const note of notesOf(found)) body.append(el('p', { class: 'field-help', text: note }));
-  };
-
-  const first = await api(`/api/mod/parity?days=${encodeURIComponent(days)}`);
-  paint(first);
-
-  const again = button('Measure', async () => {
-    state.days = Number(input.value) || 7;
-    const done = await run(say, () => api(`/api/mod/parity?days=${encodeURIComponent(state.days)}`), 'Measured.');
-    if (done.ok) paint(done.found);
-  });
-
-  return card('Parity with Carl-bot', [
-    el('div', { class: 'formrow' }, [field('Days', input), bar([again])]),
-    body,
-    say,
-  ]);
-}
-
 async function load() {
   const query = new URLSearchParams({ page: String(state.page) });
   if (state.userFilter) query.set('user_id', state.userFilter);
@@ -194,14 +164,11 @@ async function load() {
   const act = section('Action bar', 'Every one of these is the same code path as the slash command, and lands in the same case table.');
   act.body.append(actionBar());
 
-  const compare = section('Parity report');
-  compare.body.append(await parity(state.days));
-
-  document.getElementById('dash').replaceChildren(act.node, cases.node, compare.node);
+  document.getElementById('dash').replaceChildren(act.node, cases.node);
 }
 
 refresh = start({
   tab: 'moderation',
-  subtitle: 'Cases, the action bar and the Carl parity report.',
+  subtitle: 'Cases and the action bar.',
   load,
 });

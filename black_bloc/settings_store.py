@@ -54,7 +54,6 @@ MODMAIL_CATEGORY_ID = 1442613057628012594
 MODMAIL_LOG_CHANNEL_ID = 1442613059704066108
 
 WARN_THRESHOLD_MAX = 100
-CARL_MODLOG_CHANNEL_ID = 1285782812229763092
 
 KEY_TYPES: dict[str, str] = {
     "log_channel_id": "channel",
@@ -103,7 +102,6 @@ KEY_TYPES: dict[str, str] = {
     "automod_warn_threshold": "int",
     "modlog_channel_id": "channel",
     "mod_dm_on_action": "enum",
-    "carl_modlog_channel_id": "channel",
 }
 
 KEY_CHOICES: dict[str, tuple[str, ...]] = {
@@ -210,7 +208,6 @@ KEY_HELP: dict[str, str] = {
     "automod_warn_threshold": "warnings before Black Bloc says so in the log, 0 to stop counting",
     "modlog_channel_id": "where mod cases are posted; defaults to log_channel_id",
     "mod_dm_on_action": "what a punished member is told: none, server_action, server_action_reason",
-    "carl_modlog_channel_id": "Carl-bot's mod log, which /automod parity reads to compare",
 }
 
 
@@ -508,18 +505,27 @@ class SettingsStore:
             return self.default("log_channel_id")
         if key == "mod_dm_on_action":
             return "server_action_reason"
-        if key == "carl_modlog_channel_id":
-            return CARL_MODLOG_CHANNEL_ID
         if KEY_TYPES.get(key) in ("channels", "roles"):
             return []
         return None
 
     async def load(self) -> None:
         cur = await self.db.conn.execute("SELECT guild_id, key, value FROM settings")
-        self._cache = {
-            (row["guild_id"], row["key"]): json.loads(row["value"]) for row in await cur.fetchall()
-        }
+        cache: dict[tuple[int, str], Any] = {}
+        retired: set[str] = set()
+        for row in await cur.fetchall():
+            key = row["key"]
+            if key not in KEY_TYPES:
+                retired.add(key)
+                continue
+            try:
+                cache[(row["guild_id"], key)] = json.loads(row["value"])
+            except (TypeError, ValueError):
+                retired.add(key)
+        self._cache = cache
         log.info("settings loaded: %d row(s)", len(self._cache))
+        if retired:
+            log.warning("settings ignored: %s", ", ".join(sorted(retired)))
 
     def get(self, guild_id: int, key: str) -> Any:
         if key not in KEY_TYPES:

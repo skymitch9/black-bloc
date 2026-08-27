@@ -14,7 +14,6 @@ from discord.ext import commands
 from ...actionlog import log_action
 from ...automod import (
     AUTOMOD_MODES,
-    PARITY_MAX_DAYS,
     RULE_HELP,
     RULE_ORDER,
     RuleError,
@@ -26,17 +25,13 @@ from ...automod import (
     exempt_reason,
     facts_from,
     normalise_rule,
-    parity_report,
-    parse_carl_entry,
     rule_config,
 )
 from ...command_errors import SafeDynamicItem
-from ...golive import parse_ts
 from ...modcases import (
     ALREADY_APPLIED_BY_SOMEBODY,
     add_case,
     applied_by,
-    armed_verdicts_since,
     case_embed,
     claim_case,
     clamp_timeout,
@@ -50,7 +45,6 @@ from ...modcases import (
     send_modlog,
     set_case_log_message,
     set_case_outcome,
-    within_days,
 )
 from ...settings_store import DB_UNAVAILABLE, require_staff, staff_roles_sentence
 
@@ -59,7 +53,6 @@ log = logging.getLogger(__name__)
 MESSAGE_TYPES = (discord.MessageType.default, discord.MessageType.reply)
 APPLY_TEMPLATE = r"automod:apply:(?P<case_id>[0-9]+)"
 RULE_FIELDS = ("enabled", "window_s", "threshold", "actions", "timeout_s", "words")
-PARITY_HISTORY_LIMIT = 500
 STAFF_CACHE_SECONDS = 60
 
 NO_STAFF_ROLES = (
@@ -89,43 +82,6 @@ TIMEOUT_REFUSED = (
 UNKNOWN_RULE_CHOICE = (
     "**{given}** is not one of Black Bloc's automod rules, so nothing was changed. `/automod "
     "status` lists them."
-)
-NO_CARL_LOG = (
-    "Black Bloc cannot see Carl-bot's mod log, so there is nothing to compare against. Point "
-    "`carl_modlog_channel_id` at the channel Carl posts cases in with `/settings set "
-    "carl_modlog_channel_id`, and make sure Black Bloc can read its history."
-)
-CARL_LOG_FORBIDDEN = (
-    "Discord refused to let Black Bloc read <#{channel_id}>, so parity could not be measured. It "
-    "needs View Channel **and** Read Message History there. Ask an admin to give it both in that "
-    "channel's permissions, then run this again."
-)
-CARL_LOG_FAILED = (
-    "Discord would not hand over <#{channel_id}>'s history just now, so parity could not be "
-    "measured. Try again in a minute, and tell a Lead if it keeps happening."
-)
-PARITY_HEADER = (
-    "**Parity over the last {days} day(s)** — Black Bloc saw **{bloc}** verdict(s), Carl-bot "
-    "logged **{carl}** case(s)."
-)
-PARITY_VERDICT = (
-    "**{agree}** agree · **{carl_only}** Carl-only · **{bloc_only}** Bloc-only. Flip "
-    "`automod_mode` to `on` and turn Carl's automod off once Carl-only and Bloc-only have both "
-    "been zero for a week."
-)
-PARITY_TEST_MODE = (
-    "Black Bloc is in test mode, so automod only ever saw the test channel — expect Carl-only to "
-    "be the real cases and Bloc-only to be zero."
-)
-PARITY_SAME_CHANNEL = (
-    "`carl_modlog_channel_id` and `modlog_channel_id` are the same channel, so parity would count "
-    "Black Bloc's own cards as Carl-bot's cases and report nonsense. Point "
-    "`carl_modlog_channel_id` at the channel **Carl** posts in with `/settings set "
-    "carl_modlog_channel_id`, then run this again."
-)
-PARITY_TRUNCATED = (
-    "⚠️ Only the first {limit} posts in that window were read, so the window is truncated — ask "
-    "for fewer days to compare all of it."
 )
 STAFF_IS_THE_TEST_CHANNEL = (
     "`staff_channel_id` is still the test channel, so everybody who can see it would count as "
@@ -331,56 +287,6 @@ async def save_rule(
         details={"rule": name} | {key: book[name].get(key) for key in changes},
     )
     return book[name]
-
-
-async def gather_parity(bot: Any, guild: Any, days: int) -> dict[str, Any]:
-    """The parity figures, or the one sentence saying why they could not be worked out."""
-    store = bot.store
-    channel_id = store.get(guild.id, "carl_modlog_channel_id")
-    if channel_id and channel_id == store.get(guild.id, "modlog_channel_id"):
-        return {"error": PARITY_SAME_CHANNEL}
-    channel = (
-        (bot.get_channel(channel_id) or guild.get_channel(channel_id)) if channel_id else None
-    )
-    if channel is None:
-        return {"error": NO_CARL_LOG}
-    since = within_days(days, PARITY_MAX_DAYS)
-    carl: list[tuple[int, Any]] = []
-    read = 0
-    try:
-        async for post in channel.history(limit=PARITY_HISTORY_LIMIT, after=since):
-            read += 1
-            user_id, when = parse_carl_entry(post)
-            if user_id is not None:
-                carl.append((user_id, when))
-    except discord.Forbidden:
-        log.warning("automod: parity could not read %s — forbidden", channel_id)
-        return {"error": CARL_LOG_FORBIDDEN.format(channel_id=channel_id)}
-    except discord.HTTPException as exc:
-        log.warning("automod: parity could not read %s — %s", channel_id, exc)
-        return {"error": CARL_LOG_FAILED.format(channel_id=channel_id)}
-    rows = await armed_verdicts_since(bot.db, guild.id, since)
-    bloc = [(user_id, parse_ts(at)) for user_id, at in rows]
-    return {
-        "days": max(1, min(int(days or 1), PARITY_MAX_DAYS)),
-        "bloc": len(bloc),
-        "carl": len(carl),
-        "report": parity_report(bloc, carl),
-        "truncated": read >= PARITY_HISTORY_LIMIT,
-        "test_mode": getattr(bot, "guard", None) is not None,
-    }
-
-
-def parity_lines(found: dict[str, Any]) -> list[str]:
-    lines = [
-        PARITY_HEADER.format(days=found["days"], bloc=found["bloc"], carl=found["carl"]),
-        PARITY_VERDICT.format(**found["report"]),
-    ]
-    if found["truncated"]:
-        lines.insert(1, PARITY_TRUNCATED.format(limit=PARITY_HISTORY_LIMIT))
-    if found["test_mode"]:
-        lines.append(PARITY_TEST_MODE)
-    return lines
 
 
 def message_to_delete(bot: Any, case: Any, actions: tuple[str, ...]) -> list[Any]:
@@ -860,23 +766,6 @@ class AutoMod(commands.Cog):
             )
         await interaction.response.send_message(
             " ".join(said), ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-        )
-
-    @automod.command(
-        name="parity", description="Compare what automod saw with what Carl-bot logged"
-    )
-    @app_commands.describe(days="How many days back to compare")
-    async def parity(self, interaction: discord.Interaction, days: int = 7) -> None:
-        if not await require_staff(interaction):
-            return
-        if not await self._database_ready(interaction):
-            return
-        await interaction.response.defer(ephemeral=True)
-        found = await gather_parity(self.bot, interaction.guild, days)
-        await interaction.followup.send(
-            found["error"] if "error" in found else "\n".join(parity_lines(found)),
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
         )
 
 

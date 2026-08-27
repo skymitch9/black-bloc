@@ -7,14 +7,13 @@ from fastapi import APIRouter, Depends, Request
 
 from ...automod import (
     DEFAULT_RULES,
-    PARITY_MAX_DAYS,
     RULE_HELP,
     RULE_ORDER,
     TIMEOUT_MAX_SECONDS,
     RuleError,
     rule_config,
 )
-from ...cogs.moderation.automod import apply_case, gather_parity, parity_lines, save_rule
+from ...cogs.moderation.automod import apply_case, save_rule
 from ...cogs.moderation.modcmds import (
     NOT_BANNED,
     REFUSED,
@@ -55,7 +54,6 @@ from ..writes import (
 
 log = logging.getLogger(__name__)
 
-PARITY_DEFAULT_DAYS = 7
 REASON_LIMIT = 500
 PURGE_DAYS_MAX = 7
 
@@ -288,14 +286,5 @@ def build_router(bot: Any) -> APIRouter:
             raise Refused(400, "bad_rule", str(exc)) from None
         await note(bot, guild, "web.mod.rule", who, details={"rule": name} | changes)
         return {"name": name, "help": RULE_HELP.get(name, "")} | rule
-
-    @router.get("/parity")
-    async def mod_parity(days: int = PARITY_DEFAULT_DAYS) -> dict[str, Any]:
-        guild = require_guild(bot)
-        require_db(bot)
-        found = await gather_parity(bot, guild, max(1, min(int(days), PARITY_MAX_DAYS)))
-        if "error" in found:
-            raise Refused(503, "parity_unavailable", found["error"])
-        return found | {"notes": parity_lines(found)}
 
     return router

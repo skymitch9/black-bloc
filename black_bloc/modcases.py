@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 import discord
@@ -344,16 +344,6 @@ async def warn_count(db: Any, guild_id: int, user_id: int) -> int:
     return int(row["n"]) if row else 0
 
 
-async def armed_verdicts_since(db: Any, guild_id: int, since: datetime) -> list[tuple[int, Any]]:
-    """Only verdicts of rules that carry a punishment; a log-only rule is not a case Carl has."""
-    cur = await db.conn.execute(
-        "SELECT user_id, at FROM mod_cases WHERE guild_id = ? AND kind = 'automod' AND at >= ? "
-        "AND user_id IS NOT NULL AND actions IS NOT NULL AND actions != '[]' ORDER BY id",
-        (int(guild_id), since.isoformat()),
-    )
-    return [(int(row["user_id"]), row["at"]) for row in await cur.fetchall()]
-
-
 def modlog_channel_id(store: Any, guild_id: int) -> int | None:
     return store.get(guild_id, "modlog_channel_id") or store.get(guild_id, "log_channel_id")
 
@@ -448,8 +438,3 @@ def duration_error(given: Any) -> str:
 
 def refusal_in_test_mode(action: str) -> str:
     return TEST_MODE_REFUSAL.format(action=action)
-
-
-def within_days(days: Any, maximum: int) -> datetime:
-    span = max(1, min(int(days or 1), maximum))
-    return datetime.now(UTC) - timedelta(days=span)

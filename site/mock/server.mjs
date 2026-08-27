@@ -51,7 +51,6 @@ const CHANNELS = [
   { id: '800000000000000009', name: 'Join to create', type: 'voice', category_id: null, position: 8 },
   { id: '800000000000000010', name: "casey's room", type: 'voice', category_id: null, position: 9 },
   { id: '800000000000000011', name: 'modmail', type: 'category', category_id: null, position: 10 },
-  { id: '800000000000000012', name: 'carl-modlog', type: 'text', category_id: null, position: 11 },
 ];
 
 const MEMBERS = [
@@ -114,7 +113,6 @@ const SETTING_SPECS = [
   ['automod_warn_threshold', 'int', 8, 8, 'warnings before Black Bloc says so in the log, 0 to stop counting', null, 100],
   ['modlog_channel_id', 'channel', '800000000000000004', null, 'where mod cases are posted; defaults to log_channel_id'],
   ['mod_dm_on_action', 'enum', 'server_action_reason', 'server_action', 'what a punished member is told', ['none', 'server_action', 'server_action_reason']],
-  ['carl_modlog_channel_id', 'channel', '800000000000000012', null, 'Carl-bot’s mod log, which parity reads to compare'],
 ];
 
 const RULES = {
@@ -260,7 +258,6 @@ const CORE_KEYS = ['log_channel_id', 'staff_channel_id', 'role_menu_channel_id']
 const NAMESPACE_OVERRIDE = {
   modlog_channel_id: 'automod',
   mod_dm_on_action: 'automod',
-  carl_modlog_channel_id: 'automod',
 };
 
 function namespaceOf(key) {
@@ -1045,25 +1042,6 @@ route('PUT', '/api/mod/rules/:name', async (context) => {
   }
   logAction('web.mod.rule', { reason: context.params.name, details: { rule: context.params.name } });
   return { name: context.params.name, help: RULE_HELP[context.params.name] || '', ...rule };
-});
-
-route('GET', '/api/mod/parity', (context) => {
-  requireStaff(context.session);
-  const days = Math.max(1, Math.min(Number(context.url.searchParams.get('days') || 7), 30));
-  const report = { agree: 4, carl_only: 2, bloc_only: 1 };
-  return {
-    days,
-    bloc: report.agree + report.bloc_only,
-    carl: report.agree + report.carl_only,
-    report,
-    truncated: false,
-    test_mode: testMode,
-    notes: [
-      `Last **${days}** days: Black Bloc would have acted **${report.agree + report.bloc_only}** times, Carl-bot **${report.agree + report.carl_only}**.`,
-      `**${report.agree}** agreed · **${report.carl_only}** Carl only · **${report.bloc_only}** Black Bloc only.`,
-      ...(testMode ? ['Test mode is on, so Black Bloc has not actually acted on any of these.'] : []),
-    ],
-  };
 });
 
 function ticketRow(ticket) {

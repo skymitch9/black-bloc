@@ -19,7 +19,6 @@ ROUTES = [
     ("POST", "/api/mod/unban", {"user_id": "21"}),
     ("GET", "/api/mod/rules", None),
     ("PUT", "/api/mod/rules/caps", {"enabled": True}),
-    ("GET", "/api/mod/parity", None),
 ]
 
 PUNISHMENTS = ["timeout", "untimeout", "kick", "ban", "unban"]
@@ -277,35 +276,6 @@ def test_a_rule_out_of_range_is_refused_with_the_validators_sentence(client, sig
     assert bad_number.status_code == 400 and "between 1 and 100" in bad_number.json()["message"]
     assert bad_action.status_code == 400 and "punishment" in bad_action.json()["message"]
     assert unknown.status_code == 400 and "nonsense" in unknown.json()["message"]
-
-
-def test_parity_says_what_it_needs_rather_than_a_status(client, sign_in, web, wf):
-    sign_in(client)
-    response = client.get("/api/mod/parity", params={"days": 7})
-    assert response.status_code == 503
-    assert response.json()["error"] == "parity_unavailable"
-    assert "carl_modlog_channel_id" in response.json()["message"]
-
-
-async def test_parity_counts_both_sides(client, sign_in, web, guild, wf):
-    carl = wf.Channel(999, "carlbot-logs")
-    carl.history_items = []
-
-    async def history(limit=None, after=None):
-        for item in carl.history_items:
-            yield item
-
-    carl.history = history
-    guild.channels.append(carl)
-    await web.store.set(wf.GUILD_ID, "carl_modlog_channel_id", 999)
-    sign_in(client)
-
-    body = client.get("/api/mod/parity", params={"days": 3}).json()
-
-    assert body["days"] == 3
-    assert body["report"] == {"agree": 0, "carl_only": 0, "bloc_only": 0}
-    assert body["truncated"] is False
-    assert body["test_mode"] is False
 
 
 @pytest.mark.parametrize("given", ["seven", "3.5", "-1", "8", True, {"days": 1}])

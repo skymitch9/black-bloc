@@ -29,7 +29,7 @@ from black_bloc.cogs.community.role_menus import (
     posted_menus,
     remove_option,
     role_diff,
-    seed_from_carl,
+    seed_default_menus,
     select_emoji,
     set_message,
     summary,
@@ -105,12 +105,12 @@ async def test_bad_mode_is_refused(db):
 
 
 async def test_seed_is_idempotent(db):
-    created, skipped = await seed_from_carl(db, GUILD)
+    created, skipped = await seed_default_menus(db, GUILD)
     assert created == [name for name, _, _, _ in SEED] and skipped == []
     menu = await get_menu(db, GUILD, "pronouns")
     assert len(await get_options(db, menu["id"])) == 9
 
-    created_again, skipped_again = await seed_from_carl(db, GUILD)
+    created_again, skipped_again = await seed_default_menus(db, GUILD)
     assert created_again == [] and skipped_again == [name for name, _, _, _ in SEED]
     assert len(await list_menus(db, GUILD)) == len(SEED)
     assert len(await get_options(db, menu["id"])) == 9
@@ -450,12 +450,12 @@ def test_every_sentence_about_the_seed_counts_the_menus_correctly():
 
     source = inspect.getsource(role_menus)
     assert "five" not in source
-    assert source.count("six") >= 3
+    assert source.count("six") >= 2
     describe = RoleMenus.create.parameters[3]
     assert "staff" in describe.description
 
 
-def test_the_marathons_option_carries_carls_own_emoji():
+def test_the_marathons_option_carries_the_incumbents_own_emoji():
     options = dict(
         (label, emoji) for _, _, _, opts in SEED for emoji, label, _ in opts if label == "Marathons"
     )

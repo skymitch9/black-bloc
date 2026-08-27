@@ -1,4 +1,3 @@
-from datetime import UTC, datetime
 
 import pytest
 
@@ -7,7 +6,6 @@ from black_bloc.modcases import (
     BAN_PURGE_MAX_DAYS,
     LINE_REASON_LIMIT,
     add_case,
-    armed_verdicts_since,
     case_embed,
     case_line,
     cases_for,
@@ -26,7 +24,6 @@ from black_bloc.modcases import (
     set_case_log_message,
     set_case_outcome,
     warn_count,
-    within_days,
 )
 from black_bloc.storage.db import Database
 
@@ -57,7 +54,7 @@ async def db(tmp_path):
         await database.close()
 
 
-def test_durations_are_read_the_way_carl_writes_them():
+def test_durations_are_read_the_way_the_incumbent_writes_them():
     assert parse_duration("10m") == 600
     assert parse_duration("2h") == 7200
     assert parse_duration("1d") == 86400
@@ -160,19 +157,6 @@ async def test_only_one_click_ever_applies_a_case(db):
     assert await claim_case(db, case_id) is True
 
 
-async def test_parity_only_counts_verdicts_of_armed_rules(db):
-    await add_case(
-        db, GUILD, USER, "automod", mode="shadow", applied=False, actions=["warn", "timeout"]
-    )
-    await add_case(db, GUILD, USER, "automod", mode="shadow", applied=False, actions=[])
-    await add_case(db, GUILD, USER, "warn", moderator_id=MOD)
-
-    found = await armed_verdicts_since(db, GUILD, datetime(2020, 1, 1, tzinfo=UTC))
-
-    assert [user_id for user_id, _ in found] == [USER]
-    assert await armed_verdicts_since(db, GUILD, datetime(2999, 1, 1, tzinfo=UTC)) == []
-
-
 async def test_a_case_can_belong_to_a_channel_rather_than_a_member(db):
     case_id = await add_case(db, GUILD, None, "purge", moderator_id=MOD, channel_id=555)
 
@@ -243,9 +227,3 @@ def test_the_refusals_are_sentences_not_status_codes():
     assert "time out" in refusal_in_test_mode("time out")
     assert "28 days" in duration_error("forever")
     assert "forever" in duration_error("forever")
-
-
-def test_the_parity_window_is_bounded():
-    now = datetime.now(UTC)
-    assert (now - within_days(0, 30)).days == 1
-    assert (now - within_days(999, 30)).days == 30

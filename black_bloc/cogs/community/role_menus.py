@@ -118,7 +118,7 @@ NOTHING_TO_UNASSIGN = (
 )
 NO_MENUS_YET = (
     "This server has no role menus yet. Make one with `/rolemenu create`, or bring over the six "
-    "old ones with `/rolemenu seed-from-carl`."
+    "default ones with `/rolemenu seed-defaults`."
 )
 SEED_EMOJI_NOTE = (
     "A menu that already exists is left exactly as it is, options and all — to pick up the "
@@ -371,8 +371,8 @@ async def set_message(db: Any, menu_id: int, channel_id: int, message_id: int) -
     await db.conn.commit()
 
 
-async def seed_from_carl(db: Any, guild_id: int) -> tuple[list[str], list[str]]:
-    """Create the six incumbent menus; names that already exist are left alone."""
+async def seed_default_menus(db: Any, guild_id: int) -> tuple[list[str], list[str]]:
+    """Create the six default menus; names that already exist are left alone."""
     created: list[str] = []
     skipped: list[str] = []
     for name, title, mode, options in SEED:
@@ -861,12 +861,12 @@ class RoleMenus(commands.Cog):
         )
 
     @rolemenu.command(
-        name="seed-from-carl", description="Create the six menus Carl-bot used to run"
+        name="seed-defaults", description="Create the server's default role menus"
     )
     async def seed(self, interaction: discord.Interaction) -> None:
         if not await require_staff(interaction):
             return
-        created, skipped = await seed_from_carl(self.bot.db, interaction.guild.id)
+        created, skipped = await seed_default_menus(self.bot.db, interaction.guild.id)
         parts = []
         if created:
             parts.append("Created: " + ", ".join(created))

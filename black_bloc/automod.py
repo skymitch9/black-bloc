@@ -26,8 +26,6 @@ TIMEOUT_MAX_SECONDS = 28 * 24 * 3600
 CAPS_MIN_LETTERS = 8
 WORDS_MAX = 200
 WARN_THRESHOLD_DEFAULT = 8
-PARITY_TOLERANCE_SECONDS = 120
-PARITY_MAX_DAYS = 30
 
 DEFAULT_RULES: dict[str, dict[str, Any]] = {
     "mention_spam": {
@@ -88,7 +86,6 @@ INVITE_PATTERN = re.compile(
     r"(?:discord(?:app)?\.com/invite|discord\.gg|discord\.me|dsc\.gg)/[A-Za-z0-9-]+",
     re.IGNORECASE,
 )
-CARL_USER_PATTERN = re.compile(r"\((?:ID:\s*)?(\d{15,25})\)|<@!?(\d{15,25})>")
 EVERYONE_PATTERN = re.compile(r"@(?:everyone|here)")
 
 UNKNOWN_RULE = (
@@ -451,49 +448,3 @@ def exempt_reason(
 def channel_exempt(channel: Any, exempt_channel_ids: set[int], honeypot_ids: set[int]) -> bool:
     ids = {getattr(channel, "id", None), getattr(channel, "parent_id", None)} - {None}
     return bool(ids & (exempt_channel_ids | honeypot_ids))
-
-
-def parse_carl_entry(message: Any) -> tuple[int | None, datetime | None]:
-    """The member a Carl-bot modlog post is about, and when it was posted."""
-    when = getattr(message, "created_at", None)
-    if when is not None and when.tzinfo is None:
-        when = when.replace(tzinfo=UTC)
-    pieces: list[str] = [str(getattr(message, "content", "") or "")]
-    for embed in list(getattr(message, "embeds", ()) or ()):
-        pieces.append(str(getattr(embed, "description", "") or ""))
-        pieces.append(str(getattr(embed, "title", "") or ""))
-        for field_ in list(getattr(embed, "fields", ()) or ()):
-            pieces.append(str(getattr(field_, "name", "") or ""))
-            pieces.append(str(getattr(field_, "value", "") or ""))
-        footer = getattr(embed, "footer", None)
-        pieces.append(str(getattr(footer, "text", "") or ""))
-    for piece in pieces:
-        match = CARL_USER_PATTERN.search(piece)
-        if match is not None:
-            return int(next(g for g in match.groups() if g)), when
-    return None, when
-
-
-def parity_report(
-    bloc: list[tuple[int, datetime]],
-    carl: list[tuple[int, datetime]],
-    tolerance_s: int = PARITY_TOLERANCE_SECONDS,
-) -> dict[str, int]:
-    """agree / carl_only / bloc_only, matching each side once by member and ±tolerance."""
-    remaining = list(carl)
-    agreed = 0
-    bloc_only = 0
-    for user_id, when in bloc:
-        found = None
-        for index, (other_id, other_when) in enumerate(remaining):
-            if other_id != user_id or other_when is None or when is None:
-                continue
-            if abs((other_when - when).total_seconds()) <= tolerance_s:
-                found = index
-                break
-        if found is None:
-            bloc_only += 1
-        else:
-            remaining.pop(found)
-            agreed += 1
-    return {"agree": agreed, "carl_only": len(remaining), "bloc_only": bloc_only}

@@ -6,7 +6,6 @@ from black_bloc.settings_store import (
     BIRTHDAY_CHANNEL_ID,
     BIRTHDAY_COLOR,
     BIRTHDAY_TEMPLATE,
-    CARL_MODLOG_CHANNEL_ID,
     CHANNEL_MODE,
     EVENTS_LATE_CEILING_MINUTES,
     EVENTS_MAX_LATE_MINUTES,
@@ -114,6 +113,27 @@ async def test_set_get_round_trip_survives_reload(store):
     assert store.get(2, "log_channel_id") == TEST_CH
     await store.load()
     assert store.get(1, "log_channel_id") == 999
+
+
+async def test_a_row_for_a_retired_key_is_ignored_rather_than_fatal(store, caplog):
+    await store.db.conn.execute(
+        "INSERT OR REPLACE INTO settings(guild_id, key, value, updated_at) VALUES (?, ?, ?, '')",
+        (1, "carl_modlog_channel_id", "12345"),
+    )
+    await store.db.conn.execute(
+        "INSERT OR REPLACE INTO settings(guild_id, key, value, updated_at) VALUES (?, ?, ?, '')",
+        (1, "log_channel_id", "999"),
+    )
+    await store.db.conn.commit()
+
+    with caplog.at_level("WARNING"):
+        await store.load()
+
+    assert store.get(1, "log_channel_id") == 999
+    assert "carl_modlog_channel_id" in caplog.text
+    assert "carl_modlog_channel_id" not in store.all(1)
+    with pytest.raises(SettingError):
+        store.get(1, "carl_modlog_channel_id")
 
 
 async def test_all_lists_every_known_key(store):
@@ -506,12 +526,11 @@ def test_staff_refusal_names_the_channel(tmp_path, monkeypatch):
     assert f"<#{TEST_CH}>" in message and "Manage Server" in message
 
 
-async def test_the_automod_keys_default_to_carls_config_in_shadow(store):
+async def test_the_automod_keys_default_to_the_incumbents_config_in_shadow(store):
     assert store.get(1, "automod_mode") == "shadow"
     assert store.get(1, "mod_dm_on_action") == "server_action_reason"
     assert store.get(1, "automod_warn_threshold") == 8
     assert store.get(1, "modlog_channel_id") == TEST_CH
-    assert store.get(1, "carl_modlog_channel_id") == CARL_MODLOG_CHANNEL_ID
     assert store.get(1, "automod_exempt_role_ids") == []
     book = store.get(1, "automod_rules")
     assert book["mention_spam"]["threshold"] == 5

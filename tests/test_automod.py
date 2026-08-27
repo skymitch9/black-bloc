@@ -17,8 +17,6 @@ from black_bloc.automod import (
     largest_window,
     matched_words,
     normalise_rule,
-    parity_report,
-    parse_carl_entry,
     rule_config,
     rules_summary,
     validate_rules,
@@ -69,32 +67,6 @@ class FakeMessage:
         self.attachments = [FakeAttachment() for _ in range(attachments)]
 
 
-class FakeField:
-    def __init__(self, name, value):
-        self.name = name
-        self.value = value
-
-
-class FakeFooter:
-    def __init__(self, text):
-        self.text = text
-
-
-class FakeEmbed:
-    def __init__(self, description="", title="", fields=(), footer=""):
-        self.description = description
-        self.title = title
-        self.fields = list(fields)
-        self.footer = FakeFooter(footer)
-
-
-class FakeLogPost:
-    def __init__(self, content="", embeds=(), at=START):
-        self.content = content
-        self.embeds = list(embeds)
-        self.created_at = at
-
-
 def mention_message(ids, at, message_id=1):
     return FakeMessage(mentions=ids, at=at, message_id=message_id)
 
@@ -113,7 +85,7 @@ def only(name, **changes):
     return rules(**off)
 
 
-def test_the_defaults_are_carls_live_config():
+def test_the_defaults_are_the_incumbents_live_config():
     book = validate_rules({})
     assert book["mention_spam"] == {
         "enabled": True,
@@ -392,24 +364,3 @@ def test_the_summary_names_the_armed_rules():
     assert "mention_spam 5/30s delete+warn+timeout" in rules_summary(validate_rules({}))
     assert rules_summary({name: {"enabled": False} for name in RULE_ORDER}) == "every rule is off"
     assert "log only" in describe_rule("slowmode", rule_config({}, "slowmode"))
-
-
-def test_carl_modlog_entries_give_up_a_member_id():
-    embed = FakeEmbed(description="**Member:** Spammer (ID: 123456789012345678)")
-    user_id, when = parse_carl_entry(FakeLogPost(embeds=[embed]))
-    assert user_id == 123456789012345678 and when == START
-
-    fielded = FakeEmbed(fields=[FakeField("User", "<@987654321098765432>")])
-    assert parse_carl_entry(FakeLogPost(embeds=[fielded]))[0] == 987654321098765432
-
-    assert parse_carl_entry(FakeLogPost(content="nothing here"))[0] is None
-
-
-def test_parity_matches_each_side_once_inside_the_tolerance():
-    a = START
-    report = parity_report(
-        [(1, a), (1, a + timedelta(minutes=10)), (2, a)],
-        [(1, a + timedelta(seconds=30)), (3, a)],
-    )
-    assert report == {"agree": 1, "carl_only": 1, "bloc_only": 2}
-    assert parity_report([], []) == {"agree": 0, "carl_only": 0, "bloc_only": 0}

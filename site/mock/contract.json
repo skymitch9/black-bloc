@@ -61,7 +61,7 @@
       "shape": "namespaces",
       "keys": ["key", "type", "value", "default", "help"],
       "namespaces": ["core", "automod", "birthday", "events", "golive", "honeypot", "modmail", "tempvoice"],
-      "no_namespaces": ["mod", "modlog", "carl"]
+      "no_namespaces": ["mod", "modlog"]
     },
     {
       "method": "PUT",
@@ -306,14 +306,6 @@
       "read_by": ["page-automod.js ruleCard"],
       "shape": "object",
       "keys": ["name", "help", "enabled", "window_s", "threshold", "actions", "timeout_s"]
-    },
-    {
-      "method": "GET",
-      "path": "/api/mod/parity?days=7",
-      "read_by": ["page-moderation.js parity"],
-      "shape": "object",
-      "keys": ["days", "bloc", "carl", "report", "truncated", "test_mode", "notes"],
-      "nested": {"report": ["agree", "carl_only", "bloc_only"]}
     },
     {
       "method": "GET",

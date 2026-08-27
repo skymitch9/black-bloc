@@ -47,25 +47,6 @@ class FakeCog:
         return (datetime.now(UTC).isoformat(), None)
 
 
-class CarlPost:
-    def __init__(self, user_id: int) -> None:
-        self.content = f"Case #1 | Warn | <@{user_id}>"
-        self.embeds = ()
-        self.created_at = datetime.now(UTC) - timedelta(hours=1)
-
-
-def carl_history(channel, user_id: int) -> None:
-    """Give one fake channel a Carl-bot history, so parity has something to read."""
-
-    def history(limit=None, after=None):
-        async def rows():
-            yield CarlPost(user_id)
-
-        return rows()
-
-    channel.history = history
-
-
 def contract() -> dict:
     return json.loads(CONTRACT.read_text(encoding="utf-8"))
 
@@ -132,8 +113,6 @@ async def seeded(client, sign_in, web, guild, wf):
 
     web.cogs["Contract"] = FakeCog()
     await web.store.set(guild_id, "events_create_scheduled", False, by=7)
-    await web.store.set(guild_id, "carl_modlog_channel_id", wf.OTHER_CHANNEL_ID, by=7)
-    carl_history(guild.get_channel(wf.OTHER_CHANNEL_ID), MEMBER_ID)
 
     case_id = await add_case(
         db,
@@ -218,12 +197,12 @@ async def test_every_route_answers_with_the_keys_the_pages_read(client, seeded, 
 
 
 def test_the_moderation_settings_all_live_in_the_automod_namespace(web, wf):
-    """modlog, mod and carl were one-key namespaces of their own; they are moderation keys."""
+    """modlog and mod were one-key namespaces of their own; they are moderation keys."""
     found = grouped(web.store, wf.GUILD_ID)
     automod = {row["key"] for row in found["automod"]}
 
-    assert {"modlog_channel_id", "mod_dm_on_action", "carl_modlog_channel_id"} <= automod
-    assert not {"modlog", "mod", "carl"} & set(found)
+    assert {"modlog_channel_id", "mod_dm_on_action"} <= automod
+    assert not {"modlog", "mod"} & set(found)
 
 
 async def test_every_write_leaves_the_action_kind_the_audit_tab_filters_on(

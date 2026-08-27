@@ -16,7 +16,7 @@ list in `app.js` — never thirteen copies to drift.
 | Tab | File | What it does |
 |---|---|---|
 | Overview | `index.html` | mode chips that link to their tab, open counts, the last 10 actions |
-| Moderation | `moderation.html` | cases (search by member, paged), case detail with Apply-now, the warn/timeout/kick/ban/unban bar, the Carl parity report |
+| Moderation | `moderation.html` | cases (search by member, paged), case detail with Apply-now, the warn/timeout/kick/ban/unban bar |
 | Automod | `automod.html` | the rule book, exempt roles and channels, the arming switch |
 | Modmail | `modmail.html` | tickets → messages with staff notes marked, reply / anonymous reply / close, snippets, blocks |
 | Events | `events.html` | the queue with Approve / Deny (reason) / Cancel |
