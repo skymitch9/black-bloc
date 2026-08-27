@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import re
@@ -16,37 +17,59 @@ from ...command_errors import NETWORK_ERRORS, AnswersErrors, SafeDynamicItem
 from ...golive import now_iso, parse_ts
 from ...polls import (
     ARCHIVED,
+    BUTTONS_UP_TO,
     CANCELLED,
     CLOSED,
+    DATE,
+    DATE_PLAIN,
+    DATE_STEPS,
+    DEFAULT_HOURS,
     DENIED,
     KINDS,
+    LABEL_LIMIT,
     LIVE,
     MAX_HOURS,
+    MAX_SLOTS,
+    MAX_STEP,
     MIN_HOURS,
+    MIN_SLOTS,
     NATIVE,
     OPEN,
     OPEN_STATUSES,
+    PANEL,
+    PANEL_CLEAR,
+    PANEL_VOTE,
     PENDING_REVIEW,
+    PICK_SOMETHING,
+    QUESTION_LIMIT,
     RESULTS_CHOICES,
     SINGLE,
+    STEP_DAYS,
     TERMINAL_STATUSES,
+    VOTE_GONE,
+    VOTE_NOT_OPEN,
     NeedsPanel,
     can_transition,
     clamp,
     closed_text,
     closes_at,
     counts_from_options,
+    date_slots,
+    date_trouble,
     describe_hours,
     is_multi,
     mentions,
     open_text,
     options_for,
+    panel_embed,
+    panel_note,
     reminder_text,
     results_embed,
     review_card,
     surface_for,
     thread_name,
     validate,
+    voted_text,
     winners,
 )
 from ...settings_store import (
@@ -55,6 +78,7 @@ from ...settings_store import (
     POLL_ARCHIVE_MAX_DAYS,
     POLL_ARCHIVE_MIN_DAYS,
     POLL_CREATORS,
+    POLL_DATE_LABEL_FORMS,
     POLL_MODES,
     POLL_REMINDER_MAX_MINUTES,
     POLL_REVIEW_MODES,
@@ -65,10 +89,16 @@ from ...settings_store import (
 log = logging.getLogger(__name__)
 
 DECISION_TEMPLATE = r"poll:(?P<poll_id>[0-9]+):(?P<action>approve|deny)"
+VOTE_TEMPLATE = r"poll:v:(?P<poll_id>[0-9]+):(?P<position>[0-9]+)"
+VOTE_OPEN_TEMPLATE = r"poll:vm:(?P<poll_id>[0-9]+)"
+VOTE_CLEAR_TEMPLATE = r"poll:vc:(?P<poll_id>[0-9]+)"
 LOCKS_ATTR = "_poll_locks"
 POLL_MINUTES = 5
 LOOP_NAMES = ("polls",)
 LIST_LIMIT = 25
+MODAL_TITLE_LIMIT = 45
+LABEL_TEXT_LIMIT = 45
+GROUP_OPTIONS_UP_TO = 10
 
 POLLS_OFF = (
     "Polls are turned off on this server, so nothing was posted. A Lead turns them back on with "
@@ -192,12 +222,115 @@ async def create_poll(
     return cur.lastrowid
 
 
-async def add_options(db: Any, poll_id: int, labels: Any) -> None:
+async def add_options(db: Any, poll_id: int, labels: Any, values: Any = None) -> None:
+    """`value` is the instant a date slot stands for; every other kind leaves it empty."""
+    found = list(labels or ())
+    stored = list(values or ()) + [None] * len(found)
     await db.conn.executemany(
-        "INSERT INTO poll_options(poll_id, position, label) VALUES (?, ?, ?)",
-        [(poll_id, position, label) for position, label in enumerate(labels or ())],
+        "INSERT INTO poll_options(poll_id, position, label, value) VALUES (?, ?, ?, ?)",
+        [(poll_id, at, label, stored[at]) for at, label in enumerate(found)],
     )
     await db.conn.commit()
+
+
+def poll_plan(store: Any, guild_id: int, **asked: Any) -> tuple[dict[str, Any] | None, str | None]:
+    """(what to post, the refusal). The one place a poll's arguments become a poll."""
+    kind = str(asked.get("kind") or SINGLE)
+    results = str(asked.get("results") or LIVE)
+    anonymous = bool(asked.get("anonymous"))
+    hours = asked.get("hours")
+    length = (
+        int(hours)
+        if hours is not None
+        else int(store.get(guild_id, "poll_default_hours") or DEFAULT_HOURS)
+    )
+    if kind == DATE:
+        unit = str(asked.get("step_unit") or STEP_DAYS)
+        trouble = date_trouble(asked.get("start"), asked.get("slots"), asked.get("step"), unit)
+        if trouble is not None:
+            return (None, trouble)
+        made = date_slots(
+            asked.get("start"),
+            asked.get("slots"),
+            asked.get("step"),
+            unit,
+            form=str(store.get(guild_id, "poll_date_labels") or DATE_PLAIN),
+        )
+        labels = [row["label"] for row in made]
+        values: list[str | None] = [row["value"] for row in made]
+    else:
+        labels = options_for(kind, asked.get("options"))
+        values = [None] * len(labels)
+    refusal = validate(asked.get("question"), labels, length)
+    if refusal is not None:
+        return (None, refusal)
+    try:
+        surface = surface_for(kind, anonymous, results, len(labels))
+    except NeedsPanel as needed:
+        return (None, str(needed))
+    return (
+        {
+            "question": clamp(asked.get("question"), QUESTION_LIMIT),
+            "kind": kind,
+            "labels": labels,
+            "values": values,
+            "hours": length,
+            "surface": surface,
+            "multi": is_multi(kind),
+            "anonymous": anonymous,
+            "results": results,
+            "note": panel_note(anonymous, results, len(labels)),
+        },
+        None,
+    )
+
+
+async def store_poll(
+    bot: Any,
+    guild: Any,
+    creator_id: int,
+    plan: dict[str, Any],
+    *,
+    channel_id: int | None,
+    ping_role_id: int | None,
+    auto_thread: bool,
+    status: str | None = None,
+) -> tuple[Any, bool]:
+    """A plan written down as a row, its options and one log line: (the row, is it held)."""
+    reviewing = status is None and bot.store.get(guild.id, "poll_review_mode") == "on"
+    poll_id = await create_poll(
+        bot.db,
+        guild.id,
+        creator_id,
+        question=plan["question"],
+        kind=plan["kind"],
+        surface=plan["surface"],
+        multi=plan["multi"],
+        anonymous=plan["anonymous"],
+        results=plan["results"],
+        hours=plan["hours"],
+        channel_id=channel_id,
+        ping_role_id=ping_role_id,
+        status=status or (PENDING_REVIEW if reviewing else OPEN),
+        auto_thread=auto_thread,
+    )
+    await add_options(bot.db, poll_id, plan["labels"], plan.get("values"))
+    await log_action(
+        bot,
+        guild,
+        "poll.created",
+        actor=creator_id,
+        target=creator_id,
+        details={
+            "poll_id": poll_id,
+            "kind": plan["kind"],
+            "surface": plan["surface"],
+            "options": len(plan["labels"]),
+            "hours": plan["hours"],
+            "review": reviewing,
+        },
+    )
+    return (await get_poll(bot.db, poll_id), reviewing)
 
 
 async def get_poll(db: Any, poll_id: int) -> Any:
@@ -350,6 +483,71 @@ async def votes_of(db: Any, poll_id: int) -> list[Any]:
     return list(await cur.fetchall())
 
 
+def voter_key(row: Any, user_id: Any) -> int:
+    """An anonymous poll counts one vote per person without keeping who the person is."""
+    if not row["anonymous"]:
+        return int(user_id)
+    digest = hashlib.sha256(f"{int(row['id'])}:{int(user_id)}".encode()).digest()
+    return int.from_bytes(digest[:8], "big") >> 1
+
+
+async def panel_counts(db: Any, poll_id: int) -> tuple[list[dict[str, Any]], int]:
+    """Per-option totals and the number of people who voted — a panel's own tally."""
+    options = await options_of(db, poll_id)
+    cur = await db.conn.execute(
+        "SELECT option_id, COUNT(*) AS votes FROM poll_votes WHERE poll_id = ? GROUP BY option_id",
+        (poll_id,),
+    )
+    tally = {
+        int(row["option_id"]): int(row["votes"])
+        for row in await cur.fetchall()
+        if row["option_id"] is not None
+    }
+    cur = await db.conn.execute(
+        "SELECT COUNT(DISTINCT user_id) AS voters FROM poll_votes WHERE poll_id = ?", (poll_id,)
+    )
+    counted = await cur.fetchone()
+    return (
+        [
+            {
+                "position": int(item["position"]),
+                "label": str(item["label"]),
+                "votes": tally.get(int(item["id"]), 0),
+            }
+            for item in options
+        ],
+        int((counted["voters"] if counted else 0) or 0),
+    )
+
+
+async def my_positions(db: Any, poll_id: int, voter: int) -> list[int]:
+    cur = await db.conn.execute(
+        "SELECT o.position FROM poll_votes v JOIN poll_options o ON o.id = v.option_id "
+        "WHERE v.poll_id = ? AND v.user_id = ? ORDER BY o.position",
+        (poll_id, voter),
+    )
+    return [int(row["position"]) for row in await cur.fetchall()]
+
+
+async def set_panel_vote(
+    db: Any, poll_id: int, voter: int, positions: Any, *, multi: bool
+) -> list[str]:
+    """One person's whole answer, written as a replacement — never an append."""
+    by_position = {int(item["position"]): item for item in await options_of(db, poll_id)}
+    wanted = sorted({int(one) for one in positions or () if int(one) in by_position})
+    if not multi:
+        wanted = wanted[:1]
+    await db.conn.execute(
+        "DELETE FROM poll_votes WHERE poll_id = ? AND user_id = ?", (poll_id, voter)
+    )
+    await db.conn.executemany(
+        "INSERT OR IGNORE INTO poll_votes(poll_id, option_id, user_id, at) VALUES (?, ?, ?, ?)",
+        [(poll_id, by_position[at]["id"], voter, now_iso()) for at in wanted],
+    )
+    await db.conn.commit()
+    return [str(by_position[at]["label"]) for at in wanted]
+
+
 async def option_for_answer(db: Any, poll_id: int, answer_id: int) -> Any:
     cur = await db.conn.execute(
         "SELECT * FROM poll_options WHERE poll_id = ? AND answer_id = ?", (poll_id, answer_id)
@@ -481,6 +679,245 @@ def review_view(poll_id: int) -> discord.ui.View:
     return view
 
 
+def panel_card(
+    row: Any, counts: Any, voters: int, finishes: datetime | None = None
+) -> discord.Embed:
+    """One home for the panel's card, so the post, every vote and the close agree."""
+    return panel_embed(
+        poll_id=row["id"],
+        question=row["question"],
+        counts=counts,
+        voters=voters,
+        kind=row["kind"],
+        multi=bool(row["multi"]),
+        anonymous=bool(row["anonymous"]),
+        hidden=row["results"] != LIVE,
+        status=row["status"],
+        closes_at=finishes if finishes is not None else parse_ts(row["closes_at"]),
+    )
+
+
+def panel_view(row: Any, options: Any) -> discord.ui.View:
+    """A button per option while there are few enough; one that opens a modal when there are not."""
+    view = discord.ui.View(timeout=None)
+    found = list(options or ())
+    poll_id = int(row["id"])
+    if len(found) <= BUTTONS_UP_TO:
+        for item in found:
+            view.add_item(PollVoteButton(poll_id, int(item["position"]), str(item["label"])))
+    else:
+        view.add_item(PollOpenVoteButton(poll_id))
+    view.add_item(PollClearVoteButton(poll_id))
+    return view
+
+
+async def repaint_panel(bot: Any, row: Any, options: Any = None) -> None:
+    """The panel message caught up with the votes; a cosmetic failure never fails a vote."""
+    if row["surface"] != PANEL or not row["message_id"]:
+        return
+    if not guard_allows(bot, row["channel_id"]):
+        return
+    message = await fetch_poll_message(bot, row)
+    if message is None:
+        return
+    counts, voters = await panel_counts(bot.db, row["id"])
+    found = options if options is not None else await options_of(bot.db, row["id"])
+    try:
+        await message.edit(
+            embed=panel_card(row, counts, voters),
+            view=panel_view(row, found) if row["status"] == OPEN else None,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+    except Exception as exc:
+        log.warning("polls: could not repaint the panel of poll %s: %s", row["id"], exc)
+
+
+async def voting_row(interaction: discord.Interaction, poll_id: int) -> Any:
+    """The poll a button press is about, or None with the presser already answered."""
+    bot = interaction.client
+    if not bot.db.is_connected:
+        await answer(interaction, DB_UNAVAILABLE)
+        return None
+    row = await get_poll(bot.db, poll_id)
+    if row is None:
+        await answer(interaction, VOTE_GONE)
+        return None
+    if row["status"] != OPEN:
+        await answer(interaction, VOTE_NOT_OPEN.format(status=row["status"]))
+        return None
+    return row
+
+
+async def cast_vote(interaction: discord.Interaction, row: Any, positions: Any) -> list[str]:
+    bot = interaction.client
+    async with poll_lock(bot, row["id"]):
+        chosen = await set_panel_vote(
+            bot.db, row["id"], voter_key(row, interaction.user.id), positions,
+            multi=bool(row["multi"]),
+        )
+    await repaint_panel(bot, row)
+    return chosen
+
+
+class PollVoteButton(
+    SafeDynamicItem, discord.ui.DynamicItem[discord.ui.Button], template=VOTE_TEMPLATE
+):
+    def __init__(self, poll_id: int, position: int, label: str = "") -> None:
+        self.poll_id = poll_id
+        self.position = position
+        super().__init__(
+            discord.ui.Button(
+                label=clamp(label, LABEL_LIMIT) or f"Option {position + 1}",
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"poll:v:{poll_id}:{position}",
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: Any, match: re.Match):
+        return cls(int(match["poll_id"]), int(match["position"]), str(item.label or ""))
+
+    async def on_click(self, interaction: discord.Interaction) -> None:
+        row = await voting_row(interaction, self.poll_id)
+        if row is None:
+            return
+        await interaction.response.defer(ephemeral=True)
+        wanted = [self.position]
+        if row["multi"]:
+            standing = await my_positions(
+                interaction.client.db, row["id"], voter_key(row, interaction.user.id)
+            )
+            wanted = [at for at in standing if at != self.position]
+            if self.position not in standing:
+                wanted.append(self.position)
+        chosen = await cast_vote(interaction, row, wanted)
+        await answer(interaction, voted_text(chosen, multi=bool(row["multi"])))
+
+
+class PollClearVoteButton(
+    SafeDynamicItem, discord.ui.DynamicItem[discord.ui.Button], template=VOTE_CLEAR_TEMPLATE
+):
+    def __init__(self, poll_id: int) -> None:
+        self.poll_id = poll_id
+        super().__init__(
+            discord.ui.Button(
+                label=PANEL_CLEAR,
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"poll:vc:{poll_id}",
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: Any, match: re.Match):
+        return cls(int(match["poll_id"]))
+
+    async def on_click(self, interaction: discord.Interaction) -> None:
+        row = await voting_row(interaction, self.poll_id)
+        if row is None:
+            return
+        await interaction.response.defer(ephemeral=True)
+        await cast_vote(interaction, row, ())
+        await answer(interaction, voted_text((), multi=bool(row["multi"])))
+
+
+class PollOpenVoteButton(
+    SafeDynamicItem, discord.ui.DynamicItem[discord.ui.Button], template=VOTE_OPEN_TEMPLATE
+):
+    def __init__(self, poll_id: int) -> None:
+        self.poll_id = poll_id
+        super().__init__(
+            discord.ui.Button(
+                label=PANEL_VOTE,
+                style=discord.ButtonStyle.primary,
+                custom_id=f"poll:vm:{poll_id}",
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: Any, match: re.Match):
+        return cls(int(match["poll_id"]))
+
+    async def on_click(self, interaction: discord.Interaction) -> None:
+        row = await voting_row(interaction, self.poll_id)
+        if row is None:
+            return
+        options = await options_of(interaction.client.db, row["id"])
+        standing = await my_positions(
+            interaction.client.db, row["id"], voter_key(row, interaction.user.id)
+        )
+        await interaction.response.send_modal(PollVoteModal(row, options, standing))
+
+
+def vote_picker(options: Any, *, multi: bool, standing: Any = ()) -> Any:
+    """2.7.1's typed modal fields where they fit; a select once there are more than ten."""
+    found = list(options or ())
+    chosen = {int(at) for at in standing or ()}
+    rows = [
+        (str(item["position"]), clamp(item["label"], LABEL_LIMIT), int(item["position"]) in chosen)
+        for item in found
+    ]
+    if len(rows) > GROUP_OPTIONS_UP_TO:
+        return discord.ui.Select(
+            options=[
+                discord.SelectOption(label=label, value=value, default=picked)
+                for value, label, picked in rows
+            ],
+            min_values=0,
+            max_values=len(rows) if multi else 1,
+            required=False,
+        )
+    if multi:
+        return discord.ui.CheckboxGroup(
+            options=[
+                discord.CheckboxGroupOption(label=label, value=value, default=picked)
+                for value, label, picked in rows
+            ],
+            min_values=0,
+            max_values=len(rows),
+            required=False,
+        )
+    return discord.ui.RadioGroup(
+        options=[
+            discord.RadioGroupOption(label=label, value=value, default=picked)
+            for value, label, picked in rows
+        ],
+        required=False,
+    )
+
+
+def picked_values(picker: Any) -> list[str]:
+    values = getattr(picker, "values", None)
+    if values is not None:
+        return [str(one) for one in values]
+    one = getattr(picker, "value", None)
+    return [str(one)] if one else []
+
+
+class PollVoteModal(AnswersErrors, discord.ui.Modal):
+    def __init__(self, row: Any, options: Any, standing: Any = ()) -> None:
+        super().__init__(title=clamp(row["question"], MODAL_TITLE_LIMIT) or PANEL_VOTE)
+        self.poll_id = int(row["id"])
+        self.picker = vote_picker(options, multi=bool(row["multi"]), standing=standing)
+        self.add_item(
+            discord.ui.Label(
+                text=clamp(PANEL_VOTE if row["multi"] else "Your vote", LABEL_TEXT_LIMIT),
+                component=self.picker,
+            )
+        )
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        row = await voting_row(interaction, self.poll_id)
+        if row is None:
+            return
+        await interaction.response.defer(ephemeral=True)
+        wanted = picked_values(self.picker)
+        if not wanted:
+            await answer(interaction, PICK_SOMETHING)
+            return
+        chosen = await cast_vote(interaction, row, [int(one) for one in wanted])
+        await answer(interaction, voted_text(chosen, multi=bool(row["multi"])))
+
+
 async def answer(interaction: discord.Interaction, text: str) -> None:
     if interaction.response.is_done():
         await interaction.followup.send(
@@ -579,6 +1016,8 @@ async def close_poll(
 
 
 async def _write_results(bot: Any, guild: Any, row: Any, *, end_it: bool) -> bool:
+    if row["surface"] == PANEL:
+        return await _write_panel_results(bot, guild, row)
     message = await fetch_poll_message(bot, row)
     if message is None:
         await log_action(
@@ -608,6 +1047,30 @@ async def _write_results(bot: Any, guild: Any, row: Any, *, end_it: bool) -> boo
     return True
 
 
+async def _write_panel_results(bot: Any, guild: Any, row: Any) -> bool:
+    """A panel's votes are ours, so the count is read from the rows rather than from Discord."""
+    counts, voters = await panel_counts(bot.db, row["id"])
+    await save_results(bot.db, row["id"], counts, voters)
+    message = await fetch_poll_message(bot, row)
+    if message is not None:
+        await _shut_panel(bot, row, message, counts, voters)
+    await _post_results(bot, guild, row, message, counts, voters)
+    return True
+
+
+async def _shut_panel(bot: Any, row: Any, message: Any, counts: Any, voters: int) -> None:
+    """The buttons come off and the final bars go on, even for a poll that had hidden them."""
+    settled = await get_poll(bot.db, row["id"])
+    try:
+        await message.edit(
+            embed=panel_card(settled if settled is not None else row, counts, voters),
+            view=None,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+    except Exception as exc:
+        log.warning("polls: could not take the buttons off poll %s: %s", row["id"], exc)
+
+
 async def _post_results(
     bot: Any, guild: Any, row: Any, message: Any, counts: Any, total: int
 ) -> None:
@@ -632,7 +1095,7 @@ async def _post_results(
         await channel.send(
             closed_text(row["question"]),
             embed=embed,
-            reference=message,
+            reference=message if message is not None else None,
             allowed_mentions=discord.AllowedMentions.none(),
         )
     except Exception as exc:
@@ -672,6 +1135,11 @@ async def cancel_poll(bot: Any, guild: Any, row: Any, *, by: Any = None) -> bool
     if not fresh["message_id"]:
         return True
     message = await fetch_poll_message(bot, fresh)
+    if fresh["surface"] == PANEL:
+        if message is not None:
+            counts, voters = await panel_counts(bot.db, fresh["id"])
+            await _shut_panel(bot, fresh, message, counts, voters)
+        return True
     poll = getattr(message, "poll", None) if message is not None else None
     if poll is None or poll.is_finalised():
         return True
@@ -703,12 +1171,23 @@ async def post_poll(bot: Any, guild: Any, row: Any) -> tuple[Any, str | None]:
         return (None, "test_mode")
     options = await options_of(bot.db, row["id"])
     labels = [str(item["label"]) for item in options]
+    panel = row["surface"] == PANEL
+    finishes = closes_at(int(row["hours"]))
     try:
-        message = await channel.send(
-            open_text(row["creator_id"], row["ping_role_id"]),
-            poll=native_poll(row, labels),
-            allowed_mentions=mentions(row["ping_role_id"]),
-        )
+        if panel:
+            counts, voters = await panel_counts(bot.db, row["id"])
+            message = await channel.send(
+                open_text(row["creator_id"], row["ping_role_id"]),
+                embed=panel_card(row, counts, voters, finishes),
+                view=panel_view(row, options),
+                allowed_mentions=mentions(row["ping_role_id"]),
+            )
+        else:
+            message = await channel.send(
+                open_text(row["creator_id"], row["ping_role_id"]),
+                poll=native_poll(row, labels),
+                allowed_mentions=mentions(row["ping_role_id"]),
+            )
     except Exception as exc:
         log.warning("polls: could not post poll %s: %s", row["id"], exc)
         await log_action(
@@ -724,10 +1203,11 @@ async def post_poll(bot: Any, guild: Any, row: Any) -> tuple[Any, str | None]:
         row["id"],
         channel_id=channel.id,
         message_id=message.id,
-        finishes_at=_expiry(message, row),
+        finishes_at=finishes if panel else _expiry(message, row),
         thread_id=thread_id,
     )
-    await set_answer_ids(bot.db, row["id"], _answer_ids(message, len(labels)))
+    if not panel:
+        await set_answer_ids(bot.db, row["id"], _answer_ids(message, len(labels)))
     await set_status(bot.db, row["id"], OPEN)
     await log_action(
         bot,
@@ -947,7 +1427,9 @@ class Polls(commands.Cog):
     poll = app_commands.Group(name="poll", description="Put something to the room")
 
     async def cog_load(self) -> None:
-        self.bot.add_dynamic_items(PollDecisionButton)
+        self.bot.add_dynamic_items(
+            PollDecisionButton, PollVoteButton, PollOpenVoteButton, PollClearVoteButton
+        )
         if not self.bot.db.is_connected:
             return
         self._polls_loop.start()
@@ -1106,17 +1588,22 @@ class Polls(commands.Cog):
     @poll.command(name="create", description="Start a poll in this channel")
     @app_commands.describe(
         question="What you are asking",
-        kind="single, checkbox (pick several), yesno or rating (1-5)",
-        options="The answers, separated by `|` — ignored for yes/no and rating",
+        kind="single, checkbox (pick several), yesno, rating (1-5) or date",
+        options="The answers, separated by `|` — ignored for yes/no, rating and date",
         hours="How long it stays open, in whole hours",
-        anonymous="Hide who voted (arrives with the next update)",
-        results="live, or close to hide the bars until it ends (arrives with the next update)",
+        anonymous="Nobody is told who voted; Black Bloc posts its own panel instead",
+        results="live, or close to keep the bars hidden until it ends",
         ping_role="Role mentioned when it opens",
         thread="Open a discussion thread under it",
+        start="date polls: the first slot, `2026-09-05` or `2026-09-05 19:00`",
+        slots="date polls: how many slots to lay out",
+        step="date polls: the gap between two slots",
+        step_unit="date polls: whether the gap counts in hours or days",
     )
     @app_commands.choices(
         kind=[app_commands.Choice(name=name, value=name) for name in KINDS],
         results=[app_commands.Choice(name=name, value=name) for name in RESULTS_CHOICES],
+        step_unit=[app_commands.Choice(name=name, value=name) for name in DATE_STEPS],
     )
     async def poll_create(
         self,
@@ -1129,6 +1616,10 @@ class Polls(commands.Cog):
         results: app_commands.Choice[str] | None = None,
         ping_role: discord.Role | None = None,
         thread: bool | None = None,
+        start: str | None = None,
+        slots: app_commands.Range[int, MIN_SLOTS, MAX_SLOTS] | None = None,
+        step: app_commands.Range[int, 1, MAX_STEP] | None = None,
+        step_unit: app_commands.Choice[str] | None = None,
     ) -> None:
         if not await self._ready(interaction):
             return
@@ -1139,20 +1630,22 @@ class Polls(commands.Cog):
         if not self._may_create(interaction):
             await answer(interaction, NOT_A_CREATOR)
             return
-        wanted = kind.value if kind is not None else SINGLE
-        shown = results.value if results is not None else LIVE
-        labels = options_for(wanted, options)
-        length = int(hours) if hours is not None else int(
-            self.bot.store.get(guild.id, "poll_default_hours") or 24
+        plan, refusal = poll_plan(
+            self.bot.store,
+            guild.id,
+            question=question,
+            kind=kind.value if kind is not None else SINGLE,
+            options=options,
+            hours=int(hours) if hours is not None else None,
+            anonymous=anonymous,
+            results=results.value if results is not None else LIVE,
+            start=start,
+            slots=int(slots) if slots is not None else None,
+            step=int(step) if step is not None else None,
+            step_unit=step_unit.value if step_unit is not None else STEP_DAYS,
         )
-        refusal = validate(question, labels, length)
-        if refusal is not None:
+        if plan is None:
             await answer(interaction, refusal)
-            return
-        try:
-            surface = surface_for(wanted, anonymous, shown, len(labels))
-        except NeedsPanel as needed:
-            await answer(interaction, str(needed))
             return
         channel = interaction.channel
         if channel is None:
@@ -1162,7 +1655,6 @@ class Polls(commands.Cog):
             await answer(interaction, guard_refusal(self.bot))
             return
         await interaction.response.defer(ephemeral=True)
-        reviewing = self.bot.store.get(guild.id, "poll_review_mode") == "on"
         role_id = (
             ping_role.id
             if ping_role is not None
@@ -1173,45 +1665,23 @@ class Polls(commands.Cog):
             if thread is not None
             else bool(self.bot.store.get(guild.id, "poll_auto_thread"))
         )
-        poll_id = await create_poll(
-            self.bot.db,
-            guild.id,
-            interaction.user.id,
-            question=clamp(question, 300),
-            kind=wanted,
-            surface=surface,
-            multi=is_multi(wanted),
-            anonymous=anonymous,
-            results=shown,
-            hours=length,
-            channel_id=channel.id,
-            ping_role_id=role_id,
-            status=PENDING_REVIEW if reviewing else OPEN,
-            auto_thread=wants_thread,
-        )
-        await add_options(self.bot.db, poll_id, labels)
-        await log_action(
+        row, reviewing = await store_poll(
             self.bot,
             guild,
-            "poll.created",
-            actor=interaction.user,
-            target=interaction.user,
-            details={
-                "poll_id": poll_id,
-                "kind": wanted,
-                "surface": surface,
-                "options": len(labels),
-                "hours": length,
-                "review": reviewing,
-            },
+            interaction.user.id,
+            plan,
+            channel_id=channel.id,
+            ping_role_id=role_id,
+            auto_thread=wants_thread,
         )
-        row = await get_poll(self.bot.db, poll_id)
         if reviewing:
-            await self._send_for_review(interaction, guild, row)
+            await self._send_for_review(interaction, guild, row, plan["note"])
             return
-        await self._post_now(interaction, guild, row)
+        await self._post_now(interaction, guild, row, plan["note"])
 
-    async def _post_now(self, interaction: discord.Interaction, guild: Any, row: Any) -> None:
+    async def _post_now(
+        self, interaction: discord.Interaction, guild: Any, row: Any, note: str | None = None
+    ) -> None:
         message, why_not = await post_poll(self.bot, guild, row)
         if message is None:
             await set_status(self.bot.db, row["id"], CANCELLED, closed=True)
@@ -1225,10 +1695,12 @@ class Polls(commands.Cog):
         said = POSTED.format(url=url) if url else POSTED_NO_LINK
         if fresh["auto_thread"] and not fresh["thread_id"]:
             said += THREAD_FAILED
+        if note:
+            said += f"\n\n{note}"
         await answer(interaction, said)
 
     async def _send_for_review(
-        self, interaction: discord.Interaction, guild: Any, row: Any
+        self, interaction: discord.Interaction, guild: Any, row: Any, note: str | None = None
     ) -> None:
         target = card_channel(self.bot, guild)
         if target is None:
@@ -1259,13 +1731,11 @@ class Polls(commands.Cog):
             )
             return
         await set_review(self.bot.db, row["id"], target.id, message.id)
-        await answer(
-            interaction,
-            SENT_FOR_REVIEW.format(
-                question=clamp(row["question"], 80),
-                where=REVIEW_HERE.format(channel=f"<#{target.id}>"),
-            ),
+        said = SENT_FOR_REVIEW.format(
+            question=clamp(row["question"], 80),
+            where=REVIEW_HERE.format(channel=f"<#{target.id}>"),
         )
+        await answer(interaction, f"{said}\n\n{note}" if note else said)
         await dm(interaction.user, f"Sent for review on **{guild.name}**.", card_for(row, options))
 
     async def _wanted(self, interaction: discord.Interaction, poll_id: str) -> Any:
@@ -1364,6 +1834,8 @@ class Polls(commands.Cog):
 
     async def counts_for(self, row: Any) -> tuple[list[dict[str, Any]], int, bool]:
         """Discord's live numbers while a poll is open; the stored ones once it has closed."""
+        if row["surface"] == PANEL and row["status"] == OPEN:
+            return (*await panel_counts(self.bot.db, row["id"]), False)
         options = await options_of(self.bot.db, row["id"])
         if row["status"] == OPEN and guard_allows(self.bot, row["channel_id"]):
             message = await fetch_poll_message(self.bot, row)
@@ -1405,6 +1877,7 @@ class Polls(commands.Cog):
         auto_thread="Open a discussion thread under every poll",
         archive_days="Days a closed poll stays on the list",
         archive_drop_votes="Forget who voted when a poll is archived",
+        date_labels="How a date poll writes its slots: plain, or a timestamp each reader's clock",
         clear_ping_role="Stop mentioning any role",
         clear_channel="Forget the dashboard's default channel",
     )
@@ -1412,6 +1885,9 @@ class Polls(commands.Cog):
         mode=[app_commands.Choice(name=name, value=name) for name in POLL_MODES],
         review=[app_commands.Choice(name=name, value=name) for name in POLL_REVIEW_MODES],
         who_can_create=[app_commands.Choice(name=name, value=name) for name in POLL_CREATORS],
+        date_labels=[
+            app_commands.Choice(name=name, value=name) for name in POLL_DATE_LABEL_FORMS
+        ],
     )
     async def poll_settings(
         self,
@@ -1428,6 +1904,7 @@ class Polls(commands.Cog):
             app_commands.Range[int, POLL_ARCHIVE_MIN_DAYS, POLL_ARCHIVE_MAX_DAYS] | None
         ) = None,
         archive_drop_votes: bool | None = None,
+        date_labels: app_commands.Choice[str] | None = None,
         clear_ping_role: bool = False,
         clear_channel: bool = False,
     ) -> None:
@@ -1452,6 +1929,7 @@ class Polls(commands.Cog):
             ("poll_auto_thread", auto_thread),
             ("poll_archive_days", archive_days),
             ("poll_archive_drop_votes", archive_drop_votes),
+            ("poll_date_labels", date_labels.value if date_labels is not None else None),
         ):
             if value is not None:
                 changed[key] = await store.set(guild.id, key, value, by=interaction.user.id)
@@ -1489,6 +1967,7 @@ class Polls(commands.Cog):
             f"**discussion threads** — {store.get(guild.id, 'poll_auto_thread')}",
             f"**archived after** — {store.get(guild.id, 'poll_archive_days')} day(s), "
             f"votes dropped: {store.get(guild.id, 'poll_archive_drop_votes')}",
+            f"**date slot labels** — {store.get(guild.id, 'poll_date_labels')}",
             f"**staff (who may approve)** — {staff_roles_sentence(staff)}",
             *self._health_lines(),
         ]

@@ -34,9 +34,13 @@ FREE_TEXT = "text"
 NUMBER = "number"
 RANKED = "ranked"
 NATIVE_KINDS = (SINGLE, CHECKBOX, YESNO, RATING)
-LATER_KINDS = (DATE, FREE_TEXT, NUMBER, RANKED)
-KINDS = NATIVE_KINDS + LATER_KINDS
-GENERATED_KINDS = (YESNO, RATING)
+PANEL_KINDS = (DATE,)
+KNOWN_KINDS = NATIVE_KINDS + PANEL_KINDS
+LATER_KINDS = (FREE_TEXT, NUMBER, RANKED)
+KINDS = KNOWN_KINDS + LATER_KINDS
+GENERATED_KINDS = (YESNO, RATING, DATE)
+MULTI_KINDS = (CHECKBOX, DATE)
+BUTTONS_UP_TO = 5
 
 NATIVE = "native"
 PANEL = "panel"
@@ -104,7 +108,6 @@ KIND_NAMES: dict[str, str] = {
 }
 
 LATER_KIND_NAMES: dict[str, str] = {
-    DATE: "A **date** poll",
     FREE_TEXT: "A **free text** poll",
     NUMBER: "A **number** poll",
     RANKED: "A **ranked choice** poll",
@@ -114,22 +117,24 @@ NEXT_UPDATE = "that kind of poll arrives with the next update"
 
 KIND_NOT_YET = (
     "{what} needs a voting surface Black Bloc does not have yet, so nothing was posted — "
-    f"{NEXT_UPDATE}. Until then a poll can be single choice, checkbox, yes/no or a "
-    "1-5 rating."
+    f"{NEXT_UPDATE}. Until then a poll can be single choice, checkbox, yes/no, a "
+    "1-5 rating or a date."
 )
-ANONYMOUS_NOT_YET = (
-    "Discord's own polls list everybody who voted, so Black Bloc will not label one "
-    "**anonymous** and make a promise it cannot keep — nothing was posted, and "
-    f"{NEXT_UPDATE}. Run it with anonymous off if it cannot wait."
+TOO_MANY = (
+    "**{count}** options is more than the {limit} Black Bloc can put on one poll, so nothing was "
+    "posted. Cut it to {limit} or fewer and run it again."
 )
-HIDDEN_NOT_YET = (
-    "Discord's own polls show the bars as the votes come in and there is no way to hide them, so "
-    "**results at close** could not be honoured and nothing was posted — "
-    f"{NEXT_UPDATE}. Run it with results **live** if it cannot wait."
+
+PANEL_BECAUSE_ANONYMOUS = (
+    "Discord's own polls list everybody who voted, so an **anonymous** one cannot be theirs"
 )
-TOO_MANY_NOT_YET = (
-    "**{count}** options is more than the {limit} a Discord poll can carry, so nothing was "
-    f"posted — {NEXT_UPDATE}. Until then, cut it to {{limit}} options or fewer."
+PANEL_BECAUSE_HIDDEN = (
+    "Discord's own polls show the bars as the votes come in and there is no way to hide them"
+)
+PANEL_BECAUSE_LONG = "**{count}** options is more than the {limit} a Discord poll carries"
+PANEL_SAID = (
+    "This one is a Black Bloc panel rather than a Discord poll, because {why}. People vote with "
+    "the buttons under it; everything else works the same."
 )
 
 NO_QUESTION = (
@@ -176,6 +181,30 @@ BAD_STEP_UNIT = (
 DATE_NEEDS_A_START = (
     "A date poll needs a start date, so nothing was posted. Give it one with "
     "`start:2026-09-05` and Black Bloc lays the slots out from there."
+)
+
+PANEL_HOW_ONE = "Press an option to vote. Pressing a different one moves your vote."
+PANEL_HOW_MANY = "Press everything that works for you. Pressing one again takes it back."
+PANEL_HIDDEN = "Hidden until this closes, so nobody's vote is swayed by the bars."
+PANEL_ANONYMOUS = (
+    "Nobody is told who pressed what — Black Bloc does not keep your name against a vote here."
+)
+PANEL_VOTE = "Vote"
+PANEL_CLEAR = "Clear my vote"
+
+VOTED_ONE = "Your vote is on **{label}**."
+VOTED_MANY = "You have {labels}."
+VOTE_CLEARED = "Your vote is cleared, so nothing of yours counts towards this poll now."
+VOTE_NOT_OPEN = (
+    "That poll is **{status}**, so nothing was counted. The result on the message is the final one."
+)
+VOTE_GONE = (
+    "Black Bloc has no record of that poll any more, so nothing was counted. It may have been "
+    "archived — the polls page on the dashboard keeps the result."
+)
+PICK_SOMETHING = (
+    "Nothing was picked, so nothing changed. Choose at least one option, or use "
+    f"**{PANEL_CLEAR}** to take your vote back."
 )
 
 RESULTS_TITLE = "{question}"
@@ -317,26 +346,36 @@ def whole(value: Any, low: int, high: int) -> bool:
 
 
 def surface_for(kind: str, anonymous: bool, results: str, slot_count: int) -> str:
-    """`native`, or a sentence saying which part of the ask the panel slice owns."""
+    """`native`, `panel`, or a refusal sentence for a kind no surface carries yet."""
     if kind in LATER_KINDS:
         raise NeedsPanel(
             KIND_NOT_YET.format(what=LATER_KIND_NAMES.get(kind, f"A **{kind}** poll"))
         )
-    if kind not in NATIVE_KINDS:
+    if kind not in KNOWN_KINDS:
         raise NeedsPanel(KIND_NOT_YET.format(what=f"A **{clamp(kind, 40)}** poll"))
+    if int(slot_count) > MAX_PANEL_OPTIONS:
+        raise NeedsPanel(TOO_MANY.format(count=int(slot_count), limit=MAX_PANEL_OPTIONS))
+    return PANEL if panel_reason(anonymous, results, slot_count) else NATIVE
+
+
+def panel_reason(anonymous: bool, results: str, slot_count: int) -> str | None:
+    """Why this poll cannot be Discord's own — the first thing that rules native out."""
     if anonymous:
-        raise NeedsPanel(ANONYMOUS_NOT_YET)
+        return PANEL_BECAUSE_ANONYMOUS
     if results == AT_CLOSE:
-        raise NeedsPanel(HIDDEN_NOT_YET)
+        return PANEL_BECAUSE_HIDDEN
     if int(slot_count) > MAX_NATIVE_OPTIONS:
-        raise NeedsPanel(
-            TOO_MANY_NOT_YET.format(count=int(slot_count), limit=MAX_NATIVE_OPTIONS)
-        )
-    return NATIVE
+        return PANEL_BECAUSE_LONG.format(count=int(slot_count), limit=MAX_NATIVE_OPTIONS)
+    return None
+
+
+def panel_note(anonymous: bool, results: str, slot_count: int) -> str | None:
+    why = panel_reason(anonymous, results, slot_count)
+    return PANEL_SAID.format(why=why) if why else None
 
 
 def is_multi(kind: str) -> bool:
-    return kind == CHECKBOX
+    return kind in MULTI_KINDS
 
 
 def closes_at(hours: int, now: datetime | None = None) -> datetime:
@@ -454,6 +493,67 @@ def results_embed(
         embed.add_field(name="Closed", value=str(closed_at), inline=False)
     embed.set_footer(text=f"Poll #{poll_id}")
     return embed
+
+
+def panel_text(counts: Any, voters: Any, *, hidden: bool) -> str:
+    """The block under a panel poll: the bars, or the options with the bars withheld."""
+    if not hidden:
+        return results_text(counts, voters)
+    rows = list(counts or ())
+    if not rows:
+        return NO_VOTES
+    return "\n".join(
+        f"{n}. {clamp(row.get('label'), LABEL_LIMIT)}" for n, row in enumerate(rows, 1)
+    )
+
+
+def panel_embed(
+    *,
+    poll_id: Any,
+    question: str,
+    counts: Any,
+    voters: Any,
+    kind: str = SINGLE,
+    multi: bool = False,
+    anonymous: bool = False,
+    hidden: bool = False,
+    status: str = OPEN,
+    closes_at: datetime | None = None,
+) -> discord.Embed:
+    """The panel's own card. It carries the live totals unless the poll hides them."""
+    withholding = hidden and status == OPEN
+    embed = discord.Embed(
+        title=clamp(question, QUESTION_LIMIT),
+        description=f"```\n{panel_text(counts, voters, hidden=withholding)}\n```",
+        colour=COLOURS.get(status, COLOURS[OPEN]),
+    )
+    counted = max(int(voters or 0), 0)
+    embed.add_field(name="Status", value=status, inline=True)
+    embed.add_field(name="Voters", value=str(counted), inline=True)
+    embed.add_field(name="How", value=PANEL_HOW_MANY if multi else PANEL_HOW_ONE, inline=False)
+    if withholding:
+        embed.add_field(name="Results", value=PANEL_HIDDEN, inline=False)
+    if anonymous:
+        embed.add_field(name="Anonymous", value=PANEL_ANONYMOUS, inline=False)
+    if kind == RATING and not withholding:
+        mean = average_rating(counts)
+        if mean is not None:
+            embed.add_field(
+                name="Average", value=AVERAGE.format(mean=mean, top=RATING_SLOTS), inline=False
+            )
+    if closes_at is not None and status == OPEN:
+        embed.add_field(name="Closes", value=f"<t:{int(closes_at.timestamp())}:R>", inline=False)
+    embed.set_footer(text=f"Poll #{poll_id}")
+    return embed
+
+
+def voted_text(labels: Any, *, multi: bool) -> str:
+    chosen = [clamp(label, LABEL_LIMIT) for label in labels or ()]
+    if not chosen:
+        return VOTE_CLEARED
+    if not multi:
+        return VOTED_ONE.format(label=chosen[0])
+    return VOTED_MANY.format(labels=", ".join(f"**{one}**" for one in chosen))
 
 
 def review_card(

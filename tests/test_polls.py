@@ -85,23 +85,38 @@ def test_the_four_v1_kinds_all_land_on_the_native_surface():
         assert polls.surface_for(kind, False, polls.LIVE, 4) == polls.NATIVE
 
 
-def test_an_anonymous_poll_is_refused_rather_than_quietly_made_public():
+def test_an_anonymous_poll_goes_to_the_panel_because_native_lists_its_voters():
+    assert polls.surface_for(polls.SINGLE, True, polls.LIVE, 3) == polls.PANEL
+    assert polls.panel_reason(True, polls.LIVE, 3) == polls.PANEL_BECAUSE_ANONYMOUS
+
+
+def test_hiding_results_until_close_goes_to_the_panel_rather_than_being_downgraded():
+    assert polls.surface_for(polls.SINGLE, False, polls.AT_CLOSE, 3) == polls.PANEL
+    assert polls.panel_reason(False, polls.AT_CLOSE, 3) == polls.PANEL_BECAUSE_HIDDEN
+
+
+def test_more_than_ten_options_goes_to_the_panel_and_says_the_count():
+    assert polls.surface_for(polls.SINGLE, False, polls.LIVE, 12) == polls.PANEL
+    said = polls.panel_reason(False, polls.LIVE, 12)
+    assert "12" in said and "10" in said
+
+
+def test_the_first_thing_that_rules_native_out_is_the_thing_named():
+    assert polls.panel_reason(True, polls.AT_CLOSE, 20) == polls.PANEL_BECAUSE_ANONYMOUS
+    assert polls.panel_reason(False, polls.LIVE, 3) is None
+    assert polls.panel_note(False, polls.LIVE, 3) is None
+    assert polls.PANEL_BECAUSE_HIDDEN in polls.panel_note(False, polls.AT_CLOSE, 3)
+
+
+def test_more_options_than_any_surface_carries_is_refused_outright():
     with pytest.raises(polls.NeedsPanel) as caught:
-        polls.surface_for(polls.SINGLE, True, polls.LIVE, 3)
-    assert "anonymous" in str(caught.value)
-    assert polls.NEXT_UPDATE in str(caught.value)
+        polls.surface_for(polls.SINGLE, False, polls.LIVE, polls.MAX_PANEL_OPTIONS + 1)
+    assert "26" in str(caught.value) and "25" in str(caught.value)
 
 
-def test_hiding_results_until_close_is_refused_rather_than_downgraded():
-    with pytest.raises(polls.NeedsPanel) as caught:
-        polls.surface_for(polls.SINGLE, False, polls.AT_CLOSE, 3)
-    assert polls.NEXT_UPDATE in str(caught.value)
-
-
-def test_more_than_ten_options_is_refused_with_the_count_and_the_cap():
-    with pytest.raises(polls.NeedsPanel) as caught:
-        polls.surface_for(polls.SINGLE, False, polls.LIVE, 12)
-    assert "12" in str(caught.value) and "10" in str(caught.value)
+def test_a_date_poll_is_native_up_to_ten_slots_and_a_panel_past_them():
+    assert polls.surface_for(polls.DATE, False, polls.LIVE, 10) == polls.NATIVE
+    assert polls.surface_for(polls.DATE, False, polls.LIVE, 11) == polls.PANEL
 
 
 @pytest.mark.parametrize("kind", polls.LATER_KINDS)
@@ -116,8 +131,9 @@ def test_a_kind_nobody_has_heard_of_is_refused_too():
         polls.surface_for("wibble", False, polls.LIVE, 3)
 
 
-def test_only_the_checkbox_kind_lets_somebody_pick_more_than_one():
+def test_checkbox_and_date_let_somebody_pick_more_than_one():
     assert polls.is_multi(polls.CHECKBOX) is True
+    assert polls.is_multi(polls.DATE) is True
     assert polls.is_multi(polls.SINGLE) is False
 
 
