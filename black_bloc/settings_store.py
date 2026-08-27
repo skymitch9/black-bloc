@@ -16,6 +16,7 @@ from .automod import (
     validate_rules,
 )
 from .config import Settings
+from .emoji import SKIN_TONE_DEFAULT, SKIN_TONE_NAMES
 from .storage.db import Database
 
 log = logging.getLogger(__name__)
@@ -123,6 +124,7 @@ KEY_TYPES: dict[str, str] = {
     "rolemenu_mode": "enum",
     "chat_mode": "enum",
     "chat_cooldown_seconds": "int",
+    "emoji_skin_tone": "enum",
 }
 
 KEY_CHOICES: dict[str, tuple[str, ...]] = {
@@ -136,6 +138,7 @@ KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "mod_dm_on_action": MOD_DM_STYLES,
     "rolemenu_mode": ROLEMENU_MODES,
     "chat_mode": CHAT_MODES,
+    "emoji_skin_tone": SKIN_TONE_NAMES,
 }
 
 KEY_MAX: dict[str, int] = {
@@ -255,6 +258,10 @@ KEY_HELP: dict[str, str] = {
     "chat_cooldown_seconds": (
         f"seconds before the same person gets another @-mention reply, "
         f"{CHAT_COOLDOWN_MIN_SECONDS} to {CHAT_COOLDOWN_MAX_SECONDS}"
+    ),
+    "emoji_skin_tone": (
+        f"the skin tone Black Bloc's hand and people emoji wear: "
+        f"{', '.join(SKIN_TONE_NAMES)}"
     ),
 }
 
@@ -585,6 +592,8 @@ class SettingsStore:
             return "on"
         if key == "chat_cooldown_seconds":
             return CHAT_COOLDOWN_SECONDS
+        if key == "emoji_skin_tone":
+            return SKIN_TONE_DEFAULT
         if KEY_TYPES.get(key) in ("channels", "roles"):
             return []
         return None

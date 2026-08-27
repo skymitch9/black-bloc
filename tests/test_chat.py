@@ -1,4 +1,5 @@
 import random
+from types import SimpleNamespace
 
 import pytest
 
@@ -16,6 +17,11 @@ from black_bloc.chat import (
     reply_for,
     respond,
 )
+from black_bloc.emoji import SKIN_TONES
+
+WAVE = "\U0001f44b"
+HEART = "\U0001f5a4"
+DARK = SKIN_TONES["dark"]
 
 
 class FakeMember:
@@ -174,3 +180,57 @@ def test_reply_for_is_the_one_seam_and_answers_in_the_bots_voice():
     said = reply_for("<@1> hi", FakeMember(display="Nia"), FakeBot(), rng=random.Random(0))
     assert "Nia" in said
     assert len(said) <= LINE_LIMIT
+
+
+class PicksTheGesture:
+    @staticmethod
+    def choice(options):
+        return next(line for line in options if WAVE in line)
+
+
+class TonedBot(FakeBot):
+    def __init__(self, tone):
+        super().__init__()
+        self.store = SimpleNamespace(get=lambda guild_id, key: tone)
+
+
+def test_a_gesture_in_a_line_comes_out_dark_by_default():
+    member = FakeMember(display="Nia", guild=FakeGuild())
+
+    said = reply_for("<@1> hi", member, FakeBot(), rng=PicksTheGesture)
+
+    assert WAVE + DARK in said and WAVE + " " not in said
+
+
+def test_a_guild_that_picked_another_tone_gets_it():
+    member = FakeMember(display="Nia", guild=FakeGuild())
+
+    said = reply_for("<@1> hi", member, TonedBot("light"), rng=PicksTheGesture)
+
+    assert WAVE + SKIN_TONES["light"] in said
+
+
+def test_tone_none_leaves_the_gesture_bare():
+    member = FakeMember(display="Nia", guild=FakeGuild())
+
+    said = reply_for("<@1> hi", member, TonedBot("none"), rng=PicksTheGesture)
+
+    assert WAVE in said and not any(mark in said for mark in SKIN_TONES.values() if mark)
+
+
+def test_a_heart_in_a_line_is_left_exactly_as_written():
+    picks_the_heart = SimpleNamespace(
+        choice=lambda options: next(line for line in options if HEART in line)
+    )
+    member = FakeMember(display="Nia", guild=FakeGuild())
+
+    said = reply_for("<@1> love you", member, FakeBot(), rng=picks_the_heart)
+
+    assert HEART in said and DARK not in said
+
+
+def test_no_line_is_written_with_a_tone_already_on_it():
+    """The tone is a setting applied at send time, so the tables stay bare."""
+    written = [line for lines in LINES.values() for line in lines]
+    written += [line for lines in ATTENDEE_LINES.values() for line in lines]
+    assert not any(mark in line for line in written for mark in SKIN_TONES.values() if mark)

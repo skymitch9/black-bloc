@@ -4,6 +4,7 @@ import random
 import re
 from typing import Any
 
+from .emoji import tone_for, toned_text
 from .presence import human_count, status_guild
 
 LINE_LIMIT = 200
@@ -252,9 +253,10 @@ def reply_for(
     text: Any, member: Any, bot: Any, *, rng: random.Random | None = None
 ) -> str | None:
     """The whole answer, in one call — swap this out for a real conversation backend."""
-    return respond(
+    line = respond(
         classify(text),
         name=display_name(member),
         attendees=attendees_for(member, bot),
         rng=rng,
     )
+    return toned_text(line, tone_for(bot, getattr(getattr(member, "guild", None), "id", None)))
