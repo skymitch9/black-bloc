@@ -15,6 +15,8 @@ from ...actionlog import log_action
 from ...golive import (
     END_GRACE_SECONDS,
     POLL_SECONDS,
+    TWITCH,
+    YOUTUBE,
     StreamInfo,
     ended_text,
     enriched,
@@ -25,6 +27,7 @@ from ...golive import (
     passes_role_filters,
     render,
     should_announce,
+    twitch_enrichable,
     twitch_login_from_url,
 )
 from ...settings_store import DB_UNAVAILABLE, GOLIVE_MODES, require_staff
@@ -65,6 +68,17 @@ LINK_TAKEN = (
     "channel name can only belong to one member — if that channel is yours, ask a Lead to remove "
     "the other link first."
 )
+PLATFORM_UNKNOWN = "an unknown platform"
+TEST_STREAMS = {
+    TWITCH: StreamInfo(
+        url="https://www.twitch.tv/blackbloc", title="a test stream", platform=TWITCH
+    ),
+    YOUTUBE: StreamInfo(
+        url="https://www.youtube.com/watch?v=blackblocbaf",
+        title="a test stream",
+        platform=YOUTUBE,
+    ),
+}
 
 
 def _row_value(row: Any, key: str) -> Any:
@@ -148,9 +162,19 @@ async def start_session(
 ) -> int | None:
     try:
         cur = await db.conn.execute(
-            "INSERT INTO golive_sessions(guild_id, user_id, source, url, game, title, started_at, "
-            "mode) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (guild_id, user_id, source, info.url, info.game, info.title, now_iso(), mode),
+            "INSERT INTO golive_sessions(guild_id, user_id, source, url, game, title, platform, "
+            "started_at, mode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                guild_id,
+                user_id,
+                source,
+                info.url,
+                info.game,
+                info.title,
+                info.platform,
+                now_iso(),
+                mode,
+            ),
         )
     except sqlite3.IntegrityError:
         log.info("go-live: a session for %s is already open; not starting a second", user_id)
@@ -380,6 +404,7 @@ class GoLive(commands.Cog):
             "session_id": session_id,
             "url": info.url,
             "game": info.game,
+            "platform": info.platform,
             "text": text,
         }
         if not result.ok and result.reason not in ("shadow", "test_mode"):
@@ -441,7 +466,7 @@ class GoLive(commands.Cog):
             )
 
     async def _enrich(self, member: Any, info: StreamInfo) -> StreamInfo:
-        if self.helix is None or (info.game and info.title):
+        if self.helix is None or not twitch_enrichable(info) or (info.game and info.title):
             return info
         login = _row_value(await get_link(self.bot.db, member.id), "twitch_login")
         login = login or twitch_login_from_url(info.url)
@@ -576,6 +601,10 @@ class GoLive(commands.Cog):
         if not channel_id:
             return None
         return self.bot.get_channel(channel_id) or guild.get_channel(channel_id)
+
+    def _display_name(self, guild: Any, row: Any) -> str:
+        member = guild.get_member(row["user_id"])
+        return str(getattr(member, "display_name", None) or row["user_id"])
 
     def _find_member(self, user_id: int) -> Any:
         for guild in self.bot.guilds:
@@ -731,7 +760,14 @@ class GoLive(commands.Cog):
             f"**links** — {totals['links']} · **opt-outs** — {totals['optouts']} · "
             f"**live now** — {totals['open_sessions']}",
         ]
-        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+        lines += [
+            f"• {self._display_name(guild, row)} on "
+            f"{_row_value(row, 'platform') or PLATFORM_UNKNOWN}"
+            for row in await open_sessions(self.bot.db, guild.id)
+        ]
+        await interaction.response.send_message(
+            "\n".join(lines), ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+        )
 
     @golive.command(name="mode", description="Turn go-live announcements off, shadow or on")
     @app_commands.describe(mode="off, shadow (log only) or on (post announcements)")
@@ -758,13 +794,24 @@ class GoLive(commands.Cog):
         )
 
     @golive.command(name="test", description="Show what a go-live announcement would look like")
-    async def test(self, interaction: discord.Interaction) -> None:
+    @app_commands.describe(platform="Pretend the stream is on this platform instead of your own")
+    @app_commands.choices(
+        platform=[app_commands.Choice(name=name, value=name) for name in TEST_STREAMS]
+    )
+    async def test(
+        self,
+        interaction: discord.Interaction,
+        platform: app_commands.Choice[str] | None = None,
+    ) -> None:
         if not await require_staff(interaction):
             return
         store = self.bot.store
         guild = interaction.guild
-        info = extract_stream(getattr(interaction.user, "activities", ())) or StreamInfo(
-            url="https://www.twitch.tv/blackbloc", title="a test stream", platform="Twitch"
+        info = (
+            TEST_STREAMS[platform.value]
+            if platform is not None
+            else extract_stream(getattr(interaction.user, "activities", ()))
+            or TEST_STREAMS[TWITCH]
         )
         text = render(store.get(guild.id, "golive_template"), info, interaction.user)
         await interaction.response.send_message(
@@ -775,7 +822,7 @@ class GoLive(commands.Cog):
             guild,
             "golive.test",
             actor=interaction.user,
-            details={"text": text},
+            details={"text": text, "platform": info.platform},
         )
 
     @twitch.command(name="link", description="Tell Black Bloc your Twitch channel name")

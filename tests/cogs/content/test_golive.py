@@ -142,7 +142,7 @@ class FakeResponse:
         self.messages = []
 
     async def send_message(self, content=None, ephemeral=False, **kwargs):
-        self.messages.append({"content": content, "ephemeral": ephemeral})
+        self.messages.append({"content": content, "ephemeral": ephemeral, "kwargs": kwargs})
 
 
 class FakeInteraction:
@@ -183,6 +183,13 @@ class FakeHelix:
 
 def streaming_activity(url="https://www.twitch.tv/alice", game="Celeste", details="any%"):
     activity = discord.Streaming(name="Twitch", url=url)
+    activity.game = game
+    activity.details = details
+    return activity
+
+
+def youtube_activity(url="https://www.youtube.com/watch?v=xyz", game=None, details=None):
+    activity = discord.Streaming(name="YouTube", url=url)
     activity.game = game
     activity.details = details
     return activity
@@ -484,6 +491,75 @@ async def test_the_presence_listener_announces_a_new_stream(cog, bot, db):
     assert (await open_session_for(db, GUILD, USER))["source"] == "presence"
 
 
+async def test_a_youtube_presence_is_announced_with_its_own_url_and_platform(cog, bot, db):
+    await bot.store.set(GUILD, "golive_mode", "on")
+    before = FakeMember(bot.guild, activities=())
+    after = FakeMember(bot.guild, activities=(youtube_activity(),))
+
+    await cog.on_presence_update(before, after)
+
+    session = await open_session_for(db, GUILD, USER)
+    assert session["source"] == "presence" and session["platform"] == "YouTube"
+    assert session["url"] == "https://www.youtube.com/watch?v=xyz"
+    assert bot.guild.channel.messages[0].content.endswith(
+        "Check it out: https://www.youtube.com/watch?v=xyz"
+    )
+
+
+async def test_a_youtube_stream_is_never_looked_up_on_twitch(cog, bot, member, db):
+    await set_link(db, member.id, "alice")
+    cog.helix = FakeHelix(streams=[twitch_stream()])
+
+    info = StreamInfo(url="https://youtu.be/xyz", platform="YouTube")
+    await cog._go_live(member, info, "presence")
+
+    assert cog.helix.stream_calls == []
+    session = await open_session_for(db, GUILD, USER)
+    assert session["platform"] == "YouTube" and session["url"] == "https://youtu.be/xyz"
+    assert session["game"] is None and session["title"] is None
+
+
+async def test_a_twitch_presence_is_still_enriched(cog, bot, member, db):
+    await set_link(db, member.id, "alice")
+    cog.helix = FakeHelix(streams=[twitch_stream()])
+
+    await cog._go_live(member, StreamInfo(url="https://www.twitch.tv/alice"), "presence")
+
+    assert cog.helix.stream_calls == [["alice"]]
+    session = await open_session_for(db, GUILD, USER)
+    assert session["platform"] == "Twitch" and session["game"] == "Hades"
+
+
+async def test_a_youtube_session_is_kept_alive_by_presence_alone(cog, bot, db):
+    live = FakeMember(bot.guild, activities=(youtube_activity(),))
+    info = StreamInfo(url="https://youtu.be/xyz", platform="YouTube")
+    await start_session(db, GUILD, live.id, "presence", info, "on")
+    cog.helix = FakeHelix(streams=[])
+
+    await cog.reconcile_open_sessions()
+
+    assert await open_session_for(db, GUILD, live.id) is not None
+    assert cog.helix.stream_calls == []
+
+
+async def test_a_youtube_session_ends_when_the_presence_goes_away(cog, bot, member, db):
+    await set_link(db, member.id, "alice")
+    await start_session(
+        db,
+        GUILD,
+        member.id,
+        "presence",
+        StreamInfo(url="https://youtu.be/xyz", platform="YouTube"),
+        "on",
+    )
+    cog.helix = FakeHelix(streams=[twitch_stream()])
+
+    await cog.reconcile_open_sessions()
+
+    assert await open_session_for(db, GUILD, member.id) is None
+    assert cog.helix.stream_calls == []
+
+
 async def test_the_presence_listener_ignores_a_category_change(cog, bot, db):
     live_before = FakeMember(bot.guild, activities=(streaming_activity(game="Celeste"),))
     live_after = FakeMember(bot.guild, activities=(streaming_activity(game="Hades"),))
@@ -626,6 +702,43 @@ async def test_golive_test_previews_ephemerally_without_the_ping_role(
     assert "golive.test" in await action_kinds(db)
 
 
+async def test_golive_test_can_fake_a_youtube_stream(cog, bot, member, db, monkeypatch):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    await bot.store.set(GUILD, "golive_template", "{name} on {platform}: {url}")
+    interaction = FakeInteraction(bot, member, bot.guild)
+
+    await GoLive.test.callback(
+        cog, interaction, discord.app_commands.Choice(name="YouTube", value="YouTube")
+    )
+
+    assert interaction.sent == "Alice on YouTube: https://www.youtube.com/watch?v=blackblocbaf"
+    assert interaction.response.messages[0]["ephemeral"] is True
+    assert await open_sessions(db, GUILD) == []
+
+
+async def test_golive_test_still_fakes_twitch_by_default(cog, bot, member, db, monkeypatch):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    await bot.store.set(GUILD, "golive_template", "{platform}: {url}")
+    interaction = FakeInteraction(bot, member, bot.guild)
+
+    await GoLive.test.callback(cog, interaction)
+
+    assert interaction.sent == "Twitch: https://www.twitch.tv/blackbloc"
+
+
+async def test_golive_test_prefers_a_real_stream_when_no_platform_is_chosen(
+    cog, bot, monkeypatch
+):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    await bot.store.set(GUILD, "golive_template", "{platform}: {url}")
+    live = FakeMember(bot.guild, activities=(youtube_activity(),))
+    interaction = FakeInteraction(bot, live, bot.guild)
+
+    await GoLive.test.callback(cog, interaction)
+
+    assert interaction.sent == "YouTube: https://www.youtube.com/watch?v=xyz"
+
+
 async def test_golive_mode_command_stores_and_logs(cog, bot, member, db, monkeypatch):
     monkeypatch.setattr(cog_module, "require_staff", _always_staff)
     interaction = FakeInteraction(bot, member, bot.guild)
@@ -647,6 +760,22 @@ async def test_golive_status_reports_the_setup(cog, bot, member, db, monkeypatch
     assert f"<#{CHANNEL}>" in interaction.sent
     assert "no Twitch credentials" in interaction.sent
     assert "**links** — 1" in interaction.sent
+
+
+async def test_golive_status_names_the_platform_of_everyone_live(cog, bot, member, db, monkeypatch):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    await start_session(
+        db, GUILD, member.id, "presence", StreamInfo(url="u", platform="YouTube"), "on"
+    )
+    stranger = FakeMember(bot.guild, user_id=4242, display_name="Bo")
+    await start_session(db, GUILD, stranger.id, "presence", StreamInfo(url="u"), "on")
+    interaction = FakeInteraction(bot, member, bot.guild)
+
+    await GoLive.status.callback(cog, interaction)
+
+    assert "• Alice on YouTube" in interaction.sent
+    assert "• Bo on an unknown platform" in interaction.sent
+    assert interaction.response.messages[0]["kwargs"]["allowed_mentions"].everyone is False
 
 
 async def test_reconcile_on_start_closes_a_session_nothing_is_streaming(cog, bot, member, db):
