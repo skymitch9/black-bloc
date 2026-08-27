@@ -15,6 +15,7 @@ from black_bloc.cogs.community.tempvoice import (
     bottom_position,
     category_overwrites,
     channel_name,
+    clamp_bitrate,
     creator_overwrites,
     creator_position,
     delete_row,
@@ -27,14 +28,19 @@ from black_bloc.cogs.community.tempvoice import (
     get_prefs,
     get_row,
     get_row_by_panel,
+    guild_bitrate_ceiling,
     is_panel_owner,
     is_stale,
+    may_use_voice,
+    member_lists,
     not_owner_message,
     owner_overwrites,
     panel_context,
     panel_home,
     panel_id,
     parse_limit,
+    pick_row,
+    region_choices,
     rows_for_guild,
     save_prefs,
     set_owner,
@@ -126,6 +132,8 @@ class FakeVoice:
         self.position = position
         self.members = list(members)
         self.user_limit = 0
+        self.bitrate = 0
+        self.rtc_region = None
         self.deleted = False
         self.edits = []
         self.permissions = []
@@ -146,6 +154,9 @@ class FakeVoice:
             self.name = kwargs["name"]
         if "overwrites" in kwargs:
             self.overwrites = dict(kwargs["overwrites"])
+        for key in ("user_limit", "bitrate", "rtc_region"):
+            if key in kwargs:
+                setattr(self, key, kwargs[key])
 
     async def send(self, content=None, **kwargs):
         if self.send_raises is not None:
@@ -196,11 +207,20 @@ class FakeGuild:
         return channel
 
     async def create_voice_channel(
-        self, name, *, category=None, position=0, overwrites=None, user_limit=0, reason=None
+        self,
+        name,
+        *,
+        category=None,
+        position=0,
+        overwrites=None,
+        user_limit=0,
+        bitrate=None,
+        reason=None,
     ):
         self._next_id += 1
         channel = FakeVoice(self._next_id, self, category, position, name=name)
         channel.user_limit = user_limit
+        channel.bitrate = bitrate or 0
         channel.given_overwrites = overwrites
         self.add(channel)
         self.created.append(channel)
@@ -226,6 +246,7 @@ class FakeMember:
         self.guild_permissions = FakePerms(manage_guild=manage_guild)
         self.moves = []
         self.dms = []
+        self.voice = None
         guild.members[user_id] = self
 
     async def move_to(self, channel, reason=None):
@@ -269,8 +290,16 @@ class FakeBot:
 
 
 class FakeState:
-    def __init__(self):
-        self.channel = None
+    def __init__(self, channel=None):
+        self.channel = channel
+
+
+def connect(member, channel):
+    """Put a fake member in a fake voice channel, the way Discord would report it."""
+    member.voice = FakeState(channel)
+    if member not in channel.members:
+        channel.members.append(member)
+    return member
 
 
 class FakeResponse:
@@ -1324,6 +1353,254 @@ async def test_a_reconcile_loop_that_stopped_records_the_error_and_restarts_itse
     assert restarted == [True]
     assert "the gateway went away" in cog.last_error
     assert cog._reconcile_loop._error is not None
+
+
+def test_the_voice_group_carries_every_control_the_panel_has_and_more():
+    groups = {group.name: group for group in TempVoice.__cog_app_commands__}
+
+    assert sorted(command.name for command in groups["voice"].commands) == [
+        "ban", "bitrate", "claim", "hide", "info", "kick", "limit", "lock", "permit", "region",
+        "rename", "show", "transfer", "unban", "unlock", "unpermit",
+    ]
+    region = next(c for c in groups["voice"].commands if c.name == "region")
+    assert region._params["region"].autocomplete is not None
+
+
+def test_bitrates_are_clamped_to_discord_s_range_and_the_guild_s_ceiling():
+    assert clamp_bitrate(64, 96000) == 64000
+    assert clamp_bitrate(96, 64000) == 64000
+    assert clamp_bitrate(200, 96000) == 96000
+    assert clamp_bitrate(1, 96000) == 8000
+    assert clamp_bitrate("lots", 96000) == 96000
+    assert clamp_bitrate(64, None) == 64000
+
+
+def test_the_guild_s_ceiling_falls_back_to_ninety_six_kbps():
+    assert guild_bitrate_ceiling(FakeGuild()) == 96000
+
+    boosted = FakeGuild()
+    boosted.bitrate_limit = 256000.0
+    assert guild_bitrate_ceiling(boosted) == 256000
+
+
+def test_region_autocomplete_offers_auto_and_matches_what_was_typed():
+    assert region_choices("")[0] == "auto"
+    assert region_choices("us-") == ["us-central", "us-east", "us-south", "us-west"]
+    assert region_choices("nowhere") == []
+    assert len(region_choices("")) <= 25
+
+
+def test_the_allowed_role_is_what_lets_someone_use_the_commands():
+    guild = FakeGuild()
+    assert may_use_voice(None, FakeMember(guild, roles=())) is True
+    assert may_use_voice(MEMBER_ROLE_ID, FakeMember(guild, user_id=1)) is True
+    assert may_use_voice(MEMBER_ROLE_ID, FakeMember(guild, user_id=2, roles=())) is False
+
+
+def test_a_command_acts_on_the_channel_you_are_in_then_the_one_you_own():
+    rows = [
+        {"channel_id": 10, "owner_id": USER},
+        {"channel_id": 11, "owner_id": USER + 1},
+    ]
+    assert pick_row(rows, USER, 11) is rows[0]
+    assert pick_row(rows, USER, 10) is rows[0]
+    assert pick_row(rows, USER, None) is rows[0]
+    assert pick_row(rows, USER + 2, None) is None
+    assert pick_row(rows, USER, 11, owner_only=False) is rows[1]
+    assert pick_row(rows, USER, None, owner_only=False) is None
+
+
+async def test_voice_rename_changes_the_channel_the_caller_owns(cog, bot, creator, member, db):
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+    interaction = FakeInteraction(bot, member)
+
+    await cog.voice_rename.callback(cog, interaction, "The Pit")
+
+    assert made.name == "The Pit"
+    assert (await get_prefs(db, member.id))["name"] == "The Pit"
+    assert "tempvoice.rename" in await action_kinds(db)
+    assert interaction.response.messages[0].get("deferred") is True
+
+
+async def test_voice_refuses_someone_without_the_allowed_role(cog, bot, creator, db):
+    stranger = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo", roles=())
+    interaction = FakeInteraction(bot, stranger)
+
+    await cog.voice_rename.callback(cog, interaction, "The Pit")
+
+    assert f"<@&{MEMBER_ROLE_ID}>" in interaction.sent
+    assert interaction.response.messages[-1]["allowed_mentions"].roles is False
+    assert await action_kinds(db) == []
+
+
+async def test_voice_says_how_to_get_a_channel_when_you_have_none(cog, bot, member):
+    interaction = FakeInteraction(bot, member)
+
+    await cog.voice_rename.callback(cog, interaction, "The Pit")
+
+    assert "don't own a temp channel" in interaction.sent
+    assert "join to create a channel" in interaction.sent
+
+
+async def test_voice_lock_and_unlock_call_the_same_helper_the_button_does(
+    cog, bot, creator, member, db
+):
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+
+    await cog.voice_lock.callback(cog, FakeInteraction(bot, member))
+    assert made.permissions[-1][1].connect is False
+    assert (await get_prefs(db, member.id))["locked"] == 1
+
+    again = FakeInteraction(bot, member)
+    await cog.voice_lock.callback(cog, again)
+    assert "already locked" in again.sent
+    assert len(made.permissions) == 1
+
+    await cog.voice_unlock.callback(cog, FakeInteraction(bot, member))
+    assert made.permissions[-1][1].connect is None
+    kinds = await action_kinds(db)
+    assert "tempvoice.lock" in kinds and "tempvoice.unlock" in kinds
+
+
+async def test_voice_kick_moves_the_member_out_and_logs_it(cog, bot, creator, member, db):
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+    stranger = connect(FakeMember(bot.guild, user_id=USER + 1, display_name="Bo"), made)
+
+    await cog.voice_kick.callback(cog, FakeInteraction(bot, member), stranger)
+
+    assert stranger.moves == [None]
+    assert "tempvoice.kick" in await action_kinds(db)
+
+
+async def test_voice_unban_clears_the_overwrite_ban_left(cog, bot, creator, member, db):
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+    stranger = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
+    await cog.voice_ban.callback(cog, FakeInteraction(bot, member), stranger)
+    made.overwrites[stranger] = discord.PermissionOverwrite(connect=False, view_channel=False)
+
+    await cog.voice_unban.callback(cog, FakeInteraction(bot, member), stranger)
+
+    assert made.permissions[-1][:2] == (stranger, None)
+    kinds = await action_kinds(db)
+    assert "tempvoice.ban" in kinds and "tempvoice.unban" in kinds
+
+
+async def test_voice_claim_acts_on_the_channel_the_caller_is_in(cog, bot, creator, member, db):
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+    made.members.clear()
+    stranger = connect(FakeMember(bot.guild, user_id=USER + 1, display_name="Bo"), made)
+
+    await cog.voice_claim.callback(cog, FakeInteraction(bot, stranger))
+
+    assert (await get_row(db, made.id))["owner_id"] == stranger.id
+    assert "tempvoice.claim" in await action_kinds(db)
+
+
+async def test_voice_claim_needs_you_to_be_in_a_temp_channel(cog, bot, creator, member, db):
+    await cog._maybe_create(member, creator)
+    stranger = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
+    interaction = FakeInteraction(bot, stranger)
+
+    await cog.voice_claim.callback(cog, interaction)
+
+    assert "nothing to claim" in interaction.sent
+    assert "tempvoice.claim" not in await action_kinds(db)
+
+
+async def test_voice_bitrate_is_clamped_remembered_and_reused_next_time(
+    cog, bot, creator, member, db
+):
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+    interaction = FakeInteraction(bot, member)
+
+    await cog.voice_bitrate.callback(cog, interaction, 96)
+
+    assert made.bitrate == 96000
+    assert (await get_prefs(db, member.id))["bitrate"] == 96000
+    assert "tempvoice.bitrate" in await action_kinds(db)
+
+    made.members.clear()
+    await cog._maybe_delete(bot.guild, made)
+    await cog._maybe_create(member, creator)
+
+    assert bot.guild.created[1].bitrate == 96000
+
+
+async def test_voice_bitrate_says_when_the_boost_level_capped_it(cog, bot, creator, member, db):
+    await cog._maybe_create(member, creator)
+    bot.guild.bitrate_limit = 64000
+    interaction = FakeInteraction(bot, member)
+
+    await cog.voice_bitrate.callback(cog, interaction, 96)
+
+    assert bot.guild.created[0].bitrate == 64000
+    assert "64 kbps" in interaction.sent and "boost level" in interaction.sent
+
+
+async def test_voice_region_sets_and_clears_the_rtc_region(cog, bot, creator, member, db):
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+
+    await cog.voice_region.callback(cog, FakeInteraction(bot, member), "us-west")
+    assert made.rtc_region == "us-west"
+
+    auto = FakeInteraction(bot, member)
+    await cog.voice_region.callback(cog, auto, "auto")
+    assert made.rtc_region is None
+    assert "automatic" in auto.sent
+    assert (await action_kinds(db)).count("tempvoice.region") == 2
+
+
+async def test_a_region_discord_refuses_says_which_one(cog, bot, creator, member, db):
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+    made.edit_raises = refused()
+    interaction = FakeInteraction(bot, member)
+
+    await cog.voice_region.callback(cog, interaction, "atlantis")
+
+    assert "atlantis" in interaction.sent
+    assert "tempvoice.region_failed" in await action_kinds(db)
+
+
+async def test_voice_info_reports_the_channel_s_own_state(cog, bot, creator, member, db):
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+    banned = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
+    guest = FakeMember(bot.guild, user_id=USER + 2, display_name="Cass")
+    made.overwrites[banned] = discord.PermissionOverwrite(connect=False)
+    made.overwrites[guest] = discord.PermissionOverwrite(connect=True)
+    made.user_limit = 4
+    interaction = FakeInteraction(bot, member)
+
+    await cog.voice_info.callback(cog, interaction)
+
+    said = interaction.sent
+    assert f"**owner** — <@{member.id}>" in said
+    assert "**limit** — 4 people" in said
+    assert "**locked** — no" in said
+    assert f"**let in by name** — <@{guest.id}>" in said
+    assert f"**kept out by name** — <@{banned.id}>" in said
+    assert interaction.response.messages[-1]["allowed_mentions"].users is False
+
+
+def test_roles_never_count_as_permitted_or_banned_members():
+    role = FakeRole(9)
+    member = FakeRole(USER)
+    owner = FakeRole(1)
+    overwrites = {
+        role: discord.PermissionOverwrite(connect=True),
+        owner: discord.PermissionOverwrite(connect=True),
+        member: discord.PermissionOverwrite(connect=False),
+    }
+
+    assert member_lists(overwrites, 1, [9]) == ([], [USER])
 
 
 async def test_status_shows_the_lobby_name_and_the_loop_s_health(cog, bot, lead):
