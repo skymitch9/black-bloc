@@ -2,8 +2,11 @@ import pytest
 
 from black_bloc.config import load_settings
 from black_bloc.settings_store import (
+    EVENTS_LATE_CEILING_MINUTES,
+    EVENTS_MAX_LATE_MINUTES,
     EVENTS_RETENTION_DAYS,
     EVENTS_RETENTION_MAX_DAYS,
+    EVENTS_RETENTION_MIN_DAYS,
     GOLIVE_TEMPLATE,
     HONEYPOT_PURGE_MAX_DAYS,
     KEY_TYPES,
@@ -334,6 +337,7 @@ async def test_events_defaults(store):
     assert store.get(1, "events_announce_channel_id") == TEST_CH
     assert store.get(1, "events_create_scheduled") is True
     assert store.get(1, "events_channel_retention_days") == EVENTS_RETENTION_DAYS
+    assert store.get(1, "events_max_late_minutes") == EVENTS_MAX_LATE_MINUTES
     assert store.get(1, "events_category_id") is None
     assert store.get(1, "events_ping_role_id") is None
 
@@ -362,10 +366,23 @@ def test_the_create_scheduled_toggle_is_a_real_boolean():
 
 
 def test_retention_is_capped_with_its_own_sentence_not_the_ban_one():
-    assert coerce_value("events_channel_retention_days", 0) == 0
+    assert coerce_value("events_channel_retention_days", EVENTS_RETENTION_MIN_DAYS) == 1
     with pytest.raises(SettingError, match="tidy up") as caught:
         coerce_value("events_channel_retention_days", EVENTS_RETENTION_MAX_DAYS + 1)
     assert "banned account" not in str(caught.value)
+
+
+def test_a_retention_of_zero_days_is_refused_because_it_deletes_an_unread_record():
+    with pytest.raises(SettingError, match="cannot be less than 1") as caught:
+        coerce_value("events_channel_retention_days", 0)
+    assert "before anybody has read it" in str(caught.value)
+
+
+def test_how_late_an_announcement_may_be_is_a_capped_whole_number():
+    assert coerce_value("events_max_late_minutes", 0) == 0
+    assert coerce_value("events_max_late_minutes", EVENTS_LATE_CEILING_MINUTES) == 24 * 60
+    with pytest.raises(SettingError, match="already half over"):
+        coerce_value("events_max_late_minutes", EVENTS_LATE_CEILING_MINUTES + 1)
 
 
 def test_staff_refusal_names_the_channel(tmp_path, monkeypatch):

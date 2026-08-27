@@ -29,6 +29,7 @@ DONE = "done"
 CANCELLED = "cancelled"
 STATUSES = (PENDING, APPROVED, DENIED, LIVE, DONE, CANCELLED)
 OPEN_STATUSES = (PENDING, APPROVED, LIVE)
+SWEPT_STATUSES = (DONE, DENIED, CANCELLED)
 TRANSITIONS: dict[str, tuple[str, ...]] = {
     PENDING: (APPROVED, DENIED, CANCELLED),
     APPROVED: (LIVE, DONE, CANCELLED),
@@ -61,6 +62,14 @@ START_IN_THE_PAST = (
 BAD_DURATION = (
     "**{given}** is not a length Black Bloc can read, so nothing was submitted. Write it as "
     "`1h30m`, `2h` or `45m` — leave it empty for two hours — and keep it under a week."
+)
+
+ANNOUNCE_HEAD = "A new event is on the calendar."
+INTERESTED_LINK = "Hit **Interested** on it to be reminded: {url}"
+INTERESTED_HERE = "Hit **Interested** on it in the server's Events list to be reminded."
+NO_SCHEDULED_EVENT = (
+    "There is no Discord event to click this time, so watch this channel — Black Bloc says so "
+    "again when it starts."
 )
 
 
@@ -152,9 +161,15 @@ def mentions(ping_role_id: Any = None) -> discord.AllowedMentions:
     )
 
 
-def announce_text(ping_role_id: Any = None) -> str:
+def announce_text(
+    ping_role_id: Any = None, *, has_scheduled: bool = False, event_url: str | None = None
+) -> str:
     prefix = f"<@&{ping_role_id}> " if ping_role_id else ""
-    return f"{prefix}A new event is on the calendar — hit **Interested** to be reminded."
+    if has_scheduled and event_url:
+        return f"{prefix}{ANNOUNCE_HEAD} {INTERESTED_LINK.format(url=event_url)}"
+    if has_scheduled:
+        return f"{prefix}{ANNOUNCE_HEAD} {INTERESTED_HERE}"
+    return f"{prefix}{ANNOUNCE_HEAD} {NO_SCHEDULED_EVENT}"
 
 
 def golive_text(title: str, ping_role_id: Any = None) -> str:

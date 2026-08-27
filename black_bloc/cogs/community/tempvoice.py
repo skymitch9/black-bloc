@@ -10,6 +10,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 from ...actionlog import log_action
+from ...command_errors import AnswersErrors
 from ...golive import now_iso, parse_ts
 from ...settings_store import (
     DB_UNAVAILABLE,
@@ -321,7 +322,7 @@ async def answer(interaction: discord.Interaction, text: str) -> None:
     )
 
 
-class RenameModal(discord.ui.Modal, title="Rename this channel"):
+class RenameModal(AnswersErrors, discord.ui.Modal, title="Rename this channel"):
     name = discord.ui.TextInput(label="New name", max_length=NAME_LIMIT)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
@@ -344,7 +345,7 @@ class RenameModal(discord.ui.Modal, title="Rename this channel"):
         await answer(interaction, f"Renamed to **{wanted}**, and remembered for next time.")
 
 
-class LimitModal(discord.ui.Modal, title="How many people?"):
+class LimitModal(AnswersErrors, discord.ui.Modal, title="How many people?"):
     limit = discord.ui.TextInput(label="0 to 99 (0 means no limit)", max_length=2)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
@@ -459,7 +460,7 @@ class MemberPick(discord.ui.UserSelect):
         return True
 
 
-class MemberPickView(discord.ui.View):
+class MemberPickView(AnswersErrors, discord.ui.View):
     def __init__(self, action: str, placeholder: str) -> None:
         super().__init__(timeout=180)
         self.add_item(MemberPick(action, placeholder))
@@ -481,7 +482,7 @@ async def hand_over(bot: Any, channel: Any, old_owner_id: int, new_owner: Any) -
         log.warning("temp voice: could not move the owner overwrite in %s: %s", channel.id, exc)
 
 
-class TempVoicePanel(discord.ui.View):
+class TempVoicePanel(AnswersErrors, discord.ui.View):
     def __init__(self) -> None:
         super().__init__(timeout=None)
 

@@ -18,6 +18,7 @@ class TestModeGuard:
         self.test_channel_id = test_channel_id
         self._original_send: Any = None
         self._original_edit: Any = None
+        self._original_delete: Any = None
 
     def _is_dm(self, channel_id: int) -> bool:
         ch = self.bot.get_channel(channel_id)
@@ -25,8 +26,40 @@ class TestModeGuard:
             return isinstance(ch, discord.DMChannel | discord.GroupChannel)
         return any(c.id == channel_id for c in self.bot.private_channels)
 
-    def allows_channel(self, channel_id: int) -> bool:
+    @staticmethod
+    def _id_of(channel: Any) -> int | None:
+        raw = getattr(channel, "id", channel)
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return None
+
+    def allows_channel(self, channel: Any) -> bool:
+        channel_id = self._id_of(channel)
+        if channel_id is None:
+            return False
         return channel_id == self.test_channel_id or self._is_dm(channel_id)
+
+    def test_category_id(self) -> int | None:
+        test_channel = self.bot.get_channel(self.test_channel_id) if self.test_channel_id else None
+        return getattr(getattr(test_channel, "category", None), "id", None)
+
+    def allows_place(self, channel: Any) -> bool:
+        """Where a channel may be made, renamed or deleted: the test channel's own category."""
+        if self.allows_channel(channel):
+            return True
+        if not hasattr(channel, "id"):
+            channel_id = self._id_of(channel)
+            channel = self.bot.get_channel(channel_id) if channel_id is not None else None
+        if channel is None:
+            return False
+        wanted = self.test_category_id()
+        if wanted is None:
+            return False
+        found = getattr(channel, "category_id", None)
+        if found is None:
+            found = getattr(getattr(channel, "category", None), "id", None)
+        return found == wanted
 
     def refusal_message(self) -> str:
         return (
@@ -43,6 +76,7 @@ class TestModeGuard:
         http = self.bot.http
         self._original_send = http.send_message
         self._original_edit = http.edit_message
+        self._original_delete = http.delete_channel
         guard = self
 
         def gated_send_message(channel_id: int, *args: Any, **kwargs: Any):
@@ -65,8 +99,21 @@ class TestModeGuard:
                 raise TestModeViolation(f"test mode: channel {channel_id} is not the test channel")
             return guard._original_edit(channel_id, *args, **kwargs)
 
+        def gated_delete_channel(channel_id: int, *args: Any, **kwargs: Any):
+            if not guard.allows_place(int(channel_id)):
+                log.error(
+                    "TEST MODE: refused to delete channel %s (allowed: the category of %s)",
+                    channel_id,
+                    guard.test_channel_id,
+                )
+                raise TestModeViolation(
+                    f"test mode: channel {channel_id} is outside the test channel's category"
+                )
+            return guard._original_delete(channel_id, *args, **kwargs)
+
         http.send_message = gated_send_message  # type: ignore[method-assign]
         http.edit_message = gated_edit_message  # type: ignore[method-assign]
+        http.delete_channel = gated_delete_channel  # type: ignore[method-assign]
 
         tree = getattr(self.bot, "tree", None)
         if tree is not None:
@@ -85,6 +132,7 @@ class TestModeGuard:
             tree.interaction_check = interaction_check  # type: ignore[method-assign]
 
         log.warning(
-            "TEST MODE ON: messages and commands restricted to channel %s and DMs",
+            "TEST MODE ON: messages and commands restricted to channel %s and DMs; channel "
+            "deletion restricted to that channel's own category",
             self.test_channel_id,
         )

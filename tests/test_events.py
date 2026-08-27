@@ -11,8 +11,10 @@ from black_bloc.events import (
     DONE,
     LIVE,
     MAX_DURATION_MINUTES,
+    OPEN_STATUSES,
     PENDING,
     STATUSES,
+    SWEPT_STATUSES,
     TITLE_LIMIT,
     TRANSITIONS,
     announce_text,
@@ -229,3 +231,26 @@ def test_clamp_trims_and_cuts():
     assert clamp("  hello  ", 100) == "hello"
     assert clamp("x" * 200, 10) == "x" * 10
     assert clamp(None, 10) == ""
+
+
+def test_the_announcement_only_promises_an_interested_button_when_one_exists():
+    with_event = announce_text(None, has_scheduled=True, event_url="https://discord.com/events/1/2")
+    assert "Interested" in with_event
+    assert "https://discord.com/events/1/2" in with_event
+
+    no_url = announce_text(None, has_scheduled=True)
+    assert "Interested" in no_url and "http" not in no_url
+
+    without = announce_text(None, has_scheduled=False)
+    assert "Interested" not in without
+    assert "watch this channel" in without
+
+
+def test_the_announcement_keeps_its_ping_prefix_whichever_wording_it_uses():
+    assert announce_text(42, has_scheduled=True, event_url="u").startswith("<@&42> ")
+    assert announce_text(42, has_scheduled=False).startswith("<@&42> ")
+
+
+def test_the_statuses_a_finished_channel_sweep_covers_are_the_settled_ones():
+    assert set(SWEPT_STATUSES) == {DONE, DENIED, CANCELLED}
+    assert not set(SWEPT_STATUSES) & set(OPEN_STATUSES)

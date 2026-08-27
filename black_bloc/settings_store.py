@@ -25,7 +25,10 @@ HONEYPOT_PURGE_MAX_DAYS = 7
 
 EVENTS_MODES = ("off", "shadow", "on")
 EVENTS_RETENTION_DAYS = 7
+EVENTS_RETENTION_MIN_DAYS = 1
 EVENTS_RETENTION_MAX_DAYS = 365
+EVENTS_MAX_LATE_MINUTES = 15
+EVENTS_LATE_CEILING_MINUTES = 24 * 60
 
 KEY_TYPES: dict[str, str] = {
     "log_channel_id": "channel",
@@ -54,6 +57,7 @@ KEY_TYPES: dict[str, str] = {
     "events_ping_role_id": "role",
     "events_create_scheduled": "bool",
     "events_channel_retention_days": "int",
+    "events_max_late_minutes": "int",
 }
 
 KEY_CHOICES: dict[str, tuple[str, ...]] = {
@@ -66,6 +70,18 @@ KEY_CHOICES: dict[str, tuple[str, ...]] = {
 KEY_MAX: dict[str, int] = {
     "honeypot_purge_days": HONEYPOT_PURGE_MAX_DAYS,
     "events_channel_retention_days": EVENTS_RETENTION_MAX_DAYS,
+    "events_max_late_minutes": EVENTS_LATE_CEILING_MINUTES,
+}
+
+KEY_MIN: dict[str, int] = {
+    "events_channel_retention_days": EVENTS_RETENTION_MIN_DAYS,
+}
+
+KEY_MIN_REASON: dict[str, str] = {
+    "events_channel_retention_days": (
+        "Deleting a finished event's channel the moment it ends throws away the record before "
+        "anybody has read it, so the shortest Black Bloc will keep one is {limit} day."
+    ),
 }
 
 KEY_MAX_REASON: dict[str, str] = {
@@ -75,7 +91,11 @@ KEY_MAX_REASON: dict[str, str] = {
     ),
     "events_channel_retention_days": (
         "A finished event's channel kept for more than {limit} days is a channel nobody will "
-        "ever tidy up. Set it to 0 to delete one as soon as the event is over."
+        "ever tidy up."
+    ),
+    "events_max_late_minutes": (
+        "Announcing an event more than {limit} minutes after it started tells people to come to "
+        "something that is already half over."
     ),
 }
 
@@ -109,8 +129,12 @@ KEY_HELP: dict[str, str] = {
     "events_ping_role_id": "role mentioned when an event is announced and when it starts",
     "events_create_scheduled": "true to make a real Discord scheduled event when one is approved",
     "events_channel_retention_days": (
-        f"days a finished event's channel is kept before deletion, 0 to "
-        f"{EVENTS_RETENTION_MAX_DAYS}"
+        f"days a finished event's channel is kept before deletion, "
+        f"{EVENTS_RETENTION_MIN_DAYS} to {EVENTS_RETENTION_MAX_DAYS}"
+    ),
+    "events_max_late_minutes": (
+        "minutes an event may start late and still be announced; later than that it goes live "
+        "quietly"
     ),
 }
 
@@ -170,6 +194,12 @@ def coerce_value(key: str, value: Any) -> Any:
             raise SettingError(f"{key!r} takes a whole number, not {value!r}.")
         if value < 0:
             raise SettingError(f"{key!r} cannot be negative.")
+        floor = KEY_MIN.get(key)
+        if floor is not None and value < floor:
+            why = KEY_MIN_REASON.get(key, "").format(limit=floor)
+            raise SettingError(
+                f"{key!r} cannot be less than {floor}, so nothing was changed. {why}".strip()
+            )
         limit = KEY_MAX.get(key)
         if limit is not None and value > limit:
             why = KEY_MAX_REASON.get(key, "").format(limit=limit)
@@ -326,6 +356,8 @@ class SettingsStore:
             return True
         if key == "events_channel_retention_days":
             return EVENTS_RETENTION_DAYS
+        if key == "events_max_late_minutes":
+            return EVENTS_MAX_LATE_MINUTES
         if KEY_TYPES.get(key) in ("channels", "roles"):
             return []
         return None
