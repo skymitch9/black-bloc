@@ -11,6 +11,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from ...actionlog import log_action
+from ...command_errors import SafeDynamicItem
 from ...settings_store import (
     DB_UNAVAILABLE,
     HONEYPOT_MODES,
@@ -223,7 +224,9 @@ async def _dm_before_ban(guild: Any, user: Any) -> None:
         log.info("honeypot: could not warn %s before the ban: %s", getattr(user, "id", "?"), exc)
 
 
-class BanNowButton(discord.ui.DynamicItem[discord.ui.Button], template=BAN_TEMPLATE):
+class BanNowButton(
+    SafeDynamicItem, discord.ui.DynamicItem[discord.ui.Button], template=BAN_TEMPLATE
+):
     def __init__(self, hit_id: int) -> None:
         self.hit_id = hit_id
         super().__init__(
@@ -238,7 +241,7 @@ class BanNowButton(discord.ui.DynamicItem[discord.ui.Button], template=BAN_TEMPL
     async def from_custom_id(cls, interaction: discord.Interaction, item: Any, match: re.Match):
         return cls(int(match["hit_id"]))
 
-    async def callback(self, interaction: discord.Interaction) -> None:
+    async def on_click(self, interaction: discord.Interaction) -> None:
         bot = interaction.client
         if not await require_staff(interaction):
             return

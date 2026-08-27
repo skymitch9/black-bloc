@@ -1,6 +1,12 @@
 from discord import app_commands
 
-from black_bloc.command_errors import COMMAND_FAILED, install, on_tree_error
+from black_bloc.command_errors import (
+    COMMAND_FAILED,
+    AnswersErrors,
+    SafeDynamicItem,
+    install,
+    on_tree_error,
+)
 
 
 class _Response:
@@ -89,3 +95,57 @@ def test_install_puts_the_handler_on_the_tree():
 
 def test_install_is_a_no_op_without_a_tree():
     install(object())
+
+
+class _Modal(AnswersErrors):
+    pass
+
+
+class _Button(SafeDynamicItem):
+    def __init__(self, boom=None):
+        self.boom = boom
+        self.clicked = []
+
+    async def on_click(self, interaction):
+        if self.boom is not None:
+            raise self.boom
+        self.clicked.append(interaction)
+
+
+async def test_a_view_or_modal_failure_answers_the_person_and_logs_the_traceback(caplog):
+    interaction = _Interaction()
+
+    with caplog.at_level("ERROR"):
+        await _Modal().on_error(interaction, RuntimeError("boom"))
+
+    assert interaction.response.messages == [{"content": COMMAND_FAILED, "ephemeral": True}]
+    assert "boom" in caplog.text and "_Modal failed" in caplog.text
+
+
+async def test_a_dynamic_item_catches_its_own_failure_because_no_view_will(caplog):
+    interaction = _Interaction()
+    button = _Button(boom=RuntimeError("boom"))
+
+    with caplog.at_level("ERROR"):
+        await button.callback(interaction)
+
+    assert interaction.response.messages == [{"content": COMMAND_FAILED, "ephemeral": True}]
+    assert "_Button failed" in caplog.text
+
+
+async def test_a_dynamic_item_that_works_is_left_alone():
+    interaction = _Interaction()
+    button = _Button()
+
+    await button.callback(interaction)
+
+    assert button.clicked == [interaction]
+    assert interaction.response.messages == []
+
+
+async def test_an_unimplemented_dynamic_item_is_a_programmer_error_answered_politely():
+    interaction = _Interaction()
+
+    await SafeDynamicItem().callback(interaction)
+
+    assert interaction.response.messages[0]["content"] == COMMAND_FAILED
