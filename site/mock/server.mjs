@@ -222,6 +222,13 @@ const SETTING_SPECS = [
   ['rolemenu_approval_channel_id', 'channel', '800000000000000005', null, 'where a role request card is posted for staff to answer; defaults to staff_channel_id'],
   ['rolemenu_approver_role_id', 'role', null, null, 'role mentioned when a role request needs answering'],
   ['rolemenu_mode', 'enum', 'off', 'off', 'whether members can pick roles from the panels; off takes them down and hides the /rolemenu commands, on posts them again', ['off', 'on']],
+  ['chat_mode', 'enum', 'on', 'on', 'off, or on (Black Bloc answers when somebody @-mentions it)', ['off', 'on']],
+  ['chat_cooldown_seconds', 'int', 20, 20, 'seconds before the same person gets another @-mention reply, 5 to 600', null, 600, 5],
+  ['chat_ignore_channels', 'channels', [], [], 'channels Black Bloc never answers an @-mention in'],
+  ['chat_greeting_reaction', 'bool', false, false, 'true to answer a bare greeting with a toned 👋 reaction instead of a reply'],
+  ['chat_reply_in_threads', 'bool', true, true, 'true to answer @-mentions inside threads as well as in channels'],
+  ['chat_route_ping_staff', 'bool', false, false, 'true to drop a one-line note in the staff channel when somebody asks for a mod'],
+  ['emoji_skin_tone', 'enum', 'dark', 'dark', "the skin tone Black Bloc's hand and people emoji wear", ['none', 'light', 'medium-light', 'medium', 'medium-dark', 'dark']],
 ];
 
 const RULES = {
@@ -243,6 +250,164 @@ const RULE_HELP = {
   caps: 'the percentage of shouted letters a message may contain',
   bad_words: 'the blocked word list',
 };
+
+// The eight built-in canned intents carry black_bloc/chat.py's own tables, verbatim, so the
+// dashboard is editing what the bot actually says today rather than a fixture that resembles it.
+const CANNED = [
+  ['insult', 0, ['you suck', 'you stink', 'shut up', 'shut it', 'bad bot', 'dumb bot', 'stupid bot', 'useless bot', 'trash bot', 'worst bot', 'youre useless', 'youre annoying', 'nobody asked'], [
+    'Harsh, {name}, but fair on some days. I will keep trying.',
+    'Noted, {name}. I will add that to my performance review.',
+    'That one stung, {name}. Well — it would have, if I had feelings.',
+    'Fair enough, {name}. Still here though.',
+    'I will take it, {name}. Someone has to keep the cookout humble.',
+  ]],
+  ['love', 1, ['i love you', 'love you', 'love ya', 'ily', 'youre the best', 'best bot', 'good bot', 'youre awesome', 'youre great', 'love this bot'], [
+    'Love you too, {name} 🖤',
+    'That is the nicest thing anyone has said to me all day, {name}.',
+    'Aw, {name}. I would blush if I had the hardware.',
+    'Right back at you, {name}. Best crowd at any cookout.',
+    'You are alright yourself, {name}.',
+  ]],
+  ['thanks', 2, ['thanks', 'thank you', 'thankyou', 'thx', 'ty', 'tysm', 'appreciate it', 'appreciate you', 'much appreciated'], [
+    'Any time, {name}. That is what I am here for.',
+    'You got it, {name}.',
+    'No thanks needed, {name} — I run on electricity, not gratitude. Nice to hear it though.',
+    'Happy to help, {name}. Holler if you need anything else.',
+    'Any time. Go enjoy the cookout, {name}.',
+    'That is the job, {name}. Glad it landed.',
+  ]],
+  ['what_can_you_do', 3, ['what can you do', 'what do you do', 'what are you', 'who are you', 'what are your commands', 'what commands do you have', 'whats your job', 'what can you help with'], [
+    'Plenty, {name} — roles, events, birthdays, go-live posts and keeping things tidy. `/help` lists it all.',
+    'I keep the cookout running, {name}: role menus, temp voice, event posts and mod tools. Try `/help`.',
+    'Short version, {name}: I announce, organise and moderate. The long version is `/help`.',
+    'Ask `/help` for the full menu, {name} — roles, events, streams and moderation are the big four.',
+    'I am the cookout’s helper bot, {name}. `/help` shows every command I answer to.',
+  ]],
+  ['help', 4, ['help', 'help me', 'i need help', 'can you help', 'how do i', 'how does this work', 'need a hand', 'im stuck', 'whats the command'], [
+    'I have got you, {name} — run `/help` and I will list everything I answer to.',
+    'Say the word, {name}. `/help` is the menu, and an Auntie or Uncle can take it from there.',
+    'Start with `/help`, {name}. If it is a people problem, staff are the better call.',
+    'Try `/help` for commands, {name} — and if you need a human, staff are around.',
+    'Happy to point you somewhere, {name}: `/help` first, staff second.',
+  ]],
+  ['how_are_you', 5, ['how are you', 'how are ya', 'how are things', 'hows it going', 'hows it hanging', 'hows your day', 'how you doing', 'how ya doing', 'you good', 'you ok', 'you okay'], [
+    'Running clean, {name} — no errors, no complaints.',
+    'Doing well, {name}! Nothing is burning and the grill is still hot.',
+    'Same as always, {name}: awake, online and mildly enthusiastic.',
+    'All good here, {name}. How is your day going?',
+    'Cannot complain, {name} — I am a bot, so the bar is low and I am clearing it.',
+    'Good, {name}! Keeping an eye on {attendees} cookout attendees right now.',
+  ]],
+  ['greeting', 6, ['hi', 'hii', 'hiya', 'hello', 'hey', 'heya', 'yo', 'sup', 'wassup', 'whats up', 'whats good', 'good morning', 'good afternoon', 'good evening', 'morning', 'evening', 'howdy', 'greetings'], [
+    'Hey {name}! Pull up a chair — the cookout is already going.',
+    '{name}! Good to see you. What can I get you?',
+    'Hi {name} 👋 I am on shift, so just say the word.',
+    'Hey there, {name}. A plate is ready whenever you are.',
+    '{name}! Welcome in. Ask me anything, or run `/help` for the menu.',
+    'Hello {name}! Still just a bot, but a friendly one.',
+    'Hey {name}! That makes {attendees} of us at the cookout today.',
+  ]],
+  ['unknown', 90, [], [
+    'Not sure I follow, {name} — try `/help` for what I can do.',
+    'That one is past me, {name}. `/help` shows what I actually understand.',
+    'I only speak fluent commands, {name} — `/help` has the list.',
+    'You have lost me, {name}, but `/help` might have what you want.',
+    'Cannot help with that one yet, {name}. `/help` shows what I can.',
+  ]],
+];
+
+// Each data intent answers from live state, so it keeps exactly two lines: the template that
+// renders an answer, and the one it falls back to when there is nothing to say.
+const DATA_INTENTS = [
+  ['who_is_live', 10, ['whos live', 'who is live', 'anyone live', 'who is streaming', 'anyone streaming'], ['{names}', '{count}'], [
+    'Live right now: {names}. That is {count} of us on air, {name}.',
+    'Nobody is live right now, {name}. I will shout when somebody goes on.',
+  ]],
+  ['whats_next', 11, ['whats next', 'next event', 'when is the next', 'anything coming up'], ['{title}', '{when}', '{where}'], [
+    'Next up is {title}, {when}, over in {where}.',
+    'Nothing is on the calendar yet, {name}. `/event request` puts something on it.',
+  ]],
+  ['birthdays', 12, ['birthdays', 'whose birthday', 'next birthday', 'any birthdays'], ['{birthdays}', '{count}'], [
+    'Coming up: {birthdays}.',
+    'No birthdays are stored yet, {name}. `/birthday set` adds yours.',
+  ]],
+  ['head_count', 13, ['how many of us', 'how many people', 'member count', 'how many members'], ['{count}'], [
+    '{count} of us at the cookout right now, {name}.',
+    'I cannot count the room just now, {name} — ask me again in a minute.',
+  ]],
+  ['my_roles', 14, ['my roles', 'what roles can i pick', 'which roles can i get'], ['{menus}', '{roles}'], [
+    'You can pick from {menus}, {name}. You are already wearing {roles}.',
+    'There is nothing for you to pick right now, {name} — no role menu is open.',
+  ]],
+  ['time_for_me', 15, ['what time is that for me', 'in my time zone', 'what time is that my time'], ['{their_time}', '{zone}'], [
+    'That is {their_time} for you, {name} — {zone}.',
+    'I do not know your time zone yet, {name}. Set it with `/timezone set` and ask me again.',
+  ]],
+];
+
+function seedChat() {
+  const intents = [];
+  const lines = [];
+  let nextLine = 1;
+  const add = (row, texts) => {
+    intents.push(row);
+    for (const text of texts) {
+      lines.push({ id: String(nextLine++), intent_id: row.id, text, enabled: true });
+    }
+  };
+  let nextIntent = 1;
+  add({
+    id: String(nextIntent++),
+    name: 'wheres_the_food',
+    kind: 'canned',
+    triggers: ['wheres the food', 'when do we eat', 'is the grill on'],
+    enabled: true,
+    builtin: false,
+    sort: 0,
+    tokens: [],
+  }, [
+    'The grill is always on, {name}. Pull up a chair.',
+    'Plates are out, {name} — help yourself.',
+  ]);
+  for (const [name, sort, triggers, texts] of CANNED) {
+    add({
+      id: String(nextIntent++),
+      name,
+      kind: 'canned',
+      triggers,
+      enabled: true,
+      builtin: true,
+      sort,
+      tokens: [],
+    }, texts);
+  }
+  for (const [name, sort, triggers, tokens, texts] of DATA_INTENTS) {
+    add({
+      id: String(nextIntent++),
+      name,
+      kind: 'data',
+      triggers,
+      enabled: true,
+      builtin: true,
+      sort,
+      tokens,
+    }, texts);
+  }
+  add({
+    id: String(nextIntent++),
+    name: 'need_a_mod',
+    kind: 'route',
+    triggers: ['i need a mod', 'need a mod', 'report', 'staff please', 'need staff'],
+    enabled: true,
+    builtin: true,
+    sort: 20,
+    tokens: ['{staff_roles}', '{ticket_how}'],
+  }, [
+    'On it, {name} — {ticket_how} and a mod picks it up.',
+    'Staff are {staff_roles}, {name}. Give one of them a shout.',
+  ]);
+  return { intents, lines, nextIntent, nextLine };
+}
 
 function seedState() {
   return {
@@ -405,6 +570,7 @@ function seedState() {
   blocks: [
     { user_id: MEMBERS[4].id, by: STAFF.id, reason: 'opened twelve tickets about nitro', at: minutesAgo(3000) },
   ],
+  chat: seedChat(),
   nextAction: 42,
   nextCase: 10,
   nextMessage: 40,
@@ -1723,6 +1889,282 @@ route('GET', '/api/polls/:id/export.csv', (context) => {
     status: 200,
     body: `${lines.join('\n')}\n`,
     headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="poll-${poll.id}.csv"` },
+  };
+});
+
+const CHAT_MENTION = /<@[!&]?\d+>/g;
+const CHAT_DROP = /[^0-9a-z ]+/g;
+const LOVE_MARKS = ['❤', '♥', '🖤', '💜', '💖', '<3'];
+const CHAT_KEYS = ['chat_mode', 'chat_cooldown_seconds', 'chat_ignore_channels', 'chat_greeting_reaction', 'chat_reply_in_threads', 'chat_route_ping_staff'];
+const CHAT_NAME = /^[a-z0-9_]{2,32}$/;
+const UNKNOWN_INTENT = 'unknown';
+
+/** black_bloc/chat.py:normalise, in JavaScript: no mentions, no punctuation, single spaces. */
+function chatWords(text) {
+  const raw = String(text || '').replace(CHAT_MENTION, ' ').toLowerCase().replace(/['’]/g, '');
+  return raw.replace(CHAT_DROP, ' ').split(' ').filter(Boolean).join(' ');
+}
+
+function chatHasPhrase(words, phrase) {
+  return ` ${words} `.includes(` ${String(phrase).toLowerCase()} `);
+}
+
+/** Custom intents first, then the built-ins by their own sort — the bot's own order. */
+function chatOrdered() {
+  return state.chat.intents.slice().sort((a, b) =>
+    (a.builtin ? 1 : 0) - (b.builtin ? 1 : 0) || a.sort - b.sort || Number(a.id) - Number(b.id));
+}
+
+function chatLinesOf(intentId) {
+  return state.chat.lines.filter((line) => String(line.intent_id) === String(intentId));
+}
+
+function chatIntentRow(row) {
+  return {
+    id: String(row.id),
+    name: row.name,
+    kind: row.kind,
+    triggers: row.triggers.slice(),
+    enabled: Boolean(row.enabled),
+    builtin: Boolean(row.builtin),
+    sort: row.sort,
+    tokens: (row.tokens || []).slice(),
+    lines: chatLinesOf(row.id).map((line) => ({
+      id: String(line.id),
+      text: line.text,
+      enabled: Boolean(line.enabled),
+    })),
+  };
+}
+
+function chatIntentOf(id) {
+  const found = state.chat.intents.find((row) => String(row.id) === String(id));
+  if (!found) throw new Refused(404, 'no_such_intent', `Black Bloc has no chat intent #${id} any more, so nothing was changed. The Chat page lists the ones it has.`);
+  return found;
+}
+
+function chatLineOf(id) {
+  const found = state.chat.lines.find((row) => String(row.id) === String(id));
+  if (!found) throw new Refused(404, 'no_such_line', `Black Bloc has no chat line #${id} any more, so nothing was changed. Somebody may have removed it already.`);
+  return found;
+}
+
+function chatNamed(name) {
+  return state.chat.intents.find((row) => row.name === name) || null;
+}
+
+const CHAT_SAMPLE = {
+  name: STAFF.display_name,
+  attendees: '12',
+  count: '12',
+  names: 'Casey',
+  title: 'Movie night',
+  when: 'in 2 days',
+  where: '#general',
+  birthdays: 'Casey on 14 February',
+  menus: 'colours and pings',
+  roles: 'Live now',
+  their_time: '7 pm',
+  zone: 'America/Phoenix',
+  staff_roles: '@Leads and @Aunties',
+  ticket_how: 'DM me to open a ticket',
+};
+
+function chatFill(text) {
+  return String(text).replace(/\{([a-z_]+)\}/g, (whole, token) =>
+    (token in CHAT_SAMPLE ? CHAT_SAMPLE[token] : whole));
+}
+
+/** The dry run picks the FIRST enabled line rather than a random one, so a check is repeatable. */
+function chatLineFor(intent) {
+  const lines = chatLinesOf(intent.id);
+  const chosen = lines.find((line) => line.enabled) || lines[0] || null;
+  return chosen ? chatFill(chosen.text) : null;
+}
+
+function chatClassify(text) {
+  const raw = String(text || '').replace(CHAT_MENTION, ' ');
+  const words = chatWords(raw);
+  if (LOVE_MARKS.some((mark) => raw.includes(mark))) {
+    return chatNamed('love') || chatNamed(UNKNOWN_INTENT);
+  }
+  if (words) {
+    for (const intent of chatOrdered()) {
+      if (!intent.enabled || intent.name === UNKNOWN_INTENT) continue;
+      if (intent.triggers.some((phrase) => chatHasPhrase(words, phrase))) return intent;
+    }
+  }
+  return chatNamed(UNKNOWN_INTENT);
+}
+
+route('GET', '/api/chat/intents', (context) => {
+  requireStaff(context.session);
+  return {
+    intents: chatOrdered().map(chatIntentRow),
+    settings: CHAT_KEYS.map(keyRow),
+  };
+});
+
+route('POST', '/api/chat/intents', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const name = String(body.name || '').trim().toLowerCase().replace(/\s+/g, '_');
+  if (!CHAT_NAME.test(name)) {
+    throw new Refused(400, 'bad_name', `**${body.name || 'nothing'}** is not a name Black Bloc can use, so nothing was made. Two to thirty-two letters, numbers or underscores — \`wheres_the_food\` is one.`);
+  }
+  if (chatNamed(name)) {
+    throw new Refused(409, 'name_taken', `There is already an intent called **${name}**, so nothing was made. Edit that one, or pick another name.`);
+  }
+  const triggers = (Array.isArray(body.triggers) ? body.triggers : [])
+    .map((one) => chatWords(one)).filter(Boolean);
+  if (triggers.length === 0) {
+    throw new Refused(400, 'no_triggers', 'An intent with no trigger phrases would never match anything, so nothing was made. Add at least one phrase people would actually type.');
+  }
+  const texts = (Array.isArray(body.lines) ? body.lines : []).map((one) => String(one).trim()).filter(Boolean);
+  if (texts.length === 0) {
+    throw new Refused(400, 'no_lines', 'An intent with no lines has nothing to answer with, so nothing was made. Write the first line and Black Bloc will use it.');
+  }
+  const made = {
+    id: String(state.chat.nextIntent++),
+    name,
+    kind: 'canned',
+    triggers,
+    enabled: true,
+    builtin: false,
+    sort: 0,
+    tokens: [],
+  };
+  state.chat.intents.push(made);
+  for (const text of texts) {
+    state.chat.lines.push({ id: String(state.chat.nextLine++), intent_id: made.id, text, enabled: true });
+  }
+  logAction('web.chat.intent_created', { details: { name, triggers: triggers.length } });
+  return {
+    intent: chatIntentRow(made),
+    message: `**${name}** is in, with ${triggers.length} trigger phrase(s) and ${texts.length} line(s).`,
+  };
+});
+
+route('PUT', '/api/chat/intents/:id', async (context) => {
+  requireStaff(context.session);
+  const intent = chatIntentOf(context.params.id);
+  const body = await context.body();
+  if (body.name !== undefined && intent.builtin && String(body.name) !== intent.name) {
+    throw new Refused(400, 'builtin_name', `**${intent.name}** is one of Black Bloc's own intents, so its name cannot be changed. Its trigger phrases and its lines are yours to edit.`);
+  }
+  if (body.name !== undefined) {
+    const name = String(body.name).trim().toLowerCase().replace(/\s+/g, '_');
+    if (!CHAT_NAME.test(name)) {
+      throw new Refused(400, 'bad_name', `**${body.name || 'nothing'}** is not a name Black Bloc can use, so nothing was changed. Two to thirty-two letters, numbers or underscores.`);
+    }
+    const taken = chatNamed(name);
+    if (taken && String(taken.id) !== String(intent.id)) {
+      throw new Refused(409, 'name_taken', `There is already an intent called **${name}**, so nothing was changed.`);
+    }
+    intent.name = name;
+  }
+  if (body.triggers !== undefined) {
+    const triggers = (Array.isArray(body.triggers) ? body.triggers : [])
+      .map((one) => chatWords(one)).filter(Boolean);
+    if (triggers.length === 0 && !intent.builtin) {
+      throw new Refused(400, 'no_triggers', `**${intent.name}** would never match anything without a trigger phrase, so nothing was changed. Delete it instead if it has had its day.`);
+    }
+    intent.triggers = triggers;
+  }
+  if (body.enabled !== undefined) intent.enabled = Boolean(body.enabled);
+  if (body.sort !== undefined) intent.sort = Number(body.sort) || 0;
+  logAction('web.chat.intent_edited', { details: { intent_id: intent.id, name: intent.name } });
+  return {
+    intent: chatIntentRow(intent),
+    message: body.enabled === undefined
+      ? `**${intent.name}** is saved.`
+      : `**${intent.name}** ${intent.enabled ? 'answers again' : 'stays quiet from now on'}.`,
+  };
+});
+
+route('DELETE', '/api/chat/intents/:id', (context) => {
+  requireStaff(context.session);
+  const intent = chatIntentOf(context.params.id);
+  if (intent.builtin) {
+    throw new Refused(400, 'builtin_intent', `**${intent.name}** is one of Black Bloc's own intents, so it cannot be deleted — turn it off instead and it stays quiet. Its lines are still yours to edit.`);
+  }
+  state.chat.intents = state.chat.intents.filter((row) => row.id !== intent.id);
+  state.chat.lines = state.chat.lines.filter((row) => String(row.intent_id) !== String(intent.id));
+  logAction('web.chat.intent_deleted', { details: { intent_id: intent.id, name: intent.name } });
+  return {
+    intent_id: String(intent.id),
+    message: `**${intent.name}** is gone, and so are its lines. Black Bloc will not answer to those phrases any more.`,
+  };
+});
+
+route('POST', '/api/chat/intents/:id/lines', async (context) => {
+  requireStaff(context.session);
+  const intent = chatIntentOf(context.params.id);
+  const body = await context.body();
+  const text = String(body.text || '').trim();
+  if (!text) {
+    throw new Refused(400, 'no_text', 'A line with nothing in it would be an empty reply, so nothing was added. Write what Black Bloc should say.');
+  }
+  if (text.length > 200) {
+    throw new Refused(400, 'too_long', `That line is ${text.length} characters and Black Bloc keeps its replies under 200, so nothing was added. Trim it and send it again.`);
+  }
+  const made = { id: String(state.chat.nextLine++), intent_id: intent.id, text, enabled: true };
+  state.chat.lines.push(made);
+  logAction('web.chat.line_added', { details: { intent_id: intent.id, line_id: made.id } });
+  return {
+    line: { id: made.id, text: made.text, enabled: true },
+    message: `Added. **${intent.name}** now has ${chatLinesOf(intent.id).length} line(s) to choose from.`,
+  };
+});
+
+route('PUT', '/api/chat/lines/:id', async (context) => {
+  requireStaff(context.session);
+  const line = chatLineOf(context.params.id);
+  const body = await context.body();
+  if (body.text !== undefined) {
+    const text = String(body.text).trim();
+    if (!text) {
+      throw new Refused(400, 'no_text', 'A line with nothing in it would be an empty reply, so nothing was changed. Remove it instead if it has had its day.');
+    }
+    if (text.length > 200) {
+      throw new Refused(400, 'too_long', `That line is ${text.length} characters and Black Bloc keeps its replies under 200, so nothing was changed.`);
+    }
+    line.text = text;
+  }
+  if (body.enabled !== undefined) line.enabled = Boolean(body.enabled);
+  logAction('web.chat.line_edited', { details: { line_id: line.id } });
+  return {
+    line: { id: String(line.id), text: line.text, enabled: Boolean(line.enabled) },
+    message: body.enabled === undefined
+      ? 'Saved. Black Bloc uses the new wording from its next reply on.'
+      : `That line is ${line.enabled ? 'back in the pile' : 'out of the pile'}.`,
+  };
+});
+
+route('DELETE', '/api/chat/lines/:id', (context) => {
+  requireStaff(context.session);
+  const line = chatLineOf(context.params.id);
+  const intent = chatIntentOf(line.intent_id);
+  const left = chatLinesOf(intent.id).filter((row) => row.id !== line.id);
+  if (left.length === 0) {
+    throw new Refused(409, 'last_line', `That is the last line **${intent.name}** has, so removing it would leave Black Bloc with nothing to say. Write a replacement first, or turn the intent off.`);
+  }
+  state.chat.lines = state.chat.lines.filter((row) => row.id !== line.id);
+  logAction('web.chat.line_removed', { details: { intent_id: intent.id, line_id: line.id } });
+  return {
+    line_id: String(line.id),
+    message: `Removed. **${intent.name}** has ${left.length} line(s) left.`,
+  };
+});
+
+route('POST', '/api/chat/try', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const intent = chatClassify(body.text);
+  return {
+    intent: intent ? intent.name : UNKNOWN_INTENT,
+    kind: intent ? intent.kind : 'canned',
+    line: intent ? chatLineFor(intent) : null,
   };
 });
 

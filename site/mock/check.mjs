@@ -32,6 +32,8 @@ const IDS = {
   poll_id: '3',
   poll_request_id: '2',
   poll_recurrence_id: '4',
+  chat_intent_id: '1',
+  chat_line_id: '1',
 };
 
 const failures = [];
@@ -246,6 +248,13 @@ async function checkActionKinds() {
   await post('/api/modmail/snippets', { name: 'contract', content: 'hello' });
   await post(`/api/rolemenus/requests/${IDS.request_id}/deny`, { reason: 'contract check' });
   await send('DELETE', `/api/roles/grants/${IDS.grant_id}`, undefined);
+  // The six web.chat.* kinds, each left by the write that spells it rather than merely listed.
+  await post('/api/chat/intents', { name: 'contract_check', triggers: ['contract check'], lines: ['Hello {name}.'] });
+  await send('PUT', `/api/chat/intents/${IDS.chat_intent_id}`, { enabled: true });
+  await post(`/api/chat/intents/${IDS.chat_intent_id}/lines`, { text: 'Another contract line.' });
+  await send('PUT', `/api/chat/lines/${IDS.chat_line_id}`, { text: 'An edited contract line.' });
+  await send('DELETE', `/api/chat/lines/${IDS.chat_line_id}`, undefined);
+  await send('DELETE', `/api/chat/intents/${IDS.chat_intent_id}`, undefined);
   const response = await fetch(`${BASE}/api/actions?limit=200`, { headers: { cookie: 'mock_as=staff' } });
   const payload = await response.json();
   const known = new Set(contract.action_kinds);

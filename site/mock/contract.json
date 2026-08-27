@@ -158,6 +158,7 @@
         "core",
         "automod",
         "birthday",
+        "chat",
         "events",
         "golive",
         "honeypot",
@@ -970,6 +971,179 @@
     },
     {
       "method": "GET",
+      "path": "/api/chat/intents",
+      "read_by": [
+        "11b page-chat.js"
+      ],
+      "shape": "object",
+      "keys": [
+        "intents",
+        "settings"
+      ],
+      "rows": {
+        "intents": [
+          "id",
+          "name",
+          "kind",
+          "triggers",
+          "enabled",
+          "builtin",
+          "sort",
+          "tokens",
+          "lines"
+        ],
+        "settings": [
+          "key",
+          "type",
+          "value",
+          "default",
+          "help"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/intents",
+      "body": {
+        "name": "contract_intent",
+        "triggers": [
+          "contract check"
+        ],
+        "lines": [
+          "Hello {name}."
+        ]
+      },
+      "read_by": [
+        "11b page-chat.js new intent form"
+      ],
+      "shape": "object",
+      "keys": [
+        "intent",
+        "message"
+      ],
+      "nested": {
+        "intent": [
+          "id",
+          "name",
+          "kind",
+          "triggers",
+          "enabled",
+          "builtin",
+          "sort",
+          "lines"
+        ]
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chat/intents/{chat_intent_id}",
+      "body": {
+        "enabled": true
+      },
+      "read_by": [
+        "11b page-chat.js intent card"
+      ],
+      "shape": "object",
+      "keys": [
+        "intent",
+        "message"
+      ],
+      "nested": {
+        "intent": [
+          "id",
+          "name",
+          "triggers",
+          "enabled",
+          "lines"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/intents/{chat_intent_id}/lines",
+      "body": {
+        "text": "A contract line, {name}."
+      },
+      "read_by": [
+        "11b page-chat.js line list"
+      ],
+      "shape": "object",
+      "keys": [
+        "line",
+        "message"
+      ],
+      "nested": {
+        "line": [
+          "id",
+          "text",
+          "enabled"
+        ]
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chat/lines/{chat_line_id}",
+      "body": {
+        "text": "An edited contract line, {name}."
+      },
+      "read_by": [
+        "11b page-chat.js line list"
+      ],
+      "shape": "object",
+      "keys": [
+        "line",
+        "message"
+      ],
+      "nested": {
+        "line": [
+          "id",
+          "text",
+          "enabled"
+        ]
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/chat/lines/{chat_line_id}",
+      "read_by": [
+        "11b page-chat.js line list"
+      ],
+      "shape": "object",
+      "keys": [
+        "line_id",
+        "message"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/chat/intents/{chat_intent_id}",
+      "read_by": [
+        "11b page-chat.js intent card"
+      ],
+      "shape": "object",
+      "keys": [
+        "intent_id",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/try",
+      "body": {
+        "text": "hey there"
+      },
+      "read_by": [
+        "11b page-chat.js try it"
+      ],
+      "shape": "object",
+      "keys": [
+        "intent",
+        "kind",
+        "line"
+      ]
+    },
+    {
+      "method": "GET",
       "path": "/api/birthdays",
       "read_by": [
         "page-birthdays.js"
@@ -1527,7 +1701,8 @@
     "/settings.html",
     "/audit.html",
     "/health.html",
-    "/polls.html"
+    "/polls.html",
+    "/chat.html"
   ],
   "action_kinds": [
     "web.settings.set",
@@ -1577,6 +1752,12 @@
     "web.poll.created",
     "web.poll.recur_paused",
     "web.poll.recur_resumed",
-    "web.poll.recur_deleted"
+    "web.poll.recur_deleted",
+    "web.chat.intent_created",
+    "web.chat.intent_edited",
+    "web.chat.intent_deleted",
+    "web.chat.line_added",
+    "web.chat.line_edited",
+    "web.chat.line_removed"
   ]
 }
