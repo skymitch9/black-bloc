@@ -131,6 +131,57 @@ function stamp() {
   if (at) at.textContent = `loaded ${new Date().toLocaleTimeString()}`;
 }
 
+const ME_KEY = 'blackbloc.me';
+
+export function rememberMe(me) {
+  try {
+    sessionStorage.setItem(ME_KEY, JSON.stringify({ me, at: new Date().toISOString() }));
+  } catch (e) {
+    forgetMe();
+  }
+}
+
+export function forgetMe() {
+  try {
+    sessionStorage.removeItem(ME_KEY);
+  } catch (e) {
+    /* a browser that refuses session storage simply has no cache */
+  }
+}
+
+export function rememberedMe() {
+  try {
+    const found = JSON.parse(sessionStorage.getItem(ME_KEY) || 'null');
+    return found && found.me && found.me.staff === true ? found.me : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/** True when this `me` is a gate rather than a dashboard; the gate is shown. */
+function refuseFor(me) {
+  if (me.state === 'staff_unknown') {
+    refuse({
+      title: UNKNOWN_TITLE,
+      message: me.message,
+      note: `Signed in as ${me.user.name}.`,
+      state: 'info',
+      canRetry: true,
+    });
+    return true;
+  }
+  if (!me.staff) {
+    refuse({
+      title: 'This dashboard is for staff',
+      message: me.message,
+      note: `Signed in as ${me.user.name}.`,
+      state: 'warn',
+    });
+    return true;
+  }
+  return false;
+}
+
 export function start(page) {
   if (restoreTab(page.tab)) return () => {};
   renderNav(page.tab, tabHref);
@@ -152,36 +203,58 @@ export function start(page) {
     }
   };
 
-  const boot = async () => {
-    const complaint = returnedFromDiscord();
-    show('gate');
+  const paint = async (me) => {
+    await paintShell(me);
+    await page.load(me);
+    mountSections(page.tab);
+    stamp();
+    show('dash');
+  };
+
+  const verify = async () => {
     try {
       const me = await api('/api/auth/me');
       current = me;
-      if (me.state === 'staff_unknown') {
-        refuse({
-          title: UNKNOWN_TITLE,
-          message: me.message,
-          note: `Signed in as ${me.user.name}.`,
-          state: 'info',
-          canRetry: true,
-        });
+      if (refuseFor(me)) {
+        forgetMe();
         return;
       }
-      if (!me.staff) {
-        refuse({
-          title: 'This dashboard is for staff',
-          message: me.message,
-          note: `Signed in as ${me.user.name}.`,
-          state: 'warn',
-        });
-        return;
-      }
+      rememberMe(me);
       await paintShell(me);
-      await page.load(me);
-      mountSections(page.tab);
-      stamp();
-      show('dash');
+    } catch (error) {
+      forgetMe();
+      handle(error);
+    }
+  };
+
+  const ask = async () => {
+    const me = await api('/api/auth/me');
+    current = me;
+    if (refuseFor(me)) {
+      forgetMe();
+      return;
+    }
+    rememberMe(me);
+    await paint(me);
+  };
+
+  const boot = async () => {
+    const complaint = returnedFromDiscord();
+    const known = rememberedMe();
+    if (known) {
+      current = known;
+      try {
+        await paint(known);
+        verify();
+        return;
+      } catch (error) {
+        forgetMe();
+        current = null;
+      }
+    }
+    show('gate');
+    try {
+      await ask();
     } catch (error) {
       handle(error);
       if (complaint) {
@@ -195,6 +268,7 @@ export function start(page) {
   el('retry').addEventListener('click', boot);
   el('refresh').addEventListener('click', reload);
   el('signout').addEventListener('click', async () => {
+    forgetMe();
     try {
       await api('/api/auth/logout', { method: 'POST' });
     } catch (e) {
