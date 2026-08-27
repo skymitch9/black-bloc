@@ -22,6 +22,7 @@ from black_bloc.cogs.community.polls import (
     options_of,
     panel_counts,
     poll_for_message,
+    recurrences,
     results_of,
     set_answer_ids,
     set_posted,
@@ -1376,6 +1377,161 @@ async def test_a_modal_submitted_with_nothing_picked_changes_no_vote(cog, bot, l
 
     assert again.sent == pure.PICK_SOMETHING
     assert (await panel_counts(db, 1))[1] == 1
+
+
+async def recurring(cog, bot, who, **kwargs):
+    """One `/poll recur create`, daily at 09:00 Phoenix unless the caller says otherwise."""
+    interaction = FakeInteraction(bot, who, channel=kwargs.pop("channel", None))
+    await cog.recur_create.callback(
+        cog,
+        interaction,
+        kwargs.pop("question", "Are we running tonight?"),
+        kwargs.pop("every", choice("daily")),
+        kwargs.pop("at", "09:00"),
+        options=kwargs.pop("options", "Yes | No"),
+        **kwargs,
+    )
+    return interaction
+
+
+async def test_a_recurrence_is_stored_as_a_template_and_never_posted_on_the_spot(cog, bot, db):
+    lead = FakeMember(bot.guild, user_id=1, display_name="Lead", manage_guild=True)
+
+    interaction = await recurring(cog, bot, lead)
+
+    row = await get_poll(db, 1)
+    assert row["status"] == pure.RECURRING and row["recurrence"] == "daily"
+    assert (row["recur_at"], row["recur_tz"]) == ("09:00", "America/Phoenix")
+    assert row["recur_next_at"] is not None
+    assert bot.guild.get_channel(TEST_CHANNEL).messages == []
+    assert "every day at 09:00" in interaction.sent
+    assert "poll.recur_created" in await action_kinds(db)
+
+
+async def test_a_template_never_shows_up_where_polls_are_listed(cog, bot, lead, db):
+    await recurring(cog, bot, lead)
+
+    interaction = FakeInteraction(bot, lead)
+    await cog.poll_list.callback(cog, interaction)
+
+    assert interaction.sent == "Nothing is running — `/poll create` starts one."
+
+
+async def test_a_date_poll_is_refused_a_recurrence_because_its_slots_would_go_stale(
+    cog, bot, lead, db
+):
+    interaction = await recurring(cog, bot, lead, kind=choice(pure.DATE))
+
+    assert interaction.sent == pure.RECUR_NOT_A_DATE
+    assert await get_poll(db, 1) is None
+
+
+async def test_a_cadence_nobody_can_read_is_refused_before_anything_is_stored(cog, bot, lead, db):
+    interaction = await recurring(cog, bot, lead, every=choice("weekly"), day="funday")
+
+    assert "day of the week" in interaction.sent
+    assert await get_poll(db, 1) is None
+
+
+async def test_a_member_cannot_set_a_poll_to_repeat(cog, bot, member, db):
+    interaction = FakeInteraction(bot, member)
+    await cog.recur_create.callback(cog, interaction, "Q", choice("daily"), "09:00")
+
+    assert await get_poll(db, 1) is None
+
+
+async def test_a_due_recurrence_opens_one_poll_and_books_the_next_one(cog, bot, lead, db):
+    await recurring(cog, bot, lead)
+    await db.conn.execute("UPDATE polls SET recur_next_at = ? WHERE id = 1", ("2020-01-01T00:00",))
+    await db.conn.commit()
+
+    await cog.run_due_polls()
+
+    made = await get_poll(db, 2)
+    assert made["status"] == pure.OPEN and made["schedule_id"] == 1
+    assert made["question"] == "Are we running tonight?"
+    assert len(bot.guild.get_channel(TEST_CHANNEL).polls) == 1
+    template = await get_poll(db, 1)
+    assert template["status"] == pure.RECURRING
+    assert template["recur_next_at"] > "2020-01-01T00:00"
+    assert "poll.recurred" in await action_kinds(db)
+
+
+async def test_a_second_pass_at_the_same_due_time_opens_nothing_more(cog, bot, lead, db):
+    await recurring(cog, bot, lead)
+    await db.conn.execute("UPDATE polls SET recur_next_at = ? WHERE id = 1", ("2020-01-01T00:00",))
+    await db.conn.commit()
+
+    await cog.run_due_polls()
+    await cog.run_due_polls()
+
+    assert await get_poll(db, 3) is None
+    assert len(bot.guild.get_channel(TEST_CHANNEL).polls) == 1
+
+
+async def test_a_paused_recurrence_is_never_due(cog, bot, lead, db):
+    await recurring(cog, bot, lead)
+
+    interaction = FakeInteraction(bot, lead)
+    await cog.recur_pause.callback(cog, interaction, "1")
+    await cog.run_due_polls()
+
+    assert (await get_poll(db, 1))["recur_next_at"] is None
+    assert "paused" in interaction.sent
+    assert await get_poll(db, 2) is None
+
+
+async def test_starting_a_paused_recurrence_again_books_the_next_one(cog, bot, lead, db):
+    await recurring(cog, bot, lead)
+    await cog.recur_pause.callback(cog, FakeInteraction(bot, lead), "1")
+
+    interaction = FakeInteraction(bot, lead)
+    await cog.recur_pause.callback(cog, interaction, "1", paused=False)
+
+    assert (await get_poll(db, 1))["recur_next_at"] is not None
+    assert "running again" in interaction.sent
+
+
+async def test_deleting_a_recurrence_stops_it_without_touching_what_it_opened(cog, bot, lead, db):
+    await recurring(cog, bot, lead)
+    await db.conn.execute("UPDATE polls SET recur_next_at = ? WHERE id = 1", ("2020-01-01T00:00",))
+    await db.conn.commit()
+    await cog.run_due_polls()
+
+    interaction = FakeInteraction(bot, lead)
+    await cog.recur_delete.callback(cog, interaction, "1")
+
+    assert (await get_poll(db, 1))["status"] == pure.CANCELLED
+    assert (await get_poll(db, 2))["status"] == pure.OPEN
+    assert "will not run again" in interaction.sent
+    assert await recurrences(db, GUILD) == []
+
+
+async def test_a_poll_number_that_is_not_a_recurrence_says_so(cog, bot, lead, db):
+    await make(cog, bot, lead)
+
+    interaction = FakeInteraction(bot, lead)
+    await cog.recur_delete.callback(cog, interaction, "1")
+
+    assert "no repeating poll" in interaction.sent
+    assert (await get_poll(db, 1))["status"] == pure.OPEN
+
+
+async def test_the_list_names_the_cadence_and_says_when_one_is_paused(cog, bot, lead, db):
+    await recurring(cog, bot, lead, every=choice("weekly"), day="sat", at="19:00")
+    await cog.recur_pause.callback(cog, FakeInteraction(bot, lead), "1")
+
+    interaction = FakeInteraction(bot, lead)
+    await cog.recur_list.callback(cog, interaction)
+
+    assert "every Saturday at 19:00" in interaction.sent and "paused" in interaction.sent
+
+
+async def test_nothing_repeating_says_how_to_start_one(cog, bot, lead):
+    interaction = FakeInteraction(bot, lead)
+    await cog.recur_list.callback(cog, interaction)
+
+    assert interaction.sent == pure.RECUR_NONE
 
 
 async def test_forgetting_a_deleted_dashboard_channel(cog, bot, db):

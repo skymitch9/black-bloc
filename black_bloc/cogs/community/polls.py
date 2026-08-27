@@ -18,6 +18,7 @@ from ...golive import now_iso, parse_ts
 from ...polls import (
     ARCHIVED,
     BUTTONS_UP_TO,
+    CADENCES,
     CANCELLED,
     CLOSED,
     DATE,
@@ -34,6 +35,7 @@ from ...polls import (
     MIN_HOURS,
     MIN_SLOTS,
     NATIVE,
+    NOT_A_RECURRENCE,
     OPEN,
     OPEN_STATUSES,
     PANEL,
@@ -42,6 +44,13 @@ from ...polls import (
     PENDING_REVIEW,
     PICK_SOMETHING,
     QUESTION_LIMIT,
+    RECUR_DELETED,
+    RECUR_NONE,
+    RECUR_NOT_A_DATE,
+    RECUR_PAUSED,
+    RECUR_RESUMED,
+    RECUR_SAVED,
+    RECURRING,
     RESULTS_CHOICES,
     SINGLE,
     STEP_DAYS,
@@ -49,6 +58,8 @@ from ...polls import (
     VOTE_GONE,
     VOTE_NOT_OPEN,
     NeedsPanel,
+    cadence_token,
+    cadence_trouble,
     can_transition,
     clamp,
     closed_text,
@@ -56,9 +67,11 @@ from ...polls import (
     counts_from_options,
     date_slots,
     date_trouble,
+    describe_cadence,
     describe_hours,
     is_multi,
     mentions,
+    next_occurrence,
     open_text,
     options_for,
     panel_embed,
@@ -85,6 +98,7 @@ from ...settings_store import (
     require_staff,
     staff_roles_sentence,
 )
+from ...timezones import DEFAULT_TZ
 
 log = logging.getLogger(__name__)
 
@@ -346,12 +360,65 @@ async def options_of(db: Any, poll_id: int) -> list[Any]:
 
 
 async def polls_by_status(db: Any, guild_id: int, statuses: Any) -> list[Any]:
+    """Polls only: a recurrence is a template that makes them, not one of them."""
     marks = ", ".join("?" for _ in statuses)
     cur = await db.conn.execute(
-        f"SELECT * FROM polls WHERE guild_id = ? AND status IN ({marks}) ORDER BY id DESC",
+        f"SELECT * FROM polls WHERE guild_id = ? AND status IN ({marks}) "
+        "AND recurrence IS NULL ORDER BY id DESC",
         (guild_id, *statuses),
     )
     return list(await cur.fetchall())
+
+
+async def recurrences(db: Any, guild_id: int) -> list[Any]:
+    cur = await db.conn.execute(
+        "SELECT * FROM polls WHERE guild_id = ? AND status = ? AND recurrence IS NOT NULL "
+        "ORDER BY id DESC",
+        (guild_id, RECURRING),
+    )
+    return list(await cur.fetchall())
+
+
+async def get_recurrence(db: Any, guild_id: int, poll_id: int) -> Any:
+    row = await get_poll(db, poll_id)
+    if row is None or row["guild_id"] != guild_id or not row["recurrence"]:
+        return None
+    return row if row["status"] == RECURRING else None
+
+
+async def set_recurrence(
+    db: Any, poll_id: int, token: str, at_local: str, tz_name: str, next_at: Any
+) -> None:
+    await db.conn.execute(
+        "UPDATE polls SET recurrence = ?, recur_at = ?, recur_tz = ?, recur_next_at = ? "
+        "WHERE id = ?",
+        (token, at_local, tz_name, next_at, poll_id),
+    )
+    await db.conn.commit()
+
+
+async def set_recur_next(db: Any, poll_id: int, next_at: Any) -> None:
+    await db.conn.execute(
+        "UPDATE polls SET recur_next_at = ? WHERE id = ?", (next_at, poll_id)
+    )
+    await db.conn.commit()
+
+
+async def claim_occurrence(db: Any, poll_id: int, was: Any, following: str) -> bool:
+    """True only for the pass that moved the clock on, so one due time opens one poll."""
+    cur = await db.conn.execute(
+        "UPDATE polls SET recur_next_at = ? WHERE id = ? AND recur_next_at = ? AND status = ?",
+        (following, poll_id, was, RECURRING),
+    )
+    await db.conn.commit()
+    return bool(cur.rowcount)
+
+
+async def set_schedule(db: Any, poll_id: int, schedule_id: int) -> None:
+    await db.conn.execute(
+        "UPDATE polls SET schedule_id = ? WHERE id = ?", (schedule_id, poll_id)
+    )
+    await db.conn.commit()
 
 
 async def set_status(
@@ -1425,6 +1492,9 @@ class Polls(commands.Cog):
         self.last_error: dict[str, str | None] = {name: None for name in LOOP_NAMES}
 
     poll = app_commands.Group(name="poll", description="Put something to the room")
+    recur = app_commands.Group(
+        name="recur", description="Polls that run again on their own", parent=poll
+    )
 
     async def cog_load(self) -> None:
         self.bot.add_dynamic_items(
@@ -1463,9 +1533,13 @@ class Polls(commands.Cog):
         self.loop_failed("polls", exc, self._polls_loop)
 
     async def run_due_polls(self) -> None:
-        """Last calls, then closes, then the archive sweep — in that order, every pass."""
+        """Occurrences, last calls, closes, then the archive sweep — that order, every pass."""
         now = datetime.now(UTC)
         seen = {guild.id: guild for guild in getattr(self.bot, "guilds", ())}
+        for row in await due_polls(self.bot.db, RECURRING, "recur_next_at", now.isoformat()):
+            guild = seen.get(row["guild_id"])
+            if guild is not None:
+                await self._recur(guild, row, now)
         for row in await reminders_due(self.bot.db, self._reminder_horizon(now, seen)):
             guild = seen.get(row["guild_id"])
             if guild is not None:
@@ -1476,6 +1550,61 @@ class Polls(commands.Cog):
                 await close_poll(self.bot, guild, row, reason="expired")
         for guild in seen.values():
             await self._archive(guild, now)
+
+    async def _recur(self, guild: Any, row: Any, now: datetime) -> None:
+        """One occurrence, claimed before it is opened so a restart cannot post it twice."""
+        following = next_occurrence(row["recurrence"], row["recur_at"], row["recur_tz"], now)
+        if following is None:
+            await set_recur_next(self.bot.db, row["id"], None)
+            await log_action(
+                self.bot,
+                guild,
+                "poll.recur_failed",
+                details={"recurrence_id": row["id"], "reason": "unreadable_cadence"},
+            )
+            return
+        if not await claim_occurrence(
+            self.bot.db, row["id"], row["recur_next_at"], following.isoformat()
+        ):
+            return
+        options = await options_of(self.bot.db, row["id"])
+        made, _ = await store_poll(
+            self.bot,
+            guild,
+            row["creator_id"],
+            {
+                "question": row["question"],
+                "kind": row["kind"],
+                "labels": [str(item["label"]) for item in options],
+                "values": [item["value"] for item in options],
+                "hours": int(row["hours"]),
+                "surface": row["surface"],
+                "multi": bool(row["multi"]),
+                "anonymous": bool(row["anonymous"]),
+                "results": row["results"],
+            },
+            channel_id=row["channel_id"],
+            ping_role_id=row["ping_role_id"],
+            auto_thread=bool(row["auto_thread"]),
+            status=OPEN,
+        )
+        await set_schedule(self.bot.db, made["id"], row["id"])
+        message, why_not = await post_poll(self.bot, guild, await get_poll(self.bot.db, made["id"]))
+        if message is None:
+            await set_status(self.bot.db, made["id"], CANCELLED, closed=True)
+        await log_action(
+            self.bot,
+            guild,
+            "poll.recurred",
+            target=row["creator_id"],
+            details={
+                "recurrence_id": row["id"],
+                "poll_id": made["id"],
+                "posted": message is not None,
+                "reason": why_not,
+                "next_at": following.isoformat(),
+            },
+        )
 
     def _reminder_horizon(self, now: datetime, guilds: Any) -> str:
         """One window wide enough for every guild; each row is re-checked against its own."""
@@ -1864,6 +1993,213 @@ class Polls(commands.Cog):
         await interaction.response.send_message(
             "\n".join(lines), ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
         )
+
+    @recur.command(name="create", description="Set a poll to run again on its own")
+    @app_commands.describe(
+        question="What it asks, every time",
+        every="daily, weekly or monthly",
+        at="Time of day on the 24-hour clock, like 19:00",
+        day="weekly: mon-sun · monthly: the day of the month, 1-28",
+        tz="The zone that time of day is in",
+        kind="single, checkbox (pick several), yesno or rating (1-5)",
+        options="The answers, separated by `|`",
+        hours="How long each one stays open",
+        anonymous="Nobody is told who voted",
+        results="live, or close to keep the bars hidden until it ends",
+        channel="Where each one is posted",
+        ping_role="Role mentioned when each one opens",
+        thread="Open a discussion thread under each one",
+    )
+    @app_commands.choices(
+        every=[app_commands.Choice(name=name, value=name) for name in CADENCES],
+        kind=[app_commands.Choice(name=name, value=name) for name in KINDS],
+        results=[app_commands.Choice(name=name, value=name) for name in RESULTS_CHOICES],
+    )
+    async def recur_create(
+        self,
+        interaction: discord.Interaction,
+        question: str,
+        every: app_commands.Choice[str],
+        at: str,
+        day: str | None = None,
+        tz: str | None = None,
+        kind: app_commands.Choice[str] | None = None,
+        options: str | None = None,
+        hours: app_commands.Range[int, MIN_HOURS, MAX_HOURS] | None = None,
+        anonymous: bool = False,
+        results: app_commands.Choice[str] | None = None,
+        channel: discord.TextChannel | None = None,
+        ping_role: discord.Role | None = None,
+        thread: bool | None = None,
+    ) -> None:
+        if not await require_staff(interaction):
+            return
+        if not await self._ready(interaction):
+            return
+        guild = interaction.guild
+        if self.bot.store.get(guild.id, "poll_mode") == "off":
+            await answer(interaction, POLLS_OFF)
+            return
+        wanted = kind.value if kind is not None else SINGLE
+        if wanted == DATE:
+            await answer(interaction, RECUR_NOT_A_DATE)
+            return
+        zone_name = str(tz or DEFAULT_TZ)
+        trouble = cadence_trouble(every.value, day, at, zone_name)
+        if trouble is not None:
+            await answer(interaction, trouble)
+            return
+        plan, refusal = poll_plan(
+            self.bot.store,
+            guild.id,
+            question=question,
+            kind=wanted,
+            options=options,
+            hours=int(hours) if hours is not None else None,
+            anonymous=anonymous,
+            results=results.value if results is not None else LIVE,
+        )
+        if plan is None:
+            await answer(interaction, refusal)
+            return
+        target = channel if channel is not None else interaction.channel
+        if target is None:
+            await answer(interaction, NO_CHANNEL)
+            return
+        if not guard_allows(self.bot, target):
+            await answer(interaction, guard_refusal(self.bot))
+            return
+        token = cadence_token(every.value, day)
+        following = next_occurrence(token, at, zone_name)
+        row, _ = await store_poll(
+            self.bot,
+            guild,
+            interaction.user.id,
+            plan,
+            channel_id=target.id,
+            ping_role_id=(
+                ping_role.id
+                if ping_role is not None
+                else self.bot.store.get(guild.id, "poll_ping_role_id")
+            ),
+            auto_thread=(
+                bool(thread)
+                if thread is not None
+                else bool(self.bot.store.get(guild.id, "poll_auto_thread"))
+            ),
+            status=RECURRING,
+        )
+        await set_recurrence(self.bot.db, row["id"], token, at, zone_name, following.isoformat())
+        await log_action(
+            self.bot,
+            guild,
+            "poll.recur_created",
+            actor=interaction.user,
+            details={
+                "recurrence_id": row["id"],
+                "cadence": token,
+                "at": at,
+                "tz": zone_name,
+                "next_at": following.isoformat(),
+            },
+        )
+        said = RECUR_SAVED.format(
+            question=clamp(question, 80),
+            cadence=describe_cadence(token, at, zone_name),
+            when=int(following.timestamp()),
+        )
+        await answer(interaction, f"{said}\n\n{plan['note']}" if plan["note"] else said)
+
+    @recur.command(name="list", description="Show the polls that run again on their own")
+    async def recur_list(self, interaction: discord.Interaction) -> None:
+        if not await self._ready(interaction):
+            return
+        rows = await recurrences(self.bot.db, interaction.guild.id)
+        lines: list[str] = [RECUR_NONE] if not rows else []
+        for row in rows[:LIST_LIMIT]:
+            following = parse_ts(row["recur_next_at"])
+            when = f"next <t:{int(following.timestamp())}:R>" if following else "**paused**"
+            lines.append(
+                f"**#{row['id']}** {clamp(row['question'], 60)} — "
+                f"{describe_cadence(row['recurrence'], row['recur_at'], row['recur_tz'])} · "
+                f"{when} · <#{row['channel_id']}>"
+            )
+        await interaction.response.send_message(
+            "\n".join(lines), ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+        )
+
+    @recur.command(name="pause", description="Stop or start a repeating poll")
+    @app_commands.describe(
+        poll_id="The number `/poll recur list` shows",
+        paused="true stops it opening any more; false starts it again",
+    )
+    async def recur_pause(
+        self, interaction: discord.Interaction, poll_id: str, paused: bool = True
+    ) -> None:
+        row = await self._wanted_recurrence(interaction, poll_id)
+        if row is None:
+            return
+        if paused:
+            await set_recur_next(self.bot.db, row["id"], None)
+            await log_action(
+                self.bot,
+                interaction.guild,
+                "poll.recur_paused",
+                actor=interaction.user,
+                details={"recurrence_id": row["id"]},
+            )
+            await answer(interaction, RECUR_PAUSED.format(question=clamp(row["question"], 80)))
+            return
+        following = next_occurrence(row["recurrence"], row["recur_at"], row["recur_tz"])
+        if following is None:
+            await answer(interaction, NOT_A_RECURRENCE.format(poll_id=row["id"]))
+            return
+        await set_recur_next(self.bot.db, row["id"], following.isoformat())
+        await log_action(
+            self.bot,
+            interaction.guild,
+            "poll.recur_resumed",
+            actor=interaction.user,
+            details={"recurrence_id": row["id"], "next_at": following.isoformat()},
+        )
+        await answer(
+            interaction,
+            RECUR_RESUMED.format(
+                question=clamp(row["question"], 80), when=int(following.timestamp())
+            ),
+        )
+
+    @recur.command(name="delete", description="Stop a poll repeating for good")
+    @app_commands.describe(poll_id="The number `/poll recur list` shows")
+    async def recur_delete(self, interaction: discord.Interaction, poll_id: str) -> None:
+        row = await self._wanted_recurrence(interaction, poll_id)
+        if row is None:
+            return
+        await set_recur_next(self.bot.db, row["id"], None)
+        await set_status(self.bot.db, row["id"], CANCELLED, closed=True)
+        await log_action(
+            self.bot,
+            interaction.guild,
+            "poll.recur_deleted",
+            actor=interaction.user,
+            details={"recurrence_id": row["id"], "question": row["question"]},
+        )
+        await answer(interaction, RECUR_DELETED.format(question=clamp(row["question"], 80)))
+
+    async def _wanted_recurrence(self, interaction: discord.Interaction, poll_id: str) -> Any:
+        if not await require_staff(interaction):
+            return None
+        if not await self._ready(interaction):
+            return None
+        digits = str(poll_id or "").strip().lstrip("#")
+        if not digits.isdigit():
+            await answer(interaction, NOT_AN_ID.format(given=clamp(poll_id, 40)))
+            return None
+        row = await get_recurrence(self.bot.db, interaction.guild.id, int(digits))
+        if row is None:
+            await answer(interaction, NOT_A_RECURRENCE.format(poll_id=clamp(digits, 20)))
+            return None
+        return row
 
     @poll.command(name="settings", description="Show or change how polls are set up")
     @app_commands.describe(

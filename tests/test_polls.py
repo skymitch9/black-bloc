@@ -363,3 +363,71 @@ def test_a_date_poll_that_cannot_be_laid_out_is_refused_in_words(start, slots, s
 
 def test_a_workable_date_poll_is_not_refused():
     assert polls.date_trouble("2026-09-05", 7, 1, polls.STEP_DAYS) is None
+
+
+def test_a_recurrence_is_one_token_the_row_carries_and_the_loop_reads():
+    assert polls.cadence_token("daily") == "daily"
+    assert polls.cadence_token("weekly", "Saturday") == "weekly:sat"
+    assert polls.cadence_token("monthly", "12") == "monthly:12"
+    assert polls.cadence_token("weekly", "funday") is None
+    assert polls.cadence_token("yearly", None) is None
+
+
+def test_a_day_of_the_month_no_month_has_is_refused_with_the_reason():
+    assert polls.cadence_token("monthly", 29) is None
+    said = polls.cadence_trouble("monthly", 31, "09:00", "America/Phoenix")
+    assert said and "February" in said and str(polls.MAX_MONTH_DAY) in said
+
+
+def test_a_time_of_day_or_zone_nobody_can_read_is_refused():
+    assert "24-hour" in polls.cadence_trouble("daily", None, "7pm", "America/Phoenix")
+    assert "tzdata" in polls.cadence_trouble("daily", None, "19:00", "Mars/Olympus")
+    assert polls.cadence_trouble("daily", None, "19:00", "America/Phoenix") is None
+
+
+def test_a_daily_poll_moves_to_tomorrow_once_today_has_gone_past():
+    # 20:00 UTC is 13:00 in Phoenix, which has no DST and is UTC-7 all year.
+    now = datetime(2026, 8, 27, 20, 0, tzinfo=UTC)
+    assert polls.next_occurrence("daily", "09:00", "America/Phoenix", now) == datetime(
+        2026, 8, 28, 16, 0, tzinfo=UTC
+    )
+    assert polls.next_occurrence("daily", "19:00", "America/Phoenix", now) == datetime(
+        2026, 8, 28, 2, 0, tzinfo=UTC
+    )
+
+
+def test_a_weekly_poll_lands_on_its_own_weekday():
+    now = datetime(2026, 8, 27, 20, 0, tzinfo=UTC)
+    found = polls.next_occurrence("weekly:sat", "19:00", "America/Phoenix", now)
+    assert found.astimezone(polls.timezones.zone("America/Phoenix")).strftime("%a") == "Sat"
+
+
+def test_a_monthly_poll_rolls_into_the_next_year_at_december():
+    found = polls.next_occurrence(
+        "monthly:1", "07:30", "America/Phoenix", datetime(2026, 12, 15, tzinfo=UTC)
+    )
+    assert (found.year, found.month) == (2027, 1)
+
+
+def test_a_cadence_nobody_can_read_produces_no_next_time_rather_than_a_guess():
+    assert polls.next_occurrence("fortnightly", "09:00", "America/Phoenix") is None
+    assert polls.next_occurrence("weekly:funday", "09:00", "America/Phoenix") is None
+    assert polls.next_occurrence("monthly:31", "09:00", "America/Phoenix") is None
+    assert polls.next_occurrence("daily", "9am", "America/Phoenix") is None
+    assert polls.next_occurrence("daily", "09:00", "Mars/Olympus") is None
+
+
+def test_a_cadence_reads_back_as_a_sentence_with_its_zone_named():
+    assert polls.describe_cadence("daily", "09:00", "America/Phoenix") == (
+        "every day at 09:00 America/Phoenix"
+    )
+    assert "Saturday" in polls.describe_cadence("weekly:sat", "19:00", "America/Phoenix")
+    assert "22nd" in polls.describe_cadence("monthly:22", "07:30", "America/Phoenix")
+    assert "1st" in polls.describe_cadence("monthly:1", "07:30", "America/Phoenix")
+    assert "11th" in polls.describe_cadence("monthly:11", "07:30", "America/Phoenix")
+
+
+def test_a_recurring_template_is_only_ever_cancelled_never_opened():
+    assert polls.can_transition(polls.RECURRING, polls.CANCELLED)
+    assert not polls.can_transition(polls.RECURRING, polls.OPEN)
+    assert polls.RECURRING not in polls.OPEN_STATUSES

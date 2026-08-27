@@ -63,6 +63,17 @@ DAY_FORMAT = "%Y-%m-%d"
 DAY_TIME_FORMAT = "%Y-%m-%d %H:%M"
 DAY_LABEL = "%a %d %b"
 
+DAILY = "daily"
+WEEKLY = "weekly"
+MONTHLY = "monthly"
+CADENCES = (DAILY, WEEKLY, MONTHLY)
+WEEKDAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+WEEKDAY_NAMES = (
+    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+)
+MAX_MONTH_DAY = 28
+CLOCK_FORMAT = "%H:%M"
+
 DRAFT = "draft"
 PENDING_REVIEW = "pending_review"
 OPEN = "open"
@@ -70,7 +81,8 @@ CLOSED = "closed"
 ARCHIVED = "archived"
 DENIED = "denied"
 CANCELLED = "cancelled"
-STATUSES = (DRAFT, PENDING_REVIEW, OPEN, CLOSED, ARCHIVED, DENIED, CANCELLED)
+RECURRING = "recurring"
+STATUSES = (DRAFT, PENDING_REVIEW, OPEN, CLOSED, ARCHIVED, DENIED, CANCELLED, RECURRING)
 OPEN_STATUSES = (DRAFT, PENDING_REVIEW, OPEN)
 SETTLED_STATUSES = (CLOSED, CANCELLED, DENIED, ARCHIVED)
 
@@ -82,6 +94,7 @@ TRANSITIONS: dict[str, tuple[str, ...]] = {
     CANCELLED: (ARCHIVED,),
     DENIED: (),
     ARCHIVED: (),
+    RECURRING: (CANCELLED,),
 }
 
 TERMINAL_STATUSES = tuple(status for status, allowed in TRANSITIONS.items() if not allowed)
@@ -94,6 +107,7 @@ COLOURS: dict[str, int] = {
     ARCHIVED: 0x99AAB5,
     DENIED: 0xED4245,
     CANCELLED: 0xED4245,
+    RECURRING: 0x5865F2,
 }
 
 KIND_NAMES: dict[str, str] = {
@@ -206,6 +220,40 @@ PICK_SOMETHING = (
     "Nothing was picked, so nothing changed. Choose at least one option, or use "
     f"**{PANEL_CLEAR}** to take your vote back."
 )
+
+BAD_CLOCK = (
+    "**{given}** is not a time of day Black Bloc can read, so nothing was saved. Write it on the "
+    "24-hour clock — `09:00`, `19:30`."
+)
+BAD_WEEKDAY = (
+    "**{given}** is not a day of the week, so nothing was saved. A weekly poll runs on one of "
+    "{known}."
+)
+BAD_MONTH_DAY = (
+    "**{given}** is not a day of the month Black Bloc will use, so nothing was saved. It counts "
+    "from 1 to {limit} — every month has those, and a poll set for the 31st would skip February."
+)
+BAD_ZONE = (
+    "**{given}** is not a timezone this machine knows, so nothing was saved. Write it the tzdata "
+    "way — `America/Phoenix`, `Europe/London`."
+)
+RECUR_NOT_A_DATE = (
+    "A **date** poll cannot recur, so nothing was saved — its slots are fixed days, and the second "
+    "time round it would be asking about a day that has been and gone. Run `/poll create "
+    "kind:date` when you need one, or recur a checkbox poll with the days written on it."
+)
+RECUR_NONE = "No poll is set to repeat. `/poll recur create` starts one."
+RECUR_SAVED = "**{question}** will run {cadence}. The first one opens <t:{when}:R>."
+RECUR_PAUSED = "**{question}** is paused. Nothing opens until it is started again."
+RECUR_RESUMED = "**{question}** is running again. The next one opens <t:{when}:R>."
+RECUR_DELETED = "**{question}** will not run again. Polls it already opened are untouched."
+NOT_A_RECURRENCE = (
+    "Black Bloc has no repeating poll **#{poll_id}**, so nothing was done. `/poll recur list` has "
+    "the ones it knows about."
+)
+CADENCE_DAILY = "every day at {clock} {zone}"
+CADENCE_WEEKLY = "every {day} at {clock} {zone}"
+CADENCE_MONTHLY = "on the {day}{ordinal} of each month at {clock} {zone}"
 
 RESULTS_TITLE = "{question}"
 NO_VOTES = "Nobody voted."
@@ -337,6 +385,101 @@ def date_slots(
         }
         for n in range(int(slots))
     ]
+
+
+def parse_clock(text: Any) -> tuple[int, int] | None:
+    try:
+        found = datetime.strptime(str(text or "").strip(), CLOCK_FORMAT)
+    except ValueError:
+        return None
+    return (found.hour, found.minute)
+
+
+def cadence_token(every: Any, day: Any = None) -> str | None:
+    """`daily`, `weekly:sat`, `monthly:12` — one string the row carries and the loop reads."""
+    kind = str(every or "").strip().lower()
+    if kind == DAILY:
+        return DAILY
+    if kind == WEEKLY:
+        wanted = str(day or "").strip().lower()[:3]
+        return f"{WEEKLY}:{wanted}" if wanted in WEEKDAYS else None
+    if kind == MONTHLY:
+        try:
+            at = int(str(day or "").strip())
+        except (TypeError, ValueError):
+            return None
+        return f"{MONTHLY}:{at}" if 1 <= at <= MAX_MONTH_DAY else None
+    return None
+
+
+def cadence_trouble(every: Any, day: Any, at_text: Any, tz_name: Any) -> str | None:
+    """The refusal sentence for a recurrence's own arguments, or None when they work."""
+    kind = str(every or "").strip().lower()
+    if kind == WEEKLY and cadence_token(kind, day) is None:
+        return BAD_WEEKDAY.format(given=clamp(day, 40) or "nothing", known=", ".join(WEEKDAYS))
+    if kind == MONTHLY and cadence_token(kind, day) is None:
+        return BAD_MONTH_DAY.format(given=clamp(day, 40) or "nothing", limit=MAX_MONTH_DAY)
+    if cadence_token(kind, day) is None:
+        return BAD_WEEKDAY.format(given=clamp(every, 40) or "nothing", known=", ".join(CADENCES))
+    if parse_clock(at_text) is None:
+        return BAD_CLOCK.format(given=clamp(at_text, 40) or "nothing")
+    if not timezones.is_known(tz_name):
+        return BAD_ZONE.format(given=clamp(tz_name, 60) or "nothing")
+    return None
+
+
+def next_occurrence(
+    token: Any, at_text: Any, tz_name: Any, after: datetime | None = None
+) -> datetime | None:
+    """The next instant this cadence comes round, read in its own zone and returned as UTC."""
+    clock = parse_clock(at_text)
+    zi = timezones.zone(tz_name)
+    if clock is None or zi is None:
+        return None
+    kind, _, detail = str(token or "").partition(":")
+    moment = (after or datetime.now(UTC)).astimezone(zi)
+    when = moment.replace(hour=clock[0], minute=clock[1], second=0, microsecond=0)
+    if kind == DAILY:
+        if when <= moment:
+            when += timedelta(days=1)
+    elif kind == WEEKLY:
+        if detail not in WEEKDAYS:
+            return None
+        when += timedelta(days=(WEEKDAYS.index(detail) - when.weekday()) % 7)
+        if when <= moment:
+            when += timedelta(days=7)
+    elif kind == MONTHLY:
+        if not detail.isdigit() or not 1 <= int(detail) <= MAX_MONTH_DAY:
+            return None
+        when = when.replace(day=int(detail))
+        if when <= moment:
+            year, month = divmod(when.month, 12)
+            when = when.replace(year=when.year + year, month=month + 1)
+    else:
+        return None
+    return when.astimezone(UTC)
+
+
+def ordinal(number: Any) -> str:
+    value = int(number)
+    if 11 <= value % 100 <= 13:
+        return "th"
+    return {1: "st", 2: "nd", 3: "rd"}.get(value % 10, "th")
+
+
+def describe_cadence(token: Any, at_text: Any, tz_name: Any) -> str:
+    kind, _, detail = str(token or "").partition(":")
+    clock = str(at_text or "?")
+    zone_name = str(tz_name or timezones.DEFAULT_TZ)
+    if kind == WEEKLY and detail in WEEKDAYS:
+        return CADENCE_WEEKLY.format(
+            day=WEEKDAY_NAMES[WEEKDAYS.index(detail)], clock=clock, zone=zone_name
+        )
+    if kind == MONTHLY and detail.isdigit():
+        return CADENCE_MONTHLY.format(
+            day=int(detail), ordinal=ordinal(detail), clock=clock, zone=zone_name
+        )
+    return CADENCE_DAILY.format(clock=clock, zone=zone_name)
 
 
 def whole(value: Any, low: int, high: int) -> bool:
