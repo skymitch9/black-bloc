@@ -15,6 +15,7 @@ from black_bloc.golive import (
     platform_of,
     render,
     should_announce,
+    twitch_enrichable,
     twitch_login_from_url,
 )
 from black_bloc.settings_store import GOLIVE_TEMPLATE
@@ -101,6 +102,45 @@ def test_platform_comes_from_the_activity_then_the_url():
     assert platform_of(FakeActivity(), "https://example.com/live") is None
 
 
+def test_every_shape_of_youtube_address_reads_as_youtube():
+    for url in (
+        "https://youtu.be/xyz",
+        "https://www.youtube.com/watch?v=xyz",
+        "https://youtube.com/live/xyz",
+        "https://www.youtube.com/@blackbloc/live",
+        "HTTPS://WWW.YOUTUBE.COM/WATCH?V=XYZ",
+    ):
+        assert platform_of(FakeActivity(), url) == "YouTube", url
+
+
+def test_a_youtube_presence_is_read_as_a_youtube_stream():
+    activity = discord.Streaming(name="YouTube", url="https://www.youtube.com/watch?v=xyz")
+    info = extract_stream([activity])
+    assert info == StreamInfo(
+        url="https://www.youtube.com/watch?v=xyz", game=None, title=None, platform="YouTube"
+    )
+
+
+def test_the_platform_name_is_never_mistaken_for_the_stream_title():
+    for name in ("YouTube", "Twitch"):
+        activity = discord.Streaming(name=name, url=f"https://example.com/{name}")
+        info = extract_stream([activity])
+        assert info is not None and info.title is None
+
+
+def test_only_a_twitch_or_unknown_stream_may_be_enriched_from_twitch():
+    assert twitch_enrichable(StreamInfo(platform=None)) is True
+    assert twitch_enrichable(StreamInfo(platform="Twitch")) is True
+    assert twitch_enrichable(StreamInfo(platform="twitch")) is True
+    assert twitch_enrichable(StreamInfo(platform="YouTube")) is False
+
+
+def test_enrichment_never_overwrites_a_youtube_stream():
+    stream = TwitchStream("1", "alice", "Alice", "Hades", "the real title", "2026-08-26T12:00:00Z")
+    info = StreamInfo(url="https://youtu.be/xyz", platform="YouTube")
+    assert enriched(info, stream) is info
+
+
 def test_render_matches_the_incumbent_wording():
     info = StreamInfo(url="https://www.twitch.tv/alice", game="Celeste", title="any%")
     text = render(GOLIVE_TEMPLATE, info, FakeMember("Alice"))
@@ -138,6 +178,20 @@ def test_a_broken_template_falls_back_to_the_default():
     info = StreamInfo(url="u", game="g")
     assert render("{unbalanced", info, FakeMember("Alice")) == render(
         GOLIVE_TEMPLATE, info, FakeMember("Alice")
+    )
+
+
+def test_render_fills_the_platform_and_leaves_an_unknown_one_blank():
+    youtube = StreamInfo(url="https://youtu.be/xyz", game="Hades", platform="YouTube")
+    assert render("live on {platform}", youtube) == "live on YouTube"
+    assert render("live on {platform}", StreamInfo(url="u")) == "live on "
+
+
+def test_a_template_without_the_platform_renders_exactly_as_before():
+    youtube = StreamInfo(url="https://youtu.be/xyz", game="Hades", platform="YouTube")
+    assert render(GOLIVE_TEMPLATE, youtube, FakeMember("Alice")) == (
+        "REGULATORS! Mount up! **Alice** is currently streaming **Hades**! "
+        "Check it out: https://youtu.be/xyz"
     )
 
 

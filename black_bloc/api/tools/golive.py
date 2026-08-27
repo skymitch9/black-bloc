@@ -43,6 +43,7 @@ def session_row(guild: Any, row: Any) -> dict[str, Any]:
         "url": row["url"],
         "game": row["game"],
         "title": row["title"],
+        "platform": row["platform"],
         "started_at": row["started_at"],
         "ended_at": row["ended_at"],
         "mode": row["mode"],

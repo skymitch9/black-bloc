@@ -85,6 +85,21 @@ async def test_optouts_and_sessions_are_listed_newest_first(client, sign_in, web
     assert sessions[0]["user_name"] == "Ada"
 
 
+async def test_a_session_row_says_which_platform_it_was_on(client, sign_in, web, guild, wf):
+    wf.member(guild, 21, name="ada")
+    await web.db.conn.execute(
+        "INSERT INTO golive_sessions(guild_id, user_id, source, platform, started_at, mode) "
+        "VALUES (?, 21, 'presence', 'YouTube', '2026-08-27T00:00:00+00:00', 'on')",
+        (wf.GUILD_ID,),
+    )
+    await web.db.conn.commit()
+    sign_in(client)
+
+    rows = client.get("/api/golive/sessions").json()
+
+    assert rows[0]["platform"] == "YouTube"
+
+
 async def test_the_session_limit_is_clamped(client, sign_in, web):
     sign_in(client)
     assert client.get("/api/golive/sessions", params={"limit": 10000}).status_code == 200
