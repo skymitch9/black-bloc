@@ -94,12 +94,297 @@ WARN_THRESHOLD_REACHED = (
 )
 
 
+def in_test_mode(bot: Any) -> bool:
+    return getattr(bot, "guard", None) is not None
+
+
+def audit_reason(moderator: Any, reason: Any) -> str:
+    who = getattr(moderator, "display_name", getattr(moderator, "id", moderator))
+    return f"{who}: {reason}" if reason else f"{who} (no reason given)"
+
+
+async def record_case(
+    bot: Any,
+    guild: Any,
+    user_id: int | None,
+    kind: str,
+    *,
+    moderator: Any = None,
+    reason: Any = None,
+    duration_s: int | None = None,
+    applied: bool = True,
+    mode: str = "on",
+    detail: Any = None,
+    channel_id: int | None = None,
+) -> int | None:
+    """One case row and its modlog card; the one place either is written."""
+    case_id = await add_case(
+        bot.db,
+        guild.id,
+        user_id,
+        kind,
+        moderator_id=getattr(moderator, "id", None),
+        reason=reason,
+        duration_s=duration_s,
+        mode=mode,
+        applied=applied,
+        channel_id=channel_id,
+    )
+    message_id = await send_modlog(
+        bot,
+        guild,
+        case_embed(
+            case_id=case_id,
+            kind=kind,
+            user_id=user_id,
+            moderator_id=getattr(moderator, "id", None),
+            reason=reason,
+            duration_s=duration_s,
+            applied=applied,
+            mode=mode,
+            detail=detail,
+            channel_id=channel_id,
+        ),
+    )
+    await set_case_log_message(bot.db, case_id, message_id)
+    return case_id
+
+
+async def refuse_in_test_mode(
+    bot: Any,
+    guild: Any,
+    target: Any,
+    kind: str,
+    wording: str,
+    *,
+    moderator: Any = None,
+    reason: Any = None,
+    duration_s: int | None = None,
+    channel_id: int | None = None,
+) -> str:
+    """Record what would have happened and give back the refusal to say."""
+    target_id = getattr(target, "id", target)
+    case_id = await record_case(
+        bot,
+        guild,
+        target_id,
+        kind,
+        moderator=moderator,
+        reason=reason,
+        duration_s=duration_s,
+        applied=False,
+        mode="test_mode",
+        channel_id=channel_id,
+    )
+    await log_action(
+        bot,
+        guild,
+        f"mod.would_{kind}",
+        actor=moderator,
+        target=target_id,
+        reason=reason,
+        details={"case_id": case_id, "reason": "test_mode"},
+    )
+    return refusal_in_test_mode(wording)
+
+
+async def note_failure(
+    bot: Any, guild: Any, target: Any, kind: str, moderator: Any, reason: Any, exc: Exception
+) -> str:
+    target_id = getattr(target, "id", target)
+    log.warning("mod: %s refused for %s: %s", kind, target_id, exc)
+    await log_action(
+        bot,
+        guild,
+        f"mod.{kind}_failed",
+        actor=moderator,
+        target=target_id,
+        reason=reason,
+        details={"reason": f"{type(exc).__name__}: {exc}"},
+    )
+    return REFUSED[kind]
+
+
+async def tell_member(
+    bot: Any, guild: Any, member: Any, kind: str, reason: Any, duration_s: Any = None
+) -> None:
+    await dm_member(
+        member,
+        dm_text(
+            bot.store.get(guild.id, "mod_dm_on_action"),
+            guild.name,
+            kind,
+            reason,
+            duration_s=duration_s,
+        ),
+    )
+
+
+async def warn_member(bot: Any, guild: Any, member: Any, moderator: Any, reason: Any) -> str:
+    await tell_member(bot, guild, member, "warn", reason)
+    case_id = await record_case(bot, guild, member.id, "warn", moderator=moderator, reason=reason)
+    await log_action(
+        bot,
+        guild,
+        "mod.warned",
+        actor=moderator,
+        target=member,
+        reason=reason,
+        details={"case_id": case_id},
+    )
+    count = await warn_count(bot.db, guild.id, member.id)
+    threshold = int(bot.store.get(guild.id, "automod_warn_threshold") or 0)
+    tail = ""
+    if threshold and count >= threshold:
+        tail = WARN_THRESHOLD_REACHED.format(count=count, threshold=threshold)
+        await log_action(
+            bot,
+            guild,
+            "mod.warn_threshold",
+            actor=moderator,
+            target=member,
+            details={"case_id": case_id, "count": count, "threshold": threshold},
+        )
+    return f"Warned **{member.display_name}** — case **#{case_id}**.{tail}"
+
+
+async def timeout_member(
+    bot: Any, guild: Any, member: Any, moderator: Any, seconds: int, reason: Any
+) -> str:
+    try:
+        await member.timeout(
+            timedelta(seconds=clamp_timeout(seconds)), reason=audit_reason(moderator, reason)
+        )
+    except discord.HTTPException as exc:
+        return await note_failure(bot, guild, member, "timeout", moderator, reason, exc)
+    await tell_member(bot, guild, member, "timeout", reason, duration_s=clamp_timeout(seconds))
+    case_id = await record_case(
+        bot,
+        guild,
+        member.id,
+        "timeout",
+        moderator=moderator,
+        reason=reason,
+        duration_s=clamp_timeout(seconds),
+    )
+    await log_action(
+        bot,
+        guild,
+        "mod.timed_out",
+        actor=moderator,
+        target=member,
+        reason=reason,
+        details={"case_id": case_id, "duration_s": clamp_timeout(seconds)},
+    )
+    return (
+        f"Timed **{member.display_name}** out for {describe_duration(seconds)} — case "
+        f"**#{case_id}**."
+    )
+
+
+async def untimeout_member(bot: Any, guild: Any, member: Any, moderator: Any, reason: Any) -> str:
+    try:
+        await member.timeout(None, reason=audit_reason(moderator, reason))
+    except discord.HTTPException as exc:
+        return await note_failure(bot, guild, member, "untimeout", moderator, reason, exc)
+    await tell_member(bot, guild, member, "untimeout", reason)
+    case_id = await record_case(
+        bot, guild, member.id, "untimeout", moderator=moderator, reason=reason
+    )
+    await log_action(
+        bot,
+        guild,
+        "mod.untimed_out",
+        actor=moderator,
+        target=member,
+        reason=reason,
+        details={"case_id": case_id},
+    )
+    return f"**{member.display_name}** is out of their timeout — case **#{case_id}**."
+
+
+async def kick_member(bot: Any, guild: Any, member: Any, moderator: Any, reason: Any) -> str:
+    await tell_member(bot, guild, member, "kick", reason)
+    try:
+        await guild.kick(member, reason=audit_reason(moderator, reason))
+    except discord.HTTPException as exc:
+        return await note_failure(bot, guild, member, "kick", moderator, reason, exc)
+    case_id = await record_case(bot, guild, member.id, "kick", moderator=moderator, reason=reason)
+    await log_action(
+        bot,
+        guild,
+        "mod.kicked",
+        actor=moderator,
+        target=member,
+        reason=reason,
+        details={"case_id": case_id},
+    )
+    return f"Kicked **{member.display_name}** — case **#{case_id}**."
+
+
+async def ban_member(
+    bot: Any, guild: Any, member: Any, moderator: Any, reason: Any, purge_days: int = 0
+) -> str:
+    days = clamp_purge_days(purge_days)
+    await tell_member(bot, guild, member, "ban", reason)
+    try:
+        await guild.ban(
+            member, reason=audit_reason(moderator, reason), delete_message_seconds=days * 86400
+        )
+    except discord.HTTPException as exc:
+        return await note_failure(bot, guild, member, "ban", moderator, reason, exc)
+    case_id = await record_case(
+        bot,
+        guild,
+        member.id,
+        "ban",
+        moderator=moderator,
+        reason=reason,
+        detail=f"{days} day(s) of their messages deleted",
+    )
+    await log_action(
+        bot,
+        guild,
+        "mod.banned",
+        actor=moderator,
+        target=member,
+        reason=reason,
+        details={"case_id": case_id, "purge_days": days},
+    )
+    return (
+        f"Banned **{member.display_name}** and deleted {days} day(s) of their messages — case "
+        f"**#{case_id}**."
+    )
+
+
+async def unban_member(bot: Any, guild: Any, user_id: int, moderator: Any, reason: Any) -> str:
+    try:
+        await guild.unban(discord.Object(id=int(user_id)), reason=audit_reason(moderator, reason))
+    except discord.NotFound:
+        return NOT_BANNED.format(user_id=user_id)
+    except discord.HTTPException as exc:
+        return await note_failure(bot, guild, int(user_id), "unban", moderator, reason, exc)
+    case_id = await record_case(
+        bot, guild, int(user_id), "unban", moderator=moderator, reason=reason
+    )
+    await log_action(
+        bot,
+        guild,
+        "mod.unbanned",
+        actor=moderator,
+        target=int(user_id),
+        reason=reason,
+        details={"case_id": case_id},
+    )
+    return f"Lifted the ban on **{user_id}** — case **#{case_id}**."
+
+
 class ModCommands(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
     def _in_test_mode(self) -> bool:
-        return getattr(self.bot, "guard", None) is not None
+        return in_test_mode(self.bot)
 
     async def _ready(self, interaction: discord.Interaction) -> bool:
         if not await require_staff(interaction):
@@ -110,50 +395,8 @@ class ModCommands(commands.Cog):
             return False
         return True
 
-    async def _record(
-        self,
-        guild: Any,
-        user_id: int | None,
-        kind: str,
-        *,
-        moderator: Any = None,
-        reason: Any = None,
-        duration_s: int | None = None,
-        applied: bool = True,
-        mode: str = "on",
-        detail: Any = None,
-        channel_id: int | None = None,
-    ) -> int | None:
-        case_id = await add_case(
-            self.bot.db,
-            guild.id,
-            user_id,
-            kind,
-            moderator_id=getattr(moderator, "id", None),
-            reason=reason,
-            duration_s=duration_s,
-            mode=mode,
-            applied=applied,
-            channel_id=channel_id,
-        )
-        message_id = await send_modlog(
-            self.bot,
-            guild,
-            case_embed(
-                case_id=case_id,
-                kind=kind,
-                user_id=user_id,
-                moderator_id=getattr(moderator, "id", None),
-                reason=reason,
-                duration_s=duration_s,
-                applied=applied,
-                mode=mode,
-                detail=detail,
-                channel_id=channel_id,
-            ),
-        )
-        await set_case_log_message(self.bot.db, case_id, message_id)
-        return case_id
+    async def _record(self, guild: Any, user_id: int | None, kind: str, **rest: Any) -> int | None:
+        return await record_case(self.bot, guild, user_id, kind, **rest)
 
     async def _refuse_in_test_mode(
         self,
@@ -167,43 +410,24 @@ class ModCommands(commands.Cog):
         deferred: bool = False,
         channel_id: int | None = None,
     ) -> None:
-        guild = interaction.guild
-        case_id = await self._record(
-            guild,
-            getattr(member, "id", member),
+        said = await refuse_in_test_mode(
+            self.bot,
+            interaction.guild,
+            member,
             kind,
+            wording,
             moderator=interaction.user,
             reason=reason,
             duration_s=duration_s,
-            applied=False,
-            mode="test_mode",
             channel_id=channel_id,
         )
-        await log_action(
-            self.bot,
-            guild,
-            f"mod.would_{kind}",
-            actor=interaction.user,
-            target=getattr(member, "id", member),
-            reason=reason,
-            details={"case_id": case_id, "reason": "test_mode"},
-        )
         answer = interaction.followup.send if deferred else interaction.response.send_message
-        await answer(refusal_in_test_mode(wording), ephemeral=True)
+        await answer(said, ephemeral=True)
 
     async def _tell(
         self, guild: Any, member: Any, kind: str, reason: Any, duration_s: Any = None
     ) -> None:
-        await dm_member(
-            member,
-            dm_text(
-                self.bot.store.get(guild.id, "mod_dm_on_action"),
-                guild.name,
-                kind,
-                reason,
-                duration_s=duration_s,
-            ),
-        )
+        await tell_member(self.bot, guild, member, kind, reason, duration_s=duration_s)
 
     @app_commands.command(name="warn", description="Warn a member and record it")
     @app_commands.describe(member="Who to warn", reason="Why — they are told this")
@@ -212,35 +436,8 @@ class ModCommands(commands.Cog):
     ) -> None:
         if not await self._ready(interaction):
             return
-        guild = interaction.guild
-        await self._tell(guild, member, "warn", reason)
-        case_id = await self._record(
-            guild, member.id, "warn", moderator=interaction.user, reason=reason
-        )
-        await log_action(
-            self.bot,
-            guild,
-            "mod.warned",
-            actor=interaction.user,
-            target=member,
-            reason=reason,
-            details={"case_id": case_id},
-        )
-        count = await warn_count(self.bot.db, guild.id, member.id)
-        threshold = int(self.bot.store.get(guild.id, "automod_warn_threshold") or 0)
-        tail = ""
-        if threshold and count >= threshold:
-            tail = WARN_THRESHOLD_REACHED.format(count=count, threshold=threshold)
-            await log_action(
-                self.bot,
-                guild,
-                "mod.warn_threshold",
-                actor=interaction.user,
-                target=member,
-                details={"case_id": case_id, "count": count, "threshold": threshold},
-            )
         await interaction.response.send_message(
-            f"Warned **{member.display_name}** — case **#{case_id}**.{tail}",
+            await warn_member(self.bot, interaction.guild, member, interaction.user, reason),
             ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
         )
@@ -271,35 +468,10 @@ class ModCommands(commands.Cog):
                 interaction, member, "timeout", "time out", reason=reason, duration_s=seconds
             )
             return
-        guild = interaction.guild
-        try:
-            await member.timeout(
-                timedelta(seconds=clamp_timeout(seconds)), reason=self._audit(interaction, reason)
-            )
-        except discord.HTTPException as exc:
-            await self._failed(interaction, member, "timeout", reason, exc)
-            return
-        await self._tell(guild, member, "timeout", reason, duration_s=clamp_timeout(seconds))
-        case_id = await self._record(
-            guild,
-            member.id,
-            "timeout",
-            moderator=interaction.user,
-            reason=reason,
-            duration_s=clamp_timeout(seconds),
-        )
-        await log_action(
-            self.bot,
-            guild,
-            "mod.timed_out",
-            actor=interaction.user,
-            target=member,
-            reason=reason,
-            details={"case_id": case_id, "duration_s": clamp_timeout(seconds)},
-        )
         await interaction.response.send_message(
-            f"Timed **{member.display_name}** out for {describe_duration(seconds)} — case "
-            f"**#{case_id}**.",
+            await timeout_member(
+                self.bot, interaction.guild, member, interaction.user, seconds, reason
+            ),
             ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
         )
@@ -316,27 +488,10 @@ class ModCommands(commands.Cog):
                 interaction, member, "untimeout", "lift anyone's timeout", reason=reason
             )
             return
-        guild = interaction.guild
-        try:
-            await member.timeout(None, reason=self._audit(interaction, reason))
-        except discord.HTTPException as exc:
-            await self._failed(interaction, member, "untimeout", reason, exc)
-            return
-        await self._tell(guild, member, "untimeout", reason)
-        case_id = await self._record(
-            guild, member.id, "untimeout", moderator=interaction.user, reason=reason
-        )
-        await log_action(
-            self.bot,
-            guild,
-            "mod.untimed_out",
-            actor=interaction.user,
-            target=member,
-            reason=reason,
-            details={"case_id": case_id},
-        )
         await interaction.response.send_message(
-            f"**{member.display_name}** is out of their timeout — case **#{case_id}**.",
+            await untimeout_member(
+                self.bot, interaction.guild, member, interaction.user, reason
+            ),
             ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
         )
@@ -351,27 +506,8 @@ class ModCommands(commands.Cog):
         if self._in_test_mode():
             await self._refuse_in_test_mode(interaction, member, "kick", "kick", reason=reason)
             return
-        guild = interaction.guild
-        await self._tell(guild, member, "kick", reason)
-        try:
-            await guild.kick(member, reason=self._audit(interaction, reason))
-        except discord.HTTPException as exc:
-            await self._failed(interaction, member, "kick", reason, exc)
-            return
-        case_id = await self._record(
-            guild, member.id, "kick", moderator=interaction.user, reason=reason
-        )
-        await log_action(
-            self.bot,
-            guild,
-            "mod.kicked",
-            actor=interaction.user,
-            target=member,
-            reason=reason,
-            details={"case_id": case_id},
-        )
         await interaction.response.send_message(
-            f"Kicked **{member.display_name}** — case **#{case_id}**.",
+            await kick_member(self.bot, interaction.guild, member, interaction.user, reason),
             ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
         )
@@ -391,41 +527,13 @@ class ModCommands(commands.Cog):
     ) -> None:
         if not await self._ready(interaction):
             return
-        days = clamp_purge_days(purge_days)
         if self._in_test_mode():
             await self._refuse_in_test_mode(interaction, member, "ban", "ban", reason=reason)
             return
-        guild = interaction.guild
-        await self._tell(guild, member, "ban", reason)
-        try:
-            await guild.ban(
-                member,
-                reason=self._audit(interaction, reason),
-                delete_message_seconds=days * 86400,
-            )
-        except discord.HTTPException as exc:
-            await self._failed(interaction, member, "ban", reason, exc)
-            return
-        case_id = await self._record(
-            guild,
-            member.id,
-            "ban",
-            moderator=interaction.user,
-            reason=reason,
-            detail=f"{days} day(s) of their messages deleted",
-        )
-        await log_action(
-            self.bot,
-            guild,
-            "mod.banned",
-            actor=interaction.user,
-            target=member,
-            reason=reason,
-            details={"case_id": case_id, "purge_days": days},
-        )
         await interaction.response.send_message(
-            f"Banned **{member.display_name}** and deleted {days} day(s) of their messages — case "
-            f"**#{case_id}**.",
+            await ban_member(
+                self.bot, interaction.guild, member, interaction.user, reason, purge_days
+            ),
             ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
         )
@@ -448,33 +556,10 @@ class ModCommands(commands.Cog):
                 interaction, int(digits), "unban", "lift anyone's ban", reason=reason
             )
             return
-        guild = interaction.guild
-        try:
-            await guild.unban(
-                discord.Object(id=int(digits)), reason=self._audit(interaction, reason)
-            )
-        except discord.NotFound:
-            await interaction.response.send_message(
-                NOT_BANNED.format(user_id=digits), ephemeral=True
-            )
-            return
-        except discord.HTTPException as exc:
-            await self._failed(interaction, int(digits), "unban", reason, exc)
-            return
-        case_id = await self._record(
-            guild, int(digits), "unban", moderator=interaction.user, reason=reason
-        )
-        await log_action(
-            self.bot,
-            guild,
-            "mod.unbanned",
-            actor=interaction.user,
-            target=int(digits),
-            reason=reason,
-            details={"case_id": case_id},
-        )
         await interaction.response.send_message(
-            f"Lifted the ban on **{digits}** — case **#{case_id}**.",
+            await unban_member(
+                self.bot, interaction.guild, int(digits), interaction.user, reason
+            ),
             ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
         )
@@ -615,24 +700,15 @@ class ModCommands(commands.Cog):
             )
 
     def _audit(self, interaction: discord.Interaction, reason: Any) -> str:
-        who = getattr(interaction.user, "display_name", interaction.user.id)
-        return f"{who}: {reason}" if reason else f"{who} (no reason given)"
+        return audit_reason(interaction.user, reason)
 
     async def _failed(
         self, interaction: discord.Interaction, target: Any, kind: str, reason: Any, exc: Exception
     ) -> None:
-        target_id = getattr(target, "id", target)
-        log.warning("mod: %s refused for %s: %s", kind, target_id, exc)
-        await log_action(
-            self.bot,
-            interaction.guild,
-            f"mod.{kind}_failed",
-            actor=interaction.user,
-            target=target_id,
-            reason=reason,
-            details={"reason": f"{type(exc).__name__}: {exc}"},
+        said = await note_failure(
+            self.bot, interaction.guild, target, kind, interaction.user, reason, exc
         )
-        await interaction.response.send_message(REFUSED[kind], ephemeral=True)
+        await interaction.response.send_message(said, ephemeral=True)
 
 
 async def setup(bot: commands.Bot) -> None:

@@ -211,6 +211,17 @@ async def open_tickets(db: Any, guild_id: int) -> list[Any]:
     return list(await cur.fetchall())
 
 
+async def tickets_by_status(db: Any, guild_id: int, status: Any = None, limit: int = 100) -> list:
+    """Every ticket, or only those in one state; newest first for the web's tables."""
+    sql = "SELECT * FROM modmail_tickets WHERE guild_id = ?"
+    params: tuple[Any, ...] = (guild_id,)
+    if status:
+        sql += " AND status = ?"
+        params += (status,)
+    cur = await db.conn.execute(sql + " ORDER BY id DESC LIMIT ?", (*params, int(limit)))
+    return list(await cur.fetchall())
+
+
 async def ticket_for_channel(db: Any, channel_id: int) -> Any:
     cur = await db.conn.execute(
         "SELECT * FROM modmail_tickets WHERE (thread_id = ? OR (thread_id IS NULL AND "
@@ -536,6 +547,211 @@ async def react(bot: Any, message: Any, emoji: str) -> None:
         log.info("modmail: could not react to %s: %s", getattr(message, "id", "?"), exc)
 
 
+async def send_reply(
+    bot: Any,
+    guild: Any,
+    ticket: Any,
+    author: Any,
+    content: Any,
+    *,
+    anonymous: bool = False,
+    attachments: Any = (),
+    echo: bool = True,
+) -> str | None:
+    """One path for every staff reply, whether it came from a message, a command or the site."""
+    user = bot.get_user(ticket["user_id"]) or guild.get_member(ticket["user_id"])
+    embed = relay_embed(
+        OUT,
+        author_name=getattr(author, "display_name", str(author)),
+        author_id=author.id,
+        content=content,
+        attachments=attachments,
+        anonymous=anonymous,
+        colour=None if anonymous else getattr(getattr(author, "colour", None), "value", None),
+        icon_url=None
+        if anonymous
+        else getattr(getattr(author, "display_avatar", None), "url", None),
+    )
+    row_id = await add_message(
+        bot.db,
+        ticket["id"],
+        author.id,
+        OUT,
+        content=content,
+        attachments=attachments,
+        anonymous=anonymous,
+    )
+    why_not = await deliver_dm(user, embed=embed) if user is not None else "member_not_visible"
+    if why_not is not None:
+        await mark_undelivered(bot.db, row_id)
+        await log_action(
+            bot,
+            guild,
+            "modmail.dm_failed",
+            actor=author,
+            target=ticket["user_id"],
+            details={"ticket_id": ticket["id"], "reason": why_not},
+        )
+        await speak(
+            bot,
+            guild,
+            ticket,
+            content=f"⚠️ Black Bloc could not DM the member — `{clamp(why_not, 200)}`",
+            embed=embed,
+        )
+        return why_not
+    if echo:
+        await speak(bot, guild, ticket, embed=embed)
+    return None
+
+
+async def close_ticket(
+    bot: Any, guild: Any, ticket: Any, *, by: Any = None, reason: Any = None, silent: bool = False
+) -> tuple[bool, str | None]:
+    """Transcript first, then the record, then the member, then the channel."""
+    async with user_lock(bot, ticket["user_id"]):
+        fresh = await get_ticket(bot.db, ticket["id"])
+        if fresh is None or fresh["status"] != OPEN:
+            return False, None
+        rows = await ticket_messages(bot.db, fresh["id"])
+        closed_at = now_iso()
+        await mark_closed(
+            bot.db, fresh["id"], at=closed_at, by=getattr(by, "id", by), reason=reason
+        )
+        message_id, why_not = await post_transcript(
+            bot, guild, fresh, rows, by=by, reason=reason, closed_at=closed_at
+        )
+        await set_log_message(bot.db, fresh["id"], message_id)
+        await log_action(
+            bot,
+            guild,
+            "modmail.closed",
+            actor=by,
+            target=fresh["user_id"],
+            reason=clamp(reason, 400) or None,
+            details={"ticket_id": fresh["id"], "messages": len(rows)},
+        )
+        if not silent:
+            user = bot.get_user(fresh["user_id"]) or guild.get_member(fresh["user_id"])
+            if user is not None:
+                await deliver_dm(user, closing_dm(guild.name, reason))
+        if why_not is None:
+            await remove_place(bot, guild, fresh)
+        else:
+            await log_action(
+                bot,
+                guild,
+                "modmail.place_kept",
+                details={"ticket_id": fresh["id"], "reason": why_not},
+            )
+        return True, why_not
+
+
+async def post_transcript(
+    bot: Any, guild: Any, ticket: Any, rows: Any, *, by: Any, reason: Any, closed_at: str
+) -> tuple[int | None, str | None]:
+    member = guild.get_member(ticket["user_id"])
+    label = getattr(member, "display_name", None) or str(ticket["user_id"])
+    details = {"ticket_id": ticket["id"]}
+    channel_id = bot.store.get(guild.id, "modmail_log_channel_id")
+    channel = (
+        (bot.get_channel(channel_id) or guild.get_channel(channel_id)) if channel_id else None
+    )
+    if channel is None:
+        await log_action(
+            bot,
+            guild,
+            "modmail.transcript_failed",
+            details=details | {"reason": "no_log_channel"},
+        )
+        return None, "no_log_channel"
+    guard = getattr(bot, "guard", None)
+    if guard is not None and not guard.allows_channel(channel.id):
+        await log_action(
+            bot,
+            guild,
+            "modmail.would_post_transcript",
+            details=details | {"reason": "test_mode", "channel_id": channel.id},
+        )
+        return None, "test_mode"
+    text = transcript_text(
+        rows,
+        ticket_id=ticket["id"],
+        user_id=ticket["user_id"],
+        user_label=label,
+        guild_name=guild.name,
+        mode=ticket["mode"],
+        opened_at=ticket["opened_at"],
+        closed_at=closed_at,
+        closed_by=getattr(by, "id", by),
+        reason=reason,
+    )
+    embed = transcript_embed(
+        ticket_id=ticket["id"],
+        user_id=ticket["user_id"],
+        user_label=label,
+        mode=ticket["mode"],
+        counts=count_directions(rows),
+        opened_at=ticket["opened_at"],
+        closed_at=closed_at,
+        closed_by=getattr(by, "id", by),
+        reason=reason,
+    )
+    file = discord.File(
+        io.BytesIO(text.encode("utf-8")), filename=transcript_filename(ticket["id"])
+    )
+    try:
+        message = await channel.send(embed=embed, file=file, allowed_mentions=mentions())
+    except Exception as exc:
+        log.warning("modmail: could not post the transcript for %s: %s", ticket["id"], exc)
+        await log_action(
+            bot,
+            guild,
+            "modmail.transcript_failed",
+            details=details | {"reason": f"{type(exc).__name__}: {exc}"},
+        )
+        return None, f"{type(exc).__name__}: {exc}"
+    await log_action(
+        bot,
+        guild,
+        "modmail.transcript",
+        target=ticket["user_id"],
+        details=details | {"channel_id": channel.id},
+    )
+    return message.id, None
+
+
+async def remove_place(bot: Any, guild: Any, ticket: Any) -> None:
+    place, _ = await resolve_place(bot, guild, ticket)
+    if place is None:
+        return
+    if not may_remove(bot, place):
+        await log_action(
+            bot,
+            guild,
+            "modmail.would_remove_place",
+            details={"ticket_id": ticket["id"], "channel_id": place.id},
+        )
+        return
+    try:
+        if ticket["thread_id"]:
+            await place.edit(archived=True, locked=True)
+        else:
+            await place.delete(reason=f"Black Bloc modmail ticket {ticket['id']} closed")
+    except Exception as exc:
+        log.warning("modmail: could not tidy away %s: %s", place.id, exc)
+        await log_action(
+            bot,
+            guild,
+            "modmail.remove_place_failed",
+            details={
+                "ticket_id": ticket["id"],
+                "channel_id": place.id,
+                "reason": f"{type(exc).__name__}: {exc}",
+            },
+        )
+
+
 async def answer(interaction: discord.Interaction, text: str) -> None:
     if interaction.response.is_done():
         await interaction.followup.send(text, ephemeral=True, allowed_mentions=mentions())
@@ -853,55 +1069,16 @@ class Modmail(commands.Cog):
         attachments: Any = (),
         echo: bool = True,
     ) -> str | None:
-        """One path for every staff reply, whether it came from a message or a command."""
-        user = self.bot.get_user(ticket["user_id"]) or guild.get_member(ticket["user_id"])
-        embed = relay_embed(
-            OUT,
-            author_name=getattr(author, "display_name", str(author)),
-            author_id=author.id,
-            content=content,
-            attachments=attachments,
+        return await send_reply(
+            self.bot,
+            guild,
+            ticket,
+            author,
+            content,
             anonymous=anonymous,
-            colour=None
-            if anonymous
-            else getattr(getattr(author, "colour", None), "value", None),
-            icon_url=None
-            if anonymous
-            else getattr(getattr(author, "display_avatar", None), "url", None),
-        )
-        row_id = await add_message(
-            self.bot.db,
-            ticket["id"],
-            author.id,
-            OUT,
-            content=content,
             attachments=attachments,
-            anonymous=anonymous,
+            echo=echo,
         )
-        why_not = (
-            await deliver_dm(user, embed=embed) if user is not None else "member_not_visible"
-        )
-        if why_not is not None:
-            await mark_undelivered(self.bot.db, row_id)
-            await log_action(
-                self.bot,
-                guild,
-                "modmail.dm_failed",
-                actor=author,
-                target=ticket["user_id"],
-                details={"ticket_id": ticket["id"], "reason": why_not},
-            )
-            await speak(
-                self.bot,
-                guild,
-                ticket,
-                content=f"⚠️ Black Bloc could not DM the member — `{clamp(why_not, 200)}`",
-                embed=embed,
-            )
-            return why_not
-        if echo:
-            await speak(self.bot, guild, ticket, embed=embed)
-        return None
 
     async def _ready(self, interaction: discord.Interaction) -> bool:
         if interaction.guild is None:
@@ -1028,152 +1205,19 @@ class Modmail(commands.Cog):
         reason: Any = None,
         silent: bool = False,
     ) -> tuple[bool, str | None]:
-        """Transcript first, then the record, then the member, then the channel."""
-        async with user_lock(self.bot, ticket["user_id"]):
-            fresh = await get_ticket(self.bot.db, ticket["id"])
-            if fresh is None or fresh["status"] != OPEN:
-                return False, None
-            rows = await ticket_messages(self.bot.db, fresh["id"])
-            closed_at = now_iso()
-            await mark_closed(
-                self.bot.db,
-                fresh["id"],
-                at=closed_at,
-                by=getattr(by, "id", by),
-                reason=reason,
-            )
-            message_id, why_not = await self._post_transcript(
-                guild, fresh, rows, by=by, reason=reason, closed_at=closed_at
-            )
-            await set_log_message(self.bot.db, fresh["id"], message_id)
-            await log_action(
-                self.bot,
-                guild,
-                "modmail.closed",
-                actor=by,
-                target=fresh["user_id"],
-                reason=clamp(reason, 400) or None,
-                details={"ticket_id": fresh["id"], "messages": len(rows)},
-            )
-            if not silent:
-                user = self.bot.get_user(fresh["user_id"]) or guild.get_member(fresh["user_id"])
-                if user is not None:
-                    await deliver_dm(user, closing_dm(guild.name, reason))
-            if why_not is None:
-                await self._remove_place(guild, fresh)
-            else:
-                await log_action(
-                    self.bot,
-                    guild,
-                    "modmail.place_kept",
-                    details={"ticket_id": fresh["id"], "reason": why_not},
-                )
-            return True, why_not
+        return await close_ticket(
+            self.bot, guild, ticket, by=by, reason=reason, silent=silent
+        )
 
     async def _post_transcript(
         self, guild: Any, ticket: Any, rows: Any, *, by: Any, reason: Any, closed_at: str
     ) -> tuple[int | None, str | None]:
-        member = guild.get_member(ticket["user_id"])
-        label = getattr(member, "display_name", None) or str(ticket["user_id"])
-        details = {"ticket_id": ticket["id"]}
-        channel_id = self.bot.store.get(guild.id, "modmail_log_channel_id")
-        channel = (
-            (self.bot.get_channel(channel_id) or guild.get_channel(channel_id))
-            if channel_id
-            else None
+        return await post_transcript(
+            self.bot, guild, ticket, rows, by=by, reason=reason, closed_at=closed_at
         )
-        if channel is None:
-            await log_action(
-                self.bot,
-                guild,
-                "modmail.transcript_failed",
-                details=details | {"reason": "no_log_channel"},
-            )
-            return None, "no_log_channel"
-        guard = getattr(self.bot, "guard", None)
-        if guard is not None and not guard.allows_channel(channel.id):
-            await log_action(
-                self.bot,
-                guild,
-                "modmail.would_post_transcript",
-                details=details | {"reason": "test_mode", "channel_id": channel.id},
-            )
-            return None, "test_mode"
-        text = transcript_text(
-            rows,
-            ticket_id=ticket["id"],
-            user_id=ticket["user_id"],
-            user_label=label,
-            guild_name=guild.name,
-            mode=ticket["mode"],
-            opened_at=ticket["opened_at"],
-            closed_at=closed_at,
-            closed_by=getattr(by, "id", by),
-            reason=reason,
-        )
-        embed = transcript_embed(
-            ticket_id=ticket["id"],
-            user_id=ticket["user_id"],
-            user_label=label,
-            mode=ticket["mode"],
-            counts=count_directions(rows),
-            opened_at=ticket["opened_at"],
-            closed_at=closed_at,
-            closed_by=getattr(by, "id", by),
-            reason=reason,
-        )
-        file = discord.File(
-            io.BytesIO(text.encode("utf-8")), filename=transcript_filename(ticket["id"])
-        )
-        try:
-            message = await channel.send(embed=embed, file=file, allowed_mentions=mentions())
-        except Exception as exc:
-            log.warning("modmail: could not post the transcript for %s: %s", ticket["id"], exc)
-            await log_action(
-                self.bot,
-                guild,
-                "modmail.transcript_failed",
-                details=details | {"reason": f"{type(exc).__name__}: {exc}"},
-            )
-            return None, f"{type(exc).__name__}: {exc}"
-        await log_action(
-            self.bot,
-            guild,
-            "modmail.transcript",
-            target=ticket["user_id"],
-            details=details | {"channel_id": channel.id},
-        )
-        return message.id, None
 
     async def _remove_place(self, guild: Any, ticket: Any) -> None:
-        place, _ = await resolve_place(self.bot, guild, ticket)
-        if place is None:
-            return
-        if not may_remove(self.bot, place):
-            await log_action(
-                self.bot,
-                guild,
-                "modmail.would_remove_place",
-                details={"ticket_id": ticket["id"], "channel_id": place.id},
-            )
-            return
-        try:
-            if ticket["thread_id"]:
-                await place.edit(archived=True, locked=True)
-            else:
-                await place.delete(reason=f"Black Bloc modmail ticket {ticket['id']} closed")
-        except Exception as exc:
-            log.warning("modmail: could not tidy away %s: %s", place.id, exc)
-            await log_action(
-                self.bot,
-                guild,
-                "modmail.remove_place_failed",
-                details={
-                    "ticket_id": ticket["id"],
-                    "channel_id": place.id,
-                    "reason": f"{type(exc).__name__}: {exc}",
-                },
-            )
+        await remove_place(self.bot, guild, ticket)
 
     @app_commands.command(name="close", description="Close a ticket and file its transcript")
     @app_commands.describe(

@@ -13,7 +13,7 @@ from .. import __version__
 from . import auth, ref, settings_api, status
 from .auth import Refused, refused_handler, validation_handler
 from .status import latency_ms
-from .tools import birthdays, events, golive, rolemenus
+from .tools import birthdays, events, golive, honeypot, mod, modmail, rolemenus, tempvoice
 
 log = logging.getLogger(__name__)
 
@@ -71,6 +71,10 @@ def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
     app.include_router(golive.build_router(bot))
     app.include_router(events.build_router(bot))
     app.include_router(birthdays.build_router(bot))
+    app.include_router(tempvoice.build_router(bot))
+    app.include_router(honeypot.build_router(bot))
+    app.include_router(mod.build_router(bot))
+    app.include_router(modmail.build_router(bot))
 
     root = Path(bot.settings.site_root)
     if root.is_dir():

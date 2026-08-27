@@ -309,6 +309,22 @@ async def cases_for(db: Any, guild_id: int, user_id: int, limit: int, offset: in
     return list(await cur.fetchall())
 
 
+async def recent_cases(db: Any, guild_id: int, limit: int, offset: int = 0) -> list[Any]:
+    cur = await db.conn.execute(
+        "SELECT * FROM mod_cases WHERE guild_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
+        (int(guild_id), int(limit), int(offset)),
+    )
+    return list(await cur.fetchall())
+
+
+async def count_all_cases(db: Any, guild_id: int) -> int:
+    cur = await db.conn.execute(
+        "SELECT COUNT(*) AS n FROM mod_cases WHERE guild_id = ?", (int(guild_id),)
+    )
+    row = await cur.fetchone()
+    return int(row["n"]) if row else 0
+
+
 async def count_cases(db: Any, guild_id: int, user_id: int) -> int:
     cur = await db.conn.execute(
         "SELECT COUNT(*) AS n FROM mod_cases WHERE guild_id = ? AND user_id = ?",

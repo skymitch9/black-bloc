@@ -13,6 +13,7 @@ from ..events import OPEN_STATUSES
 from ..modmail import OPEN as MODMAIL_OPEN
 from ..settings_store import KEY_TYPES
 from .auth import Refused, guild_of, staff_dependency
+from .names import as_id, named
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +32,10 @@ COUNTS_UNAVAILABLE = (
 DB_UNREACHABLE = (
     "Black Bloc's database is not reachable right now, so this page cannot load its data; try "
     "again in a minute."
+)
+NOT_AN_ID = (
+    "**{given}** is not an id Black Bloc can read, so the log was not filtered. Ids are the long "
+    "numbers Discord shows under Copy ID."
 )
 
 
@@ -175,13 +180,27 @@ def _action(row: Any, with_details: bool) -> dict[str, Any]:
 
 
 async def recent_actions(
-    bot: Any, guild_id: int, limit: int, *, with_details: bool = False
+    bot: Any,
+    guild_id: int,
+    limit: int,
+    *,
+    with_details: bool = False,
+    kind: str | None = None,
+    user_id: int | None = None,
 ) -> list[dict[str, Any]]:
-    cur = await bot.db.conn.execute(
+    """`kind` matches a whole kind or a prefix like `web.` or `mod.`; `user_id` either end."""
+    sql = (
         "SELECT id, at, kind, actor_id, target_id, reason, details FROM action_log "
-        "WHERE guild_id = ? ORDER BY id DESC LIMIT ?",
-        (guild_id, limit),
+        "WHERE guild_id = ?"
     )
+    params: tuple[Any, ...] = (guild_id,)
+    if kind:
+        sql += " AND (kind = ? OR kind LIKE ?)"
+        params += (kind, f"{kind.rstrip('.')}.%")
+    if user_id is not None:
+        sql += " AND (actor_id = ? OR target_id = ?)"
+        params += (user_id, user_id)
+    cur = await bot.db.conn.execute(sql + " ORDER BY id DESC LIMIT ?", (*params, limit))
     return [_action(row, with_details) for row in await cur.fetchall()]
 
 
@@ -225,7 +244,12 @@ def build_router(bot: Any) -> APIRouter:
         }
 
     @router.get("/actions")
-    async def actions(limit: int = ACTIONS_DEFAULT_LIMIT, details: int = 0) -> dict[str, Any]:
+    async def actions(
+        limit: int = ACTIONS_DEFAULT_LIMIT,
+        details: int = 0,
+        kind: str = "",
+        user_id: str = "",
+    ) -> dict[str, Any]:
         limit = max(1, min(limit, ACTIONS_MAX_LIMIT))
         guild = guild_of(bot)
         if guild is None:
@@ -233,7 +257,21 @@ def build_router(bot: Any) -> APIRouter:
         db = getattr(bot, "db", None)
         if db is None or not db.is_connected:
             raise Refused(503, "database_unavailable", DB_UNREACHABLE)
-        rows = await recent_actions(bot, guild.id, limit, with_details=bool(details))
-        return {"actions": rows, "limit": limit, "notes": []}
+        wanted = as_id(user_id) if user_id else None
+        if user_id and wanted is None:
+            raise Refused(400, "bad_request", NOT_AN_ID.format(given=str(user_id)[:40]))
+        rows = await recent_actions(
+            bot,
+            guild.id,
+            limit,
+            with_details=bool(details),
+            kind=str(kind or "").strip() or None,
+            user_id=wanted,
+        )
+        return {
+            "actions": [named(row, guild, "actor", "target") for row in rows],
+            "limit": limit,
+            "notes": [],
+        }
 
     return router

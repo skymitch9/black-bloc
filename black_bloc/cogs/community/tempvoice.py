@@ -277,6 +277,84 @@ def pref(row: Any, key: str) -> Any:
         return None
 
 
+def creator_spot(bot: Any, guild: Any) -> tuple[Any, int, str]:
+    guard = getattr(bot, "guard", None)
+    if guard is not None:
+        test_channel = bot.get_channel(guard.test_channel_id) if guard.test_channel_id else None
+        if test_channel is None:
+            return None, 0, "no_test_channel"
+        category = test_channel.category
+        voice = list(getattr(category, "voice_channels", ())) if category is not None else []
+        return category, bottom_position(c.position for c in voice), "test_category"
+    afk = getattr(guild, "afk_channel", None)
+    if afk is None:
+        afk = next((c for c in guild.voice_channels if c.name == AFK_FALLBACK_NAME), None)
+    if afk is not None:
+        return afk.category, creator_position(afk.position, 0), "above_afk"
+    return None, bottom_position(c.position for c in guild.voice_channels), "bottom"
+
+
+def where_sentence(where: str) -> str:
+    if where == "test_category":
+        return (
+            "Test mode is on, so it went in the test channel's category — join it there to "
+            "try it. Run `/tempvoice setup` again once test mode is off and it will go "
+            "directly above the AFK channel."
+        )
+    if where == "above_afk":
+        return "It sits directly above the AFK channel, as asked."
+    return (
+        "Black Bloc could not find an AFK channel to sit above, so it went to the bottom of "
+        "the list — drag it where you want it."
+    )
+
+
+async def make_creator_channel(
+    bot: Any, guild: Any, actor: Any, name: str | None = None
+) -> tuple[str, str]:
+    """Set up join-to-create, for slash and web alike: (what happened, what to say)."""
+    live = [
+        cid
+        for cid in (bot.store.get(guild.id, "tempvoice_creator_ids") or [])
+        if guild.get_channel(cid) is not None
+    ]
+    if live:
+        return (
+            "already",
+            ALREADY_A_LOBBY.format(where=f"<#{live[0]}>", channel_id=live[0]),
+        )
+    category, position, where = creator_spot(bot, guild)
+    if where == "no_test_channel":
+        return ("no_test_channel", NO_TEST_CHANNEL)
+    try:
+        channel = await guild.create_voice_channel(
+            name or CREATOR_NAME,
+            category=category,
+            position=position,
+            reason="Black Bloc temp voice: join-to-create",
+        )
+    except discord.HTTPException as exc:
+        log.warning("temp voice: setup could not create the creator channel: %s", exc)
+        return ("refused", CANNOT_CREATE)
+    ids = list(bot.store.get(guild.id, "tempvoice_creator_ids") or [])
+    if channel.id not in ids:
+        ids.append(channel.id)
+    await bot.store.set(
+        guild.id, "tempvoice_creator_ids", ids, by=getattr(actor, "id", actor)
+    )
+    await log_action(
+        bot,
+        guild,
+        "tempvoice.setup",
+        actor=actor,
+        details={"channel_id": channel.id, "placed": where},
+    )
+    return (
+        "created",
+        f"**{channel.name}** is ready — {channel.mention}. {where_sentence(where)}",
+    )
+
+
 async def panel_context(interaction: discord.Interaction, *, owner_only: bool = True) -> Any:
     """This click's temp-channel row, or None once the clicker has been answered."""
     bot = interaction.client
@@ -836,24 +914,7 @@ class TempVoice(commands.Cog):
         return getattr(channel, "category_id", None) == getattr(test_channel, "category_id", None)
 
     def _creator_spot(self, guild: Any) -> tuple[Any, int, str]:
-        guard = getattr(self.bot, "guard", None)
-        if guard is not None:
-            test_channel = (
-                self.bot.get_channel(guard.test_channel_id) if guard.test_channel_id else None
-            )
-            if test_channel is None:
-                return None, 0, "no_test_channel"
-            category = test_channel.category
-            voice = list(getattr(category, "voice_channels", ())) if category is not None else []
-            return category, bottom_position(c.position for c in voice), "test_category"
-        afk = getattr(guild, "afk_channel", None)
-        if afk is None:
-            afk = next(
-                (c for c in guild.voice_channels if c.name == AFK_FALLBACK_NAME), None
-            )
-        if afk is not None:
-            return afk.category, creator_position(afk.position, 0), "above_afk"
-        return None, bottom_position(c.position for c in guild.voice_channels), "bottom"
+        return creator_spot(self.bot, guild)
 
     def _lock(self, locks: dict[int, asyncio.Lock], key: int) -> asyncio.Lock:
         lock = locks.get(key)
@@ -877,52 +938,12 @@ class TempVoice(commands.Cog):
             return
         if not await self._database_ready(interaction):
             return
-        guild = interaction.guild
-        live = [
-            cid
-            for cid in (self.bot.store.get(guild.id, "tempvoice_creator_ids") or [])
-            if guild.get_channel(cid) is not None
-        ]
-        if live:
-            await interaction.response.send_message(
-                ALREADY_A_LOBBY.format(where=f"<#{live[0]}>", channel_id=live[0]),
-                ephemeral=True,
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
-            return
-        category, position, where = self._creator_spot(guild)
-        if where == "no_test_channel":
-            await interaction.response.send_message(NO_TEST_CHANNEL, ephemeral=True)
-            return
         await interaction.response.defer(ephemeral=True)
-        try:
-            channel = await guild.create_voice_channel(
-                name or CREATOR_NAME,
-                category=category,
-                position=position,
-                reason="Black Bloc temp voice: join-to-create",
-            )
-        except discord.HTTPException as exc:
-            log.warning("temp voice: setup could not create the creator channel: %s", exc)
-            await interaction.followup.send(CANNOT_CREATE, ephemeral=True)
-            return
-        ids = list(self.bot.store.get(guild.id, "tempvoice_creator_ids") or [])
-        if channel.id not in ids:
-            ids.append(channel.id)
-        await self.bot.store.set(
-            guild.id, "tempvoice_creator_ids", ids, by=interaction.user.id
+        _, said = await make_creator_channel(
+            self.bot, interaction.guild, interaction.user, name
         )
         await interaction.followup.send(
-            f"**{channel.name}** is ready — {channel.mention}. {self._where_sentence(where)}",
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-        await log_action(
-            self.bot,
-            guild,
-            "tempvoice.setup",
-            actor=interaction.user,
-            details={"channel_id": channel.id, "placed": where},
+            said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
         )
 
     @tempvoice.command(name="forget", description="Stop treating a channel id as join-to-create")
@@ -1019,18 +1040,7 @@ class TempVoice(commands.Cog):
 
     @staticmethod
     def _where_sentence(where: str) -> str:
-        if where == "test_category":
-            return (
-                "Test mode is on, so it went in the test channel's category — join it there to "
-                "try it. Run `/tempvoice setup` again once test mode is off and it will go "
-                "directly above the AFK channel."
-            )
-        if where == "above_afk":
-            return "It sits directly above the AFK channel, as asked."
-        return (
-            "Black Bloc could not find an AFK channel to sit above, so it went to the bottom of "
-            "the list — drag it where you want it."
-        )
+        return where_sentence(where)
 
 
 async def setup(bot: commands.Bot) -> None:

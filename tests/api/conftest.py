@@ -106,6 +106,7 @@ class WebChannel:
         self.viewers = viewers if viewers is not None else set()
         self.messages: list[WebMessage] = []
         self.mention = f"<#{channel_id}>"
+        self.deleted = False
 
     def permissions_for(self, role: Any) -> Permissions:
         return Permissions(view_channel=getattr(role, "id", None) in self.viewers)
@@ -114,6 +115,12 @@ class WebChannel:
         message = WebMessage(9000 + len(self.messages), self, content=content, **kwargs)
         self.messages.append(message)
         return message
+
+    async def delete(self, reason: str | None = None) -> None:
+        self.deleted = True
+
+    async def edit(self, **kwargs: Any) -> None:
+        self.edits = getattr(self, "edits", []) + [kwargs]
 
     async def fetch_message(self, message_id: int) -> WebMessage:
         found = next((m for m in self.messages if m.id == message_id), None)
