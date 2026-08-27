@@ -428,6 +428,7 @@ export function ask({ title, body, confirmLabel = 'Do it', tone = 'danger' }) {
 
 export function field(label, control, help = null) {
   const id = control && control.id ? control.id : null;
+  if (control && control.classList) control.classList.add('field-control');
   return el('div', { class: 'field' }, [
     el('label', { class: 'field-label', for: id || undefined, text: label }),
     control,

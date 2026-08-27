@@ -888,7 +888,9 @@ button.grid-row:focus-visible { outline: var(--et-focus-ring); outline-offset: -
 .input:focus-visible { outline: var(--et-focus-ring); outline-offset: -1px; }
 .input.area { min-height: 8rem; resize: vertical; }
 .input.mono { font-family: var(--et-font-mono); font-size: var(--et-ui-sm); }
-.input.switch { width: 2.4rem; min-height: 1.3rem; max-width: 2.4rem; accent-color: var(--et-accent); box-shadow: none; }
+/* margin: 0 kills the UA's own 3px/4px around a checkbox, which was the last
+   3px of drift between a switch and the text boxes standing beside it. */
+.input.switch { width: 2.4rem; min-height: 1.3rem; max-width: 2.4rem; margin: 0; accent-color: var(--et-accent); box-shadow: none; }
 .input.color { max-width: 6rem; padding: .2em; }
 select.input[multiple] { padding: .3em; }
 .input::placeholder { color: var(--et-muted); }
@@ -922,8 +924,9 @@ a.btn { text-decoration: none; }
   .field > .field-label { grid-column: 1; }
   .field > .field-help,
   .field > .field-current { grid-column: 2; }
-  .formrow .field { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
+  .formrow .field { grid-template-columns: minmax(0, 1fr); align-items: start; }
   .formrow .field > .field-label,
+  .formrow .field > .field-control,
   .formrow .field > .field-help,
   .formrow .field > .field-current { grid-column: 1; }
 }
@@ -942,19 +945,62 @@ a.btn { text-decoration: none; }
   color: var(--et-muted);
 }
 
-.formrow { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
-.formrow .field { flex: 1 1 12rem; margin: 0; }
+/* Fields standing side by side are LEVEL, with or without help text.
+   They used to be bottom-aligned (align-items: flex-end), so a field that
+   carried a line of help under its box - or a taller control, or a switch
+   instead of a text box - pushed its own control off the line its siblings
+   sat on. Each field is a three-row grid now (label / control / help) and
+   the row that holds the CONTROL starts at the same y in every sibling
+   whether the rows above and below it are filled or empty. */
+.formrow { display: flex; flex-wrap: wrap; gap: 12px; align-items: start; }
+.formrow > .field {
+  flex: 1 1 12rem;
+  margin: 0;
+  grid-template-rows: auto minmax(var(--et-control-h), auto) auto;
+  align-content: start;
+}
+.formrow > .field > .field-label { grid-row: 1; align-self: end; }
+.formrow > .field > .field-control { grid-row: 2; align-self: start; }
+.formrow > .field > .field-help,
+.formrow > .field > .field-current { grid-row: 3; }
+
+/* A button bar standing in a formrow has no label above it, so top-aligning
+   the row would leave it floating level with the LABELS. One label line plus
+   the field's own row gap puts it back on the control line, in tokens rather
+   than in a measured px. */
+.formrow:has(> .field) > .bar {
+  margin-top: calc(var(--et-ui-xs) * var(--et-ui-line) + 4px);
+  align-self: start;
+}
+
+/* Where subgrid exists, the three rows are shared by the whole formrow
+   instead of being computed per field - so a label that WRAPS moves every
+   sibling's control down with it rather than only its own. A row that also
+   holds a .bar keeps the flex layout, because a button bar sizes to its
+   content and a grid track would give it a full field-width column. */
+@supports (grid-template-rows: subgrid) {
+  .formrow:not(.dateline):not(:has(> .bar)) {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    grid-template-rows: auto minmax(var(--et-control-h), auto) auto;
+    align-items: start;
+  }
+  .formrow:not(.dateline):not(:has(> .bar)) > .field {
+    grid-row: span 3;
+    grid-template-rows: subgrid;
+  }
+}
 
 /* One date, one line: the label sits over its box so month, day and year
    share the width instead of each claiming an 11rem label column. */
-.formrow.dateline { flex-wrap: nowrap; align-items: end; }
-.formrow.dateline .field {
+.formrow.dateline { flex-wrap: nowrap; align-items: start; }
+.formrow.dateline > .field {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   flex: 1 1 0;
   min-width: 0;
 }
-.formrow.dateline .field > .field-label { grid-column: 1; }
+.formrow.dateline > .field > .field-label { grid-column: 1; }
 @media (max-width: 30rem) {
   .formrow.dateline { flex-wrap: wrap; }
   .formrow.dateline .field { flex: 1 1 7rem; }

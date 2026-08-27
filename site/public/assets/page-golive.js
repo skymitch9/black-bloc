@@ -112,11 +112,7 @@ async function wordingCard(spec, prefix, endSuffix) {
 
   const preview = card('What an announcement looks like', [
     el('div', { class: 'formrow' }, [
-      el('div', { class: 'field' }, [
-        el('label', { class: 'field-label', text: 'Playing a game' }),
-        playing,
-        el('p', { class: 'field-help', text: `Off shows what an empty game reads as: “${GAME_FALLBACK}”.` }),
-      ]),
+      field('Playing a game', playing, `Off shows what an empty game reads as: “${GAME_FALLBACK}”.`),
     ]),
     shown,
     el('p', { class: 'field-help', text: 'And once the stream has ended:' }),
