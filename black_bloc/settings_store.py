@@ -170,7 +170,7 @@ KEY_HELP: dict[str, str] = {
     "role_menu_channel_id": "where /rolemenu post goes by default",
     "golive_mode": "off, shadow (log only) or on (post go-live announcements)",
     "golive_channel_id": "where go-live announcements are posted",
-    "golive_template": "the announcement wording; {name} {game} {title} {url}",
+    "golive_template": "the announcement wording; {name} {game} {title} {url} {platform}",
     "golive_live_role_id": "role given while someone is streaming",
     "golive_require_role_id": "only announce people who have this role",
     "golive_ignore_role_id": "never announce people who have this role",

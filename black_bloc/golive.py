@@ -12,6 +12,8 @@ from .settings_store import GOLIVE_TEMPLATE
 log = logging.getLogger(__name__)
 
 GAME_FALLBACK = "something"
+TWITCH = "Twitch"
+YOUTUBE = "YouTube"
 END_SUFFIX = " — stream ended"
 END_GRACE_SECONDS = 120
 POLL_SECONDS = 60
@@ -49,9 +51,9 @@ def platform_of(activity: Any, url: str | None) -> str | None:
         return named
     lowered = (url or "").lower()
     if "twitch.tv" in lowered:
-        return "Twitch"
+        return TWITCH
     if "youtube.com" in lowered or "youtu.be" in lowered:
-        return "YouTube"
+        return YOUTUBE
     return None
 
 
@@ -61,14 +63,20 @@ def extract_stream(activities: Any) -> StreamInfo | None:
         if not is_streaming(activity):
             continue
         url = _text(getattr(activity, "url", None))
+        platform = platform_of(activity, url)
+        title = _text(getattr(activity, "details", None)) or _text(getattr(activity, "name", None))
         return StreamInfo(
             url=url,
             game=_text(getattr(activity, "game", None)) or _text(getattr(activity, "state", None)),
-            title=_text(getattr(activity, "details", None))
-            or _text(getattr(activity, "name", None)),
-            platform=platform_of(activity, url),
+            title=None if title == platform else title,
+            platform=platform,
         )
     return None
+
+
+def twitch_enrichable(info: StreamInfo) -> bool:
+    """True only while a Twitch lookup could still be about this stream."""
+    return (info.platform or TWITCH).casefold() == TWITCH.casefold()
 
 
 def twitch_login_from_url(url: str | None) -> str | None:
@@ -85,19 +93,19 @@ def from_twitch(stream: Any) -> StreamInfo:
         url=getattr(stream, "url", None),
         game=_text(getattr(stream, "game_name", None)),
         title=_text(getattr(stream, "title", None)),
-        platform="Twitch",
+        platform=TWITCH,
     )
 
 
 def enriched(info: StreamInfo, stream: Any) -> StreamInfo:
     """Fill gaps in a presence StreamInfo from a Twitch stream row."""
-    if stream is None:
+    if stream is None or not twitch_enrichable(info):
         return info
     return StreamInfo(
         url=info.url or _text(getattr(stream, "url", None)),
         game=info.game or _text(getattr(stream, "game_name", None)),
         title=info.title or _text(getattr(stream, "title", None)),
-        platform=info.platform or "Twitch",
+        platform=info.platform or TWITCH,
     )
 
 
@@ -115,6 +123,7 @@ def render(
         game=info.game or GAME_FALLBACK,
         title=info.title or "",
         url=info.url or "",
+        platform=info.platform or "",
     )
     try:
         text = template.format_map(fields)

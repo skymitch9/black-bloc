@@ -12,7 +12,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 11
+        assert SCHEMA_VERSION == 12
         cur = await db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = {r["name"] for r in await cur.fetchall()}
         assert {"settings", "action_log", "role_menus", "role_menu_options"} <= tables
@@ -94,8 +94,29 @@ async def test_the_migration_step_is_idempotent(tmp_path):
         cur = await db.conn.execute("PRAGMA table_info(golive_sessions)")
         names = [row["name"] for row in await cur.fetchall()]
         assert names.count("live_role_added") == 1
+        assert names.count("platform") == 1
     finally:
         await db.close()
+
+
+async def test_a_session_row_gains_a_platform_column_on_an_older_file(tmp_path):
+    path = tmp_path / "old.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await open_session(db, 5)
+    await db.conn.execute("ALTER TABLE golive_sessions DROP COLUMN platform")
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("PRAGMA table_info(golive_sessions)")
+        assert "platform" in {row["name"] for row in await cur.fetchall()}
+        cur = await again.conn.execute("SELECT platform FROM golive_sessions WHERE user_id = 5")
+        assert (await cur.fetchone())["platform"] is None
+    finally:
+        await again.close()
 
 
 async def test_only_one_session_per_member_may_be_open(tmp_path):
