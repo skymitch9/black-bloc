@@ -36,6 +36,7 @@ list in `app.js` — never thirteen copies to drift.
 | `public/assets/ui.js` | tables, pager, pickers, typed setting inputs, the confirm dialog, the notice line |
 | `public/assets/page-*.js` | one module per tab; they hold no HTML, they build DOM |
 | `public/assets/site.css` | the only CSS this repo wrote: tokens only, no raw colours |
+| `public/favicon.ico` | a 32×32 ICO written by hand into this repo (no image toolchain, no CDN): a blocky **B** in the cyberpunk accent on the page background. Every page links it — the log used to show `GET /favicon.ico 404` on every load |
 | `mock/server.mjs` | a zero-dependency stand-in for the API — see `mock/README.md` |
 | `mock/contract.json` | **the one home for every route's shape** — read by `mock/check.mjs` AND by the bot's `tests/api/test_contract.py`, so the mock and the real routers cannot answer differently |
 | `mock/check.mjs` | fetches every page and every route from a running mock and asserts `contract.json` |

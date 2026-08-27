@@ -63,6 +63,19 @@ def test_the_page_is_served_from_this_app_at_the_root(bot):
     assert client_for(bot).get("/assets/app.js").status_code == 200
 
 
+def test_every_page_asks_for_the_favicon_this_app_can_actually_serve(bot):
+    """The log was a `GET /favicon.ico 404` on every page load."""
+    pages = sorted(Path(bot.settings.site_root).glob("*.html"))
+    assert len(pages) >= 13
+    for page in pages:
+        assert '<link rel="icon" href="/favicon.ico"' in page.read_text(encoding="utf-8"), page
+
+    response = client_for(bot).get("/favicon.ico")
+
+    assert response.status_code == 200
+    assert response.content[:4] == b"\x00\x00\x01\x00"
+
+
 def test_the_api_still_runs_when_the_page_is_not_on_disk(bot, tmp_path):
     bot.settings.site_root = Path(tmp_path / "nothing-here")
     assert client_for(bot).get("/health").status_code == 200
