@@ -161,12 +161,18 @@
  *            apex backdrop's drifting fields + grain; transparent/0 where a
  *            theme carries its atmosphere in --et-bg-texture instead)
  *   type     --et-font --et-font-display --et-font-mono --et-font-label
+ *            --et-font-nav
  *            --et-text-display/-title/-heading/-body/-small/-micro
+ *            --et-ui-xl/-lg/-md/-sm/-xs/-2xs --et-ui-line
+ *            --et-weight-body/-medium/-strong/-heavy
+ *            --et-label-transform --et-label-tracking --et-label-weight
  *            --et-title-case --et-title-spacing --et-heading-weight
  *   shape    --et-radius --et-radius-lg --et-radius-xl --et-radius-pill
- *            --et-border-w --et-clip-panel
+ *            --et-border-w --et-hairline-w --et-dot-radius --et-clip-panel
+ *   control  --et-control-h --et-control-h-sm --et-control-h-lg
+ *            --et-focus-ring --et-card-shadow --et-table-stripe --et-row-hover
  *   button   --et-btn-bg --et-btn-fg --et-btn-border --et-btn-shadow
- *            --et-press
+ *            --et-btn-radius --et-press
  *   motion   --et-ease --et-ease-out --et-ease-spring
  *            --et-dur-fast --et-dur --et-dur-slow --et-tilt-max
  *
@@ -406,6 +412,32 @@
   --et-btn-border: 0 solid transparent;
   --et-btn-shadow: none;
   --et-press: scale(.965);
+
+  --et-ui-xl: 28px;
+  --et-ui-lg: 17px;
+  --et-ui-md: 15px;
+  --et-ui-sm: 13px;
+  --et-ui-xs: 12px;
+  --et-ui-2xs: 11px;
+  --et-ui-line: 1.5;
+  --et-weight-body: 400;
+  --et-weight-medium: 500;
+  --et-weight-strong: 600;
+  --et-weight-heavy: 700;
+  --et-font-nav: var(--et-font);
+  --et-label-transform: none;
+  --et-label-tracking: .01em;
+  --et-label-weight: 600;
+  --et-hairline-w: 1px;
+  --et-dot-radius: 999px;
+  --et-focus-ring: 2px solid var(--et-accent);
+  --et-control-h: 34px;
+  --et-control-h-sm: 28px;
+  --et-control-h-lg: 38px;
+  --et-btn-radius: var(--et-radius-pill);
+  --et-card-shadow: var(--et-shadow);
+  --et-table-stripe: transparent;
+  --et-row-hover: var(--et-shell-inset);
 }
 
 /* Apple dark — twice on purpose: once for no-JS visitors whose OS is dark
@@ -437,6 +469,32 @@
     --et-transit: #3fc0da; /* the teal, lifted for black */
     --et-shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 30px -14px rgba(0, 0, 0, .7);
     --et-shadow-lift: 0 16px 48px -12px rgba(0, 0, 0, .65);
+
+    --et-ui-xl: 28px;
+    --et-ui-lg: 17px;
+    --et-ui-md: 15px;
+    --et-ui-sm: 13px;
+    --et-ui-xs: 12px;
+    --et-ui-2xs: 11px;
+    --et-ui-line: 1.5;
+    --et-weight-body: 400;
+    --et-weight-medium: 500;
+    --et-weight-strong: 600;
+    --et-weight-heavy: 700;
+    --et-font-nav: var(--et-font);
+    --et-label-transform: none;
+    --et-label-tracking: .01em;
+    --et-label-weight: 600;
+    --et-hairline-w: 1px;
+    --et-dot-radius: 999px;
+    --et-focus-ring: 2px solid var(--et-accent);
+    --et-control-h: 34px;
+    --et-control-h-sm: 28px;
+    --et-control-h-lg: 38px;
+    --et-btn-radius: var(--et-radius-pill);
+    --et-card-shadow: var(--et-shadow);
+    --et-table-stripe: transparent;
+    --et-row-hover: var(--et-shell-inset);
   }
 }
 :root[data-mode="dark"] {
@@ -465,6 +523,32 @@
   --et-transit: #3fc0da; /* the teal, lifted for black */
   --et-shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 30px -14px rgba(0, 0, 0, .7);
   --et-shadow-lift: 0 16px 48px -12px rgba(0, 0, 0, .65);
+
+  --et-ui-xl: 28px;
+  --et-ui-lg: 17px;
+  --et-ui-md: 15px;
+  --et-ui-sm: 13px;
+  --et-ui-xs: 12px;
+  --et-ui-2xs: 11px;
+  --et-ui-line: 1.5;
+  --et-weight-body: 400;
+  --et-weight-medium: 500;
+  --et-weight-strong: 600;
+  --et-weight-heavy: 700;
+  --et-font-nav: var(--et-font);
+  --et-label-transform: none;
+  --et-label-tracking: .01em;
+  --et-label-weight: 600;
+  --et-hairline-w: 1px;
+  --et-dot-radius: 999px;
+  --et-focus-ring: 2px solid var(--et-accent);
+  --et-control-h: 34px;
+  --et-control-h-sm: 28px;
+  --et-control-h-lg: 38px;
+  --et-btn-radius: var(--et-radius-pill);
+  --et-card-shadow: var(--et-shadow);
+  --et-table-stripe: transparent;
+  --et-row-hover: var(--et-shell-inset);
 }
 
 /* ---- CLASSIC — the apex's original look, promoted to a theme --------------- */
@@ -540,6 +624,32 @@
   --et-blob-2: rgba(217, 164, 65, .18);
   --et-blob-3: rgba(177, 83, 60, .12);
   --et-grain-opacity: .035;
+
+  --et-ui-xl: 26px;
+  --et-ui-lg: 17px;
+  --et-ui-md: 15px;
+  --et-ui-sm: 13px;
+  --et-ui-xs: 12px;
+  --et-ui-2xs: 11px;
+  --et-ui-line: 1.5;
+  --et-weight-body: 400;
+  --et-weight-medium: 500;
+  --et-weight-strong: 600;
+  --et-weight-heavy: 700;
+  --et-font-nav: var(--et-font);
+  --et-label-transform: uppercase;
+  --et-label-tracking: .06em;
+  --et-label-weight: 700;
+  --et-hairline-w: 1px;
+  --et-dot-radius: 999px;
+  --et-focus-ring: 2px solid var(--et-accent);
+  --et-control-h: 34px;
+  --et-control-h-sm: 28px;
+  --et-control-h-lg: 38px;
+  --et-btn-radius: var(--et-radius);
+  --et-card-shadow: var(--et-shadow);
+  --et-table-stripe: color-mix(in srgb, var(--et-accent) 4%, transparent);
+  --et-row-hover: var(--et-shell-inset);
 }
 
 :root[data-theme="classic"][data-mode="dark"] {
@@ -576,6 +686,32 @@
   --et-blob-2: rgba(217, 164, 65, .16);
   --et-blob-3: rgba(217, 126, 99, .11);
   --et-grain-opacity: .05;
+
+  --et-ui-xl: 26px;
+  --et-ui-lg: 17px;
+  --et-ui-md: 15px;
+  --et-ui-sm: 13px;
+  --et-ui-xs: 12px;
+  --et-ui-2xs: 11px;
+  --et-ui-line: 1.5;
+  --et-weight-body: 400;
+  --et-weight-medium: 500;
+  --et-weight-strong: 600;
+  --et-weight-heavy: 700;
+  --et-font-nav: var(--et-font);
+  --et-label-transform: uppercase;
+  --et-label-tracking: .06em;
+  --et-label-weight: 700;
+  --et-hairline-w: 1px;
+  --et-dot-radius: 999px;
+  --et-focus-ring: 2px solid var(--et-accent);
+  --et-control-h: 34px;
+  --et-control-h-sm: 28px;
+  --et-control-h-lg: 38px;
+  --et-btn-radius: var(--et-radius);
+  --et-card-shadow: var(--et-shadow);
+  --et-table-stripe: color-mix(in srgb, var(--et-accent) 4%, transparent);
+  --et-row-hover: var(--et-shell-inset);
 }
 
 /* ---- CYBERPUNK — dark first (the audiobook site's identity) --------------- */
@@ -656,6 +792,32 @@
   --et-field-bg: var(--et-bg);   /* fields recess to the ground; panels stay lifted */
   --et-font-label: var(--et-font-mono);
   --et-brand-shadow: var(--et-glow-title);
+
+  --et-ui-xl: 26px;
+  --et-ui-lg: 18px;
+  --et-ui-md: 16px;
+  --et-ui-sm: 15px;
+  --et-ui-xs: 13px;
+  --et-ui-2xs: 12px;
+  --et-ui-line: 1.35;
+  --et-weight-body: 500;
+  --et-weight-medium: 600;
+  --et-weight-strong: 700;
+  --et-weight-heavy: 700;
+  --et-font-nav: var(--et-font-mono);
+  --et-label-transform: uppercase;
+  --et-label-tracking: .14em;
+  --et-label-weight: 400;
+  --et-hairline-w: 1px;
+  --et-dot-radius: 2px;
+  --et-focus-ring: 2px solid var(--et-accent-2);
+  --et-control-h: 34px;
+  --et-control-h-sm: 28px;
+  --et-control-h-lg: 38px;
+  --et-btn-radius: var(--et-radius);
+  --et-card-shadow: var(--et-shadow);
+  --et-table-stripe: color-mix(in srgb, var(--et-accent) 5%, transparent);
+  --et-row-hover: color-mix(in srgb, var(--et-accent) 10%, transparent);
 }
 
 /* Cyberpunk light — the site's own html.light palette (club pages, the
@@ -695,6 +857,32 @@
   --et-glow: 0 0 8px rgba(0, 121, 143, .25);
   --et-glow-title: 0 0 10px rgba(154, 123, 0, .25);
   --et-transit: #8a3fb8; /* INVENTED, as above — the violet's light form */
+
+  --et-ui-xl: 26px;
+  --et-ui-lg: 18px;
+  --et-ui-md: 16px;
+  --et-ui-sm: 15px;
+  --et-ui-xs: 13px;
+  --et-ui-2xs: 12px;
+  --et-ui-line: 1.35;
+  --et-weight-body: 500;
+  --et-weight-medium: 600;
+  --et-weight-strong: 700;
+  --et-weight-heavy: 700;
+  --et-font-nav: var(--et-font-mono);
+  --et-label-transform: uppercase;
+  --et-label-tracking: .14em;
+  --et-label-weight: 400;
+  --et-hairline-w: 1px;
+  --et-dot-radius: 2px;
+  --et-focus-ring: 2px solid var(--et-accent-2);
+  --et-control-h: 34px;
+  --et-control-h-sm: 28px;
+  --et-control-h-lg: 38px;
+  --et-btn-radius: var(--et-radius);
+  --et-card-shadow: var(--et-shadow);
+  --et-table-stripe: color-mix(in srgb, var(--et-accent) 5%, transparent);
+  --et-row-hover: color-mix(in srgb, var(--et-accent) 10%, transparent);
 }
 
 /* ---- RETRO — light first (the games app's aged-paper identity) ------------ */
@@ -783,6 +971,32 @@
   --et-btn-border: 2px solid var(--et-ink);
   --et-btn-shadow: 2px 2px 0 rgba(43, 38, 34, .22);
   --et-press: translate(2px, 2px);   /* the press INTO the shadow */
+
+  --et-ui-xl: 30px;
+  --et-ui-lg: 19px;
+  --et-ui-md: 15px;
+  --et-ui-sm: 14px;
+  --et-ui-xs: 13px;
+  --et-ui-2xs: 12px;
+  --et-ui-line: 1.45;
+  --et-weight-body: 400;
+  --et-weight-medium: 600;
+  --et-weight-strong: 700;
+  --et-weight-heavy: 800;
+  --et-font-nav: var(--et-font-label);
+  --et-label-transform: uppercase;
+  --et-label-tracking: .03em;
+  --et-label-weight: 400;
+  --et-hairline-w: 2px;
+  --et-dot-radius: 2px;
+  --et-focus-ring: 3px solid var(--et-accent);
+  --et-control-h: 36px;
+  --et-control-h-sm: 30px;
+  --et-control-h-lg: 40px;
+  --et-btn-radius: var(--et-radius-pill);
+  --et-card-shadow: var(--et-shadow);
+  --et-table-stripe: color-mix(in srgb, var(--et-ink) 5%, transparent);
+  --et-row-hover: color-mix(in srgb, var(--et-accent-2) 18%, transparent);
 }
 
 :root[data-theme="retro"][data-mode="dark"] {
@@ -829,6 +1043,32 @@
 
   --et-btn-fg: #1b1814;
   --et-btn-shadow: 2px 2px 0 rgba(0, 0, 0, .5);
+
+  --et-ui-xl: 30px;
+  --et-ui-lg: 19px;
+  --et-ui-md: 15px;
+  --et-ui-sm: 14px;
+  --et-ui-xs: 13px;
+  --et-ui-2xs: 12px;
+  --et-ui-line: 1.45;
+  --et-weight-body: 400;
+  --et-weight-medium: 600;
+  --et-weight-strong: 700;
+  --et-weight-heavy: 800;
+  --et-font-nav: var(--et-font-label);
+  --et-label-transform: uppercase;
+  --et-label-tracking: .03em;
+  --et-label-weight: 400;
+  --et-hairline-w: 2px;
+  --et-dot-radius: 2px;
+  --et-focus-ring: 3px solid var(--et-accent);
+  --et-control-h: 36px;
+  --et-control-h-sm: 30px;
+  --et-control-h-lg: 40px;
+  --et-btn-radius: var(--et-radius-pill);
+  --et-card-shadow: var(--et-shadow);
+  --et-table-stripe: color-mix(in srgb, var(--et-ink) 5%, transparent);
+  --et-row-hover: color-mix(in srgb, var(--et-accent-2) 18%, transparent);
 }
 
 /* ---- HEARTS — light first (pink and white, the arcade half of retro) ------ */
@@ -939,6 +1179,32 @@
   --et-btn-border: 2px solid var(--et-ink);
   --et-btn-shadow: 2px 2px 0 rgba(58, 31, 43, .22);
   --et-press: translate(2px, 2px); /* the press INTO the shadow, retro's move */
+
+  --et-ui-xl: 28px;
+  --et-ui-lg: 18px;
+  --et-ui-md: 15px;
+  --et-ui-sm: 14px;
+  --et-ui-xs: 13px;
+  --et-ui-2xs: 12px;
+  --et-ui-line: 1.5;
+  --et-weight-body: 400;
+  --et-weight-medium: 600;
+  --et-weight-strong: 700;
+  --et-weight-heavy: 800;
+  --et-font-nav: var(--et-font-label);
+  --et-label-transform: uppercase;
+  --et-label-tracking: .04em;
+  --et-label-weight: 400;
+  --et-hairline-w: 2px;
+  --et-dot-radius: 999px;
+  --et-focus-ring: 3px solid var(--et-accent);
+  --et-control-h: 36px;
+  --et-control-h-sm: 30px;
+  --et-control-h-lg: 40px;
+  --et-btn-radius: var(--et-radius-pill);
+  --et-card-shadow: var(--et-shadow);
+  --et-table-stripe: color-mix(in srgb, var(--et-accent) 5%, transparent);
+  --et-row-hover: color-mix(in srgb, var(--et-accent) 10%, transparent);
 }
 
 :root[data-theme="hearts"][data-mode="dark"] {
@@ -989,6 +1255,32 @@
 
   --et-btn-fg: #2a0d19;
   --et-btn-shadow: 2px 2px 0 rgba(0, 0, 0, .55);
+
+  --et-ui-xl: 28px;
+  --et-ui-lg: 18px;
+  --et-ui-md: 15px;
+  --et-ui-sm: 14px;
+  --et-ui-xs: 13px;
+  --et-ui-2xs: 12px;
+  --et-ui-line: 1.5;
+  --et-weight-body: 400;
+  --et-weight-medium: 600;
+  --et-weight-strong: 700;
+  --et-weight-heavy: 800;
+  --et-font-nav: var(--et-font-label);
+  --et-label-transform: uppercase;
+  --et-label-tracking: .04em;
+  --et-label-weight: 400;
+  --et-hairline-w: 2px;
+  --et-dot-radius: 999px;
+  --et-focus-ring: 3px solid var(--et-accent);
+  --et-control-h: 36px;
+  --et-control-h-sm: 30px;
+  --et-control-h-lg: 40px;
+  --et-btn-radius: var(--et-radius-pill);
+  --et-card-shadow: var(--et-shadow);
+  --et-table-stripe: color-mix(in srgb, var(--et-accent) 5%, transparent);
+  --et-row-hover: color-mix(in srgb, var(--et-accent) 10%, transparent);
 }
 
 /* ---- DISCORD — dark first (this dashboard's own identity) ----------------- */
@@ -1069,6 +1361,32 @@
   --et-blob-2: transparent;
   --et-blob-3: transparent;
   --et-grain-opacity: 0;
+
+  --et-ui-xl: 24px;
+  --et-ui-lg: 16px;
+  --et-ui-md: 14px;
+  --et-ui-sm: 13px;
+  --et-ui-xs: 12px;
+  --et-ui-2xs: 11px;
+  --et-ui-line: 1.45;
+  --et-weight-body: 400;
+  --et-weight-medium: 500;
+  --et-weight-strong: 600;
+  --et-weight-heavy: 700;
+  --et-font-nav: var(--et-font);
+  --et-label-transform: uppercase;
+  --et-label-tracking: .08em;
+  --et-label-weight: 700;
+  --et-hairline-w: 1px;
+  --et-dot-radius: 999px;
+  --et-focus-ring: 2px solid var(--et-accent);
+  --et-control-h: 32px;
+  --et-control-h-sm: 28px;
+  --et-control-h-lg: 34px;
+  --et-btn-radius: 4px;
+  --et-card-shadow: none;
+  --et-table-stripe: transparent;
+  --et-row-hover: var(--et-shell-inset);
 }
 
 /* Discord light — section A's light column. The shell greys are Discord's own
@@ -1107,6 +1425,32 @@
   --et-hue-4: #8a4fd8;
   --et-hue-5: #b4841d;
   --et-hue-6: #0069a8;
+
+  --et-ui-xl: 24px;
+  --et-ui-lg: 16px;
+  --et-ui-md: 14px;
+  --et-ui-sm: 13px;
+  --et-ui-xs: 12px;
+  --et-ui-2xs: 11px;
+  --et-ui-line: 1.45;
+  --et-weight-body: 400;
+  --et-weight-medium: 500;
+  --et-weight-strong: 600;
+  --et-weight-heavy: 700;
+  --et-font-nav: var(--et-font);
+  --et-label-transform: uppercase;
+  --et-label-tracking: .08em;
+  --et-label-weight: 700;
+  --et-hairline-w: 1px;
+  --et-dot-radius: 999px;
+  --et-focus-ring: 2px solid var(--et-accent);
+  --et-control-h: 32px;
+  --et-control-h-sm: 28px;
+  --et-control-h-lg: 34px;
+  --et-btn-radius: 4px;
+  --et-card-shadow: none;
+  --et-table-stripe: transparent;
+  --et-row-hover: var(--et-shell-inset);
 }
 
 /* Texture is decoration and loses to user settings (the games app's own

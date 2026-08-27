@@ -52,7 +52,7 @@ export function renderNav(current, hrefFor) {
   const nav = at('tabnav');
   if (!nav) return;
   nav.replaceChildren(...GROUPS.map((group) => el('div', { class: 'nav-group' }, [
-    el('div', { class: 'nav-head', text: group.head.toUpperCase() }),
+    el('div', { class: 'nav-head', text: group.head }),
     ...group.items.map((item) => el('a', {
       class: 'nav-link',
       href: hrefFor(item.tab),
