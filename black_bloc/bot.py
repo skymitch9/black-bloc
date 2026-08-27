@@ -24,6 +24,7 @@ COGS: tuple[str, ...] = (
     "black_bloc.cogs.moderation.honeypot",
     "black_bloc.cogs.content.golive",
     "black_bloc.cogs.moderation.automod",
+    "black_bloc.cogs.moderation.modcmds",
 )
 
 
