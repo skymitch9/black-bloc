@@ -22,6 +22,7 @@ from ...golive import (
     edits_on_end,
     embed_summary,
     end_details,
+    end_summary,
     ended_embed,
     ended_text,
     enriched,
@@ -812,6 +813,8 @@ class GoLive(commands.Cog):
         )
         lines = [
             f"**mode** — {self._mode(guild.id)}",
+            f"**stream end** — "
+            f"{end_summary(self._end_mode(guild.id), store.get(guild.id, 'golive_end_suffix'))}",
             f"**channel** — {f'<#{channel_id}>' if channel_id else 'not set'}",
             f"**cooldown** — {store.get(guild.id, 'golive_cooldown_minutes')} minute(s)",
             f"**twitch polling** — {polling}",

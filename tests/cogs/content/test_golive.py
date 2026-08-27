@@ -830,6 +830,31 @@ async def test_golive_status_reports_the_setup(cog, bot, member, db, monkeypatch
     assert "**links** — 1" in interaction.sent
 
 
+async def test_golive_status_says_the_announcement_is_left_alone_when_the_end_mode_is_off(
+    cog, bot, member, db, monkeypatch
+):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    interaction = FakeInteraction(bot, member, bot.guild)
+
+    await GoLive.status.callback(cog, interaction)
+
+    assert "**stream end** — off (left as posted)" in interaction.sent
+    assert "stream ended" not in interaction.sent
+
+
+async def test_golive_status_quotes_the_end_wording_when_the_end_mode_is_edit(
+    cog, bot, member, db, monkeypatch
+):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    await bot.store.set(GUILD, "golive_end_mode", "edit")
+    await bot.store.set(GUILD, "golive_end_suffix", " (that's a wrap)")
+    interaction = FakeInteraction(bot, member, bot.guild)
+
+    await GoLive.status.callback(cog, interaction)
+
+    assert "**stream end** — edit (\" (that's a wrap)\")" in interaction.sent
+
+
 async def test_golive_status_names_the_platform_of_everyone_live(cog, bot, member, db, monkeypatch):
     monkeypatch.setattr(cog_module, "require_staff", _always_staff)
     await start_session(

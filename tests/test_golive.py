@@ -11,6 +11,7 @@ from black_bloc.golive import (
     edits_on_end,
     embed_summary,
     end_details,
+    end_summary,
     ended_embed,
     ended_text,
     enriched,
@@ -302,6 +303,17 @@ def test_the_end_log_says_the_announcement_was_left_alone_only_when_it_was():
 def test_the_edit_mode_name_is_the_registrys_and_not_a_second_copy():
     assert edits_on_end(GOLIVE_END_EDIT) is True
     assert GOLIVE_END_MODES == (GOLIVE_END_OFF, GOLIVE_END_EDIT)
+
+
+def test_the_end_summary_names_the_mode_and_shows_the_wording_only_when_it_is_used():
+    assert end_summary(GOLIVE_END_OFF) == "off (left as posted)"
+    assert end_summary(GOLIVE_END_EDIT) == f'edit ("{GOLIVE_END_SUFFIX}")'
+    assert end_summary(GOLIVE_END_EDIT, " (over)") == 'edit (" (over)")'
+
+
+def test_the_end_summary_never_calls_an_unreadable_mode_off():
+    assert end_summary("wibble") == "wibble (left as posted)"
+    assert end_summary(None) == "None (left as posted)"
 
 
 def test_ended_text_is_appended_once():
