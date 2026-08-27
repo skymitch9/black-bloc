@@ -5,6 +5,15 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
+from .automod import (
+    AUTOMOD_MODES,
+    CARL_MODLOG_CHANNEL_ID,
+    MOD_DM_STYLES,
+    WARN_THRESHOLD_DEFAULT,
+    RuleError,
+    rules_summary,
+    validate_rules,
+)
 from .config import Settings
 from .storage.db import Database
 
@@ -26,6 +35,8 @@ HONEYPOT_PURGE_MAX_DAYS = 7
 EVENTS_MODES = ("off", "shadow", "on")
 EVENTS_RETENTION_DAYS = 7
 EVENTS_RETENTION_MAX_DAYS = 365
+
+WARN_THRESHOLD_MAX = 100
 
 KEY_TYPES: dict[str, str] = {
     "log_channel_id": "channel",
@@ -54,6 +65,14 @@ KEY_TYPES: dict[str, str] = {
     "events_ping_role_id": "role",
     "events_create_scheduled": "bool",
     "events_channel_retention_days": "int",
+    "automod_mode": "enum",
+    "automod_rules": "json",
+    "automod_exempt_role_ids": "roles",
+    "automod_exempt_channel_ids": "channels",
+    "automod_warn_threshold": "int",
+    "modlog_channel_id": "channel",
+    "mod_dm_on_action": "enum",
+    "carl_modlog_channel_id": "channel",
 }
 
 KEY_CHOICES: dict[str, tuple[str, ...]] = {
@@ -61,11 +80,14 @@ KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "tempvoice_mode": TEMPVOICE_MODES,
     "honeypot_mode": HONEYPOT_MODES,
     "events_mode": EVENTS_MODES,
+    "automod_mode": AUTOMOD_MODES,
+    "mod_dm_on_action": MOD_DM_STYLES,
 }
 
 KEY_MAX: dict[str, int] = {
     "honeypot_purge_days": HONEYPOT_PURGE_MAX_DAYS,
     "events_channel_retention_days": EVENTS_RETENTION_MAX_DAYS,
+    "automod_warn_threshold": WARN_THRESHOLD_MAX,
 }
 
 KEY_MAX_REASON: dict[str, str] = {
@@ -76,6 +98,10 @@ KEY_MAX_REASON: dict[str, str] = {
     "events_channel_retention_days": (
         "A finished event's channel kept for more than {limit} days is a channel nobody will "
         "ever tidy up. Set it to 0 to delete one as soon as the event is over."
+    ),
+    "automod_warn_threshold": (
+        "A warning count above {limit} is a number nobody is reading any more. Set it to 0 to "
+        "stop counting warnings at all."
     ),
 }
 
@@ -112,6 +138,14 @@ KEY_HELP: dict[str, str] = {
         f"days a finished event's channel is kept before deletion, 0 to "
         f"{EVENTS_RETENTION_MAX_DAYS}"
     ),
+    "automod_mode": "off, shadow (log what it would do) or on (delete, warn and time out)",
+    "automod_rules": "the automod rule book; /automod rule is what changes it",
+    "automod_exempt_role_ids": "roles automod ignores; staff are always ignored too",
+    "automod_exempt_channel_ids": "channels automod never reads",
+    "automod_warn_threshold": "warnings before Black Bloc says so in the log, 0 to stop counting",
+    "modlog_channel_id": "where mod cases are posted; defaults to log_channel_id",
+    "mod_dm_on_action": "what a punished member is told: none, server_action, server_action_reason",
+    "carl_modlog_channel_id": "Carl-bot's mod log, which /automod parity reads to compare",
 }
 
 
@@ -185,6 +219,11 @@ def coerce_value(key: str, value: Any) -> Any:
         if not isinstance(value, str) or not value.strip():
             raise SettingError(f"{key!r} takes some text, not {value!r}.")
         return value
+    if kind == "json":
+        try:
+            return validate_rules(value)
+        except RuleError as exc:
+            raise SettingError(str(exc)) from exc
     raise SettingError(f"{key!r} has no validator for type {kind!r}.")
 
 
@@ -213,6 +252,8 @@ def parse_value(key: str, raw: str) -> Any:
 
 def display_value(key: str, value: Any) -> str:
     kind = KEY_TYPES.get(key)
+    if kind == "json":
+        return rules_summary(value)
     if kind in ("channels", "roles"):
         mark = "#" if kind == "channels" else "@&"
         return ", ".join(f"<{mark}{v}>" for v in value) if value else "not set"
@@ -326,6 +367,18 @@ class SettingsStore:
             return True
         if key == "events_channel_retention_days":
             return EVENTS_RETENTION_DAYS
+        if key == "automod_mode":
+            return "shadow"
+        if key == "automod_rules":
+            return validate_rules({})
+        if key == "automod_warn_threshold":
+            return WARN_THRESHOLD_DEFAULT
+        if key == "modlog_channel_id":
+            return self.default("log_channel_id")
+        if key == "mod_dm_on_action":
+            return "server_action_reason"
+        if key == "carl_modlog_channel_id":
+            return CARL_MODLOG_CHANNEL_ID
         if KEY_TYPES.get(key) in ("channels", "roles"):
             return []
         return None

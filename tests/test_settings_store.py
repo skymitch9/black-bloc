@@ -1,5 +1,6 @@
 import pytest
 
+from black_bloc.automod import CARL_MODLOG_CHANNEL_ID, validate_rules
 from black_bloc.config import load_settings
 from black_bloc.settings_store import (
     EVENTS_RETENTION_DAYS,
@@ -374,3 +375,32 @@ def test_staff_refusal_names_the_channel(tmp_path, monkeypatch):
     s = SettingsStore(Database(tmp_path / "s.sqlite3"), settings)
     message = s.staff_refusal(1)
     assert f"<#{TEST_CH}>" in message and "Manage Server" in message
+
+
+async def test_the_automod_keys_default_to_carls_config_in_shadow(store):
+    assert store.get(1, "automod_mode") == "shadow"
+    assert store.get(1, "mod_dm_on_action") == "server_action_reason"
+    assert store.get(1, "automod_warn_threshold") == 8
+    assert store.get(1, "modlog_channel_id") == TEST_CH
+    assert store.get(1, "carl_modlog_channel_id") == CARL_MODLOG_CHANNEL_ID
+    assert store.get(1, "automod_exempt_role_ids") == []
+    book = store.get(1, "automod_rules")
+    assert book["mention_spam"]["threshold"] == 5
+    book["mention_spam"]["threshold"] = 99
+    assert store.get(1, "automod_rules")["mention_spam"]["threshold"] == 5
+
+
+async def test_the_rule_book_is_validated_on_the_way_in(store):
+    await store.set(1, "automod_rules", {"mention_spam": {"threshold": 3}})
+    assert store.get(1, "automod_rules")["mention_spam"]["threshold"] == 3
+    assert store.get(1, "automod_rules")["slowmode"]["window_s"] == 4
+    with pytest.raises(SettingError, match="automod rules"):
+        await store.set(1, "automod_rules", {"nonsense": {}})
+    with pytest.raises(SettingError, match="28 days|between"):
+        await store.set(1, "automod_rules", {"mention_spam": {"timeout_s": 99999999}})
+
+
+def test_a_rule_book_reads_back_as_a_summary_not_as_json():
+    shown = display_value("automod_rules", validate_rules({}))
+    assert "mention_spam 5/30s delete+warn+timeout" in shown
+    assert "{" not in shown
