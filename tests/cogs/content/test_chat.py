@@ -3,7 +3,7 @@ import pytest
 
 from black_bloc.cogs.content.chat import Chat, mentions_bot
 from black_bloc.config import load_settings
-from black_bloc.settings_store import SettingsStore
+from black_bloc.settings_store import CHAT_COOLDOWN_SECONDS, SettingsStore
 from black_bloc.storage.db import Database
 
 GUILD = 7
@@ -270,9 +270,14 @@ async def test_a_failed_reply_leaves_no_cooldown_and_no_action_row(cog, bot, mem
     assert await rows(db, "chat.insult") == []
 
 
-async def test_a_reply_in_a_dm_needs_no_guild_setting(cog, bot):
+async def test_a_reply_in_a_dm_needs_no_guild_setting_but_still_cools_down(cog, bot):
     lone = FakeMember(None, user_id=903, display_name="Ana")
     lone.guild = None
-    message = FakeMessage(lone, "<@55> hi", guild=None, mentions=[bot.user])
-    await cog.on_message(message)
-    assert len(message.replies) == 1
+    first = FakeMessage(lone, "<@55> hi", guild=None, mentions=[bot.user])
+    await cog.on_message(first)
+    second = FakeMessage(lone, "<@55> hi", guild=None, mentions=[bot.user])
+    await cog.on_message(second)
+
+    assert len(first.replies) == 1
+    assert second.replies == []
+    assert cog.cooldown_seconds(None) == CHAT_COOLDOWN_SECONDS

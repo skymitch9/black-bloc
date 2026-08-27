@@ -9,6 +9,7 @@ from discord.ext import commands
 
 from ...actionlog import log_action
 from ...chat import INSULT, classify, reply_for
+from ...settings_store import CHAT_COOLDOWN_SECONDS
 
 log = logging.getLogger(__name__)
 
@@ -33,8 +34,9 @@ class Chat(commands.Cog):
         self._answered: dict[int, float] = {}
 
     def cooldown_seconds(self, guild_id: int | None) -> int:
+        """A DM has no guild to read the setting from, so it gets the registry's default."""
         if guild_id is None:
-            return 0
+            return CHAT_COOLDOWN_SECONDS
         return int(self.bot.store.get(guild_id, "chat_cooldown_seconds") or 0)
 
     def cooling(self, user_id: int, seconds: int, now: float) -> bool:
