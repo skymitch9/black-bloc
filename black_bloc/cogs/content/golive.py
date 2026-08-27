@@ -18,6 +18,9 @@ from ...golive import (
     TWITCH,
     YOUTUBE,
     StreamInfo,
+    announcement_embed,
+    embed_summary,
+    ended_embed,
     ended_text,
     enriched,
     extract_stream,
@@ -29,6 +32,7 @@ from ...golive import (
     should_announce,
     twitch_enrichable,
     twitch_login_from_url,
+    with_box_art,
 )
 from ...settings_store import DB_UNAVAILABLE, GOLIVE_MODES, require_staff
 from ...twitch import TwitchClient, TwitchError
@@ -71,12 +75,19 @@ LINK_TAKEN = (
 PLATFORM_UNKNOWN = "an unknown platform"
 TEST_STREAMS = {
     TWITCH: StreamInfo(
-        url="https://www.twitch.tv/blackbloc", title="a test stream", platform=TWITCH
+        url="https://www.twitch.tv/blackbloc",
+        game="Just Chatting",
+        title="a test stream",
+        platform=TWITCH,
+        game_id="509658",
+        box_art_url="https://static-cdn.jtvnw.net/ttv-boxart/509658-285x380.jpg",
     ),
     YOUTUBE: StreamInfo(
         url="https://www.youtube.com/watch?v=blackblocbaf",
+        game="a test game",
         title="a test stream",
         platform=YOUTUBE,
+        thumbnail_url="https://i.ytimg.com/vi/aqz-KE-bpKQ/hqdefault.jpg",
     ),
 }
 
@@ -386,6 +397,7 @@ class GoLive(commands.Cog):
             return
         if source == "presence":
             info = await self._enrich(member, info)
+        info = await self._box_art(guild, info)
         session_id = await start_session(self.bot.db, guild.id, member.id, source, info, mode)
         if session_id is None:
             return
@@ -395,7 +407,10 @@ class GoLive(commands.Cog):
             member,
             ping_role_id=store.get(guild.id, "golive_ping_role_id"),
         )
-        result = await self._post(guild, text) if mode == "on" else PostResult(reason="shadow")
+        embed = self._embed(guild, info, member, source)
+        result = (
+            await self._post(guild, text, embed) if mode == "on" else PostResult(reason="shadow")
+        )
         if result.ok:
             await set_announced(self.bot.db, session_id, result.message.id)
         details = {
@@ -407,6 +422,8 @@ class GoLive(commands.Cog):
             "platform": info.platform,
             "text": text,
         }
+        if embed is not None:
+            details["embed"] = embed_summary(embed)
         if not result.ok and result.reason not in ("shadow", "test_mode"):
             await log_action(
                 self.bot,
@@ -456,6 +473,7 @@ class GoLive(commands.Cog):
             await message.edit(
                 content=ended_text(message.content),
                 allowed_mentions=self._mentions(guild.id),
+                **self._ended_embed(guild, row, message),
             )
         except Exception as exc:
             log.info(
@@ -464,6 +482,33 @@ class GoLive(commands.Cog):
                 type(exc).__name__,
                 exc,
             )
+
+    def _embed(self, guild: Any, info: StreamInfo, member: Any, source: str) -> Any:
+        if not self.bot.store.get(guild.id, "golive_embed"):
+            return None
+        return announcement_embed(info, member, source)
+
+    def _ended_embed(self, guild: Any, row: Any, message: Any) -> dict[str, Any]:
+        existing = list(getattr(message, "embeds", None) or ())
+        if not existing:
+            return {}
+        name = self._display_name(guild, row)
+        return {"embed": ended_embed(existing[0], name, _row_value(row, "platform"))}
+
+    async def _box_art(self, guild: Any, info: StreamInfo) -> StreamInfo:
+        """Twitch knows the game's art; YouTube and presence-only streams are never asked."""
+        if self.helix is None or info.box_art_url or not info.game_id:
+            return info
+        if not twitch_enrichable(info) or not self.bot.store.get(guild.id, "golive_embed"):
+            return info
+        try:
+            games = await self.helix.get_games([info.game_id])
+        except TwitchError as exc:
+            log.warning(
+                "go-live: no box art for game %s (%s); posting without it", info.game_id, exc
+            )
+            return info
+        return with_box_art(info, games[0]) if games else info
 
     async def _enrich(self, member: Any, info: StreamInfo) -> StreamInfo:
         if self.helix is None or not twitch_enrichable(info) or (info.game and info.title):
@@ -479,7 +524,7 @@ class GoLive(commands.Cog):
             return info
         return enriched(info, streams[0] if streams else None)
 
-    async def _post(self, guild: Any, text: str) -> PostResult:
+    async def _post(self, guild: Any, text: str, embed: Any = None) -> PostResult:
         channel_id = self.bot.store.get(guild.id, "golive_channel_id")
         if not channel_id:
             log.warning("go-live: not posted — golive_channel_id is not set")
@@ -493,7 +538,11 @@ class GoLive(commands.Cog):
             log.warning("go-live: not posted — channel %s is not visible", channel_id)
             return PostResult(reason="channel_not_visible")
         try:
-            message = await channel.send(text, allowed_mentions=self._mentions(guild.id))
+            message = await channel.send(
+                text,
+                allowed_mentions=self._mentions(guild.id),
+                **({"embed": embed} if embed is not None else {}),
+            )
         except Exception as exc:
             log.warning("go-live: not posted — %s: %s", type(exc).__name__, exc)
             return PostResult(reason=f"{type(exc).__name__}: {exc}")
@@ -814,15 +863,19 @@ class GoLive(commands.Cog):
             or TEST_STREAMS[TWITCH]
         )
         text = render(store.get(guild.id, "golive_template"), info, interaction.user)
+        source = "twitch" if (info.platform or "").casefold() == TWITCH.casefold() else "presence"
+        embed = self._embed(guild, info, interaction.user, source)
+        details: dict[str, Any] = {"text": text, "platform": info.platform}
+        if embed is not None:
+            details["embed"] = embed_summary(embed)
         await interaction.response.send_message(
-            text, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+            text,
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+            **({"embed": embed} if embed is not None else {}),
         )
         await log_action(
-            self.bot,
-            guild,
-            "golive.test",
-            actor=interaction.user,
-            details={"text": text, "platform": info.platform},
+            self.bot, guild, "golive.test", actor=interaction.user, details=details
         )
 
     @twitch.command(name="link", description="Tell Black Bloc your Twitch channel name")
