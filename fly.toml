@@ -3,7 +3,7 @@
 # Runbook: docs/access/deploy.md
 
 app = "black-bloc"
-primary_region = "phx"
+primary_region = "lax"   # nearest to Phoenix; Fly has no phx region
 
 [build]
   dockerfile = "Dockerfile"
