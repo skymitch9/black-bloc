@@ -1,46 +1,61 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 import uvicorn
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, Request
+from fastapi.staticfiles import StaticFiles
 
 from .. import __version__
 from . import auth, status
 from .auth import Refused, refused_handler
+from .status import latency_ms
 
 log = logging.getLogger(__name__)
 
-CORS_METHODS = ("GET", "POST", "OPTIONS")
-CORS_HEADERS = ("content-type",)
+CSP = (
+    "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; "
+    "frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+)
+SECURITY_HEADERS = {
+    "Strict-Transport-Security": "max-age=31536000",
+    "Content-Security-Policy": CSP,
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff",
+}
 
 
 def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
     app = FastAPI(title="Black Bloc API", version=__version__, docs_url=None, redoc_url=None)
 
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next: Any) -> Any:
+        response = await call_next(request)
+        for name, value in SECURITY_HEADERS.items():
+            response.headers.setdefault(name, value)
+        return response
+
     @app.get("/health")
     async def health() -> dict[str, Any]:
-        ready = bool(bot.is_ready())
         return {
             "ok": True,
             "version": __version__,
-            "ready": ready,
+            "ready": bool(bot.is_ready()),
             "guilds": len(bot.guilds),
-            "latency_ms": round(bot.latency * 1000) if ready else None,
+            "latency_ms": latency_ms(bot),
         }
 
     app.add_exception_handler(Refused, refused_handler)
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[str(bot.settings.site_origin).rstrip("/")],
-        allow_credentials=True,
-        allow_methods=list(CORS_METHODS),
-        allow_headers=list(CORS_HEADERS),
-    )
     app.include_router(auth.build_router(bot, oauth_request=oauth_request))
     app.include_router(status.build_router(bot))
+
+    root = Path(bot.settings.site_root)
+    if root.is_dir():
+        app.mount("/", StaticFiles(directory=root, html=True), name="site")
+    else:
+        log.warning("api: %s is not a directory — serving the API without the page", root)
     return app
 
 

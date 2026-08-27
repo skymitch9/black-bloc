@@ -21,8 +21,8 @@ TOKEN_URL = f"{DISCORD_API}/oauth2/token"
 SCOPES = "identify guilds.members.read"
 REQUEST_TIMEOUT_SECONDS = 15
 
-SESSION_COOKIE = "bb_session"
-STATE_COOKIE = "bb_state"
+SESSION_COOKIE = "__Host-bb_session"
+STATE_COOKIE = "__Host-bb_state"
 STATE_TTL_SECONDS = 600
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 
@@ -38,6 +38,10 @@ NOT_STAFF = (
     "This dashboard is for the mods and admins of Black in a Flash!. You are signed in, but your "
     "Discord account does not hold a staff role or Manage Server. Ask a Lead for the role, then "
     "sign in again."
+)
+STAFF_UNKNOWN = (
+    "Black Bloc could not check your roles with Discord just now — nothing is wrong with your "
+    "access; try again in a minute."
 )
 LOGIN_UNAVAILABLE = (
     "Signing in is not switched on for this server yet — the Discord application credentials have "
@@ -93,8 +97,12 @@ def read_session(
     if not token or "." not in token:
         return ("invalid", None)
     body, _, mac = token.rpartition(".")
-    expected = hmac.new(secret.encode("utf-8"), body.encode("ascii"), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(mac, expected):
+    try:
+        signed, given = body.encode("ascii"), mac.encode("ascii")
+    except UnicodeEncodeError:
+        return ("invalid", None)
+    expected = hmac.new(secret.encode("utf-8"), signed, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(given, expected.encode("ascii")):
         return ("invalid", None)
     try:
         payload = json.loads(_b64d(body))
@@ -151,12 +159,17 @@ def is_admitted(guild: Any, store: Any, user_id: int, role_ids: set[int]) -> boo
     return False
 
 
-def live_staff(bot: Any, user_id: int, recorded: bool) -> bool:
+def live_staff(bot: Any, user_id: int, recorded: bool) -> tuple[bool, bool]:
+    """(staff, known). `known` is False only when the guild cannot be consulted."""
+    if not bot.is_ready():
+        return (recorded, False)
     guild = guild_of(bot)
-    member = guild.get_member(user_id) if guild is not None else None
+    if guild is None:
+        return (recorded, False)
+    member = guild.get_member(user_id)
     if member is None:
-        return recorded
-    return bool(bot.store.is_staff(member))
+        return (False, True)
+    return (bool(bot.store.is_staff(member)), True)
 
 
 def current_session(request: Request, bot: Any) -> dict[str, Any]:
@@ -172,11 +185,13 @@ def current_session(request: Request, bot: Any) -> dict[str, Any]:
         user_id = int(payload["uid"])
     except (KeyError, TypeError, ValueError):
         raise Refused(401, "not_signed_in", NOT_SIGNED_IN) from None
+    staff, known = live_staff(bot, user_id, bool(payload.get("staff")))
     return {
         "id": str(user_id),
         "name": str(payload.get("name") or ""),
         "avatar": payload.get("avatar"),
-        "staff": live_staff(bot, user_id, bool(payload.get("staff"))),
+        "staff": staff,
+        "staff_known": known,
     }
 
 
@@ -187,10 +202,19 @@ def session_dependency(bot: Any):
     return dependency
 
 
+def staff_state(who: dict[str, Any]) -> str:
+    if not who["staff_known"]:
+        return "staff_unknown"
+    return "staff" if who["staff"] else "not_staff"
+
+
 def staff_dependency(bot: Any):
     async def dependency(request: Request) -> dict[str, Any]:
         who = current_session(request, bot)
-        if not who["staff"]:
+        state = staff_state(who)
+        if state == "staff_unknown":
+            raise Refused(503, "staff_unknown", STAFF_UNKNOWN)
+        if state == "not_staff":
             raise Refused(403, "not_staff", NOT_STAFF)
         return who
 
@@ -201,7 +225,7 @@ def cookie_kwargs(settings: Any) -> dict[str, Any]:
     return {
         "httponly": True,
         "samesite": settings.session_cookie_samesite,
-        "secure": str(settings.api_origin).lower().startswith("https"),
+        "secure": settings.origin.lower().startswith("https"),
         "path": "/",
     }
 
@@ -277,6 +301,15 @@ class DiscordOAuth:
         return payload
 
 
+def state_matches(given: str | None, expected: str | None) -> bool:
+    if not given or not expected:
+        return False
+    try:
+        return hmac.compare_digest(given, expected)
+    except TypeError:
+        return False
+
+
 def display_name(identity: dict[str, Any]) -> str:
     return str(
         identity.get("global_name") or identity.get("username") or identity.get("id") or "someone"
@@ -296,9 +329,7 @@ def build_router(bot: Any, *, oauth_request: Any = None) -> APIRouter:
         )
 
     def _home(outcome: str) -> RedirectResponse:
-        return RedirectResponse(
-            f"{str(settings.site_origin).rstrip('/')}/?signin={outcome}", status_code=303
-        )
+        return RedirectResponse(f"{settings.origin}/?signin={outcome}", status_code=303)
 
     @router.get("/login")
     async def login() -> Any:
@@ -332,18 +363,22 @@ def build_router(bot: Any, *, oauth_request: Any = None) -> APIRouter:
             raise Refused(503, "login_unavailable", LOGIN_UNAVAILABLE)
         if error or not code:
             return _home("denied")
-        expected = request.cookies.get(STATE_COOKIE)
-        if not expected or not state or not hmac.compare_digest(state, expected):
+        if not state_matches(state, request.cookies.get(STATE_COOKIE)):
             log.warning("auth: callback rejected — the state cookie did not match")
             return _home("state")
 
         client = _client()
+        member: dict[str, Any] | None = None
         try:
             token = await client.exchange(code)
             identity = await client.identity(token)
             guild = guild_of(bot)
             guild_id = getattr(guild, "id", None) or settings.dev_guild_id
-            member = await client.guild_member(token, guild_id) if guild_id else None
+            if guild_id:
+                try:
+                    member = await client.guild_member(token, guild_id)
+                except OAuthError as exc:
+                    log.warning("auth: the guild member lookup failed — %s", exc)
         except OAuthError as exc:
             log.warning("auth: sign-in failed — %s", exc)
             return _home("failed")
@@ -371,24 +406,28 @@ def build_router(bot: Any, *, oauth_request: Any = None) -> APIRouter:
             max_age=SESSION_TTL_SECONDS,
             **cookie_kwargs(settings),
         )
-        response.delete_cookie(STATE_COOKIE, path="/")
+        response.delete_cookie(STATE_COOKIE, **cookie_kwargs(settings))
         return response
 
     @router.post("/logout")
     async def logout() -> Any:
         response = JSONResponse({"ok": True})
-        response.delete_cookie(SESSION_COOKIE, path="/")
+        response.delete_cookie(SESSION_COOKIE, **cookie_kwargs(settings))
         return response
 
     @router.get("/me")
     async def me(request: Request) -> dict[str, Any]:
         who = current_session(request, bot)
         guild = guild_of(bot)
+        state = staff_state(who)
         return {
             "user": {"id": who["id"], "name": who["name"], "avatar": who["avatar"]},
-            "staff": who["staff"],
+            "staff": state == "staff",
+            "state": state,
             "guild": {"id": str(guild.id), "name": guild.name} if guild is not None else None,
-            "message": None if who["staff"] else NOT_STAFF,
+            "message": {"staff": None, "not_staff": NOT_STAFF, "staff_unknown": STAFF_UNKNOWN}[
+                state
+            ],
         }
 
     return router
@@ -397,6 +436,7 @@ def build_router(bot: Any, *, oauth_request: Any = None) -> APIRouter:
 __all__ = [
     "NOT_STAFF",
     "SESSION_COOKIE",
+    "STAFF_UNKNOWN",
     "STATE_COOKIE",
     "DiscordOAuth",
     "OAuthError",
@@ -405,9 +445,11 @@ __all__ = [
     "current_session",
     "guild_of",
     "is_admitted",
+    "live_staff",
     "read_session",
     "refused_handler",
     "session_dependency",
     "sign_session",
     "staff_dependency",
+    "state_matches",
 ]

@@ -17,6 +17,9 @@ def settings(tmp_path, monkeypatch):
 
 
 API_SECRET = "test-session-secret"
+# https, because a __Host- cookie needs Secure and http.cookiejar refuses to
+# return a Secure cookie over http — the tests would never carry a session.
+API_ORIGIN = "https://testserver"
 API_GUILD_ID = 4242
 STAFF_ROLE_ID = 11
 PLAIN_ROLE_ID = 22
@@ -121,8 +124,7 @@ def api_settings(monkeypatch):
         discord_client_id="client-id",
         discord_client_secret="client-secret",
         session_secret=API_SECRET,
-        api_origin="http://testserver",
-        site_origin="https://blackbloc.heygabi.ai",
+        site_origin=API_ORIGIN,
     )
 
 
@@ -136,6 +138,7 @@ def fakes():
         Bot=FakeBot,
         Database=FakeDatabase,
         SECRET=API_SECRET,
+        ORIGIN=API_ORIGIN,
         GUILD_ID=API_GUILD_ID,
         STAFF_ROLE_ID=STAFF_ROLE_ID,
         PLAIN_ROLE_ID=PLAIN_ROLE_ID,
@@ -154,8 +157,22 @@ def bot(api_settings, guild):
 
 
 @pytest.fixture
-def sign_in():
-    def _sign_in(client, *, uid: int = 7, staff: bool = True, ttl: int = SESSION_TTL_SECONDS):
+def sign_in(guild):
+    """Sign somebody in AND let the bot's guild cache see them — staff is re-read live."""
+
+    def _sign_in(
+        client,
+        *,
+        uid: int = 7,
+        staff: bool = True,
+        ttl: int = SESSION_TTL_SECONDS,
+        cached: bool = True,
+    ):
+        if cached:
+            role = FakeRole(STAFF_ROLE_ID, "Aunties / Uncles") if staff else FakeRole(
+                PLAIN_ROLE_ID, "Member"
+            )
+            guild.members.setdefault(uid, FakeMember(uid, [role]))
         token = sign_session(
             API_SECRET,
             {

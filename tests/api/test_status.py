@@ -45,7 +45,7 @@ class FakeCog:
 
 
 def client_for(bot) -> TestClient:
-    return TestClient(create_app(bot), base_url="http://testserver")
+    return TestClient(create_app(bot), base_url="https://testserver")
 
 
 @pytest.fixture
@@ -203,11 +203,31 @@ def test_loop_health_ignores_a_cog_with_no_loops(bot):
     assert loop_health(bot) == []
 
 
-def test_status_says_so_when_there_is_no_guild_to_report_on(api_settings, sign_in, fakes):
-    headless = fakes.Bot(api_settings, None)
-    client = client_for(headless)
+def test_no_guild_is_staff_unknown_rather_than_a_report_on_nothing(api_settings, sign_in, fakes):
+    """F2: with no guild the staff question has no answer, so the gate says so first."""
+    client = client_for(fakes.Bot(api_settings, None))
     sign_in(client)
+    response = client.get("/api/status")
+    assert response.status_code == 503
+    assert response.json()["error"] == "staff_unknown"
+
+
+def test_status_says_so_when_the_guild_goes_away_mid_request(bot, guild, sign_in):
+    client = client_for(bot)
+    sign_in(client)
+    once = iter([guild])
+    bot.get_guild, bot.guilds = (lambda _id: next(once, None)), []
     body = client.get("/api/status").json()
     assert body["guild"] is None
     assert body["features"] == []
     assert "not in a server it can report on yet" in body["notes"][0]
+
+
+def test_status_reports_no_latency_when_the_gateway_has_not_measured_one(bot, sign_in):
+    """F3: round(nan) raises, and a status page must not 500 on a missing figure."""
+    client = client_for(bot)
+    sign_in(client)
+    bot.latency = float("nan")
+    assert client.get("/api/status").json()["bot"]["latency_ms"] is None
+    bot.latency = float("inf")
+    assert client.get("/api/status").json()["bot"]["latency_ms"] is None

@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     api_enabled: bool = False
     api_host: str = "127.0.0.1"
     api_port: int = 8080
+    site_root: Path = Path("site/public")
 
     twitch_client_id: str | None = Field(
         default=None, description="Twitch application client id (go-live fallback path)"
@@ -42,7 +43,6 @@ class Settings(BaseSettings):
     test_channel_id: int | None = None
 
     site_origin: str = "https://blackbloc.heygabi.ai"
-    api_origin: str = "https://black-bloc.fly.dev"
     session_cookie_samesite: str = "lax"
     discord_client_id: str | None = None
     discord_client_secret: str | None = None
@@ -68,8 +68,17 @@ class Settings(BaseSettings):
         return bool(self.discord_client_id and self.discord_client_secret and self.session_secret)
 
     @property
+    def origin(self) -> str:
+        return self.site_origin.rstrip("/")
+
+    @property
+    def api_origin(self) -> str:
+        """Deprecated alias for `site_origin`; one origin serves both (code-notes 8a)."""
+        return self.origin
+
+    @property
     def oauth_redirect_uri(self) -> str:
-        return f"{self.api_origin.rstrip('/')}/api/auth/callback"
+        return f"{self.origin}/api/auth/callback"
 
     def validate_test_mode(self) -> None:
         if self.test_mode and not self.test_channel_id:

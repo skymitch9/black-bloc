@@ -22,43 +22,42 @@ deploy, no sync script, no runtime dependency in either direction. A sixth
 estate theme reaches this page only if someone copies the two files in again.
 The fonts' OFL licences travel with the faces and must stay.
 
-The page talks to **its own origin and the API origin, and to no other host.**
+The page talks to **its own origin and to no other host.**
 
-## The API origin
+## One hostname, one origin (owner decision, 2026-08-26)
 
-`index.html` carries `<meta name="api-origin" content="https://black-bloc.fly.dev">`.
-That tag is the only place it is written down — point the site at a different
-deployment by editing it, never by editing `app.js`.
+⚠️ **There is no separate front-end deployment.** The Fly app `black-bloc`
+serves this directory itself, mounted at `/` by `black_bloc/api/server.py`
+after the API routers, so `https://blackbloc.heygabi.ai` is both the page and
+the API. There is no Cloudflare Pages project, no `wrangler.toml`, and no CORS
+middleware — a same-origin `fetch` needs none, and the `SameSite=Lax` session
+cookie works because nothing is cross-site any more.
 
-The API's CORS allow-list is the other half: it is `SITE_ORIGIN` in the bot's
-environment (default `https://blackbloc.heygabi.ai`). Both must agree or the
-browser blocks every call.
+`index.html` carries `<meta name="api-origin" content="">`. **Empty means "the
+origin this page came from"**, which is the normal case. Fill it in only to
+point the page at a different deployment, and never edit `app.js` instead.
+
+The directory the app serves is `SITE_ROOT` (default `site/public`, relative to
+the working directory; the Dockerfile copies it to `/app/site/public`).
 
 ## Deploying
 
-⚠️ **A directory deploy ships the WORKING TREE, not a commit.** Deploy only
-from a clean tree; if another agent has uncommitted work here, deploy from a
-`git worktree add <tmp> HEAD` checkout instead.
+The page ships **inside the bot's image** — there is no second deploy:
 
 ```
-git status --short          # must be empty
-npx wrangler pages deploy site/public --project-name blackbloc
+flyctl deploy --app black-bloc --ha=false
 ```
 
-Custom domain `blackbloc.heygabi.ai` is attached in the Cloudflare dashboard
-(Workers & Pages → blackbloc → Custom domains). Full runbook, including the
-Discord Developer Portal redirect URI that must be registered:
-`docs/access/site.md`.
+Full runbook, including DNS, the certificate and the Discord Developer Portal
+redirect URI that must be registered: `docs/access/site.md`.
 
 ## Checking it locally
 
-Any static server will do; the page needs no origin of its own to render its
-signed-out state.
+Run the bot with `API_ENABLED=true` and open `http://127.0.0.1:8080` — the same
+process serves the page and the API, so nothing has to be told where the other
+half is.
 
-```
-python -m http.server 8788 --directory site/public
-```
-
-The API calls will be refused by CORS unless `SITE_ORIGIN` matches where you
-are serving from — which is the correct behaviour, and the page says so in a
-sentence rather than showing a status code.
+A bare static server (`python -m http.server 8788 --directory site/public`)
+renders the signed-out state, but every API call fails and the page says the
+bot is not answering — correct behaviour, and a sentence rather than a status
+code.

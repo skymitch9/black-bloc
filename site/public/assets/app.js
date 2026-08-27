@@ -1,15 +1,18 @@
 /**
  * app.js — the whole status page. Talks to the Black Bloc API and to nothing
- * else; the API origin comes from <meta name="api-origin">, never hardcoded.
+ * else; the API is the page's own origin unless <meta name="api-origin">
+ * names another. Never hardcoded here.
  *
- * The four refusal states are the point of this file (global rule: nobody
+ * The five refusal states are the point of this file (global rule: nobody
  * sees a bare HTTP status). They are kept apart because their fixes differ:
  *   not signed in            → sign in
  *   signed in, not staff     → ask a Lead for the role
  *   session expired          → sign in again, nothing is wrong with access
+ *   roles could not be read  → NEITHER of the two above: the bot could not ask
+ *                              Discord, so it is a fault with a retry button
  *   API unreachable          → an OUTAGE, never described as a permission
  *                              problem, and never given a "sign in" button
- * The API supplies the sentence for the first three, so the wording has one
+ * The API supplies the sentence for the first four, so the wording has one
  * home. Only the outage sentence lives here, because a dead API cannot
  * describe itself.
  */
@@ -26,6 +29,8 @@ const OUTAGE = 'This page cannot reach Black Bloc right now. That is an outage, 
 const SIGNED_OUT_TITLE = 'Sign in to see this';
 const SIGNED_OUT = 'Sign in with the Discord account you moderate Black in a Flash! with, and ' +
   'this page will fill in.';
+
+const UNKNOWN_TITLE = 'Your roles could not be checked';
 
 const RETURNED = {
   denied: 'Discord sign-in was cancelled, so nobody was signed in. Start again when you are ready.',
@@ -65,7 +70,7 @@ class Outage extends Error {}
 async function api(path, options = {}) {
   let response;
   try {
-    response = await fetch(`${API}${path}`, { credentials: 'include', ...options });
+    response = await fetch(`${API}${path}`, { credentials: 'same-origin', ...options });
   } catch (e) {
     throw new Outage(String(e));
   }
@@ -291,6 +296,11 @@ function handle(error) {
     refuse({ title: 'This dashboard is for staff', message: error.message, state: 'warn' });
     return;
   }
+  // Not a refusal and not an outage: the bot is up but could not ask Discord.
+  if (error.code === 'staff_unknown') {
+    refuse({ title: UNKNOWN_TITLE, message: error.message, state: 'info', canRetry: true });
+    return;
+  }
   // Anything else — a 503 from the API, a database that cannot answer — is a
   // fault, so it gets a retry and never a permission sentence.
   refuse({
@@ -311,6 +321,16 @@ async function boot() {
   const complaint = returnedFromDiscord();
   try {
     const me = await api('/api/auth/me');
+    if (me.state === 'staff_unknown') {
+      refuse({
+        title: UNKNOWN_TITLE,
+        message: me.message,
+        note: `Signed in as ${me.user.name}.`,
+        state: 'info',
+        canRetry: true,
+      });
+      return;
+    }
     if (!me.staff) {
       refuse({
         title: 'This dashboard is for staff',

@@ -1,8 +1,0 @@
-name = "blackbloc"
-pages_build_output_dir = "public"
-compatibility_date = "2026-08-26"
-
-# No [[functions]] and no functions/ directory ON PURPOSE. Everything dynamic
-# lives in the bot's own API (black_bloc/api) on Fly, because it needs the live
-# gateway connection and the same SQLite file the bot writes. A Worker here
-# would be a second place that answers questions about the bot's state.

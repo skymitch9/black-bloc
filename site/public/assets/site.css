@@ -9,6 +9,15 @@
    real <a> because it is a top-level navigation to Discord. */
 a.btn { text-decoration: none; }
 
+/* The fifth state. "Your roles could not be checked" is neither a refusal
+   (warn) nor a fault in the bot (danger), so it gets the neutral/info dot and
+   a retry, never a permission colour. */
+.row[data-state="info"] .dot {
+  background: var(--et-info);
+  box-shadow: 0 0 0 3px var(--et-info-bg);
+}
+.row[data-state="info"] .badge { border-color: var(--et-info); color: var(--et-info); }
+
 .mode-chip {
   padding: .1em .6em;
   border: 1px solid var(--et-hairline);

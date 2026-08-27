@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,6 +9,8 @@ from fastapi.testclient import TestClient
 from black_bloc.api.auth import (
     SESSION_COOKIE,
     STATE_COOKIE,
+    Refused,
+    current_session,
     is_admitted,
     read_session,
     role_ids_from,
@@ -21,9 +24,12 @@ USER_ID = 7
 class FakeDiscord:
     """Stands in for Discord's OAuth endpoints; no socket is ever opened."""
 
-    def __init__(self, *, member: dict | None, token_status: int = 200) -> None:
+    def __init__(
+        self, *, member: dict | None, token_status: int = 200, member_status: int = 200
+    ) -> None:
         self.member = member
         self.token_status = token_status
+        self.member_status = member_status
         self.calls: list[str] = []
 
     async def __call__(self, method, url, *, headers=None, data=None):
@@ -35,6 +41,8 @@ class FakeDiscord:
         if url.endswith("/users/@me"):
             return (200, {"id": str(USER_ID), "username": "mod", "global_name": "Mod"})
         if url.endswith("/member"):
+            if self.member_status != 200:
+                return (self.member_status, {"message": "Internal Server Error"})
             if self.member is None:
                 return (404, {"message": "Unknown Guild"})
             return (200, self.member)
@@ -45,7 +53,7 @@ def client_for(bot, discord: FakeDiscord | None = None) -> TestClient:
     return TestClient(
         create_app(bot, oauth_request=discord),
         follow_redirects=False,
-        base_url="http://testserver",
+        base_url="https://testserver",
     )
 
 
@@ -72,9 +80,32 @@ def test_login_redirects_to_discord_with_the_two_scopes(bot):
     query = parse_qs(target.query)
     assert target.netloc == "discord.com"
     assert query["scope"] == ["identify guilds.members.read"]
-    assert query["redirect_uri"] == ["http://testserver/api/auth/callback"]
+    assert query["redirect_uri"] == ["https://testserver/api/auth/callback"]
     assert query["response_type"] == ["code"]
     assert response.cookies.get(STATE_COOKIE)
+
+
+def set_cookie(response, name: str) -> str:
+    return next(h for h in response.headers.get_list("set-cookie") if h.startswith(f"{name}="))
+
+
+def test_both_cookies_are_host_prefixed_secure_and_httponly(bot, guild, fakes):
+    """__Host- is only honoured with Secure, Path=/ and no Domain (F8)."""
+    guild.members[USER_ID] = fakes.Member(
+        USER_ID, [fakes.Role(fakes.STAFF_ROLE_ID, "Aunties / Uncles")]
+    )
+    _, done = sign_in_through_discord(bot, {"roles": [str(fakes.STAFF_ROLE_ID)]})
+    headers = [
+        set_cookie(client_for(bot).get("/api/auth/login"), STATE_COOKIE),
+        set_cookie(done, SESSION_COOKIE),
+    ]
+    assert STATE_COOKIE.startswith("__Host-") and SESSION_COOKIE.startswith("__Host-")
+    for header in headers:
+        assert "; Secure" in header
+        assert "; HttpOnly" in header
+        assert "; Path=/" in header
+        assert "Domain=" not in header
+        assert "SameSite=lax" in header
 
 
 def test_login_says_so_when_the_app_is_not_configured(bot):
@@ -91,7 +122,7 @@ def test_staff_member_is_admitted_and_gets_a_session(bot, guild, fakes):
     )
     client, done = sign_in_through_discord(bot, {"roles": [str(fakes.STAFF_ROLE_ID)]})
     assert done.status_code == 303
-    assert done.headers["location"] == "https://blackbloc.heygabi.ai/?signin=ok"
+    assert done.headers["location"] == f"{fakes.ORIGIN}/?signin=ok"
     state, payload = read_session(fakes.SECRET, done.cookies[SESSION_COOKIE])
     assert state == "ok"
     assert payload["staff"] is True
@@ -189,7 +220,70 @@ def test_a_demoted_mod_loses_access_without_signing_out(bot, guild, fakes, sign_
     guild.members[USER_ID] = fakes.Member(USER_ID, [fakes.Role(fakes.PLAIN_ROLE_ID, "Member")])
     client = client_for(bot)
     sign_in(client, uid=USER_ID, staff=True)
-    assert client.get("/api/auth/me").json()["staff"] is False
+    body = client.get("/api/auth/me").json()
+    assert body["staff"] is False
+    assert body["state"] == "not_staff"
+
+
+def test_a_member_the_guild_has_never_heard_of_is_not_staff(bot, sign_in):
+    """F2: the guild answered, and its answer is no — the cookie does not overrule it."""
+    client = client_for(bot)
+    sign_in(client, uid=USER_ID, staff=True, cached=False)
+    body = client.get("/api/auth/me").json()
+    assert body["staff"] is False
+    assert body["state"] == "not_staff"
+    assert client.get("/api/status").status_code == 403
+
+
+def test_a_guild_that_cannot_be_consulted_is_unknown_not_a_refusal(api_settings, fakes, sign_in):
+    """F7: bot not ready / no cached guild is its own state, never NOT_STAFF."""
+    for headless in (fakes.Bot(api_settings, None), fakes.Bot(api_settings, fakes.Guild())):
+        if headless.guild is not None:
+            headless.is_ready = lambda: False
+        client = client_for(headless)
+        sign_in(client, uid=USER_ID, staff=True, cached=False)
+        body = client.get("/api/auth/me").json()
+        assert body["state"] == "staff_unknown"
+        assert body["staff"] is False
+        assert "could not check your roles" in body["message"]
+        refused = client.get("/api/status")
+        assert refused.status_code == 503
+        assert refused.json()["error"] == "staff_unknown"
+
+
+def test_discord_refusing_the_member_lookup_still_signs_them_in(bot, guild, fakes):
+    """F7: a 5xx on the member read is not evidence they are not staff."""
+    guild.members[USER_ID] = fakes.Member(
+        USER_ID, [fakes.Role(fakes.STAFF_ROLE_ID, "Aunties / Uncles")]
+    )
+    discord = FakeDiscord(member=None, member_status=500)
+    client = client_for(bot, discord)
+    state = start_login(client)
+    done = client.get("/api/auth/callback", params={"code": "abc", "state": state})
+    assert done.headers["location"].endswith("?signin=ok")
+    _, payload = read_session(fakes.SECRET, done.cookies[SESSION_COOKIE])
+    assert payload["staff"] is False
+    assert client.get("/api/auth/me").json()["staff"] is True
+
+
+def test_a_non_ascii_state_is_a_mismatch_not_a_crash(bot):
+    """F3: hmac.compare_digest raises TypeError on non-ASCII text."""
+    client = client_for(bot)
+    start_login(client)
+    done = client.get("/api/auth/callback", params={"code": "abc", "state": "sté"})
+    assert done.status_code == 303
+    assert done.headers["location"].endswith("?signin=state")
+
+
+@pytest.mark.parametrize("raw", ["bódy.deadbeef", "body.mác", "é.é"])
+def test_a_non_ascii_cookie_is_invalid_not_a_crash(raw, bot, fakes):
+    """F3: str.encode('ascii') on the cookie was a 500. httpx refuses to SEND one,
+    so the assertion is at the boundary that reads it."""
+    assert read_session(fakes.SECRET, raw) == ("invalid", None)
+    request = SimpleNamespace(cookies={SESSION_COOKIE: raw})
+    with pytest.raises(Refused) as refused:
+        current_session(request, bot)
+    assert refused.value.error == "not_signed_in"
 
 
 @pytest.mark.parametrize("raw", ["", "no-dot", "body.deadbeef"])

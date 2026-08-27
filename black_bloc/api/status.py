@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -26,6 +27,18 @@ COUNTS_UNAVAILABLE = (
     "The open counts could not be read because Black Bloc cannot reach its own database right "
     "now. They are left blank rather than shown as zero."
 )
+
+
+def latency_ms(bot: Any) -> int | None:
+    """None — never a number — before the gateway has measured a heartbeat."""
+    if not bot.is_ready():
+        return None
+    seconds = getattr(bot, "latency", None)
+    if not isinstance(seconds, int | float) or isinstance(seconds, bool):
+        return None
+    if not math.isfinite(seconds):
+        return None
+    return round(seconds * 1000)
 
 
 def mode_keys() -> list[str]:
@@ -175,7 +188,7 @@ def build_router(bot: Any) -> APIRouter:
         return {
             "bot": {
                 "ready": ready,
-                "latency_ms": round(bot.latency * 1000) if ready else None,
+                "latency_ms": latency_ms(bot),
                 "guilds": len(getattr(bot, "guilds", ()) or ()),
                 "uptime_seconds": uptime,
                 "started_at": _iso(started_at),
