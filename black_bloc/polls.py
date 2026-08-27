@@ -6,11 +6,14 @@ from typing import Any
 
 import discord
 
+from . import timezones
+
 log = logging.getLogger(__name__)
 
 QUESTION_LIMIT = 300
 LABEL_LIMIT = 55
 MAX_NATIVE_OPTIONS = 10
+MAX_PANEL_OPTIONS = 25
 MIN_OPTIONS = 2
 MIN_HOURS = 1
 MAX_HOURS = 32 * 24
@@ -42,6 +45,19 @@ SURFACES = (NATIVE, PANEL)
 LIVE = "live"
 AT_CLOSE = "close"
 RESULTS_CHOICES = (LIVE, AT_CLOSE)
+
+DATE_PLAIN = "plain"
+DATE_TIMESTAMP = "timestamp"
+DATE_LABEL_FORMS = (DATE_PLAIN, DATE_TIMESTAMP)
+MIN_SLOTS = 2
+MAX_SLOTS = MAX_PANEL_OPTIONS
+STEP_HOURS = "hours"
+STEP_DAYS = "days"
+DATE_STEPS = (STEP_HOURS, STEP_DAYS)
+MAX_STEP = 168
+DAY_FORMAT = "%Y-%m-%d"
+DAY_TIME_FORMAT = "%Y-%m-%d %H:%M"
+DAY_LABEL = "%a %d %b"
 
 DRAFT = "draft"
 PENDING_REVIEW = "pending_review"
@@ -141,6 +157,27 @@ BAD_HOURS = (
     "counts poll length in whole hours, from {low} to {high} (32 days)."
 )
 
+BAD_START = (
+    "**{given}** is not a date Black Bloc can read, so nothing was posted. Write it as "
+    "`2026-09-05`, or `2026-09-05 19:00` when the time of day matters."
+)
+BAD_SLOTS = (
+    "A date poll needs between {low} and {high} slots and this one asked for **{given}**, so "
+    "nothing was posted. Say how many with `slots:`."
+)
+BAD_STEP = (
+    "**{given}** is not a gap Black Bloc can leave between two slots, so nothing was posted. It "
+    "counts in whole {unit}, from 1 to {high}."
+)
+BAD_STEP_UNIT = (
+    "**{given}** is not a unit a date poll can step by, so nothing was posted. It is `hours` or "
+    "`days`."
+)
+DATE_NEEDS_A_START = (
+    "A date poll needs a start date, so nothing was posted. Give it one with "
+    "`start:2026-09-05` and Black Bloc lays the slots out from there."
+)
+
 RESULTS_TITLE = "{question}"
 NO_VOTES = "Nobody voted."
 WINNER_MARK = "  <- winner"
@@ -198,9 +235,85 @@ def validate(question: Any, labels: Any, hours: Any) -> str | None:
 
 
 def whole_hours(hours: Any) -> bool:
-    if isinstance(hours, bool) or not isinstance(hours, int):
+    return whole(hours, MIN_HOURS, MAX_HOURS)
+
+
+def parse_day(text: Any, tz_name: Any = timezones.DEFAULT_TZ) -> datetime | None:
+    """`2026-09-05`, or `2026-09-05 19:00`, read in the server's zone and returned as UTC."""
+    zi = timezones.zone(tz_name) or timezones.zone(timezones.DEFAULT_TZ)
+    typed = str(text or "").strip()
+    for shape in (DAY_TIME_FORMAT, DAY_FORMAT):
+        try:
+            naive = datetime.strptime(typed, shape)
+        except ValueError:
+            continue
+        return naive.replace(tzinfo=zi).astimezone(UTC)
+    return None
+
+
+def clock_label(when: datetime) -> str:
+    """`7 pm`, `7:30 pm` — the twelve-hour form, built by hand because Windows has no `%-I`."""
+    hour = when.hour % 12 or 12
+    minute = f":{when.minute:02d}" if when.minute else ""
+    return f"{hour}{minute} {'am' if when.hour < 12 else 'pm'}"
+
+
+def slot_label(
+    when: datetime, *, with_time: bool, form: str = DATE_PLAIN, tz_name: Any = timezones.DEFAULT_TZ
+) -> str:
+    """The answer text for one date slot, in whichever form the server has asked for."""
+    if form == DATE_TIMESTAMP:
+        return f"<t:{int(when.timestamp())}:{'f' if with_time else 'D'}>"
+    zi = timezones.zone(tz_name) or timezones.zone(timezones.DEFAULT_TZ)
+    local = when.astimezone(zi)
+    day = local.strftime(DAY_LABEL)
+    return f"{day} · {clock_label(local)}" if with_time else day
+
+
+def date_trouble(start: Any, slots: Any, step: Any, unit: Any) -> str | None:
+    """The refusal sentence for a date poll's own arguments, or None when they work."""
+    if not str(start or "").strip():
+        return DATE_NEEDS_A_START
+    if parse_day(start) is None:
+        return BAD_START.format(given=clamp(start, 40))
+    if str(unit) not in DATE_STEPS:
+        return BAD_STEP_UNIT.format(given=clamp(unit, 40))
+    if not whole(slots, MIN_SLOTS, MAX_SLOTS):
+        return BAD_SLOTS.format(given=clamp(slots, 40), low=MIN_SLOTS, high=MAX_SLOTS)
+    if not whole(step, 1, MAX_STEP):
+        return BAD_STEP.format(given=clamp(step, 40), unit=unit, high=MAX_STEP)
+    return None
+
+
+def date_slots(
+    start: Any,
+    slots: Any,
+    step: Any,
+    unit: Any = STEP_DAYS,
+    *,
+    form: str = DATE_PLAIN,
+    tz_name: Any = timezones.DEFAULT_TZ,
+) -> list[dict[str, str]]:
+    """One row per candidate slot: the answer text, and the instant it stands for."""
+    first = parse_day(start, tz_name)
+    if first is None:
+        return []
+    gap = timedelta(hours=int(step)) if str(unit) == STEP_HOURS else timedelta(days=int(step))
+    zi = timezones.zone(tz_name) or timezones.zone(timezones.DEFAULT_TZ)
+    with_time = str(unit) == STEP_HOURS or first.astimezone(zi).time() != datetime.min.time()
+    return [
+        {
+            "label": slot_label(first + gap * n, with_time=with_time, form=form, tz_name=tz_name),
+            "value": (first + gap * n).isoformat(),
+        }
+        for n in range(int(slots))
+    ]
+
+
+def whole(value: Any, low: int, high: int) -> bool:
+    if isinstance(value, bool) or not isinstance(value, int):
         return False
-    return MIN_HOURS <= hours <= MAX_HOURS
+    return low <= value <= high
 
 
 def surface_for(kind: str, anonymous: bool, results: str, slot_count: int) -> str:

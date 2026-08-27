@@ -17,6 +17,7 @@ from .automod import (
 )
 from .config import Settings
 from .emoji import SKIN_TONE_DEFAULT, SKIN_TONE_NAMES
+from .polls import DATE_LABEL_FORMS as POLL_DATE_LABEL_FORMS
 from .polls import MAX_HOURS as POLL_MAX_HOURS
 from .polls import MIN_HOURS as POLL_MIN_HOURS
 from .storage.db import Database
@@ -127,6 +128,7 @@ KEY_TYPES: dict[str, str] = {
     "poll_auto_thread": "bool",
     "poll_archive_days": "int",
     "poll_archive_drop_votes": "bool",
+    "poll_date_labels": "enum",
     "birthday_mode": "enum",
     "birthday_channel_id": "channel",
     "birthday_template": "text",
@@ -164,6 +166,7 @@ KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "poll_mode": POLL_MODES,
     "poll_review_mode": POLL_REVIEW_MODES,
     "poll_who_can_create": POLL_CREATORS,
+    "poll_date_labels": POLL_DATE_LABEL_FORMS,
     "birthday_mode": BIRTHDAY_MODES,
     "modmail_mode": MODMAIL_MODES,
     "automod_mode": AUTOMOD_MODES,
@@ -318,6 +321,10 @@ KEY_HELP: dict[str, str] = {
     ),
     "poll_archive_drop_votes": (
         "true to forget who voted when a poll is archived; the totals are kept either way"
+    ),
+    "poll_date_labels": (
+        "how a date poll writes its slots: plain (Sat 30 Aug · 7 pm, in the server's zone) or "
+        "timestamp (each reader sees their own clock, if Discord renders one in an answer)"
     ),
     "birthday_mode": "off, shadow (log only) or on (post birthday wishes)",
     "birthday_channel_id": "where birthday wishes are posted",
@@ -665,6 +672,8 @@ class SettingsStore:
             return POLL_ARCHIVE_DAYS
         if key == "poll_archive_drop_votes":
             return True
+        if key == "poll_date_labels":
+            return POLL_DATE_LABEL_FORMS[0]
         if key == "birthday_mode":
             return "shadow"
         if key == "birthday_channel_id":

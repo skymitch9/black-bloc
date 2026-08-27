@@ -264,3 +264,86 @@ def test_stored_options_become_the_shape_every_renderer_reads():
         {"position": 0, "label": "Yes", "votes": 3},
         {"position": 1, "label": "No", "votes": 0},
     ]
+
+
+def test_a_start_date_is_read_with_or_without_a_time_of_day():
+    assert polls.parse_day("2026-09-05") is not None
+    assert polls.parse_day("2026-09-05 19:00") is not None
+    assert polls.parse_day("5 September") is None
+    assert polls.parse_day("") is None
+
+
+def test_a_date_read_in_the_server_zone_comes_back_as_utc():
+    found = polls.parse_day("2026-09-05 19:00")
+    assert found.tzinfo is UTC
+    assert (found.day, found.hour) == (6, 2)
+
+
+def test_the_twelve_hour_clock_drops_a_zero_minute_and_keeps_a_real_one():
+    at = datetime(2026, 8, 30, 19, 0, tzinfo=UTC)
+    assert polls.clock_label(at) == "7 pm"
+    assert polls.clock_label(at.replace(minute=30)) == "7:30 pm"
+    assert polls.clock_label(at.replace(hour=0)) == "12 am"
+    assert polls.clock_label(at.replace(hour=12)) == "12 pm"
+
+
+def test_a_day_slot_reads_as_plain_text_by_default_and_a_stamp_when_asked():
+    at = datetime(2026, 8, 30, 14, 0, tzinfo=UTC)
+    assert polls.slot_label(at, with_time=False) == "Sun 30 Aug"
+    assert polls.slot_label(at, with_time=False, form=polls.DATE_TIMESTAMP) == (
+        f"<t:{int(at.timestamp())}:D>"
+    )
+    assert polls.slot_label(at, with_time=True, form=polls.DATE_TIMESTAMP).endswith(":f>")
+
+
+def test_day_steps_generate_one_slot_a_day_with_no_time_of_day_on_them():
+    made = polls.date_slots("2026-09-05", 3, 1, polls.STEP_DAYS)
+    assert [row["label"] for row in made] == ["Sat 05 Sep", "Sun 06 Sep", "Mon 07 Sep"]
+    assert all("·" not in row["label"] for row in made)
+    assert made[0]["value"] < made[1]["value"] < made[2]["value"]
+
+
+def test_an_hourly_step_puts_the_time_of_day_on_every_slot():
+    made = polls.date_slots("2026-09-05 18:00", 3, 2, polls.STEP_HOURS)
+    assert [row["label"] for row in made] == [
+        "Sat 05 Sep · 6 pm",
+        "Sat 05 Sep · 8 pm",
+        "Sat 05 Sep · 10 pm",
+    ]
+
+
+def test_a_start_with_a_time_keeps_it_even_when_the_step_is_in_days():
+    made = polls.date_slots("2026-09-05 19:30", 2, 1, polls.STEP_DAYS)
+    assert made[0]["label"] == "Sat 05 Sep · 7:30 pm"
+
+
+def test_every_generated_slot_label_fits_what_discord_takes():
+    made = polls.date_slots("2026-09-05 19:30", polls.MAX_SLOTS, 1, polls.STEP_DAYS)
+    assert len(made) == polls.MAX_SLOTS
+    assert all(len(row["label"]) <= polls.LABEL_LIMIT for row in made)
+
+
+def test_a_date_poll_with_no_start_is_refused_before_anything_is_generated():
+    assert polls.date_trouble("", 5, 1, polls.STEP_DAYS) == polls.DATE_NEEDS_A_START
+    assert polls.date_slots("", 5, 1, polls.STEP_DAYS) == []
+
+
+@pytest.mark.parametrize(
+    "start, slots, step, unit",
+    [
+        ("nonsense", 5, 1, polls.STEP_DAYS),
+        ("2026-09-05", 1, 1, polls.STEP_DAYS),
+        ("2026-09-05", polls.MAX_SLOTS + 1, 1, polls.STEP_DAYS),
+        ("2026-09-05", 5, 0, polls.STEP_DAYS),
+        ("2026-09-05", 5, polls.MAX_STEP + 1, polls.STEP_HOURS),
+        ("2026-09-05", 5, 1, "fortnights"),
+        ("2026-09-05", True, 1, polls.STEP_DAYS),
+    ],
+)
+def test_a_date_poll_that_cannot_be_laid_out_is_refused_in_words(start, slots, step, unit):
+    said = polls.date_trouble(start, slots, step, unit)
+    assert said and "nothing was posted" in said
+
+
+def test_a_workable_date_poll_is_not_refused():
+    assert polls.date_trouble("2026-09-05", 7, 1, polls.STEP_DAYS) is None
