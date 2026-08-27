@@ -8,6 +8,7 @@ from black_bloc.twitch import (
     TwitchClient,
     TwitchError,
     batches,
+    sized,
 )
 
 
@@ -37,10 +38,33 @@ def streams(*logins):
                     "user_login": login,
                     "user_name": login.title(),
                     "game_name": "Celeste",
+                    "game_id": "509658",
                     "title": "any%",
                     "started_at": "2026-08-26T12:00:00Z",
+                    "thumbnail_url": (
+                        f"https://static-cdn.jtvnw.net/previews-ttv/live_user_{login}-"
+                        "{width}x{height}.jpg"
+                    ),
                 }
                 for i, login in enumerate(logins)
+            ]
+        },
+    )
+
+
+def games(*rows):
+    return (
+        200,
+        {
+            "data": [
+                {
+                    "id": game_id,
+                    "name": name,
+                    "box_art_url": (
+                        f"https://static-cdn.jtvnw.net/ttv-boxart/{game_id}-" "{width}x{height}.jpg"
+                    ),
+                }
+                for game_id, name in rows
             ]
         },
     )
@@ -182,3 +206,71 @@ async def test_a_network_failure_reaches_the_caller_of_get_streams():
 
 def test_requests_carry_a_timeout():
     assert REQUEST_TIMEOUT_SECONDS == 15
+
+
+def test_sized_fills_twitchs_placeholders_and_survives_a_missing_address():
+    assert sized("a/{width}x{height}.jpg", 285, 380) == "a/285x380.jpg"
+    assert sized(None, 285, 380) == ""
+    assert sized("a/plain.jpg", 285, 380) == "a/plain.jpg"
+
+
+async def test_a_stream_carries_its_game_id_and_a_sized_thumbnail():
+    http = FakeHttp([token_ok(), streams("alice")])
+    client = TwitchClient("id", "secret", request=http)
+
+    found = await client.get_streams(["alice"])
+
+    assert found[0].game_id == "509658"
+    assert found[0].thumbnail_url == (
+        "https://static-cdn.jtvnw.net/previews-ttv/live_user_alice-1280x720.jpg"
+    )
+
+
+async def test_get_games_returns_box_art_at_the_size_discord_shows():
+    http = FakeHttp([token_ok(), games(("509658", "Just Chatting"))])
+    client = TwitchClient("id", "secret", request=http)
+
+    found = await client.get_games(["509658"])
+
+    assert (found[0].id, found[0].name) == ("509658", "Just Chatting")
+    assert found[0].box_art_url == "https://static-cdn.jtvnw.net/ttv-boxart/509658-285x380.jpg"
+    assert http.calls[1]["url"] == f"{HELIX_URL}/games"
+    assert http.calls[1]["params"] == [("id", "509658")]
+
+
+async def test_a_game_is_only_asked_for_once():
+    http = FakeHttp([token_ok(), games(("509658", "Just Chatting"))])
+    client = TwitchClient("id", "secret", request=http)
+
+    first = await client.get_games(["509658"])
+    second = await client.get_games(["509658", "509658"])
+
+    assert first == second
+    assert [c["url"] for c in http.calls] == [TOKEN_URL, f"{HELIX_URL}/games"]
+
+
+async def test_get_games_asks_only_about_the_ids_it_has_not_seen():
+    http = FakeHttp([token_ok(), games(("1", "One")), games(("2", "Two"))])
+    client = TwitchClient("id", "secret", request=http)
+
+    await client.get_games(["1"])
+    both = await client.get_games(["1", "2"])
+
+    assert sorted(game.id for game in both) == ["1", "2"]
+    assert http.calls[2]["params"] == [("id", "2")]
+
+
+async def test_get_games_ignores_empty_ids_and_never_calls_helix_for_nothing():
+    http = FakeHttp([])
+    client = TwitchClient("id", "secret", request=http)
+
+    assert await client.get_games([None, "", "  "]) == []
+    assert http.calls == []
+
+
+async def test_a_helix_failure_on_games_reaches_the_caller():
+    http = FakeHttp([token_ok(), (500, {})])
+    client = TwitchClient("id", "secret", request=http)
+
+    with pytest.raises(TwitchError, match="500"):
+        await client.get_games(["509658"])

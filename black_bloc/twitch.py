@@ -10,6 +10,10 @@ TOKEN_URL = "https://id.twitch.tv/oauth2/token"
 HELIX_URL = "https://api.twitch.tv/helix"
 BATCH_SIZE = 100
 REQUEST_TIMEOUT_SECONDS = 15
+BOX_ART_WIDTH = 285
+BOX_ART_HEIGHT = 380
+THUMBNAIL_WIDTH = 1280
+THUMBNAIL_HEIGHT = 720
 
 
 class TwitchError(RuntimeError):
@@ -24,6 +28,8 @@ class TwitchStream:
     game_name: str
     title: str
     started_at: str
+    game_id: str = ""
+    thumbnail_url: str = ""
 
     @property
     def url(self) -> str:
@@ -37,9 +43,21 @@ class TwitchUser:
     display_name: str
 
 
+@dataclass(frozen=True)
+class TwitchGame:
+    id: str
+    name: str
+    box_art_url: str
+
+
 def batches(logins: Any, size: int = BATCH_SIZE) -> list[list[str]]:
     ordered = [str(login).lower() for login in logins]
     return [ordered[i : i + size] for i in range(0, len(ordered), size)]
+
+
+def sized(url: Any, width: int, height: int) -> str:
+    """Twitch hands back art addresses with {width}x{height} left for the caller."""
+    return str(url or "").replace("{width}", str(width)).replace("{height}", str(height))
 
 
 def stream_from(row: dict[str, Any]) -> TwitchStream:
@@ -50,6 +68,16 @@ def stream_from(row: dict[str, Any]) -> TwitchStream:
         game_name=str(row.get("game_name") or ""),
         title=str(row.get("title") or ""),
         started_at=str(row.get("started_at") or ""),
+        game_id=str(row.get("game_id") or ""),
+        thumbnail_url=sized(row.get("thumbnail_url"), THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT),
+    )
+
+
+def game_from(row: dict[str, Any]) -> TwitchGame:
+    return TwitchGame(
+        id=str(row.get("id") or ""),
+        name=str(row.get("name") or ""),
+        box_art_url=sized(row.get("box_art_url"), BOX_ART_WIDTH, BOX_ART_HEIGHT),
     )
 
 
@@ -68,6 +96,7 @@ class TwitchClient:
         self._request = request or self._aiohttp_request
         self._session: Any = None
         self._token: str | None = None
+        self._games: dict[str, TwitchGame] = {}
 
     async def _aiohttp_request(
         self,
@@ -158,4 +187,22 @@ class TwitchClient:
         for chunk in batches(logins):
             rows = await self._get("users", [("login", login) for login in chunk])
             found.extend(user_from(row) for row in rows)
+        return found
+
+    async def get_games(self, ids: Any) -> list[TwitchGame]:
+        """Box art for these game ids, remembered for the life of the process."""
+        wanted: list[str] = []
+        for raw in ids or ():
+            game_id = str(raw or "").strip()
+            if game_id and game_id not in wanted:
+                wanted.append(game_id)
+        found = [self._games[game_id] for game_id in wanted if game_id in self._games]
+        missing = [game_id for game_id in wanted if game_id not in self._games]
+        for chunk in batches(missing):
+            rows = await self._get("games", [("id", game_id) for game_id in chunk])
+            for row in rows:
+                game = game_from(row)
+                if game.id:
+                    self._games[game.id] = game
+                found.append(game)
         return found
