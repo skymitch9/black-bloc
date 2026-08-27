@@ -58,6 +58,11 @@ MODMAIL_LOG_CHANNEL_ID = 1442613059704066108
 
 WARN_THRESHOLD_MAX = 100
 
+CHAT_MODES = ("off", "on")
+CHAT_COOLDOWN_SECONDS = 20
+CHAT_COOLDOWN_MIN_SECONDS = 5
+CHAT_COOLDOWN_MAX_SECONDS = 600
+
 BOT_BIO_TEMPLATE = (
     "Black Bloc — moderation & content bot for Black in a Flash!. Staff dashboard: {site}"
 )
@@ -114,6 +119,8 @@ KEY_TYPES: dict[str, str] = {
     "bot_bio": "text",
     "status_prefix": "text",
     "rolemenu_mode": "enum",
+    "chat_mode": "enum",
+    "chat_cooldown_seconds": "int",
 }
 
 KEY_CHOICES: dict[str, tuple[str, ...]] = {
@@ -126,6 +133,7 @@ KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "automod_mode": AUTOMOD_MODES,
     "mod_dm_on_action": MOD_DM_STYLES,
     "rolemenu_mode": ROLEMENU_MODES,
+    "chat_mode": CHAT_MODES,
 }
 
 KEY_MAX: dict[str, int] = {
@@ -133,16 +141,22 @@ KEY_MAX: dict[str, int] = {
     "events_channel_retention_days": EVENTS_RETENTION_MAX_DAYS,
     "events_max_late_minutes": EVENTS_LATE_CEILING_MINUTES,
     "automod_warn_threshold": WARN_THRESHOLD_MAX,
+    "chat_cooldown_seconds": CHAT_COOLDOWN_MAX_SECONDS,
 }
 
 KEY_MIN: dict[str, int] = {
     "events_channel_retention_days": EVENTS_RETENTION_MIN_DAYS,
+    "chat_cooldown_seconds": CHAT_COOLDOWN_MIN_SECONDS,
 }
 
 KEY_MIN_REASON: dict[str, str] = {
     "events_channel_retention_days": (
         "Deleting a finished event's channel the moment it ends throws away the record before "
         "anybody has read it, so the shortest Black Bloc will keep one is {limit} day."
+    ),
+    "chat_cooldown_seconds": (
+        "A gap shorter than {limit} seconds lets one person hold Black Bloc in a back-and-forth "
+        "that fills the channel. Set `chat_mode` to off if you want it quiet altogether."
     ),
 }
 
@@ -162,6 +176,10 @@ KEY_MAX_REASON: dict[str, str] = {
     "automod_warn_threshold": (
         "A warning count above {limit} is a number nobody is reading any more. Set it to 0 to "
         "stop counting warnings at all."
+    ),
+    "chat_cooldown_seconds": (
+        "A gap longer than {limit} seconds means most people never get an answer at all, which "
+        "reads as a broken bot rather than a quiet one."
     ),
 }
 
@@ -229,6 +247,11 @@ KEY_HELP: dict[str, str] = {
     "rolemenu_mode": (
         "whether members can pick roles from the panels; off takes them down and hides the "
         "/rolemenu commands, on posts them again"
+    ),
+    "chat_mode": "off, or on (Black Bloc answers when somebody @-mentions it)",
+    "chat_cooldown_seconds": (
+        f"seconds before the same person gets another @-mention reply, "
+        f"{CHAT_COOLDOWN_MIN_SECONDS} to {CHAT_COOLDOWN_MAX_SECONDS}"
     ),
 }
 
@@ -553,6 +576,10 @@ class SettingsStore:
             return STATUS_PREFIX
         if key == "rolemenu_mode":
             return "off"
+        if key == "chat_mode":
+            return "on"
+        if key == "chat_cooldown_seconds":
+            return CHAT_COOLDOWN_SECONDS
         if KEY_TYPES.get(key) in ("channels", "roles"):
             return []
         return None
