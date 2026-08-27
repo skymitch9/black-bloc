@@ -58,6 +58,7 @@ log = logging.getLogger(__name__)
 LOCKS_ATTR = "_modmail_locks"
 RECONCILE_MINUTES = 5
 ORPHAN_GRACE_MINUTES = 5
+REFUSAL_COOLDOWN_MINUTES = 10
 RELAY_TYPES = (discord.MessageType.default, discord.MessageType.reply)
 TICKET_REACTION = "\N{WHITE HEAVY CHECK MARK}"
 NOTE_REACTION = "\N{MEMO}"
@@ -123,7 +124,10 @@ DM_FAILED_SAID = (
 RELAY_FAILED_SAID = " The ticket itself could not be written to; the log says why."
 CLOSED_SAID = "Ticket #{ticket_id} is closed.{extra}"
 CLOSE_RACED = "Ticket #{ticket_id} was closed by somebody else while you were typing."
-NO_TRANSCRIPT_SAID = " The transcript could not be posted; the log says why."
+NO_TRANSCRIPT_SAID = (
+    " The transcript could not be posted, so the ticket channel was left where it is rather than "
+    "deleted and the messages are still in the database; the log says why."
+)
 SILENT_SAID = " The member was not told, because you asked for a silent close."
 BLOCKED_SAID = "**{who}** can no longer open modmail tickets. `/modmail unblock` undoes it."
 ALREADY_BLOCKED = "**{who}** was already blocked, so nothing changed."
@@ -232,10 +236,11 @@ async def add_message(
     content: Any = None,
     attachments: Any = (),
     anonymous: bool = False,
+    delivered: bool = True,
 ) -> int | None:
     cur = await db.conn.execute(
         "INSERT INTO modmail_messages(ticket_id, at, author_id, direction, anonymous, content, "
-        "attachments) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "attachments, delivered) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (
             ticket_id,
             now_iso(),
@@ -244,10 +249,20 @@ async def add_message(
             1 if anonymous else 0,
             clamp(content, CONTENT_LIMIT) or None,
             dump_attachments(attachments),
+            1 if delivered else 0,
         ),
     )
     await db.conn.commit()
     return cur.lastrowid
+
+
+async def mark_undelivered(db: Any, message_id: int | None) -> None:
+    if message_id is None:
+        return
+    await db.conn.execute(
+        "UPDATE modmail_messages SET delivered = 0 WHERE id = ?", (message_id,)
+    )
+    await db.conn.commit()
 
 
 async def ticket_messages(db: Any, ticket_id: int) -> list[Any]:
@@ -343,7 +358,7 @@ def ticket_category(bot: Any, guild: Any) -> tuple[Any, str]:
     """Where ticket channels go: the test channel's category while the guard is installed."""
     if getattr(bot, "guard", None) is not None:
         channel = test_channel(bot)
-        if channel is None:
+        if channel is None or getattr(channel, "category", None) is None:
             return None, "no_test_channel"
         return channel.category, "test_category"
     category_id = bot.store.get(guild.id, "modmail_category_id")
@@ -516,6 +531,10 @@ async def resolve_ticket(bot: Any, guild: Any, channel_id: Any, given: Any) -> t
 class Modmail(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+        self._refused: dict[int, datetime] = {}
+        self._gone: dict[int, int] = {}
+        self.last_ok_at: str | None = None
+        self.last_error: str | None = None
 
     modmail = app_commands.Group(name="modmail", description="Run the modmail inbox")
 
@@ -542,14 +561,15 @@ class Modmail(commands.Cog):
         if guild is None:
             guild = self._home_guild(author.id)
         if guild is None:
-            await deliver_dm(author, NO_GUILD_DM)
+            if self._anywhere_enabled():
+                await self._refuse(author, NO_GUILD_DM)
             return
         if not self.bot.store.get(guild.id, "modmail_enabled"):
-            await deliver_dm(author, DISABLED_DM.format(guild=guild.name))
+            await self._refuse(author, DISABLED_DM.format(guild=guild.name))
             return
         blocked = await blocked_row(self.bot.db, author.id)
         if blocked is not None:
-            await deliver_dm(author, BLOCKED_DM.format(guild=guild.name))
+            await self._refuse(author, BLOCKED_DM.format(guild=guild.name))
             await log_action(
                 self.bot,
                 guild,
@@ -561,18 +581,36 @@ class Modmail(commands.Cog):
         async with user_lock(self.bot, author.id):
             ticket, opened = await self._open_or_find(guild, author)
             if ticket is None:
-                await deliver_dm(author, CANNOT_OPEN_DM)
+                await self._refuse(author, CANNOT_OPEN_DM)
                 return
-            await self._relay_inbound(guild, ticket, message)
+            why_not = await self._relay_inbound(guild, ticket, message)
             if opened:
                 await deliver_dm(author, opening_dm(guild.name))
-        await react(self.bot, message, TICKET_REACTION)
+        await react(
+            self.bot, message, TICKET_REACTION if why_not is None else FAILED_REACTION
+        )
 
     def _home_guild(self, user_id: int) -> Any:
         for guild in getattr(self.bot, "guilds", ()):
             if guild.get_member(user_id) is not None:
                 return guild
         return None
+
+    def _anywhere_enabled(self) -> bool:
+        return any(
+            self.bot.store.get(guild.id, "modmail_enabled")
+            for guild in getattr(self.bot, "guilds", ())
+        )
+
+    async def _refuse(self, user: Any, text: str) -> None:
+        """One refusal DM per member per cooldown: a stranger must not be answered repeatedly."""
+        now = datetime.now(UTC)
+        cutoff = now - timedelta(minutes=REFUSAL_COOLDOWN_MINUTES)
+        self._refused = {uid: at for uid, at in self._refused.items() if at > cutoff}
+        if user.id in self._refused:
+            return
+        self._refused[user.id] = now
+        await deliver_dm(user, text)
 
     async def _open_or_find(self, guild: Any, user: Any) -> tuple[Any, bool]:
         existing = await open_ticket_for(self.bot.db, guild.id, user.id)
@@ -607,6 +645,8 @@ class Modmail(commands.Cog):
     async def _make_place(
         self, guild: Any, user: Any, ticket_id: int, mode: str
     ) -> tuple[Any, str | None]:
+        if not self.bot.store.staff_roles(guild):
+            return None, "no_staff_roles"
         if mode == THREAD_MODE:
             parent, where = thread_parent(self.bot, guild)
             if parent is None:
@@ -625,11 +665,9 @@ class Modmail(commands.Cog):
             except discord.HTTPException as exc:
                 return None, f"{type(exc).__name__}: {exc}"
         category, where = ticket_category(self.bot, guild)
-        if where in ("no_test_channel", "no_category", "not_a_category"):
+        if category is None:
             return None, where
         staff = self.bot.store.staff_roles(guild)
-        if not staff:
-            log.warning("modmail: no staff roles resolve, so ticket %s is admin-only", ticket_id)
         try:
             return (
                 await guild.create_text_channel(
@@ -688,7 +726,9 @@ class Modmail(commands.Cog):
             return
         await speak(self.bot, guild, ticket, embed=embed)
 
-    async def _relay_inbound(self, guild: Any, ticket: Any, message: discord.Message) -> None:
+    async def _relay_inbound(
+        self, guild: Any, ticket: Any, message: discord.Message
+    ) -> str | None:
         urls = attachment_urls(message.attachments)
         await add_message(
             self.bot.db,
@@ -715,6 +755,7 @@ class Modmail(commands.Cog):
                 target=message.author,
                 details={"ticket_id": ticket["id"], "reason": why_not},
             )
+        return why_not
 
     async def _staff_message(self, message: discord.Message) -> None:
         """A plain message in a ticket is a reply; one starting with `=` is a private note."""
@@ -769,12 +810,14 @@ class Modmail(commands.Cog):
             content=content,
             attachments=attachments,
             anonymous=anonymous,
-            colour=getattr(getattr(author, "colour", None), "value", None),
+            colour=None
+            if anonymous
+            else getattr(getattr(author, "colour", None), "value", None),
             icon_url=None
             if anonymous
             else getattr(getattr(author, "display_avatar", None), "url", None),
         )
-        await add_message(
+        row_id = await add_message(
             self.bot.db,
             ticket["id"],
             author.id,
@@ -787,6 +830,7 @@ class Modmail(commands.Cog):
             await deliver_dm(user, embed=embed) if user is not None else "member_not_visible"
         )
         if why_not is not None:
+            await mark_undelivered(self.bot.db, row_id)
             await log_action(
                 self.bot,
                 guild,
@@ -961,7 +1005,15 @@ class Modmail(commands.Cog):
                 user = self.bot.get_user(fresh["user_id"]) or guild.get_member(fresh["user_id"])
                 if user is not None:
                     await deliver_dm(user, closing_dm(guild.name, reason))
-            await self._remove_place(guild, fresh)
+            if why_not is None:
+                await self._remove_place(guild, fresh)
+            else:
+                await log_action(
+                    self.bot,
+                    guild,
+                    "modmail.place_kept",
+                    details={"ticket_id": fresh["id"], "reason": why_not},
+                )
             return True, why_not
 
     async def _post_transcript(
@@ -1171,11 +1223,13 @@ class Modmail(commands.Cog):
     ) -> None:
         if not await self._ready(interaction):
             return
+        await interaction.response.defer(ephemeral=True)
         who = getattr(user, "display_name", str(user))
         if await blocked_row(self.bot.db, user.id) is not None:
             await answer(interaction, ALREADY_BLOCKED.format(who=who))
             return
         await add_block(self.bot.db, user.id, interaction.user.id, reason)
+        await answer(interaction, BLOCKED_SAID.format(who=who))
         await log_action(
             self.bot,
             interaction.guild,
@@ -1184,18 +1238,19 @@ class Modmail(commands.Cog):
             target=user,
             reason=clamp(reason, 400) or None,
         )
-        await answer(interaction, BLOCKED_SAID.format(who=who))
 
     @modmail.command(name="unblock", description="Let someone open modmail tickets again")
     @app_commands.describe(user="Who to unblock")
     async def modmail_unblock(self, interaction: discord.Interaction, user: discord.User) -> None:
         if not await self._ready(interaction):
             return
+        await interaction.response.defer(ephemeral=True)
         who = getattr(user, "display_name", str(user))
         if await blocked_row(self.bot.db, user.id) is None:
             await answer(interaction, NOT_BLOCKED.format(who=who))
             return
         await remove_block(self.bot.db, user.id)
+        await answer(interaction, UNBLOCKED_SAID.format(who=who))
         await log_action(
             self.bot,
             interaction.guild,
@@ -1203,12 +1258,12 @@ class Modmail(commands.Cog):
             actor=interaction.user,
             target=user,
         )
-        await answer(interaction, UNBLOCKED_SAID.format(who=who))
 
     @modmail.command(name="blocked", description="Who cannot open modmail tickets")
     async def modmail_blocked(self, interaction: discord.Interaction) -> None:
         if not await self._ready(interaction):
             return
+        await interaction.response.defer(ephemeral=True)
         rows = await blocked_rows(self.bot.db)
         if not rows:
             await answer(interaction, NO_BLOCKS)
@@ -1228,15 +1283,9 @@ class Modmail(commands.Cog):
     ) -> None:
         if not await self._ready(interaction):
             return
+        await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         await self.bot.store.set(guild.id, "modmail_mode", mode.value, by=interaction.user.id)
-        await log_action(
-            self.bot,
-            guild,
-            "modmail.settings",
-            actor=interaction.user,
-            details={"modmail_mode": mode.value},
-        )
         await answer(
             interaction,
             MODE_SET.format(
@@ -1244,12 +1293,22 @@ class Modmail(commands.Cog):
                 count=len(await open_tickets(self.bot.db, guild.id)),
             ),
         )
+        await log_action(
+            self.bot,
+            guild,
+            "modmail.settings",
+            actor=interaction.user,
+            details={"modmail_mode": mode.value},
+        )
 
     @modmail.command(name="status", description="What modmail is doing and where it is set up")
     async def modmail_status(self, interaction: discord.Interaction) -> None:
         if not await self._ready(interaction):
             return
-        guild = interaction.guild
+        await interaction.response.defer(ephemeral=True)
+        await answer(interaction, "\n".join(await self._status_lines(interaction.guild)))
+
+    async def _status_lines(self, guild: Any) -> list[str]:
         store = self.bot.store
         staff = store.staff_roles(guild)
         rows = await open_tickets(self.bot.db, guild.id)
@@ -1275,7 +1334,7 @@ class Modmail(commands.Cog):
             lines.append("No ticket is open.")
         if not staff:
             lines.append(NO_STAFF_WARNING)
-        await answer(interaction, "\n".join(lines))
+        return lines
 
     @modmail.command(name="settings", description="Show or change how modmail is set up")
     @app_commands.describe(
@@ -1299,6 +1358,7 @@ class Modmail(commands.Cog):
     ) -> None:
         if not await self._ready(interaction):
             return
+        await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         changed: dict[str, Any] = {}
         for key, value in (
@@ -1312,11 +1372,11 @@ class Modmail(commands.Cog):
                 changed[key] = await self.bot.store.set(
                     guild.id, key, value, by=interaction.user.id
                 )
+        await answer(interaction, "\n".join(await self._status_lines(guild)))
         if changed:
             await log_action(
                 self.bot, guild, "modmail.settings", actor=interaction.user, details=changed
             )
-        await self.modmail_status.callback(self, interaction)
 
     snippet = app_commands.Group(name="snippet", description="Saved modmail replies")
 
@@ -1327,6 +1387,7 @@ class Modmail(commands.Cog):
     ) -> None:
         if not await self._ready(interaction):
             return
+        await interaction.response.defer(ephemeral=True)
         key = str(name).strip().lower()
         if not valid_snippet_name(key):
             await answer(interaction, BAD_SNIPPET_NAME.format(given=clamp(name, 40)))
@@ -1334,6 +1395,7 @@ class Modmail(commands.Cog):
         await save_snippet(
             self.bot.db, key, clamp(content, CONTENT_LIMIT), interaction.user.id
         )
+        await answer(interaction, SNIPPET_SAVED.format(name=key))
         await log_action(
             self.bot,
             interaction.guild,
@@ -1341,17 +1403,18 @@ class Modmail(commands.Cog):
             actor=interaction.user,
             details={"name": key},
         )
-        await answer(interaction, SNIPPET_SAVED.format(name=key))
 
     @snippet.command(name="remove", description="Delete a saved reply")
     @app_commands.describe(name="Which one")
     async def snippet_remove(self, interaction: discord.Interaction, name: str) -> None:
         if not await self._ready(interaction):
             return
+        await interaction.response.defer(ephemeral=True)
         key = str(name).strip().lower()
         if not await remove_snippet(self.bot.db, key):
             await answer(interaction, NO_SUCH_SNIPPET.format(name=clamp(name, 40)))
             return
+        await answer(interaction, SNIPPET_GONE.format(name=key))
         await log_action(
             self.bot,
             interaction.guild,
@@ -1359,12 +1422,12 @@ class Modmail(commands.Cog):
             actor=interaction.user,
             details={"name": key},
         )
-        await answer(interaction, SNIPPET_GONE.format(name=key))
 
     @snippet.command(name="list", description="Show the saved replies")
     async def snippet_list(self, interaction: discord.Interaction) -> None:
         if not await self._ready(interaction):
             return
+        await interaction.response.defer(ephemeral=True)
         rows = await all_snippets(self.bot.db)
         if not rows:
             await answer(interaction, NO_SNIPPETS)

@@ -16,7 +16,7 @@ from black_bloc.cogs.moderation.modmail import (
     ticket_messages,
 )
 from black_bloc.config import load_settings
-from black_bloc.modmail import IN, NOTE, OUT, parse_topic
+from black_bloc.modmail import COLOURS, IN, NOTE, OUT, UNDELIVERED_MARK, parse_topic
 from black_bloc.settings_store import CHANNEL_MODE, THREAD_MODE, SettingsStore
 from black_bloc.storage.db import Database
 
@@ -630,8 +630,17 @@ async def test_an_anonymous_reply_never_names_the_staff_member(cog, bot, member,
 
     embed = member.dms[-1]["embed"]
     assert embed.author.name == "Staff" and embed.footer.text is None
+    assert embed.colour.value == COLOURS[OUT]
     rows = await ticket_messages(db, ticket["id"])
     assert rows[-1]["anonymous"] == 1
+
+
+async def test_a_named_reply_still_carries_the_staff_members_role_colour(cog, bot, member, lead):
+    await open_one(cog, bot, member)
+
+    await cog.reply.callback(cog, FakeInteraction(bot, lead), text="on it")
+
+    assert member.dms[-1]["embed"].colour.value == 0xABCDEF
 
 
 async def test_a_reply_with_no_text_and_no_snippet_is_refused(cog, bot, member, lead):
@@ -973,6 +982,132 @@ async def test_a_snippet_name_with_spaces_is_refused(cog, bot, lead):
     await cog.snippet_add.callback(cog, interaction, name="ban appeal", content="no")
 
     assert "is not a snippet name" in interaction.sent
+
+
+async def test_a_stranger_is_told_nothing_at_all_while_no_guild_has_modmail_on(cog, bot, db):
+    bot.guard = FakeGuard()
+    await bot.store.set(GUILD, "modmail_enabled", False)
+    stranger = FakeUser(None, user_id=4242, display_name="Stranger")
+
+    await cog.on_message(dm_from(stranger))
+
+    assert stranger.dms == []
+    cur = await db.conn.execute("SELECT COUNT(*) AS n FROM modmail_tickets")
+    assert (await cur.fetchone())["n"] == 0
+
+
+async def test_a_refusal_is_sent_once_per_member_until_the_cooldown_is_over(cog, bot, member):
+    bot.guard = FakeGuard()
+    await bot.store.set(GUILD, "modmail_enabled", False)
+
+    await cog.on_message(dm_from(member, "first"))
+    await cog.on_message(dm_from(member, "second"))
+    await cog.on_message(dm_from(member, "third"))
+
+    assert len(member.dms) == 1
+    cog._refused.clear()
+    await cog.on_message(dm_from(member, "much later"))
+    assert len(member.dms) == 2
+
+
+async def test_a_test_channel_with_no_category_opens_no_ticket_at_the_top_level(
+    cog, bot, member, db
+):
+    bot.guard = FakeGuard()
+    bot.guild.channels[TEST_CHANNEL].category = None
+    bot.guild.channels[TEST_CHANNEL].category_id = None
+
+    await cog.on_message(dm_from(member))
+
+    assert bot.guild.created == []
+    assert await open_ticket_for(db, GUILD, member.id) is None
+    cur = await db.conn.execute("SELECT close_reason FROM modmail_tickets")
+    assert "no_test_channel" in (await cur.fetchone())["close_reason"]
+    assert "could not open a ticket" in member.dms[-1]["content"]
+
+
+async def test_no_staff_role_resolving_means_no_ticket_is_opened_at_all(cog, bot, member, db):
+    bot.guard = FakeGuard()
+    bot.guild.channels[TEST_CHANNEL].visible_to = set()
+
+    await cog.on_message(dm_from(member))
+
+    assert bot.guild.created == []
+    assert await open_ticket_for(db, GUILD, member.id) is None
+    cur = await db.conn.execute("SELECT close_reason FROM modmail_tickets")
+    assert "no_staff_roles" in (await cur.fetchone())["close_reason"]
+    assert "modmail.open_failed" in await action_kinds(db)
+    assert "could not open a ticket" in member.dms[-1]["content"]
+
+
+async def test_a_relay_that_never_reached_the_ticket_gets_a_warning_reaction(cog, bot, member, db):
+    bot.guard = FakeGuard()
+    bot.guild.channels[TEST_CHANNEL].send_raises = refused()
+
+    message = dm_from(member)
+    await cog.on_message(message)
+
+    assert message.reactions == ["\N{WARNING SIGN}"]
+    assert "modmail.relay_failed" in await action_kinds(db)
+    assert await open_ticket_for(db, GUILD, member.id) is not None
+
+
+async def test_a_reply_the_member_never_got_is_marked_undelivered_in_the_transcript(
+    cog, bot, member, lead, db
+):
+    ticket = await open_one(cog, bot, member)
+    member.dm_raises = discord.Forbidden(_Response(403), "cannot send")
+
+    await cog.reply.callback(cog, FakeInteraction(bot, lead), text="are you there")
+    rows = await ticket_messages(db, ticket["id"])
+    assert rows[-1]["delivered"] == 0
+
+    member.dm_raises = None
+    await cog.close.callback(cog, FakeInteraction(bot, lead), reason="no answer")
+
+    body = bot.guild.channels[TEST_CHANNEL].messages[-1].kwargs["file"].fp.getvalue().decode()
+    assert UNDELIVERED_MARK in body
+
+
+async def test_a_transcript_that_could_not_be_filed_keeps_the_ticket_channel(
+    cog, bot, member, lead, db
+):
+    ticket = await open_one(cog, bot, member)
+    channel = bot.guild.get_channel(ticket["channel_id"])
+    await bot.store.set(GUILD, "modmail_log_channel_id", LOG_CHANNEL)
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.close.callback(cog, interaction, reason="sorted")
+
+    assert channel.deleted is False
+    assert (await get_ticket(db, ticket["id"]))["status"] == "closed"
+    assert "left where it is" in interaction.sent
+    assert "modmail.place_kept" in await action_kinds(db)
+    assert len(await ticket_messages(db, ticket["id"])) == 1
+
+
+async def test_every_management_command_defers_before_it_answers(cog, bot, member, lead):
+    await open_one(cog, bot, member)
+    calls = [
+        (cog.modmail_status.callback, {}),
+        (cog.modmail_blocked.callback, {}),
+        (cog.snippet_list.callback, {}),
+        (cog.modmail_block.callback, {"user": member}),
+        (cog.modmail_unblock.callback, {"user": member}),
+        (cog.snippet_add.callback, {"name": "appeal", "content": "hello"}),
+        (cog.snippet_remove.callback, {"name": "appeal"}),
+        (cog.modmail_settings.callback, {"enabled": True}),
+        (
+            cog.modmail_mode.callback,
+            {"mode": discord.app_commands.Choice(name="channel", value="channel")},
+        ),
+    ]
+
+    for callback, kwargs in calls:
+        interaction = FakeInteraction(bot, lead)
+        await callback(cog, interaction, **kwargs)
+        assert interaction.response.messages[0].get("deferred") is True, callback
+        assert interaction.sent is not None, callback
 
 
 async def test_a_stored_message_keeps_its_direction_and_anonymity(db):

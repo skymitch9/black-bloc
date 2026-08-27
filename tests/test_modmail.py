@@ -2,10 +2,14 @@ from datetime import UTC, datetime
 
 from black_bloc.modmail import (
     ANONYMOUS_NAME,
+    COLOURS,
     IN,
     NOTE,
     OUT,
+    TRUNCATED_MARK,
+    UNDELIVERED_MARK,
     attachment_urls,
+    clamp_bytes,
     closing_dm,
     count_directions,
     dump_attachments,
@@ -113,11 +117,17 @@ def test_an_inbound_relay_shows_the_member_and_their_attachments():
 
 def test_an_anonymous_reply_names_no_staff_member_anywhere():
     embed = relay_embed(
-        OUT, author_name="Mod Meg", author_id=STAFF, content="looking into it", anonymous=True
+        OUT,
+        author_name="Mod Meg",
+        author_id=STAFF,
+        content="looking into it",
+        anonymous=True,
+        colour=0xABCDEF,
     )
 
     assert embed.author.name == ANONYMOUS_NAME
     assert embed.footer.text is None
+    assert embed.colour.value == COLOURS[OUT]
     rendered = f"{embed.author.name}{embed.description}{embed.title}"
     assert "Meg" not in rendered
 
@@ -253,3 +263,25 @@ def test_the_closing_dm_repeats_the_reason_when_there_is_one():
 def test_each_mode_is_described_in_words():
     assert "channels" in modes_sentence("channel")
     assert "private threads" in modes_sentence("thread")
+
+
+def test_the_transcript_is_cut_on_bytes_not_characters_and_says_it_was_cut():
+    body = "é" * 100
+
+    cut = clamp_bytes(body, limit=150)
+
+    assert len(cut.encode("utf-8")) <= 150
+    assert cut.endswith(TRUNCATED_MARK)
+    assert "�" not in cut
+    assert clamp_bytes(body, limit=10_000) == body
+
+
+def test_a_reply_that_never_reached_the_member_is_marked_in_the_transcript():
+    rows = [row(IN, "hello"), row(OUT, "are you there", author_id=STAFF) | {"delivered": 0}]
+
+    text = transcript_text(
+        rows, ticket_id=TICKET, user_id=USER, user_label="Alice", guild_name="Server"
+    )
+
+    assert UNDELIVERED_MARK in text
+    assert text.count(UNDELIVERED_MARK) == 1

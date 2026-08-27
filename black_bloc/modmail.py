@@ -29,6 +29,9 @@ FIELD_LIMIT = 1024
 NAME_LIMIT = 100
 SNIPPET_NAME_LIMIT = 40
 TRANSCRIPT_BYTES = 7_000_000
+TRUNCATED_MARK = "\n\n… truncated — this ticket is longer than one transcript file can hold.\n"
+UNDELIVERED_MARK = "(not delivered)"
+ATTACHMENTS_EXPIRE = "Attachment links stop working about 24 hours after they were posted."
 
 COLOURS: dict[str, int] = {IN: 0x5865F2, OUT: 0x57F287, NOTE: 0x99AAB5}
 TITLES: dict[str, str] = {
@@ -45,6 +48,25 @@ TRANSCRIPT_NAME = "modmail-ticket-{ticket_id}.txt"
 NO_TEXT = "(no text)"
 
 SNIPPET_NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,39}$")
+
+
+def field_of(row: Any, key: str, default: Any = None) -> Any:
+    """One column of a row that may predate it, without pretending a missing column is False."""
+    try:
+        value = row[key]
+    except (KeyError, IndexError):
+        return default
+    return default if value is None else value
+
+
+def clamp_bytes(text: Any, limit: int = TRANSCRIPT_BYTES) -> str:
+    """Discord bounds an upload in BYTES, so the cut is made in bytes and said out loud."""
+    body = str(text or "")
+    raw = body.encode("utf-8")
+    if len(raw) <= limit:
+        return body
+    mark = TRUNCATED_MARK.encode("utf-8")
+    return raw[: max(limit - len(mark), 0)].decode("utf-8", "ignore") + TRUNCATED_MARK
 
 
 def ticket_channel_name(user_name: Any, ticket_id: Any) -> str:
@@ -136,18 +158,19 @@ def relay_embed(
     at: datetime | None = None,
 ) -> discord.Embed:
     """The one embed every relayed message becomes, whichever way it is going."""
-    shown = ANONYMOUS_NAME if direction == OUT and anonymous else str(author_name or "someone")
+    hidden = direction == OUT and anonymous
+    shown = ANONYMOUS_NAME if hidden else str(author_name or "someone")
     embed = discord.Embed(
         title=TITLES.get(direction, direction),
         description=clamp(content, CONTENT_LIMIT) or f"*{NO_TEXT}*",
-        colour=int(colour) if colour else COLOURS.get(direction, COLOURS[IN]),
+        colour=int(colour) if colour and not hidden else COLOURS.get(direction, COLOURS[IN]),
         timestamp=at or datetime.now(UTC),
     )
     embed.set_author(name=clamp(shown, NAME_LIMIT), icon_url=icon_url or None)
     urls = attachment_urls(attachments)
     if urls:
         embed.add_field(name="Attachments", value=attachment_field(urls), inline=False)
-    if not (direction == OUT and anonymous):
+    if not hidden:
         embed.set_footer(text=f"{shown} · {author_id}")
     return embed
 
@@ -207,6 +230,8 @@ def transcript_line(row: Any) -> str:
     who = f"{LABELS.get(direction, direction)} {row['author_id']}"
     if direction == OUT and row["anonymous"]:
         who = f"{who} (anonymous)"
+    if direction == OUT and not field_of(row, "delivered", 1):
+        who = f"{who} {UNDELIVERED_MARK}"
     body = str(row["content"] or "").strip() or NO_TEXT
     lines = [f"[{shown}] {who}: {body}"]
     lines += [f"    attachment: {url}" for url in load_attachments(row["attachments"])]
@@ -238,14 +263,14 @@ def transcript_text(
         + (f" by {closed_by}" if closed_by else "")
         + (f" — {reason}" if reason else ""),
         f"Messages: {counts[IN]} from the member, {counts[OUT]} sent, {counts[NOTE]} note(s)",
+        ATTACHMENTS_EXPIRE,
         "-" * 60,
         "",
     ]
     body = [transcript_line(row) for row in rows or ()]
     if not body:
         body = ["(nothing was said)"]
-    text = "\n".join(head + body) + "\n"
-    return text[:TRANSCRIPT_BYTES]
+    return clamp_bytes("\n".join(head + body) + "\n")
 
 
 def transcript_filename(ticket_id: Any) -> str:

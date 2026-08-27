@@ -191,6 +191,7 @@ CREATE TABLE IF NOT EXISTS modmail_snippets (
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("golive_sessions", "live_role_added", "INTEGER NOT NULL DEFAULT 0"),
+    ("modmail_messages", "delivered", "INTEGER NOT NULL DEFAULT 1"),
 )
 
 CLOSE_DUPLICATE_OPEN_SESSIONS = """
