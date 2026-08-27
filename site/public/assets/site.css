@@ -113,6 +113,8 @@ body { overflow: hidden; }
   font-family: var(--et-font-mono);
   font-size: var(--et-ui-2xs);
 }
+/* A queue waiting on somebody is not the same kind of number as a tally. */
+.nav-count[data-tone="warn"] { color: var(--et-warn); font-weight: var(--et-weight-strong); }
 
 .shell-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 
@@ -459,6 +461,33 @@ details:not([open]) > .sect-summary .sect-mark { transform: rotate(-90deg); }
 }
 .sect-inner.flush > .section-body { display: block; gap: 0; }
 
+/* A fold inside a section, for the settled half of a queue. It borrows the
+   section head's chevron so the two read as the same gesture. */
+.foldout {
+  border: var(--et-border-w) solid var(--et-hairline);
+  border-radius: var(--et-radius);
+  background: var(--et-shell-inset);
+}
+.foldout-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  list-style: none;
+  cursor: pointer;
+  font-size: var(--et-ui-md);
+  font-weight: var(--et-weight-medium);
+}
+.foldout-head::-webkit-details-marker { display: none; }
+.foldout-head:focus-visible { outline: var(--et-focus-ring); outline-offset: -2px; }
+details:not([open]) > .foldout-head .sect-mark { transform: rotate(-90deg); }
+.foldout-body { padding: 0 12px 12px; }
+
+/* One waiting request: who asked, for what, and how long ago. */
+.reqhead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.reqhead .rowlist-main { flex-grow: 1; }
+.reqhead .role-chip { max-width: none; }
+
 /* ---- pills, chips, chevrons ---------------------------------------------- */
 
 .pill,
@@ -583,6 +612,10 @@ a.rowlist-main:focus-visible,
   border-radius: var(--et-dot-radius);
   background: var(--role, var(--et-muted));
 }
+.role-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The clock a timed grant puts on the chip: quieter than the role's own name,
+   and it never gets squeezed out when the name is long. */
+.role-chip-note { flex: none; color: var(--et-muted); font-family: var(--et-font-mono); }
 .role-more { color: var(--et-muted); font-family: var(--et-font-mono); font-size: var(--et-ui-2xs); }
 
 /* ---- search boxes --------------------------------------------------------- */
@@ -696,8 +729,15 @@ a.rowlist-main:focus-visible,
 .grid-table.members .grid-row {
   grid-template-columns: minmax(0, 1.5fr) 140px minmax(0, 1.6fr) 72px 24px;
 }
-a.grid-row:hover { background: var(--et-row-hover); }
+a.grid-row:hover,
+.grid-row.rowlink:hover { background: var(--et-row-hover); }
 a.grid-row:focus-visible { outline: var(--et-focus-ring); outline-offset: -2px; }
+/* A row with two destinations keeps its hover, and each link keeps its own
+   focus ring — see page-members.js memberRow for why the row is a div. */
+a.cell-member { color: inherit; text-decoration: none; }
+a.cell-member:hover .cell-member-name { text-decoration: underline; }
+a.cell-member:focus-visible,
+.grid-row .chip-go:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; }
 button.grid-row {
   width: 100%;
   border: 0;
@@ -883,7 +923,10 @@ button.grid-row:focus-visible { outline: var(--et-focus-ring); outline-offset: -
 .input:focus-visible { outline: var(--et-focus-ring); outline-offset: -1px; }
 .input.area { min-height: 8rem; resize: vertical; }
 .input.mono { font-family: var(--et-font-mono); font-size: var(--et-ui-sm); }
-.input.switch { width: 2.4rem; min-height: 1.3rem; max-width: 2.4rem; accent-color: var(--et-accent); box-shadow: none; }
+/* The UA stylesheet's own margin on a checkbox is the last few px of drift on
+   a row of side-by-side fields, and it survives an alignment fix because it is
+   margin, not alignment. */
+.input.switch { width: 2.4rem; min-height: 1.3rem; max-width: 2.4rem; margin: 0; accent-color: var(--et-accent); box-shadow: none; }
 .input.color { max-width: 6rem; padding: .2em; }
 select.input[multiple] { padding: .3em; }
 .input::placeholder { color: var(--et-muted); }
@@ -937,19 +980,52 @@ a.btn { text-decoration: none; }
   color: var(--et-muted);
 }
 
-.formrow { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
-.formrow .field { flex: 1 1 12rem; margin: 0; }
+/* Fields side by side are TOP-aligned on a three-row grid — label, control,
+   help — so the control row starts at the same y in every sibling whether the
+   rows above and below it are filled or empty. Bottom-aligning them (which is
+   what this used to do) moved a control off its neighbours' line the moment
+   one of them grew a second line of help or a taller box. */
+.formrow { display: flex; flex-wrap: wrap; gap: 12px; align-items: start; }
+.formrow .field {
+  flex: 1 1 12rem;
+  margin: 0;
+  display: grid;
+  grid-template-rows: auto minmax(var(--et-control-h), auto) auto;
+  align-content: start;
+}
+.formrow .field > .field-control { grid-row: 2; align-self: start; }
+/* The case the explicit rows cannot cover: a label that WRAPS. Sharing the
+   rows means a two-line label moves every sibling's control down with it.
+   Scoped away from a button bar, which sizes to its content — a grid track
+   would give it a full field-width column. */
+@supports (grid-template-rows: subgrid) {
+  .formrow:not(.dateline):not(:has(> .bar)) {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(12rem, 1fr);
+    grid-template-rows: auto minmax(var(--et-control-h), auto) auto;
+  }
+  .formrow:not(.dateline):not(:has(> .bar)) > .field {
+    grid-row: span 3;
+    grid-template-rows: subgrid;
+  }
+}
+/* A bar has no label above it, so a top-aligned row would leave the button
+   level with the LABELS. One label line plus the field's row gap, in tokens
+   rather than a measured px, so it stays right when a theme changes scale. */
+.formrow > .bar { margin-top: calc(var(--et-ui-xs) * var(--et-ui-line) + 4px); }
 
 /* One date, one line: the label sits over its box so month, day and year
    share the width instead of each claiming an 11rem label column. */
-.formrow.dateline { flex-wrap: nowrap; align-items: end; }
-.formrow.dateline .field {
+.formrow.dateline { flex-wrap: nowrap; align-items: start; }
+.formrow.dateline > .field {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
   flex: 1 1 0;
   min-width: 0;
 }
-.formrow.dateline .field > .field-label { grid-column: 1; }
+.formrow.dateline > .field > .field-label { grid-column: 1; }
 @media (max-width: 30rem) {
   .formrow.dateline { flex-wrap: wrap; }
   .formrow.dateline .field { flex: 1 1 7rem; }
