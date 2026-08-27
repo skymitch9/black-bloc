@@ -68,9 +68,19 @@ REPAIRED = (
     "Black Bloc repaired the join-to-create channel it already had — {where} — instead of making "
     "a second one. It is called **{name}** again, and {who} can see it and join it."
 )
+ADOPTED = (
+    "Black Bloc found a join-to-create channel it was not keeping track of — {where} — and took "
+    "it over instead of making a second one. It is called **{name}**, and {who} can see it and "
+    "join it."
+)
 EXTRA_LOBBIES = (
     " There are other join-to-create channels too — {extras} — so drop the ones you do not want "
     "with `/tempvoice forget <id>`."
+)
+STRAY_LOBBIES = (
+    "**not kept track of** — {extras}. Each of those is called **{name}** and sits where the "
+    "join-to-create channel belongs, but Black Bloc does not treat it as one. Run `/tempvoice "
+    "setup` to take it over and repair it, or delete the channel."
 )
 CANNOT_REPAIR = (
     "Discord refused to change {where}, so nothing was repaired. Black Bloc needs the Manage "
@@ -106,6 +116,20 @@ def channel_name(template: str, member_name: str, saved: str | None = None) -> s
             log.warning("temp voice: the name template %r could not be rendered", template)
             name = TEMPVOICE_NAME_TEMPLATE.format(user=member_name)
     return name[:NAME_LIMIT] or TEMPVOICE_NAME_TEMPLATE.format(user=member_name)[:NAME_LIMIT]
+
+
+def same_lobby_name(name: Any, wanted: Any) -> bool:
+    return str(name or "").strip().casefold() == str(wanted or "").strip().casefold()
+
+
+def lobbies_by_name(category: Any, wanted: Any, known: Any = ()) -> list[Any]:
+    """Voice channels in the category that carry the lobby's name and are not in the id list."""
+    ids = {int(channel_id) for channel_id in known}
+    return [
+        channel
+        for channel in (getattr(category, "voice_channels", None) or ())
+        if int(channel.id) not in ids and same_lobby_name(getattr(channel, "name", ""), wanted)
+    ]
 
 
 def bottom_position(positions: Any) -> int:
@@ -984,17 +1008,18 @@ class TempVoice(commands.Cog):
             )
         else:
             wanted = self.bot.store.get(guild.id, "tempvoice_creator_name")
-        live = [
-            guild.get_channel(cid)
-            for cid in (self.bot.store.get(guild.id, "tempvoice_creator_ids") or [])
-            if guild.get_channel(cid) is not None
-        ]
+        ids = list(self.bot.store.get(guild.id, "tempvoice_creator_ids") or [])
+        live = [guild.get_channel(cid) for cid in ids if guild.get_channel(cid) is not None]
         if live:
             await self._repair(interaction, live, wanted)
             return
         category, position, where = self._creator_spot(guild)
         if where == "no_test_channel":
             await interaction.response.send_message(NO_TEST_CHANNEL, ephemeral=True)
+            return
+        unknown = lobbies_by_name(category, wanted, ids)
+        if unknown:
+            await self._adopt(interaction, unknown, wanted)
             return
         await interaction.response.defer(ephemeral=True)
         allow = self._join_roles(guild)
@@ -1010,7 +1035,6 @@ class TempVoice(commands.Cog):
             log.warning("temp voice: setup could not create the creator channel: %s", exc)
             await interaction.followup.send(CANNOT_CREATE, ephemeral=True)
             return
-        ids = list(self.bot.store.get(guild.id, "tempvoice_creator_ids") or [])
         if channel.id not in ids:
             ids.append(channel.id)
         await self.bot.store.set(
@@ -1030,7 +1054,33 @@ class TempVoice(commands.Cog):
             details={"channel_id": channel.id, "placed": where, "name": wanted},
         )
 
-    async def _repair(self, interaction: discord.Interaction, live: list[Any], wanted: str) -> None:
+    async def _adopt(
+        self, interaction: discord.Interaction, found: list[Any], wanted: str
+    ) -> None:
+        """Store a lobby that carries the name but was never written down, then repair it."""
+        guild = interaction.guild
+        ids = list(self.bot.store.get(guild.id, "tempvoice_creator_ids") or [])
+        ids.extend(channel.id for channel in found if channel.id not in ids)
+        await self.bot.store.set(
+            guild.id, "tempvoice_creator_ids", ids, by=interaction.user.id
+        )
+        await log_action(
+            self.bot,
+            guild,
+            "tempvoice.adopt",
+            actor=interaction.user,
+            details={"channel_ids": [channel.id for channel in found], "name": wanted},
+        )
+        await self._repair(interaction, found, wanted, adopted=True)
+
+    async def _repair(
+        self,
+        interaction: discord.Interaction,
+        live: list[Any],
+        wanted: str,
+        *,
+        adopted: bool = False,
+    ) -> None:
         """Put the lobby the server already has back to its name and its own overwrites."""
         guild = interaction.guild
         channel = live[0]
@@ -1073,7 +1123,7 @@ class TempVoice(commands.Cog):
             actor=interaction.user,
             details={"channel_id": channel.id, "name": wanted},
         )
-        said = REPAIRED.format(
+        said = (ADOPTED if adopted else REPAIRED).format(
             where=channel.mention, name=wanted, who=roles_sentence(allow)
         )
         if len(live) > 1:
@@ -1139,18 +1189,27 @@ class TempVoice(commands.Cog):
         store = self.bot.store
         creators = store.get(guild.id, "tempvoice_creator_ids") or []
         role_id = store.get(guild.id, "tempvoice_allowed_role_id")
+        wanted = store.get(guild.id, "tempvoice_creator_name")
         rows = await rows_for_guild(self.bot.db, guild.id)
+        category, _, _ = self._creator_spot(guild)
+        unknown = lobbies_by_name(category, wanted, creators)
         lines = [
             f"**mode** — {store.get(guild.id, 'tempvoice_mode')}",
             "**join-to-create** — "
             + (", ".join(f"<#{c}>" for c in creators) if creators else "not set up yet"),
             f"**name template** — `{store.get(guild.id, 'tempvoice_name_template')}`",
-            f"**join-to-create name** — `{store.get(guild.id, 'tempvoice_creator_name')}`",
+            f"**join-to-create name** — `{wanted}`",
             f"**allowed role** — {f'<@&{role_id}>' if role_id else 'anyone'}",
             f"**channels open now** — {len(rows)}",
             f"**last reconcile** — {self.last_ok_at or 'not yet'}",
             f"**last error** — {self.last_error or 'none'}",
         ]
+        if unknown:
+            lines.append(
+                STRAY_LOBBIES.format(
+                    extras=", ".join(f"<#{channel.id}>" for channel in unknown), name=wanted
+                )
+            )
         await interaction.response.send_message(
             "\n".join(lines), ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
         )

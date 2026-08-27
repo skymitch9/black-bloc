@@ -22,6 +22,7 @@ from black_bloc.cogs.community.tempvoice import (
     get_row,
     is_panel_owner,
     is_stale,
+    lobbies_by_name,
     not_owner_message,
     owner_overwrites,
     panel_context,
@@ -1180,3 +1181,82 @@ async def test_status_shows_the_lobby_name_and_the_loop_s_health(cog, bot, lead)
     assert "join to create a channel" in interaction.sent
     assert "2026-08-26T12:00:00+00:00" in interaction.sent
     assert "**last error** — none" in interaction.sent
+
+
+def test_a_lobby_is_recognised_by_its_name_when_the_id_list_does_not_know_it():
+    guild = FakeGuild()
+    known = FakeVoice(1, guild, name=TEMPVOICE_CREATOR_NAME)
+    stray = FakeVoice(2, guild, name="  Join To Create A Channel  ")
+    other = FakeVoice(3, guild, name="General")
+    category = FakeCategory(50, voice_channels=[known, stray, other])
+
+    assert lobbies_by_name(category, TEMPVOICE_CREATOR_NAME, [1]) == [stray]
+    assert lobbies_by_name(category, TEMPVOICE_CREATOR_NAME, [1, 2]) == []
+    assert lobbies_by_name(None, TEMPVOICE_CREATOR_NAME, []) == []
+
+
+def where_the_lobby_belongs(bot, name=TEMPVOICE_CREATOR_NAME, ids=()):
+    """Test mode on, a lobby carrying the name in the test channel's category, and no stored id."""
+    category = FakeCategory(50)
+    lobby = bot.guild.add(FakeVoice(600, bot.guild, category=category, position=2, name=name))
+    category.voice_channels = [lobby]
+    bot.guild.add(FakeText(TEST_CHANNEL, category=category))
+    bot.guard = FakeGuard()
+    return category, lobby
+
+
+async def test_setup_takes_over_a_lobby_it_lost_track_of_instead_of_making_a_second_one(
+    cog, bot, lead, db
+):
+    await bot.store.set(GUILD, "tempvoice_creator_ids", [])
+    _, lobby = where_the_lobby_belongs(bot, name="join")
+    await bot.store.set(GUILD, "tempvoice_creator_name", "join")
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.setup_channel.callback(cog, interaction, None)
+
+    assert bot.guild.created == []
+    assert bot.store.get(GUILD, "tempvoice_creator_ids") == [lobby.id]
+    assert lobby.edits and lobby.edits[-1]["name"] == "join"
+    assert "took it over" in interaction.sent and f"<#{lobby.id}>" in interaction.sent
+    kinds = await action_kinds(db)
+    assert "tempvoice.adopt" in kinds and "tempvoice.repair" in kinds
+
+
+async def test_setup_leaves_a_channel_with_another_name_alone_and_makes_its_own(cog, bot, lead):
+    await bot.store.set(GUILD, "tempvoice_creator_ids", [])
+    _, lobby = where_the_lobby_belongs(bot, name="General")
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.setup_channel.callback(cog, interaction, None)
+
+    assert lobby.edits == []
+    assert [c.name for c in bot.guild.created] == [TEMPVOICE_CREATOR_NAME]
+    assert bot.store.get(GUILD, "tempvoice_creator_ids") == [bot.guild.created[0].id]
+
+
+async def test_a_lobby_taken_over_is_stored_even_when_discord_refuses_the_repair(
+    cog, bot, lead, db
+):
+    await bot.store.set(GUILD, "tempvoice_creator_ids", [])
+    _, lobby = where_the_lobby_belongs(bot)
+    lobby.edit_raises = refused()
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.setup_channel.callback(cog, interaction, None)
+
+    assert bot.store.get(GUILD, "tempvoice_creator_ids") == [lobby.id]
+    assert "refused" in interaction.sent
+    assert "tempvoice.repair_failed" in await action_kinds(db)
+
+
+async def test_status_names_the_lobbies_black_bloc_is_not_keeping_track_of(cog, bot, lead):
+    _, lobby = where_the_lobby_belongs(bot)
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.status.callback(cog, interaction)
+
+    assert f"<#{lobby.id}>" in interaction.sent
+    assert "not kept track of" in interaction.sent
+    assert "`/tempvoice setup`" in interaction.sent
+    assert interaction.response.messages[-1]["allowed_mentions"].everyone is False
