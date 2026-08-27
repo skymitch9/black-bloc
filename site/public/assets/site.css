@@ -917,6 +917,21 @@ a.btn { text-decoration: none; }
 
 .formrow { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
 .formrow .field { flex: 1 1 12rem; margin: 0; }
+
+/* One date, one line: the label sits over its box so month, day and year
+   share the width instead of each claiming an 11rem label column. */
+.formrow.dateline { flex-wrap: nowrap; align-items: end; }
+.formrow.dateline .field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  flex: 1 1 0;
+  min-width: 0;
+}
+.formrow.dateline .field > .field-label { grid-column: 1; }
+@media (max-width: 30rem) {
+  .formrow.dateline { flex-wrap: wrap; }
+  .formrow.dateline .field { flex: 1 1 7rem; }
+}
 .bar > .field {
   margin: 0;
   flex: 0 1 24rem;

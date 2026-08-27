@@ -52,7 +52,8 @@ function setCard() {
 
   return card('Set a birthday', [
     picker.node,
-    el('div', { class: 'formrow' }, [field('Month', month), field('Day', day), field('Year', year, 'Only used when birthday_show_age is on.')]),
+    el('div', { class: 'formrow dateline' }, [field('Month', month), field('Day', day), field('Year', year)]),
+    el('p', { class: 'field-help', text: 'The year is optional, and only used when birthday_show_age is on.' }),
     bar([save]),
     say,
   ]);
