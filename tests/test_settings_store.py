@@ -4,6 +4,7 @@ from black_bloc.config import load_settings
 from black_bloc.settings_store import (
     GOLIVE_CHANNEL_ID,
     GOLIVE_TEMPLATE,
+    HONEYPOT_PURGE_MAX_DAYS,
     KEY_TYPES,
     MEMBER_ROLE_ID,
     TEMPVOICE_NAME_TEMPLATE,
@@ -13,7 +14,8 @@ from black_bloc.settings_store import (
     display_value,
     member_is_staff,
     parse_value,
-    staff_role_ids_from_overwrites,
+    resolved_staff_roles,
+    staff_roles_sentence,
 )
 from black_bloc.storage.db import Database
 
@@ -36,12 +38,39 @@ async def store(tmp_path, monkeypatch):
 
 
 class _Role:
-    def __init__(self, id, default=False):
+    def __init__(self, id, default=False, bot_managed=False):
         self.id = id
+        self.name = f"role-{id}"
         self._default = default
+        self._bot_managed = bot_managed
 
     def is_default(self):
         return self._default
+
+    def is_bot_managed(self):
+        return self._bot_managed
+
+
+class _Channel:
+    """A staff channel that answers `permissions_for`, overwrites or not."""
+
+    def __init__(self, channel_id, visible_to):
+        self.id = channel_id
+        self.overwrites = {}
+        self._visible = set(visible_to)
+
+    def permissions_for(self, role):
+        return _Perms(view_channel=role.id in self._visible)
+
+
+class _Guild:
+    def __init__(self, roles, channels=()):
+        self.id = 1
+        self.roles = list(roles)
+        self.channels = {c.id: c for c in channels}
+
+    def get_channel(self, channel_id):
+        return self.channels.get(channel_id)
 
 
 class _Perms:
@@ -51,8 +80,9 @@ class _Perms:
 
 
 class _Member:
-    def __init__(self, roles=(), manage_guild=False):
+    def __init__(self, roles=(), manage_guild=False, guild=None):
         self.roles = roles
+        self.guild = guild
         self.guild_permissions = _Perms(manage_guild=manage_guild)
 
 
@@ -95,14 +125,60 @@ def test_channel_values_are_type_checked():
         coerce_value("log_channel_id", True)
 
 
-def test_staff_roles_come_from_view_overwrites():
-    overwrites = {
-        _Role(STAFF_ROLE): _Perms(view_channel=True),
-        _Role(1, default=True): _Perms(view_channel=True),
-        _Role(2): _Perms(view_channel=False),
-        _Role(3): _Perms(view_channel=None),
-    }
-    assert staff_role_ids_from_overwrites(overwrites) == {STAFF_ROLE}
+def test_staff_roles_are_computed_not_read_off_the_overwrites():
+    everyone = _Role(1, default=True)
+    mods = _Role(STAFF_ROLE)
+    members = _Role(2)
+    a_bot = _Role(3, bot_managed=True)
+    channel = _Channel(9, visible_to={everyone.id, STAFF_ROLE, a_bot.id})
+    guild = _Guild([everyone, mods, members, a_bot], [channel])
+
+    assert channel.overwrites == {}
+    assert [role.id for role in resolved_staff_roles(guild, channel)] == [STAFF_ROLE]
+    assert resolved_staff_roles(guild, None) == []
+
+
+def test_a_role_that_can_only_see_the_channel_by_inheritance_still_counts():
+    mods = _Role(STAFF_ROLE)
+    guild = _Guild([mods])
+    inherited = {STAFF_ROLE}
+
+    resolved = resolved_staff_roles(
+        guild,
+        _Channel(9, visible_to=set()),
+        perms_for=lambda role: _Perms(view_channel=role.id in inherited),
+    )
+
+    assert [role.id for role in resolved] == [STAFF_ROLE]
+
+
+def test_a_role_whose_permissions_cannot_be_worked_out_is_skipped():
+    def boom(role):
+        raise RuntimeError("no idea")
+
+    guild = _Guild([_Role(STAFF_ROLE)])
+    assert resolved_staff_roles(guild, _Channel(9, visible_to=set()), perms_for=boom) == []
+
+
+def test_the_staff_sentence_names_the_roles_or_says_there_are_none():
+    assert staff_roles_sentence([]) == "no roles at all"
+    assert "1 role(s)" in staff_roles_sentence([_Role(STAFF_ROLE)])
+    assert f"role-{STAFF_ROLE}" in staff_roles_sentence([_Role(STAFF_ROLE)])
+
+
+async def test_the_store_resolves_staff_from_the_staff_channel(store):
+    mods = _Role(STAFF_ROLE)
+    guild = _Guild([mods], [_Channel(TEST_CH, visible_to={STAFF_ROLE})])
+
+    assert store.staff_role_ids(guild) == {STAFF_ROLE}
+    assert store.is_staff(_Member(roles=[mods], guild=guild))
+
+
+async def test_a_staff_channel_black_bloc_cannot_see_resolves_to_nobody(store):
+    guild = _Guild([_Role(STAFF_ROLE)])
+
+    assert store.staff_role_ids(guild) == set()
+    assert store.staff_roles(guild) == []
 
 
 def test_member_is_staff_by_role_or_manage_guild():
@@ -183,6 +259,16 @@ async def test_tempvoice_defaults(store):
     assert store.get(1, "tempvoice_name_template") == TEMPVOICE_NAME_TEMPLATE
     assert store.get(1, "tempvoice_allowed_role_id") == MEMBER_ROLE_ID
     assert store.get(1, "tempvoice_creator_ids") == []
+
+
+def test_the_purge_window_is_clamped_to_discord_s_maximum():
+    assert coerce_value("honeypot_purge_days", HONEYPOT_PURGE_MAX_DAYS) == HONEYPOT_PURGE_MAX_DAYS
+    assert coerce_value("honeypot_purge_days", 0) == 0
+    with pytest.raises(SettingError, match=f"cannot be more than {HONEYPOT_PURGE_MAX_DAYS}"):
+        coerce_value("honeypot_purge_days", HONEYPOT_PURGE_MAX_DAYS + 1)
+    with pytest.raises(SettingError, match="cannot be negative"):
+        coerce_value("honeypot_purge_days", -1)
+    assert coerce_value("golive_cooldown_minutes", 9999) == 9999
 
 
 async def test_honeypot_defaults(store):

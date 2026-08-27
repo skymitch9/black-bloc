@@ -21,6 +21,7 @@ MEMBER_ROLE_ID = 1073741054563602532
 TEMPVOICE_NAME_TEMPLATE = "{user}'s bloc"
 TEMPVOICE_MODES = ("off", "on")
 HONEYPOT_MODES = ("off", "shadow", "on")
+HONEYPOT_PURGE_MAX_DAYS = 7
 
 KEY_TYPES: dict[str, str] = {
     "log_channel_id": "channel",
@@ -51,6 +52,8 @@ KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "honeypot_mode": HONEYPOT_MODES,
 }
 
+KEY_MAX: dict[str, int] = {"honeypot_purge_days": HONEYPOT_PURGE_MAX_DAYS}
+
 KEY_HELP: dict[str, str] = {
     "log_channel_id": "where Black Bloc posts what it did",
     "staff_channel_id": "the channel whose viewers count as staff",
@@ -70,7 +73,10 @@ KEY_HELP: dict[str, str] = {
     "tempvoice_allowed_role_id": "only members with this role get a temporary channel",
     "honeypot_mode": "off, shadow (log only) or on (ban whoever posts in the trap)",
     "honeypot_channel_ids": "the trap channels; /honeypot setup fills this in",
-    "honeypot_purge_days": "days of the banned account's messages to delete with it",
+    "honeypot_purge_days": (
+        f"days of the banned account's messages to delete with it, 0 to "
+        f"{HONEYPOT_PURGE_MAX_DAYS}"
+    ),
     "honeypot_exempt_role_ids": "roles the trap ignores; staff are always ignored too",
 }
 
@@ -130,6 +136,13 @@ def coerce_value(key: str, value: Any) -> Any:
             raise SettingError(f"{key!r} takes a whole number, not {value!r}.")
         if value < 0:
             raise SettingError(f"{key!r} cannot be negative.")
+        limit = KEY_MAX.get(key)
+        if limit is not None and value > limit:
+            raise SettingError(
+                f"{key!r} cannot be more than {limit}, so nothing was changed. Discord itself "
+                f"refuses to delete more than {limit} days of a banned account's messages, and a "
+                f"bigger number would make every ban fail."
+            )
         return value
     if kind == "bool":
         if not isinstance(value, bool):
@@ -179,15 +192,41 @@ def display_value(key: str, value: Any) -> str:
     return str(value)
 
 
-def staff_role_ids_from_overwrites(overwrites: Any) -> set[int]:
-    """Role ids explicitly allowed to view the staff channel; @everyone never counts."""
-    found: set[int] = set()
-    for target, perms in dict(overwrites).items():
-        if not hasattr(target, "is_default") or target.is_default():
+def resolved_staff_roles(guild: Any, channel: Any, perms_for: Any = None) -> list[Any]:
+    """Roles whose computed permissions see the staff channel; @everyone never counts."""
+    if channel is None:
+        return []
+    resolve = perms_for or getattr(channel, "permissions_for", None)
+    if resolve is None:
+        log.warning("staff roles: %s cannot say what a role may see", getattr(channel, "id", "?"))
+        return []
+    found: list[Any] = []
+    for role in getattr(guild, "roles", ()):
+        is_default = getattr(role, "is_default", None)
+        if is_default is not None and is_default():
             continue
-        if getattr(perms, "view_channel", None) is True:
-            found.add(target.id)
+        bot_managed = getattr(role, "is_bot_managed", None)
+        if bot_managed is not None and bot_managed():
+            continue
+        try:
+            perms = resolve(role)
+        except Exception as exc:
+            log.warning(
+                "staff roles: could not work out what %s can see: %s",
+                getattr(role, "id", role),
+                exc,
+            )
+            continue
+        if getattr(perms, "view_channel", False):
+            found.append(role)
     return found
+
+
+def staff_roles_sentence(roles: Any) -> str:
+    names = [f"**{getattr(role, 'name', role)}**" for role in roles]
+    if not names:
+        return "no roles at all"
+    return f"{len(names)} role(s) — " + ", ".join(names)
 
 
 def member_is_staff(member: Any, staff_ids: set[int]) -> bool:
@@ -274,12 +313,13 @@ class SettingsStore:
         self._cache[(guild_id, key)] = stored
         return stored
 
-    def staff_role_ids(self, guild: Any) -> set[int]:
+    def staff_roles(self, guild: Any) -> list[Any]:
         channel_id = self.get(guild.id, "staff_channel_id")
         channel = guild.get_channel(channel_id) if channel_id else None
-        if channel is None:
-            return set()
-        return staff_role_ids_from_overwrites(channel.overwrites)
+        return resolved_staff_roles(guild, channel)
+
+    def staff_role_ids(self, guild: Any) -> set[int]:
+        return {role.id for role in self.staff_roles(guild)}
 
     def is_staff(self, member: Any) -> bool:
         guild = getattr(member, "guild", None)

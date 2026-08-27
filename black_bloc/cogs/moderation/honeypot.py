@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import discord
@@ -11,11 +11,19 @@ from discord import app_commands
 from discord.ext import commands
 
 from ...actionlog import log_action
-from ...settings_store import DB_UNAVAILABLE, HONEYPOT_MODES, require_staff
+from ...settings_store import (
+    DB_UNAVAILABLE,
+    HONEYPOT_MODES,
+    HONEYPOT_PURGE_MAX_DAYS,
+    require_staff,
+    staff_roles_sentence,
+)
 
 log = logging.getLogger(__name__)
 
 TRAP_NAME = "🍯-do-not-post-here"
+TRAP_MESSAGE_TYPES = (discord.MessageType.default, discord.MessageType.reply)
+SHADOW_OFFER_MINUTES = 10
 NOTICE = (
     "This channel is a trap for bots. **Do not post here** — anything posted is treated as spam "
     "and the account is banned."
@@ -53,6 +61,34 @@ CANNOT_CREATE = (
 NOTICE_NOT_POSTED = (
     "The pinned notice was not posted, because test mode keeps Black Bloc out of every channel "
     "but the test one. Post it by hand for now, or run this again once test mode is off."
+)
+NO_STAFF_ROLES = (
+    "Black Bloc cannot work out who counts as staff, so the trap was left as it was. Nobody but "
+    "server admins would be exempt from it, which means one mistyped message from a moderator "
+    "would ban them. Point `staff_channel_id` at a channel only staff can see with `/settings "
+    "set staff_channel_id`, check `/honeypot status` lists the roles you expect, then turn the "
+    "trap on again."
+)
+NO_STAFF_WARNING = (
+    "⚠️ **No staff roles resolve.** Only people with Manage Server are exempt, so a moderator "
+    "who posts here would be banned. Fix `staff_channel_id` before leaving the trap on."
+)
+ALREADY_A_TRAP = (
+    "This server already has a trap channel — {where} — so a second one was not made. Two traps "
+    "are two things to remember; delete that channel, or run `/honeypot forget {channel_id}` if "
+    "it is already gone, then run this again."
+)
+NOT_A_TRAP = (
+    "**{channel_id}** is not one of Black Bloc's trap channels, so nothing was forgotten. "
+    "`/honeypot status` lists the ones it knows about."
+)
+NOT_AN_ID = (
+    "**{given}** is not a channel id, so nothing was forgotten. Right-click the channel and "
+    "choose Copy Channel ID, or read the id out of `/honeypot status`."
+)
+FORGOTTEN = (
+    "Black Bloc has forgotten **{channel_id}** — it is no longer a trap, and posts there are "
+    "ignored from now on."
 )
 
 
@@ -133,6 +169,17 @@ async def banned_already(db: Any, guild_id: int, user_id: int) -> bool:
     return await cur.fetchone() is not None
 
 
+async def offered_recently(db: Any, guild_id: int, user_id: int, minutes: int) -> bool:
+    """True when this author already got a Ban-now button inside the window."""
+    since = (datetime.now(UTC) - timedelta(minutes=minutes)).isoformat()
+    cur = await db.conn.execute(
+        "SELECT 1 FROM honeypot_hits WHERE guild_id = ? AND user_id = ? AND action = 'would_ban' "
+        "AND at >= ? LIMIT 1",
+        (guild_id, user_id, since),
+    )
+    return await cur.fetchone() is not None
+
+
 async def hit_counts(db: Any, guild_id: int) -> dict[str, int]:
     cur = await db.conn.execute(
         "SELECT action, COUNT(*) AS n FROM honeypot_hits WHERE guild_id = ? GROUP BY action",
@@ -150,11 +197,12 @@ async def do_ban(
         return "test_mode"
     user = guild.get_member(user_id) or discord.Object(id=user_id)
     await _dm_before_ban(guild, user)
+    days = max(0, min(int(purge_days), HONEYPOT_PURGE_MAX_DAYS))
     try:
         await guild.ban(
             user,
             reason=f"Honeypot: posted in #{channel_name}",
-            delete_message_days=purge_days,
+            delete_message_seconds=days * 86400,
         )
     except discord.HTTPException as exc:
         log.warning("honeypot: could not ban %s: %s", user_id, exc)
@@ -271,6 +319,8 @@ class Honeypot(commands.Cog):
     async def on_message(self, message: discord.Message) -> None:
         if message.guild is None or message.webhook_id is not None:
             return
+        if getattr(message, "type", None) not in TRAP_MESSAGE_TYPES:
+            return
         me = getattr(self.bot, "user", None)
         if me is not None and message.author.id == me.id:
             return
@@ -280,7 +330,9 @@ class Honeypot(commands.Cog):
         mode = store.get(message.guild.id, "honeypot_mode")
         if mode == "off":
             return
-        if message.channel.id not in (store.get(message.guild.id, "honeypot_channel_ids") or []):
+        traps = store.get(message.guild.id, "honeypot_channel_ids") or []
+        channel = message.channel
+        if channel.id not in traps and getattr(channel, "parent_id", None) not in traps:
             return
         async with self._lock(message.author.id):
             await self._caught(message, mode)
@@ -314,6 +366,9 @@ class Honeypot(commands.Cog):
                 details={"reason": reason, "channel_id": message.channel.id},
             )
             return
+        offered = await offered_recently(
+            self.bot.db, guild.id, author.id, SHADOW_OFFER_MINUTES
+        )
         await self._delete(message)
         hit_id = await record_hit(
             self.bot.db,
@@ -361,12 +416,31 @@ class Honeypot(commands.Cog):
                 )
                 return
             details = details | {"reason": "test_mode"}
+        if offered:
+            await log_action(
+                self.bot, guild, "honeypot.hit_recorded", target=author, details=details
+            )
+            return
         await log_action(
             self.bot, guild, "honeypot.would_ban", target=author, details=details
         )
         await self._offer_ban(guild, hit_id, author.id, content)
 
     async def _delete(self, message: discord.Message) -> None:
+        if not self._may_act_in(message.channel):
+            log.warning(
+                "honeypot: TEST MODE — the trap post in %s was left alone, because that channel "
+                "is outside the test channel's category",
+                message.channel.id,
+            )
+            await log_action(
+                self.bot,
+                message.guild,
+                "honeypot.would_delete",
+                target=message.author,
+                details={"channel_id": message.channel.id},
+            )
+            return
         try:
             await message.delete()
         except discord.HTTPException as exc:
@@ -428,6 +502,18 @@ class Honeypot(commands.Cog):
         if not await self._database_ready(interaction):
             return
         guild = interaction.guild
+        live = [
+            cid
+            for cid in (self.bot.store.get(guild.id, "honeypot_channel_ids") or [])
+            if guild.get_channel(cid) is not None
+        ]
+        if live:
+            await interaction.response.send_message(
+                ALREADY_A_TRAP.format(where=f"<#{live[0]}>", channel_id=live[0]),
+                ephemeral=True,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+            return
         category = self._test_category()
         if category is False:
             await interaction.response.send_message(
@@ -445,7 +531,15 @@ class Honeypot(commands.Cog):
                 position=len(list(guild.text_channels)),
                 overwrites={
                     guild.default_role: discord.PermissionOverwrite(
-                        view_channel=True, send_messages=True
+                        view_channel=True,
+                        send_messages=True,
+                        create_public_threads=False,
+                        create_private_threads=False,
+                        send_messages_in_threads=False,
+                        add_reactions=False,
+                        attach_files=False,
+                        embed_links=False,
+                        use_external_emojis=False,
                     )
                 },
                 slowmode_delay=0,
@@ -491,6 +585,17 @@ class Honeypot(commands.Cog):
             return False
         return True
 
+    def _may_act_in(self, channel: Any) -> bool:
+        guard = getattr(self.bot, "guard", None)
+        if guard is None:
+            return True
+        test_channel = (
+            self.bot.get_channel(guard.test_channel_id) if guard.test_channel_id else None
+        )
+        if test_channel is None:
+            return False
+        return getattr(channel, "category_id", None) == getattr(test_channel, "category_id", None)
+
     def _test_category(self) -> Any:
         """The test channel's category while the guard is on; None when it is off."""
         guard = getattr(self.bot, "guard", None)
@@ -513,9 +618,12 @@ class Honeypot(commands.Cog):
         store = self.bot.store
         channels = store.get(guild.id, "honeypot_channel_ids") or []
         roles = store.get(guild.id, "honeypot_exempt_role_ids") or []
+        staff = store.staff_roles(guild)
+        mode = store.get(guild.id, "honeypot_mode")
         totals = await hit_counts(self.bot.db, guild.id)
         lines = [
-            f"**mode** — {store.get(guild.id, 'honeypot_mode')}",
+            f"**mode** — {mode}",
+            f"**staff (always exempt)** — {staff_roles_sentence(staff)}",
             "**trap channels** — "
             + (", ".join(f"<#{c}>" for c in channels) if channels else "not set up yet"),
             f"**purge** — {store.get(guild.id, 'honeypot_purge_days')} day(s) of their messages",
@@ -525,6 +633,8 @@ class Honeypot(commands.Cog):
             f"{totals.get('would_ban', 0)} logged in shadow · "
             f"{totals.get('ban_failed', 0)} failed · {totals.get('exempt', 0)} ignored",
         ]
+        if not staff and mode == "on":
+            lines.append(NO_STAFF_WARNING)
         await interaction.response.send_message(
             "\n".join(lines), ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
         )
@@ -539,6 +649,9 @@ class Honeypot(commands.Cog):
     ) -> None:
         if not await require_staff(interaction):
             return
+        if mode.value == "on" and not self.bot.store.staff_roles(interaction.guild):
+            await interaction.response.send_message(NO_STAFF_ROLES, ephemeral=True)
+            return
         await self.bot.store.set(
             interaction.guild.id, "honeypot_mode", mode.value, by=interaction.user.id
         )
@@ -552,6 +665,51 @@ class Honeypot(commands.Cog):
             actor=interaction.user,
             details={"mode": mode.value},
         )
+
+    @honeypot.command(name="forget", description="Stop treating a channel id as a trap")
+    @app_commands.describe(channel_id="The id of the trap channel to forget")
+    async def forget(self, interaction: discord.Interaction, channel_id: str) -> None:
+        if not await require_staff(interaction):
+            return
+        guild = interaction.guild
+        digits = channel_id.strip().lstrip("<#").rstrip(">")
+        if not digits.isdigit():
+            await interaction.response.send_message(
+                NOT_AN_ID.format(given=channel_id), ephemeral=True
+            )
+            return
+        removed = await self._forget(guild, int(digits), actor=interaction.user)
+        if not removed:
+            await interaction.response.send_message(
+                NOT_A_TRAP.format(channel_id=digits), ephemeral=True
+            )
+            return
+        await interaction.response.send_message(
+            FORGOTTEN.format(channel_id=digits), ephemeral=True
+        )
+
+    async def _forget(self, guild: Any, channel_id: int, actor: Any = None) -> bool:
+        ids = list(self.bot.store.get(guild.id, "honeypot_channel_ids") or [])
+        if channel_id not in ids:
+            return False
+        ids.remove(channel_id)
+        await self.bot.store.set(
+            guild.id, "honeypot_channel_ids", ids, by=getattr(actor, "id", None)
+        )
+        await log_action(
+            self.bot,
+            guild,
+            "honeypot.trap_removed",
+            actor=actor,
+            details={"channel_id": channel_id},
+        )
+        return True
+
+    @commands.Cog.listener()
+    async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel) -> None:
+        if not self.bot.db.is_connected:
+            return
+        await self._forget(channel.guild, channel.id)
 
     @exempt.command(name="add", description="Let a role post in the trap without being banned")
     async def exempt_add(self, interaction: discord.Interaction, role: discord.Role) -> None:
