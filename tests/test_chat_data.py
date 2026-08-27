@@ -142,7 +142,8 @@ async def test_who_is_live_names_the_open_sessions_and_links_them(bot, db):
     tokens, filled = await asked(bot, "who_is_live")
 
     assert filled is True
-    assert "Nia" in tokens["who"] and "https://twitch.tv/nia" in tokens["who"]
+    assert tokens["names"] == "Nia"
+    assert tokens["links"] == "<https://twitch.tv/nia>"
     assert tokens["count"] == 1
 
 
@@ -172,7 +173,7 @@ async def test_whats_next_is_the_soonest_approved_event_still_to_come(bot, db):
     assert filled is True
     assert tokens["title"] == "Movie night"
     assert tokens["when"].startswith("<t:") and tokens["when"].endswith(":R>")
-    assert tokens["where"] == "the park"
+    assert tokens["channel"] == "the park"
 
 
 async def test_an_event_that_has_already_started_is_not_whats_next(bot, db):
@@ -217,7 +218,7 @@ async def test_birthdays_lists_the_next_three_and_skips_the_opted_out(bot, db):
     tokens, filled = await asked(bot, "birthdays")
 
     assert filled is True and tokens["count"] == 3
-    assert "Nia" not in tokens["who"]
+    assert "Nia" not in tokens["list"]
 
 
 async def test_no_stored_birthdays_is_the_empty_state(bot):
@@ -244,8 +245,8 @@ async def test_my_roles_names_the_menus_and_the_roles_they_already_hold(bot, db)
     tokens, filled = await asked(bot, "my_roles", member=member)
 
     assert filled is True
-    assert tokens["can_pick"] == "Colours"
-    assert tokens["have"] == "Member"
+    assert tokens["menus"] == "Colours"
+    assert tokens["roles"] == "Member"
 
 
 async def test_my_roles_says_nothing_held_rather_than_leaving_a_hole(bot, db):
@@ -256,7 +257,7 @@ async def test_my_roles_says_nothing_held_rather_than_leaving_a_hole(bot, db):
 
     tokens, filled = await asked(bot, "my_roles", member=FakeMember())
 
-    assert filled is True and tokens["have"] == "nothing from them yet"
+    assert filled is True and tokens["roles"] == "nothing from them yet"
 
 
 async def test_my_roles_is_the_empty_state_while_picking_is_off(bot, db):

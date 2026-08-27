@@ -222,6 +222,12 @@ const SETTING_SPECS = [
   ['rolemenu_approval_channel_id', 'channel', '800000000000000005', null, 'where a role request card is posted for staff to answer; defaults to staff_channel_id'],
   ['rolemenu_approver_role_id', 'role', null, null, 'role mentioned when a role request needs answering'],
   ['rolemenu_mode', 'enum', 'off', 'off', 'whether members can pick roles from the panels; off takes them down and hides the /rolemenu commands, on posts them again', ['off', 'on']],
+  ['chat_mode', 'enum', 'on', 'on', 'off, or on (Black Bloc answers when somebody @-mentions it)', ['off', 'on']],
+  ['chat_cooldown_seconds', 'int', 20, 20, 'seconds before the same person gets another @-mention reply, 5 to 600', null, 600, 5],
+  ['chat_ignore_channels', 'channels', [], [], 'channels Black Bloc never answers an @-mention in'],
+  ['chat_greeting_reaction', 'bool', false, false, 'true to answer a bare hello with a wave reaction instead of a sentence; anything longer still gets a reply'],
+  ['chat_reply_in_threads', 'bool', true, true, 'true to answer @-mentions inside threads as well as channels'],
+  ['chat_route_ping_staff', 'bool', false, false, 'true to drop one line in the staff channel when somebody asks the bot for a mod; only used while modmail_enabled is true'],
 ];
 
 const RULES = {
@@ -405,27 +411,29 @@ function seedState() {
   blocks: [
     { user_id: MEMBERS[4].id, by: STAFF.id, reason: 'opened twelve tickets about nitro', at: minutesAgo(3000) },
   ],
+  // The CUSTOM intent is id 1 and its line is id 1 on purpose: the contract's PUT / POST /
+  // DELETE entries point at {chat_intent_id} and {chat_line_id}, and a built-in refuses DELETE.
   chatIntents: [
-    { id: 1, name: 'greeting', kind: 'canned', triggers: ['hi', 'hey', 'hello', 'good morning'], enabled: true, sort: 13, created_by: null, updated_at: minutesAgo(9000), builtin: true },
-    { id: 2, name: 'who_is_live', kind: 'data', triggers: ['whos live', 'who is live', 'anyone live'], enabled: true, sort: 6, created_by: null, updated_at: minutesAgo(9000), builtin: true },
-    { id: 3, name: 'need_a_mod', kind: 'route', triggers: ['i need a mod', 'staff please', 'help me'], enabled: true, sort: 3, created_by: null, updated_at: minutesAgo(9000), builtin: true },
-    { id: 20, name: 'cookout_hours', kind: 'canned', triggers: ['when is the cookout'], enabled: true, sort: 0, created_by: STAFF.id, updated_at: minutesAgo(50), builtin: false },
+    { id: 1, name: 'cookout_hours', kind: 'canned', triggers: ['when is the cookout'], enabled: true, sort: 0, created_by: STAFF.id, updated_at: minutesAgo(50), builtin: false },
+    { id: 2, name: 'need_a_mod', kind: 'route', triggers: ['i need a mod', 'staff please', 'help me'], enabled: true, sort: 3, created_by: null, updated_at: minutesAgo(9000), builtin: true },
+    { id: 3, name: 'who_is_live', kind: 'data', triggers: ['whos live', 'who is live', 'anyone live'], enabled: true, sort: 6, created_by: null, updated_at: minutesAgo(9000), builtin: true },
+    { id: 4, name: 'greeting', kind: 'canned', triggers: ['hi', 'hey', 'hello', 'good morning'], enabled: true, sort: 13, created_by: null, updated_at: minutesAgo(9000), builtin: true },
   ],
   chatLines: [
-    { id: 1, intent_id: 1, text: 'Hey {name}! Pull up a chair — the cookout is already going.', slot: 'filled', enabled: true, created_by: null, updated_at: minutesAgo(9000) },
-    { id: 2, intent_id: 1, text: 'Hey {name}! That makes {attendees} of us at the cookout today.', slot: 'attendee', enabled: true, created_by: null, updated_at: minutesAgo(9000) },
-    { id: 3, intent_id: 2, text: 'Live right now, {name}: {who}', slot: 'filled', enabled: true, created_by: null, updated_at: minutesAgo(9000) },
-    { id: 4, intent_id: 2, text: 'Nobody is streaming right now, {name} — the cookout is all off-camera.', slot: 'empty', enabled: true, created_by: null, updated_at: minutesAgo(9000) },
-    { id: 5, intent_id: 3, text: 'DM me and I will open a ticket for staff, {name}.', slot: 'filled', enabled: true, created_by: null, updated_at: minutesAgo(9000) },
-    { id: 6, intent_id: 3, text: 'Staff to ask, {name}: {roles}.', slot: 'empty', enabled: true, created_by: null, updated_at: minutesAgo(9000) },
-    { id: 30, intent_id: 20, text: 'Doors at six, {name}.', slot: 'filled', enabled: true, created_by: STAFF.id, updated_at: minutesAgo(50) },
+    { id: 1, intent_id: 1, text: 'Doors at six, {name}.', slot: 'filled', enabled: true, created_by: STAFF.id, updated_at: minutesAgo(50) },
+    { id: 2, intent_id: 2, text: 'DM me and I will open a ticket for staff, {name}.', slot: 'filled', enabled: true, created_by: null, updated_at: minutesAgo(9000) },
+    { id: 3, intent_id: 2, text: 'Staff to ask, {name}: {roles}.', slot: 'empty', enabled: true, created_by: null, updated_at: minutesAgo(9000) },
+    { id: 4, intent_id: 3, text: 'Live right now, {name}: {names} — {links}', slot: 'filled', enabled: true, created_by: null, updated_at: minutesAgo(9000) },
+    { id: 5, intent_id: 3, text: 'Nobody is streaming right now, {name} — the cookout is all off-camera.', slot: 'empty', enabled: true, created_by: null, updated_at: minutesAgo(9000) },
+    { id: 6, intent_id: 4, text: 'Hey {name}! Pull up a chair — the cookout is already going.', slot: 'filled', enabled: true, created_by: null, updated_at: minutesAgo(9000) },
+    { id: 7, intent_id: 4, text: 'Hey {name}! That makes {attendees} of us at the cookout today.', slot: 'attendee', enabled: true, created_by: null, updated_at: minutesAgo(9000) },
   ],
   nextAction: 42,
   nextCase: 10,
   nextMessage: 40,
   nextPoll: 10,
-  nextChatIntent: 21,
-  nextChatLine: 31,
+  nextChatIntent: 5,
+  nextChatLine: 8,
   actions: seedActions(),
   };
 }
@@ -2185,6 +2193,18 @@ const CHAT_BUILT_INS = ['insult', 'love', 'thanks', 'need_a_mod', 'birthdays', '
   'who_is_live', 'head_count', 'my_roles', 'time_for_me', 'what_can_you_do', 'help',
   'how_are_you', 'greeting', 'unknown'];
 const CHAT_NAME = /^[a-z][a-z0-9_]*$/;
+// Mirrors black_bloc/chat.py:TOKENS — the chips the Chat page offers for each intent.
+const CHAT_TOKENS = {
+  who_is_live: ['{names}', '{links}'],
+  whats_next: ['{title}', '{when}', '{channel}'],
+  birthdays: ['{list}'],
+  head_count: ['{count}'],
+  my_roles: ['{menus}', '{roles}'],
+  time_for_me: ['{time}'],
+  need_a_mod: ['{roles}'],
+};
+const CHAT_SETTING_KEYS = ['chat_mode', 'chat_cooldown_seconds', 'chat_ignore_channels',
+  'chat_greeting_reaction', 'chat_reply_in_threads', 'chat_route_ping_staff'];
 const CHAT_UNKNOWN_LINE = 'Not sure I follow, {name} — try `/help` for what I can do.';
 const CHAT_NO_SUCH_INTENT = 'Black Bloc has no chat intent **#%s** any more, so nothing was done. The Chat page lists the ones it has.';
 const CHAT_NO_SUCH_LINE = 'Black Bloc has no chat line **#%s** any more, so nothing was done. Somebody may have removed it while this page was open.';
@@ -2212,6 +2232,7 @@ function chatIntentRow(row) {
     sort: row.sort,
     triggers: [...row.triggers],
     builtin: row.builtin,
+    tokens: [...(CHAT_TOKENS[row.name] || [])],
     created_by: row.created_by === null ? null : String(row.created_by),
     updated_at: row.updated_at,
     lines: state.chatLines.filter((line) => line.intent_id === row.id).map(chatLineRow),
@@ -2307,15 +2328,13 @@ function chatFilled(row) {
 }
 
 function chatTokens(row, filled) {
-  const live = state.golive.sessions
-    .filter((one) => one.ended_at === null)
-    .map((one) => `${memberName(one.user_id)} — <${one.url}>`)
-    .join(', ');
+  const live = state.golive.sessions.filter((one) => one.ended_at === null);
   return {
     name: STAFF.display_name,
     attendees: MEMBERS.length,
-    count: filled ? live.split(', ').filter(Boolean).length : 0,
-    who: live || 'nobody',
+    count: filled ? live.length : 0,
+    names: live.map((one) => memberName(one.user_id)).join(', ') || 'nobody',
+    links: live.map((one) => `<${one.url}>`).join(', ') || 'no links',
     roles: '**Aunties / Uncles**',
   };
 }
@@ -2328,6 +2347,7 @@ route('GET', '/api/chat/intents', (context) => {
   requireStaff(context.session);
   return {
     intents: state.chatIntents.map(chatIntentRow),
+    settings: CHAT_SETTING_KEYS.map(keyRow),
     slots: [...CHAT_SLOTS],
     notes: [],
   };

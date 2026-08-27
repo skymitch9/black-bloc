@@ -27,10 +27,13 @@ from ...chat import (
     list_intents,
     read_triggers,
     seed_defaults,
+    tokens_of,
     update_intent,
     update_line,
 )
+from ...settings_store import KEY_TYPES
 from ..auth import Refused, staff_dependency
+from ..settings_api import key_row, namespace_of
 from ..writes import (
     actor_for,
     note,
@@ -41,6 +44,8 @@ from ..writes import (
 )
 
 log = logging.getLogger(__name__)
+
+NAMESPACE = "chat"
 
 NO_SUCH_INTENT = (
     "Black Bloc has no chat intent **#{intent_id}** any more, so nothing was done. The Chat page "
@@ -99,10 +104,20 @@ def intent_row(row: Any, lines: Any) -> dict[str, Any]:
         "sort": int(row["sort"]),
         "triggers": list(read_triggers(row["triggers"])),
         "builtin": str(row["name"]) in BUILTIN_NAMES,
+        "tokens": list(tokens_of(str(row["name"]))),
         "created_by": _id(row["created_by"]),
         "updated_at": row["updated_at"],
         "lines": [line_row(one) for one in lines],
     }
+
+
+def chat_settings(bot: Any, guild_id: int) -> list[dict[str, Any]]:
+    """The chat namespace in the same row shape /api/settings uses."""
+    return [
+        key_row(bot.store, guild_id, key)
+        for key in KEY_TYPES
+        if namespace_of(key) == NAMESPACE
+    ]
 
 
 def refused(exc: ChatError) -> Refused:
@@ -149,6 +164,7 @@ def build_router(bot: Any) -> APIRouter:
             rows = await list_intents(bot.db, guild.id)
         return {
             "intents": [await _shown(guild, row) for row in rows],
+            "settings": chat_settings(bot, guild.id),
             "slots": list(SLOTS),
             "notes": [],
         }

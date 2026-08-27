@@ -30,6 +30,36 @@ async def test_the_page_lists_every_intent_with_its_lines(seeded, client):
     assert "slots" in payload and "filled" in payload["slots"]
 
 
+async def test_each_intent_carries_the_tokens_the_page_offers_as_chips(seeded, client):
+    by_name = {row["name"]: row for row in intents_of(client)}
+
+    assert by_name["head_count"]["tokens"] == ["{count}"]
+    assert by_name["who_is_live"]["tokens"] == ["{names}", "{links}"]
+    assert by_name["whats_next"]["tokens"] == ["{title}", "{when}", "{channel}"]
+    assert by_name["birthdays"]["tokens"] == ["{list}"]
+    assert by_name["my_roles"]["tokens"] == ["{menus}", "{roles}"]
+    assert by_name["time_for_me"]["tokens"] == ["{time}"]
+    assert by_name["greeting"]["tokens"] == []
+
+
+async def test_the_page_gets_the_chat_settings_in_the_shape_settings_uses(seeded, client):
+    rows = client.get("/api/chat/intents").json()["settings"]
+
+    assert {row["key"] for row in rows} == {
+        "chat_mode",
+        "chat_cooldown_seconds",
+        "chat_ignore_channels",
+        "chat_greeting_reaction",
+        "chat_reply_in_threads",
+        "chat_route_ping_staff",
+    }
+    for row in rows:
+        assert {"key", "type", "value", "default", "help"} <= set(row)
+    mode = next(row for row in rows if row["key"] == "chat_mode")
+    assert mode["choices"] == ["off", "on"]
+    assert next(row for row in rows if row["key"] == "chat_reply_in_threads")["default"] is True
+
+
 async def test_a_guild_never_seeded_is_seeded_on_the_first_read(client, sign_in, wf, guild):
     wf.member(guild, 7, name="lead", staff=True)
     sign_in(client)

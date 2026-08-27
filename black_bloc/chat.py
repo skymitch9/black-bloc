@@ -207,15 +207,15 @@ ROUTE_INTENTS: dict[str, tuple[str, ...]] = {
 
 DATA_LINES: dict[str, dict[str, tuple[str, ...]]] = {
     "birthdays": {
-        FILLED: ("Birthdays coming up, {name}: {who}",),
+        FILLED: ("Birthdays coming up, {name}: {list}",),
         EMPTY: ("No birthdays stored yet, {name} — `/birthday set` adds yours to the list.",),
     },
     "whats_next": {
-        FILLED: ("Next up, {name}: **{title}** {when} in {where}.",),
+        FILLED: ("Next up, {name}: **{title}** {when} in {channel}.",),
         EMPTY: ("Nothing on the calendar yet, {name}. `/event request` gets one started.",),
     },
     "who_is_live": {
-        FILLED: ("Live right now, {name}: {who}",),
+        FILLED: ("Live right now, {name}: {names} — {links}",),
         EMPTY: ("Nobody is streaming right now, {name} — the cookout is all off-camera.",),
     },
     "head_count": {
@@ -223,11 +223,11 @@ DATA_LINES: dict[str, dict[str, tuple[str, ...]]] = {
         EMPTY: ("I cannot count heads at the moment, {name}. Ask me again in a minute.",),
     },
     "my_roles": {
-        FILLED: ("You can pick from {can_pick}, {name}. Right now you have {have}.",),
+        FILLED: ("You can pick from {menus}, {name}. Right now you have {roles}.",),
         EMPTY: ("Role picking is off right now, {name}, so there is nothing to pick.",),
     },
     "time_for_me": {
-        FILLED: ("That is {time} for you, {name} — {zone}.",),
+        FILLED: ("That is {time} for you, {name}.",),
         EMPTY: (
             "I need to know your zone before I can work that out, {name}. Run `/timezone set` "
             "and ask me again.",
@@ -243,6 +243,16 @@ ROUTE_LINES: dict[str, dict[str, tuple[str, ...]]] = {
         ),
         EMPTY: ("Staff to ask, {name}: {roles}.",),
     },
+}
+
+TOKENS: dict[str, tuple[str, ...]] = {
+    "who_is_live": ("{names}", "{links}"),
+    "whats_next": ("{title}", "{when}", "{channel}"),
+    "birthdays": ("{list}",),
+    "head_count": ("{count}",),
+    "my_roles": ("{menus}", "{roles}"),
+    "time_for_me": ("{time}",),
+    "need_a_mod": ("{roles}",),
 }
 
 BUILTIN_ORDER: tuple[str, ...] = (
@@ -436,6 +446,11 @@ def bare_greeting(text: Any, intents: Any = ()) -> bool:
 def kind_of(intent: str, intents: Any = ()) -> str:
     row = by_name(intents).get(intent)
     return str(row["kind"]) if row is not None else BUILTIN_KINDS.get(intent, CANNED)
+
+
+def tokens_of(intent: str) -> tuple[str, ...]:
+    """The tokens THIS intent fills in, beyond `{name}` and `{attendees}`."""
+    return TOKENS.get(intent, ())
 
 
 def code_lines(intent: str, slot: str) -> tuple[str, ...]:

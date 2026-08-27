@@ -1520,6 +1520,7 @@
       "shape": "object",
       "keys": [
         "intents",
+        "settings",
         "slots",
         "notes"
       ],
@@ -1532,9 +1533,17 @@
           "sort",
           "triggers",
           "builtin",
+          "tokens",
           "created_by",
           "updated_at",
           "lines"
+        ],
+        "settings": [
+          "key",
+          "type",
+          "value",
+          "default",
+          "help"
         ]
       }
     },
@@ -1564,6 +1573,7 @@
           "triggers",
           "enabled",
           "builtin",
+          "tokens",
           "lines"
         ]
       }

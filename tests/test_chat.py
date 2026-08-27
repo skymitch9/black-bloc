@@ -1,4 +1,5 @@
 import random
+import re
 from types import SimpleNamespace
 
 import pytest
@@ -46,6 +47,7 @@ from black_bloc.chat import (
     reply_for,
     respond,
     seed_defaults,
+    tokens_of,
     update_intent,
     update_line,
 )
@@ -472,6 +474,23 @@ def test_the_data_and_route_phrases_land_on_their_own_intents(text, intent):
 def test_a_birthday_question_is_not_read_as_the_next_event():
     """`when is the next` is a whats_next phrase, so birthdays has to be asked first."""
     assert classify("when is the next birthday") == "birthdays"
+
+
+def test_every_token_a_seeded_line_uses_is_one_the_page_advertises():
+    """The token help is a promise: a chip the page shows has to render."""
+    for table in (DATA_LINES, ROUTE_LINES):
+        for intent, slots in table.items():
+            allowed = {"name", "attendees"} | {one.strip("{}") for one in tokens_of(intent)}
+            for lines in slots.values():
+                for line in lines:
+                    used = set(re.findall(r"\{([a-z_]+)\}", line))
+                    assert used <= allowed, f"{intent}: {sorted(used - allowed)}"
+
+
+def test_a_canned_intent_advertises_no_tokens_of_its_own():
+    assert tokens_of("greeting") == ()
+    assert tokens_of("head_count") == ("{count}",)
+    assert tokens_of("nothing_like_it") == ()
 
 
 def test_the_kind_of_an_intent_is_known_without_any_rows():

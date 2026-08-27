@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 
 BIRTHDAY_LIMIT = 3
 NOBODY = "nobody"
+NO_LINKS = "no links"
 NOTHING_HELD = "nothing from them yet"
 SOME_MODS = "the mods"
 
@@ -89,14 +90,19 @@ def at_local(hour: int, minute: int) -> datetime | None:
 async def who_is_live(bot: Any, guild: Any, member: Any, text: Any) -> tuple[dict[str, Any], bool]:
     db = usable_db(bot)
     if db is None or guild is None:
-        return {"who": NOBODY, "count": 0}, False
-    named = []
+        return {"names": NOBODY, "links": NO_LINKS, "count": 0}, False
+    named, linked = [], []
     for row in await open_sessions(db, guild.id):
-        who = display_of(guild, row["user_id"])
-        named.append(f"{who} — <{row['url']}>" if row["url"] else who)
+        named.append(display_of(guild, row["user_id"]))
+        if row["url"]:
+            linked.append(f"<{row['url']}>")
     if not named:
-        return {"who": NOBODY, "count": 0}, False
-    return {"who": ", ".join(named), "count": len(named)}, True
+        return {"names": NOBODY, "links": NO_LINKS, "count": 0}, False
+    return {
+        "names": ", ".join(named),
+        "links": ", ".join(linked) or NO_LINKS,
+        "count": len(named),
+    }, True
 
 
 async def whats_next(bot: Any, guild: Any, member: Any, text: Any) -> tuple[dict[str, Any], bool]:
@@ -111,7 +117,7 @@ async def whats_next(bot: Any, guild: Any, member: Any, text: Any) -> tuple[dict
         return {
             "title": str(row["title"]),
             "when": relative(when),
-            "where": event_place(row),
+            "channel": event_place(row),
         }, True
     return {}, False
 
@@ -144,7 +150,7 @@ async def birthdays(bot: Any, guild: Any, member: Any, text: Any) -> tuple[dict[
     if not found:
         return {}, False
     said = ", ".join(f"{display_of(guild, item.user_id)} {stamp(item.when)}" for item in found)
-    return {"who": said, "count": len(found)}, True
+    return {"list": said, "count": len(found)}, True
 
 
 async def head_count(bot: Any, guild: Any, member: Any, text: Any) -> tuple[dict[str, Any], bool]:
@@ -172,8 +178,8 @@ async def my_roles(bot: Any, guild: Any, member: Any, text: Any) -> tuple[dict[s
     if not offered:
         return {}, False
     return {
-        "can_pick": ", ".join(offered),
-        "have": ", ".join(held) or NOTHING_HELD,
+        "menus": ", ".join(offered),
+        "roles": ", ".join(held) or NOTHING_HELD,
         "count": len(offered),
     }, True
 
@@ -190,7 +196,6 @@ async def time_for_me(bot: Any, guild: Any, member: Any, text: Any) -> tuple[dic
     return {
         "time": clock(when.astimezone(here)),
         "zone": str(name),
-        "when": relative(when),
     }, True
 
 

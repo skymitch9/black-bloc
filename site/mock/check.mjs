@@ -32,8 +32,8 @@ const IDS = {
   poll_id: '3',
   poll_request_id: '2',
   poll_recurrence_id: '4',
-  chat_intent_id: '20',
-  chat_line_id: '30',
+  chat_intent_id: '1',
+  chat_line_id: '1',
 };
 
 const failures = [];
