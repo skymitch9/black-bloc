@@ -356,6 +356,16 @@ class SettingsStore:
         self._cache[(guild_id, key)] = stored
         return stored
 
+    async def clear(self, guild_id: int, key: str) -> None:
+        """Forget a scalar setting so `get` reads the default again."""
+        if key not in KEY_TYPES:
+            raise SettingError(f"{key!r} is not a Black Bloc setting.")
+        await self.db.conn.execute(
+            "DELETE FROM settings WHERE guild_id = ? AND key = ?", (guild_id, key)
+        )
+        await self.db.conn.commit()
+        self._cache.pop((guild_id, key), None)
+
     def staff_roles(self, guild: Any) -> list[Any]:
         channel_id = self.get(guild.id, "staff_channel_id")
         channel = guild.get_channel(channel_id) if channel_id else None

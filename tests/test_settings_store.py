@@ -315,6 +315,20 @@ def test_list_settings_parse_and_display():
     assert display_value("tempvoice_creator_ids", []) == "not set"
 
 
+async def test_clearing_a_scalar_setting_puts_the_default_back(store):
+    await store.set(1, "events_ping_role_id", 42)
+    assert store.get(1, "events_ping_role_id") == 42
+
+    await store.clear(1, "events_ping_role_id")
+    assert store.get(1, "events_ping_role_id") is None
+
+    await store.load()
+    assert store.get(1, "events_ping_role_id") is None
+    await store.clear(1, "events_ping_role_id")
+    with pytest.raises(SettingError, match="not a Black Bloc setting"):
+        await store.clear(1, "events_ping_role")
+
+
 async def test_events_defaults(store):
     assert store.get(1, "events_mode") == "on"
     assert store.get(1, "events_announce_channel_id") == TEST_CH
