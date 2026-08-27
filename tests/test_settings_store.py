@@ -5,6 +5,7 @@ from black_bloc.settings_store import (
     BIRTHDAY_CHANNEL_ID,
     BIRTHDAY_COLOR,
     BIRTHDAY_TEMPLATE,
+    CHANNEL_MODE,
     EVENTS_LATE_CEILING_MINUTES,
     EVENTS_MAX_LATE_MINUTES,
     EVENTS_RETENTION_DAYS,
@@ -15,7 +16,10 @@ from black_bloc.settings_store import (
     KEY_TYPES,
     LIVE_NOW_CHANNEL_ID,
     MEMBER_ROLE_ID,
+    MODMAIL_CATEGORY_ID,
+    MODMAIL_LOG_CHANNEL_ID,
     TEMPVOICE_NAME_TEMPLATE,
+    THREAD_MODE,
     SettingError,
     SettingsStore,
     coerce_value,
@@ -444,6 +448,50 @@ async def test_a_setting_can_be_unset_again(store):
     assert store.get(1, "birthday_role_id") is None
     with pytest.raises(SettingError, match="not a Black Bloc setting"):
         await store.clear(1, "nonsense_id")
+
+
+async def test_modmail_defaults_point_nowhere_real_while_test_mode_is_on(store):
+    assert store.get(1, "modmail_enabled") is False
+    assert store.get(1, "modmail_mode") == CHANNEL_MODE
+    assert store.get(1, "modmail_category_id") is None
+    assert store.get(1, "modmail_staff_channel_id") is None
+    assert store.get(1, "modmail_log_channel_id") == TEST_CH
+
+
+async def test_the_modmail_places_become_the_real_ones_once_test_mode_is_off(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
+    settings = load_settings(_env_file=None, test_mode=False, test_channel_id=None)
+    db = Database(tmp_path / "m.sqlite3")
+    await db.connect()
+    try:
+        s = SettingsStore(db, settings)
+        await s.load()
+        assert s.get(1, "modmail_category_id") == MODMAIL_CATEGORY_ID
+        assert s.get(1, "modmail_log_channel_id") == MODMAIL_LOG_CHANNEL_ID
+    finally:
+        await db.close()
+
+
+def test_the_modmail_keys_are_typed_and_the_mode_is_an_enum():
+    assert coerce_value("modmail_enabled", True) is True
+    assert coerce_value("modmail_mode", THREAD_MODE) == THREAD_MODE
+    assert coerce_value("modmail_category_id", _Role(5)) == 5
+    with pytest.raises(SettingError, match="channel"):
+        coerce_value("modmail_log_channel_id", "the log")
+    with pytest.raises(SettingError, match="channel, thread"):
+        coerce_value("modmail_mode", "email")
+    with pytest.raises(SettingError, match="true or false"):
+        coerce_value("modmail_enabled", "yes")
+    assert display_value("modmail_staff_channel_id", 7) == "<#7>"
+    assert {
+        "modmail_enabled",
+        "modmail_mode",
+        "modmail_category_id",
+        "modmail_staff_channel_id",
+        "modmail_log_channel_id",
+    } <= set(KEY_TYPES)
 
 
 def test_staff_refusal_names_the_channel(tmp_path, monkeypatch):

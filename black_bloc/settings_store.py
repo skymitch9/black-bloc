@@ -38,6 +38,12 @@ BIRTHDAY_TZ = "America/Phoenix"
 BIRTHDAY_MODES = ("off", "shadow", "on")
 HEX_COLOR = re.compile(r"^#?([0-9a-fA-F]{6})$")
 
+CHANNEL_MODE = "channel"
+THREAD_MODE = "thread"
+MODMAIL_MODES = (CHANNEL_MODE, THREAD_MODE)
+MODMAIL_CATEGORY_ID = 1442613057628012594
+MODMAIL_LOG_CHANNEL_ID = 1442613059704066108
+
 KEY_TYPES: dict[str, str] = {
     "log_channel_id": "channel",
     "staff_channel_id": "channel",
@@ -72,6 +78,11 @@ KEY_TYPES: dict[str, str] = {
     "birthday_color": "color",
     "birthday_role_id": "role",
     "birthday_show_age": "bool",
+    "modmail_enabled": "bool",
+    "modmail_mode": "enum",
+    "modmail_category_id": "channel",
+    "modmail_staff_channel_id": "channel",
+    "modmail_log_channel_id": "channel",
 }
 
 KEY_CHOICES: dict[str, tuple[str, ...]] = {
@@ -80,6 +91,7 @@ KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "honeypot_mode": HONEYPOT_MODES,
     "events_mode": EVENTS_MODES,
     "birthday_mode": BIRTHDAY_MODES,
+    "modmail_mode": MODMAIL_MODES,
 }
 
 KEY_MAX: dict[str, int] = {
@@ -157,6 +169,11 @@ KEY_HELP: dict[str, str] = {
     "birthday_color": "the birthday embed's colour, as a hex code like #4eefff",
     "birthday_role_id": "role given for the day and taken back the next; none by default",
     "birthday_show_age": "true to put {age} in reach for people who stored a birth year",
+    "modmail_enabled": "true when Black Bloc answers DMs; false leaves them to the old ModMail bot",
+    "modmail_mode": "channel (one channel per ticket) or thread (private threads in one channel)",
+    "modmail_category_id": "the category ticket channels are made in, in channel mode",
+    "modmail_staff_channel_id": "the channel ticket threads are made in, in thread mode",
+    "modmail_log_channel_id": "where a closed ticket's transcript is posted",
 }
 
 
@@ -399,6 +416,16 @@ class SettingsStore:
             return BIRTHDAY_COLOR
         if key == "birthday_show_age":
             return False
+        if key == "modmail_enabled":
+            return False
+        if key == "modmail_mode":
+            return CHANNEL_MODE
+        if key == "modmail_category_id":
+            return None if self.settings.test_mode else MODMAIL_CATEGORY_ID
+        if key == "modmail_log_channel_id":
+            if self.settings.test_mode:
+                return self.settings.test_channel_id
+            return MODMAIL_LOG_CHANNEL_ID
         if KEY_TYPES.get(key) in ("channels", "roles"):
             return []
         return None
