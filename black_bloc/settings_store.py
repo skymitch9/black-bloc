@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -29,6 +30,13 @@ EVENTS_RETENTION_MIN_DAYS = 1
 EVENTS_RETENTION_MAX_DAYS = 365
 EVENTS_MAX_LATE_MINUTES = 15
 EVENTS_LATE_CEILING_MINUTES = 24 * 60
+
+BIRTHDAY_CHANNEL_ID = 1411816390414962700
+BIRTHDAY_TEMPLATE = "Happy Birthday **{name}**!"
+BIRTHDAY_COLOR = "#4eefff"
+BIRTHDAY_TZ = "America/Phoenix"
+BIRTHDAY_MODES = ("off", "shadow", "on")
+HEX_COLOR = re.compile(r"^#?([0-9a-fA-F]{6})$")
 
 KEY_TYPES: dict[str, str] = {
     "log_channel_id": "channel",
@@ -58,6 +66,12 @@ KEY_TYPES: dict[str, str] = {
     "events_create_scheduled": "bool",
     "events_channel_retention_days": "int",
     "events_max_late_minutes": "int",
+    "birthday_mode": "enum",
+    "birthday_channel_id": "channel",
+    "birthday_template": "text",
+    "birthday_color": "color",
+    "birthday_role_id": "role",
+    "birthday_show_age": "bool",
 }
 
 KEY_CHOICES: dict[str, tuple[str, ...]] = {
@@ -65,6 +79,7 @@ KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "tempvoice_mode": TEMPVOICE_MODES,
     "honeypot_mode": HONEYPOT_MODES,
     "events_mode": EVENTS_MODES,
+    "birthday_mode": BIRTHDAY_MODES,
 }
 
 KEY_MAX: dict[str, int] = {
@@ -136,6 +151,12 @@ KEY_HELP: dict[str, str] = {
         "minutes an event may start late and still be announced; later than that it goes live "
         "quietly"
     ),
+    "birthday_mode": "off, shadow (log only) or on (post birthday wishes)",
+    "birthday_channel_id": "where birthday wishes are posted",
+    "birthday_template": "the birthday wording; {name} and {age}",
+    "birthday_color": "the birthday embed's colour, as a hex code like #4eefff",
+    "birthday_role_id": "role given for the day and taken back the next; none by default",
+    "birthday_show_age": "true to put {age} in reach for people who stored a birth year",
 }
 
 
@@ -215,6 +236,14 @@ def coerce_value(key: str, value: Any) -> Any:
         if not isinstance(value, str) or not value.strip():
             raise SettingError(f"{key!r} takes some text, not {value!r}.")
         return value
+    if kind == "color":
+        match = HEX_COLOR.match(str(value or "").strip()) if isinstance(value, str) else None
+        if match is None:
+            raise SettingError(
+                f"{key!r} takes a hex colour like `#4eefff` — six digits 0-9 or a-f, with or "
+                f"without the `#`, and nothing else. {value!r} is not one, so nothing was changed."
+            )
+        return f"#{match.group(1).lower()}"
     raise SettingError(f"{key!r} has no validator for type {kind!r}.")
 
 
@@ -358,6 +387,18 @@ class SettingsStore:
             return EVENTS_RETENTION_DAYS
         if key == "events_max_late_minutes":
             return EVENTS_MAX_LATE_MINUTES
+        if key == "birthday_mode":
+            return "shadow"
+        if key == "birthday_channel_id":
+            if self.settings.test_mode:
+                return self.settings.test_channel_id
+            return BIRTHDAY_CHANNEL_ID
+        if key == "birthday_template":
+            return BIRTHDAY_TEMPLATE
+        if key == "birthday_color":
+            return BIRTHDAY_COLOR
+        if key == "birthday_show_age":
+            return False
         if KEY_TYPES.get(key) in ("channels", "roles"):
             return []
         return None
@@ -388,15 +429,19 @@ class SettingsStore:
         self._cache[(guild_id, key)] = stored
         return stored
 
-    async def clear(self, guild_id: int, key: str) -> None:
-        """Forget a scalar setting so `get` reads the default again."""
+    async def clear(self, guild_id: int, key: str, *, by: int | None = None) -> bool:
+        """Forget one stored setting so its default applies again."""
         if key not in KEY_TYPES:
             raise SettingError(f"{key!r} is not a Black Bloc setting.")
-        await self.db.conn.execute(
+        cur = await self.db.conn.execute(
             "DELETE FROM settings WHERE guild_id = ? AND key = ?", (guild_id, key)
         )
         await self.db.conn.commit()
         self._cache.pop((guild_id, key), None)
+        cleared = bool(cur.rowcount)
+        if cleared:
+            log.info("settings cleared: %s for guild %s by %s", key, guild_id, by)
+        return cleared
 
     def staff_roles(self, guild: Any) -> list[Any]:
         channel_id = self.get(guild.id, "staff_channel_id")

@@ -2,6 +2,9 @@ import pytest
 
 from black_bloc.config import load_settings
 from black_bloc.settings_store import (
+    BIRTHDAY_CHANNEL_ID,
+    BIRTHDAY_COLOR,
+    BIRTHDAY_TEMPLATE,
     EVENTS_LATE_CEILING_MINUTES,
     EVENTS_MAX_LATE_MINUTES,
     EVENTS_RETENTION_DAYS,
@@ -355,6 +358,30 @@ async def test_the_announce_channel_becomes_live_now_once_test_mode_is_off(tmp_p
         await db.close()
 
 
+async def test_birthday_defaults(store):
+    assert store.get(1, "birthday_mode") == "shadow"
+    assert store.get(1, "birthday_channel_id") == TEST_CH
+    assert store.get(1, "birthday_template") == BIRTHDAY_TEMPLATE
+    assert store.get(1, "birthday_color") == BIRTHDAY_COLOR
+    assert store.get(1, "birthday_role_id") is None
+    assert store.get(1, "birthday_show_age") is False
+
+
+async def test_the_birthday_channel_defaults_to_the_incumbent_s_once_test_mode_is_off(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
+    settings = load_settings(_env_file=None, test_mode=False, test_channel_id=None)
+    db = Database(tmp_path / "b.sqlite3")
+    await db.connect()
+    try:
+        s = SettingsStore(db, settings)
+        await s.load()
+        assert s.get(1, "birthday_channel_id") == BIRTHDAY_CHANNEL_ID
+    finally:
+        await db.close()
+
+
 def test_the_create_scheduled_toggle_is_a_real_boolean():
     assert coerce_value("events_create_scheduled", False) is False
     assert parse_value("events_create_scheduled", "off") is False
@@ -383,6 +410,40 @@ def test_how_late_an_announcement_may_be_is_a_capped_whole_number():
     assert coerce_value("events_max_late_minutes", EVENTS_LATE_CEILING_MINUTES) == 24 * 60
     with pytest.raises(SettingError, match="already half over"):
         coerce_value("events_max_late_minutes", EVENTS_LATE_CEILING_MINUTES + 1)
+
+
+def test_the_birthday_values_are_checked_and_parsed():
+    assert coerce_value("birthday_mode", "on") == "on"
+    with pytest.raises(SettingError, match="off, shadow, on"):
+        coerce_value("birthday_mode", "someday")
+    assert coerce_value("birthday_show_age", True) is True
+    with pytest.raises(SettingError, match="true or false"):
+        coerce_value("birthday_show_age", "yes")
+    assert parse_value("birthday_show_age", "yes") is True
+    assert parse_value("birthday_color", " #4eefff ") == "#4eefff"
+    assert coerce_value("birthday_role_id", _Role(6)) == 6
+
+
+def test_a_colour_that_is_not_a_hex_code_is_refused_with_a_sentence():
+    assert coerce_value("birthday_color", "#4EEFFF") == "#4eefff"
+    assert coerce_value("birthday_color", " 4eefff ") == "#4eefff"
+    for bad in ("blue", "#4eeff", "#4eefffff", "", "#nothex", 4):
+        with pytest.raises(SettingError, match="hex colour"):
+            coerce_value("birthday_color", bad)
+
+
+async def test_a_setting_can_be_unset_again(store):
+    await store.set(1, "birthday_role_id", 42)
+    assert store.get(1, "birthday_role_id") == 42
+
+    assert await store.clear(1, "birthday_role_id", by=9) is True
+    assert store.get(1, "birthday_role_id") is None
+    assert await store.clear(1, "birthday_role_id") is False
+
+    await store.load()
+    assert store.get(1, "birthday_role_id") is None
+    with pytest.raises(SettingError, match="not a Black Bloc setting"):
+        await store.clear(1, "nonsense_id")
 
 
 def test_staff_refusal_names_the_channel(tmp_path, monkeypatch):

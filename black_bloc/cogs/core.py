@@ -17,7 +17,12 @@ from ..settings_store import (
 
 CHANNEL_KEYS = [key for key, kind in KEY_TYPES.items() if kind == "channel"]
 ROLE_KEYS = [key for key, kind in KEY_TYPES.items() if kind == "role"]
-VALUE_KEYS = [key for key, kind in KEY_TYPES.items() if kind in ("enum", "int", "text", "bool")]
+VALUE_KEYS = [
+    key for key, kind in KEY_TYPES.items() if kind in ("enum", "int", "text", "bool", "color")
+]
+CLEARABLE_KEYS = [key for key, kind in KEY_TYPES.items() if kind in ("channel", "role")]
+CLEARED = "**{key}** is no longer set, so Black Bloc is back to its own default for it."
+NOT_SET = "**{key}** was not set for this server, so nothing changed."
 
 
 class Core(commands.Cog):
@@ -141,6 +146,37 @@ class Core(commands.Cog):
             "settings.set",
             actor=interaction.user,
             details={"key": key.value, "value": parsed},
+        )
+
+
+    @settings.command(name="clear", description="Unset one channel or role setting")
+    @app_commands.describe(key="Which setting to unset")
+    @app_commands.choices(
+        key=[app_commands.Choice(name=name, value=name) for name in CLEARABLE_KEYS]
+    )
+    async def settings_clear(
+        self, interaction: discord.Interaction, key: app_commands.Choice[str]
+    ) -> None:
+        if not await require_staff(interaction):
+            return
+        try:
+            cleared = await self.bot.store.clear(
+                interaction.guild.id, key.value, by=interaction.user.id
+            )
+        except SettingError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            return
+        await interaction.response.send_message(
+            (CLEARED if cleared else NOT_SET).format(key=key.value), ephemeral=True
+        )
+        if not cleared:
+            return
+        await log_action(
+            self.bot,
+            interaction.guild,
+            "settings.clear",
+            actor=interaction.user,
+            details={"key": key.value},
         )
 
 

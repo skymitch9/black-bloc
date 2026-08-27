@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -142,11 +142,25 @@ CREATE TABLE IF NOT EXISTS events (
 );
 
 CREATE INDEX IF NOT EXISTS events_by_status ON events(guild_id, status, starts_at);
+
+CREATE TABLE IF NOT EXISTS birthdays (
+    user_id           INTEGER PRIMARY KEY,
+    guild_id          INTEGER NOT NULL,
+    month             INTEGER NOT NULL,
+    day               INTEGER NOT NULL,
+    year              INTEGER,
+    opted_in          INTEGER NOT NULL DEFAULT 1,
+    source            TEXT    NOT NULL,
+    set_at            TEXT    NOT NULL,
+    last_announced_on TEXT,
+    role_added        INTEGER NOT NULL DEFAULT 0
+);
 """
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("golive_sessions", "live_role_added", "INTEGER NOT NULL DEFAULT 0"),
     ("events", "card_channel_id", "INTEGER"),
+    ("birthdays", "role_added_id", "INTEGER"),
 )
 
 CLOSE_DUPLICATE_OPEN_SESSIONS = """
