@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, NamedTuple
 
 import discord
 from discord import app_commands
@@ -14,6 +14,7 @@ from ...command_errors import AnswersErrors
 from ...golive import now_iso, parse_ts
 from ...settings_store import (
     DB_UNAVAILABLE,
+    GUILD_ONLY,
     TEMPVOICE_MODES,
     TEMPVOICE_NAME_TEMPLATE,
     require_staff,
@@ -27,6 +28,37 @@ RECONCILE_GRACE_SECONDS = 60
 RECONCILE_MINUTES = 5
 NAME_LIMIT = 100
 LOCKS_ATTR = "_tempvoice_channel_locks"
+MIN_BITRATE = 8
+MAX_BITRATE = 96
+AUTO_REGION = "auto"
+VOICE_REGIONS = (
+    AUTO_REGION,
+    "brazil",
+    "bucharest",
+    "buenos-aires",
+    "dubai",
+    "finland",
+    "frankfurt",
+    "hongkong",
+    "india",
+    "japan",
+    "madrid",
+    "milan",
+    "rotterdam",
+    "russia",
+    "santiago",
+    "singapore",
+    "south-korea",
+    "southafrica",
+    "stockholm",
+    "sydney",
+    "tel-aviv",
+    "us-central",
+    "us-east",
+    "us-south",
+    "us-west",
+    "warsaw",
+)
 
 NOT_A_TEMP_CHANNEL = (
     "This panel is not attached to a temporary voice channel any more, so nothing was changed. "
@@ -63,6 +95,29 @@ CLAIM_LOST = (
 CLAIM_NEEDS_CONNECTION = (
     "You have to be connected to this channel before you can claim it, so nothing was changed. "
     "Join the voice channel, then press Claim again."
+)
+CHANNEL_GONE = (
+    "That temporary voice channel is gone, so nothing was changed. Join the join-to-create "
+    "channel again to get a fresh one."
+)
+RENAMED_TOO_OFTEN = (
+    "Discord only lets a channel be renamed **twice every 10 minutes**, and this one has used "
+    "both, so the name did not change. Wait a few minutes and try again."
+)
+VOICE_NEEDS_ROLE = (
+    "Voice controls are for members with the <@&{role_id}> role, so nothing was changed. Ask a "
+    "Lead for that role, then try again."
+)
+NO_OWNED_CHANNEL = (
+    "You don't own a temp channel right now — join **{lobby}** to make one."
+)
+CLAIM_NEEDS_A_CHANNEL = (
+    "You are not in one of Black Bloc's temporary voice channels, so there is nothing to claim. "
+    "Join the one you want, then run `/voice claim` again."
+)
+CANNOT_SET_REGION = (
+    "Discord would not use **{region}** as this channel's voice region, so nothing changed. Pick "
+    "one from the list, or **auto** to let Discord choose the closest server."
 )
 REPAIRED = (
     "Black Bloc repaired the join-to-create channel it already had — {where} — instead of making "
@@ -158,6 +213,24 @@ def parse_limit(raw: str) -> int | None:
 
 def is_panel_owner(owner_id: Any, clicker_id: Any) -> bool:
     return int(owner_id) == int(clicker_id)
+
+
+def may_use_voice(role_id: Any, member: Any) -> bool:
+    if not role_id:
+        return True
+    return any(getattr(role, "id", None) == role_id for role in getattr(member, "roles", ()))
+
+
+def pick_row(rows: Any, user_id: int, here_id: Any, *, owner_only: bool = True) -> Any:
+    """The channel a `/voice` command acts on: the one you are in, else the one you own."""
+    connected = None
+    if here_id is not None:
+        connected = next((r for r in rows if int(r["channel_id"]) == int(here_id)), None)
+    if not owner_only:
+        return connected
+    if connected is not None and int(connected["owner_id"]) == int(user_id):
+        return connected
+    return next((r for r in rows if int(r["owner_id"]) == int(user_id)), None)
 
 
 def not_owner_message(owner_id: int) -> str:
@@ -257,11 +330,20 @@ def roles_sentence(roles: Any) -> str:
     return ", ".join(names) if names else "everyone the category already lets in"
 
 
-def panel_text(member: Any) -> str:
+def panel_text(member: Any, channel: Any, *, elsewhere: bool = False) -> str:
+    first = f"Controls for <#{channel.id}>\n" if elsewhere else ""
     return (
-        f"**{member.display_name}'s channel** — the buttons below belong to <@{member.id}>. "
-        "Rename it, cap it, lock it, hide it, or hand it to someone else."
+        f"{first}**{member.display_name}'s channel** — the buttons below belong to "
+        f"<@{member.id}>. Rename it, cap it, lock it, hide it, or hand it to someone else."
     )
+
+
+def panel_home(bot: Any, channel: Any) -> Any:
+    """The panel goes in the voice chat, or in the test channel while the guard would refuse it."""
+    guard = getattr(bot, "guard", None)
+    if guard is None or guard.allows_channel(channel.id):
+        return channel
+    return bot.get_channel(guard.test_channel_id) if guard.test_channel_id else None
 
 
 async def add_channel(
@@ -297,10 +379,20 @@ async def delete_row(db: Any, channel_id: int) -> bool:
     return cur.rowcount > 0
 
 
-async def set_panel_message(db: Any, channel_id: int, message_id: int) -> None:
+async def get_row_by_panel(db: Any, message_id: int) -> Any:
+    cur = await db.conn.execute(
+        "SELECT * FROM tempvoice_channels WHERE panel_message_id = ?", (message_id,)
+    )
+    return await cur.fetchone()
+
+
+async def set_panel_message(
+    db: Any, channel_id: int, message_id: int, panel_channel_id: int | None = None
+) -> None:
     await db.conn.execute(
-        "UPDATE tempvoice_channels SET panel_message_id = ? WHERE channel_id = ?",
-        (message_id, channel_id),
+        "UPDATE tempvoice_channels SET panel_message_id = ?, panel_channel_id = ? "
+        "WHERE channel_id = ?",
+        (message_id, panel_channel_id, channel_id),
     )
     await db.conn.commit()
 
@@ -325,23 +417,31 @@ async def save_prefs(
     user_limit: int | None = None,
     locked: bool | None = None,
     hidden: bool | None = None,
+    bitrate: int | None = None,
 ) -> None:
     """Remember one setting for next time; the others keep whatever they already were."""
     row = await get_prefs(db, user_id)
-    current = {"name": None, "user_limit": None, "locked": 0, "hidden": 0}
+    current = {"name": None, "user_limit": None, "locked": 0, "hidden": 0, "bitrate": None}
     if row is not None:
-        current = {key: row[key] for key in current}
-    given = {"name": name, "user_limit": user_limit, "locked": locked, "hidden": hidden}
+        current = {key: pref(row, key) for key in current}
+    given = {
+        "name": name,
+        "user_limit": user_limit,
+        "locked": locked,
+        "hidden": hidden,
+        "bitrate": bitrate,
+    }
     merged = {key: (current[key] if value is None else value) for key, value in given.items()}
     await db.conn.execute(
-        "INSERT OR REPLACE INTO tempvoice_prefs(user_id, name, user_limit, locked, hidden) "
-        "VALUES (?, ?, ?, ?, ?)",
+        "INSERT OR REPLACE INTO tempvoice_prefs(user_id, name, user_limit, locked, hidden, "
+        "bitrate) VALUES (?, ?, ?, ?, ?, ?)",
         (
             user_id,
             merged["name"],
             merged["user_limit"],
             int(bool(merged["locked"])),
             int(bool(merged["hidden"])),
+            merged["bitrate"],
         ),
     )
     await db.conn.commit()
@@ -526,8 +626,36 @@ async def make_creator_channel(
     )
 
 
-async def panel_context(interaction: discord.Interaction, *, owner_only: bool = True) -> Any:
-    """This click's temp-channel row, or None once the clicker has been answered."""
+class Target(NamedTuple):
+    row: Any
+    channel: Any
+
+
+def temp_channel(interaction: discord.Interaction, channel_id: Any) -> Any:
+    guild = getattr(interaction, "guild", None)
+    found = guild.get_channel(int(channel_id)) if guild is not None else None
+    if found is None:
+        found = interaction.client.get_channel(int(channel_id))
+    return found
+
+
+async def panel_row(interaction: discord.Interaction, channel_id: int | None) -> Any:
+    """The row this click belongs to: the id it carries, else the panel message, else the chat."""
+    db = interaction.client.db
+    if channel_id is not None:
+        return await get_row(db, int(channel_id))
+    message = getattr(interaction, "message", None)
+    if message is not None:
+        row = await get_row_by_panel(db, message.id)
+        if row is not None:
+            return row
+    return await get_row(db, interaction.channel_id)
+
+
+async def panel_context(
+    interaction: discord.Interaction, *, owner_only: bool = True, channel_id: int | None = None
+) -> Target | None:
+    """This click's temp channel and its row, or None once the clicker has been answered."""
     bot = interaction.client
     guard = getattr(bot, "guard", None)
     if guard is not None and not guard.allows_channel(interaction.channel_id):
@@ -536,7 +664,7 @@ async def panel_context(interaction: discord.Interaction, *, owner_only: bool = 
     if not bot.db.is_connected:
         await interaction.response.send_message(DB_UNAVAILABLE, ephemeral=True)
         return None
-    row = await get_row(bot.db, interaction.channel_id)
+    row = await panel_row(interaction, channel_id)
     if row is None:
         await interaction.response.send_message(NOT_A_TEMP_CHANNEL, ephemeral=True)
         return None
@@ -547,16 +675,22 @@ async def panel_context(interaction: discord.Interaction, *, owner_only: bool = 
             allowed_mentions=discord.AllowedMentions.none(),
         )
         return None
-    return row
+    channel = temp_channel(interaction, row["channel_id"])
+    if channel is None:
+        await interaction.response.send_message(CHANNEL_GONE, ephemeral=True)
+        return None
+    return Target(row, channel)
 
 
-async def panel_log(interaction: discord.Interaction, kind: str, **details: Any) -> None:
+async def panel_log(
+    interaction: discord.Interaction, kind: str, channel_id: Any, **details: Any
+) -> None:
     await log_action(
         interaction.client,
         interaction.guild,
         f"tempvoice.{kind}",
         actor=interaction.user,
-        details={"channel_id": interaction.channel_id} | details,
+        details={"channel_id": int(channel_id)} | details,
     )
 
 
@@ -571,35 +705,323 @@ async def answer(interaction: discord.Interaction, text: str) -> None:
     )
 
 
+def rate_limited(exc: Any) -> bool:
+    return isinstance(exc, discord.RateLimited) or getattr(exc, "status", None) == 429
+
+
+def already_message(permission: str, was_off: bool) -> str:
+    if permission == "connect":
+        state = "locked" if was_off else "unlocked"
+    else:
+        state = "hidden" if was_off else "visible to everyone"
+    return f"This channel is already {state}, so nothing was changed."
+
+
+async def move_out(interaction: discord.Interaction, target: Any) -> bool:
+    try:
+        await target.move_to(None, reason="Black Bloc temp voice")
+    except discord.HTTPException as exc:
+        log.warning("temp voice: could not move %s out: %s", target.id, exc)
+        return False
+    return True
+
+
+async def do_rename(interaction: discord.Interaction, channel: Any, row: Any, wanted: str) -> str:
+    wanted = (wanted or "").strip()[:NAME_LIMIT]
+    if not wanted:
+        return "A channel needs a name, so nothing was changed."
+    try:
+        await channel.edit(name=wanted, reason="Black Bloc temp voice")
+    except (discord.HTTPException, discord.RateLimited) as exc:
+        log.warning("temp voice: rename refused in %s: %s", channel.id, exc)
+        await panel_log(interaction, "rename_failed", channel.id, reason=str(exc))
+        return RENAMED_TOO_OFTEN if rate_limited(exc) else CANNOT_EDIT
+    await save_prefs(interaction.client.db, row["owner_id"], name=wanted)
+    await panel_log(interaction, "rename", channel.id, name=wanted)
+    return f"Renamed to **{wanted}**, and remembered for next time."
+
+
+async def do_limit(interaction: discord.Interaction, channel: Any, row: Any, value: int) -> str:
+    try:
+        await channel.edit(user_limit=value, reason="Black Bloc temp voice")
+    except discord.HTTPException as exc:
+        log.warning("temp voice: limit refused in %s: %s", channel.id, exc)
+        await panel_log(interaction, "limit_failed", channel.id, reason=str(exc))
+        return CANNOT_EDIT
+    await save_prefs(interaction.client.db, row["owner_id"], user_limit=value)
+    await panel_log(interaction, "limit", channel.id, user_limit=value)
+    return "Anyone can join now." if value == 0 else f"Capped at **{value}** people."
+
+
+async def do_privacy(
+    interaction: discord.Interaction,
+    channel: Any,
+    row: Any,
+    permission: str,
+    want: bool | None = None,
+) -> str:
+    everyone = channel.guild.default_role
+    async with channel_lock(interaction.client, channel.id):
+        overwrite = channel.overwrites_for(everyone)
+        was_off = getattr(overwrite, permission) is False
+        turning_off = (not was_off) if want is None else want
+        if turning_off == was_off:
+            return already_message(permission, was_off)
+        setattr(overwrite, permission, False if turning_off else None)
+        try:
+            await channel.set_permissions(
+                everyone, overwrite=overwrite, reason="Black Bloc temp voice"
+            )
+        except discord.HTTPException as exc:
+            log.warning("temp voice: %s refused in %s: %s", permission, channel.id, exc)
+            await panel_log(interaction, "privacy_failed", channel.id, reason=str(exc))
+            return CANNOT_EDIT
+    if permission == "connect":
+        await save_prefs(interaction.client.db, row["owner_id"], locked=turning_off)
+        said = "Locked — nobody new may join." if turning_off else "Unlocked — anyone may join."
+        kind = "lock" if turning_off else "unlock"
+    else:
+        await save_prefs(interaction.client.db, row["owner_id"], hidden=turning_off)
+        said = (
+            "Hidden — only people already in it can see it."
+            if turning_off
+            else "Visible again to everyone."
+        )
+        kind = "hide" if turning_off else "show"
+    await panel_log(interaction, kind, channel.id)
+    return said
+
+
+async def do_kick(interaction: discord.Interaction, channel: Any, row: Any, target: Any) -> str:
+    if target.id not in connected_ids(channel):
+        return NOT_IN_CHANNEL.format(name=target.display_name)
+    if not await move_out(interaction, target):
+        return CANNOT_EDIT
+    await panel_log(interaction, "kick", channel.id, target_id=target.id)
+    return f"Moved **{target.display_name}** out of the channel."
+
+
+async def do_ban(interaction: discord.Interaction, channel: Any, row: Any, target: Any) -> str:
+    try:
+        await channel.set_permissions(
+            target, connect=False, view_channel=False, reason="Black Bloc temp voice: banned"
+        )
+    except discord.HTTPException as exc:
+        log.warning("temp voice: ban refused in %s: %s", channel.id, exc)
+        await panel_log(interaction, "ban_failed", channel.id, target_id=target.id, reason=str(exc))
+        return CANNOT_EDIT
+    if target.id in connected_ids(channel):
+        await move_out(interaction, target)
+    await panel_log(interaction, "ban", channel.id, target_id=target.id)
+    return (
+        f"**{target.display_name}** can no longer join this channel. Unban undoes it."
+    )
+
+
+async def do_permit(interaction: discord.Interaction, channel: Any, row: Any, target: Any) -> str:
+    try:
+        await channel.set_permissions(
+            target, connect=True, view_channel=True, reason="Black Bloc temp voice: permitted"
+        )
+    except discord.HTTPException as exc:
+        log.warning("temp voice: permit refused in %s: %s", channel.id, exc)
+        await panel_log(
+            interaction, "permit_failed", channel.id, target_id=target.id, reason=str(exc)
+        )
+        return CANNOT_EDIT
+    await panel_log(interaction, "permit", channel.id, target_id=target.id)
+    return f"**{target.display_name}** can join this channel now."
+
+
+async def do_forget_member(
+    interaction: discord.Interaction, channel: Any, row: Any, target: Any, kind: str
+) -> str:
+    """Undo a ban or a permit: the member's own connect/view overwrite goes back to the default."""
+    async with channel_lock(interaction.client, channel.id):
+        overwrite = channel.overwrites_for(target)
+        overwrite.connect = None
+        overwrite.view_channel = None
+        empty = bool(getattr(overwrite, "is_empty", bool)())
+        try:
+            await channel.set_permissions(
+                target,
+                overwrite=None if empty else overwrite,
+                reason=f"Black Bloc temp voice: {kind}",
+            )
+        except discord.HTTPException as exc:
+            log.warning("temp voice: %s refused in %s: %s", kind, channel.id, exc)
+            await panel_log(
+                interaction, f"{kind}_failed", channel.id, target_id=target.id, reason=str(exc)
+            )
+            return CANNOT_EDIT
+    await panel_log(interaction, kind, channel.id, target_id=target.id)
+    if kind == "unban":
+        return f"**{target.display_name}** may join this channel again."
+    return (
+        f"**{target.display_name}** no longer has their own way in — this channel's own rules "
+        "apply to them again."
+    )
+
+
+def guild_bitrate_ceiling(guild: Any) -> int:
+    try:
+        return int(getattr(guild, "bitrate_limit", 0)) or MAX_BITRATE * 1000
+    except (TypeError, ValueError):
+        return MAX_BITRATE * 1000
+
+
+def clamp_bitrate(kbps: Any, ceiling: Any) -> int:
+    """What Discord will accept: the asked-for kbps in bits, capped by the guild's boost tier."""
+    try:
+        wanted = int(kbps)
+    except (TypeError, ValueError):
+        wanted = MAX_BITRATE
+    wanted = min(max(wanted, MIN_BITRATE), MAX_BITRATE) * 1000
+    try:
+        top = int(ceiling)
+    except (TypeError, ValueError):
+        top = MAX_BITRATE * 1000
+    return min(wanted, max(top, MIN_BITRATE * 1000))
+
+
+def region_choices(current: str) -> list[str]:
+    text = (current or "").strip().lower()
+    return [name for name in VOICE_REGIONS if text in name][:25]
+
+
+def member_lists(overwrites: Any, owner_id: Any, role_ids: Any) -> tuple[list[int], list[int]]:
+    """Who this channel lets in by name and who it shuts out by name, from its own overwrites."""
+    permitted: list[int] = []
+    banned: list[int] = []
+    skip = {int(owner_id)} | {int(role_id) for role_id in role_ids}
+    for target, overwrite in (overwrites or {}).items():
+        target_id = int(getattr(target, "id", 0))
+        if target_id in skip:
+            continue
+        if overwrite.connect is False:
+            banned.append(target_id)
+        elif overwrite.connect is True:
+            permitted.append(target_id)
+    return permitted, banned
+
+
+def mentions(ids: Any) -> str:
+    return ", ".join(f"<@{user_id}>" for user_id in ids) or "nobody"
+
+
+def info_lines(channel: Any, row: Any, role_ids: Any) -> list[str]:
+    everyone = channel.overwrites_for(channel.guild.default_role)
+    permitted, banned = member_lists(getattr(channel, "overwrites", {}), row["owner_id"], role_ids)
+    limit = int(getattr(channel, "user_limit", 0) or 0)
+    bitrate = int(getattr(channel, "bitrate", 0) or 0)
+    cap = "no limit" if limit == 0 else f"{limit} people"
+    speed = f"{bitrate // 1000} kbps" if bitrate else "whatever the server gives it"
+    return [
+        f"**channel** — <#{channel.id}>",
+        f"**owner** — <@{row['owner_id']}>",
+        f"**limit** — {cap}",
+        f"**locked** — {'yes' if everyone.connect is False else 'no'}",
+        f"**hidden** — {'yes' if everyone.view_channel is False else 'no'}",
+        f"**bitrate** — {speed}",
+        f"**region** — {getattr(channel, 'rtc_region', None) or 'automatic'}",
+        f"**let in by name** — {mentions(permitted)}",
+        f"**kept out by name** — {mentions(banned)}",
+    ]
+
+
+async def do_bitrate(interaction: discord.Interaction, channel: Any, row: Any, kbps: int) -> str:
+    bits = clamp_bitrate(kbps, guild_bitrate_ceiling(channel.guild))
+    try:
+        await channel.edit(bitrate=bits, reason="Black Bloc temp voice")
+    except discord.HTTPException as exc:
+        log.warning("temp voice: bitrate refused in %s: %s", channel.id, exc)
+        await panel_log(interaction, "bitrate_failed", channel.id, reason=str(exc))
+        return CANNOT_EDIT
+    await save_prefs(interaction.client.db, row["owner_id"], bitrate=bits)
+    await panel_log(interaction, "bitrate", channel.id, bitrate=bits)
+    said = f"Bitrate set to **{bits // 1000} kbps**, and remembered for next time."
+    if bits < min(int(kbps), MAX_BITRATE) * 1000:
+        said += " That is as high as this server's boost level allows."
+    return said
+
+
+async def do_region(interaction: discord.Interaction, channel: Any, row: Any, region: str) -> str:
+    wanted = (region or AUTO_REGION).strip().lower()
+    try:
+        await channel.edit(
+            rtc_region=None if wanted == AUTO_REGION else wanted, reason="Black Bloc temp voice"
+        )
+    except (discord.HTTPException, ValueError, TypeError) as exc:
+        log.warning("temp voice: region %s refused in %s: %s", wanted, channel.id, exc)
+        await panel_log(interaction, "region_failed", channel.id, region=wanted, reason=str(exc))
+        return CANNOT_SET_REGION.format(region=wanted)
+    await panel_log(interaction, "region", channel.id, region=wanted)
+    if wanted == AUTO_REGION:
+        return "Voice region is **automatic** again — Discord picks the closest server."
+    return f"Voice region set to **{wanted}**."
+
+
+async def do_transfer(interaction: discord.Interaction, channel: Any, row: Any, target: Any) -> str:
+    async with channel_lock(interaction.client, channel.id):
+        fresh = await get_row(interaction.client.db, channel.id)
+        if fresh is None:
+            return NOT_A_TEMP_CHANNEL
+        if int(fresh["owner_id"]) != int(row["owner_id"]):
+            return CLAIM_LOST
+        await hand_over(interaction.client, channel, fresh["owner_id"], target)
+        await panel_log(
+            interaction, "transfer", channel.id, target_id=target.id, from_id=fresh["owner_id"]
+        )
+    return f"**{target.display_name}** owns this channel now."
+
+
+async def do_claim(interaction: discord.Interaction, channel: Any, row: Any) -> str:
+    async with channel_lock(interaction.client, channel.id):
+        fresh = await get_row(interaction.client.db, channel.id)
+        if fresh is None:
+            return NOT_A_TEMP_CHANNEL
+        owner_id = fresh["owner_id"]
+        if is_panel_owner(owner_id, interaction.user.id):
+            return "You already own this channel, so nothing changed."
+        if int(owner_id) != int(row["owner_id"]):
+            return CLAIM_LOST
+        here = connected_ids(channel)
+        if interaction.user.id not in here:
+            return CLAIM_NEEDS_CONNECTION
+        if owner_id in here:
+            return OWNER_STILL_HERE.format(owner_id=owner_id)
+        await hand_over(interaction.client, channel, owner_id, interaction.user)
+        await panel_log(interaction, "claim", channel.id, from_id=owner_id)
+    return "This channel is yours now."
+
+
 class RenameModal(AnswersErrors, discord.ui.Modal, title="Rename this channel"):
     name = discord.ui.TextInput(label="New name", max_length=NAME_LIMIT)
 
+    def __init__(self, channel_id: int | None = None) -> None:
+        super().__init__()
+        self.channel_id = channel_id
+
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        row = await panel_context(interaction)
-        if row is None:
+        found = await panel_context(interaction, channel_id=self.channel_id)
+        if found is None:
             return
         await interaction.response.defer(ephemeral=True)
-        wanted = str(self.name).strip()[:NAME_LIMIT]
-        if not wanted:
-            await answer(interaction, "A channel needs a name, so nothing was changed.")
-            return
-        try:
-            await interaction.channel.edit(name=wanted, reason="Black Bloc temp voice")
-        except discord.HTTPException as exc:
-            log.warning("temp voice: rename refused in %s: %s", interaction.channel_id, exc)
-            await answer(interaction, CANNOT_EDIT)
-            return
-        await save_prefs(interaction.client.db, row["owner_id"], name=wanted)
-        await panel_log(interaction, "rename", name=wanted)
-        await answer(interaction, f"Renamed to **{wanted}**, and remembered for next time.")
+        await answer(
+            interaction, await do_rename(interaction, found.channel, found.row, str(self.name))
+        )
 
 
 class LimitModal(AnswersErrors, discord.ui.Modal, title="How many people?"):
     limit = discord.ui.TextInput(label="0 to 99 (0 means no limit)", max_length=2)
 
+    def __init__(self, channel_id: int | None = None) -> None:
+        super().__init__()
+        self.channel_id = channel_id
+
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        row = await panel_context(interaction)
-        if row is None:
+        found = await panel_context(interaction, channel_id=self.channel_id)
+        if found is None:
             return
         await interaction.response.defer(ephemeral=True)
         value = parse_limit(str(self.limit))
@@ -610,109 +1032,43 @@ class LimitModal(AnswersErrors, discord.ui.Modal, title="How many people?"):
                 "number — 0 lets anyone in.",
             )
             return
-        try:
-            await interaction.channel.edit(user_limit=value, reason="Black Bloc temp voice")
-        except discord.HTTPException as exc:
-            log.warning("temp voice: limit refused in %s: %s", interaction.channel_id, exc)
-            await answer(interaction, CANNOT_EDIT)
-            return
-        await save_prefs(interaction.client.db, row["owner_id"], user_limit=value)
-        await panel_log(interaction, "limit", user_limit=value)
-        await answer(
-            interaction,
-            "Anyone can join now." if value == 0 else f"Capped at **{value}** people.",
-        )
+        await answer(interaction, await do_limit(interaction, found.channel, found.row, value))
+
+
+MEMBER_ACTIONS = {
+    "kick": do_kick,
+    "ban": do_ban,
+    "permit": do_permit,
+    "transfer": do_transfer,
+}
 
 
 class MemberPick(discord.ui.UserSelect):
-    def __init__(self, action: str, placeholder: str) -> None:
+    def __init__(self, action: str, placeholder: str, channel_id: int | None = None) -> None:
         super().__init__(placeholder=placeholder, min_values=1, max_values=1)
         self.action = action
+        self.channel_id = channel_id
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        row = await panel_context(interaction)
-        if row is None:
+        found = await panel_context(interaction, channel_id=self.channel_id)
+        if found is None:
             return
         await interaction.response.defer(ephemeral=True)
         target = self.values[0]
-        channel = interaction.channel
-        handler = getattr(self, f"_{self.action}")
-        await handler(interaction, channel, target, row)
-
-    async def _kick(self, interaction: Any, channel: Any, target: Any, row: Any) -> None:
-        if target.id not in connected_ids(channel):
-            await answer(interaction, NOT_IN_CHANNEL.format(name=target.display_name))
-            return
-        if not await self._move_out(interaction, target):
-            return
-        await panel_log(interaction, "kick", target_id=target.id)
-        await answer(interaction, f"Moved **{target.display_name}** out of the channel.")
-
-    async def _ban(self, interaction: Any, channel: Any, target: Any, row: Any) -> None:
-        try:
-            await channel.set_permissions(
-                target,
-                connect=False,
-                view_channel=False,
-                reason="Black Bloc temp voice: banned",
+        handler = MEMBER_ACTIONS.get(self.action)
+        if handler is None:
+            said = await do_forget_member(
+                interaction, found.channel, found.row, target, self.action
             )
-        except discord.HTTPException as exc:
-            log.warning("temp voice: ban refused in %s: %s", channel.id, exc)
-            await panel_log(interaction, "ban_failed", target_id=target.id, reason=str(exc))
-            await answer(interaction, CANNOT_EDIT)
-            return
-        if target.id in connected_ids(channel):
-            await self._move_out(interaction, target, answered=False)
-        await panel_log(interaction, "ban", target_id=target.id)
-        await answer(
-            interaction,
-            f"**{target.display_name}** can no longer join this channel. The Permit button "
-            "undoes it.",
-        )
-
-    async def _permit(self, interaction: Any, channel: Any, target: Any, row: Any) -> None:
-        try:
-            await channel.set_permissions(
-                target, connect=True, view_channel=True, reason="Black Bloc temp voice: permitted"
-            )
-        except discord.HTTPException as exc:
-            log.warning("temp voice: permit refused in %s: %s", channel.id, exc)
-            await panel_log(interaction, "permit_failed", target_id=target.id, reason=str(exc))
-            await answer(interaction, CANNOT_EDIT)
-            return
-        await panel_log(interaction, "permit", target_id=target.id)
-        await answer(interaction, f"**{target.display_name}** can join this channel now.")
-
-    async def _transfer(self, interaction: Any, channel: Any, target: Any, row: Any) -> None:
-        async with channel_lock(interaction.client, channel.id):
-            fresh = await get_row(interaction.client.db, channel.id)
-            if fresh is None:
-                await answer(interaction, NOT_A_TEMP_CHANNEL)
-                return
-            if int(fresh["owner_id"]) != int(row["owner_id"]):
-                await answer(interaction, CLAIM_LOST)
-                return
-            await hand_over(interaction.client, channel, fresh["owner_id"], target)
-            await panel_log(
-                interaction, "transfer", target_id=target.id, from_id=fresh["owner_id"]
-            )
-        await answer(interaction, f"**{target.display_name}** owns this channel now.")
-
-    async def _move_out(self, interaction: Any, target: Any, *, answered: bool = True) -> bool:
-        try:
-            await target.move_to(None, reason="Black Bloc temp voice")
-        except discord.HTTPException as exc:
-            log.warning("temp voice: could not move %s out: %s", target.id, exc)
-            if answered:
-                await answer(interaction, CANNOT_EDIT)
-            return False
-        return True
+        else:
+            said = await handler(interaction, found.channel, found.row, target)
+        await answer(interaction, said)
 
 
 class MemberPickView(AnswersErrors, discord.ui.View):
-    def __init__(self, action: str, placeholder: str) -> None:
+    def __init__(self, action: str, placeholder: str, channel_id: int | None = None) -> None:
         super().__init__(timeout=180)
-        self.add_item(MemberPick(action, placeholder))
+        self.add_item(MemberPick(action, placeholder, channel_id))
 
 
 async def hand_over(bot: Any, channel: Any, old_owner_id: int, new_owner: Any) -> None:
@@ -737,29 +1093,25 @@ class TempVoicePanel(AnswersErrors, discord.ui.View):
 
     @discord.ui.button(label="Rename", custom_id=panel_id("rename"), row=0)
     async def rename(self, interaction: discord.Interaction, button: Any) -> None:
-        if await panel_context(interaction) is None:
+        found = await panel_context(interaction)
+        if found is None:
             return
-        await interaction.response.send_modal(RenameModal())
+        await interaction.response.send_modal(RenameModal(found.row["channel_id"]))
 
     @discord.ui.button(label="Limit", custom_id=panel_id("limit"), row=0)
     async def limit(self, interaction: discord.Interaction, button: Any) -> None:
-        if await panel_context(interaction) is None:
+        found = await panel_context(interaction)
+        if found is None:
             return
-        await interaction.response.send_modal(LimitModal())
+        await interaction.response.send_modal(LimitModal(found.row["channel_id"]))
 
     @discord.ui.button(label="Lock / Unlock", custom_id=panel_id("lock"), row=0)
     async def lock(self, interaction: discord.Interaction, button: Any) -> None:
-        row = await panel_context(interaction)
-        if row is None:
-            return
-        await self._toggle(interaction, row, "connect")
+        await self._toggle(interaction, "connect")
 
     @discord.ui.button(label="Hide / Show", custom_id=panel_id("hide"), row=0)
     async def hide(self, interaction: discord.Interaction, button: Any) -> None:
-        row = await panel_context(interaction)
-        if row is None:
-            return
-        await self._toggle(interaction, row, "view_channel")
+        await self._toggle(interaction, "view_channel")
 
     @discord.ui.button(label="Kick", custom_id=panel_id("kick"), row=1)
     async def kick(self, interaction: discord.Interaction, button: Any) -> None:
@@ -769,9 +1121,17 @@ class TempVoicePanel(AnswersErrors, discord.ui.View):
     async def ban(self, interaction: discord.Interaction, button: Any) -> None:
         await self._pick(interaction, "ban", "Who should be kept out of this channel?")
 
+    @discord.ui.button(label="Unban", custom_id=panel_id("unban"), row=1)
+    async def unban(self, interaction: discord.Interaction, button: Any) -> None:
+        await self._pick(interaction, "unban", "Who should be let back in?")
+
     @discord.ui.button(label="Permit", custom_id=panel_id("permit"), row=1)
     async def permit(self, interaction: discord.Interaction, button: Any) -> None:
         await self._pick(interaction, "permit", "Who should be let in?")
+
+    @discord.ui.button(label="Unpermit", custom_id=panel_id("unpermit"), row=1)
+    async def unpermit(self, interaction: discord.Interaction, button: Any) -> None:
+        await self._pick(interaction, "unpermit", "Whose invite should be taken back?")
 
     @discord.ui.button(label="Transfer", custom_id=panel_id("transfer"), row=2)
     async def transfer(self, interaction: discord.Interaction, button: Any) -> None:
@@ -779,72 +1139,32 @@ class TempVoicePanel(AnswersErrors, discord.ui.View):
 
     @discord.ui.button(label="Claim", custom_id=panel_id("claim"), row=2)
     async def claim(self, interaction: discord.Interaction, button: Any) -> None:
-        row = await panel_context(interaction, owner_only=False)
-        if row is None:
+        found = await panel_context(interaction, owner_only=False)
+        if found is None:
             return
         await interaction.response.defer(ephemeral=True)
-        channel = interaction.channel
-        async with channel_lock(interaction.client, channel.id):
-            fresh = await get_row(interaction.client.db, channel.id)
-            if fresh is None:
-                await answer(interaction, NOT_A_TEMP_CHANNEL)
-                return
-            owner_id = fresh["owner_id"]
-            if is_panel_owner(owner_id, interaction.user.id):
-                await answer(interaction, "You already own this channel, so nothing changed.")
-                return
-            if int(owner_id) != int(row["owner_id"]):
-                await answer(interaction, CLAIM_LOST)
-                return
-            here = connected_ids(channel)
-            if interaction.user.id not in here:
-                await answer(interaction, CLAIM_NEEDS_CONNECTION)
-                return
-            if owner_id in here:
-                await answer(interaction, OWNER_STILL_HERE.format(owner_id=owner_id))
-                return
-            await hand_over(interaction.client, channel, owner_id, interaction.user)
-            await panel_log(interaction, "claim", from_id=owner_id)
-        await answer(interaction, "This channel is yours now.")
+        await answer(interaction, await do_claim(interaction, found.channel, found.row))
 
     async def _pick(self, interaction: discord.Interaction, action: str, placeholder: str) -> None:
-        if await panel_context(interaction) is None:
+        found = await panel_context(interaction)
+        if found is None:
             return
         await interaction.response.send_message(
-            placeholder, view=MemberPickView(action, placeholder), ephemeral=True
+            placeholder,
+            view=MemberPickView(action, placeholder, found.row["channel_id"]),
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    async def _toggle(self, interaction: discord.Interaction, row: Any, permission: str) -> None:
+    async def _toggle(self, interaction: discord.Interaction, permission: str) -> None:
+        found = await panel_context(interaction)
+        if found is None:
+            return
         if not interaction.response.is_done():
             await interaction.response.defer(ephemeral=True)
-        channel = interaction.channel
-        everyone = channel.guild.default_role
-        overwrite = channel.overwrites_for(everyone)
-        was_off = getattr(overwrite, permission) is False
-        setattr(overwrite, permission, None if was_off else False)
-        try:
-            await channel.set_permissions(
-                everyone, overwrite=overwrite, reason="Black Bloc temp voice"
-            )
-        except discord.HTTPException as exc:
-            log.warning("temp voice: %s toggle refused in %s: %s", permission, channel.id, exc)
-            await answer(interaction, CANNOT_EDIT)
-            return
-        locking = permission == "connect"
-        if locking:
-            await save_prefs(interaction.client.db, row["owner_id"], locked=not was_off)
-            said = "Unlocked — anyone may join." if was_off else "Locked — nobody new may join."
-            kind = "unlock" if was_off else "lock"
-        else:
-            await save_prefs(interaction.client.db, row["owner_id"], hidden=not was_off)
-            said = (
-                "Visible again to everyone."
-                if was_off
-                else "Hidden — only people already in it can see it."
-            )
-            kind = "show" if was_off else "hide"
-        await panel_log(interaction, kind)
-        await answer(interaction, said)
+        await answer(
+            interaction, await do_privacy(interaction, found.channel, found.row, permission)
+        )
 
 
 class TempVoice(commands.Cog):
@@ -856,6 +1176,9 @@ class TempVoice(commands.Cog):
 
     tempvoice = app_commands.Group(
         name="tempvoice", description="Temporary voice channels people make by joining one"
+    )
+    voice = app_commands.Group(
+        name="voice", description="Change your own temporary voice channel"
     )
 
     def loop_health(self, name: str) -> tuple[str | None, str | None]:
@@ -999,6 +1322,12 @@ class TempVoice(commands.Cog):
             member.display_name,
             pref(prefs, "name"),
         )
+        remembered = pref(prefs, "bitrate")
+        extra: dict[str, Any] = {}
+        if remembered:
+            extra["bitrate"] = clamp_bitrate(
+                int(remembered) // 1000, guild_bitrate_ceiling(guild)
+            )
         try:
             channel = await guild.create_voice_channel(
                 name,
@@ -1014,6 +1343,7 @@ class TempVoice(commands.Cog):
                 ),
                 user_limit=int(pref(prefs, "user_limit") or 0),
                 reason=f"Black Bloc temp voice for {member}",
+                **extra,
             )
         except discord.HTTPException as exc:
             log.warning("temp voice: could not create a channel for %s: %s", member.id, exc)
@@ -1071,25 +1401,27 @@ class TempVoice(commands.Cog):
         )
 
     async def _post_panel(self, guild: Any, channel: Any, member: Any) -> None:
-        guard = getattr(self.bot, "guard", None)
-        if guard is not None and not guard.allows_channel(channel.id):
-            log.warning("temp voice: TEST MODE — no control panel posted in %s", channel.id)
+        home = panel_home(self.bot, channel)
+        if home is None:
+            log.warning("temp voice: TEST MODE — no test channel to put the panel for %s in",
+                        channel.id)
             await log_action(
                 self.bot,
                 guild,
-                "tempvoice.would_post_panel",
+                "tempvoice.panel_failed",
                 target=member,
-                details={"channel_id": channel.id},
+                details={"channel_id": channel.id, "reason": "no_test_channel"},
             )
             return
+        elsewhere = home.id != channel.id
         try:
-            message = await channel.send(
-                panel_text(member),
+            message = await home.send(
+                panel_text(member, channel, elsewhere=elsewhere),
                 view=TempVoicePanel(),
                 allowed_mentions=discord.AllowedMentions.none(),
             )
         except Exception as exc:
-            log.warning("temp voice: could not post the panel in %s: %s", channel.id, exc)
+            log.warning("temp voice: could not post the panel in %s: %s", home.id, exc)
             await log_action(
                 self.bot,
                 guild,
@@ -1098,7 +1430,15 @@ class TempVoice(commands.Cog):
                 details={"channel_id": channel.id, "reason": f"{type(exc).__name__}: {exc}"},
             )
             return
-        await set_panel_message(self.bot.db, channel.id, message.id)
+        await set_panel_message(self.bot.db, channel.id, message.id, home.id)
+        if elsewhere:
+            await log_action(
+                self.bot,
+                guild,
+                "tempvoice.panel_elsewhere",
+                target=member,
+                details={"channel_id": channel.id, "panel_channel_id": home.id},
+            )
 
     def _may_act_in(self, channel: Any) -> bool:
         return may_act_in(self.bot, channel)
@@ -1241,6 +1581,148 @@ class TempVoice(commands.Cog):
             "tempvoice.mode",
             actor=interaction.user,
             details={"mode": mode.value},
+        )
+
+    async def _voice_target(
+        self, interaction: discord.Interaction, *, owner_only: bool = True
+    ) -> Target | None:
+        """The temp channel this command acts on, or None once the caller has been answered."""
+        if interaction.guild is None:
+            await interaction.response.send_message(GUILD_ONLY, ephemeral=True)
+            return None
+        store = self.bot.store
+        role_id = store.get(interaction.guild.id, "tempvoice_allowed_role_id")
+        if not may_use_voice(role_id, interaction.user):
+            await interaction.response.send_message(
+                VOICE_NEEDS_ROLE.format(role_id=role_id),
+                ephemeral=True,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+            return None
+        if not await self._database_ready(interaction):
+            return None
+        rows = await rows_for_guild(self.bot.db, interaction.guild.id)
+        here = getattr(getattr(interaction.user, "voice", None), "channel", None)
+        row = pick_row(rows, interaction.user.id, getattr(here, "id", None), owner_only=owner_only)
+        if row is None:
+            lobby = store.get(interaction.guild.id, "tempvoice_creator_name")
+            await interaction.response.send_message(
+                NO_OWNED_CHANNEL.format(lobby=lobby) if owner_only else CLAIM_NEEDS_A_CHANNEL,
+                ephemeral=True,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+            return None
+        channel = temp_channel(interaction, row["channel_id"])
+        if channel is None:
+            await interaction.response.send_message(CHANNEL_GONE, ephemeral=True)
+            return None
+        return Target(row, channel)
+
+    async def _act(
+        self, interaction: discord.Interaction, handler: Any, *args: Any, owner_only: bool = True
+    ) -> None:
+        found = await self._voice_target(interaction, owner_only=owner_only)
+        if found is None:
+            return
+        await interaction.response.defer(ephemeral=True)
+        await answer(interaction, await handler(interaction, found.channel, found.row, *args))
+
+    @voice.command(name="rename", description="Rename your temporary voice channel")
+    @app_commands.describe(name="What the channel should be called")
+    async def voice_rename(self, interaction: discord.Interaction, name: str) -> None:
+        await self._act(interaction, do_rename, name)
+
+    @voice.command(name="limit", description="Cap how many people can be in your channel")
+    @app_commands.describe(people="0 to 99; 0 means no limit")
+    async def voice_limit(
+        self, interaction: discord.Interaction, people: app_commands.Range[int, 0, 99]
+    ) -> None:
+        await self._act(interaction, do_limit, int(people))
+
+    @voice.command(name="lock", description="Stop anyone new joining your channel")
+    async def voice_lock(self, interaction: discord.Interaction) -> None:
+        await self._act(interaction, do_privacy, "connect", True)
+
+    @voice.command(name="unlock", description="Let people join your channel again")
+    async def voice_unlock(self, interaction: discord.Interaction) -> None:
+        await self._act(interaction, do_privacy, "connect", False)
+
+    @voice.command(name="hide", description="Hide your channel from everyone not in it")
+    async def voice_hide(self, interaction: discord.Interaction) -> None:
+        await self._act(interaction, do_privacy, "view_channel", True)
+
+    @voice.command(name="show", description="Show your channel to everyone again")
+    async def voice_show(self, interaction: discord.Interaction) -> None:
+        await self._act(interaction, do_privacy, "view_channel", False)
+
+    @voice.command(name="kick", description="Move somebody out of your channel")
+    @app_commands.describe(member="Who should leave")
+    async def voice_kick(self, interaction: discord.Interaction, member: discord.Member) -> None:
+        await self._act(interaction, do_kick, member)
+
+    @voice.command(name="ban", description="Keep somebody out of your channel")
+    @app_commands.describe(member="Who should be kept out")
+    async def voice_ban(self, interaction: discord.Interaction, member: discord.Member) -> None:
+        await self._act(interaction, do_ban, member)
+
+    @voice.command(name="unban", description="Let somebody you banned back in")
+    @app_commands.describe(member="Who should be let back in")
+    async def voice_unban(self, interaction: discord.Interaction, member: discord.Member) -> None:
+        await self._act(interaction, do_forget_member, member, "unban")
+
+    @voice.command(name="permit", description="Let somebody into your channel by name")
+    @app_commands.describe(member="Who should be let in")
+    async def voice_permit(self, interaction: discord.Interaction, member: discord.Member) -> None:
+        await self._act(interaction, do_permit, member)
+
+    @voice.command(name="unpermit", description="Take back somebody's way into your channel")
+    @app_commands.describe(member="Whose invite should be taken back")
+    async def voice_unpermit(
+        self, interaction: discord.Interaction, member: discord.Member
+    ) -> None:
+        await self._act(interaction, do_forget_member, member, "unpermit")
+
+    @voice.command(name="claim", description="Take over the channel you are in when its owner left")
+    async def voice_claim(self, interaction: discord.Interaction) -> None:
+        await self._act(interaction, do_claim, owner_only=False)
+
+    @voice.command(name="transfer", description="Hand your channel to somebody else")
+    @app_commands.describe(member="Who should own it")
+    async def voice_transfer(
+        self, interaction: discord.Interaction, member: discord.Member
+    ) -> None:
+        await self._act(interaction, do_transfer, member)
+
+    @voice.command(name="bitrate", description="Set your channel's audio quality")
+    @app_commands.describe(kbps="8 to 96; higher needs a higher server boost level")
+    async def voice_bitrate(
+        self, interaction: discord.Interaction, kbps: app_commands.Range[int, MIN_BITRATE,
+                                                                        MAX_BITRATE]
+    ) -> None:
+        await self._act(interaction, do_bitrate, int(kbps))
+
+    @voice.command(name="region", description="Pick which of Discord's servers carries the audio")
+    @app_commands.describe(region="A region, or auto to let Discord choose")
+    async def voice_region(self, interaction: discord.Interaction, region: str) -> None:
+        await self._act(interaction, do_region, region)
+
+    @voice_region.autocomplete("region")
+    async def _region_options(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        return [app_commands.Choice(name=name, value=name) for name in region_choices(current)]
+
+    @voice.command(name="info", description="Show how your temporary channel is set up")
+    async def voice_info(self, interaction: discord.Interaction) -> None:
+        found = await self._voice_target(interaction)
+        if found is None:
+            return
+        role_ids = [getattr(role, "id", 0) for role in getattr(interaction.guild, "roles", ())]
+        role_ids.append(getattr(interaction.guild.default_role, "id", 0))
+        await interaction.response.send_message(
+            "\n".join(info_lines(found.channel, found.row, role_ids)),
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
         )
 
 
