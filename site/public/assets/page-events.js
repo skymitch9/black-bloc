@@ -75,7 +75,7 @@ async function load() {
   const query = state.status ? `?status=${encodeURIComponent(state.status)}` : '';
   const payload = await api(`/api/events${query}`);
   const rows = listOf(payload, 'events');
-  await names(idsIn(rows, ['requester_id', 'decided_by']));
+  await names(idsIn(rows, ['requester_id', 'decided_by_id']));
 
   const say = notice();
   const status = el('select', { class: 'input' });
@@ -93,7 +93,7 @@ async function load() {
     { label: 'Asked by', cell: (row) => nameNode(row.requester_id, row.requester_name) },
     { label: 'Starts', cell: (row) => when(row.starts_at), className: 'mono' },
     { label: 'Status', cell: (row) => badge(row.status, TONE[row.status] || null) },
-    { label: 'Decided by', cell: (row) => nameNode(row.decided_by, row.decided_by_name) },
+    { label: 'Decided by', cell: (row) => nameNode(row.decided_by_id, row.decided_by_name) },
     { label: 'Why not', cell: (row) => row.deny_reason, className: 'wrap' },
     { label: '', cell: (row) => decide(row, say) },
   ], rows, { empty: 'Nothing matches that.' });

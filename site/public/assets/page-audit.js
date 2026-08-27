@@ -22,7 +22,7 @@ function settingsTable(rows) {
     { label: 'When', cell: (row) => when(row.updated_at || row.at), className: 'mono' },
     { label: 'Key', cell: (row) => el('span', { class: 'mono', text: row.key }) },
     { label: 'Value', cell: (row) => valueNode(row.value), className: 'wrap' },
-    { label: 'By', cell: (row) => nameNode(row.updated_by || row.by, row.updated_by_name || row.by_name) },
+    { label: 'By', cell: (row) => nameNode(row.updated_by_id, row.updated_by_name) },
   ], rows, { empty: 'No setting has been changed yet.' });
 }
 
@@ -49,7 +49,7 @@ async function load() {
   const allActions = listOf(actions, 'actions');
   const actionRows = kindFilter ? allActions : allActions.filter((row) => String(row.kind || '').startsWith(WEB));
 
-  await names(idsIn(auditRows, ['updated_by', 'by'])
+  await names(idsIn(auditRows, ['updated_by_id'])
     .concat(idsInValues(auditRows))
     .concat(idsIn(allActions, ['actor_id', 'target_id'])));
 

@@ -209,6 +209,58 @@ def candidate_text(match: Any) -> str:
     return shown + (f" and {more} more" if more > 0 else "")
 
 
+async def members_of(guild: Any) -> list[Any]:
+    """Every member Black Bloc can see, chunking first when the cache is short."""
+    members = list(getattr(guild, "members", ()) or ())
+    expected = int(getattr(guild, "member_count", 0) or 0)
+    if expected and len(members) < expected:
+        try:
+            await guild.chunk()
+        except Exception as exc:
+            log.warning("birthdays: could not fill the member cache (%s)", exc)
+        members = list(getattr(guild, "members", ()) or ())
+    return members
+
+
+async def import_rows(
+    bot: Any, guild: Any, rows: list[Any], as_of: int, members: list[Any]
+) -> dict[str, list[str]]:
+    """The Birthday Bot seed, for slash and web alike: what was taken and what was not."""
+    result: dict[str, list[str]] = {
+        "imported": [],
+        "already": [],
+        "ambiguous": [],
+        "not_found": [],
+    }
+    for row in rows:
+        where = f"{row.display_name} — {month_day_text(row.month, row.day)}"
+        match = resolve(row, members)
+        if match.status == "not_found":
+            result["not_found"].append(where)
+            continue
+        if match.status == "ambiguous":
+            result["ambiguous"].append(f"{where} → {candidate_text(match)}")
+            continue
+        user_id = match.member_id
+        existing = await get_birthday(bot.db, user_id)
+        if existing is not None:
+            result["already"].append(
+                f"{where} → <@{user_id}> (kept the {existing['source']} entry)"
+            )
+            continue
+        await save_birthday(
+            bot.db,
+            guild.id,
+            user_id,
+            row.month,
+            row.day,
+            year_from_age(row.age_shown, as_of),
+            "import",
+        )
+        result["imported"].append(f"{where} → <@{user_id}>")
+    return result
+
+
 def report_lines(result: dict[str, list[str]], as_of_year: int, searched: int = 0) -> list[str]:
     lines = [
         f"**{len(result['imported'])} imported** · {len(result['already'])} already stored · "
@@ -835,53 +887,12 @@ class Birthdays(commands.Cog):
         )
 
     async def members_of(self, guild: Any) -> list[Any]:
-        """Every member Black Bloc can see, chunking first when the cache is short."""
-        members = list(getattr(guild, "members", ()) or ())
-        expected = int(getattr(guild, "member_count", 0) or 0)
-        if expected and len(members) < expected:
-            try:
-                await guild.chunk()
-            except Exception as exc:
-                log.warning("birthdays: could not fill the member cache (%s)", exc)
-            members = list(getattr(guild, "members", ()) or ())
-        return members
+        return await members_of(guild)
 
     async def _import(
         self, guild: Any, rows: list[Any], as_of: int, members: list[Any]
     ) -> dict[str, list[str]]:
-        result: dict[str, list[str]] = {
-            "imported": [],
-            "already": [],
-            "ambiguous": [],
-            "not_found": [],
-        }
-        for row in rows:
-            where = f"{row.display_name} — {month_day_text(row.month, row.day)}"
-            match = resolve(row, members)
-            if match.status == "not_found":
-                result["not_found"].append(where)
-                continue
-            if match.status == "ambiguous":
-                result["ambiguous"].append(f"{where} → {candidate_text(match)}")
-                continue
-            user_id = match.member_id
-            existing = await get_birthday(self.bot.db, user_id)
-            if existing is not None:
-                result["already"].append(
-                    f"{where} → <@{user_id}> (kept the {existing['source']} entry)"
-                )
-                continue
-            await save_birthday(
-                self.bot.db,
-                guild.id,
-                user_id,
-                row.month,
-                row.day,
-                year_from_age(row.age_shown, as_of),
-                "import",
-            )
-            result["imported"].append(f"{where} → <@{user_id}>")
-        return result
+        return await import_rows(self.bot, guild, rows, as_of, members)
 
 
 async def setup(bot: commands.Bot) -> None:

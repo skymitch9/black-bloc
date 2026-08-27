@@ -22,6 +22,11 @@ log = logging.getLogger(__name__)
 
 CORE_KEYS = ("log_channel_id", "staff_channel_id", "role_menu_channel_id")
 CORE = "core"
+NAMESPACE_OVERRIDE = {
+    "modlog_channel_id": "automod",
+    "mod_dm_on_action": "automod",
+    "carl_modlog_channel_id": "automod",
+}
 AUDIT_DEFAULT_LIMIT = 100
 AUDIT_MAX_LIMIT = 500
 
@@ -36,6 +41,8 @@ UNKNOWN_KEY = (
 
 
 def namespace_of(key: str) -> str:
+    if key in NAMESPACE_OVERRIDE:
+        return NAMESPACE_OVERRIDE[key]
     if key in CORE_KEYS:
         return CORE
     head, _, rest = key.partition("_")

@@ -34,7 +34,7 @@ function messageNode(message) {
       el('span', { text: when(message.at) }),
       el('span', { text: DIRECTION_LABEL[direction] }),
       message.anonymous ? badge('anonymous', 'warn') : null,
-      message.delivered === 0 ? badge('not delivered', 'danger') : null,
+      message.delivered === false ? badge('not delivered', 'danger') : null,
     ]),
     el('p', { class: 'msg-body', text: message.content || '(no text)' }),
   ]);
@@ -44,7 +44,7 @@ async function ticketView(id) {
   const payload = await api(`/api/modmail/tickets/${encodeURIComponent(id)}`);
   const ticket = payload && payload.ticket ? payload.ticket : payload;
   const messages = listOf(payload, 'messages');
-  await names(idsIn([ticket], ['user_id', 'closed_by']).concat(idsIn(messages, ['author_id'])));
+  await names(idsIn([ticket], ['user_id', 'closed_by_id']).concat(idsIn(messages, ['author_id'])));
 
   const say = notice();
   const text = el('textarea', { class: 'input area', rows: '4', placeholder: 'what to send back' });
@@ -111,7 +111,7 @@ function snippetsCard(rows) {
   const list = table([
     { label: 'Name', cell: (row) => el('span', { class: 'mono', text: row.name }) },
     { label: 'Says', cell: (row) => row.content, className: 'wrap' },
-    { label: 'By', cell: (row) => nameNode(row.by, row.by_name) },
+    { label: 'By', cell: (row) => nameNode(row.by_id, row.by_name) },
     {
       label: '',
       cell: (row) => button('Delete', async () => {
@@ -156,7 +156,7 @@ function blocksCard(rows) {
   const list = table([
     { label: 'Member', cell: (row) => nameNode(row.user_id, row.user_name) },
     { label: 'Since', cell: (row) => when(row.at), className: 'mono' },
-    { label: 'By', cell: (row) => nameNode(row.by, row.by_name) },
+    { label: 'By', cell: (row) => nameNode(row.by_id, row.by_name) },
     { label: 'Why', cell: (row) => row.reason, className: 'wrap' },
     {
       label: '',
@@ -180,7 +180,7 @@ async function load() {
   const tickets = listOf(ticketPayload, 'tickets');
   const snippets = listOf(snippetPayload, 'snippets');
   const blocks = listOf(blockPayload, 'blocks');
-  await names(idsIn(tickets, ['user_id', 'closed_by']).concat(idsIn(snippets, ['by'])).concat(idsIn(blocks, ['user_id', 'by'])));
+  await names(idsIn(tickets, ['user_id', 'closed_by_id']).concat(idsIn(snippets, ['by_id'])).concat(idsIn(blocks, ['user_id', 'by_id'])));
 
   const status = el('select', { class: 'input' });
   for (const one of [['open', 'open'], ['closed', 'closed'], ['', 'every ticket']]) {
@@ -197,7 +197,6 @@ async function load() {
     { label: 'Member', cell: (row) => nameNode(row.user_id, row.user_name) },
     { label: 'Opened', cell: (row) => when(row.opened_at), className: 'mono' },
     { label: 'Status', cell: (row) => badge(row.status, row.status === 'open' ? 'ok' : null) },
-    { label: 'Messages', cell: (row) => (row.messages === undefined ? '—' : String(row.messages)) },
     {
       label: '',
       cell: (row) => button('Open', () => {

@@ -6,11 +6,32 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
-from ...birthdays import date_problem, month_day_text, year_problem
-from ...cogs.community.birthdays import delete_birthday, rows_for_guild, save_birthday
+from ...actionlog import log_action
+from ...birthdays import (
+    date_problem,
+    import_as_of_year,
+    load_import_rows,
+    month_day_text,
+    year_problem,
+)
+from ...cogs.community.birthdays import (
+    delete_birthday,
+    import_rows,
+    members_of,
+    report_lines,
+    rows_for_guild,
+    save_birthday,
+)
 from ..auth import Refused, staff_dependency
 from ..names import as_id, resolve_one
-from ..writes import note, require_db, require_guild, wanted_id, writer_dependency
+from ..writes import (
+    actor_for,
+    note,
+    require_db,
+    require_guild,
+    wanted_id,
+    writer_dependency,
+)
 
 log = logging.getLogger(__name__)
 
@@ -22,6 +43,10 @@ NO_BIRTHDAY = (
 )
 NEEDS_A_DATE = (
     "A birthday needs a month and a day, so nothing was stored. Pick both and send it again."
+)
+IMPORT_EMPTY = (
+    "There is no Birthday Bot export to read, so nothing was imported. The seed file ships with "
+    "Black Bloc; ask whoever deployed it whether it was left out."
 )
 
 
@@ -88,6 +113,40 @@ def build_router(bot: Any) -> APIRouter:
         rows = await rows_for_guild(bot.db, guild.id)
         stored = next(row for row in rows if int(row["user_id"]) == wanted)
         return birthday_row(guild, stored)
+
+    @router.post("/import")
+    async def birthdays_import(request: Request) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        rows = load_import_rows()
+        if not rows:
+            raise Refused(409, "nothing_to_import", IMPORT_EMPTY)
+        as_of = import_as_of_year()
+        members = await members_of(guild)
+        result = await import_rows(bot, guild, rows, as_of, members)
+        await log_action(
+            bot,
+            guild,
+            "birthday.import",
+            actor=actor_for(bot, who, guild),
+            details={key: len(value) for key, value in result.items()}
+            | {"searched": len(members)},
+        )
+        await note(
+            bot,
+            guild,
+            "web.birthday.import",
+            who,
+            details={key: len(value) for key, value in result.items()},
+        )
+        return {
+            "counts": {key: len(value) for key, value in result.items()},
+            "searched": len(members),
+            "as_of_year": as_of,
+            "report": result,
+            "notes": report_lines(result, as_of, len(members)),
+        }
 
     @router.delete("/{user_id}")
     async def birthday_clear(request: Request, user_id: str) -> dict[str, Any]:

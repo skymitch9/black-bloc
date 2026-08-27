@@ -26,7 +26,7 @@ async function load() {
   const say = notice();
 
   const list = table([
-    { label: 'Channel', cell: (row) => nameNode(row.channel_id, row.channel_name) },
+    { label: 'Channel', cell: (row) => nameNode(row.channel_id, row.name) },
     { label: 'Owner', cell: (row) => nameNode(row.owner_id, row.owner_name) },
     { label: 'Made from', cell: (row) => nameNode(row.creator_id, row.creator_name) },
     { label: 'Since', cell: (row) => when(row.created_at), className: 'mono' },

@@ -77,12 +77,13 @@ const SETTING_SPECS = [
   ['golive_live_role_id', 'role', '900000000000000003', null, 'role given while someone is streaming'],
   ['golive_require_role_id', 'role', null, null, 'only announce people who have this role'],
   ['golive_ignore_role_id', 'role', null, null, 'never announce people who have this role'],
-  ['golive_cooldown_minutes', 'int', 60, 60, 'minutes before the same person is announced again', null, 1440],
+  ['golive_cooldown_minutes', 'int', 60, 60, 'minutes before the same person is announced again'],
   ['golive_ping_role_id', 'role', null, null, 'role mentioned in front of every go-live announcement'],
-  ['golive_max_session_hours', 'int', 12, 12, 'hours before a stream still marked live is closed anyway', null, 48],
+  ['golive_max_session_hours', 'int', 12, 12, 'hours before a stream still marked live is closed anyway'],
   ['tempvoice_mode', 'enum', 'on', 'off', 'off, or on (join-to-create makes a temporary voice channel)', ['off', 'on']],
   ['tempvoice_creator_ids', 'channels', ['800000000000000009'], [], 'the join-to-create channels; /tempvoice setup fills this in'],
   ['tempvoice_name_template', 'text', "{user}'s room", "{user}'s room", 'what a spawned channel is called; {user} is the member'],
+  ['tempvoice_creator_name', 'text', 'join to create a channel', 'join to create a channel', 'what the join-to-create channel is called'],
   ['tempvoice_allowed_role_id', 'role', null, null, 'only members with this role get a temporary channel'],
   ['honeypot_mode', 'enum', 'shadow', 'off', 'off, shadow (log only) or on (ban whoever posts in the trap)', ['off', 'shadow', 'on']],
   ['honeypot_channel_ids', 'channels', ['800000000000000007'], [], 'the trap channels; /honeypot setup fills this in'],
@@ -93,8 +94,8 @@ const SETTING_SPECS = [
   ['events_announce_channel_id', 'channel', '800000000000000006', null, 'where an approved event is announced'],
   ['events_ping_role_id', 'role', null, null, 'role mentioned when an event is announced and when it starts'],
   ['events_create_scheduled', 'bool', true, false, 'true to make a real Discord scheduled event when one is approved'],
-  ['events_channel_retention_days', 'int', 7, 7, 'days a finished event’s channel is kept before deletion, 1 to 90', null, 90],
-  ['events_max_late_minutes', 'int', 30, 30, 'minutes an event may start late and still be announced', null, 240],
+  ['events_channel_retention_days', 'int', 7, 7, 'days a finished event’s channel is kept before deletion, 1 to 365', null, 365, 1],
+  ['events_max_late_minutes', 'int', 30, 30, 'minutes an event may start late and still be announced', null, 1440],
   ['birthday_mode', 'enum', 'shadow', 'off', 'off, shadow (log only) or on (post birthday wishes)', ['off', 'shadow', 'on']],
   ['birthday_channel_id', 'channel', '800000000000000002', null, 'where birthday wishes are posted'],
   ['birthday_template', 'text', 'Happy birthday {name}!', 'Happy birthday {name}!', 'the birthday wording; {name} and {age}'],
@@ -110,7 +111,7 @@ const SETTING_SPECS = [
   ['automod_rules', 'json', null, null, 'the automod rule book; the Automod tab is what changes it'],
   ['automod_exempt_role_ids', 'roles', ['900000000000000001', '900000000000000002'], [], 'roles automod ignores'],
   ['automod_exempt_channel_ids', 'channels', ['800000000000000003'], [], 'channels automod never reads'],
-  ['automod_warn_threshold', 'int', 8, 8, 'warnings before Black Bloc says so in the log, 0 to stop counting', null, 50],
+  ['automod_warn_threshold', 'int', 8, 8, 'warnings before Black Bloc says so in the log, 0 to stop counting', null, 100],
   ['modlog_channel_id', 'channel', '800000000000000004', null, 'where mod cases are posted; defaults to log_channel_id'],
   ['mod_dm_on_action', 'enum', 'server_action_reason', 'server_action', 'what a punished member is told', ['none', 'server_action', 'server_action_reason']],
   ['carl_modlog_channel_id', 'channel', '800000000000000012', null, 'Carl-bot’s mod log, which parity reads to compare'],
@@ -136,7 +137,8 @@ const RULE_HELP = {
   bad_words: 'the blocked word list',
 };
 
-const state = {
+function seedState() {
+  return {
   settings: new Map(SETTING_SPECS.map((spec) => [spec[0], spec[2]])),
   audit: [
     { key: 'automod_mode', value: 'shadow', updated_by: STAFF.id, updated_at: minutesAgo(220) },
@@ -231,43 +233,63 @@ const state = {
   nextAction: 42,
   nextCase: 10,
   nextMessage: 40,
-};
+  actions: seedActions(),
+  };
+}
 
-state.actions = [
-  { id: 41, at: minutesAgo(3), kind: 'web.settings_set', actor_id: STAFF.id, target_id: null, reason: 'automod_mode = shadow', details: { key: 'automod_mode', value: 'shadow' } },
+function seedActions() {
+  return [
+  { id: 41, at: minutesAgo(3), kind: 'web.settings.set', actor_id: STAFF.id, target_id: null, reason: 'automod_mode = shadow', details: { key: 'automod_mode', value: 'shadow' } },
   { id: 40, at: minutesAgo(20), kind: 'automod.would_timeout', actor_id: null, target_id: MEMBERS[4].id, reason: 'mention spam: 6 mentions in 30s', details: { rule: 'mention_spam' } },
   { id: 39, at: minutesAgo(30), kind: 'honeypot.would_ban', actor_id: null, target_id: MEMBERS[4].id, reason: 'posted in #free-nitro-here', details: null },
   { id: 38, at: minutesAgo(45), kind: 'tempvoice.channel_created', actor_id: MEMBERS[1].id, target_id: '800000000000000010', reason: null, details: null },
   { id: 37, at: minutesAgo(60), kind: 'events.requested', actor_id: MEMBERS[3].id, target_id: null, reason: 'Movie night', details: null },
   { id: 36, at: minutesAgo(88), kind: 'modmail.note_added', actor_id: STAFF.id, target_id: MEMBERS[3].id, reason: null, details: null },
   { id: 35, at: minutesAgo(120), kind: 'golive.would_announce', actor_id: null, target_id: MEMBERS[1].id, reason: 'Lethal Company', details: null },
-  { id: 34, at: minutesAgo(220), kind: 'web.settings_set', actor_id: STAFF.id, target_id: null, reason: 'automod_mode = shadow', details: null },
+  { id: 34, at: minutesAgo(220), kind: 'web.settings.set', actor_id: STAFF.id, target_id: null, reason: 'automod_mode = shadow', details: null },
   { id: 33, at: minutesAgo(400), kind: 'mod.warn', actor_id: MEMBERS[1].id, target_id: MEMBERS[5].id, reason: 'link spam', details: null },
   { id: 32, at: minutesAgo(800), kind: 'mod.warn', actor_id: STAFF.id, target_id: MEMBERS[4].id, reason: 'told to stop', details: null },
   { id: 31, at: minutesAgo(900), kind: 'settings.set', actor_id: MEMBERS[1].id, target_id: null, reason: 'golive_mode = shadow', details: null },
   { id: 30, at: minutesAgo(5000), kind: 'mod.ban', actor_id: STAFF.id, target_id: MEMBERS[7].id, reason: 'scam links', details: null },
-];
+  ];
+}
+
+let state = seedState();
+
+const CORE_KEYS = ['log_channel_id', 'staff_channel_id', 'role_menu_channel_id'];
+const NAMESPACE_OVERRIDE = {
+  modlog_channel_id: 'automod',
+  mod_dm_on_action: 'automod',
+  carl_modlog_channel_id: 'automod',
+};
 
 function namespaceOf(key) {
-  const head = key.split('_')[0];
-  if (['log', 'staff', 'role'].includes(head)) return 'core';
-  return head;
+  if (key in NAMESPACE_OVERRIDE) return NAMESPACE_OVERRIDE[key];
+  if (CORE_KEYS.includes(key)) return 'core';
+  const [head, ...rest] = key.split('_');
+  return rest.length ? head : 'core';
+}
+
+function keyRow(key) {
+  const [, type, , fallback, help, choices, max, min] = specOf(key);
+  return {
+    key,
+    type,
+    value: state.settings.get(key) ?? null,
+    default: fallback ?? null,
+    help,
+    ...(choices ? { choices } : {}),
+    ...(max === undefined || max === null ? {} : { max }),
+    ...(min === undefined || min === null ? {} : { min }),
+  };
 }
 
 function settingsPayload() {
-  const grouped = {};
-  for (const [key, type, , fallback, help, choices, max] of SETTING_SPECS) {
+  const grouped = { core: [] };
+  for (const [key] of SETTING_SPECS) {
     const namespace = namespaceOf(key);
     grouped[namespace] = grouped[namespace] || [];
-    grouped[namespace].push({
-      key,
-      type,
-      value: state.settings.get(key) ?? null,
-      default: fallback ?? null,
-      help,
-      ...(choices ? { choices } : {}),
-      ...(max === undefined || max === null ? {} : { max }),
-    });
+    grouped[namespace].push(keyRow(key));
   }
   return grouped;
 }
@@ -458,6 +480,13 @@ function match(pattern, path) {
   return params;
 }
 
+route('POST', '/api/mock/reset', () => {
+  // NOT part of the contract: it exists so site/mock/check.mjs can give every route the
+  // same fixture, the way each pytest case gets a fresh database.
+  state = seedState();
+  return { reset: true };
+});
+
 route('GET', '/api/auth/me', (context) => meBody(context.session));
 
 route('GET', '/api/auth/login', (context) => ({
@@ -528,8 +557,15 @@ route('GET', '/api/settings/audit', (context) => {
   requireStaff(context.session);
   const limit = Math.max(1, Math.min(Number(context.url.searchParams.get('limit') || 100), 500));
   return {
-    audit: state.audit.slice(0, limit).map((row) => ({ ...row, updated_by_name: memberName(row.updated_by) })),
-    notes: [],
+    audit: state.audit.slice(0, limit).map((row) => ({
+      key: row.key,
+      namespace: namespaceOf(row.key),
+      value: row.value,
+      updated_by_id: row.updated_by === null || row.updated_by === undefined ? null : String(row.updated_by),
+      updated_by_name: memberName(row.updated_by),
+      updated_at: row.updated_at,
+    })),
+    limit,
   };
 });
 
@@ -540,8 +576,8 @@ route('PUT', '/api/settings/:key', async (context) => {
   armingRefusal(context.params.key, value);
   state.settings.set(context.params.key, value);
   state.audit.unshift({ key: context.params.key, value, updated_by: STAFF.id, updated_at: now() });
-  logAction('web.settings_set', { reason: `${context.params.key} = ${JSON.stringify(value)}`, details: { key: context.params.key, value } });
-  return { key: context.params.key, value };
+  logAction('web.settings.set', { reason: `${context.params.key} = ${JSON.stringify(value)}`, details: { key: context.params.key, value } });
+  return keyRow(context.params.key);
 });
 
 route('DELETE', '/api/settings/:key', (context) => {
@@ -550,18 +586,30 @@ route('DELETE', '/api/settings/:key', (context) => {
   if (spec === null) throw new Refused(400, 'unknown_key', `Black Bloc has no setting called ${context.params.key}.`);
   state.settings.set(context.params.key, spec[3] ?? null);
   state.audit.unshift({ key: context.params.key, value: spec[3] ?? null, updated_by: STAFF.id, updated_at: now() });
-  logAction('web.settings_clear', { reason: context.params.key });
-  return { key: context.params.key, value: spec[3] ?? null };
+  logAction('web.settings.clear', { reason: context.params.key, details: { key: context.params.key } });
+  return { ...keyRow(context.params.key), cleared: true };
 });
+
+function menuRow(menu) {
+  return {
+    name: menu.name,
+    title: menu.title,
+    description: menu.description,
+    mode: menu.mode,
+    channel_id: menu.channel_id === null || menu.channel_id === undefined ? null : String(menu.channel_id),
+    message_id: menu.message_id === null || menu.message_id === undefined ? null : String(menu.message_id),
+    options: menu.options.map((option, at) => ({
+      role_id: String(option.role_id),
+      label: option.label ?? null,
+      emoji: option.emoji ?? null,
+      position: option.position ?? at,
+    })),
+  };
+}
 
 route('GET', '/api/rolemenus', (context) => {
   requireStaff(context.session);
-  return {
-    rolemenus: state.menus.map((menu) => ({
-      ...menu,
-      options: menu.options.map((option) => ({ ...option, role_name: memberName(option.role_id) })),
-    })),
-  };
+  return state.menus.map(menuRow);
 });
 
 route('POST', '/api/rolemenus', async (context) => {
@@ -582,8 +630,8 @@ route('POST', '/api/rolemenus', async (context) => {
     options: Array.isArray(body.options) ? body.options : [],
   };
   state.menus.unshift(menu);
-  logAction('web.rolemenu_create', { reason: name });
-  return menu;
+  logAction('web.rolemenu.create', { reason: name, details: { menu: name, mode: menu.mode } });
+  return menuRow(menu);
 });
 
 route('PUT', '/api/rolemenus/:name', async (context) => {
@@ -595,8 +643,8 @@ route('PUT', '/api/rolemenus/:name', async (context) => {
   if (body.description !== undefined) menu.description = body.description;
   if (body.mode !== undefined) menu.mode = body.mode;
   if (Array.isArray(body.options)) menu.options = body.options;
-  logAction('web.rolemenu_edit', { reason: menu.name });
-  return menu;
+  logAction('web.rolemenu.edit', { reason: menu.name, details: { menu: menu.name } });
+  return menuRow(menu);
 });
 
 route('DELETE', '/api/rolemenus/:name', (context) => {
@@ -604,8 +652,8 @@ route('DELETE', '/api/rolemenus/:name', (context) => {
   const at = state.menus.findIndex((entry) => entry.name === context.params.name);
   if (at < 0) throw new Refused(404, 'no_menu', `There is no role menu called ${context.params.name}.`);
   state.menus.splice(at, 1);
-  logAction('web.rolemenu_delete', { reason: context.params.name });
-  return { ok: true, name: context.params.name };
+  logAction('web.rolemenu.delete', { reason: context.params.name, details: { menu: context.params.name } });
+  return { deleted: true, name: context.params.name };
 });
 
 route('POST', '/api/rolemenus/:name/post', async (context) => {
@@ -617,13 +665,13 @@ route('POST', '/api/rolemenus/:name/post', async (context) => {
   guard('posting a role menu');
   menu.channel_id = String(body.channel_id);
   menu.message_id = String(Date.now());
-  logAction('web.rolemenu_post', { reason: menu.name, target_id: menu.channel_id });
-  return menu;
+  logAction('web.rolemenu.post', { reason: menu.name, target_id: menu.channel_id, details: { menu: menu.name, channel_id: menu.channel_id, message_id: menu.message_id } });
+  return { posted: true, name: menu.name, channel_id: menu.channel_id, message_id: menu.message_id };
 });
 
 route('GET', '/api/golive/links', (context) => {
   requireStaff(context.session);
-  return { links: state.golive.links.map((link) => ({ ...link, user_name: memberName(link.user_id) })) };
+  return state.golive.links.map((link) => ({ user_id: String(link.user_id), user_name: memberName(link.user_id), twitch_login: link.twitch_login, twitch_user_id: link.twitch_user_id, linked_at: link.linked_at }));
 });
 
 route('DELETE', '/api/golive/links/:user_id', (context) => {
@@ -631,26 +679,60 @@ route('DELETE', '/api/golive/links/:user_id', (context) => {
   const at = state.golive.links.findIndex((link) => link.user_id === context.params.user_id);
   if (at < 0) throw new Refused(404, 'no_link', 'That member has no Twitch link stored, so there was nothing to unlink.');
   state.golive.links.splice(at, 1);
-  logAction('web.golive_unlink', { target_id: context.params.user_id });
-  return { ok: true, user_id: context.params.user_id };
+  logAction('web.golive.unlink', { target_id: context.params.user_id });
+  return { unlinked: true, user_id: context.params.user_id };
 });
 
 route('GET', '/api/golive/optouts', (context) => {
   requireStaff(context.session);
-  return { optouts: state.golive.optouts.map((row) => ({ ...row, user_name: memberName(row.user_id) })) };
+  return state.golive.optouts.map((row) => ({ user_id: String(row.user_id), user_name: memberName(row.user_id), at: row.at }));
 });
 
 route('GET', '/api/golive/sessions', (context) => {
   requireStaff(context.session);
   const limit = Math.max(1, Math.min(Number(context.url.searchParams.get('limit') || 50), 200));
-  return { sessions: state.golive.sessions.slice(0, limit).map((row) => ({ ...row, user_name: memberName(row.user_id) })) };
+  return state.golive.sessions.slice(0, limit).map((row) => ({
+    user_id: String(row.user_id),
+    user_name: memberName(row.user_id),
+    id: row.id,
+    source: row.source,
+    url: row.url,
+    game: row.game,
+    title: row.title,
+    started_at: row.started_at,
+    ended_at: row.ended_at,
+    mode: row.mode,
+    announced_message_id: row.announced_message_id === null ? null : String(row.announced_message_id),
+  }));
 });
+
+function eventRow(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    location: row.location,
+    starts_at: row.starts_at,
+    ends_at: row.ends_at,
+    minutes: row.ends_at ? Math.round((Date.parse(row.ends_at) - Date.parse(row.starts_at)) / 60000) : null,
+    status: row.status,
+    requester_id: String(row.requester_id),
+    requester_name: memberName(row.requester_id),
+    decided_by_id: row.decided_by === null || row.decided_by === undefined ? null : String(row.decided_by),
+    decided_by_name: memberName(row.decided_by),
+    decided_at: row.decided_at,
+    deny_reason: row.deny_reason,
+    review_channel_id: row.review_channel_id === undefined ? null : row.review_channel_id,
+    created_at: row.created_at,
+  };
+}
 
 route('GET', '/api/events', (context) => {
   requireStaff(context.session);
   const status = context.url.searchParams.get('status');
-  const rows = status ? state.events.filter((event) => event.status === status) : state.events;
-  return { events: rows.map((row) => ({ ...row, requester_name: memberName(row.requester_id), decided_by_name: memberName(row.decided_by) })) };
+  const wanted = String(status || '').split(',').filter(Boolean);
+  const rows = wanted.length ? state.events.filter((event) => wanted.includes(event.status)) : state.events;
+  return rows.map(eventRow);
 });
 
 function eventOf(id) {
@@ -668,8 +750,8 @@ route('POST', '/api/events/:id/approve', (context) => {
   event.status = 'approved';
   event.decided_by = STAFF.id;
   event.decided_at = now();
-  logAction('web.event_approve', { reason: event.title });
-  return event;
+  logAction('web.event.approved', { target_id: event.requester_id, details: { event_id: event.id } });
+  return { event: eventRow(event), message: `“${event.title}” is approved.` };
 });
 
 route('POST', '/api/events/:id/deny', async (context) => {
@@ -686,8 +768,8 @@ route('POST', '/api/events/:id/deny', async (context) => {
   event.deny_reason = body.reason;
   event.decided_by = STAFF.id;
   event.decided_at = now();
-  logAction('web.event_deny', { reason: body.reason });
-  return event;
+  logAction('web.event.denied', { target_id: event.requester_id, reason: body.reason, details: { event_id: event.id } });
+  return { event: eventRow(event), message: `“${event.title}” is denied.` };
 });
 
 route('POST', '/api/events/:id/cancel', (context) => {
@@ -697,13 +779,30 @@ route('POST', '/api/events/:id/cancel', (context) => {
   event.status = 'cancelled';
   event.decided_by = STAFF.id;
   event.decided_at = now();
-  logAction('web.event_cancel', { reason: event.title });
-  return event;
+  logAction('web.event.cancel', { target_id: event.requester_id, details: { event_id: event.id } });
+  return { event: eventRow(event), message: 'Cancelled.' };
 });
+
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+function birthdayRow(row) {
+  return {
+    user_id: String(row.user_id),
+    user_name: memberName(row.user_id),
+    month: Number(row.month),
+    day: Number(row.day),
+    year: row.year ? Number(row.year) : null,
+    when: `${MONTH_NAMES[Number(row.month) - 1]} ${Number(row.day)}`,
+    opted_in: Boolean(row.opted_in),
+    source: row.source,
+    set_at: row.set_at,
+    last_announced_on: row.last_announced_on ?? null,
+  };
+}
 
 route('GET', '/api/birthdays', (context) => {
   requireStaff(context.session);
-  return { birthdays: state.birthdays.map((row) => ({ ...row, user_name: memberName(row.user_id) })) };
+  return state.birthdays.map(birthdayRow);
 });
 
 route('PUT', '/api/birthdays/:user_id', async (context) => {
@@ -721,8 +820,8 @@ route('PUT', '/api/birthdays/:user_id', async (context) => {
   row.year = body.year ? Number(body.year) : null;
   row.set_at = now();
   if (!existing) state.birthdays.push(row);
-  logAction('web.birthday_set', { target_id: row.user_id, reason: `${month}/${day}` });
-  return row;
+  logAction('web.birthday.set', { target_id: row.user_id, details: { month, day, year: row.year } });
+  return birthdayRow(row);
 });
 
 route('DELETE', '/api/birthdays/:user_id', (context) => {
@@ -730,31 +829,77 @@ route('DELETE', '/api/birthdays/:user_id', (context) => {
   const at = state.birthdays.findIndex((row) => row.user_id === context.params.user_id);
   if (at < 0) throw new Refused(404, 'no_birthday', 'That member has no birthday stored, so there was nothing to remove.');
   state.birthdays.splice(at, 1);
-  logAction('web.birthday_clear', { target_id: context.params.user_id });
-  return { ok: true, user_id: context.params.user_id };
+  logAction('web.birthday.clear', { target_id: context.params.user_id });
+  return { removed: true, user_id: context.params.user_id };
+});
+
+route('POST', '/api/birthdays/import', (context) => {
+  requireStaff(context.session);
+  const searched = MEMBERS.length;
+  const asOf = 2026;
+  const report = {
+    imported: ['Dax — March 3 → <@700000000000000007>'],
+    already: ['Casey — February 14 → <@700000000000000002> (kept the self entry)'],
+    ambiguous: ['moth — June 1 → Moth, moth_light'],
+    not_found: ['someonewholeft — August 9'],
+  };
+  const counts = Object.fromEntries(Object.entries(report).map(([key, value]) => [key, value.length]));
+  logAction('web.birthday.import', { details: counts });
+  return {
+    counts,
+    searched,
+    as_of_year: asOf,
+    report,
+    notes: [
+      `**${counts.imported} imported** · ${counts.already} already stored · ${counts.ambiguous} ambiguous · ${counts.not_found} not found`,
+      `Matched against the **${searched}** members Black Bloc can see in this server.`,
+    ],
+  };
 });
 
 route('GET', '/api/tempvoice/channels', (context) => {
   requireStaff(context.session);
-  return {
-    channels: state.tempvoice.map((row) => ({
-      ...row,
-      channel_name: memberName(row.channel_id),
+  return state.tempvoice.map((row) => {
+    const live = CHANNELS.find((channel) => channel.id === String(row.channel_id)) || null;
+    return {
+      channel_id: String(row.channel_id),
+      name: live ? live.name : null,
+      gone: live === null,
+      owner_id: String(row.owner_id),
       owner_name: memberName(row.owner_id),
-      creator_name: memberName(row.creator_id),
-    })),
-  };
+      creator_id: String(row.creator_id),
+      created_at: row.created_at,
+      connected: row.connected ?? 0,
+    };
+  });
 });
 
-route('POST', '/api/tempvoice/setup', () => {
+route('POST', '/api/tempvoice/setup', (context) => {
+  requireStaff(context.session);
   guard('creating the join-to-create channel');
-  return { ok: true };
+  logAction('web.tempvoice.setup', { details: { name: null } });
+  return {
+    created: true,
+    outcome: 'repaired',
+    message: 'Black Bloc repaired the join-to-create channel it already had — <#800000000000000009> — instead of making a second one.',
+  };
 });
 
 route('GET', '/api/honeypot/hits', (context) => {
   requireStaff(context.session);
   const limit = Math.max(1, Math.min(Number(context.url.searchParams.get('limit') || 50), 200));
-  return { hits: state.honeypot.slice(0, limit).map((row) => ({ ...row, user_name: memberName(row.user_id), channel_name: memberName(row.channel_id) })) };
+  return state.honeypot.slice(0, limit).map((row) => ({
+    id: row.id,
+    user_id: String(row.user_id),
+    user_name: memberName(row.user_id),
+    channel_id: String(row.channel_id),
+    channel_name: memberName(row.channel_id),
+    message_id: row.message_id === null ? null : String(row.message_id),
+    content: row.content,
+    at: row.at,
+    mode: row.mode,
+    action: row.action,
+  }));
 });
 
 route('POST', '/api/honeypot/hits/:id/ban', (context) => {
@@ -763,14 +908,36 @@ route('POST', '/api/honeypot/hits/:id/ban', (context) => {
   if (!hit) throw new Refused(404, 'no_hit', 'That honeypot hit is not on file any more.');
   guard('banning from a honeypot hit');
   hit.action = 'banned';
-  logAction('web.honeypot_ban', { target_id: hit.user_id });
-  return hit;
+  logAction('web.honeypot.ban', { target_id: hit.user_id, details: { hit_id: hit.id } });
+  return { banned: true, hit_id: hit.id, message: `Banned <@${hit.user_id}> and purged their recent messages.` };
 });
 
-route('POST', '/api/honeypot/setup', () => {
+route('POST', '/api/honeypot/setup', (context) => {
+  requireStaff(context.session);
   guard('creating the trap channel');
-  return { ok: true };
+  logAction('web.honeypot.setup', { details: { name: null } });
+  return { created: true, message: '**free-nitro-here** is ready — <#800000000000000007>. Nobody but Black Bloc can post in it.' };
 });
+
+function caseRow(row) {
+  return {
+    id: row.id,
+    kind: row.kind,
+    user_id: row.user_id === null || row.user_id === undefined ? null : String(row.user_id),
+    user_name: memberName(row.user_id),
+    moderator_id: row.moderator_id === null || row.moderator_id === undefined ? null : String(row.moderator_id),
+    moderator_name: memberName(row.moderator_id),
+    reason: row.reason,
+    duration_s: row.duration_s ?? null,
+    at: row.at,
+    mode: row.mode,
+    applied: Boolean(row.applied),
+    actions: row.actions || [],
+    done: row.done || [],
+    failed: row.failed || [],
+    channel_id: row.channel_id === undefined || row.channel_id === null ? null : String(row.channel_id),
+  };
+}
 
 route('GET', '/api/mod/cases', (context) => {
   requireStaff(context.session);
@@ -780,10 +947,11 @@ route('GET', '/api/mod/cases', (context) => {
   const rows = userId ? state.cases.filter((row) => row.user_id === userId) : state.cases;
   const slice = rows.slice((page - 1) * size, page * size);
   return {
-    cases: slice.map((row) => ({ ...row, user_name: memberName(row.user_id), moderator_name: memberName(row.moderator_id) })),
+    cases: slice.map(caseRow),
+    total: rows.length,
     page,
     pages: Math.max(1, Math.ceil(rows.length / size)),
-    total: rows.length,
+    per_page: size,
   };
 });
 
@@ -791,7 +959,7 @@ route('GET', '/api/mod/cases/:id', (context) => {
   requireStaff(context.session);
   const found = state.cases.find((row) => String(row.id) === String(context.params.id));
   if (!found) throw new Refused(404, 'no_case', 'There is no case with that number.');
-  return { ...found, user_name: memberName(found.user_id), moderator_name: memberName(found.moderator_id) };
+  return caseRow(found);
 });
 
 route('POST', '/api/mod/cases/:id/apply', (context) => {
@@ -802,11 +970,11 @@ route('POST', '/api/mod/cases/:id/apply', (context) => {
   guard('applying a shadow case');
   found.applied = true;
   found.done = found.actions;
-  logAction('web.case_apply', { target_id: found.user_id, reason: found.reason });
-  return found;
+  logAction('web.mod.apply', { target_id: found.user_id, details: { case_id: found.id } });
+  return { applied: true, case_id: found.id, message: `Case ${found.id} was carried out: ${found.done.join(', ')}.` };
 });
 
-const MOD_ACTIONS = ['warn', 'timeout', 'kick', 'ban', 'unban'];
+const MOD_ACTIONS = ['warn', 'timeout', 'untimeout', 'kick', 'ban', 'unban'];
 
 for (const action of MOD_ACTIONS) {
   route('POST', `/api/mod/${action}`, async (context) => {
@@ -835,17 +1003,19 @@ for (const action of MOD_ACTIONS) {
       failed: [],
     };
     state.cases.unshift(row);
-    logAction(`web.mod_${action}`, { target_id: row.user_id, reason: row.reason });
-    return { ...row, user_name: memberName(row.user_id), moderator_name: memberName(row.moderator_id) };
+    logAction(`web.mod.${action}`, { target_id: row.user_id, reason: row.reason });
+    return {
+      done: true,
+      kind: action,
+      user_id: row.user_id,
+      message: `${memberName(row.user_id) || row.user_id} — ${action} done, case ${row.id}.`,
+    };
   });
 }
 
 route('GET', '/api/mod/rules', (context) => {
   requireStaff(context.session);
-  return {
-    mode: state.settings.get('automod_mode') ?? null,
-    rules: Object.entries(state.rules).map(([name, rule]) => ({ name, help: RULE_HELP[name] || null, ...rule })),
-  };
+  return Object.entries(state.rules).map(([name, rule]) => ({ name, help: RULE_HELP[name] || '', ...rule }));
 });
 
 route('PUT', '/api/mod/rules/:name', async (context) => {
@@ -862,36 +1032,65 @@ route('PUT', '/api/mod/rules/:name', async (context) => {
   for (const key of ['enabled', 'window_s', 'threshold', 'actions', 'timeout_s', 'words']) {
     if (body[key] !== undefined) rule[key] = body[key];
   }
-  logAction('web.automod_rule', { reason: context.params.name });
-  return { name: context.params.name, ...rule };
+  logAction('web.mod.rule', { reason: context.params.name, details: { rule: context.params.name } });
+  return { name: context.params.name, help: RULE_HELP[context.params.name] || '', ...rule };
 });
 
 route('GET', '/api/mod/parity', (context) => {
   requireStaff(context.session);
   const days = Math.max(1, Math.min(Number(context.url.searchParams.get('days') || 7), 30));
+  const report = { agree: 4, carl_only: 2, bloc_only: 1 };
   return {
     days,
-    agree: 4,
-    carl_only: 2,
-    bloc_only: 1,
+    bloc: report.agree + report.bloc_only,
+    carl: report.agree + report.carl_only,
+    report,
+    truncated: false,
+    test_mode: TEST_MODE,
     notes: [
-      `Compared the last ${days} days of #carl-modlog with what automod saw, matching each side once within two minutes.`,
+      `Last **${days}** days: Black Bloc would have acted **${report.agree + report.bloc_only}** times, Carl-bot **${report.agree + report.carl_only}**.`,
+      `**${report.agree}** agreed · **${report.carl_only}** Carl only · **${report.bloc_only}** Black Bloc only.`,
+      ...(TEST_MODE ? ['Test mode is on, so Black Bloc has not actually acted on any of these.'] : []),
     ],
   };
 });
+
+function ticketRow(ticket) {
+  return {
+    id: ticket.id,
+    user_id: String(ticket.user_id),
+    user_name: memberName(ticket.user_id),
+    mode: ticket.mode,
+    status: ticket.status,
+    channel_id: ticket.channel_id === null ? null : String(ticket.channel_id),
+    thread_id: ticket.thread_id === null ? null : String(ticket.thread_id),
+    opened_at: ticket.opened_at,
+    closed_at: ticket.closed_at,
+    closed_by_id: ticket.closed_by === null || ticket.closed_by === undefined ? null : String(ticket.closed_by),
+    closed_by_name: memberName(ticket.closed_by),
+    close_reason: ticket.close_reason,
+  };
+}
+
+function messageRow(message) {
+  return {
+    id: message.id,
+    at: message.at,
+    author_id: String(message.author_id),
+    author_name: memberName(message.author_id),
+    direction: message.direction,
+    anonymous: Boolean(message.anonymous),
+    content: message.content,
+    attachments: message.attachments || [],
+    delivered: Boolean(message.delivered),
+  };
+}
 
 route('GET', '/api/modmail/tickets', (context) => {
   requireStaff(context.session);
   const status = context.url.searchParams.get('status');
   const rows = status ? state.tickets.filter((ticket) => ticket.status === status) : state.tickets;
-  return {
-    tickets: rows.map((ticket) => ({
-      ...ticket,
-      user_name: memberName(ticket.user_id),
-      closed_by_name: memberName(ticket.closed_by),
-      messages: (state.messages[ticket.id] || []).length,
-    })),
-  };
+  return rows.map(ticketRow);
 });
 
 function ticketOf(id) {
@@ -903,10 +1102,7 @@ function ticketOf(id) {
 route('GET', '/api/modmail/tickets/:id', (context) => {
   requireStaff(context.session);
   const ticket = ticketOf(context.params.id);
-  return {
-    ticket: { ...ticket, user_name: memberName(ticket.user_id), closed_by_name: memberName(ticket.closed_by) },
-    messages: (state.messages[ticket.id] || []).map((message) => ({ ...message, author_name: memberName(message.author_id) })),
-  };
+  return { ...ticketRow(ticket), messages: (state.messages[ticket.id] || []).map(messageRow) };
 });
 
 route('POST', '/api/modmail/tickets/:id/reply', async (context) => {
@@ -923,12 +1119,12 @@ route('POST', '/api/modmail/tickets/:id/reply', async (context) => {
     direction: 'out',
     anonymous: Boolean(body.anonymous),
     content: body.text,
-    attachments: null,
-    delivered: 1,
+    attachments: [],
+    delivered: true,
   };
   state.messages[ticket.id] = (state.messages[ticket.id] || []).concat([message]);
-  logAction('web.modmail_reply', { target_id: ticket.user_id });
-  return { ...message, author_name: memberName(message.author_id) };
+  logAction('web.modmail.reply', { target_id: ticket.user_id, details: { ticket_id: ticket.id, anonymous: message.anonymous, delivered: true } });
+  return { sent: true, ticket_id: ticket.id, message: 'Sent.' };
 });
 
 route('POST', '/api/modmail/tickets/:id/close', async (context) => {
@@ -941,13 +1137,19 @@ route('POST', '/api/modmail/tickets/:id/close', async (context) => {
   ticket.closed_at = now();
   ticket.closed_by = STAFF.id;
   ticket.close_reason = body.reason || null;
-  logAction('web.modmail_close', { target_id: ticket.user_id, reason: ticket.close_reason });
-  return ticket;
+  logAction('web.modmail.close', { target_id: ticket.user_id, reason: ticket.close_reason, details: { ticket_id: ticket.id, silent: Boolean(body.silent) } });
+  return { closed: true, ticket: ticketRow(ticket), transcript: true };
 });
 
 route('GET', '/api/modmail/snippets', (context) => {
   requireStaff(context.session);
-  return { snippets: state.snippets.map((row) => ({ ...row, by_name: memberName(row.by) })) };
+  return state.snippets.map((row) => ({
+    name: row.name,
+    content: row.content,
+    by_id: row.by === null || row.by === undefined ? null : String(row.by),
+    by_name: memberName(row.by),
+    at: row.at,
+  }));
 });
 
 route('POST', '/api/modmail/snippets', async (context) => {
@@ -960,8 +1162,8 @@ route('POST', '/api/modmail/snippets', async (context) => {
   const existing = state.snippets.find((row) => row.name === name);
   if (existing) existing.content = body.content;
   else state.snippets.unshift({ name, content: body.content, by: STAFF.id, at: now() });
-  logAction('web.modmail_snippet', { reason: name });
-  return { name, content: body.content };
+  logAction('web.modmail.snippet', { reason: name, details: { name } });
+  return { saved: true, name, content: body.content };
 });
 
 route('DELETE', '/api/modmail/snippets/:name', (context) => {
@@ -969,35 +1171,40 @@ route('DELETE', '/api/modmail/snippets/:name', (context) => {
   const at = state.snippets.findIndex((row) => row.name === context.params.name);
   if (at < 0) throw new Refused(404, 'no_snippet', `There is no snippet called ${context.params.name}.`);
   state.snippets.splice(at, 1);
-  logAction('web.modmail_snippet_delete', { reason: context.params.name });
-  return { ok: true, name: context.params.name };
+  logAction('web.modmail.snippet_remove', { reason: context.params.name, details: { name: context.params.name } });
+  return { removed: true, name: context.params.name };
 });
 
 route('GET', '/api/modmail/blocks', (context) => {
   requireStaff(context.session);
-  return { blocks: state.blocks.map((row) => ({ ...row, user_name: memberName(row.user_id), by_name: memberName(row.by) })) };
+  return state.blocks.map((row) => ({
+    user_id: String(row.user_id),
+    user_name: memberName(row.user_id),
+    by_id: row.by === null || row.by === undefined ? null : String(row.by),
+    by_name: memberName(row.by),
+    reason: row.reason,
+    at: row.at,
+  }));
 });
 
 route('POST', '/api/modmail/blocks', async (context) => {
   requireStaff(context.session);
   const body = await context.body();
   if (!body.user_id) throw new Refused(400, 'bad_value', 'Pick the member to block first.');
-  if (state.blocks.some((row) => row.user_id === String(body.user_id))) {
-    throw new Refused(409, 'exists', 'That member is already blocked from modmail.');
-  }
   const row = { user_id: String(body.user_id), by: STAFF.id, reason: body.reason || null, at: now() };
-  state.blocks.unshift(row);
-  logAction('web.modmail_block', { target_id: row.user_id, reason: row.reason });
-  return row;
+  const at = state.blocks.findIndex((entry) => entry.user_id === row.user_id);
+  if (at >= 0) state.blocks[at] = row;
+  else state.blocks.unshift(row);
+  logAction('web.modmail.block', { target_id: row.user_id, reason: row.reason });
+  return { blocked: true, user_id: row.user_id };
 });
 
 route('DELETE', '/api/modmail/blocks/:user_id', (context) => {
   requireStaff(context.session);
   const at = state.blocks.findIndex((row) => row.user_id === context.params.user_id);
-  if (at < 0) throw new Refused(404, 'no_block', 'That member is not blocked, so there was nothing to undo.');
-  state.blocks.splice(at, 1);
-  logAction('web.modmail_unblock', { target_id: context.params.user_id });
-  return { ok: true, user_id: context.params.user_id };
+  if (at >= 0) state.blocks.splice(at, 1);
+  logAction('web.modmail.unblock', { target_id: context.params.user_id });
+  return { unblocked: true, user_id: context.params.user_id };
 });
 
 function send(response, status, body, headers = {}) {

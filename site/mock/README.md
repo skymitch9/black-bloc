@@ -36,10 +36,33 @@ dashboard as that person.
 Stopping the server altogether is the sixth state: the page says Black Bloc is
 not answering and calls it an outage, never a permission problem.
 
+## Checking it still matches the bot
+
+`contract.json` is the one home for every route's shape: for each route, the
+keys the pages actually read, taken from their own property accesses.
+
+```
+MOCK_TEST_MODE=0 node site/mock/server.mjs &
+node site/mock/check.mjs
+```
+
+`check.mjs` fetches all thirteen pages and every route in `contract.json` and
+reports anything missing. **The bot's own test suite reads the same file** —
+`tests/api/test_contract.py` runs it against the real routers with fakes — so a
+shape cannot be right in one half and wrong in the other. Change a response
+shape and you change three things together: the router, this mock, and
+`contract.json`.
+
+Set `MOCK_TEST_MODE=0`, or every destructive route answers 409 by design and
+the checker counts that as a failure. `check.mjs` calls `POST /api/mock/reset`
+before each route so every one sees the same fixture; that route exists for the
+checker and is **not** part of the contract.
+
 ## What it is not
 
-Fake data, held in memory: writes last until the process is restarted. The
-shapes follow `docs/info/phase8b-design.md` (the contract) and, where the
-contract names a route but not its fields, the column names of the matching
-table in `black_bloc/storage/db.py`. Where the real API turns out to disagree,
-**the real API wins** and this file is what changes.
+Fake data, held in memory: writes last until the process is restarted or reset.
+The shapes follow the real routers in `black_bloc/api/` — where the two
+disagree, **the real API wins** and this file is what changes.
+`docs/info/phase8b-design.md` is the contract in prose, but it fixes the JSON
+only for `/api/ref/*` and `/api/settings`; `contract.json` is where the rest is
+written down, and it was settled by reading the routers.

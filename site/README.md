@@ -37,6 +37,8 @@ list in `app.js` — never thirteen copies to drift.
 | `public/assets/page-*.js` | one module per tab; they hold no HTML, they build DOM |
 | `public/assets/site.css` | the only CSS this repo wrote: tokens only, no raw colours |
 | `mock/server.mjs` | a zero-dependency stand-in for the API — see `mock/README.md` |
+| `mock/contract.json` | **the one home for every route's shape** — read by `mock/check.mjs` AND by the bot's `tests/api/test_contract.py`, so the mock and the real routers cannot answer differently |
+| `mock/check.mjs` | fetches every page and every route from a running mock and asserts `contract.json` |
 | `public/assets/estate-theme.css`, `theme.js`, `status-shell.css`, `permission-ux.js`, `motion.js`, `fonts/*` | a **SNAPSHOT** copied from `catalog-platform/sites/heygabi-home/public/assets/` on 2026-08-26 |
 
 **Every snowflake on every page renders as a name**, with the id in a `title`
@@ -94,6 +96,14 @@ realistic data, and `?as=…` puts you in any of the refusal states:
 
 ```
 node site/mock/server.mjs        # http://127.0.0.1:8788
+```
+
+To check the mock still matches the bot, run it with writes let through and
+then the checker:
+
+```
+MOCK_TEST_MODE=0 node site/mock/server.mjs &
+node site/mock/check.mjs         # 13 pages, 49 routes, every key the pages read
 ```
 
 `site/mock/README.md` has the table of states. A bare static server

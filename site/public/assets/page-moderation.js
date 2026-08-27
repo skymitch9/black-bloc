@@ -1,4 +1,4 @@
-import { api, listOf, names, send } from './api.js';
+import { api, listOf, names, notesOf, send } from './api.js';
 import { start } from './app.js';
 import {
   ask,
@@ -59,7 +59,7 @@ function actionBar() {
     const body = { user_id: picker.id, reason: reason.value.trim() };
     if (what === 'timeout') body.duration = Number(length.value);
     const done = await run(say, () => send(`/api/mod/${what}`, 'POST', body), (found) =>
-      `Done — case ${found?.id ?? 'written'}: ${what} for ${picker.name}.`);
+      found?.message || `Done — ${what} for ${picker.name}.`);
     if (done.ok) refresh();
   }, { tone: 'warn', small: false });
 
@@ -113,12 +113,13 @@ async function parity(days) {
   const input = el('input', { class: 'input', type: 'number', min: '1', max: '30', value: String(days) });
   const body = el('div');
   const paint = (found) => {
+    const report = (found && found.report) || {};
     body.replaceChildren(el('div', { class: 'tiles' }, [
-      el('div', { class: 'tile' }, [el('div', { class: 'tile-value', text: String(found.agree ?? '—') }), el('div', { class: 'tile-label', text: 'Both saw it' })]),
-      el('div', { class: 'tile' }, [el('div', { class: 'tile-value', text: String(found.carl_only ?? '—') }), el('div', { class: 'tile-label', text: 'Carl only' })]),
-      el('div', { class: 'tile' }, [el('div', { class: 'tile-value', text: String(found.bloc_only ?? '—') }), el('div', { class: 'tile-label', text: 'Black Bloc only' })]),
+      el('div', { class: 'tile' }, [el('div', { class: 'tile-value', text: String(report.agree ?? '—') }), el('div', { class: 'tile-label', text: 'Both saw it' })]),
+      el('div', { class: 'tile' }, [el('div', { class: 'tile-value', text: String(report.carl_only ?? '—') }), el('div', { class: 'tile-label', text: 'Carl only' })]),
+      el('div', { class: 'tile' }, [el('div', { class: 'tile-value', text: String(report.bloc_only ?? '—') }), el('div', { class: 'tile-label', text: 'Black Bloc only' })]),
     ]));
-    for (const note of found.notes || []) body.append(el('p', { class: 'field-help', text: note }));
+    for (const note of notesOf(found)) body.append(el('p', { class: 'field-help', text: note }));
   };
 
   const first = await api(`/api/mod/parity?days=${encodeURIComponent(days)}`);

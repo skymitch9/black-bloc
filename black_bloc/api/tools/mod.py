@@ -14,7 +14,7 @@ from ...automod import (
     RuleError,
     rule_config,
 )
-from ...cogs.moderation.automod import apply_case, gather_parity, save_rule
+from ...cogs.moderation.automod import apply_case, gather_parity, parity_lines, save_rule
 from ...cogs.moderation.modcmds import (
     NOT_BANNED,
     REFUSED,
@@ -275,6 +275,6 @@ def build_router(bot: Any) -> APIRouter:
         found = await gather_parity(bot, guild, max(1, min(int(days), PARITY_MAX_DAYS)))
         if "error" in found:
             raise Refused(503, "parity_unavailable", found["error"])
-        return found
+        return found | {"notes": parity_lines(found)}
 
     return router

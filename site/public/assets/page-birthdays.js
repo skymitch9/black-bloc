@@ -1,4 +1,4 @@
-import { api, listOf, names, send } from './api.js';
+import { api, listOf, names, notesOf, send } from './api.js';
 import { start } from './app.js';
 import {
   ask,
@@ -22,6 +22,7 @@ import {
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 let refresh = () => {};
+let lastImport = null;
 
 function setCard() {
   const say = notice();
@@ -53,6 +54,36 @@ function setCard() {
     el('div', { class: 'formrow' }, [field('Month', month), field('Day', day), field('Year', year, 'Only used when birthday_show_age is on.')]),
     bar([save]),
     say,
+  ]);
+}
+
+function importCard() {
+  const say = notice();
+  const report = el('div');
+  for (const line of notesOf(lastImport || {})) report.append(el('p', { class: 'field-help', text: line }));
+
+  const go = button('Import the Birthday Bot list', async () => {
+    const sure = await ask({
+      title: 'Import the Birthday Bot export?',
+      body: [
+        'Black Bloc reads the export it ships with, matches each row against the members it can see, and stores the ones it is sure about.',
+        'A birthday somebody already has is left exactly as it is; ambiguous rows are listed for you to set by hand.',
+      ],
+      confirmLabel: 'Import it',
+      tone: 'warn',
+    });
+    if (!sure) return;
+    const done = await run(say, () => send('/api/birthdays/import', 'POST', {}), 'Imported.');
+    if (!done.ok) return;
+    lastImport = done.found;
+    refresh();
+  }, { tone: 'warn', small: false });
+
+  return card('Import from Birthday Bot', [
+    el('p', { class: 'field-help', text: 'The same import `/birthday import` runs, with the same report. Safe to run twice — nothing already stored is overwritten.' }),
+    bar([go]),
+    say,
+    report,
   ]);
 }
 
@@ -99,7 +130,7 @@ async function load() {
   months.body.append(say);
 
   const add = section('Add or change one');
-  add.body.append(setCard());
+  add.body.append(setCard(), importCard());
 
   document.getElementById('dash').replaceChildren(add.node, months.node, await namespaceSettings('birthday'));
 }

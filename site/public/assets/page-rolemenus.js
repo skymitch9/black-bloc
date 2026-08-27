@@ -49,7 +49,7 @@ async function editor(menu) {
   const title = el('input', { class: 'input', type: 'text', value: menu ? menu.title || '' : '' });
   const description = el('input', { class: 'input', type: 'text', value: menu ? menu.description || '' : '' });
   const mode = el('select', { class: 'input' });
-  for (const one of ['multiple', 'single']) {
+  for (const one of ['multiple', 'single', 'staff']) {
     mode.append(el('option', { value: one, text: one, selected: menu && menu.mode === one ? true : undefined }));
   }
 
