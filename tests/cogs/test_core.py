@@ -172,7 +172,9 @@ async def kinds(db):
 def test_the_choices_cover_every_key_and_fit_discords_limit():
     assert "birthday_role_id" in CLEARABLE_KEYS and "birthday_channel_id" in CLEARABLE_KEYS
     assert "birthday_color" in VALUE_KEYS
+    assert "bot_bio" in VALUE_KEYS and "status_prefix" in VALUE_KEYS
     assert len(CLEARABLE_KEYS) <= 25
+    assert len(VALUE_KEYS) <= 25
 
 
 async def test_settings_show_is_split_into_messages_discord_will_take(bot, cog):

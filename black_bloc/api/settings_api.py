@@ -20,7 +20,13 @@ from .writes import note, require_db, require_guild, writer_dependency
 
 log = logging.getLogger(__name__)
 
-CORE_KEYS = ("log_channel_id", "staff_channel_id", "role_menu_channel_id")
+CORE_KEYS = (
+    "log_channel_id",
+    "staff_channel_id",
+    "role_menu_channel_id",
+    "bot_bio",
+    "status_prefix",
+)
 CORE = "core"
 NAMESPACE_OVERRIDE = {
     "modlog_channel_id": "automod",

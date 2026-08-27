@@ -55,6 +55,11 @@ MODMAIL_LOG_CHANNEL_ID = 1442613059704066108
 
 WARN_THRESHOLD_MAX = 100
 
+BOT_BIO_TEMPLATE = (
+    "Black Bloc — moderation & content bot for Black in a Flash!. Staff dashboard: {site}"
+)
+STATUS_PREFIX = "Cookout attendees"
+
 KEY_TYPES: dict[str, str] = {
     "log_channel_id": "channel",
     "staff_channel_id": "channel",
@@ -102,6 +107,8 @@ KEY_TYPES: dict[str, str] = {
     "automod_warn_threshold": "int",
     "modlog_channel_id": "channel",
     "mod_dm_on_action": "enum",
+    "bot_bio": "text",
+    "status_prefix": "text",
 }
 
 KEY_CHOICES: dict[str, tuple[str, ...]] = {
@@ -208,6 +215,8 @@ KEY_HELP: dict[str, str] = {
     "automod_warn_threshold": "warnings before Black Bloc says so in the log, 0 to stop counting",
     "modlog_channel_id": "where mod cases are posted; defaults to log_channel_id",
     "mod_dm_on_action": "what a punished member is told: none, server_action, server_action_reason",
+    "bot_bio": "the About Me on Black Bloc's own profile, dashboard link and all",
+    "status_prefix": "what goes in front of the member count in Black Bloc's status",
 }
 
 
@@ -505,6 +514,10 @@ class SettingsStore:
             return self.default("log_channel_id")
         if key == "mod_dm_on_action":
             return "server_action_reason"
+        if key == "bot_bio":
+            return BOT_BIO_TEMPLATE.format(site=self.settings.origin)
+        if key == "status_prefix":
+            return STATUS_PREFIX
         if KEY_TYPES.get(key) in ("channels", "roles"):
             return []
         return None

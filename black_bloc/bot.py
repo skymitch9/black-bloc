@@ -28,6 +28,7 @@ COGS: tuple[str, ...] = (
     "black_bloc.cogs.moderation.modmail",
     "black_bloc.cogs.moderation.automod",
     "black_bloc.cogs.moderation.modcmds",
+    "black_bloc.cogs.presence",
 )
 
 
