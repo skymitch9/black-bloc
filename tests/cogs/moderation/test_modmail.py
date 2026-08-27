@@ -1,5 +1,5 @@
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import discord
 import pytest
@@ -8,6 +8,7 @@ from black_bloc.cogs.moderation.modmail import (
     Modmail,
     add_message,
     blocked_row,
+    get_ticket,
     open_ticket_for,
     open_tickets,
     resolve_ticket,
@@ -732,6 +733,246 @@ async def test_every_relay_forbids_every_mention_except_the_staff_ping(cog, bot,
         assert allowed.everyone is False and allowed.users is False
     assert member.dms[-1]["allowed_mentions"].everyone is False
     assert member.dms[-1]["allowed_mentions"].roles is False
+
+
+async def test_closing_files_a_transcript_deletes_the_channel_and_tells_the_member(
+    cog, bot, member, lead, db
+):
+    ticket = await open_one(cog, bot, member)
+    channel = bot.guild.get_channel(ticket["channel_id"])
+    lead.roles = [FakeRole(STAFF_ROLE)]
+    await cog.on_message(guild_message(channel, lead, "sorted for you"))
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.close.callback(cog, interaction, reason="sorted")
+
+    row = await get_ticket(db, ticket["id"])
+    assert row["status"] == "closed" and row["close_reason"] == "sorted"
+    assert row["closed_by"] == LEAD and row["log_message_id"] is not None
+    posted = bot.guild.channels[TEST_CHANNEL].messages[-1]
+    assert posted.kwargs["file"].filename == f"modmail-ticket-{ticket['id']}.txt"
+    body = posted.kwargs["file"].fp.getvalue().decode()
+    assert "MEMBER 900: my ban was unfair" in body and "STAFF 1: sorted for you" in body
+    assert channel.deleted is True
+    assert "has been closed" in member.dms[-1]["content"]
+    kinds = await action_kinds(db)
+    assert "modmail.transcript" in kinds and "modmail.closed" in kinds
+    assert interaction.response.messages[0]["deferred"] is True
+
+
+async def test_a_silent_close_files_the_transcript_without_dming_anybody(
+    cog, bot, member, lead, db
+):
+    ticket = await open_one(cog, bot, member)
+    before = len(member.dms)
+
+    await cog.close.callback(cog, FakeInteraction(bot, lead), reason="spam", silent=True)
+
+    assert (await get_ticket(db, ticket["id"]))["status"] == "closed"
+    assert len(member.dms) == before
+
+
+async def test_closing_a_ticket_twice_tells_the_second_staffer_rather_than_closing_again(
+    cog, bot, member, lead, db
+):
+    ticket = await open_one(cog, bot, member)
+    await cog.close.callback(cog, FakeInteraction(bot, lead), reason="one")
+    second = FakeInteraction(bot, lead)
+
+    await cog.close.callback(cog, second, ticket=str(ticket["id"]))
+
+    assert "already closed" in second.sent
+    assert (await get_ticket(db, ticket["id"]))["close_reason"] == "one"
+
+
+async def test_a_closed_ticket_frees_the_member_to_open_another(cog, bot, member, lead, db):
+    first = await open_one(cog, bot, member)
+    await cog.close.callback(cog, FakeInteraction(bot, lead), reason="done")
+
+    await cog.on_message(dm_from(member, "hello again"))
+
+    second = await open_ticket_for(db, GUILD, member.id)
+    assert second is not None and second["id"] != first["id"]
+    assert len(bot.guild.created) == 2
+
+
+async def test_a_transcript_the_guard_would_refuse_is_a_would_not_a_failure(
+    cog, bot, member, lead, db
+):
+    ticket = await open_one(cog, bot, member)
+    await bot.store.set(GUILD, "modmail_log_channel_id", LOG_CHANNEL)
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.close.callback(cog, interaction, reason="sorted")
+
+    kinds = await action_kinds(db)
+    assert "modmail.would_post_transcript" in kinds
+    assert "modmail.transcript_failed" not in kinds
+    assert (await get_ticket(db, ticket["id"]))["status"] == "closed"
+    assert "transcript could not be posted" in interaction.sent
+
+
+async def test_a_thread_ticket_is_archived_and_locked_not_deleted(cog, bot, member, lead, db):
+    bot.guard = FakeGuard()
+    await bot.store.set(GUILD, "modmail_mode", THREAD_MODE)
+    await cog.on_message(dm_from(member))
+    ticket = await open_ticket_for(db, GUILD, member.id)
+    thread = bot.guild.threads[ticket["thread_id"]]
+
+    await cog.close.callback(cog, FakeInteraction(bot, lead), reason="done")
+
+    assert thread.archived is True and thread.locked is True and thread.deleted is False
+
+
+async def test_a_ticket_whose_channel_has_gone_is_closed_by_the_reconciler(cog, bot, member, db):
+    ticket = await open_one(cog, bot, member)
+    bot.guild.channels.pop(ticket["channel_id"])
+
+    await cog.reconcile_tickets()
+
+    row = await get_ticket(db, ticket["id"])
+    assert row["status"] == "closed" and row["close_reason"] == "ticket_channel_gone"
+
+
+async def test_a_ticket_that_never_got_a_channel_is_left_alone_inside_the_grace(cog, bot, db):
+    await db.conn.execute(
+        "INSERT INTO modmail_tickets(guild_id, user_id, mode, channel_id, status, opened_at) "
+        "VALUES (?, ?, 'channel', 0, 'open', ?)",
+        (GUILD, USER, datetime.now(UTC).isoformat()),
+    )
+    await db.conn.commit()
+
+    await cog.reconcile_tickets()
+    assert (await get_ticket(db, 1))["status"] == "open"
+
+    await db.conn.execute(
+        "UPDATE modmail_tickets SET opened_at = ?",
+        ((datetime.now(UTC) - timedelta(hours=2)).isoformat(),),
+    )
+    await db.conn.commit()
+    await cog.reconcile_tickets()
+
+    row = await get_ticket(db, 1)
+    assert row["status"] == "closed" and row["close_reason"] == "never_got_a_place"
+
+
+async def test_a_lookup_that_could_not_be_made_never_closes_a_ticket(cog, bot, member, db):
+    ticket = await open_one(cog, bot, member)
+    bot.guild.channels.pop(ticket["channel_id"])
+
+    async def broken(channel_id):
+        raise discord.HTTPException(_Response(500), "later")
+
+    bot.guild.fetch_channel = broken
+    await cog.reconcile_tickets()
+
+    assert (await get_ticket(db, ticket["id"]))["status"] == "open"
+
+
+async def test_deleting_the_ticket_channel_closes_its_ticket_at_once(cog, bot, member, db):
+    ticket = await open_one(cog, bot, member)
+    channel = bot.guild.get_channel(ticket["channel_id"])
+    bot.guild.channels.pop(channel.id)
+
+    await cog.on_guild_channel_delete(channel)
+
+    row = await get_ticket(db, ticket["id"])
+    assert row["status"] == "closed" and row["close_reason"] == "ticket_channel_deleted"
+
+
+async def test_a_deleted_category_or_staff_channel_is_forgotten(cog, bot, db):
+    await live(bot)
+    await bot.store.set(GUILD, "modmail_staff_channel_id", LOG_CHANNEL)
+    category = bot.guild.channels[CATEGORY]
+    category.guild = bot.guild
+
+    await cog.on_guild_channel_delete(category)
+    await cog.on_guild_channel_delete(bot.guild.channels[LOG_CHANNEL])
+
+    assert bot.store.get(GUILD, "modmail_category_id") != CATEGORY
+    assert bot.store.get(GUILD, "modmail_staff_channel_id") is None
+    kinds = await action_kinds(db)
+    assert "modmail.category_forgotten" in kinds
+    assert "modmail.staff_channel_forgotten" in kinds
+
+
+async def test_blocking_and_unblocking_are_both_recorded(cog, bot, member, lead, db):
+    first = FakeInteraction(bot, lead)
+    await cog.modmail_block.callback(cog, first, user=member, reason="abuse")
+    again = FakeInteraction(bot, lead)
+    await cog.modmail_block.callback(cog, again, user=member)
+    freed = FakeInteraction(bot, lead)
+    await cog.modmail_unblock.callback(cog, freed, user=member)
+
+    assert "already blocked" in again.sent
+    assert await blocked_row(db, member.id) is None
+    kinds = await action_kinds(db)
+    assert kinds.count("modmail.blocked") == 1 and "modmail.unblocked" in kinds
+    assert "was not blocked" in (
+        await unblock_again(cog, bot, lead, member)
+    )
+
+
+async def unblock_again(cog, bot, lead, member):
+    interaction = FakeInteraction(bot, lead)
+    await cog.modmail_unblock.callback(cog, interaction, user=member)
+    return interaction.sent
+
+
+async def test_changing_the_mode_says_open_tickets_keep_theirs(cog, bot, member, lead):
+    await open_one(cog, bot, member)
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.modmail_mode.callback(
+        cog, interaction, mode=discord.app_commands.Choice(name="thread", value="thread")
+    )
+
+    assert bot.store.get(GUILD, "modmail_mode") == THREAD_MODE
+    assert "1 ticket(s) already open keep the mode" in interaction.sent
+
+
+async def test_status_lists_the_open_tickets_and_the_resolved_staff(cog, bot, member, lead):
+    ticket = await open_one(cog, bot, member)
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.modmail_status.callback(cog, interaction)
+
+    assert f"**#{ticket['id']}**" in interaction.sent
+    assert "Lead" in interaction.sent
+    assert interaction.response.messages[-1]["allowed_mentions"].everyone is False
+
+
+async def test_status_warns_loudly_when_no_staff_role_resolves(cog, bot, lead):
+    bot.guild.channels[TEST_CHANNEL].visible_to = set()
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.modmail_status.callback(cog, interaction)
+
+    assert "No staff roles resolve" in interaction.sent
+
+
+async def test_snippets_are_saved_listed_and_removed(cog, bot, lead, db):
+    saved = FakeInteraction(bot, lead)
+    await cog.snippet_add.callback(cog, saved, name="Appeal", content="Appeals go to a Lead.")
+    listed = FakeInteraction(bot, lead)
+    await cog.snippet_list.callback(cog, listed)
+    gone = FakeInteraction(bot, lead)
+    await cog.snippet_remove.callback(cog, gone, name="appeal")
+    missing = FakeInteraction(bot, lead)
+    await cog.snippet_remove.callback(cog, missing, name="appeal")
+
+    assert "appeal" in saved.sent and "appeal" in listed.sent
+    assert "is gone" in gone.sent and "no snippet called" in missing.sent
+    cur = await db.conn.execute("SELECT COUNT(*) AS n FROM modmail_snippets")
+    assert (await cur.fetchone())["n"] == 0
+
+
+async def test_a_snippet_name_with_spaces_is_refused(cog, bot, lead):
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.snippet_add.callback(cog, interaction, name="ban appeal", content="no")
+
+    assert "is not a snippet name" in interaction.sent
 
 
 async def test_a_stored_message_keeps_its_direction_and_anonymity(db):
