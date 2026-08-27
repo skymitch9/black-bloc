@@ -26,6 +26,8 @@ GOLIVE_TEMPLATE = (
 )
 GOLIVE_MODES = ("off", "shadow", "on")
 
+ROLEMENU_MODES = ("off", "on")
+
 MEMBER_ROLE_ID = 1073741054563602532
 TEMPVOICE_NAME_TEMPLATE = "{user}'s bloc"
 TEMPVOICE_CREATOR_NAME = "join to create a channel"
@@ -109,6 +111,7 @@ KEY_TYPES: dict[str, str] = {
     "mod_dm_on_action": "enum",
     "bot_bio": "text",
     "status_prefix": "text",
+    "rolemenu_mode": "enum",
 }
 
 KEY_CHOICES: dict[str, tuple[str, ...]] = {
@@ -120,6 +123,7 @@ KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "modmail_mode": MODMAIL_MODES,
     "automod_mode": AUTOMOD_MODES,
     "mod_dm_on_action": MOD_DM_STYLES,
+    "rolemenu_mode": ROLEMENU_MODES,
 }
 
 KEY_MAX: dict[str, int] = {
@@ -217,6 +221,7 @@ KEY_HELP: dict[str, str] = {
     "mod_dm_on_action": "what a punished member is told: none, server_action, server_action_reason",
     "bot_bio": "the About Me on Black Bloc's own profile, dashboard link and all",
     "status_prefix": "what goes in front of the member count in Black Bloc's status",
+    "rolemenu_mode": "whether members can pick roles from the posted panels",
 }
 
 
@@ -518,6 +523,8 @@ class SettingsStore:
             return BOT_BIO_TEMPLATE.format(site=self.settings.origin)
         if key == "status_prefix":
             return STATUS_PREFIX
+        if key == "rolemenu_mode":
+            return "off"
         if KEY_TYPES.get(key) in ("channels", "roles"):
             return []
         return None

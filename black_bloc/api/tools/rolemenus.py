@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Request
 
 from ...cogs.community.role_menus import (
     MODES,
+    ROLE_MENUS_OFF,
     STAFF_MODE,
     MenuLimitError,
     add_option,
@@ -19,6 +20,7 @@ from ...cogs.community.role_menus import (
     get_menu,
     get_options,
     list_menus,
+    picking_is_on,
     post_panel,
     remove_option,
     update_menu,
@@ -243,6 +245,8 @@ def build_router(bot: Any) -> APIRouter:
             raise Refused(400, "staff_menu", STAFF_MENU_NOT_POSTED.format(name=name))
         if not options:
             raise Refused(400, "no_options", NOTHING_TO_POST.format(name=name))
+        if not picking_is_on(bot, guild.id):
+            raise Refused(409, "rolemenu_off", ROLE_MENUS_OFF)
         channel_id = as_id(payload.get("channel_id")) or bot.store.get(
             guild.id, "role_menu_channel_id"
         )

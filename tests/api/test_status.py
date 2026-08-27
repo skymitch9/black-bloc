@@ -123,6 +123,7 @@ def test_every_mode_key_in_the_registry_is_reported():
         "birthday_mode",
         "modmail_mode",
         "automod_mode",
+        "rolemenu_mode",
     }
 
 

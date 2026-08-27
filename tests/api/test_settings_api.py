@@ -13,6 +13,25 @@ def test_every_registry_key_lands_in_a_namespace():
     assert namespace_of("automod_rules") == "automod"
 
 
+async def test_the_role_menu_switch_round_trips_through_the_settings_api(
+    client, sign_in, web, wf
+):
+    """The Role menus tab's On/Off switch is this key and nothing else."""
+    sign_in(client)
+
+    listed = {row["key"]: row for row in client.get("/api/settings").json()["rolemenu"]}
+    assert listed["rolemenu_mode"]["value"] == "off"
+    assert listed["rolemenu_mode"]["choices"] == ["off", "on"]
+
+    stored = client.put("/api/settings/rolemenu_mode", json={"value": "on"})
+
+    assert stored.status_code == 200 and stored.json()["value"] == "on"
+    assert web.store.get(wf.GUILD_ID, "rolemenu_mode") == "on"
+    refused = client.put("/api/settings/rolemenu_mode", json={"value": "shadow"})
+    assert refused.status_code == 400 and "off, on" in refused.json()["message"]
+    assert web.store.get(wf.GUILD_ID, "rolemenu_mode") == "on"
+
+
 def test_settings_need_a_session(client):
     assert client.get("/api/settings").status_code == 401
     assert client.put("/api/settings/golive_mode", json={"value": "on"}).status_code == 401

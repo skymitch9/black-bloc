@@ -99,6 +99,7 @@ async def seeded(client, sign_in, web, guild, wf):
 
     web.cogs["Contract"] = FakeCog()
     await web.store.set(guild_id, "events_create_scheduled", False, by=7)
+    await web.store.set(guild_id, "rolemenu_mode", "on", by=7)
 
     case_id = await add_case(
         db,

@@ -24,6 +24,11 @@ def call(client, method, route, payload):
     return client.request(method, route, json=payload)
 
 
+async def menus_on(web, wf) -> None:
+    """`rolemenu_mode` ships off, and a panel is not posted while members cannot pick."""
+    await web.store.set(wf.GUILD_ID, "rolemenu_mode", "on")
+
+
 async def a_menu(client, wf, name: str = "colours") -> dict:
     return client.post(
         "/api/rolemenus",
@@ -162,6 +167,7 @@ async def test_posting_a_panel_puts_it_in_the_channel_and_remembers_the_message(
     client, sign_in, web, guild, wf
 ):
     sign_in(client)
+    await menus_on(web, wf)
     await a_menu(client, wf)
     client.put(
         "/api/rolemenus/colours",
@@ -185,6 +191,7 @@ async def test_posting_outside_the_test_channel_is_refused_while_the_guard_is_on
     client, sign_in, web, guild, wf
 ):
     sign_in(client)
+    await menus_on(web, wf)
     await a_menu(client, wf)
     client.put(
         "/api/rolemenus/colours",
@@ -208,6 +215,33 @@ async def test_posting_outside_the_test_channel_is_refused_while_the_guard_is_on
     assert allowed.status_code == 200
 
 
+async def test_posting_is_refused_while_role_menus_are_turned_off(
+    client, sign_in, web, guild, wf
+):
+    sign_in(client)
+    await a_menu(client, wf)
+    client.put(
+        "/api/rolemenus/colours",
+        json={"options": [{"role_id": str(wf.PLAIN_ROLE_ID), "label": "Member"}]},
+    )
+
+    response = client.post(
+        "/api/rolemenus/colours/post", json={"channel_id": str(wf.TEST_CHANNEL_ID)}
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"] == "rolemenu_off"
+    assert "turned off" in response.json()["message"]
+    assert guild.get_channel(wf.TEST_CHANNEL_ID).messages == []
+    assert "web.rolemenu.post" not in await wf.kinds_in(web.db)
+
+    await menus_on(web, wf)
+    allowed = client.post(
+        "/api/rolemenus/colours/post", json={"channel_id": str(wf.TEST_CHANNEL_ID)}
+    )
+    assert allowed.status_code == 200
+
+
 async def test_a_staff_menu_and_an_empty_menu_are_not_posted(client, sign_in, wf):
     sign_in(client)
     client.post("/api/rolemenus", json={"name": "runner", "title": "R", "mode": "staff"})
@@ -222,6 +256,7 @@ async def test_a_staff_menu_and_an_empty_menu_are_not_posted(client, sign_in, wf
 
 async def test_the_default_channel_setting_is_used_when_none_is_given(client, sign_in, web, wf):
     sign_in(client)
+    await menus_on(web, wf)
     await web.store.set(wf.GUILD_ID, "role_menu_channel_id", wf.TEST_CHANNEL_ID)
     await a_menu(client, wf)
     client.put(

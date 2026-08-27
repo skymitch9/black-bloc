@@ -297,6 +297,15 @@ async def test_tempvoice_defaults(store):
     assert store.get(1, "tempvoice_creator_ids") == []
 
 
+async def test_role_menus_ship_turned_off(store):
+    """Owner ask, 2026-08-27: role selection is off until somebody turns it on."""
+    assert store.get(1, "rolemenu_mode") == "off"
+    assert await store.set(1, "rolemenu_mode", "on") == "on"
+    assert store.get(1, "rolemenu_mode") == "on"
+    with pytest.raises(SettingError, match="off, on"):
+        coerce_value("rolemenu_mode", "shadow")
+
+
 def test_the_purge_window_is_clamped_to_discord_s_maximum():
     assert coerce_value("honeypot_purge_days", HONEYPOT_PURGE_MAX_DAYS) == HONEYPOT_PURGE_MAX_DAYS
     assert coerce_value("honeypot_purge_days", 0) == 0

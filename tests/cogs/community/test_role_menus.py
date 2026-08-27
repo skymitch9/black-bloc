@@ -1,13 +1,16 @@
 import discord
 import pytest
+from discord import app_commands
 
 from black_bloc.cogs.community.role_menus import (
     DESCRIPTION_MAX,
     JOY_GAMING,
     LABEL_MAX,
+    MODE_KEY,
     MODES,
     NO_MENUS_YET,
     OPTIONS_MAX,
+    ROLE_MENUS_OFF,
     SEED,
     TITLE_MAX,
     MenuLimitError,
@@ -120,6 +123,9 @@ class FakeRole:
     def __init__(self, role_id):
         self.id = role_id
         self.name = f"role-{role_id}"
+
+    def is_assignable(self):
+        return True
 
 
 class FakePerms:
@@ -236,6 +242,7 @@ async def bot(db, monkeypatch):
     store = SettingsStore(db, settings)
     await store.load()
     await store.set(GUILD, "log_channel_id", LOG_CHANNEL)
+    await store.set(GUILD, MODE_KEY, "on")
     return FakeBot(db, store, FakeGuild())
 
 
@@ -362,6 +369,129 @@ async def test_assign_is_staff_only(bot, db):
     await RoleMenus.assign.callback(RoleMenus(bot), interaction, "runner-status", plain)
 
     assert "staff only" in interaction.sent
+
+
+@pytest.fixture
+def clicker(monkeypatch, bot):
+    """`RoleMenuSelect` insists on a real `discord.Member`; the fake stands in for one."""
+    monkeypatch.setattr(discord, "Member", FakeMember)
+    return FakeMember(bot.guild, user_id=900, roles=(99,))
+
+
+async def self_serve_menu(db, name="pronouns"):
+    menu_id = await create_menu(db, GUILD, name, "Pronouns", None, "multiple")
+    await add_option(db, menu_id, 1, "He/Him")
+    await add_option(db, menu_id, 2, "She/Her")
+    return menu_id
+
+
+async def test_a_click_hands_out_roles_while_role_menus_are_on(bot, db, clicker):
+    menu_id = await self_serve_menu(db)
+    select = RoleMenuView(menu_id, await get_options(db, menu_id), "multiple").children[0]
+    select._values = ["1"]
+    interaction = FakeInteraction(bot, clicker)
+
+    await select.callback(interaction)
+
+    assert clicker.edits == [[99, 1]]
+    assert "Added: He/Him" in interaction.sent
+    assert "role_menu.update" in await action_kinds(db)
+
+
+async def test_a_click_changes_nothing_while_role_menus_are_off(bot, db, clicker):
+    menu_id = await self_serve_menu(db)
+    await bot.store.set(GUILD, MODE_KEY, "off")
+    select = RoleMenuView(menu_id, await get_options(db, menu_id), "multiple").children[0]
+    select._values = ["1"]
+    interaction = FakeInteraction(bot, clicker)
+
+    await select.callback(interaction)
+
+    assert interaction.sent == ROLE_MENUS_OFF
+    assert interaction.response.messages[0]["ephemeral"] is True
+    assert clicker.edits == [] and [role.id for role in clicker.roles] == [99]
+    assert "role_menu.update" not in await action_kinds(db)
+
+
+async def test_the_staff_select_changes_nothing_while_role_menus_are_off(bot, db, lead):
+    menu_id = await staff_menu(db)
+    target = FakeMember(bot.guild, user_id=900, roles=(10,))
+    select = StaffAssignSelect(menu_id, await get_options(db, menu_id), target, remove=False)
+    select._values = ["11"]
+    await bot.store.set(GUILD, MODE_KEY, "off")
+    interaction = FakeInteraction(bot, lead)
+
+    await select.callback(interaction)
+
+    assert interaction.sent == ROLE_MENUS_OFF
+    assert target.edits == []
+    assert "role_menu.assign" not in await action_kinds(db)
+
+
+async def test_posting_a_panel_is_refused_while_role_menus_are_off(bot, db, lead):
+    await self_serve_menu(db)
+    await bot.store.set(GUILD, MODE_KEY, "off")
+    interaction = FakeInteraction(bot, lead)
+
+    await RoleMenus.post.callback(RoleMenus(bot), interaction, "pronouns", None)
+
+    assert interaction.sent == ROLE_MENUS_OFF
+    assert (await get_menu(db, GUILD, "pronouns"))["message_id"] is None
+
+
+async def test_the_staff_pickers_are_refused_while_role_menus_are_off(bot, db, lead):
+    await staff_menu(db)
+    await bot.store.set(GUILD, MODE_KEY, "off")
+    target = FakeMember(bot.guild, user_id=900, roles=(10,))
+
+    assign = FakeInteraction(bot, lead)
+    await RoleMenus.assign.callback(RoleMenus(bot), assign, "runner-status", target)
+    unassign = FakeInteraction(bot, lead)
+    await RoleMenus.unassign.callback(RoleMenus(bot), unassign, "runner-status", target)
+
+    assert assign.sent == ROLE_MENUS_OFF and assign.view is None
+    assert unassign.sent == ROLE_MENUS_OFF and unassign.view is None
+
+
+async def test_staff_can_still_build_a_menu_while_role_menus_are_off(bot, db, lead):
+    """Off stops members picking, not staff preparing — `create` and `add` still work."""
+    await bot.store.set(GUILD, MODE_KEY, "off")
+    created = FakeInteraction(bot, lead)
+    await RoleMenus.create.callback(RoleMenus(bot), created, "colours", "Colours")
+    added = FakeInteraction(bot, lead)
+    await RoleMenus.add.callback(RoleMenus(bot), added, "colours", FakeRole(5), None, None)
+
+    menu = await get_menu(db, GUILD, "colours")
+    assert menu is not None
+    assert [row["role_id"] for row in await get_options(db, menu["id"])] == [5]
+
+
+async def test_mode_stores_the_choice_and_logs_it(bot, db, lead):
+    off = FakeInteraction(bot, lead)
+    await RoleMenus.mode.callback(
+        RoleMenus(bot), off, app_commands.Choice(name="off", value="off")
+    )
+
+    assert bot.store.get(GUILD, MODE_KEY) == "off"
+    assert "**off**" in off.sent
+    assert "role_menu.mode" in await action_kinds(db)
+
+    on = FakeInteraction(bot, lead)
+    await RoleMenus.mode.callback(RoleMenus(bot), on, app_commands.Choice(name="on", value="on"))
+
+    assert bot.store.get(GUILD, MODE_KEY) == "on"
+    assert "**on**" in on.sent
+
+
+async def test_mode_is_staff_only(bot):
+    stranger = FakeInteraction(bot, FakeMember(bot.guild, user_id=900))
+
+    await RoleMenus.mode.callback(
+        RoleMenus(bot), stranger, app_commands.Choice(name="off", value="off")
+    )
+
+    assert "staff only" in stranger.sent
+    assert bot.store.get(GUILD, MODE_KEY) == "on"
 
 
 class _Refused:

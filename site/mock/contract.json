@@ -57,10 +57,10 @@
     {
       "method": "GET",
       "path": "/api/settings",
-      "read_by": ["page-settings.js", "ui.js"],
+      "read_by": ["page-settings.js", "page-rolemenus.js", "ui.js"],
       "shape": "namespaces",
       "keys": ["key", "type", "value", "default", "help"],
-      "namespaces": ["core", "automod", "birthday", "events", "golive", "honeypot", "modmail", "tempvoice"],
+      "namespaces": ["core", "automod", "birthday", "events", "golive", "honeypot", "modmail", "rolemenu", "tempvoice"],
       "no_namespaces": ["mod", "modlog"]
     },
     {

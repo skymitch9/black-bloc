@@ -1,4 +1,4 @@
-import { api, listOf, names, refRoles, send } from './api.js';
+import { api, listOf, names, refRoles, saveSetting, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
 import {
   ask,
@@ -10,6 +10,7 @@ import {
   el,
   field,
   idsIn,
+  modeChip,
   nameNode,
   notice,
   readSelect,
@@ -21,9 +22,48 @@ import {
   table,
 } from './ui.js';
 
+const MODE_KEY = 'rolemenu_mode';
+const STAYS_POSTED = 'Panels stay posted; members see “turned off” until you switch this on, so ' +
+  'turning it back on is instant. Staff can still build and edit menus while it is off.';
+const TURNED_ON = 'On. Every panel already posted hands out roles again straight away.';
+const TURNED_OFF = 'Off. The panels stay where they are; a click on one now says role menus are ' +
+  'turned off and changes nobody’s roles.';
+const NO_KEY = 'The bot did not report a rolemenu_mode key, so this switch is not shown rather ' +
+  'than guessed at.';
+
 const state = { editing: null, creating: false };
 
 let refresh = () => {};
+
+function modeSwitch(spec) {
+  const say = notice();
+  const chip = modeChip(spec.value);
+  let now = spec.value === 'on' ? 'on' : 'off';
+
+  const flip = async (wanted) => {
+    if (wanted === now) return;
+    const done = await run(say, () => saveSetting(MODE_KEY, wanted), wanted === 'on' ? TURNED_ON : TURNED_OFF);
+    if (done.ok) paint(done.found && done.found.value ? done.found.value : wanted);
+  };
+
+  const on = button('Turn on', () => flip('on'), { small: false });
+  const off = button('Turn off', () => flip('off'), { small: false, tone: 'warn' });
+
+  function paint(value) {
+    now = value === 'on' ? 'on' : 'off';
+    chip.textContent = now;
+    chip.setAttribute('data-mode', now);
+    on.disabled = now === 'on';
+    off.disabled = now === 'off';
+  }
+  paint(spec.value);
+
+  return card('Members picking roles', [
+    field('Now', chip, spec.help || null),
+    bar([on, off]),
+    say,
+  ]);
+}
 
 async function optionRow(option) {
   const role = await roleSelect(option ? option.role_id : null);
@@ -135,8 +175,9 @@ async function postCard(menu, say) {
 }
 
 async function load() {
-  const [payload] = await Promise.all([api('/api/rolemenus'), refRoles()]);
+  const [payload, , allSettings] = await Promise.all([api('/api/rolemenus'), refRoles(), settings(true)]);
   const menus = listOf(payload, 'rolemenus');
+  const mode = settingsNamespace(allSettings, 'rolemenu').find((spec) => spec.key === MODE_KEY);
   const optionIds = [];
   for (const menu of menus) for (const option of menu.options || []) optionIds.push(option.role_id);
   await names(idsIn(menus, ['channel_id']).concat(optionIds));
@@ -214,7 +255,10 @@ async function load() {
     );
   }
 
-  const nodes = [one.node, two.node];
+  const switchboard = section('Role selection', STAYS_POSTED);
+  switchboard.body.append(mode ? modeSwitch(mode) : sayNothing(NO_KEY));
+
+  const nodes = [switchboard.node, one.node, two.node];
   if (state.creating) {
     const made = section('New menu', null, { id: 'editor', open: true });
     made.body.append(await editor(null));

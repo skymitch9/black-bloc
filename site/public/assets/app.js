@@ -25,6 +25,7 @@ export const FEATURE_TABS = {
   birthday: 'birthdays',
   modmail: 'modmail',
   automod: 'automod',
+  rolemenu: 'rolemenus',
 };
 
 export function tabHref(tab) {

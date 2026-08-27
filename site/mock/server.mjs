@@ -24,6 +24,7 @@ const TYPES = {
 const NOT_SIGNED_IN = 'You are not signed in yet. Sign in with the Discord account you moderate Black in a Flash! with.';
 const NOT_STAFF = 'This dashboard is for the mods and admins of Black in a Flash!. Your Discord account is signed in, but it does not hold a staff role. Ask a Lead for the role.';
 const STAFF_UNKNOWN = 'Black Bloc could not ask Discord which roles you hold, so it cannot tell whether you are staff. That is a fault at the bot, not a problem with your access. Try again in a minute.';
+const ROLE_MENUS_OFF = 'Role menus are turned off right now, so nothing was changed. A Lead can turn them back on from the dashboard\'s Role menus tab or with `/rolemenu mode on`.';
 const GUARD = 'TEST MODE is on, so Black Bloc refuses to act outside #mute-me-bot-test-spam. Nothing was done. Ask the owner to lift the test guard first.';
 const UNKNOWN_ROUTE = 'This dashboard asked Black Bloc for something it does not serve. That is a fault in the page, not a problem with your access.';
 
@@ -113,6 +114,7 @@ const SETTING_SPECS = [
   ['automod_warn_threshold', 'int', 8, 8, 'warnings before Black Bloc says so in the log, 0 to stop counting', null, 100],
   ['modlog_channel_id', 'channel', '800000000000000004', null, 'where mod cases are posted; defaults to log_channel_id'],
   ['mod_dm_on_action', 'enum', 'server_action_reason', 'server_action', 'what a punished member is told', ['none', 'server_action', 'server_action_reason']],
+  ['rolemenu_mode', 'enum', 'off', 'off', 'whether members can pick roles from the posted panels', ['off', 'on']],
 ];
 
 const RULES = {
@@ -390,10 +392,10 @@ function meBody(session) {
 }
 
 function statusBody() {
-  const features = ['golive', 'tempvoice', 'honeypot', 'events', 'birthday', 'modmail', 'automod'].map((feature) => {
-    const key = `${feature}_mode`;
-    return { key, feature, mode: state.settings.get(key) ?? null };
-  });
+  const features = SETTING_SPECS
+    .map(([key]) => key)
+    .filter((key) => key.endsWith('_mode'))
+    .map((key) => ({ key, feature: key.slice(0, -'_mode'.length), mode: state.settings.get(key) ?? null }));
   return {
     bot: {
       ready: true,
@@ -691,6 +693,7 @@ route('POST', '/api/rolemenus/:name/post', async (context) => {
   if (!menu) throw new Refused(404, 'no_menu', `There is no role menu called ${context.params.name}.`);
   const body = await context.body();
   if (!body.channel_id) throw new Refused(400, 'bad_value', 'Pick a channel to post the menu in.');
+  if (state.settings.get('rolemenu_mode') !== 'on') throw new Refused(409, 'rolemenu_off', ROLE_MENUS_OFF);
   guard('posting a role menu');
   menu.channel_id = String(body.channel_id);
   menu.message_id = String(Date.now());

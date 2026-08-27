@@ -131,6 +131,9 @@ async function seed() {
   // The same fixture the pytest side builds: the mock is put back to its seed, then given
   // the one role menu the contract's PUT / post / DELETE entries act on.
   await post('/api/mock/reset');
+  // rolemenu_mode ships off, and a panel is not posted while it is off — so the post route's
+  // shape, and the guard's own 409 on it, are only reachable with it turned on.
+  await send('PUT', '/api/settings/rolemenu_mode', { value: 'on' });
   await post('/api/rolemenus', { name: 'contract', title: 'Contract', mode: 'multiple' });
   await fetch(`${BASE}/api/rolemenus/contract`, {
     method: 'PUT',

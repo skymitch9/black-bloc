@@ -9,12 +9,13 @@ from discord.ext import commands
 
 from ...actionlog import log_action
 from ...modcases import pages_under_limit
-from ...settings_store import require_staff
+from ...settings_store import ROLEMENU_MODES, require_staff
 
 log = logging.getLogger(__name__)
 
 MODES = ("multiple", "single", "staff")
 STAFF_MODE = "staff"
+MODE_KEY = "rolemenu_mode"
 JOY_GAMING = "<:JoyGAMING:1337948924844965931>"
 
 TITLE_MAX = 256
@@ -93,6 +94,10 @@ SEED: tuple[tuple[str, str, str, tuple[tuple[str, str, int], ...]], ...] = (
     ),
 )
 
+ROLE_MENUS_OFF = (
+    "Role menus are turned off right now, so nothing was changed. A Lead can turn them back on "
+    "from the dashboard's Role menus tab or with `/rolemenu mode on`."
+)
 NOT_IN_GUILD = (
     "Role menus only work inside the server, and this click did not come from one, so no "
     "roles were changed. Open the panel in a server channel and try again."
@@ -163,6 +168,10 @@ def check_option_count(count: int) -> int:
     if count > OPTIONS_MAX:
         raise MenuLimitError(TOO_MANY_OPTIONS.format(limit=OPTIONS_MAX, given=count))
     return count
+
+
+def picking_is_on(bot: Any, guild_id: int) -> bool:
+    return bot.store.get(guild_id, MODE_KEY) == "on"
 
 
 def custom_id(menu_id: int) -> str:
@@ -453,6 +462,9 @@ class RoleMenuSelect(discord.ui.Select):
         if guild is None or not isinstance(member, discord.Member):
             await interaction.response.send_message(NOT_IN_GUILD, ephemeral=True)
             return
+        if not picking_is_on(bot, guild.id):
+            await interaction.response.send_message(ROLE_MENUS_OFF, ephemeral=True)
+            return
         to_add, to_remove = role_diff(
             (role.id for role in member.roles), self.role_ids, (int(v) for v in self.values)
         )
@@ -513,6 +525,9 @@ class StaffAssignSelect(discord.ui.Select):
         guild = interaction.guild
         if guild is None:
             await interaction.response.send_message(NOT_IN_GUILD, ephemeral=True)
+            return
+        if not picking_is_on(bot, guild.id):
+            await interaction.response.send_message(ROLE_MENUS_OFF, ephemeral=True)
             return
         selected = {int(value) for value in self.values}
         if self.remove:
@@ -765,6 +780,9 @@ class RoleMenus(commands.Cog):
                 ephemeral=True,
             )
             return
+        if not picking_is_on(self.bot, interaction.guild.id):
+            await interaction.response.send_message(ROLE_MENUS_OFF, ephemeral=True)
+            return
         target = channel or self._default_channel(interaction)
         if target is None:
             await interaction.response.send_message(
@@ -831,6 +849,9 @@ class RoleMenus(commands.Cog):
                     allowed_mentions=discord.AllowedMentions.none(),
                 )
                 return
+        if not picking_is_on(self.bot, interaction.guild.id):
+            await interaction.response.send_message(ROLE_MENUS_OFF, ephemeral=True)
+            return
         await interaction.response.send_message(
             f"Pick what **{member.display_name}** should "
             + ("lose" if remove else "have")
@@ -838,6 +859,40 @@ class RoleMenus(commands.Cog):
             view=StaffAssignView(menu["id"], options, member, remove=remove),
             ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    @rolemenu.command(
+        name="mode", description="Turn members picking roles from the panels off or on"
+    )
+    @app_commands.describe(
+        mode="off leaves every panel posted and changes nobody's roles; on lets members pick again"
+    )
+    @app_commands.choices(
+        mode=[app_commands.Choice(name=name, value=name) for name in ROLEMENU_MODES]
+    )
+    async def mode(
+        self, interaction: discord.Interaction, mode: app_commands.Choice[str]
+    ) -> None:
+        if not await require_staff(interaction):
+            return
+        await self.bot.store.set(
+            interaction.guild.id, MODE_KEY, mode.value, by=interaction.user.id
+        )
+        await interaction.response.send_message(
+            f"Picking roles from the panels is now **{mode.value}**. "
+            + (
+                "Every panel already posted works again straight away."
+                if mode.value == "on"
+                else "The panels stay where they are; a click now says they are turned off."
+            ),
+            ephemeral=True,
+        )
+        await log_action(
+            self.bot,
+            interaction.guild,
+            "role_menu.mode",
+            actor=interaction.user,
+            details={"mode": mode.value},
         )
 
     @rolemenu.command(name="delete", description="Delete a role menu")
