@@ -22,6 +22,7 @@ from .tools import (
     members,
     mod,
     modmail,
+    polls,
     rolemenus,
     roles,
     tempvoice,
@@ -139,6 +140,7 @@ def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
     app.include_router(roles.build_router(bot))
     app.include_router(golive.build_router(bot))
     app.include_router(events.build_router(bot))
+    app.include_router(polls.build_router(bot))
     app.include_router(birthdays.build_router(bot))
     app.include_router(tempvoice.build_router(bot))
     app.include_router(honeypot.build_router(bot))

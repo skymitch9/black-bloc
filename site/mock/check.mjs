@@ -29,6 +29,8 @@ const IDS = {
   plain_role_id: '900000000000000005',
   request_id: '4',
   grant_id: '5',
+  poll_id: '3',
+  poll_request_id: '2',
 };
 
 const failures = [];
