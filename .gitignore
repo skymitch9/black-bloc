@@ -18,5 +18,6 @@ build/
 data/*
 !data/.gitkeep
 
-# docs/ is TRACKED on purpose (see docs/README.md header). Never put a secret
-# VALUE in there — names only.
+# docs/ is LOCAL ONLY (owner, 2026-08-26): the working docs tree stays on this
+# machine; peers get a curated set. Purged from GitHub history the same day.
+docs/

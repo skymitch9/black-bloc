@@ -15,7 +15,9 @@ Thin on purpose. The living state is in `docs/` — **read `docs/README.md`,
   (`TEST_MODE=true`). Never flip it, never post elsewhere, brief every subagent with this.
 - This is a GATEWAY bot (persistent websocket). It cannot run on Cloudflare
   Workers; hosting is an always-on container — `docs/info/hosting.md`.
-- `docs/` is tracked. Every ask goes on `docs/TODO.md` the moment it is mentioned;
+- `docs/` is **LOCAL ONLY** (gitignored; owner rule 2026-08-26 — peers get curated docs,
+  not the working tree). It exists on the owner's machine only; never `git add -f` it.
+  Every ask goes on `docs/TODO.md` the moment it is mentioned;
   finished items MOVE whole to `docs/DONE.md` in the session they land.
 - Owner rule: on a Fable session, builds go to `model: 'opus'` subagents; Fable plans,
   briefs and reviews.
