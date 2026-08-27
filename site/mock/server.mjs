@@ -65,6 +65,7 @@ const UNKNOWN_ROUTE = 'This dashboard asked Black Bloc for something it does not
 
 const now = () => new Date().toISOString();
 const minutesAgo = (m) => new Date(Date.now() - m * 60000).toISOString();
+const daysAhead = (d) => new Date(Date.now() + d * 86400000).toISOString();
 
 const ROLES = [
   { id: '900000000000000001', name: 'Aunties / Uncles', color: '#e04a6d', position: 12, managed: false },
@@ -206,6 +207,8 @@ const SETTING_SPECS = [
   ['automod_warn_threshold', 'int', 8, 8, 'warnings before Black Bloc says so in the log, 0 to stop counting', null, 100],
   ['modlog_channel_id', 'channel', '800000000000000004', null, 'where mod cases are posted; defaults to log_channel_id'],
   ['mod_dm_on_action', 'enum', 'server_action_reason', 'server_action', 'what a punished member is told', ['none', 'server_action', 'server_action_reason']],
+  ['rolemenu_approval_channel_id', 'channel', '800000000000000005', null, 'where a role request card is posted for staff to answer; defaults to staff_channel_id'],
+  ['rolemenu_approver_role_id', 'role', null, null, 'role mentioned when a role request needs answering'],
   ['rolemenu_mode', 'enum', 'off', 'off', 'whether members can pick roles from the panels; off takes them down and hides the /rolemenu commands, on posts them again', ['off', 'on']],
 ];
 
@@ -241,27 +244,64 @@ function seedState() {
   rules: JSON.parse(JSON.stringify(RULES)),
   menus: [
     {
+      id: 1,
       name: 'colours',
       title: 'Pick a colour',
       description: 'One at a time.',
       mode: 'single',
       channel_id: '800000000000000002',
       message_id: '810000000000000001',
+      approval: false,
+      expires_days: null,
+      retry_days: 7,
       options: [
         { role_id: '900000000000000003', label: 'Live now', emoji: '🔴', position: 0 },
         { role_id: '900000000000000004', label: 'Birthday', emoji: '🎂', position: 1 },
       ],
     },
     {
+      id: 2,
       name: 'pings',
       title: 'What should we ping you for?',
       description: null,
       mode: 'multiple',
       channel_id: null,
       message_id: null,
+      approval: false,
+      expires_days: null,
+      retry_days: 7,
       options: [{ role_id: '900000000000000005', label: 'Members', emoji: null, position: 0 }],
     },
+    {
+      id: 3,
+      name: 'runner-status',
+      title: 'Runner status',
+      description: 'Staff say yes to these, and they run out after a week.',
+      mode: 'multiple',
+      channel_id: '800000000000000002',
+      message_id: '810000000000000002',
+      approval: true,
+      expires_days: 7,
+      retry_days: 7,
+      options: [{ role_id: '900000000000000003', label: 'Runner', emoji: '🏃', position: 0 }],
+    },
   ],
+  requests: [
+    { id: 4, menu_id: 3, user_id: MEMBERS[3].id, role_id: '900000000000000003', requested_at: minutesAgo(35), status: 'pending', decided_by: null, decided_at: null, deny_reason: null },
+    { id: 3, menu_id: 3, user_id: MEMBERS[6].id, role_id: '900000000000000003', requested_at: minutesAgo(1500), status: 'pending', decided_by: null, decided_at: null, deny_reason: null },
+    { id: 2, menu_id: 3, user_id: MEMBERS[1].id, role_id: '900000000000000003', requested_at: minutesAgo(6000), status: 'approved', decided_by: STAFF.id, decided_at: minutesAgo(5900), deny_reason: null },
+    { id: 1, menu_id: 3, user_id: MEMBERS[4].id, role_id: '900000000000000003', requested_at: minutesAgo(9000), status: 'denied', decided_by: MEMBERS[1].id, decided_at: minutesAgo(8900), deny_reason: 'Not until the trial run is over.' },
+  ],
+  grants: [
+    { id: 5, user_id: MEMBERS[1].id, role_id: '900000000000000003', source: 'approval', granted_by: STAFF.id, granted_at: minutesAgo(5900), expires_at: daysAhead(2), removed_at: null, removed_reason: null },
+    { id: 4, user_id: MEMBERS[2].id, role_id: '900000000000000001', source: 'staff', granted_by: STAFF.id, granted_at: minutesAgo(20000), expires_at: daysAhead(29), removed_at: null, removed_reason: null },
+    { id: 3, user_id: MEMBERS[3].id, role_id: '900000000000000004', source: 'menu', granted_by: null, granted_at: minutesAgo(30000), expires_at: null, removed_at: null, removed_reason: null },
+    { id: 2, user_id: MEMBERS[5].id, role_id: '900000000000000003', source: 'staff', granted_by: MEMBERS[1].id, granted_at: minutesAgo(40000), expires_at: daysAhead(-1), removed_at: minutesAgo(1200), removed_reason: 'expired' },
+    { id: 1, user_id: MEMBERS[6].id, role_id: '900000000000000005', source: 'manual', granted_by: null, granted_at: minutesAgo(50000), expires_at: null, removed_at: minutesAgo(300), removed_reason: 'ended_by_staff' },
+  ],
+  nextMenu: 4,
+  nextRequest: 5,
+  nextGrant: 6,
   golive: {
     links: [
       { user_id: MEMBERS[1].id, twitch_login: 'caseyfast', twitch_user_id: '112233', linked_at: minutesAgo(4000) },
@@ -779,6 +819,99 @@ route('DELETE', '/api/settings/:key', (context) => {
   return { ...keyRow(context.params.key), cleared: true };
 });
 
+const BAD_APPROVAL = 'Approval is on or off, so nothing was changed. That is a fault in the page rather than in what you picked.';
+const BAD_DAYS = 'That is not a number of days, so nothing was changed. Send a whole number from 0 to 3650 — 0 means the role never runs out.';
+const NOT_POSTED_YET = 'That menu is not posted anywhere yet, so there is no panel to move. Post it from the Post a menu section to choose where it goes.';
+const NO_SUCH_REQUEST = 'Black Bloc has no record of that request any more, so nothing was done.';
+const ALREADY_DECIDED = 'Somebody answered that request already, so nothing was changed.';
+const DENY_NEEDS_A_REASON = 'A denied request needs one line the member is sent, so nothing was done. Say why and send it again.';
+const NO_SUCH_GRANT = 'Black Bloc has no timed role like that any more, so nothing was changed.';
+const ALREADY_ENDED = 'That timed role has already ended, so there was nothing to change.';
+const NO_END_DATE = 'That role has no end date, so there is nothing to push back. End it now instead.';
+const DAYS_NEEDED = 'Extending a role needs a number of days, so nothing was changed.';
+const NO_SUCH_MEMBER = 'That is not somebody Black Bloc can see in this server, so nothing was granted.';
+const NO_SUCH_ROLE = 'That is not a role in this server any more, so nothing was granted.';
+
+function wantedApproval(given) {
+  if (given === undefined || given === null) return null;
+  if (typeof given !== 'boolean') throw new Refused(400, 'bad_approval', BAD_APPROVAL);
+  return given;
+}
+
+function wantedDays(given, where) {
+  if (given === undefined || given === null || given === '') return null;
+  const number = Number(given);
+  if (!Number.isInteger(number) || number < 0 || number > 3650) {
+    throw new Refused(400, 'bad_days', `${BAD_DAYS} (${where})`);
+  }
+  return number;
+}
+
+/** The real API takes the old panel down before the new one goes up. */
+function movePanel(menu, channelId) {
+  if (!menu.message_id) throw new Refused(400, 'not_posted', NOT_POSTED_YET);
+  if (menu.mode === 'staff') throw new Refused(400, 'staff_menu', `${menu.name} is a staff-assigned menu, so there is no panel to post.`);
+  if (!menu.options.length) throw new Refused(400, 'no_options', `${menu.name} has no roles on it yet, so there is nothing to post.`);
+  if (state.settings.get('rolemenu_mode') !== 'on') throw new Refused(409, 'rolemenu_off', ROLE_MENUS_OFF);
+  if (!CHANNELS.some((channel) => channel.id === channelId)) {
+    throw new Refused(400, 'no_such_channel', `${channelId} is not a channel Black Bloc can see, so nothing was moved.`);
+  }
+  guard('moving a role menu panel');
+  menu.channel_id = channelId;
+  menu.message_id = String(Date.now());
+  logAction('web.rolemenu.post', { reason: menu.name, target_id: menu.channel_id, details: { menu: menu.name, channel_id: menu.channel_id, message_id: menu.message_id } });
+}
+
+function menuNameOf(menuId) {
+  const found = state.menus.find((menu) => String(menu.id) === String(menuId));
+  return found ? found.name : null;
+}
+
+function requestRow(row) {
+  return {
+    id: row.id,
+    menu_id: String(row.menu_id),
+    menu_name: menuNameOf(row.menu_id),
+    user_id: String(row.user_id),
+    user_name: memberName(row.user_id),
+    user_avatar: null,
+    role_id: String(row.role_id),
+    role_name: memberName(row.role_id),
+    requested_at: row.requested_at,
+    status: row.status,
+    decided_by_id: row.decided_by === null ? null : String(row.decided_by),
+    decided_by_name: row.decided_by === null ? null : memberName(row.decided_by),
+    decided_at: row.decided_at,
+    deny_reason: row.deny_reason,
+  };
+}
+
+function grantRow(row) {
+  return {
+    id: row.id,
+    user_id: String(row.user_id),
+    user_name: memberName(row.user_id),
+    role_id: String(row.role_id),
+    role_name: memberName(row.role_id),
+    source: row.source,
+    granted_by_id: row.granted_by === null ? null : String(row.granted_by),
+    granted_by_name: row.granted_by === null ? null : memberName(row.granted_by),
+    granted_at: row.granted_at,
+    expires_at: row.expires_at,
+    removed_at: row.removed_at,
+    removed_reason: row.removed_reason,
+    open: row.removed_at === null,
+  };
+}
+
+function whenDays(days) {
+  return days === null || days === undefined ? null : daysAhead(days);
+}
+
+function menuOfRequest(row) {
+  return state.menus.find((menu) => String(menu.id) === String(row.menu_id)) || null;
+}
+
 function menuRow(menu) {
   return {
     name: menu.name,
@@ -787,6 +920,9 @@ function menuRow(menu) {
     mode: menu.mode,
     channel_id: menu.channel_id === null || menu.channel_id === undefined ? null : String(menu.channel_id),
     message_id: menu.message_id === null || menu.message_id === undefined ? null : String(menu.message_id),
+    approval: Boolean(menu.approval),
+    expires_days: menu.expires_days ?? null,
+    retry_days: menu.retry_days ?? 7,
     options: menu.options.map((option, at) => ({
       role_id: String(option.role_id),
       label: option.label ?? null,
@@ -810,12 +946,16 @@ route('POST', '/api/rolemenus', async (context) => {
     throw new Refused(409, 'exists', `There is already a role menu called ${name}. Pick another name or edit that one.`);
   }
   const menu = {
+    id: state.nextMenu++,
     name,
     title: body.title || name,
     description: body.description || null,
     mode: body.mode || 'multiple',
     channel_id: null,
     message_id: null,
+    approval: wantedApproval(body.approval) ?? false,
+    expires_days: wantedDays(body.expires_days, 'expires_days') ?? null,
+    retry_days: wantedDays(body.retry_days, 'retry_days') ?? 7,
     options: Array.isArray(body.options) ? body.options : [],
   };
   state.menus.unshift(menu);
@@ -831,8 +971,15 @@ route('PUT', '/api/rolemenus/:name', async (context) => {
   if (body.title !== undefined) menu.title = body.title;
   if (body.description !== undefined) menu.description = body.description;
   if (body.mode !== undefined) menu.mode = body.mode;
+  if (body.approval !== undefined) menu.approval = wantedApproval(body.approval);
+  if (body.expires_days !== undefined) menu.expires_days = wantedDays(body.expires_days, 'expires_days') || null;
+  if (body.retry_days !== undefined) menu.retry_days = wantedDays(body.retry_days, 'retry_days') ?? menu.retry_days;
   if (Array.isArray(body.options)) menu.options = body.options;
   logAction('web.rolemenu.edit', { reason: menu.name, details: { menu: menu.name } });
+  const moving = body.channel_id === undefined || body.channel_id === null || body.channel_id === ''
+    ? null
+    : String(body.channel_id);
+  if (moving !== null && moving !== menu.channel_id) movePanel(menu, moving);
   return menuRow(menu);
 });
 
@@ -857,6 +1004,135 @@ route('POST', '/api/rolemenus/:name/post', async (context) => {
   menu.message_id = String(Date.now());
   logAction('web.rolemenu.post', { reason: menu.name, target_id: menu.channel_id, details: { menu: menu.name, channel_id: menu.channel_id, message_id: menu.message_id } });
   return { posted: true, name: menu.name, channel_id: menu.channel_id, message_id: menu.message_id };
+});
+
+route('GET', '/api/rolemenus/requests', (context) => {
+  requireStaff(context.session);
+  const asked = (context.url.searchParams.get('status') || '').split(',').filter(Boolean);
+  const known = ['pending', 'approved', 'denied', 'withdrawn', 'granted_by_hand'];
+  for (const one of asked) {
+    if (!known.includes(one)) {
+      throw new Refused(400, 'unknown_status', `${one} is not a state a role request can be in, so nothing was listed. They are ${known.join(', ')}.`);
+    }
+  }
+  const wanted = asked.length ? asked : known;
+  return state.requests
+    .filter((row) => wanted.includes(row.status))
+    .slice()
+    .sort((a, b) => (b.status === 'pending') - (a.status === 'pending') || b.id - a.id)
+    .map(requestRow);
+});
+
+route('POST', '/api/rolemenus/requests/:id/approve', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const row = state.requests.find((one) => String(one.id) === context.params.id);
+  if (!row) throw new Refused(409, 'not_decided', NO_SUCH_REQUEST);
+  if (row.status !== 'pending') throw new Refused(409, 'not_decided', `${ALREADY_DECIDED} It is already ${row.status}.`);
+  const given = wantedDays(body.days, 'days');
+  const menu = menuOfRequest(row);
+  const days = body.days === undefined || body.days === null ? (menu ? menu.expires_days : null) : given;
+  row.status = 'approved';
+  row.decided_by = STAFF.id;
+  row.decided_at = now();
+  const until = days ? whenDays(days) : null;
+  state.grants.unshift({
+    id: state.nextGrant++,
+    user_id: row.user_id,
+    role_id: row.role_id,
+    source: 'approval',
+    granted_by: STAFF.id,
+    granted_at: now(),
+    expires_at: until,
+    removed_at: null,
+    removed_reason: null,
+  });
+  logAction('web.role.approved', { target_id: row.user_id, details: { request_id: row.id, role_id: row.role_id } });
+  return {
+    request: requestRow(row),
+    message: `Approved — ${memberName(row.user_id)} has ${memberName(row.role_id)} now.${until ? ' It runs out in ' + days + ' days.' : ''}`,
+  };
+});
+
+route('POST', '/api/rolemenus/requests/:id/deny', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const row = state.requests.find((one) => String(one.id) === context.params.id);
+  if (!row) throw new Refused(409, 'not_decided', NO_SUCH_REQUEST);
+  const reason = String(body.reason || '').trim();
+  if (!reason) throw new Refused(400, 'no_reason', DENY_NEEDS_A_REASON);
+  if (row.status !== 'pending') throw new Refused(409, 'not_decided', `${ALREADY_DECIDED} It is already ${row.status}.`);
+  row.status = 'denied';
+  row.decided_by = STAFF.id;
+  row.decided_at = now();
+  row.deny_reason = reason;
+  logAction('web.role.denied', { target_id: row.user_id, reason, details: { request_id: row.id, role_id: row.role_id } });
+  return { request: requestRow(row), message: 'Denied, and they have been told why.' };
+});
+
+route('GET', '/api/roles/grants', (context) => {
+  requireStaff(context.session);
+  const params = context.url.searchParams;
+  const userId = params.get('user_id') || '';
+  const roleId = params.get('role_id') || '';
+  const limit = Math.max(1, Math.min(Number(params.get('limit') || 200) || 200, 200));
+  return state.grants
+    .filter((row) => (!userId || String(row.user_id) === userId) && (!roleId || String(row.role_id) === roleId))
+    .slice()
+    .sort((a, b) => (b.removed_at === null) - (a.removed_at === null) || b.id - a.id)
+    .slice(0, limit)
+    .map(grantRow);
+});
+
+route('POST', '/api/roles/grants', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const userId = String(body.user_id || '');
+  const roleId = String(body.role_id || '');
+  if (!ROSTER.some((row) => row.id === userId)) throw new Refused(404, 'no_such_member', NO_SUCH_MEMBER);
+  if (!ROLES.some((row) => row.id === roleId)) throw new Refused(404, 'no_such_role', NO_SUCH_ROLE);
+  const days = wantedDays(body.days, 'days');
+  const row = {
+    id: state.nextGrant++,
+    user_id: userId,
+    role_id: roleId,
+    source: 'staff',
+    granted_by: STAFF.id,
+    granted_at: now(),
+    expires_at: days ? whenDays(days) : null,
+    removed_at: null,
+    removed_reason: null,
+  };
+  state.grants.unshift(row);
+  logAction('web.role.granted', { target_id: userId, reason: body.reason || null, details: { grant_id: row.id, role_id: roleId, expires_at: row.expires_at } });
+  return grantRow(row);
+});
+
+route('POST', '/api/roles/grants/:id/extend', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const row = state.grants.find((one) => String(one.id) === context.params.id);
+  if (!row) throw new Refused(404, 'no_such_grant', NO_SUCH_GRANT);
+  if (row.removed_at) throw new Refused(409, 'already_ended', ALREADY_ENDED);
+  if (!row.expires_at) throw new Refused(409, 'no_end_date', NO_END_DATE);
+  if (body.days === undefined || body.days === null || body.days === '') {
+    throw new Refused(400, 'no_days', DAYS_NEEDED);
+  }
+  const days = Math.max(1, wantedDays(body.days, 'days') || 1);
+  row.expires_at = new Date(new Date(row.expires_at).getTime() + days * 86400000).toISOString();
+  logAction('web.role.extended', { target_id: row.user_id, details: { grant_id: row.id, role_id: row.role_id, expires_at: row.expires_at } });
+  return grantRow(row);
+});
+
+route('DELETE', '/api/roles/grants/:id', (context) => {
+  requireStaff(context.session);
+  const row = state.grants.find((one) => String(one.id) === context.params.id);
+  if (!row) throw new Refused(404, 'no_such_grant', NO_SUCH_GRANT);
+  if (row.removed_at) throw new Refused(409, 'already_ended', ALREADY_ENDED);
+  row.removed_at = now();
+  row.removed_reason = 'ended_by_staff';
+  logAction('web.role.ended', { target_id: row.user_id, details: { grant_id: row.id, role_id: row.role_id } });
+  return grantRow(row);
 });
 
 route('GET', '/api/golive/links', (context) => {
