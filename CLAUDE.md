@@ -4,7 +4,10 @@ Thin on purpose. The living state is in `docs/` — **read `docs/README.md`,
 `docs/TODO.md`, `docs/KNOWN_ISSUES.md` first**, every session (global rule).
 
 - Python 3.12, venv at `.venv`. `pip install -e ".[dev]"`, `pytest`, `python -m black_bloc`.
-- `black_bloc/app.py` is the orchestrator and stays thin. Features are cogs under
+- ⚠️ **CODE STYLE (owner, 2026-08-26): near-zero comments in code.** Explanations
+  live in `docs/info/code-notes.md`, keyed by `path:line`, not in the source. One-line
+  docstrings at most. `black_bloc/app.py` is a bare "run button"; `bot.py` is lifecycle
+  only; every behaviour is its own module with helpers. Features are cogs under
   `black_bloc/cogs/` (`moderation/`, `content/`), registered in `bot.py:COGS`.
 - Config comes ONLY from `black_bloc/config.py` (pydantic-settings, `.env`). Nothing
   else reads `os.environ`.

@@ -21,3 +21,6 @@ data/*
 # docs/ is LOCAL ONLY (owner, 2026-08-26): the working docs tree stays on this
 # machine; peers get a curated set. Purged from GitHub history the same day.
 docs/
+
+# One-off read-only Discord scan scripts written by agents; scratch tooling, not product.
+scripts/scan/
