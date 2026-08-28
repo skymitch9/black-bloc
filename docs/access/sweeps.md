@@ -1,7 +1,7 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TEMPORARILY TRACKED (owner order 2026-08-27). Last verified:
-> **2026-08-27 17:30** — "verified" below means a human did it in the real server; everything else is
+> **2026-08-27 20:20** — "verified" below means a human did it in the real server; everything else is
 > test-suite evidence only. Tick a row by moving it to the verified table with the date.
 
 All of this happens in **`#mute-me-bot-test-spam`** (test mode) or on **https://blackbloc.heygabi.ai**.
@@ -27,8 +27,12 @@ All of this happens in **`#mute-me-bot-test-spam`** (test mode) or on **https://
 | 9 | Polls — recurring, reminder | `/poll recur create` weekly; a 1-hour poll | the next occurrence opens on schedule; a reminder 60 min before close |
 | 10 | Chat 2 | `@Black Bloc how many of us` / `who's live` / `what's next` / `birthdays` / `my roles` / `I need a mod`; edit a greeting line on /chat.html then `hi` | live answers; the edited line is used; 👋🏿 tone visible |
 | 11 | Birthday daily import | nothing to do — read the log after a restart | `birthdays: the daily import took nothing new — {… 'already': 38 …}` |
-| 12 | Logs (Phase 12, deploying 2026-08-27 evening) | flip `golive_log_level` to `all`, `/golive test`, then back to `important`, `/golive test` again; `/golive logs` | Discord line only in `all`; dashboard shows both; a role request still posts its card with `rolemenu_log_level = off` |
+| 12 | Logs (Phase 12, live 18:38) | flip `golive_log_level` to `all`, `/golive test`, then back to `important`, `/golive test` again; `/golive logs` | Discord line only in `all`; dashboard shows both; a role request still posts its card with `rolemenu_log_level = off` |
 | 13 | Emoji tone | `@Black Bloc hi` until a 👋 line comes up | dark tone by default; `emoji_skin_tone` setting changes it |
+| 14 | Requests — staff (Phase 13, live 20:15) | `/request create` in the test channel as staff (What / Why / due date) | ephemeral "Filed as #N … approved straight away"; the row appears on https://blackbloc.heygabi.ai/requests.html under Planned & in progress; `/request list`, `/request logs` |
+| 15 | Requests — member | have a non-staff member sign in at https://blackbloc.heygabi.ai and file one; or `/request create` as a member | they see ONLY the Requests page (file + their own); the row lands in Pending; Approve / Decline from the page → DM; `/request withdraw <id>` while pending |
+| 16 | Via column | change one setting from Discord (`/settings set-value …`) and one from the website | Logs page → Settings audit shows **Discord** and **Website** in the Via column; `/settings logs` says the same |
+| 17 | Cyberpunk look | cog → Cyberpunk | the estate's cyan/yellow palette again (no magenta) — say if it still reads wrong |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that
