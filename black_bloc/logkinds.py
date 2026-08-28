@@ -23,6 +23,7 @@ FEATURES = (
     "rolemenu",
     "poll",
     "chat",
+    "request",
 )
 
 HEADS: dict[str, str] = {
@@ -44,6 +45,8 @@ HEADS: dict[str, str] = {
     "rolemenu": "rolemenu",
     "poll": "poll",
     "chat": "chat",
+    "request": "request",
+    "requests": "request",
 }
 
 FEATURE_LABELS: dict[str, str] = {
@@ -59,6 +62,7 @@ FEATURE_LABELS: dict[str, str] = {
     "rolemenu": "Role menus",
     "poll": "Polls",
     "chat": "Chat",
+    "request": "Requests",
 }
 
 FEATURE_PAGES: dict[str, str] = {
@@ -74,6 +78,7 @@ FEATURE_PAGES: dict[str, str] = {
     "rolemenu": "rolemenus.html",
     "poll": "polls.html",
     "chat": "chat.html",
+    "request": "requests.html",
 }
 
 IMPORTANT_SUFFIXES = (
@@ -108,6 +113,8 @@ IMPORTANT: frozenset[str] = frozenset(
         "mod.warn_threshold",
         "modmail.unblocked",
         "poll.cancelled",
+        "request.declined",
+        "request.done",
         "role.extended",
     }
 )
@@ -202,6 +209,13 @@ ROUTINE: frozenset[str] = frozenset(
         "poll.reminded",
         "poll.settings",
         "presence.bio_set",
+        "request.auto_approved",
+        "request.comment",
+        "request.filed",
+        "request.in_progress",
+        "request.planned",
+        "request.updated",
+        "request.withdrawn",
         "role.changed_by_hand",
         "role.reconciled",
         "role.requested",

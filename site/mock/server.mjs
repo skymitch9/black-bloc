@@ -215,6 +215,7 @@ const LOG_LEVEL_FEATURES = [
   ['rolemenu', 'role menus', 'rolemenu'],
   ['poll', 'polls', 'poll'],
   ['chat', 'chat', 'chat'],
+  ['request', 'requests', 'request'],
 ];
 
 const SETTING_SPECS = [

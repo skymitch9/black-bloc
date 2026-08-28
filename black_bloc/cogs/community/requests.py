@@ -7,7 +7,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from ...actionlog import log_action
+from ...actionlog import LOGS_DEFAULT, LOGS_MAX, LOGS_MIN, log_action, send_logs
 from ...command_errors import NETWORK_ERRORS, AnswersErrors
 from ...requests import (
     ALREADY_THAT,
@@ -421,6 +421,19 @@ class Requests(commands.Cog):
             reason=reason,
         )
         await answer(interaction, said)
+
+    @request.command(name="logs", description="The last few request log lines")
+    @app_commands.describe(
+        count="How many lines, 1 to 50 (10 by default)",
+        important_only="True to leave out the dry runs and the housekeeping",
+    )
+    async def request_logs(
+        self,
+        interaction: discord.Interaction,
+        count: app_commands.Range[int, LOGS_MIN, LOGS_MAX] = LOGS_DEFAULT,
+        important_only: bool = False,
+    ) -> None:
+        await send_logs(interaction, "request", count=count, important_only=important_only)
 
 
 async def setup(bot: commands.Bot) -> None:

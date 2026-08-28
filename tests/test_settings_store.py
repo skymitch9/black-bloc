@@ -790,7 +790,8 @@ def test_the_chat_manners_keys_refuse_the_wrong_shape():
 
 async def test_every_feature_has_a_log_level_key_defaulting_to_important(store):
     keys = [f"{feature}_log_level" for feature in FEATURES]
-    assert len(keys) == 12
+    assert len(keys) == 13
+    assert "request_log_level" in keys
     for key in keys:
         assert KEY_TYPES[key] == "enum"
         assert KEY_CHOICES[key] == LEVELS

@@ -423,6 +423,7 @@ LOG_LEVEL_COMMANDS: dict[str, str] = {
     "rolemenu": "rolemenu",
     "poll": "poll",
     "chat": "chat",
+    "request": "request",
 }
 
 
