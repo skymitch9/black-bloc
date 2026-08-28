@@ -1,0 +1,263 @@
+import pytest
+
+from black_bloc import requests as pure
+from black_bloc.storage.db import Database
+
+GUILD = 7
+OTHER_GUILD = 8
+ASKER = 900
+STAFFER = 901
+
+
+@pytest.fixture
+async def db(tmp_path):
+    database = Database(tmp_path / "r.sqlite3")
+    await database.connect()
+    try:
+        yield database
+    finally:
+        await database.close()
+
+
+async def file_one(db, **kwargs):
+    fields = {
+        "what": "a request board",
+        "why": "the google doc is a mess",
+        "due_on": None,
+    } | kwargs
+    guild_id = fields.pop("guild_id", GUILD)
+    user_id = fields.pop("user_id", ASKER)
+    return await pure.create_request(db, guild_id, user_id, **fields)
+
+
+def test_a_due_date_is_the_shape_it_says_or_a_sentence():
+    assert pure.parse_due("2026-09-15") == "2026-09-15"
+    assert pure.parse_due("") is None
+    assert pure.parse_due(None) is None
+    assert pure.parse_due("  2026-09-15 ") == "2026-09-15"
+    with pytest.raises(pure.RequestError) as caught:
+        pure.parse_due("15/09/2026")
+
+    assert "YYYY-MM-DD" in str(caught.value)
+    assert "15/09/2026" in str(caught.value)
+
+
+def test_a_date_that_is_not_a_day_is_refused_rather_than_rounded():
+    for given in ("2026-13-01", "2026-02-30", "next tuesday"):
+        with pytest.raises(pure.RequestError):
+            pure.parse_due(given)
+
+
+def test_a_due_date_reads_back_as_a_hammertime_stamp_each_reader_sees_in_their_own_clock():
+    stamp = pure.due_stamp("2026-09-15")
+
+    assert stamp is not None and stamp.startswith("<t:") and stamp.endswith(":D>")
+    assert pure.due_stamp(None) is None
+    assert pure.due_stamp("not a date") is None
+
+
+def test_the_three_fields_are_refused_in_the_order_a_person_meets_them():
+    what, why, due = pure.checked_fields(" a board ", " the doc is a mess ", "2026-09-15")
+
+    assert (what, why, due) == ("a board", "the doc is a mess", "2026-09-15")
+    with pytest.raises(pure.RequestError) as no_what:
+        pure.checked_fields("   ", "", "")
+    with pytest.raises(pure.RequestError) as no_why:
+        pure.checked_fields("a board", "  ", "")
+
+    assert "what you are asking for" in str(no_what.value)
+    assert "why it is worth doing" in str(no_why.value)
+
+
+def test_what_and_why_are_cut_to_the_length_the_modal_takes():
+    what, why, _ = pure.checked_fields("a" * 2000, "b" * 2000, "")
+
+    assert len(what) == pure.WHAT_LIMIT
+    assert len(why) == pure.WHY_LIMIT
+
+
+def test_a_priority_is_a_small_whole_number_or_a_sentence():
+    assert pure.wanted_priority(None) is None
+    assert pure.wanted_priority("") is None
+    assert pure.wanted_priority(3) == 3
+    assert pure.wanted_priority("0") == 0
+    for bad in ("high", -1, pure.PRIORITY_MAX + 1, True):
+        with pytest.raises(pure.RequestError):
+            pure.wanted_priority(bad)
+
+
+def test_only_the_states_staff_can_set_are_settable():
+    assert pure.wanted_status("approved") == "approved"
+    assert pure.wanted_status(" DONE ") == "done"
+    for bad in ("pending", "withdrawn", "shipped", ""):
+        with pytest.raises(pure.RequestError):
+            pure.wanted_status(bad)
+
+
+def test_a_filter_of_no_statuses_means_every_one_and_an_unknown_one_is_refused():
+    assert pure.wanted_statuses("") == pure.STATUSES
+    assert pure.wanted_statuses("pending,done") == ("pending", "done")
+    with pytest.raises(pure.RequestError):
+        pure.wanted_statuses("pending,shipped")
+
+
+def test_a_page_that_is_past_the_end_shows_the_last_one_rather_than_nothing():
+    rows = list(range(25))
+
+    assert pure.page_of(rows, 1, 10) == (rows[:10], 1, 3)
+    assert pure.page_of(rows, 3, 10) == (rows[20:], 3, 3)
+    assert pure.page_of(rows, 99, 10) == (rows[20:], 3, 3)
+    assert pure.page_of(rows, 0, 10) == (rows[:10], 1, 3)
+    assert pure.page_of([], 1, 10) == ([], 1, 1)
+
+
+async def test_a_filed_request_starts_pending_with_nobody_having_decided(db):
+    request_id = await file_one(db, due_on="2026-09-15")
+    row = await pure.get_request(db, request_id)
+
+    assert row["status"] == pure.PENDING
+    assert row["decided_by"] is None and row["decided_at"] is None
+    assert row["due_on"] == "2026-09-15"
+    assert row["created_at"]
+
+
+async def test_a_staffers_request_may_be_stored_approved_with_the_decision_stamped(db):
+    request_id = await file_one(db, status=pure.APPROVED, decided_by=STAFFER)
+    row = await pure.get_request(db, request_id)
+
+    assert row["status"] == pure.APPROVED
+    assert row["decided_by"] == STAFFER and row["decided_at"]
+
+
+async def test_the_list_puts_pending_first_and_then_the_newest(db):
+    old = await file_one(db, what="old one")
+    middle = await file_one(db, what="middle one")
+    fresh = await file_one(db, what="fresh one")
+    await pure.set_status(db, fresh, pure.DONE, decided_by=STAFFER)
+    await pure.set_status(db, old, pure.APPROVED, decided_by=STAFFER)
+
+    rows = await pure.list_requests(db, GUILD)
+
+    assert [row["id"] for row in rows] == [middle, fresh, old]
+
+
+async def test_a_list_never_reaches_into_another_server(db):
+    mine = await file_one(db)
+    await file_one(db, guild_id=OTHER_GUILD)
+
+    rows = await pure.list_requests(db, GUILD)
+
+    assert [row["id"] for row in rows] == [mine]
+    assert await pure.count_requests(db, GUILD) == 1
+
+
+async def test_a_list_filters_by_status_by_asker_by_assignee_and_by_words(db):
+    mine = await file_one(db, what="a request board", why="the doc is a mess")
+    theirs = await file_one(db, user_id=STAFFER, what="a karaoke night", why="it is fun")
+    await pure.set_status(db, theirs, pure.PLANNED, decided_by=STAFFER)
+    await pure.set_fields(db, theirs, assignee_id=STAFFER)
+
+    assert [r["id"] for r in await pure.list_requests(db, GUILD, statuses=(pure.PENDING,))] == [
+        mine
+    ]
+    assert [r["id"] for r in await pure.list_requests(db, GUILD, user_id=STAFFER)] == [theirs]
+    assert [r["id"] for r in await pure.list_requests(db, GUILD, assignee_id=STAFFER)] == [theirs]
+    assert [r["id"] for r in await pure.list_requests(db, GUILD, query="karaoke")] == [theirs]
+    assert await pure.count_requests(db, GUILD, query="karaoke") == 1
+
+
+async def test_a_search_reads_the_notes_as_well_as_the_what_and_the_why(db):
+    request_id = await file_one(db)
+    await pure.set_fields(db, request_id, notes="waiting on the hosting bill")
+
+    assert [r["id"] for r in await pure.list_requests(db, GUILD, query="hosting")] == [request_id]
+
+
+async def test_a_page_of_the_list_is_asked_for_in_sql_not_sliced_afterwards(db):
+    for number in range(5):
+        await file_one(db, what=f"one {number}")
+
+    first = await pure.list_requests(db, GUILD, limit=2, offset=0)
+    second = await pure.list_requests(db, GUILD, limit=2, offset=2)
+
+    assert len(first) == 2 and len(second) == 2
+    assert {row["id"] for row in first} & {row["id"] for row in second} == set()
+
+
+async def test_moving_to_done_stamps_when_and_moving_off_declined_forgets_the_reason(db):
+    request_id = await file_one(db)
+    await pure.set_status(db, request_id, pure.DECLINED, decided_by=STAFFER, decline_reason="no")
+    declined = await pure.get_request(db, request_id)
+
+    assert declined["decline_reason"] == "no" and declined["done_at"] is None
+
+    await pure.set_status(db, request_id, pure.DONE, decided_by=STAFFER)
+    done = await pure.get_request(db, request_id)
+
+    assert done["done_at"] and done["decline_reason"] is None
+
+
+async def test_a_decision_that_names_nobody_leaves_the_first_deciders_name_alone(db):
+    request_id = await file_one(db)
+    await pure.set_status(db, request_id, pure.APPROVED, decided_by=STAFFER)
+    await pure.set_status(db, request_id, pure.PLANNED)
+    row = await pure.get_request(db, request_id)
+
+    assert row["decided_by"] == STAFFER
+
+
+async def test_only_the_fields_actually_sent_are_written(db):
+    request_id = await file_one(db)
+    await pure.set_fields(db, request_id, priority=2)
+    await pure.set_fields(db, request_id, notes="soon")
+    row = await pure.get_request(db, request_id)
+
+    assert row["priority"] == 2 and row["notes"] == "soon" and row["assignee_id"] is None
+    assert await pure.set_fields(db, request_id) == []
+
+
+async def test_a_field_can_be_cleared_again_by_sending_it_as_nothing(db):
+    request_id = await file_one(db)
+    await pure.set_fields(db, request_id, assignee_id=STAFFER, priority=1)
+    await pure.set_fields(db, request_id, assignee_id=None, priority=None)
+    row = await pure.get_request(db, request_id)
+
+    assert row["assignee_id"] is None and row["priority"] is None
+
+
+async def test_comments_come_back_oldest_first_and_are_counted_per_request(db):
+    first = await file_one(db)
+    second = await file_one(db)
+    await pure.add_comment(db, first, STAFFER, "looking at it")
+    await pure.add_comment(db, first, ASKER, "thank you")
+    await pure.add_comment(db, second, STAFFER, "next week")
+
+    rows = await pure.comments_for(db, first)
+
+    assert [row["text"] for row in rows] == ["looking at it", "thank you"]
+    assert await pure.comment_counts(db, [first, second]) == {first: 2, second: 1}
+    assert await pure.comment_counts(db, []) == {}
+
+
+async def test_the_pending_count_is_what_the_sidebar_badge_reads(db):
+    await file_one(db)
+    second = await file_one(db)
+    await pure.set_status(db, second, pure.APPROVED, decided_by=STAFFER)
+
+    assert await pure.pending_count(db, GUILD) == 1
+
+
+async def test_the_notice_message_id_is_kept_so_the_line_can_be_found_again(db):
+    request_id = await file_one(db)
+    await pure.set_message(db, request_id, 4242)
+
+    assert (await pure.get_request(db, request_id))["message_id"] == 4242
+
+
+async def test_a_summary_line_names_the_number_the_state_and_the_deadline(db):
+    request_id = await file_one(db, due_on="2026-09-15")
+    line = pure.summary_line(await pure.get_request(db, request_id))
+
+    assert f"#{request_id}" in line
+    assert "waiting on staff" in line
+    assert "<t:" in line
