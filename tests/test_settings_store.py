@@ -1,8 +1,10 @@
 import pytest
 
+from black_bloc.api.status import mode_keys
 from black_bloc.automod import validate_rules
 from black_bloc.config import load_settings
 from black_bloc.emoji import SKIN_TONE_DEFAULT, SKIN_TONE_NAMES
+from black_bloc.logkinds import FEATURES, LEVELS
 from black_bloc.settings_store import (
     BIRTHDAY_CHANNEL_ID,
     BIRTHDAY_COLOR,
@@ -19,6 +21,7 @@ from black_bloc.settings_store import (
     GOLIVE_END_SUFFIX,
     GOLIVE_TEMPLATE,
     HONEYPOT_PURGE_MAX_DAYS,
+    KEY_CHOICES,
     KEY_HELP,
     KEY_TYPES,
     LIVE_NOW_CHANNEL_ID,
@@ -783,3 +786,28 @@ def test_the_chat_manners_keys_refuse_the_wrong_shape():
     ):
         with pytest.raises(SettingError):
             coerce_value(key, bad)
+
+
+async def test_every_feature_has_a_log_level_key_defaulting_to_important(store):
+    keys = [f"{feature}_log_level" for feature in FEATURES]
+    assert len(keys) == 12
+    for key in keys:
+        assert KEY_TYPES[key] == "enum"
+        assert KEY_CHOICES[key] == LEVELS
+        assert KEY_HELP.get(key)
+        assert store.get(7, key) == "important"
+        assert store.default(key) == "important"
+
+
+def test_a_log_level_takes_only_the_three_levels():
+    assert coerce_value("golive_log_level", "off") == "off"
+    assert coerce_value("mod_log_level", "all") == "all"
+    for bad in ("quiet", "IMPORTANT", "on", 1, None):
+        with pytest.raises(SettingError):
+            coerce_value("chat_log_level", bad)
+
+
+def test_no_log_level_key_is_read_as_a_feature_switch():
+    """`api/status.py` calls every key ending in `_mode` a feature; none of these does."""
+    assert not [key for key in mode_keys() if key.endswith("_log_level")]
+    assert all(not key.endswith("_mode") for key in KEY_TYPES if key.endswith("_log_level"))

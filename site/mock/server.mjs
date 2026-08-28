@@ -159,6 +159,22 @@ const ROSTER = [
   })),
 ];
 
+// [feature namespace, the word the help uses, the slash group that shows its logs]
+const LOG_LEVEL_FEATURES = [
+  ['core', 'core', null],
+  ['automod', 'automod', 'automod'],
+  ['honeypot', 'honeypot', 'honeypot'],
+  ['mod', 'moderation', 'mod'],
+  ['modmail', 'modmail', 'modmail'],
+  ['golive', 'go-live', 'golive'],
+  ['events', 'events', 'event'],
+  ['birthday', 'birthdays', 'birthday'],
+  ['tempvoice', 'temp voice', 'voice'],
+  ['rolemenu', 'role menus', 'rolemenu'],
+  ['poll', 'polls', 'poll'],
+  ['chat', 'chat', 'chat'],
+];
+
 const SETTING_SPECS = [
   ['log_channel_id', 'channel', '800000000000000004', null, 'where Black Bloc posts what it did'],
   ['staff_channel_id', 'channel', '800000000000000005', null, 'the channel whose viewers count as staff'],
@@ -228,6 +244,14 @@ const SETTING_SPECS = [
   ['chat_greeting_reaction', 'bool', false, false, 'true to answer a bare hello with a wave reaction instead of a sentence; anything longer still gets a reply'],
   ['chat_reply_in_threads', 'bool', true, true, 'true to answer @-mentions inside threads as well as channels'],
   ['chat_route_ping_staff', 'bool', false, false, 'true to drop one line in the staff channel when somebody asks the bot for a mod; only used while modmail_enabled is true'],
+  ...LOG_LEVEL_FEATURES.map(([feature, label, command]) => [
+    `${feature}_log_level`,
+    'enum',
+    'important',
+    'important',
+    `which ${label} log lines reach the Discord log channel: off, important (anything that acted on a member, or failed) or all. Every line is kept on the dashboard${command ? ` and in \`/${command} logs\`` : ''} either way`,
+    ['off', 'important', 'all'],
+  ]),
 ];
 
 const RULES = {
@@ -473,6 +497,7 @@ const NOT_A_FEATURE = ['golive_end_mode'];
 const NAMESPACE_OVERRIDE = {
   modlog_channel_id: 'automod',
   mod_dm_on_action: 'automod',
+  mod_log_level: 'automod',
 };
 
 function namespaceOf(key) {

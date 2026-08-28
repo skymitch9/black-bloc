@@ -17,6 +17,7 @@ from .automod import (
 )
 from .config import Settings
 from .emoji import SKIN_TONE_DEFAULT, SKIN_TONE_NAMES
+from .logkinds import FEATURE_LABELS, FEATURES, LEVEL_DEFAULT, LEVELS, log_level_key
 from .polls import DATE_LABEL_FORMS as POLL_DATE_LABEL_FORMS
 from .polls import MAX_HOURS as POLL_MAX_HOURS
 from .polls import MIN_HOURS as POLL_MIN_HOURS
@@ -381,6 +382,37 @@ KEY_HELP: dict[str, str] = {
     ),
 }
 
+LOG_LEVEL_HELP = (
+    "which {label} log lines reach the Discord log channel: off, important (anything that acted "
+    "on a member, or failed) or all. Every line is kept on the dashboard{extra} either way"
+)
+LOG_LEVEL_COMMANDS: dict[str, str] = {
+    "automod": "automod",
+    "honeypot": "honeypot",
+    "mod": "mod",
+    "modmail": "modmail",
+    "golive": "golive",
+    "events": "event",
+    "birthday": "birthday",
+    "tempvoice": "voice",
+    "rolemenu": "rolemenu",
+    "poll": "poll",
+    "chat": "chat",
+}
+
+
+def log_level_help(feature: str) -> str:
+    command = LOG_LEVEL_COMMANDS.get(feature)
+    return LOG_LEVEL_HELP.format(
+        label=FEATURE_LABELS[feature].lower(),
+        extra=f" and in `/{command} logs`" if command else "",
+    )
+
+
+KEY_TYPES.update({log_level_key(feature): "enum" for feature in FEATURES})
+KEY_CHOICES.update({log_level_key(feature): LEVELS for feature in FEATURES})
+KEY_HELP.update({log_level_key(feature): log_level_help(feature) for feature in FEATURES})
+
 
 GUILD_ONLY = (
     "That command changes settings for a server, so it has to be run in the server itself "
@@ -738,6 +770,8 @@ class SettingsStore:
             return False
         if key == "emoji_skin_tone":
             return SKIN_TONE_DEFAULT
+        if key.endswith("_log_level"):
+            return LEVEL_DEFAULT
         if KEY_TYPES.get(key) in ("channels", "roles"):
             return []
         return None

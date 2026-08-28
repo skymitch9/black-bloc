@@ -31,6 +31,7 @@ CORE = "core"
 NAMESPACE_OVERRIDE = {
     "modlog_channel_id": "automod",
     "mod_dm_on_action": "automod",
+    "mod_log_level": "automod",
 }
 AUDIT_DEFAULT_LIMIT = 100
 AUDIT_MAX_LIMIT = 500
