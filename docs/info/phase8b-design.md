@@ -494,3 +494,68 @@ Discord. `/api/chat/try` renders a reply and returns it; it never sends one.
 `chat_cooldown_seconds`, so the `chat` namespace is **six** keys. All six are
 returned on `GET /api/chat/intents` as well as by `/api/settings`, and all six
 were added to `site/mock/server.mjs`, which had never carried any of them.
+
+(12a made the `chat` namespace **seven** — `chat_log_level` lands there on its
+own prefix, so the Chat page's `settings` block carries it too.)
+
+---
+
+## `GET /api/actions` — the Logs filters and the CSV export (12a, 2026-08-27)
+
+Added by **12a** (commits `da020f6`, `a6f422b`) for the Logs page. The route
+kept every parameter and every key it already had, so Overview, Health and the
+old Audit page work unchanged.
+
+### Parameters
+
+| Name | Meaning |
+|---|---|
+| `limit` | **kept as an alias of `per_page`** — three existing pages send `?limit=`. `per_page` wins when both are given. |
+| `per_page` | page size, clamped 1–200, default 50 |
+| `page` | 1-based; a page past the end is `actions: []` with the real `total`, not a 404 |
+| `details` | `1` to include the `details` blob (unchanged; `summary` is always there) |
+| `kind` | a whole kind or a dotted prefix (unchanged) |
+| `user_id` | either end of the action (unchanged) |
+| `feature` | one of the twelve `logkinds.FEATURES`; anything else is a **400 with a sentence naming the twelve** |
+| `q` | case-insensitive substring over kind, actor name, target name, reason and the details JSON |
+| `since` / `until` | ISO; a bare `2026-08-27` as `until` means the **end** of that day |
+| `important` | `1` for the lines that acted on a member or failed |
+
+### Response
+
+`{actions: [...], kinds: [...], limit, per_page, page, total, shown, notes}`
+
+- Every row gains **`feature`**, **`important`** and **`summary`** (the reason,
+  else the details flattened to `key=value`). Actor and target stay **flat**
+  (`actor_id` / `actor_name` / `target_id` / `target_name`).
+- **`kinds`** is the distinct kinds this guild has logged under the current
+  `feature` — the page's chips, with no second request. ⚠️ It follows `feature`
+  **alone**: paging past the end, or a `q` that matches nothing, must still
+  leave the chips standing. Pinned by *the chips are what this guild logged, not
+  the page it asked for*.
+- `total` is what matched; `shown` is what this page returned.
+- ⚠️ **The scan is capped at 5000 rows** (`actionlog.SCAN_LIMIT`), because
+  importance and `q` are Python predicates rather than columns. When the cap is
+  hit, `notes` says so in a sentence — the count is never quietly smaller than
+  the truth without saying why.
+
+### `GET /api/actions/export.csv`
+
+Same filters, `text/csv`, `Content-Disposition: attachment;
+filename="black-bloc-log.csv"`, columns `id, at, kind, feature, important,
+actor_id, actor_name, target_id, target_name, reason, details`. It is
+**deliberately NOT in `contract.json`** — `check.mjs` reads JSON shapes and this
+one answers CSV, exactly as `/api/polls/{id}/export.csv` already is. Its
+refusals are the list route's refusals (400 on a bad feature / date / id, 401
+signed out, 503 with no guild or no database).
+
+### Twelve more settings keys
+
+`<feature>_log_level` for each of `logkinds.FEATURES`, enum
+`off`/`important`/`all` (quietest first — the order the page's segment renders),
+default `important`. ⚠️ **`mod_log_level` is in
+`settings_api.NAMESPACE_OVERRIDE` → `automod`**, alongside `modlog_channel_id`
+and `mod_dm_on_action`: the contract asserts `no_namespaces: [mod, modlog]`, and
+the moderation settings already live under `automod`. The rest land on their own
+prefix, so the registry's singular names are what the pages read —
+`birthday_log_level`, `poll_log_level`, `rolemenu_log_level`.

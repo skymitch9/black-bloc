@@ -5,6 +5,16 @@
 > `code-notes.md` §§ events (review card), role menus 2 (requests + decisions), polls 10b (create form).
 > NOT verified: nothing has run. **Build after the Sunday 2026-08-30 16:00 reset.**
 
+> ✅ **13b built in `a260e1b` (contract + mock) and `fec0f57` (the page)** on branch
+> `worktree-agent-acd6d4a9712a56eb0` off `main` @ `40b7782` — ⚠️ **not in `main` yet.**
+> `docs/info/code-notes.md` § *requests — dashboard (13b)* carries the keys, the
+> measurements and what was NOT verified. Two things the reviewer must reconcile with
+> 13a: **a member mode** was added mid-build on the owner's ask ("also let people put
+> request on the dashboard too"), which needs `GET /api/auth/me` to report
+> `member: true`, plus `GET /api/requests/mine` and `POST /api/requests/{id}/withdraw`;
+> and the board is **cards rather than a table**, which this document's §Dashboard
+> already allows. 13a's half is not built, so eight contract cases fail by design.
+
 ## The ask (owner, verbatim, 2026-08-27)
 - "we should also make a /request command so we can stop using the google doc, also put it on the website"
 - "its just the initial doc that I gave you, its an idea on paper, we should make our request form more

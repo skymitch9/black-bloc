@@ -1,9 +1,27 @@
 # Phase 12 — Logs: quiet Discord, loud website, `/… logs` everywhere
 
+> ✅ **12a BUILT (2026-08-27)** on branch `agent-ac3b8dd35b6cc0c5d` off `main` @ `0090fd8`, in seven
+> commits: `313fa48` (`logkinds.py` + the classification test), `e352f33` (the twelve
+> `_log_level` keys), `d6f0541` (the gate in `log_action` + the shared renderer),
+> `d4ac492` (`/<feature> logs` on every group), `da020f6` (the `/api/actions` filters +
+> `export.csv`), `a6f422b` (12b's clarifications: `kinds` and per-row `summary`), `f0a897f` (every `.would_` kind routine by rule).
+> `pytest -q` **2017 passed** (1941 before, +76). `ruff check .` clean. `site/mock/check.mjs`
+> clean at **16 pages, 81 routes**. **12b (the dashboard) is separate** and is not in
+> these commits. ⚠️ **Nothing has run against live Discord** — no line has been observed
+> suppressed or posted. Read `docs/info/code-notes.md` § *logs (12a)* for the kind table
+> and the decisions.
+
+
 > **Audience:** the Phase 12 build agents and the reviewer. **Status:** LOCAL ONLY (gitignored 2026-08-26).
 > Last verified: **2026-08-27** — owner decisions taken 17:14–17:17; code facts from `black_bloc/actionlog.py`
 > and the per-phase code-notes kind lists (every phase reported its `log_action` kinds). NOT verified:
 > nothing has run. **Build after the Sunday 2026-08-30 16:00 weekly reset** unless the owner says otherwise.
+
+> **12b built** in `48927b2` (contract + mock) / `32c8d23` (logsSection + the twelve mounts) /
+> `ec70c9b` (audit.html becomes the Logs page) / `6e2b6fc` (Overview important-only) / `047b21a`
+> (the 390px fix), on branch `worktree-agent-a7158ae45cbdd06f1` off `main` @ `0090fd8`. Nothing under
+> `black_bloc/` was touched. Details, deviations and what was NOT verified:
+> `docs/info/code-notes.md` § `logs — dashboard (12b)`.
 
 ## The ask (owner, verbatim, 2026-08-27 17:14)
 "i think we need to pipe a lot of the logs to the website and a logs command per function and keep the

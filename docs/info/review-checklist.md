@@ -119,3 +119,5 @@
     builder has uncommitted files; never run two builders in one tree.
 20. Subagent cost is invisible until it lands — read usage before dispatch
     and after landing; builds run 150–260k Opus tokens here.
+
+33. **Is every decision this change introduces configurable from BOTH the dashboard and the bot?** (owner rule 2026-08-27: "all decisions we make here can be configured in dashboard and with bot"). A decided default is a registry key (`KEY_TYPES`/`KEY_HELP`/`KEY_CHOICES`), which gives the Settings page + `/settings set-value` for free; a per-item choice (menu approval, poll anonymity, request status) needs a slash subcommand AND a dashboard control. Traced to: Phase 12 log levels, Phase 9 approval fields, Phase 10 per-poll flags — all built that way; the rule stops the next one from being a constant.
