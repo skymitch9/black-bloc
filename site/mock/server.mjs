@@ -2150,7 +2150,7 @@ route('DELETE', '/api/chat/lines/:id', (context) => {
     throw new Refused(409, 'last_line', `That is the last line **${intent.name}** has, so removing it would leave Black Bloc with nothing to say. Write a replacement first, or turn the intent off.`);
   }
   state.chat.lines = state.chat.lines.filter((row) => row.id !== line.id);
-  logAction('web.chat.line_removed', { details: { intent_id: intent.id, line_id: line.id } });
+  logAction('web.chat.line_deleted', { details: { intent_id: intent.id, line_id: line.id } });
   return {
     line_id: String(line.id),
     message: `Removed. **${intent.name}** has ${left.length} line(s) left.`,
