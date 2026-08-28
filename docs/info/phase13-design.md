@@ -1,5 +1,13 @@
 # Phase 13 — Requests (F18): `/request` replaces the ideas doc
 
+> ✅ **13a built in `5d637b4` (storage), `e7e0f9e` (settings), `cf23268` (cog),
+> `27ec297` (API + member gate) and `415eb8c` (contract + mock)**, on branch
+> `worktree-agent-ae90babf488323552` off `main` @ `40b7782`. The dashboard page is
+> **13b**, built in parallel. Notes: `code-notes.md` § *requests (13a)*; routes:
+> `phase8b-design.md` § *Requests (13a)*.
+> ⚠️ **NOTHING has been run against live Discord** — no gateway session, no
+> `/request`, no modal, no DM, no notice line.
+
 > **Audience:** the Phase 13 build agents and the reviewer. **Status:** TEMPORARILY TRACKED (owner order
 > 2026-08-27). Last verified: **2026-08-27** — owner answers taken 17:42–17:46; patterns from
 > `code-notes.md` §§ events (review card), role menus 2 (requests + decisions), polls 10b (create form).

@@ -3105,3 +3105,83 @@ When they are merged:
   are checked to agree on shape by `check.mjs` and on nothing else.
 - **No dashboard page exists**, so nobody has edited a line through a browser —
   every API assertion is `TestClient`.
+
+## requests (13a) (2026-08-27)
+
+> **F18, slice a of two** — `/request`, the `requests` tables, the
+> `/api/requests` routes and the site's first non-staff gate. Built on branch
+> `worktree-agent-ae90babf488323552` off `main` @ `40b7782`, commits `5d637b4`
+> (storage), `e7e0f9e` (settings), `cf23268` (cog), `27ec297` (API + member
+> gate), `415eb8c` (contract + mock). The dashboard **Requests** page is **13b**
+> and does not exist yet. **Last verified: 2026-08-27** — `pytest -q` **2062
+> passed** (1941 before, **+121**). `ruff check .` clean.
+> `node site/mock/check.mjs` clean at **88 routes** (80 before).
+> ⚠️ **NOTHING has been run against live Discord** — no gateway session, no
+> `/request`, no modal submitted, no DM sent, no notice line posted. Every claim
+> about what Discord does is read off the installed library or off a fake.
+
+### The one deviation from the brief
+
+| Key | Note |
+|---|---|
+| `black_bloc/cogs/community/requests.py:245` | ⚠️ **The brief says `/request` opens the modal; it is `/request create`.** Discord cannot have a command group called `request` *and* a bare `/request` — the group owns the name, and `list` / `withdraw` / `set` need the group. `create` is what `/event create` and `/poll create` already use, so it is the name a member has met before. |
+
+### Storage
+
+| Key | Note |
+|---|---|
+| `black_bloc/storage/db.py:363` | `requests` is additive and `SCHEMA_VERSION` goes 15 → 16. No `ADDED_COLUMNS` entry is needed: nothing had these tables before, so `CREATE TABLE IF NOT EXISTS` is the whole migration. |
+| `black_bloc/storage/db.py:382` | The index is `(guild_id, status, id)` rather than the `(guild_id, status)` the brief named. The `id` on the end is free and it is what makes the list's own `ORDER BY … id DESC` an index scan instead of a sort. |
+| `black_bloc/storage/db.py:384` | ⚠️ **`request_comments.request_id` is `REFERENCES requests(id) ON DELETE CASCADE`, and `db.py:419` already sets `PRAGMA foreign_keys=ON`** — so deleting a request takes its thread with it rather than leaving orphan rows nothing can reach. Pinned by `tests/storage/test_db.py`'s *a request's comments go when the request does*. Nothing deletes a request today; `withdrawn` and `declined` are states, not deletions. |
+| `black_bloc/requests.py:278` | ⚠️ **`ORDER BY (status <> 'pending'), id DESC` — pending first, then newest — is done in SQL, and `limit`/`offset` are passed straight through.** The first cut read every row and sliced in Python, which is fine at fifty requests and wrong at five thousand. `page_of` at `:218` still exists, but only for the SLASH command, where the rows are already in hand and a Discord message caps the list anyway. |
+| `black_bloc/requests.py:324` | ⚠️ **`set_status` clears `decline_reason` on any move that is not a decline, and stamps `done_at` only on the move to `done`.** A request declined "we already have one" and later approved would otherwise still be carrying the sentence that says it was refused, and the page would show both. `decided_by`/`decided_at` use `COALESCE`, so a later move that names nobody (a withdrawal) does not erase who decided it first. Pinned by *moving to done stamps when and moving off declined forgets the reason*. |
+| `black_bloc/requests.py:351` | `set_fields` takes `...` for "leave it alone" and `None` for "clear it", and returns the names it actually wrote. That is what lets `POST …/status` tell a save that changed nothing (refused) from one that cleared a field (allowed), and what keeps `web.request.updated`'s `changed` list honest. |
+
+### What a person may type
+
+| Key | Note |
+|---|---|
+| `black_bloc/requests.py:130` | `parse_due` uses `date.fromisoformat`, so `2026-02-30` and `2026-13-01` are refused as firmly as `next tuesday` — a shape check with a regex would have taken both. An empty box is `None`, never an error: the due date is optional and a member who leaves it blank has not made a mistake. |
+| `black_bloc/requests.py:142` | `due_stamp` renders `<t:…:D>` at **noon UTC** of the stored day. A date has no time, and midnight is the value that flips to the previous day for everybody west of UTC — the owner's own zone included. Noon is the hour that reads as the right date in every zone the server has. |
+| `black_bloc/requests.py:184` | `checked_fields` refuses What before Why, so the sentence a person gets names the box they left empty rather than "fill it in". Both are then cut to 1000, which is what the modal's `max_length` already enforces — the API has no such enforcement, so the cut is the one that matters. |
+| `black_bloc/requests.py:38` | `STATUS_WORDS` is the vocabulary in one place, and the API sends it as `status_word` beside `status`. Without it the dashboard would carry a second copy of the mapping and the two would drift the first time a state was renamed. |
+
+### The cog
+
+| Key | Note |
+|---|---|
+| `black_bloc/cogs/community/requests.py:73` | ⚠️ **`submit` asks the guard BY HAND at `:264`, because a modal submission never goes through `tree.interaction_check`.** `guard.install()` patches `http.send_message` and sets `tree.interaction_check`, and neither one sees a modal reply: the interaction response goes out on a different endpoint, and the check only wraps app commands. This is the same rule the polls cog writes down at `cogs/community/polls.py:1421`. Pinned by *a modal sent from outside the test channel is refused by hand*. |
+| `black_bloc/cogs/community/requests.py:130` | ⚠️ **`notify` SKIPS a channel the guard refuses rather than raising, and the request is filed either way.** The notice is a courtesy; the row is the point. Raising would mean that setting `request_notify_channel_id` to anything but the test channel while `TEST_MODE` is on would break filing altogether. A channel that refuses the post for a real reason (permissions, an outage) is a logged `request.notify_failed`, so a silent nothing is still a visible fact. |
+| `black_bloc/cogs/community/requests.py:161` | `apply_decision` is the one path a status moves by, and both the slash command and the API call it — so the DM, the `request.<status>` line and the "already **x**" refusal cannot differ between the two. It returns `(said, fresh)` with `fresh is None` meaning nothing moved, the shape `role_menus.apply_request_decision` already uses. |
+| `black_bloc/cogs/community/requests.py:108` | A DM that bounces is a `request.dm_failed` row, never a swallowed exception — a member who blocks the bot or leaves the server must not make a staff decision look like it failed. `bot.get_user` is the fallback when `guild.get_member` has nothing, so somebody who has left is still tried once. |
+| `black_bloc/cogs/community/requests.py:279` | ⚠️ **The auto-approve test is `store.is_staff(interaction.user)`, which is `settings_store.resolved_staff_roles` — the SAME derivation the dashboard's own gate uses**, via `api/auth.py:is_admitted`. Anything else here would mean a mod is auto-approved on the site and held in Discord, or the other way round. |
+| `black_bloc/command_visibility.py:16` | `request_mode` joins `rolemenu_mode` in `HIDDEN_WHEN_OFF`, so turning requests off takes the whole `/request` group out of the dev guild's tree. Nothing else changes: `requests_are_on` is still checked inside the commands, because the tree sync is debounced and a member can beat it. |
+
+### The member gate — the site's first non-staff write
+
+| Key | Note |
+|---|---|
+| `black_bloc/api/writes.py:95` | ⚠️ **`member_dependency` is declared on exactly THREE routes and nowhere else** — `POST /api/requests`, `GET /api/requests/mine`, `POST /api/requests/{id}/withdraw`. Everything else in the API, this router's own six staff routes included, still goes through `staff_dependency` / `writer_dependency` / `reader_dependency`. Pinned by *the member routes are the only three that are not staff only*, which walks the other seven and asserts 403 for a member session. |
+| `black_bloc/api/auth.py:201` | `live_member` mirrors `live_staff`: `(member, known)`, with `known` false only when the bot is not ready or the guild cannot be reached. It is a **live** cache lookup, never the cookie — a person who left the server stops being able to file the moment the gateway notices, without waiting seven days for their session to expire. |
+| `black_bloc/api/writes.py:31` | ⚠️ **Ten a minute per person, against sixty for a staff write.** A member write is the only one an unvetted account can reach, so it gets the login route's order of magnitude rather than the dashboard's. Its bucket is its own (`_api_member_bucket`), so filing a request cannot spend a staffer's write allowance and a flood of requests cannot lock a mod out of the moderation page. |
+| `black_bloc/api/auth.py:49` | ⚠️ **`/api/auth/me` gained `member`, and `state` deliberately did NOT change.** `site/public/assets/app.js:167` gates the whole dashboard on `me.staff` and shows `me.message`; changing `state` would have moved that gate for every existing page. What did change is the sentence: a signed-in **member** who is not staff now gets `MEMBER_NOT_STAFF` — the dashboard is staff-only, but you can still file a request — because the old `NOT_STAFF` ("ask a Lead for the role") is now wrong advice for somebody who has something they *can* do. Somebody signed in who is **not** in the guild still gets the old sentence. |
+| `black_bloc/api/tools/requests.py:213` | `_may_file` raises for both refusals and returns the auto-approve answer, so the route reads as one line and the two refusals cannot get out of order — `request_mode = off` is a 409 about the feature, `request_who_can_file = staff` is a 403 about the caller, and a member meets them in that order. |
+
+### The API
+
+| Key | Note |
+|---|---|
+| `black_bloc/api/tools/requests.py:320` | ⚠️ **`GET /api/requests/mine` and `GET /api/requests/export.csv` are declared BEFORE `GET /api/requests/{request_id}`.** `request_id` is typed `int`, so FastAPI would answer `mine` with a 422 validation error rather than the list — a bare status with no sentence, which is exactly what the front-door rule forbids. Route order is the whole fix and it is load-bearing; the mock's own `match()` scans in registration order for the same reason. |
+| `black_bloc/api/tools/requests.py:391` | ⚠️ **`POST …/status` writes the fields FIRST and moves the state LAST.** A bad `assignee_id` sent alongside `status: done` must not leave the row done and unassigned. `set_fields` is a single `UPDATE`, `wanted_assignee` raises before it, and `apply_decision` runs only once everything else has landed. Pinned by *the status route moves the state last so a bad field stops it*. |
+| `black_bloc/api/tools/requests.py:113` | `requester` and `assignee` are objects (`{id, name, avatar}`) rather than a flat `assignee_id` / `assignee_name` pair, because the page draws an avatar beside each and a null assignee has to be one absent thing, not two. `decided_by` stays flat, matching the audit rows. |
+| `black_bloc/api/tools/requests.py:244` | `pending` rides along on the list response — the sidebar badge, counted over the guild rather than the page, so paging to page 3 does not make the badge say 0. |
+| `black_bloc/api/tools/requests.py:181` | `wanted_assignee` takes `...` for absent and `None`/`""` for cleared, so `{"assignee_id": ""}` unassigns and a payload that never mentions it leaves it alone. Both were needed: the page's picker sends the empty string to clear. |
+| `black_bloc/api/tools/requests.py:279` | A web decision leaves **two** action rows — `request.<status>` from `apply_decision` and `web.request.<status>` from `note` — which is what `api/tools/rolemenus.py:321` already does. The audit tab filters on `web.`, so the second is what makes a site decision distinguishable from a slash-command one. |
+
+### The contract, and what is not in it
+
+| Key | Note |
+|---|---|
+| `site/mock/contract.json` | ⚠️ **The paths spell the id `1` rather than a `{placeholder}`.** A placeholder would need a new key in `site/mock/check.mjs`'s `IDS` table, and 13b owns that file this week. Both halves instead seed **request #1 as the signed-in staff session's own pending row** — `tests/api/test_contract.py`'s `seeded` and the mock's `seedState` — which is what makes `/api/requests/mine` non-empty and the approve/decline routes reachable in the same fixture. |
+| `site/mock/server.mjs` | ⚠️ **The mock's helpers are `ask*`, not `request*`, and its state key is `state.asks`.** `requestRow` and `state.requests` were already taken by the ROLE-request feature, and the first cut of this file silently shadowed both — the symptom was three unrelated rolemenus contract rows failing, not a syntax error. |
+| `site/mock/contract.json` | `GET /api/requests/export.csv` is deliberately absent: `check.mjs` reads JSON shapes and this answers CSV, exactly as the polls and logs exports already are. `POST /api/requests/{id}/withdraw` is absent too — it only ever answers 200 for the person who filed the row, which one fixture session cannot exercise both ways. |

@@ -494,3 +494,112 @@ Discord. `/api/chat/try` renders a reply and returns it; it never sends one.
 `chat_cooldown_seconds`, so the `chat` namespace is **six** keys. All six are
 returned on `GET /api/chat/intents` as well as by `/api/settings`, and all six
 were added to `site/mock/server.mjs`, which had never carried any of them.
+
+## Requests (13a) — `/api/requests`
+
+> Added 2026-08-27 by 13a (`27ec297`, contract/mock `415eb8c`). The dashboard
+> page that reads them is **13b**. **Last verified: 2026-08-27** — `pytest -q`
+> **2062 passed** and `node site/mock/check.mjs` clean at **88 routes**; nothing
+> has been run against live Discord.
+
+⚠️ **This is the first router on the site that is not staff-only end to end.**
+`black_bloc/api/writes.py:member_dependency` is a new gate — signed in **and**
+in the guild — and it is declared on exactly **three** routes. Every other route
+in the whole API, this router's included, keeps `staff_dependency` /
+`writer_dependency` / `reader_dependency` untouched.
+
+| Method | Path | Gate |
+|---|---|---|
+| `GET` | `/api/requests?status=&assignee=&q=&page=` | staff (reader) |
+| `POST` | `/api/requests` `{what, why, due_on?}` | **member** |
+| `GET` | `/api/requests/mine?page=` | **member** |
+| `POST` | `/api/requests/{id}/withdraw` | **member**, own row, pending only |
+| `GET` | `/api/requests/{id}` | staff (reader) |
+| `POST` | `/api/requests/{id}/approve` | staff (writer) |
+| `POST` | `/api/requests/{id}/decline` `{reason}` | staff (writer) |
+| `POST` | `/api/requests/{id}/status` `{status?, assignee_id?, priority?, notes?, reason?}` | staff (writer) |
+| `POST` | `/api/requests/{id}/comments` `{text}` | staff (writer) |
+| `GET` | `/api/requests/export.csv?status=&q=` | staff (reader) |
+
+### The row every GET carries
+
+```
+{id, what, why, due_on, status, status_word, priority, notes,
+ requester: {id, name, avatar}, assignee: {id, name, avatar} | null,
+ comment_count, created_at, decided_by, decided_by_name, decided_at,
+ decline_reason, done_at}
+```
+
+Ids are **strings**. `assignee` is `null` when nobody owns it. `status` is one
+of `pending` `approved` `planned` `in_progress` `done` `declined` `withdrawn`;
+`status_word` is the same thing in words, so the page never has to hold its own
+copy of the vocabulary. A comment is
+`{id, request_id, author: {id, name, avatar}, text, at}`.
+
+`GET /api/requests` answers `{requests, total, page, pages, per_page, pending}`
+— `pending` is the sidebar badge, and it counts the whole guild, not the page.
+`GET /api/requests/mine` answers the same object without `pending`.
+`GET /api/requests/{id}` answers `{request, comments}`. Every write answers
+`{request, message}` — or `{comment, message}` for a comment.
+
+**Pending first, then newest.** `ORDER BY (status <> 'pending'), id DESC`, in
+SQL rather than in Python, so a page is a `LIMIT`/`OFFSET` and not a slice of
+everything. 20 a page.
+
+### `/api/auth/me` now says `member`
+
+`{user, staff, member, state, guild, message}`. `state` is unchanged
+(`staff` / `not_staff` / `staff_unknown`) so nothing that already reads it
+breaks; `member` is new, and `message` for a signed-in **member** who is not
+staff is now `auth.MEMBER_NOT_STAFF` — it says the rest of the dashboard is
+staff-only but they can still file a request — instead of the flat `NOT_STAFF`.
+A signed-in person who is **not** in the guild still gets `NOT_STAFF`.
+
+### Refusals
+
+| Status | When |
+|---|---|
+| 400 `request_refused` | an empty What or Why, a due date that is not `YYYY-MM-DD`, a priority outside 0–5, a `status` that is not one of the five staff states, a `status=` filter naming a state that does not exist |
+| 400 `no_reason` | declining without a line the person is sent |
+| 400 `no_text` | a comment with nothing in it |
+| 400 `no_such_member` | an `assignee_id` Discord does not show in this guild |
+| 400 `nothing_to_save` | `POST …/status` with no status and no field |
+| 403 `not_a_member` | signed in, but not in the guild (the member gate) |
+| 403 `staff_only` | `request_who_can_file = staff` and the caller is not |
+| 403 `not_yours` | withdrawing somebody else's row |
+| 404 `no_such_request` | no such request, or one belonging to another guild |
+| 409 `requests_off` | `request_mode = off` |
+| 409 `not_pending` | withdrawing a row that has already been decided |
+| 409 `not_decided` | moving a row to the state it is already in |
+| 429 `slow_down` | ten member writes a minute per person (`writes.MEMBER_RATE`) |
+| 503 `member_unknown` | the guild cannot be consulted, so membership is unknown |
+
+There is **no `409 test_mode`** in this router. The one thing that reaches a
+public channel is the notice line, and `cogs/community/requests.py:notify` asks
+the guard itself and skips rather than raising — a request is filed either way.
+
+### New action kinds (added to `contract.json`'s `action_kinds`)
+
+`web.request.filed`, `web.request.approved`, `web.request.declined`,
+`web.request.planned`, `web.request.in_progress`, `web.request.done`,
+`web.request.withdrawn`, `web.request.updated`, `web.request.comment`.
+The cog's own kinds are the same words without the `web.` — plus
+`request.auto_approved`, `request.dm_failed` and `request.notify_failed`.
+
+### Five more settings keys
+
+`request_mode` (enum off/on, default **on**), `request_who_can_file` (enum
+everyone/staff, default **everyone**), `request_auto_approve_staff` (bool,
+default **true**), `request_notify_channel_id` (channel, the test channel while
+`TEST_MODE` is on and nothing once it is off), `request_dm_on_decision` (bool,
+default **true**). They land on their own `request` namespace in
+`/api/settings`. `request_mode` is in `command_visibility.HIDDEN_WHEN_OFF`, so
+turning it off takes `/request` out of the tree as well.
+
+### Not in `contract.json`
+
+`GET /api/requests/export.csv` — it answers CSV, not JSON, exactly as
+`/api/polls/{id}/export.csv` and `/api/actions/export.csv` already are.
+`POST /api/requests/{id}/withdraw` — it only ever answers 200 for the person who
+filed the row, which one fixture session cannot exercise both ways; it is
+covered in `tests/api/tools/test_requests.py` instead.
