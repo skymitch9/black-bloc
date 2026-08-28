@@ -1712,7 +1712,7 @@
     "/audit.html",
     "/health.html",
     "/polls.html",
-    "chat"
+    "/chat.html"
   ],
   "action_kinds": [
     "web.settings.set",
