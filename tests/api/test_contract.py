@@ -31,9 +31,8 @@ from black_bloc.golive import StreamInfo
 from black_bloc.modcases import add_case
 from black_bloc.modmail import IN
 from black_bloc.polls import next_occurrence
-from black_bloc.requests import PENDING, PLANNED
+from black_bloc.requests import PENDING, PLANNED, create_request
 from black_bloc.requests import add_comment as add_request_comment
-from black_bloc.requests import create_request
 
 CONTRACT = Path(__file__).resolve().parents[2] / "site" / "mock" / "contract.json"
 MEMBER_ID = 21
