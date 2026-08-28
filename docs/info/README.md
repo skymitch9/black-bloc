@@ -7,6 +7,7 @@
 | File | Answers |
 |---|---|
 | [`phase1-design.md`](phase1-design.md) · [`phase2-design.md`](phase2-design.md) · [`phase3-design.md`](phase3-design.md) · [`phase4-design.md`](phase4-design.md) · [`phase5-design.md`](phase5-design.md) · [`phase6-design.md`](phase6-design.md) · [`phase7-design.md`](phase7-design.md) · [`phase8-design.md`](phase8-design.md) | Per-phase build specs (the builder's brief source): 1 settings/log/role menus · 2 go-live · 3 temp voice + honeypot · 4 events · 5 birthdays · 6 moderation (shadow) · 7 modmail · **8 the config website** |
+| [`phase13-design.md`](phase13-design.md) | **Requests (F18)** (2026-08-27): `/request` (what / why / due date, requester automatic), staff auto-approved, the pending-features list on a Requests page; two slices — after the Sunday reset |
 | [`phase12-design.md`](phase12-design.md) | **Logs** (2026-08-27): Discord gets only important lines (acted on a member / failed; approvals always notify), per-feature `_log_level`, Logs sections on every page + a global Logs page, `/… logs` on every group; two slices — after the Sunday reset |
 | [`phase11-design.md`](phase11-design.md) | **Chat 2 (F10 step 2)** (2026-08-27): editable intents/lines page, data intents (live / next / birthdays / count / roles / timezone), modmail routing, manners settings; two slices — after polls |
 | [`phase10-design.md`](phase10-design.md) | **Polls (F15)** (2026-08-27): the 15 owner decisions, deltas from the research design, the test-mode rule, two build slices — build after Phase 9 |

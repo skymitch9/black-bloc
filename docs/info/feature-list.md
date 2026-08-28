@@ -81,3 +81,4 @@ shadow/test mode → owner verifies in the test channel.
 ## Still open
 
 - **Q13** build-order approval · Twitch developer app credentials (owner, in progress; fallback path only).
+| F18 | **Requests** | Decided 2026-08-27 | The "initial doc" of ideas on paper | `/request` modal (what, why, optional due date; requester automatic) → pending-features list on the dashboard; mod-or-higher auto-approved; [`phase13-design.md`](phase13-design.md); build after the Sunday reset |
