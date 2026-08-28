@@ -12,7 +12,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 15
+        assert SCHEMA_VERSION == 16
         cur = await db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = {r["name"] for r in await cur.fetchall()}
         assert {"settings", "action_log", "role_menus", "role_menu_options"} <= tables
@@ -37,6 +37,49 @@ async def test_connect_bootstraps_schema(tmp_path):
         } <= tables
         assert {"polls", "poll_options", "poll_votes", "poll_results"} <= tables
         assert {"chat_intents", "chat_lines"} <= tables
+        assert {"requests", "request_comments"} <= tables
+    finally:
+        await db.close()
+
+
+async def test_a_request_and_its_comments_carry_what_the_requests_page_shows(tmp_path):
+    db = Database(tmp_path / "r.sqlite3")
+    await db.connect()
+    try:
+        cur = await db.conn.execute("PRAGMA table_info(requests)")
+        columns = {row["name"] for row in await cur.fetchall()}
+        assert {"id", "guild_id", "user_id", "what", "why", "due_on", "status"} <= columns
+        assert {"priority", "assignee_id", "notes", "created_at", "message_id"} <= columns
+        assert {"decided_by", "decided_at", "decline_reason", "done_at"} <= columns
+        cur = await db.conn.execute("PRAGMA table_info(request_comments)")
+        columns = {row["name"] for row in await cur.fetchall()}
+        assert {"id", "request_id", "author_id", "text", "at"} <= columns
+        cur = await db.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='requests'"
+        )
+        assert "requests_by_status" in {row["name"] for row in await cur.fetchall()}
+    finally:
+        await db.close()
+
+
+async def test_a_requests_comments_go_when_the_request_does(tmp_path):
+    db = Database(tmp_path / "r.sqlite3")
+    await db.connect()
+    try:
+        await db.conn.execute(
+            "INSERT INTO requests(id, guild_id, user_id, what, why, status, created_at) "
+            "VALUES (1, 7, 9, 'a bot', 'because', 'pending', '2026-08-27T00:00:00+00:00')"
+        )
+        await db.conn.execute(
+            "INSERT INTO request_comments(request_id, author_id, text, at) "
+            "VALUES (1, 9, 'any news?', '2026-08-27T00:00:00+00:00')"
+        )
+        await db.conn.commit()
+        await db.conn.execute("DELETE FROM requests WHERE id = 1")
+        await db.conn.commit()
+        cur = await db.conn.execute("SELECT COUNT(*) AS found FROM request_comments")
+
+        assert (await cur.fetchone())["found"] == 0
     finally:
         await db.close()
 
