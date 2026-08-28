@@ -228,6 +228,14 @@ const SETTING_SPECS = [
   ['chat_greeting_reaction', 'bool', false, false, 'true to answer a bare hello with a wave reaction instead of a sentence; anything longer still gets a reply'],
   ['chat_reply_in_threads', 'bool', true, true, 'true to answer @-mentions inside threads as well as channels'],
   ['chat_route_ping_staff', 'bool', false, false, 'true to drop one line in the staff channel when somebody asks the bot for a mod; only used while modmail_enabled is true'],
+  ...['core', 'automod', 'honeypot', 'mod', 'modmail', 'golive', 'events', 'birthday', 'tempvoice', 'rolemenu', 'poll', 'chat'].map((feature) => [
+    `${feature}_log_level`,
+    'enum',
+    'important',
+    'important',
+    'what reaches the Discord log channel: off (dashboard only), important (acted on a member, or failed) or all',
+    ['off', 'important', 'all'],
+  ]),
 ];
 
 const RULES = {
@@ -428,43 +436,148 @@ function seedState() {
     { id: 6, intent_id: 4, text: 'Hey {name}! Pull up a chair — the cookout is already going.', slot: 'filled', enabled: true, created_by: null, updated_at: minutesAgo(9000) },
     { id: 7, intent_id: 4, text: 'Hey {name}! That makes {attendees} of us at the cookout today.', slot: 'attendee', enabled: true, created_by: null, updated_at: minutesAgo(9000) },
   ],
-  nextAction: 42,
+  nextAction: SEEDED_ACTIONS[0].id + 1,
   nextCase: 10,
   nextMessage: 40,
   nextPoll: 10,
   nextChatIntent: 5,
   nextChatLine: 8,
-  actions: seedActions(),
+  actions: SEEDED_ACTIONS.map((row) => ({ ...row })),
   };
 }
 
-function seedActions() {
+const OLDEST_ACTION_ID = 19;
+
+/** The hand-written head of the log: the rows the older pages were built against. */
+function recentActions() {
   return [
-  { id: 41, at: minutesAgo(3), kind: 'web.settings.set', actor_id: STAFF.id, target_id: null, reason: 'automod_mode = shadow', details: { key: 'automod_mode', value: 'shadow' } },
-  { id: 40, at: minutesAgo(20), kind: 'automod.would_timeout', actor_id: null, target_id: MEMBERS[4].id, reason: 'mention spam: 6 mentions in 30s', details: { rule: 'mention_spam' } },
-  { id: 39, at: minutesAgo(30), kind: 'honeypot.would_ban', actor_id: null, target_id: MEMBERS[4].id, reason: 'posted in #free-nitro-here', details: null },
-  { id: 38, at: minutesAgo(45), kind: 'tempvoice.channel_created', actor_id: MEMBERS[1].id, target_id: '800000000000000010', reason: null, details: null },
-  { id: 37, at: minutesAgo(60), kind: 'events.requested', actor_id: MEMBERS[3].id, target_id: null, reason: 'Movie night', details: null },
-  { id: 36, at: minutesAgo(88), kind: 'modmail.note_added', actor_id: STAFF.id, target_id: MEMBERS[3].id, reason: null, details: null },
-  { id: 35, at: minutesAgo(120), kind: 'golive.would_announce', actor_id: null, target_id: MEMBERS[1].id, reason: 'Lethal Company', details: null },
-  { id: 34, at: minutesAgo(220), kind: 'web.settings.set', actor_id: STAFF.id, target_id: null, reason: 'automod_mode = shadow', details: null },
-  { id: 33, at: minutesAgo(400), kind: 'mod.warn', actor_id: MEMBERS[1].id, target_id: MEMBERS[5].id, reason: 'link spam', details: null },
-  { id: 32, at: minutesAgo(800), kind: 'mod.warn', actor_id: STAFF.id, target_id: MEMBERS[4].id, reason: 'told to stop', details: null },
-  { id: 31, at: minutesAgo(900), kind: 'settings.set', actor_id: MEMBERS[1].id, target_id: null, reason: 'golive_mode = shadow', details: null },
-  { id: 30, at: minutesAgo(5000), kind: 'mod.ban', actor_id: STAFF.id, target_id: MEMBERS[7].id, reason: 'scam links', details: null },
-  { id: 29, at: minutesAgo(5200), kind: 'honeypot.banned', actor_id: null, target_id: MEMBERS[5].id, reason: 'posted in #free-nitro-here', details: null },
-  { id: 28, at: minutesAgo(6100), kind: 'honeypot.ban_failed', actor_id: null, target_id: MEMBERS[7].id, reason: 'Missing Permissions', details: null },
-  { id: 27, at: minutesAgo(6200), kind: 'automod.timeout', actor_id: null, target_id: MEMBERS[5].id, reason: 'caps: 82% of a 40-character message', details: { rule: 'caps' } },
-  { id: 26, at: minutesAgo(7400), kind: 'automod.delete', actor_id: null, target_id: MEMBERS[6].id, reason: 'invitespam: 1 invite in 30s', details: { rule: 'invitespam' } },
-  { id: 25, at: minutesAgo(8000), kind: 'rolemenu.role_given', actor_id: MEMBERS[3].id, target_id: '900000000000000003', reason: 'colours', details: null },
-  { id: 24, at: minutesAgo(9100), kind: 'automod.timeout', actor_id: null, target_id: MEMBERS[4].id, reason: 'attachmentspam: 6 files in 30s', details: { rule: 'attachmentspam' } },
-  { id: 23, at: minutesAgo(9600), kind: 'birthday.would_wish', actor_id: null, target_id: MEMBERS[1].id, reason: 'February 14', details: null },
-  { id: 22, at: minutesAgo(11000), kind: 'mod.warn', actor_id: MEMBERS[1].id, target_id: MEMBERS[3].id, reason: 'arguing in #welcome', details: null },
-  { id: 21, at: minutesAgo(12000), kind: 'tempvoice.channel_deleted', actor_id: null, target_id: '800000000000000010', reason: 'empty for 60s', details: null },
-  { id: 20, at: minutesAgo(13000), kind: 'events.approved', actor_id: STAFF.id, target_id: null, reason: 'Speedrun race', details: null },
-  { id: 19, at: minutesAgo(14000), kind: 'mod.kick_failed', actor_id: STAFF.id, target_id: MEMBERS[5].id, reason: 'Missing Permissions', details: null },
+  { at: minutesAgo(3), kind: 'web.settings.set', actor_id: STAFF.id, target_id: null, reason: 'automod_mode = shadow', details: { key: 'automod_mode', value: 'shadow' } },
+  { at: minutesAgo(20), kind: 'automod.would_timeout', actor_id: null, target_id: MEMBERS[4].id, reason: 'mention spam: 6 mentions in 30s', details: { rule: 'mention_spam' } },
+  { at: minutesAgo(30), kind: 'honeypot.would_ban', actor_id: null, target_id: MEMBERS[4].id, reason: 'posted in #free-nitro-here', details: null },
+  { at: minutesAgo(45), kind: 'tempvoice.channel_created', actor_id: MEMBERS[1].id, target_id: '800000000000000010', reason: null, details: null },
+  { at: minutesAgo(60), kind: 'events.requested', actor_id: MEMBERS[3].id, target_id: null, reason: 'Movie night', details: null },
+  { at: minutesAgo(88), kind: 'modmail.note_added', actor_id: STAFF.id, target_id: MEMBERS[3].id, reason: null, details: null },
+  { at: minutesAgo(120), kind: 'golive.would_announce', actor_id: null, target_id: MEMBERS[1].id, reason: 'Lethal Company', details: null },
+  { at: minutesAgo(220), kind: 'web.settings.set', actor_id: STAFF.id, target_id: null, reason: 'automod_mode = shadow', details: null },
+  { at: minutesAgo(400), kind: 'mod.warn', actor_id: MEMBERS[1].id, target_id: MEMBERS[5].id, reason: 'link spam', details: null },
+  { at: minutesAgo(800), kind: 'mod.warn', actor_id: STAFF.id, target_id: MEMBERS[4].id, reason: 'told to stop', details: null },
+  { at: minutesAgo(900), kind: 'settings.set', actor_id: MEMBERS[1].id, target_id: null, reason: 'golive_mode = shadow', details: null },
+  { at: minutesAgo(5000), kind: 'mod.ban', actor_id: STAFF.id, target_id: MEMBERS[7].id, reason: 'scam links', details: null },
+  { at: minutesAgo(5200), kind: 'honeypot.banned', actor_id: null, target_id: MEMBERS[5].id, reason: 'posted in #free-nitro-here', details: null },
+  { at: minutesAgo(6100), kind: 'honeypot.ban_failed', actor_id: null, target_id: MEMBERS[7].id, reason: 'Missing Permissions', details: null },
+  { at: minutesAgo(6200), kind: 'automod.timeout', actor_id: null, target_id: MEMBERS[5].id, reason: 'caps: 82% of a 40-character message', details: { rule: 'caps' } },
+  { at: minutesAgo(7400), kind: 'automod.delete', actor_id: null, target_id: MEMBERS[6].id, reason: 'invitespam: 1 invite in 30s', details: { rule: 'invitespam' } },
+  { at: minutesAgo(8000), kind: 'rolemenu.role_given', actor_id: MEMBERS[3].id, target_id: '900000000000000003', reason: 'colours', details: null },
+  { at: minutesAgo(9100), kind: 'automod.timeout', actor_id: null, target_id: MEMBERS[4].id, reason: 'attachmentspam: 6 files in 30s', details: { rule: 'attachmentspam' } },
+  { at: minutesAgo(9600), kind: 'birthday.would_wish', actor_id: null, target_id: MEMBERS[1].id, reason: 'February 14', details: null },
+  { at: minutesAgo(11000), kind: 'mod.warn', actor_id: MEMBERS[1].id, target_id: MEMBERS[3].id, reason: 'arguing in #welcome', details: null },
+  { at: minutesAgo(12000), kind: 'tempvoice.channel_deleted', actor_id: null, target_id: '800000000000000010', reason: 'empty for 60s', details: null },
+  { at: minutesAgo(13000), kind: 'events.approved', actor_id: STAFF.id, target_id: null, reason: 'Speedrun race', details: null },
+  { at: minutesAgo(14000), kind: 'mod.kick_failed', actor_id: STAFF.id, target_id: MEMBERS[5].id, reason: 'Missing Permissions', details: null },
   ];
 }
+
+const ACTION_TEMPLATES = [
+  ['golive.announce', 'Lethal Company', null, 'member'],
+  ['golive.would_announce', 'Deep Rock Galactic', null, 'member'],
+  ['golive.ended', 'off after 2h 40m', null, 'member'],
+  ['golive.role_given', 'live for the duration', null, 'member'],
+  ['golive.announce_failed', 'Missing Permissions in the announce channel', null, 'member'],
+  ['golive.optout', 'asked not to be announced', 'member', null],
+  ['events.requested', 'Movie night', 'member', null],
+  ['events.approved', 'Speedrun race', 'staff', 'member'],
+  ['events.denied', 'clashes with the cookout', 'staff', 'member'],
+  ['events.channel_created', null, null, 'channel'],
+  ['events.ended', 'Board game night', null, null],
+  ['events.reminder', 'starts in 30 minutes', null, null],
+  ['birthday.wished', 'February 14', null, 'member'],
+  ['birthday.would_wish', 'March 2', null, 'member'],
+  ['birthday.role_given', 'for the day', null, 'member'],
+  ['birthday.role_taken', 'the day is over', null, 'member'],
+  ['birthday.import', '12 rows read, 9 stored', 'staff', null],
+  ['tempvoice.channel_created', null, 'member', 'channel'],
+  ['tempvoice.channel_deleted', 'empty for 60s', null, 'channel'],
+  ['tempvoice.swept', '3 empty rooms closed', null, null],
+  ['tempvoice.rename_failed', 'rate limited by Discord', 'member', 'channel'],
+  ['rolemenu.role_given', 'colours', 'member', 'role'],
+  ['rolemenu.role_taken', 'unpicked from the panel', 'member', 'role'],
+  ['rolemenu.requested', 'Live now', 'member', 'role'],
+  ['rolemenu.approved', 'Live now', 'staff', 'member'],
+  ['rolemenu.denied', 'not streaming yet', 'staff', 'member'],
+  ['rolemenu.expired', 'the clock ran out', null, 'member'],
+  ['rolemenu.reconciled', '2 grants put back', null, null],
+  ['mod.warn', 'link spam', 'mod', 'member'],
+  ['mod.timeout', 'shouting in caps', 'mod', 'member'],
+  ['mod.untimeout', 'appealed and accepted', 'staff', 'member'],
+  ['mod.kick', 'first-day nitro scam', 'staff', 'member'],
+  ['mod.ban', 'scam links', 'staff', 'member'],
+  ['mod.ban_failed', 'Missing Permissions', 'staff', 'member'],
+  ['mod.note', 'watching this one', 'staff', 'member'],
+  ['automod.timeout', 'caps: 82% of a 40-character message', null, 'member'],
+  ['automod.delete', 'invitespam: 1 invite in 30s', null, 'member'],
+  ['automod.would_timeout', 'mention spam: 6 mentions in 30s', null, 'member'],
+  ['automod.would_delete', 'linkspam: 2 links in 1s', null, 'member'],
+  ['automod.warned', 'eight warnings on the board', null, 'member'],
+  ['honeypot.banned', 'posted in #free-nitro-here', null, 'member'],
+  ['honeypot.would_ban', 'posted in #free-nitro-here', null, 'member'],
+  ['honeypot.ban_failed', 'Missing Permissions', null, 'member'],
+  ['modmail.ticket_opened', null, 'member', null],
+  ['modmail.replied', null, 'staff', 'member'],
+  ['modmail.note_added', null, 'staff', 'member'],
+  ['modmail.ticket_closed', 'answered', 'staff', 'member'],
+  ['modmail.blocked', 'opened twelve tickets about nitro', 'staff', 'member'],
+  ['modmail.dm_failed', 'their DMs are shut', null, 'member'],
+  ['poll.created', 'What are we playing Friday?', 'staff', null],
+  ['poll.opened', 'Cookout menu', 'staff', null],
+  ['poll.reminder', '60 minutes left', null, null],
+  ['poll.ended', 'Cookout menu — 41 votes', null, null],
+  ['poll.would_close', 'Movie pick', null, null],
+  ['chat.reply', 'greeting', null, 'member'],
+  ['chat.insult', 'let a rude line go', null, 'member'],
+  ['chat.routed', 'asked for a mod', null, 'member'],
+  ['web.settings.set', 'automod_mode = shadow', 'staff', null],
+  ['web.settings.clear', 'golive_ping_role_id put back to its default', 'staff', null],
+];
+
+const MADE_UP_ACTIONS = 120;
+
+/**
+ * The long tail: a month and a bit of every feature's kinds, so the Logs page
+ * has something to page, filter by date and export.
+ */
+function madeUpActions() {
+  const people = MEMBERS.slice(1, 9).map((member) => member.id);
+  const channels = ['800000000000000010', '800000000000000006', '800000000000000002'];
+  const roles = ['900000000000000003', '900000000000000004', '900000000000000005'];
+  const pick = (which, at) => {
+    if (which === 'staff') return STAFF.id;
+    if (which === 'mod') return MEMBERS[1].id;
+    if (which === 'member') return people[at % people.length];
+    if (which === 'channel') return channels[at % channels.length];
+    if (which === 'role') return roles[at % roles.length];
+    return null;
+  };
+  const rows = [];
+  for (let at = 0; at < MADE_UP_ACTIONS; at += 1) {
+    const [kind, reason, actor, target] = ACTION_TEMPLATES[(at * 13) % ACTION_TEMPLATES.length];
+    rows.push({
+      at: minutesAgo(Math.round(14400 + at * 60 + at * at * 2.4)),
+      kind,
+      actor_id: pick(actor, at),
+      target_id: pick(target, at + 3),
+      reason,
+      details: null,
+    });
+  }
+  return rows;
+}
+
+function seedActions() {
+  const rows = recentActions().concat(madeUpActions());
+  return rows.map((row, at) => ({ id: rows.length - at + OLDEST_ACTION_ID - 1, ...row }));
+}
+
+const SEEDED_ACTIONS = seedActions();
 
 let state = seedState();
 
@@ -473,6 +586,7 @@ const NOT_A_FEATURE = ['golive_end_mode'];
 const NAMESPACE_OVERRIDE = {
   modlog_channel_id: 'automod',
   mod_dm_on_action: 'automod',
+  mod_log_level: 'automod',
 };
 
 function namespaceOf(key) {
@@ -627,6 +741,69 @@ function withNames(row, keys) {
   return found;
 }
 
+// ⚠️ The mock's copy of black_bloc/logkinds.py (12a). A second home for one rule, the way
+// chatWords is: a fixture that guessed at importance would let the page look right while
+// showing a classification the bot does not make. The bot's file is the authority.
+const LOG_FEATURES = [
+  'core', 'automod', 'honeypot', 'mod', 'modmail', 'golive',
+  'events', 'birthday', 'tempvoice', 'rolemenu', 'poll', 'chat',
+];
+
+const FEATURE_ALIAS = {
+  settings: 'core',
+  role: 'rolemenu',
+  rolemenus: 'rolemenu',
+  event: 'events',
+  birthdays: 'birthday',
+  polls: 'poll',
+  voice: 'tempvoice',
+};
+
+function featureOf(kind) {
+  const parts = String(kind || '').split('.').filter(Boolean);
+  if (parts[0] === 'web') parts.shift();
+  const head = FEATURE_ALIAS[parts[0]] || parts[0] || '';
+  return LOG_FEATURES.includes(head) ? head : 'core';
+}
+
+const IMPORTANT_KINDS = new Set([
+  'mod.warn', 'mod.timeout', 'mod.untimeout', 'mod.kick', 'mod.ban', 'mod.unban',
+  'web.mod.warn', 'web.mod.timeout', 'web.mod.untimeout', 'web.mod.kick', 'web.mod.ban',
+  'web.mod.unban', 'web.mod.apply',
+  'automod.timeout', 'automod.delete', 'automod.warn',
+  'honeypot.banned', 'web.honeypot.ban',
+  'rolemenu.role_given', 'rolemenu.role_taken', 'web.role.granted', 'web.role.extended',
+  'modmail.blocked', 'web.modmail.block', 'web.modmail.unblock',
+  'golive.announce', 'golive.role_given',
+  'birthday.wished', 'birthday.role_given', 'birthday.role_taken',
+]);
+
+const IMPORTANT_SUFFIX = [
+  '_failed', '.approved', '.denied', '.expired', '.warned',
+  '.timed_out', '.kicked', '.banned', '.granted', '.ended',
+];
+
+function isImportant(kind) {
+  const said = String(kind || '');
+  if (said.includes('.would_')) return false;
+  if (IMPORTANT_KINDS.has(said)) return true;
+  return IMPORTANT_SUFFIX.some((tail) => said.endsWith(tail));
+}
+
+const SUMMARY_MAX = 100;
+
+/** One line a person can read without the kind beside it; never past 100 characters. */
+function summaryOf(row) {
+  const parts = String(row.kind || '').split('.').filter(Boolean);
+  if (parts[0] === 'web') parts.shift();
+  const said = parts.join(' ').replace(/_/g, ' ').trim() || String(row.kind || '');
+  let text = said.charAt(0).toUpperCase() + said.slice(1);
+  if (row.target_name || row.target_id) text += ` — ${row.target_name || `id ${row.target_id}`}`;
+  if (row.reason) text += ` — ${row.reason}`;
+  else if (row.actor_name || row.actor_id) text += ` — by ${row.actor_name || `id ${row.actor_id}`}`;
+  return text.length > SUMMARY_MAX ? `${text.slice(0, SUMMARY_MAX - 1)}…` : text;
+}
+
 async function readBody(request) {
   const chunks = [];
   for await (const chunk of request) chunks.push(chunk);
@@ -729,17 +906,91 @@ route('GET', '/api/status', (context) => {
   return statusBody();
 });
 
+const ACTIONS_PER_PAGE = 25;
+const ACTIONS_MAX_PER_PAGE = 200;
+
+function actionRow(row) {
+  const named = withNames(row, [['actor_id', 'actor_name'], ['target_id', 'target_name']]);
+  return {
+    ...named,
+    feature: featureOf(row.kind),
+    important: isImportant(row.kind),
+    summary: summaryOf(named),
+  };
+}
+
+const sameId = (a, b) => a !== null && a !== undefined && String(a) === String(b);
+
+/** A date box sends YYYY-MM-DD; ISO-Z strings sort as text, so no clock arithmetic is needed. */
+const fromDay = (value) => (String(value).includes('T') ? String(value) : `${value}T00:00:00.000Z`);
+const toDay = (value) => (String(value).includes('T') ? String(value) : `${value}T23:59:59.999Z`);
+
+function actionText(row) {
+  return [
+    row.kind, row.summary, row.actor_name, row.target_name, row.reason,
+    row.details ? JSON.stringify(row.details) : '',
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function actionsMatching(params) {
+  const feature = params.get('feature');
+  const kind = params.get('kind');
+  const query = (params.get('q') || '').trim().toLowerCase();
+  const since = params.get('since');
+  const until = params.get('until');
+  const userId = params.get('user_id');
+  const actorId = params.get('actor_id');
+  const targetId = params.get('target_id');
+  const important = params.get('important');
+  let rows = state.actions.map(actionRow);
+  if (feature) rows = rows.filter((row) => row.feature === feature);
+  if (kind) rows = rows.filter((row) => String(row.kind).startsWith(kind));
+  if (important === '1' || important === 'true') rows = rows.filter((row) => row.important);
+  if (since) rows = rows.filter((row) => row.at >= fromDay(since));
+  if (until) rows = rows.filter((row) => row.at <= toDay(until));
+  if (userId) rows = rows.filter((row) => sameId(row.actor_id, userId) || sameId(row.target_id, userId));
+  if (actorId) rows = rows.filter((row) => sameId(row.actor_id, actorId));
+  if (targetId) rows = rows.filter((row) => sameId(row.target_id, targetId));
+  if (query) rows = rows.filter((row) => actionText(row).includes(query));
+  return rows;
+}
+
+route('GET', '/api/actions/export.csv', (context) => {
+  requireStaff(context.session);
+  const rows = actionsMatching(context.url.searchParams);
+  const cell = (value) => `"${String(value === null || value === undefined ? '' : value).replace(/"/g, '""')}"`;
+  const lines = ['at,kind,feature,important,actor_id,actor_name,target_id,target_name,summary'];
+  for (const row of rows) {
+    lines.push([
+      row.at, row.kind, row.feature, row.important ? 'yes' : 'no',
+      row.actor_id, row.actor_name, row.target_id, row.target_name, row.summary,
+    ].map(cell).join(','));
+  }
+  return {
+    status: 200,
+    body: `${lines.join('\n')}\n`,
+    headers: {
+      'content-type': 'text/csv; charset=utf-8',
+      'content-disposition': 'attachment; filename="black-bloc-logs.csv"',
+    },
+  };
+});
+
 route('GET', '/api/actions', (context) => {
   requireStaff(context.session);
-  const limit = Math.max(1, Math.min(Number(context.url.searchParams.get('limit') || 50), 200));
-  const kind = context.url.searchParams.get('kind');
-  const userId = context.url.searchParams.get('user_id');
-  let rows = state.actions;
-  if (kind) rows = rows.filter((row) => String(row.kind).startsWith(kind));
-  if (userId) rows = rows.filter((row) => row.actor_id === userId || row.target_id === userId);
+  const params = context.url.searchParams;
+  const rows = actionsMatching(params);
+  const asked = Number(params.get('per_page') || params.get('limit') || ACTIONS_PER_PAGE);
+  const perPage = Math.max(1, Math.min(Number.isFinite(asked) ? asked : ACTIONS_PER_PAGE, ACTIONS_MAX_PER_PAGE));
+  const page = Math.max(1, Number(params.get('page')) || 1);
+  const shown = rows.slice((page - 1) * perPage, page * perPage);
   return {
-    actions: rows.slice(0, limit).map((row) => withNames(row, [['actor_id', 'actor_name'], ['target_id', 'target_name']])),
-    limit,
+    actions: shown,
+    total: rows.length,
+    page,
+    per_page: perPage,
+    shown: shown.length,
+    limit: perPage,
     notes: [],
   };
 });
