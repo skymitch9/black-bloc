@@ -1,6 +1,9 @@
 import { api } from './api.js';
 import { duration, el } from './ui.js';
 
+/** The one page a signed-in member who is not staff may use. */
+export const MEMBER_TAB = 'requests';
+
 export const GROUPS = [
   {
     head: 'Overview',
@@ -8,6 +11,7 @@ export const GROUPS = [
       { tab: 'overview', label: 'Overview' },
       { tab: 'health', label: 'Health' },
       { tab: 'audit', label: 'Audit log' },
+      { tab: 'requests', label: 'Requests', feature: 'request', count: 'featurerequests' },
     ],
   },
   {
@@ -44,6 +48,7 @@ let statusOnce = null;
 let membersOnce = null;
 let requestsOnce = null;
 let pollsOnce = null;
+let featureOnce = null;
 
 export function shellStatus() {
   if (statusOnce === null) statusOnce = api('/api/status').catch(() => null);
@@ -75,11 +80,22 @@ export function pollTally() {
   return pollsOnce;
 }
 
+/** Feature requests still waiting on an answer, for the badge beside Requests. */
+export function featureRequestTally() {
+  if (featureOnce === null) {
+    featureOnce = api('/api/requests?status=pending&per_page=1')
+      .then((found) => (found && typeof found.total === 'number' ? found.total : null))
+      .catch(() => null);
+  }
+  return featureOnce;
+}
+
 export function forgetShellStatus() {
   statusOnce = null;
   membersOnce = null;
   requestsOnce = null;
   pollsOnce = null;
+  featureOnce = null;
 }
 
 export function renderNav(current, hrefFor) {
@@ -239,14 +255,45 @@ function paintCounts(tally, waiting, running) {
   );
 }
 
+/**
+ * A signed-in member who is not staff gets ONE thing in the rail, because
+ * every other page would refuse them. The nav is built before `me` arrives,
+ * so this trims it rather than the renderer knowing who is looking.
+ */
+function paintNavFor(member) {
+  for (const link of document.querySelectorAll('.nav-link')) {
+    link.hidden = member && link.getAttribute('data-tab') !== MEMBER_TAB;
+  }
+  for (const group of document.querySelectorAll('.nav-group')) {
+    group.hidden = ![...group.querySelectorAll('.nav-link')].some((link) => !link.hidden);
+  }
+}
+
+export function isMemberOnly(me) {
+  return Boolean(me) && me.staff !== true && me.member === true;
+}
+
 export async function paintShell(me) {
   paintUser(me);
-  const [status, tally, waiting, running] = await Promise.all([
-    shellStatus(), memberTally(), requestTally(), pollTally(),
+  paintNavFor(isMemberOnly(me));
+  if (isMemberOnly(me)) {
+    // Every tally below this line is a staff route, so a member is asked for none of them.
+    paintCounts(null, null, null);
+    paintCount('featurerequests', null, () => '');
+    paintGuild(null, me);
+    return null;
+  }
+  const [status, tally, waiting, running, asked] = await Promise.all([
+    shellStatus(), memberTally(), requestTally(), pollTally(), featureRequestTally(),
   ]);
   paintDots(status);
   paintHealth(status);
   paintGuild(status, me);
   paintCounts(tally, waiting, running);
+  paintCount(
+    'featurerequests',
+    typeof asked === 'number' && asked > 0 ? asked : null,
+    (found) => `${found} request${found === 1 ? '' : 's'} waiting on an answer`,
+  );
   return status;
 }

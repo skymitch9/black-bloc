@@ -1,6 +1,6 @@
 import { api, Outage, signInHref } from './api.js';
 import { lastTab, mountSections, rememberTab } from './layout.js';
-import { forgetShellStatus, mountShell, paintShell, renderNav } from './shell.js';
+import { MEMBER_TAB, forgetShellStatus, isMemberOnly, mountShell, paintShell, renderNav } from './shell.js';
 
 export const TABS = [
   { tab: 'overview', href: '/index.html', label: 'Overview' },
@@ -18,6 +18,7 @@ export const TABS = [
   { tab: 'honeypot', href: '/honeypot.html', label: 'Honeypot' },
   { tab: 'settings', href: '/settings.html', label: 'Settings' },
   { tab: 'audit', href: '/audit.html', label: 'Audit' },
+  { tab: 'requests', href: '/requests.html', label: 'Requests' },
   { tab: 'health', href: '/health.html', label: 'Health' },
 ];
 
@@ -32,6 +33,7 @@ export const FEATURE_TABS = {
   rolemenu: 'rolemenus',
   poll: 'polls',
   chat: 'chat',
+  request: 'requests',
 };
 
 export function tabHref(tab) {
@@ -156,14 +158,24 @@ export function forgetMe() {
 export function rememberedMe() {
   try {
     const found = JSON.parse(sessionStorage.getItem(ME_KEY) || 'null');
-    return found && found.me && found.me.staff === true ? found.me : null;
+    if (!found || !found.me) return null;
+    return found.me.staff === true || found.me.member === true ? found.me : null;
   } catch (e) {
     return null;
   }
 }
 
-/** True when this `me` is a gate rather than a dashboard; the gate is shown. */
-function refuseFor(me) {
+/**
+ * True when this `me` is a gate rather than a dashboard; the gate is shown.
+ * A signed-in MEMBER is neither: they are not staff, but Requests is theirs,
+ * so they are sent there instead of being told the dashboard is not for them.
+ */
+function refuseFor(me, tab) {
+  if (isMemberOnly(me)) {
+    if (tab === MEMBER_TAB) return false;
+    location.replace(tabHref(MEMBER_TAB));
+    return true;
+  }
   if (me.state === 'staff_unknown') {
     refuse({
       title: UNKNOWN_TITLE,
@@ -219,7 +231,7 @@ export function start(page) {
     try {
       const me = await api('/api/auth/me');
       current = me;
-      if (refuseFor(me)) {
+      if (refuseFor(me, page.tab)) {
         forgetMe();
         return;
       }
@@ -234,7 +246,7 @@ export function start(page) {
   const ask = async () => {
     const me = await api('/api/auth/me');
     current = me;
-    if (refuseFor(me)) {
+    if (refuseFor(me, page.tab)) {
       forgetMe();
       return;
     }
