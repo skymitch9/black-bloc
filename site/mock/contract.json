@@ -1737,7 +1737,7 @@
       ]
     },
     {
-      "_": "13a requests. {feature_request_id} is the signed-in staffer's own PENDING row (the mock seeds it as 25) and {member_request_id} is somebody else's, already planned (30) — both halves seed the pair so /api/requests/mine is never empty and the decide routes always have something to move. GET /api/requests/export.csv is NOT here: it answers CSV, not JSON, and this table only checks JSON keys. POST /api/requests/{feature_request_id}/withdraw is NOT here either: it only ever answers 200 for the person who filed the row, which one fixture session cannot exercise both ways.",
+      "_": "Requests. {feature_request_id} is the signed-in staffer's own PENDING row (the mock seeds it as 25) and {member_request_id} is the member session's own pending row (30), the only kind Withdraw takes — both halves seed the pair so /api/requests/mine is never empty and the decide routes always have something to move. GET /api/requests/export.csv is NOT here: it answers CSV, not JSON, and this table only checks JSON keys. POST /api/requests/{feature_request_id}/withdraw is NOT here either: it only ever answers 200 for the person who filed the row, which one fixture session cannot exercise both ways.",
       "method": "GET",
       "path": "/api/requests",
       "read_by": [
@@ -1987,7 +1987,8 @@
     "/audit.html",
     "/health.html",
     "/polls.html",
-    "/chat.html"
+    "/chat.html",
+    "/requests.html"
   ],
   "action_kinds": [
     "web.settings.set",

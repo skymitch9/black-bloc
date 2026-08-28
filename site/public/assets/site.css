@@ -1440,3 +1440,140 @@ dialog.ask::backdrop { background: var(--et-transit-bg, rgb(0 0 0 / .55)); }
   color: var(--et-muted);
   font-size: var(--et-ui-sm);
 }
+
+/* ---- foldout: the shut-by-default block inside a section ------------------ */
+
+/* ui.js has drawn `foldout()` since Polls 10b and site.css had NO rule for it:
+   the browser's own disclosure triangle sat beside the chevron the helper
+   draws, and the count badge had no gap. Found on Requests, fixed for every
+   page that uses one (Polls' Archive is the other). */
+.foldout {
+  margin-top: 10px;
+  border-top: var(--et-hairline-w) solid var(--et-hairline);
+}
+.foldout-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  color: var(--et-muted);
+  font-family: var(--et-font-label);
+  font-size: var(--et-ui-xs);
+  font-weight: var(--et-weight-medium);
+  letter-spacing: var(--et-label-tracking);
+  text-transform: var(--et-label-transform);
+  cursor: pointer;
+  list-style: none;
+}
+.foldout-head::-webkit-details-marker { display: none; }
+.foldout-head:hover { color: var(--et-fg); }
+.foldout-head:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; }
+.foldout-head .sect-mark { transform: rotate(-90deg); }
+.foldout[open] > .foldout-head .sect-mark { transform: none; }
+.foldout-body { padding-bottom: 8px; }
+
+/* ---- requests: one card per ask ------------------------------------------- */
+
+/* Approved / planned / in progress are states, not warnings; --et-info is the
+   theme's own token for that and the badge had no rule for it yet. */
+.badge[data-tone="info"] {
+  border-color: color-mix(in srgb, var(--et-info) 40%, transparent);
+  color: var(--et-info);
+}
+
+.req-head {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.req-headtext { flex: 1 1 16rem; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.req-what {
+  margin: 0;
+  font-size: var(--et-ui-md);
+  font-weight: var(--et-weight-strong);
+  color: var(--et-fg);
+  text-wrap: pretty;
+}
+.req-meta { color: var(--et-muted); font-size: var(--et-ui-xs); }
+.req-marks { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+
+.req-who {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  max-width: 100%;
+  color: var(--et-fg);
+  font-size: var(--et-ui-sm);
+  text-decoration: none;
+}
+.req-who:hover .req-who-name { color: var(--et-accent); text-decoration: underline; }
+.req-who:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; border-radius: var(--et-radius); }
+.req-who-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.req-due {
+  flex: none;
+  color: var(--et-muted);
+  font-size: var(--et-ui-xs);
+  white-space: nowrap;
+}
+.req-due[data-tone="warn"] { color: var(--et-warn); }
+.req-due[data-tone="danger"] { color: var(--et-danger); }
+
+.req-whybox { margin-top: 8px; }
+/* Two lines by default. The clamp is undone by the data attribute rather than
+   by a second rule set, so the button is the only thing that changes. */
+.req-why {
+  margin: 0;
+  color: var(--et-muted);
+  font-size: var(--et-ui-sm);
+  text-wrap: pretty;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.req-why[data-open="true"] { -webkit-line-clamp: none; line-clamp: none; overflow: visible; }
+.req-more {
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--et-accent);
+  font-family: inherit;
+  font-size: var(--et-ui-xs);
+  cursor: pointer;
+}
+.req-more:hover { text-decoration: underline; }
+.req-more:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; }
+
+.req-reason {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-left: 2px solid var(--et-danger);
+  border-radius: var(--et-radius);
+  background: var(--et-shell-inset);
+  color: var(--et-fg);
+  font-size: var(--et-ui-sm);
+  text-wrap: pretty;
+}
+
+/* Who is on it: a line of text and its buttons, or the picker once Change is
+   pressed. It is a field control, so it keeps the control row's height and
+   stays level with the segment and the select beside it. */
+.req-assign {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: var(--et-control-h);
+}
+.req-assign-now { color: var(--et-fg); font-size: var(--et-ui-sm); }
+.req-assign .picker { flex: 1 1 14rem; min-width: 0; }
+
+.req-notes { display: flex; flex-direction: column; gap: 10px; }
+.req-note { padding-left: 10px; border-left: 2px solid var(--et-hairline); }
+.req-note-who { display: block; color: var(--et-muted); font-size: var(--et-ui-2xs); }
+.req-note-text { margin: 2px 0 0; font-size: var(--et-ui-sm); text-wrap: pretty; }
