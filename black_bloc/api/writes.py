@@ -6,7 +6,16 @@ from typing import Any
 from fastapi import Request
 
 from ..actionlog import log_action
-from .auth import Refused, TokenBucket, guild_of, staff_dependency
+from .auth import (
+    MEMBER_UNKNOWN,
+    NOT_A_MEMBER,
+    Refused,
+    TokenBucket,
+    current_session,
+    guild_of,
+    member_state,
+    staff_dependency,
+)
 from .status import DB_UNREACHABLE
 
 log = logging.getLogger(__name__)
@@ -19,6 +28,10 @@ READ_RATE = 300
 READ_WINDOW_SECONDS = 60
 READ_BUCKET_ATTR = "_api_read_bucket"
 
+MEMBER_RATE = 10
+MEMBER_WINDOW_SECONDS = 60
+MEMBER_BUCKET_ATTR = "_api_member_bucket"
+
 TOO_MANY_WRITES = (
     "That is more changes than Black Bloc will take in a minute, so this one was not made. "
     "Nothing is wrong with your account — wait a minute and try again."
@@ -26,6 +39,10 @@ TOO_MANY_WRITES = (
 TOO_MANY_READS = (
     "That is more of this than Black Bloc will look up in a minute, so it was not loaded. "
     "Nothing is wrong with your account — wait a minute and open the page again."
+)
+TOO_MANY_MEMBER_WRITES = (
+    "That is more requests than Black Bloc will take from one person in a minute, so this one "
+    "was not filed. Nothing is wrong with your account — wait a minute and send it again."
 )
 NO_GUILD = (
     "Black Bloc is not in a server it can change anything in yet, so nothing was done. That is a "
@@ -69,6 +86,28 @@ def bucket_for(bot: Any) -> TokenBucket:
 
 def read_bucket_for(bot: Any) -> TokenBucket:
     return _bucket(bot, READ_BUCKET_ATTR, READ_RATE, READ_WINDOW_SECONDS)
+
+
+def member_bucket_for(bot: Any) -> TokenBucket:
+    return _bucket(bot, MEMBER_BUCKET_ATTR, MEMBER_RATE, MEMBER_WINDOW_SECONDS)
+
+
+def member_dependency(bot: Any):
+    """Signed in AND in the server — the only gate on the site that is not staff-only."""
+
+    async def dependency(request: Request) -> dict[str, Any]:
+        who = current_session(request, bot)
+        state = member_state(who)
+        if state == "member_unknown":
+            raise Refused(503, "member_unknown", MEMBER_UNKNOWN)
+        if state == "not_a_member":
+            raise Refused(403, "not_a_member", NOT_A_MEMBER)
+        if not member_bucket_for(bot).take(str(who["id"])):
+            log.warning("api: rate-limited member writes from %s", who["id"])
+            raise Refused(429, "slow_down", TOO_MANY_MEMBER_WRITES)
+        return who
+
+    return dependency
 
 
 def writer_dependency(bot: Any):
@@ -167,8 +206,10 @@ async def note(
 
 __all__ = [
     "FEATURE_OFF",
+    "MEMBER_RATE",
     "NO_GUILD",
     "READ_RATE",
+    "TOO_MANY_MEMBER_WRITES",
     "TOO_MANY_READS",
     "TOO_MANY_WRITES",
     "WRITE_RATE",
@@ -176,6 +217,8 @@ __all__ = [
     "actor_for",
     "bucket_for",
     "guard_of",
+    "member_bucket_for",
+    "member_dependency",
     "note",
     "read_bucket_for",
     "reader_dependency",
