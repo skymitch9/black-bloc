@@ -186,18 +186,23 @@ def stamp(at: Any) -> str:
     return f"<t:{int(when.timestamp())}:R>"
 
 
-def summarise(row: Any) -> str:
+def summary_of(reason: Any, details: Any) -> str:
     """The reason if there is one, otherwise the details flattened to `key=value`."""
-    reason = row["reason"]
     if reason:
         return str(reason)
-    try:
-        found = json.loads(row["details"]) if row["details"] else None
-    except (TypeError, ValueError):
-        return str(row["details"])
+    found = details
+    if isinstance(found, str):
+        try:
+            found = json.loads(found)
+        except (TypeError, ValueError):
+            return found
     if isinstance(found, dict):
         return ", ".join(f"{key}={value}" for key, value in found.items())
     return "" if found is None else str(found)
+
+
+def summarise(row: Any) -> str:
+    return summary_of(row["reason"], row["details"])
 
 
 def action_line(row: Any) -> str:

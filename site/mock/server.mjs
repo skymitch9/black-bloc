@@ -788,6 +788,18 @@ route('GET', '/api/status', (context) => {
   return statusBody();
 });
 
+function summaryOfAction(row) {
+  if (row.reason) return String(row.reason);
+  if (!row.details) return '';
+  if (typeof row.details !== 'object') return String(row.details);
+  return Object.entries(row.details).map(([key, value]) => `${key}=${value}`).join(', ');
+}
+
+function kindsPresent(feature) {
+  const rows = feature ? state.actions.filter((row) => featureOfKind(row.kind) === feature) : state.actions;
+  return [...new Set(rows.map((row) => row.kind))].sort();
+}
+
 function searchedActions(params) {
   const kind = params.get('kind');
   const userId = params.get('user_id');
@@ -806,6 +818,7 @@ function searchedActions(params) {
     ...withNames(row, [['actor_id', 'actor_name'], ['target_id', 'target_name']]),
     feature: featureOfKind(row.kind),
     important: isImportantKind(row.kind),
+    summary: summaryOfAction(row),
   }));
   if (needle) {
     rows = rows.filter((row) =>
@@ -827,6 +840,7 @@ route('GET', '/api/actions', (context) => {
   const shown = rows.slice((page - 1) * size, (page - 1) * size + size);
   return {
     actions: shown,
+    kinds: kindsPresent(params.get('feature')),
     limit: size,
     per_page: size,
     page,

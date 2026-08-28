@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import PlainTextResponse
 
 from .. import __version__
-from ..actionlog import SCAN_LIMIT, feature_clause
+from ..actionlog import SCAN_LIMIT, feature_clause, summary_of
 from ..events import OPEN_STATUSES
 from ..logkinds import FEATURES, feature_of, is_important
 from ..modmail import OPEN as MODMAIL_OPEN
@@ -214,7 +214,9 @@ def _details(raw: Any) -> Any:
 
 
 def _action(row: Any, with_details: bool) -> dict[str, Any]:
+    """Actor and target stay FLAT — Overview, Health and the Logs page all read them that way."""
     kind = row["kind"]
+    details = _details(row["details"])
     found = {
         "id": row["id"],
         "at": row["at"],
@@ -224,10 +226,23 @@ def _action(row: Any, with_details: bool) -> dict[str, Any]:
         "actor_id": str(row["actor_id"]) if row["actor_id"] is not None else None,
         "target_id": str(row["target_id"]) if row["target_id"] is not None else None,
         "reason": row["reason"],
+        "summary": summary_of(row["reason"], details),
     }
     if with_details:
-        found["details"] = _details(row["details"])
+        found["details"] = details
     return found
+
+
+async def kinds_present(bot: Any, guild_id: int, feature: str | None) -> list[str]:
+    """The chips the Logs page offers: what this guild has actually logged, not the whole table."""
+    sql = "SELECT DISTINCT kind FROM action_log WHERE guild_id = ?"
+    params: tuple[Any, ...] = (guild_id,)
+    if feature:
+        clause, wanted = feature_clause(feature)
+        sql += f" AND {clause}"
+        params += wanted
+    cur = await bot.db.conn.execute(f"{sql} ORDER BY kind", params)
+    return [row["kind"] for row in await cur.fetchall()]
 
 
 async def recent_actions(
@@ -407,18 +422,18 @@ def build_router(bot: Any) -> APIRouter:
     ) -> dict[str, Any]:
         size = max(1, min(per_page or limit, ACTIONS_MAX_LIMIT))
         page = max(1, page)
-        empty = {
-            "actions": [],
-            "limit": size,
-            "per_page": size,
-            "page": page,
-            "total": 0,
-            "shown": 0,
-            "notes": [NO_GUILD],
-        }
         guild = guild_of(bot)
         if guild is None:
-            return empty
+            return {
+                "actions": [],
+                "kinds": [],
+                "limit": size,
+                "per_page": size,
+                "page": page,
+                "total": 0,
+                "shown": 0,
+                "notes": [NO_GUILD],
+            }
         db = getattr(bot, "db", None)
         if db is None or not db.is_connected:
             raise Refused(503, "database_unavailable", DB_UNREACHABLE)
@@ -441,6 +456,7 @@ def build_router(bot: Any) -> APIRouter:
             ]
         return {
             "actions": shown,
+            "kinds": await kinds_present(bot, guild.id, wanted_feature(feature)),
             "limit": size,
             "per_page": size,
             "page": page,

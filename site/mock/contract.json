@@ -65,6 +65,7 @@
       "shape": "object",
       "keys": [
         "actions",
+        "kinds",
         "limit",
         "per_page",
         "page",
@@ -83,7 +84,8 @@
           "actor_name",
           "target_id",
           "target_name",
-          "reason"
+          "reason",
+          "summary"
         ]
       }
     },
@@ -96,6 +98,7 @@
       "shape": "object",
       "keys": [
         "actions",
+        "kinds",
         "limit",
         "per_page",
         "page",
@@ -114,7 +117,8 @@
           "actor_name",
           "target_id",
           "target_name",
-          "reason"
+          "reason",
+          "summary"
         ]
       }
     },

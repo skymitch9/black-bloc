@@ -479,6 +479,61 @@ async def test_every_action_row_says_which_feature_it_is_and_whether_it_matters(
     assert rows["poll.created"]["important"] is False
 
 
+async def test_the_page_gets_the_kind_chips_without_a_second_request(bot, db, sign_in, wf):
+    for kind in ("poll.created", "poll.created", "poll.closed", "mod.banned"):
+        await _log(db, wf.GUILD_ID, kind)
+    bot.db = db
+
+    client = client_for(bot)
+    sign_in(client)
+
+    assert client.get("/api/actions").json()["kinds"] == [
+        "mod.banned",
+        "poll.closed",
+        "poll.created",
+    ]
+    narrowed = client.get("/api/actions", params={"feature": "poll"}).json()
+    assert narrowed["kinds"] == ["poll.closed", "poll.created"]
+
+
+async def test_the_chips_are_what_this_guild_logged_not_the_page_it_asked_for(
+    bot, db, sign_in, wf
+):
+    """`kinds` follows `feature` only — paging past the end must not empty the chips."""
+    for n in range(4):
+        await _log(db, wf.GUILD_ID, f"poll.k{n}", at=f"2026-08-2{n}T00:00:00+00:00")
+    bot.db = db
+
+    client = client_for(bot)
+    sign_in(client)
+    body = client.get("/api/actions", params={"per_page": 1, "page": 9, "q": "nothing"}).json()
+
+    assert body["actions"] == []
+    assert body["kinds"] == ["poll.k0", "poll.k1", "poll.k2", "poll.k3"]
+
+
+async def test_every_row_carries_a_summary_even_when_details_are_withheld(bot, db, sign_in, wf):
+    await db.conn.execute(
+        "INSERT INTO action_log(guild_id, at, kind, reason, details) "
+        "VALUES (?, '2026-08-26T00:00:00+00:00', 'poll.created', NULL, ?)",
+        (wf.GUILD_ID, json.dumps({"poll_id": 3, "hours": 24})),
+    )
+    await _log(db, wf.GUILD_ID, "mod.banned", at="2026-08-27T00:00:00+00:00")
+    await db.conn.execute(
+        "UPDATE action_log SET reason = 'scam links' WHERE kind = 'mod.banned'"
+    )
+    await db.conn.commit()
+    bot.db = db
+
+    client = client_for(bot)
+    sign_in(client)
+    rows = {row["kind"]: row for row in client.get("/api/actions").json()["actions"]}
+
+    assert "details" not in rows["poll.created"]
+    assert rows["poll.created"]["summary"] == "poll_id=3, hours=24"
+    assert rows["mod.banned"]["summary"] == "scam links"
+
+
 async def test_actions_can_be_filtered_by_feature(bot, db, sign_in, wf):
     for kind in ("role.granted", "role_menu.update", "web.rolemenu.post", "poll.created"):
         await _log(db, wf.GUILD_ID, kind)
