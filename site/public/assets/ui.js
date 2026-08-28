@@ -310,11 +310,34 @@ export function button(label, onClick, { tone = null, small = true, disabled = f
   });
 }
 
+const BOLD = /\*\*([^*]+)\*\*/g;
+
+/**
+ * The house style writes ids and names as `**#31**`, which every outcome
+ * sentence used to print with its asterisks. Text nodes and `el` only - the
+ * sentence carries names and reasons people typed, so it never goes near
+ * innerHTML.
+ */
+export function boldParts(text) {
+  const said = String(text ?? '');
+  const parts = [];
+  let at = 0;
+  for (const found of said.matchAll(BOLD)) {
+    if (found.index > at) parts.push(document.createTextNode(said.slice(at, found.index)));
+    parts.push(el('strong', { text: found[1] }));
+    at = found.index + found[0].length;
+  }
+  if (at < said.length) parts.push(document.createTextNode(said.slice(at)));
+  return parts;
+}
+
 export function notice(text = '', tone = null) {
   const node = el('p', { class: 'notice' });
   const say = (message, messageTone = null) => {
-    node.textContent = message || '';
-    node.hidden = !message;
+    const said = message || '';
+    node.replaceChildren(...boldParts(said));
+    node.said = said;
+    node.hidden = !said;
     if (messageTone) node.setAttribute('data-tone', messageTone);
     else node.removeAttribute('data-tone');
   };
@@ -504,24 +527,56 @@ function scrollerOf(node) {
  * is a SIBLING of the scroller rather than an overlay on top of it, so nothing
  * covers y=0 inside `.content` and no bar height has to be subtracted here.
  */
+function offsetIn(scroller, block) {
+  const root = document.scrollingElement || document.documentElement;
+  const base = scroller === root ? 0 : scroller.getBoundingClientRect().top;
+  return scroller.scrollTop + block.getBoundingClientRect().top - base;
+}
+
 function listTop(node) {
   const block = node.closest('.sect, .card, .table-block') || node.parentElement;
   const scroller = scrollerOf(node);
-  const root = document.scrollingElement || document.documentElement;
-  const base = scroller === root ? 0 : scroller.getBoundingClientRect().top;
-  return { scroller, at: scroller.scrollTop + block.getBoundingClientRect().top - base };
+  return { scroller, block, at: offsetIn(scroller, block) };
+}
+
+const PAINT_BACKSTOP_MS = 60;
+
+/**
+ * Two frames let the rebuilt rows lay out — but `requestAnimationFrame` does
+ * not run at all in a tab that is not on screen, so a timer races it and
+ * whichever arrives first wins.
+ */
+function painted() {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      resolve();
+    };
+    requestAnimationFrame(() => requestAnimationFrame(finish));
+    setTimeout(finish, PAINT_BACKSTOP_MS);
+  });
+}
+
+function place(scroller, at) {
+  scroller.scrollTop = Math.max(0, at - PAGER_GAP);
 }
 
 /**
- * Only when the list has scrolled off the top: a visible list is left alone.
- * The move is instant rather than smooth on purpose - a smooth scroll is an
- * animation, and an animation does not run in a tab that is not on screen, so
- * the one thing this exists to do would silently not happen.
+ * UNCONDITIONAL, and after the new rows are in the document. Replacing `#dash`
+ * resets the scroller to 0 before this runs, so the old "already at the top,
+ * leave it alone" test always fired and every page landed at the top of the
+ * PAGE rather than the top of the list. Placed twice on purpose: once the
+ * moment `onPage` resolves, which is all a hidden tab will ever get, and again
+ * once the rows have laid out, which is what makes the landing exact. The move
+ * is instant rather than smooth because a smooth scroll is an animation, and an
+ * animation does not run in a tab that is not on screen either.
  */
-function backToTop({ scroller, at }) {
-  const wanted = Math.max(0, at - PAGER_GAP);
-  if (scroller.scrollTop <= wanted + 1) return;
-  scroller.scrollTop = wanted;
+async function backToTop({ scroller, block, at }) {
+  place(scroller, at);
+  await painted();
+  place(scroller, block.isConnected ? offsetIn(scroller, block) : at);
 }
 
 export function pager({ page, hasMore, onPage, count = null }) {
@@ -530,7 +585,7 @@ export function pager({ page, hasMore, onPage, count = null }) {
   const go = async (to) => {
     const where = listTop(node);
     await onPage(to);
-    backToTop(where);
+    await backToTop(where);
   };
   node.append(
     button('Previous', () => go(at - 1), { tone: 'quiet', disabled: at <= 1 }),
@@ -1148,7 +1203,8 @@ const outcomes = new Map();
  * built, so the outcome survives its own refresh.
  */
 export function keepSaying(where, say) {
-  outcomes.set(where, { text: say.textContent, tone: say.getAttribute('data-tone') || 'ok' });
+  const text = say.said === undefined ? say.textContent : say.said;
+  outcomes.set(where, { text, tone: say.getAttribute('data-tone') || 'ok' });
 }
 
 export function sayAgain(where, say) {

@@ -174,15 +174,22 @@ const KIND_HEADS = {
   modmail: 'modmail', golive: 'golive', event: 'events', events: 'events',
   birthday: 'birthday', tempvoice: 'tempvoice',
   role: 'rolemenu', role_menu: 'rolemenu', rolemenu: 'rolemenu',
-  poll: 'poll', chat: 'chat',
+  poll: 'poll', chat: 'chat', request: 'request', requests: 'request',
 };
 const IMPORTANT_SUFFIXES = [
   '_failed', '.approved', '.denied', '.expired', '.warned', '.timed_out', '.timeout',
   '.kicked', '.kick', '.banned', '.ban', '.granted', '.ended', '.removed', '.purged',
   '.blocked', '.closed',
 ];
-const IMPORTANT_KINDS = ['automod.deleted', 'mod.warn', 'mod.unbanned', 'mod.untimed_out'];
-const ROUTINE_KINDS = ['poll.closed', 'tempvoice.ban', 'tempvoice.kick', 'honeypot.ban'];
+const IMPORTANT_KINDS = [
+  'automod.deleted', 'mod.warn', 'mod.unbanned', 'mod.untimed_out',
+  'request.declined', 'request.done',
+];
+const ROUTINE_KINDS = [
+  'poll.closed', 'tempvoice.ban', 'tempvoice.kick', 'honeypot.ban',
+  'request.filed', 'request.auto_approved', 'request.withdrawn', 'request.planned',
+  'request.in_progress', 'request.updated', 'request.comment',
+];
 
 function bareKind(kind) {
   const text = String(kind || '');
@@ -594,7 +601,7 @@ function seedState() {
   // Withdraw takes. `asks` and not `requests`: state.requests is the ROLE-request list.
   asks: seedRequests(),
   askComments: seedRequestComments(),
-  nextAction: 42,
+  nextAction: 47,
   nextCase: 10,
   nextMessage: 40,
   nextPoll: 10,
@@ -608,7 +615,12 @@ function seedState() {
 
 function seedActions() {
   return [
-  { id: 41, at: minutesAgo(3), kind: 'web.settings.set', actor_id: STAFF.id, target_id: null, reason: 'automod_mode = shadow', details: { key: 'automod_mode', value: 'shadow' } },
+  { id: 46, at: minutesAgo(1), kind: 'web.request.declined', actor_id: STAFF.id, target_id: MEMBERS[7].id, reason: 'Opt-in is the whole point of that role.', details: { request_id: 5, via: 'website' } },
+  { id: 45, at: minutesAgo(2), kind: 'web.request.approved', actor_id: STAFF.id, target_id: MEMBERS[1].id, reason: null, details: { request_id: 24, via: 'website' } },
+  { id: 44, at: minutesAgo(2), kind: 'request.filed', actor_id: MEMBERS[3].id, target_id: MEMBERS[3].id, reason: null, details: { request_id: 30, via: 'discord' } },
+  { id: 43, at: minutesAgo(3), kind: 'web.request.updated', actor_id: STAFF.id, target_id: null, reason: null, details: { request_id: 20, changed: ['assignee_id', 'priority'], via: 'website' } },
+  { id: 42, at: minutesAgo(3), kind: 'request.done', actor_id: STAFF.id, target_id: MEMBERS[6].id, reason: null, details: { request_id: 11, via: 'discord' } },
+  { id: 41, at: minutesAgo(3), kind: 'web.settings.set', actor_id: STAFF.id, target_id: null, reason: 'automod_mode = shadow', details: { key: 'automod_mode', value: 'shadow', via: 'website' } },
   { id: 40, at: minutesAgo(20), kind: 'automod.would_timeout', actor_id: null, target_id: MEMBERS[4].id, reason: 'mention spam: 6 mentions in 30s', details: { rule: 'mention_spam' } },
   { id: 39, at: minutesAgo(30), kind: 'honeypot.would_ban', actor_id: null, target_id: MEMBERS[4].id, reason: 'posted in #free-nitro-here', details: null },
   { id: 38, at: minutesAgo(45), kind: 'tempvoice.channel_created', actor_id: MEMBERS[1].id, target_id: '800000000000000010', reason: null, details: null },

@@ -28,6 +28,7 @@ export const LOG_FEATURES = [
   { feature: 'rolemenu', label: 'Role menus', tab: 'rolemenus' },
   { feature: 'poll', label: 'Polls', tab: 'polls' },
   { feature: 'chat', label: 'Chat', tab: 'chat' },
+  { feature: 'request', label: 'Requests', tab: 'requests' },
 ];
 
 const LABELS = new Map(LOG_FEATURES.map((one) => [one.feature, one.label]));
@@ -47,6 +48,7 @@ const ROUTINE = {
   chat: 'Chat replies are routine, so nothing here is marked important.',
   tempvoice: 'Rooms opening and closing are routine.',
   poll: 'Creating a poll and reminding people about it are routine.',
+  request: 'Filing a request and moving it along are routine; a decision is not.',
 };
 
 export function kindPill(row) {

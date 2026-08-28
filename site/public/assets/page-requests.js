@@ -1,5 +1,6 @@
 import { api, listOf, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
+import { logsSection } from './logs.js';
 import {
   ago,
   ask,
@@ -68,6 +69,7 @@ const SETTING_KEYS = [
   'request_auto_approve_staff',
   'request_notify_channel_id',
   'request_dm_on_decision',
+  'request_log_level',
 ];
 
 const SAID = {
@@ -809,6 +811,7 @@ async function loadStaff() {
     declinedSection(refused, listOf(refused, 'requests'), listOf(gone, 'requests')),
     fileSection(fileForm(fileSay, auto)),
     settingsBox.node,
+    await logsSection('request'),
   );
   keepTyping(typed);
   remeasure();
