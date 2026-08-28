@@ -14,14 +14,18 @@
 > NOT verified: nothing has run. **Build after the Sunday 2026-08-30 16:00 reset.**
 
 > ✅ **13b built in `a260e1b` (contract + mock) and `fec0f57` (the page)** on branch
-> `worktree-agent-acd6d4a9712a56eb0` off `main` @ `40b7782` — ⚠️ **not in `main` yet.**
-> `docs/info/code-notes.md` § *requests — dashboard (13b)* carries the keys, the
-> measurements and what was NOT verified. Two things the reviewer must reconcile with
-> 13a: **a member mode** was added mid-build on the owner's ask ("also let people put
-> request on the dashboard too"), which needs `GET /api/auth/me` to report
-> `member: true`, plus `GET /api/requests/mine` and `POST /api/requests/{id}/withdraw`;
-> and the board is **cards rather than a table**, which this document's §Dashboard
-> already allows. 13a's half is not built, so eight contract cases fail by design.
+> `worktree-agent-acd6d4a9712a56eb0` off `main` @ `40b7782`, and **merged in `641e53b`**
+> on the integration branch `worktree-agent-acd3594b9dbefbec2` (off `main` @ `16c5781`).
+> `docs/info/code-notes.md` §§ *requests — dashboard (13b)* and *integration night
+> 2026-08-27* carry the keys, the measurements and what was NOT verified.
+> Both things the reviewer was asked to reconcile with 13a are done: **a member mode**
+> (the owner's "also let people put request on the dashboard too") now reads the real
+> router's `/api/auth/me` — `staff: false, member: true, state: "not_staff"` — with
+> `GET /api/requests/mine` and `POST /api/requests/{id}/withdraw` behind
+> `member_dependency`, and a stranger still meets the gate; and the board stays
+> **cards rather than a table**, which this document's §Dashboard already allows.
+> The eight contract cases that failed by design now pass: `node site/mock/check.mjs`
+> is clean at **17 pages / 89 routes** and `pytest -q` is **2158 passed**.
 
 ## The ask (owner, verbatim, 2026-08-27)
 - "we should also make a /request command so we can stop using the google doc, also put it on the website"

@@ -19,6 +19,8 @@ from .logkinds import (
     like_patterns,
     log_level_key,
     should_post,
+    via_of,
+    via_word,
 )
 from .settings_store import GUILD_ONLY, require_staff
 
@@ -32,6 +34,7 @@ LOGS_MAX = 50
 LOGS_DEFAULT = 10
 SCAN_LIMIT = 5000
 COLUMNS = "id, at, kind, actor_id, target_id, reason, details"
+SUMMARY_SKIPS = ("via",)
 NOTHING_YET = "Nothing has been logged for this yet."
 NOTHING_IMPORTANT = "Nothing important has been logged for this yet."
 FOOTER = "The whole log, searchable, is on the dashboard: {origin}/{page}"
@@ -94,6 +97,13 @@ def level_for(bot: Any, guild: Any, kind: str) -> str:
     return found if found in LEVELS else ALL
 
 
+def stamped(kind: str, details: dict[str, Any] | None) -> dict[str, Any]:
+    """Every row says where it came from, so no writer can forget the owner's Via column."""
+    found = dict(details or {})
+    found["via"] = via_of(kind, found)
+    return found
+
+
 async def log_action(
     bot: Any,
     guild: Any,
@@ -107,6 +117,7 @@ async def log_action(
 ) -> int | None:
     """Record one action: a DB row always, a log-channel embed when the level asks for it."""
     at = datetime.now(UTC)
+    details = stamped(kind, details)
     cur = await bot.db.conn.execute(
         "INSERT INTO action_log(guild_id, at, kind, actor_id, target_id, reason, details) "
         "VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -197,12 +208,27 @@ def summary_of(reason: Any, details: Any) -> str:
         except (TypeError, ValueError):
             return found
     if isinstance(found, dict):
-        return ", ".join(f"{key}={value}" for key, value in found.items())
+        return ", ".join(
+            f"{key}={value}" for key, value in found.items() if key not in SUMMARY_SKIPS
+        )
     return "" if found is None else str(found)
 
 
 def summarise(row: Any) -> str:
     return summary_of(row["reason"], row["details"])
+
+
+def as_details(details: Any) -> Any:
+    if isinstance(details, str):
+        try:
+            return json.loads(details)
+        except (TypeError, ValueError):
+            return None
+    return details
+
+
+def via_for(row: Any) -> str:
+    return via_of(row["kind"], as_details(row["details"]))
 
 
 def action_line(row: Any) -> str:
@@ -219,7 +245,9 @@ def action_line(row: Any) -> str:
     body = " · ".join(parts)
     if len(body) > LINE_LIMIT:
         body = f"{body[: LINE_LIMIT - 1]}…"
-    return f"{stamp(row['at'])} · {body}"
+    # Outside the cap, like the stamp: a truncated line must still say where it came from.
+    said_via = f"via {via_word(row['kind'], as_details(row['details']))}"
+    return f"{stamp(row['at'])} · {body} · {said_via}"
 
 
 async def recent_lines(

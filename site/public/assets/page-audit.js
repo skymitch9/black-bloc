@@ -1,7 +1,7 @@
 import { api, apiHref, listOf, names, notesOf } from './api.js';
 import { start } from './app.js';
 import { syncSubnav } from './layout.js';
-import { LOG_FEATURES, featureLabel, importantSwitch, logsTable } from './logs.js';
+import { LOG_FEATURES, featureLabel, importantSwitch, logsTable, viaCell } from './logs.js';
 import {
   bar,
   button,
@@ -70,6 +70,7 @@ function settingsTable(rows) {
     { label: 'Key', cell: (row) => el('span', { class: 'mono', text: row.key }) },
     { label: 'Value', cell: (row) => valueNode(row.value), className: 'wrap' },
     { label: 'By', cell: (row) => nameNode(row.updated_by_id, row.updated_by_name) },
+    { label: 'Via', cell: (row) => viaCell(row.via) },
   ], rows, { empty: 'No setting has been changed yet.' });
 }
 

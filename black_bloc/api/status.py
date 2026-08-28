@@ -15,7 +15,7 @@ from fastapi.responses import PlainTextResponse
 from .. import __version__
 from ..actionlog import SCAN_LIMIT, feature_clause, summary_of
 from ..events import OPEN_STATUSES
-from ..logkinds import FEATURES, feature_of, is_important
+from ..logkinds import FEATURES, feature_of, is_important, via_of
 from ..modmail import OPEN as MODMAIL_OPEN
 from ..settings_store import KEY_TYPES
 from .auth import Refused, guild_of, staff_dependency
@@ -39,6 +39,7 @@ CSV_COLUMNS = (
     "target_id",
     "target_name",
     "reason",
+    "via",
     "details",
 )
 
@@ -227,6 +228,7 @@ def _action(row: Any, with_details: bool) -> dict[str, Any]:
         "target_id": str(row["target_id"]) if row["target_id"] is not None else None,
         "reason": row["reason"],
         "summary": summary_of(row["reason"], details),
+        "via": via_of(kind, details),
     }
     if with_details:
         found["details"] = details

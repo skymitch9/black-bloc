@@ -200,6 +200,15 @@ function featureOfKind(kind) {
   return KIND_HEADS[bareKind(kind).split('.')[0]] || 'core';
 }
 
+// The mock's copy of black_bloc/logkinds.py:via_of — what the writer recorded wins,
+// and the `web.` head decides every row written before anybody recorded it.
+const VIA_WORDS = { discord: 'Discord', website: 'Website' };
+function viaOfKind(kind, details) {
+  const said = String((details && details.via) || '').trim().toLowerCase();
+  if (VIA_WORDS[said]) return said;
+  return String(kind || '').startsWith('web.') ? 'website' : 'discord';
+}
+
 function isImportantKind(kind) {
   const text = bareKind(kind);
   if (text.includes('.would_')) return false;
@@ -627,10 +636,10 @@ function seedActions() {
   { id: 37, at: minutesAgo(60), kind: 'events.requested', actor_id: MEMBERS[3].id, target_id: null, reason: 'Movie night', details: null },
   { id: 36, at: minutesAgo(88), kind: 'modmail.note_added', actor_id: STAFF.id, target_id: MEMBERS[3].id, reason: null, details: null },
   { id: 35, at: minutesAgo(120), kind: 'golive.would_announce', actor_id: null, target_id: MEMBERS[1].id, reason: 'Lethal Company', details: null },
-  { id: 34, at: minutesAgo(220), kind: 'web.settings.set', actor_id: STAFF.id, target_id: null, reason: 'automod_mode = shadow', details: null },
+  { id: 34, at: minutesAgo(220), kind: 'web.settings.set', actor_id: STAFF.id, target_id: null, reason: 'automod_mode = shadow', details: { key: 'automod_mode', value: 'shadow', via: 'website' } },
   { id: 33, at: minutesAgo(400), kind: 'mod.warn', actor_id: MEMBERS[1].id, target_id: MEMBERS[5].id, reason: 'link spam', details: null },
   { id: 32, at: minutesAgo(800), kind: 'mod.warn', actor_id: STAFF.id, target_id: MEMBERS[4].id, reason: 'told to stop', details: null },
-  { id: 31, at: minutesAgo(900), kind: 'settings.set', actor_id: MEMBERS[1].id, target_id: null, reason: 'golive_mode = shadow', details: null },
+  { id: 31, at: minutesAgo(900), kind: 'settings.set', actor_id: MEMBERS[1].id, target_id: null, reason: 'golive_mode = shadow', details: { key: 'golive_mode', value: 'shadow', via: 'discord' } },
   { id: 30, at: minutesAgo(5000), kind: 'mod.ban', actor_id: STAFF.id, target_id: MEMBERS[7].id, reason: 'scam links', details: null },
   { id: 29, at: minutesAgo(5200), kind: 'honeypot.banned', actor_id: null, target_id: MEMBERS[5].id, reason: 'posted in #free-nitro-here', details: null },
   { id: 28, at: minutesAgo(6100), kind: 'honeypot.ban_failed', actor_id: null, target_id: MEMBERS[7].id, reason: 'Missing Permissions', details: null },
@@ -926,11 +935,17 @@ route('GET', '/api/status', (context) => {
   return statusBody();
 });
 
+// actionlog.py:SUMMARY_SKIPS — `via` is its own column, so it never joins the summary.
+const SUMMARY_SKIPS = ['via'];
+
 function summaryOfAction(row) {
   if (row.reason) return String(row.reason);
   if (!row.details) return '';
   if (typeof row.details !== 'object') return String(row.details);
-  return Object.entries(row.details).map(([key, value]) => `${key}=${value}`).join(', ');
+  return Object.entries(row.details)
+    .filter(([key]) => !SUMMARY_SKIPS.includes(key))
+    .map(([key, value]) => `${key}=${value}`)
+    .join(', ');
 }
 
 function kindsPresent(feature) {
@@ -957,6 +972,7 @@ function searchedActions(params) {
     feature: featureOfKind(row.kind),
     important: isImportantKind(row.kind),
     summary: summaryOfAction(row),
+    via: viaOfKind(row.kind, row.details),
   }));
   if (needle) {
     rows = rows.filter((row) =>
@@ -1124,6 +1140,16 @@ route('GET', '/api/settings', (context) => {
   return settingsPayload();
 });
 
+const SETTINGS_KINDS = ['settings.set', 'settings.clear', 'web.settings.set', 'web.settings.clear'];
+
+/** The settings table has no column for where a change came from; the action log has. */
+function viaForKey(key) {
+  const found = state.actions.find(
+    (row) => SETTINGS_KINDS.includes(row.kind) && String((row.details || {}).key || '') === String(key),
+  );
+  return found ? viaOfKind(found.kind, found.details) : null;
+}
+
 route('GET', '/api/settings/audit', (context) => {
   requireStaff(context.session);
   const limit = Math.max(1, Math.min(Number(context.url.searchParams.get('limit') || 100), 500));
@@ -1135,6 +1161,7 @@ route('GET', '/api/settings/audit', (context) => {
       updated_by_id: row.updated_by === null || row.updated_by === undefined ? null : String(row.updated_by),
       updated_by_name: memberName(row.updated_by),
       updated_at: row.updated_at,
+      via: viaForKey(row.key),
     })),
     limit,
   };
@@ -1147,7 +1174,7 @@ route('PUT', '/api/settings/:key', async (context) => {
   armingRefusal(context.params.key, value);
   state.settings.set(context.params.key, value);
   state.audit.unshift({ key: context.params.key, value, updated_by: STAFF.id, updated_at: now() });
-  logAction('web.settings.set', { reason: `${context.params.key} = ${JSON.stringify(value)}`, details: { key: context.params.key, value } });
+  logAction('web.settings.set', { reason: `${context.params.key} = ${JSON.stringify(value)}`, details: { key: context.params.key, value, via: 'website' } });
   return keyRow(context.params.key);
 });
 
@@ -1157,7 +1184,7 @@ route('DELETE', '/api/settings/:key', (context) => {
   if (spec === null) throw new Refused(400, 'unknown_key', `Black Bloc has no setting called ${context.params.key}.`);
   state.settings.set(context.params.key, spec[3] ?? null);
   state.audit.unshift({ key: context.params.key, value: spec[3] ?? null, updated_by: STAFF.id, updated_at: now() });
-  logAction('web.settings.clear', { reason: context.params.key, details: { key: context.params.key } });
+  logAction('web.settings.clear', { reason: context.params.key, details: { key: context.params.key, via: 'website' } });
   return { ...keyRow(context.params.key), cleared: true };
 });
 

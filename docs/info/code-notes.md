@@ -3669,3 +3669,122 @@ misalignment.
 | `site/mock/contract.json` | The paths use `{feature_request_id}` — the signed-in staff session's own **pending** row — with `{member_request_id}` beside it for somebody else's, already planned. Both halves seed the pair (`tests/api/test_contract.py`'s `seeded`, the mock's `seedState` as **25** and **30**, `check.mjs`'s `IDS`), which is what makes `/api/requests/mine` non-empty and the approve/decline routes reachable in the same fixture. |
 | `site/mock/server.mjs` | ⚠️ **The mock's helpers are `ask*`, not `request*`, and its state key is `state.asks`.** `requestRow` and `state.requests` were already taken by the ROLE-request feature, and the first cut of this file silently shadowed both — the symptom was three unrelated rolemenus contract rows failing, not a syntax error. |
 | `site/mock/contract.json` | `GET /api/requests/export.csv` is deliberately absent: `check.mjs` reads JSON shapes and this answers CSV, exactly as the polls and logs exports already are. `POST /api/requests/{id}/withdraw` is absent too — it only ever answers 200 for the person who filed the row, which one fixture session cannot exercise both ways. |
+
+## integration night 2026-08-27 — 13b merged, request kinds, defects, cyberpunk restored, via
+
+> The integration pass on branch `worktree-agent-acd3594b9dbefbec2`, cut from `main`
+> @ `16c5781`. Five commits: `641e53b` (13b merged, mocks reconciled) → `196e7a9`
+> (request kinds, `request_log_level`, `/request logs`) → `a4e7fcd` (the three
+> defects) → `f10260d` (cyberpunk restored) → the `via` commit. Line numbers are as
+> of the last of them.
+>
+> **Last verified: 2026-08-27** — `pytest -q` **2158 passed** (2144 + 14 new; three
+> known failures on `main` fixed). `ruff check .` clean. `node site/mock/check.mjs`
+> clean at **17 pages / 89 routes**. Browser pass on the mock at port 8912, Chrome,
+> Cyberpunk dark / Cyberpunk light / Discord dark, 1280 and 390 CSS px in
+> same-origin iframes.
+> ⚠️ **NOTHING has run against live Discord.** No gateway session, no `/request`, no
+> `/settings logs`, no line watched to arrive or be suppressed. Every claim below is
+> against fakes, a temporary SQLite file, or `site/mock/server.mjs`.
+
+### The merge — which side won where
+
+`git merge --no-ff worktree-agent-acd6d4a9712a56eb0` conflicted in five files, 31
+hunks. **The real router is the truth**, so `black_bloc/api/tools/requests.py` and
+`black_bloc/api/auth.py` decided every shape.
+
+| File | Hunks | How it was resolved |
+|---|---|---|
+| `site/mock/contract.json` | 16 | **13a's table verbatim** — the resolved file is byte-identical to `main`'s, plus 13b's `/requests.html` page entry, which 13a had not added. 13b's shapes were wrong against the router in five ways: `shown`/`notes` instead of `pages`/`pending`, no `status_word`, `decided_by` as an object rather than a flat id beside `decided_by_name`, a FLAT `GET /api/requests/{id}` instead of `{request, comments}`, and no `request_id` on a comment row. Its `web.request.status` / `web.request.commented` kinds are not what the router emits either (`updated` / `comment`). |
+| `site/mock/server.mjs` | 12 | **Split.** 13a's row builders, refusal sentences, statuses, page size and ORDER (`asksSorted` = pending first then id DESC, which is the router's `ORDER BY (status <> 'pending'), id DESC`) all won; 13b's `requestOrder` (pending oldest-first) did not. 13b's **thirty-row fixture** won over 13a's two hand-written rows, moved under 13a's `asks`/`askComments` keys. 13b's **member gating** won on all three non-staff routes. |
+| `site/mock/check.mjs` | 1 | A comment only; both halves already agreed on `feature_request_id: '25'` and `member_request_id: '30'`. 13b's UNGUARDED entry and its six `web.request.*` calls merged cleanly and were kept. |
+| `site/public/assets/app.js` | 1 | Both: 12b's `audit` → **Logs** label AND 13b's `requests` tab. |
+| `site/public/assets/shell.js` | 1 | Both, same way. |
+
+| Key | Note |
+|---|---|
+| ⚠️ `server.mjs:815` (`meBody`) | **13b invented `state: 'member'`, which the router never returns.** `api/auth.py:506` only ever sends `staff` / `not_staff` / `staff_unknown`, and a guild member who is not staff is `state: "not_staff"` with `member: true` and the `MEMBER_NOT_STAFF` sentence. The mock now says that. Nothing on the page reads `state` for this — `shell.js:272 isMemberOnly` reads `staff !== true && member === true` — so the page was right and only the fixture was lying. A **stranger** keeps `member: false` and keeps the gate, which is what `app.js:173 refuseFor` needs to tell the two apart. |
+| ⚠️ `server.mjs` `asks` / `askComments` | **`state.requests` is the ROLE-request list** (`server.mjs:406`, read by `GET /api/rolemenus/requests`), and 13b's first cut shadowed it with a duplicate key — the symptom was twelve unrelated rolemenus contract rows failing. 13a's `ask*` names avoid it in the same way 13b's `featureRequests` did; `ask*` won because the route bodies that survived are 13a's. `check.mjs`'s `request_id` is still the ROLE placeholder and `feature_request_id` is the new one. |
+| `server.mjs` seed row 25 | Changed from `MEMBERS[3]` to `MEMBERS[0]` so `{feature_request_id}` is the **staff session's own pending row**, which is what `contract.json` says it is and what makes `GET /api/requests/mine` non-empty for the staff fixture. 30 stays the member session's own pending row — the only kind Withdraw takes. |
+| ⚠️ `server.mjs` `POST /api/requests` | 13a's mock never checked `request_who_can_file`; the router does (`api/tools/requests.py:213 _may_file`). Added, with the router's own `STAFF_ONLY_FILES` sentence, so a member meets the same three refusals in the same order on both halves. |
+| `page-requests.js:500 pagerFor` | Sent `per_page` the router does not take and derived `hasMore` from a page size of its own. It now reads `payload.per_page` and `payload.pages`, which the router sends (`API_PAGE` is **20**, not the page's 25). |
+| **not reconciled, deliberately** | The mock's `/status` route lets a **pending** row move straight to `planned`, because `apply_decision` (`cogs/community/requests.py:161`) does; 13b's mock refused it with "Approve it first". The page tolerates both and the router is the truth. |
+
+### Phase 12 meets Phase 13 — the thirteenth feature
+
+| Key | Note |
+|---|---|
+| `black_bloc/logkinds.py:19` | `request` joins `FEATURES`, so `settings_store.py:437` generates `request_log_level` with the other twelve and `logkinds.LOG_LEVEL_KEYS` is thirteen long. `HEADS` takes **both** `request` and `requests` as heads, because `feature_of` splits on the first dot and nothing stops a later kind being written either way. |
+| `black_bloc/logkinds.py:115` | ⚠️ **IMPORTANT gets only `request.declined` and `request.done`.** `request.approved` arrives free on the `.approved` suffix and `request.dm_failed` / `request.notify_failed` on `_failed`; listing them as well would fail nothing but would be a second home for the same decision. |
+| `black_bloc/logkinds.py:212` | ROUTINE gets `filed`, `auto_approved`, `withdrawn`, `planned`, `in_progress`, `updated`, `comment` — the owner's line is that a DECISION is loud and the rest of a request's life is not. `bare()` means every `web.request.*` twin classifies with its bare kind, so nine kinds are covered by seven entries. |
+| `tests/test_logkinds.py:34` | Two additions: the `f'request.{status}'` call site in the cog, enumerated to its five statuses, and the nine `web.request.*` kinds under `black_bloc/api/writes.py::kind` — those reach `log_action` through `note()`, so the scanner sees the variable, not the string. |
+| `black_bloc/cogs/community/requests.py:435` | `/request logs` is the thirteenth, and it is the whole body of `send_logs` like the other twelve — which is why `settings_store.is_staff_command` finds `require_staff` in its `co_names` and hides it from non-staff with no `extras`. |
+| `tests/test_bot.py:95` | The tree is **35** top-level commands (34 before), still far under Discord's 100; `/voice` is still the fullest group at 18. |
+
+### The three defects
+
+| Key | Note |
+|---|---|
+| ⚠️ `site/public/assets/ui.js:527 backToTop` | **The pager landed at the top of the PAGE.** `#dash`'s `replaceChildren` resets the scroller to 0 before the helper runs, so the old `if (scroller.scrollTop <= wanted + 1) return` always short-circuited. Now: unconditional, and after the new rows are in the document. It places the scroller twice — once the instant `onPage` resolves, once after `painted()` — because `painted()` races two `requestAnimationFrame`s against a **60 ms timer**, and ⚠️ **rAF does not run at all in a tab that is not on screen**, which the first cut of this fix proved by never firing under browser automation. Instant, never smooth, for the same reason. |
+| `ui.js:507 listTop` | Keeps the block as well as the offset. When the block survives the rebuild (`logs.js` replaces only its `results`) the landing is re-measured from the live node; when `#dash` was replaced the recorded offset is used, and it is still right because everything ABOVE the list is rebuilt identically. |
+| ⚠️ `ui.js:313 boldParts` | **`**x**` rendered its asterisks in every outcome sentence.** One shared fix in `notice()`'s `say`, which is what `run()` writes into: the message is split on `**…**` into text nodes and `el('strong', { text })`. **No innerHTML** — the sentence carries names and reasons people typed. `node.said` keeps the raw text so `keepSaying` parks the markers rather than the flattened text and a sentence that survives a reload keeps its emphasis. |
+| `page-requests.js:817` | `await logsSection('request')` at the foot of the STAFF view only — a member cannot read `/api/actions`, and asking would be one 403 swallowed for nothing. `request_log_level` joins the page's `SETTING_KEYS`, `request` joins `logs.js:18 LOG_FEATURES` (so the Logs page gets its chip) and `logs.js:46 ROUTINE` gets its sentence. |
+
+**Measured, the pager, in a 1276×796 iframe on the mock** — `.content.scrollTop`
+before Next / after, then where the list block's top sits under the top bar, beside
+what the same click did before the fix:
+
+| page | before | after | list top | list top, unfixed |
+|---|---|---|---|---|
+| Requests · Planned & in progress (33 rows) | 9340 | **930** | **8.18px** | 938.18px |
+| Members (60 rows) | 2439 | **122** (the page's own maximum) | **48.21px** | 170.21px |
+| Polls · Closed (17 rows) | 663 | 663 (already the maximum) | **296.11px** | 959.45px |
+
+⚠️ **Members and Polls both land on a page whose scroller cannot reach the wanted
+offset**, because page 2 is shorter than page 1; `scrollTop` clamps and the list ends
+up as near the top as the page allows. That is the right answer and it is why the
+raw before/after numbers alone do not tell the story — the list-top column does.
+
+### Cyberpunk
+
+See the `f10260d` commit message for the palette and the contrast table.
+⚠️ **The two light-mode figures below 4.5:1 — accent 4.46 on the page ground, heading
+3.54 — are the estate's own values.** The neon set beat both; the owner asked for the
+estate's palette by name, so they are recorded rather than quietly improved. Dark is
+the default this site boots into and clears everything.
+
+### Via — where a change was made
+
+Owner, 2026-08-27 18:51: *"in the logs we should add how someone has set a setting,
+if they set it in discord or on the website"*.
+
+| Key | Note |
+|---|---|
+| `black_bloc/logkinds.py:335 via_of` | Two words, `discord` and `website`. **What the writer recorded wins**; otherwise the kind's `web.` head decides. That second half is what makes every row written before tonight say something rather than nothing. |
+| ⚠️ `black_bloc/actionlog.py:97 stamped` | **`log_action` stamps `details["via"]` itself, so no writer can forget it.** There are thirty-odd `store.set` callers across the cogs and editing every one would have been thirty chances to miss one — the same reasoning that made every `.would_` kind routine by RULE. The two settings doors (`cogs/core.py`'s four calls, `api/settings_api.py`'s two) ALSO pass it explicitly, so a kind rename cannot silently relabel the one thing the owner asked about. |
+| ⚠️ **the residual, accepted** | A website path that logs a **bare** feature kind — `api/tools/requests.py` calling `apply_decision`, which logs `request.approved` — is stamped `discord` by the rule, and its `web.request.approved` twin beside it says `website`. It is not wrong about the ACTION (a slash command logs the same bare kind) and the pair is the provenance, but a reader scanning the Via column sees one Discord row for a website decision. Passing `via` down through `apply_decision` and its siblings is the fix and is not in scope tonight. **Settings, the owner's actual ask, have no such pair:** a settings change is `settings.set`/`settings.clear` (Discord) or `web.settings.set`/`web.settings.clear` (website) and never both. |
+| `black_bloc/actionlog.py:35` | `SUMMARY_SKIPS` keeps `via` out of the flattened `key=value` summary — it is its own column and its own part of the line, so it must not appear twice. The mock mirrors the same list (`server.mjs:938`). |
+| `black_bloc/actionlog.py:245` | The `/… logs` line ends `· via Discord`, **outside the 100-character cap**, the way the stamp sits outside it: a truncated line must still say where the action came from. |
+| ⚠️ `black_bloc/api/settings_api.py:152 via_by_key` | **The `settings` table has no column for this**, so the Settings audit reads it back off the action log: the newest `settings.*` / `web.settings.*` row whose `details.key` matches, over a 2000-row scan. A key nothing logged answers `null`, which the page draws as `—` rather than guessing Discord. ⚠️ **A cleared key leaves the settings table entirely**, so a clear never appears in the audit at all; the Logs page is where a clear is read. |
+| `site/public/assets/logs.js:52 viaCell` | A `.pill.viapill`. Discord is the quiet base pill, the website takes the accent tint — the same grammar `.kindpill[data-important]` already uses, so no new colour was invented. Drawn in `logsTable` (every Logs section and the Logs page) and in `page-audit.js:72`'s Settings audit table. |
+| `black_bloc/api/status.py:230` | `via` is on every `/api/actions` row and in the CSV, between `reason` and `details`. |
+
+### What was NOT verified
+
+- ⚠️ **No live Discord, at all.** No `/request`, no `/request logs`, no `/settings logs`,
+  no line watched to arrive or be suppressed, no command sync. The 35-command tree has
+  never been sent to Discord.
+- ⚠️ **The pager fix has never been exercised in a FOREGROUND tab.** Every measurement
+  above was taken with the automated tab backgrounded, which is the case the 60 ms
+  backstop exists for — the rAF path itself is therefore the half that was NOT observed
+  firing. It is the cheaper path, not the load-bearing one.
+- **Cyberpunk light's two sub-4.5 contrast figures are computed, not sampled** — the
+  numbers are WCAG arithmetic over the token values, not a pixel sampler on a rendered
+  page.
+- **Chrome only**, Cyberpunk dark, Cyberpunk light and Discord dark, 1280 and 390. The
+  other nine theme×mode combinations were not opened; the new CSS is token-only, but
+  that is inference.
+- **No `.pill.viapill` contrast sample** was taken; it reuses `--et-accent` at the same
+  mix as `.pill.kindpill[data-important]`.
+- **Nothing was deployed**, and no owner sweep from either phase's definition of done
+  has been run.

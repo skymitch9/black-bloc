@@ -517,6 +517,14 @@ details:not([open]) > .sect-summary .sect-mark { transform: rotate(-90deg); }
   background: color-mix(in srgb, var(--et-accent) 14%, transparent);
   border-color: color-mix(in srgb, var(--et-accent) 40%, transparent);
 }
+/* Where a line came from. Two values only, so they are told apart by the token
+   the theme already uses for each: Discord is the muted quiet of the chrome,
+   the website is the accent that every other web-driven thing wears. */
+.pill.viapill { white-space: nowrap; }
+.pill.viapill[data-via="website"] {
+  color: var(--et-accent);
+  border-color: color-mix(in srgb, var(--et-accent) 40%, transparent);
+}
 /* A section body is a grid, and a grid item's automatic minimum size is its
    content — a tools row of nowrap controls reports the SUM of them, so at 390
    it overflowed the section instead of wrapping. min-width: 0 is the fix, and

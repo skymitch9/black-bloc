@@ -129,7 +129,11 @@ async def test_a_mode_that_is_off_at_startup_hides_its_commands_and_syncs_once(b
     assert waits.seen == [cv.DEBOUNCE_SECONDS]
     rows = await logged(bot.db)
     assert [row["kind"] for row in rows] == [cv.LOG_KIND]
-    assert json.loads(rows[0]["details"]) == {"commands": 2, "hidden": ["rolemenu"]}
+    assert json.loads(rows[0]["details"]) == {
+        "commands": 2,
+        "hidden": ["rolemenu"],
+        "via": "discord",
+    }
 
 
 async def test_a_mode_that_is_on_leaves_the_commands_alone_and_does_not_sync(bot, waits):

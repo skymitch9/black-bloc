@@ -14,6 +14,9 @@ from black_bloc.logkinds import (
     OFF,
     ROUTINE,
     SHADOW,
+    VIA_DISCORD,
+    VIA_WEBSITE,
+    VIA_WORDS,
     bare,
     feature_of,
     heads_for,
@@ -22,6 +25,8 @@ from black_bloc.logkinds import (
     like_patterns,
     log_level_key,
     should_post,
+    via_of,
+    via_word,
 )
 
 PACKAGE = pathlib.Path(logkinds.__file__).resolve().parent
@@ -357,6 +362,26 @@ def test_a_request_is_loud_only_when_it_is_answered_or_fails():
     assert is_important("request.notify_failed") is True
     assert feature_of("request.filed") == "request"
     assert feature_of("web.request.approved") == "request"
+
+
+def test_via_reads_what_the_writer_recorded_and_falls_back_to_the_web_head():
+    """Owner, 2026-08-27: a log line says whether Discord or the website did it."""
+    assert via_of("settings.set", {"key": "golive_mode"}) == "discord"
+    assert via_of("web.settings.set", {"key": "golive_mode"}) == "website"
+    # what the writer recorded wins over the head, which is what a website path
+    # logging a bare feature kind needs.
+    assert via_of("request.approved", {"via": "website"}) == "website"
+    assert via_of("web.request.approved", {"via": "discord"}) == "discord"
+    # anything that is not one of the two words is not a decision, so the head decides
+    assert via_of("settings.set", {"via": "carrier pigeon"}) == "discord"
+    assert via_of("web.settings.set", {"via": ""}) == "website"
+    assert via_of("settings.set", None) == "discord"
+    assert via_of("settings.set", "not a dict") == "discord"
+    # `web` on its own is not a head with anything under it
+    assert via_of("web") == "discord"
+    assert via_word("web.settings.set") == "Website"
+    assert via_word("settings.set") == "Discord"
+    assert set(VIA_WORDS) == {VIA_DISCORD, VIA_WEBSITE}
 
 
 def test_should_post_reads_the_three_levels():

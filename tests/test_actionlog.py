@@ -93,7 +93,7 @@ async def test_row_written_and_embed_posted(wired):
     assert rows[0]["guild_id"] == 7
     assert rows[0]["actor_id"] == 42 and rows[0]["target_id"] == 43
     assert rows[0]["reason"] == "clicked a menu"
-    assert json.loads(rows[0]["details"]) == {"added": [1]}
+    assert json.loads(rows[0]["details"]) == {"added": [1], "via": "discord"}
     assert channel.sent[0]["embed"].title == "role_menu.update"
 
 
@@ -280,11 +280,15 @@ async def test_a_line_carries_a_relative_stamp_and_stays_under_the_limit(wired):
 
     line = (await recent_lines(db, 7, "mod", 1))[0]
 
-    stamp, _, body = line.partition(" · ")
+    stamp, _, rest = line.partition(" · ")
+    body, _, said_via = rest.rpartition(" · ")
     assert stamp.startswith("<t:") and stamp.endswith(":R>")
+    # The stamp and the via sit OUTSIDE the cap: a truncated line still renders its
+    # timestamp and still says where the action came from.
     assert len(body) <= 100
     assert body.startswith("`mod.banned` · <@42> → <@43>")
     assert body.endswith("…")
+    assert said_via == "via Discord"
 
 
 async def test_details_stand_in_when_there_is_no_reason(wired):
@@ -296,6 +300,43 @@ async def test_details_stand_in_when_there_is_no_reason(wired):
 
     assert "poll_id=3, hours=24" in line
     assert "→" not in line
+    # `via` is its own part of the line and its own column on the page, so it never
+    # leaks into the summary that stands in for a missing reason.
+    assert "via=" not in line
+
+
+async def test_every_line_says_where_it_came_from(wired):
+    """Owner, 2026-08-27: `/… logs` says whether Discord or the website did it."""
+    db, store = wired
+    bot = _Bot(db, store, _Channel())
+    await log_action(bot, _Guild(), "settings.set", details={"key": "golive_mode"})
+    await log_action(bot, _Guild(), "web.settings.set", details={"key": "golive_mode"})
+
+    lines = await recent_lines(db, 7, "core", 2)
+
+    assert lines[0].endswith(" · via Website")
+    assert lines[1].endswith(" · via Discord")
+
+
+async def test_a_website_path_that_logs_a_bare_kind_can_still_say_website(wired):
+    """The recorded word beats the kind's head — that is what `details['via']` is for."""
+    db, store = wired
+    bot = _Bot(db, store, _Channel())
+    await log_action(bot, _Guild(), "request.approved", details={"request_id": 5, "via": "website"})
+
+    line = (await recent_lines(db, 7, "request", 1))[0]
+
+    assert line.endswith(" · via Website")
+
+
+async def test_a_row_is_stamped_even_when_the_caller_passed_no_details(wired):
+    db, store = wired
+    bot = _Bot(db, store, _Channel())
+    await log_action(bot, _Guild(), "web.golive.optin")
+
+    rows = await _rows(db)
+
+    assert json.loads(rows[0]["details"]) == {"via": "website"}
 
 
 def test_every_feature_has_a_clause_and_core_asks_it_backwards():

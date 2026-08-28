@@ -84,10 +84,34 @@ function whoCell(id, given) {
   }, [node]);
 }
 
+const VIA_WORDS = { discord: 'Discord', website: 'Website' };
+const VIA_TITLES = {
+  discord: 'Done in Discord — a slash command or a button on one of the bot’s own messages',
+  website: 'Done on this dashboard',
+};
+
+/**
+ * Owner, 2026-08-27: "add how someone has set a setting, if they set it in
+ * discord or on the website". The API sends `via` on every row and derives it
+ * from the kind's `web.` head when an older row never recorded it, so a row
+ * written before this landed still says something rather than nothing.
+ */
+export function viaCell(via) {
+  const found = VIA_WORDS[via] ? via : null;
+  if (!found) return el('span', { class: 'cell-quiet', text: '—' });
+  return el('span', {
+    class: 'pill viapill',
+    'data-via': found,
+    title: VIA_TITLES[found],
+    text: VIA_WORDS[found],
+  });
+}
+
 export function logsTable(rows, empty) {
   return table([
     { label: 'When', cell: (row) => whenCell(row.at) },
     { label: 'Kind', cell: (row) => kindPill(row) },
+    { label: 'Via', cell: (row) => viaCell(row.via) },
     { label: 'Actor', cell: (row) => whoCell(row.actor_id, row.actor_name) },
     { label: 'Target', cell: (row) => whoCell(row.target_id, row.target_name) },
     { label: 'Summary', cell: (row) => row.summary || row.reason, className: 'wrap' },

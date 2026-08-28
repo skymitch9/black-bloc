@@ -1,3 +1,5 @@
+import json
+
 import discord
 import pytest
 from discord import app_commands
@@ -171,6 +173,11 @@ async def kinds(db):
     return [row["kind"] for row in await cur.fetchall()]
 
 
+async def details(db):
+    cur = await db.conn.execute("SELECT details FROM action_log ORDER BY id")
+    return [json.loads(row["details"]) if row["details"] else None for row in await cur.fetchall()]
+
+
 def test_the_choices_cover_every_key_and_fit_discords_limit():
     assert "birthday_role_id" in CLEARABLE_KEYS and "birthday_channel_id" in CLEARABLE_KEYS
     assert "birthday_color" in VALUE_KEYS
@@ -267,6 +274,26 @@ async def test_clearing_something_that_was_never_set_says_so_and_logs_nothing(bo
 
     assert "was not set" in interaction.sent
     assert await kinds(bot.db) == []
+
+
+async def test_a_slash_change_records_that_it_came_from_discord(bot, cog, db):
+    """Owner, 2026-08-27: the log says whether Discord or the website set a key."""
+    interaction = FakeInteraction(bot, FakeMember(bot.guild, user_id=1, manage_guild=True))
+
+    await cog.settings_set_value.callback(cog, interaction, "golive_embed", "false")
+
+    assert await kinds(db) == ["settings.set"]
+    assert (await details(db))[0]["via"] == "discord"
+
+
+async def test_a_slash_clear_records_discord_too(bot, cog, member):
+    give_staff(bot, member)
+    await bot.store.set(GUILD, "birthday_role_id", CAKE_ROLE)
+    choice = discord.app_commands.Choice(name="birthday_role_id", value="birthday_role_id")
+
+    await cog.settings_clear.callback(cog, FakeInteraction(bot, member), choice)
+
+    assert (await details(bot.db))[0] == {"key": "birthday_role_id", "via": "discord"}
 
 
 tempvoice = app_commands.Group(name="tempvoice", description="Temporary voice channels")

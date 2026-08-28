@@ -85,7 +85,8 @@
           "target_id",
           "target_name",
           "reason",
-          "summary"
+          "summary",
+          "via"
         ]
       }
     },
@@ -118,7 +119,8 @@
           "target_id",
           "target_name",
           "reason",
-          "summary"
+          "summary",
+          "via"
         ]
       }
     },
@@ -263,7 +265,8 @@
           "value",
           "updated_by_id",
           "updated_by_name",
-          "updated_at"
+          "updated_at",
+          "via"
         ]
       }
     },
