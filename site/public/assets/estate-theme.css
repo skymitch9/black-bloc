@@ -739,22 +739,27 @@
 }
 
 /* ---- CYBERPUNK — dark first (the audiobook site's identity) --------------- */
-/* Owner, 2026-08-27: "the theme needs more neon blue and othe neon colors".
-   Electric blue #3d8bff is now the primary voice (accent, buttons, focus glow,
-   nav-active, table stripe, card glow); neon magenta #ff3df0 is the second
-   (headings, wordmark, focus ring, chrome edge); neon green #2bff88 is ok.
-   Neon yellow #fcee0a stays as WARN only — it still reads as part of the neon
-   set, but it no longer wears the headings. Cyan #05d9e8, the old primary,
-   is kept as --et-info so the audiobook site's own voice stays in the set.
-   Ambient neon haze on the ground; notched corners instead of radius.
-   --et-hue-1..6 are NOT touched: they are the source site's shelf hues and
-   nothing the dashboard draws reads them. */
+/* Measured from the site's own pages (club/community block, the dominant of
+   its two palettes). Yellow #fcee0a = brand voice (headings, active states);
+   cyan #05d9e8 = interactive (focus, links, primary buttons — .btn-primary
+   is cyan-filled with #04121a text); magenta #ff2a6d = danger. Ambient neon
+   haze on the ground; notched corners instead of radius.
+   ⚠️ Owner, 2026-08-27 18:50: "the cyber punk theme on the dashboard hs
+   strayed more from cyber punk and way more ito neon… copy the ones we use on
+   other gabi platforms and tighten that up, we look like a neon circus out
+   here." The electric-blue/magenta/green set b936b96 introduced is REVERTED to
+   the values above, which are the estate's own and are shared with the other
+   gabi sites. Every token added after b936b96 is kept and re-derived from this
+   palette: the focus ring, the glows, the nav heads, the table stripe and the
+   row hover all read cyan again, and no magenta is left anywhere the estate
+   did not already have it (danger only). --et-info goes back to inheriting
+   `var(--et-accent)` from :root rather than naming a colour of its own. */
 
 :root[data-theme="cyberpunk"] {
   --et-bg: #0a0a12;
   --et-bg-2: #12121f;
   --et-surface-edge: #12121f; /* flat: the notch is the identity, not a bevel */
-  --et-shadow: 0 0 12px rgba(61, 139, 255, .18);
+  --et-shadow: 0 0 10px rgba(5, 217, 232, .12);
   --et-hue-1: #fcee0a; /* the three neons ARE the three shelves */
   --et-hue-2: #05d9e8;
   --et-hue-3: #ff2a6d;
@@ -766,35 +771,34 @@
   --et-blob-3: transparent;
   --et-grain-opacity: 0;
   --et-bg-texture:
-    radial-gradient(ellipse at 20% 50%, rgba(61, 139, 255, .05) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 20%, rgba(255, 61, 240, .035) 0%, transparent 50%),
-    radial-gradient(ellipse at 50% 80%, rgba(43, 255, 136, .025) 0%, transparent 50%);
+    radial-gradient(ellipse at 20% 50%, rgba(252, 238, 10, .03) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(5, 217, 232, .03) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 80%, rgba(255, 42, 109, .02) 0%, transparent 50%);
   --et-bg-texture-size: auto;
   --et-surface: #12121f;
   --et-fg: #e8e6e3;
   --et-muted: #8a8f98;
-  --et-hairline: #232a45; /* blue-shifted off #2a2a3a so the chrome sits in the blue */
-  --et-ink: #232a45;
+  --et-hairline: #2a2a3a;
+  --et-ink: #2a2a3a;
   --et-shell-bg: #12121f;
   --et-shell-inset: #0a0a12;
-  --et-nav-active: #16264a;
+  --et-nav-active: #23233a;
 
-  --et-accent: #3d8bff;
-  --et-accent-fg: #02060f;
-  --et-accent-2: #ff3df0;
+  --et-accent: #05d9e8;
+  --et-accent-fg: #04121a;
+  --et-accent-2: #fcee0a;
   --et-heading-color: var(--et-accent-2);
 
-  --et-ok: #2bff88; /* INVENTED — the site has no green anywhere; flagged, not fabricated silently */
+  --et-ok: #39d98a; /* INVENTED — the site has no green anywhere; flagged, not fabricated silently */
   --et-warn: #fcee0a;
   --et-danger: #ff2a6d;
-  --et-info: #05d9e8; /* the old primary cyan, kept in the set as the info voice */
 
   --et-panel-border: var(--et-hairline);
   --et-field-border: var(--et-hairline);
 
-  --et-shadow-lift: 0 0 18px rgba(61, 139, 255, .32);
-  --et-glow: 0 0 8px rgba(61, 139, 255, .35);
-  --et-glow-title: 0 0 10px rgba(255, 61, 240, .35);
+  --et-shadow-lift: 0 0 16px rgba(5, 217, 232, .25);
+  --et-glow: 0 0 8px rgba(5, 217, 232, .3);
+  --et-glow-title: 0 0 10px rgba(252, 238, 10, .3);
 
   --et-font: 'Rajdhani', 'Segoe UI', system-ui, sans-serif;
   --et-font-display: 'Rajdhani', 'Share Tech Mono', 'Segoe UI', system-ui, sans-serif;
@@ -812,8 +816,8 @@
      border, not the glow (matches the source's own behaviour). */
   --et-clip-panel: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
 
-  --et-btn-bg: var(--et-accent);      /* .btn-primary: electric-blue fill */
-  --et-btn-fg: var(--et-accent-fg);   /* near-black ink on the neon, the site's grammar */
+  --et-btn-bg: var(--et-accent);      /* .btn-primary: cyan fill */
+  --et-btn-fg: var(--et-accent-fg);   /* #04121a on cyan, the site's literal */
   --et-btn-border: 1px solid var(--et-accent);
   --et-btn-shadow: none;
   --et-press: scale(.97);
@@ -837,14 +841,14 @@
   --et-font-nav: var(--et-font-mono);
   --et-nav-head-size: var(--et-ui-lg);
   --et-nav-head-weight: var(--et-weight-heavy);
-  --et-nav-head-color: var(--et-accent); /* electric blue, in the uppercase mono the label tokens set */
+  --et-nav-head-color: var(--et-accent); /* cyan, in the uppercase mono the label tokens set */
   --et-nav-head-space: 22px;
   --et-label-transform: uppercase;
   --et-label-tracking: .14em;
   --et-label-weight: 400;
   --et-hairline-w: 1px;
   --et-dot-radius: 2px;
-  --et-focus-ring: 2px solid var(--et-accent-2);
+  --et-focus-ring: 2px solid var(--et-accent); /* cyan is the interactive voice here */
   --et-control-h: 34px;
   --et-control-h-sm: 28px;
   --et-control-h-lg: 38px;
@@ -864,7 +868,7 @@
   --et-bg-texture: none; /* the site kills its haze in light mode */
   --et-surface: #ffffff;
   --et-surface-edge: #ffffff;
-  --et-shadow: 0 4px 14px rgba(18, 70, 209, .16);
+  --et-shadow: 0 4px 14px rgba(22, 22, 30, .10);
   --et-hue-1: #9a7b00;
   --et-hue-2: #00798f;
   --et-hue-3: #c31e58;
@@ -873,24 +877,23 @@
   --et-hue-6: #1d4ed8; /* ebooks — strong blue; teal clashed with books' #00798f */
   --et-fg: #16161e;
   --et-muted: #5c6270;
-  --et-hairline: #c5cbdb; /* blue-shifted off #c9cdd9, to match the dark block */
-  --et-ink: #c5cbdb;
+  --et-hairline: #c9cdd9;
+  --et-ink: #c9cdd9;
   --et-shell-bg: #e4e7ee;
   --et-shell-inset: #ffffff;
-  --et-nav-active: #ccd8f2;
+  --et-nav-active: #d3d8e4;
 
-  --et-accent: #1246d1; /* the light form of the electric blue */
+  --et-accent: #00798f;
   --et-accent-fg: #ffffff;
-  --et-accent-2: #b01a8e; /* the light form of the neon magenta */
+  --et-accent-2: #9a7b00;
 
-  --et-ok: #0c6f3e; /* INVENTED, as above */
-  --et-warn: #7f6400;
+  --et-ok: #1d7a4b; /* INVENTED, as above */
+  --et-warn: #9a7b00;
   --et-danger: #c31e58;
-  --et-info: #006c80; /* the old primary cyan, as in the dark block */
 
-  --et-shadow-lift: 0 6px 20px rgba(18, 70, 209, .22);
-  --et-glow: 0 0 8px rgba(18, 70, 209, .3);
-  --et-glow-title: 0 0 10px rgba(176, 26, 142, .3);
+  --et-shadow-lift: 0 6px 20px rgba(22, 22, 30, .15);
+  --et-glow: 0 0 8px rgba(0, 121, 143, .25);
+  --et-glow-title: 0 0 10px rgba(154, 123, 0, .25);
   --et-transit: #8a3fb8; /* INVENTED, as above — the violet's light form */
 
   --et-ui-xl: 26px;
@@ -907,14 +910,14 @@
   --et-font-nav: var(--et-font-mono);
   --et-nav-head-size: var(--et-ui-lg);
   --et-nav-head-weight: var(--et-weight-heavy);
-  --et-nav-head-color: var(--et-accent); /* electric blue, in the uppercase mono the label tokens set */
+  --et-nav-head-color: var(--et-accent); /* cyan, in the uppercase mono the label tokens set */
   --et-nav-head-space: 22px;
   --et-label-transform: uppercase;
   --et-label-tracking: .14em;
   --et-label-weight: 400;
   --et-hairline-w: 1px;
   --et-dot-radius: 2px;
-  --et-focus-ring: 2px solid var(--et-accent-2);
+  --et-focus-ring: 2px solid var(--et-accent); /* cyan is the interactive voice here */
   --et-control-h: 34px;
   --et-control-h-sm: 28px;
   --et-control-h-lg: 38px;
