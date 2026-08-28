@@ -1,7 +1,7 @@
 # Owner guide — before the trip, on the road, when you're back
 
 > **Audience:** you (the owner), on your phone or the laptop. **Status:** TEMPORARILY TRACKED (2026-08-27).
-> Last verified: **2026-08-27 18:05** — commands were run from the main machine this week; the laptop steps
+> Last verified: **2026-08-27 20:22** — commands were run from the main machine this week; the laptop steps
 > are the same tools on a fresh clone and have NOT been rehearsed on your laptop.
 > Details live in [`runbook.md`](runbook.md) (operations) and [`sweeps.md`](sweeps.md) (what to test); this
 > page is the order to do things in.
@@ -50,7 +50,7 @@
 | See if the bot is up | https://blackbloc.heygabi.ai/health (should say `"ok":true,"ready":true`) |
 | See what it has been doing | https://blackbloc.heygabi.ai → **Logs** (every feature page has its own Logs section too; `/golive logs` etc. in Discord) |
 | See the team's requests | https://blackbloc.heygabi.ai/requests.html — members file with `/request create` in Discord or sign in and file on that page (they see only Requests) |
-| Test something | [`sweeps.md`](sweeps.md) — 13 rows in priority order, each with what to expect |
+| Test something | [`sweeps.md`](sweeps.md) — 17 rows in priority order, each with what to expect |
 | Turn a feature on/off | Dashboard → that feature's page → the ON / SHADOW / OFF switch (or **Settings**) |
 | Quiet the Discord log channel | Settings → `<feature>_log_level` (off / important / all) |
 
