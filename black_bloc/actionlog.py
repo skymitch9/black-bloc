@@ -10,6 +10,8 @@ import discord
 from .logkinds import (
     ALL,
     CORE,
+    FEATURE_LABELS,
+    FEATURE_PAGES,
     FEATURES,
     LEVELS,
     feature_of,
@@ -18,11 +20,13 @@ from .logkinds import (
     log_level_key,
     should_post,
 )
+from .settings_store import GUILD_ONLY, require_staff
 
 log = logging.getLogger(__name__)
 
 DETAILS_LIMIT = 900
 LINE_LIMIT = 100
+BODY_LIMIT = 3900
 LOGS_MIN = 1
 LOGS_MAX = 50
 LOGS_DEFAULT = 10
@@ -30,6 +34,11 @@ SCAN_LIMIT = 5000
 COLUMNS = "id, at, kind, actor_id, target_id, reason, details"
 NOTHING_YET = "Nothing has been logged for this yet."
 NOTHING_IMPORTANT = "Nothing important has been logged for this yet."
+FOOTER = "The whole log, searchable, is on the dashboard: {origin}/{page}"
+LOGS_DB_DOWN = (
+    "Black Bloc cannot reach its own database right now, so it cannot read the log. Wait a "
+    "moment and run the command again, and tell a Lead if it keeps happening."
+)
 
 
 def entity_id(entity: Any) -> int | None:
@@ -220,3 +229,55 @@ async def recent_lines(
     if not rows:
         return [NOTHING_IMPORTANT if important_only else NOTHING_YET]
     return [action_line(row) for row in rows]
+
+
+def logs_embed(feature: str, lines: list[str], important_only: bool, origin: str) -> discord.Embed:
+    body: list[str] = []
+    spent = 0
+    for line in lines:
+        if spent + len(line) + 1 > BODY_LIMIT:
+            break
+        body.append(line)
+        spent += len(line) + 1
+    title = f"{FEATURE_LABELS[feature]} log"
+    embed = discord.Embed(
+        title=f"{title} — important only" if important_only else title,
+        description="\n".join(body),
+    )
+    embed.set_footer(
+        text=FOOTER.format(origin=str(origin).rstrip("/"), page=FEATURE_PAGES[feature])
+    )
+    return embed
+
+
+async def send_logs(
+    interaction: Any,
+    feature: str,
+    *,
+    count: int = LOGS_DEFAULT,
+    important_only: bool = False,
+    staff_only: bool = True,
+) -> None:
+    """The whole body of every `/<feature> logs` command."""
+    if staff_only:
+        if not await require_staff(interaction):
+            return
+    elif interaction.guild is None:
+        await interaction.response.send_message(GUILD_ONLY, ephemeral=True)
+        return
+    bot = interaction.client
+    if not getattr(bot.db, "is_connected", False):
+        await interaction.response.send_message(LOGS_DB_DOWN, ephemeral=True)
+        return
+    lines = await recent_lines(
+        bot.db,
+        interaction.guild.id,
+        feature,
+        max(LOGS_MIN, min(int(count), LOGS_MAX)),
+        important_only,
+    )
+    await interaction.response.send_message(
+        embed=logs_embed(feature, lines, important_only, bot.settings.origin),
+        ephemeral=True,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )

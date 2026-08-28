@@ -8,7 +8,13 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from ...actionlog import log_action
+from ...actionlog import (
+    LOGS_DEFAULT,
+    LOGS_MAX,
+    LOGS_MIN,
+    log_action,
+    send_logs,
+)
 from ...automod import TIMEOUT_MAX_SECONDS
 from ...modcases import (
     CASES_PER_PAGE,
@@ -382,6 +388,21 @@ async def unban_member(bot: Any, guild: Any, user_id: int, moderator: Any, reaso
 class ModCommands(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+
+    mod = app_commands.Group(name="mod", description="What Black Bloc has done to members")
+
+    @mod.command(name="logs", description="The last few moderation log lines")
+    @app_commands.describe(
+        count="How many lines, 1 to 50 (10 by default)",
+        important_only="True to leave out the dry runs and the housekeeping",
+    )
+    async def mod_logs(
+        self,
+        interaction: discord.Interaction,
+        count: app_commands.Range[int, LOGS_MIN, LOGS_MAX] = LOGS_DEFAULT,
+        important_only: bool = False,
+    ) -> None:
+        await send_logs(interaction, "mod", count=count, important_only=important_only)
 
     def _in_test_mode(self) -> bool:
         return in_test_mode(self.bot)

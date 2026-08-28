@@ -9,7 +9,13 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from ...actionlog import log_action
+from ...actionlog import (
+    LOGS_DEFAULT,
+    LOGS_MAX,
+    LOGS_MIN,
+    log_action,
+    send_logs,
+)
 from ...birthdays import (
     MONTH_NAMES,
     age,
@@ -597,6 +603,19 @@ class Birthdays(commands.Cog):
 
     async def _zone_of(self, user_id: int) -> str:
         return await member_zone_name(self.bot.db, user_id)
+
+    @birthday.command(name="logs", description="The last few birthday log lines")
+    @app_commands.describe(
+        count="How many lines, 1 to 50 (10 by default)",
+        important_only="True to leave out the dry runs and the housekeeping",
+    )
+    async def birthday_logs(
+        self,
+        interaction: discord.Interaction,
+        count: app_commands.Range[int, LOGS_MIN, LOGS_MAX] = LOGS_DEFAULT,
+        important_only: bool = False,
+    ) -> None:
+        await send_logs(interaction, "birthday", count=count, important_only=important_only)
 
     @birthday.command(name="set", description="Tell Black Bloc when your birthday is")
     @app_commands.describe(

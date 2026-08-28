@@ -10,7 +10,13 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from ...actionlog import log_action
+from ...actionlog import (
+    LOGS_DEFAULT,
+    LOGS_MAX,
+    LOGS_MIN,
+    log_action,
+    send_logs,
+)
 from ...command_errors import SafeDynamicItem
 from ...settings_store import (
     DB_UNAVAILABLE,
@@ -590,6 +596,19 @@ class Honeypot(commands.Cog):
         log.warning("honeypot: refused a command — the database is not connected")
         await interaction.response.send_message(DB_UNAVAILABLE, ephemeral=True)
         return False
+
+    @honeypot.command(name="logs", description="The last few honeypot log lines")
+    @app_commands.describe(
+        count="How many lines, 1 to 50 (10 by default)",
+        important_only="True to leave out the dry runs and the housekeeping",
+    )
+    async def honeypot_logs(
+        self,
+        interaction: discord.Interaction,
+        count: app_commands.Range[int, LOGS_MIN, LOGS_MAX] = LOGS_DEFAULT,
+        important_only: bool = False,
+    ) -> None:
+        await send_logs(interaction, "honeypot", count=count, important_only=important_only)
 
     @honeypot.command(name="setup", description="Create the trap channel spam bots post in")
     @app_commands.describe(name="What the trap channel is called")

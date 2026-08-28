@@ -3,6 +3,8 @@ from types import SimpleNamespace
 import discord
 import pytest
 
+from black_bloc import actionlog
+from black_bloc.actionlog import log_action
 from black_bloc.chat import (
     BUILTIN_ORDER,
     UNKNOWN,
@@ -14,6 +16,7 @@ from black_bloc.chat import (
     seed_defaults,
     update_line,
 )
+from black_bloc.cogs.content import chat as cog_module
 from black_bloc.cogs.content.chat import Chat, in_a_thread, mentions_bot
 from black_bloc.config import load_settings
 from black_bloc.settings_store import CHAT_COOLDOWN_SECONDS, SettingsStore
@@ -511,6 +514,64 @@ async def test_the_staff_note_obeys_the_guard(cog, bot, member, caplog):
 
     assert [m for m in staff.messages if "asked for a mod" in str(m["content"])] == []
     assert caplog.records == []
+
+
+class FakeResponse:
+    def __init__(self):
+        self.messages = []
+
+    async def send_message(self, content=None, ephemeral=False, **kwargs):
+        self.messages.append({"content": content, "ephemeral": ephemeral, **kwargs})
+
+
+class FakeInteraction:
+    def __init__(self, bot, user):
+        self.client = bot
+        self.user = user
+        self.guild = bot.guild
+        self.guild_id = bot.guild.id
+        self.channel_id = CHANNEL
+        self.response = FakeResponse()
+
+    @property
+    def sent(self):
+        return self.response.messages[-1]["content"]
+
+
+async def _always_staff(interaction):
+    return True
+
+
+async def test_chat_logs_shows_the_chat_lines_only(cog, bot, member, db, monkeypatch):
+    monkeypatch.setattr(actionlog, "require_staff", _always_staff)
+    for kind in ("chat.route", "poll.created", "chat.insult"):
+        await log_action(bot, bot.guild, kind, actor=member)
+    interaction = FakeInteraction(bot, member)
+
+    await Chat.chat_logs.callback(cog, interaction)
+
+    said = interaction.response.messages[-1]
+    assert said["ephemeral"] is True
+    assert said["embed"].title == "Chat log"
+    assert "`chat.insult`" in said["embed"].description
+    assert "`chat.route`" in said["embed"].description
+    assert "poll.created" not in said["embed"].description
+    assert said["embed"].footer.text.endswith("/chat.html")
+
+
+async def test_chat_settings_lists_every_chat_key_including_its_log_level(
+    cog, bot, member, monkeypatch
+):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    await bot.store.set(GUILD, "chat_log_level", "off")
+    interaction = FakeInteraction(bot, member)
+
+    await Chat.chat_settings.callback(cog, interaction)
+
+    said = interaction.sent
+    assert "`chat_mode` — **on**" in said
+    assert "`chat_log_level` — **off**" in said
+    assert "/settings set" in said
 
 
 def test_a_thread_is_told_apart_from_an_ordinary_channel():

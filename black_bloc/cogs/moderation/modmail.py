@@ -11,7 +11,13 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from ...actionlog import log_action
+from ...actionlog import (
+    LOGS_DEFAULT,
+    LOGS_MAX,
+    LOGS_MIN,
+    log_action,
+    send_logs,
+)
 from ...events import clamp
 from ...golive import now_iso, parse_ts
 from ...modmail import (
@@ -1355,6 +1361,19 @@ class Modmail(commands.Cog):
             return
         for row in await tickets_in_channel(self.bot.db, thread.id):
             await self._close(thread.guild, row, reason="ticket_thread_deleted", silent=True)
+
+    @modmail.command(name="logs", description="The last few modmail log lines")
+    @app_commands.describe(
+        count="How many lines, 1 to 50 (10 by default)",
+        important_only="True to leave out the dry runs and the housekeeping",
+    )
+    async def modmail_logs(
+        self,
+        interaction: discord.Interaction,
+        count: app_commands.Range[int, LOGS_MIN, LOGS_MAX] = LOGS_DEFAULT,
+        important_only: bool = False,
+    ) -> None:
+        await send_logs(interaction, "modmail", count=count, important_only=important_only)
 
     @modmail.command(name="block", description="Stop someone opening modmail tickets")
     @app_commands.describe(user="Who to block", reason="Why, for the log")

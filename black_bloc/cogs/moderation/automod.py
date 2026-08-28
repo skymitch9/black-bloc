@@ -11,7 +11,13 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from ...actionlog import log_action
+from ...actionlog import (
+    LOGS_DEFAULT,
+    LOGS_MAX,
+    LOGS_MIN,
+    log_action,
+    send_logs,
+)
 from ...automod import (
     AUTOMOD_MODES,
     RULE_HELP,
@@ -559,6 +565,19 @@ class AutoMod(commands.Cog):
         log.warning("automod: refused a command — the database is not connected")
         await interaction.response.send_message(DB_UNAVAILABLE, ephemeral=True)
         return False
+
+    @automod.command(name="logs", description="The last few automod log lines")
+    @app_commands.describe(
+        count="How many lines, 1 to 50 (10 by default)",
+        important_only="True to leave out the dry runs and the housekeeping",
+    )
+    async def automod_logs(
+        self,
+        interaction: discord.Interaction,
+        count: app_commands.Range[int, LOGS_MIN, LOGS_MAX] = LOGS_DEFAULT,
+        important_only: bool = False,
+    ) -> None:
+        await send_logs(interaction, "automod", count=count, important_only=important_only)
 
     @automod.command(name="status", description="Show what automod is set to and has seen")
     async def status(self, interaction: discord.Interaction) -> None:
