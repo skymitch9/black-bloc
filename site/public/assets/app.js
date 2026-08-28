@@ -17,7 +17,7 @@ export const TABS = [
   { tab: 'tempvoice', href: '/tempvoice.html', label: 'Temp voice' },
   { tab: 'honeypot', href: '/honeypot.html', label: 'Honeypot' },
   { tab: 'settings', href: '/settings.html', label: 'Settings' },
-  { tab: 'audit', href: '/audit.html', label: 'Audit' },
+  { tab: 'audit', href: '/audit.html', label: 'Logs' },
   { tab: 'health', href: '/health.html', label: 'Health' },
 ];
 

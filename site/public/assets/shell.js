@@ -7,7 +7,7 @@ export const GROUPS = [
     items: [
       { tab: 'overview', label: 'Overview' },
       { tab: 'health', label: 'Health' },
-      { tab: 'audit', label: 'Audit log' },
+      { tab: 'audit', label: 'Logs' },
     ],
   },
   {

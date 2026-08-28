@@ -20,7 +20,10 @@ const STATS = [
 const COLUMNS = ['Member', 'Joined', 'Roles', 'Cases', ''];
 const ROLES_SHOWN = 3;
 
-const state = { page: 1, filter: 'all', query: '' };
+/** A Logs row links here by name, so the box starts filled in with what it asked for. */
+const asked = new URLSearchParams(location.search).get('q');
+
+const state = { page: 1, filter: 'all', query: (asked || '').trim().toLowerCase() };
 
 let refresh = () => {};
 
@@ -118,6 +121,7 @@ function toolbar(payload, rows) {
     searchField({
       label: 'Search members',
       placeholder: 'Search members…',
+      value: state.query,
       onQuery: (query) => {
         if (query === state.query) return;
         state.query = query;

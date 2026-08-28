@@ -1,5 +1,6 @@
 import { api, listOf, names, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
+import { logsSection } from './logs.js';
 import {
   ago,
   ask,
@@ -626,6 +627,7 @@ async function load() {
     archiveSection(archive),
     createSection(await createForm(createSay)),
     settingsBox.node,
+    await logsSection('poll'),
   );
 }
 

@@ -1,9 +1,14 @@
 import { settings } from './api.js';
 import { start } from './app.js';
 import { syncSubnav } from './layout.js';
+import { logsSection } from './logs.js';
 import { el, sayNothing, searchField, section, settingsEditor } from './ui.js';
 
 const FIRST = 'core';
+
+const CORE_LOGS_NOTE = 'Everything done from this dashboard and every settings change, ' +
+  'whoever made it. Settings changes are routine — nothing here acts on a member — so switch ' +
+  'to All to see them.';
 
 const NAMESPACE_NOTES = {
   core: 'staff_channel_id is what decides who may see this dashboard.',
@@ -107,6 +112,7 @@ async function load() {
     }),
     share(groups),
     editor.bar,
+    await logsSection('core', { title: 'Logs', note: CORE_LOGS_NOTE }),
   );
 }
 

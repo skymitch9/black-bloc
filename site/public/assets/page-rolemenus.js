@@ -1,5 +1,6 @@
 import { api, listOf, names, refRoles, saveSetting, send, settings, settingsNamespace } from './api.js';
 import { start, tabHref } from './app.js';
+import { logsSection } from './logs.js';
 import {
   ago,
   ask,
@@ -627,6 +628,7 @@ async function load() {
     one.node,
     two.node,
     box.node,
+    await logsSection('rolemenu'),
   ].filter(Boolean);
   if (state.creating) {
     const made = section('New menu', null, { id: 'editor', open: true });

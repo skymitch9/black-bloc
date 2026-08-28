@@ -142,9 +142,24 @@ function sentence(row) {
   return node;
 }
 
+const NOTHING_IMPORTANT = 'Nothing important has happened — nothing has acted on a member ' +
+  'or failed. The Logs page has the routine lines.';
+
+/** Overview shows only what acted on somebody; the Logs page shows the rest. */
+function allLink() {
+  return el('a', {
+    href: tabHref('audit'),
+    title: 'Every line, important or routine, on the Logs page',
+    text: 'All',
+  });
+}
+
 function actionsCard(rows) {
   if (rows.length === 0) {
-    return card('Last actions', [sayNothing('Black Bloc has not logged anything yet.')], { flush: true });
+    return card('Last actions', [sayNothing(NOTHING_IMPORTANT)], {
+      actions: [allLink()],
+      flush: true,
+    });
   }
   const lines = rows.map((row) => {
     const said = verbOf(row.kind);
@@ -157,16 +172,13 @@ function actionsCard(rows) {
       sentence(row),
     ]);
   });
-  return card('Last actions', lines, {
-    actions: [el('a', { href: tabHref('audit'), text: 'All' })],
-    flush: true,
-  });
+  return card('Last actions', lines, { actions: [allLink()], flush: true });
 }
 
 async function load() {
   const [status, actions, payload] = await Promise.all([
     shellStatus(),
-    api('/api/actions?limit=10'),
+    api('/api/actions?limit=10&important=1'),
     settings(true),
   ]);
   const rows = listOf(actions, 'actions');

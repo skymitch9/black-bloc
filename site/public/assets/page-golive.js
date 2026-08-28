@@ -1,5 +1,6 @@
 import { api, listOf, names, refRoles, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
+import { logsSection } from './logs.js';
 import {
   ask,
   badge,
@@ -258,6 +259,7 @@ async function load() {
     three.node,
     await wordingSection(golive),
     await namespaceSettings('golive', { onSaved: () => refresh(), omit: [TEMPLATE_KEY, END_MODE_KEY] }),
+    await logsSection('golive'),
   );
 }
 
