@@ -110,9 +110,9 @@ function logsSurface() {
     target: null,
   };
   const group = section('Logs', LOGS_NOTE, { id: 'logs' });
-  const results = el('div');
+  const results = el('div', { class: 'logs-results' });
   const count = el('span', { class: 'table-count' });
-  const chips = el('div', { class: 'chipbar' });
+  const chips = el('div', { class: 'chipbar logs-chips' });
   const csv = el('a', {
     class: 'btn small quiet',
     href: '#',
@@ -237,7 +237,7 @@ function logsSurface() {
 
   paintChips();
   group.body.append(
-    el('div', { class: 'table-tools' }, [
+    el('div', { class: 'table-tools logs-tools' }, [
       search,
       importantSwitch(state.important, (only) => {
         state.important = only;
@@ -253,7 +253,7 @@ function logsSurface() {
       field('To', to, 'The last day to include.'),
       field('Kind', kind, 'The start of a kind, like automod.'),
     ]),
-    el('div', { class: 'formrow' }, [actor.node, target.node]),
+    el('div', { class: 'pickerrow' }, [actor.node, target.node]),
     bar([clear]),
     results,
   );

@@ -517,6 +517,21 @@ details:not([open]) > .sect-summary .sect-mark { transform: rotate(-90deg); }
   background: color-mix(in srgb, var(--et-accent) 14%, transparent);
   border-color: color-mix(in srgb, var(--et-accent) 40%, transparent);
 }
+/* A section body is a grid, and a grid item's automatic minimum size is its
+   content — a tools row of nowrap controls reports the SUM of them, so at 390
+   it overflowed the section instead of wrapping. min-width: 0 is the fix, and
+   the search box is allowed to shrink so the row wraps at a useful width. */
+.logs-tools,
+.logs-chips,
+.logs-results,
+.logs-results > .table-scroll { min-width: 0; }
+.logs-tools > .searchfield { flex: 1 1 14rem; }
+
+/* Two member pickers side by side. NOT a .formrow: a picker is a whole block —
+   a field, its results, its pick and its notice — and the formrow's three
+   explicit grid rows would reserve empty control and help rows under it. */
+.pickerrow { display: flex; flex-wrap: wrap; gap: 12px; align-items: start; }
+.pickerrow > .picker { flex: 1 1 16rem; min-width: 0; }
 .celllink { color: inherit; text-decoration: none; }
 .celllink:hover { text-decoration: underline; }
 .celllink:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; border-radius: var(--et-radius); }

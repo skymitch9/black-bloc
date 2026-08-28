@@ -134,15 +134,17 @@ function chip(label, pressed, onPick, title = null) {
   });
 }
 
+const SWITCH = 'Switch to All to see the routine lines too.';
+
 function nothingSaid(feature, state) {
   const named = featureLabel(feature);
-  if (state.query) return `Nothing ${named} has logged has “${state.query}” in it.`;
-  if (state.kind) return `${named} has logged nothing of kind ${state.kind}${state.important ? ' that was important' : ''}.`;
-  if (state.important) {
-    const said = ROUTINE[feature] || '';
-    return `${named} has logged nothing important. ${said} Switch to All to see every line.`.replace('  ', ' ');
-  }
-  return `${named} has logged nothing at all yet.`;
+  const bits = [];
+  if (state.query) bits.push(`Nothing ${named} has logged has “${state.query}” in it.`);
+  else if (state.kind) bits.push(`${named} has logged nothing of kind ${state.kind}${state.important ? ' that was important' : ''}.`);
+  else if (state.important) bits.push(`${named} has logged nothing important.`, ROUTINE[feature]);
+  else bits.push(`${named} has logged nothing at all yet.`);
+  if (state.important) bits.push(SWITCH);
+  return bits.filter(Boolean).join(' ');
 }
 
 /**
@@ -157,7 +159,7 @@ export async function logsSection(feature, { title = 'Logs', note = NOTE, perPag
   const count = el('span', { class: 'table-count' });
 
   const kinds = await kindsFor(feature);
-  const chips = el('div', { class: 'chipbar' });
+  const chips = el('div', { class: 'chipbar logs-chips' });
 
   const paintChips = () => {
     chips.replaceChildren(
@@ -216,7 +218,7 @@ export async function logsSection(feature, { title = 'Logs', note = NOTE, perPag
 
   paintChips();
   group.body.append(...[
-    el('div', { class: 'table-tools' }, [
+    el('div', { class: 'table-tools logs-tools' }, [
       searchField({
         label: `Search the ${featureLabel(feature)} log`,
         placeholder: 'Search these lines…',
