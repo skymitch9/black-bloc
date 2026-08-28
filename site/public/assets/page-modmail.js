@@ -1,5 +1,6 @@
 import { api, listOf, names, send } from './api.js';
 import { start } from './app.js';
+import { logsSection } from './logs.js';
 import {
   ask,
   badge,
@@ -231,6 +232,7 @@ async function load() {
     two.node,
     three.node,
     await namespaceSettings('modmail'),
+    await logsSection('modmail'),
   );
 }
 

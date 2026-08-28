@@ -1,5 +1,6 @@
 import { api, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
+import { logsSection } from './logs.js';
 import {
   ask,
   badge,
@@ -29,6 +30,7 @@ const SETTING_KEYS = [
   'chat_greeting_reaction',
   'chat_reply_in_threads',
   'chat_route_ping_staff',
+  'chat_log_level',
   'emoji_skin_tone',
 ];
 
@@ -534,6 +536,7 @@ async function load() {
     intentsSection(intents, intentsSay),
     newIntentSection(createSay),
     await settingsSection(specs),
+    await logsSection('chat'),
   );
 }
 

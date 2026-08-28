@@ -1,5 +1,6 @@
 import { api, listOf, names, refChannels, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
+import { logsSection } from './logs.js';
 import {
   ask,
   bar,
@@ -145,6 +146,7 @@ async function load() {
     two.node,
     naming.node,
     await namespaceSettings('tempvoice', { omit: [CREATOR_KEY, NAME_KEY] }),
+    await logsSection('tempvoice'),
   );
 }
 

@@ -10,6 +10,11 @@ export function signInHref() {
   return `${API}/api/auth/login`;
 }
 
+/** For the handful of links a person follows rather than the page fetching. */
+export function apiHref(path) {
+  return `${API}${path}`;
+}
+
 export async function api(path, options = {}) {
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), TIMEOUT_MS);

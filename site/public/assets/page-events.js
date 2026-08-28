@@ -1,5 +1,6 @@
 import { api, listOf, names, send } from './api.js';
 import { start } from './app.js';
+import { logsSection } from './logs.js';
 import {
   ask,
   badge,
@@ -105,7 +106,11 @@ async function load() {
   );
   one.body.append(bar([field('Show', status)], { sticky: true }), queue, say);
 
-  document.getElementById('dash').replaceChildren(one.node, await namespaceSettings('events'));
+  document.getElementById('dash').replaceChildren(
+    one.node,
+    await namespaceSettings('events'),
+    await logsSection('events'),
+  );
 }
 
 refresh = start({

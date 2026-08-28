@@ -1,5 +1,6 @@
 import { api, listOf, names, send } from './api.js';
 import { start } from './app.js';
+import { logsSection } from './logs.js';
 import {
   ask,
   badge,
@@ -86,7 +87,12 @@ async function load() {
   const two = section('Trap channels');
   two.body.append(setup);
 
-  document.getElementById('dash').replaceChildren(one.node, two.node, await namespaceSettings('honeypot'));
+  document.getElementById('dash').replaceChildren(
+    one.node,
+    two.node,
+    await namespaceSettings('honeypot'),
+    await logsSection('honeypot'),
+  );
 }
 
 refresh = start({

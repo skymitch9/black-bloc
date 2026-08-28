@@ -1,5 +1,6 @@
 import { api, listOf, names, send, settings } from './api.js';
 import { start, tabHref } from './app.js';
+import { logsSection } from './logs.js';
 import { memberTally, shellStatus } from './shell.js';
 import {
   ask,
@@ -20,6 +21,7 @@ import {
   run,
   searchField,
   section,
+  settingsPanel,
   shortWhen,
   when,
 } from './ui.js';
@@ -27,6 +29,9 @@ import {
 const KINDS = ['warn', 'timeout', 'untimeout', 'kick', 'ban', 'unban'];
 const DESTRUCTIVE = ['kick', 'ban', 'unban'];
 const PILL_FEATURES = [['automod', 'Automod'], ['honeypot', 'Honeypot']];
+const LOG_LEVEL_KEY = 'mod_log_level';
+const LOG_LEVEL_NOTE = 'How much of what moderation does is repeated into the Discord log ' +
+  'channel. The Logs section below is written to whatever this says.';
 
 const FILTERS = [
   ['all', 'All', null],
@@ -360,6 +365,14 @@ async function load() {
   );
   only.body.append(picker.node);
 
+  const level = Object.values(allSettings || {})
+    .flatMap((group) => (Array.isArray(group) ? group : []))
+    .filter((spec) => spec.key === LOG_LEVEL_KEY);
+  const levelBox = section('Settings', LOG_LEVEL_NOTE, { count: level.length || null });
+  levelBox.body.append(await settingsPanel(level, {
+    empty: 'The bot registers no mod_log_level key, so this is not shown rather than guessed at.',
+  }));
+
   const nodes = [statStrip(payload, rows, tally), casesCard(payload, rows), act.node, only.node];
   if (state.openCase !== null) {
     const detail = section(`Case ${state.openCase}`, null, { id: 'case', open: true });
@@ -367,6 +380,7 @@ async function load() {
     nodes.push(detail.node);
   }
 
+  nodes.push(levelBox.node, await logsSection('mod'));
   document.getElementById('dash').replaceChildren(...nodes);
 }
 

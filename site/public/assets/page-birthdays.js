@@ -1,5 +1,6 @@
 import { api, listOf, names, notesOf, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
+import { logsSection } from './logs.js';
 import {
   ask,
   bar,
@@ -213,6 +214,7 @@ async function load() {
     months.node,
     wording.node,
     await namespaceSettings('birthday', { omit: [TEMPLATE_KEY] }),
+    await logsSection('birthday'),
   );
 }
 

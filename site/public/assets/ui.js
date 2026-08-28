@@ -142,13 +142,14 @@ export function slugOf(text) {
 
 const DEBOUNCE_MS = 200;
 
-export function searchBox({ label = 'Search', placeholder = 'type to filter', onQuery = null } = {}) {
+export function searchBox({ label = 'Search', placeholder = 'type to filter', onQuery = null, value = '' } = {}) {
   const input = el('input', {
     class: 'input search',
     type: 'search',
     placeholder,
     autocomplete: 'off',
     'aria-label': label,
+    value: value || undefined,
   });
   let timer = null;
   const fire = () => {

@@ -1,5 +1,6 @@
 import { api, listOf, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
+import { logsSection } from './logs.js';
 import {
   bar,
   button,
@@ -16,6 +17,7 @@ import {
 } from './ui.js';
 
 const ACTIONS = ['delete', 'warn', 'timeout'];
+const MOD_KEYS = ['mod_log_level'];
 
 let refresh = () => {};
 
@@ -120,13 +122,14 @@ async function load() {
     empty: 'No exemption keys are registered.',
   }));
 
-  const homed = [mode, ...exempt].filter(Boolean).map((spec) => spec.key);
+  const homed = [mode, ...exempt].filter(Boolean).map((spec) => spec.key).concat(MOD_KEYS);
 
   document.getElementById('dash').replaceChildren(
     arming.node,
     book.node,
     exemptions.node,
     await namespaceSettings('automod', { title: 'All automod settings', omit: homed }),
+    await logsSection('automod'),
   );
 }
 
