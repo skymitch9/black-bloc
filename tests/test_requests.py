@@ -56,6 +56,23 @@ def test_a_due_date_reads_back_as_a_hammertime_stamp_each_reader_sees_in_their_o
     assert pure.due_stamp("not a date") is None
 
 
+def test_the_due_stamp_is_local_midnight_in_the_servers_zone_not_utc():
+    """Phoenix is UTC-7 all year, so local midnight is 07:00 UTC — never the day before."""
+    from datetime import UTC, datetime
+
+    stamp = pure.due_stamp("2026-09-15")
+    at = datetime.fromtimestamp(int(stamp[3:-3]), UTC)
+
+    assert (at.hour, at.minute) == (7, 0)
+    assert at.date().isoformat() == "2026-09-15"
+    assert pure.due_stamp("2026-09-15", "Europe/London") != stamp
+
+
+def test_a_stored_due_date_stays_a_plain_date_and_never_becomes_an_instant():
+    assert pure.parse_due("2026-09-15") == "2026-09-15"
+    assert "T" not in pure.parse_due("2026-09-15")
+
+
 def test_the_three_fields_are_refused_in_the_order_a_person_meets_them():
     what, why, due = pure.checked_fields(" a board ", " the doc is a mess ", "2026-09-15")
 
@@ -164,6 +181,27 @@ async def test_a_list_filters_by_status_by_asker_by_assignee_and_by_words(db):
     assert [r["id"] for r in await pure.list_requests(db, GUILD, assignee_id=STAFFER)] == [theirs]
     assert [r["id"] for r in await pure.list_requests(db, GUILD, query="karaoke")] == [theirs]
     assert await pure.count_requests(db, GUILD, query="karaoke") == 1
+
+
+async def test_the_unassigned_column_asks_for_assignee_none(db):
+    mine = await file_one(db, what="nobody has this")
+    theirs = await file_one(db, what="somebody has this")
+    await pure.set_fields(db, theirs, assignee_id=STAFFER)
+
+    rows = await pure.list_requests(db, GUILD, assignee_id=pure.UNASSIGNED)
+
+    assert [row["id"] for row in rows] == [mine]
+    assert await pure.count_requests(db, GUILD, assignee_id=pure.UNASSIGNED) == 1
+
+
+async def test_a_search_can_also_match_on_ids_the_caller_resolved_from_names(db):
+    theirs = await file_one(db, user_id=STAFFER, what="a karaoke night", why="it is fun")
+    await file_one(db, what="a request board", why="the doc is a mess")
+
+    rows = await pure.list_requests(db, GUILD, query="lead", named=[STAFFER])
+
+    assert [row["id"] for row in rows] == [theirs]
+    assert await pure.list_requests(db, GUILD, query="lead", named=[]) == []
 
 
 async def test_a_search_reads_the_notes_as_well_as_the_what_and_the_why(db):

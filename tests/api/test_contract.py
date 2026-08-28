@@ -239,12 +239,16 @@ async def seeded(client, sign_in, web, guild, wf):
         db, guild_id, "cookout_hours", ["when is the cookout"], by=7
     )
     chat_line_id = await add_chat_line(db, chat_intent_id, "Doors at six, {name}.", by=7)
-    # Request #1 is the signed-in staffer's own pending row, so /api/requests/mine is never
-    # empty and the decide routes have something to move; #2 is somebody else's, already
-    # planned. The contract spells the id 1 rather than a placeholder — see its own note.
-    await make_request(db, guild_id, 7, "A requests board on the site", PENDING)
-    await add_request_comment(db, 1, 7, "Looking at this one this week.")
-    await make_request(db, guild_id, MEMBER_ID, "Karaoke night", PLANNED, decided_by=7)
+    # {feature_request_id} is the signed-in staffer's own pending row, so /api/requests/mine
+    # is never empty and the decide routes have something to move; {member_request_id} is
+    # somebody else's, already planned. The mock seeds the same pair as 25 and 30.
+    feature_request_id = await make_request(
+        db, guild_id, 7, "A requests board on the site", PENDING
+    )
+    await add_request_comment(db, feature_request_id, 7, "Looking at this one this week.")
+    member_request_id = await make_request(
+        db, guild_id, MEMBER_ID, "Karaoke night", PLANNED, decided_by=7
+    )
     grant_id = await grants.add_grant(
         db,
         guild_id,
@@ -270,6 +274,8 @@ async def seeded(client, sign_in, web, guild, wf):
         "poll_recurrence_id": str(recurrence_id),
         "chat_intent_id": str(chat_intent_id),
         "chat_line_id": str(chat_line_id),
+        "feature_request_id": str(feature_request_id),
+        "member_request_id": str(member_request_id),
     }
 
 

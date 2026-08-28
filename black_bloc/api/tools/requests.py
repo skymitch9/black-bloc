@@ -23,8 +23,10 @@ from ...requests import (
     PENDING,
     REASON_LIMIT,
     REQUESTS_OFF,
+    SEARCH_LIMIT,
     STAFF_ONLY_FILES,
     STATUS_WORDS,
+    UNASSIGNED,
     WITHDRAWN,
     WITHDRAWN_SAID,
     RequestError,
@@ -62,6 +64,7 @@ from ..writes import (
 log = logging.getLogger(__name__)
 
 CSV_MEDIA_TYPE = "text/csv"
+NAME_MATCH_LIMIT = 200
 CSV_COLUMNS = (
     "id",
     "status",
@@ -178,6 +181,36 @@ def export_csv(guild: Any, rows: Any, counts: dict[int, int]) -> str:
     return out.getvalue()
 
 
+def wanted_filter(given: Any) -> Any:
+    """The board's Unassigned column sends `assignee=none`; anything else is an id."""
+    text = str(given or "").strip()
+    if not text:
+        return None
+    return UNASSIGNED if text.lower() == UNASSIGNED else as_id(text)
+
+
+def members_matching(guild: Any, query: str) -> list[int]:
+    """`q` reaches the requester's NAME, which lives in the gateway cache and not in SQL."""
+    if not query:
+        return []
+    lowered = query.lower()
+    found: list[int] = []
+    for member in list(getattr(guild, "members", ()) or ()):
+        haystack = " ".join(
+            str(part or "").lower()
+            for part in (
+                getattr(member, "name", None),
+                getattr(member, "display_name", None),
+                getattr(member, "global_name", None),
+            )
+        )
+        if lowered in haystack:
+            found.append(int(member.id))
+        if len(found) >= NAME_MATCH_LIMIT:
+            break
+    return found
+
+
 def wanted_assignee(guild: Any, given: Any) -> Any:
     """`...` leaves it alone, an empty one clears it, an id Discord does not know is a sentence."""
     if given is ...:
@@ -250,10 +283,16 @@ def build_router(bot: Any) -> APIRouter:
             statuses = wanted_statuses(status)
         except RequestError as exc:
             raise refused(exc) from exc
-        wanted_by = as_id(assignee) if assignee else None
-        query = clamp(q, 80)
+        wanted_by = wanted_filter(assignee)
+        query = clamp(q, SEARCH_LIMIT)
+        named = members_matching(guild, query)
         total = await count_requests(
-            bot.db, guild.id, statuses=statuses, assignee_id=wanted_by, query=query
+            bot.db,
+            guild.id,
+            statuses=statuses,
+            assignee_id=wanted_by,
+            query=query,
+            named=named,
         )
         pages = max(1, -(-total // API_PAGE))
         at = max(1, min(int(page or 1), pages))
@@ -263,6 +302,7 @@ def build_router(bot: Any) -> APIRouter:
             statuses=statuses,
             assignee_id=wanted_by,
             query=query,
+            named=named,
             limit=API_PAGE,
             offset=(at - 1) * API_PAGE,
         )
@@ -349,8 +389,13 @@ def build_router(bot: Any) -> APIRouter:
             statuses = wanted_statuses(status)
         except RequestError as exc:
             raise refused(exc) from exc
+        query = clamp(q, SEARCH_LIMIT)
         rows = await list_requests(
-            bot.db, guild.id, statuses=statuses, query=clamp(q, 80)
+            bot.db,
+            guild.id,
+            statuses=statuses,
+            query=query,
+            named=members_matching(guild, query),
         )
         body = export_csv(
             guild, rows, await comment_counts(bot.db, [row["id"] for row in rows])

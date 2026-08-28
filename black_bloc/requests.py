@@ -4,6 +4,8 @@ import logging
 from datetime import UTC, date, datetime
 from typing import Any
 
+from .timezones import DEFAULT_TZ, zone
+
 log = logging.getLogger(__name__)
 
 PENDING = "pending"
@@ -139,14 +141,15 @@ def parse_due(raw: Any) -> str | None:
     return found.isoformat()
 
 
-def due_stamp(due_on: Any) -> str | None:
+def due_stamp(due_on: Any, tz_name: Any = DEFAULT_TZ) -> str | None:
+    """`<t:…:D>` from local midnight in the server's zone; the stored value stays a date."""
     if not due_on:
         return None
     try:
         found = date.fromisoformat(str(due_on))
     except ValueError:
         return None
-    at = datetime(found.year, found.month, found.day, 12, 0, tzinfo=UTC)
+    at = datetime(found.year, found.month, found.day, tzinfo=zone(tz_name) or UTC)
     return f"<t:{int(at.timestamp())}:D>"
 
 
@@ -249,29 +252,38 @@ async def get_request(db: Any, request_id: int) -> Any:
     return await cur.fetchone()
 
 
+UNASSIGNED = "none"
+
+
 def _where(
     guild_id: int,
     *,
     statuses: Any = None,
-    assignee_id: int | None = None,
+    assignee_id: Any = None,
     user_id: int | None = None,
     query: str = "",
+    named: Any = None,
 ) -> tuple[str, list[Any]]:
+    """`assignee_id=UNASSIGNED` is the board's Unassigned column; `named` are id matches for `q`."""
     clauses = ["guild_id = ?"]
     params: list[Any] = [guild_id]
     if statuses:
         clauses.append(f"status IN ({', '.join('?' for _ in statuses)})")
         params.extend(statuses)
-    if assignee_id is not None:
+    if assignee_id == UNASSIGNED:
+        clauses.append("assignee_id IS NULL")
+    elif assignee_id is not None:
         clauses.append("assignee_id = ?")
         params.append(assignee_id)
     if user_id is not None:
         clauses.append("user_id = ?")
         params.append(user_id)
     if query:
-        clauses.append("(what LIKE ? OR why LIKE ? OR notes LIKE ?)")
         like = f"%{query}%"
-        params.extend([like, like, like])
+        found = [int(one) for one in named or ()]
+        by_name = f" OR user_id IN ({', '.join('?' for _ in found)})" if found else ""
+        clauses.append(f"(what LIKE ? OR why LIKE ? OR notes LIKE ?{by_name})")
+        params.extend([like, like, like, *found])
     return (" AND ".join(clauses), params)
 
 
@@ -280,15 +292,21 @@ async def list_requests(
     guild_id: int,
     *,
     statuses: Any = None,
-    assignee_id: int | None = None,
+    assignee_id: Any = None,
     user_id: int | None = None,
     query: str = "",
+    named: Any = None,
     limit: int | None = None,
     offset: int = 0,
 ) -> list[Any]:
     """Pending first, then newest; the order the requests page and `/request list` both show."""
     where, params = _where(
-        guild_id, statuses=statuses, assignee_id=assignee_id, user_id=user_id, query=query
+        guild_id,
+        statuses=statuses,
+        assignee_id=assignee_id,
+        user_id=user_id,
+        query=query,
+        named=named,
     )
     tail = ""
     if limit is not None:
@@ -307,12 +325,18 @@ async def count_requests(
     guild_id: int,
     *,
     statuses: Any = None,
-    assignee_id: int | None = None,
+    assignee_id: Any = None,
     user_id: int | None = None,
     query: str = "",
+    named: Any = None,
 ) -> int:
     where, params = _where(
-        guild_id, statuses=statuses, assignee_id=assignee_id, user_id=user_id, query=query
+        guild_id,
+        statuses=statuses,
+        assignee_id=assignee_id,
+        user_id=user_id,
+        query=query,
+        named=named,
     )
     cur = await db.conn.execute(
         f"SELECT COUNT(*) AS found FROM requests WHERE {where}", tuple(params)

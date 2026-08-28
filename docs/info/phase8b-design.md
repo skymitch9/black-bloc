@@ -499,7 +499,7 @@ were added to `site/mock/server.mjs`, which had never carried any of them.
 
 > Added 2026-08-27 by 13a (`27ec297`, contract/mock `415eb8c`). The dashboard
 > page that reads them is **13b**. **Last verified: 2026-08-27** — `pytest -q`
-> **2062 passed** and `node site/mock/check.mjs` clean at **88 routes**; nothing
+> **2071 passed** and `node site/mock/check.mjs` clean at **88 routes**; nothing
 > has been run against live Discord.
 
 ⚠️ **This is the first router on the site that is not staff-only end to end.**
@@ -517,7 +517,7 @@ in the whole API, this router's included, keeps `staff_dependency` /
 | `GET` | `/api/requests/{id}` | staff (reader) |
 | `POST` | `/api/requests/{id}/approve` | staff (writer) |
 | `POST` | `/api/requests/{id}/decline` `{reason}` | staff (writer) |
-| `POST` | `/api/requests/{id}/status` `{status?, assignee_id?, priority?, notes?, reason?}` | staff (writer) |
+| `POST` | `/api/requests/{id}/status` `{status?, assignee_id?, priority?, notes?, reason?}` — `status` is one of `approved` `planned` `in_progress` `done` `declined` | staff (writer) |
 | `POST` | `/api/requests/{id}/comments` `{text}` | staff (writer) |
 | `GET` | `/api/requests/export.csv?status=&q=` | staff (reader) |
 
@@ -545,6 +545,21 @@ copy of the vocabulary. A comment is
 **Pending first, then newest.** `ORDER BY (status <> 'pending'), id DESC`, in
 SQL rather than in Python, so a page is a `LIMIT`/`OFFSET` and not a slice of
 everything. 20 a page.
+
+**Filters.** `status=` takes a comma list of the seven states. `assignee=` takes
+an id, or the word **`none`** for the board's Unassigned column. `q=` matches
+`what`, `why`, `notes` **and the requester's name** — the name is resolved
+against the gateway's member cache in Python and OR-ed in as `user_id IN (…)`,
+because a Discord display name is not a column.
+
+⚠️ **`due_on` is a plain `YYYY-MM-DD` string on the wire in both directions** —
+row and POST body — never an ISO instant. It becomes `<t:…:D>` only where it is
+rendered (the DMs and `/request list`), from **local midnight in the server's
+zone**.
+
+⚠️ **`POST /api/requests` is NOT refused under `TEST_MODE`.** It writes a row;
+the only thing that reaches a channel is the optional notice line, and that asks
+the guard itself and skips.
 
 ### `/api/auth/me` now says `member`
 

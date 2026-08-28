@@ -236,6 +236,60 @@ async def test_the_staff_list_filters_by_status_by_assignee_and_by_words(as_staf
     assert by_assignee["requests"][0]["assignee"]["name"] == "Lead"
 
 
+async def test_the_unassigned_column_asks_for_assignee_none(as_staff, client, web):
+    await file_one(client, what="nobody has this")
+    await file_one(client, what="somebody has this")
+    await pure.set_fields(web.db, 2, assignee_id=LEAD)
+
+    unassigned = client.get("/api/requests?assignee=none").json()
+
+    assert [row["id"] for row in unassigned["requests"]] == ["1"]
+    assert all(row["assignee"] is None for row in unassigned["requests"])
+
+
+async def test_a_search_matches_the_requesters_name_as_well_as_the_text(
+    as_staff, client, sign_in
+):
+    await file_one(client, what="a request board")
+    sign_in(client, uid=ASKER, staff=False)
+    await file_one(client, what="a karaoke night")
+    sign_in(client, uid=LEAD, staff=True)
+
+    by_name = client.get("/api/requests?q=ada").json()
+
+    assert [row["id"] for row in by_name["requests"]] == ["2"]
+    assert by_name["requests"][0]["requester"]["name"] == "Ada"
+    assert client.get("/api/requests?q=nobodyhere").json()["requests"] == []
+
+
+async def test_the_board_segment_may_set_approved_as_well_as_the_later_states(as_staff, client):
+    await file_one(client)
+    client.post("/api/requests/1/status", json={"status": "planned"})
+
+    back = client.post("/api/requests/1/status", json={"status": "approved"})
+
+    assert back.status_code == 200
+    assert back.json()["request"]["status"] == "approved"
+
+
+async def test_filing_from_the_site_is_not_guard_refused_while_test_mode_is_on(
+    as_member, web, wf
+):
+    """The route is a database write; only the notice line is a channel post."""
+    web.guard = wf.Guard()
+
+    made = await file_one(as_member)
+
+    assert made.status_code == 200
+    assert made.json()["request"]["status"] == "pending"
+
+
+async def test_a_due_date_stays_a_plain_date_on_the_way_out(as_member):
+    row = (await file_one(as_member, due_on="2026-09-15")).json()["request"]
+
+    assert row["due_on"] == "2026-09-15" and "T" not in row["due_on"]
+
+
 async def test_a_status_filter_the_bot_does_not_know_is_refused_by_name(as_staff, client):
     refused = client.get("/api/requests?status=shipped")
 

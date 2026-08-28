@@ -3115,7 +3115,9 @@ When they are merged:
 > gate), `415eb8c` (contract + mock). The dashboard **Requests** page is **13b**
 > and does not exist yet. **Last verified: 2026-08-27** — `pytest -q` **2062
 > passed** (1941 before, **+121**). `ruff check .` clean.
-> `node site/mock/check.mjs` clean at **88 routes** (80 before).
+> `node site/mock/check.mjs` clean at **88 routes** (80 before). Updated for
+> 13b's clarifications (due date, `assignee=none`, name search, the id
+> placeholders): `pytest -q` **2071 passed**, **+130**.
 > ⚠️ **NOTHING has been run against live Discord** — no gateway session, no
 > `/request`, no modal submitted, no DM sent, no notice line posted. Every claim
 > about what Discord does is read off the installed library or off a fake.
@@ -3142,7 +3144,7 @@ When they are merged:
 | Key | Note |
 |---|---|
 | `black_bloc/requests.py:130` | `parse_due` uses `date.fromisoformat`, so `2026-02-30` and `2026-13-01` are refused as firmly as `next tuesday` — a shape check with a regex would have taken both. An empty box is `None`, never an error: the due date is optional and a member who leaves it blank has not made a mistake. |
-| `black_bloc/requests.py:142` | `due_stamp` renders `<t:…:D>` at **noon UTC** of the stored day. A date has no time, and midnight is the value that flips to the previous day for everybody west of UTC — the owner's own zone included. Noon is the hour that reads as the right date in every zone the server has. |
+| `black_bloc/requests.py:144` | ⚠️ **`due_on` is a plain `YYYY-MM-DD` STRING everywhere — stored, sent and taken — and only ever becomes an instant at render time.** `due_stamp` builds `<t:…:D>` from **local midnight in the server's zone** (`timezones.DEFAULT_TZ`, America/Phoenix, a fixed UTC-7), so the stamp reads as the day the person typed rather than the day before it. Midnight UTC would flip the date for every reader west of UTC, the owner included; an ISO instant on the wire would make the dashboard guess a zone. Pinned by *the due stamp is local midnight in the server's zone, not UTC*. |
 | `black_bloc/requests.py:184` | `checked_fields` refuses What before Why, so the sentence a person gets names the box they left empty rather than "fill it in". Both are then cut to 1000, which is what the modal's `max_length` already enforces — the API has no such enforcement, so the cut is the one that matters. |
 | `black_bloc/requests.py:38` | `STATUS_WORDS` is the vocabulary in one place, and the API sends it as `status_word` beside `status`. Without it the dashboard would carry a second copy of the mapping and the two would drift the first time a state was renamed. |
 
@@ -3175,13 +3177,16 @@ When they are merged:
 | `black_bloc/api/tools/requests.py:391` | ⚠️ **`POST …/status` writes the fields FIRST and moves the state LAST.** A bad `assignee_id` sent alongside `status: done` must not leave the row done and unassigned. `set_fields` is a single `UPDATE`, `wanted_assignee` raises before it, and `apply_decision` runs only once everything else has landed. Pinned by *the status route moves the state last so a bad field stops it*. |
 | `black_bloc/api/tools/requests.py:113` | `requester` and `assignee` are objects (`{id, name, avatar}`) rather than a flat `assignee_id` / `assignee_name` pair, because the page draws an avatar beside each and a null assignee has to be one absent thing, not two. `decided_by` stays flat, matching the audit rows. |
 | `black_bloc/api/tools/requests.py:244` | `pending` rides along on the list response — the sidebar badge, counted over the guild rather than the page, so paging to page 3 does not make the badge say 0. |
+| `black_bloc/api/tools/requests.py:184` | `wanted_filter` reads `assignee=none` as the board's **Unassigned** column and turns it into `assignee_id IS NULL`; anything else is an id. It is a separate function from `wanted_assignee` because a FILTER and a WRITE want opposite things from an empty value — the filter wants every row, the write wants the field cleared. |
+| `black_bloc/api/tools/requests.py:192` | ⚠️ **`q` also matches the requester's NAME, and a name is not in SQL.** Names live in the gateway's member cache, so `members_matching` resolves the query to ids in Python and `_where` ORs `user_id IN (…)` onto the three `LIKE` clauses. Capped at `NAME_MATCH_LIMIT` = 200 ids so a one-letter query cannot build an unbounded `IN` list. |
 | `black_bloc/api/tools/requests.py:181` | `wanted_assignee` takes `...` for absent and `None`/`""` for cleared, so `{"assignee_id": ""}` unassigns and a payload that never mentions it leaves it alone. Both were needed: the page's picker sends the empty string to clear. |
+| `black_bloc/api/tools/requests.py:279` | ⚠️ **`POST /api/requests` is NOT guard-refused under `TEST_MODE`, and that is deliberate** — it is a database write, and the only thing this feature sends to a channel is the optional notice line, which asks the guard itself. Refusing the route would mean nobody could file from the site while the bot is in test mode, for no safety gain. The COG's modal reply *is* guard-checked, because that one really is a message. Pinned by *filing from the site is not guard refused while test mode is on*. |
 | `black_bloc/api/tools/requests.py:279` | A web decision leaves **two** action rows — `request.<status>` from `apply_decision` and `web.request.<status>` from `note` — which is what `api/tools/rolemenus.py:321` already does. The audit tab filters on `web.`, so the second is what makes a site decision distinguishable from a slash-command one. |
 
 ### The contract, and what is not in it
 
 | Key | Note |
 |---|---|
-| `site/mock/contract.json` | ⚠️ **The paths spell the id `1` rather than a `{placeholder}`.** A placeholder would need a new key in `site/mock/check.mjs`'s `IDS` table, and 13b owns that file this week. Both halves instead seed **request #1 as the signed-in staff session's own pending row** — `tests/api/test_contract.py`'s `seeded` and the mock's `seedState` — which is what makes `/api/requests/mine` non-empty and the approve/decline routes reachable in the same fixture. |
+| `site/mock/contract.json` | The paths use `{feature_request_id}` — the signed-in staff session's own **pending** row — with `{member_request_id}` beside it for somebody else's, already planned. Both halves seed the pair (`tests/api/test_contract.py`'s `seeded`, the mock's `seedState` as **25** and **30**, `check.mjs`'s `IDS`), which is what makes `/api/requests/mine` non-empty and the approve/decline routes reachable in the same fixture. |
 | `site/mock/server.mjs` | ⚠️ **The mock's helpers are `ask*`, not `request*`, and its state key is `state.asks`.** `requestRow` and `state.requests` were already taken by the ROLE-request feature, and the first cut of this file silently shadowed both — the symptom was three unrelated rolemenus contract rows failing, not a syntax error. |
 | `site/mock/contract.json` | `GET /api/requests/export.csv` is deliberately absent: `check.mjs` reads JSON shapes and this answers CSV, exactly as the polls and logs exports already are. `POST /api/requests/{id}/withdraw` is absent too — it only ever answers 200 for the person who filed the row, which one fixture session cannot exercise both ways. |

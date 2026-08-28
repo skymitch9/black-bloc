@@ -434,11 +434,12 @@ function seedState() {
     { id: 6, intent_id: 4, text: 'Hey {name}! Pull up a chair — the cookout is already going.', slot: 'filled', enabled: true, created_by: null, updated_at: minutesAgo(9000) },
     { id: 7, intent_id: 4, text: 'Hey {name}! That makes {attendees} of us at the cookout today.', slot: 'attendee', enabled: true, created_by: null, updated_at: minutesAgo(9000) },
   ],
-  // Request 1 belongs to the staff session, so GET /api/requests/mine is never empty; 2 is
-  // somebody else's and already planned, so the list has more than one state in it.
+  // {feature_request_id} = 25 belongs to the staff session, so GET /api/requests/mine is never
+  // empty; {member_request_id} = 30 is somebody else's and already planned, so the list has more
+  // than one state in it. check.mjs's IDS table spells both.
   asks: [
     {
-      id: 1,
+      id: 25,
       user_id: STAFF.id,
       what: 'A requests board on the site',
       why: 'the google doc nobody can find is where ideas go to die',
@@ -455,7 +456,7 @@ function seedState() {
       message_id: null,
     },
     {
-      id: 2,
+      id: 30,
       user_id: MEMBERS[1].id,
       what: 'Karaoke night in the voice lounge',
       why: 'the last one filled the room and people keep asking',
@@ -473,7 +474,7 @@ function seedState() {
     },
   ],
   askComments: [
-    { id: 1, request_id: 1, author_id: STAFF.id, text: 'Looking at this one this week.', at: minutesAgo(60) },
+    { id: 1, request_id: 25, author_id: STAFF.id, text: 'Looking at this one this week.', at: minutesAgo(60) },
   ],
   nextAction: 42,
   nextCase: 10,
@@ -481,7 +482,7 @@ function seedState() {
   nextPoll: 10,
   nextChatIntent: 5,
   nextChatLine: 8,
-  nextAsk: 3,
+  nextAsk: 31,
   nextAskComment: 2,
   actions: seedActions(),
   };
@@ -2672,12 +2673,16 @@ route('GET', '/api/requests', (context) => {
       throw new Refused(400, 'request_refused', `**${one}** is not a state a request can be in, so nothing was changed. They are ${REQUEST_STATUSES.join(', ')}.`);
     }
   }
-  const assignee = url.searchParams.get('assignee') || '';
+  const assignee = String(url.searchParams.get('assignee') || '').trim();
   const query = String(url.searchParams.get('q') || '').trim().toLowerCase();
   const rows = asksSorted(state.asks).filter((row) => {
     if (wanted.length && !wanted.includes(row.status)) return false;
-    if (assignee && String(row.assignee_id) !== assignee) return false;
-    if (query && ![row.what, row.why, row.notes].some((one) => String(one || '').toLowerCase().includes(query))) return false;
+    // `assignee=none` is the board's Unassigned column.
+    if (assignee.toLowerCase() === 'none' && row.assignee_id) return false;
+    if (assignee && assignee.toLowerCase() !== 'none' && String(row.assignee_id) !== assignee) return false;
+    // `q` reaches the requester's NAME as well as the three text columns.
+    const haystack = [row.what, row.why, row.notes, memberName(row.user_id)];
+    if (query && !haystack.some((one) => String(one || '').toLowerCase().includes(query))) return false;
     return true;
   });
   return {
