@@ -1711,7 +1711,8 @@
     "/settings.html",
     "/audit.html",
     "/health.html",
-    "/polls.html"
+    "/polls.html",
+    "chat"
   ],
   "action_kinds": [
     "web.settings.set",
