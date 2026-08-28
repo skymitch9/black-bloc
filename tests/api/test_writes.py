@@ -4,12 +4,15 @@ import pytest
 
 from black_bloc.api.auth import Refused
 from black_bloc.api.writes import (
+    MEMBER_RATE,
     READ_RATE,
     WRITE_RATE,
     WebActor,
     actor_for,
     bucket_for,
     guard_of,
+    member_bucket_for,
+    member_dependency,
     note,
     read_bucket_for,
     refuse_guarded,
@@ -138,3 +141,49 @@ def test_another_session_is_not_slowed_down_by_this_ones_reads(client, sign_in, 
 
     sign_in(client, uid=8)
     assert client.get("/api/ref/roles").status_code == 200
+
+
+def test_the_member_bucket_is_its_own_and_far_smaller_than_the_staff_one(web):
+    assert member_bucket_for(web) is member_bucket_for(web)
+    assert member_bucket_for(web).limit == MEMBER_RATE
+    assert MEMBER_RATE < WRITE_RATE
+    assert member_bucket_for(web) is not bucket_for(web)
+
+
+async def test_the_member_gate_takes_a_member_and_refuses_a_stranger(client, sign_in, web, wf):
+    gate = member_dependency(web)
+    wf.member(web.guild, 21, name="ada")
+    sign_in(client, uid=21, staff=False)
+
+    class _Ask:
+        cookies = dict(client.cookies)
+
+    who = await gate(_Ask())
+
+    assert who["id"] == "21" and who["staff"] is False and who["member"] is True
+
+    sign_in(client, uid=22, staff=False, cached=False)
+    _Ask.cookies = dict(client.cookies)
+    with pytest.raises(Refused) as raised:
+        await gate(_Ask())
+
+    assert raised.value.status == 403 and raised.value.error == "not_a_member"
+    assert "Join the server" in raised.value.message
+
+
+async def test_the_member_gate_says_it_could_not_check_rather_than_refusing_access(
+    client, sign_in, web, wf
+):
+    wf.member(web.guild, 21, name="ada")
+    sign_in(client, uid=21, staff=False)
+    web.guild, web.guilds = None, []
+    gate = member_dependency(web)
+
+    class _Ask:
+        cookies = dict(client.cookies)
+
+    with pytest.raises(Refused) as raised:
+        await gate(_Ask())
+
+    assert raised.value.status == 503 and raised.value.error == "member_unknown"
+    assert "try again in a minute" in raised.value.message

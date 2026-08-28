@@ -31,6 +31,8 @@ from black_bloc.golive import StreamInfo
 from black_bloc.modcases import add_case
 from black_bloc.modmail import IN
 from black_bloc.polls import next_occurrence
+from black_bloc.requests import PENDING, PLANNED, create_request
+from black_bloc.requests import add_comment as add_request_comment
 
 CONTRACT = Path(__file__).resolve().parents[2] / "site" / "mock" / "contract.json"
 MEMBER_ID = 21
@@ -101,6 +103,21 @@ def check(where: str, payload, spec: dict) -> None:
         assert not missing(found, nested_keys), (
             f"{where}.{field} is missing {missing(found, nested_keys)}"
         )
+
+
+async def make_request(
+    db, guild_id: int, user_id: int, what: str, status: str, decided_by: int | None = None
+) -> int:
+    return await create_request(
+        db,
+        guild_id,
+        user_id,
+        what=what,
+        why="the google doc nobody can find is where ideas go to die",
+        due_on=None,
+        status=status,
+        decided_by=decided_by,
+    )
 
 
 async def make_poll(db, guild_id: int, question: str, status: str) -> int:
@@ -223,6 +240,16 @@ async def seeded(client, sign_in, web, guild, wf):
         db, guild_id, "cookout_hours", ["when is the cookout"], by=7
     )
     chat_line_id = await add_chat_line(db, chat_intent_id, "Doors at six, {name}.", by=7)
+    # {feature_request_id} is the signed-in staffer's own pending row, so /api/requests/mine
+    # is never empty and the decide routes have something to move; {member_request_id} is
+    # somebody else's, already planned. The mock seeds the same pair as 25 and 30.
+    feature_request_id = await make_request(
+        db, guild_id, 7, "A requests board on the site", PENDING
+    )
+    await add_request_comment(db, feature_request_id, 7, "Looking at this one this week.")
+    member_request_id = await make_request(
+        db, guild_id, MEMBER_ID, "Karaoke night", PLANNED, decided_by=7
+    )
     grant_id = await grants.add_grant(
         db,
         guild_id,
@@ -248,6 +275,8 @@ async def seeded(client, sign_in, web, guild, wf):
         "poll_recurrence_id": str(recurrence_id),
         "chat_intent_id": str(chat_intent_id),
         "chat_line_id": str(chat_line_id),
+        "feature_request_id": str(feature_request_id),
+        "member_request_id": str(member_request_id),
     }
 
 

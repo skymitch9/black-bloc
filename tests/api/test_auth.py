@@ -150,13 +150,33 @@ def test_plain_member_is_signed_in_but_not_staff(bot, guild, fakes):
     me = client.get("/api/auth/me")
     assert me.status_code == 200
     assert me.json()["staff"] is False
-    assert "does not hold a staff role" in me.json()["message"]
+    assert me.json()["member"] is True
+    assert me.json()["state"] == "not_staff"
+    assert "you can still file a request" in me.json()["message"]
+
+
+def test_a_staffer_is_a_member_too_and_gets_no_message_at_all(bot, guild, fakes):
+    guild.members[USER_ID] = fakes.Member(USER_ID, [fakes.Role(fakes.STAFF_ROLE_ID, "Lead")])
+    client, _ = sign_in_through_discord(bot, {"roles": [str(fakes.STAFF_ROLE_ID)]})
+    me = client.get("/api/auth/me").json()
+
+    assert me["staff"] is True and me["member"] is True
+    assert me["state"] == "staff" and me["message"] is None
 
 
 def test_someone_not_in_the_guild_is_signed_in_but_not_staff(bot, fakes):
     _, done = sign_in_through_discord(bot, None)
     _, payload = read_session(fakes.SECRET, done.cookies[SESSION_COOKIE])
     assert payload["staff"] is False
+
+
+def test_someone_not_in_the_guild_is_not_a_member_either(bot, fakes):
+    client, _ = sign_in_through_discord(bot, None)
+    me = client.get("/api/auth/me").json()
+
+    assert me["staff"] is False and me["member"] is False
+    assert me["state"] == "not_staff"
+    assert "does not hold a staff role" in me["message"]
 
 
 def test_a_bad_state_never_reaches_discord(bot):

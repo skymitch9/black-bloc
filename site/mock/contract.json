@@ -1735,6 +1735,240 @@
         "slot",
         "line"
       ]
+    },
+    {
+      "_": "13a requests. {feature_request_id} is the signed-in staffer's own PENDING row (the mock seeds it as 25) and {member_request_id} is somebody else's, already planned (30) — both halves seed the pair so /api/requests/mine is never empty and the decide routes always have something to move. GET /api/requests/export.csv is NOT here: it answers CSV, not JSON, and this table only checks JSON keys. POST /api/requests/{feature_request_id}/withdraw is NOT here either: it only ever answers 200 for the person who filed the row, which one fixture session cannot exercise both ways.",
+      "method": "GET",
+      "path": "/api/requests",
+      "read_by": [
+        "13b page-requests.js pending, planned, done and declined lists"
+      ],
+      "shape": "object",
+      "keys": [
+        "requests",
+        "total",
+        "page",
+        "pages",
+        "per_page",
+        "pending"
+      ],
+      "rows": {
+        "requests": [
+          "id",
+          "what",
+          "why",
+          "due_on",
+          "status",
+          "status_word",
+          "priority",
+          "notes",
+          "requester",
+          "assignee",
+          "comment_count",
+          "created_at",
+          "decided_by",
+          "decided_by_name",
+          "decided_at",
+          "decline_reason",
+          "done_at"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/requests/mine",
+      "read_by": [
+        "13b page-requests.js the member's own list"
+      ],
+      "shape": "object",
+      "keys": [
+        "requests",
+        "total",
+        "page",
+        "pages",
+        "per_page"
+      ],
+      "rows": {
+        "requests": [
+          "id",
+          "what",
+          "status",
+          "status_word",
+          "due_on",
+          "requester",
+          "comment_count",
+          "created_at"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/requests",
+      "body": {
+        "what": "A contract check request",
+        "why": "so the shape of a filed row is read"
+      },
+      "read_by": [
+        "13b page-requests.js File a request form"
+      ],
+      "shape": "object",
+      "keys": [
+        "request",
+        "message"
+      ],
+      "nested": {
+        "request": [
+          "id",
+          "what",
+          "why",
+          "due_on",
+          "status",
+          "status_word",
+          "requester",
+          "comment_count",
+          "created_at"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/requests/{feature_request_id}",
+      "read_by": [
+        "13b page-requests.js one request and its comment thread"
+      ],
+      "shape": "object",
+      "keys": [
+        "request",
+        "comments"
+      ],
+      "nested": {
+        "request": [
+          "id",
+          "what",
+          "why",
+          "due_on",
+          "status",
+          "status_word",
+          "priority",
+          "notes",
+          "requester",
+          "assignee",
+          "comment_count",
+          "created_at",
+          "decided_by",
+          "decided_by_name",
+          "decided_at",
+          "decline_reason",
+          "done_at"
+        ]
+      },
+      "rows": {
+        "comments": [
+          "id",
+          "request_id",
+          "author",
+          "text",
+          "at"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/requests/{feature_request_id}/approve",
+      "body": {},
+      "read_by": [
+        "13b page-requests.js Approve"
+      ],
+      "shape": "object",
+      "keys": [
+        "request",
+        "message"
+      ],
+      "nested": {
+        "request": [
+          "id",
+          "status",
+          "status_word",
+          "decided_by",
+          "decided_by_name",
+          "decided_at"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/requests/{feature_request_id}/decline",
+      "body": {
+        "reason": "we already have one of these"
+      },
+      "read_by": [
+        "13b page-requests.js Decline"
+      ],
+      "shape": "object",
+      "keys": [
+        "request",
+        "message"
+      ],
+      "nested": {
+        "request": [
+          "id",
+          "status",
+          "status_word",
+          "decline_reason",
+          "decided_by",
+          "decided_at"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/requests/{feature_request_id}/status",
+      "body": {
+        "priority": 2,
+        "notes": "after the hosting bill"
+      },
+      "read_by": [
+        "13b page-requests.js priority, assignee and notes"
+      ],
+      "shape": "object",
+      "keys": [
+        "request",
+        "message"
+      ],
+      "nested": {
+        "request": [
+          "id",
+          "status",
+          "status_word",
+          "priority",
+          "notes",
+          "assignee"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/requests/{feature_request_id}/comments",
+      "body": {
+        "text": "A contract check comment."
+      },
+      "read_by": [
+        "13b page-requests.js comment thread"
+      ],
+      "shape": "object",
+      "keys": [
+        "comment",
+        "message"
+      ],
+      "nested": {
+        "comment": [
+          "id",
+          "request_id",
+          "author",
+          "text",
+          "at"
+        ]
+      }
     }
   ],
   "pages": [
@@ -1809,6 +2043,15 @@
     "web.chat.intent_deleted",
     "web.chat.line_added",
     "web.chat.line_edited",
-    "web.chat.line_deleted"
+    "web.chat.line_deleted",
+    "web.request.filed",
+    "web.request.approved",
+    "web.request.declined",
+    "web.request.planned",
+    "web.request.in_progress",
+    "web.request.done",
+    "web.request.withdrawn",
+    "web.request.updated",
+    "web.request.comment"
   ]
 }

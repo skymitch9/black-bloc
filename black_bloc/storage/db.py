@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -359,6 +359,37 @@ CREATE TABLE IF NOT EXISTS chat_lines (
 );
 
 CREATE INDEX IF NOT EXISTS chat_lines_by_intent ON chat_lines(intent_id, id);
+
+CREATE TABLE IF NOT EXISTS requests (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id       INTEGER NOT NULL,
+    user_id        INTEGER NOT NULL,
+    what           TEXT    NOT NULL,
+    why            TEXT    NOT NULL,
+    due_on         TEXT,
+    status         TEXT    NOT NULL DEFAULT 'pending',
+    priority       INTEGER,
+    assignee_id    INTEGER,
+    notes          TEXT,
+    created_at     TEXT    NOT NULL,
+    decided_by     INTEGER,
+    decided_at     TEXT,
+    decline_reason TEXT,
+    done_at        TEXT,
+    message_id     INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS requests_by_status ON requests(guild_id, status, id);
+
+CREATE TABLE IF NOT EXISTS request_comments (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    request_id INTEGER NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+    author_id  INTEGER NOT NULL,
+    text       TEXT    NOT NULL,
+    at         TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS request_comments_by_request ON request_comments(request_id, id);
 """
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (

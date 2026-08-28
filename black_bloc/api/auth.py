@@ -46,6 +46,19 @@ STAFF_UNKNOWN = (
     "Black Bloc could not check your roles with Discord just now — nothing is wrong with your "
     "access; try again in a minute."
 )
+MEMBER_NOT_STAFF = (
+    "The rest of this dashboard is for the mods and admins of Black in a Flash!, but you are a "
+    "member here, so you can still file a request and follow your own. Ask a Lead for a staff "
+    "role if you need the rest."
+)
+NOT_A_MEMBER = (
+    "You are signed in, but Discord does not show you as a member of Black in a Flash!, so "
+    "nothing was done. Join the server with the account you signed in with, then try again."
+)
+MEMBER_UNKNOWN = (
+    "Black Bloc could not check with Discord that you are in the server just now — nothing is "
+    "wrong with your access; try again in a minute."
+)
 LOGIN_UNAVAILABLE = (
     "Signing in is not switched on for this server yet — the Discord application credentials have "
     "not been set. This is a setup step for the owner, not something you are missing. Tell a Lead "
@@ -185,6 +198,16 @@ def live_staff(bot: Any, user_id: int, recorded: bool) -> tuple[bool, bool]:
     return (bool(bot.store.is_staff(member)), True)
 
 
+def live_member(bot: Any, user_id: int) -> tuple[bool, bool]:
+    """(member, known). `known` is False only when the guild cannot be consulted."""
+    if not bot.is_ready():
+        return (False, False)
+    guild = guild_of(bot)
+    if guild is None:
+        return (False, False)
+    return (guild.get_member(user_id) is not None, True)
+
+
 def current_session(request: Request, bot: Any) -> dict[str, Any]:
     secret = bot.settings.session_secret
     if not secret:
@@ -199,12 +222,15 @@ def current_session(request: Request, bot: Any) -> dict[str, Any]:
     except (KeyError, TypeError, ValueError):
         raise Refused(401, "not_signed_in", NOT_SIGNED_IN) from None
     staff, known = live_staff(bot, user_id, bool(payload.get("staff")))
+    member, member_known = live_member(bot, user_id)
     return {
         "id": str(user_id),
         "name": str(payload.get("name") or ""),
         "avatar": payload.get("avatar"),
         "staff": staff,
         "staff_known": known,
+        "member": member,
+        "member_known": member_known,
     }
 
 
@@ -219,6 +245,12 @@ def staff_state(who: dict[str, Any]) -> str:
     if not who["staff_known"]:
         return "staff_unknown"
     return "staff" if who["staff"] else "not_staff"
+
+
+def member_state(who: dict[str, Any]) -> str:
+    if not who["member_known"]:
+        return "member_unknown"
+    return "member" if who["member"] else "not_a_member"
 
 
 def staff_dependency(bot: Any):
@@ -472,20 +504,24 @@ def build_router(bot: Any, *, oauth_request: Any = None) -> APIRouter:
         who = current_session(request, bot)
         guild = guild_of(bot)
         state = staff_state(who)
+        member = member_state(who) == "member"
+        said = {"staff": None, "not_staff": NOT_STAFF, "staff_unknown": STAFF_UNKNOWN}[state]
         return {
             "user": {"id": who["id"], "name": who["name"], "avatar": who["avatar"]},
             "staff": state == "staff",
+            "member": member,
             "state": state,
             "guild": {"id": str(guild.id), "name": guild.name} if guild is not None else None,
-            "message": {"staff": None, "not_staff": NOT_STAFF, "staff_unknown": STAFF_UNKNOWN}[
-                state
-            ],
+            "message": MEMBER_NOT_STAFF if state == "not_staff" and member else said,
         }
 
     return router
 
 
 __all__ = [
+    "MEMBER_NOT_STAFF",
+    "MEMBER_UNKNOWN",
+    "NOT_A_MEMBER",
     "NOT_STAFF",
     "SESSION_COOKIE",
     "SLOW_DOWN",
@@ -500,7 +536,9 @@ __all__ = [
     "current_session",
     "guild_of",
     "is_admitted",
+    "live_member",
     "live_staff",
+    "member_state",
     "read_session",
     "refused_handler",
     "session_dependency",

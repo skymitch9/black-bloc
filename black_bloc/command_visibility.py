@@ -11,7 +11,10 @@ from .actionlog import log_action
 
 log = logging.getLogger(__name__)
 
-HIDDEN_WHEN_OFF: dict[str, tuple[str, ...]] = {"rolemenu_mode": ("rolemenu",)}
+HIDDEN_WHEN_OFF: dict[str, tuple[str, ...]] = {
+    "rolemenu_mode": ("rolemenu",),
+    "request_mode": ("request",),
+}
 NEVER_HIDDEN: tuple[str, ...] = ("settings",)
 OFF = "off"
 DEBOUNCE_SECONDS = 5.0

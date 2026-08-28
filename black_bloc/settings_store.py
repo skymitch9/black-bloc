@@ -77,6 +77,9 @@ MODMAIL_LOG_CHANNEL_ID = 1442613059704066108
 
 WARN_THRESHOLD_MAX = 100
 
+REQUEST_MODES = ("off", "on")
+REQUEST_FILERS = ("everyone", "staff")
+
 CHAT_MODES = ("off", "on")
 CHAT_COOLDOWN_SECONDS = 20
 CHAT_COOLDOWN_MIN_SECONDS = 5
@@ -151,6 +154,11 @@ KEY_TYPES: dict[str, str] = {
     "bot_bio": "text",
     "status_prefix": "text",
     "rolemenu_mode": "enum",
+    "request_mode": "enum",
+    "request_who_can_file": "enum",
+    "request_auto_approve_staff": "bool",
+    "request_notify_channel_id": "channel",
+    "request_dm_on_decision": "bool",
     "chat_mode": "enum",
     "chat_cooldown_seconds": "int",
     "chat_ignore_channels": "channels",
@@ -177,6 +185,8 @@ KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "automod_mode": AUTOMOD_MODES,
     "mod_dm_on_action": MOD_DM_STYLES,
     "rolemenu_mode": ROLEMENU_MODES,
+    "request_mode": REQUEST_MODES,
+    "request_who_can_file": REQUEST_FILERS,
     "chat_mode": CHAT_MODES,
     "emoji_skin_tone": SKIN_TONE_NAMES,
 }
@@ -354,6 +364,21 @@ KEY_HELP: dict[str, str] = {
     "rolemenu_mode": (
         "whether members can pick roles from the panels; off takes them down and hides the "
         "/rolemenu commands, on posts them again"
+    ),
+    "request_mode": (
+        "off, or on (members can ask for things with /request and staff decide on the site)"
+    ),
+    "request_who_can_file": "who may file a request: everyone, or staff only",
+    "request_auto_approve_staff": (
+        "true to approve a request the moment a mod or admin files it, instead of holding it for "
+        "a decision"
+    ),
+    "request_notify_channel_id": (
+        "where one line goes when a request is filed; blank tells nobody and the site is the only "
+        "place they show up"
+    ),
+    "request_dm_on_decision": (
+        "true to DM the person who asked when their request is approved, declined or done"
     ),
     "chat_mode": "off, or on (Black Bloc answers when somebody @-mentions it)",
     "chat_cooldown_seconds": (
@@ -758,6 +783,16 @@ class SettingsStore:
             return STATUS_PREFIX
         if key == "rolemenu_mode":
             return "off"
+        if key == "request_mode":
+            return "on"
+        if key == "request_who_can_file":
+            return "everyone"
+        if key == "request_auto_approve_staff":
+            return True
+        if key == "request_notify_channel_id":
+            return self.settings.test_channel_id if self.settings.test_mode else None
+        if key == "request_dm_on_decision":
+            return True
         if key == "chat_mode":
             return "on"
         if key == "chat_cooldown_seconds":

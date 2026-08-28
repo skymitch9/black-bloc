@@ -59,6 +59,7 @@ function stamp(html) {
 const NOT_SIGNED_IN = 'You are not signed in yet. Sign in with the Discord account you moderate Black in a Flash! with.';
 const NOT_STAFF = 'This dashboard is for the mods and admins of Black in a Flash!. Your Discord account is signed in, but it does not hold a staff role. Ask a Lead for the role.';
 const STAFF_UNKNOWN = 'Black Bloc could not ask Discord which roles you hold, so it cannot tell whether you are staff. That is a fault at the bot, not a problem with your access. Try again in a minute.';
+const MEMBER_NOT_STAFF = 'The rest of this dashboard is for the mods and admins of Black in a Flash!, but you are a member here, so you can still file a request and follow your own. Ask a Lead for a staff role if you need the rest.';
 const ROLE_MENUS_OFF = 'Role menus are turned off right now, so nothing was changed. A Lead can turn them back on from the dashboard\'s Role menus tab or with `/rolemenu mode on`.';
 const GUARD = 'TEST MODE is on, so Black Bloc refuses to act outside #mute-me-bot-test-spam. Nothing was done. Ask the owner to lift the test guard first.';
 const UNKNOWN_ROUTE = 'This dashboard asked Black Bloc for something it does not serve. That is a fault in the page, not a problem with your access.';
@@ -287,6 +288,11 @@ const SETTING_SPECS = [
     `which ${label} log lines reach the Discord log channel: off, important (anything that acted on a member, or failed) or all. Every line is kept on the dashboard${command ? ` and in \`/${command} logs\`` : ''} either way`,
     ['off', 'important', 'all'],
   ]),
+  ['request_mode', 'enum', 'on', 'on', 'off, or on (members can ask for things with /request and staff decide on the site)', ['off', 'on']],
+  ['request_who_can_file', 'enum', 'everyone', 'everyone', 'who may file a request: everyone, or staff only', ['everyone', 'staff']],
+  ['request_auto_approve_staff', 'bool', true, true, 'true to approve a request the moment a mod or admin files it, instead of holding it for a decision'],
+  ['request_notify_channel_id', 'channel', '800000000000000003', null, 'where one line goes when a request is filed; blank tells nobody and the site is the only place they show up'],
+  ['request_dm_on_decision', 'bool', true, true, 'true to DM the person who asked when their request is approved, declined or done'],
 ];
 
 const RULES = {
@@ -487,12 +493,56 @@ function seedState() {
     { id: 6, intent_id: 4, text: 'Hey {name}! Pull up a chair — the cookout is already going.', slot: 'filled', enabled: true, created_by: null, updated_at: minutesAgo(9000) },
     { id: 7, intent_id: 4, text: 'Hey {name}! That makes {attendees} of us at the cookout today.', slot: 'attendee', enabled: true, created_by: null, updated_at: minutesAgo(9000) },
   ],
+  // {feature_request_id} = 25 belongs to the staff session, so GET /api/requests/mine is never
+  // empty; {member_request_id} = 30 is somebody else's and already planned, so the list has more
+  // than one state in it. check.mjs's IDS table spells both.
+  asks: [
+    {
+      id: 25,
+      user_id: STAFF.id,
+      what: 'A requests board on the site',
+      why: 'the google doc nobody can find is where ideas go to die',
+      due_on: null,
+      status: 'pending',
+      priority: null,
+      assignee_id: null,
+      notes: null,
+      created_at: minutesAgo(90),
+      decided_by: null,
+      decided_at: null,
+      decline_reason: null,
+      done_at: null,
+      message_id: null,
+    },
+    {
+      id: 30,
+      user_id: MEMBERS[1].id,
+      what: 'Karaoke night in the voice lounge',
+      why: 'the last one filled the room and people keep asking',
+      due_on: '2026-09-15',
+      status: 'planned',
+      priority: 2,
+      assignee_id: STAFF.id,
+      notes: 'after the hosting bill lands',
+      created_at: minutesAgo(4000),
+      decided_by: STAFF.id,
+      decided_at: minutesAgo(3900),
+      decline_reason: null,
+      done_at: null,
+      message_id: null,
+    },
+  ],
+  askComments: [
+    { id: 1, request_id: 25, author_id: STAFF.id, text: 'Looking at this one this week.', at: minutesAgo(60) },
+  ],
   nextAction: 42,
   nextCase: 10,
   nextMessage: 40,
   nextPoll: 10,
   nextChatIntent: 5,
   nextChatLine: 8,
+  nextAsk: 31,
+  nextAskComment: 2,
   actions: seedActions(),
   };
 }
@@ -635,12 +685,14 @@ function meBody(session) {
   const user = { id: STAFF.id, name: STAFF.name, avatar: null };
   const guild = { id: '600000000000000001', name: 'Black in a Flash!' };
   if (session === 'stranger') {
-    return { status: 200, body: { user: { id: MEMBERS[5].id, name: MEMBERS[5].name, avatar: null }, staff: false, state: 'not_staff', guild, message: NOT_STAFF } };
+    // A signed-in member of the server who is not staff: `member` is what lets the requests
+    // page show them the form while every other page stays staff-only.
+    return { status: 200, body: { user: { id: MEMBERS[5].id, name: MEMBERS[5].name, avatar: null }, staff: false, member: true, state: 'not_staff', guild, message: MEMBER_NOT_STAFF } };
   }
   if (session === 'unknown') {
-    return { status: 200, body: { user, staff: false, state: 'staff_unknown', guild, message: STAFF_UNKNOWN } };
+    return { status: 200, body: { user, staff: false, member: false, state: 'staff_unknown', guild, message: STAFF_UNKNOWN } };
   }
-  return { status: 200, body: { user, staff: true, state: 'staff', guild, message: null } };
+  return { status: 200, body: { user, staff: true, member: true, state: 'staff', guild, message: null } };
 }
 
 function statusBody() {
@@ -2621,6 +2673,306 @@ route('POST', '/api/chat/try', async (context) => {
   const tokens = chatTokens(row, filled);
   const said = lines.length ? lines[0].text : CHAT_UNKNOWN_LINE;
   return { intent: row.name, kind: row.kind, slot, line: chatRender(said, tokens) };
+});
+
+// Requests (13a). The helpers are ask* rather than request* because requestRow above is
+// already the role-request row. Mirrors black_bloc/api/tools/requests.py: ids as strings, refusals in
+// words, pending first. POST /api/requests, GET /api/requests/mine and the withdraw route
+// are the only three the real API lets a non-staff member call.
+const REQUEST_STATUSES = ['pending', 'approved', 'planned', 'in_progress', 'done', 'declined', 'withdrawn'];
+const REQUEST_STAFF_STATUSES = ['approved', 'planned', 'in_progress', 'done', 'declined'];
+const REQUEST_STATUS_WORDS = {
+  pending: 'waiting on staff',
+  approved: 'approved',
+  planned: 'planned',
+  in_progress: 'being worked on',
+  done: 'done',
+  declined: 'declined',
+  withdrawn: 'withdrawn',
+};
+const REQUEST_PAGE = 20;
+const REQUEST_PRIORITY_MAX = 5;
+const REQUESTS_OFF = 'Requests are turned off on this server, so nothing was filed. A Lead turns them back on with `/settings set request_mode on` — ask one if you have something to ask for.';
+const REQUEST_NEEDS_WHAT = 'A request needs a line saying what you are asking for, so nothing was filed. Fill the What box in and send it again.';
+const REQUEST_NEEDS_WHY = 'A request needs a line saying why it is worth doing, so nothing was filed. That is the part staff read first — fill the Why box in and send it again.';
+const REQUEST_DECLINE_NEEDS_A_REASON = 'A declined request needs one line the person who asked is sent, so nothing was changed. Say why and send it again.';
+const REQUEST_COMMENT_NEEDS_TEXT = 'There is nothing to add, so no comment was left. Type what you want on the request and send it again.';
+const REQUEST_NOTHING_TO_SAVE = 'That change arrived with nothing in it, so nothing was saved. It is a fault in the page rather than in what you typed — reload the requests page and try again.';
+
+function askPerson(id) {
+  if (id === null || id === undefined || id === '') return null;
+  return { id: String(id), name: memberName(id) || String(id), avatar: null };
+}
+
+function askRow(row) {
+  return {
+    id: String(row.id),
+    what: row.what,
+    why: row.why,
+    due_on: row.due_on,
+    status: row.status,
+    status_word: REQUEST_STATUS_WORDS[row.status] || row.status,
+    priority: row.priority,
+    notes: row.notes,
+    requester: askPerson(row.user_id),
+    assignee: askPerson(row.assignee_id),
+    comment_count: state.askComments.filter((one) => one.request_id === row.id).length,
+    created_at: row.created_at,
+    decided_by: row.decided_by ? String(row.decided_by) : null,
+    decided_by_name: row.decided_by ? memberName(row.decided_by) : null,
+    decided_at: row.decided_at,
+    decline_reason: row.decline_reason,
+    done_at: row.done_at,
+  };
+}
+
+function askCommentRow(row) {
+  return {
+    id: String(row.id),
+    request_id: String(row.request_id),
+    author: askPerson(row.author_id),
+    text: row.text,
+    at: row.at,
+  };
+}
+
+function wantedAsk(id) {
+  const found = state.asks.find((one) => String(one.id) === String(id));
+  if (!found) {
+    throw new Refused(404, 'no_such_request', `Black Bloc has no request **#${id}**, so nothing was done. \`/request list\` shows the ones it has.`);
+  }
+  return found;
+}
+
+function asksSorted(rows) {
+  return [...rows].sort((a, b) => {
+    const first = (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1);
+    return first !== 0 ? first : b.id - a.id;
+  });
+}
+
+function askPage(rows, page) {
+  const total = rows.length;
+  const pages = Math.max(1, Math.ceil(total / REQUEST_PAGE));
+  const at = Math.max(1, Math.min(Number(page || 1), pages));
+  return {
+    requests: rows.slice((at - 1) * REQUEST_PAGE, at * REQUEST_PAGE).map(askRow),
+    total,
+    page: at,
+    pages,
+    per_page: REQUEST_PAGE,
+  };
+}
+
+function askFields(body) {
+  const what = String(body.what || '').trim().slice(0, 1000);
+  if (!what) throw new Refused(400, 'request_refused', REQUEST_NEEDS_WHAT);
+  const why = String(body.why || '').trim().slice(0, 1000);
+  if (!why) throw new Refused(400, 'request_refused', REQUEST_NEEDS_WHY);
+  const given = String(body.due_on || '').trim();
+  if (given && !/^\d{4}-\d{2}-\d{2}$/.test(given)) {
+    throw new Refused(400, 'request_refused', `**${given}** is not a date Black Bloc can read, so nothing was filed. Write it as \`YYYY-MM-DD\` — \`2026-09-15\`, say — or leave the box empty if there is no deadline.`);
+  }
+  return { what, why, due_on: given || null };
+}
+
+function askDecide(row, status, reason) {
+  if (row.status === status) {
+    throw new Refused(409, 'not_decided', `Request **#${row.id}** is already **${status}**, so nothing was changed.`);
+  }
+  if (status === 'declined' && !reason) {
+    throw new Refused(400, 'no_reason', REQUEST_DECLINE_NEEDS_A_REASON);
+  }
+  row.status = status;
+  row.decided_by = STAFF.id;
+  row.decided_at = now();
+  row.decline_reason = status === 'declined' ? reason : null;
+  if (status === 'done') row.done_at = now();
+  logAction(`web.request.${status}`, { target_id: row.user_id, reason: reason || null, details: { request_id: row.id } });
+  return `Request **#${row.id}** is now **${REQUEST_STATUS_WORDS[status]}**.`;
+}
+
+route('GET', '/api/requests', (context) => {
+  requireStaff(context.session);
+  const url = context.url;
+  const wanted = String(url.searchParams.get('status') || '').split(',').map((one) => one.trim()).filter(Boolean);
+  for (const one of wanted) {
+    if (!REQUEST_STATUSES.includes(one)) {
+      throw new Refused(400, 'request_refused', `**${one}** is not a state a request can be in, so nothing was changed. They are ${REQUEST_STATUSES.join(', ')}.`);
+    }
+  }
+  const assignee = String(url.searchParams.get('assignee') || '').trim();
+  const query = String(url.searchParams.get('q') || '').trim().toLowerCase();
+  const rows = asksSorted(state.asks).filter((row) => {
+    if (wanted.length && !wanted.includes(row.status)) return false;
+    // `assignee=none` is the board's Unassigned column.
+    if (assignee.toLowerCase() === 'none' && row.assignee_id) return false;
+    if (assignee && assignee.toLowerCase() !== 'none' && String(row.assignee_id) !== assignee) return false;
+    // `q` reaches the requester's NAME as well as the three text columns.
+    const haystack = [row.what, row.why, row.notes, memberName(row.user_id)];
+    if (query && !haystack.some((one) => String(one || '').toLowerCase().includes(query))) return false;
+    return true;
+  });
+  return {
+    ...askPage(rows, url.searchParams.get('page')),
+    pending: state.asks.filter((row) => row.status === 'pending').length,
+  };
+});
+
+route('POST', '/api/requests', async (context) => {
+  requireStaff(context.session);
+  if (state.settings.get('request_mode') === 'off') throw new Refused(409, 'requests_off', REQUESTS_OFF);
+  const body = await context.body();
+  const fields = askFields(body);
+  const approved = state.settings.get('request_auto_approve_staff') !== false;
+  const made = {
+    id: state.nextAsk++,
+    user_id: STAFF.id,
+    ...fields,
+    status: approved ? 'approved' : 'pending',
+    priority: null,
+    assignee_id: null,
+    notes: null,
+    created_at: now(),
+    decided_by: approved ? STAFF.id : null,
+    decided_at: approved ? now() : null,
+    decline_reason: null,
+    done_at: null,
+    message_id: null,
+  };
+  state.asks.push(made);
+  logAction('web.request.filed', { target_id: STAFF.id, details: { request_id: made.id, auto_approved: approved } });
+  const said = approved
+    ? `Filed as **#${made.id}**, and approved straight away because you are staff.`
+    : `Filed as **#${made.id}** — staff will see it on this page.`;
+  return { request: askRow(made), message: said };
+});
+
+route('GET', '/api/requests/mine', (context) => {
+  requireStaff(context.session);
+  const rows = asksSorted(state.asks.filter((row) => String(row.user_id) === STAFF.id));
+  return askPage(rows, context.url.searchParams.get('page'));
+});
+
+route('GET', '/api/requests/export.csv', (context) => {
+  requireStaff(context.session);
+  const header = 'id,status,what,why,due_on,priority,requester_id,requester_name,assignee_id,assignee_name,created_at,decided_by,decided_at,decline_reason,done_at,comments';
+  const lines = asksSorted(state.asks).map((row) => {
+    const shown = askRow(row);
+    return [
+      shown.id,
+      shown.status,
+      `"${shown.what.split('"').join('""')}"`,
+      `"${shown.why.split('"').join('""')}"`,
+      shown.due_on || '',
+      shown.priority === null ? '' : shown.priority,
+      (shown.requester || {}).id || '',
+      (shown.requester || {}).name || '',
+      (shown.assignee || {}).id || '',
+      (shown.assignee || {}).name || '',
+      shown.created_at,
+      shown.decided_by || '',
+      shown.decided_at || '',
+      shown.decline_reason || '',
+      shown.done_at || '',
+      shown.comment_count,
+    ].join(',');
+  });
+  return {
+    status: 200,
+    headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="requests.csv"' },
+    body: [header, ...lines].join('\n'),
+  };
+});
+
+route('GET', '/api/requests/:id', (context) => {
+  requireStaff(context.session);
+  const row = wantedAsk(context.params.id);
+  return {
+    request: askRow(row),
+    comments: state.askComments.filter((one) => one.request_id === row.id).map(askCommentRow),
+  };
+});
+
+route('POST', '/api/requests/:id/approve', (context) => {
+  requireStaff(context.session);
+  const row = wantedAsk(context.params.id);
+  return { request: askRow(row), message: askDecide(row, 'approved', null) };
+});
+
+route('POST', '/api/requests/:id/decline', async (context) => {
+  requireStaff(context.session);
+  const row = wantedAsk(context.params.id);
+  const body = await context.body();
+  const reason = String(body.reason || '').trim().slice(0, 400);
+  if (!reason) throw new Refused(400, 'no_reason', REQUEST_DECLINE_NEEDS_A_REASON);
+  return { request: askRow(row), message: askDecide(row, 'declined', reason) };
+});
+
+route('POST', '/api/requests/:id/status', async (context) => {
+  requireStaff(context.session);
+  const row = wantedAsk(context.params.id);
+  const body = await context.body();
+  const changed = [];
+  if ('assignee_id' in body) {
+    const given = body.assignee_id;
+    if (given === null || given === '') row.assignee_id = null;
+    else if (!MEMBERS.some((one) => one.id === String(given))) {
+      throw new Refused(400, 'no_such_member', `**${given}** is not somebody Black Bloc can see in this server, so nothing was changed. Pick a name from the list.`);
+    } else row.assignee_id = String(given);
+    changed.push('assignee_id');
+  }
+  if ('priority' in body) {
+    const given = body.priority;
+    if (given === null || given === '') row.priority = null;
+    else {
+      const number = Number(given);
+      if (!Number.isInteger(number) || number < 0 || number > REQUEST_PRIORITY_MAX) {
+        throw new Refused(400, 'request_refused', `**${given}** is not a priority Black Bloc can read, so nothing was changed. Send a whole number from 0 to ${REQUEST_PRIORITY_MAX}, or nothing at all to leave it unranked.`);
+      }
+      row.priority = number;
+    }
+    changed.push('priority');
+  }
+  if ('notes' in body) {
+    row.notes = String(body.notes || '').trim().slice(0, 1000) || null;
+    changed.push('notes');
+  }
+  const status = body.status ? String(body.status).trim().toLowerCase() : null;
+  if (status && !REQUEST_STAFF_STATUSES.includes(status)) {
+    throw new Refused(400, 'request_refused', `**${body.status}** is not a state a request can be in, so nothing was changed. They are ${REQUEST_STAFF_STATUSES.join(', ')}.`);
+  }
+  if (!status && !changed.length) throw new Refused(400, 'nothing_to_save', REQUEST_NOTHING_TO_SAVE);
+  let said = `Request **#${row.id}** is saved.`;
+  if (changed.length) logAction('web.request.updated', { details: { request_id: row.id, changed: changed.sort() } });
+  if (status) said = askDecide(row, status, String(body.reason || '').trim() || null);
+  return { request: askRow(row), message: said };
+});
+
+route('POST', '/api/requests/:id/withdraw', (context) => {
+  requireStaff(context.session);
+  const row = wantedAsk(context.params.id);
+  if (String(row.user_id) !== STAFF.id) {
+    throw new Refused(403, 'not_yours', `Request **#${row.id}** is not yours, so nothing was withdrawn. Only the person who filed it can take it back; staff decline one instead.`);
+  }
+  if (row.status !== 'pending') {
+    throw new Refused(409, 'not_pending', `Request **#${row.id}** is already **${REQUEST_STATUS_WORDS[row.status]}**, so there was nothing to withdraw. Ask staff if you want it stopped.`);
+  }
+  row.status = 'withdrawn';
+  logAction('web.request.withdrawn', { target_id: row.user_id, details: { request_id: row.id } });
+  return { request: askRow(row), message: `Request **#${row.id}** is withdrawn. Nobody will pick it up now.` };
+});
+
+route('POST', '/api/requests/:id/comments', async (context) => {
+  requireStaff(context.session);
+  const row = wantedAsk(context.params.id);
+  const body = await context.body();
+  const text = String(body.text || '').trim().slice(0, 1000);
+  if (!text) throw new Refused(400, 'no_text', REQUEST_COMMENT_NEEDS_TEXT);
+  const made = { id: state.nextAskComment++, request_id: row.id, author_id: STAFF.id, text, at: now() };
+  state.askComments.push(made);
+  logAction('web.request.comment', { details: { request_id: row.id, comment_id: made.id } });
+  return { comment: askCommentRow(made), message: `Your comment is on request **#${row.id}**.` };
 });
 
 function send(response, status, body, headers = {}) {

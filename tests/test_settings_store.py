@@ -811,3 +811,49 @@ def test_no_log_level_key_is_read_as_a_feature_switch():
     """`api/status.py` calls every key ending in `_mode` a feature; none of these does."""
     assert not [key for key in mode_keys() if key.endswith("_log_level")]
     assert all(not key.endswith("_mode") for key in KEY_TYPES if key.endswith("_log_level"))
+async def test_requests_ship_on_open_to_everyone_and_auto_approving_staff(store):
+    assert store.get(7, "request_mode") == "on"
+    assert store.get(7, "request_who_can_file") == "everyone"
+    assert store.get(7, "request_auto_approve_staff") is True
+    assert store.get(7, "request_dm_on_decision") is True
+    for key in (
+        "request_mode",
+        "request_who_can_file",
+        "request_auto_approve_staff",
+        "request_notify_channel_id",
+        "request_dm_on_decision",
+    ):
+        assert key in KEY_TYPES and KEY_HELP.get(key)
+
+
+async def test_the_request_notice_lands_in_the_test_channel_while_test_mode_is_on(store):
+    assert store.get(7, "request_notify_channel_id") == TEST_CH
+
+
+async def test_the_request_notice_points_nowhere_once_test_mode_is_off(tmp_path, monkeypatch):
+    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
+    settings = load_settings(_env_file=None, test_mode=False, test_channel_id=TEST_CH)
+    db = Database(tmp_path / "r.sqlite3")
+    await db.connect()
+    try:
+        live = SettingsStore(db, settings)
+
+        assert live.get(7, "request_notify_channel_id") is None
+    finally:
+        await db.close()
+
+
+def test_the_request_switches_only_take_the_words_they_document():
+    assert coerce_value("request_mode", "off") == "off"
+    assert coerce_value("request_who_can_file", "staff") == "staff"
+    assert coerce_value("request_auto_approve_staff", False) is False
+    assert coerce_value("request_notify_channel_id", 12) == 12
+    for key, bad in (
+        ("request_mode", "shadow"),
+        ("request_who_can_file", "mods"),
+        ("request_auto_approve_staff", "yes"),
+        ("request_notify_channel_id", "12"),
+        ("request_dm_on_decision", 1),
+    ):
+        with pytest.raises(SettingError):
+            coerce_value(key, bad)

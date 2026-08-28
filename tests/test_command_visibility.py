@@ -220,6 +220,15 @@ def test_hidden_names_reads_the_store_and_needs_a_guild(bot):
     assert cv.hidden_names(bot, None) == set()
 
 
+async def test_the_request_group_is_shown_while_requests_are_on_and_hidden_when_they_are_off(bot):
+    assert cv.HIDDEN_WHEN_OFF["request_mode"] == ("request",)
+    assert "request" not in cv.hidden_names(bot, GUILD)
+
+    await bot.store.set(GUILD, "request_mode", "off", by=5)
+
+    assert "request" in cv.hidden_names(bot, GUILD)
+
+
 async def test_the_real_command_tree_hides_and_gives_back_the_group(tmp_path, monkeypatch, waits):
     monkeypatch.delenv("DISCORD_TOKEN", raising=False)
     settings = load_settings(

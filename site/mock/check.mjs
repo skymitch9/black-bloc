@@ -34,6 +34,9 @@ const IDS = {
   poll_recurrence_id: '4',
   chat_intent_id: '1',
   chat_line_id: '1',
+  // 13a: the staff session's own PENDING request, and somebody else's already-planned one.
+  feature_request_id: '25',
+  member_request_id: '30',
 };
 
 const failures = [];
