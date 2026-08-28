@@ -906,6 +906,17 @@ async def test_the_request_card_carries_two_buttons_and_pings_the_approver_role(
     assert fields["Status"] == "pending"
 
 
+async def test_the_request_card_is_a_notification_and_ignores_the_log_level(bot, db, clicker):
+    """Decision 2: an approval card is its own send, so `off` must not take it away."""
+    await bot.store.set(GUILD, "rolemenu_log_level", "off")
+    menu_id = await approval_menu(db, expires=7)
+
+    await pick(bot, db, menu_id, clicker, ["10"])
+
+    assert "role.requested" in await action_kinds(db)
+    assert len(cards_in(bot)) == 1
+
+
 async def test_picking_a_pending_role_again_takes_the_request_back(bot, db, clicker):
     menu_id = await approval_menu(db)
     await pick(bot, db, menu_id, clicker, ["10"])
