@@ -1,10 +1,77 @@
-import { api, listOf, names, notesOf } from './api.js';
+import { api, apiHref, listOf, names, notesOf } from './api.js';
 import { start } from './app.js';
-import { bar, button, el, field, idsIn, looksLikeId, nameNode, section, table, valueNode, when } from './ui.js';
+import { syncSubnav } from './layout.js';
+import { LOG_FEATURES, featureLabel, importantSwitch, logsTable } from './logs.js';
+import {
+  bar,
+  button,
+  el,
+  field,
+  idsIn,
+  looksLikeId,
+  memberPicker,
+  nameNode,
+  pager,
+  sayNothing,
+  searchField,
+  section,
+  sentenceFor,
+  table,
+  valueNode,
+  when,
+} from './ui.js';
 
-const WEB = 'web.';
+const PER_PAGE = 25;
 
-let kindFilter = '';
+const LOGS_NOTE = 'Every line Black Bloc has written, whether or not it said so in Discord. ' +
+  'Important means it acted on a member or something failed; everything else is routine.';
+const AUDIT_NOTE = 'Every settings change, whoever made it and however they made it.';
+
+function paramsFor(state, { paged = true } = {}) {
+  const found = new URLSearchParams();
+  if (paged) {
+    found.set('page', String(state.page));
+    found.set('per_page', String(PER_PAGE));
+  }
+  if (state.feature) found.set('feature', state.feature);
+  if (state.kind) found.set('kind', state.kind);
+  if (state.query) found.set('q', state.query);
+  if (state.important) found.set('important', '1');
+  if (state.since) found.set('since', state.since);
+  if (state.until) found.set('until', state.until);
+  if (state.actor) found.set('actor_id', state.actor.id);
+  if (state.target) found.set('target_id', state.target.id);
+  return found;
+}
+
+function nothingSaid(state) {
+  const bits = [];
+  if (state.feature) bits.push(featureLabel(state.feature));
+  if (state.kind) bits.push(`kind ${state.kind}`);
+  if (state.query) bits.push(`“${state.query}”`);
+  if (state.actor) bits.push(`done by ${state.actor.name}`);
+  if (state.target) bits.push(`done to ${state.target.name}`);
+  if (state.since || state.until) bits.push(`${state.since || 'the beginning'} to ${state.until || 'now'}`);
+  const said = bits.length ? ` for ${bits.join(', ')}` : '';
+  return state.important
+    ? `Nothing important has been logged${said}. Switch to All to see the routine lines too.`
+    : `Nothing has been logged${said}.`;
+}
+
+function dateBox(value, onSet) {
+  const input = el('input', { class: 'input', type: 'date', value: value || undefined });
+  input.addEventListener('change', () => onSet(input.value));
+  return input;
+}
+
+function settingsTable(rows) {
+  return table([
+    { label: 'When', cell: (row) => when(row.updated_at || row.at), className: 'mono' },
+    { label: 'Key', cell: (row) => el('span', { class: 'mono', text: row.key }) },
+    { label: 'Value', cell: (row) => valueNode(row.value), className: 'wrap' },
+    { label: 'By', cell: (row) => nameNode(row.updated_by_id, row.updated_by_name) },
+  ], rows, { empty: 'No setting has been changed yet.' });
+}
 
 function idsInValues(rows) {
   const found = [];
@@ -17,76 +84,191 @@ function idsInValues(rows) {
   return found;
 }
 
-function settingsTable(rows) {
-  return table([
-    { label: 'When', cell: (row) => when(row.updated_at || row.at), className: 'mono' },
-    { label: 'Key', cell: (row) => el('span', { class: 'mono', text: row.key }) },
-    { label: 'Value', cell: (row) => valueNode(row.value), className: 'wrap' },
-    { label: 'By', cell: (row) => nameNode(row.updated_by_id, row.updated_by_name) },
-  ], rows, { empty: 'No setting has been changed yet.' });
+async function auditSection() {
+  const payload = await api('/api/settings/audit?limit=100');
+  const rows = listOf(payload, 'audit');
+  await names(idsIn(rows, ['updated_by_id']).concat(idsInValues(rows)));
+  const one = section('Settings audit', AUDIT_NOTE, { count: rows.length, id: 'settings-audit' });
+  one.body.append(settingsTable(rows));
+  return { node: one.node, notes: notesOf(payload) };
 }
 
-function actionsTable(rows) {
-  return table([
-    { label: 'When', cell: (row) => when(row.at), className: 'mono' },
-    { label: 'What', cell: (row) => el('span', { class: 'kind', text: row.kind }) },
-    { label: 'Who', cell: (row) => nameNode(row.actor_id, row.actor_name) },
-    { label: 'Target', cell: (row) => nameNode(row.target_id, row.target_name) },
-    { label: 'Why', cell: (row) => row.reason, className: 'wrap' },
-  ], rows, { empty: 'Nothing has been done from this dashboard yet.' });
-}
-
-let refresh = () => {};
-
-async function load() {
-  const query = kindFilter ? `&kind=${encodeURIComponent(kindFilter)}` : '';
-  const [audit, actions] = await Promise.all([
-    api('/api/settings/audit?limit=100'),
-    api(`/api/actions?limit=200${query}`),
-  ]);
-
-  const auditRows = listOf(audit, 'audit');
-  const allActions = listOf(actions, 'actions');
-  const actionRows = kindFilter ? allActions : allActions.filter((row) => String(row.kind || '').startsWith(WEB));
-
-  await names(idsIn(auditRows, ['updated_by_id'])
-    .concat(idsInValues(auditRows))
-    .concat(idsIn(allActions, ['actor_id', 'target_id'])));
-
-  const kind = el('input', { class: 'input', type: 'text', value: kindFilter, placeholder: 'web. or automod.timeout' });
-  const apply = button('Filter', () => {
-    kindFilter = kind.value.trim();
-    refresh();
+/**
+ * The whole log, every filter the route takes. It reloads only its own results
+ * so a date change does not rebuild the settings audit under it.
+ */
+function logsSurface() {
+  const state = {
+    page: 1,
+    feature: '',
+    kind: '',
+    query: '',
+    important: true,
+    since: '',
+    until: '',
+    actor: null,
+    target: null,
+  };
+  const group = section('Logs', LOGS_NOTE, { id: 'logs' });
+  const results = el('div');
+  const count = el('span', { class: 'table-count' });
+  const chips = el('div', { class: 'chipbar' });
+  const csv = el('a', {
+    class: 'btn small quiet',
+    href: '#',
+    title: 'The same filters, as a file',
+    text: 'Export CSV',
   });
-  const clear = button('Only this dashboard', () => {
-    kindFilter = '';
-    refresh();
+
+  const again = () => {
+    state.page = 1;
+    load();
+  };
+
+  const paintChips = () => {
+    const one = (label, value, title) => el('button', {
+      class: 'chip-filter',
+      type: 'button',
+      'aria-pressed': state.feature === value ? 'true' : 'false',
+      title,
+      text: label,
+      on: {
+        click: () => {
+          state.feature = state.feature === value ? '' : value;
+          paintChips();
+          again();
+        },
+      },
+    });
+    chips.replaceChildren(
+      one('Everything', '', 'Every part of Black Bloc'),
+      ...LOG_FEATURES.map((entry) => one(entry.label, entry.feature, `Only ${entry.label}`)),
+    );
+  };
+
+  const load = async () => {
+    csv.setAttribute('href', apiHref(`/api/actions/export.csv?${paramsFor(state, { paged: false })}`));
+    let payload;
+    try {
+      payload = await api(`/api/actions?${paramsFor(state).toString()}`);
+    } catch (error) {
+      results.replaceChildren(sayNothing(sentenceFor(error).text));
+      count.textContent = '';
+      return;
+    }
+    const rows = listOf(payload, 'actions');
+    await names(idsIn(rows, ['actor_id', 'target_id']));
+    const total = typeof payload.total === 'number' ? payload.total : rows.length;
+    count.textContent = `${rows.length} of ${total} line${total === 1 ? '' : 's'}`;
+    group.count(total);
+    const notes = notesOf(payload);
+    results.replaceChildren(
+      ...(notes.length ? [el('p', { class: 'section-note', text: notes.join(' ') })] : []),
+      logsTable(rows, nothingSaid(state)),
+      pager({
+        page: state.page,
+        hasMore: state.page * PER_PAGE < total,
+        count: rows.length,
+        onPage: (to) => {
+          state.page = Math.max(1, to);
+          return load();
+        },
+      }),
+    );
+    syncSubnav();
+  };
+
+  const actor = memberPicker({
+    label: 'Done by',
+    onPick: (member) => {
+      state.actor = member;
+      again();
+    },
+  });
+  const target = memberPicker({
+    label: 'Done to',
+    onPick: (member) => {
+      state.target = member;
+      again();
+    },
+  });
+
+  const kind = searchField({
+    label: 'Filter by kind',
+    placeholder: 'automod. or mod.ban',
+    onQuery: (value) => {
+      if (value === state.kind) return;
+      state.kind = value;
+      again();
+    },
+  });
+
+  const from = dateBox(state.since, (value) => {
+    state.since = value;
+    again();
+  });
+  const to = dateBox(state.until, (value) => {
+    state.until = value;
+    again();
+  });
+
+  const search = searchField({
+    label: 'Search the log',
+    placeholder: 'Search every line…',
+    onQuery: (value) => {
+      if (value === state.query) return;
+      state.query = value;
+      again();
+    },
+  });
+
+  const clear = button('Clear filters', () => {
+    Object.assign(state, {
+      feature: '', kind: '', query: '', since: '', until: '', actor: null, target: null,
+    });
+    actor.clear();
+    target.clear();
+    from.value = '';
+    to.value = '';
+    for (const box of [search, kind]) box.querySelector('.input.search').value = '';
+    paintChips();
+    again();
   }, { tone: 'quiet' });
 
-  const one = section('Settings audit', 'Every settings change, whoever made it and however they made it.', {
-    count: auditRows.length,
-  });
-  one.body.append(settingsTable(auditRows));
-
-  const two = section(
-    kindFilter ? `Actions matching ${kindFilter}` : 'Actions taken from this dashboard',
-    kindFilter ? 'Filtered by the kind you typed.' : 'A dashboard change logs a web.* kind.',
-    { count: actionRows.length, id: 'actions' },
+  paintChips();
+  group.body.append(
+    el('div', { class: 'table-tools' }, [
+      search,
+      importantSwitch(state.important, (only) => {
+        state.important = only;
+        again();
+      }),
+      count,
+      el('span', { class: 'topbar-gap' }),
+      csv,
+    ]),
+    chips,
+    el('div', { class: 'formrow' }, [
+      field('From', from, 'The first day to include.'),
+      field('To', to, 'The last day to include.'),
+      field('Kind', kind, 'The start of a kind, like automod.'),
+    ]),
+    el('div', { class: 'formrow' }, [actor.node, target.node]),
+    bar([clear]),
+    results,
   );
-  two.body.append(
-    bar([field('Action kind', kind), apply, clear], { sticky: true }),
-    actionsTable(actionRows),
-  );
-
-  const notes = notesOf(audit).concat(notesOf(actions));
-  document.getElementById('dash').replaceChildren(
-    ...(notes.length ? [el('p', { class: 'section-note', text: notes.join(' ') })] : []),
-    one.node,
-    two.node,
-  );
+  return { node: group.node, load };
 }
 
-refresh = start({
-  tab: 'audit',
-  load,
-});
+async function load() {
+  const surface = logsSurface();
+  const audit = await auditSection();
+  document.getElementById('dash').replaceChildren(
+    ...(audit.notes.length ? [el('p', { class: 'section-note', text: audit.notes.join(' ') })] : []),
+    surface.node,
+    audit.node,
+  );
+  await surface.load();
+}
+
+start({ tab: 'audit', load });
