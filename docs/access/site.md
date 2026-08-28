@@ -1,0 +1,286 @@
+# The config website — runbook
+
+> **Audience:** whoever deploys or fixes the site, and the reviewer doing the
+> first live sign-in. **Status:** LOCAL ONLY (gitignored). **Last verified:
+> 2026-08-27** — the routes table and the mock section below were added at the
+> **Phase 8b merge** and read off the merged tree (`black_bloc/api/tools/*`,
+> `site/mock/`); the deploy steps above them are unchanged and still
+> **2026-08-26**, rewritten for **Option A** (one hostname) after the Phase 8a
+> security review, then **re-read against `main` after the Phase 8a merge** that
+> same day (was: branch `worktree-agent-ae8cc520aba4406d0` at `50205dd`). Every
+> path, command and URL below was read off the merged tree. Three things changed
+> at the merge and are corrected here: `settings.api_origin` is gone,
+> `DISCORD_CLIENT_ID` joins the secrets to set, and the status page now also
+> counts **open modmail tickets** (Phases 5–7 had not merged when 8a was built).
+>
+> ⚠️ **NOTHING HERE HAS BEEN RUN.** The DNS records have never been created,
+> the certificate has never been issued, the redirect URI has never been
+> registered, and no human has ever signed in. Every step below is written from
+> the code, not from a deploy. Treat the first run as a drill and correct this
+> file from what actually happens.
+>
+> ⚠️ **What was NOT verified:** anything against live Discord, live Fly or a
+> browser. The `__Host-` cookie prefix, the CSP, HSTS and the static mount are
+> asserted by tests against an in-process ASGI client, which is not a browser.
+
+Companions: [`deploy.md`](deploy.md) (the bot on Fly),
+[`../info/phase8-design.md`](../info/phase8-design.md) (why any of this
+exists), [`../info/code-notes.md`](../info/code-notes.md) (why the code is
+shaped the way it is), `site/README.md` in the repo (the developer-facing
+half, which IS committed).
+
+## ⚠️ Option A — one app, one hostname (owner decision, 2026-08-26)
+
+**There is no second deployment.** The Fly app `black-bloc` serves the page
+*and* the API at **`https://blackbloc.heygabi.ai`**:
+`black_bloc/api/server.py` mounts `site/public` with `StaticFiles(html=True)`
+at `/`, after the API routers, so `/health` and `/api/*` win and everything
+else is a file.
+
+What that decision deleted, and why each mattered:
+
+| Gone | Why |
+|---|---|
+| the Cloudflare Pages project, `site/wrangler.toml`, `wrangler pages deploy` | the page ships inside the bot's image; a directory deploy cannot ship another agent's working tree if there is no directory deploy |
+| `CORSMiddleware` | same-origin `fetch` needs no CORS, and an allow-list that must match a second hostname is one more thing to get wrong |
+| `API_ORIGIN` as a second hostname | one value, `SITE_ORIGIN`. The `settings.api_origin` alias was **removed at the main merge** (2026-08-26) rather than kept for a release — nothing read it, and a second name for one fact is checklist item 15. Use `settings.origin`. An `API_ORIGIN` environment variable is **no longer read** — delete it wherever it is set |
+| the `SameSite=Lax` cross-site constraint | it was a real, written-down defect: a Lax cookie does not ride a cross-site `fetch`, so the old two-hostname shape would have signed everybody out on their first API call. One origin makes it moot, and the cookie stays `Lax` |
+
+⚠️ **The API is now PUBLIC on the internet, on the same hostname as the
+page** (finding F9). Every route requires a signed-in staff session except
+**`/health`**, which is deliberately public because it is the uptime probe and
+says nothing a stranger could not learn by watching the bot come online.
+`/openapi.json`, `/docs` and `/redoc` are switched off.
+
+## 1. Secrets and config to import — set these on Fly before anything else
+
+Names only; values live in `fly secrets` and the Discord Developer Portal.
+
+```
+flyctl secrets set --app black-bloc DISCORD_CLIENT_ID=…
+flyctl secrets set --app black-bloc DISCORD_CLIENT_SECRET=…
+flyctl secrets set --app black-bloc SESSION_SECRET=…
+flyctl secrets set --app black-bloc SITE_ORIGIN=https://blackbloc.heygabi.ai
+```
+
+⚠️ **`DISCORD_CLIENT_ID` is in that list on purpose.** It is not a secret, but
+`site_login_configured` is false without it and sign-in never switches on — the
+commonest way to deploy a page that says "signing in is not switched on yet".
+
+| Name | What it is | Where a copy lives |
+|---|---|---|
+| `DISCORD_CLIENT_ID` | the Black Bloc application's client id — not a secret, but sign-in is off without it | Developer Portal → Black Bloc → OAuth2 |
+| `DISCORD_CLIENT_SECRET` | the same application's secret | Developer Portal (re-mintable there) |
+| `SESSION_SECRET` | any long random string; it signs the session cookie | `fly secrets` and `.env` only. **Changing it signs everybody out** — that is also the emergency lever if a cookie is ever believed compromised |
+| `SITE_ORIGIN` | the one hostname (default `https://blackbloc.heygabi.ai`) | `fly.toml`/`fly secrets`. It is the OAuth redirect base, where sign-in returns to, and whether the cookies get `Secure` |
+| `SITE_ROOT` | the directory served (default `site/public`); the Dockerfile puts it at `/app/site/public` | nothing to set — listed so a "the page 404s" hunt has a name to grep |
+
+Until `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` and `SESSION_SECRET` are all
+set, sign-in is **off** and the page says so in a sentence that blames the
+setup and not the visitor. That is deliberate.
+
+⚠️ **`SITE_ORIGIN` must be `https://…`.** The cookies are named `__Host-…`,
+which a browser honours only with `Secure`, `Path=/` and no `Domain` — and
+`Secure` is derived from this value's scheme. An http `SITE_ORIGIN` produces
+cookies every browser silently drops, which looks exactly like "signing in
+does nothing".
+
+## 2. DNS — point the hostname at Fly (proxy OFF)
+
+In Cloudflare, on `heygabi.ai`:
+
+```
+A     blackbloc  →  66.241.125.10
+AAAA  blackbloc  →  2a09:8280:1::17c:d6fb:0
+```
+
+⚠️ **Both records must be DNS-only (grey cloud, proxy OFF).** Fly issues and
+serves the certificate itself; proxying through Cloudflare puts a second TLS
+terminator in front of it and breaks the ACME check.
+
+Then issue the certificate and watch it:
+
+```
+flyctl certs add   blackbloc.heygabi.ai --app black-bloc
+flyctl certs check blackbloc.heygabi.ai --app black-bloc
+```
+
+`certs check` is the one to re-run while waiting; it names which check is
+outstanding rather than just failing.
+
+## 3. ⚠️ The redirect URI to register — this exact string
+
+Developer Portal → the Black Bloc application → **OAuth2** → **Redirects** →
+Add:
+
+```
+https://blackbloc.heygabi.ai/api/auth/callback
+```
+
+**It is on the site's own hostname now** — the old
+`https://black-bloc.fly.dev/api/auth/callback` is wrong under Option A and
+must be removed. Discord compares byte for byte: no trailing slash, no `www`.
+The value the code sends is derived at `black_bloc/config.py`'s
+`oauth_redirect_uri` from `SITE_ORIGIN`, so if `SITE_ORIGIN` ever changes this
+registration changes with it or every sign-in fails with `invalid_request`.
+
+No other Discord setting is needed: the scopes (`identify`,
+`guilds.members.read`) are requested per-authorisation, not configured.
+
+## 4. Deploy
+
+One deploy ships the bot, the API and the page:
+
+```
+flyctl deploy --app black-bloc --ha=false
+```
+
+⚠️ **Do not run `fly launch`** — it rewrites `fly.toml`, and the three machine
+settings in `[http_service]` are load-bearing: the machine answering HTTP is
+the machine holding the gateway websocket, so `auto_stop_machines = false`,
+`auto_start_machines = false` and `min_machines_running = 1` must survive every
+edit. An idle HTTP service is not an idle bot.
+
+Confirm:
+
+```
+curl -s https://blackbloc.heygabi.ai/health
+curl -sI https://blackbloc.heygabi.ai/ | grep -i "strict-transport\|content-security"
+```
+
+`/health` is public on purpose. Everything else answers `401` with a sentence
+until you sign in.
+
+## 5. First sign-in — the drill
+
+In order, because each step's failure looks different:
+
+1. Open `https://blackbloc.heygabi.ai`. Expect the signed-out state and a
+   **Sign in with Discord** button, shown *immediately* — the page paints its
+   "Checking…" row before it asks the API anything.
+2. Click it. Discord asks to authorise **identify** and **members read**.
+3. Expect a bounce back to the site, already signed in, showing health,
+   feature modes, loops and the action log.
+4. Have a **non-staff** member try it. Expect: signed in, greeted by name, and
+   told this is for mods and to ask a Lead — never a bare 403.
+5. Open the browser console. **A CSP violation is a bug to report**, not
+   something to loosen the policy over: the page was built with no inline
+   script, no `eval` and no third-party host.
+
+## When it looks broken — read the symptom, not the status
+
+| What you see | What it actually is |
+|---|---|
+| "Black Bloc is not answering" | the app is down, or the request took more than ten seconds. There is no CORS any more, so this is now an honest outage rather than a same-origin mistake in disguise. Check `/health`. |
+| Discord says `invalid_request` / redirect mismatch | §3. The registered URI is not byte-identical to `<SITE_ORIGIN>/api/auth/callback`, or the old `black-bloc.fly.dev` one is still registered and being sent. |
+| "Signing in is not switched on for this server yet" | §1 — one of the three sign-in values is unset. Not a permission problem. |
+| Sign-in appears to do nothing; you land back signed out | ⚠️ the `__Host-` cookies were dropped. `SITE_ORIGIN` is not `https://`, or something in front of Fly is stripping `Secure`. §1. |
+| "That is more sign-in attempts than Black Bloc will take in a minute" | the rate limit (ten a minute per client IP). It is keyed on `Fly-Client-IP`; if **everyone** trips it at once, the proxy header is missing and every visitor is sharing one bucket. |
+| **"Black Bloc could not check your roles with Discord just now"** | the fifth state, and it is **not** a refusal. The bot is up but could not consult the guild — still starting, the guild not yet cached, or a Discord outage. The retry button is the fix. ⚠️ Nobody is told they are not staff in this case, by design: the old code answered "not staff", which sent real mods to ask a Lead for a role they already had. |
+| "signed in but not staff" for somebody who IS a mod | the staff set is derived from who can *see* the staff channel (`staff_channel_id`), computed permissions and all. Run `/settings` in Discord and check the channel; the site and the slash commands share one definition, so if one is wrong both are. |
+| A mod who was just demoted still has access | they should not — staff is re-checked against the guild on **every** request, and the cookie's flag is no longer allowed to overrule a guild that answered. Signing them out (or rotating `SESSION_SECRET`) is the hard stop. |
+
+## The pages
+
+Thirteen HTML files in `site/public/`, served by the same app at `/`:
+`index.html` (Overview), `moderation.html`, `automod.html`, `modmail.html`,
+`events.html`, `golive.html`, `rolemenus.html`, `birthdays.html`,
+`tempvoice.html`, `honeypot.html`, `settings.html`, `audit.html`,
+`health.html`. `site/README.md` says what each one does.
+
+⚠️ **Every page links `/favicon.ico`** (added 2026-08-27 — the log showed a
+`GET /favicon.ico 404` on every single page load). The file is a 32×32 ICO
+written by hand into the repo, so there is no image toolchain and no CDN to
+depend on, and `img-src 'self'` covers it with no CSP change. A page added
+later without the `<link rel="icon">` brings the 404 back;
+`tests/api/test_server.py` asserts every page carries it and that the app
+serves the file.
+
+## The routes, after Phase 8b (2026-08-27)
+
+Every one is under `/api`, JSON, staff-gated by the same
+`staff_dependency` 8a introduced (401 `not_signed_in`, 403 `not_staff`,
+503 `staff_unknown`; every error body is `{error, message}` with a sentence).
+**Writes** additionally go through `api/writes.py`: one rate-limit bucket **per
+bot** (60 a minute per session, not per router), the guild/database checks, the
+guard's 409 carrying the **cog's own** refusal sentence, and one
+`web.<area>.<verb>` line in the action log beside the feature's own line.
+
+| Surface | Routes | Notes |
+|---|---|---|
+| Reference | `GET /api/ref/{channels,roles,members,names}` | the pickers and the name resolver. **Cache only** — no `fetch_*` call anywhere in `api/names.py`, so a table render never costs a Discord round-trip |
+| Settings | `GET /api/settings` · `PUT`/`DELETE /api/settings/{key}` · `GET /api/settings/audit` | `PUT` returns the **stored** value through the same `SettingsStore.set(..., by=)` the slash commands use, and a refusal is the validator's own sentence as a 400 |
+| Moderation | `GET /api/mod/cases[?user_id=&page=]` · `GET/POST /api/mod/cases/{id}[/apply]` · `POST /api/mod/{warn,timeout,untimeout,kick,ban,unban}` · `GET /api/mod/rules` · `PUT /api/mod/rules/{name}` | `cases` is the one paged route: `{cases,total,page,pages,per_page}`. Discord refusing an action is a **502**, never a 200 with a sad message. `GET /api/mod/parity` was removed 2026-08-27 |
+| Modmail | `GET /api/modmail/tickets[?status=]` · `GET /api/modmail/tickets/{id}` · `POST …/{reply,close}` · `GET/POST /api/modmail/snippets` · `DELETE /api/modmail/snippets/{name}` · `GET/POST /api/modmail/blocks` · `DELETE /api/modmail/blocks/{user_id}` | closing refuses under the guard only when it would **delete** the channel |
+| Events | `GET /api/events[?status=]` · `POST /api/events/{id}/{approve,deny,cancel}` | same lock and same allowed-transition check as the buttons in Discord |
+| Go-live | `GET /api/golive/{links,optouts,sessions}` · `DELETE /api/golive/links/{user_id}` | |
+| Role menus | `GET/POST /api/rolemenus` · `PUT/DELETE /api/rolemenus/{name}` · `POST /api/rolemenus/{name}/post` | `PUT` takes the **whole** option list and syncs to it |
+| Birthdays | `GET /api/birthdays` · `PUT/DELETE /api/birthdays/{user_id}` · `POST /api/birthdays/import` | `import` runs the same import `/birthday import` does and returns the same report |
+| Temp voice | `GET /api/tempvoice/channels` · `POST /api/tempvoice/setup` | setup **repairs or adopts** the lobby the server already has; `repaired` and `adopted` are successes, not refusals |
+| Honeypot | `GET /api/honeypot/hits[?limit=]` · `POST /api/honeypot/hits/{id}/ban` · `POST /api/honeypot/setup` | Ban-now is the trap's own ban path, test-mode refusal included |
+| Status | `GET /api/status` · `GET /api/actions[?limit=&kind=&user_id=]` | as 8a, plus `actor_name`/`target_name` resolved. `kind=` matches a whole kind **or** a prefix, so `kind=web` is "everything done from the dashboard" |
+
+⚠️ **`modlog_channel_id` and `mod_dm_on_action` are served in the `automod`
+namespace**, not as two one-key groups of their own. The namespace is otherwise
+the key prefix before the first `_`; the exceptions live in one map,
+`settings_api.py:NAMESPACE_OVERRIDE`. A new moderation key with a new prefix
+needs a line there or it grows its own group. (A third key was in that map until
+2026-08-27, when the parity tool it belonged to was removed.)
+
+## Running the site without a bot — the mock
+
+`site/mock/server.mjs` serves `site/public` **and** `/api/*` on one origin, the
+way the real deployment does, with fixture data and no dependency beyond Node
+itself. It is how the pages are looked at without a Discord token or a database.
+
+```bash
+node site/mock/server.mjs                 # http://127.0.0.1:8788
+MOCK_PORT=9000 node site/mock/server.mjs  # somewhere else
+MOCK_TEST_MODE=0 node site/mock/server.mjs  # let destructive writes succeed
+```
+
+`MOCK_TEST_MODE` defaults **on**, matching the bot's real state, so every
+destructive write refuses with a 409 and the guard's sentence — the refusal path
+is the one a developer meets first rather than one nobody exercises.
+
+**Try the five permission states** by appending `?as=` to any page or route; it
+also sets a cookie, so the rest of the session stays in that state:
+
+| `?as=` | What you get |
+|---|---|
+| *(absent)* or `staff` | signed in, staff — the working dashboard |
+| `none` | signed out (401) |
+| `stranger` | signed in, not staff (403) |
+| `unknown` | roles could not be checked (503) — the fifth state, with a retry |
+| `expired` | the session has expired (401) |
+| `down` | the database is unreachable (503) |
+
+**Checking the mock still matches the bot** — run the mock, then the checker:
+
+```bash
+MOCK_TEST_MODE=0 MOCK_PORT=8788 node site/mock/server.mjs &
+MOCK_PORT=8788 node site/mock/check.mjs
+```
+
+It fetches all thirteen pages and every route and asserts the keys in
+`site/mock/contract.json`. ⚠️ **`site/mock/contract.json` is the one home for
+those shapes**, and `tests/api/test_contract.py` asserts the **real** routers
+against the same file — so the mock cannot teach a shape the bot does not
+serve. If you change a response shape, change the router, the mock and that
+file together, and both checks stay green. Set `MOCK_TEST_MODE=0` or every
+destructive route answers 409 and the checker reports it as a failure.
+
+## What this site deliberately does NOT do
+
+- **Phase 8b writes; 8a did not.** Every write goes through the same code path
+  the slash command uses, so the audit trail stays one table and the bot sees
+  the change live. What it still does **not** do is act outside the test channel
+  while `TEST_MODE` is on — those routes answer 409 with the same sentence the
+  slash command gives.
+- **It has no connection to heygabi** beyond sharing a domain (owner decision,
+  2026-08-26): no estate auth, no auth worker, no estate status endpoints, no
+  shared deploy script. The theme is a **copied snapshot** — a new estate theme
+  reaches this page only if someone copies it in.
+- **It talks to no host but its own origin.** Under Option A there is not even
+  a second one. If a future change adds a host, that is a decision to take to
+  the owner, not a detail — and the CSP will refuse it first.

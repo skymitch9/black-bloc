@@ -1,0 +1,973 @@
+# Black Bloc — DONE (dated archive, newest first, append only)
+
+> **Audience:** Claude sessions and the owner. **Status:** LOCAL ONLY (gitignored 2026-08-26).
+> Last verified: **2026-08-27**.
+>
+> Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
+> never edited afterwards. A wrong entry gets a superseding one above it.
+
+## 2026-08-27 — Phase 11: Chat 2 — editable intents and lines, data intents, routing, manners, the Chat page
+
+Moved whole from `TODO.md`:
+
+- **Owner 2026-08-27 ~14:12, verbatim: "yes lets do all of those,"** (F10 step 2, after being shown the canned lines and five suggestions) → build, in order, as one phase (`info/phase11-design.md` to write): (1) **Chat page** on the dashboard: intents with their trigger words and lines, add/edit/remove lines and whole intents (stored in a `chat_intents`/`chat_lines` table seeded from today's `chat.py` tables; the code table becomes the fallback); (2) **data intents**: who is live (open go-live sessions), what is next (next approved event with a HammerTime stamp), birthdays (next few), how many of us (attendee count), my roles (menus the member can pick from), what time is that for me (F4 timezone conversion); (3) **routing**: "I need a mod" / "help me" → opens or explains modmail; (4) **manners**: `chat_ignore_channels` setting, optional emoji reaction instead of a reply to a bare greeting (`chat_greeting_reaction` on/off); (5) later: the real conversation backend behind `reply_for`, persona prompt built from the lines. Status: **owner "Do it" (~15:55) → 11a dispatched 16:09 off `ebf99a2`; owner "Dispatch anyway" (16:18, weekly 87 — overriding the headroom hold) → 11b dispatched 16:19 in parallel off `ebf99a2`, building against the design's routes + its own mock entries; contract/mock conflicts expected at merge.**
+
+**Landed as Phase 11** (`info/phase11-design.md`): 11a merge `dc4985c` (storage schema 15 `chat_intents`/`chat_lines` with a `slot` column filled/empty/attendee, per-guild seed of 15 intents with the code tables as fallback, classification over guild rows, six data intents, `need_a_mod` routing, manners settings, `/api/chat` eight routes; Opus ~399k, +122 tests) and 11b merge `e03176b` (the Chat page — Try it, per-intent cards with trigger chips and inline lines, New intent, settings section; Opus ~299k) built IN PARALLEL on the owner's "Dispatch anyway" (weekly 87→88); the two halves met on a six-point contract clarification relayed mid-build (`tokens` per intent, `message` on writes, settings row shape, bool manners keys, route precedence for "help me", contract fixture ids). Conflicts at merge: exactly the two mock files, resolved contract = 11a's (router truth), `server.mjs` = 11b's (page-validated) + one action-kind rename to `web.chat.line_deleted`. `main` 1941 tests + ruff green; `check.mjs` 16 pages / 80 routes after the mock `try` gained `slot`. Deployed 17:05 Phoenix by Claude (`deploys.log`); **verified live:** chat cog loaded, `chat: seeded 15 intent(s) for guild …` in the Fly logs, 32 commands synced, `/health` ok. Deviations recorded in code-notes: `reply_for` is now a coroutine (data intents read the DB) with `answer_for` beneath it as the step-3 seam; `GET /api/chat/intents` seeds a guild that has none (a write on a read, so the page is never blank); built-ins cannot be deleted, only disabled. **NOT verified live:** no @-mention answered from an edited line yet, no data intent asked in the server, no 👋🏿 reaction, no staff-channel route note; `time_for_me`'s bare "7pm = Phoenix" assumption untested on a person. Owner sweep: `@Black Bloc how many of us`, `who's live`, `what's next`; edit a greeting on /chat.html and say hi.
+
+## 2026-08-27 — Phase 10: polls (native Discord polls wrapped, panel surface, recurring, Polls tab)
+
+Moved whole from `TODO.md`:
+
+- **Owner 2026-08-27 ~10:46, verbatim: "can we also have a poll app, copy polly or any other popular polling app in discrd"** → feature **F15 Polls** (already on the feature list as "Future (found)"). Step 1: research agent (Polly, Easypoll, Simple Poll, Discord native polls via discord.py `Poll`) → `info/polls-research.md` with a feature matrix and a recommended design; step 2: owner decisions one at a time; step 3: `info/phase9-design.md` + build (shadow-free feature, but test-channel only under TEST_MODE). **Research LANDED 10:58** → [`info/polls-research.md`](info/polls-research.md): Polly is a Slack/Teams product, not a Discord app — the Discord equivalents are EasyPoll / Simple Poll; Discord NATIVE polls (10 answers, 1 h–32 d, multi-select, live bars) are the free voting surface and discord.py 2.7.1 + our intents already support them; the paid features everywhere are the wrapper (scheduling, recurrence, reminders, history, export, dashboard) which Black Bloc already has patterns for; typed answers are affordable via 2.7.1's modal CheckboxGroup/RadioGroup except DATES (no picker anywhere in Discord → generated slots). Test-mode gap: `poll.end()` and interaction-response sends bypass the guard — the cog must check by hand. Build = two slices (9a native ~250–350k, 9b wrapper ~200–300k). ⏸ **15 owner decisions in §7, to be asked one at a time; first: answer types in v1.** Status: **all 15 decisions taken 12:16 (see the decisions entry below); design doc + build after Phase 9 lands.**
+- **Owner 2026-08-27 ~10:49, verbatim: "also in that poll let them set a data type for the box so if they pick date or checkbox etc it changes how the poll functions"** → poll creation has a per-poll (or per-option) answer TYPE that changes the mechanics: choice (single), checkbox (multi-select), date / date-range (availability, When2meet-style), free text, number / rating scale, yes-no. Native Discord polls only cover choice + multi-select; the other types need Black Bloc's own buttons/modals/select menus. Folded into the F15 research + design. Status: **relayed to the research agent.**
+- **Polls (F15) — owner decisions, 2026-08-27:** D1 answer types in v1 → **single choice, checkbox, yes/no, rating scale, date/availability** (free text, number, ranked = v2) — "Yes go with your rec" (~11:46). D2 who may create → **staff only** ("Staff only", ~11:53). D3 staff review before posting → **no by default, but a switch (`poll_review_mode` off/on) changeable from both `/poll settings` and the dashboard** ("Make polls need approval as no but should be editable in the bot and the ui", ~12:02). D4 default duration → **24 h**, per-poll override, 32 d ceiling ("24h", ~12:03). D5 anonymous votes → **the poll creator chooses per poll (anonymous on/off at creation)**; when on, the poll runs on Black Bloc's own panel (native polls expose voters) and the UI says so ("Let poll creator set if anonymous is allowed", ~12:04). D6 results visibility → **creator chooses per poll, default live**; "hide until close" forces the panel (native cannot hide) ("Also set by creator live by default", ~12:05). D7 channel → **the channel the command was run in**; `poll_channel_id` as the dashboard-create default ("Yes channel it was created in", ~12:06). D8 ping on open → **none by default; `poll_ping_role_id` setting + per-poll override** ("Yes your call", ~12:07). D9 reminder → **60 min before close, in the poll's channel, no ping; `poll_reminder_minutes`, 0 = off** ("Yes", ~12:08). D10 recurring polls in v1 → **yes, staff-only, daily/weekly/monthly** ("Yes", ~12:10). D11 weighted votes → **no** ("No", ~12:11). D12 reopen closed polls → **no** ("No", ~12:12). D13 auto-thread → **off by default, `poll_auto_thread` setting** ("Your call", ~12:13). D14 results retention + export → **after 365 days a poll is ARCHIVED, not deleted: the summary (question, options, totals, close date) is kept forever; per-vote rows may be dropped at archive time; archived polls sit in a collapsed "Archive" section on the dashboard with export still available; `poll_archive_days` default 365** ("Maybe not forever but like a year" then "Or we archive after a year but keep it", ~12:15). CSV export yes. D15 priority → **after the current phase; not urgent** ("Your call, it's not an urgent feature", ~12:16). **All 15 decided → design [`info/phase10-design.md`](info/phase10-design.md). Owner 13:37: "do polls" → 10a builder dispatched 13:38 off `6e08223`. **10a LANDED 2026-08-27** on branch `worktree-agent-aa83500e6aae1280f`, four commits `033e1c7` → `a0fe975` → `d3d1234` → `09d8654`: storage (schema 14, four tables), the pure module + ten settings keys, the cog (`/poll create|end|cancel|results|list|settings`, the review switch, the last-call + close + archive loop, the raw vote listeners) and the staff-gated API + contract + mock. `pytest -q` 1738 passed (1596 before), `ruff` clean, `check.mjs` 14 pages / 68 routes clean. ⚠️ **Not merged and nothing has run against Discord — no poll has ever been posted by this code.** ⚠️ **The `<t:…>`-in-an-answer-label question is STILL OPEN**: the library sends the label unescaped and the docs say nothing, so only a posted poll can settle it — 10b must post one in the test channel first. **10b still to do:** the panel surface (anonymous, hide-until-close, > 10 date slots, free text / number), recurrence, `POST /api/polls`, the dashboard tab (`polls.html` + `page-polls.js` + the nav entry) and the pager scroll-to-top from the 14:01 ask.**
+- **Polls status 14:47:** **10a LIVE in `3eb7e4f`** (1738 tests, schema 14, 32 commands synced; no poll posted yet — owner sweep: `/poll create` each kind in the test channel, vote, `/poll end`, results embed). **10b dispatched 14:47 off `3eb7e4f`** (panel surface, date kind, recurring, `POST /api/polls` + dashboard tab, pager scroll-to-top). ⚠️ open: `<t:…>` inside a native answer label — 10b posts one test poll (message id in its report) for the owner to look at; `poll_date_labels` setting flips the label style either way.
+- **Owner 2026-08-27 ~14:01, verbatim: "for each page that has pagination make sure on hitting next page it scrolls back to the top of the list"** → every pager (Moderation cases, Members, Audit, Health last-50 if paged, Modmail tickets, Role menus Requests/Timed roles, Birthdays by month if paged, Polls in 10b) scrolls the table/list top edge into view (`scrollIntoView({block: "start"})` on the table-block, minus the top bar height) after Previous/Next/page change, once the new rows have rendered; one shared helper in `ui.js` (the pager component) so every page gets it. Status: **queued into the 10b site build (10a owns no pages; 10b owns `site/`).**
+
+**Landed as Phase 10** (`info/phase10-design.md`; design from `info/polls-research.md` + the 15 owner decisions taken one at a time): 10a merge `3eb7e4f` (storage schema 14, `black_bloc/polls.py`, the cog, the 5-min loop, raw vote listeners, review switch, results history, archive job, API; Opus ~391k, +142 tests) deployed 14:45; 10b merge `ebf99a2` (panel surface for anonymous / hide-until-close / date slots > 10, `kind:date` with generated slots, `/poll recur` daily/weekly/monthly, `POST /api/polls` + the **Polls** tab as the 15th page with create form / open / pending / closed / archive / recurring / CSV export, and the shared pager scroll-to-top from the 14:01 ask; Opus ~513k, +81 tests) deployed 15:44. `main` 1819 tests + ruff green; `check.mjs` 15 pages / 72 routes; 32 commands synced. **Measured:** discord.py 2.7.1 dispatches only the RAW poll-vote events reliably (non-raw need a cached message) — the cog listens raw only; the `guild_polls`/`dm_polls` intents were already on; the API stores `<t:…>` inside an answer label unescaped (test poll message `1542651824950218792` in the test channel) — **whether the client renders it is still for the owner's eyes**, so date labels default to plain text with `poll_date_labels` to flip; `RadioGroup`/`CheckboxGroup` cap at 10 options (a `Select` carries longer lists). Eleven `poll_*` settings; `poll_mode` on by default (no shadow: a poll punishes nobody); test-mode enforced by hand at every acting site because `poll.end()` and interaction responses bypass the patched send. Deviations recorded in code-notes: recurrence reuses `schedule_id` (no schema bump), `polls.auto_thread` per poll, cancelled→archived allowed, panel bars divide by distinct voters, anonymous votes stored as a per-poll truncated SHA-256 (**KI-9**). One shared CSS fix on the way: `.field > .seg { justify-self: start }` (segments had been stretching since 9b, visible on Role menus' Approval field). **NOT verified live:** no poll created by a person, no vote cast on either surface, no reminder/close/recurrence fired against Discord, no client render of the timestamp label seen, CSV never saved by a click. Owner sweep: `/poll create` each kind in the test channel; look at the test poll's first answer (renders as a date or as literal `<t:…>`?) and say which; vote; `/poll end`; results embed; dashboard Polls tab.
+
+## 2026-08-27 — Owner verified live: @-mention replies and the go-live card
+
+Owner, 13:59, verbatim: "we've tested @ing the bot, we tested golive we've not tested rolemenu yet". Supersedes the NOT-verified-live caveats in the entries "Black Bloc answers when @-mentioned" and "Go-live announcement is a card" above — both exercised in the real server by the owner. Still unverified live: Phase 9 role approval / timed roles / reconciliation (owner sweep pending), temp-voice panel in the voice chat, YouTube presence, daily import beyond the log line.
+
+## 2026-08-27 — Two questions answered: no other bot imports to cron; the Live role already exists
+
+Moved whole from `TODO.md`:
+
+- **Owner 2026-08-27 ~09:53, verbatim: "are there any imports or stuff we're gathering from other bots as commands that we can turn into crons?"** → survey of every command that imports/gathers; answer in chat, decisions one at a time.
+- **Owner 2026-08-27 ~11:24, verbatim: "also as a side feature lets add a way to dynamically assign a role like streaming when live (keep off for noww)"** → ALREADY BUILT in Phase 2: `golive_live_role_id` (F2 "optional *Live* role") — the bot adds the role when a session opens and removes it when the stream ends; it is off whenever the setting is unset (it is unset in production today). No build needed; stays off until the owner points the setting at a role. Status: **answered; nothing to do.**
+
+**Answered, nothing to build.** (1) Imports/gathering from other bots as commands → only `/birthday import` existed (now a daily loop, see the entry above); the seven loops already cover Twitch polling, birthdays, events, presence, panels, visibility; setup/repair commands stay manual on purpose (a cron would fight the owner's deliberate deletions); F2's "scan for inactive streamers" is the one future cron-shaped item, still TBD. (2) A dynamic "streaming" role while live already exists from Phase 2 — `golive_live_role_id`, unset in production, so off exactly as asked; point it at a role in Settings to turn it on.
+
+## 2026-08-27 — Go-live wording section owns the stream-end mode
+
+Moved whole from `TODO.md`:
+
+- **Follow-up found by the stream-end builder (12:39):** `site/public/assets/page-golive.js:140` previews the "once the stream ends" wording unconditionally; with `golive_end_mode` now off by default it previews an edit that will not happen. Fix: read `golive_end_mode` and show the preview only in `edit` (with a one-line "stream-end edit is off" note otherwise); `/golive status` should also print the end mode. Status: **Opus builder dispatched 13:19 off `271b42a`.**
+
+**Landed:** merge `6e08223` (builder commits `607d268`, `2e4f58f`; Opus ~162k). `main` 1596 tests + ruff green; `check.mjs` 14 pages / 61 routes. Deployed 13:33 Phoenix by Claude (`deploys.log`); `/health` ok. The Go-live page's Announcement wording section now owns `golive_end_mode` as a segment beside "Playing a game": in `edit` the ended preview renders, in `off` one honest sentence replaces it; a missing key renders neither (checklist 10); the key is omitted from that page's accordion (one home per page) and stays on global Settings. `/golive status` prints `**stream end** — off (left as posted)` / `edit ("…")`, echoing the stored value rather than assuming. Mock gained the key and mirrors `NOT_A_FEATURE`. **NOT verified live:** the status line has not been read in a real ephemeral reply; browser check was mock-only, Chrome, Discord dark.
+
+## 2026-08-27 — Phase 9: approval-gated role menus, timed roles, reconciliation (bot + dashboard)
+
+Moved whole from `TODO.md`:
+
+- **Owner 2026-08-27 ~11:12, verbatim: "todo: certain roles menus like runner-status we want to have be on approval basis, so you select a role and it pings a mod to approve it"** → role menus gain a per-menu (or per-option) **approval** mode: picking the role creates a pending request, pings the staff/approver role in the staff channel with Approve / Deny buttons (same shape as the events review queue), the member is told the outcome, the grant is logged; dashboard shows pending requests. Depends on role menus being switched back on (`rolemenu_mode` is off). Status 12:27: **9a LIVE in `a46b7ff`** (merge `e792bfa`; 1441 tests on the branch, 1565 on main; schema 13; `/rolemenu edit`, `/role grant`, `/role extend`, hourly `_expiry` loop, `on_member_update` reconciliation; withdraw = pick the pending role again). **9b pending** (dashboard: editor fields incl. per-menu channel, Requests + Timed roles sections, Members chip expiry, contract routes) — dispatch when the site polish builder lands. Owner sweep: make `runner-status` approval-gated with 7-day expiry via `/rolemenu edit`, pick it, approve, watch the DM; bot needs View Audit Log for the by-hand actor.
+- **Owner 2026-08-27 ~11:16, verbatim: "we also need a recolciliation step so if someone is manually given a role it reflects on our portal and the bot knows"** → role reconciliation: (a) `on_member_update` listener records role adds/removes made by hand (audit-log actor when readable) into the role-menu/pick store and the action log; (b) a periodic sweep (hourly) diffs live guild roles against what the bot believes for every menu-managed role and fixes the record, never the member; (c) the Members page and Role menus page read the reconciled truth. Pairs with the 11:12 approval-mode ask — one role-menu design note covers both. Note: the Members tab already shows LIVE roles from the gateway cache, so manual grants are visible there today; the gap is the bot's own records. Status: **LIVE in `a46b7ff` (9a); dashboard view in 9b.**
+- **Owner 2026-08-27 ~11:24, verbatim: "we also need a way for certain roles to be time limited. the same runner status roles. so we can set someone to have it for a week."** → time-limited role grants: a per-menu default duration (`expires_after` on the menu, e.g. 7 d) that staff can override when approving (and a `/role grant @user @role 7d`-style staff command + dashboard field); a `role_grants` table (member, role, granted_by, granted_at, expires_at, source: menu/approval/manual/staff); an hourly sweep removes expired roles, DMs the member, logs `role.expired`; extend/renew from the dashboard; the Members page shows "expires in N d" on the chip. Ties into the reconciliation ask (a manual grant of a timed role gets a record with no expiry unless staff set one). Status: **LIVE in `a46b7ff` (9a); dashboard Extend/End in 9b.**
+- **Owner 2026-08-27 ~11:30, verbatim: "also in that same editor menu we need to be able to change which channels theyre posting in"** → the Role menus editor gets a per-menu **Channel** picker (the menu row already stores `channel_id`, set today only by `/rolemenu post`); saving a different channel on a posted menu takes the old panel down and posts it in the new channel (reuse `rolemenu_panels` reconcile), and the Post card shows the channel it will use. Status: **deferred to Phase 9b (the 9a builder is editing the role-menu files now).**
+- **Role-menu approval — decisions (owner, 2026-08-27):** Q1 approval granularity → **"per menu"** (~11:20). Q2 who approves / where → **any staff role approves; requests post in a channel set by a NEW setting `rolemenu_approval_channel_id` (default = `staff_channel_id`), Approve/Deny buttons, optional ping role `rolemenu_approver_role_id` (default none)** — owner: "yes that works, just make sure we can set the channel where they post later in settings" (~11:22). Q3 pending experience → **ephemeral "Sent to staff for approval — you'll get a DM when it's decided", option shows as pending, pick again to withdraw, approve = role + DM, deny = DM with reason** (owner: "yes your choice is good", ~11:40). Q4 denial cooldown → **7 days per menu (setting), denial DM says when they can retry, staff can grant by hand any time** (owner: "yes go with suggested", ~11:41). **All four decided → design note `info/phase9-design.md`, then build.**
+
+**Landed as Phase 9** (`info/phase9-design.md`): 9a merge `e792bfa` (bot, storage schema 13, API; Opus ~366k) deployed 12:26 in `a46b7ff`; 9b merge `271b42a` (dashboard; Opus ~416k) deployed 13:17. `main` 1592 tests + ruff green; `check.mjs` 14 pages / 61 routes. Both deploys by Claude under the owner's authorisation (`deploys.log`); `/health` ok; migration `added role_menus.retry_days` seen in the Fly logs; panels re-registered on boot. **What shipped:** per-menu `approval` / `expires_days` / `retry_days` (via `/rolemenu edit` and the dashboard editor), request cards with persistent Approve/Deny in `rolemenu_approval_channel_id` (default staff channel) + optional `rolemenu_approver_role_id` ping, pending/withdraw (pick again)/DM-on-decision, 7-day retry refusal sentence, `role_grants` for every bot-made grant with expiry, `/role grant|extend`, hourly `_expiry` loop (Health tab), `on_member_update` reconciliation (`role.changed_by_hand` with the audit-log actor when `View Audit Log` is granted) + hourly record sweep that never touches members; dashboard Requests (pending first, decided collapsed) + Timed roles (Extend / End now / Grant form) sections, sidebar pending count, per-menu **Channel** picker that moves a posted panel (`PUT /api/rolemenus/{name}` accepts `channel_id`), Members chips show "· N d" from `roles[].expires_at`. Two 9a design deviations recorded in code-notes: withdraw = pick the pending role again (a shared select cannot show per-member selection); decide-then-add ordering with `role.approve_failed` + no grant row if Discord refuses. Settings-store merge conflicts (keys added by parallel builds) resolved keep-both twice; `site.css` conflict (the level-field grid written twice) resolved for `main`'s measured version. **NOT verified live:** no request card, button press, DM, expiry or panel move has happened in the real server; the by-hand actor needs **View Audit Log** on the Bots role (unchecked); audit rows B5–B7 (un-post / seed / staff assign) remain open. Owner sweep: `/rolemenu edit runner-status approval:on expires_days:7` → pick → Approve (Discord or dashboard) → DM → `/role extend` → Members chip.
+
+## 2026-08-27 — Stream-end edit is a setting, off by default
+
+Moved whole from `TODO.md`:
+
+- **Owner 2026-08-27 ~12:30, verbatim: "Let's have stream end announcement by optional and off by default"** → new setting `golive_end_mode` (off / edit), default **off**: when off the original announcement (sentence + card) is left untouched when the stream ends (the session still closes, the Live role still comes off); when `edit`, today's behaviour (suffix + "was live" card). Status 12:40: **merged `e5d890e`, deploying** — `golive_end_mode` off/edit default off; session still closes and the Live role still comes off; `api/status.py` excludes it from the feature-mode list (it names no feature).
+
+**Landed:** merge `e5d890e` (builder commit `7e46a81`, Opus ~140k). `main` 1573 tests + ruff green. Deployed 12:42 Phoenix by Claude (`deploys.log`); `/health` ok. `golive_end_mode` enum off/edit, default **off**: at stream end the session still closes, the Live role still comes off and `golive.end` logs `"announcement": "left"`; nothing is fetched or edited unless the mode is `edit` (then byte-identical to before). Both end paths (`_end_live` and the reconcile/age-out `_close_session`) go through the one gate. Side fix: `api/status.py:mode_keys()` now excludes `golive_end_mode` (it names no feature) so the Overview would not grow a bogus "Golive_end" row. **Live behaviour change:** every guild gets the new default — set `golive_end_mode = edit` to get the old marking back. **NOT verified live** (no stream ended since deploy). Follow-up queued: the Go-live page previews the ended wording regardless of the mode (`page-golive.js:140`), and `/golive status` does not print the mode.
+
+## 2026-08-27 — Site polish: neon Cyberpunk, sidebar headers read as headers, every field group level
+
+Moved whole from `TODO.md`:
+
+- **Owner 2026-08-27 ~11:08, verbatim: "the theme needs more neon blue and othe neon colors"** → assumed = the **Cyberpunk** theme (the one the owner was viewing; Discord stays the approved mock). Palette pass on `:root[data-theme="cyberpunk"]` (dark + light) in `estate-theme.css`: neon blue as the primary accent, a second/third neon (magenta, green) on ok/warn/info/pills/nav-active/focus ring, glow via `--et-focus-ring`/`--et-card-shadow`, keep contrast readable. Status: **site polish builder dispatched 11:59 (item 1).**
+- **Owner 2026-08-27 ~11:27, verbatim: "for the headers on the left side on the webite, its hard to tell which ones are header and which are clickable. make the headers bigger and maybe bold"** → sidebar group headers (OVERVIEW / MODERATION / COMMUNITY / SERVER / ON THIS PAGE): bigger (body size rather than micro), bold, higher-contrast colour, more space above; clickable items stay as they are so the two read differently at a glance. Token-only (`--et-nav-head-size/-weight/-color`) so every theme follows; Discord theme deviates from the mock here ON PURPOSE (owner call). Status: **site polish builder dispatched 11:59 (item 2).**
+- **Owner 2026-08-27 ~11:29, verbatim: "the editting a menu page on the website on the rolemenu has offset boxes, name, title, desc mode are not level"** → Role menus page, "New menu / Editing X" editor (`page-rolemenus.js` `editor`): the Name / Title / Description / Mode fields sit at different heights — align them on one grid row (labels above, controls level; the textarea gets the same top edge; wrap to two rows at phone width). Status: **deferred to Phase 9b (the 9a builder is editing the role-menu files now).**
+- **Owner 2026-08-27 ~11:44, verbatim: "go ahead and make sure every set of text boxes that are next to each other are all level, it seems to be around when there are subtext beneath or above the box that pushes the default offline"** → site-wide: every side-by-side field group (`.field-row` / form grids in `ui.js` `field()` and the page-level forms — Role menus editor, Birthdays set form, Moderation action form, Modmail snippets/blocks, Events settings, Go-live link form) uses one shared layout: CSS grid with `grid-template-rows: auto auto auto` (label / control / help) and `align-items: start` (or subgrid where supported), so a field with help text above or below no longer pushes its control off the line of its neighbours; the control row is what aligns. Token-only. Add a mock-server check page or a test that renders each form and asserts the controls share a top edge. Supersedes the 11:29 role-menu-editor item (that becomes one instance). Status: **site polish builder dispatched 11:59 (item 3).**
+
+**Landed:** merge `c176cd2` (builder commits `b936b96` neon, `8424c60` nav heads, `6b7ab62` level fields; Opus ~243k). `main` 1565 tests + ruff green; `check.mjs` 14 pages / 54 routes. Deployed 12:33 Phoenix by Claude (`deploys.log`); `/health` ok; Fable eyeballed Moderation + Role menus in Cyberpunk on the mock before merging. **Measured:** Cyberpunk changes confined to its two theme blocks (18 hunks between old lines 718–858) + one cyberpunk-scoped wordmark rule; contrast table in `info/code-notes.md` § "site polish" — every text role ≥ 4.5:1 in both modes, every light-mode figure better than before; accent `#3d8bff`, headings `#ff3df0`, ok `#2bff88`, yellow kept only for warn, old cyan became info. Nav heads: four new tokens at all 13 sites, each theme's head one size step above its nav item, bold. Field alignment: 19 → 28 groups measured, misaligned 12 → **0** (worst had been the Role menus editor at 40 px and modmail at 92 px); root cause `.formrow { align-items: flex-end }`; fixed at the shared `field()`/formrow grid (subgrid + explicit-rows fallback), plus the UA checkbox margin and one `.bar` offset. **NOT verified live:** only Chrome; four of twelve theme×mode pairs by eye (the rest by computed style); no label-wrap case provoked; contrast computed from hexes, not sampled pixels.
+
+## 2026-08-27 — Stream-ended wording setting, no prefix-command noise, dark-skin emoji
+
+Moved whole from `TODO.md`:
+
+- **Owner 2026-08-27 ~11:53, verbatim: "Make black bloc use dark skin emotes"** → every human-gesture emoji the bot sends (wave, thumbs up, clap, raised hands, flex, pray, point, ok-hand, and people emoji) carries a skin-tone modifier — default **dark 🏿** (`U+1F3FF`), with `emoji_skin_tone` setting (none / medium-light … dark) so it can be tuned; one helper `black_bloc/emoji.py` (`toned("👋")`) used by chat lines, birthday/event/go-live/modmail copy and embeds; non-human emoji untouched. Sweep = grep every emoji literal in `black_bloc/**`. Status: **bot batch builder dispatched 11:59 (item 3).**
+- **Noise in the logs (found 11:49):** `discord.ext.commands.errors.CommandNotFound: Command "hi" is not found` at 18:40:55Z — `commands.Bot` treats "@Black Bloc hi" as a prefix-command attempt (mention prefix) and logs the miss; the chat cog answers via `on_message` regardless. Fix: an `on_command_error` that swallows `CommandNotFound`, or a prefix that can never match. Status: **bot batch builder dispatched 11:59 (item 2).**
+
+**Landed:** merge `a46b7ff` (builder commits `853aee3`, `ec7b345`, `046a54a`; Opus ~170k). `main` 1565 tests + ruff green. Deployed 12:26 Phoenix by Claude together with Phase 9a (`deploys.log`); verified: 31 commands synced, logged in 19:26:26Z, `/health` ok. (1) `golive.py:ended_text`/footer read `golive_end_suffix` — the key added by the site follow-up now has one home. (2) The "hi" noise: measured root cause — `command_prefix` was `when_mentioned_or("!")` with zero prefix commands in the tree, so every mention became a `CommandNotFound`; now `black_bloc/prefix.py:no_prefix_commands` returns `[]` and `get_context` never dispatches (`discord/ext/commands/bot.py:1319` `startswith(())` is False); reproduced both ways in tests; `settings.command_prefix` kept because modmail reads it to ignore other bots' commands. (3) Emoji: `black_bloc/emoji.py` (`SKIN_TONES`, `toned`, `toned_text`, `tone_for`, Unicode `Emoji_Modifier_Base` set) + `emoji_skin_tone` setting default **dark**; census of 47 literals found exactly ONE tone-capable output emoji (👋 in `chat.py`) — hearts, status glyphs, arrows and the user-configured role-menu emoji take no modifier by design; every chat reply passes through `toned_text` at send time so future lines get it for free. **NOT verified live:** no toned emoji seen in Discord yet (owner check = `@Black Bloc hi` → a 👋🏿 line eventually); button-label tone support is inferred from `PartialEmoji.from_str` round-tripping, not measured against the API; the modifier-base list was transcribed, not generated.
+
+## 2026-08-27 — Dashboard: controls instead of displays, cache-busted assets, avatars, one sign-in check
+
+Moved whole from `TODO.md`:
+
+- **Owner 2026-08-27 ~10:31, verbatim: "on the website, in the go-live area, can we update the annoucement wording to be a changable text field instead of just a display. also audit all the ssite features. we dont want any displays showing what the bot can do, we want ways to interact and change."** → (1) Go-live page: the announcement template becomes an editable field (writes `golive_template` through the settings store, with the preview kept beside it); (2) audit of all 13 pages: every read-only "what the bot can do" panel becomes a control or goes. Audit landed → `info/site-feature-audit.md`. Status: **site follow-up builder dispatched 11:03 (items 3, 5, 8–12).**
+- **Owner 2026-08-27 ~10:37, verbatim: "https://blackbloc.heygabi.ai/birthdays.html on this page make month day year all on the same line"** → the set-a-birthday form's month / day / year controls sit in one row. Status: **site follow-up builder dispatched 11:03 (item 6).**
+- **Owner 2026-08-27 ~10:39, verbatim: "also every new page refresh is giving me the message, checking to see if oyure logged in, thats too much. it should happen on itial page load only"** → cache the last successful `/api/auth/me` result in `sessionStorage` (user, staff flag, checked-at); on later page loads render straight from the cache and re-verify silently in the background, showing the "checking" state only when there is no cache or the silent re-check fails (then the existing signed-out / not-staff gates take over). Never trust the cache for writes — the server still gates every call. Where: the gate text "Asking the bot whether you are signed in." (`site/public/*.html` `#gate-message`) shown until `app.js:158` `/api/auth/me` resolves. Status: **site follow-up builder dispatched 11:03.**
+- **Owner 2026-08-27 ~10:41 asked what "Creator / tempvoice_creator_ids" is on the Temp voice page** → it is the list of join-to-create voice channels (the "join" lobby); the label "Creator" is unclear. Fix: human label "Join-to-create channels" with the help line "Join one of these and Black Bloc makes you your own channel" (`settings_store.py:181` help + the site label map). Status: **site follow-up builder dispatched 11:03.**
+- **Owner 2026-08-27 ~10:46, verbatim: "do we even need the creator section? i dont get its usecase so lets rm it unless oyu can say why we need it"** → decision put to the owner (one question): the setting itself must exist (it is how the bot knows which voice channel is the lobby) but the dashboard section can go, with the lobby shown as one line on the Set-up card. Supersedes the 10:41 relabel note. **Owner 2026-08-27 ~10:52: "rm it."** → the Creator / `tempvoice_creator_ids` section comes off the Temp voice page; the Set-up card shows one line "Lobby: #join" with Set up / repair and Forget beside it. The setting itself stays (the bot needs it). Status: **site follow-up builder dispatched 11:03 (item 7).**
+- **Found live 11:02 (Members page after the 188acf3 deploy):** (1) returning browsers rendered the page with a STALE cached `site.css` (name/username and role chips ran together, stat strip wrapped) — a hard reload fixed it: assets carry no `Cache-Control` and no version in their URLs, so every deploy shows old CSS/JS to anyone who visited before; fix = `?v=<build id>` on every asset URL + `Cache-Control: no-cache` (ETag revalidation) on `/assets`. (2) avatars are broken images: CSP `img-src 'self' data:` (`api/server.py:32`) blocks `cdn.discordapp.com`; fix = allow `https://cdn.discordapp.com https://media.discordapp.net` AND fall back to the initial letter on `img` error. Status: **site follow-up builder dispatched 11:03 (items 1–2).**
+- **Site feature audit LANDED 10:50** → [`info/site-feature-audit.md`](info/site-feature-audit.md). 🔴 Found a live bug: Automod page Mode + Exemptions sections render `[object Object]` and save nothing (`page-automod.js:95,119`). The site follow-up build brief = audit A1–A8, B1–B3, B9, C1–C4, prose cuts + the queued asks (Birthdays one-line date, sign-in cache, Creator section per owner answer). B4–B8 held for a later batch.
+- **Owner 2026-08-27 ~11:06, verbatim: "move the go live template from setting to the annoucement wording tab and let that be editable"** → same as the 10:31 ask; = site follow-up item 5 (audit A1 + C2): `golive_template` editor lives in "Announcement wording" with the live preview, and the row is REMOVED from the Go-live page's Settings accordion (it stays on the global Settings page). Status: **in the builder dispatched 11:03; reiterated to it.**
+
+**Landed:** merge `a28e132` (twelve builder commits `adfb5e7`→`dab62c8`, one per item, Opus ~463k — the largest dispatch of the project; conflict in `cogs/core.py`/`tests/cogs/test_core.py` resolved by keeping `main`'s `/settings set-value` autocomplete from `8b8f792`). `main` 1425 tests + ruff green; `check.mjs` 14 pages / 54 routes. Deployed 11:55 Phoenix by Claude (`deploys.log`). **Verified live:** every asset URL carries `?v=<version>-<hash>`, assets `Cache-Control: no-cache`, HTML `no-store`, CSP `img-src` allows Discord's CDN, `/health` ok, logged in 18:56:12Z. Build id = package version + sha256 of `site/public` (not a git sha — the container has none); `?v=` cannot reach ES-module imports so `no-cache` is the real fix and the stamp the belt. Sign-in: `sessionStorage` cache, display only, server still gates every call; warm load never shows the gate (measured in the mock: `/api/auth/me` moved from first to last request). Go-live wording: textarea editor + live preview (ping role, `{platform}`, empty-game word, literal unknown tokens), omitted from that page's accordion, kept on global Settings; `golive_end_suffix` key added but `golive.py:ended_text` does NOT read it yet (next bot batch). Creator section gone; `Lobby: #… [Forget]` line via new `POST /api/tempvoice/forget` sharing `forget_creator` with the slash command (a shadowed `FORGOTTEN` constant found and renamed on the way). Audit rows A1–A8, B1–B3, B9, C1–C4 and the §4 prose cuts marked "Done in <commit>" in `info/site-feature-audit.md`; **still open there: B4** (temp-voice per-room actions, refactor first), **B5–B7** (role-menu un-post / seed / staff assign — 9b territory), **B8** (event detail/edit). **NOT verified live:** an avatar actually loading from the CDN in the browser; the gate behaviour in the real site (mock only); one Fly proxy `PU03 unreachable worker host` on `/assets/site.css` at 18:56:35Z during the restart — three follow-up fetches returned 200.
+
+## 2026-08-27 — Black Bloc answers when @-mentioned (F10 step 1: canned intents)
+
+Moved whole from `TODO.md`:
+
+- **Owner 2026-08-27 ~11:33, verbatim: "we need to also add basic conversation and replies to the bot when people @ it and say hi, we can set up true covnersation"** → F10 step 1: an `@Black Bloc …` mention handler with a small intent table (greeting / thanks / how-are-you / what-can-you-do / help / unknown) and several canned lines per intent in the bot's voice, randomised, replying in-channel (guard: test channel + DMs only under TEST_MODE), per-user cooldown, `chat_mode` off/on setting (default **on** in test), logged as `chat.reply`; the handler is a single `respond(text, member) -> str | None` seam so a real conversation backend (LLM) can replace the intent table later without touching the cog. Note: message content for messages that @mention the bot arrives WITHOUT the privileged Message Content intent (builder to verify from discord.py 2.7.1). Status: **Opus builder dispatched 11:34.**
+
+**Landed:** merge `1899f6e` (builder commits `047f48d`, `e0aa2d6`; Opus ~156k). `main` 1389 tests + ruff green. Deployed 11:48 Phoenix by Claude (`deploys.log`); verified: `loaded cog black_bloc.cogs.content.chat`, logged in 18:48:37Z. Shape: `black_bloc/chat.py` (pure: `classify`, `respond`, the `reply_for` seam for a future conversation backend) + `cogs/content/chat.py` (`on_message`: ignores bots/webhooks, needs the bot's mention, `chat_mode` on/off default on, guard checked first at debug level, per-user `chat_cooldown_seconds` default 20 stamped only after a reply lands, `reply(mention_author=False, allowed_mentions=none)`; only `insult` writes an action row `chat.insult`). Measured: a message that @mentions the bot carries `content` without the privileged intent (`discord/flags.py:1256–1262`), though `intents.py:9` already enables it for automod. Voice = first draft, 5–6 lines per intent, one emoji max, `unknown` → `/help`. **NOT verified live:** no reply has been observed in a channel yet — owner check = `@Black Bloc hi` in the test channel. Follow-up noted in TODO: `CommandNotFound: Command "hi" is not found` logged at 18:40:55Z when the owner @mentioned the bot before this shipped — the prefix-command dispatcher still treats "@bot word" as a command attempt (noise only).
+
+## 2026-08-27 — Go-live announcement is a card: streamer, game and the game's art, no avatar
+
+Moved whole from `TODO.md`:
+
+- **Owner 2026-08-27 ~10:50, verbatim (with a screenshot of another bot's go-live embed — streamcord: author line "PopNoTarts is now live on Twitch!" with avatar icon, stream title as a link, a "Game" field, the game's box art as the image): "can we make our go live message show the streamer name and the game they're playing instead of their avatar"** → replace the plain-sentence post (+ Discord's link preview of the streamer) with an embed: title "{name} is now live on {platform}!", the stream title linking to the stream, a **Game** field, and the game box art (Twitch Helix `games` endpoint → `box_art_url`; YouTube: the stream thumbnail if known, else no image); the `golive_template` sentence stays as the message text above the embed. Status: **Opus builder dispatched 10:54 off `74f06b5`** — text stays the template sentence; embed = "{name} is now live on {platform}!" author (no avatar), title→stream link, Game field, box art via Helix `games` (cached) or the activity thumbnail, platform colour, end-of-stream edit; `golive_embed` bool setting (default on).
+
+**Landed:** merge `8b8f792` (four builder commits `6a38357`→`b00521c`, Opus ~203k, reviewed by Fable: `announcement_embed` sets no `icon_url`/thumbnail anywhere). `main` 1329 tests + ruff green. Deployed 11:14 Phoenix by Claude (`deploys.log`); verified: 30 commands synced, logged in 18:14:32Z, `/health` ok. The card: author "{name} is now live on {platform}!", stream title → link, **Game** field (never blank — `GAME_FALLBACK`), image = Helix `games` box art (cached; a Helix failure degrades to no image, never blocks the post) or the presence asset; Twitch purple / YouTube red; footer names the source; end-of-stream edits the card to "was live" + "· stream ended". `golive_embed` bool (default on) restores the old sentence-only post when off. Side effect that had to land: the 26th value-typed key hit Discord's 25-choice cap on `/settings set-value`, so that command's `key` is now autocomplete (`cogs/core.py`). **NOT verified live:** the card has never rendered in the real client; the `/helix/games` shape and the `twitch:`/`youtube:` presence-asset prefixes are from docs/inference — owner check = `/golive test` (Twitch, then YouTube) in the test channel, then one real stream. Code-notes: the new section names `74f06b5` as the base; five already-keyed files moved lines and were NOT re-keyed (next docs pass).
+
+## 2026-08-27 — Batch 7: themes restyle everything · Members tab · YouTube go-live · temp-voice panel in the voice chat
+
+Moved whole from `TODO.md` (four owner asks, all landed in `188acf3`, deployed 11:00 Phoenix by Claude under the owner's 10:25 standing authorisation — `deploys.log`):
+
+- **Owner 2026-08-27 ~10:18, verbatim: "make sure that the other themes work and dont just change the background color, make sure it applies to all CSS"** → audit `site.css`/`shell.js`-drawn CSS for anything the five old themes cannot override (font faces, radii, shadows, borders, control heights); every such value must go through an `--et-*` token that each theme sets. Audit 10:20 (measured live, Cyberpunk + Retro): colours and the body face switch, but cards, pills, radii, borders and the whole type scale stay Discord's — `site.css` hardcodes 64 `font-size` px, `border-radius: 4px`, 1px borders, weights/tracking. Status: **Opus builder dispatched 10:23 (Part 1 of a two-part brief, same worktree as the Members ask): tokenise everything, Discord keeps the mock values, each old theme sets its own; pass = computed-style table shows ≥4 old themes differing on face/radius/size.**
+- **Owner 2026-08-27 ~10:18, verbatim: "also show server users, server user count also somewhere in the moderation area."** → a member count + a members list in the MODERATION group of the dashboard (likely a Members page or a panel on Moderation: name, joined, roles, case count). Needs an API route (`/api/members`, paginated, staff-only, from the bot's member cache). Design settled 10:22: `GET /api/members` (staff-only, search/filter/sort/paginate, cases count grouped, staff from `resolved_staff_roles`), a **Members** page under MODERATION with stat strip + B-style table, sidebar count, and a fifth **Members** stat on Moderation linking to it. Status: **Opus builder dispatched 10:23 (Part 2 of the same brief).**
+- **Owner 2026-08-27 ~10:34, verbatim: "we also need to get youtube going live stuff too, go let the streaming activity work for youtube"** → the Discord streaming-activity detector (`golive.py`) must treat a YouTube stream the same as Twitch (Discord's Streaming activity carries `platform`/`url`); announce with the YouTube link; F3 in the feature list moves from "maybe" to decided. Finding 10:36: presence path is already platform-agnostic, but `_enrich` Twitch-looks-up any stream when the member has a Twitch link (can overwrite YouTube data), no `{platform}` template field, `/golive test` is Twitch-only, sessions may not store the platform. Status 10:53: **merged to main (`git log -1`), pushed, 1266 tests green on the branch; DEPLOY PENDING — ships with the temp-voice panel change in one deploy; first live check = owner runs `/golive test platform:YouTube` in the test channel.** Limitation for the owner: works only when Discord itself shows "Streaming on YouTube" (YouTube connection + activity display on). Was: (enrich only Twitch, `{platform}` field, platform on sessions/status/API, test command choice; YouTube API fallback out of scope — presence only).
+- **Owner 2026-08-27 ~10:44, verbatim: "also lets move the controls for the join to create from the #test channel into the channel txt of the voice chat that was made like the other bot does it"** → the temp-voice owner control panel posts into the created voice channel's own text chat (`VoiceChannel.send`) instead of `#mute-me-bot-test-spam`; the test-mode guard gets a NARROW allowance for channels Black Bloc itself created (rows in the tempvoice table), nothing wider — this is the owner scoping the test policy, recorded here verbatim. Finding 10:39: `panel_home` already prefers the voice chat and only falls back to the test channel because the guard refuses it. Status: **Opus builder dispatched 10:40** — in-memory `owned_channel_ids` allowance on the guard (rows in `tempvoice_channels` only), restore on boot, prune on delete, interactions allowed there, copy updated.
+
+**Landed, measured:** merges `7534d26` (themes + Members, Opus ~367k), `74f06b5` (YouTube, ~174k), `188acf3` (temp-voice panel, ~212k); `main` 1292 tests + ruff green with the venv; `check.mjs` 14 pages / 49 routes at `7534d26`. Themes: 25 tokens added at all 13 declaration sites; computed-style table shows ALL five old themes differ from Discord on font-family, radius and type size, and Discord proved unchanged by a 55-selector × 21-property diff (`info/code-notes.md` § "site — theme tokens"). Members: `GET /api/members` (search/filter/sort/paginate, cases grouped, staff from `staff_role_ids`, bots never staff), 15 tests, two real bugs caught by tests (undated members sorted first; mock's 'new' joins were 9 days old). YouTube: presence path proven platform-agnostic; `_enrich` gated by `twitch_enrichable`; `{platform}` template field; `golive_sessions.platform` column (schema 11→12, additive); a title-less stream rendered `{title}` as the platform name — fixed. Temp voice: guard `owned_channel_ids` allowance (only rows in `tempvoice_channels`), `allows_place` deliberately NOT widened, slash commands there still refused; bot grants itself view/connect/manage on spawned channels (hidden-channel lockout fixed). **Verified live after deploy:** `/health` ok, bot logged in 18:00:25Z, daily import ran, no log errors, Members page rendered signed in. **NOT verified live (owner sweep):** `/golive test platform:YouTube`; a real YouTube presence (only works when Discord itself shows "Streaming on YouTube"); a temp-voice panel appearing in a new channel's chat and a button press there — the Bots role needs Send Messages in that voice channel or the log shows `tempvoice.panel_failed`; a restart restoring old panels.
+
+## 2026-08-27 — The dashboard is Direction A ("Discord-native"): new default theme, grouped sidebar, docked save bar
+
+Moved whole from `TODO.md`:
+
+- **Owner 2026-08-27 ~09:32, verbatim: "Lets go with A, keep this exact same design and implement it but make sure our existing theme selectors work"** → Direction A ("Discord-native") is the site look. Build: a new default theme `discord` (dark + light palettes from `info/dashboard-inspiration.md` §A) beside the five existing themes, the shell rebuilt to the mock (grouped sidebar, top bar with the cog, B-style tables, docked save bar, grouped settings), all token-driven so the five old themes still switch. Reference: the mock artboards are copied to `info/mock-direction-a/` (local only). Status ~10:20: **merged to main as `a60796c` (+ `666dd8e` copy fix for the daily birthday import), 1248 tests + ruff green, pushed; reviewed by Fable against the mock on the builder's mock server (Overview/Moderation/Settings match). DEPLOY PENDING — owner runs it (classifier refuses `flyctl deploy` in-session). After deploy: verify live in the Discord theme + one old theme, then move this item whole to DONE.** Polish noted, not blocking: the "On this page" sub-nav shows raw group keys (`core`, `birthday`) in lowercase; multi-select boxes (exempt roles/channels) look cramped in the 218px control slot.
+
+**Landed:** merge `a60796c` (five builder commits `3412e40`→`e96b988`, Opus in a worktree, ~433k tokens) + `666dd8e` (Birthdays page copy no longer names the removed `/birthday import`). 1248 tests + ruff green with the venv interpreter (a first run used the system Python and failed on `discord` — run `.venv/Scripts/python -m pytest`). Reviewed by Fable against the mock on the builder's mock server: Overview/Moderation/Settings match. Deployed by the owner via `!` at 10:20 Phoenix (`deploys.log`); **verified live** signed in as the owner in the Discord theme. Mock reference kept at `info/mock-direction-a/` (local only); canvas https://claude.ai/code/artifact/ad76df70-49f4-4fcd-a66a-07c8969d0ddd (Direction A front page, Cookout parked on page 2). Deviations recorded in `info/code-notes.md` § "site restyle — Direction A": no `moderation_mode` key exists so that sidebar item has no dot; feature sub-lines use real counts or a plain sentence; stat strip counts the loaded page. **Follow-ups spun out as their own TODO items (10:18):** the old themes only repaint colours/faces under the new shell (tokenisation build), and the Members page. Polish noted, not done: "On this page" shows raw group keys in lowercase; multi-selects cramped in the 218px control slot.
+
+## 2026-08-27 — `/birthday import` is gone; the Birthday Bot list is imported on a daily loop
+
+Moved whole from `TODO.md`:
+
+- **Owner 2026-08-27 ~09:39, verbatim: "lets hide the birthday import command and just put it on a daily cron. make sure you follow the A design as closely as possible"** → (1) the birthday import slash command comes off the tree and the import runs on a daily loop; (2) reinforcement for the in-flight Direction A build (brief already says pixel-exact; relayed to the builder as a narrowing note). Status ~09:52: **landed on main as `1b751b9` and pushed; 1248 tests green; DEPLOY PENDING — the deploy command was refused by the session's permission classifier twice, owner runs it (`! flyctl deploy --app black-bloc --ha=false --remote-only --yes`), then verify `/api/status` lists `_import_loop` and append `docs/deploys.log`.** Design: `/birthday import` removed, `import_rows` on a 24 h loop that also fires at startup, action logged only when something was imported, loop visible on the Health tab. Site builder was sent the "as close to A as possible" note.
+
+**Landed:** `1b751b9` (Opus builder in a worktree, reviewed by Fable, fast-forwarded to `main`, pushed). 1248 tests green, ruff clean. Deployed by the owner via `!` at 10:00 Phoenix because the session's permission classifier refused `flyctl deploy` twice (`deploys.log`). **Verified live** in the Fly logs at 16:59:51Z: `_import_loop` ran 4 s after login — imported 0 / already 38 / ambiguous 0 / not_found 1 — so the seed is fully absorbed and only the one unmatched name remains. Loop health is on the Health tab by discovery (`tests/api/test_status.py`). Explanations: `info/code-notes.md` § "birthdays — daily import loop"; `info/phase5-design.md` Import section carries the superseded banner. **Residual:** `site/public/assets/page-birthdays.js:84` still says "The same import `/birthday import` runs" — one-line copy fix folded into the Direction A site restyle item (that builder owns `site/`).
+
+## 2026-08-27 — Turning role menus off takes the panels down; turning it on posts them again
+
+Moved whole from `TODO.md`:
+
+- **Batch 6 item 3 (queued behind item 2), owner verbatim 2026-08-27 ~08:30:
+  "Panels get turned off when off, I'll get the ux now, save role menu seed"**
+  → OVERTURNS the "panels stay posted" default: on `rolemenu_mode` → `off`,
+  delete every posted panel message (guarded delete; log `role_menu.unposted`
+  per menu, keep `channel_id` so re-posting lands in the same channel, clear
+  `message_id`); on → `on`, re-post every menu that had a channel (same
+  persistent views), log `role_menu.reposted`. Menu rows, options and the
+  seed data are NEVER touched by the switch. Driven by the same store change
+  hook as item 2 (one trigger path), debounced with it.
+
+**What landed.** One commit on `main`, **not pushed, not deployed, never run
+against a live bot.** 1243 tests pass (1221 before), ruff clean,
+`site/mock/check.mjs` clean (13 pages, 48 routes).
+
+- **`black_bloc/rolemenu_panels.py`** (new) — `reconcile(bot, reposting=…)`
+  matches the posted panels to the stored mode, per guild. `off` → for every
+  row with a `message_id`: guard check, delete the message, `message_id =
+  NULL` (the `channel_id` stays), log `role_menu.unposted`. `on` → for every
+  row with a `channel_id` and no `message_id`: guard check, `post_panel` (the
+  same helper `/rolemenu post` and the web route use, so the same persistent
+  view and the same `set_message`), log `role_menu.reposted`.
+- **The guard is checked explicitly** because `guard.py` patches
+  `send_message`/`edit_message`/`delete_channel` and **not** `delete_message`
+  — a panel outside the test channel is refused and logged
+  `role_menu.would_unpost` / `role_menu.would_repost` (checklist 1 and 2: a
+  dry run and a failure never share a log kind).
+- **One failure never aborts the sweep** — `discord.NotFound` means the panel
+  was already deleted by hand and the row is simply forgotten; any other
+  `HTTPException`, an unreachable channel, or an unexpected exception logs
+  `role_menu.unpost_failed` / `role_menu.repost_failed` and the loop carries
+  on to the next menu.
+- **One coalesced run per flip** — the panel work is registered as a job on
+  the **existing** `VisibilitySync` debounce (`controller(bot).also(job)`,
+  run after the 5 s debounce and *before* the command sync, so panels are not
+  held behind the 60 s sync rate limit). An `off → on → off` burst is one run
+  and the last state wins, because `reconcile` reads the stored mode at run
+  time rather than at flip time.
+- **`on_ready` re-runs it one way only** (`panels_on_boot`): rows still
+  holding a `message_id` while the mode is `off` come down, and nothing is
+  ever posted at boot — a restart must not surprise the server with panels
+  nobody asked for. It is also what arms the job (`PanelSync.ready`), so a
+  cold channel cache in `setup_hook` cannot log failures for panels that are
+  fine.
+- **Menu rows, options and the seed are untouched** by the switch — asserted
+  by a test that snapshots every menu and every option around an `off`/`on`
+  round trip.
+- **Wording** — the Role menus tab now says *"Turning this off removes the
+  posted panels and hides the /rolemenu commands; turning it on re-posts every
+  menu in its channel"*; `/rolemenu mode` and its `describe`, the
+  `rolemenu_mode` registry help and the mock's copy of it all say the same.
+
+**NOT verified:** any of it against a running bot — no panel message has ever
+been deleted by this code, nothing has been re-posted, no guard has refused a
+real delete, and the mode has never been flipped against live Discord.
+
+## 2026-08-27 — The `/rolemenu` commands disappear while role menus are off
+
+Owner ask, verbatim (~08:00): *"Can we suppress the / command for rolemenu too
+toggle by ui"*.
+
+**What landed.** One commit on `main`, **not pushed, not deployed, never run
+against a live bot.** 1221 tests pass (1206 before), ruff clean.
+
+- **`black_bloc/command_visibility.py`** — a registry, `HIDDEN_WHEN_OFF =
+  {"rolemenu_mode": ("rolemenu",)}`, mapping a mode key to the top-level
+  command names to hide while that mode is `off`. `apply_visibility(bot)`
+  removes them from the **dev-guild copy** of the tree
+  (`tree.remove_command(name, guild=…)`, keeping the returned object so the
+  put-back is the same `Group` with its cog binding) or re-adds them
+  (`tree.add_command(command, guild=…, override=True)`), then sends **one**
+  `tree.sync(guild=…)`, debounced 5 s and never more than once per 60 s
+  (KI-2). Nothing changed → no sync at all.
+- **`/settings` can never be hidden** (`NEVER_HIDDEN`) — it is the way back:
+  `/settings set-value rolemenu_mode on`, since `/rolemenu mode` is hidden
+  along with the rest of the group.
+- **One trigger path** — `SettingsStore.on_change(key, callback)` (new) fires
+  on every `set` **and** `clear`, so `/rolemenu mode`, `/settings set-value`
+  and `PUT /api/settings/{key}` all reach the same code. `bot.py:61` registers
+  it and applies once at startup, right after the initial sync.
+- **`/help`** filters the tree through the registry, because hiding touches the
+  guild copy and the global command would otherwise still be listed.
+- **`commands.visibility`** action-log row per sync: resulting command count,
+  what is hidden, and the actor who changed the setting.
+- **Wording** — the dashboard's Role menus tab says the switch also hides the
+  commands; `/rolemenu mode` says so as it flips; the "role menus are turned
+  off" sentence now points at `/settings set-value rolemenu_mode on` rather
+  than at a command that is no longer there.
+- **Tests** — `tests/test_command_visibility.py` (11, all offline): a fake tree
+  recording remove/add/sync; off at startup → removed + exactly one sync; on →
+  untouched, no sync; three flips through the store hook → one sync; the same
+  command object comes back; `/settings` never removed; the rate-limit window
+  waited out; another guild ignored; no dev guild → nothing; a refused sync
+  leaves the window open. One of them drives the **real** `CommandTree` with
+  the real cogs loaded and only `sync` faked, which is where discord.py 2.7.1's
+  `remove_command`/`add_command`/`copy_global_to` semantics are actually
+  exercised. Plus two store-hook tests and two `/help` tests.
+
+**NOT verified:** anything against a running bot or Discord — no command has
+ever been removed from a live tree, no sync has been sent, nobody has clicked
+the dashboard switch and watched `/rolemenu` vanish. The 5 s / 60 s figures are
+asserted in tests, not measured against Discord's real rate limit.
+
+**Moved whole from `TODO.md` § Open engineering items:**
+
+- **Batch 6 item 2 (queued behind item 1), owner verbatim 2026-08-27 ~08:00:
+  "Can we suppress the / command for rolemenu too toggle by ui"** → command
+  VISIBILITY tied to the mode: when `rolemenu_mode` is `off`, remove the
+  `rolemenu` group from the tree and re-sync the dev guild (rate-limit aware:
+  one sync per change, debounced); when `on`, re-add + sync. Applied at startup
+  from the stored mode and on every change (web toggle or `/settings
+  set-value rolemenu_mode on`, which stays visible as the slash-side way back).
+  Generic: a `hidden_when_off` registry so other features can opt in later.
+  Log `commands.visibility` with the resulting count; `/help` reflects it.
+
+## 2026-08-27 — Role selection turned off, with a switch to turn it back on
+
+Owner ask, verbatim (~07:50): *"let's turn off all role selection stuff but do
+it in a way we can turn it back on with ui."*
+
+**What landed.** One commit on `main`, **not pushed, not deployed, never run
+against a live bot.** 1206 tests pass, ruff clean, `site/mock/check.mjs` reports
+13 pages / 48 routes with every key present.
+
+- **`rolemenu_mode`** — a new registry enum (`off`|`on`), **default `off`**,
+  appended to `KEY_TYPES` so `mode_keys()` and the Overview chips pick it up
+  with no change to either. Help: *"whether members can pick roles from the
+  posted panels"*.
+- **While off**, the self-serve select, the staff-assign select, `/rolemenu
+  post`, `assign` and `unassign` all answer with one sentence and change no
+  roles; `create`, `add`, `remove`, `show`, `showall`, `list`, `delete` and
+  `seed-defaults` still work, so staff prepare menus while it is off.
+- **`/rolemenu mode <off|on>`** (staff) flips it and logs `role_menu.mode`.
+- **Web** — a first-section On/Off switch on the Role menus tab, reading
+  `/api/settings` and writing `PUT /api/settings/rolemenu_mode`, repainting its
+  chip from the stored value with no reload; the Overview chip for `rolemenu`
+  now links to that tab. `POST /api/rolemenus/{name}/post` answers 409 with the
+  same sentence while off, and the mock mirrors it.
+- **Panels are LEFT POSTED** — the deliberate choice, so turning it back on is
+  instant. Recorded in `info/code-notes.md` § "The off switch" and in the tab's
+  own helper text.
+
+**NOT verified:** anything against a running bot or the real API in a browser —
+only pytest, ruff and the mock's contract check. Nobody has clicked the switch.
+
+**Moved whole from `TODO.md` § Open engineering items:**
+
+- **Batch 6 (dispatched 2026-08-27 ~07:55), owner verbatim: "let's turn off all
+  role selection stuff but do it in a way we can turn it back on with ui"** →
+  `rolemenu_mode` (`off|on`, default **off**): panels answer "turned off",
+  `post/assign/unassign` refuse, CRUD still works, `/rolemenu mode`, an On/Off
+  switch at the top of the dashboard's Role menus tab, Overview chip. Deliberate
+  choice (overturnable): posted panels stay in place so turning back on is
+  instant. Owner also asked "What's in batch 6" — it was empty until this item.
+
+## 2026-08-27 — The Health tab finds every loop by itself (KI-7 closed)
+
+**Supersedes the "finding worth keeping" in the presence entry below**, which
+recorded the gap this closes.
+
+**What landed.** One commit on `main`, **not pushed, not deployed, never run
+against a live bot.** 1195 tests pass, ruff clean.
+
+- **`black_bloc/api/status.py`** — new `_loops(cog)` walks each cog's class MRO
+  dicts and its instance dict for `discord.ext.tasks.Loop` instances and
+  `getattr`s only those names, then asks `cog.loop_health(<attribute name>)` for
+  the health beside each one. `dir(cog)` is still never called, so the
+  property-that-raises hazard the old note named is still avoided.
+- **`black_bloc/cogs/presence.py`** — `get_tasks` **deleted**. It was ours, not
+  discord.py's, it was the only one in the tree, and a declaration only one of
+  six cogs remembered to write is exactly the second home the discovery reader
+  removes.
+- **No mapping table was needed.** Every cog's `loop_health` already accepted
+  its own attribute name: `Presence.status`, `GoLive.poller`,
+  `Birthdays._sweep`, `Events._golive_loop` / `._reconcile_loop` (which strips
+  the `_` prefix and `_loop` suffix itself), `TempVoice._reconcile_loop`,
+  `Modmail._reconcile_loop`. **Seven loops, six cogs**, up from one.
+- **`site/` untouched.** The per-loop shape is unchanged (`cog`, `name`,
+  `running`, `failed`, `state`, `next_iteration`, `last_ok_at`, `last_error`),
+  so `page-health.js`, the mock and `site/mock/contract.json` needed no edit —
+  including the honest "this loop does not record its last success yet" text a
+  blank `last_ok_at` still renders.
+- **Tests.** `tests/api/test_status.py` now builds **real** `tasks.Loop` objects
+  (a duck-typed double would no longer be found, so the old fakes would have
+  passed while describing an empty page), and a parametrised test builds each
+  real cog with the fake bot and asserts every loop it owns comes back from
+  `/api/status` with the `last_ok_at` that cog records. A cog that grows a loop
+  is one row in that table.
+
+**NOT verified:** any of it against a running bot — no loop has ever been
+discovered off a live gateway connection, and nobody has loaded the Health tab
+against the real API. The residual, accepted in `KNOWN_ISSUES.md`: discovery is
+by TYPE, so a loop held where `getattr` cannot reach it (in a list or a dict)
+stays invisible. Nothing in the tree does that today.
+
+## 2026-08-27 — The bot's own face: the site link in its About Me, and a "Cookout attendees" status
+
+**The two asks, verbatim (owner, 2026-08-27 ~06:35):** (1) *"we should put the
+url for the site in the bio of the bot"*; (2) *"The status of the bot should be
+'Cookout attendees' then the number of server members"*. They arrived as items
+(1) and (2) of a three-ask block in `TODO.md`; ask (3), the dashboard UX pass,
+is still open there.
+
+**What landed.** One commit on `main`, **not pushed, not deployed, never run
+against a live bot.** 1194 tests pass (1173 + 21), ruff clean.
+
+- **`black_bloc/presence.py`** — the decisions, with almost no Discord in them:
+  `status_text` (the `Cookout attendees: 412` sentence), `bio_text`,
+  `human_count` (the guild's `member_count` minus the bots the cache can see),
+  `status_guild` (the dev guild, else the first cached one), and the two
+  appliers `update_status` and `ensure_bio`. Everything but the two appliers is
+  pure and tested with no gateway.
+- **`black_bloc/cogs/presence.py`** — the plumbing: the About Me written once
+  per process on `on_ready`, the status re-applied on every `on_ready`, a
+  10-minute `tasks.loop` with an `@loop.error` handler that restarts it, a
+  5-second debounce on `on_member_join` / `on_member_remove`, and
+  `/presence apply` (staff) to put both back by hand after a settings change.
+- **Two registry keys**, both `text`: `bot_bio` (default renders the owner's
+  sentence over `config.py`'s `site_origin`, so the hostname keeps one home)
+  and `status_prefix` (default `Cookout attendees`). Both reachable from
+  `/settings set-value` and from the dashboard's Settings page under **core**.
+- **Health.** The cog reports `loop_health("status")` with `last_ok_at` /
+  `last_error`, and defines `get_tasks()` so `api/status.py` can find the loop.
+
+**The finding worth keeping.** `commands.Cog` in discord.py 2.7.1 has **no
+`get_tasks` method** — verified at runtime (`hasattr(commands.Cog,
+"get_tasks")` is `False`). `api/status.py:90` asks every cog for one, and none
+of the five other loop-owning cogs defines it, so the dashboard's Health tab
+currently lists **no loops at all**. The presence cog defines its own; the rest
+are an open gap, not a fixed contract.
+
+**Verified:** `AppInfo.edit(description=…)` exists in the installed library
+(`.venv/Lib/site-packages/discord/appinfo.py:299`, `description` at `:304`,
+added in 2.4), and `discord.CustomActivity` is there
+(`discord/activity.py:760`). `change_presence` is a gateway op, so `guard.py`
+neither sees nor needs to gate it — a status is not a channel, and it is
+allowed to run in test mode.
+
+**NOT verified:** any of it against a running bot. No About Me has ever been
+edited by this code, no custom status ever set, `AppInfo.edit` has never been
+called for real, and the 400-character description / 128-character status
+limits are read off Discord's documentation rather than measured.
+
+## 2026-08-27 — The Phase 8b security review's nine findings, fixed in two commits
+
+**What:** two commits on `main` over `6b75c11`. **Not pushed, not deployed,
+never run against a live bot.** 1178 tests pass (1134 + 44), ruff clean, and
+`node site/mock/check.mjs` reports 13 pages / 49 routes with `MOCK_TEST_MODE`
+at its **default** — which it could not do before.
+
+**`5da62b3` — the three deploy blockers.**
+
+- **CSRF (HIGH).** There was no Origin check at all: `SameSite=lax` does not
+  stop a top-level form POST, so any other site could `<form method="post">` at
+  `/api/mod/ban` and the browser would attach the session cookie. A middleware
+  registered first (so it runs innermost, and its own refusal still picks up the
+  security headers and the access log) now requires `Sec-Fetch-Site:
+  same-origin` **or** an exact `Origin` match on every non-GET/HEAD/OPTIONS
+  request under `/api`, **logout included, nothing exempt** — 403 `cross_site`
+  with a sentence. It also requires `Content-Type: application/json` whenever
+  there is a body (415 `not_json`), so a simple form POST cannot reach a handler
+  even if the origin check were ever weakened; a bodyless request (logout, every
+  `DELETE`) needs none, which is what `api.js` sends.
+- **Caching.** Every `/api` answer carries `Cache-Control: no-store` and
+  `Pragma: no-cache`, by assignment rather than `setdefault`. The page's assets
+  are untouched.
+- **Config.** `SESSION_COOKIE_SAMESITE` is `lax` or `strict` and nothing else
+  (`none` would have left the new middleware as the only thing between another
+  site and the cookie). `SESSION_SECRET` must be ≥ 32 characters or sign-in
+  stays off with a plain warning — the cookie is an HMAC over a payload carrying
+  the `staff` flag. `.env.example` says both.
+
+**`3581eea` — the input guards, the read limit and the mock.**
+
+- `purge_days` was `int(payload.get(...) or 0)` — a 500 on the word "seven".
+  Guarded parse, bounded 0–7, refused **before** the guard check so junk cannot
+  first record a `mod.would_ban` case and then fail.
+- Role menu `PUT` wrote the heading, then walked the options, so a bad role in
+  position two left a half-written menu. The whole body is validated first now;
+  a non-dict option is a 400, not an AttributeError; `description` is coerced to
+  `str` before it can reach sqlite, keeping absent / `""` / value distinct.
+- Discord's 256 / 4096 / 100 / 25 live in the **cog** beside the SQL, reused by
+  `create_menu`, `update_menu`, `add_option` and the API. They **refuse with the
+  reason**, never truncate.
+- A second `TokenBucket`, 300/min per session, on `/api/ref/*`, `/api/actions`
+  and `/api/mod/cases`. And `TokenBucket`'s prune was O(n) per call and outrun by
+  a spoofable header — it evicts the least-recently-used key in O(1) now.
+- The mock refused a modmail reply and a warn that the **real API allows**;
+  `check.mjs` now asserts the six genuinely-guarded routes 409 and those two do
+  not, then flips the guard off through a new non-contract `/api/mock/guard` to
+  read the shapes of the routes that refuse.
+
+**Two existing tests changed, and why.** The bucket test asserted the dict
+*shrinks* after a flood — true of the old sweep, false of an eviction cap; it
+asserts the cap holds and the oldest key is gone. The `showall` paging test
+built one menu with 100 options, which the 25-option limit refuses; it builds
+four full menus instead and still spans several messages.
+
+**Why:** `docs/info/code-notes.md`, "Phase 8b — the security review's fixes".
+
+**NOT verified:** any of it against live Discord, or a real browser against the
+real API. The same-site check is exercised through `TestClient` only, which
+sends whatever the test says rather than what Chrome would send.
+
+## 2026-08-27 — Batch 3 merged: the panel you can press in test mode, and `/voice`
+
+**What:** one merge commit on `main`, `6b75c11`, two parents (`65dc85c` and
+`af3dd55`). **Not pushed, not deployed, never run against a live bot.** The
+branch `worktree-agent-aa87571126477eb8f` was cut from `9d948ca` and carried two
+commits (`91c9c0b` the panel, `af3dd55` the `/voice` group). **1134 tests pass
+(1105 + 29), ruff clean, `node site/mock/check.mjs` reports 13 pages / 49 routes
+with every key present.**
+
+Moved here whole from `TODO.md`. The ask, owner verbatim (2026-08-26 ~23:40):
+*"in the join to create channel, i recall that bot we're mimicking having a way
+to change the details of a channel in the chat associated with the voice
+channel. can you do research then implement that."* The Phase 3 panel existed
+but the guard suppressed it in test mode, so nobody could press a button until
+test mode was lifted.
+
+**What landed.** The panel is now posted **into the test channel** while guarded,
+with a first line naming the voice channel it controls, and its buttons work
+from there — which needed a new column, `tempvoice_channels.panel_channel_id`,
+because `interaction.channel_id` stopped being the answer to "which channel is
+this click about". Three outcomes, three log kinds: posted in the voice chat →
+nothing extra, posted in the test channel → `tempvoice.panel_elsewhere`, no test
+channel to post in → `tempvoice.panel_failed`. Unban and Unpermit joined the
+panel (eleven buttons now), `tempvoice_prefs` grew a `bitrate` column, and a
+`/voice` group of sixteen subcommands calls the same module-level `do_*` helpers
+the buttons call — one implementation per action, not two.
+
+**The merge conflict, and how it was resolved.** Both sides had restructured
+`tempvoice.py` from the same base for different reasons. `main`'s batches 1–2
+and the 8b reconcile had extracted the setup path to module level so the web
+could call it (`make_creator_channel`, `repair_creator_channel`,
+`adopt_creator_channel`, `creator_spot`, `where_sentence`, `may_act_in`,
+`join_roles`, `same_lobby_name`, `lobbies_by_name`); the branch had extracted the
+*panel* path to module level so the slash commands could call it (`Target`,
+`temp_channel`, `panel_row`, `panel_home`, `get_row_by_panel`, `rate_limited`,
+`already_message`, `move_out`, `pick_row`, `may_use_voice`,
+`guild_bitrate_ceiling`, `clamp_bitrate`, `region_choices`, `member_lists`,
+`mentions`, `info_lines`, eleven `do_*` helpers, and a `panel_context` that
+returns a `Target`). Both were kept. ⚠️ **The branch's own `_repair` and
+`_where_sentence` were DROPPED rather than merged** — `main` had already lifted
+both to module level, and keeping the branch's copies would have been a second
+home for each (checklist 15). Git auto-merged everything except two hunks;
+`api/tools/tempvoice.py` still imports `connected_ids`, `make_creator_channel`
+and `rows_for_guild` unchanged.
+
+**Schema 8 → 10, and 9 is used rather than skipped.** Nothing on `main` had
+claimed 9 (`main` was at 8; the other live worktrees are at 8 and 5), so the
+branch's numbering stands: `panel_channel_id` is 9, `tempvoice_prefs.bitrate` is
+10. Both are additive through `ADDED_COLUMNS` **and** present in `SCHEMA`, so a
+fresh database and a migrated one agree.
+
+**The docs gotcha, worth keeping.** The `### F8 follow-up` block in
+`info/code-notes.md` carried a banner saying to re-key it after the merge and to
+*trust the anchors, not the numbers* — which turned out to be the only usable
+advice, because ⚠️ **its keys matched NEITHER branch commit.** Three of thirteen
+(`:194`, `:200`, `:317`) were exact against `af3dd55`; most of the rest carried a
+consistent **+170** offset against it, and none matched `91c9c0b`. A diff-based
+re-key therefore produced confident, wrong numbers — `panel_context`'s note
+landed on `return CANNOT_EDIT`. That block was re-keyed **by anchor**, function
+by function, and every key verified one at a time against the merged file. The
+main F8 block, keyed honestly against `65dc85c`, mapped cleanly (114 keys moved,
+4 hand-repaired). Three notes described behaviour the merge removed and were
+**rewritten rather than renumbered**: `_post_panel`'s "the panel is NOT posted in
+test mode", the `would_post_panel` test note, and `db.py:11`'s "bumped to 8".
+
+## 2026-08-27 — Phase 8b merged and reconciled: the API and the pages meet
+
+**What:** three commits on `main`, **not pushed and not deployed**. `178fe69`
+merges the API branch (`worktree-agent-aa75689d2dd1f44e7`, 53 routes, the name
+resolver, the settings API, and plain-helper extractions in nine cogs);
+`6bf4669` merges the pages branch (`worktree-agent-a1a9c6c08baf65618`,
+`site/**` only, thirteen tabs and a Node mock); the third reconciles their
+shapes. **1105 tests pass, ruff clean** (831 + 223 + 51 new contract cases).
+
+**The one merge conflict, and how it was resolved.** Both halves had rewritten
+`black_bloc/cogs/community/tempvoice.py`'s setup path from the same base and for
+different reasons: Builder A extracted `make_creator_channel` so the web could
+call it, while `main`'s test-sweep batches 1 and 2 had grown the remembered
+lobby name, the join overwrites, repair, and adoption of a lobby the bot had
+lost track of. **Both were kept, in one home**: the batch work now lives *inside*
+`make_creator_channel`, with `repair_creator_channel` and `adopt_creator_channel`
+beside it at module level; `setup_channel` defers and delegates; `_adopt` and
+`_repair` are gone; `_may_act_in` and `_join_roles` delegate to module-level
+`may_act_in` / `join_roles`. The behaviour change reaches the API too:
+`POST /api/tempvoice/setup` now treats `repaired` and `adopted` as **successes**,
+and the branch's `already_a_lobby` 409 went with the behaviour it described.
+
+**The real work was the shapes.** The two builders coded blind against
+`info/phase8b-design.md`, which fixes the JSON only for `/api/ref/*` and
+`/api/settings`. Nine routes disagreed. ⚠️ **None of them would have thrown** —
+they render as an em-dash, a blank tile or a badge that never appears, which is
+exactly why they needed finding on purpose rather than by looking at a page:
+
+| Route | What differed | Fixed where |
+|---|---|---|
+| `GET /api/mod/parity` | API nests the counts under `report` and has no `notes`; the page read `found.agree` and `found.notes` | **both** — page reads `report.*`; the API returns the command's own `parity_lines` as `notes`, so the "test mode is on" caveat has one wording |
+| `GET /api/events` | API `decided_by_id`; page read `decided_by` | site |
+| `GET /api/modmail/snippets`, `/blocks` | API `by_id`; page read `by` | site |
+| `GET /api/modmail/tickets[/{id}]` | API `closed_by_id`; page resolved `closed_by` | site |
+| modmail message `delivered` | API sends a bool; page tested `=== 0` | site |
+| `GET /api/modmail/tickets` | page had a "Messages" count column the API never sends | site — column removed |
+| `GET /api/settings/audit` | API `updated_by_id`; page read `updated_by` \| `by` | site |
+| `GET /api/tempvoice/channels` | API `name`; page read `channel_name` | site |
+| `POST /api/mod/{warn,…}` | API has no `id`; page printed "case ${found.id ?? 'written'}" | site — shows the API's own sentence |
+| `PUT /api/rolemenus/{name}` | page's mode select offered only `multiple`/`single`, so saving a **staff** menu silently downgraded it | site — `staff` added |
+
+**Two things the API gained, because the page needed them.**
+`POST /api/birthdays/import` is the "import report" the design listed for the
+birthdays tab and named no route for — Builder B correctly refused to invent an
+endpoint, and it exists now because the cog already had the whole import trapped
+inside the slash command, so `import_rows` and `members_of` were lifted to module
+level the same way A lifted nine others. And parity's `notes`, above.
+
+**Settings namespaces (owner decision at the merge):** `modlog_channel_id`,
+`mod_dm_on_action` and `carl_modlog_channel_id` were served as three one-key
+namespaces of their own, because the rule is "the prefix before the first `_`".
+They are moderation keys, so they are folded into **`automod`** by an explicit
+map, `settings_api.py:NAMESPACE_OVERRIDE`. Builder A's argument against a hand-kept
+table — it goes stale when Phase 9 adds a key — is real and is written down beside
+the map; the answer is that three lines in the one module that decides namespaces
+beat handing somebody a settings page with groups called `mod`, `modlog` and `carl`.
+
+⚠️ **The fix that outlives all of the above is `site/mock/contract.json`.** For
+every route, the keys the pages actually read, derived by grepping the page
+modules' property accesses rather than by restating the design doc. Both halves
+read that one file: `tests/api/test_contract.py` runs it against the **real**
+routers with fakes (51 cases, and a route that answers `[]` **fails** — a row
+shape checked against nothing is a green test that never ran), and
+`site/mock/check.mjs` runs it against the mock. So a shape can no longer be right
+in one half and wrong in the other unless somebody edits one and not the file
+both read. The mock was rewritten to be byte-compatible: bare arrays where the
+API returns bare arrays, `*_id` name fields, flat ticket detail, `web.<area>.<verb>`
+action kinds (it had been teaching `web.settings_set`), and `POST /api/mock/reset`
+so each check starts from the same fixture.
+
+**Verified:** `1105 passed`, `ruff: All checks passed!`, and
+`check: ok - 13 pages, 49 routes, all keys present`. The mock's refusal paths
+were smoke-tested by hand (409 under `MOCK_TEST_MODE`, 403 non-staff, 401
+signed out). **NOT verified:** any page in a browser against the **real** API —
+only against the mock; and nothing whatsoever against live Discord. The bot was
+not run, nothing was pushed, nothing was deployed, and no worktree was removed.
+
+## 2026-08-27 — Owner test sweep round 2: `/help`, and a lobby setup can adopt
+
+**What:** two commits on `main`, not pushed and not deployed.
+
+`/help` (`black_bloc/cogs/core.py`) answers the owner's ask verbatim — *"we also
+need a / command that vomits out every /command that can be run"*. It walks
+`bot.tree.get_commands()` **and** the guild-synced copies, merged by name, so a
+guild-only command cannot be missing from "every command that can be run here";
+recurses through groups and subgroups; renders `/group sub — description` one per
+line under a bold heading per top-level command, sorted; chunks through the shared
+`pages_under_limit`, first page as the ephemeral response and the rest as
+ephemeral followups with `allowed_mentions=none`. An optional `filter:` narrows by
+name or description and keeps a group's heading when the group itself matches; no
+match gets a sentence, not an empty message. Staff-only commands are suffixed
+`(staff)`, decided by `is_staff_command` in `settings_store.py` (one home, next to
+`require_staff`): it reads the command body for the `require_staff` call and
+follows **one** hop into a helper it calls — which is how `/warn` and the modmail
+commands, gated in `_ready`, are marked — and leaves a gate further away
+**unmarked rather than guessed at**, per the owner's instruction. That was chosen
+over a decorator/`extras` marker on ~50 commands in nine files because a marker
+goes stale silently the first time somebody forgets it, and reading the call
+cannot.
+
+Temp voice (`black_bloc/cogs/community/tempvoice.py`) now **adopts** a lobby it
+lost track of instead of making a second one: when `tempvoice_creator_ids` names
+no live channel, `/tempvoice setup` looks in the target category for a voice
+channel whose name equals `tempvoice_creator_name` (stripped, case-insensitive),
+stores its id **before** attempting the repair (the id is the durable half; a
+rename Discord refuses must not undo the adoption), logs `tempvoice.adopt` as its
+own kind, and repairs it in place with a sentence saying it took it over. Extra
+matches are adopted too and named with `/tempvoice forget`, reusing the repair
+path's existing sentence. `/tempvoice status` now lists every voice channel in the
+target category carrying the lobby name whose id is **not** in the list, with the
+sentence that fixes it.
+
+**Root cause found for the duplicate lobby (finding 2a), and what could NOT be
+established:** the write path has no gap. Both the Phase 3 original (`c3bf360`)
+and the current command store the new channel's id immediately after a successful
+create and before the reply, and the only two code paths that remove an id are
+`/tempvoice forget` and the `on_guild_channel_delete` listener, which fires only
+for a channel that really was deleted. So a lobby whose id is absent is one *this
+store never saw created*: made by hand, made by a bot process reading a different
+database (`DATABASE_PATH` defaults to a **relative** `data/black_bloc.sqlite3`, so
+a local run and the Fly volume at `/data` are two different stores — measured
+2026-08-27, the repo's own `data/black_bloc.sqlite3` has no `settings` table at
+all), or one whose delete event removed it. ⚠️ **Which of those happened is NOT
+established** — the live store is on the Fly volume and was not readable from this
+tree, and the bot was not run (owner mid-sweep). What *is* established, and is the
+real defect either way: the stored id was the **only** recogniser, so any lobby
+the store did not know always produced a second one. It now has a second
+recogniser.
+
+**Tests:** 831 pass, ruff clean (817 before; 14 added). Changed tests: none
+rewritten — the 14 are additions. New: the rendering of `/help` asserted as a
+whole list (shape, sort order, `(staff)` suffix), the filter's three cases, the
+chunking, the guild-only command appearing, and ⚠️ **the only test in the suite
+that builds the real bot and loads every cog**, which is what proves the one-hop
+staff detection on the real tree (`/warn` gates in `modcmds._ready`). Detection
+tests in `tests/test_settings_store.py` pin the **limit** as well as the successes:
+a gate two calls away reads `False` on purpose. Temp voice added the pure
+name-matching function, adoption instead of a second channel, a channel with
+another name being left alone, the id being stored even when Discord refuses the
+rename, and status naming the strays.
+
+**NOT verified:** anything against live Discord. `/help` has never been run in the
+server, no lobby has ever been adopted, and the commands are not synced until the
+next deploy.
+
+**Commits:** `c47aa6f` (`/help`), `b430eb0` (temp voice). Docs: `info/code-notes.md`
+re-keyed (98 keys moved across six files, one anchor repaired by hand).
+
+## 2026-08-26 — Owner test sweep round 1: four findings fixed (not deployed)
+
+**What:** `8fe0677` temp voice — `/tempvoice setup` now passes explicit
+overwrites built from a copy of the category's own, adding `view_channel` +
+`connect` for `tempvoice_allowed_role_id` (Member), for every **resolved** staff
+role and for the bot (plus `manage_channels`/`move_members`), leaving `@everyone`
+exactly as the category has it; spawned channels get the same allowed-role and
+staff allows on top of the owner's. The lobby's name became a setting
+(`tempvoice_creator_name`, default *join to create a channel*), and setup
+**repairs** an existing lobby in place instead of refusing, gated on
+`_may_act_in` because a rename is a side effect `guard.py` cannot see.
+`_reconcile_loop` gained an `@loop.error` handler, `last_ok_at`/`last_error`,
+`loop_health()` for `api/status.py`, and two lines in `/tempvoice status`.
+`9d948ca` — `/rolemenu showall` (staff, every menu + every option, chunked
+through the shared `pages_under_limit`, first page as the response and the rest
+as ephemeral followups, `allowed_mentions=none` on all of them); `menu_heading`
+and `option_line` extracted so `show` and `showall` cannot disagree, and `show`
+gained the `allowed_mentions` it was missing while printing role mentions; and
+`/twitch link` renamed its parameter to `channel` with no user-facing sentence
+saying *login*, internal names (`twitch_login` column, `clean_login`, the log
+detail key) deliberately unchanged.
+
+**Why the `join` name was NOT a truncation bug:** measured, not guessed — the
+cog has no string handling on the setup path, and the command's `name` parameter
+introspects as optional with default `None`, so an unsupplied name renders the
+full default. Discord must have sent `name: join`. The fix is a setting that can
+be read back and re-applied, plus a repair path.
+
+**Tests:** 817 pass (800 → 812 → 817), ruff clean. One test changed meaning:
+*setup refuses a second lobby* became *setup repairs the lobby it already has*,
+because refusing is what left the owner with a broken lobby and no way back.
+
+**NOT verified:** nothing is deployed. No Discord API call was made and the bot
+was never run — the owner was mid-sweep against the live instance. Deployment and
+live re-verification are tracked in `TODO.md` under the round-1 sweep table.
+
+## 2026-08-26 — Phase 8a live: the status site at blackbloc.heygabi.ai (Option A)
+
+**What:** worktree build (`930248d` API auth + status routers, `6b1bdb0`
+site — the builder rendered every refusal state in Chrome); Opus security
+review → SHIP WITH FIXES (12 findings: cross-site cookie could never work on
+Pages; `live_staff` failed OPEN for members who left; three 500 paths incl.
+NaN latency; no rate limit; OAuth code in the access log; "could not check"
+reported as "not staff"; no security headers); owner decision Q14 = Option A
+(serve the site from the Fly app under one hostname); Opus fixer (`c211715`,
+`50205dd`): StaticFiles mount, `__Host-` cookies, CSP/HSTS/nosniff, per-IP
+rate limit via `Fly-Client-IP`, `staff_unknown` state, no CORS; merge agent
+→ `618dcd1` (no conflicts; found and fixed the loop-health reader guessing
+attribute names — Events' dict would have rendered as an error — via a
+`cog.loop_health(name)` contract; `open_modmail` count added; dead
+`api_origin` removed; `.env.example` corrected). 800 tests. Owner did DNS
+(A/AAAA, proxy off — Claude drove the Cloudflare form via `form_input` after
+a password-manager popup blocked keystrokes), both OAuth redirects; Fly cert
+issued by Let's Encrypt; secrets staged via a self-cleaning script.
+Deployed: `/health` 200, index 200 with CSP, Uvicorn on 0.0.0.0:8080,
+bot logged in.
+**Why Option A:** a `SameSite=Lax` cookie does not ride a cross-site fetch,
+and `SameSite=None` is already blocked by Safari/Firefox partitioning; one
+hostname removes the problem and every CORS line with it.
+**Verified:** offline suite; HTTP checks against the live hostname. **Not
+verified:** a real Discord sign-in round-trip — the owner's sweep.
+
+## 2026-08-26 — Phase 6 live (shadow): moderation (F7) — the seventh and last core phase
+
+**What:** worktree build (`6437d9f`, `fa6f6e8`, `71626c5`: pure rule
+engine, shared `modcases.py`, automod cog, mod commands); Opus reviewer →
+SHIP WITH FIXES (23 findings, top: a fired verdict re-fired on every later
+message in the window — an apology would be deleted and timed out again;
+Apply-now locked on the clicker not the case; parity could agree with
+itself); owner decisions applied (raw mention counting, `/untimeout`+`/unban`
+gated in test mode, `/settings show` chunked, arming refused while the staff
+channel is the test channel); Opus fixer (`3c2beff`, `e85d9b5`); merge agent
+→ `4677597` (6 conflicts incl. a genuine add/add on `tests/cogs/test_core.py`,
+merged; duration parsers in events vs modcases documented as NOT
+interchangeable — minutes vs seconds). 735 tests. Deployed: `synced 27 app
+commands`. Architecture rule 5 gained the bounded-idempotent-rebuild
+exception for the one non-additive schema step (`mod_cases.user_id` nullable).
+**Why shadow beside Carl:** `/automod parity` is the cut-over number; Carl
+stays armed until Bloc-only and Carl-only are both zero for a week.
+**Verified:** offline suite; Fly log. **Not verified:** any real
+delete/timeout/ban; Carl's modlog format is inferred from two shapes —
+first parity run must be eyeballed.
+
+## 2026-08-26 — Phase 7 live (disabled by default): modmail (F11)
+
+**What:** worktree build (`b111a7f`, `0d7500c`, `c4e4777`); Opus reviewer →
+SHIP WITH FIXES (16 findings: `/areply` leaked the staff role *colour*; the
+bot DM'd strangers while modmail was off; transcript clamp counted chars
+not bytes and a failed transcript still deleted the channel; nine commands
+never deferred; no loop error handler); Opus fixer (`669440f`, `2cc9c02`);
+merge agent → `088b107` (5 append-only conflicts, no one-home breaks;
+Phase 7 already reused `events.clamp`/`slugify`, `golive.parse_ts`,
+`timezones.stamp`). 628 tests. Deployed: `synced 17 app commands`.
+**Why disabled by default:** the incumbent ModMail bot holds 5 live
+tickets; Black Bloc says nothing until the owner flips `modmail_enabled`.
+Channel mode (like today) is the default; thread mode is a setting.
+**Verified:** offline suite; Fly log. **Not verified:** any DM relay,
+ticket channel, or transcript against live Discord — owner's sweep.
+
+## 2026-08-26 — Phase 5 live: birthdays (F6) — first parallel-worktree phase
+
+**What:** built in an isolated git worktree while Phase 4 was on `main`
+(`3978163`, `4c45f17`); Opus reviewer → SHIP WITH FIXES (12 findings — a
+birthday *role* was granted even in shadow; removal used the current
+setting's role, not the granted one; the import searched Discord by prefix
+and could not match `[Tag] Name` nicknames); Opus fixer (`149c568`,
+`6793c97`): mode-gated role add, `role_added_id` column, role taken back on
+remove/optout, import scores against the cached member list (no network),
+`/settings clear`, `#RRGGBB` colour validation, `importlib.resources` seed;
+Opus merge agent → `08b114c` (4 conflicted files, all append-only; one
+genuine break — a `sqlite_master` probe for Phase 4's table — removed as
+a second home). 534 tests. Deployed: `synced 11 app commands`.
+**Why worktrees:** owner asked for parallelism; a Docker deploy ships the
+working tree, so builders must not share `main`. Shared files are touched
+append-only and schema versions are pre-assigned per phase.
+**Verified:** offline suite; Fly log. **Not verified:** the import against
+the real 118 members (the report will say); any real embed.
+
+## 2026-08-26 — Phase 4 live: events (F4/F5) + review fixes
+
+**What:** Opus builder (`10ef099` timezones + `/timezone`, `039bb25`
+events logic, `839cfff` cog: 5-field modal, `pending-user-event` review
+channels, DynamicItem Approve/Deny, scheduled-event creation, go-live +
+reconcile loops); Opus reviewer → SHIP WITH FIXES (14 findings: bare
+`ValueError` from `ScheduledEvent.cancel()` would kill the reconcile loop
+for the process's life; stale events announced late with a role ping;
+retention deleted channels without the guard; the announcement promised an
+Interested button that may not exist); Opus fixer (`63e1d15`, `8474f14`):
+end-vs-cancel by event status, `@loop.error` + health on both loops,
+missed/late handling with `events_max_late_minutes`, guard now gates
+`delete_channel` via `allows_place`, `announce_text` truthful, requester
+DM'd on every cancel, `AnswersErrors`/`SafeDynamicItem` mixins applied
+across events/honeypot/tempvoice, two-miss reconcile, DST gap detection.
+450 tests. Deployed: `synced 10 app commands`.
+**Why the review card posts to the test channel in test mode:** the review
+channel is not the test channel; the guarded send is the only way the owner
+can click Approve/Deny during the sweep — it reverts to the review channel
+when the guard is gone.
+**Verified:** offline suite; Fly log. **Not verified:** a real modal, a
+real scheduled event, a real rename against the 2/10-min limit — owner's sweep.
+
+## 2026-08-26 — Phase 3 live: temp voice (F8), honeypot (F9, shadow), role-menu rider (F17)
+
+**What:** Opus builder (`c3bf360` temp voice on schema v4, `6ed9f80`
+honeypot, `9319560` role rider: Carl's real emoji, `staff` mode,
+`runner-status`); Opus reviewer → SHIP WITH FIXES, 15 findings (HIGH: staff
+exemption ignored category-inherited permissions — a Lead could be banned by
+the trap; purge-days >7 would 400 every ban; threads bypassed the trap and
+system messages could ban their author); Opus fixer (`85a7978`, `808686c`):
+computed-permission staff derivation (one home, refuses to arm with an
+empty set, status prints the resolved count), purge clamp 0–7 via
+`delete_message_seconds`, message-type filter + thread denies, log-before-
+answer in all eight panel handlers, defer-before-edit, claim/transfer lock
+(on the bot object — module-level locks broke under per-test loops),
+5-minute reconcile loop, claim requires being connected, `voice_states`
+for occupancy, `forget` commands + channel-delete listeners, shadow-hit
+dedupe, place-gated deletes. 288 tests. Deployed: `synced 8 app commands`.
+**Why the panel is not posted in test mode:** a temp channel is not the
+test channel; the guard would raise from the HTTP layer — logged as
+`would_post_panel` instead. Checklist grew to 27 items.
+**Verified:** offline suite; Fly log. **Not verified:** any real voice
+event, channel creation, or trap post — owner's sweep.
+
+## 2026-08-26 — Phase 2 live in shadow: go-live feed (F1/F2) + review fixes
+
+**What:** Opus builder (3 commits `b635320` Twitch Helix client, `b2c0b39`
+go-live logic + schema v3 + 8 settings keys, `ece5e3b` cog: presence
+listener, 60 s Twitch poller, 120 s end-grace, `/golive`, `/twitch`);
+Opus adversarial reviewer → **SHIP WITH FIXES** (13 findings, 5 blocking
+before mode `on`); Opus fixer (`a680536` + `8579f3e`): reconcile open
+sessions on start, unconditional role removal via `live_role_added`,
+`golive.post_failed` distinct from `would_announce`, transport errors wrapped
+as `TwitchError` + a tree error handler (`command_errors.py`),
+`allowed_mentions` everywhere, per-user lock + partial unique index against
+double-announce, poller health in `/golive status`, duplicate-login refusal,
+guard now gates `edit_message`. 162 tests, ruff clean. Deployed; `synced 6
+app commands`; Twitch enrichment confirmed on after the secrets import.
+**Why shadow by default:** nothing reaches `#live-now` until the owner has
+compared `would_announce` lines against YAG's real posts.
+**Review learnings** → `info/review-checklist.md` (20 items), now in every
+brief. **Verified:** offline suite; Fly log lines. **Not verified:** any
+real presence event or Helix call — on the owner's test sweep.
+
+## 2026-08-26 — Phase 1 live: settings store, action log, role menus (F16)
+
+**What:** Opus builder, three commits (`7190855` settings store + schema v2
++ `/settings`, `81fe783` action log, `5c528c5` role menus + Carl seed);
+Fable reviewed the select handler and staff derivation; 43 tests, ruff
+clean; deployed to Fly — `synced 4 app commands`, logged in 01:30:00Z.
+**Why these shapes:** one settings registry with typed keys and defaults
+derived from TEST_MODE so nothing hard-codes a channel; `log_action` writes
+the DB row first and never raises on the embed, so the log is the record
+even when Discord refuses; role menus are select-menus (not reactions) with
+persistent views re-registered on startup; the diff touches only the
+menu's own roles, so posting our panels beside Carl's strips nobody.
+**Builder deviations accepted:** `SettingsStore(db, settings)`;
+`Database.is_connected`; `guard.refusal_message()`; `@everyone` excluded
+from staff; seed does not pre-check assignability. **Verified:** offline
+suite + the Fly log lines. **Not verified:** any click in Discord — on the
+owner's test-sweep list in `TODO.md`.
+
+## 2026-08-26 — Incumbent survey, feature list, seven phase designs
+
+**What:** Two Opus research agents + Fable's own dashboard walk produced the
+complete picture of what the server runs: `archive/current-bots/
+discord-scan-2026-08-26.md` (128/128 channels, 12,488 messages, 60 roles),
+`carl-bot-dashboard-…`, `yagpdb-dashboard-…`, `birthday-bot-export-…`, and
+`info/reference-bots.md` (vendor docs for TempVoice, Honeypot, YAGPDB,
+Carl, Birthday Bot, Modmail + Discord platform limits). Every owner decision
+Q1–Q13 was asked one at a time and recorded in `TODO.md`. Output:
+`info/feature-list.md` (F1–F16, build order approved) and
+`info/phase1..7-design.md`.
+
+**Why it took a rescan:** the first scan read 4/134 channels — the bot
+lacked a role with View on the categories. Owner gave it `Bots`
+(Administrator; accepted because moderation-role management is coming). The
+first pass's *inference* that `#live-now` was human-posted was wrong;
+measured: 199/200 posts are YAGPDB. Kept as the example of why inferences
+get labelled.
+
+**Findings that changed the design:** Birthday Bot fires at each member's
+own midnight (15/16 land the evening before in Phoenix); Carl has exactly
+one armed automod rule; YAGPDB has no role menus; three dormant bots incl.
+two earlier attempts at this project; Discord exposes no user timezone;
+EventSub needs a user token (websocket) or a public callback (webhook) — so
+Twitch is Helix polling as a fallback, presence is primary.
+
+**Verified:** all counts above are from the agents' reports and the saved
+captures. **Not verified:** vendor-doc claims marked "(inferred)" or
+"(from memory)" inside `reference-bots.md`; the Bash-tool Defender block
+was diagnosed from `Get-MpThreatDetection`, not reproduced on purpose.
+
+## 2026-08-26 — First Fly.io deploy; `/ping` confirmed by the owner
+
+**What:** `flyctl` installed (winget `Fly-io.flyctl`), owner logged in from a
+real PowerShell window (Claude's shells are non-interactive and `auth login`
+refuses them), app `black-bloc` created in org *Sky*, 1 GB volume in `lax`
+(there is no `phx` region), four secrets imported via stdin, `deploy
+--ha=false`. Fly log shows `logged in as Black_Bloc#6132 … 1 guild(s)` at
+2026-08-27T00:14:44Z on machine `85e744c4d959d8`. The owner confirmed `/ping`
+worked against the local run just before ("ping worked").
+
+**Why `--ha=false`:** Fly's default is two machines; for a gateway bot that
+is two copies answering every command. One machine, one volume.
+
+**Why `secrets import` over `secrets set`:** the token never appears on a
+command line, in shell history, or in Claude's output.
+
+**Verified:** login from Fly (log line above); `deploys.log` entry written.
+**Not verified:** `/ping` against the *hosted* instance by a human (on TODO);
+the machine surviving a Fly host restart with the volume intact (needs time).
+
+## 2026-08-26 — First live login + test-mode gate + first commit/repo
+
+**What:** Owner created the application, token, guild ID, invite and the three
+privileged-intent toggles; the bot logged in as `Black_Bloc#6132` in *Black in
+a Flash!* (1 guild) with `synced 2 app commands`. The owner's test-channel rule
+became `black_bloc/guard.py` (`TEST_MODE`, `TEST_CHANNEL_ID`). First commit
+made and pushed to a private GitHub repo under the owner's account.
+
+**Why it took several runs — each run found a real defect that reading the
+code had not:**
+1. `DEV_GUILD_ID=` blank in `.env` → pydantic refused `""` as `int | None`.
+   Fix: `before` validator maps blank → `None`; config errors now exit 2 with
+   one plain line (`config.py:load_settings`).
+2. Not-yet-invited server → bare `403 Forbidden` traceback from `tree.sync`.
+   Fix: caught, logged with the invite URL (`bot.py:setup_hook`); the invite
+   URL is built from `INVITE_PERMISSIONS` and logged before the gateway step.
+3. Intents off → 40-line `PrivilegedIntentsRequired` traceback. Fix: mapped to
+   exit 3 with the portal step named (`app.py:main`). Same for `LoginFailure`.
+Lesson recorded in `info/gotchas.md`: run it, do not reason about it.
+
+**Verified:** login, cog load, guild command sync, test-mode banner — from the
+bot's own log, 16:57 Phoenix. 13/13 tests, ruff clean.
+**Not verified:** the owner invoking `/ping` (left on TODO); the guard against
+a *real* out-of-channel send (unit-tested only).
+
+## 2026-08-26 — Project scaffold, venv, docs tree
+
+**What:** Empty folder → runnable Python package `black_bloc/` (thin
+`app.py` orchestrator, `bot.py` with cog loading + dev-guild command sync,
+`config.py` on pydantic-settings, `storage/db.py` on aiosqlite, optional
+`api/server.py` FastAPI health endpoint run inside the bot's loop), `tests/`
+(config, offline bot+cog load, DB bootstrap, API health), `Dockerfile` +
+`fly.toml`, `.venv`, and the seven-piece `docs/` tree with `DOCS_STANDARD.md`
+copied from the estate.
+
+**Why these choices (the part worth keeping):**
+- **`discord.py` over hikari/nextcord/pycord** — largest ecosystem, first-party
+  slash-command support (`app_commands`), cogs are the natural per-feature unit,
+  and the estate has no existing Python Discord code to stay consistent with.
+- **FastAPI over Flask** — the bot is `asyncio`; FastAPI runs in the same loop
+  and can read bot state directly. Flask would need a thread and IPC. It is
+  flag-gated (`API_ENABLED`) and OFF by default because no feature needs it yet.
+- **SQLite (aiosqlite) over Postgres** — one process, one file, zero services
+  to run; a hosted Postgres would be the first paid dependency for a bot with
+  no data yet. Revisit when there is a second process or real write volume.
+- **Not Cloudflare Workers** — owner's first thought for hosting, rejected
+  because a moderation bot needs gateway events (messages, joins), which need a
+  persistent websocket Workers cannot hold. Full reasoning: `info/hosting.md`.
+
+**Verified:** `pytest` → 6 passed, `ruff check` → clean, both in the fresh
+`.venv` (Python 3.12.10, discord.py installed 2026-08-26); `python -m black_bloc` with
+no token exits 2 with a plain-English message instead of a traceback.
+**Not verified:** anything against a live Discord gateway (no token yet); the
+Fly.io deploy (not run).

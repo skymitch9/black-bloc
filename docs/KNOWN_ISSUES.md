@@ -1,0 +1,163 @@
+# Black Bloc — Known Issues, Waivers & Exceptions
+
+> **Audience:** Claude sessions and the owner. **Status:** LOCAL ONLY (gitignored 2026-08-26).
+> Last verified: **2026-08-27** — KI-9 added (anonymous poll votes are a per-poll hash, accepted); before that KI-8 added when the role-menu panels started
+> following the mode (measured in tests only; no panel has ever been deleted
+> against live Discord). Before that, KI-2 gained a second-sync note when command
+> visibility landed (measured only in tests; no sync has been sent to Discord).
+> Before that, KI-7 closed after the generic loop discovery
+> landed (measured: seven loops, six cogs, `pytest -q` green). The other entries
+> were written from reading the code, not from an incident, and were NOT
+> re-checked today.
+>
+> **This file exists to stop the same non-bug being re-reported.** It holds
+> things that ARE wrong, or look wrong, and are deliberately tolerated.
+> Every entry: Symptom · Status · Why tolerated · What would change it.
+>
+> - Work in flight → [`TODO.md`](TODO.md)
+> - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
+
+## KI-1 — SQLite database lives inside a OneDrive-synced folder — `WATCHING`
+
+**Symptom:** the default `DATABASE_PATH=data/black_bloc.sqlite3` sits under
+`OneDrive/Documents/...`. OneDrive syncing a live SQLite file (plus its `-wal`
+and `-shm` sidecars) is a known source of "database is locked" errors and, in
+the worst case, a torn copy in the cloud.
+**Why tolerated:** the DB is empty and the bot is not yet running unattended;
+the hosted deployment uses a Fly volume at `/data`, not this folder.
+**What would change it:** the first real table with data, OR the bot running
+locally for more than a test session. Fix is one line in `.env`
+(`DATABASE_PATH=C:\...\outside-onedrive\black_bloc.sqlite3`).
+
+## KI-2 — Slash commands are re-synced to the dev guild on EVERY startup — `ACCEPTED`
+
+**Symptom:** `bot.py:setup_hook` calls `tree.sync(guild=...)` unconditionally
+when `DEV_GUILD_ID` is set. Command sync is rate-limited by Discord; frequent
+restarts can trip it (symptom is a 429 in the log and a startup delay).
+**Why tolerated:** guild-scoped sync is instant and the limit is generous for
+a single dev guild; the convenience of "restart and the new command is there"
+is worth it during development.
+**What would change it:** the bot serving more than one guild — then commands
+sync globally, once, via an explicit command, not at boot. Number: **>1 guild**.
+
+⚠️ **Second sync on the same boot, 2026-08-27 — `ACCEPTED` too.** Command
+visibility (`info/code-notes.md` § `command_visibility.py`) re-applies the
+stored feature modes right after the startup sync, so a boot with
+`rolemenu_mode` **off** spends a *second* guild sync about five seconds after
+the first. It only happens when a hidden-when-off feature is actually off and
+the tree therefore had to change; a boot with everything on syncs once, as
+before. The alternative — applying visibility *before* the startup sync — was
+rejected because `copy_global_to` re-seeds the guild mapping from the globals
+and would put the hidden command straight back. **What would change it:** a 429
+on startup in the log. Number: **1 observed 429**.
+
+## KI-4 — Modmail transcripts link to attachments that expire — `ACCEPTED`
+
+**Symptom:** transcripts store attachment URLs as Discord CDN links, which
+carry signed `?ex=…&is=…&hm=…` parameters and stop resolving after ~24 h.
+A transcript read a week later has dead attachment links (the text is
+intact).
+**Why tolerated:** re-uploading every attachment into the log channel would
+double storage and re-post member content; the incumbent Modmail bot has the
+same limitation. The transcript header says the links expire.
+**What would change it:** a staff request to keep attachments — then mirror
+them to the Fly volume (or R2) at close time. Number: **any** such request.
+
+## KI-5 — Test mode does not stop a web modmail reply or a web `/warn` from reaching a member — `ACCEPTED`
+
+**Symptom:** while `TEST_MODE`, `POST /api/modmail/tickets/{id}/reply` and
+`POST /api/mod/warn` (and their slash-command twins) still DM the real
+member; `POST /api/honeypot/setup` and `POST /api/tempvoice/setup` still
+create real channels (inside the test category). The guard sees channel
+sends and edits, not DMs or channel creation.
+**Why tolerated:** DMs are inside the owner's test policy ("you're allowed to
+be dm'd to test too"); the slash commands behave identically, so the web is
+not a wider door; channel creation is place-gated to the test category.
+**What would change it:** the first time a real member receives a test DM by
+mistake — then add a `TEST_DM_ALLOWLIST` of user ids the guard permits.
+Number: **1 incident**.
+
+## KI-6 — A stolen session cookie stays valid for up to 7 days after sign-out — `ACCEPTED`
+
+**Symptom:** the site session is a stateless signed cookie
+(`__Host-bb_session`); `/api/auth/logout` clears it in the browser but
+cannot revoke a copy taken elsewhere until it expires (`SESSION_TTL_SECONDS`,
+7 d).
+**Why tolerated:** every request re-checks staff status against the live
+guild cache, so a stolen cookie is useless the moment the account loses its
+staff role or leaves; the cookie is `__Host-`, `Secure`, `HttpOnly`, so
+theft needs the browser itself.
+**What would change it:** a second staff member (i.e. any user other than
+the owner) signing in — then add a `sessions` table with a per-session id
+in the signed payload and a revocation on logout. Number: **>1 site user**.
+
+## KI-8 — A role-menu panel in a channel Black Bloc cannot reach is retried on every flip — `ACCEPTED`
+
+**Symptom:** turning `rolemenu_mode` **off** logs `role_menu.unpost_failed` for
+any menu whose channel is gone, invisible, or refuses the delete, and keeps the
+row's `message_id`. Every later flip tries that menu again and logs the same
+line, forever. `role_menu.would_unpost` behaves the same way while test mode
+refuses the channel — which today is **every** panel outside
+`TEST_CHANNEL_ID`.
+**Why tolerated:** the alternative is worse. Clearing `message_id` on a failure
+would tell the database the panel is down while it is still up in the channel,
+and the next `on` would post a **second** panel beside it — two live selects
+with the same `custom_id`. A repeated log line is cheap; a duplicated panel is
+the kind of thing somebody has to clean up by hand. The sweep never blocks on
+it: one failure costs one menu and the loop carries on
+(`info/code-notes.md` § `rolemenu_panels.py:108`).
+**What would change it:** a menu whose channel has genuinely been **deleted**
+(`on_guild_channel_delete`) should clear both `channel_id` and `message_id`, at
+which point the row stops being retried because there is nothing left to
+reconcile. Number: **any menu logging `unpost_failed` on more than 2
+consecutive flips** with a channel that no longer exists.
+
+## KI-7 — (SUPERSEDED 2026-08-27) The dashboard Health tab lists no loops but the presence one — `CLOSED`
+
+**Was:** `api/status.py` built the loop list by asking every cog for
+`get_tasks()`. `commands.Cog` in discord.py 2.7.1 has no such method — measured
+2026-08-27 at runtime, `hasattr(commands.Cog, "get_tasks")` is `False` — and only
+`cogs/presence.py` defined one, so the other five loop-owning cogs contributed
+nothing and their `loop_health` readers were never called.
+**Now:** `api/status.py:_loops` discovers loops **generically**, by walking each
+cog's class and instance dicts for `discord.ext.tasks.Loop` instances and asking
+`cog.loop_health(<attribute name>)` for the health beside each one. `get_tasks`
+is gone from `presence.py` — one home, and the fix was one reader rather than
+the five near-identical three-line methods this entry proposed. The Health tab
+now lists **seven** loops across six cogs; every cog's `loop_health` already
+accepted its own attribute name, so no mapping table was needed. The API shape
+(`cog`, `name`, `running`, `failed`, `state`, `next_iteration`, `last_ok_at`,
+`last_error`) is unchanged, so `site/` and `site/mock/contract.json` needed no
+edit. A parametrised test in `tests/api/test_status.py` builds each real cog and
+asserts every loop it owns reaches `/api/status` with the `last_ok_at` the cog
+records — so a cog added later with a loop is covered by adding one row.
+**Residual, accepted:** discovery is by TYPE, so a loop a cog holds somewhere
+`getattr` cannot reach (inside a list, a dict, a lazily-built object) is still
+invisible. Nothing in the tree does that, and the honest "this loop does not
+record its last success yet" text still covers a cog with no `loop_health`.
+
+## KI-3 — (SUPERSEDED 2026-08-26 by Phase 8a) The FastAPI companion has no authentication — `CLOSED`
+
+**Was:** off by default, localhost only, no auth. **Now:** the API is public
+on `https://blackbloc.heygabi.ai` with Discord-OAuth sessions on every route
+except `/health`; rate-limited login/callback; CSP/HSTS. The three original
+"why tolerated" premises are all false, so the entry is closed rather than
+edited. `/health` exposing guild count + latency publicly is the residual
+and is accepted (it is what a status page is for).
+
+## KI-3 (original text, kept for the record) — The FastAPI companion has no authentication — `ACCEPTED`
+
+**Symptom:** `/health` (and anything added later) answers anyone who can reach
+the port.
+**Why tolerated:** `API_ENABLED` defaults to `false`; when on, it binds to
+`127.0.0.1` and `fly.toml` deliberately has no `[http_service]`, so nothing is
+reachable from outside the machine/container.
+**What would change it:** the first route that is exposed beyond localhost
+(a dashboard, a webhook receiver). At that point auth is a blocker for the
+exposure, not a follow-up.
+
+## KI-9 — Anonymous panel-poll votes are hashed, not unlinkable — `ACCEPTED`
+
+**Symptom:** a poll created with `anonymous` on runs on Black Bloc's own panel and stores one `poll_votes` row per voter keyed by a truncated per-poll SHA-256 of the member id (no name, no id). Someone holding BOTH the database and a member list could confirm a guess ("did member X vote?") by recomputing the hash; they cannot enumerate voters from the table alone.
+**Why tolerated:** a panel must store one row per person to stop double voting; a keyed MAC would need a secret that has to live somewhere (env + Fly secret + recovery doc) for a threat that requires database access, which already exposes far more than poll choices. The dashboard and every embed never show per-voter rows for anonymous polls. Recorded in `info/code-notes.md` § "polls (10b)".
+**What would change it:** a second staff member with database access, or the first anonymous poll about anything sensitive (staff elections, conduct). Number: **>1 person with `/data` access**, or **1 sensitive poll** — then move to an HMAC with a `POLL_VOTE_SECRET`.

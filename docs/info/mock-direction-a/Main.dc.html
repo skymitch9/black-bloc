@@ -1,0 +1,220 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap">
+  <style>
+    body { margin: 0; background: #1E1F22; }
+    a { color: #5865F2; text-decoration: none; }
+    a:hover { color: #808AF5; }
+    .m { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  </style>
+</helmet>
+<div style="width: 1440px; height: 900px; overflow: hidden; background: #1E1F22; color: #F2F3F5; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; display: flex;">
+
+  <div style="width: 240px; flex-shrink: 0; background: #2B2D31; border-right: 1px solid #3F4147; display: flex; flex-direction: column;">
+    <div style="height: 56px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid #3F4147;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="#5865F2" stroke="#5865F2" stroke-width="1.5" stroke-linejoin="round"><polygon points="13 2 4 14 11 14 10 22 20 10 13 10 13 2"></polygon></svg>
+      <span style="font-size: 14px; font-weight: 700; letter-spacing: 0.08em;">BLACK BLOC</span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 18px; padding: 16px 8px;">
+
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #B5BAC1; padding: 0 8px 6px 8px;">OVERVIEW</div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; background: #3F4147; font-size: 14px; font-weight: 500; color: #F2F3F5;"><span style="flex-grow: 1;">Overview</span></div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; font-size: 14px; color: #B5BAC1;"><span style="flex-grow: 1;">Health</span></div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; font-size: 14px; color: #B5BAC1;"><span style="flex-grow: 1;">Audit log</span></div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #B5BAC1; padding: 0 8px 6px 8px;">MODERATION</div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; font-size: 14px; color: #B5BAC1;"><span style="flex-grow: 1;">Moderation</span><span style="width: 8px; height: 8px; border-radius: 999px; background: #23A55A;"></span></div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; font-size: 14px; color: #B5BAC1;"><span style="flex-grow: 1;">Automod</span><span style="width: 8px; height: 8px; border-radius: 999px; background: #F0B132;"></span></div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; font-size: 14px; color: #B5BAC1;"><span style="flex-grow: 1;">Honeypot</span><span style="width: 8px; height: 8px; border-radius: 999px; background: #F0B132;"></span></div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; font-size: 14px; color: #B5BAC1;"><span style="flex-grow: 1;">Modmail</span><span style="width: 8px; height: 8px; border-radius: 999px; background: #B5BAC1;"></span></div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #B5BAC1; padding: 0 8px 6px 8px;">COMMUNITY</div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; font-size: 14px; color: #B5BAC1;"><span style="flex-grow: 1;">Go-live</span><span style="width: 8px; height: 8px; border-radius: 999px; background: #23A55A;"></span></div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; font-size: 14px; color: #B5BAC1;"><span style="flex-grow: 1;">Events</span><span style="width: 8px; height: 8px; border-radius: 999px; background: #23A55A;"></span></div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; font-size: 14px; color: #B5BAC1;"><span style="flex-grow: 1;">Birthdays</span><span style="width: 8px; height: 8px; border-radius: 999px; background: #F0B132;"></span></div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; font-size: 14px; color: #B5BAC1;"><span style="flex-grow: 1;">Temp voice</span><span style="width: 8px; height: 8px; border-radius: 999px; background: #23A55A;"></span></div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; font-size: 14px; color: #B5BAC1;"><span style="flex-grow: 1;">Role menus</span><span style="width: 8px; height: 8px; border-radius: 999px; background: #B5BAC1;"></span></div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #B5BAC1; padding: 0 8px 6px 8px;">SERVER</div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; font-size: 14px; color: #B5BAC1;"><span style="flex-grow: 1;">Settings</span></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column;">
+
+    <div style="height: 56px; flex-shrink: 0; display: flex; align-items: center; gap: 12px; padding: 0 24px; background: #2B2D31; border-bottom: 1px solid #3F4147;">
+      <span style="font-size: 16px; font-weight: 600;">Black in a Flash!</span>
+      <div style="display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: #1E1F22;">
+        <span style="width: 8px; height: 8px; border-radius: 999px; background: #23A55A;"></span>
+        <span style="font-size: 12px; color: #B5BAC1;">online · 4d 6h</span>
+      </div>
+      <div style="flex-grow: 1;"></div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 4px 12px 4px 4px; border-radius: 999px; background: #1E1F22;">
+        <span style="width: 24px; height: 24px; border-radius: 999px; background: #5865F2; color: #FFFFFF; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;">I</span>
+        <span style="font-size: 14px; color: #F2F3F5;">Sky</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#B5BAC1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </div>
+      <div style="width: 32px; height: 32px; border-radius: 999px; display: flex; align-items: center; justify-content: center; background: #1E1F22;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B5BAC1" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"></circle><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.2 5.2l2.1 2.1M16.7 16.7l2.1 2.1M18.8 5.2l-2.1 2.1M7.3 16.7l-2.1 2.1"></path></svg>
+      </div>
+    </div>
+
+    <div style="flex-grow: 1; min-height: 0; padding: 24px; display: flex; flex-direction: column; gap: 16px; overflow: hidden;">
+
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <div style="font-size: 24px; font-weight: 600; letter-spacing: -0.01em;">Overview</div>
+        <div style="font-size: 14px; color: #B5BAC1;">Every feature's mode, what's open, and the last actions the bot took.</div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start;">
+
+        <div style="background: #313338; border: 1px solid #3F4147; border-radius: 6px; display: flex; flex-direction: column; overflow: hidden;">
+          <div style="display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid #3F4147;">
+            <span style="font-size: 14px; font-weight: 600; flex-grow: 1;">Features</span>
+            <span class="m" style="font-size: 11px; color: #B5BAC1;">8</span>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid #3F4147;">
+            <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1; min-width: 0;">
+              <span style="font-size: 14px; font-weight: 500;">Moderation</span>
+              <span style="font-size: 12px; color: #B5BAC1;">3 open cases</span>
+            </div>
+            <span class="m" style="font-size: 11px; letter-spacing: 0.08em; padding: 3px 8px; border-radius: 999px; color: #23A55A; background: rgba(35, 165, 90, 0.14); border: 1px solid rgba(35, 165, 90, 0.4);">ON</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B5BAC1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid #3F4147;">
+            <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1; min-width: 0;">
+              <span style="font-size: 14px; font-weight: 500;">Automod</span>
+              <span style="font-size: 12px; color: #B5BAC1;">12 would-have-acted this week</span>
+            </div>
+            <span class="m" style="font-size: 11px; letter-spacing: 0.08em; padding: 3px 8px; border-radius: 999px; color: #F0B132; background: rgba(240, 177, 50, 0.14); border: 1px solid rgba(240, 177, 50, 0.4);">SHADOW</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B5BAC1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid #3F4147;">
+            <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1; min-width: 0;">
+              <span style="font-size: 14px; font-weight: 500;">Go-live</span>
+              <span style="font-size: 12px; color: #B5BAC1;">2 live now</span>
+            </div>
+            <span class="m" style="font-size: 11px; letter-spacing: 0.08em; padding: 3px 8px; border-radius: 999px; color: #23A55A; background: rgba(35, 165, 90, 0.14); border: 1px solid rgba(35, 165, 90, 0.4);">ON</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B5BAC1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid #3F4147;">
+            <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1; min-width: 0;">
+              <span style="font-size: 14px; font-weight: 500;">Birthdays</span>
+              <span style="font-size: 12px; color: #B5BAC1;">next: Kay · Sep 2</span>
+            </div>
+            <span class="m" style="font-size: 11px; letter-spacing: 0.08em; padding: 3px 8px; border-radius: 999px; color: #F0B132; background: rgba(240, 177, 50, 0.14); border: 1px solid rgba(240, 177, 50, 0.4);">SHADOW</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B5BAC1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid #3F4147;">
+            <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1; min-width: 0;">
+              <span style="font-size: 14px; font-weight: 500;">Honeypot</span>
+              <span style="font-size: 12px; color: #B5BAC1;">0 trips</span>
+            </div>
+            <span class="m" style="font-size: 11px; letter-spacing: 0.08em; padding: 3px 8px; border-radius: 999px; color: #F0B132; background: rgba(240, 177, 50, 0.14); border: 1px solid rgba(240, 177, 50, 0.4);">SHADOW</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B5BAC1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid #3F4147;">
+            <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1; min-width: 0;">
+              <span style="font-size: 14px; font-weight: 500;">Temp voice</span>
+              <span style="font-size: 12px; color: #B5BAC1;">4 rooms open</span>
+            </div>
+            <span class="m" style="font-size: 11px; letter-spacing: 0.08em; padding: 3px 8px; border-radius: 999px; color: #23A55A; background: rgba(35, 165, 90, 0.14); border: 1px solid rgba(35, 165, 90, 0.4);">ON</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B5BAC1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid #3F4147;">
+            <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1; min-width: 0;">
+              <span style="font-size: 14px; font-weight: 500;">Modmail</span>
+              <span style="font-size: 12px; color: #B5BAC1;">3 open tickets</span>
+            </div>
+            <span class="m" style="font-size: 11px; letter-spacing: 0.08em; padding: 3px 8px; border-radius: 999px; color: #B5BAC1; background: rgba(181, 186, 193, 0.10); border: 1px solid #3F4147;">OFF</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B5BAC1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 12px; padding: 10px 16px;">
+            <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1; min-width: 0;">
+              <span style="font-size: 14px; font-weight: 500;">Role menus</span>
+              <span style="font-size: 12px; color: #B5BAC1;">hidden</span>
+            </div>
+            <span class="m" style="font-size: 11px; letter-spacing: 0.08em; padding: 3px 8px; border-radius: 999px; color: #B5BAC1; background: rgba(181, 186, 193, 0.10); border: 1px solid #3F4147;">OFF</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B5BAC1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+
+          <div style="background: #313338; border: 1px solid #3F4147; border-radius: 6px; display: flex; flex-direction: column; overflow: hidden;">
+            <div style="display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid #3F4147;">
+              <span style="font-size: 14px; font-weight: 600; flex-grow: 1;">Needs a human</span>
+              <span class="m" style="font-size: 11px; color: #B5BAC1;">2</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid #3F4147;">
+              <span style="width: 8px; height: 8px; border-radius: 999px; background: #F0B132; flex-shrink: 0;"></span>
+              <span style="font-size: 14px; flex-grow: 1;">1 event waiting on a Lead</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B5BAC1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px; padding: 10px 16px;">
+              <span style="width: 8px; height: 8px; border-radius: 999px; background: #00A8FC; flex-shrink: 0;"></span>
+              <span style="font-size: 14px; flex-grow: 1;">3 open modmails</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B5BAC1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </div>
+          </div>
+
+          <div style="background: #313338; border: 1px solid #3F4147; border-radius: 6px; display: flex; flex-direction: column; overflow: hidden;">
+            <div style="display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid #3F4147;">
+              <span style="font-size: 14px; font-weight: 600; flex-grow: 1;">Last actions</span>
+              <a href="#" style="font-size: 12px;">All</a>
+            </div>
+            <div style="display: flex; align-items: baseline; gap: 12px; padding: 10px 16px; border-bottom: 1px solid #3F4147;">
+              <span class="m" style="font-size: 11px; color: #B5BAC1; flex-shrink: 0;">08:41</span>
+              <span style="font-size: 14px;">warned <strong style="font-weight: 600;">Bob</strong> — mass mention — by Sky</span>
+            </div>
+            <div style="display: flex; align-items: baseline; gap: 12px; padding: 10px 16px; border-bottom: 1px solid #3F4147;">
+              <span class="m" style="font-size: 11px; color: #B5BAC1; flex-shrink: 0;">08:38</span>
+              <span style="font-size: 14px; color: #F0B132;">would have banned <strong style="font-weight: 600;">Eve</strong> — honeypot</span>
+            </div>
+            <div style="display: flex; align-items: baseline; gap: 12px; padding: 10px 16px; border-bottom: 1px solid #3F4147;">
+              <span class="m" style="font-size: 11px; color: #B5BAC1; flex-shrink: 0;">08:12</span>
+              <span style="font-size: 14px;">opened case <span class="m" style="font-size: 12px;">#41</span> — <strong style="font-weight: 600;">Dee</strong> — by Auntie Jo</span>
+            </div>
+            <div style="display: flex; align-items: baseline; gap: 12px; padding: 10px 16px; border-bottom: 1px solid #3F4147;">
+              <span class="m" style="font-size: 11px; color: #B5BAC1; flex-shrink: 0;">07:55</span>
+              <span style="font-size: 14px;">event approved — Block Party — by Lead Mo</span>
+            </div>
+            <div style="display: flex; align-items: baseline; gap: 12px; padding: 10px 16px;">
+              <span class="m" style="font-size: 11px; color: #B5BAC1; flex-shrink: 0;">07:40</span>
+              <span style="font-size: 14px;">go-live posted — Nia is live</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
