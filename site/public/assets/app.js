@@ -12,6 +12,7 @@ export const TABS = [
   { tab: 'golive', href: '/golive.html', label: 'Go-live' },
   { tab: 'rolemenus', href: '/rolemenus.html', label: 'Role menus' },
   { tab: 'polls', href: '/polls.html', label: 'Polls' },
+  { tab: 'chat', href: '/chat.html', label: 'Chat' },
   { tab: 'birthdays', href: '/birthdays.html', label: 'Birthdays' },
   { tab: 'tempvoice', href: '/tempvoice.html', label: 'Temp voice' },
   { tab: 'honeypot', href: '/honeypot.html', label: 'Honeypot' },
@@ -30,6 +31,7 @@ export const FEATURE_TABS = {
   automod: 'automod',
   rolemenu: 'rolemenus',
   poll: 'polls',
+  chat: 'chat',
 };
 
 export function tabHref(tab) {

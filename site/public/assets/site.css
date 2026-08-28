@@ -1306,8 +1306,100 @@ dialog.ask::backdrop { background: var(--et-transit-bg, rgb(0 0 0 / .55)); }
 
 /* A segment is only as wide as its buttons. As a bare grid item it stretched to
    the field's full width and its hairline background painted the rest of the row
-   as a grey bar - visible on Role menus' Approval field before Polls hit it. */
-.field > .seg { justify-self: start; }
+   as a grey bar - visible on Role menus' Approval field before Polls hit it.
+   A pill or a fixed value in a field's control slot has the same problem: a grid
+   item is stretched unless it is told not to be. */
+.field > .seg,
+.field > .badge,
+.field > .chat-fixed { justify-self: start; }
+
+/* ---- chat: an intent's trigger phrases and its editable lines -------------- */
+
+/* A built-in intent's name is not editable, so it is TEXT on the control line
+   rather than a disabled box - and it keeps the control row's height so it
+   stays level with the boxes beside it. */
+.chat-fixed {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--et-control-h);
+  font-family: var(--et-font-mono);
+  font-size: var(--et-ui-sm);
+  color: var(--et-fg);
+}
+
+.trigchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 3px 4px 3px 10px;
+  border: var(--et-border-w) solid var(--et-hairline);
+  border-radius: var(--et-radius-pill);
+  background: var(--et-shell-inset);
+  color: var(--et-fg);
+  font-size: var(--et-ui-xs);
+}
+.trigchip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trigchip-x {
+  flex: none;
+  padding: 0 5px;
+  border: 0;
+  border-radius: var(--et-radius-pill);
+  background: transparent;
+  color: var(--et-muted);
+  font-family: inherit;
+  font-size: var(--et-ui-sm);
+  line-height: 1;
+  cursor: pointer;
+}
+.trigchip-x:hover { color: var(--et-danger); }
+.trigchip-x:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; }
+
+.chatblock { margin-top: 12px; }
+.chatblock > h4 {
+  margin: 0 0 6px;
+  color: var(--et-muted);
+  font-family: var(--et-font-label);
+  font-size: var(--et-ui-xs);
+  font-weight: var(--et-weight-medium);
+  letter-spacing: var(--et-label-tracking);
+  text-transform: var(--et-label-transform);
+}
+.chatlines { display: flex; flex-direction: column; }
+.chatline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: var(--et-hairline-w) solid var(--et-hairline);
+}
+.chatline:last-child { border-bottom: 0; }
+/* The wording takes the room and the buttons keep their own, so a long line
+   wraps the bar under it rather than pushing the row past the card. */
+.chatline > .input { flex: 1 1 18rem; min-width: 0; }
+.chatline[data-enabled="false"] > .input { color: var(--et-muted); }
+.chatline-off {
+  flex: none;
+  color: var(--et-muted);
+  font-family: var(--et-font-label);
+  font-size: var(--et-ui-2xs);
+  letter-spacing: var(--et-label-tracking);
+  text-transform: var(--et-label-transform);
+}
+
+.chat-answer { margin-top: 10px; }
+.chat-answer-label { color: var(--et-muted); font-size: var(--et-ui-xs); }
+.chat-answer-line {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-left: 2px solid var(--et-accent);
+  background: var(--et-shell-inset);
+  border-radius: var(--et-radius);
+  color: var(--et-fg);
+  font-size: var(--et-ui-md);
+  text-wrap: pretty;
+}
 
 /* The options on a review card: a plain numbered list, indented in tokens. */
 .plain-list {
