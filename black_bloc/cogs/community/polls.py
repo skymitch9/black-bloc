@@ -12,7 +12,13 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from ...actionlog import log_action
+from ...actionlog import (
+    LOGS_DEFAULT,
+    LOGS_MAX,
+    LOGS_MIN,
+    log_action,
+    send_logs,
+)
 from ...command_errors import NETWORK_ERRORS, AnswersErrors, SafeDynamicItem
 from ...golive import now_iso, parse_ts
 from ...polls import (
@@ -1738,6 +1744,19 @@ class Polls(commands.Cog):
         if self.bot.store.get(interaction.guild.id, "poll_who_can_create") == "everyone":
             return True
         return self.bot.store.is_staff(interaction.user)
+
+    @poll.command(name="logs", description="The last few poll log lines")
+    @app_commands.describe(
+        count="How many lines, 1 to 50 (10 by default)",
+        important_only="True to leave out the dry runs and the housekeeping",
+    )
+    async def poll_logs(
+        self,
+        interaction: discord.Interaction,
+        count: app_commands.Range[int, LOGS_MIN, LOGS_MAX] = LOGS_DEFAULT,
+        important_only: bool = False,
+    ) -> None:
+        await send_logs(interaction, "poll", count=count, important_only=important_only)
 
     @poll.command(name="create", description="Start a poll in this channel")
     @app_commands.describe(

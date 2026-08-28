@@ -10,7 +10,13 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from ...actionlog import log_action
+from ...actionlog import (
+    LOGS_DEFAULT,
+    LOGS_MAX,
+    LOGS_MIN,
+    log_action,
+    send_logs,
+)
 from ...command_errors import AnswersErrors
 from ...golive import now_iso, parse_ts
 from ...settings_store import (
@@ -1793,6 +1799,19 @@ class TempVoice(commands.Cog):
             return
         await interaction.response.defer(ephemeral=True)
         await answer(interaction, await handler(interaction, found.channel, found.row, *args))
+
+    @voice.command(name="logs", description="The last few temp voice log lines")
+    @app_commands.describe(
+        count="How many lines, 1 to 50 (10 by default)",
+        important_only="True to leave out the dry runs and the housekeeping",
+    )
+    async def voice_logs(
+        self,
+        interaction: discord.Interaction,
+        count: app_commands.Range[int, LOGS_MIN, LOGS_MAX] = LOGS_DEFAULT,
+        important_only: bool = False,
+    ) -> None:
+        await send_logs(interaction, "tempvoice", count=count, important_only=important_only)
 
     @voice.command(name="rename", description="Rename your temporary voice channel")
     @app_commands.describe(name="What the channel should be called")

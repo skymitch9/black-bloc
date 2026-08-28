@@ -159,6 +159,57 @@ const ROSTER = [
   })),
 ];
 
+// Mirrors black_bloc/logkinds.py. The mock only needs enough of it to sort and
+// mark its own seed rows; the router is the truth and test_logkinds.py guards it.
+const KIND_HEADS = {
+  settings: 'core', commands: 'core', presence: 'core',
+  automod: 'automod', honeypot: 'honeypot', mod: 'mod', case: 'mod',
+  modmail: 'modmail', golive: 'golive', event: 'events', events: 'events',
+  birthday: 'birthday', tempvoice: 'tempvoice',
+  role: 'rolemenu', role_menu: 'rolemenu', rolemenu: 'rolemenu',
+  poll: 'poll', chat: 'chat',
+};
+const IMPORTANT_SUFFIXES = [
+  '_failed', '.approved', '.denied', '.expired', '.warned', '.timed_out', '.timeout',
+  '.kicked', '.kick', '.banned', '.ban', '.granted', '.ended', '.removed', '.purged',
+  '.blocked', '.closed',
+];
+const IMPORTANT_KINDS = ['automod.deleted', 'mod.warn', 'mod.unbanned', 'mod.untimed_out'];
+const ROUTINE_KINDS = ['poll.closed', 'tempvoice.ban', 'tempvoice.kick', 'honeypot.ban'];
+
+function bareKind(kind) {
+  const text = String(kind || '');
+  return text.startsWith('web.') ? text.slice(4) : text;
+}
+
+function featureOfKind(kind) {
+  return KIND_HEADS[bareKind(kind).split('.')[0]] || 'core';
+}
+
+function isImportantKind(kind) {
+  const text = bareKind(kind);
+  if (text.includes('.would_')) return false;
+  if (ROUTINE_KINDS.includes(text)) return false;
+  if (IMPORTANT_KINDS.includes(text)) return true;
+  return IMPORTANT_SUFFIXES.some((suffix) => text.endsWith(suffix));
+}
+
+// [feature namespace, the word the help uses, the slash group that shows its logs]
+const LOG_LEVEL_FEATURES = [
+  ['core', 'core', null],
+  ['automod', 'automod', 'automod'],
+  ['honeypot', 'honeypot', 'honeypot'],
+  ['mod', 'moderation', 'mod'],
+  ['modmail', 'modmail', 'modmail'],
+  ['golive', 'go-live', 'golive'],
+  ['events', 'events', 'event'],
+  ['birthday', 'birthdays', 'birthday'],
+  ['tempvoice', 'temp voice', 'voice'],
+  ['rolemenu', 'role menus', 'rolemenu'],
+  ['poll', 'polls', 'poll'],
+  ['chat', 'chat', 'chat'],
+];
+
 const SETTING_SPECS = [
   ['log_channel_id', 'channel', '800000000000000004', null, 'where Black Bloc posts what it did'],
   ['staff_channel_id', 'channel', '800000000000000005', null, 'the channel whose viewers count as staff'],
@@ -228,6 +279,14 @@ const SETTING_SPECS = [
   ['chat_greeting_reaction', 'bool', false, false, 'true to answer a bare hello with a wave reaction instead of a sentence; anything longer still gets a reply'],
   ['chat_reply_in_threads', 'bool', true, true, 'true to answer @-mentions inside threads as well as channels'],
   ['chat_route_ping_staff', 'bool', false, false, 'true to drop one line in the staff channel when somebody asks the bot for a mod; only used while modmail_enabled is true'],
+  ...LOG_LEVEL_FEATURES.map(([feature, label, command]) => [
+    `${feature}_log_level`,
+    'enum',
+    'important',
+    'important',
+    `which ${label} log lines reach the Discord log channel: off, important (anything that acted on a member, or failed) or all. Every line is kept on the dashboard${command ? ` and in \`/${command} logs\`` : ''} either way`,
+    ['off', 'important', 'all'],
+  ]),
 ];
 
 const RULES = {
@@ -473,6 +532,7 @@ const NOT_A_FEATURE = ['golive_end_mode'];
 const NAMESPACE_OVERRIDE = {
   modlog_channel_id: 'automod',
   mod_dm_on_action: 'automod',
+  mod_log_level: 'automod',
 };
 
 function namespaceOf(key) {
@@ -729,18 +789,86 @@ route('GET', '/api/status', (context) => {
   return statusBody();
 });
 
-route('GET', '/api/actions', (context) => {
-  requireStaff(context.session);
-  const limit = Math.max(1, Math.min(Number(context.url.searchParams.get('limit') || 50), 200));
-  const kind = context.url.searchParams.get('kind');
-  const userId = context.url.searchParams.get('user_id');
+function summaryOfAction(row) {
+  if (row.reason) return String(row.reason);
+  if (!row.details) return '';
+  if (typeof row.details !== 'object') return String(row.details);
+  return Object.entries(row.details).map(([key, value]) => `${key}=${value}`).join(', ');
+}
+
+function kindsPresent(feature) {
+  const rows = feature ? state.actions.filter((row) => featureOfKind(row.kind) === feature) : state.actions;
+  return [...new Set(rows.map((row) => row.kind))].sort();
+}
+
+function searchedActions(params) {
+  const kind = params.get('kind');
+  const userId = params.get('user_id');
+  const feature = params.get('feature');
+  const since = params.get('since');
+  const until = params.get('until');
+  const needle = (params.get('q') || '').trim().toLowerCase();
   let rows = state.actions;
   if (kind) rows = rows.filter((row) => String(row.kind).startsWith(kind));
   if (userId) rows = rows.filter((row) => row.actor_id === userId || row.target_id === userId);
+  if (feature) rows = rows.filter((row) => featureOfKind(row.kind) === feature);
+  if (since) rows = rows.filter((row) => row.at >= since);
+  if (until) rows = rows.filter((row) => row.at <= until);
+  if (params.get('important') === '1') rows = rows.filter((row) => isImportantKind(row.kind));
+  rows = rows.map((row) => ({
+    ...withNames(row, [['actor_id', 'actor_name'], ['target_id', 'target_name']]),
+    feature: featureOfKind(row.kind),
+    important: isImportantKind(row.kind),
+    summary: summaryOfAction(row),
+  }));
+  if (needle) {
+    rows = rows.filter((row) =>
+      [row.kind, row.actor_name, row.target_name, row.reason, JSON.stringify(row.details || '')]
+        .join(' ')
+        .toLowerCase()
+        .includes(needle),
+    );
+  }
+  return rows;
+}
+
+route('GET', '/api/actions', (context) => {
+  requireStaff(context.session);
+  const params = context.url.searchParams;
+  const size = Math.max(1, Math.min(Number(params.get('per_page') || params.get('limit') || 50), 200));
+  const page = Math.max(1, Number(params.get('page') || 1));
+  const rows = searchedActions(params);
+  const shown = rows.slice((page - 1) * size, (page - 1) * size + size);
   return {
-    actions: rows.slice(0, limit).map((row) => withNames(row, [['actor_id', 'actor_name'], ['target_id', 'target_name']])),
-    limit,
+    actions: shown,
+    kinds: kindsPresent(params.get('feature')),
+    limit: size,
+    per_page: size,
+    page,
+    total: rows.length,
+    shown: shown.length,
     notes: [],
+  };
+});
+
+route('GET', '/api/actions/export.csv', (context) => {
+  // NOT in contract.json: check.mjs reads JSON shapes, and this one answers text/csv.
+  requireStaff(context.session);
+  const columns = ['id', 'at', 'kind', 'feature', 'important', 'actor_id', 'actor_name', 'target_id', 'target_name', 'reason', 'details'];
+  const cell = (row, name) => {
+    const value = name === 'details' ? (row.details ? JSON.stringify(row.details) : '') : row[name];
+    if (value === null || value === undefined) return '';
+    const text = String(value);
+    return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+  const lines = [columns.join(',')];
+  for (const row of searchedActions(context.url.searchParams)) {
+    lines.push(columns.map((name) => cell(row, name)).join(','));
+  }
+  return {
+    status: 200,
+    headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="black-bloc-log.csv"' },
+    body: `${lines.join('\n')}\n`,
   };
 });
 

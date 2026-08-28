@@ -1484,8 +1484,8 @@ def test_the_voice_group_carries_every_control_the_panel_has_and_more():
     groups = {group.name: group for group in TempVoice.__cog_app_commands__}
 
     assert sorted(command.name for command in groups["voice"].commands) == [
-        "ban", "bitrate", "claim", "hide", "info", "kick", "limit", "lock", "permit", "region",
-        "rename", "reset", "show", "transfer", "unban", "unlock", "unpermit",
+        "ban", "bitrate", "claim", "hide", "info", "kick", "limit", "lock", "logs", "permit",
+        "region", "rename", "reset", "show", "transfer", "unban", "unlock", "unpermit",
     ]
     region = next(c for c in groups["voice"].commands if c.name == "region")
     assert region._params["region"].autocomplete is not None

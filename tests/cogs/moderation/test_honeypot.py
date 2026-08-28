@@ -436,6 +436,10 @@ async def test_staff_and_bots_are_ignored_and_their_posts_are_left_alone(cog, bo
 
     assert [h["action"] for h in await hits(db)] == ["exempt"]
     assert "honeypot.exempt" in await action_kinds(db)
+    assert bot.guild.get_channel(LOG_CHANNEL).messages == []
+
+    await bot.store.set(GUILD, "honeypot_log_level", "all")
+    await cog.on_message(FakePost(bot.guild, a_bot, trap))
     assert bot.guild.get_channel(LOG_CHANNEL).messages != []
 
 

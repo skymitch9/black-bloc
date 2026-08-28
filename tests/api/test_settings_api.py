@@ -53,7 +53,7 @@ def test_the_index_is_grouped_by_namespace_with_type_default_and_help(client, si
 
     assert set(body) >= {"core", "golive", "tempvoice", "honeypot", "events", "automod", "modmail"}
     core = {row["key"] for row in body["core"]}
-    assert core == set(CORE_KEYS)
+    assert core == set(CORE_KEYS) | {"core_log_level"}
     golive = {row["key"]: row for row in body["golive"]}
     assert golive["golive_mode"]["type"] == "enum"
     assert golive["golive_mode"]["choices"] == ["off", "shadow", "on"]

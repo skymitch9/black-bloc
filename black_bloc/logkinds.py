@@ -1,0 +1,332 @@
+from __future__ import annotations
+
+CORE = "core"
+WEB = "web"
+SHADOW = ".would_"
+
+OFF = "off"
+IMPORTANT_ONLY = "important"
+ALL = "all"
+LEVELS = (OFF, IMPORTANT_ONLY, ALL)
+LEVEL_DEFAULT = IMPORTANT_ONLY
+
+FEATURES = (
+    CORE,
+    "automod",
+    "honeypot",
+    "mod",
+    "modmail",
+    "golive",
+    "events",
+    "birthday",
+    "tempvoice",
+    "rolemenu",
+    "poll",
+    "chat",
+)
+
+HEADS: dict[str, str] = {
+    "settings": CORE,
+    "commands": CORE,
+    "presence": CORE,
+    "automod": "automod",
+    "honeypot": "honeypot",
+    "mod": "mod",
+    "case": "mod",
+    "modmail": "modmail",
+    "golive": "golive",
+    "event": "events",
+    "events": "events",
+    "birthday": "birthday",
+    "tempvoice": "tempvoice",
+    "role": "rolemenu",
+    "role_menu": "rolemenu",
+    "rolemenu": "rolemenu",
+    "poll": "poll",
+    "chat": "chat",
+}
+
+FEATURE_LABELS: dict[str, str] = {
+    CORE: "Core",
+    "automod": "Automod",
+    "honeypot": "Honeypot",
+    "mod": "Moderation",
+    "modmail": "Modmail",
+    "golive": "Go-live",
+    "events": "Events",
+    "birthday": "Birthdays",
+    "tempvoice": "Temp voice",
+    "rolemenu": "Role menus",
+    "poll": "Polls",
+    "chat": "Chat",
+}
+
+FEATURE_PAGES: dict[str, str] = {
+    CORE: "settings.html",
+    "automod": "automod.html",
+    "honeypot": "honeypot.html",
+    "mod": "moderation.html",
+    "modmail": "modmail.html",
+    "golive": "golive.html",
+    "events": "events.html",
+    "birthday": "birthdays.html",
+    "tempvoice": "tempvoice.html",
+    "rolemenu": "rolemenus.html",
+    "poll": "polls.html",
+    "chat": "chat.html",
+}
+
+IMPORTANT_SUFFIXES = (
+    "_failed",
+    ".approved",
+    ".denied",
+    ".expired",
+    ".warned",
+    ".timed_out",
+    ".timeout",
+    ".kicked",
+    ".kick",
+    ".banned",
+    ".ban",
+    ".granted",
+    ".ended",
+    ".removed",
+    ".purged",
+    ".blocked",
+    ".closed",
+)
+
+IMPORTANT: frozenset[str] = frozenset(
+    {
+        "automod.deleted",
+        "event.cancelled",
+        "event.missed",
+        "event.announce_skipped_late",
+        "golive.role_stuck",
+        "mod.untimed_out",
+        "mod.unbanned",
+        "mod.warn_threshold",
+        "modmail.unblocked",
+        "poll.cancelled",
+        "role.extended",
+    }
+)
+
+ROUTINE: frozenset[str] = frozenset(
+    {
+        "birthday.add_role",
+        "birthday.announce",
+        "birthday.clear",
+        "birthday.import",
+        "birthday.member_missing",
+        "birthday.mode",
+        "birthday.optin",
+        "birthday.optout",
+        "birthday.remove",
+        "birthday.remove_role",
+        "birthday.set",
+        "chat.insult",
+        "chat.intent_created",
+        "chat.intent_deleted",
+        "chat.intent_edited",
+        "chat.line_added",
+        "chat.line_deleted",
+        "chat.line_edited",
+        "chat.route",
+        "commands.visibility",
+        "event.announce",
+        "event.announce_channel_forgotten",
+        "event.announcement_edited",
+        "event.cancel",
+        "event.category_forgotten",
+        "event.channel_deleted",
+        "event.created",
+        "event.done",
+        "event.go_live",
+        "event.settings",
+        "golive.add_role",
+        "golive.announce",
+        "golive.end",
+        "golive.link",
+        "golive.mode",
+        "golive.optin",
+        "golive.optout",
+        "golive.remove_role",
+        "golive.test",
+        "golive.unlink",
+        "honeypot.ban",
+        "honeypot.exempt",
+        "honeypot.exempt_add",
+        "honeypot.exempt_remove",
+        "honeypot.hit_recorded",
+        "honeypot.mode",
+        "honeypot.setup",
+        "honeypot.trap_removed",
+        "automod.exempt_add",
+        "automod.exempt_remove",
+        "automod.mode",
+        "automod.observed",
+        "automod.rule",
+        "mod.apply",
+        "mod.rule",
+        "modmail.block",
+        "modmail.blocked_dm",
+        "modmail.category_forgotten",
+        "modmail.close",
+        "modmail.forgotten",
+        "modmail.log_channel_forgotten",
+        "modmail.member_left",
+        "modmail.opened",
+        "modmail.place_kept",
+        "modmail.reply",
+        "modmail.settings",
+        "modmail.snippet",
+        "modmail.snippet_remove",
+        "modmail.snippet_removed",
+        "modmail.snippet_saved",
+        "modmail.staff_channel_forgotten",
+        "modmail.transcript",
+        "modmail.unblock",
+        "poll.archived",
+        "poll.cancel",
+        "poll.channel_forgotten",
+        "poll.closed",
+        "poll.created",
+        "poll.end",
+        "poll.opened",
+        "poll.recur_created",
+        "poll.recur_deleted",
+        "poll.recur_paused",
+        "poll.recur_resumed",
+        "poll.recurred",
+        "poll.reminded",
+        "poll.settings",
+        "presence.bio_set",
+        "role.changed_by_hand",
+        "role.reconciled",
+        "role.requested",
+        "role.withdrawn",
+        "role_menu.assign",
+        "role_menu.delete",
+        "role_menu.edit",
+        "role_menu.mode",
+        "role_menu.post",
+        "role_menu.reposted",
+        "role_menu.unassign",
+        "role_menu.unposted",
+        "role_menu.update",
+        "rolemenu.create",
+        "rolemenu.delete",
+        "rolemenu.edit",
+        "rolemenu.post",
+        "settings.clear",
+        "settings.set",
+        "tempvoice.adopt",
+        "tempvoice.ban",
+        "tempvoice.bitrate",
+        "tempvoice.claim",
+        "tempvoice.create",
+        "tempvoice.creator_removed",
+        "tempvoice.delete",
+        "tempvoice.forget",
+        "tempvoice.hide",
+        "tempvoice.kick",
+        "tempvoice.limit",
+        "tempvoice.lock",
+        "tempvoice.mode",
+        "tempvoice.panel_elsewhere",
+        "tempvoice.permit",
+        "tempvoice.prefs_reset",
+        "tempvoice.region",
+        "tempvoice.rename",
+        "tempvoice.repair",
+        "tempvoice.setup",
+        "tempvoice.show",
+        "tempvoice.transfer",
+        "tempvoice.turned_away",
+        "tempvoice.unban",
+        "tempvoice.unlock",
+        "tempvoice.unpermit",
+    }
+)
+
+
+def bare(kind: str) -> str:
+    """`web.role.granted` and `role.granted` are the same event, logged from two places."""
+    text = str(kind or "")
+    head, dot, rest = text.partition(".")
+    return rest if head == WEB and rest else text
+
+
+def feature_of(kind: str) -> str:
+    head, _, _ = bare(kind).partition(".")
+    return HEADS.get(head, CORE)
+
+
+def heads_for(feature: str) -> tuple[str, ...]:
+    return tuple(head for head, found in HEADS.items() if found == feature)
+
+
+def like_patterns(feature: str) -> tuple[str, ...]:
+    """The SQL `LIKE` forms of one feature's kinds, derived from `HEADS` so there is one home."""
+    found: list[str] = []
+    for head in heads_for(feature):
+        found.append(f"{head}.%")
+        found.append(f"{WEB}.{head}.%")
+    return tuple(found)
+
+
+def is_shadow(kind: str) -> bool:
+    return SHADOW in bare(kind)
+
+
+def is_important(kind: str) -> bool:
+    text = bare(kind)
+    if SHADOW in text or text in ROUTINE:
+        return False
+    if text in IMPORTANT:
+        return True
+    return any(text.endswith(suffix) for suffix in IMPORTANT_SUFFIXES)
+
+
+def should_post(kind: str, level: str | None) -> bool:
+    """An unknown level is `all` — today's behaviour — so nothing goes quiet by accident."""
+    if level == OFF:
+        return False
+    if level == IMPORTANT_ONLY:
+        return is_important(kind)
+    return True
+
+
+def log_level_key(feature: str) -> str:
+    return f"{feature}_log_level"
+
+
+LOG_LEVEL_KEYS: tuple[str, ...] = tuple(log_level_key(feature) for feature in FEATURES)
+
+
+__all__ = [
+    "ALL",
+    "CORE",
+    "FEATURES",
+    "FEATURE_LABELS",
+    "FEATURE_PAGES",
+    "HEADS",
+    "IMPORTANT",
+    "IMPORTANT_ONLY",
+    "IMPORTANT_SUFFIXES",
+    "LEVELS",
+    "SHADOW",
+    "LEVEL_DEFAULT",
+    "LOG_LEVEL_KEYS",
+    "OFF",
+    "ROUTINE",
+    "bare",
+    "feature_of",
+    "heads_for",
+    "is_important",
+    "is_shadow",
+    "like_patterns",
+    "log_level_key",
+    "should_post",
+]

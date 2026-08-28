@@ -563,3 +563,34 @@ async def test_a_staff_role_holder_may_run_them(cog, bot, target):
     await cog.warn.callback(cog, interaction, target, "stop")
 
     assert "Warned" in interaction.sent
+
+
+async def test_mod_logs_reads_the_moderation_lines_a_warn_left_behind(cog, bot, lead, target, db):
+    await cog.warn.callback(cog, FakeInteraction(bot, lead), target, "stop")
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.mod_logs.callback(cog, interaction)
+
+    said = interaction.response.messages[-1]
+    assert said["ephemeral"] is True
+    assert said["embed"].title == "Moderation log"
+    assert "`mod.warned`" in said["embed"].description
+    assert f"<@{lead.id}> → <@{target.id}>" in said["embed"].description
+    assert said["embed"].footer.text.endswith("/moderation.html")
+
+
+async def test_mod_logs_refuses_somebody_who_is_not_staff(cog, bot, target):
+    interaction = FakeInteraction(bot, target)
+
+    await cog.mod_logs.callback(cog, interaction)
+
+    assert "staff only" in interaction.sent
+    assert "embed" not in interaction.response.messages[-1]
+
+
+async def test_mod_logs_says_so_when_there_is_nothing_yet(cog, bot, lead):
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.mod_logs.callback(cog, interaction, 5, True)
+
+    assert "Nothing important" in interaction.response.messages[-1]["embed"].description

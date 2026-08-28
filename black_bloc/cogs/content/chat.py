@@ -5,9 +5,16 @@ import time
 from typing import Any
 
 import discord
+from discord import app_commands
 from discord.ext import commands
 
-from ...actionlog import log_action
+from ...actionlog import (
+    LOGS_DEFAULT,
+    LOGS_MAX,
+    LOGS_MIN,
+    log_action,
+    send_logs,
+)
 from ...chat import (
     GREETING,
     INSULT,
@@ -19,7 +26,12 @@ from ...chat import (
     seed_defaults,
 )
 from ...emoji import tone_for, toned
-from ...settings_store import CHAT_COOLDOWN_SECONDS
+from ...settings_store import (
+    CHAT_COOLDOWN_SECONDS,
+    KEY_TYPES,
+    display_value,
+    require_staff,
+)
 
 log = logging.getLogger(__name__)
 
@@ -36,6 +48,11 @@ WATCHED = (
     "chat_route_ping_staff",
 )
 STAFF_NOTE = "{who} asked for a mod in {where}. {link}"
+CHAT_KEYS = tuple(key for key in KEY_TYPES if key.startswith("chat_"))
+SETTINGS_FOOTER = (
+    "`/settings set` changes any of these, and the Chat page on the dashboard edits the words "
+    "themselves."
+)
 
 
 def mentions_bot(message: Any, me: Any) -> bool:
@@ -57,6 +74,36 @@ class Chat(commands.Cog):
         self.bot = bot
         self._answered: dict[int, float] = {}
         self._seeded: set[int] = set()
+
+    chat = app_commands.Group(name="chat", description="How Black Bloc answers @-mentions")
+
+    @chat.command(name="logs", description="The last few chat log lines")
+    @app_commands.describe(
+        count="How many lines, 1 to 50 (10 by default)",
+        important_only="True to leave out the dry runs and the housekeeping",
+    )
+    async def chat_logs(
+        self,
+        interaction: discord.Interaction,
+        count: app_commands.Range[int, LOGS_MIN, LOGS_MAX] = LOGS_DEFAULT,
+        important_only: bool = False,
+    ) -> None:
+        await send_logs(interaction, "chat", count=count, important_only=important_only)
+
+    @chat.command(name="settings", description="Show how chat is set up for this server")
+    async def chat_settings(self, interaction: discord.Interaction) -> None:
+        if not await require_staff(interaction):
+            return
+        store = self.bot.store
+        lines = [
+            f"`{key}` — **{display_value(key, store.get(interaction.guild.id, key))}**"
+            for key in CHAT_KEYS
+        ]
+        await interaction.response.send_message(
+            "\n".join([*lines, "", SETTINGS_FOOTER]),
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
 
     async def cog_load(self) -> None:
         for key in WATCHED:

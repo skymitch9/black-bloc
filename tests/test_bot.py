@@ -1,7 +1,27 @@
 from types import SimpleNamespace
 
+from discord import app_commands
+
 from black_bloc import bot as bot_module
 from black_bloc.bot import COGS, BlackBlocBot
+from black_bloc.logkinds import FEATURES
+
+TOP_LEVEL_MAX = 100
+CHILDREN_MAX = 25
+LOGS_GROUPS = {
+    "golive": "golive",
+    "event": "events",
+    "birthday": "birthday",
+    "voice": "tempvoice",
+    "rolemenu": "rolemenu",
+    "role": "rolemenu",
+    "automod": "automod",
+    "honeypot": "honeypot",
+    "modmail": "modmail",
+    "poll": "poll",
+    "chat": "chat",
+    "mod": "mod",
+}
 
 
 async def test_bot_builds_and_cogs_load(settings):
@@ -41,6 +61,62 @@ async def test_the_bot_has_no_prefix_commands_to_dispatch(settings):
         await bot.load_extension(name)
     assert bot.commands == set()
     assert await bot.get_prefix(SimpleNamespace(content="anything")) == []
+    await bot.close()
+
+
+async def test_every_feature_group_has_a_logs_command(settings):
+    bot = BlackBlocBot(settings)
+    for name in COGS:
+        await bot.load_extension(name)
+
+    groups = {
+        command.name: command
+        for command in bot.tree.get_commands()
+        if isinstance(command, app_commands.Group)
+    }
+    for group_name, feature in LOGS_GROUPS.items():
+        group = groups[group_name]
+        logs = next(child for child in group.commands if child.name == "logs")
+        assert [option.name for option in logs.parameters] == ["count", "important_only"]
+        assert feature in FEATURES
+    assert {child.name for child in groups["chat"].commands} == {"logs", "settings"}
+    await bot.close()
+
+
+async def test_the_command_tree_stays_inside_discords_limits(settings):
+    """One `logs` per group; two new top-level groups. Neither ceiling is near."""
+    bot = BlackBlocBot(settings)
+    for name in COGS:
+        await bot.load_extension(name)
+
+    top = bot.tree.get_commands()
+    assert len(top) <= TOP_LEVEL_MAX
+    assert len(top) == 34
+    for command in top:
+        if isinstance(command, app_commands.Group):
+            assert len(command.commands) <= CHILDREN_MAX, command.name
+            for child in command.commands:
+                if isinstance(child, app_commands.Group):
+                    assert len(child.commands) <= CHILDREN_MAX, child.name
+    await bot.close()
+
+
+async def test_a_logs_command_is_staff_only_and_ephemeral(settings):
+    """`is_staff_command` reads the callback's helpers, so send_logs' gate is what it finds."""
+    from black_bloc.settings_store import is_staff_command
+
+    bot = BlackBlocBot(settings)
+    for name in COGS:
+        await bot.load_extension(name)
+
+    groups = {
+        command.name: command
+        for command in bot.tree.get_commands()
+        if isinstance(command, app_commands.Group)
+    }
+    for group_name in LOGS_GROUPS:
+        logs = next(c for c in groups[group_name].commands if c.name == "logs")
+        assert is_staff_command(logs), group_name
     await bot.close()
 
 

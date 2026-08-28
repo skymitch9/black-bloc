@@ -11,7 +11,13 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from ...actionlog import log_action
+from ...actionlog import (
+    LOGS_DEFAULT,
+    LOGS_MAX,
+    LOGS_MIN,
+    log_action,
+    send_logs,
+)
 from ...golive import (
     END_GRACE_SECONDS,
     POLL_SECONDS,
@@ -778,6 +784,19 @@ class GoLive(commands.Cog):
         log.warning("go-live: refused a command — the database is not connected")
         await interaction.response.send_message(DB_UNAVAILABLE, ephemeral=True)
         return False
+
+    @golive.command(name="logs", description="The last few go-live log lines")
+    @app_commands.describe(
+        count="How many lines, 1 to 50 (10 by default)",
+        important_only="True to leave out the dry runs and the housekeeping",
+    )
+    async def golive_logs(
+        self,
+        interaction: discord.Interaction,
+        count: app_commands.Range[int, LOGS_MIN, LOGS_MAX] = LOGS_DEFAULT,
+        important_only: bool = False,
+    ) -> None:
+        await send_logs(interaction, "golive", count=count, important_only=important_only)
 
     @golive.command(name="optout", description="Stop Black Bloc announcing your streams")
     async def optout(self, interaction: discord.Interaction) -> None:

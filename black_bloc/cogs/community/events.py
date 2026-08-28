@@ -10,7 +10,13 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from ...actionlog import log_action
+from ...actionlog import (
+    LOGS_DEFAULT,
+    LOGS_MAX,
+    LOGS_MIN,
+    log_action,
+    send_logs,
+)
 from ...command_errors import NETWORK_ERRORS, AnswersErrors, SafeDynamicItem
 from ...events import (
     APPROVED,
@@ -1191,6 +1197,19 @@ class Events(commands.Cog):
             await interaction.response.send_message(GUILD_ONLY, ephemeral=True)
             return False
         return await self._database_ready(interaction)
+
+    @event.command(name="logs", description="The last few events log lines")
+    @app_commands.describe(
+        count="How many lines, 1 to 50 (10 by default)",
+        important_only="True to leave out the dry runs and the housekeeping",
+    )
+    async def event_logs(
+        self,
+        interaction: discord.Interaction,
+        count: app_commands.Range[int, LOGS_MIN, LOGS_MAX] = LOGS_DEFAULT,
+        important_only: bool = False,
+    ) -> None:
+        await send_logs(interaction, "events", count=count, important_only=important_only)
 
     @event.command(name="create", description="Propose an event for the mods to review")
     async def event_create(self, interaction: discord.Interaction) -> None:

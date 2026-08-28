@@ -5,6 +5,8 @@ from datetime import UTC, datetime, timedelta
 import discord
 import pytest
 
+from black_bloc import actionlog
+from black_bloc.actionlog import log_action
 from black_bloc.cogs.content import golive as cog_module
 from black_bloc.cogs.content.golive import (
     GoLive,
@@ -1371,3 +1373,50 @@ async def test_golive_test_shows_no_card_when_the_setting_is_off(cog, bot, membe
     await GoLive.test.callback(cog, interaction)
 
     assert "embed" not in interaction.response.messages[-1]["kwargs"]
+
+
+async def test_golive_logs_shows_this_features_lines_and_nothing_else(
+    cog, bot, member, db, monkeypatch
+):
+    monkeypatch.setattr(actionlog, "require_staff", _always_staff)
+    for kind in ("golive.announce", "poll.created", "golive.post_failed"):
+        await log_action(bot, bot.guild, kind, actor=member, target=member)
+    interaction = FakeInteraction(bot, member, bot.guild)
+
+    await GoLive.golive_logs.callback(cog, interaction)
+
+    said = interaction.response.messages[-1]
+    embed = said["kwargs"]["embed"]
+    assert said["ephemeral"] is True
+    assert said["kwargs"]["allowed_mentions"].everyone is False
+    assert embed.title == "Go-live log"
+    assert "`golive.post_failed`" in embed.description
+    assert "`golive.announce`" in embed.description
+    assert "poll.created" not in embed.description
+    assert embed.footer.text.endswith("/golive.html")
+
+
+async def test_golive_logs_important_only_leaves_out_the_routine_lines(
+    cog, bot, member, db, monkeypatch
+):
+    monkeypatch.setattr(actionlog, "require_staff", _always_staff)
+    for kind in ("golive.announce", "golive.post_failed"):
+        await log_action(bot, bot.guild, kind)
+    interaction = FakeInteraction(bot, member, bot.guild)
+
+    await GoLive.golive_logs.callback(cog, interaction, 50, True)
+
+    embed = interaction.response.messages[-1]["kwargs"]["embed"]
+    assert embed.title == "Go-live log — important only"
+    assert "`golive.post_failed`" in embed.description
+    assert "golive.announce" not in embed.description
+
+
+async def test_golive_logs_says_so_when_the_database_is_away(cog, bot, member, db, monkeypatch):
+    monkeypatch.setattr(actionlog, "require_staff", _always_staff)
+    await db.close()
+    interaction = FakeInteraction(bot, member, bot.guild)
+
+    await GoLive.golive_logs.callback(cog, interaction)
+
+    assert "cannot reach its own database" in interaction.sent

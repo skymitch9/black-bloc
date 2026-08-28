@@ -52,6 +52,7 @@ async def test_the_page_gets_the_chat_settings_in_the_shape_settings_uses(seeded
         "chat_greeting_reaction",
         "chat_reply_in_threads",
         "chat_route_ping_staff",
+        "chat_log_level",
     }
     for row in rows:
         assert {"key", "type", "value", "default", "help"} <= set(row)

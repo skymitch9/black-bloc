@@ -199,6 +199,16 @@ async def test_the_bio_is_written_once_and_recorded_in_the_action_log(bot, app):
 
     assert app.edits == [{"description": bot.store.get(GUILD, "bot_bio")}]
     assert await kinds(bot.db) == ["presence.bio_set"]
+    assert bot.guild.get_channel(TEST_CHANNEL).messages == []
+
+
+async def test_the_bio_line_reaches_discord_when_core_logging_is_turned_up(bot, app):
+    """`presence.bio_set` is routine, so `core_log_level` is what decides."""
+    await bot.store.set(GUILD, "core_log_level", "all")
+
+    assert await ensure_bio(bot) is True
+
+    assert await kinds(bot.db) == ["presence.bio_set"]
     assert bot.guild.get_channel(TEST_CHANNEL).messages
 
 
