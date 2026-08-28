@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+from typing import Any
+
 CORE = "core"
 WEB = "web"
 SHADOW = ".would_"
+
+VIA_DISCORD = "discord"
+VIA_WEBSITE = "website"
+VIA_WORDS: dict[str, str] = {VIA_DISCORD: "Discord", VIA_WEBSITE: "Website"}
 
 OFF = "off"
 IMPORTANT_ONLY = "important"
@@ -23,6 +29,7 @@ FEATURES = (
     "rolemenu",
     "poll",
     "chat",
+    "request",
 )
 
 HEADS: dict[str, str] = {
@@ -44,6 +51,8 @@ HEADS: dict[str, str] = {
     "rolemenu": "rolemenu",
     "poll": "poll",
     "chat": "chat",
+    "request": "request",
+    "requests": "request",
 }
 
 FEATURE_LABELS: dict[str, str] = {
@@ -59,6 +68,7 @@ FEATURE_LABELS: dict[str, str] = {
     "rolemenu": "Role menus",
     "poll": "Polls",
     "chat": "Chat",
+    "request": "Requests",
 }
 
 FEATURE_PAGES: dict[str, str] = {
@@ -74,6 +84,7 @@ FEATURE_PAGES: dict[str, str] = {
     "rolemenu": "rolemenus.html",
     "poll": "polls.html",
     "chat": "chat.html",
+    "request": "requests.html",
 }
 
 IMPORTANT_SUFFIXES = (
@@ -108,6 +119,8 @@ IMPORTANT: frozenset[str] = frozenset(
         "mod.warn_threshold",
         "modmail.unblocked",
         "poll.cancelled",
+        "request.declined",
+        "request.done",
         "role.extended",
     }
 )
@@ -202,6 +215,13 @@ ROUTINE: frozenset[str] = frozenset(
         "poll.reminded",
         "poll.settings",
         "presence.bio_set",
+        "request.auto_approved",
+        "request.comment",
+        "request.filed",
+        "request.in_progress",
+        "request.planned",
+        "request.updated",
+        "request.withdrawn",
         "role.changed_by_hand",
         "role.reconciled",
         "role.requested",
@@ -298,6 +318,20 @@ def should_post(kind: str, level: str | None) -> bool:
     return True
 
 
+def via_of(kind: str, details: Any = None) -> str:
+    """Where a change was made. What the writer recorded wins; the `web.` head decides the rest."""
+    if isinstance(details, dict):
+        found = str(details.get("via") or "").strip().lower()
+        if found in VIA_WORDS:
+            return found
+    head, dot, rest = str(kind or "").partition(".")
+    return VIA_WEBSITE if head == WEB and rest else VIA_DISCORD
+
+
+def via_word(kind: str, details: Any = None) -> str:
+    return VIA_WORDS[via_of(kind, details)]
+
+
 def log_level_key(feature: str) -> str:
     return f"{feature}_log_level"
 
@@ -321,6 +355,9 @@ __all__ = [
     "LOG_LEVEL_KEYS",
     "OFF",
     "ROUTINE",
+    "VIA_DISCORD",
+    "VIA_WEBSITE",
+    "VIA_WORDS",
     "bare",
     "feature_of",
     "heads_for",
@@ -329,4 +366,6 @@ __all__ = [
     "like_patterns",
     "log_level_key",
     "should_post",
+    "via_of",
+    "via_word",
 ]

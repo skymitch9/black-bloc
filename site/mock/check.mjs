@@ -34,7 +34,8 @@ const IDS = {
   poll_recurrence_id: '4',
   chat_intent_id: '1',
   chat_line_id: '1',
-  // 13a: the staff session's own PENDING request, and somebody else's already-planned one.
+  // request_id above is a ROLE request; a feature request is a different table and gets its
+  // own pair: 25 is the staff session's own pending row, 30 is somebody else's.
   feature_request_id: '25',
   member_request_id: '30',
 };
@@ -185,6 +186,9 @@ const GUARDED = [
 const UNGUARDED = [
   ['POST', '/api/modmail/tickets/{ticket_id}/reply', { text: 'hello' }],
   ['POST', '/api/mod/warn', { user_id: '{member_id}', reason: 'contract check' }],
+  // Filing a request writes a row and DMs; only the one line in request_notify_channel_id
+  // is a channel post, and that is guarded on its own inside the bot.
+  ['POST', '/api/requests', { what: 'contract check', why: 'the guard list needs one' }],
 ];
 
 async function setGuard(on) {
@@ -258,6 +262,18 @@ async function checkActionKinds() {
   await send('PUT', `/api/chat/lines/${IDS.chat_line_id}`, { text: 'An edited contract line.' });
   await send('DELETE', `/api/chat/lines/${IDS.chat_line_id}`, undefined);
   await send('DELETE', `/api/chat/intents/${IDS.chat_intent_id}`, undefined);
+  // The six web.request.* kinds. Withdraw is the member's own, so it is the one call here
+  // that goes in as somebody who is not staff.
+  await post('/api/requests', { what: 'contract check', why: 'so web.request.filed is left' });
+  await post(`/api/requests/${IDS.feature_request_id}/comments`, { text: 'contract check' });
+  await post(`/api/requests/${IDS.feature_request_id}/status`, { priority: 2 });
+  await post(`/api/requests/${IDS.feature_request_id}/approve`, {});
+  await post('/api/requests/26/decline', { reason: 'contract check' });
+  await fetch(`${BASE}/api/requests/${IDS.member_request_id}/withdraw`, {
+    method: 'POST',
+    headers: { cookie: 'mock_as=member', 'content-type': 'application/json' },
+    body: '{}',
+  });
   const response = await fetch(`${BASE}/api/actions?limit=200`, { headers: { cookie: 'mock_as=staff' } });
   const payload = await response.json();
   const known = new Set(contract.action_kinds);

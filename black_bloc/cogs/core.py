@@ -9,6 +9,7 @@ from discord.ext import commands
 from .. import __version__
 from ..actionlog import log_action
 from ..command_visibility import hidden_names
+from ..logkinds import VIA_DISCORD
 from ..modcases import pages_under_limit
 from ..settings_store import (
     KEY_HELP,
@@ -184,7 +185,7 @@ class Core(commands.Cog):
             "settings.set",
             actor=interaction.user,
             target=channel,
-            details={"key": key.value, "channel_id": channel.id},
+            details={"key": key.value, "channel_id": channel.id, "via": VIA_DISCORD},
         )
 
     @settings.command(name="set-role", description="Point one Black Bloc setting at a role")
@@ -213,7 +214,7 @@ class Core(commands.Cog):
             interaction.guild,
             "settings.set",
             actor=interaction.user,
-            details={"key": key.value, "role_id": role.id},
+            details={"key": key.value, "role_id": role.id, "via": VIA_DISCORD},
         )
 
     @settings.command(
@@ -237,7 +238,7 @@ class Core(commands.Cog):
             interaction.guild,
             "settings.set",
             actor=interaction.user,
-            details={"key": key, "value": parsed},
+            details={"key": key, "value": parsed, "via": VIA_DISCORD},
         )
 
     @settings_set_value.autocomplete("key")
@@ -278,7 +279,7 @@ class Core(commands.Cog):
             interaction.guild,
             "settings.clear",
             actor=interaction.user,
-            details={"key": key.value},
+            details={"key": key.value, "via": VIA_DISCORD},
         )
 
 

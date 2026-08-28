@@ -67,6 +67,12 @@ const UNKNOWN_ROUTE = 'This dashboard asked Black Bloc for something it does not
 const now = () => new Date().toISOString();
 const minutesAgo = (m) => new Date(Date.now() - m * 60000).toISOString();
 const daysAhead = (d) => new Date(Date.now() + d * 86400000).toISOString();
+// A due date is a DAY, not an instant: it travels as YYYY-MM-DD, built from the local
+// clock so the day named here is the day the page prints back.
+const dayAhead = (d) => {
+  const at = new Date(Date.now() + d * 86400000);
+  return `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`;
+};
 
 const ROLES = [
   { id: '900000000000000001', name: 'Aunties / Uncles', color: '#e04a6d', position: 12, managed: false },
@@ -168,15 +174,22 @@ const KIND_HEADS = {
   modmail: 'modmail', golive: 'golive', event: 'events', events: 'events',
   birthday: 'birthday', tempvoice: 'tempvoice',
   role: 'rolemenu', role_menu: 'rolemenu', rolemenu: 'rolemenu',
-  poll: 'poll', chat: 'chat',
+  poll: 'poll', chat: 'chat', request: 'request', requests: 'request',
 };
 const IMPORTANT_SUFFIXES = [
   '_failed', '.approved', '.denied', '.expired', '.warned', '.timed_out', '.timeout',
   '.kicked', '.kick', '.banned', '.ban', '.granted', '.ended', '.removed', '.purged',
   '.blocked', '.closed',
 ];
-const IMPORTANT_KINDS = ['automod.deleted', 'mod.warn', 'mod.unbanned', 'mod.untimed_out'];
-const ROUTINE_KINDS = ['poll.closed', 'tempvoice.ban', 'tempvoice.kick', 'honeypot.ban'];
+const IMPORTANT_KINDS = [
+  'automod.deleted', 'mod.warn', 'mod.unbanned', 'mod.untimed_out',
+  'request.declined', 'request.done',
+];
+const ROUTINE_KINDS = [
+  'poll.closed', 'tempvoice.ban', 'tempvoice.kick', 'honeypot.ban',
+  'request.filed', 'request.auto_approved', 'request.withdrawn', 'request.planned',
+  'request.in_progress', 'request.updated', 'request.comment',
+];
 
 function bareKind(kind) {
   const text = String(kind || '');
@@ -185,6 +198,15 @@ function bareKind(kind) {
 
 function featureOfKind(kind) {
   return KIND_HEADS[bareKind(kind).split('.')[0]] || 'core';
+}
+
+// The mock's copy of black_bloc/logkinds.py:via_of — what the writer recorded wins,
+// and the `web.` head decides every row written before anybody recorded it.
+const VIA_WORDS = { discord: 'Discord', website: 'Website' };
+function viaOfKind(kind, details) {
+  const said = String((details && details.via) || '').trim().toLowerCase();
+  if (VIA_WORDS[said]) return said;
+  return String(kind || '').startsWith('web.') ? 'website' : 'discord';
 }
 
 function isImportantKind(kind) {
@@ -209,6 +231,7 @@ const LOG_LEVEL_FEATURES = [
   ['rolemenu', 'role menus', 'rolemenu'],
   ['poll', 'polls', 'poll'],
   ['chat', 'chat', 'chat'],
+  ['request', 'requests', 'request'],
 ];
 
 const SETTING_SPECS = [
@@ -314,6 +337,94 @@ const RULE_HELP = {
   caps: 'the percentage of shouted letters a message may contain',
   bad_words: 'the blocked word list',
 };
+
+// Requests (13b). [id, member, what, why, dueInDays|null, status, priority|null,
+// assignee|null, notes|null, filedMinutesAgo, declineReason|null] — the wide rows are
+// derived from these so thirty of them stay readable.
+const REQUEST_SEED = [
+  [30, 3, 'A #suggestions channel with a poll under every idea', 'The ideas doc is where suggestions go to die. If each one opened a poll we would know in a day whether anybody else wants it.', null, 'pending', null, null, null, 40, null],
+  [29, 0, 'Let /request take screenshots', 'Half of what I want to describe is a picture of the thing being wrong. Typing it out loses the detail.', 21, 'pending', null, null, null, 120, null],
+  [28, 6, 'A weekly digest of what the bot did', 'Nobody reads the log channel. One Monday post with the week in five lines would actually get read.', 7, 'pending', null, null, null, 300, null],
+  [27, 2, 'Birthday shout-outs should skip people who are not in the server any more', 'We wished a happy birthday to somebody who left in March and it was awkward for everyone.', null, 'pending', null, null, null, 900, null],
+  [26, 5, 'Let members mute the go-live pings without leaving the role', 'I want the colour, not the notification. Right now it is both or neither.', 30, 'pending', null, null, null, 1500, null],
+  [25, 0, 'A queue for the karaoke nights', 'We keep losing the running order in chat. A /queue with a list everybody can see would fix it.', 14, 'pending', null, null, null, 2600, null],
+  [24, 1, 'Temp voice channels should remember the name I gave them', 'I rename mine every single time. It should come back the way I left it.', null, 'approved', 3, null, null, 4200, null],
+  [23, 6, 'Show who is in a temp voice room from the text channel', 'You cannot tell whether it is worth joining without joining.', 45, 'approved', 2, 0, null, 5000, null],
+  [22, 2, 'An /events ical export', 'Half the group lives in a different time zone and reads the calendar app, not Discord.', 60, 'approved', 4, null, 'Casey has the feed format from last year.', 6400, null],
+  [21, 4, 'Automod should let me appeal a timeout', 'I got a ten minute timeout for a link nobody minded and there was nowhere to say so.', null, 'approved', 5, null, null, 7000, null],
+  [20, 3, 'Role menus with a description under each role', 'The emoji is not enough. New people pick the wrong one every week.', 25, 'planned', 2, 0, 'Fits under the existing menu editor — no new storage.', 8200, null],
+  [19, 1, 'A #welcome message that names the three channels worth reading', 'We say the same three things to every new person by hand.', null, 'planned', 3, 1, null, 9000, null],
+  [18, 6, 'Let staff pin a poll result to the top of the channel', 'The result scrolls away and then we argue about it again a month later.', 40, 'planned', 3, null, null, 9800, null],
+  [17, 2, 'Modmail should show the member\'s last five messages', 'You open a ticket with no idea what happened just before it.', null, 'planned', 1, 0, 'Needs a message cache the bot does not keep yet — ask before starting.', 11000, null],
+  [16, 5, 'A quiet hours mode for the announcement pings', 'Three in the morning go-live pings are why I turned notifications off entirely.', 90, 'planned', 4, null, null, 12000, null],
+  [15, 3, 'The cookout countdown on the dashboard', 'Everybody asks how long is left and somebody has to do the arithmetic in their head.', 10, 'in_progress', 2, 0, 'Half built; the timer is drawn, the setting is not wired.', 13000, null],
+  [14, 1, 'Search the audit log by member', 'Scrolling to find one person\'s three lines takes minutes.', null, 'in_progress', 1, 1, null, 14000, null],
+  [13, 6, 'Let me file a request from a message with a right-click', 'Half of the requests start as somebody complaining in chat.', 35, 'in_progress', 3, 0, null, 15000, null],
+  [12, 2, 'Honeypot should tell staff what the trap caught', 'The ban lands and nobody knows what was posted.', null, 'in_progress', 2, 3, 'Rivet is on this one while Moth is away.', 16000, null],
+  [11, 3, 'Stop the bot answering @-mentions inside threads', 'It talks over serious threads and it is hard to take seriously afterwards.', null, 'done', 2, 0, null, 20000, null],
+  [10, 0, 'A /help that lists only the commands I can actually run', 'The full list is intimidating and most of it refuses me anyway.', null, 'done', 3, 0, null, 22000, null],
+  [9, 6, 'Timed roles for the event crew', 'We hand the role out and then forget to take it back for months.', null, 'done', 1, 1, 'Shipped as part of the role menus work.', 24000, null],
+  [8, 2, 'Birthday wishes with the member\'s own colour', 'A grey embed for a birthday is a bit sad.', null, 'done', 5, 0, null, 26000, null],
+  [7, 4, 'Let people opt out of go-live announcements', 'Some of us stream for four people on purpose.', null, 'done', 2, 1, null, 28000, null],
+  [6, 5, 'A dashboard I can read on my phone', 'I am never at a desk when something needs answering.', null, 'done', 1, 0, 'The whole site got this, not just one page.', 30000, null],
+  [5, 4, 'Give everybody the ping role by default', 'More people would see the announcements.', null, 'declined', null, null, null, 32000, 'Opt-in is the whole point of that role — a default ping is the thing people leave servers over. Ask again if you want a second, quieter role.'],
+  [4, 5, 'Let members delete other people\'s messages in their own temp room', 'It is my room, I should be able to tidy it.', null, 'declined', null, null, null, 34000, 'Deleting somebody else\'s words is a moderator action and it stays with the moderators. You can kick somebody from your room instead.'],
+  [3, 7, 'An auto-role that gives new joins the Member role instantly', 'The manual step is slow.', null, 'declined', null, null, null, 40000, 'The manual step is the anti-raid measure. We looked at this in March and the answer has not changed — see the pinned post in the Leads channel.'],
+  [2, 1, 'Rename #general to #the-porch', 'It suits the place better.', null, 'withdrawn', null, null, null, 41000, null],
+  [1, 3, 'A second bot for music', 'Nobody has bothered since the last one broke.', null, 'withdrawn', null, null, null, 44000, null],
+];
+
+const REQUEST_DECIDED = ['approved', 'planned', 'in_progress', 'done', 'declined'];
+
+function seedRequests() {
+  return REQUEST_SEED.map(([id, who, what, why, due, status, priority, assignee, notes, aged, reason]) => ({
+    id,
+    user_id: MEMBERS[who].id,
+    what,
+    why,
+    due_on: due === null ? null : dayAhead(due),
+    status,
+    priority,
+    assignee_id: assignee === null ? null : MEMBERS[assignee].id,
+    notes,
+    created_at: minutesAgo(aged),
+    decided_by: REQUEST_DECIDED.includes(status) ? STAFF.id : null,
+    decided_at: REQUEST_DECIDED.includes(status) ? minutesAgo(Math.round(aged * 0.7)) : null,
+    decline_reason: reason,
+    done_at: status === 'done' ? minutesAgo(Math.round(aged * 0.2)) : null,
+    message_id: null,
+  }));
+}
+
+// [id, request, author, text, minutesAgo] — every section on the page has at least one
+// row with a thread on it, so the drawer is never drawn only against an empty list.
+const REQUEST_COMMENT_SEED = [
+  [1, 30, 0, 'This is close to what #ideas was meant to be. Worth doing properly once rather than twice badly.', 30],
+  [2, 30, 2, 'A poll under every one would drown the channel. Poll the ones that get five reactions?', 20],
+  [3, 27, 0, 'Agreed, and it is a one-line check against the member list.', 800],
+  [4, 25, 3, 'I have the running order from the last three nights if that helps size it.', 2400],
+  [5, 22, 0, 'Casey is right that the feed format is the hard part. Nothing else here is new.', 6000],
+  [6, 22, 1, 'I will dig the old one out this week.', 5900],
+  [7, 20, 0, 'Planned for after the requests work lands.', 8000],
+  [8, 17, 0, 'Holding this one — the message cache is a bigger change than the ticket view is.', 10500],
+  [9, 17, 2, 'Even the last one message would help.', 10400],
+  [10, 15, 0, 'Timer is drawn. The setting for the date is the bit left.', 12500],
+  [11, 15, 3, 'Can it count down to the next one automatically rather than a date somebody types?', 12400],
+  [12, 12, 2, 'Taking this while Moth is away.', 15500],
+  [13, 11, 0, 'Shipped — chat_reply_in_threads turns it off.', 19000],
+  [14, 5, 0, 'Saying no here rather than in DMs so the reasoning is on the record.', 31000],
+  [15, 3, 0, 'Third time this has been asked. The pinned post is the long answer.', 39000],
+];
+
+function seedRequestComments() {
+  return REQUEST_COMMENT_SEED.map(([id, request_id, who, text, aged]) => ({
+    id,
+    request_id,
+    author_id: MEMBERS[who].id,
+    text,
+    at: minutesAgo(aged),
+  }));
+}
 
 function seedState() {
   return {
@@ -493,73 +604,42 @@ function seedState() {
     { id: 6, intent_id: 4, text: 'Hey {name}! Pull up a chair — the cookout is already going.', slot: 'filled', enabled: true, created_by: null, updated_at: minutesAgo(9000) },
     { id: 7, intent_id: 4, text: 'Hey {name}! That makes {attendees} of us at the cookout today.', slot: 'attendee', enabled: true, created_by: null, updated_at: minutesAgo(9000) },
   ],
-  // {feature_request_id} = 25 belongs to the staff session, so GET /api/requests/mine is never
-  // empty; {member_request_id} = 30 is somebody else's and already planned, so the list has more
-  // than one state in it. check.mjs's IDS table spells both.
-  asks: [
-    {
-      id: 25,
-      user_id: STAFF.id,
-      what: 'A requests board on the site',
-      why: 'the google doc nobody can find is where ideas go to die',
-      due_on: null,
-      status: 'pending',
-      priority: null,
-      assignee_id: null,
-      notes: null,
-      created_at: minutesAgo(90),
-      decided_by: null,
-      decided_at: null,
-      decline_reason: null,
-      done_at: null,
-      message_id: null,
-    },
-    {
-      id: 30,
-      user_id: MEMBERS[1].id,
-      what: 'Karaoke night in the voice lounge',
-      why: 'the last one filled the room and people keep asking',
-      due_on: '2026-09-15',
-      status: 'planned',
-      priority: 2,
-      assignee_id: STAFF.id,
-      notes: 'after the hosting bill lands',
-      created_at: minutesAgo(4000),
-      decided_by: STAFF.id,
-      decided_at: minutesAgo(3900),
-      decline_reason: null,
-      done_at: null,
-      message_id: null,
-    },
-  ],
-  askComments: [
-    { id: 1, request_id: 25, author_id: STAFF.id, text: 'Looking at this one this week.', at: minutesAgo(60) },
-  ],
-  nextAction: 42,
+  // The feature-request fixture. {feature_request_id} = 25 is the staff session's own PENDING
+  // row, so GET /api/requests/mine is never empty and Approve/Decline always have something to
+  // act on; {member_request_id} = 30 is the member session's own pending row, the only kind
+  // Withdraw takes. `asks` and not `requests`: state.requests is the ROLE-request list.
+  asks: seedRequests(),
+  askComments: seedRequestComments(),
+  nextAction: 47,
   nextCase: 10,
   nextMessage: 40,
   nextPoll: 10,
   nextChatIntent: 5,
   nextChatLine: 8,
   nextAsk: 31,
-  nextAskComment: 2,
+  nextAskComment: 16,
   actions: seedActions(),
   };
 }
 
 function seedActions() {
   return [
-  { id: 41, at: minutesAgo(3), kind: 'web.settings.set', actor_id: STAFF.id, target_id: null, reason: 'automod_mode = shadow', details: { key: 'automod_mode', value: 'shadow' } },
+  { id: 46, at: minutesAgo(1), kind: 'web.request.declined', actor_id: STAFF.id, target_id: MEMBERS[7].id, reason: 'Opt-in is the whole point of that role.', details: { request_id: 5, via: 'website' } },
+  { id: 45, at: minutesAgo(2), kind: 'web.request.approved', actor_id: STAFF.id, target_id: MEMBERS[1].id, reason: null, details: { request_id: 24, via: 'website' } },
+  { id: 44, at: minutesAgo(2), kind: 'request.filed', actor_id: MEMBERS[3].id, target_id: MEMBERS[3].id, reason: null, details: { request_id: 30, via: 'discord' } },
+  { id: 43, at: minutesAgo(3), kind: 'web.request.updated', actor_id: STAFF.id, target_id: null, reason: null, details: { request_id: 20, changed: ['assignee_id', 'priority'], via: 'website' } },
+  { id: 42, at: minutesAgo(3), kind: 'request.done', actor_id: STAFF.id, target_id: MEMBERS[6].id, reason: null, details: { request_id: 11, via: 'discord' } },
+  { id: 41, at: minutesAgo(3), kind: 'web.settings.set', actor_id: STAFF.id, target_id: null, reason: 'automod_mode = shadow', details: { key: 'automod_mode', value: 'shadow', via: 'website' } },
   { id: 40, at: minutesAgo(20), kind: 'automod.would_timeout', actor_id: null, target_id: MEMBERS[4].id, reason: 'mention spam: 6 mentions in 30s', details: { rule: 'mention_spam' } },
   { id: 39, at: minutesAgo(30), kind: 'honeypot.would_ban', actor_id: null, target_id: MEMBERS[4].id, reason: 'posted in #free-nitro-here', details: null },
   { id: 38, at: minutesAgo(45), kind: 'tempvoice.channel_created', actor_id: MEMBERS[1].id, target_id: '800000000000000010', reason: null, details: null },
   { id: 37, at: minutesAgo(60), kind: 'events.requested', actor_id: MEMBERS[3].id, target_id: null, reason: 'Movie night', details: null },
   { id: 36, at: minutesAgo(88), kind: 'modmail.note_added', actor_id: STAFF.id, target_id: MEMBERS[3].id, reason: null, details: null },
   { id: 35, at: minutesAgo(120), kind: 'golive.would_announce', actor_id: null, target_id: MEMBERS[1].id, reason: 'Lethal Company', details: null },
-  { id: 34, at: minutesAgo(220), kind: 'web.settings.set', actor_id: STAFF.id, target_id: null, reason: 'automod_mode = shadow', details: null },
+  { id: 34, at: minutesAgo(220), kind: 'web.settings.set', actor_id: STAFF.id, target_id: null, reason: 'automod_mode = shadow', details: { key: 'automod_mode', value: 'shadow', via: 'website' } },
   { id: 33, at: minutesAgo(400), kind: 'mod.warn', actor_id: MEMBERS[1].id, target_id: MEMBERS[5].id, reason: 'link spam', details: null },
   { id: 32, at: minutesAgo(800), kind: 'mod.warn', actor_id: STAFF.id, target_id: MEMBERS[4].id, reason: 'told to stop', details: null },
-  { id: 31, at: minutesAgo(900), kind: 'settings.set', actor_id: MEMBERS[1].id, target_id: null, reason: 'golive_mode = shadow', details: null },
+  { id: 31, at: minutesAgo(900), kind: 'settings.set', actor_id: MEMBERS[1].id, target_id: null, reason: 'golive_mode = shadow', details: { key: 'golive_mode', value: 'shadow', via: 'discord' } },
   { id: 30, at: minutesAgo(5000), kind: 'mod.ban', actor_id: STAFF.id, target_id: MEMBERS[7].id, reason: 'scam links', details: null },
   { id: 29, at: minutesAgo(5200), kind: 'honeypot.banned', actor_id: null, target_id: MEMBERS[5].id, reason: 'posted in #free-nitro-here', details: null },
   { id: 28, at: minutesAgo(6100), kind: 'honeypot.ban_failed', actor_id: null, target_id: MEMBERS[7].id, reason: 'Missing Permissions', details: null },
@@ -664,8 +744,21 @@ function sessionOf(request, url) {
   return cookieOf(request, 'mock_as') || 'staff';
 }
 
+const MEMBER = MEMBERS[3];
+
+/** The one session that is a signed-in guild member and NOT staff: requests only. */
+function requireMember(session) {
+  if (session === 'member') return;
+  requireStaff(session);
+}
+
+function actorOf(session) {
+  return session === 'member' ? MEMBER.id : STAFF.id;
+}
+
 function requireStaff(session) {
   if (session === 'none') throw new Refused(401, 'not_signed_in', NOT_SIGNED_IN);
+  if (session === 'member') throw new Refused(403, 'not_staff', NOT_STAFF);
   if (session === 'stranger') throw new Refused(403, 'not_staff', NOT_STAFF);
   if (session === 'unknown') throw new Refused(503, 'staff_unknown', STAFF_UNKNOWN);
   if (session === 'expired') throw new Refused(401, 'session_expired', 'Your sign-in has expired. Sign in again — nothing is wrong with your access.');
@@ -684,10 +777,11 @@ function meBody(session) {
   if (session === 'expired') return { status: 401, body: { error: 'session_expired', message: 'Your sign-in has expired. Sign in again — nothing is wrong with your access.' } };
   const user = { id: STAFF.id, name: STAFF.name, avatar: null };
   const guild = { id: '600000000000000001', name: 'Black in a Flash!' };
+  if (session === 'member') {
+    return { status: 200, body: { user: { id: MEMBER.id, name: MEMBER.display_name, avatar: null }, staff: false, member: true, state: 'not_staff', guild, message: MEMBER_NOT_STAFF } };
+  }
   if (session === 'stranger') {
-    // A signed-in member of the server who is not staff: `member` is what lets the requests
-    // page show them the form while every other page stays staff-only.
-    return { status: 200, body: { user: { id: MEMBERS[5].id, name: MEMBERS[5].name, avatar: null }, staff: false, member: true, state: 'not_staff', guild, message: MEMBER_NOT_STAFF } };
+    return { status: 200, body: { user: { id: MEMBERS[5].id, name: MEMBERS[5].name, avatar: null }, staff: false, member: false, state: 'not_staff', guild, message: NOT_STAFF } };
   }
   if (session === 'unknown') {
     return { status: 200, body: { user, staff: false, member: false, state: 'staff_unknown', guild, message: STAFF_UNKNOWN } };
@@ -841,11 +935,17 @@ route('GET', '/api/status', (context) => {
   return statusBody();
 });
 
+// actionlog.py:SUMMARY_SKIPS — `via` is its own column, so it never joins the summary.
+const SUMMARY_SKIPS = ['via'];
+
 function summaryOfAction(row) {
   if (row.reason) return String(row.reason);
   if (!row.details) return '';
   if (typeof row.details !== 'object') return String(row.details);
-  return Object.entries(row.details).map(([key, value]) => `${key}=${value}`).join(', ');
+  return Object.entries(row.details)
+    .filter(([key]) => !SUMMARY_SKIPS.includes(key))
+    .map(([key, value]) => `${key}=${value}`)
+    .join(', ');
 }
 
 function kindsPresent(feature) {
@@ -872,6 +972,7 @@ function searchedActions(params) {
     feature: featureOfKind(row.kind),
     important: isImportantKind(row.kind),
     summary: summaryOfAction(row),
+    via: viaOfKind(row.kind, row.details),
   }));
   if (needle) {
     rows = rows.filter((row) =>
@@ -1039,6 +1140,16 @@ route('GET', '/api/settings', (context) => {
   return settingsPayload();
 });
 
+const SETTINGS_KINDS = ['settings.set', 'settings.clear', 'web.settings.set', 'web.settings.clear'];
+
+/** The settings table has no column for where a change came from; the action log has. */
+function viaForKey(key) {
+  const found = state.actions.find(
+    (row) => SETTINGS_KINDS.includes(row.kind) && String((row.details || {}).key || '') === String(key),
+  );
+  return found ? viaOfKind(found.kind, found.details) : null;
+}
+
 route('GET', '/api/settings/audit', (context) => {
   requireStaff(context.session);
   const limit = Math.max(1, Math.min(Number(context.url.searchParams.get('limit') || 100), 500));
@@ -1050,6 +1161,7 @@ route('GET', '/api/settings/audit', (context) => {
       updated_by_id: row.updated_by === null || row.updated_by === undefined ? null : String(row.updated_by),
       updated_by_name: memberName(row.updated_by),
       updated_at: row.updated_at,
+      via: viaForKey(row.key),
     })),
     limit,
   };
@@ -1062,7 +1174,7 @@ route('PUT', '/api/settings/:key', async (context) => {
   armingRefusal(context.params.key, value);
   state.settings.set(context.params.key, value);
   state.audit.unshift({ key: context.params.key, value, updated_by: STAFF.id, updated_at: now() });
-  logAction('web.settings.set', { reason: `${context.params.key} = ${JSON.stringify(value)}`, details: { key: context.params.key, value } });
+  logAction('web.settings.set', { reason: `${context.params.key} = ${JSON.stringify(value)}`, details: { key: context.params.key, value, via: 'website' } });
   return keyRow(context.params.key);
 });
 
@@ -1072,7 +1184,7 @@ route('DELETE', '/api/settings/:key', (context) => {
   if (spec === null) throw new Refused(400, 'unknown_key', `Black Bloc has no setting called ${context.params.key}.`);
   state.settings.set(context.params.key, spec[3] ?? null);
   state.audit.unshift({ key: context.params.key, value: spec[3] ?? null, updated_by: STAFF.id, updated_at: now() });
-  logAction('web.settings.clear', { reason: context.params.key, details: { key: context.params.key } });
+  logAction('web.settings.clear', { reason: context.params.key, details: { key: context.params.key, via: 'website' } });
   return { ...keyRow(context.params.key), cleared: true };
 });
 
@@ -2693,6 +2805,7 @@ const REQUEST_STATUS_WORDS = {
 const REQUEST_PAGE = 20;
 const REQUEST_PRIORITY_MAX = 5;
 const REQUESTS_OFF = 'Requests are turned off on this server, so nothing was filed. A Lead turns them back on with `/settings set request_mode on` — ask one if you have something to ask for.';
+const REQUEST_STAFF_ONLY = 'Only staff may file a request on this server at the moment, so nothing was filed. Ask a Lead to put it in for you, or to set `request_who_can_file` to everyone.';
 const REQUEST_NEEDS_WHAT = 'A request needs a line saying what you are asking for, so nothing was filed. Fill the What box in and send it again.';
 const REQUEST_NEEDS_WHY = 'A request needs a line saying why it is worth doing, so nothing was filed. That is the part staff read first — fill the Why box in and send it again.';
 const REQUEST_DECLINE_NEEDS_A_REASON = 'A declined request needs one line the person who asked is sent, so nothing was changed. Say why and send it again.';
@@ -2820,28 +2933,33 @@ route('GET', '/api/requests', (context) => {
 });
 
 route('POST', '/api/requests', async (context) => {
-  requireStaff(context.session);
+  requireMember(context.session);
   if (state.settings.get('request_mode') === 'off') throw new Refused(409, 'requests_off', REQUESTS_OFF);
+  const staff = context.session !== 'member';
+  if (!staff && state.settings.get('request_who_can_file') === 'staff') {
+    throw new Refused(403, 'staff_only', REQUEST_STAFF_ONLY);
+  }
+  const mine = actorOf(context.session);
   const body = await context.body();
   const fields = askFields(body);
-  const approved = state.settings.get('request_auto_approve_staff') !== false;
+  const approved = staff && state.settings.get('request_auto_approve_staff') !== false;
   const made = {
     id: state.nextAsk++,
-    user_id: STAFF.id,
+    user_id: mine,
     ...fields,
     status: approved ? 'approved' : 'pending',
     priority: null,
     assignee_id: null,
     notes: null,
     created_at: now(),
-    decided_by: approved ? STAFF.id : null,
+    decided_by: approved ? mine : null,
     decided_at: approved ? now() : null,
     decline_reason: null,
     done_at: null,
     message_id: null,
   };
   state.asks.push(made);
-  logAction('web.request.filed', { target_id: STAFF.id, details: { request_id: made.id, auto_approved: approved } });
+  logAction('web.request.filed', { actor_id: mine, target_id: mine, details: { request_id: made.id, auto_approved: approved } });
   const said = approved
     ? `Filed as **#${made.id}**, and approved straight away because you are staff.`
     : `Filed as **#${made.id}** — staff will see it on this page.`;
@@ -2849,8 +2967,9 @@ route('POST', '/api/requests', async (context) => {
 });
 
 route('GET', '/api/requests/mine', (context) => {
-  requireStaff(context.session);
-  const rows = asksSorted(state.asks.filter((row) => String(row.user_id) === STAFF.id));
+  requireMember(context.session);
+  const mine = actorOf(context.session);
+  const rows = asksSorted(state.asks.filter((row) => String(row.user_id) === String(mine)));
   return askPage(rows, context.url.searchParams.get('page'));
 });
 
@@ -2950,16 +3069,17 @@ route('POST', '/api/requests/:id/status', async (context) => {
 });
 
 route('POST', '/api/requests/:id/withdraw', (context) => {
-  requireStaff(context.session);
+  requireMember(context.session);
+  const mine = actorOf(context.session);
   const row = wantedAsk(context.params.id);
-  if (String(row.user_id) !== STAFF.id) {
+  if (String(row.user_id) !== String(mine)) {
     throw new Refused(403, 'not_yours', `Request **#${row.id}** is not yours, so nothing was withdrawn. Only the person who filed it can take it back; staff decline one instead.`);
   }
   if (row.status !== 'pending') {
     throw new Refused(409, 'not_pending', `Request **#${row.id}** is already **${REQUEST_STATUS_WORDS[row.status]}**, so there was nothing to withdraw. Ask staff if you want it stopped.`);
   }
   row.status = 'withdrawn';
-  logAction('web.request.withdrawn', { target_id: row.user_id, details: { request_id: row.id } });
+  logAction('web.request.withdrawn', { actor_id: mine, target_id: row.user_id, details: { request_id: row.id } });
   return { request: askRow(row), message: `Request **#${row.id}** is withdrawn. Nobody will pick it up now.` };
 });
 

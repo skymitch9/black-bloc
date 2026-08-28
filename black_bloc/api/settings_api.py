@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
+from ..logkinds import VIA_WEBSITE, via_of
 from ..settings_store import (
     KEY_CHOICES,
     KEY_HELP,
@@ -35,6 +36,8 @@ NAMESPACE_OVERRIDE = {
 }
 AUDIT_DEFAULT_LIMIT = 100
 AUDIT_MAX_LIMIT = 500
+AUDIT_SCAN_LIMIT = 2000
+SETTINGS_KINDS = ("settings.set", "settings.clear", "web.settings.set", "web.settings.clear")
 
 NO_VALUE = (
     "That change arrived without a value, so nothing was changed. It is a fault in the page "
@@ -113,7 +116,7 @@ def grouped(store: Any, guild_id: int) -> dict[str, list[dict[str, Any]]]:
     return found
 
 
-def audit_row(guild: Any, row: Any) -> dict[str, Any]:
+def audit_row(guild: Any, row: Any, via: str | None = None) -> dict[str, Any]:
     key = str(row["key"])
     try:
         value = json.loads(row["value"])
@@ -127,7 +130,31 @@ def audit_row(guild: Any, row: Any) -> dict[str, Any]:
         "updated_by_id": str(by) if by is not None else None,
         "updated_by_name": resolve_one(guild, by)["display_name"] if by is not None else None,
         "updated_at": row["updated_at"],
+        "via": via,
     }
+
+
+async def via_by_key(bot: Any, guild: Any, keys: Any) -> dict[str, str]:
+    """The settings table has no column for where a change came from; the action log has."""
+    wanted = {str(one) for one in keys}
+    if not wanted:
+        return {}
+    marks = ", ".join("?" for _ in SETTINGS_KINDS)
+    cur = await bot.db.conn.execute(
+        f"SELECT kind, details FROM action_log WHERE guild_id = ? AND kind IN ({marks}) "
+        "ORDER BY id DESC LIMIT ?",
+        (guild.id, *SETTINGS_KINDS, AUDIT_SCAN_LIMIT),
+    )
+    found: dict[str, str] = {}
+    for row in await cur.fetchall():
+        try:
+            details = json.loads(row["details"]) if row["details"] else None
+        except (TypeError, ValueError):
+            details = None
+        key = str((details or {}).get("key") or "")
+        if key in wanted and key not in found:
+            found[key] = via_of(row["kind"], details)
+    return found
 
 
 async def audit_rows(bot: Any, guild: Any, limit: int) -> list[dict[str, Any]]:
@@ -136,7 +163,9 @@ async def audit_rows(bot: Any, guild: Any, limit: int) -> list[dict[str, Any]]:
         "ORDER BY updated_at DESC, key LIMIT ?",
         (guild.id, limit),
     )
-    return [audit_row(guild, row) for row in await cur.fetchall()]
+    rows = list(await cur.fetchall())
+    marks = await via_by_key(bot, guild, [row["key"] for row in rows])
+    return [audit_row(guild, row, marks.get(str(row["key"]))) for row in rows]
 
 
 def build_router(bot: Any) -> APIRouter:
@@ -173,7 +202,11 @@ def build_router(bot: Any) -> APIRouter:
         except SettingError as exc:
             raise Refused(400, "bad_value", str(exc)) from None
         await note(
-            bot, guild, "web.settings.set", who, details={"key": key, "value": as_json(key, stored)}
+            bot,
+            guild,
+            "web.settings.set",
+            who,
+            details={"key": key, "value": as_json(key, stored), "via": VIA_WEBSITE},
         )
         return key_row(bot.store, guild.id, key)
 
@@ -185,7 +218,9 @@ def build_router(bot: Any) -> APIRouter:
         if key not in KEY_TYPES:
             raise Refused(400, "unknown_setting", UNKNOWN_KEY.format(key=key))
         cleared = await bot.store.clear(guild.id, key, by=int(who["id"]))
-        await note(bot, guild, "web.settings.clear", who, details={"key": key})
+        await note(
+            bot, guild, "web.settings.clear", who, details={"key": key, "via": VIA_WEBSITE}
+        )
         return key_row(bot.store, guild.id, key) | {"cleared": cleared}
 
     return router

@@ -14,6 +14,9 @@ from black_bloc.logkinds import (
     OFF,
     ROUTINE,
     SHADOW,
+    VIA_DISCORD,
+    VIA_WEBSITE,
+    VIA_WORDS,
     bare,
     feature_of,
     heads_for,
@@ -22,6 +25,8 @@ from black_bloc.logkinds import (
     like_patterns,
     log_level_key,
     should_post,
+    via_of,
+    via_word,
 )
 
 PACKAGE = pathlib.Path(logkinds.__file__).resolve().parent
@@ -66,6 +71,15 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.poll.recur_deleted",
         "web.poll.recur_paused",
         "web.poll.recur_resumed",
+        "web.request.approved",
+        "web.request.comment",
+        "web.request.declined",
+        "web.request.done",
+        "web.request.filed",
+        "web.request.in_progress",
+        "web.request.planned",
+        "web.request.updated",
+        "web.request.withdrawn",
         "web.role.ended",
         "web.role.extended",
         "web.role.granted",
@@ -123,6 +137,13 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "tempvoice.unlock",
         "tempvoice.unpermit",
         "tempvoice.unpermit_failed",
+    ),
+    "black_bloc/cogs/community/requests.py::f'request.{status}'": (
+        "request.approved",
+        "request.declined",
+        "request.planned",
+        "request.in_progress",
+        "request.done",
     ),
     "black_bloc/cogs/content/chat.py::LOG_KIND": ("chat.insult",),
     "black_bloc/cogs/content/chat.py::ROUTE_KIND": ("chat.route",),
@@ -321,6 +342,48 @@ def test_the_routine_set_beats_a_suffix():
     assert is_important("mod.banned") is True
 
 
+def test_a_request_is_loud_only_when_it_is_answered_or_fails():
+    """Filing, triage and a withdrawal are the member's own housekeeping; a decision is not."""
+    for kind in (
+        "request.filed",
+        "request.auto_approved",
+        "request.withdrawn",
+        "request.planned",
+        "request.in_progress",
+        "request.updated",
+        "request.comment",
+    ):
+        assert is_important(kind) is False, kind
+        assert is_important(f"web.{kind}") is False, kind
+    for kind in ("request.approved", "request.declined", "request.done"):
+        assert is_important(kind) is True, kind
+        assert is_important(f"web.{kind}") is True, kind
+    assert is_important("request.dm_failed") is True
+    assert is_important("request.notify_failed") is True
+    assert feature_of("request.filed") == "request"
+    assert feature_of("web.request.approved") == "request"
+
+
+def test_via_reads_what_the_writer_recorded_and_falls_back_to_the_web_head():
+    """Owner, 2026-08-27: a log line says whether Discord or the website did it."""
+    assert via_of("settings.set", {"key": "golive_mode"}) == "discord"
+    assert via_of("web.settings.set", {"key": "golive_mode"}) == "website"
+    # what the writer recorded wins over the head, which is what a website path
+    # logging a bare feature kind needs.
+    assert via_of("request.approved", {"via": "website"}) == "website"
+    assert via_of("web.request.approved", {"via": "discord"}) == "discord"
+    # anything that is not one of the two words is not a decision, so the head decides
+    assert via_of("settings.set", {"via": "carrier pigeon"}) == "discord"
+    assert via_of("web.settings.set", {"via": ""}) == "website"
+    assert via_of("settings.set", None) == "discord"
+    assert via_of("settings.set", "not a dict") == "discord"
+    # `web` on its own is not a head with anything under it
+    assert via_of("web") == "discord"
+    assert via_word("web.settings.set") == "Website"
+    assert via_word("settings.set") == "Discord"
+    assert set(VIA_WORDS) == {VIA_DISCORD, VIA_WEBSITE}
+
+
 def test_should_post_reads_the_three_levels():
     assert should_post("mod.banned", OFF) is False
     assert should_post("poll.created", OFF) is False
@@ -335,8 +398,8 @@ def test_an_unknown_level_is_todays_behaviour():
 
 
 def test_every_feature_has_one_settings_key():
-    assert len(FEATURES) == 12
-    assert len(set(FEATURES)) == 12
+    assert len(FEATURES) == 13
+    assert len(set(FEATURES)) == 13
     assert log_level_key("golive") == "golive_log_level"
     assert LEVELS == (OFF, IMPORTANT_ONLY, ALL)
 

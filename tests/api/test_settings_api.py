@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from black_bloc.api.settings_api import CORE_KEYS, namespace_of
 from black_bloc.api.writes import WRITE_RATE
 from black_bloc.settings_store import KEY_TYPES
@@ -191,3 +193,63 @@ def test_writes_are_rate_limited_per_session(client, sign_in):
     assert response.status_code == 429
     assert response.json()["error"] == "slow_down"
     assert client.get("/api/settings").status_code == 200
+
+
+async def test_a_website_change_records_that_it_came_from_the_website(client, sign_in, web, wf):
+    """Owner, 2026-08-27: the log says whether Discord or the website set a key."""
+    sign_in(client, uid=7)
+
+    client.put("/api/settings/golive_mode", json={"value": "on"})
+
+    cur = await web.db.conn.execute(
+        "SELECT kind, details FROM action_log WHERE kind = 'web.settings.set'"
+    )
+    row = (await cur.fetchall())[0]
+    assert json.loads(row["details"])["via"] == "website"
+
+    audit = client.get("/api/settings/audit").json()["audit"][0]
+    assert audit["key"] == "golive_mode"
+    assert audit["via"] == "website"
+
+
+async def test_clearing_from_the_website_says_so_too(client, sign_in, web, wf):
+    sign_in(client, uid=7)
+    client.put("/api/settings/golive_mode", json={"value": "on"})
+
+    client.delete("/api/settings/golive_mode")
+
+    cur = await web.db.conn.execute(
+        "SELECT details FROM action_log WHERE kind = 'web.settings.clear'"
+    )
+    assert json.loads((await cur.fetchall())[0]["details"])["via"] == "website"
+    # A cleared key leaves the settings table, so the audit has nothing to show for it;
+    # the Logs page is where a clear is read, and that row carries the word.
+    logged = client.get("/api/actions?limit=10").json()["actions"]
+    assert next(one for one in logged if one["kind"] == "web.settings.clear")["via"] == "website"
+
+
+async def test_a_key_the_action_log_never_saw_reports_no_via_rather_than_guessing(
+    client, sign_in, web, wf
+):
+    """A key written before this landed has nothing to read, and says so with a null."""
+    await web.store.set(wf.GUILD_ID, "golive_mode", "shadow", by=7)
+    sign_in(client, uid=7)
+
+    row = next(
+        one
+        for one in client.get("/api/settings/audit").json()["audit"]
+        if one["key"] == "golive_mode"
+    )
+
+    assert row["via"] is None
+
+
+async def test_every_action_row_the_page_reads_carries_a_via(client, sign_in, web, wf):
+    sign_in(client, uid=7)
+    client.put("/api/settings/golive_mode", json={"value": "on"})
+
+    rows = client.get("/api/actions?limit=10").json()["actions"]
+
+    assert rows
+    assert all(row["via"] in ("discord", "website") for row in rows)
+    assert next(row for row in rows if row["kind"] == "web.settings.set")["via"] == "website"
