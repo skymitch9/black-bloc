@@ -5,6 +5,7 @@
 
 | File | Answers |
 |---|---|
+| [`OWNER_GUIDE.md`](OWNER_GUIDE.md) | **Start here, owner:** before the trip (encrypt `.env`, leave the session open), the laptop once, what to look at on the road, if something looks wrong, when you're back |
 | [`setup.md`](setup.md) | Local run: venv, `.env`, Developer Portal, invite, first start |
 | [`deploy.md`](deploy.md) | Hosting on Fly.io: first launch, secrets, volume, redeploy, logs. Verified daily since 2026-08-26 (see `../deploys.log`) |
 | [`RECOVERY.md`](RECOVERY.md) | Rebuild from nothing: inventory, secret custody, named gaps |
