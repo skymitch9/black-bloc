@@ -89,3 +89,25 @@ Stop a leftover mock server on Windows: find the `node` PID on the port (`Get-Ne
 `scripts/docs/move_done.py "<heading>" <note-file> "<TODO line prefix>" [...]` moves TODO items whole
 into DONE with a landing note (append-only, newest first). Every ask goes on `TODO.md` the moment it is
 mentioned; finished items move in the session they land.
+
+## Laptop from scratch (what you need while away)
+You do NOT need `.env` to deploy — secrets live on Fly. You need it only to run the bot locally.
+
+```
+git clone https://github.com/skymitch9/black-bloc.git && cd black-bloc
+winget install --id Fly-io.flyctl        # then, in a NEW terminal: flyctl auth login (browser)
+python -m venv .venv && .venv/Scripts/pip install -e ".[dev]"      # tests fake their own tokens
+node --version                            # for site/mock/check.mjs (Node 20+)
+```
+Deploy = the block under **Deploy** above (`git pull` first). Docs are tracked temporarily, so `docs/` comes with the clone.
+
+**`.env` on another machine, without pasting secrets around:** on the main machine run
+`sh scripts/env-lock.sh` in YOUR OWN terminal (it prompts for a passphrase; keep it in your password
+manager), commit the resulting `.env.enc`, push. On the laptop: `sh scripts/env-unlock.sh` → writes
+`.env` (gitignored). AES-256-CBC with PBKDF2 (600k iterations) via the OpenSSL that ships with Git for
+Windows; the passphrase never leaves your head/password manager and Claude never sees the values. If
+you rotate a secret, re-run lock and commit the new `.env.enc`. (A Firebase/Firestore store would work
+too but would need a service-account key on the laptop — a second secret to protect for no gain.)
+Variable NAMES in `.env`: `DISCORD_TOKEN DISCORD_CLIENT_ID DISCORD_CLIENT_SECRET SESSION_SECRET
+TWITCH_CLIENT_ID TWITCH_CLIENT_SECRET DEV_GUILD_ID TEST_MODE TEST_CHANNEL_ID DATABASE_PATH API_ENABLED
+API_HOST API_PORT SITE_ORIGIN COMMAND_PREFIX LOG_LEVEL`.

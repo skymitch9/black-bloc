@@ -27,3 +27,6 @@ scripts/scan/
 
 # Agent worktrees (parallel builders); never product code.
 .claude/
+
+# Encrypted copy of .env (scripts/env-lock.sh); safe to commit, unlock with scripts/env-unlock.sh
+!.env.enc
