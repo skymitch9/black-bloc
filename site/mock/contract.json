@@ -66,6 +66,10 @@
       "keys": [
         "actions",
         "limit",
+        "per_page",
+        "page",
+        "total",
+        "shown",
         "notes"
       ],
       "rows": {
@@ -73,6 +77,39 @@
           "id",
           "at",
           "kind",
+          "feature",
+          "important",
+          "actor_id",
+          "actor_name",
+          "target_id",
+          "target_name",
+          "reason"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/actions?feature=core&q=settings&important=0&page=1&per_page=5",
+      "read_by": [
+        "page-audit.js"
+      ],
+      "shape": "object",
+      "keys": [
+        "actions",
+        "limit",
+        "per_page",
+        "page",
+        "total",
+        "shown",
+        "notes"
+      ],
+      "rows": {
+        "actions": [
+          "id",
+          "at",
+          "kind",
+          "feature",
+          "important",
           "actor_id",
           "actor_name",
           "target_id",

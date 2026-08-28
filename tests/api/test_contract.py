@@ -188,6 +188,7 @@ async def seeded(client, sign_in, web, guild, wf):
             "options": [{"role_id": str(wf.PLAIN_ROLE_ID), "label": "Member"}],
         },
     )
+    client.put("/api/settings/poll_auto_thread", json={"value": True})
     client.post("/api/modmail/snippets", json={"name": "contract", "content": "hello"})
     client.post("/api/modmail/blocks", json={"user_id": str(MEMBER_ID)})
     await create_menu(

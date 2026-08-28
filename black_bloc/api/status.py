@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+import io
 import json
 import logging
 import math
@@ -8,9 +10,12 @@ from typing import Any
 
 from discord.ext import tasks
 from fastapi import APIRouter, Depends
+from fastapi.responses import PlainTextResponse
 
 from .. import __version__
+from ..actionlog import SCAN_LIMIT, feature_clause
 from ..events import OPEN_STATUSES
+from ..logkinds import FEATURES, feature_of, is_important
 from ..modmail import OPEN as MODMAIL_OPEN
 from ..settings_store import KEY_TYPES
 from .auth import Refused, guild_of, staff_dependency
@@ -22,6 +27,20 @@ HONEYPOT_WINDOW_DAYS = 7
 NOT_A_FEATURE = ("golive_end_mode", "poll_review_mode")
 ACTIONS_DEFAULT_LIMIT = 50
 ACTIONS_MAX_LIMIT = 200
+CSV_MEDIA_TYPE = "text/csv"
+CSV_COLUMNS = (
+    "id",
+    "at",
+    "kind",
+    "feature",
+    "important",
+    "actor_id",
+    "actor_name",
+    "target_id",
+    "target_name",
+    "reason",
+    "details",
+)
 
 NO_GUILD = (
     "Black Bloc is not in a server it can report on yet, so the per-feature figures below are "
@@ -38,6 +57,19 @@ DB_UNREACHABLE = (
 NOT_AN_ID = (
     "**{given}** is not an id Black Bloc can read, so the log was not filtered. Ids are the long "
     "numbers Discord shows under Copy ID."
+)
+NOT_A_DATE = (
+    "**{given}** is not a date Black Bloc can read, so the log was not filtered. Dates look like "
+    "2026-08-27 or 2026-08-27T14:30:00Z."
+)
+UNKNOWN_FEATURE = (
+    "**{given}** is not one of Black Bloc's features, so the log was not filtered. The features "
+    "are: {known}."
+)
+SCAN_TRUNCATED = (
+    "Only the most recent {limit} log lines were searched, so the count below is what matched "
+    "inside that window rather than the whole history. Narrow the dates or the feature to see "
+    "further back."
 )
 
 
@@ -182,10 +214,13 @@ def _details(raw: Any) -> Any:
 
 
 def _action(row: Any, with_details: bool) -> dict[str, Any]:
+    kind = row["kind"]
     found = {
         "id": row["id"],
         "at": row["at"],
-        "kind": row["kind"],
+        "kind": kind,
+        "feature": feature_of(kind),
+        "important": is_important(kind),
         "actor_id": str(row["actor_id"]) if row["actor_id"] is not None else None,
         "target_id": str(row["target_id"]) if row["target_id"] is not None else None,
         "reason": row["reason"],
@@ -203,6 +238,9 @@ async def recent_actions(
     with_details: bool = False,
     kind: str | None = None,
     user_id: int | None = None,
+    feature: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
 ) -> list[dict[str, Any]]:
     """`kind` matches a whole kind or a prefix like `web.` or `mod.`; `user_id` either end."""
     sql = (
@@ -216,8 +254,99 @@ async def recent_actions(
     if user_id is not None:
         sql += " AND (actor_id = ? OR target_id = ?)"
         params += (user_id, user_id)
+    if feature:
+        clause, wanted = feature_clause(feature)
+        sql += f" AND {clause}"
+        params += wanted
+    if since:
+        sql += " AND at >= ?"
+        params += (since,)
+    if until:
+        sql += " AND at <= ?"
+        params += (until,)
     cur = await bot.db.conn.execute(sql + " ORDER BY id DESC LIMIT ?", (*params, limit))
     return [_action(row, with_details) for row in await cur.fetchall()]
+
+
+def csv_cell(row: dict[str, Any], name: str) -> Any:
+    value = row.get(name)
+    if name == "details":
+        return json.dumps(value, default=str) if value else ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return "" if value is None else value
+
+
+def searchable(row: dict[str, Any]) -> str:
+    parts = [str(row.get(name) or "") for name in ("kind", "actor_name", "target_name", "reason")]
+    parts.append(json.dumps(row.get("details"), default=str) if row.get("details") else "")
+    return " ".join(parts).lower()
+
+
+def wanted_when(given: str, name: str) -> str | None:
+    """A bare date is the whole day: `until=2026-08-27` must not exclude that afternoon."""
+    text = str(given or "").strip()
+    if not text:
+        return None
+    try:
+        when = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        raise Refused(400, "bad_request", NOT_A_DATE.format(given=text[:40])) from None
+    if len(text) == 10 and name == "until":
+        when = when.replace(hour=23, minute=59, second=59, microsecond=999999)
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=UTC)
+    return when.astimezone(UTC).isoformat()
+
+
+def wanted_feature(given: str) -> str | None:
+    text = str(given or "").strip().lower()
+    if not text:
+        return None
+    if text not in FEATURES:
+        raise Refused(
+            400,
+            "bad_request",
+            UNKNOWN_FEATURE.format(given=text[:40], known=", ".join(FEATURES)),
+        )
+    return text
+
+
+async def searched_actions(
+    bot: Any,
+    guild: Any,
+    *,
+    kind: str,
+    user_id: str,
+    feature: str,
+    since: str,
+    until: str,
+    q: str,
+    important: bool,
+) -> tuple[list[dict[str, Any]], bool]:
+    """Everything SQL can filter, then importance and the free-text search in Python."""
+    wanted_id = as_id(user_id) if user_id else None
+    if user_id and wanted_id is None:
+        raise Refused(400, "bad_request", NOT_AN_ID.format(given=str(user_id)[:40]))
+    rows = await recent_actions(
+        bot,
+        guild.id,
+        SCAN_LIMIT,
+        with_details=True,
+        kind=str(kind or "").strip() or None,
+        user_id=wanted_id,
+        feature=wanted_feature(feature),
+        since=wanted_when(since, "since"),
+        until=wanted_when(until, "until"),
+    )
+    truncated = len(rows) >= SCAN_LIMIT
+    found = [named(row, guild, "actor", "target") for row in rows]
+    if important:
+        found = [row for row in found if row["important"]]
+    needle = str(q or "").strip().lower()
+    if needle:
+        found = [row for row in found if needle in searchable(row)]
+    return (found, truncated)
 
 
 def build_router(bot: Any) -> APIRouter:
@@ -265,32 +394,97 @@ def build_router(bot: Any) -> APIRouter:
     @router.get("/actions", dependencies=[Depends(reader)])
     async def actions(
         limit: int = ACTIONS_DEFAULT_LIMIT,
+        per_page: int = 0,
+        page: int = 1,
         details: int = 0,
         kind: str = "",
         user_id: str = "",
+        feature: str = "",
+        q: str = "",
+        since: str = "",
+        until: str = "",
+        important: int = 0,
     ) -> dict[str, Any]:
-        limit = max(1, min(limit, ACTIONS_MAX_LIMIT))
+        size = max(1, min(per_page or limit, ACTIONS_MAX_LIMIT))
+        page = max(1, page)
+        empty = {
+            "actions": [],
+            "limit": size,
+            "per_page": size,
+            "page": page,
+            "total": 0,
+            "shown": 0,
+            "notes": [NO_GUILD],
+        }
         guild = guild_of(bot)
         if guild is None:
-            return {"actions": [], "limit": limit, "notes": [NO_GUILD]}
+            return empty
         db = getattr(bot, "db", None)
         if db is None or not db.is_connected:
             raise Refused(503, "database_unavailable", DB_UNREACHABLE)
-        wanted = as_id(user_id) if user_id else None
-        if user_id and wanted is None:
-            raise Refused(400, "bad_request", NOT_AN_ID.format(given=str(user_id)[:40]))
-        rows = await recent_actions(
+        found, truncated = await searched_actions(
             bot,
-            guild.id,
-            limit,
-            with_details=bool(details),
-            kind=str(kind or "").strip() or None,
-            user_id=wanted,
+            guild,
+            kind=kind,
+            user_id=user_id,
+            feature=feature,
+            since=since,
+            until=until,
+            q=q,
+            important=bool(important),
         )
+        start = (page - 1) * size
+        shown = found[start : start + size]
+        if not details:
+            shown = [
+                {key: value for key, value in row.items() if key != "details"} for row in shown
+            ]
         return {
-            "actions": [named(row, guild, "actor", "target") for row in rows],
-            "limit": limit,
-            "notes": [],
+            "actions": shown,
+            "limit": size,
+            "per_page": size,
+            "page": page,
+            "total": len(found),
+            "shown": len(shown),
+            "notes": [SCAN_TRUNCATED.format(limit=SCAN_LIMIT)] if truncated else [],
         }
+
+    @router.get("/actions/export.csv", dependencies=[Depends(reader)])
+    async def actions_export(
+        kind: str = "",
+        user_id: str = "",
+        feature: str = "",
+        q: str = "",
+        since: str = "",
+        until: str = "",
+        important: int = 0,
+    ) -> PlainTextResponse:
+        guild = guild_of(bot)
+        if guild is None:
+            raise Refused(503, "no_guild", NO_GUILD)
+        db = getattr(bot, "db", None)
+        if db is None or not db.is_connected:
+            raise Refused(503, "database_unavailable", DB_UNREACHABLE)
+        found, _ = await searched_actions(
+            bot,
+            guild,
+            kind=kind,
+            user_id=user_id,
+            feature=feature,
+            since=since,
+            until=until,
+            q=q,
+            important=bool(important),
+        )
+        out = io.StringIO()
+        writer = csv.writer(out, lineterminator="\n")
+        writer.writerow(CSV_COLUMNS)
+        for row in found:
+            writer.writerow([csv_cell(row, name) for name in CSV_COLUMNS])
+        return PlainTextResponse(
+            out.getvalue(),
+            media_type=CSV_MEDIA_TYPE,
+            headers={"Content-Disposition": 'attachment; filename="black-bloc-log.csv"'},
+        )
 
     return router

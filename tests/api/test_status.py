@@ -460,3 +460,166 @@ async def test_an_actions_filter_that_is_not_an_id_is_a_sentence(bot, db, sign_i
     assert response.status_code == 400
     assert set(response.json()) == {"error", "message"}
     assert "nobody" in response.json()["message"]
+
+
+async def test_every_action_row_says_which_feature_it_is_and_whether_it_matters(
+    bot, db, sign_in, wf
+):
+    await _log(db, wf.GUILD_ID, "web.role.granted", actor=7, target=21)
+    await _log(db, wf.GUILD_ID, "poll.created", actor=7)
+    bot.db = db
+
+    client = client_for(bot)
+    sign_in(client)
+    rows = {row["kind"]: row for row in client.get("/api/actions").json()["actions"]}
+
+    assert rows["web.role.granted"]["feature"] == "rolemenu"
+    assert rows["web.role.granted"]["important"] is True
+    assert rows["poll.created"]["feature"] == "poll"
+    assert rows["poll.created"]["important"] is False
+
+
+async def test_actions_can_be_filtered_by_feature(bot, db, sign_in, wf):
+    for kind in ("role.granted", "role_menu.update", "web.rolemenu.post", "poll.created"):
+        await _log(db, wf.GUILD_ID, kind)
+    bot.db = db
+
+    client = client_for(bot)
+    sign_in(client)
+    body = client.get("/api/actions", params={"feature": "rolemenu"}).json()
+
+    assert body["total"] == 3
+    assert all(row["feature"] == "rolemenu" for row in body["actions"])
+
+
+async def test_a_feature_nobody_has_is_a_sentence_that_names_the_ones_there_are(bot, db, sign_in):
+    bot.db = db
+    client = client_for(bot)
+    sign_in(client)
+    response = client.get("/api/actions", params={"feature": "rolemenus"})
+    assert response.status_code == 400
+    assert "rolemenus" in response.json()["message"]
+    assert "tempvoice" in response.json()["message"]
+
+
+async def test_important_leaves_out_the_dry_runs(bot, db, sign_in, wf):
+    for kind in ("mod.would_ban", "mod.banned", "mod.warned"):
+        await _log(db, wf.GUILD_ID, kind)
+    bot.db = db
+
+    client = client_for(bot)
+    sign_in(client)
+    body = client.get("/api/actions", params={"important": 1}).json()
+
+    assert {row["kind"] for row in body["actions"]} == {"mod.banned", "mod.warned"}
+    assert body["total"] == 2
+
+
+async def test_q_searches_the_kind_the_names_and_the_details(bot, db, sign_in, guild, wf):
+    wf.member(guild, 21, name="spammer")
+    await _log(db, wf.GUILD_ID, "mod.banned", actor=7, target=21)
+    await db.conn.execute(
+        "INSERT INTO action_log(guild_id, at, kind, reason, details) "
+        "VALUES (?, '2026-08-26T00:00:00+00:00', 'poll.created', 'a question', ?)",
+        (wf.GUILD_ID, json.dumps({"poll_id": 77})),
+    )
+    await db.conn.commit()
+    bot.db = db
+
+    client = client_for(bot)
+    sign_in(client)
+    hits = lambda text: {  # noqa: E731
+        row["kind"] for row in client.get("/api/actions", params={"q": text}).json()["actions"]
+    }
+
+    assert hits("banned") == {"mod.banned"}
+    assert hits("spamm") == {"mod.banned"}
+    assert hits("poll_id") == {"poll.created"}
+    assert hits("a question") == {"poll.created"}
+    assert hits("nothing like that") == set()
+
+
+async def test_since_and_until_read_a_bare_date_as_the_whole_day(bot, db, sign_in, wf):
+    await _log(db, wf.GUILD_ID, "poll.created", at="2026-08-25T23:00:00+00:00")
+    await _log(db, wf.GUILD_ID, "poll.closed", at="2026-08-26T18:00:00+00:00")
+    await _log(db, wf.GUILD_ID, "poll.opened", at="2026-08-27T01:00:00+00:00")
+    bot.db = db
+
+    client = client_for(bot)
+    sign_in(client)
+    within = client.get(
+        "/api/actions", params={"since": "2026-08-26", "until": "2026-08-26"}
+    ).json()
+
+    assert [row["kind"] for row in within["actions"]] == ["poll.closed"]
+    after = client.get("/api/actions", params={"since": "2026-08-26T18:00:00Z"}).json()
+    assert {row["kind"] for row in after["actions"]} == {"poll.closed", "poll.opened"}
+
+
+async def test_a_date_nobody_can_read_is_a_sentence(bot, db, sign_in):
+    bot.db = db
+    client = client_for(bot)
+    sign_in(client)
+    response = client.get("/api/actions", params={"since": "last tuesday"})
+    assert response.status_code == 400
+    assert "last tuesday" in response.json()["message"]
+
+
+async def test_paging_reports_the_whole_count_and_the_page_it_gave_back(bot, db, sign_in, wf):
+    for n in range(7):
+        await _log(db, wf.GUILD_ID, f"poll.k{n}", at=f"2026-08-2{n}T00:00:00+00:00")
+    bot.db = db
+
+    client = client_for(bot)
+    sign_in(client)
+    first = client.get("/api/actions", params={"per_page": 3, "page": 1}).json()
+    last = client.get("/api/actions", params={"per_page": 3, "page": 3}).json()
+    past_the_end = client.get("/api/actions", params={"per_page": 3, "page": 9}).json()
+
+    assert (first["total"], first["shown"], first["per_page"]) == (7, 3, 3)
+    assert [row["kind"] for row in first["actions"]] == ["poll.k6", "poll.k5", "poll.k4"]
+    assert [row["kind"] for row in last["actions"]] == ["poll.k0"]
+    assert (past_the_end["total"], past_the_end["shown"]) == (7, 0)
+    assert past_the_end["actions"] == []
+
+
+async def test_per_page_is_clamped_and_limit_still_works_for_the_old_pages(bot, db, sign_in):
+    bot.db = db
+    client = client_for(bot)
+    sign_in(client)
+    assert client.get("/api/actions", params={"per_page": 100000}).json()["per_page"] == 200
+    assert client.get("/api/actions", params={"per_page": 0, "limit": 10}).json()["per_page"] == 10
+    assert client.get("/api/actions", params={"page": -4}).json()["page"] == 1
+
+
+async def test_the_export_is_csv_with_the_same_filters(bot, db, sign_in, guild, wf):
+    wf.member(guild, 21, name="spammer")
+    await _log(db, wf.GUILD_ID, "mod.banned", actor=7, target=21)
+    await _log(db, wf.GUILD_ID, "poll.created")
+    bot.db = db
+
+    client = client_for(bot)
+    sign_in(client)
+    response = client.get("/api/actions/export.csv", params={"feature": "mod"})
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert "black-bloc-log.csv" in response.headers["content-disposition"]
+    lines = response.text.strip().splitlines()
+    assert lines[0].startswith("id,at,kind,feature,important,")
+    assert len(lines) == 2
+    assert "mod.banned,mod,true" in lines[1]
+    assert "Spammer" in lines[1]
+
+
+async def test_the_export_refuses_the_same_way_the_list_does(bot, db, sign_in):
+    bot.db = db
+    client = client_for(bot)
+    sign_in(client)
+    assert client.get("/api/actions/export.csv", params={"feature": "nope"}).status_code == 400
+    assert client.get("/api/actions/export.csv", params={"user_id": "x"}).status_code == 400
+
+
+def test_the_export_needs_a_session_like_every_other_read(bot):
+    client = client_for(bot)
+    assert client.get("/api/actions/export.csv").status_code == 401
