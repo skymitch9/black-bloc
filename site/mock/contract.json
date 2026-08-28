@@ -1694,6 +1694,238 @@
         "slot",
         "line"
       ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/requests?status=pending&per_page=5",
+      "read_by": [
+        "13b page-requests.js"
+      ],
+      "shape": "object",
+      "keys": [
+        "requests",
+        "total",
+        "shown",
+        "page",
+        "per_page",
+        "notes"
+      ],
+      "rows": {
+        "requests": [
+          "id",
+          "what",
+          "why",
+          "due_on",
+          "status",
+          "priority",
+          "requester",
+          "assignee",
+          "notes",
+          "comment_count",
+          "created_at",
+          "decided_by",
+          "decided_at",
+          "decline_reason",
+          "done_at"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/requests/mine",
+      "read_by": [
+        "13b page-requests.js member mode"
+      ],
+      "shape": "object",
+      "keys": [
+        "requests",
+        "total",
+        "shown",
+        "page",
+        "per_page",
+        "notes"
+      ],
+      "rows": {
+        "requests": [
+          "id",
+          "what",
+          "why",
+          "due_on",
+          "status",
+          "priority",
+          "requester",
+          "assignee",
+          "notes",
+          "comment_count",
+          "created_at",
+          "decided_by",
+          "decided_at",
+          "decline_reason",
+          "done_at"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/requests/{feature_request_id}",
+      "read_by": [
+        "13b page-requests.js comments drawer"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "what",
+        "why",
+        "due_on",
+        "status",
+        "priority",
+        "requester",
+        "assignee",
+        "notes",
+        "comment_count",
+        "created_at",
+        "decided_by",
+        "decided_at",
+        "decline_reason",
+        "done_at",
+        "comments"
+      ],
+      "rows": {
+        "comments": [
+          "id",
+          "author",
+          "text",
+          "at"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/requests",
+      "body": {
+        "what": "A contract check",
+        "why": "The contract table needs one request it filed itself.",
+        "due_on": null
+      },
+      "read_by": [
+        "13b page-requests.js file a request form"
+      ],
+      "shape": "object",
+      "keys": [
+        "request",
+        "message"
+      ],
+      "nested": {
+        "request": [
+          "id",
+          "what",
+          "why",
+          "due_on",
+          "status",
+          "priority",
+          "requester",
+          "assignee",
+          "notes",
+          "comment_count",
+          "created_at",
+          "decided_by",
+          "decided_at",
+          "decline_reason",
+          "done_at"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/requests/{feature_request_id}/approve",
+      "body": {},
+      "read_by": [
+        "13b page-requests.js pending section"
+      ],
+      "shape": "object",
+      "keys": [
+        "request",
+        "message"
+      ],
+      "nested": {
+        "request": [
+          "id",
+          "status",
+          "decided_by",
+          "decided_at"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/requests/{feature_request_id}/decline",
+      "body": {
+        "reason": "Answered in the Leads channel already."
+      },
+      "read_by": [
+        "13b page-requests.js decline dialog"
+      ],
+      "shape": "object",
+      "keys": [
+        "request",
+        "message"
+      ],
+      "nested": {
+        "request": [
+          "id",
+          "status",
+          "decline_reason",
+          "decided_by",
+          "decided_at"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/requests/{feature_request_id}/status",
+      "body": {
+        "priority": 2
+      },
+      "read_by": [
+        "13b page-requests.js board row"
+      ],
+      "shape": "object",
+      "keys": [
+        "request",
+        "message"
+      ],
+      "nested": {
+        "request": [
+          "id",
+          "status",
+          "priority",
+          "assignee",
+          "notes"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/requests/{feature_request_id}/comments",
+      "body": {
+        "text": "A note from the contract check."
+      },
+      "read_by": [
+        "13b page-requests.js comments drawer"
+      ],
+      "shape": "object",
+      "keys": [
+        "comment",
+        "message"
+      ],
+      "nested": {
+        "comment": [
+          "id",
+          "author",
+          "text",
+          "at"
+        ]
+      }
     }
   ],
   "pages": [
@@ -1712,7 +1944,8 @@
     "/audit.html",
     "/health.html",
     "/polls.html",
-    "/chat.html"
+    "/chat.html",
+    "/requests.html"
   ],
   "action_kinds": [
     "web.settings.set",
@@ -1768,6 +2001,12 @@
     "web.chat.intent_deleted",
     "web.chat.line_added",
     "web.chat.line_edited",
-    "web.chat.line_deleted"
+    "web.chat.line_deleted",
+    "web.request.filed",
+    "web.request.approved",
+    "web.request.declined",
+    "web.request.status",
+    "web.request.withdrawn",
+    "web.request.commented"
   ]
 }

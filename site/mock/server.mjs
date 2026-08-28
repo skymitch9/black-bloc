@@ -66,6 +66,12 @@ const UNKNOWN_ROUTE = 'This dashboard asked Black Bloc for something it does not
 const now = () => new Date().toISOString();
 const minutesAgo = (m) => new Date(Date.now() - m * 60000).toISOString();
 const daysAhead = (d) => new Date(Date.now() + d * 86400000).toISOString();
+// A due date is a DAY, not an instant: it travels as YYYY-MM-DD, built from the local
+// clock so the day named here is the day the page prints back.
+const dayAhead = (d) => {
+  const at = new Date(Date.now() + d * 86400000);
+  return `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`;
+};
 
 const ROLES = [
   { id: '900000000000000001', name: 'Aunties / Uncles', color: '#e04a6d', position: 12, managed: false },
@@ -228,6 +234,11 @@ const SETTING_SPECS = [
   ['chat_greeting_reaction', 'bool', false, false, 'true to answer a bare hello with a wave reaction instead of a sentence; anything longer still gets a reply'],
   ['chat_reply_in_threads', 'bool', true, true, 'true to answer @-mentions inside threads as well as channels'],
   ['chat_route_ping_staff', 'bool', false, false, 'true to drop one line in the staff channel when somebody asks the bot for a mod; only used while modmail_enabled is true'],
+  ['request_mode', 'enum', 'on', 'on', 'off, or on (members can file feature requests with /request and on the site)', ['off', 'on']],
+  ['request_who_can_file', 'enum', 'everyone', 'everyone', 'who may file a request: everyone, or staff only', ['everyone', 'staff']],
+  ['request_auto_approve_staff', 'bool', true, true, 'true to approve a request straight away when a mod or higher files it'],
+  ['request_notify_channel_id', 'channel', '800000000000000005', null, 'where one line is posted when a request is filed; blank posts nowhere'],
+  ['request_dm_on_decision', 'bool', true, true, 'true to DM the person who asked when their request is approved, declined or done'],
 ];
 
 const RULES = {
@@ -249,6 +260,94 @@ const RULE_HELP = {
   caps: 'the percentage of shouted letters a message may contain',
   bad_words: 'the blocked word list',
 };
+
+// Requests (13b). [id, member, what, why, dueInDays|null, status, priority|null,
+// assignee|null, notes|null, filedMinutesAgo, declineReason|null] — the wide rows are
+// derived from these so thirty of them stay readable.
+const REQUEST_SEED = [
+  [30, 3, 'A #suggestions channel with a poll under every idea', 'The ideas doc is where suggestions go to die. If each one opened a poll we would know in a day whether anybody else wants it.', null, 'pending', null, null, null, 40, null],
+  [29, 0, 'Let /request take screenshots', 'Half of what I want to describe is a picture of the thing being wrong. Typing it out loses the detail.', 21, 'pending', null, null, null, 120, null],
+  [28, 6, 'A weekly digest of what the bot did', 'Nobody reads the log channel. One Monday post with the week in five lines would actually get read.', 7, 'pending', null, null, null, 300, null],
+  [27, 2, 'Birthday shout-outs should skip people who are not in the server any more', 'We wished a happy birthday to somebody who left in March and it was awkward for everyone.', null, 'pending', null, null, null, 900, null],
+  [26, 5, 'Let members mute the go-live pings without leaving the role', 'I want the colour, not the notification. Right now it is both or neither.', 30, 'pending', null, null, null, 1500, null],
+  [25, 3, 'A queue for the karaoke nights', 'We keep losing the running order in chat. A /queue with a list everybody can see would fix it.', 14, 'pending', null, null, null, 2600, null],
+  [24, 1, 'Temp voice channels should remember the name I gave them', 'I rename mine every single time. It should come back the way I left it.', null, 'approved', 3, null, null, 4200, null],
+  [23, 6, 'Show who is in a temp voice room from the text channel', 'You cannot tell whether it is worth joining without joining.', 45, 'approved', 2, 0, null, 5000, null],
+  [22, 2, 'An /events ical export', 'Half the group lives in a different time zone and reads the calendar app, not Discord.', 60, 'approved', 4, null, 'Casey has the feed format from last year.', 6400, null],
+  [21, 4, 'Automod should let me appeal a timeout', 'I got a ten minute timeout for a link nobody minded and there was nowhere to say so.', null, 'approved', 5, null, null, 7000, null],
+  [20, 3, 'Role menus with a description under each role', 'The emoji is not enough. New people pick the wrong one every week.', 25, 'planned', 2, 0, 'Fits under the existing menu editor — no new storage.', 8200, null],
+  [19, 1, 'A #welcome message that names the three channels worth reading', 'We say the same three things to every new person by hand.', null, 'planned', 3, 1, null, 9000, null],
+  [18, 6, 'Let staff pin a poll result to the top of the channel', 'The result scrolls away and then we argue about it again a month later.', 40, 'planned', 3, null, null, 9800, null],
+  [17, 2, 'Modmail should show the member\'s last five messages', 'You open a ticket with no idea what happened just before it.', null, 'planned', 1, 0, 'Needs a message cache the bot does not keep yet — ask before starting.', 11000, null],
+  [16, 5, 'A quiet hours mode for the announcement pings', 'Three in the morning go-live pings are why I turned notifications off entirely.', 90, 'planned', 4, null, null, 12000, null],
+  [15, 3, 'The cookout countdown on the dashboard', 'Everybody asks how long is left and somebody has to do the arithmetic in their head.', 10, 'in_progress', 2, 0, 'Half built; the timer is drawn, the setting is not wired.', 13000, null],
+  [14, 1, 'Search the audit log by member', 'Scrolling to find one person\'s three lines takes minutes.', null, 'in_progress', 1, 1, null, 14000, null],
+  [13, 6, 'Let me file a request from a message with a right-click', 'Half of the requests start as somebody complaining in chat.', 35, 'in_progress', 3, 0, null, 15000, null],
+  [12, 2, 'Honeypot should tell staff what the trap caught', 'The ban lands and nobody knows what was posted.', null, 'in_progress', 2, 3, 'Rivet is on this one while Moth is away.', 16000, null],
+  [11, 3, 'Stop the bot answering @-mentions inside threads', 'It talks over serious threads and it is hard to take seriously afterwards.', null, 'done', 2, 0, null, 20000, null],
+  [10, 0, 'A /help that lists only the commands I can actually run', 'The full list is intimidating and most of it refuses me anyway.', null, 'done', 3, 0, null, 22000, null],
+  [9, 6, 'Timed roles for the event crew', 'We hand the role out and then forget to take it back for months.', null, 'done', 1, 1, 'Shipped as part of the role menus work.', 24000, null],
+  [8, 2, 'Birthday wishes with the member\'s own colour', 'A grey embed for a birthday is a bit sad.', null, 'done', 5, 0, null, 26000, null],
+  [7, 4, 'Let people opt out of go-live announcements', 'Some of us stream for four people on purpose.', null, 'done', 2, 1, null, 28000, null],
+  [6, 5, 'A dashboard I can read on my phone', 'I am never at a desk when something needs answering.', null, 'done', 1, 0, 'The whole site got this, not just one page.', 30000, null],
+  [5, 4, 'Give everybody the ping role by default', 'More people would see the announcements.', null, 'declined', null, null, null, 32000, 'Opt-in is the whole point of that role — a default ping is the thing people leave servers over. Ask again if you want a second, quieter role.'],
+  [4, 5, 'Let members delete other people\'s messages in their own temp room', 'It is my room, I should be able to tidy it.', null, 'declined', null, null, null, 34000, 'Deleting somebody else\'s words is a moderator action and it stays with the moderators. You can kick somebody from your room instead.'],
+  [3, 7, 'An auto-role that gives new joins the Member role instantly', 'The manual step is slow.', null, 'declined', null, null, null, 40000, 'The manual step is the anti-raid measure. We looked at this in March and the answer has not changed — see the pinned post in the Leads channel.'],
+  [2, 1, 'Rename #general to #the-porch', 'It suits the place better.', null, 'withdrawn', null, null, null, 41000, null],
+  [1, 3, 'A second bot for music', 'Nobody has bothered since the last one broke.', null, 'withdrawn', null, null, null, 44000, null],
+];
+
+const REQUEST_DECIDED = ['approved', 'planned', 'in_progress', 'done', 'declined'];
+
+function seedRequests() {
+  return REQUEST_SEED.map(([id, who, what, why, due, status, priority, assignee, notes, aged, reason]) => ({
+    id,
+    user_id: MEMBERS[who].id,
+    what,
+    why,
+    due_on: due === null ? null : dayAhead(due),
+    status,
+    priority,
+    assignee_id: assignee === null ? null : MEMBERS[assignee].id,
+    notes,
+    created_at: minutesAgo(aged),
+    decided_by: REQUEST_DECIDED.includes(status) ? STAFF.id : null,
+    decided_at: REQUEST_DECIDED.includes(status) ? minutesAgo(Math.round(aged * 0.7)) : null,
+    decline_reason: reason,
+    done_at: status === 'done' ? minutesAgo(Math.round(aged * 0.2)) : null,
+    message_id: null,
+  }));
+}
+
+// [id, request, author, text, minutesAgo] — every section on the page has at least one
+// row with a thread on it, so the drawer is never drawn only against an empty list.
+const REQUEST_COMMENT_SEED = [
+  [1, 30, 0, 'This is close to what #ideas was meant to be. Worth doing properly once rather than twice badly.', 30],
+  [2, 30, 2, 'A poll under every one would drown the channel. Poll the ones that get five reactions?', 20],
+  [3, 27, 0, 'Agreed, and it is a one-line check against the member list.', 800],
+  [4, 25, 3, 'I have the running order from the last three nights if that helps size it.', 2400],
+  [5, 22, 0, 'Casey is right that the feed format is the hard part. Nothing else here is new.', 6000],
+  [6, 22, 1, 'I will dig the old one out this week.', 5900],
+  [7, 20, 0, 'Planned for after the requests work lands.', 8000],
+  [8, 17, 0, 'Holding this one — the message cache is a bigger change than the ticket view is.', 10500],
+  [9, 17, 2, 'Even the last one message would help.', 10400],
+  [10, 15, 0, 'Timer is drawn. The setting for the date is the bit left.', 12500],
+  [11, 15, 3, 'Can it count down to the next one automatically rather than a date somebody types?', 12400],
+  [12, 12, 2, 'Taking this while Moth is away.', 15500],
+  [13, 11, 0, 'Shipped — chat_reply_in_threads turns it off.', 19000],
+  [14, 5, 0, 'Saying no here rather than in DMs so the reasoning is on the record.', 31000],
+  [15, 3, 0, 'Third time this has been asked. The pinned post is the long answer.', 39000],
+];
+
+function seedRequestComments() {
+  return REQUEST_COMMENT_SEED.map(([id, request_id, who, text, aged]) => ({
+    id,
+    request_id,
+    author_id: MEMBERS[who].id,
+    text,
+    at: minutesAgo(aged),
+  }));
+}
 
 function seedState() {
   return {
@@ -434,6 +533,10 @@ function seedState() {
   nextPoll: 10,
   nextChatIntent: 5,
   nextChatLine: 8,
+  featureRequests: seedRequests(),
+  featureComments: seedRequestComments(),
+  nextFeatureRequest: 31,
+  nextFeatureComment: 16,
   actions: seedActions(),
   };
 }
@@ -554,8 +657,21 @@ function sessionOf(request, url) {
   return cookieOf(request, 'mock_as') || 'staff';
 }
 
+const MEMBER = MEMBERS[3];
+
+/** The one session that is a signed-in guild member and NOT staff: requests only. */
+function requireMember(session) {
+  if (session === 'member') return;
+  requireStaff(session);
+}
+
+function actorOf(session) {
+  return session === 'member' ? MEMBER.id : STAFF.id;
+}
+
 function requireStaff(session) {
   if (session === 'none') throw new Refused(401, 'not_signed_in', NOT_SIGNED_IN);
+  if (session === 'member') throw new Refused(403, 'not_staff', NOT_STAFF);
   if (session === 'stranger') throw new Refused(403, 'not_staff', NOT_STAFF);
   if (session === 'unknown') throw new Refused(503, 'staff_unknown', STAFF_UNKNOWN);
   if (session === 'expired') throw new Refused(401, 'session_expired', 'Your sign-in has expired. Sign in again — nothing is wrong with your access.');
@@ -574,13 +690,16 @@ function meBody(session) {
   if (session === 'expired') return { status: 401, body: { error: 'session_expired', message: 'Your sign-in has expired. Sign in again — nothing is wrong with your access.' } };
   const user = { id: STAFF.id, name: STAFF.name, avatar: null };
   const guild = { id: '600000000000000001', name: 'Black in a Flash!' };
+  if (session === 'member') {
+    return { status: 200, body: { user: { id: MEMBER.id, name: MEMBER.display_name, avatar: null }, staff: false, member: true, state: 'member', guild, message: null } };
+  }
   if (session === 'stranger') {
-    return { status: 200, body: { user: { id: MEMBERS[5].id, name: MEMBERS[5].name, avatar: null }, staff: false, state: 'not_staff', guild, message: NOT_STAFF } };
+    return { status: 200, body: { user: { id: MEMBERS[5].id, name: MEMBERS[5].name, avatar: null }, staff: false, member: false, state: 'not_staff', guild, message: NOT_STAFF } };
   }
   if (session === 'unknown') {
-    return { status: 200, body: { user, staff: false, state: 'staff_unknown', guild, message: STAFF_UNKNOWN } };
+    return { status: 200, body: { user, staff: false, member: false, state: 'staff_unknown', guild, message: STAFF_UNKNOWN } };
   }
-  return { status: 200, body: { user, staff: true, state: 'staff', guild, message: null } };
+  return { status: 200, body: { user, staff: true, member: true, state: 'staff', guild, message: null } };
 }
 
 function statusBody() {
@@ -2493,6 +2612,370 @@ route('POST', '/api/chat/try', async (context) => {
   const tokens = chatTokens(row, filled);
   const said = lines.length ? lines[0].text : CHAT_UNKNOWN_LINE;
   return { intent: row.name, kind: row.kind, slot, line: chatRender(said, tokens) };
+});
+
+// Requests (F18, 13b's half): the pending features list the ideas doc used to be.
+const REQUEST_STATUSES = ['pending', 'approved', 'planned', 'in_progress', 'done', 'declined', 'withdrawn'];
+const REQUEST_SETTABLE = ['approved', 'planned', 'in_progress', 'done'];
+const REQUEST_PER_PAGE = 25;
+const REQUEST_PER_PAGE_MAX = 100;
+const REQUEST_TEXT_MAX = 1000;
+const REQUEST_COMMENT_MAX = 2000;
+
+const REQUEST_OFF = 'Requests are turned off right now, so nothing was filed. A Lead can turn them back on from the Settings section of this page.';
+const REQUEST_STAFF_ONLY = 'Requests are set to staff only at the moment, so this one was not filed. Ask a mod to put it in for you, or ask a Lead to set request_who_can_file back to everyone.';
+const REQUEST_NEED_WHAT = 'A request needs the WHAT filled in — one line saying what you want built. Nothing was filed.';
+const REQUEST_NEED_WHY = 'A request needs the WHY filled in. It is the part that decides whether this gets built, so nothing was filed without it.';
+const REQUEST_BAD_DATE = 'A due date is a day like 2026-09-30, so nothing was filed. Leave it blank if nothing depends on the date.';
+const REQUEST_DECLINE_NEEDS_A_REASON = 'A declined request needs one line the person who asked is sent, so nothing was done. Say why and send it again.';
+const REQUEST_COMMENT_NEEDS_TEXT = 'There is nothing to add yet, so no note was left. Type something and send it again.';
+
+function requestOf(id) {
+  const found = state.featureRequests.find((row) => String(row.id) === String(id));
+  if (!found) {
+    throw new Refused(404, 'no_such_request', `Black Bloc has no request #${id} any more, so nothing was done. The Requests page lists the ones it has.`);
+  }
+  return found;
+}
+
+function requestPerson(id) {
+  if (id === null || id === undefined) return null;
+  const found = MEMBERS.find((one) => one.id === String(id));
+  return { id: String(id), name: memberName(id) || String(id), avatar: found ? found.avatar_url : null };
+}
+
+function requestCommentRow(row) {
+  return {
+    id: String(row.id),
+    author: { id: String(row.author_id), name: memberName(row.author_id) || String(row.author_id) },
+    text: row.text,
+    at: row.at,
+  };
+}
+
+function requestCommentsOf(id) {
+  return state.featureComments
+    .filter((row) => row.request_id === id)
+    .slice()
+    .sort((a, b) => (a.at < b.at ? -1 : 1))
+    .map(requestCommentRow);
+}
+
+function featureRequestRow(row) {
+  const asked = requestPerson(row.user_id);
+  const hand = requestPerson(row.assignee_id);
+  const decided = requestPerson(row.decided_by);
+  return {
+    id: String(row.id),
+    what: row.what,
+    why: row.why,
+    due_on: row.due_on,
+    status: row.status,
+    priority: row.priority,
+    requester: { id: asked.id, name: asked.name, avatar: asked.avatar },
+    assignee: hand === null ? null : { id: hand.id, name: hand.name },
+    notes: row.notes,
+    comment_count: state.featureComments.filter((one) => one.request_id === row.id).length,
+    created_at: row.created_at,
+    decided_by: decided === null ? null : { id: decided.id, name: decided.name },
+    decided_at: row.decided_at,
+    decline_reason: row.decline_reason,
+    done_at: row.done_at,
+  };
+}
+
+/**
+ * Waiting first and the longest wait at the top, then everything else newest
+ * first: the top of the list is always the thing somebody is owed an answer on.
+ */
+function requestOrder(rows) {
+  const waiting = rows.filter((row) => row.status === 'pending')
+    .slice().sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
+  const rest = rows.filter((row) => row.status !== 'pending')
+    .slice().sort((a, b) => b.id - a.id);
+  return waiting.concat(rest);
+}
+
+function requestText(given, refusal) {
+  const said = String(given === null || given === undefined ? '' : given).trim();
+  if (!said) throw new Refused(400, 'request_refused', refusal);
+  if (said.length > REQUEST_TEXT_MAX) {
+    throw new Refused(400, 'request_refused', `That is ${said.length} characters and the limit is ${REQUEST_TEXT_MAX}, so nothing was filed. Say the short version here and the detail in a note underneath.`);
+  }
+  return said;
+}
+
+function requestDue(given) {
+  if (given === null || given === undefined || String(given).trim() === '') return null;
+  const said = String(given).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(said)) throw new Refused(400, 'request_refused', REQUEST_BAD_DATE);
+  const [y, m, d] = said.split('-').map(Number);
+  const at = new Date(y, m - 1, d);
+  if (at.getFullYear() !== y || at.getMonth() !== m - 1 || at.getDate() !== d) {
+    throw new Refused(400, 'request_refused', REQUEST_BAD_DATE);
+  }
+  return said;
+}
+
+function requestPriority(given) {
+  if (given === null || given === undefined || given === '') return null;
+  const found = Number(given);
+  if (!Number.isInteger(found) || found < 1 || found > 5) {
+    throw new Refused(400, 'request_refused', 'Priority runs from 1 (do it first) to 5 (some day), so nothing was changed.');
+  }
+  return found;
+}
+
+function requestAssignee(given) {
+  if (given === null || given === undefined || given === '') return null;
+  const found = MEMBERS.find((one) => one.id === String(given));
+  if (!found) {
+    throw new Refused(400, 'no_such_member', 'That is not somebody Black Bloc can see in this server, so nobody was put on it.');
+  }
+  return found.id;
+}
+
+function requestMatches(row, query) {
+  if (!query) return true;
+  const said = query.toLowerCase();
+  return [row.what, row.why, row.notes, memberName(row.user_id)]
+    .filter(Boolean)
+    .some((part) => String(part).toLowerCase().includes(said));
+}
+
+function requestPage(rows, url) {
+  const page = Math.max(1, Number(url.searchParams.get('page') || 1) || 1);
+  const perPage = Math.min(
+    REQUEST_PER_PAGE_MAX,
+    Math.max(1, Number(url.searchParams.get('per_page') || REQUEST_PER_PAGE) || REQUEST_PER_PAGE),
+  );
+  const window = rows.slice((page - 1) * perPage, page * perPage);
+  return {
+    requests: window.map(featureRequestRow),
+    total: rows.length,
+    shown: window.length,
+    page,
+    per_page: perPage,
+    notes: [],
+  };
+}
+
+route('GET', '/api/requests', (context) => {
+  requireStaff(context.session);
+  const wanted = String(context.url.searchParams.get('status') || '').split(',').filter(Boolean);
+  for (const part of wanted) {
+    if (!REQUEST_STATUSES.includes(part)) {
+      throw new Refused(400, 'unknown_status', `${part} is not a state a request can be in, so nothing was listed. They are ${REQUEST_STATUSES.join(', ')}.`);
+    }
+  }
+  const assignee = context.url.searchParams.get('assignee');
+  const query = String(context.url.searchParams.get('q') || '').trim();
+  let rows = state.featureRequests.slice();
+  if (wanted.length) rows = rows.filter((row) => wanted.includes(row.status));
+  if (assignee === 'none') rows = rows.filter((row) => row.assignee_id === null);
+  else if (assignee) rows = rows.filter((row) => String(row.assignee_id) === String(assignee));
+  rows = rows.filter((row) => requestMatches(row, query));
+  return requestPage(requestOrder(rows), context.url);
+});
+
+route('GET', '/api/requests/mine', (context) => {
+  requireMember(context.session);
+  const mine = actorOf(context.session);
+  const rows = state.featureRequests.filter((row) => String(row.user_id) === String(mine));
+  return requestPage(requestOrder(rows), context.url);
+});
+
+route('GET', '/api/requests/export.csv', (context) => {
+  // NOT in contract.json: check.mjs reads JSON shapes, and this one answers text/csv.
+  requireStaff(context.session);
+  const lines = ['id,status,priority,what,why,requester,assignee,due_on,created_at,decided_at,done_at,decline_reason,comments'];
+  const quote = (value) => `"${String(value === null || value === undefined ? '' : value).replace(/"/g, '""')}"`;
+  for (const row of requestOrder(state.featureRequests.slice())) {
+    lines.push([
+      row.id,
+      row.status,
+      row.priority === null ? '' : row.priority,
+      quote(row.what),
+      quote(row.why),
+      quote(memberName(row.user_id) || row.user_id),
+      quote(row.assignee_id === null ? '' : memberName(row.assignee_id) || row.assignee_id),
+      row.due_on || '',
+      row.created_at,
+      row.decided_at || '',
+      row.done_at || '',
+      quote(row.decline_reason || ''),
+      state.featureComments.filter((one) => one.request_id === row.id).length,
+    ].join(','));
+  }
+  return {
+    status: 200,
+    body: `${lines.join('\n')}\n`,
+    headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="requests.csv"' },
+  };
+});
+
+route('GET', '/api/requests/:id', (context) => {
+  requireStaff(context.session);
+  const row = requestOf(context.params.id);
+  return { ...featureRequestRow(row), comments: requestCommentsOf(row.id) };
+});
+
+route('POST', '/api/requests', async (context) => {
+  requireMember(context.session);
+  if (state.settings.get('request_mode') === 'off') throw new Refused(409, 'requests_off', REQUEST_OFF);
+  const staff = context.session !== 'member';
+  if (!staff && state.settings.get('request_who_can_file') === 'staff') {
+    throw new Refused(403, 'staff_only', REQUEST_STAFF_ONLY);
+  }
+  const body = await context.body();
+  const what = requestText(body.what, REQUEST_NEED_WHAT);
+  const why = requestText(body.why, REQUEST_NEED_WHY);
+  const due = requestDue(body.due_on);
+  const approved = staff && state.settings.get('request_auto_approve_staff') === true;
+  const made = {
+    id: state.nextFeatureRequest++,
+    user_id: actorOf(context.session),
+    what,
+    why,
+    due_on: due,
+    status: approved ? 'approved' : 'pending',
+    priority: null,
+    assignee_id: null,
+    notes: null,
+    created_at: now(),
+    decided_by: approved ? actorOf(context.session) : null,
+    decided_at: approved ? now() : null,
+    decline_reason: null,
+    done_at: null,
+    message_id: null,
+  };
+  state.featureRequests.push(made);
+  logAction('web.request.filed', { actor_id: made.user_id, details: { request_id: made.id, auto_approved: approved } });
+  const told = state.settings.get('request_notify_channel_id')
+    ? ` Staff have been told in #${(CHANNELS.find((one) => one.id === state.settings.get('request_notify_channel_id')) || {}).name || 'the notify channel'}.`
+    : '';
+  return {
+    request: featureRequestRow(made),
+    message: approved
+      ? `Filed as **#${made.id}** and approved straight away, because staff requests do not wait.${told}`
+      : `Filed as **#${made.id}**. Staff see it on this page and you will hear back when somebody answers it.${told}`,
+  };
+});
+
+route('POST', '/api/requests/:id/approve', (context) => {
+  requireStaff(context.session);
+  const row = requestOf(context.params.id);
+  if (row.status !== 'pending') {
+    throw new Refused(409, 'already_decided', `Request #${row.id} is ${row.status.replace('_', ' ')} already, so there was nothing to approve.`);
+  }
+  row.status = 'approved';
+  row.decided_by = STAFF.id;
+  row.decided_at = now();
+  logAction('web.request.approved', { target_id: row.user_id, details: { request_id: row.id } });
+  const dm = state.settings.get('request_dm_on_decision') === true
+    ? ` ${memberName(row.user_id)} has been DM’d.`
+    : ' Nobody was DM’d — request_dm_on_decision is off.';
+  return { request: featureRequestRow(row), message: `Request #${row.id} is approved.${dm}` };
+});
+
+route('POST', '/api/requests/:id/decline', async (context) => {
+  requireStaff(context.session);
+  const row = requestOf(context.params.id);
+  if (row.status !== 'pending') {
+    throw new Refused(409, 'already_decided', `Request #${row.id} is ${row.status.replace('_', ' ')} already, so there was nothing to decline.`);
+  }
+  const body = await context.body();
+  const reason = String(body.reason || '').trim();
+  if (!reason) throw new Refused(400, 'no_reason', REQUEST_DECLINE_NEEDS_A_REASON);
+  row.status = 'declined';
+  row.decline_reason = reason;
+  row.decided_by = STAFF.id;
+  row.decided_at = now();
+  logAction('web.request.declined', { target_id: row.user_id, reason, details: { request_id: row.id } });
+  const dm = state.settings.get('request_dm_on_decision') === true
+    ? ` ${memberName(row.user_id)} has been sent that reason word for word.`
+    : ' Nobody was DM’d — request_dm_on_decision is off, so the reason is only on this page.';
+  return { request: featureRequestRow(row), message: `Request #${row.id} is declined.${dm}` };
+});
+
+route('POST', '/api/requests/:id/status', async (context) => {
+  requireStaff(context.session);
+  const row = requestOf(context.params.id);
+  const body = await context.body();
+  const changed = [];
+  if (body.status !== undefined && body.status !== null && String(body.status) !== row.status) {
+    const wanted = String(body.status);
+    if (!REQUEST_SETTABLE.includes(wanted)) {
+      throw new Refused(400, 'bad_status', `A request is moved between ${REQUEST_SETTABLE.join(', ').replace(/_/g, ' ')} from here. Approve or Decline answers a pending one, and a withdrawn one is the member’s own call.`);
+    }
+    if (row.status === 'pending') {
+      throw new Refused(409, 'not_decided', `Request #${row.id} is still waiting on an answer, so it cannot be moved yet. Approve it first and it joins the planned list.`);
+    }
+    if (row.status === 'declined' || row.status === 'withdrawn') {
+      throw new Refused(409, 'settled', `Request #${row.id} is ${row.status}, so it is not on the board any more. File it again if it should come back.`);
+    }
+    row.status = wanted;
+    row.done_at = wanted === 'done' ? now() : null;
+    changed.push('status');
+  }
+  if (body.priority !== undefined) {
+    row.priority = requestPriority(body.priority);
+    changed.push('priority');
+  }
+  if (body.assignee_id !== undefined) {
+    row.assignee_id = requestAssignee(body.assignee_id);
+    changed.push('assignee');
+  }
+  if (body.notes !== undefined) {
+    const said = String(body.notes === null ? '' : body.notes).trim();
+    if (said.length > REQUEST_COMMENT_MAX) {
+      throw new Refused(400, 'request_refused', `A note has to be ${REQUEST_COMMENT_MAX} characters or fewer, so nothing was saved.`);
+    }
+    row.notes = said === '' ? null : said;
+    changed.push('notes');
+  }
+  logAction('web.request.status', { target_id: row.user_id, details: { request_id: row.id, changed: changed.slice().sort() } });
+  const said = changed.length === 0
+    ? `Nothing about request #${row.id} was different, so nothing was changed.`
+    : `Request #${row.id} is saved — ${changed.join(', ')}.`;
+  return { request: featureRequestRow(row), message: said };
+});
+
+route('POST', '/api/requests/:id/withdraw', (context) => {
+  requireMember(context.session);
+  const row = requestOf(context.params.id);
+  const mine = actorOf(context.session);
+  if (String(row.user_id) !== String(mine)) {
+    throw new Refused(403, 'not_yours', 'That request is somebody else’s, so nothing was withdrawn. You can only take back the ones you filed.');
+  }
+  if (row.status !== 'pending') {
+    throw new Refused(409, 'already_decided', `Request #${row.id} has already been answered, so it cannot be taken back. Leave a note on it instead.`);
+  }
+  row.status = 'withdrawn';
+  row.decided_at = now();
+  logAction('web.request.withdrawn', { actor_id: mine, details: { request_id: row.id } });
+  return { request: featureRequestRow(row), message: `Request #${row.id} is withdrawn. Staff will not be asked about it again.` };
+});
+
+route('POST', '/api/requests/:id/comments', async (context) => {
+  requireStaff(context.session);
+  const row = requestOf(context.params.id);
+  const body = await context.body();
+  const text = String(body.text || '').trim();
+  if (!text) throw new Refused(400, 'no_text', REQUEST_COMMENT_NEEDS_TEXT);
+  if (text.length > REQUEST_COMMENT_MAX) {
+    throw new Refused(400, 'request_refused', `A note has to be ${REQUEST_COMMENT_MAX} characters or fewer, so nothing was saved.`);
+  }
+  const made = {
+    id: state.nextFeatureComment++,
+    request_id: row.id,
+    author_id: STAFF.id,
+    text,
+    at: now(),
+  };
+  state.featureComments.push(made);
+  logAction('web.request.commented', { target_id: row.user_id, details: { request_id: row.id } });
+  return { comment: requestCommentRow(made), message: `Added to request #${row.id}.` };
 });
 
 function send(response, status, body, headers = {}) {
