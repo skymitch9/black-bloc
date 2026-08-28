@@ -2,6 +2,7 @@ from __future__ import annotations
 
 CORE = "core"
 WEB = "web"
+SHADOW = ".would_"
 
 OFF = "off"
 IMPORTANT_ONLY = "important"
@@ -124,9 +125,6 @@ ROUTINE: frozenset[str] = frozenset(
         "birthday.remove",
         "birthday.remove_role",
         "birthday.set",
-        "birthday.would_add_role",
-        "birthday.would_announce",
-        "birthday.would_remove_role",
         "chat.insult",
         "chat.intent_created",
         "chat.intent_deleted",
@@ -146,14 +144,6 @@ ROUTINE: frozenset[str] = frozenset(
         "event.done",
         "event.go_live",
         "event.settings",
-        "event.would_announce",
-        "event.would_cancel_scheduled",
-        "event.would_create_scheduled",
-        "event.would_delete_channel",
-        "event.would_edit_announcement",
-        "event.would_go_live",
-        "event.would_post_card",
-        "event.would_rename",
         "golive.add_role",
         "golive.announce",
         "golive.end",
@@ -164,9 +154,6 @@ ROUTINE: frozenset[str] = frozenset(
         "golive.remove_role",
         "golive.test",
         "golive.unlink",
-        "golive.would_add_role",
-        "golive.would_announce",
-        "golive.would_remove_role",
         "honeypot.ban",
         "honeypot.exempt",
         "honeypot.exempt_add",
@@ -175,24 +162,13 @@ ROUTINE: frozenset[str] = frozenset(
         "honeypot.mode",
         "honeypot.setup",
         "honeypot.trap_removed",
-        "honeypot.would_ban",
-        "honeypot.would_delete",
         "automod.exempt_add",
         "automod.exempt_remove",
         "automod.mode",
         "automod.observed",
         "automod.rule",
-        "automod.would_delete",
-        "automod.would_timeout",
-        "automod.would_warn",
         "mod.apply",
         "mod.rule",
-        "mod.would_ban",
-        "mod.would_kick",
-        "mod.would_purge",
-        "mod.would_timeout",
-        "mod.would_unban",
-        "mod.would_untimeout",
         "modmail.block",
         "modmail.blocked_dm",
         "modmail.category_forgotten",
@@ -211,8 +187,6 @@ ROUTINE: frozenset[str] = frozenset(
         "modmail.staff_channel_forgotten",
         "modmail.transcript",
         "modmail.unblock",
-        "modmail.would_post_transcript",
-        "modmail.would_remove_place",
         "poll.archived",
         "poll.cancel",
         "poll.channel_forgotten",
@@ -227,11 +201,6 @@ ROUTINE: frozenset[str] = frozenset(
         "poll.recurred",
         "poll.reminded",
         "poll.settings",
-        "poll.would_cancel",
-        "poll.would_close",
-        "poll.would_open",
-        "poll.would_post_results",
-        "poll.would_remind",
         "presence.bio_set",
         "role.changed_by_hand",
         "role.reconciled",
@@ -246,8 +215,6 @@ ROUTINE: frozenset[str] = frozenset(
         "role_menu.unassign",
         "role_menu.unposted",
         "role_menu.update",
-        "role_menu.would_repost",
-        "role_menu.would_unpost",
         "rolemenu.create",
         "rolemenu.delete",
         "rolemenu.edit",
@@ -309,9 +276,13 @@ def like_patterns(feature: str) -> tuple[str, ...]:
     return tuple(found)
 
 
+def is_shadow(kind: str) -> bool:
+    return SHADOW in bare(kind)
+
+
 def is_important(kind: str) -> bool:
     text = bare(kind)
-    if text in ROUTINE:
+    if SHADOW in text or text in ROUTINE:
         return False
     if text in IMPORTANT:
         return True
@@ -345,6 +316,7 @@ __all__ = [
     "IMPORTANT_ONLY",
     "IMPORTANT_SUFFIXES",
     "LEVELS",
+    "SHADOW",
     "LEVEL_DEFAULT",
     "LOG_LEVEL_KEYS",
     "OFF",
@@ -353,6 +325,7 @@ __all__ = [
     "feature_of",
     "heads_for",
     "is_important",
+    "is_shadow",
     "like_patterns",
     "log_level_key",
     "should_post",

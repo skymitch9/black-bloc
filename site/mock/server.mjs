@@ -188,6 +188,7 @@ function featureOfKind(kind) {
 
 function isImportantKind(kind) {
   const text = bareKind(kind);
+  if (text.includes('.would_')) return false;
   if (ROUTINE_KINDS.includes(text)) return false;
   if (IMPORTANT_KINDS.includes(text)) return true;
   return IMPORTANT_SUFFIXES.some((suffix) => text.endsWith(suffix));

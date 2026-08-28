@@ -13,10 +13,12 @@ from black_bloc.logkinds import (
     LEVELS,
     OFF,
     ROUTINE,
+    SHADOW,
     bare,
     feature_of,
     heads_for,
     is_important,
+    is_shadow,
     like_patterns,
     log_level_key,
     should_post,
@@ -206,6 +208,8 @@ def emitted_kinds() -> set[str]:
 
 def _classification(kind: str) -> str:
     text = bare(kind)
+    if SHADOW in text:
+        return "routine (shadow)"
     if text in ROUTINE:
         return "routine"
     if text in IMPORTANT:
@@ -284,6 +288,29 @@ def test_web_kinds_collapse_onto_the_kind_they_mirror():
 )
 def test_feature_of_reads_the_dotted_head(kind, feature):
     assert feature_of(kind) == feature
+
+
+def test_every_shadow_kind_is_routine_by_rule_not_by_being_listed():
+    """Owner, 2026-08-27: "lets mute all the would calls too, keep that in discord logs"."""
+    shadows = sorted(kind for kind in emitted_kinds() if SHADOW in bare(kind))
+
+    assert len(shadows) >= 25
+    assert all(is_shadow(kind) for kind in shadows)
+    assert not [kind for kind in shadows if is_important(kind)]
+    assert not [kind for kind in shadows if bare(kind) in ROUTINE], (
+        "a .would_ kind is routine by rule; listing it as well is a second home for the decision"
+    )
+    assert not [kind for kind in shadows if should_post(kind, IMPORTANT_ONLY)]
+    assert all(should_post(kind, ALL) for kind in shadows)
+
+
+def test_the_shadow_rule_beats_a_suffix_that_would_have_matched():
+    """A dry run may not borrow the word it is only pretending to do."""
+    for kind in ("mod.would_ban", "automod.would_timeout", "web.mod.would_kick"):
+        assert is_important(kind) is False
+    assert is_important("mod.would_something_that_failed") is False
+    assert is_important("mod.banned") is True
+    assert is_shadow("mod.wouldnt_ban") is False
 
 
 def test_the_routine_set_beats_a_suffix():
