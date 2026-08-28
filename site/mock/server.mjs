@@ -2165,6 +2165,7 @@ route('POST', '/api/chat/try', async (context) => {
     intent: intent ? intent.name : UNKNOWN_INTENT,
     kind: intent ? intent.kind : 'canned',
     line: intent ? chatLineFor(intent) : null,
+    slot: intent ? 'filled' : null,
   };
 });
 
