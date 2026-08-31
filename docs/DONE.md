@@ -9,6 +9,31 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-08-31 — code-notes.md re-keyed: 1215 of 1817 anchors were wrong
+
+Moved whole from `TODO.md`:
+
+- **`code-notes.md` re-key** — measured 2026-08-31: 88 files / 22,333 insertions
+  since the last re-key (`666dd8e`); 4 of 4 spot-checked `bot.py` keys miss.
+  A build-sized diff-driven pass (the file carries a red warning meanwhile).
+  Three more builds appended sections today — re-key covers through `ef8a7a1`.
+  Status: **re-key Opus agent dispatched 2026-08-31 ~12:35, editing in place,
+  uncommitted for Fable review.**
+
+**Landed `b22d44b`** (Opus ~274k): 1817 in-scope keys checked, **1215 updated**, 590
+already correct, 12 GONE (marked in place with section banners, constructs deleted by
+later phases — the pager guard, `classify` in chat, four mock fixtures, two retired CSS
+rules, cyberpunk's neon `--et-info` pair, the golive preview command). Method: one base
+commit fitted per section, keys mapped base→HEAD only along diff-equal lines, residue
+anchor-hunted; two path-resolution bugs in the file's own reference style found and
+fixed; two automated anchor-jump passes tried and REJECTED on dry-run evidence (clearly
+wrong jumps beat no jumps). Cold 20-key samples: 45% exact before repair → **70% exact /
+80% usable at delivery**, found misses then repaired (all were stale before `666dd8e`).
+Integrity: 1629/1632 final keys land on a real construct line, 0 out of range. Residue
+recorded in the file: 3 keys too vague to place confidently (`ui.js:415`, `bot.py:41`
+deliberate, `birthdays.py:423`), and the false cyberpunk-accent note superseded in place
+by Fable. CLAUDE.md's KNOWN-STALE warning replaced with the re-key rule.
+
 ## 2026-08-31 — KI-6/KI-9 closed and restyle R1 live in one deploy
 
 Moved whole from `TODO.md` (both dispatched ~11:45 in parallel worktrees, merged and

@@ -9,8 +9,9 @@ Thin on purpose. The living state is in `docs/` — **read `docs/README.md`,
   docstrings at most. `black_bloc/app.py` is a bare "run button"; `bot.py` is lifecycle
   only; every behaviour is its own module with helpers. Features are cogs under
   `black_bloc/cogs/` (`community/`, `moderation/`, `content/`), registered in `bot.py:COGS`.
-  ⚠️ `code-notes.md`'s `path:line` keys are KNOWN STALE (measured 2026-08-31) — trust the
-  anchor text in each note, not the number; see the red block at the top of that file.
+  `code-notes.md` was re-keyed 2026-08-31 (header line says against which commit);
+  when in doubt trust the anchor text in each note over the number, and re-key
+  after every merge (the standing merge-order rule).
 - Config comes ONLY from `black_bloc/config.py` (pydantic-settings, `.env`). Nothing
   else reads `os.environ`.
 - Secrets: `.env` is gitignored; token custody is the Discord Developer Portal.
