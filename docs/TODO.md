@@ -112,11 +112,14 @@ per feature, so the old bot keeps running until the new one is proven.
   table toolbar/drawer furniture, Ctrl+K command palette, show-keys toggle.
   Also fold in R1's overridable calls if the owner wants them changed: nav
   grouping (Requests under Overview, Members under Moderation — one line in
-  `shell.js:GROUPS`), noun-phrase labels. Ready to dispatch.
+  `shell.js:GROUPS`), noun-phrase labels. Status: **R2 Opus builder dispatched
+  2026-08-31 ~12:35 in a worktree.**
 - **`code-notes.md` re-key** — measured 2026-08-31: 88 files / 22,333 insertions
   since the last re-key (`666dd8e`); 4 of 4 spot-checked `bot.py` keys miss.
   A build-sized diff-driven pass (the file carries a red warning meanwhile).
-  Three more builds appended sections today — re-key covers through `0c49257`.
+  Three more builds appended sections today — re-key covers through `ef8a7a1`.
+  Status: **re-key Opus agent dispatched 2026-08-31 ~12:35, editing in place,
+  uncommitted for Fable review.**
 
 - **Owner 2026-08-27 ~11:49, verbatim: "Probably should make a deploy button api so you can deploy for me if you can't permission"** → idea logged. Today: the owner's standing authorisation works — the last four deploys ran from the session. A deploy endpoint on the bot would need a Fly API token on the machine and a self-redeploy path; higher risk than value while the session can deploy. Status: **parked unless the classifier blocks again.**
 
