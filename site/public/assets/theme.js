@@ -80,13 +80,17 @@
   // estate-theme.css) and reaches every cog on the estate — the apex pages
   // build their <select> from it below, and React consumers read
   // window.estateTheme.themes. Nothing else may keep a copy of this list.
-  var THEMES = ['discord', 'classic', 'apple', 'cyberpunk', 'retro', 'hearts'];
+  // LOCAL ADDITION (Black Bloc, R2): 'blackbloc' is this dashboard's own theme
+  // and its default. It is first so the dropdown opens on it. Everything else
+  // is the estate snapshot verbatim.
+  var THEMES = ['blackbloc', 'discord', 'classic', 'apple', 'cyberpunk', 'retro', 'hearts'];
 
   // Human names, beside the ids they name, for the same reason: a cog that
   // wrote its own labels would still need editing for theme #6. Unknown ids
   // degrade to a capitalised id rather than showing nothing — an older
   // vendored copy meeting a newer name should look plain, not broken.
   var LABELS = {
+    blackbloc: 'Black Bloc',
     discord: 'Discord',
     classic: 'Classic',
     apple: 'Apple',
