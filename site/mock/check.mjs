@@ -26,6 +26,7 @@ const IDS = {
   hit_id: '7',
   test_channel_id: '800000000000000003',
   lobby_channel_id: '800000000000000009',
+  room_channel_id: '800000000000000010',
   plain_role_id: '900000000000000005',
   request_id: '4',
   grant_id: '5',
@@ -167,6 +168,9 @@ async function seed() {
       options: [{ role_id: '900000000000000005', label: 'Members', emoji: null }],
     }),
   });
+  // Posted here so the unpost entry has a panel to take down; refused while the guard is on,
+  // which is exactly what the GUARDED pass asserts a moment later.
+  await post('/api/rolemenus/contract/post', { channel_id: IDS.test_channel_id });
   await post('/api/modmail/snippets', { name: 'contract', content: 'hello' });
   await post('/api/modmail/blocks', { user_id: IDS.member_id, reason: 'contract check' });
   // The opt-out the DELETE entry takes away again; the seed's own opt-out is somebody else.
@@ -184,6 +188,13 @@ const GUARDED = [
   ['POST', '/api/modmail/tickets/{ticket_id}/close', {}],
 ];
 const UNGUARDED = [
+  // A room action is place-gated (tempvoice.py:may_act_in), not blanket-refused: a room
+  // spawned from a lobby the guard placed sits in the test channel's own category, so it is
+  // one of the ones a staffer may still change while test mode is on.
+  ['POST', '/api/tempvoice/rooms/{room_channel_id}/rename', { name: 'guarded check' }],
+  // A member's roles are not a channel, so guard.py cannot see this and neither the picker
+  // nor the route refuses it in test mode — /rolemenu assign changes real roles today.
+  ['POST', '/api/rolemenus/contract/assign', { user_id: '{member_id}', role_ids: ['{plain_role_id}'] }],
   ['POST', '/api/modmail/tickets/{ticket_id}/reply', { text: 'hello' }],
   ['POST', '/api/mod/warn', { user_id: '{member_id}', reason: 'contract check' }],
   // Filing a request writes a row and DMs; only the one line in request_notify_channel_id
@@ -255,6 +266,19 @@ async function checkActionKinds() {
   await post('/api/modmail/snippets', { name: 'contract', content: 'hello' });
   await post(`/api/rolemenus/requests/${IDS.request_id}/deny`, { reason: 'contract check' });
   await send('DELETE', `/api/roles/grants/${IDS.grant_id}`, undefined);
+  // The six web.tempvoice.* room kinds, each left by the write that spells it: lock and unlock
+  // are two kinds off one route, and so are hide and show.
+  await post(`/api/tempvoice/rooms/${IDS.room_channel_id}/rename`, { name: 'contract room' });
+  await post(`/api/tempvoice/rooms/${IDS.room_channel_id}/limit`, { limit: 4 });
+  await post(`/api/tempvoice/rooms/${IDS.room_channel_id}/lock`, { locked: true });
+  await post(`/api/tempvoice/rooms/${IDS.room_channel_id}/lock`, { locked: false });
+  await post(`/api/tempvoice/rooms/${IDS.room_channel_id}/hide`, { hidden: true });
+  await post(`/api/tempvoice/rooms/${IDS.room_channel_id}/hide`, { hidden: false });
+  await post('/api/rolemenus/contract/unpost', {});
+  await post('/api/rolemenus/seed', {});
+  await post('/api/rolemenus/contract/assign', { user_id: IDS.member_id, role_ids: [IDS.plain_role_id] });
+  await post('/api/rolemenus/contract/assign', { user_id: IDS.member_id, role_ids: [IDS.plain_role_id], remove: true });
+  await send('PUT', `/api/events/${IDS.event_id}`, { title: 'Contract night', start: '2099-09-14 19:30', duration: '2h' });
   // The six web.chat.* kinds, each left by the write that spells it rather than merely listed.
   await post('/api/chat/intents', { name: 'contract_check', triggers: ['contract check'], lines: ['Hello {name}.'] });
   await send('PUT', `/api/chat/intents/${IDS.chat_intent_id}`, { enabled: true });

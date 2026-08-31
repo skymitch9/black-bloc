@@ -205,6 +205,9 @@ async def seeded(client, sign_in, web, guild, wf):
             "options": [{"role_id": str(wf.PLAIN_ROLE_ID), "label": "Member"}],
         },
     )
+    client.post(
+        "/api/rolemenus/contract/post", json={"channel_id": str(wf.TEST_CHANNEL_ID)}
+    )
     client.put("/api/settings/poll_auto_thread", json={"value": True})
     client.post("/api/modmail/snippets", json={"name": "contract", "content": "hello"})
     client.post("/api/modmail/blocks", json={"user_id": str(MEMBER_ID)})
@@ -267,6 +270,7 @@ async def seeded(client, sign_in, web, guild, wf):
         "hit_id": str(hit_id),
         "test_channel_id": str(wf.TEST_CHANNEL_ID),
         "lobby_channel_id": str(wf.VOICE_CHANNEL_ID),
+        "room_channel_id": str(wf.VOICE_CHANNEL_ID),
         "plain_role_id": str(wf.PLAIN_ROLE_ID),
         "request_id": str(request_id),
         "grant_id": str(grant_id),

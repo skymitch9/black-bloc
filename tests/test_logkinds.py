@@ -49,6 +49,7 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.chat.line_deleted",
         "web.chat.line_edited",
         "web.event.cancel",
+        "web.event.edited",
         "web.golive.link",
         "web.golive.optin",
         "web.golive.optout",
@@ -87,6 +88,7 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.rolemenu.delete",
         "web.rolemenu.edit",
         "web.rolemenu.post",
+        "web.role_menu.seeded",
         "web.settings.clear",
         "web.settings.set",
         "web.tempvoice.forget",
@@ -112,7 +114,7 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "event.category_forgotten",
         "event.announce_channel_forgotten",
     ),
-    "black_bloc/cogs/community/tempvoice.py::f'tempvoice.{kind}'": (
+    "black_bloc/cogs/community/tempvoice.py::f'{head}tempvoice.{kind}'": (
         "tempvoice.ban",
         "tempvoice.ban_failed",
         "tempvoice.bitrate",
@@ -137,6 +139,17 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "tempvoice.unlock",
         "tempvoice.unpermit",
         "tempvoice.unpermit_failed",
+        # The dashboard's room actions (B4) go through the same helper with a website doer,
+        # so the head is `web.` and these are the six-plus-failures it can leave.
+        "web.tempvoice.hide",
+        "web.tempvoice.limit",
+        "web.tempvoice.limit_failed",
+        "web.tempvoice.lock",
+        "web.tempvoice.privacy_failed",
+        "web.tempvoice.rename",
+        "web.tempvoice.rename_failed",
+        "web.tempvoice.show",
+        "web.tempvoice.unlock",
     ),
     "black_bloc/cogs/community/requests.py::f'request.{status}'": (
         "request.approved",
@@ -178,13 +191,26 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "modmail.log_channel_forgotten",
     ),
     "black_bloc/command_visibility.py::LOG_KIND": ("commands.visibility",),
-    "black_bloc/rolemenu_panels.py::kind": (
+    # B7: one helper serves the staff picker and the dashboard, so the head and the word are
+    # both built at call time rather than being two literals in two places.
+    "black_bloc/cogs/community/role_menus.py::kind": (
+        "role_menu.assign",
+        "role_menu.unassign",
+        "web.role_menu.assign",
+        "web.role_menu.unassign",
+    ),
+    "black_bloc/rolemenu_panels.py::f'{head}{kind}'": (
         "role_menu.unposted",
         "role_menu.unpost_failed",
         "role_menu.would_unpost",
         "role_menu.reposted",
         "role_menu.repost_failed",
         "role_menu.would_repost",
+        # B5: the dashboard's Un-post, and the panel move a channel change makes, both call
+        # `unpost` with a website via, so the same three kinds arrive under a `web.` head.
+        "web.role_menu.unposted",
+        "web.role_menu.unpost_failed",
+        "web.role_menu.would_unpost",
     ),
 }
 

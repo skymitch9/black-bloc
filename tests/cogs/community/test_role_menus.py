@@ -16,6 +16,7 @@ from black_bloc.cogs.community.role_menus import (
     MODE_KEY,
     MODES,
     NO_MENUS_YET,
+    NOTHING_TO_UNPOST,
     OPTIONS_MAX,
     ROLE_MENUS_OFF,
     SEED,
@@ -51,6 +52,7 @@ from black_bloc.cogs.community.role_menus import (
     retry_days_of,
     role_diff,
     seed_default_menus,
+    seed_summary,
     select_emoji,
     set_message,
     summary,
@@ -182,6 +184,9 @@ class FakeMessage:
 
     async def edit(self, **kwargs):
         self.kwargs |= kwargs
+
+    async def delete(self):
+        self.channel.messages = [m for m in self.channel.messages if m.id != self.id]
 
 
 class FakeChannel:
@@ -529,6 +534,40 @@ async def test_the_staff_select_changes_nothing_while_role_menus_are_off(bot, db
     assert interaction.sent == ROLE_MENUS_OFF
     assert target.edits == []
     assert "role_menu.assign" not in await action_kinds(db)
+
+
+async def test_unpost_takes_the_panel_down_and_leaves_the_menu(bot, db, lead):
+    menu_id = await self_serve_menu(db)
+    channel = bot.guild.get_channel(TEST_CHANNEL)
+    message = await channel.send(content="panel")
+    await set_message(db, menu_id, TEST_CHANNEL, message.id)
+    interaction = FakeInteraction(bot, lead)
+
+    await RoleMenus.unpost.callback(RoleMenus(bot), interaction, "pronouns")
+
+    assert "panel is down" in interaction.sent
+    assert channel.messages == []
+    menu = await get_menu(db, GUILD, "pronouns")
+    assert menu["message_id"] is None and menu["channel_id"] == TEST_CHANNEL
+    assert "role_menu.unposted" in await action_kinds(db)
+
+
+async def test_unpost_of_a_menu_with_no_panel_says_so(bot, db, lead):
+    await self_serve_menu(db)
+    interaction = FakeInteraction(bot, lead)
+
+    await RoleMenus.unpost.callback(RoleMenus(bot), interaction, "pronouns")
+
+    assert interaction.sent == NOTHING_TO_UNPOST.format(name="pronouns")
+
+
+def test_seed_summary_is_the_one_wording_both_doors_show():
+    said = seed_summary(["pronouns"], ["colours"])
+
+    assert "Created: pronouns" in said
+    assert "Already there, left alone: colours" in said
+    assert "/rolemenu post <name>" in said
+    assert "Already there" not in seed_summary(["pronouns"], [])
 
 
 async def test_posting_a_panel_is_refused_while_role_menus_are_off(bot, db, lead):

@@ -543,7 +543,7 @@ function seedState() {
     { user_id: MEMBERS[7].id, month: 4, day: 8, year: 1999, opted_in: true, source: 'import', set_at: minutesAgo(19000) },
   ],
   tempvoice: [
-    { channel_id: '800000000000000010', owner_id: MEMBERS[1].id, creator_id: '800000000000000009', created_at: minutesAgo(45) },
+    { channel_id: '800000000000000010', owner_id: MEMBERS[1].id, creator_id: '800000000000000009', created_at: minutesAgo(45), user_limit: 0, locked: false, hidden: false },
   ],
   honeypot: [
     { id: 7, user_id: MEMBERS[4].id, channel_id: '800000000000000007', message_id: '820000000000000001', content: 'free nitro at scam-link.example', at: minutesAgo(30), mode: 'shadow', action: 'would_ban' },
@@ -1382,6 +1382,99 @@ route('POST', '/api/rolemenus/:name/post', async (context) => {
   return { posted: true, name: menu.name, channel_id: menu.channel_id, message_id: menu.message_id };
 });
 
+// The six names black_bloc/cogs/community/role_menus.py:SEED creates; a name this server
+// already has is left exactly as it is, options and all.
+const SEED_MENUS = ['pronouns', 'playstyle', 'mentoring', 'interests', 'event-alerts', 'runner-status'];
+
+route('POST', '/api/rolemenus/seed', (context) => {
+  requireStaff(context.session);
+  const created = [];
+  const skipped = [];
+  for (const name of SEED_MENUS) {
+    if (state.menus.some((entry) => entry.name === name)) {
+      skipped.push(name);
+      continue;
+    }
+    state.menus.push({
+      id: state.nextMenu++,
+      name,
+      title: name,
+      description: null,
+      mode: name === 'runner-status' ? 'staff' : 'multiple',
+      channel_id: null,
+      message_id: null,
+      approval: false,
+      expires_days: null,
+      retry_days: 7,
+      options: [],
+    });
+    created.push(name);
+  }
+  const parts = [];
+  if (created.length) parts.push(`Created: ${created.join(', ')}`);
+  if (skipped.length) {
+    parts.push(`Already there, left alone: ${skipped.join(', ')}`);
+    parts.push('A menu that already exists is left exactly as it is, options and all.');
+  }
+  parts.push('Post each one with `/rolemenu post <name>` — except `runner-status`, which staff hand out with `/rolemenu assign`.');
+  logAction('web.role_menu.seeded', { details: { created, skipped } });
+  return { created, skipped, message: parts.join(' · ') };
+});
+
+// Roles are changed by the same helper the /rolemenu assign picker uses, and neither asks the
+// guard: a member's roles are not a channel, so this is not one of the test-mode refusals.
+route('POST', '/api/rolemenus/:name/assign', async (context) => {
+  requireStaff(context.session);
+  const menu = state.menus.find((entry) => entry.name === context.params.name);
+  if (!menu) throw new Refused(404, 'no_such_menu', `This server has no role menu called **${context.params.name}**, so nothing was changed.`);
+  if (!(menu.options || []).length) {
+    throw new Refused(400, 'no_options', `**${menu.name}** has no roles on it yet, so there is nothing to hand out. Add one to the menu first.`);
+  }
+  if (state.settings.get('rolemenu_mode') !== 'on') throw new Refused(409, 'rolemenu_off', ROLE_MENUS_OFF);
+  const body = await context.body();
+  const wanted = String(body.user_id || '');
+  if (!MEMBERS.some((member) => member.id === wanted)) {
+    throw new Refused(404, 'no_such_member', `**${wanted}** is not somebody Black Bloc can see in this server, so nothing was changed. Pick them from the list rather than typing an id.`);
+  }
+  const remove = body.remove === true;
+  const owned = new Map((menu.options || []).map((option) => [String(option.role_id), option.label]));
+  const picked = (body.role_ids || []).map(String).filter((id) => owned.has(id));
+  if (picked.length === 0) {
+    return {
+      assigned: !remove,
+      name: menu.name,
+      user_id: wanted,
+      message: `**${memberName(wanted)}** already has exactly those roles, so nothing changed.`,
+    };
+  }
+  const words = picked.map((id) => owned.get(id)).join(', ');
+  logAction(remove ? 'web.role_menu.unassign' : 'web.role_menu.assign', { target_id: wanted, details: { menu_id: menu.id } });
+  return {
+    assigned: !remove,
+    name: menu.name,
+    user_id: wanted,
+    message: `**${memberName(wanted)}** — ${remove ? 'Removed' : 'Added'}: ${words}`,
+  };
+});
+
+route('POST', '/api/rolemenus/:name/unpost', (context) => {
+  requireStaff(context.session);
+  const menu = state.menus.find((entry) => entry.name === context.params.name);
+  if (!menu) throw new Refused(404, 'no_such_menu', `This server has no role menu called **${context.params.name}**, so nothing was changed.`);
+  if (!menu.message_id) {
+    throw new Refused(400, 'not_posted', `**${menu.name}** has no panel up right now, so there was nothing to take down. Post it from the Post a menu section first.`);
+  }
+  const where = menu.channel_id;
+  menu.message_id = null;
+  logAction('web.role_menu.unposted', { target_id: where, details: { menu: menu.name, channel_id: where } });
+  return {
+    unposted: true,
+    name: menu.name,
+    channel_id: where === null || where === undefined ? null : String(where),
+    message: `**${menu.name}**'s panel is down. The menu and its roles are untouched and nobody loses a role — post it again whenever you want it back.`,
+  };
+});
+
 route('GET', '/api/rolemenus/requests', (context) => {
   requireStaff(context.session);
   const asked = (context.url.searchParams.get('status') || '').split(',').filter(Boolean);
@@ -1612,7 +1705,22 @@ route('GET', '/api/golive/sessions', (context) => {
   }));
 });
 
+// The two words black_bloc/api/tools/events.py:EDITABLE names; every other state is settled.
+const EVENTS_EDITABLE = ['pending', 'approved'];
+
+function eventMinutes(row) {
+  return row.ends_at ? Math.round((Date.parse(row.ends_at) - Date.parse(row.starts_at)) / 60000) : 120;
+}
+
+function eventDuration(minutes) {
+  const hours = Math.floor(Math.max(minutes, 0) / 60);
+  const rest = Math.max(minutes, 0) % 60;
+  if (hours && rest) return `${hours}h ${rest}m`;
+  return hours ? `${hours}h` : `${rest}m`;
+}
+
 function eventRow(row) {
+  const minutes = eventMinutes(row);
   return {
     id: row.id,
     title: row.title,
@@ -1620,7 +1728,11 @@ function eventRow(row) {
     location: row.location,
     starts_at: row.starts_at,
     ends_at: row.ends_at,
-    minutes: row.ends_at ? Math.round((Date.parse(row.ends_at) - Date.parse(row.starts_at)) / 60000) : null,
+    minutes,
+    duration: eventDuration(minutes),
+    editable: EVENTS_EDITABLE.includes(row.status),
+    announced: Boolean(row.announce_message_id),
+    scheduled: Boolean(row.scheduled_event_id),
     status: row.status,
     requester_id: String(row.requester_id),
     requester_name: memberName(row.requester_id),
@@ -1646,6 +1758,48 @@ function eventOf(id) {
   if (!found) throw new Refused(404, 'no_event', 'That event is not in the queue any more — somebody may have decided it already.');
   return found;
 }
+
+route('GET', '/api/events/:id', (context) => {
+  requireStaff(context.session);
+  return { event: eventRow(eventOf(context.params.id)) };
+});
+
+route('PUT', '/api/events/:id', async (context) => {
+  requireStaff(context.session);
+  const event = eventOf(context.params.id);
+  if (!EVENTS_EDITABLE.includes(event.status)) {
+    throw new Refused(409, 'not_editable', `Event **#${event.id}** is **${event.status}**, so its details cannot be changed — only an event still waiting for a decision or already approved can be edited.`);
+  }
+  const body = await context.body();
+  const title = String(body.title || '').trim();
+  if (!title) {
+    throw new Refused(400, 'event_refused', 'An event needs a name, so nothing was submitted. Put something in the Title box — it is the heading everybody sees on the card.');
+  }
+  const start = String(body.start || '').trim();
+  const when = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(start) ? Date.parse(start.replace(' ', 'T') + 'Z') : NaN;
+  if (Number.isNaN(when)) {
+    throw new Refused(400, 'event_refused', `**${start}** is not a date Black Bloc can read, so nothing was submitted. Write it as \`YYYY-MM-DD HH:MM\` on a 24-hour clock.`);
+  }
+  if (when <= Date.now()) {
+    throw new Refused(400, 'event_refused', `**${start}** has already gone by, so nothing was submitted. Pick a time in the future.`);
+  }
+  const raw = String(body.duration || '').trim();
+  const parts = raw === '' ? [null, '2', null] : /^(?:(\d{1,4})h)?(?:(\d{1,5})m)?$/.exec(raw.toLowerCase().replace(/\s+/g, ''));
+  if (!parts || (raw !== '' && !parts[1] && !parts[2])) {
+    throw new Refused(400, 'event_refused', `**${raw}** is not a length Black Bloc can read, so nothing was submitted. Write it as \`1h30m\`, \`2h\` or \`45m\`.`);
+  }
+  const minutes = Number(parts[1] || 0) * 60 + Number(parts[2] || 0);
+  event.title = title;
+  event.description = String(body.description || '').trim() || null;
+  event.location = String(body.location || '').trim() || null;
+  event.starts_at = new Date(when).toISOString();
+  event.ends_at = new Date(when + minutes * 60000).toISOString();
+  logAction('web.event.edited', { target_id: event.requester_id, details: { event_id: event.id, title } });
+  const notes = [];
+  if (event.announce_message_id) notes.push('The public announcement still says what it said before; Black Bloc does not rewrite one it has already posted.');
+  if (event.scheduled_event_id) notes.push('The Discord scheduled event still has the old details — nothing here edits one that was already made.');
+  return { event: eventRow(event), message: "Saved, and the review channel's name follows the title.", notes };
+});
 
 route('POST', '/api/events/:id/approve', (context) => {
   requireStaff(context.session);
@@ -2133,21 +2287,105 @@ route('POST', '/api/birthdays/import', (context) => {
   };
 });
 
+function roomRow(row) {
+  const live = CHANNELS.find((channel) => channel.id === String(row.channel_id)) || null;
+  return {
+    channel_id: String(row.channel_id),
+    name: row.name ?? (live ? live.name : null),
+    gone: live === null,
+    owner_id: String(row.owner_id),
+    owner_name: memberName(row.owner_id),
+    creator_id: String(row.creator_id),
+    created_at: row.created_at,
+    connected: row.connected ?? 0,
+    user_limit: row.user_limit ?? 0,
+    locked: row.locked === true,
+    hidden: row.hidden === true,
+  };
+}
+
+// The real gate on a room action is black_bloc/cogs/community/tempvoice.py:may_act_in — the
+// room has to sit in the test channel's own category, because a channel edit is a side effect
+// guard.py cannot see. A room spawned from a lobby the guard placed is in that category, which
+// is why these four are not in check.mjs's GUARDED list.
+function roomFor(given) {
+  const wanted = String(given || '');
+  const row = state.tempvoice.find((one) => String(one.channel_id) === wanted);
+  if (!row) {
+    throw new Refused(404, 'no_such_room', 'Black Bloc is not keeping track of a temporary voice channel with that id, so nothing was changed. The Open now list on this page is the ones it knows about.');
+  }
+  const live = CHANNELS.find((channel) => channel.id === wanted) || null;
+  const test = CHANNELS.find((channel) => channel.id === '800000000000000003') || null;
+  if (live === null) {
+    throw new Refused(404, 'channel_gone', 'That temporary voice channel is gone, so nothing was changed. Join the join-to-create channel again to get a fresh one.');
+  }
+  if (testMode && live.category_id !== (test ? test.category_id : null)) {
+    throw new Refused(409, 'test_mode', `**${live.name}** sits outside the test channel's category, so test mode stopped that change and nothing happened.`);
+  }
+  return { row, live };
+}
+
 route('GET', '/api/tempvoice/channels', (context) => {
   requireStaff(context.session);
-  return state.tempvoice.map((row) => {
-    const live = CHANNELS.find((channel) => channel.id === String(row.channel_id)) || null;
-    return {
-      channel_id: String(row.channel_id),
-      name: live ? live.name : null,
-      gone: live === null,
-      owner_id: String(row.owner_id),
-      owner_name: memberName(row.owner_id),
-      creator_id: String(row.creator_id),
-      created_at: row.created_at,
-      connected: row.connected ?? 0,
-    };
-  });
+  return state.tempvoice.map(roomRow);
+});
+
+route('POST', '/api/tempvoice/rooms/:channel_id/rename', async (context) => {
+  requireStaff(context.session);
+  const { row } = roomFor(context.params.channel_id);
+  const wanted = String((await context.body()).name || '').trim().slice(0, 100);
+  if (!wanted) {
+    throw new Refused(400, 'no_name', 'A channel needs a name, so nothing was changed. Type what it should be called and save again.');
+  }
+  row.name = wanted;
+  logAction('web.tempvoice.rename', { target_id: row.channel_id, details: { name: wanted } });
+  return { room: roomRow(row), message: `Renamed to **${wanted}**, and remembered for next time.` };
+});
+
+route('POST', '/api/tempvoice/rooms/:channel_id/limit', async (context) => {
+  requireStaff(context.session);
+  const { row } = roomFor(context.params.channel_id);
+  const given = (await context.body()).limit;
+  const value = Number(given);
+  if (!/^\d+$/.test(String(given ?? '')) || value < 0 || value > 99) {
+    throw new Refused(400, 'bad_limit', `**${given}** is not a number of people Black Bloc can use, so nothing was changed. Pick a whole number from 0 to 99 — 0 means no limit.`);
+  }
+  row.user_limit = value;
+  logAction('web.tempvoice.limit', { target_id: row.channel_id, details: { user_limit: value } });
+  return {
+    room: roomRow(row),
+    message: value === 0 ? 'Anyone can join now.' : `Capped at **${value}** people.`,
+  };
+});
+
+route('POST', '/api/tempvoice/rooms/:channel_id/lock', async (context) => {
+  requireStaff(context.session);
+  const { row } = roomFor(context.params.channel_id);
+  const want = (await context.body()).locked !== false;
+  if (want === row.locked) {
+    return { room: roomRow(row), message: `This channel is already ${want ? 'locked' : 'unlocked'}, so nothing was changed.` };
+  }
+  row.locked = want;
+  logAction(want ? 'web.tempvoice.lock' : 'web.tempvoice.unlock', { target_id: row.channel_id });
+  return {
+    room: roomRow(row),
+    message: want ? 'Locked — nobody new may join.' : 'Unlocked — anyone may join.',
+  };
+});
+
+route('POST', '/api/tempvoice/rooms/:channel_id/hide', async (context) => {
+  requireStaff(context.session);
+  const { row } = roomFor(context.params.channel_id);
+  const want = (await context.body()).hidden !== false;
+  if (want === row.hidden) {
+    return { room: roomRow(row), message: `This channel is already ${want ? 'hidden' : 'visible to everyone'}, so nothing was changed.` };
+  }
+  row.hidden = want;
+  logAction(want ? 'web.tempvoice.hide' : 'web.tempvoice.show', { target_id: row.channel_id });
+  return {
+    room: roomRow(row),
+    message: want ? 'Hidden — only people already in it can see it.' : 'Visible again to everyone.',
+  };
 });
 
 route('POST', '/api/tempvoice/setup', (context) => {

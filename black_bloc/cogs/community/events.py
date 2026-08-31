@@ -4,7 +4,7 @@ import asyncio
 import logging
 import re
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, NamedTuple
 
 import discord
 from discord import app_commands
@@ -240,6 +240,78 @@ async def create_event(
     )
     await db.conn.commit()
     return cur.lastrowid
+
+
+class EventFields(NamedTuple):
+    title: str
+    description: str
+    location: str
+    starts: datetime
+    minutes: int
+
+
+def checked_fields(
+    *,
+    title: Any,
+    description: Any,
+    location: Any,
+    start: Any,
+    duration: Any,
+    tz_name: str,
+    now: datetime,
+) -> tuple[EventFields | None, str]:
+    """Every rule an event's fields have to pass, for the modal and the dashboard alike."""
+    wanted = clamp(title, TITLE_LIMIT)
+    if not wanted:
+        return None, NO_TITLE
+    starts = parse_start(start, tz_name)
+    if starts is None:
+        return None, start_error(start, tz_name, START_EXAMPLE)
+    trouble = clock_trouble(start, tz_name)
+    if trouble == GAP:
+        return None, DST_GAP.format(given=clamp(start, 80), tz=tz_name)
+    if trouble == AMBIGUOUS:
+        return None, DST_AMBIGUOUS.format(given=clamp(start, 80), tz=tz_name)
+    if starts <= now:
+        return None, START_IN_THE_PAST.format(given=clamp(start, 80), tz=tz_name)
+    minutes = parse_duration(duration)
+    if minutes is None:
+        return None, BAD_DURATION.format(given=clamp(duration, 40))
+    return (
+        EventFields(
+            wanted,
+            clamp(description, DESCRIPTION_LIMIT),
+            clamp(location, LOCATION_LIMIT),
+            starts,
+            minutes,
+        ),
+        "",
+    )
+
+
+async def update_event(
+    db: Any,
+    event_id: int,
+    *,
+    title: str,
+    description: str | None,
+    location: str | None,
+    starts_at: datetime,
+    finishes_at: datetime,
+) -> None:
+    await db.conn.execute(
+        "UPDATE events SET title = ?, description = ?, location = ?, starts_at = ?, ends_at = ? "
+        "WHERE id = ?",
+        (
+            title,
+            description or None,
+            location or None,
+            starts_at.isoformat(),
+            finishes_at.isoformat(),
+            event_id,
+        ),
+    )
+    await db.conn.commit()
 
 
 async def get_event(db: Any, event_id: int) -> Any:
@@ -1233,29 +1305,20 @@ class Events(commands.Cog):
         location: str,
     ) -> None:
         """What the modal does once it is filled in: one row, one channel, one card."""
-        if not title:
-            await answer(interaction, NO_TITLE)
+        fields, why = checked_fields(
+            title=title,
+            description=description,
+            location=location,
+            start=start,
+            duration=duration,
+            tz_name=tz_name,
+            now=datetime.now(UTC),
+        )
+        if fields is None:
+            await answer(interaction, why)
             return
-        starts = parse_start(start, tz_name)
-        if starts is None:
-            await answer(interaction, start_error(start, tz_name, START_EXAMPLE))
-            return
-        trouble = clock_trouble(start, tz_name)
-        if trouble == GAP:
-            await answer(interaction, DST_GAP.format(given=clamp(start, 80), tz=tz_name))
-            return
-        if trouble == AMBIGUOUS:
-            await answer(interaction, DST_AMBIGUOUS.format(given=clamp(start, 80), tz=tz_name))
-            return
-        if starts <= datetime.now(UTC):
-            await answer(
-                interaction, START_IN_THE_PAST.format(given=clamp(start, 80), tz=tz_name)
-            )
-            return
-        minutes = parse_duration(duration)
-        if minutes is None:
-            await answer(interaction, BAD_DURATION.format(given=clamp(duration, 40)))
-            return
+        title, description, location = fields.title, fields.description, fields.location
+        starts, minutes = fields.starts, fields.minutes
         guild = interaction.guild
         category, where = events_category(self.bot, guild)
         if where == "no_test_channel":

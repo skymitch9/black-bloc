@@ -3,10 +3,12 @@ import { start } from './app.js';
 import { logsSection } from './logs.js';
 import {
   ask,
+  badge,
   bar,
   button,
   card,
   el,
+  field,
   idsIn,
   keepSaying,
   nameNode,
@@ -44,6 +46,65 @@ async function nameCard(spec) {
     made.say,
   ]);
   return [made.row.node, preview, made.editor.bar];
+}
+
+/** A confirm dialog with one thing to type in it; null when it was cancelled. */
+async function askFor({ title, body, label, value = '', confirmLabel, type = 'text' }) {
+  const input = el('input', { class: 'input', type, value: String(value) });
+  const sure = await ask({
+    title,
+    body: [...body, field(label, input)],
+    confirmLabel,
+    tone: 'warn',
+  });
+  return sure ? input.value : null;
+}
+
+/** B4: the four things the panel's own buttons do, per room, through the same helpers. */
+function roomActions(row, say) {
+  const act = async (path, body) => {
+    const done = await run(
+      say,
+      () => send(`/api/tempvoice/rooms/${row.channel_id}${path}`, 'POST', body),
+      (found) => found.message,
+    );
+    if (done.ok) {
+      keepSaying('tempvoice.rooms', say);
+      refresh();
+    }
+  };
+  const rename = button('Rename', async () => {
+    const wanted = await askFor({
+      title: `Rename ${row.name || row.channel_id}?`,
+      body: ['The owner keeps this name for their next channel too.'],
+      label: 'New name',
+      value: row.name || '',
+      confirmLabel: 'Rename it',
+    });
+    if (wanted !== null) await act('/rename', { name: wanted });
+  });
+  const cap = button('Cap', async () => {
+    const wanted = await askFor({
+      title: `Cap ${row.name || row.channel_id}?`,
+      body: ['0 to 99 people; 0 means no limit.'],
+      label: 'How many people',
+      value: row.user_limit ?? 0,
+      confirmLabel: 'Set the cap',
+      type: 'number',
+    });
+    if (wanted !== null) await act('/limit', { limit: wanted });
+  });
+  const lock = button(row.locked ? 'Unlock' : 'Lock', () => act('/lock', { locked: !row.locked }));
+  const hide = button(row.hidden ? 'Show' : 'Hide', () => act('/hide', { hidden: !row.hidden }));
+  return bar([rename, cap, lock, hide]);
+}
+
+function roomState(row) {
+  const marks = [];
+  if (row.locked) marks.push(badge('locked', 'warn'));
+  if (row.hidden) marks.push(badge('hidden', 'warn'));
+  if (marks.length === 0) return el('span', { class: 'muted', text: 'open' });
+  return el('span', {}, marks.length === 2 ? [marks[0], ' ', marks[1]] : marks);
 }
 
 /** The lobby line: the join-to-create channels by name, each with a Forget. */
@@ -97,12 +158,17 @@ async function load() {
   await names(idsIn(rows, ['channel_id', 'owner_id', 'creator_id']));
 
   const say = notice();
+  const roomsSay = notice();
 
   const list = table([
     { label: 'Channel', cell: (row) => nameNode(row.channel_id, row.name) },
     { label: 'Owner', cell: (row) => nameNode(row.owner_id, row.owner_name) },
     { label: 'Made from', cell: (row) => nameNode(row.creator_id, row.creator_name) },
+    { label: 'In it', cell: (row) => String(row.connected ?? 0), className: 'mono' },
+    { label: 'Cap', cell: (row) => (row.user_limit ? String(row.user_limit) : 'none'), className: 'mono' },
+    { label: 'Access', cell: (row) => roomState(row) },
     { label: 'Since', cell: (row) => when(row.created_at), className: 'mono' },
+    { label: 'Change', cell: (row) => (row.gone ? 'gone' : roomActions(row, roomsSay)) },
   ], rows, { empty: 'No temporary channels are open right now.' });
 
   const setup = card('Setup and repair', [
@@ -130,7 +196,7 @@ async function load() {
   const one = section('Open now', 'These are live from Discord, not a stored guess.', {
     count: rows.length,
   });
-  one.body.append(list);
+  one.body.append(list, sayAgain('tempvoice.rooms', roomsSay));
   const two = section('Setup');
   two.body.append(setup);
 

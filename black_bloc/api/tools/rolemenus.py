@@ -9,6 +9,8 @@ from ... import rolegrants as grants
 from ... import rolemenu_panels as panels
 from ...cogs.community.role_menus import (
     MODES,
+    NO_SUCH_MEMBER,
+    NOTHING_ON_THIS_MENU,
     ROLE_MENUS_OFF,
     STAFF_MODE,
     UNSET,
@@ -31,8 +33,12 @@ from ...cogs.community.role_menus import (
     post_panel,
     remove_option,
     retry_days_of,
+    seed_default_menus,
+    seed_summary,
+    staff_assign,
     update_menu,
 )
+from ...logkinds import VIA_WEBSITE
 from ..auth import Refused, staff_dependency
 from ..names import as_id, avatar_url, resolve_one
 from ..writes import (
@@ -111,6 +117,19 @@ PANEL_NOT_MOVED = (
 DENY_NEEDS_A_REASON = (
     "A denied request needs one line the member is sent, so nothing was done. Say why and send "
     "it again."
+)
+NOTHING_TO_UNPOST = (
+    "**{name}** has no panel up right now, so there was nothing to take down. Post it from the "
+    "Post a menu section first."
+)
+PANEL_STUCK = (
+    "Black Bloc could not take **{name}**'s panel down, so it is still where it was. It needs to "
+    "see that channel and be able to delete its own message there — ask a Lead to check both, "
+    "then try again."
+)
+PANEL_TAKEN_DOWN = (
+    "**{name}**'s panel is down. The menu and its roles are untouched and nobody loses a role — "
+    "post it again whenever you want it back."
 )
 
 
@@ -289,7 +308,7 @@ async def move_panel(bot: Any, guild: Any, name: str, channel_id: int, who: Any)
     menu, options = await read_menu(bot, guild, name)
     await can_move(bot, guild, menu, options, channel_id)
     target = await wanted_target(bot, guild, menu, options, channel_id)
-    if not await panels.unpost(bot, menu, actor_for(bot, who, guild)):
+    if not await panels.unpost(bot, menu, actor_for(bot, who, guild), via=VIA_WEBSITE):
         raise Refused(409, "panel_stuck", PANEL_NOT_MOVED.format(name=name))
     fresh, options = await read_menu(bot, guild, name)
     return await post_panel(bot, fresh, options, target)
@@ -309,6 +328,25 @@ def build_router(bot: Any) -> APIRouter:
             menu_row(menu, await get_options(bot.db, menu["id"]))
             for menu in await list_menus(bot.db, guild.id)
         ]
+
+    @router.post("/seed")
+    async def rolemenu_seed(request: Request) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        created, skipped = await seed_default_menus(bot.db, guild.id)
+        await note(
+            bot,
+            guild,
+            "web.role_menu.seeded",
+            who,
+            details={"created": created, "skipped": skipped},
+        )
+        return {
+            "created": created,
+            "skipped": skipped,
+            "message": seed_summary(created, skipped),
+        }
 
     @router.get("/requests")
     async def rolemenu_requests(status: str = "") -> list[dict[str, Any]]:
@@ -472,6 +510,65 @@ def build_router(bot: Any) -> APIRouter:
             "name": name,
             "channel_id": str(target.id),
             "message_id": str(message.id),
+        }
+
+    @router.post("/{name}/assign")
+    async def rolemenu_assign(
+        request: Request, name: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        menu, options = await read_menu(bot, guild, name)
+        if not options:
+            raise Refused(400, "no_options", NOTHING_ON_THIS_MENU.format(name=name))
+        if not picking_is_on(bot, guild.id):
+            raise Refused(409, "rolemenu_off", ROLE_MENUS_OFF)
+        given = payload.get("user_id")
+        member = guild.get_member(as_id(given)) if as_id(given) is not None else None
+        if member is None:
+            raise Refused(404, "no_such_member", NO_SUCH_MEMBER.format(user_id=given))
+        remove = bool(payload.get("remove"))
+        wanted = [as_id(one) for one in payload.get("role_ids") or ()]
+        done, said = await staff_assign(
+            bot,
+            guild,
+            actor_for(bot, who, guild),
+            menu,
+            options,
+            member,
+            [one for one in wanted if one is not None],
+            remove=remove,
+            via=VIA_WEBSITE,
+        )
+        if not done:
+            raise Refused(409, "role_refused", said)
+        return {
+            "assigned": not remove,
+            "name": name,
+            "user_id": str(member.id),
+            "message": said,
+        }
+
+    @router.post("/{name}/unpost")
+    async def rolemenu_unpost(request: Request, name: str) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        menu, _ = await read_menu(bot, guild, name)
+        if not menu["message_id"]:
+            raise Refused(400, "not_posted", NOTHING_TO_UNPOST.format(name=name))
+        guard = guard_of(bot)
+        blocked = guard is not None and not guard.allows_channel(menu["channel_id"])
+        if not await panels.unpost(bot, menu, actor_for(bot, who, guild), via=VIA_WEBSITE):
+            if blocked:
+                refuse_guarded(guard.refusal_message())
+            raise Refused(409, "panel_stuck", PANEL_STUCK.format(name=name))
+        return {
+            "unposted": True,
+            "name": name,
+            "channel_id": str(menu["channel_id"]) if menu["channel_id"] else None,
+            "message": PANEL_TAKEN_DOWN.format(name=name),
         }
 
     return router

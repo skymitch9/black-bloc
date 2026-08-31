@@ -119,9 +119,28 @@ class WebChannel:
         self.messages: list[WebMessage] = []
         self.mention = f"<#{channel_id}>"
         self.deleted = False
+        self.user_limit = 0
+        self.guild: Any = None
+        self.voice_states: dict[int, Any] = {}
+        self.overwrites: dict[Any, Any] = {}
+        self.edit_raises: Any = None
 
     def permissions_for(self, role: Any) -> Permissions:
         return Permissions(view_channel=getattr(role, "id", None) in self.viewers)
+
+    def overwrites_for(self, target: Any) -> Any:
+        found = self.overwrites.get(target)
+        if found is None:
+            found = SimpleNamespace(connect=None, view_channel=None)
+        return SimpleNamespace(**vars(found))
+
+    async def set_permissions(self, target: Any, overwrite: Any = None, reason: str = "") -> None:
+        if self.edit_raises is not None:
+            raise self.edit_raises
+        if overwrite is None:
+            self.overwrites.pop(target, None)
+        else:
+            self.overwrites[target] = overwrite
 
     async def send(self, content=None, **kwargs: Any) -> WebMessage:
         message = WebMessage(9000 + len(self.messages), self, content=content, **kwargs)
@@ -132,7 +151,12 @@ class WebChannel:
         self.deleted = True
 
     async def edit(self, **kwargs: Any) -> None:
+        if self.edit_raises is not None:
+            raise self.edit_raises
         self.edits = getattr(self, "edits", []) + [kwargs]
+        for field in ("name", "user_limit"):
+            if field in kwargs:
+                setattr(self, field, kwargs[field])
 
     async def fetch_message(self, message_id: int) -> WebMessage:
         found = next((m for m in self.messages if m.id == message_id), None)
@@ -173,6 +197,7 @@ class WebGuild:
         ]
         for channel in self.channels:
             channel.category = category if channel.category_id == CATEGORY_ID else None
+            channel.guild = self
         self.members = MemberBook()
         self.bans: list[Any] = []
         self.kicks: list[Any] = []
@@ -217,6 +242,7 @@ class WebGuild:
     async def create_text_channel(self, name, **kwargs):
         channel = WebChannel(700 + len(self.created), name, position=len(self.channels))
         channel.kwargs = kwargs
+        channel.guild = self
         self.channels.append(channel)
         self.created.append(channel)
         return channel
@@ -226,6 +252,7 @@ class WebGuild:
             750 + len(self.created), name, kind="voice", position=len(self.channels)
         )
         channel.kwargs = kwargs
+        channel.guild = self
         self.channels.append(channel)
         self.created.append(channel)
         return channel

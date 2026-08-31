@@ -367,6 +367,57 @@
       ]
     },
     {
+      "method": "POST",
+      "path": "/api/rolemenus/seed",
+      "body": {},
+      "read_by": [
+        "page-rolemenus.js Seed defaults"
+      ],
+      "shape": "object",
+      "keys": [
+        "created",
+        "skipped",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/rolemenus/contract/assign",
+      "body": {
+        "user_id": "{member_id}",
+        "role_ids": [
+          "{plain_role_id}"
+        ]
+      },
+      "needs": "one option",
+      "read_by": [
+        "page-rolemenus.js assignForm"
+      ],
+      "shape": "object",
+      "keys": [
+        "assigned",
+        "name",
+        "user_id",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/rolemenus/contract/unpost",
+      "body": {},
+      "needs": "the contract menu posted by the seed",
+      "read_by": [
+        "page-rolemenus.js postCard"
+      ],
+      "shape": "object",
+      "keys": [
+        "unposted",
+        "name",
+        "channel_id",
+        "message"
+      ]
+    },
+    {
       "method": "DELETE",
       "path": "/api/rolemenus/contract",
       "read_by": [
@@ -697,6 +748,10 @@
         "starts_at",
         "ends_at",
         "minutes",
+        "duration",
+        "editable",
+        "announced",
+        "scheduled",
         "status",
         "requester_id",
         "requester_name",
@@ -707,6 +762,61 @@
         "review_channel_id",
         "created_at"
       ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/events/{event_id}",
+      "read_by": [
+        "page-events.js detail"
+      ],
+      "shape": "object",
+      "keys": [
+        "event"
+      ],
+      "nested": {
+        "event": [
+          "id",
+          "title",
+          "description",
+          "location",
+          "starts_at",
+          "duration",
+          "editable",
+          "announced",
+          "scheduled"
+        ]
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/events/{event_id}",
+      "body": {
+        "title": "Contract night",
+        "description": "edited by the contract check",
+        "location": "the park",
+        "start": "2099-09-14 19:30",
+        "duration": "1h30m",
+        "tz": "UTC"
+      },
+      "read_by": [
+        "page-events.js editor"
+      ],
+      "shape": "object",
+      "keys": [
+        "event",
+        "message",
+        "notes"
+      ],
+      "nested": {
+        "event": [
+          "id",
+          "title",
+          "starts_at",
+          "ends_at",
+          "minutes",
+          "duration"
+        ]
+      }
     },
     {
       "method": "POST",
@@ -1138,8 +1248,98 @@
         "owner_name",
         "creator_id",
         "created_at",
-        "connected"
+        "connected",
+        "user_limit",
+        "locked",
+        "hidden"
       ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/tempvoice/rooms/{room_channel_id}/rename",
+      "body": {
+        "name": "contract room"
+      },
+      "read_by": [
+        "page-tempvoice.js roomActions"
+      ],
+      "shape": "object",
+      "keys": [
+        "room",
+        "message"
+      ],
+      "nested": {
+        "room": [
+          "channel_id",
+          "name",
+          "user_limit",
+          "locked",
+          "hidden"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/tempvoice/rooms/{room_channel_id}/limit",
+      "body": {
+        "limit": 4
+      },
+      "read_by": [
+        "page-tempvoice.js roomActions"
+      ],
+      "shape": "object",
+      "keys": [
+        "room",
+        "message"
+      ],
+      "nested": {
+        "room": [
+          "channel_id",
+          "user_limit"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/tempvoice/rooms/{room_channel_id}/lock",
+      "body": {
+        "locked": true
+      },
+      "read_by": [
+        "page-tempvoice.js roomActions"
+      ],
+      "shape": "object",
+      "keys": [
+        "room",
+        "message"
+      ],
+      "nested": {
+        "room": [
+          "channel_id",
+          "locked"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/tempvoice/rooms/{room_channel_id}/hide",
+      "body": {
+        "hidden": true
+      },
+      "read_by": [
+        "page-tempvoice.js roomActions"
+      ],
+      "shape": "object",
+      "keys": [
+        "room",
+        "message"
+      ],
+      "nested": {
+        "room": [
+          "channel_id",
+          "hidden"
+        ]
+      }
     },
     {
       "method": "POST",
@@ -2000,6 +2200,10 @@
     "web.rolemenu.edit",
     "web.rolemenu.delete",
     "web.rolemenu.post",
+    "web.role_menu.unposted",
+    "web.role_menu.seeded",
+    "web.role_menu.assign",
+    "web.role_menu.unassign",
     "web.golive.link",
     "web.golive.unlink",
     "web.golive.optout",
@@ -2007,6 +2211,7 @@
     "web.event.approved",
     "web.event.denied",
     "web.event.cancel",
+    "web.event.edited",
     "web.poll.approved",
     "web.poll.denied",
     "web.poll.end",
@@ -2017,6 +2222,12 @@
     "web.birthday.import",
     "web.tempvoice.setup",
     "web.tempvoice.forget",
+    "web.tempvoice.rename",
+    "web.tempvoice.limit",
+    "web.tempvoice.lock",
+    "web.tempvoice.unlock",
+    "web.tempvoice.hide",
+    "web.tempvoice.show",
     "web.honeypot.ban",
     "web.honeypot.setup",
     "web.mod.warn",

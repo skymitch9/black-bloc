@@ -3811,3 +3811,76 @@ if they set it in discord or on the website"*.
   mix as `.pill.kindpill[data-important]`.
 - **Nothing was deployed**, and no owner sweep from either phase's definition of done
   has been run.
+
+## Site feature audit B4–B8 — the last five dashboard controls (2026-08-31)
+
+> Built on branch `worktree-agent-aab8d0b3a81f1039b` off `7b7840b`, one commit per item:
+> **B4** `4f0f399` · **B5** `47628b7` · **B6** `2c65db0` · **B7** `d8f44c7` · **B8** `379b0c1`.
+> **Last verified: 2026-08-31** — `pytest -q` **2227 passed** (2162 before B4),
+> `ruff check black_bloc tests site` clean, `node site/mock/check.mjs` clean at **98 routes**
+> (89 before). ⚠️ **Nothing here has run against live Discord**: every channel edit, role
+> change and event edit is exercised against the repo's fakes and the mock only, and no page
+> has been opened in a browser — the JS is parse-checked and contract-checked, not rendered.
+>
+> ⚠️ **`ruff check .` reports 2 pre-existing errors** in `scripts/doctools/move_done.py`
+> (a long docstring and a variable named `l`). That folder is untracked tooling and predates
+> this work; `ruff check black_bloc tests site` is the gate these commits pass.
+
+### B4 — temp voice per-room actions
+
+| Key | Note |
+|---|---|
+| ⚠️ `black_bloc/cogs/community/tempvoice.py:786 Doer` | **The refactor that made B4 possible, and it is deliberately duck-typed.** `do_rename`/`do_limit`/`do_privacy` only ever wanted three things off the interaction — `.client`, `.guild`, `.user` — so `Doer` is a NamedTuple with exactly those names plus `via`. A `discord.Interaction` already satisfies it, so **every panel and `/voice` call site is unchanged** and there is still one implementation of each action rather than an API near-duplicate (checklist 15). The alternative, threading `(bot, guild, actor)` through as three arguments, would have rewritten thirteen call sites for the same result. |
+| `black_bloc/cogs/community/tempvoice.py:777 Said` | A `str` subclass carrying `ok`. The helpers answer with a **sentence** and the panel just prints it, but the API has to know whether to answer 200 or refuse — and `str` compatibility is what kept `_act`, both modals, the panel toggle and the existing tests working with no edit at all. Only the three helpers B4 routes return `Said`; the other nine still return plain `str` because nothing outside the panel reads their outcome. |
+| ⚠️ `black_bloc/cogs/community/tempvoice.py:844 panel_log` | The kind grows a `web.` head and `details["via"]` **from the doer**, so a rename made on the dashboard logs `web.tempvoice.rename` and a rename made on the panel logs `tempvoice.rename`. No new entry in `logkinds.py` was needed: `bare()` strips the head, so both collapse onto the `tempvoice.rename` already in `ROUTINE`, and `rename_failed` is important by suffix. |
+| ⚠️ `black_bloc/api/tools/tempvoice.py:86 room` | **The place gate, and it is the whole test-mode story for these four routes.** A channel edit is a side effect `guard.py` cannot see, so the route asks the cog's own `may_act_in` — the room has to sit in the test channel's category. A room spawned from a lobby the guard placed is in that category, so a staffer can still drive the feature in test mode; a room anywhere else is a 409 in words. That is why these four are in `check.mjs`'s **UNGUARDED** list rather than GUARDED: they are place-gated, not blanket-refused. |
+| `black_bloc/api/tools/tempvoice.py:98 answered` | One shape for all four: `{room, message}`, where `room` is the row re-read after the write so the page repaints from what Discord now says rather than from what it asked for. `Said.ok` false becomes `409 discord_refused` carrying the cog's own sentence (the Manage Channels one, or the rename rate-limit one). |
+| `black_bloc/cogs/community/tempvoice.py:1085 privacy_of` | Locked and hidden read off the `@everyone` overwrite, in **one** place: `/voice info` and the dashboard's Access column were otherwise going to spell the same rule twice (checklist 15). |
+| **skipped, and why** | **Region and Kick are not routed.** Region is cheap on the API side but needs a 25-entry picker per row on a table that already grew four buttons, and Kick needs a member picker per room plus `connected_ids`. Neither is blocked by the refactor — `do_region` and `do_kick` take the same `Doer` — so both are a small follow-up rather than a design problem. |
+
+⚠️ **Two test TABLES move when a `log_action` kind stops being a plain literal**, and both
+fail by name rather than silently: `tests/test_logkinds.py:KNOWN_DYNAMIC` is keyed on the
+`ast.unparse` of the kind expression, so `f'tempvoice.{kind}'` became
+`f'{head}tempvoice.{kind}'` and the key had to move with it; and a `{placeholder}` added to
+`site/mock/contract.json` needs the SAME name in `tests/api/test_contract.py`'s ids dict,
+because `check.mjs` and the pytest side fill it from two different tables.
+
+### B5 — un-post a role menu panel
+
+| Key | Note |
+|---|---|
+| ⚠️ `black_bloc/rolemenu_panels.py:61 unpost` | **The route calls this, not `clear_message`.** `clear_message` only forgets the message id; `unpost` deletes the message in Discord, asks the guard first, clears the row and logs — the whole operation the mode switch already used. Calling the storage helper straight would have left the panel up in Discord and the row saying it was down. |
+| ⚠️ `black_bloc/api/tools/rolemenus.py:509 rolemenu_unpost` | **The guard is asked twice, on purpose.** `unpost` asks it first so a refused take-down is logged as `web.role_menu.would_unpost` exactly as the slash twin logs `role_menu.would_unpost` (checklist 1 and 2); the route then asks the same question to tell the two `False` answers apart — the guard's own sentence with `409 test_mode`, or `409 panel_stuck` when Discord refused. Without the second ask, both would come back as "Black Bloc could not take it down", which is true of the wrong thing. |
+| `black_bloc/rolemenu_panels.py:40 note` | Grew a `via`, so the web's un-post leaves ONE line under a `web.` head rather than a bare line plus a mirror. `bare()` collapses it onto `role_menu.unposted`, which is already in `ROUTINE`, so nothing new needed classifying. **`move_panel` passes it too**, which fixes the same residual on the existing channel-change path. |
+| `black_bloc/cogs/community/role_menus.py:1958 unpost` | The slash twin, added because checklist 33 says a per-item action needs both doors — `/rolemenu mode off` took every panel down and there was no way to take ONE down from Discord. It imports `rolemenu_panels` **inside the function**: that module imports this one at the top, so a module-level import is a cycle. |
+
+### B6 — seed the default menus
+
+| Key | Note |
+|---|---|
+| `black_bloc/cogs/community/role_menus.py:620 seed_summary` | Lifted out of the slash command so the button and `/rolemenu seed-defaults` say the **same** sentence — including the emoji caveat, which is the part people act on. `seed_default_menus` was already idempotent (`create_menu` returns `None` on a name that exists), so the route needed no new safety, only a way to report it. |
+| ⚠️ `black_bloc/api/tools/rolemenus.py:322 rolemenu_seed` | Answers `created` and `skipped` as **lists**, not a count, because "already there, left alone" is the half that needs naming — a staffer who sees `event-alerts` skipped is being told why its Marathons emoji is missing, and the message spells the fix. The route is declared **before** `/{name}/…`, and `POST /seed` cannot collide with anything in any case: there is no `POST /{name}`. |
+| `black_bloc/cogs/community/role_menus.py:2078` | Seeding now leaves a `role_menu.seeded` line from BOTH doors; the slash command left none at all before, so a seeded server had no record of when its menus appeared. |
+| **not verified** | No seed has ever run against the live guild. The six menus' role ids in `SEED` are the real server's; nothing here checked that any of them still exists, and a role that is gone simply becomes an option Discord will refuse at pick time — the same as before this change. |
+
+### B7 — staff assign from the dashboard
+
+| Key | Note |
+|---|---|
+| ⚠️ `black_bloc/cogs/community/role_menus.py:1288 staff_assign` | **Lifted whole out of `StaffAssignSelect.callback`, which was the only implementation of "hand a menu's roles out".** The select now does the guard/guild/mode checks and then calls it; the route does its own checks and calls the same function. It returns `(done, sentence)` — the shape `make_creator_channel` already set in this repo — because the caller has to choose between an ephemeral reply and an HTTP status. ⚠️ **The extraction also fixed the ORDER:** the select used to answer the clicker BEFORE writing the `role_grants` rows and the action line, so a failed reply took the record of a real role change with it (checklist 12). Everything durable now happens before the sentence is handed back. |
+| ⚠️ `black_bloc/cogs/community/role_menus.py:1301 role_diff` | Untouched, and it is what makes this safe: **only roles the menu owns are ever added or removed**, so a staffer handing out `runner-status` cannot strip somebody's Admin. The route passes whatever ids the page sent and they are intersected with the menu's options — an id that is not on the menu is dropped, not refused, exactly as a select value would be. |
+| ⚠️ `black_bloc/api/tools/rolemenus.py:452 rolemenu_assign` | **There is deliberately NO test-mode refusal here, and it is in `check.mjs`'s UNGUARDED list.** A member's roles are not a channel, so `guard.py` cannot see the change; the slash twin only checks the guard on *where the click happened*, which means `/rolemenu assign` in the test channel changes real roles today. `POST /api/roles/grants` (Phase 9a) already works the same way. Refusing here would have been a rule the bot has not got. |
+| `black_bloc/api/tools/rolemenus.py:461` | The route keeps the slash twin's other two gates — `rolemenu_mode` off is a `409 rolemenu_off`, an empty menu a `400` — so the two doors refuse the same things for the same reasons. |
+| `tests/test_logkinds.py KNOWN_DYNAMIC` | `role_menu.assign`/`unassign` stopped being literals when the head became `web.` for the website, so they moved from the literal scan into the table under `role_menus.py::kind`, with all four values named. |
+| **deviation from the spec** | The form offers **every menu that has a role on it**, not only `staff`-mode ones, because `/rolemenu assign` has never been restricted to staff-mode menus either — restricting one door and not the other is the drift checklist 15 exists to stop. Each option is labelled `name — mode` so a staff menu is obvious. |
+
+### B8 — event detail and editing
+
+| Key | Note |
+|---|---|
+| ⚠️ `black_bloc/cogs/community/events.py:245 checked_fields` | **The modal's whole validation chain, lifted out and made callable.** Title, the `YYYY-MM-DD HH:MM` parse, the **DST gap and ambiguity** checks, "that has already gone by" and the `1h30m` duration parse, in that order, returning `(fields, why)`. `submit` now calls it and so does the PUT, so a dashboard edit cannot make an event `/event propose` would have refused — and the refusal sentence is the identical one. |
+| ⚠️ `black_bloc/api/tools/events.py:200 event_edit` | **The zone is the caller's, and it is named on the wire.** The body carries `start` as a bare `YYYY-MM-DD HH:MM` plus a `tz`; the page sends the browser's own IANA zone (`Intl.DateTimeFormat().resolvedOptions().timeZone`) and shows it above the field, and an unknown zone falls back to the staffer's stored `/timezone set` one. A bare local time with no zone is the bug this avoids — the cog reads it in the *requester's* zone, which is not who is typing. |
+| `black_bloc/api/tools/events.py:194` | Only `pending` and `approved` may be edited (`EDITABLE`); a denied, cancelled, live or done event answers `409 not_editable` naming its state. Nothing here calls `can_transition`, because an edit is not a transition — the status does not move. |
+| ⚠️ `black_bloc/api/tools/events.py:238` | **What an edit does NOT do is in the answer, not left to be discovered.** `rename_channel` (the cog's own helper, guard-aware, `would_rename` in test mode) follows the title, so the review channel keeps up. An announcement already posted and a Discord scheduled event already made **keep the old details**, and `notes` says so in words for whichever applies — there is no existing helper that rewrites either, and claiming a change that did not happen is checklist 10. `announced` and `scheduled` are on every row so the page can warn before the save, not only after. |
+| `black_bloc/api/tools/events.py:88` | `GET /api/events/{event_id}` exists so the page has a detail route to name, though the list already carried every field the card shows — the audit's finding was that the page *fetched* them and rendered none of them. |
+| `site/public/assets/page-events.js:44 localStart` | The prefilled start is the stored instant **rendered in this browser's zone**, which is the same zone the save is read in — the two have to agree or an untouched Save would move the event. |

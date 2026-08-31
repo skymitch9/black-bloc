@@ -19,6 +19,7 @@ from ...actionlog import (
 )
 from ...command_errors import AnswersErrors
 from ...golive import now_iso, parse_ts
+from ...logkinds import VIA_DISCORD, VIA_WEBSITE, WEB
 from ...settings_store import (
     DB_UNAVAILABLE,
     GUILD_ONLY,
@@ -171,6 +172,11 @@ OUTSIDE_TEST_CATEGORY = (
 NOT_A_LOBBY = (
     "**{channel_id}** is not one of Black Bloc's join-to-create channels, so nothing was "
     "forgotten. `/tempvoice status` lists the ones it knows about."
+)
+OUTSIDE_TEST_ROOM = (
+    "**{name}** sits outside the test channel's category, so test mode stopped that change and "
+    "nothing happened. Black Bloc only edits temporary channels made from a lobby in that "
+    "category while test mode is on — turn test mode off to reach the rest."
 )
 NOT_AN_ID = (
     "**{given}** is not a channel id, so nothing was forgotten. Right-click the channel and "
@@ -767,6 +773,26 @@ class Target(NamedTuple):
     channel: Any
 
 
+class Said(str):
+    """The sentence an action answers with, carrying whether it changed anything."""
+
+    ok: bool
+
+    def __new__(cls, text: str, *, ok: bool = True) -> Said:
+        found = super().__new__(cls, text)
+        found.ok = ok
+        return found
+
+
+class Doer(NamedTuple):
+    """Who is acting, shaped like the interaction the panel hands these helpers."""
+
+    client: Any
+    guild: Any
+    user: Any
+    via: str = VIA_DISCORD
+
+
 def temp_channel(interaction: discord.Interaction, channel_id: Any) -> Any:
     guild = getattr(interaction, "guild", None)
     found = guild.get_channel(int(channel_id)) if guild is not None else None
@@ -818,15 +844,15 @@ async def panel_context(
     return Target(row, channel)
 
 
-async def panel_log(
-    interaction: discord.Interaction, kind: str, channel_id: Any, **details: Any
-) -> None:
+async def panel_log(who: Any, kind: str, channel_id: Any, **details: Any) -> None:
+    via = getattr(who, "via", VIA_DISCORD)
+    head = f"{WEB}." if via == VIA_WEBSITE else ""
     await log_action(
-        interaction.client,
-        interaction.guild,
-        f"tempvoice.{kind}",
-        actor=interaction.user,
-        details={"channel_id": int(channel_id)} | details,
+        who.client,
+        who.guild,
+        f"{head}tempvoice.{kind}",
+        actor=who.user,
+        details={"channel_id": int(channel_id), "via": via} | details,
     )
 
 
@@ -862,47 +888,47 @@ async def move_out(interaction: discord.Interaction, target: Any) -> bool:
     return True
 
 
-async def do_rename(interaction: discord.Interaction, channel: Any, row: Any, wanted: str) -> str:
+async def do_rename(who: Any, channel: Any, row: Any, wanted: str) -> Said:
     wanted = (wanted or "").strip()[:NAME_LIMIT]
     if not wanted:
-        return "A channel needs a name, so nothing was changed."
+        return Said("A channel needs a name, so nothing was changed.", ok=False)
     try:
         await channel.edit(name=wanted, reason="Black Bloc temp voice")
     except (discord.HTTPException, discord.RateLimited) as exc:
         log.warning("temp voice: rename refused in %s: %s", channel.id, exc)
-        await panel_log(interaction, "rename_failed", channel.id, reason=str(exc))
-        return RENAMED_TOO_OFTEN if rate_limited(exc) else CANNOT_EDIT
-    await save_prefs(interaction.client.db, row["owner_id"], name=wanted)
-    await panel_log(interaction, "rename", channel.id, name=wanted)
-    return f"Renamed to **{wanted}**, and remembered for next time."
+        await panel_log(who, "rename_failed", channel.id, reason=str(exc))
+        return Said(RENAMED_TOO_OFTEN if rate_limited(exc) else CANNOT_EDIT, ok=False)
+    await save_prefs(who.client.db, row["owner_id"], name=wanted)
+    await panel_log(who, "rename", channel.id, name=wanted)
+    return Said(f"Renamed to **{wanted}**, and remembered for next time.")
 
 
-async def do_limit(interaction: discord.Interaction, channel: Any, row: Any, value: int) -> str:
+async def do_limit(who: Any, channel: Any, row: Any, value: int) -> Said:
     try:
         await channel.edit(user_limit=value, reason="Black Bloc temp voice")
     except discord.HTTPException as exc:
         log.warning("temp voice: limit refused in %s: %s", channel.id, exc)
-        await panel_log(interaction, "limit_failed", channel.id, reason=str(exc))
-        return CANNOT_EDIT
-    await save_prefs(interaction.client.db, row["owner_id"], user_limit=value)
-    await panel_log(interaction, "limit", channel.id, user_limit=value)
-    return "Anyone can join now." if value == 0 else f"Capped at **{value}** people."
+        await panel_log(who, "limit_failed", channel.id, reason=str(exc))
+        return Said(CANNOT_EDIT, ok=False)
+    await save_prefs(who.client.db, row["owner_id"], user_limit=value)
+    await panel_log(who, "limit", channel.id, user_limit=value)
+    return Said("Anyone can join now." if value == 0 else f"Capped at **{value}** people.")
 
 
 async def do_privacy(
-    interaction: discord.Interaction,
+    who: Any,
     channel: Any,
     row: Any,
     permission: str,
     want: bool | None = None,
-) -> str:
+) -> Said:
     everyone = channel.guild.default_role
-    async with channel_lock(interaction.client, channel.id):
+    async with channel_lock(who.client, channel.id):
         overwrite = channel.overwrites_for(everyone)
         was_off = getattr(overwrite, permission) is False
         turning_off = (not was_off) if want is None else want
         if turning_off == was_off:
-            return already_message(permission, was_off)
+            return Said(already_message(permission, was_off))
         setattr(overwrite, permission, False if turning_off else None)
         try:
             await channel.set_permissions(
@@ -910,22 +936,22 @@ async def do_privacy(
             )
         except discord.HTTPException as exc:
             log.warning("temp voice: %s refused in %s: %s", permission, channel.id, exc)
-            await panel_log(interaction, "privacy_failed", channel.id, reason=str(exc))
-            return CANNOT_EDIT
+            await panel_log(who, "privacy_failed", channel.id, reason=str(exc))
+            return Said(CANNOT_EDIT, ok=False)
     if permission == "connect":
-        await save_prefs(interaction.client.db, row["owner_id"], locked=turning_off)
+        await save_prefs(who.client.db, row["owner_id"], locked=turning_off)
         said = "Locked — nobody new may join." if turning_off else "Unlocked — anyone may join."
         kind = "lock" if turning_off else "unlock"
     else:
-        await save_prefs(interaction.client.db, row["owner_id"], hidden=turning_off)
+        await save_prefs(who.client.db, row["owner_id"], hidden=turning_off)
         said = (
             "Hidden — only people already in it can see it."
             if turning_off
             else "Visible again to everyone."
         )
         kind = "hide" if turning_off else "show"
-    await panel_log(interaction, kind, channel.id)
-    return said
+    await panel_log(who, kind, channel.id)
+    return Said(said)
 
 
 async def do_kick(interaction: discord.Interaction, channel: Any, row: Any, target: Any) -> str:
@@ -1049,8 +1075,17 @@ def mentions(ids: Any) -> str:
     return ", ".join(f"<@{user_id}>" for user_id in ids) or "nobody"
 
 
+def privacy_of(channel: Any) -> tuple[bool, bool]:
+    """Locked and hidden, read off the channel's own `@everyone` overwrite."""
+    try:
+        overwrite = channel.overwrites_for(channel.guild.default_role)
+    except (AttributeError, TypeError):
+        return False, False
+    return overwrite.connect is False, overwrite.view_channel is False
+
+
 def info_lines(channel: Any, row: Any, role_ids: Any) -> list[str]:
-    everyone = channel.overwrites_for(channel.guild.default_role)
+    locked, hidden = privacy_of(channel)
     permitted, banned = member_lists(getattr(channel, "overwrites", {}), row["owner_id"], role_ids)
     limit = int(getattr(channel, "user_limit", 0) or 0)
     bitrate = int(getattr(channel, "bitrate", 0) or 0)
@@ -1060,8 +1095,8 @@ def info_lines(channel: Any, row: Any, role_ids: Any) -> list[str]:
         f"**channel** — <#{channel.id}>",
         f"**owner** — <@{row['owner_id']}>",
         f"**limit** — {cap}",
-        f"**locked** — {'yes' if everyone.connect is False else 'no'}",
-        f"**hidden** — {'yes' if everyone.view_channel is False else 'no'}",
+        f"**locked** — {'yes' if locked else 'no'}",
+        f"**hidden** — {'yes' if hidden else 'no'}",
         f"**bitrate** — {speed}",
         f"**region** — {getattr(channel, 'rtc_region', None) or 'automatic'}",
         f"**let in by name** — {mentions(permitted)}",

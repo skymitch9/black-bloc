@@ -44,6 +44,10 @@ const TURNED_OFF = 'Off. The posted panels are removed and the /rolemenu command
 const NO_KEY = 'The bot did not report a rolemenu_mode key, so this switch is not shown rather ' +
   'than guessed at.';
 
+const SEED_BODY = 'Six menus this server expects — pronouns, playstyle, mentoring, interests, ' +
+  'event-alerts and runner-status. A name you already have is left exactly as it is, options ' +
+  'and all, and nothing is posted until you post it.';
+
 const APPROVAL_HELP = 'On, picking this role asks staff first instead of handing it over.';
 const EXPIRES_HELP = 'Blank means the role never runs out.';
 const RETRY_HELP = 'How long after a no before they may ask again.';
@@ -59,6 +63,9 @@ const TIMED_NOTE = 'Every role Black Bloc is holding a clock on. Ending one take
 const NO_REQUESTS = 'Nobody is waiting on staff. A menu only asks first when its Approval is on.';
 const NO_DECIDED = 'Nothing has been decided yet.';
 const NO_GRANTS = 'No role has a clock on it. Grant one below, or give a menu an "Expires after".';
+const ASSIGN_HELP = 'The same path /rolemenu assign takes: only the roles on the menu you pick ' +
+  'are touched, and a clock starts if that menu has one.';
+const NO_MENU_TO_ASSIGN = 'No menu has a role on it yet, so there is nothing to hand out.';
 const PICK_A_MEMBER = 'Pick the member this is about first.';
 const PICK_A_ROLE = 'Pick the role to give them first.';
 const A_REASON = 'Say why — they are sent exactly this.';
@@ -259,9 +266,31 @@ async function postCard(menu, say) {
         });
         if (!sure) return;
         const done = await run(say, () => send(`/api/rolemenus/${encodeURIComponent(menu.name)}/post`, 'POST', { channel_id: channelId }), 'Posted.');
-        if (done.ok) refresh();
+        if (done.ok) {
+          keepSaying('menus', say);
+          refresh();
+        }
       }, { tone: 'warn' }),
+      button('Un-post', async () => {
+        const sure = await ask({
+          title: `Take ${menu.name}'s panel down?`,
+          body: ['The message is deleted. The menu, its roles and everybody who already has one are untouched, and you can post it again whenever you want.'],
+          confirmLabel: 'Take it down',
+          tone: 'warn',
+        });
+        if (!sure) return;
+        const done = await run(
+          say,
+          () => send(`/api/rolemenus/${encodeURIComponent(menu.name)}/unpost`, 'POST', {}),
+          (found) => found?.message || 'The panel is down.',
+        );
+        if (done.ok) {
+          keepSaying('menus', say);
+          refresh();
+        }
+      }, { tone: 'quiet', disabled: !menu.message_id }),
     ]),
+    menu.message_id ? null : el('p', { class: 'field-help', text: 'Nothing is posted yet, so there is nothing to take down.' }),
   ]);
 }
 
@@ -469,7 +498,69 @@ async function grantForm(say) {
   ]);
 }
 
-async function timedSection(rows, say) {
+/** B7: the /rolemenu assign picker, as a form — one menu, one member, its own roles. */
+function assignForm(menus, say) {
+  const usable = menus.filter((menu) => (menu.options || []).length > 0);
+  if (usable.length === 0) return sayNothing(NO_MENU_TO_ASSIGN);
+  const picker = memberPicker({ label: 'Member' });
+  const which = el('select', { class: 'input' }, usable.map((menu) =>
+    el('option', { value: menu.name, text: `${menu.name} — ${menu.mode}` })));
+  const boxes = el('div', { class: 'formrow' });
+
+  const paint = () => {
+    const menu = usable.find((one) => one.name === which.value) || usable[0];
+    boxes.replaceChildren(...(menu.options || []).map((option) => {
+      const box = el('input', {
+        class: 'input switch',
+        type: 'checkbox',
+        value: String(option.role_id),
+      });
+      return el('label', { class: 'field' }, [box, ' ', chipFor(option.role_id, option.label)]);
+    }));
+  };
+  which.addEventListener('change', paint);
+  paint();
+
+  const picked = () => [...boxes.querySelectorAll('input:checked')].map((box) => box.value);
+
+  const go = (remove) => async () => {
+    if (!picker.id) {
+      say.say(PICK_A_MEMBER, 'warn');
+      return;
+    }
+    const roleIds = picked();
+    if (roleIds.length === 0) {
+      say.say(PICK_A_ROLE, 'warn');
+      return;
+    }
+    const done = await run(
+      say,
+      () => send(`/api/rolemenus/${encodeURIComponent(which.value)}/assign`, 'POST', {
+        user_id: picker.id,
+        role_ids: roleIds,
+        remove,
+      }),
+      (found) => found?.message || 'Done.',
+    );
+    if (done.ok) {
+      keepSaying('timed', say);
+      refresh();
+    }
+  };
+
+  return card('Hand roles out', [
+    el('p', { class: 'field-help', text: ASSIGN_HELP }),
+    picker.node,
+    field('Menu', which),
+    boxes,
+    bar([
+      button('Give these', go(false), { tone: 'warn', small: false }),
+      button('Take these off', go(true), { tone: 'danger', small: false }),
+    ]),
+  ]);
+}
+
+async function timedSection(rows, menus, say) {
   const open = rows.filter((row) => row.open).length;
   const one = section('Timed roles', TIMED_NOTE, { count: open });
   one.body.append(
@@ -481,6 +572,7 @@ async function timedSection(rows, say) {
       { label: 'Ends', cell: endsCell },
       { label: '', cell: (row) => grantActions(row, say) },
     ], rows, { empty: state.member ? 'No role of theirs has a clock on it.' : NO_GRANTS }),
+    assignForm(menus, say),
     await grantForm(say),
     say,
   );
@@ -585,6 +677,24 @@ async function load() {
         state.editing = null;
         refresh();
       }, { small: false }),
+      button('Seed defaults', async () => {
+        const sure = await ask({
+          title: 'Create the default role menus?',
+          body: [SEED_BODY],
+          confirmLabel: 'Create them',
+          tone: 'warn',
+        });
+        if (!sure) return;
+        const done = await run(
+          say,
+          () => send('/api/rolemenus/seed', 'POST', {}),
+          (found) => found?.message || 'Seeded.',
+        );
+        if (done.ok) {
+          keepSaying('menus', say);
+          refresh();
+        }
+      }, { small: false, tone: 'quiet' }),
     ], { sticky: true }),
     list,
     sayAgain('menus', say),
@@ -624,7 +734,7 @@ async function load() {
     banner,
     switchboard.node,
     requestsSection(requests, menus, askSay),
-    await timedSection(grants, timedSay),
+    await timedSection(grants, menus, timedSay),
     one.node,
     two.node,
     box.node,
