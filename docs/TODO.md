@@ -110,7 +110,7 @@ per feature, so the old bot keeps running until the new one is proven.
   (top bar, grouped nav + icons, width-filling grid, docked dirty save bar,
   human labels) then R2 skin (the "Black Bloc" theme dark+light as default,
   wordmark, copy voice, table furniture, Ctrl+K palette, show-keys toggle).
-  **Queued AFTER the B4–B8 builder merges** — both touch `site/`.
+  Status: **R1 Opus builder dispatched 2026-08-31 ~11:45 in a worktree** (R2 after R1 lands).
 - **`code-notes.md` re-key** — measured 2026-08-31: 88 files / 22,333 insertions
   since the last re-key (`666dd8e`); 4 of 4 spot-checked `bot.py` keys miss.
   A build-sized diff-driven pass (the file carries a red warning meanwhile).
@@ -119,12 +119,7 @@ per feature, so the old bot keeps running until the new one is proven.
   2026-08-31): the dashboard now admits any signed-in guild member, so KI-6's
   ">1 site user" trigger (sessions table + a per-session id in the cookie +
   revocation on logout) and KI-9's (HMAC poll-vote hashing with a
-  `POLL_VOTE_SECRET`) are due. Small security build; queue after B4–B8.
-- **DB backup drill** (RECOVERY gap re-opened by the docs audit 2026-08-31):
-  the live volume now holds real rows (38 birthdays + settings + cases) and
-  RECOVERY.md's own threshold — "the first table with real data" — has passed.
-  Need: a dump path off the Fly volume (`flyctl ssh sftp` or a scheduled
-  export), drilled once, documented in `access/RECOVERY.md`.
+  `POLL_VOTE_SECRET`) are due. Status: **Opus builder dispatched 2026-08-31 ~11:45 in a worktree** (schema 17 sessions + per-poll hash scheme; expect a one-time sign-out for site users at deploy).
 
 - **Owner 2026-08-27 ~11:49, verbatim: "Probably should make a deploy button api so you can deploy for me if you can't permission"** → idea logged. Today: the owner's standing authorisation works — the last four deploys ran from the session. A deploy endpoint on the bot would need a Fly API token on the machine and a self-redeploy path; higher risk than value while the session can deploy. Status: **parked unless the classifier blocks again.**
 

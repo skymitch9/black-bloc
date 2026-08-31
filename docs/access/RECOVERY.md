@@ -8,15 +8,32 @@
 > `.gitignore` no longer lists `docs/`). The Fly/GitHub/secret inventory below
 > is still the **2026-08-26 (evening)** reading and was NOT re-checked against
 > the live Fly app or the Developer Portal today.
-> ⚠️ **Nothing in this file has been DRILLED.** Every restore claim below is
-> inference until a dated drill line says otherwise.
+> ⚠️ **Drilled so far: the DB backup pull (2026-08-31, below).** Every other
+> restore claim is inference until a dated drill line says otherwise.
 
 ## 🔴 Named gaps (fix these before there is anything worth losing)
 
 | Gap | Consequence today | Closes when |
 |---|---|---|
 | ~~**`docs/` is local-only**~~ **CLOSED 2026-08-31** | Was: the whole docs tree existed on ONE machine under OneDrive sync. Now `docs/` is **tracked in git and pushed** to `github.com/skymitch9/black-bloc` (owner, 2026-08-31, commit `1eb8870`) — measured: `git ls-files docs` returns 48 files. A clone restores the docs tree with the code. | Closed. ⚠️ Consequence: the repo is the backup, so **never write a secret VALUE under `docs/`** — names and custody only. |
-| **No DB backup** | ⚠️ **No longer "the DB holds nothing"** — schema is at **16** and the live volume carries real rows (birthdays imported, settings, action log, polls, requests). A lost volume loses all of it. | Was "the first table with real data" — that threshold has PASSED. Add a scheduled `fly ssh sftp get` of `/data/black_bloc.sqlite3` or a dump job. **This is now an open gap, not a deferred one.** |
+| **DB backup is manual, not scheduled** | The pull below works and was **DRILLED 2026-08-31** (backup verified: 30 tables, 38 birthdays, 15 chat intents, 6 settings), but nothing runs it on a schedule — a lost volume loses everything since the last manual pull. | A scheduled job (local cron/Task Scheduler running the three commands below, or a bot-side export loop). Until then: pull one after anything import-shaped. |
+
+### DB backup — the drilled procedure (2026-08-31)
+
+```
+<flyctl> ssh console --app black-bloc -C "python3 -c \"import sqlite3; s=sqlite3.connect('/data/black_bloc.sqlite3'); d=sqlite3.connect('/data/backup-drill.sqlite3'); s.backup(d); d.close(); s.close(); print('backup written')\""
+<flyctl> ssh sftp get /data/backup-drill.sqlite3 %USERPROFILE%\black-bloc-backups\backup-<date>.sqlite3 --app black-bloc
+<flyctl> ssh console --app black-bloc -C "rm /data/backup-drill.sqlite3"
+```
+
+Notes from the drill: use `sqlite3.backup()` on the machine first — a raw copy of the
+live file can tear (WAL is in play); the image has no `sqlite3` CLI but python3 is
+there. From Git Bash prefix `MSYS_NO_PATHCONV=1` or `/data/...` gets rewritten to a
+Windows path. `flyctl ssh console -C` may exit with "The handle is invalid" on Windows
+AFTER the command ran — trust the printed output, not the exit code. Verify a pulled
+backup by opening it and counting rows (birthdays 38 as of 2026-08-31). Backups live
+in `%USERPROFILE%\black-bloc-backups\` — NEVER inside the repo (the DB holds member
+data and `docs/` is tracked).
 
 ## Inventory
 

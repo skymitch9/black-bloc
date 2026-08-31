@@ -9,6 +9,27 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-08-31 — DB backup drilled: the first dated drill line in RECOVERY.md
+
+Moved whole from `TODO.md`:
+
+- **DB backup drill** (RECOVERY gap re-opened by the docs audit 2026-08-31):
+  the live volume now holds real rows (38 birthdays + settings + cases) and
+  RECOVERY.md's own threshold — "the first table with real data" — has passed.
+  Need: a dump path off the Fly volume (`flyctl ssh sftp` or a scheduled
+  export), drilled once, documented in `access/RECOVERY.md`.
+
+**Landed 2026-08-31 ~11:35 Phoenix, run by Fable from the session:** consistent
+snapshot via `sqlite3.backup()` on the machine (no sqlite3 CLI in the image —
+python3 does it; a raw copy of the live WAL-mode file can tear), pulled with
+`flyctl ssh sftp get` to `%USERPROFILE%\black-bloc-backups\backup-2026-08-31.sqlite3`
+(290,816 bytes), **verified by opening it**: 30 tables, birthdays 38, chat_intents 15,
+settings 6; drill file removed from the volume after. Procedure + three gotchas
+(MSYS path rewriting, the bogus "handle is invalid" exit, never store a backup in
+the tracked repo) written into `access/RECOVERY.md`, whose header now carries its
+first dated drill line. **Residual, owned by the RECOVERY gap table:** the pull is
+manual — nothing schedules it yet.
+
 ## 2026-08-31 — B4–B8: the last five audit leftovers, live
 
 The 2026-08-27 site-feature audit's open tail (`info/site-feature-audit.md` §2), queued for
