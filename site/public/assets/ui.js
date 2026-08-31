@@ -478,15 +478,40 @@ export function idsIn(rows, keys) {
 const SEARCH_FROM = 2;
 const LONG_FROM = 12;
 
+/** A header that needs explaining says so with a mark, the way Cloudflare's does. */
+function headCell(column) {
+  const th = el('th', { scope: 'col', title: column.help || undefined }, [
+    el('span', { text: column.label }),
+  ]);
+  if (column.help) th.append(el('span', { class: 'th-mark', 'aria-hidden': 'true', text: 'ⓘ' }));
+  return th;
+}
+
+/**
+ * "Showing 1–25 of 120 lines" under the table, and what the search left when a
+ * search is narrowing it. `from` is the 1-based index of this page's first row,
+ * so a server-paged table counts across pages instead of restarting at 1.
+ */
+function footText(shown, rows, foot) {
+  const noun = foot.noun || 'row';
+  const said = (n) => `${noun}${n === 1 ? '' : 's'}`;
+  const total = typeof foot.total === 'number' ? foot.total : rows.length;
+  const from = typeof foot.from === 'number' && foot.from > 0 ? foot.from : 1;
+  if (shown !== rows.length) return `Showing ${shown} of the ${rows.length} ${said(rows.length)} on this page`;
+  if (rows.length === 0) return `Showing none of ${total} ${said(total)}`;
+  return `Showing ${from}–${from + rows.length - 1} of ${total} ${said(total)}`;
+}
+
 export function table(columns, rows, {
   empty = 'Nothing here yet.',
   emptyAction = null,
   search = 'auto',
   searchLabel = 'Search this table',
+  tools = [],
+  foot = null,
 } = {}) {
   if (!rows || rows.length === 0) return sayNothing(empty, emptyAction);
-  const head = el('tr', {}, columns.map((column) =>
-    el('th', { scope: 'col', text: column.label })));
+  const head = el('tr', {}, columns.map(headCell));
   const body = rows.map((row, index) => el('tr', {}, columns.map((column) => {
     const made = column.cell ? column.cell(row, index) : row[column.key];
     const cell = el('td', { class: column.className || undefined });
@@ -506,31 +531,33 @@ export function table(columns, rows, {
   ]);
 
   const wanted = search === true || (search === 'auto' && rows.length >= SEARCH_FROM);
-  if (!wanted) return scroll;
+  const extras = [].concat(tools).filter(Boolean);
+  if (!wanted && extras.length === 0 && foot === null) return scroll;
 
-  const shown = el('span', { class: 'table-count', text: `${rows.length} row(s)` });
+  const counted = foot ? el('div', { class: 'table-foot', text: footText(rows.length, rows, foot) }) : null;
+  // One home for the count: the foot owns it when there is one, and the
+  // toolbar keeps it only when there is not.
+  const shown = counted ? null : el('span', { class: 'table-count', text: `${rows.length} row(s)` });
   const none = sayNothing(
     'Nothing in this table matches what you typed.',
     textAction('Clear the search', () => clearSearch(input)),
   );
   none.hidden = true;
-  const input = searchField({
+  const input = wanted ? searchField({
     label: searchLabel,
     placeholder: 'filter these rows',
     onQuery: (query) => {
       const found = filterRows(scroll, query);
-      shown.textContent = query === ''
-        ? `${found.total} row(s)`
-        : `${found.shown} of ${found.total}`;
+      if (shown) shown.textContent = query === '' ? `${found.total} row(s)` : `${found.shown} of ${found.total}`;
+      if (counted) counted.textContent = footText(found.shown, rows, foot);
       none.hidden = found.shown > 0;
       scroll.hidden = found.shown === 0;
     },
-  });
-  return el('div', { class: 'table-block' }, [
-    el('div', { class: 'table-tools' }, [input, shown]),
-    scroll,
-    none,
-  ]);
+  }) : null;
+  const bar = input || extras.length || shown
+    ? el('div', { class: 'table-tools' }, [input, ...extras, el('span', { class: 'table-gap' }), shown])
+    : null;
+  return el('div', { class: 'table-block' }, [bar, scroll, counted, none]);
 }
 
 const PAGER_GAP = 8;
@@ -624,6 +651,40 @@ export function pager({ page, hasMore, onPage, count = null }) {
     button('Next', () => go(at + 1), { tone: 'quiet', disabled: !hasMore }),
   );
   return node;
+}
+
+let drawerNode = null;
+let drawerShut = null;
+
+export function closeDrawer() {
+  if (drawerNode && drawerNode.open) drawerNode.close();
+}
+
+/**
+ * The right-hand detail panel a row opens instead of the page growing a
+ * section under it. A native <dialog> in modal state, so Escape, the focus
+ * trap and the backdrop are the platform's job and not this file's.
+ */
+export function openDrawer(title, body, { onClose = null } = {}) {
+  if (drawerNode === null) {
+    drawerNode = el('dialog', { class: 'drawer' });
+    drawerNode.addEventListener('click', (event) => {
+      if (event.target === drawerNode) closeDrawer();
+    });
+    document.body.append(drawerNode);
+  }
+  drawerNode.replaceChildren(el('div', { class: 'drawer-inner' }, [
+    el('div', { class: 'drawer-head' }, [
+      el('h2', { class: 'drawer-title', text: title }),
+      button('Close', () => closeDrawer(), { tone: 'quiet' }),
+    ]),
+    el('div', { class: 'drawer-body' }, [].concat(body).filter(Boolean)),
+  ]));
+  if (drawerShut) drawerNode.removeEventListener('close', drawerShut);
+  drawerShut = onClose || null;
+  if (drawerShut) drawerNode.addEventListener('close', drawerShut);
+  if (!drawerNode.open) drawerNode.showModal();
+  return drawerNode;
 }
 
 let dialog = null;
@@ -1021,6 +1082,53 @@ export async function settingRow(spec, { onDirty = null } = {}) {
   say.classList.add('setrow-say');
   paint();
   return row;
+}
+
+const SHOW_KEYS = 'bb_show_keys';
+
+function keysWanted() {
+  try {
+    return localStorage.getItem(SHOW_KEYS) === 'true';
+  } catch (e) {
+    return false;
+  }
+}
+
+/* Stamped at import, before a row is drawn, so a person who wants the keys
+   never sees them appear a frame late. */
+document.documentElement.setAttribute('data-showkeys', keysWanted() ? 'true' : 'false');
+
+export function setShowKeys(on) {
+  document.documentElement.setAttribute('data-showkeys', on ? 'true' : 'false');
+  try {
+    localStorage.setItem(SHOW_KEYS, on ? 'true' : 'false');
+  } catch (e) {
+    /* private mode, a full quota, storage switched off — the choice just is not remembered */
+  }
+}
+
+/**
+ * The switch that reveals the mono raw-key sub-lines. CSS hides them, so they
+ * are still in the DOM and the command palette still finds a setting by its
+ * key while they are out of sight.
+ */
+export function keysSwitch() {
+  const node = el('button', {
+    class: 'btn quiet small',
+    type: 'button',
+    text: 'Show keys',
+    title: 'Show each setting’s raw registry key under its name',
+  });
+  const paint = () => node.setAttribute(
+    'aria-pressed',
+    document.documentElement.getAttribute('data-showkeys') === 'true' ? 'true' : 'false',
+  );
+  node.addEventListener('click', () => {
+    setShowKeys(node.getAttribute('aria-pressed') !== 'true');
+    paint();
+  });
+  paint();
+  return node;
 }
 
 /** Every bar from the render that is being replaced goes with it. */

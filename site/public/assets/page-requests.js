@@ -520,6 +520,18 @@ function emptySaid(which, payload, base, filterable = false) {
   return base;
 }
 
+/** The row-count footer the big lists wear: "Showing 1-10 of 24 requests". */
+function footFor(which, payload, rows, perPage) {
+  if (rows.length === 0) return null;
+  const size = payload.per_page ?? perPage;
+  const total = payload.total ?? rows.length;
+  const from = (state[which] - 1) * size + 1;
+  return el('div', {
+    class: 'grid-foot',
+    text: `Showing ${from}–${from + rows.length - 1} of ${total} request${total === 1 ? '' : 's'}`,
+  });
+}
+
 function pagerFor(which, payload, rows, perPage) {
   const size = payload.per_page ?? perPage;
   const pages = payload.pages ?? Math.ceil((payload.total ?? 0) / size);
@@ -540,6 +552,7 @@ function pendingSection(payload, rows, say) {
     rows.length === 0
       ? sayNothing(emptySaid('pending', payload, NO_PENDING, true), emptyDo('pending', payload, true))
       : el('div', { class: 'section-body' }, rows.map(pendingCard)),
+    footFor('pending', payload, rows, PER_PAGE),
     pagerFor('pending', payload, rows, PER_PAGE),
     say,
   );
@@ -555,6 +568,7 @@ function boardSection(payload, rows, say) {
     rows.length === 0
       ? sayNothing(emptySaid('board', payload, NO_BOARD, true), emptyDo('board', payload, true))
       : el('div', { class: 'section-body' }, rows.map(boardCard)),
+    footFor('board', payload, rows, PER_PAGE),
     pagerFor('board', payload, rows, PER_PAGE),
     say,
   );
@@ -570,6 +584,7 @@ function doneSection(payload, rows) {
       rows.length === 0
         ? sayNothing(emptySaid('done', payload, NO_DONE), emptyDo('done', payload))
         : el('div', { class: 'section-body' }, rows.map(shutCard)),
+      footFor('done', payload, rows, SHUT_PER_PAGE),
       pagerFor('done', payload, rows, SHUT_PER_PAGE),
     ],
     { count: total },
@@ -585,6 +600,7 @@ function declinedSection(payload, rows, gone) {
       rows.length === 0
         ? sayNothing(emptySaid('declined', payload, NO_DECLINED), emptyDo('declined', payload))
         : el('div', { class: 'section-body' }, rows.map(shutCard)),
+      footFor('declined', payload, rows, SHUT_PER_PAGE),
       pagerFor('declined', payload, rows, SHUT_PER_PAGE),
     ], { count: total }),
     foldout('Taken back by the person who asked', [
@@ -780,6 +796,7 @@ function mineSection(payload, rows, say) {
     rows.length === 0
       ? sayNothing(emptySaid('mine', payload, NO_MINE), emptyDo('mine', payload))
       : el('div', { class: 'section-body' }, rows.map((row) => mineCard(row, say))),
+    footFor('mine', payload, rows, PER_PAGE),
     pagerFor('mine', payload, rows, PER_PAGE),
     say,
   );

@@ -108,15 +108,22 @@ export function viaCell(via) {
   });
 }
 
-export function logsTable(rows, empty, emptyAction = null) {
-  return table([
-    { label: 'When', cell: (row) => whenCell(row.at) },
-    { label: 'Kind', cell: (row) => kindPill(row) },
-    { label: 'Via', cell: (row) => viaCell(row.via) },
-    { label: 'Actor', cell: (row) => whoCell(row.actor_id, row.actor_name) },
-    { label: 'Target', cell: (row) => whoCell(row.target_id, row.target_name) },
-    { label: 'Summary', cell: (row) => row.summary || row.reason, className: 'wrap' },
-  ], rows, { empty, emptyAction, search: false });
+export const LOG_COLUMNS = [
+  { label: 'When', help: 'When the bot wrote the line. Hover for the exact time.', cell: (row) => whenCell(row.at) },
+  {
+    label: 'Kind',
+    help: 'The bot’s own name for what happened. Highlighted means important — it acted on ' +
+      'a member, or it failed.',
+    cell: (row) => kindPill(row),
+  },
+  { label: 'Via', help: 'Where the thing was done: in Discord, or on this dashboard.', cell: (row) => viaCell(row.via) },
+  { label: 'Actor', help: 'Who did it. The bot itself when nobody asked.', cell: (row) => whoCell(row.actor_id, row.actor_name) },
+  { label: 'Target', help: 'Who or what it was done to.', cell: (row) => whoCell(row.target_id, row.target_name) },
+  { label: 'Summary', cell: (row) => row.summary || row.reason, className: 'wrap' },
+];
+
+export function logsTable(rows, empty, emptyAction = null, foot = null) {
+  return table(LOG_COLUMNS, rows, { empty, emptyAction, search: false, foot });
 }
 
 /** The importance switch every logs surface wears, in the site's own segments. */
@@ -183,7 +190,6 @@ export async function logsSection(feature, { title = 'Logs', note = NOTE, perPag
   const state = { page: 1, kind: '', query: '', important: true };
   const group = section(title, note, { id: `logs-${feature}` });
   const results = el('div', { class: 'logs-results' });
-  const count = el('span', { class: 'table-count' });
 
   const kinds = await kindsFor(feature);
   const chips = el('div', { class: 'chipbar logs-chips' });
@@ -249,16 +255,18 @@ export async function logsSection(feature, { title = 'Logs', note = NOTE, perPag
       payload = await api(`/api/actions?${params.toString()}`);
     } catch (error) {
       results.replaceChildren(sayNothing(sentenceFor(error).text));
-      count.textContent = '';
       return;
     }
     const rows = listOf(payload, 'actions');
     await names(idsIn(rows, ['actor_id', 'target_id']));
     const total = typeof payload.total === 'number' ? payload.total : rows.length;
-    count.textContent = `${rows.length} of ${total} line${total === 1 ? '' : 's'}`;
     group.count(total);
     results.replaceChildren(
-      logsTable(rows, nothingSaid(feature, state), rows.length === 0 ? wayOut() : null),
+      logsTable(rows, nothingSaid(feature, state), rows.length === 0 ? wayOut() : null, {
+        noun: 'line',
+        total,
+        from: (state.page - 1) * perPage + 1,
+      }),
       pager({
         page: state.page,
         hasMore: state.page * perPage < total,
@@ -284,7 +292,6 @@ export async function logsSection(feature, { title = 'Logs', note = NOTE, perPag
       },
     }),
     only,
-    count,
   ]);
 
   paintChips();

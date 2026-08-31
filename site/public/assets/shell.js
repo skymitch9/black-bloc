@@ -15,7 +15,7 @@ export const GROUPS = [
     ],
   },
   {
-    head: 'Moderation',
+    head: 'Runs the server',
     items: [
       { tab: 'moderation', label: 'Moderation', icon: 'navModeration' },
       { tab: 'members', label: 'Members', icon: 'navMembers', count: 'members' },
@@ -25,7 +25,7 @@ export const GROUPS = [
     ],
   },
   {
-    head: 'Community',
+    head: 'Runs the cookout',
     items: [
       { tab: 'golive', label: 'Go-live', icon: 'navGolive', feature: 'golive' },
       { tab: 'events', label: 'Events', icon: 'navEvents', feature: 'events' },
@@ -37,7 +37,7 @@ export const GROUPS = [
     ],
   },
   {
-    head: 'Server',
+    head: 'The desk',
     items: [{ tab: 'settings', label: 'Settings', icon: 'navSettings' }],
   },
 ];

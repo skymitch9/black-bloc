@@ -1519,10 +1519,164 @@
   --et-row-hover: var(--et-shell-inset);
 }
 
+/* ---- BLACK BLOC — "Cookout", dark first (this dashboard's DEFAULT) -------- */
+/* Palette from docs/info/dashboard-inspiration.md § 4 C, with four values
+   moved for contrast (measured, see docs/info/code-notes.md § R2). Warmth is
+   the identity, so --et-danger is deliberately the one COLD hue in the set:
+   destructive controls must not read as more ember. Display face is Bangers,
+   already self-hosted for retro; it reaches the wordmark and the page title
+   only, through --et-font-display, and site.css caps it at 24px. */
+
+:root[data-theme="blackbloc"] {
+  --et-bg: #17110e;
+  --et-bg-2: #1e1613;
+  --et-bg-texture:
+    radial-gradient(ellipse at 15% 0%, rgba(255, 122, 24, .05) 0%, transparent 55%),
+    radial-gradient(ellipse at 85% 100%, rgba(255, 201, 60, .03) 0%, transparent 55%);
+  --et-bg-texture-size: auto;
+  --et-surface: #241a16;
+  --et-surface-edge: #241a16;
+  --et-fg: #fbf3e9;
+  --et-muted: #c0a897;
+  --et-hairline: #3a2a22;
+  --et-ink: #3a2a22;
+  --et-shell-bg: #1e1613;
+  --et-shell-inset: #17110e;
+  --et-nav-active: #33241d;
+
+  --et-accent: #ff7a18;
+  --et-accent-fg: #1a0f08;
+  --et-accent-2: #ffc93c;
+  --et-heading-color: var(--et-fg);
+
+  --et-ok: #7cc04b;
+  --et-warn: #ffc93c;
+  --et-danger: #f4707e;
+  --et-info: #69b7e0;
+  --et-transit: #ffb07a;
+
+  --et-panel-border: var(--et-hairline);
+  --et-field-border: var(--et-hairline);
+  --et-field-bg: var(--et-bg);
+  --et-field-shadow: none;
+  --et-brand-fill: var(--et-accent);
+  --et-brand-stroke: 0 transparent;
+  --et-brand-shadow: none;
+
+  --et-shadow: 0 1px 0 rgba(0, 0, 0, .3), 0 2px 12px -6px rgba(0, 0, 0, .7);
+  --et-shadow-lift: 0 6px 20px -8px rgba(0, 0, 0, .75);
+  --et-glow: none;
+  --et-glow-title: none;
+
+  --et-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+             'Helvetica Neue', Arial, sans-serif;
+  --et-font-display: 'Bangers', 'Inter', 'Segoe UI', sans-serif;
+  --et-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --et-font-label: var(--et-font-mono);
+  --et-title-case: none;
+  --et-title-spacing: .02em;
+  --et-heading-weight: 400;
+
+  --et-radius: 8px;
+  --et-radius-lg: 12px;
+  --et-radius-xl: 16px;
+  --et-radius-pill: 999px;
+  --et-border-w: 1px;
+  --et-clip-panel: none;
+
+  --et-btn-bg: var(--et-accent);
+  --et-btn-fg: var(--et-accent-fg);
+  --et-btn-border: 0 solid transparent;
+  --et-btn-shadow: none;
+  --et-press: scale(.98);
+
+  --et-hue-1: #ff7a18;
+  --et-hue-2: #7cc04b;
+  --et-hue-3: #f4707e;
+  --et-hue-4: #c58af0;
+  --et-hue-5: #ffc93c;
+  --et-hue-6: #69b7e0;
+  --et-blob-1: transparent;
+  --et-blob-2: transparent;
+  --et-blob-3: transparent;
+  --et-grain-opacity: 0;
+
+  --et-ui-xl: 26px;
+  --et-ui-lg: 16px;
+  --et-ui-md: 14px;
+  --et-ui-sm: 13px;
+  --et-ui-xs: 12px;
+  --et-ui-2xs: 11px;
+  --et-ui-line: 1.45;
+  --et-weight-body: 400;
+  --et-weight-medium: 500;
+  --et-weight-strong: 600;
+  --et-weight-heavy: 700;
+  --et-font-nav: var(--et-font);
+  --et-nav-head-size: var(--et-ui-xs);
+  --et-nav-head-weight: var(--et-weight-heavy);
+  --et-nav-head-color: var(--et-muted);
+  --et-nav-head-space: 20px;
+  --et-label-transform: uppercase;
+  --et-label-tracking: .09em;
+  --et-label-weight: 700;
+  --et-hairline-w: 1px;
+  --et-dot-radius: 999px;
+  --et-focus-ring: 2px solid var(--et-accent);
+  --et-control-h: 32px;
+  --et-control-h-sm: 28px;
+  --et-control-h-lg: 34px;
+  --et-btn-radius: 8px;
+  --et-card-shadow: none;
+  --et-table-stripe: transparent;
+  --et-row-hover: var(--et-shell-inset);
+}
+
+/* Black Bloc light — the C table's light column. Ember drops to #AA4109 so the
+   accent still clears 4.5:1 as text on the rail's own active row, and the
+   ground stays warm paper rather than white so the white cards have an edge. */
+:root[data-theme="blackbloc"][data-mode="light"] {
+  --et-bg: #fff7ec;
+  --et-bg-2: #ffffff;
+  --et-bg-texture:
+    radial-gradient(ellipse at 15% 0%, rgba(170, 65, 9, .04) 0%, transparent 55%),
+    radial-gradient(ellipse at 85% 100%, rgba(138, 90, 0, .03) 0%, transparent 55%);
+  --et-surface: #ffffff;
+  --et-surface-edge: #ffffff;
+  --et-fg: #231710;
+  --et-muted: #68503f;
+  --et-hairline: #e8d8c4;
+  --et-ink: #e8d8c4;
+  --et-shell-bg: #fcf2e4;
+  --et-shell-inset: #f3e7d6;
+  --et-nav-active: #f0dec6;
+
+  --et-accent: #aa4109;
+  --et-accent-fg: #ffffff;
+  --et-accent-2: #8a5a00;
+
+  --et-ok: #38701c;
+  --et-warn: #8a5a00;
+  --et-danger: #b01b36;
+  --et-info: #0f5e96;
+  --et-transit: #8a4a1a;
+
+  --et-shadow: 0 1px 0 rgba(35, 23, 16, .05), 0 2px 12px -6px rgba(35, 23, 16, .16);
+  --et-shadow-lift: 0 6px 20px -8px rgba(35, 23, 16, .2);
+
+  --et-hue-1: #aa4109;
+  --et-hue-2: #38701c;
+  --et-hue-3: #b01b36;
+  --et-hue-4: #6b3fa0;
+  --et-hue-5: #8a5a00;
+  --et-hue-6: #0f5e96;
+}
+
 /* Texture is decoration and loses to user settings (the games app's own
    rule, kept estate-wide). */
 @media (prefers-contrast: more) {
-  :root, :root[data-theme="cyberpunk"], :root[data-theme="retro"], :root[data-theme="hearts"] {
+  :root, :root[data-theme="cyberpunk"], :root[data-theme="retro"], :root[data-theme="hearts"],
+  :root[data-theme="blackbloc"] {
     --et-bg-texture: none;
   }
 }

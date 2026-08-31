@@ -21,6 +21,27 @@
   --bb-reset-fg: var(--et-muted);
   --bb-reset-fg-hover: var(--et-fg);
   --bb-empty-gap: 10px;
+  --bb-title-font: var(--et-font-display);
+  --bb-chrome-font: var(--et-font-display);
+  --bb-wordmark-size: var(--et-ui-md);
+  --bb-wordmark-weight: var(--et-weight-heavy);
+  --bb-mark-size: 16px;
+  --bb-today-bg: var(--et-bg-2);
+  --bb-today-border: var(--et-panel-border, var(--et-hairline));
+  --bb-today-edge: var(--et-accent);
+  --bb-scrim: rgb(0 0 0 / .55);
+}
+
+/* The display-face rule, and the only theme-keyed token block the site owns:
+   in Black Bloc the display face is Bangers, and it may reach the wordmark
+   and the page title ONLY — everything else that reads --et-font-display
+   (the server name, stat and tile numbers, the confirm dialog's heading) is
+   under 20px or inside a control, so it takes the UI face instead. */
+:root[data-theme="blackbloc"] {
+  --bb-chrome-font: var(--et-font);
+  --bb-wordmark-size: 20px;
+  --bb-wordmark-weight: var(--et-weight-body);
+  --bb-mark-size: 20px;
 }
 
 /* ---- the shell ----------------------------------------------------------- */
@@ -60,12 +81,18 @@ body { overflow: hidden; }
   color: var(--et-fg);
   text-decoration: none;
 }
-.side-brand svg { flex: none; color: var(--et-brand-fill, var(--et-accent)); }
+.side-brand svg {
+  flex: none;
+  width: var(--bb-mark-size);
+  height: var(--bb-mark-size);
+  color: var(--et-brand-fill, var(--et-accent));
+}
 .side-brand:focus-visible { outline: var(--et-focus-ring); outline-offset: -2px; }
 .side-wordmark {
-  font-family: var(--et-font-display);
-  font-size: var(--et-ui-md);
-  font-weight: var(--et-weight-heavy);
+  font-family: var(--bb-title-font);
+  font-size: var(--bb-wordmark-size);
+  font-weight: var(--bb-wordmark-weight);
+  line-height: 1;
   letter-spacing: var(--et-label-tracking);
   text-transform: var(--et-label-transform);
 }
@@ -162,7 +189,7 @@ body { overflow: hidden; }
 }
 .topbar-gap { flex-grow: 1; }
 .topbar-guild {
-  font-family: var(--et-font-display);
+  font-family: var(--bb-chrome-font);
   font-size: var(--et-ui-lg);
   font-weight: var(--et-weight-strong);
   overflow: hidden;
@@ -280,7 +307,7 @@ body { overflow: hidden; }
    nobody in the survey puts display type in a control at all. */
 .page-head h1 {
   margin: 0;
-  font-family: var(--et-font-display);
+  font-family: var(--bb-title-font);
   font-size: var(--bb-page-title-size);
   font-weight: var(--et-heading-weight);
   letter-spacing: var(--et-title-spacing);
@@ -291,6 +318,41 @@ body { overflow: hidden; }
 .page-head .sub { margin: 0; font-size: var(--et-ui-md); color: var(--et-muted); }
 .page-head-aside { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .page-head-aside:empty { display: none; }
+
+/* The Overview's opening sentence. It is the ONE place the "what wants a
+   person" counts are stated — the counter card that used to say them again
+   was removed with it. */
+.today {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: var(--et-border-w) solid var(--bb-today-border);
+  border-left: 3px solid var(--bb-today-edge);
+  border-radius: var(--et-radius-lg);
+  background: var(--bb-today-bg);
+  box-shadow: var(--et-card-shadow);
+}
+.today[data-tone="danger"] { --bb-today-edge: var(--et-danger); }
+.today[data-tone="unknown"] { --bb-today-edge: var(--et-muted); }
+.today-head {
+  font-family: var(--et-font-label);
+  font-size: var(--et-ui-2xs);
+  font-weight: var(--et-label-weight);
+  letter-spacing: var(--et-label-tracking);
+  text-transform: uppercase;
+  color: var(--et-muted);
+}
+.today-line { margin: 0; font-size: var(--et-ui-lg); line-height: 1.45; text-wrap: pretty; }
+.today-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--et-fg);
+  text-underline-offset: 3px;
+}
+.today-link:hover { color: var(--et-accent); }
+.today-link:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; }
 
 .scrim { display: none; }
 
@@ -316,7 +378,7 @@ body { overflow: hidden; }
     position: fixed;
     inset: 0;
     z-index: 59;
-    background: var(--et-transit-bg, rgb(0 0 0 / .5));
+    background: var(--bb-scrim);
   }
   .scrim[hidden] { display: none; }
   .user-menu { right: 12px; }
@@ -437,7 +499,7 @@ a.rowlist-row:focus-visible { outline: var(--et-focus-ring); outline-offset: -2p
 a.stat:hover { background: var(--et-row-hover); }
 a.stat:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; }
 .stat-value {
-  font-family: var(--et-font-display);
+  font-family: var(--bb-chrome-font);
   font-size: var(--bb-stat-size);
   font-weight: var(--et-weight-strong);
   line-height: 1.1;
@@ -703,8 +765,28 @@ a.rowlist-main:focus-visible,
 .searchfield:focus-within { border-color: var(--et-accent); }
 
 .table-tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.table-gap { flex-grow: 1; }
 .table-count { color: var(--et-muted); font-size: var(--et-ui-xs); white-space: nowrap; }
 .table-block { display: grid; gap: .45rem; }
+/* The row-count footer, Cloudflare's "Showing 1-17 of 17". One home for the
+   number: a table that has this does not also count itself in its toolbar. */
+.table-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 16px;
+  color: var(--et-muted);
+  font-size: var(--et-ui-xs);
+}
+/* A header that carries an explanation wears the mark that says so; the
+   sentence itself is the th's title, so hover and a screen reader agree. */
+.th-mark {
+  margin-left: 4px;
+  color: var(--et-muted);
+  font-size: var(--et-ui-2xs);
+  cursor: help;
+}
+th[title] { cursor: help; }
 
 /* ---- tables --------------------------------------------------------------- */
 
@@ -862,6 +944,15 @@ button.grid-row:focus-visible { outline: var(--et-focus-ring); outline-offset: -
 .setrow:last-child { border-bottom: 0; }
 .setrow-head { display: flex; flex-direction: column; gap: 1px; flex-grow: 1; min-width: 0; }
 .setrow-label { font-size: var(--et-ui-md); font-weight: var(--et-weight-medium); }
+/* Hidden until somebody asks for them (the Show keys switch on Settings). They
+   stay in the DOM either way, so the command palette still finds a setting by
+   its key while they are out of sight. */
+:root:not([data-showkeys="true"]) .setrow-key { display: none; }
+/* A row the palette or a #key link has just taken you to: it flashes, so the
+   eye lands on the right one of ninety. */
+.setrow { transition: background-color .35s ease; }
+.setrow[data-found="true"] { background: color-mix(in srgb, var(--et-accent) 16%, transparent); }
+@media (prefers-reduced-motion: reduce) { .setrow { transition: none; } }
 .setrow-key {
   color: var(--et-muted);
   font-family: var(--et-font-mono);
@@ -1178,7 +1269,7 @@ a.btn { text-decoration: none; }
   box-shadow: var(--et-card-shadow);
 }
 .tile-value {
-  font-family: var(--et-font-display);
+  font-family: var(--bb-chrome-font);
   font-size: var(--et-ui-xl);
   font-weight: var(--et-weight-strong);
   line-height: 1.1;
@@ -1237,9 +1328,148 @@ dialog.ask {
   background: var(--et-surface);
   color: var(--et-fg);
 }
-dialog.ask::backdrop { background: var(--et-transit-bg, rgb(0 0 0 / .55)); }
+dialog.ask::backdrop { background: var(--bb-scrim); }
+
+/* ---- the command palette (Ctrl K) ---------------------------------------- */
+
+.kbd-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--et-control-h-sm);
+  padding: 0 8px;
+  border: var(--et-border-w) solid var(--et-hairline);
+  border-radius: var(--et-radius);
+  background: transparent;
+  color: var(--et-muted);
+  cursor: pointer;
+}
+.kbd-hint:hover { color: var(--et-fg); border-color: var(--et-accent); }
+.kbd-hint:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; }
+.kbd-hint kbd {
+  font-family: var(--et-font-mono);
+  font-size: var(--et-ui-2xs);
+  letter-spacing: .04em;
+}
+
+dialog.palette {
+  width: min(38rem, calc(100vw - 2rem));
+  margin-top: 12vh;
+  padding: 0;
+  border: var(--et-border-w) solid var(--et-hairline);
+  border-radius: var(--et-radius-lg);
+  background: var(--et-surface);
+  color: var(--et-fg);
+  box-shadow: var(--et-shadow-lift);
+}
+dialog.palette::backdrop { background: var(--bb-scrim); }
+.palette-inner { display: flex; flex-direction: column; min-height: 0; }
+.palette-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  padding: 12px 14px;
+  border-bottom: var(--et-hairline-w) solid var(--et-hairline);
+}
+.palette-input {
+  flex-grow: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  font-size: var(--et-ui-lg);
+}
+.palette-input:focus-visible { outline: none; }
+.palette-list { max-height: 22rem; overflow-y: auto; padding: 6px; }
+.palette-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--et-radius);
+  background: transparent;
+  color: var(--et-fg);
+  font: var(--et-weight-body) var(--et-ui-md)/1.35 var(--et-font);
+  text-align: left;
+  cursor: pointer;
+}
+.palette-row:hover { background: var(--et-row-hover); }
+.palette-row[aria-selected="true"] { background: var(--et-nav-active); }
+.palette-kind {
+  flex: none;
+  width: 4rem;
+  color: var(--et-muted);
+  font-family: var(--et-font-label);
+  font-size: var(--et-ui-2xs);
+  letter-spacing: var(--et-label-tracking);
+  text-transform: uppercase;
+}
+.palette-title { flex-grow: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.palette-note {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  color: var(--et-muted);
+  font-family: var(--et-font-mono);
+  font-size: var(--et-ui-2xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.palette-help {
+  margin: 0;
+  padding: 8px 14px;
+  border-top: var(--et-hairline-w) solid var(--et-hairline);
+  color: var(--et-muted);
+  font-size: var(--et-ui-2xs);
+}
+.palette .say-nothing { padding: 14px; }
+
+/* The right-hand detail drawer. A native <dialog> so Escape, the focus trap
+   and the backdrop come from the platform; the margins are what put it on the
+   right edge instead of the middle. */
+dialog.drawer {
+  width: min(30rem, 100vw);
+  max-width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  margin: 0 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-left: var(--et-border-w) solid var(--et-hairline);
+  border-radius: 0;
+  background: var(--et-bg-2);
+  color: var(--et-fg);
+  box-shadow: var(--et-shadow-lift);
+}
+dialog.drawer::backdrop { background: var(--bb-scrim); }
+.drawer-inner { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.drawer-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  height: 56px;
+  padding: 0 16px;
+  border-bottom: var(--et-hairline-w) solid var(--et-hairline);
+  background: var(--et-shell-bg);
+}
+.drawer-title {
+  flex-grow: 1;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--bb-chrome-font);
+  font-size: var(--et-ui-lg);
+  font-weight: var(--et-weight-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.drawer-body { flex: 1 1 0; min-height: 0; overflow-y: auto; padding: 16px; }
+.drawer-body > .card { border: 0; background: transparent; box-shadow: none; }
 .ask-inner { padding: 16px; display: grid; gap: 8px; }
-.ask-inner h2 { margin: 0; font-family: var(--et-font-display); font-size: var(--et-ui-lg); }
+.ask-inner h2 { margin: 0; font-family: var(--bb-chrome-font); font-size: var(--et-ui-lg); }
 .ask-body { margin: 0; font-size: var(--et-ui-md); text-wrap: pretty; }
 
 .msglist { display: grid; gap: 8px; list-style: none; margin: 0; padding: 0; }
