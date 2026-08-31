@@ -1705,7 +1705,22 @@ route('GET', '/api/golive/sessions', (context) => {
   }));
 });
 
+// The two words black_bloc/api/tools/events.py:EDITABLE names; every other state is settled.
+const EVENTS_EDITABLE = ['pending', 'approved'];
+
+function eventMinutes(row) {
+  return row.ends_at ? Math.round((Date.parse(row.ends_at) - Date.parse(row.starts_at)) / 60000) : 120;
+}
+
+function eventDuration(minutes) {
+  const hours = Math.floor(Math.max(minutes, 0) / 60);
+  const rest = Math.max(minutes, 0) % 60;
+  if (hours && rest) return `${hours}h ${rest}m`;
+  return hours ? `${hours}h` : `${rest}m`;
+}
+
 function eventRow(row) {
+  const minutes = eventMinutes(row);
   return {
     id: row.id,
     title: row.title,
@@ -1713,7 +1728,11 @@ function eventRow(row) {
     location: row.location,
     starts_at: row.starts_at,
     ends_at: row.ends_at,
-    minutes: row.ends_at ? Math.round((Date.parse(row.ends_at) - Date.parse(row.starts_at)) / 60000) : null,
+    minutes,
+    duration: eventDuration(minutes),
+    editable: EVENTS_EDITABLE.includes(row.status),
+    announced: Boolean(row.announce_message_id),
+    scheduled: Boolean(row.scheduled_event_id),
     status: row.status,
     requester_id: String(row.requester_id),
     requester_name: memberName(row.requester_id),
@@ -1739,6 +1758,48 @@ function eventOf(id) {
   if (!found) throw new Refused(404, 'no_event', 'That event is not in the queue any more — somebody may have decided it already.');
   return found;
 }
+
+route('GET', '/api/events/:id', (context) => {
+  requireStaff(context.session);
+  return { event: eventRow(eventOf(context.params.id)) };
+});
+
+route('PUT', '/api/events/:id', async (context) => {
+  requireStaff(context.session);
+  const event = eventOf(context.params.id);
+  if (!EVENTS_EDITABLE.includes(event.status)) {
+    throw new Refused(409, 'not_editable', `Event **#${event.id}** is **${event.status}**, so its details cannot be changed — only an event still waiting for a decision or already approved can be edited.`);
+  }
+  const body = await context.body();
+  const title = String(body.title || '').trim();
+  if (!title) {
+    throw new Refused(400, 'event_refused', 'An event needs a name, so nothing was submitted. Put something in the Title box — it is the heading everybody sees on the card.');
+  }
+  const start = String(body.start || '').trim();
+  const when = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(start) ? Date.parse(start.replace(' ', 'T') + 'Z') : NaN;
+  if (Number.isNaN(when)) {
+    throw new Refused(400, 'event_refused', `**${start}** is not a date Black Bloc can read, so nothing was submitted. Write it as \`YYYY-MM-DD HH:MM\` on a 24-hour clock.`);
+  }
+  if (when <= Date.now()) {
+    throw new Refused(400, 'event_refused', `**${start}** has already gone by, so nothing was submitted. Pick a time in the future.`);
+  }
+  const raw = String(body.duration || '').trim();
+  const parts = raw === '' ? [null, '2', null] : /^(?:(\d{1,4})h)?(?:(\d{1,5})m)?$/.exec(raw.toLowerCase().replace(/\s+/g, ''));
+  if (!parts || (raw !== '' && !parts[1] && !parts[2])) {
+    throw new Refused(400, 'event_refused', `**${raw}** is not a length Black Bloc can read, so nothing was submitted. Write it as \`1h30m\`, \`2h\` or \`45m\`.`);
+  }
+  const minutes = Number(parts[1] || 0) * 60 + Number(parts[2] || 0);
+  event.title = title;
+  event.description = String(body.description || '').trim() || null;
+  event.location = String(body.location || '').trim() || null;
+  event.starts_at = new Date(when).toISOString();
+  event.ends_at = new Date(when + minutes * 60000).toISOString();
+  logAction('web.event.edited', { target_id: event.requester_id, details: { event_id: event.id, title } });
+  const notes = [];
+  if (event.announce_message_id) notes.push('The public announcement still says what it said before; Black Bloc does not rewrite one it has already posted.');
+  if (event.scheduled_event_id) notes.push('The Discord scheduled event still has the old details — nothing here edits one that was already made.');
+  return { event: eventRow(event), message: "Saved, and the review channel's name follows the title.", notes };
+});
 
 route('POST', '/api/events/:id/approve', (context) => {
   requireStaff(context.session);

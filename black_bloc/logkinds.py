@@ -155,6 +155,7 @@ ROUTINE: frozenset[str] = frozenset(
         "event.channel_deleted",
         "event.created",
         "event.done",
+        "event.edited",
         "event.go_live",
         "event.settings",
         "golive.add_role",

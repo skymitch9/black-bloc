@@ -748,6 +748,10 @@
         "starts_at",
         "ends_at",
         "minutes",
+        "duration",
+        "editable",
+        "announced",
+        "scheduled",
         "status",
         "requester_id",
         "requester_name",
@@ -758,6 +762,61 @@
         "review_channel_id",
         "created_at"
       ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/events/{event_id}",
+      "read_by": [
+        "page-events.js detail"
+      ],
+      "shape": "object",
+      "keys": [
+        "event"
+      ],
+      "nested": {
+        "event": [
+          "id",
+          "title",
+          "description",
+          "location",
+          "starts_at",
+          "duration",
+          "editable",
+          "announced",
+          "scheduled"
+        ]
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/events/{event_id}",
+      "body": {
+        "title": "Contract night",
+        "description": "edited by the contract check",
+        "location": "the park",
+        "start": "2099-09-14 19:30",
+        "duration": "1h30m",
+        "tz": "UTC"
+      },
+      "read_by": [
+        "page-events.js editor"
+      ],
+      "shape": "object",
+      "keys": [
+        "event",
+        "message",
+        "notes"
+      ],
+      "nested": {
+        "event": [
+          "id",
+          "title",
+          "starts_at",
+          "ends_at",
+          "minutes",
+          "duration"
+        ]
+      }
     },
     {
       "method": "POST",
@@ -2152,6 +2211,7 @@
     "web.event.approved",
     "web.event.denied",
     "web.event.cancel",
+    "web.event.edited",
     "web.poll.approved",
     "web.poll.denied",
     "web.poll.end",
