@@ -948,6 +948,11 @@ button.grid-row:focus-visible { outline: var(--et-focus-ring); outline-offset: -
    stay in the DOM either way, so the command palette still finds a setting by
    its key while they are out of sight. */
 :root:not([data-showkeys="true"]) .setrow-key { display: none; }
+/* A row the palette or a #key link has just taken you to: it flashes, so the
+   eye lands on the right one of ninety. */
+.setrow { transition: background-color .35s ease; }
+.setrow[data-found="true"] { background: color-mix(in srgb, var(--et-accent) 16%, transparent); }
+@media (prefers-reduced-motion: reduce) { .setrow { transition: none; } }
 .setrow-key {
   color: var(--et-muted);
   font-family: var(--et-font-mono);
@@ -1324,6 +1329,102 @@ dialog.ask {
   color: var(--et-fg);
 }
 dialog.ask::backdrop { background: var(--bb-scrim); }
+
+/* ---- the command palette (Ctrl K) ---------------------------------------- */
+
+.kbd-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--et-control-h-sm);
+  padding: 0 8px;
+  border: var(--et-border-w) solid var(--et-hairline);
+  border-radius: var(--et-radius);
+  background: transparent;
+  color: var(--et-muted);
+  cursor: pointer;
+}
+.kbd-hint:hover { color: var(--et-fg); border-color: var(--et-accent); }
+.kbd-hint:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; }
+.kbd-hint kbd {
+  font-family: var(--et-font-mono);
+  font-size: var(--et-ui-2xs);
+  letter-spacing: .04em;
+}
+
+dialog.palette {
+  width: min(38rem, calc(100vw - 2rem));
+  margin-top: 12vh;
+  padding: 0;
+  border: var(--et-border-w) solid var(--et-hairline);
+  border-radius: var(--et-radius-lg);
+  background: var(--et-surface);
+  color: var(--et-fg);
+  box-shadow: var(--et-shadow-lift);
+}
+dialog.palette::backdrop { background: var(--bb-scrim); }
+.palette-inner { display: flex; flex-direction: column; min-height: 0; }
+.palette-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  padding: 12px 14px;
+  border-bottom: var(--et-hairline-w) solid var(--et-hairline);
+}
+.palette-input {
+  flex-grow: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  font-size: var(--et-ui-lg);
+}
+.palette-input:focus-visible { outline: none; }
+.palette-list { max-height: 22rem; overflow-y: auto; padding: 6px; }
+.palette-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--et-radius);
+  background: transparent;
+  color: var(--et-fg);
+  font: var(--et-weight-body) var(--et-ui-md)/1.35 var(--et-font);
+  text-align: left;
+  cursor: pointer;
+}
+.palette-row:hover { background: var(--et-row-hover); }
+.palette-row[aria-selected="true"] { background: var(--et-nav-active); }
+.palette-kind {
+  flex: none;
+  width: 4rem;
+  color: var(--et-muted);
+  font-family: var(--et-font-label);
+  font-size: var(--et-ui-2xs);
+  letter-spacing: var(--et-label-tracking);
+  text-transform: uppercase;
+}
+.palette-title { flex-grow: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.palette-note {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  color: var(--et-muted);
+  font-family: var(--et-font-mono);
+  font-size: var(--et-ui-2xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.palette-help {
+  margin: 0;
+  padding: 8px 14px;
+  border-top: var(--et-hairline-w) solid var(--et-hairline);
+  color: var(--et-muted);
+  font-size: var(--et-ui-2xs);
+}
+.palette .say-nothing { padding: 14px; }
 
 /* The right-hand detail drawer. A native <dialog> so Escape, the focus trap
    and the backdrop come from the platform; the margins are what put it on the

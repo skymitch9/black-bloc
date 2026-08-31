@@ -2,9 +2,11 @@ import { settings } from './api.js';
 import { start } from './app.js';
 import { syncSubnav } from './layout.js';
 import { logsSection } from './logs.js';
+import { JUMP } from './palette.js';
 import { el, keysSwitch, sayNothing, searchField, section, settingsEditor } from './ui.js';
 
 const FIRST = 'core';
+const FLASH_MS = 2400;
 
 const CORE_LOGS_NOTE = 'Everything done from this dashboard and every settings change, ' +
   'whoever made it. Settings changes are routine — nothing here acts on a member — so switch ' +
@@ -96,6 +98,27 @@ function filterBox(groups, keys) {
   return { box, said };
 }
 
+/**
+ * The command palette and a /settings.html#key link both land here: open the
+ * group the row is in, take the page to it, and flash it so the eye finds it.
+ */
+function jumpToKey() {
+  const key = decodeURIComponent(String(location.hash || '').replace(/^#/, ''));
+  if (!key) return;
+  const row = document.querySelector(`.setrow[data-key="${CSS.escape(key)}"]`);
+  if (!row) return;
+  const details = row.closest('details.sect-card');
+  if (details) details.open = true;
+  // `auto`, not `smooth`: a smooth scroll started while the page is still
+  // settling is cancelled by the next layout and the row is never reached.
+  row.scrollIntoView({ behavior: 'auto', block: 'center' });
+  row.setAttribute('data-found', 'true');
+  setTimeout(() => row.removeAttribute('data-found'), FLASH_MS);
+}
+
+window.addEventListener('hashchange', jumpToKey);
+document.addEventListener(JUMP, jumpToKey);
+
 async function load() {
   const payload = await settings(true);
   const namespaces = order(payload);
@@ -132,6 +155,10 @@ async function load() {
     share(groups),
     await logsSection('core', { title: 'Logs', note: CORE_LOGS_NOTE }),
   );
+  // After mountSections has applied the remembered open/closed state and
+  // mountColumns has moved the blocks — otherwise the group is shut again
+  // under the jump and the scroll lands nowhere.
+  setTimeout(jumpToKey, 0);
 }
 
 start({ tab: 'settings', load });

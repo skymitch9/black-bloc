@@ -1,5 +1,6 @@
 import { api, Outage, signInHref } from './api.js';
 import { lastTab, mountColumns, mountSections, rememberTab } from './layout.js';
+import { mountPalette } from './palette.js';
 import { MEMBER_TAB, forgetShellStatus, isMemberOnly, mountShell, paintShell, renderNav } from './shell.js';
 import { clearDock } from './ui.js';
 
@@ -205,6 +206,7 @@ export function start(page) {
   if (restoreTab(page.tab)) return () => {};
   renderNav(page.tab, tabHref);
   mountShell();
+  mountPalette();
   rememberTab(page.tab);
 
   let current = null;
