@@ -9,6 +9,21 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-08-31 — Owner bug report: empty Requests queues said "null"
+
+Owner, ~13:20, verbatim: *"https://blackbloc.heygabi.ai/requests.html it says null
+since 0 records, fix this up to say something about this particular queue being
+empty"* → measured in the owner's own browser (screenshot): each empty queue showed
+its correct per-queue sentence ("Nothing is waiting on an answer…") **plus the
+literal word `null`** and a dead `Previous · Page 1 · 0 shown · Next` row. Root
+cause: `page-requests.js:footFor` returned `null` and `body.append(null)` renders
+the WORD — the exact trap the file's own line-365 note documents for
+`replaceChildren`; the call sites didn't filter. Fix `d2516aa`, deployed 13:28:
+`footFor` returns an empty fragment (covers staff + member views), and
+`ui.js:pager` renders nothing on page 1 with zero shown and no more pages (all
+pages benefit). **Verified live by screenshot after deploy** — sentences only, no
+null, no dead pager. 2257 tests, ruff, `check.mjs` 17/98 all green.
+
 ## 2026-08-31 — Restyle R2 live: the site wears Black Bloc
 
 Moved whole from `TODO.md`:
