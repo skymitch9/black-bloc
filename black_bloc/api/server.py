@@ -93,6 +93,7 @@ def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
         redoc_url=None,
         openapi_url=None,
     )
+    app.state.bot = bot
 
     @app.middleware("http")
     async def same_site_writes(request: Request, call_next: Any) -> Any:

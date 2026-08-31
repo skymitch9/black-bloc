@@ -96,7 +96,7 @@ def member_dependency(bot: Any):
     """Signed in AND in the server — the only gate on the site that is not staff-only."""
 
     async def dependency(request: Request) -> dict[str, Any]:
-        who = current_session(request, bot)
+        who = await current_session(request, bot)
         state = member_state(who)
         if state == "member_unknown":
             raise Refused(503, "member_unknown", MEMBER_UNKNOWN)

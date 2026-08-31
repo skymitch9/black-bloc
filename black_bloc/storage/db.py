@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -390,6 +390,16 @@ CREATE TABLE IF NOT EXISTS request_comments (
 );
 
 CREATE INDEX IF NOT EXISTS request_comments_by_request ON request_comments(request_id, id);
+
+CREATE TABLE IF NOT EXISTS sessions (
+    id         TEXT    PRIMARY KEY,
+    user_id    INTEGER NOT NULL,
+    created_at TEXT    NOT NULL,
+    expires_at TEXT    NOT NULL,
+    revoked_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS sessions_by_user ON sessions(user_id, created_at);
 """
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (

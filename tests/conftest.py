@@ -1,5 +1,7 @@
+import secrets
+import sqlite3
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
@@ -161,6 +163,25 @@ def bot(api_settings, guild):
     return FakeBot(api_settings, guild)
 
 
+def record_session(client, sid: str, user_id: int, ttl: int) -> None:
+    """The row the callback writes, from a sync fixture: plain sqlite3 on the same file."""
+    db = getattr(getattr(getattr(client, "app", None), "state", None), "bot", None)
+    db = getattr(db, "db", None)
+    if db is None or not db.is_connected:
+        return
+    at = datetime.now(UTC)
+    conn = sqlite3.connect(db.path)
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO sessions(id, user_id, created_at, expires_at) "
+            "VALUES (?, ?, ?, ?)",
+            (sid, int(user_id), at.isoformat(), (at + timedelta(seconds=ttl)).isoformat()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 @pytest.fixture
 def sign_in(guild):
     """Sign somebody in AND let the bot's guild cache see them — staff is re-read live."""
@@ -172,12 +193,15 @@ def sign_in(guild):
         staff: bool = True,
         ttl: int = SESSION_TTL_SECONDS,
         cached: bool = True,
+        sid: str | None = None,
     ):
         if cached:
             role = FakeRole(STAFF_ROLE_ID, "Aunties / Uncles") if staff else FakeRole(
                 PLAIN_ROLE_ID, "Member"
             )
             guild.members.setdefault(uid, FakeMember(uid, [role]))
+        session_id = sid or f"test-{uid}-{secrets.token_hex(4)}"
+        record_session(client, session_id, uid, ttl)
         token = sign_session(
             API_SECRET,
             {
@@ -185,6 +209,7 @@ def sign_in(guild):
                 "name": "Mod",
                 "avatar": None,
                 "staff": staff,
+                "sid": session_id,
                 "exp": int(time.time()) + ttl,
             },
         )

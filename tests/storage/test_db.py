@@ -12,7 +12,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 16
+        assert SCHEMA_VERSION == 17
         cur = await db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = {r["name"] for r in await cur.fetchall()}
         assert {"settings", "action_log", "role_menus", "role_menu_options"} <= tables
@@ -38,6 +38,10 @@ async def test_connect_bootstraps_schema(tmp_path):
         assert {"polls", "poll_options", "poll_votes", "poll_results"} <= tables
         assert {"chat_intents", "chat_lines"} <= tables
         assert {"requests", "request_comments"} <= tables
+        assert "sessions" in tables
+        cur = await db.conn.execute("PRAGMA table_info(sessions)")
+        columns = {r["name"] for r in await cur.fetchall()}
+        assert {"id", "user_id", "created_at", "expires_at", "revoked_at"} == columns
     finally:
         await db.close()
 
