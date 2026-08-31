@@ -800,6 +800,7 @@ async function loadStaff() {
 
   const settingsBox = section('Settings', SETTINGS_NOTE, { count: specs.length || null });
   settingsBox.body.append(await settingsPanel(specs, {
+    where: 'Settings',
     empty: 'The bot registers no request settings yet.',
   }));
 

@@ -94,6 +94,7 @@ async function load() {
     'Arming automod is the switch that starts deleting messages and timing people out.',
   );
   arming.body.append(await settingsPanel(mode ? [mode] : [], {
+    where: 'Mode',
     empty: 'The bot did not report an automod_mode key, so this switch is not shown rather than guessed at.',
   }));
 
@@ -119,6 +120,7 @@ async function load() {
     count: exempt.length || null,
   });
   exemptions.body.append(await settingsPanel(exempt, {
+    where: 'Exemptions',
     empty: 'No exemption keys are registered.',
   }));
 

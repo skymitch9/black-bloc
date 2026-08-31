@@ -154,7 +154,7 @@ async function wordingCard(spec, prefix, endSpec, endSuffix) {
     end ? end.say : null,
     made.say,
   ]);
-  return [made.row.node, preview, made.editor.bar];
+  return [made.row.node, preview];
 }
 
 async function wordingSection(specs) {

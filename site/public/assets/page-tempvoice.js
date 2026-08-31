@@ -45,7 +45,7 @@ async function nameCard(spec) {
     shown,
     made.say,
   ]);
-  return [made.row.node, preview, made.editor.bar];
+  return [made.row.node, preview];
 }
 
 /** A confirm dialog with one thing to type in it; null when it was cancelled. */

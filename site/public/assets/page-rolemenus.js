@@ -726,6 +726,7 @@ async function load() {
     count: settingSpecs.length || null,
   });
   box.body.append(await settingsPanel(settingSpecs, {
+    where: 'Settings',
     empty: 'The bot registers no role-menu settings beyond the switch above.',
   }));
 

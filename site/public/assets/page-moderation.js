@@ -370,6 +370,7 @@ async function load() {
     .filter((spec) => spec.key === LOG_LEVEL_KEY);
   const levelBox = section('Settings', LOG_LEVEL_NOTE, { count: level.length || null });
   levelBox.body.append(await settingsPanel(level, {
+    where: 'Settings',
     empty: 'The bot registers no mod_log_level key, so this is not shown rather than guessed at.',
   }));
 

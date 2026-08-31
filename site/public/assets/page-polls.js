@@ -615,6 +615,7 @@ async function load() {
 
   const settingsBox = section('Settings', SETTINGS_NOTE, { count: settingSpecs.length || null });
   settingsBox.body.append(await settingsPanel(settingSpecs, {
+    where: 'Settings',
     empty: 'The bot registers no poll settings beyond the switch above.',
   }));
 

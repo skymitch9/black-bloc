@@ -54,7 +54,7 @@ async function wordingCard(spec, color) {
     shown,
     made.say,
   ]);
-  return [made.row.node, preview, made.editor.bar];
+  return [made.row.node, preview];
 }
 
 function setCard() {

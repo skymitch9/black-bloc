@@ -914,6 +914,13 @@ export async function settingRow(spec, { onDirty = null } = {}) {
     'data-search': `${spec.key} ${humanLabel(spec.key)} ${spec.type} ${spec.help || ''}`.toLowerCase(),
   });
   const state = { loaded: spec.value };
+  const wipe = el('button', {
+    class: 'setrow-reset',
+    type: 'button',
+    'aria-label': `Put ${humanLabel(spec.key)} back to its default`,
+    title: 'Put this back to its default',
+    hidden: true,
+  }, [icon('backspace', 14, 'setrow-reset-mark')]);
   let made = null;
 
   const readNow = () => {
@@ -940,6 +947,7 @@ export async function settingRow(spec, { onDirty = null } = {}) {
     row.dirty = found.ok ? !same(found.value, state.loaded) : true;
     node.setAttribute('data-dirty', row.dirty ? 'true' : 'false');
     mark.hidden = !row.dirty;
+    wipe.hidden = !(clearable() && found.ok && !blank(found.value));
     if (onDirty) onDirty();
   };
   row.paint = paint;
@@ -947,6 +955,23 @@ export async function settingRow(spec, { onDirty = null } = {}) {
   made = await control(spec, paint);
   made.node.addEventListener('input', paint);
   made.node.addEventListener('change', paint);
+
+  /** A segment always holds one of its choices and a colour always holds a
+      colour, so neither has an empty state to put back. */
+  function clearable() {
+    return !made.node.setValue && spec.type !== 'color';
+  }
+
+  row.blankOut = () => {
+    if (made.node.tagName === 'SELECT') {
+      for (const option of made.node.options) option.selected = option.value === '';
+    } else {
+      made.node.value = '';
+    }
+    say.say('');
+    paint();
+  };
+  wipe.addEventListener('click', () => row.blankOut());
 
   row.reset = () => {
     if (made.node.setValue) made.node.setValue(state.loaded);
@@ -970,6 +995,7 @@ export async function settingRow(spec, { onDirty = null } = {}) {
     ]),
     mark,
     el('div', { class: 'setrow-control' }, [made.node]),
+    wipe,
     say,
   );
   say.classList.add('setrow-say');
@@ -977,30 +1003,52 @@ export async function settingRow(spec, { onDirty = null } = {}) {
   return row;
 }
 
+/** Every bar from the render that is being replaced goes with it. */
+export function clearDock() {
+  const zone = document.getElementById('dockzone');
+  if (zone) zone.replaceChildren();
+}
+
+/** The one strip at the foot of the page every save bar docks into. */
+function dockZone() {
+  const found = document.getElementById('dockzone');
+  if (found) return found;
+  const main = document.querySelector('.shell-main');
+  if (!main) return null;
+  const zone = el('div', { class: 'dockzone', id: 'dockzone' });
+  main.append(zone);
+  return zone;
+}
+
 /**
  * The docked bar: it exists only while something is dirty, says how many
- * settings are waiting, and offers Discard (quiet) beside Save (accent).
+ * changes are waiting, and offers Discard (quiet) beside Save Changes
+ * (accent). It docks itself at the foot of the page rather than sitting in
+ * the panel it belongs to, so a caller never places it.
  */
-export function saveBar(onSave, onDiscard) {
+export function saveBar(onSave, onDiscard, { where = null } = {}) {
   const text = el('span', { class: 'savebar-text' });
   const node = el('div', { class: 'savebar' }, [
     el('span', { class: 'dot-sm', 'data-tone': 'warn' }),
     text,
     button('Discard', onDiscard, { tone: 'quiet', small: false }),
-    el('button', { class: 'btn save', type: 'button', text: 'Save', on: { click: onSave } }),
+    el('button', { class: 'btn save', type: 'button', text: 'Save Changes', on: { click: onSave } }),
   ]);
+  const named = (said) => (where ? `${where} — ${said}` : said);
   node.hidden = true;
   node.say = (count, message = null, tone = null) => {
     if (message) {
-      text.textContent = message;
+      text.textContent = named(message);
       node.querySelector('.dot-sm').setAttribute('data-tone', tone || 'warn');
       node.hidden = false;
       return;
     }
-    text.textContent = `Unsaved changes — ${count} setting${count === 1 ? '' : 's'}`;
+    text.textContent = named(`${count} change${count === 1 ? '' : 's'} pending`);
     node.querySelector('.dot-sm').setAttribute('data-tone', 'warn');
     node.hidden = count === 0;
   };
+  const zone = dockZone();
+  if (zone) zone.append(node);
   return node;
 }
 
@@ -1009,9 +1057,9 @@ export function saveBar(onSave, onDiscard) {
  * dirty rows; a row emptied back to nothing is CLEARED rather than stored as
  * null, which is how "put this back to its default" survives the docked bar.
  */
-export async function settingsEditor(specs, { onSaved = null } = {}) {
+export async function settingsEditor(specs, { onSaved = null, where = null } = {}) {
   const rows = [];
-  const dock = saveBar(() => write(), () => discard());
+  const dock = saveBar(() => write(), () => discard(), { where });
   const count = () => rows.filter((row) => row.dirty).length;
   const refresh = () => dock.say(count());
 
@@ -1064,13 +1112,14 @@ export async function settingsEditor(specs, { onSaved = null } = {}) {
   return { rows, bar: dock, discard, write, dirtyCount: count };
 }
 
-export async function settingsPanel(specs, { onSaved = null, empty = 'This part of the bot has no settings yet.' } = {}) {
+export async function settingsPanel(specs, {
+  onSaved = null,
+  where = null,
+  empty = 'This part of the bot has no settings yet.',
+} = {}) {
   if (!specs || specs.length === 0) return sayNothing(empty);
-  const editor = await settingsEditor(specs, { onSaved });
-  return el('div', { class: 'settings-grid' }, [
-    ...editor.rows.map((row) => row.node),
-    editor.bar,
-  ]);
+  const editor = await settingsEditor(specs, { onSaved, where });
+  return el('div', { class: 'settings-grid' }, editor.rows.map((row) => row.node));
 }
 
 /** `omit` is how a key that has its own editor higher up the page keeps one home. */
@@ -1086,6 +1135,7 @@ export async function namespaceSettings(namespace, {
   const group = section(title, note, { count: specs.length || null });
   group.body.append(await settingsPanel(specs, {
     onSaved,
+    where: title,
     empty: `The bot registers no settings under ${namespace}.`,
   }));
   return group.node;
@@ -1117,8 +1167,10 @@ export function fillTemplate(template, values) {
  * textarea, the docked bar the Settings page uses, and `paint` called with the
  * filled-in sample every time the text or one of `controls` changes.
  */
-export async function templateEditor(spec, { sample = () => ({}), paint = null, controls = [] } = {}) {
-  const editor = await settingsEditor([{ ...spec, type: 'longtext' }]);
+export async function templateEditor(spec, { sample = () => ({}), paint = null, controls = [], where = null } = {}) {
+  const editor = await settingsEditor([{ ...spec, type: 'longtext' }], {
+    where: where || humanLabel(spec.key),
+  });
   const row = editor.rows[0];
   const say = notice();
   const repaint = () => {

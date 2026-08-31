@@ -301,6 +301,7 @@ body { overflow: hidden; }
   .topbar-menu { display: inline-flex; }
   .topbar { padding: 0 12px; }
   .content { padding: 16px; }
+  .savebar { margin: 0 16px 16px; }
   .scrim {
     display: block;
     position: fixed;
@@ -882,18 +883,41 @@ button.grid-row:focus-visible { outline: var(--et-focus-ring); outline-offset: -
 .setrow[data-dirty="true"] .setrow-control .input { border-color: var(--et-warn); }
 .setrow-say { flex-basis: 100%; margin: 0; }
 
+.setrow-reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  padding: 4px;
+  border: 0;
+  border-radius: var(--et-radius);
+  background: none;
+  color: var(--bb-reset-fg);
+  cursor: pointer;
+}
+.setrow-reset:hover { color: var(--bb-reset-fg-hover); background: var(--et-row-hover); }
+.setrow-reset:focus-visible { outline: var(--et-focus-ring); outline-offset: 1px; }
+.setrow-reset[hidden] { display: none; }
+
+/* The one strip every save bar docks into: a sibling of the scrolling body, so
+   it sits under the page rather than over it and covers nothing. It takes no
+   room at all while every bar in it is hidden. */
+.dockzone { display: flex; flex-direction: column; flex: none; }
+.dockzone[hidden] { display: none; }
+
 .savebar {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
   flex-wrap: wrap;
+  margin: 0 24px 16px;
   padding: 12px 16px;
-  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border: var(--et-border-w) solid var(--bb-dock-border);
   border-radius: var(--et-radius-lg);
-  background: var(--et-shell-bg);
+  background: var(--bb-dock-bg);
+  box-shadow: var(--et-shadow-lift);
 }
-.savebar.dock { position: sticky; bottom: 0; z-index: 3; box-shadow: var(--et-shadow-lift); }
 .savebar-text { flex-grow: 1; font-size: var(--et-ui-md); }
 .savebar .btn {
   min-height: var(--et-control-h-lg);

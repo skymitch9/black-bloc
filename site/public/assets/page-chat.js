@@ -507,7 +507,7 @@ function newIntentSection(say) {
 
 async function settingsSection(specs) {
   const one = section('Settings', SETTINGS_NOTE, { count: specs.length || null });
-  one.body.append(await settingsPanel(specs, { empty: NO_SETTINGS }));
+  one.body.append(await settingsPanel(specs, { where: 'Settings', empty: NO_SETTINGS }));
   return one.node;
 }
 
