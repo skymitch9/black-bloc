@@ -8,6 +8,21 @@
  * paddings, the 240px rail, the 56px bars), which are bones and shared.
  */
 
+/* ---- tokens this site owns ----------------------------------------------- */
+/* Defined RELATIVELY off --et-*, so all five estate themes x dark+light get a
+   value without estate-theme.css being touched. See code-notes. */
+:root {
+  --bb-nav-icon: var(--et-muted);
+  --bb-nav-icon-active: var(--et-accent);
+  --bb-page-title-size: min(var(--et-ui-xl), 24px);
+  --bb-stat-size: min(var(--et-ui-xl), 24px);
+  --bb-dock-bg: var(--et-shell-bg);
+  --bb-dock-border: var(--et-panel-border, var(--et-hairline));
+  --bb-reset-fg: var(--et-muted);
+  --bb-reset-fg-hover: var(--et-fg);
+  --bb-empty-gap: 10px;
+}
+
 /* ---- the shell ----------------------------------------------------------- */
 
 html, body { height: 100%; }
@@ -86,13 +101,23 @@ body { overflow: hidden; }
   text-decoration: none;
 }
 .nav-label { flex-grow: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* One thin glyph per item, sized in em and painted with currentColor, so every
+   theme dresses it without the sprite knowing a single colour. */
+.nav-icon {
+  flex: none;
+  width: 1em;
+  height: 1em;
+  color: var(--bb-nav-icon);
+}
 .nav-link:hover { color: var(--et-fg); }
+.nav-link:hover .nav-icon { color: var(--et-fg); }
 .nav-link:focus-visible { outline: var(--et-focus-ring); outline-offset: -2px; }
 .nav-link[aria-current="page"] {
   background: var(--et-nav-active);
   color: var(--et-fg);
   font-weight: var(--et-weight-medium);
 }
+.nav-link[aria-current="page"] .nav-icon { color: var(--bb-nav-icon-active); }
 
 /* The mode dot beside a feature: green ON, amber SHADOW, muted OFF. A feature
    the bot reports no mode for gets no dot at all rather than a wrong one. */

@@ -1,5 +1,5 @@
 import { api } from './api.js';
-import { duration, el } from './ui.js';
+import { duration, el, icon } from './ui.js';
 
 /** The one page a signed-in member who is not staff may use. */
 export const MEMBER_TAB = 'requests';
@@ -8,37 +8,37 @@ export const GROUPS = [
   {
     head: 'Overview',
     items: [
-      { tab: 'overview', label: 'Overview' },
-      { tab: 'health', label: 'Health' },
-      { tab: 'audit', label: 'Logs' },
-      { tab: 'requests', label: 'Requests', feature: 'request', count: 'featurerequests' },
+      { tab: 'overview', label: 'Overview', icon: 'navOverview' },
+      { tab: 'health', label: 'Health', icon: 'navHealth' },
+      { tab: 'audit', label: 'Logs', icon: 'navLogs' },
+      { tab: 'requests', label: 'Requests', icon: 'navRequests', feature: 'request', count: 'featurerequests' },
     ],
   },
   {
     head: 'Moderation',
     items: [
-      { tab: 'moderation', label: 'Moderation' },
-      { tab: 'members', label: 'Members', count: 'members' },
-      { tab: 'automod', label: 'Automod', feature: 'automod' },
-      { tab: 'honeypot', label: 'Honeypot', feature: 'honeypot' },
-      { tab: 'modmail', label: 'Modmail', feature: 'modmail' },
+      { tab: 'moderation', label: 'Moderation', icon: 'navModeration' },
+      { tab: 'members', label: 'Members', icon: 'navMembers', count: 'members' },
+      { tab: 'automod', label: 'Automod', icon: 'navAutomod', feature: 'automod' },
+      { tab: 'honeypot', label: 'Honeypot', icon: 'navHoneypot', feature: 'honeypot' },
+      { tab: 'modmail', label: 'Modmail', icon: 'navModmail', feature: 'modmail' },
     ],
   },
   {
     head: 'Community',
     items: [
-      { tab: 'golive', label: 'Go-live', feature: 'golive' },
-      { tab: 'events', label: 'Events', feature: 'events' },
-      { tab: 'birthdays', label: 'Birthdays', feature: 'birthday' },
-      { tab: 'tempvoice', label: 'Temp voice', feature: 'tempvoice' },
-      { tab: 'rolemenus', label: 'Role menus', feature: 'rolemenu', count: 'requests' },
-      { tab: 'polls', label: 'Polls', feature: 'poll', count: 'polls' },
-      { tab: 'chat', label: 'Chat', feature: 'chat' },
+      { tab: 'golive', label: 'Go-live', icon: 'navGolive', feature: 'golive' },
+      { tab: 'events', label: 'Events', icon: 'navEvents', feature: 'events' },
+      { tab: 'birthdays', label: 'Birthdays', icon: 'navBirthdays', feature: 'birthday' },
+      { tab: 'tempvoice', label: 'Temp voice', icon: 'navTempvoice', feature: 'tempvoice' },
+      { tab: 'rolemenus', label: 'Role menus', icon: 'navRolemenus', feature: 'rolemenu', count: 'requests' },
+      { tab: 'polls', label: 'Polls', icon: 'navPolls', feature: 'poll', count: 'polls' },
+      { tab: 'chat', label: 'Chat', icon: 'navChat', feature: 'chat' },
     ],
   },
   {
     head: 'Server',
-    items: [{ tab: 'settings', label: 'Settings' }],
+    items: [{ tab: 'settings', label: 'Settings', icon: 'navSettings' }],
   },
 ];
 
@@ -110,6 +110,7 @@ export function renderNav(current, hrefFor) {
       'data-feature': item.feature || undefined,
       'aria-current': item.tab === current ? 'page' : undefined,
     }, [
+      icon(item.icon, 16, 'nav-icon'),
       el('span', { class: 'nav-label', text: item.label }),
       item.feature ? el('span', { class: 'nav-dot', 'data-tab': item.tab, hidden: true }) : null,
       item.count ? el('span', { class: 'nav-count', 'data-count': item.count, hidden: true }) : null,

@@ -9,6 +9,7 @@ import {
   settings,
   settingsNamespace,
 } from './api.js';
+import { ICONS } from './icons.js';
 
 const OUTAGE_WRITE = 'Black Bloc did not answer, so nothing was changed. That is an outage, not a ' +
   'permission problem — try again in a minute.';
@@ -38,13 +39,6 @@ export function el(tag, props = {}, children = []) {
   }
   return node;
 }
-
-const ICONS = {
-  chevronDown: { body: '<polyline points="6 9 12 15 18 9"></polyline>', width: 2 },
-  chevronRight: { body: '<polyline points="9 18 15 12 9 6"></polyline>', width: 2 },
-  search: { body: '<circle cx="11" cy="11" r="7"></circle><line x1="20" y1="20" x2="16.65" y2="16.65"></line>', width: 2 },
-  menu: { body: '<line x1="4" y1="7" x2="20" y2="7"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="17" x2="20" y2="17"></line>', width: 2 },
-};
 
 export function icon(name, size = 16, className = 'chev') {
   const spec = ICONS[name];
