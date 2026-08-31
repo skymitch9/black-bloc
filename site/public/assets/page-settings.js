@@ -2,7 +2,7 @@ import { settings } from './api.js';
 import { start } from './app.js';
 import { syncSubnav } from './layout.js';
 import { logsSection } from './logs.js';
-import { el, sayNothing, searchField, section, settingsEditor } from './ui.js';
+import { el, keysSwitch, sayNothing, searchField, section, settingsEditor } from './ui.js';
 
 const FIRST = 'core';
 
@@ -121,12 +121,13 @@ async function load() {
   });
 
   const filter = filterBox(groups, specs.length);
-  if (aside) aside.replaceChildren(filter.box, filter.said);
+  if (aside) aside.replaceChildren(filter.box, filter.said, keysSwitch());
 
   target.replaceChildren(
     el('p', {
       class: 'section-note',
-      text: 'The ⌫ beside a row puts it back to its default; nothing is written until you press Save Changes.',
+      text: 'The ⌫ beside a row puts it back to its default; nothing is written until you press ' +
+        'Save Changes. Show keys puts each setting’s raw name back under it.',
     }),
     share(groups),
     await logsSection('core', { title: 'Logs', note: CORE_LOGS_NOTE }),

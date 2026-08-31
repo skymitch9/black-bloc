@@ -944,6 +944,10 @@ button.grid-row:focus-visible { outline: var(--et-focus-ring); outline-offset: -
 .setrow:last-child { border-bottom: 0; }
 .setrow-head { display: flex; flex-direction: column; gap: 1px; flex-grow: 1; min-width: 0; }
 .setrow-label { font-size: var(--et-ui-md); font-weight: var(--et-weight-medium); }
+/* Hidden until somebody asks for them (the Show keys switch on Settings). They
+   stay in the DOM either way, so the command palette still finds a setting by
+   its key while they are out of sight. */
+:root:not([data-showkeys="true"]) .setrow-key { display: none; }
 .setrow-key {
   color: var(--et-muted);
   font-family: var(--et-font-mono);

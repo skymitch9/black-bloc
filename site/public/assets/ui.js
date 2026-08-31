@@ -1084,6 +1084,53 @@ export async function settingRow(spec, { onDirty = null } = {}) {
   return row;
 }
 
+const SHOW_KEYS = 'bb_show_keys';
+
+function keysWanted() {
+  try {
+    return localStorage.getItem(SHOW_KEYS) === 'true';
+  } catch (e) {
+    return false;
+  }
+}
+
+/* Stamped at import, before a row is drawn, so a person who wants the keys
+   never sees them appear a frame late. */
+document.documentElement.setAttribute('data-showkeys', keysWanted() ? 'true' : 'false');
+
+export function setShowKeys(on) {
+  document.documentElement.setAttribute('data-showkeys', on ? 'true' : 'false');
+  try {
+    localStorage.setItem(SHOW_KEYS, on ? 'true' : 'false');
+  } catch (e) {
+    /* private mode, a full quota, storage switched off — the choice just is not remembered */
+  }
+}
+
+/**
+ * The switch that reveals the mono raw-key sub-lines. CSS hides them, so they
+ * are still in the DOM and the command palette still finds a setting by its
+ * key while they are out of sight.
+ */
+export function keysSwitch() {
+  const node = el('button', {
+    class: 'btn quiet small',
+    type: 'button',
+    text: 'Show keys',
+    title: 'Show each setting’s raw registry key under its name',
+  });
+  const paint = () => node.setAttribute(
+    'aria-pressed',
+    document.documentElement.getAttribute('data-showkeys') === 'true' ? 'true' : 'false',
+  );
+  node.addEventListener('click', () => {
+    setShowKeys(node.getAttribute('aria-pressed') !== 'true');
+    paint();
+  });
+  paint();
+  return node;
+}
+
 /** Every bar from the render that is being replaced goes with it. */
 export function clearDock() {
   const zone = document.getElementById('dockzone');
