@@ -9,6 +9,47 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-08-31 — Restyle R2 live: the site wears Black Bloc
+
+Moved whole from `TODO.md`:
+
+- **Site restyle R2 — the skin** (R1 is LIVE `0c49257`, see `DONE.md`; brief =
+  `info/site-restyle-design.md`): the "Black Bloc" theme dark+light as the new
+  default (existing 5 themes stay), wordmark + display face, the sentence-voice
+  copy pass (C's group names and labels), table toolbar/drawer furniture, Ctrl+K
+  command palette, show-keys toggle. Status: **R2 Opus builder dispatched
+  2026-08-31 ~12:35 in a worktree.**
+
+**Landed as merge `c334922`, deployed 13:14 Phoenix** (Opus ~417k, 8 commits
+`a28caef`..`090a593`; 2257 tests, ruff clean, 17 pages / 98 routes). What shipped:
+the **Black Bloc theme** as default (`data-default-theme="blackbloc"` on all 17
+pages; a stored choice still wins) with a measured contrast table — worst ratio
+**4.51**, four §4C palette values darkened to clear 4.5, danger deliberately the
+one COLD hue so Ban never wears the warmth; **Bangers** wordmark + page titles
+(already on disk, OFL — Bricolage would have needed vendoring) via a
+`--bb-title-font`/`--bb-chrome-font` split that leaves the six estate themes
+untouched; **sentence-voice pass** — group captions "Runs the server / Runs the
+cookout / The desk", all 90 labels rewritten (key set byte-identical), the
+Overview TODAY sentence with each clause a link (it REPLACED the "Needs a human"
+card — one fact, one home); **table furniture** — toolbars, ⓘ heads,
+"Showing 1–N of M" feet (which absorbed four duplicate counters), a Cases
+right-hand drawer (native dialog; Requests renders cards, no drawer — the
+brief's escape hatch), plus two found defects fixed (opaque `--et-transit-bg`
+was blacking out every theme's modal backdrop and the mobile scrim → `--bb-scrim`);
+**Ctrl+K palette** (`palette.js`) over pages/settings-by-label-and-key/actions,
+exercised end-to-end (anchor jump needs `behavior:'auto'` — smooth scroll gets
+cancelled by the next layout); **Show keys** toggle, per-browser, no flash,
+palette still finds hidden keys. Rendered: all 17 pages × both modes (34
+screenshots), Cyberpunk + Discord regression-checked. Deviations accepted by
+Fable at merge: seven themes in the dropdown (discord was already a sixth),
+Bangers, no Requests drawer, TODAY replacing the card, `estate-theme.css`/
+`theme.js` edited with precedent. **Verified live after deploy:** `/health` ok,
+35 commands synced, `palette.js` 200, blackbloc default on the live index.
+**NOT verified:** no real member-only session, no narrow viewport, no real-API
+browser pass; contrast computed from hexes. Owner sweep rows 28–30. Known
+cosmetic: "RUNS THE COOKOUT" wraps in Cyberpunk's rail (its own type scale) —
+owner's call, on TODO.
+
 ## 2026-08-31 — code-notes.md re-keyed: 1215 of 1817 anchors were wrong
 
 Moved whole from `TODO.md`:

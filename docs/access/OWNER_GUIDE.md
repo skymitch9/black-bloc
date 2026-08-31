@@ -51,7 +51,7 @@
 | See if the bot is up | https://blackbloc.heygabi.ai/health (should say `"ok":true,"ready":true`) |
 | See what it has been doing | https://blackbloc.heygabi.ai → **Logs** (every feature page has its own Logs section too; `/golive logs` etc. in Discord) |
 | See the team's requests | https://blackbloc.heygabi.ai/requests.html — members file with `/request create` in Discord or sign in and file on that page (they see only Requests) |
-| Test something | [`sweeps.md`](sweeps.md) — 27 rows in priority order, each with what to expect (+ the detailed phase 1–8a scripts) |
+| Test something | [`sweeps.md`](sweeps.md) — 30 rows in priority order, each with what to expect (+ the detailed phase 1–8a scripts) |
 | Turn a feature on/off | Dashboard → that feature's page → the ON / SHADOW / OFF switch (or **Settings**) |
 | Quiet the Discord log channel | Settings → `<feature>_log_level` (off / important / all) |
 

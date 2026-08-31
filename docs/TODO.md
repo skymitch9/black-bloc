@@ -105,15 +105,12 @@ per feature, so the old bot keeps running until the new one is proven.
 
 - **Move the SQLite file out of the OneDrive-synced tree** — KI-1.
 
-- **Site restyle R2 — the skin** (R1 is LIVE `0c49257`, see `DONE.md`; brief =
-  [`info/site-restyle-design.md`](info/site-restyle-design.md)): the "Black
-  Bloc" theme dark+light as the new default (existing 5 themes stay), wordmark
-  + display face, the sentence-voice copy pass (C's group names and labels),
-  table toolbar/drawer furniture, Ctrl+K command palette, show-keys toggle.
-  Also fold in R1's overridable calls if the owner wants them changed: nav
-  grouping (Requests under Overview, Members under Moderation — one line in
-  `shell.js:GROUPS`), noun-phrase labels. Status: **R2 Opus builder dispatched
-  2026-08-31 ~12:35 in a worktree.**
+- **Restyle look-and-feel calls the owner may still override** (each cheap):
+  nav grouping (Requests under Overview, Members under Moderation — one line in
+  `shell.js:GROUPS`); the TODAY strip replaced the "Needs a human" card
+  (one-fact-one-home); "RUNS THE COOKOUT" wraps to two rail lines in the
+  Cyberpunk theme only (its own `--et-nav-head-size`; fix = shorter caption or a
+  theme override). Say the word and any of these flips.
 
 - **Owner 2026-08-27 ~11:49, verbatim: "Probably should make a deploy button api so you can deploy for me if you can't permission"** → idea logged. Today: the owner's standing authorisation works — the last four deploys ran from the session. A deploy endpoint on the bot would need a Fly API token on the machine and a self-redeploy path; higher risk than value while the session can deploy. Status: **parked unless the classifier blocks again.**
 
