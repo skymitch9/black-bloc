@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
+from black_bloc.api import sessions
 from black_bloc.api.auth import (
     BUCKET_MAX_KEYS,
     LOGIN_RATE,
@@ -240,6 +241,81 @@ def test_logout_clears_the_cookie(bot, sign_in):
     assert "Max-Age=0" in cleared or "expires=Thu, 01 Jan 1970" in cleared
 
 
+async def sessions_in(db) -> list:
+    cur = await db.conn.execute("SELECT * FROM sessions ORDER BY rowid")
+    return list(await cur.fetchall())
+
+
+async def test_signing_in_writes_a_session_row_the_cookie_names(web, wf):
+    wf.member(web.guild, USER_ID, name="mod", staff=True)
+    _, done = sign_in_through_discord(web, {"roles": [str(wf.STAFF_ROLE_ID)]})
+
+    _, payload = read_session(wf.SECRET, done.cookies[SESSION_COOKIE])
+    rows = await sessions_in(web.db)
+    assert len(rows) == 1
+    assert rows[0]["id"] == payload["sid"]
+    assert rows[0]["user_id"] == USER_ID and rows[0]["revoked_at"] is None
+
+
+async def test_a_stolen_cookie_is_dead_the_moment_its_owner_signs_out(web, wf):
+    """KI-6: the whole point — a copy taken elsewhere stops working at logout, not in 7 days."""
+    wf.member(web.guild, USER_ID, name="mod", staff=True)
+    client, done = sign_in_through_discord(web, {"roles": [str(wf.STAFF_ROLE_ID)]})
+    stolen = done.cookies[SESSION_COOKIE]
+    assert client.get("/api/auth/me").status_code == 200
+
+    assert client.post("/api/auth/logout").status_code == 200
+
+    client.cookies.set(SESSION_COOKIE, stolen)
+    refused = client.get("/api/auth/me")
+    assert refused.status_code == 401
+    assert refused.json()["error"] == "not_signed_in"
+    rows = await sessions_in(web.db)
+    assert rows[0]["revoked_at"] is not None
+
+
+def test_a_cookie_from_before_sessions_existed_is_simply_signed_out(web, wf):
+    """The one-time sign-out at deploy: no sid in the payload is no session at all."""
+    client = client_for(web)
+    client.cookies.set(
+        SESSION_COOKIE,
+        sign_session(wf.SECRET, {"uid": str(USER_ID), "staff": True, "exp": 4102444800}),
+    )
+    refused = client.get("/api/auth/me")
+    assert refused.status_code == 401
+    assert refused.json()["error"] == "not_signed_in"
+    assert "not signed in" in refused.json()["message"]
+
+
+def test_a_session_id_that_is_not_in_the_table_is_not_signed_in(web, wf):
+    client = client_for(web)
+    client.cookies.set(
+        SESSION_COOKIE,
+        sign_session(
+            wf.SECRET,
+            {"uid": str(USER_ID), "staff": True, "sid": "never-written-down", "exp": 4102444800},
+        ),
+    )
+    assert client.get("/api/auth/me").json()["error"] == "not_signed_in"
+
+
+async def test_the_request_path_reads_the_cached_verdict_not_the_table(web, wf, sign_in):
+    """One DB read per session per CACHE_TTL_SECONDS; `end` is what makes a revoke immediate."""
+    wf.member(web.guild, USER_ID, name="mod", staff=True)
+    client = client_for(web)
+    sign_in(client, uid=USER_ID, staff=True, sid="cached-one")
+    assert client.get("/api/auth/me").status_code == 200
+
+    await web.db.conn.execute(
+        "UPDATE sessions SET revoked_at = '2026-01-01T00:00:00+00:00' WHERE id = 'cached-one'"
+    )
+    await web.db.conn.commit()
+    assert client.get("/api/auth/me").status_code == 200
+
+    sessions.cache_for(web).forget("cached-one")
+    assert client.get("/api/auth/me").json()["error"] == "not_signed_in"
+
+
 def test_a_demoted_mod_loses_access_without_signing_out(bot, guild, fakes, sign_in):
     guild.members[USER_ID] = fakes.Member(USER_ID, [fakes.Role(fakes.PLAIN_ROLE_ID, "Member")])
     client = client_for(bot)
@@ -379,13 +455,13 @@ def test_the_forwarded_header_is_used_when_fly_sets_none(bot):
 
 
 @pytest.mark.parametrize("raw", ["bódy.deadbeef", "body.mác", "é.é"])
-def test_a_non_ascii_cookie_is_invalid_not_a_crash(raw, bot, fakes):
+async def test_a_non_ascii_cookie_is_invalid_not_a_crash(raw, bot, fakes):
     """F3: str.encode('ascii') on the cookie was a 500. httpx refuses to SEND one,
     so the assertion is at the boundary that reads it."""
     assert read_session(fakes.SECRET, raw) == ("invalid", None)
     request = SimpleNamespace(cookies={SESSION_COOKIE: raw})
     with pytest.raises(Refused) as refused:
-        current_session(request, bot)
+        await current_session(request, bot)
     assert refused.value.error == "not_signed_in"
 
 

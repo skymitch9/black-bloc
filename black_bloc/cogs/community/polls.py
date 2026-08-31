@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import hmac
 import json
 import logging
 import re
@@ -49,6 +50,7 @@ from ...polls import (
     PANEL_VOTE,
     PENDING_REVIEW,
     PICK_SOMETHING,
+    POLL_SECRET_UNSET,
     QUESTION_LIMIT,
     RECUR_DELETED,
     RECUR_NONE,
@@ -62,6 +64,9 @@ from ...polls import (
     STEP_DAYS,
     TERMINAL_STATUSES,
     VOTE_GONE,
+    VOTE_HASHED,
+    VOTE_KEY_MISSING,
+    VOTE_KEYED,
     VOTE_NOT_OPEN,
     NeedsPanel,
     cadence_token,
@@ -216,11 +221,12 @@ async def create_poll(
     ping_role_id: int | None,
     status: str,
     auto_thread: bool = False,
+    vote_scheme: str = VOTE_HASHED,
 ) -> int | None:
     cur = await db.conn.execute(
         "INSERT INTO polls(guild_id, creator_id, question, kind, surface, multi, anonymous, "
-        "results, hours, auto_thread, channel_id, ping_role_id, status, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "results, hours, auto_thread, channel_id, ping_role_id, status, vote_scheme, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             guild_id,
             creator_id,
@@ -235,6 +241,7 @@ async def create_poll(
             channel_id,
             ping_role_id,
             status,
+            vote_scheme,
             now_iso(),
         ),
     )
@@ -333,6 +340,7 @@ async def store_poll(
         ping_role_id=ping_role_id,
         status=status or (PENDING_REVIEW if reviewing else OPEN),
         auto_thread=auto_thread,
+        vote_scheme=vote_scheme_for(poll_secret(bot)),
     )
     await add_options(bot.db, poll_id, plan["labels"], plan.get("values"))
     await log_action(
@@ -556,11 +564,39 @@ async def votes_of(db: Any, poll_id: int) -> list[Any]:
     return list(await cur.fetchall())
 
 
-def voter_key(row: Any, user_id: Any) -> int:
+def vote_scheme_for(secret: Any) -> str:
+    return VOTE_KEYED if secret else VOTE_HASHED
+
+
+def scheme_of(row: Any) -> str:
+    """The scheme a poll was created with; a row written before the column is the old one."""
+    try:
+        stored = row["vote_scheme"]
+    except (IndexError, KeyError, TypeError):
+        stored = None
+    return VOTE_KEYED if str(stored or "") == VOTE_KEYED else VOTE_HASHED
+
+
+def poll_secret(bot: Any) -> str | None:
+    return getattr(getattr(bot, "settings", None), "poll_vote_secret", None)
+
+
+def can_key(row: Any, secret: Any) -> bool:
+    """False only for a keyed poll whose secret has gone — never guess, never downgrade."""
+    return not row["anonymous"] or scheme_of(row) != VOTE_KEYED or bool(secret)
+
+
+def voter_key(row: Any, user_id: Any, secret: Any = None) -> int:
     """An anonymous poll counts one vote per person without keeping who the person is."""
     if not row["anonymous"]:
         return int(user_id)
-    digest = hashlib.sha256(f"{int(row['id'])}:{int(user_id)}".encode()).digest()
+    preimage = f"{int(row['id'])}:{int(user_id)}".encode()
+    if scheme_of(row) == VOTE_KEYED:
+        if not secret:
+            raise ValueError("this poll's votes are keyed and POLL_VOTE_SECRET is not set")
+        digest = hmac.new(str(secret).encode("utf-8"), preimage, hashlib.sha256).digest()
+    else:
+        digest = hashlib.sha256(preimage).digest()
     return int.from_bytes(digest[:8], "big") >> 1
 
 
@@ -818,14 +854,22 @@ async def voting_row(interaction: discord.Interaction, poll_id: int) -> Any:
     if row["status"] != OPEN:
         await answer(interaction, VOTE_NOT_OPEN.format(status=row["status"]))
         return None
+    if not can_key(row, poll_secret(bot)):
+        log.warning("polls: poll %s is keyed and POLL_VOTE_SECRET is not set", row["id"])
+        await answer(interaction, VOTE_KEY_MISSING)
+        return None
     return row
+
+
+def voter_of(interaction: discord.Interaction, row: Any) -> int:
+    return voter_key(row, interaction.user.id, poll_secret(interaction.client))
 
 
 async def cast_vote(interaction: discord.Interaction, row: Any, positions: Any) -> list[str]:
     bot = interaction.client
     async with poll_lock(bot, row["id"]):
         chosen = await set_panel_vote(
-            bot.db, row["id"], voter_key(row, interaction.user.id), positions,
+            bot.db, row["id"], voter_of(interaction, row), positions,
             multi=bool(row["multi"]),
         )
     await repaint_panel(bot, row)
@@ -858,7 +902,7 @@ class PollVoteButton(
         wanted = [self.position]
         if row["multi"]:
             standing = await my_positions(
-                interaction.client.db, row["id"], voter_key(row, interaction.user.id)
+                interaction.client.db, row["id"], voter_of(interaction, row)
             )
             wanted = [at for at in standing if at != self.position]
             if self.position not in standing:
@@ -916,7 +960,7 @@ class PollOpenVoteButton(
             return
         options = await options_of(interaction.client.db, row["id"])
         standing = await my_positions(
-            interaction.client.db, row["id"], voter_key(row, interaction.user.id)
+            interaction.client.db, row["id"], voter_of(interaction, row)
         )
         await interaction.response.send_modal(PollVoteModal(row, options, standing))
 
@@ -1531,6 +1575,8 @@ class Polls(commands.Cog):
         self.bot.add_dynamic_items(
             PollDecisionButton, PollVoteButton, PollOpenVoteButton, PollClearVoteButton
         )
+        if not poll_secret(self.bot):
+            log.warning(POLL_SECRET_UNSET)
         if not self.bot.db.is_connected:
             return
         self._polls_loop.start()

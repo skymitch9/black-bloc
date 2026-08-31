@@ -13,6 +13,8 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
+from . import sessions
+
 log = logging.getLogger(__name__)
 
 DISCORD_API = "https://discord.com/api/v10"
@@ -208,7 +210,7 @@ def live_member(bot: Any, user_id: int) -> tuple[bool, bool]:
     return (guild.get_member(user_id) is not None, True)
 
 
-def current_session(request: Request, bot: Any) -> dict[str, Any]:
+async def current_session(request: Request, bot: Any) -> dict[str, Any]:
     secret = bot.settings.session_secret
     if not secret:
         raise Refused(503, "login_unavailable", LOGIN_UNAVAILABLE)
@@ -221,6 +223,8 @@ def current_session(request: Request, bot: Any) -> dict[str, Any]:
         user_id = int(payload["uid"])
     except (KeyError, TypeError, ValueError):
         raise Refused(401, "not_signed_in", NOT_SIGNED_IN) from None
+    if not await sessions.alive(bot, payload.get("sid")):
+        raise Refused(401, "not_signed_in", NOT_SIGNED_IN)
     staff, known = live_staff(bot, user_id, bool(payload.get("staff")))
     member, member_known = live_member(bot, user_id)
     return {
@@ -236,7 +240,7 @@ def current_session(request: Request, bot: Any) -> dict[str, Any]:
 
 def session_dependency(bot: Any):
     async def dependency(request: Request) -> dict[str, Any]:
-        return current_session(request, bot)
+        return await current_session(request, bot)
 
     return dependency
 
@@ -255,7 +259,7 @@ def member_state(who: dict[str, Any]) -> str:
 
 def staff_dependency(bot: Any):
     async def dependency(request: Request) -> dict[str, Any]:
-        who = current_session(request, bot)
+        who = await current_session(request, bot)
         state = staff_state(who)
         if state == "staff_unknown":
             raise Refused(503, "staff_unknown", STAFF_UNKNOWN)
@@ -480,6 +484,7 @@ def build_router(bot: Any, *, oauth_request: Any = None) -> APIRouter:
             "name": display_name(identity),
             "avatar": identity.get("avatar"),
             "staff": staff,
+            "sid": await sessions.start(bot, user_id, ttl=SESSION_TTL_SECONDS),
             "exp": int(time.time()) + SESSION_TTL_SECONDS,
         }
         log.info("auth: signed in %s (staff=%s)", user_id, staff)
@@ -494,14 +499,19 @@ def build_router(bot: Any, *, oauth_request: Any = None) -> APIRouter:
         return response
 
     @router.post("/logout")
-    async def logout() -> Any:
+    async def logout(request: Request) -> Any:
+        _, payload = read_session(
+            str(settings.session_secret or ""), request.cookies.get(SESSION_COOKIE)
+        )
+        if payload is not None:
+            await sessions.end(bot, payload.get("sid"))
         response = JSONResponse({"ok": True})
         response.delete_cookie(SESSION_COOKIE, **cookie_kwargs(settings))
         return response
 
     @router.get("/me")
     async def me(request: Request) -> dict[str, Any]:
-        who = current_session(request, bot)
+        who = await current_session(request, bot)
         guild = guild_of(bot)
         state = staff_state(who)
         member = member_state(who) == "member"

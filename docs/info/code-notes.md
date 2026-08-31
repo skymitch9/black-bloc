@@ -3884,3 +3884,46 @@ because `check.mjs` and the pytest side fill it from two different tables.
 | ⚠️ `black_bloc/api/tools/events.py:238` | **What an edit does NOT do is in the answer, not left to be discovered.** `rename_channel` (the cog's own helper, guard-aware, `would_rename` in test mode) follows the title, so the review channel keeps up. An announcement already posted and a Discord scheduled event already made **keep the old details**, and `notes` says so in words for whichever applies — there is no existing helper that rewrites either, and claiming a change that did not happen is checklist 10. `announced` and `scheduled` are on every row so the page can warn before the save, not only after. |
 | `black_bloc/api/tools/events.py:88` | `GET /api/events/{event_id}` exists so the page has a detail route to name, though the list already carried every field the card shows — the audit's finding was that the page *fetched* them and rendered none of them. |
 | `site/public/assets/page-events.js:44 localStart` | The prefilled start is the stored instant **rendered in this browser's zone**, which is the same zone the save is read in — the two have to agree or an untouched Save would move the event. |
+
+## KI-6 — revocable sessions (2026-08-31)
+
+> Built in the worktree `agent-a21673af8bc44721c` off `33d1086`.
+> **Last verified: 2026-08-31** — `pytest -q` **2244 passed** (2227 before),
+> `ruff check black_bloc tests site` clean. ⚠️ **Nothing here has run against a browser
+> or live Discord**: every sign-in, logout and stolen-cookie replay is exercised through
+> the repo's fakes and `TestClient`, never against `discord.com` or a real cookie jar.
+> ⚠️ **Deploying this signs everybody out once** — a cookie minted before this commit
+> carries no `sid`, and a payload with no session id is an invalid session. People see
+> the ordinary signed-out page and sign in again; there is no new copy for it.
+
+| Key | Note |
+|---|---|
+| ⚠️ `black_bloc/api/sessions.py alive` | **The whole of KI-6 in one function: present, unexpired, unrevoked.** The cookie is still the stateless signed payload it always was; the only new fact is `sid`, and this is the one place that decides whether that id is still a session. A payload without a `sid` reaches here as `None` and is refused, which is why the deploy is a one-time sign-out rather than a migration. |
+| ⚠️ `black_bloc/api/sessions.py database_of` | **A database that cannot be reached is NOT a sign-out.** If `bot.db` is missing or disconnected the check answers `True` and the request carries on with the signature and expiry it already had. The alternative — refusing — would turn a sqlite blip into "everybody is logged out", and buys nothing: every data route already refuses with `database_unavailable` through `writes.require_db`, so a dashboard on a dead database shows nothing either way. The cost is that revocation cannot be enforced while the database is down, which is the same window in which nothing else works. |
+| ⚠️ `black_bloc/api/sessions.py SessionCache` | **One DB read per session per 30 s, and a logout is immediate anyway.** `end` writes `False` into the cache BEFORE it touches the row, so the very next request in this process is refused even if the UPDATE is slow — the TTL is about how long a verdict written by somebody else could linger, and there is only ever one process (one uvicorn worker on one Fly machine). Bounded at `CACHE_MAX_KEYS` and evicted oldest-first, the same shape `TokenBucket` uses. A verdict can only ever go true → false, so caching a `False` costs nothing. |
+| `black_bloc/api/sessions.py is_past` | An expiry nobody can parse counts as **past**. A session whose dates are unreadable is not a session anybody should be riding on, and this is the same "unparseable timestamp is treated as ended" rule the loops already follow (checklist 5). |
+| `black_bloc/api/sessions.py start` | Sign-in deletes rows whose `expires_at` has gone by before writing the new one, so the table is bounded by *live* sessions rather than by every sign-in ever. Sign-in is rare enough that the sweep costs nothing, and there is no loop to own it. |
+| ⚠️ `black_bloc/api/auth.py current_session` | **Now `async`, and that is the only reason `writes.member_dependency` and the two dependencies here changed.** The session check is a DB read; making the function async was cheaper than keeping a sync façade that hides one. Every call site was already inside an async dependency or route. |
+| `black_bloc/api/auth.py logout` | Takes the `Request` now: it reads the cookie it is about to clear, so it can revoke the row by id. A cookie that is expired or forged yields no payload and nothing is revoked — there is nothing live to revoke. |
+| ⚠️ `black_bloc/api/server.py create_app` | `app.state.bot = bot` exists so the **test** sign-in fixture can find the database the app was built with. It is the FastAPI-idiomatic place for it and nothing in `black_bloc` reads it; the alternative was a per-file fixture in twenty test files naming the right database by hand, which is exactly the wiring that goes stale. |
+| ⚠️ `tests/conftest.py record_session` | The fixture writes the `sessions` row with **plain `sqlite3` on the same file**, because `sign_in` is a sync fixture called from both sync and async tests and cannot await the real `sessions.start`. It is a real row in the real database, not a seeded cache, so the 270 existing sign-ins exercise the same lookup the site does. |
+| **not verified** | No browser has held one of these cookies; no session has been revoked against the live site; the 30-second cache has only ever been exercised with a hand-set clock. |
+
+## KI-9 — keyed anonymous poll votes (2026-08-31)
+
+> Same worktree, the commit after KI-6. **Last verified: 2026-08-31** —
+> `pytest -q` **2257 passed** (2244 after KI-6), `ruff check black_bloc tests site` clean.
+> ⚠️ **Nothing here has run against live Discord**: every vote is a fake button press in
+> the repo's harness, and no anonymous poll has ever been cast in the server.
+> ⚠️ **`POLL_VOTE_SECRET` is optional and the deploy does not need it** — without it new
+> polls keep the old hash and the bot logs one warning when the polls cog loads.
+
+| Key | Note |
+|---|---|
+| ⚠️ `black_bloc/cogs/community/polls.py voter_key` | **The scheme is per POLL, not per deploy, and that is the whole migration.** A poll that is already open has `poll_votes` rows keyed with the old per-poll `sha256("<poll_id>:<user_id>")`; if the scheme changed underneath it, the same person would key to a different number and be able to vote a second time. So the row remembers what it was created with (`polls.vote_scheme`, additive, schema 18) and this function follows the row. New polls are `hmac` when `POLL_VOTE_SECRET` is set, `sha256` when it is not. The truncation is unchanged — top 63 bits of the digest, so `poll_votes.user_id` stays an INTEGER and nothing else moved. |
+| ⚠️ `black_bloc/cogs/community/polls.py can_key` | **A keyed poll whose key has gone is REFUSED, never downgraded.** Falling back to the hash would key the same person to a new number and hand them a second vote — the exact failure the per-poll scheme exists to prevent. `can_key` asks the question and `voting_row` answers the presser with `VOTE_KEY_MISSING` before anything is written; the `ValueError` is the belt to that braces, so a call site added later fails loudly instead of quietly double-counting. |
+| `black_bloc/cogs/community/polls.py scheme_of` | Tolerates a row with no `vote_scheme` **key at all** (a `sqlite3.Row` from before the column, or a plain dict in a test) and reads it as the old scheme. NULL and missing mean the same thing here: this poll predates the column. |
+| ⚠️ `black_bloc/cogs/community/polls.py voting_row` | The single gate all three vote buttons already went through, which is why the missing-key refusal is one check rather than three. The log line names the poll id and **never the key or a preimage** — a preimage is a member id, which is the thing anonymity is protecting. |
+| `black_bloc/cogs/community/polls.py cog_load` | The one startup warning, and only when the key is unset. It says what the fallback IS (the old hash, on new polls) rather than only that something is missing, because the behaviour is deliberate and safe — a deploy without the secret must not read as broken. |
+| ⚠️ `black_bloc/config.py poll_vote_secret` | **A secret, so it is deliberately NOT a settings-registry key** — checklist 33 asks for both doors on every decision, but a registry key is readable on the Settings page and editable with `/settings set-value`, and a MAC key that the dashboard can show is not a MAC key. It follows `SESSION_SECRET`: env only, `fly secrets` in production, blank counts as unset. What IS configurable both ways is the thing people actually decide — a poll's `anonymous` flag — and that already has a slash path and a dashboard control. |
+| **not verified** | No key has been set on the Fly machine; no poll has been created under `hmac` outside the tests; nothing has measured the old scheme against a real `poll_votes` table (the live one is empty). |

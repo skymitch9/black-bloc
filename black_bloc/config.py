@@ -64,9 +64,13 @@ class Settings(BaseSettings):
     discord_client_secret: str | None = None
     session_secret: str | None = None
 
+    poll_vote_secret: str | None = Field(
+        default=None, description="Key for the anonymous poll-vote MAC; unset falls back to a hash"
+    )
+
     @field_validator(
         "dev_guild_id", "test_channel_id", "twitch_client_id", "twitch_client_secret",
-        "discord_client_id", "discord_client_secret", "session_secret",
+        "discord_client_id", "discord_client_secret", "session_secret", "poll_vote_secret",
         mode="before",
     )
     @classmethod
@@ -102,6 +106,10 @@ class Settings(BaseSettings):
             and self.session_secret
             and len(self.session_secret) >= SESSION_SECRET_MIN
         )
+
+    @property
+    def poll_votes_keyed(self) -> bool:
+        return bool(self.poll_vote_secret)
 
     @property
     def origin(self) -> str:

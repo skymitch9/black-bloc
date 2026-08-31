@@ -24,6 +24,7 @@ from black_bloc.cogs.community.polls import (
     poll_for_message,
     recurrences,
     results_of,
+    scheme_of,
     set_answer_ids,
     set_posted,
     vote_picker,
@@ -1282,6 +1283,105 @@ async def test_an_anonymous_panel_keeps_the_count_without_keeping_the_name(cog, 
     assert stored and lead.id not in stored
     assert (await panel_counts(db, 1))[1] == 1
     assert await my_positions(db, 1, voter_key(await get_poll(db, 1), lead.id)) == [0]
+
+
+SECRET = "a-poll-vote-secret-nobody-else-has"
+
+
+async def test_a_poll_made_while_the_key_is_set_is_written_down_as_keyed(cog, bot, lead, db):
+    bot.settings.poll_vote_secret = SECRET
+
+    await make(cog, bot, lead, anonymous=True, options="Pizza | Tacos")
+
+    assert (await get_poll(db, 1))["vote_scheme"] == pure.VOTE_KEYED
+
+
+async def test_a_poll_made_without_the_key_records_the_old_scheme(cog, bot, lead, db):
+    await make(cog, bot, lead, anonymous=True, options="Pizza | Tacos")
+
+    assert (await get_poll(db, 1))["vote_scheme"] == pure.VOTE_HASHED
+
+
+async def test_a_keyed_anonymous_vote_is_a_mac_and_not_the_bare_hash(cog, bot, lead, db):
+    """KI-9: holding the database and a member list is no longer enough to confirm a guess."""
+    bot.settings.poll_vote_secret = SECRET
+    await make(cog, bot, lead, anonymous=True, options="Pizza | Tacos")
+
+    await press(bot, lead, 1, 0)
+
+    row = await get_poll(db, 1)
+    stored = [vote["user_id"] for vote in await votes_of(db, 1)]
+    assert stored == [voter_key(row, lead.id, SECRET)]
+    assert lead.id not in stored
+    assert voter_key(row, lead.id, SECRET) != voter_key(row, lead.id, "some-other-key")
+
+
+async def test_a_poll_open_before_the_key_arrived_keeps_its_old_scheme(cog, bot, lead, db):
+    """The migration risk: a scheme that changed under an open poll would let one person
+    vote twice."""
+    await make(cog, bot, lead, anonymous=True, options="Pizza | Tacos")
+    await press(bot, lead, 1, 0)
+    bot.settings.poll_vote_secret = SECRET
+
+    await press(bot, lead, 1, 1)
+
+    row = await get_poll(db, 1)
+    assert row["vote_scheme"] == pure.VOTE_HASHED
+    assert (await panel_counts(db, 1))[1] == 1
+    assert await my_positions(db, 1, voter_key(row, lead.id)) == [1]
+
+
+async def test_a_keyed_poll_whose_key_has_gone_refuses_the_vote_in_words(cog, bot, lead, db):
+    bot.settings.poll_vote_secret = SECRET
+    await make(cog, bot, lead, anonymous=True, options="Pizza | Tacos")
+    bot.settings.poll_vote_secret = None
+
+    interaction = await press(bot, lead, 1, 0)
+
+    assert interaction.sent == pure.VOTE_KEY_MISSING
+    assert await votes_of(db, 1) == []
+    assert "POLL_VOTE_SECRET" not in str(await votes_of(db, 1))
+
+
+def test_voter_key_refuses_to_downgrade_a_keyed_poll():
+    keyed = {"id": 1, "anonymous": 1, "vote_scheme": pure.VOTE_KEYED}
+    with pytest.raises(ValueError):
+        voter_key(keyed, 900)
+
+
+def test_a_row_from_before_the_column_existed_reads_as_the_old_scheme():
+    assert scheme_of({"id": 1, "anonymous": 1}) == pure.VOTE_HASHED
+    assert scheme_of({"id": 1, "anonymous": 1, "vote_scheme": None}) == pure.VOTE_HASHED
+    assert scheme_of({"id": 1, "anonymous": 1, "vote_scheme": "hmac"}) == pure.VOTE_KEYED
+
+
+def test_a_named_poll_is_still_the_member_id_whatever_the_scheme():
+    named = {"id": 1, "anonymous": 0, "vote_scheme": pure.VOTE_KEYED}
+    assert voter_key(named, 900) == 900
+
+
+def test_the_same_person_is_a_different_number_in_every_keyed_poll():
+    first = {"id": 1, "anonymous": 1, "vote_scheme": pure.VOTE_KEYED}
+    second = {"id": 2, "anonymous": 1, "vote_scheme": pure.VOTE_KEYED}
+    assert voter_key(first, 900, SECRET) != voter_key(second, 900, SECRET)
+    assert voter_key(first, 900, SECRET) == voter_key(first, 900, SECRET)
+
+
+async def test_a_bot_with_no_key_says_so_once_when_the_cog_loads(cog, bot, caplog):
+    with caplog.at_level("WARNING"):
+        await cog.cog_load()
+    await cog.cog_unload()
+
+    assert [line for line in caplog.messages if "POLL_VOTE_SECRET" in line]
+
+
+async def test_a_bot_with_the_key_says_nothing_at_startup(cog, bot, caplog):
+    bot.settings.poll_vote_secret = SECRET
+    with caplog.at_level("WARNING"):
+        await cog.cog_load()
+    await cog.cog_unload()
+
+    assert not [line for line in caplog.messages if "POLL_VOTE_SECRET" in line]
 
 
 async def test_a_named_panel_keeps_the_voter_so_the_export_can_name_them(cog, bot, lead, db):

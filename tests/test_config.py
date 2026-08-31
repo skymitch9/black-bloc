@@ -66,6 +66,20 @@ def test_samesite_is_taken_in_any_case_and_only_the_two_choices(monkeypatch):
         load_settings(_env_file=None)
 
 
+def test_the_poll_vote_key_is_off_until_it_is_set_and_blank_counts_as_unset(monkeypatch):
+    monkeypatch.delenv("POLL_VOTE_SECRET", raising=False)
+    assert load_settings(_env_file=None).poll_vote_secret is None
+    assert load_settings(_env_file=None).poll_votes_keyed is False
+
+    monkeypatch.setenv("POLL_VOTE_SECRET", "   ")
+    assert load_settings(_env_file=None).poll_votes_keyed is False
+
+    monkeypatch.setenv("POLL_VOTE_SECRET", "a-key-nobody-else-has")
+    keyed = load_settings(_env_file=None)
+    assert keyed.poll_vote_secret == "a-key-nobody-else-has"
+    assert keyed.poll_votes_keyed is True
+
+
 def test_a_short_session_secret_disables_sign_in_and_warns(monkeypatch, caplog):
     for name in ("DISCORD_CLIENT_ID", "DISCORD_CLIENT_SECRET"):
         monkeypatch.setenv(name, "set")

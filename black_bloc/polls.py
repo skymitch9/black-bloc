@@ -216,6 +216,18 @@ VOTE_GONE = (
     "Black Bloc has no record of that poll any more, so nothing was counted. It may have been "
     "archived — the polls page on the dashboard keeps the result."
 )
+VOTE_HASHED = "sha256"
+VOTE_KEYED = "hmac"
+VOTE_KEY_MISSING = (
+    "Black Bloc cannot count a vote on this anonymous poll just now, so nothing was counted. "
+    "The key that keeps these votes anonymous (POLL_VOTE_SECRET) is not set on the bot — that is "
+    "a setup step for the owner, not a problem with your account. Tell a Lead."
+)
+POLL_SECRET_UNSET = (
+    "polls: POLL_VOTE_SECRET is not set, so a new anonymous poll keeps the old per-poll hash of "
+    "the voter id. Set it (and keep it) to move new polls onto a keyed MAC; polls already open "
+    "stay on the scheme they were created with either way."
+)
 PICK_SOMETHING = (
     "Nothing was picked, so nothing changed. Choose at least one option, or use "
     f"**{PANEL_CLEAR}** to take your vote back."
