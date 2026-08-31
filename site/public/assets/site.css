@@ -28,9 +28,13 @@
 html, body { height: 100%; }
 body { overflow: hidden; }
 
+/* `minmax(0, 1fr)` on the row and not `auto`: an auto row is sized to its
+   tallest item and stretch only ever GROWS it, so the docked bar pushed the
+   whole column past the bottom of the window instead of the body giving way. */
 .shell {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   height: 100dvh;
   overflow: hidden;
   font-size: var(--et-ui-md);
@@ -254,11 +258,14 @@ body { overflow: hidden; }
 .topbar .hg-cog:hover { color: var(--et-fg); border: 0; }
 .hg-cog-panel { top: 64px; }
 
+/* `flex: 1 1 0` and not `flex-grow: 1`: with an auto basis the body's own
+   height is its starting size, and the docked save bar under it is pushed off
+   the bottom of the window in whichever theme has the taller rows. */
 .content {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  flex-grow: 1;
+  flex: 1 1 0;
   min-height: 0;
   max-width: none;
   margin: 0;
