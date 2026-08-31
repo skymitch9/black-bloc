@@ -1,6 +1,17 @@
 import { api, listOf } from './api.js';
 import { start, tabHref } from './app.js';
-import { avatar, el, icon, pager, roleChip, searchField, shortWhen, untilWhen } from './ui.js';
+import {
+  avatar,
+  el,
+  icon,
+  pager,
+  roleChip,
+  sayNothing,
+  searchField,
+  shortWhen,
+  textAction,
+  untilWhen,
+} from './ui.js';
 
 const FILTERS = [
   ['all', 'All'],
@@ -146,6 +157,17 @@ function nothingSaid() {
   return 'Black Bloc cannot see any members yet. That is a cache it fills on connect, not a fault with your access.';
 }
 
+/** Nothing to show and a filter on means the filter is the thing to undo. */
+function nothingToDo() {
+  if (!state.query && state.filter === 'all') return null;
+  return textAction('Show every member', () => {
+    state.query = '';
+    state.filter = 'all';
+    state.page = 1;
+    refresh();
+  });
+}
+
 function membersCard(payload, rows) {
   const head = el('div', { class: 'grid-row head' }, COLUMNS.map((label) => el('span', { text: label })));
   const body = el('div', { class: 'grid-table members' }, [head, ...rows.map(memberRow)]);
@@ -153,7 +175,7 @@ function membersCard(payload, rows) {
   return el('div', { class: 'card' }, [
     toolbar(payload, rows),
     rows.length === 0
-      ? el('div', { class: 'grid-foot', text: nothingSaid() })
+      ? sayNothing(nothingSaid(), nothingToDo())
       : el('div', { class: 'table-scroll' }, [body]),
     pager({
       page: state.page,

@@ -104,14 +104,12 @@ async function load() {
   const filter = filterBox(groups, specs.length);
   if (aside) aside.replaceChildren(filter.box, filter.said);
 
-  editor.bar.classList.add('dock');
   target.replaceChildren(
     el('p', {
       class: 'section-note',
-      text: 'Emptying a row puts it back to its default.',
+      text: 'The ⌫ beside a row puts it back to its default; nothing is written until you press Save Changes.',
     }),
     share(groups),
-    editor.bar,
     await logsSection('core', { title: 'Logs', note: CORE_LOGS_NOTE }),
   );
 }

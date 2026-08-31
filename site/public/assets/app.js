@@ -1,6 +1,7 @@
 import { api, Outage, signInHref } from './api.js';
-import { lastTab, mountSections, rememberTab } from './layout.js';
+import { lastTab, mountColumns, mountSections, rememberTab } from './layout.js';
 import { MEMBER_TAB, forgetShellStatus, isMemberOnly, mountShell, paintShell, renderNav } from './shell.js';
+import { clearDock } from './ui.js';
 
 export const TABS = [
   { tab: 'overview', href: '/index.html', label: 'Overview' },
@@ -65,6 +66,8 @@ function show(which) {
   el('gate').hidden = which !== 'gate';
   el('dash').hidden = which !== 'dash';
   el('footbar').hidden = which !== 'dash';
+  const zone = el('dockzone');
+  if (zone) zone.hidden = which !== 'dash';
 }
 
 export function refuse({ title, message, note = null, state = null, canSignIn = false, canRetry = false }) {
@@ -210,10 +213,12 @@ export function start(page) {
     try {
       forgetShellStatus();
       await paintShell(current);
+      clearDock();
       await page.load(current);
       mountSections(page.tab);
       stamp();
       show('dash');
+      mountColumns();
     } catch (error) {
       handle(error);
     }
@@ -221,10 +226,12 @@ export function start(page) {
 
   const paint = async (me) => {
     await paintShell(me);
+    clearDock();
     await page.load(me);
     mountSections(page.tab);
     stamp();
     show('dash');
+    mountColumns();
   };
 
   const verify = async () => {

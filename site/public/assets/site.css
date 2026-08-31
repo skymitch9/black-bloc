@@ -8,14 +8,33 @@
  * paddings, the 240px rail, the 56px bars), which are bones and shared.
  */
 
+/* ---- tokens this site owns ----------------------------------------------- */
+/* Defined RELATIVELY off --et-*, so all five estate themes x dark+light get a
+   value without estate-theme.css being touched. See code-notes. */
+:root {
+  --bb-nav-icon: var(--et-muted);
+  --bb-nav-icon-active: var(--et-accent);
+  --bb-page-title-size: min(var(--et-ui-xl), 24px);
+  --bb-stat-size: min(var(--et-ui-xl), 24px);
+  --bb-dock-bg: var(--et-shell-bg);
+  --bb-dock-border: var(--et-panel-border, var(--et-hairline));
+  --bb-reset-fg: var(--et-muted);
+  --bb-reset-fg-hover: var(--et-fg);
+  --bb-empty-gap: 10px;
+}
+
 /* ---- the shell ----------------------------------------------------------- */
 
 html, body { height: 100%; }
 body { overflow: hidden; }
 
+/* `minmax(0, 1fr)` on the row and not `auto`: an auto row is sized to its
+   tallest item and stretch only ever GROWS it, so the docked bar pushed the
+   whole column past the bottom of the window instead of the body giving way. */
 .shell {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   height: 100dvh;
   overflow: hidden;
   font-size: var(--et-ui-md);
@@ -86,13 +105,23 @@ body { overflow: hidden; }
   text-decoration: none;
 }
 .nav-label { flex-grow: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* One thin glyph per item, sized in em and painted with currentColor, so every
+   theme dresses it without the sprite knowing a single colour. */
+.nav-icon {
+  flex: none;
+  width: 1em;
+  height: 1em;
+  color: var(--bb-nav-icon);
+}
 .nav-link:hover { color: var(--et-fg); }
+.nav-link:hover .nav-icon { color: var(--et-fg); }
 .nav-link:focus-visible { outline: var(--et-focus-ring); outline-offset: -2px; }
 .nav-link[aria-current="page"] {
   background: var(--et-nav-active);
   color: var(--et-fg);
   font-weight: var(--et-weight-medium);
 }
+.nav-link[aria-current="page"] .nav-icon { color: var(--bb-nav-icon-active); }
 
 /* The mode dot beside a feature: green ON, amber SHADOW, muted OFF. A feature
    the bot reports no mode for gets no dot at all rather than a wrong one. */
@@ -229,11 +258,14 @@ body { overflow: hidden; }
 .topbar .hg-cog:hover { color: var(--et-fg); border: 0; }
 .hg-cog-panel { top: 64px; }
 
+/* `flex: 1 1 0` and not `flex-grow: 1`: with an auto basis the body's own
+   height is its starting size, and the docked save bar under it is pushed off
+   the bottom of the window in whichever theme has the taller rows. */
 .content {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  flex-grow: 1;
+  flex: 1 1 0;
   min-height: 0;
   max-width: none;
   margin: 0;
@@ -244,10 +276,12 @@ body { overflow: hidden; }
 
 .page-head { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
 .page-head-text { display: flex; flex-direction: column; gap: 4px; flex-grow: 1; min-width: 0; }
+/* Capped: no theme's display type gets above ~24px on a control panel, and
+   nobody in the survey puts display type in a control at all. */
 .page-head h1 {
   margin: 0;
   font-family: var(--et-font-display);
-  font-size: var(--et-ui-xl);
+  font-size: var(--bb-page-title-size);
   font-weight: var(--et-heading-weight);
   letter-spacing: var(--et-title-spacing);
   text-transform: var(--et-title-case);
@@ -276,6 +310,7 @@ body { overflow: hidden; }
   .topbar-menu { display: inline-flex; }
   .topbar { padding: 0 12px; }
   .content { padding: 16px; }
+  .savebar { margin: 0 16px 16px; }
   .scrim {
     display: block;
     position: fixed;
@@ -369,6 +404,12 @@ a.rowlist-row:focus-visible { outline: var(--et-focus-ring); outline-offset: -2p
 .actline[data-tone="would"] .actline-text { color: var(--et-warn); }
 .actline[data-tone="failed"] .actline-text { color: var(--et-danger); }
 
+/* The page's blocks, one under the other, until layout.js balances a run of
+   them into .twocol. The gap is what the two columns already use, so a
+   full-width block and a two-up run sit on the same rhythm. */
+#dash { display: flex; flex-direction: column; gap: 16px; }
+#dash[hidden] { display: none; }
+
 .twocol {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -397,7 +438,7 @@ a.stat:hover { background: var(--et-row-hover); }
 a.stat:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; }
 .stat-value {
   font-family: var(--et-font-display);
-  font-size: var(--et-ui-xl);
+  font-size: var(--bb-stat-size);
   font-weight: var(--et-weight-strong);
   line-height: 1.1;
 }
@@ -851,18 +892,41 @@ button.grid-row:focus-visible { outline: var(--et-focus-ring); outline-offset: -
 .setrow[data-dirty="true"] .setrow-control .input { border-color: var(--et-warn); }
 .setrow-say { flex-basis: 100%; margin: 0; }
 
+.setrow-reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  padding: 4px;
+  border: 0;
+  border-radius: var(--et-radius);
+  background: none;
+  color: var(--bb-reset-fg);
+  cursor: pointer;
+}
+.setrow-reset:hover { color: var(--bb-reset-fg-hover); background: var(--et-row-hover); }
+.setrow-reset:focus-visible { outline: var(--et-focus-ring); outline-offset: 1px; }
+.setrow-reset[hidden] { display: none; }
+
+/* The one strip every save bar docks into: a sibling of the scrolling body, so
+   it sits under the page rather than over it and covers nothing. It takes no
+   room at all while every bar in it is hidden. */
+.dockzone { display: flex; flex-direction: column; flex: none; }
+.dockzone[hidden] { display: none; }
+
 .savebar {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
   flex-wrap: wrap;
+  margin: 0 24px 16px;
   padding: 12px 16px;
-  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border: var(--et-border-w) solid var(--bb-dock-border);
   border-radius: var(--et-radius-lg);
-  background: var(--et-shell-bg);
+  background: var(--bb-dock-bg);
+  box-shadow: var(--et-shadow-lift);
 }
-.savebar.dock { position: sticky; bottom: 0; z-index: 3; box-shadow: var(--et-shadow-lift); }
 .savebar-text { flex-grow: 1; font-size: var(--et-ui-md); }
 .savebar .btn {
   min-height: var(--et-control-h-lg);
@@ -1060,6 +1124,10 @@ a.btn { text-decoration: none; }
 /* ---- odds and ends -------------------------------------------------------- */
 
 .say-nothing {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--bb-empty-gap);
   margin: 0;
   padding: 12px 16px;
   border: var(--et-border-w) dashed var(--et-hairline);
@@ -1068,6 +1136,20 @@ a.btn { text-decoration: none; }
   font-size: var(--et-ui-md);
   text-wrap: pretty;
 }
+.say-nothing-text { min-width: 0; }
+.say-nothing-do {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--et-accent);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.say-nothing-do:hover { color: var(--et-fg); }
+.say-nothing-do:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; }
 .card .say-nothing { border: 0; border-radius: 0; }
 
 .notice { margin: 4px 0 0; font-size: var(--et-ui-xs); color: var(--et-muted); text-wrap: pretty; }

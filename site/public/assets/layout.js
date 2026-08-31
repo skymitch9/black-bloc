@@ -135,6 +135,80 @@ export function syncSubnav() {
   }
 }
 
+const WIDE = '.twocol, .statgrid, .savebar, .section-note, .bar, .pager, .say-nothing';
+const NEEDS_WIDTH = '.table-scroll, .grid-table, table';
+const RUN_MIN = 2;
+
+function wide(node) {
+  const asked = node.getAttribute('data-span');
+  if (asked) return asked === 'full';
+  if (node.matches(WIDE)) return true;
+  return Boolean(node.querySelector(NEEDS_WIDTH));
+}
+
+/**
+ * Greedy longest-first-in-document-order balance: each block joins whichever
+ * column is shorter right now. Heights are read BEFORE anything moves, because
+ * wrapping changes every one of them.
+ */
+function balance(run) {
+  const heights = run.map((node) => node.offsetHeight || 1);
+  const left = el('div', { class: 'colstack' });
+  const right = el('div', { class: 'colstack' });
+  let leftAt = 0;
+  let rightAt = 0;
+  run.forEach((node, at) => {
+    if (leftAt <= rightAt) {
+      left.append(node);
+      leftAt += heights[at];
+    } else {
+      right.append(node);
+      rightAt += heights[at];
+    }
+  });
+  return el('div', { class: 'twocol' }, [left, right]);
+}
+
+/**
+ * Turns the page's stack of blocks into two columns so a wide window is not
+ * half empty. A block that carries a table, a stat strip or a save bar spans
+ * the full width and breaks the run, so the reading order stays whole-block by
+ * whole-block. Must run AFTER #dash is shown — a hidden element measures zero
+ * and the balance would be meaningless.
+ */
+export function mountColumns() {
+  const dash = document.getElementById('dash');
+  if (!dash || dash.hidden) return;
+  const kids = [...dash.children];
+  if (kids.length < RUN_MIN) return;
+  const blocks = [];
+  let run = [];
+  const flush = () => {
+    if (run.length >= RUN_MIN) blocks.push(balance(run));
+    else blocks.push(...run);
+    run = [];
+  };
+  for (const node of kids) {
+    if (wide(node)) {
+      flush();
+      blocks.push(node);
+    } else {
+      run.push(node);
+    }
+  }
+  flush();
+  dash.replaceChildren(...blocks);
+}
+
+/** Opens a section and takes the page to it — what an empty state's one action does. */
+export function openSection(slug) {
+  const node = document.querySelector(`section.sect[data-sect="${slug}"]`);
+  if (!node) return;
+  const details = node.querySelector('details.sect-card');
+  if (details) details.open = true;
+  node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 let watching = null;
 
 /**

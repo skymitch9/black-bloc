@@ -13,6 +13,7 @@ import {
   segment,
   sentenceFor,
   table,
+  textAction,
 } from './ui.js';
 
 export const LOG_FEATURES = [
@@ -107,7 +108,7 @@ export function viaCell(via) {
   });
 }
 
-export function logsTable(rows, empty) {
+export function logsTable(rows, empty, emptyAction = null) {
   return table([
     { label: 'When', cell: (row) => whenCell(row.at) },
     { label: 'Kind', cell: (row) => kindPill(row) },
@@ -115,7 +116,7 @@ export function logsTable(rows, empty) {
     { label: 'Actor', cell: (row) => whoCell(row.actor_id, row.actor_name) },
     { label: 'Target', cell: (row) => whoCell(row.target_id, row.target_name) },
     { label: 'Summary', cell: (row) => row.summary || row.reason, className: 'wrap' },
-  ], rows, { empty, search: false });
+  ], rows, { empty, emptyAction, search: false });
 }
 
 /** The importance switch every logs surface wears, in the site's own segments. */
@@ -186,6 +187,35 @@ export async function logsSection(feature, { title = 'Logs', note = NOTE, perPag
 
   const kinds = await kindsFor(feature);
   const chips = el('div', { class: 'chipbar logs-chips' });
+  const only = importantSwitch(state.important, (wanted) => {
+    state.important = wanted;
+    state.page = 1;
+    load();
+  });
+
+  /** The one thing to do about an empty log: widen whatever narrowed it. */
+  const wayOut = () => {
+    if (state.important) {
+      return textAction('Show every line', () => {
+        state.important = false;
+        state.page = 1;
+        only.setValue('all');
+        load();
+      });
+    }
+    if (state.kind || state.query) {
+      return textAction('Clear the filters', () => {
+        state.kind = '';
+        state.query = '';
+        state.page = 1;
+        const box = tools.querySelector('input');
+        if (box) box.value = '';
+        paintChips();
+        load();
+      });
+    }
+    return null;
+  };
 
   const paintChips = () => {
     chips.replaceChildren(
@@ -228,7 +258,7 @@ export async function logsSection(feature, { title = 'Logs', note = NOTE, perPag
     count.textContent = `${rows.length} of ${total} line${total === 1 ? '' : 's'}`;
     group.count(total);
     results.replaceChildren(
-      logsTable(rows, nothingSaid(feature, state)),
+      logsTable(rows, nothingSaid(feature, state), rows.length === 0 ? wayOut() : null),
       pager({
         page: state.page,
         hasMore: state.page * perPage < total,
@@ -242,26 +272,24 @@ export async function logsSection(feature, { title = 'Logs', note = NOTE, perPag
     syncSubnav();
   };
 
-  paintChips();
-  group.body.append(...[
-    el('div', { class: 'table-tools logs-tools' }, [
-      searchField({
-        label: `Search the ${featureLabel(feature)} log`,
-        placeholder: 'Search these lines…',
-        onQuery: (query) => {
-          if (query === state.query) return;
-          state.query = query;
-          state.page = 1;
-          load();
-        },
-      }),
-      importantSwitch(state.important, (only) => {
-        state.important = only;
+  const tools = el('div', { class: 'table-tools logs-tools' }, [
+    searchField({
+      label: `Search the ${featureLabel(feature)} log`,
+      placeholder: 'Search these lines…',
+      onQuery: (query) => {
+        if (query === state.query) return;
+        state.query = query;
         state.page = 1;
         load();
-      }),
-      count,
-    ]),
+      },
+    }),
+    only,
+    count,
+  ]);
+
+  paintChips();
+  group.body.append(...[
+    tools,
     kinds.length > 1 ? chips : null,
     results,
   ].filter(Boolean));

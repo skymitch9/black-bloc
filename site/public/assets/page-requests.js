@@ -1,5 +1,6 @@
 import { api, listOf, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
+import { openSection } from './layout.js';
 import { logsSection } from './logs.js';
 import {
   ago,
@@ -24,6 +25,7 @@ import {
   segment,
   sentenceFor,
   settingsPanel,
+  textAction,
 } from './ui.js';
 
 const PER_PAGE = 25;
@@ -489,6 +491,25 @@ function shutCard(row) {
  * "nothing here" then would be a lie about the list rather than about the page,
  * so the sentence names which one it is.
  */
+/** One thing to do about an empty list: go back, widen, or file something. */
+function emptyDo(which, payload, filterable = false) {
+  const total = payload.total ?? 0;
+  if (total > 0 && state[which] > 1) {
+    return textAction('Go back to the first page', () => {
+      state[which] = 1;
+      refresh();
+    });
+  }
+  if (filterable && (state.q || state.assignee)) {
+    return textAction('Clear the filters', () => {
+      state.q = '';
+      state.assignee = '';
+      refresh();
+    });
+  }
+  return textAction('File a request', () => openSection('file-a-request'));
+}
+
 function emptySaid(which, payload, base, filterable = false) {
   const total = payload.total ?? 0;
   if (total > 0 && state[which] > 1) {
@@ -517,7 +538,7 @@ function pendingSection(payload, rows, say) {
   const one = section('Pending', PENDING_NOTE, { count: payload.total ?? rows.length, open: true });
   one.body.append(
     rows.length === 0
-      ? sayNothing(emptySaid('pending', payload, NO_PENDING, true))
+      ? sayNothing(emptySaid('pending', payload, NO_PENDING, true), emptyDo('pending', payload, true))
       : el('div', { class: 'section-body' }, rows.map(pendingCard)),
     pagerFor('pending', payload, rows, PER_PAGE),
     say,
@@ -532,7 +553,7 @@ function boardSection(payload, rows, say) {
   });
   one.body.append(
     rows.length === 0
-      ? sayNothing(emptySaid('board', payload, NO_BOARD, true))
+      ? sayNothing(emptySaid('board', payload, NO_BOARD, true), emptyDo('board', payload, true))
       : el('div', { class: 'section-body' }, rows.map(boardCard)),
     pagerFor('board', payload, rows, PER_PAGE),
     say,
@@ -547,7 +568,7 @@ function doneSection(payload, rows) {
     'Requests that shipped',
     [
       rows.length === 0
-        ? sayNothing(emptySaid('done', payload, NO_DONE))
+        ? sayNothing(emptySaid('done', payload, NO_DONE), emptyDo('done', payload))
         : el('div', { class: 'section-body' }, rows.map(shutCard)),
       pagerFor('done', payload, rows, SHUT_PER_PAGE),
     ],
@@ -562,7 +583,7 @@ function declinedSection(payload, rows, gone) {
   one.body.append(
     foldout('Declined, with the reason', [
       rows.length === 0
-        ? sayNothing(emptySaid('declined', payload, NO_DECLINED))
+        ? sayNothing(emptySaid('declined', payload, NO_DECLINED), emptyDo('declined', payload))
         : el('div', { class: 'section-body' }, rows.map(shutCard)),
       pagerFor('declined', payload, rows, SHUT_PER_PAGE),
     ], { count: total }),
@@ -757,7 +778,7 @@ function mineSection(payload, rows, say) {
   });
   one.body.append(
     rows.length === 0
-      ? sayNothing(emptySaid('mine', payload, NO_MINE))
+      ? sayNothing(emptySaid('mine', payload, NO_MINE), emptyDo('mine', payload))
       : el('div', { class: 'section-body' }, rows.map((row) => mineCard(row, say))),
     pagerFor('mine', payload, rows, PER_PAGE),
     say,
@@ -800,6 +821,7 @@ async function loadStaff() {
 
   const settingsBox = section('Settings', SETTINGS_NOTE, { count: specs.length || null });
   settingsBox.body.append(await settingsPanel(specs, {
+    where: 'Settings',
     empty: 'The bot registers no request settings yet.',
   }));
 
