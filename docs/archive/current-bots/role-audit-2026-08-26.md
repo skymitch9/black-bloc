@@ -1,6 +1,6 @@
-# Role audit — every member and every role (read-only)
+﻿# Role audit — every member and every role (read-only)
 
-> **Audience:** the role-takeover work (F16 + the Member gate). **Status:** LOCAL ONLY,
+> **Audience:** the role-takeover work (F16 + the Member gate). **Status:** TRACKED (2026-08-31; private repo),
 > one-off capture. **Last verified: 2026-08-27 01:37 UTC** — fetched
 > via the HTTP members endpoint with the Members intent; nothing was changed.
 

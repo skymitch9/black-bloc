@@ -8,8 +8,7 @@
 > ⚠️ **NOTHING has been run against live Discord** — no gateway session, no
 > `/request`, no modal, no DM, no notice line.
 
-> **Audience:** the Phase 13 build agents and the reviewer. **Status:** TEMPORARILY TRACKED (owner order
-> 2026-08-27). Last verified: **2026-08-27** — owner answers taken 17:42–17:46; patterns from
+> **Audience:** the Phase 13 build agents and the reviewer. **Status:** TRACKED (2026-08-31; private repo). Last verified: **2026-08-27** — owner answers taken 17:42–17:46; patterns from
 > `code-notes.md` §§ events (review card), role menus 2 (requests + decisions), polls 10b (create form).
 > NOT verified: nothing has run. **Build after the Sunday 2026-08-30 16:00 reset.**
 

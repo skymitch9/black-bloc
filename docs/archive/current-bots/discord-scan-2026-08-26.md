@@ -1,7 +1,7 @@
-# Discord server scan — Black in a Flash! — 2026-08-26
+﻿# Discord server scan — Black in a Flash! — 2026-08-26
 
 > **Audience:** Black Bloc feature builders (F1/F2 live-now, F6 birthdays, F7 moderation,
-> F8 temp voice, F9 honeypot, F11 modmail). **Status:** LOCAL ONLY (gitignored).
+> F8 temp voice, F9 honeypot, F11 modmail). **Status:** TRACKED (2026-08-31; private repo).
 > One-off measurement dump, not a living doc. **Last verified: 2026-08-26.**
 >
 > **Method:** READ-ONLY Discord HTTP API via the Black Bloc bot token

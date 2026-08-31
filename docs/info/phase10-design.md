@@ -1,4 +1,4 @@
-# Phase 10 — Polls (F15): native Discord polls, wrapped
+﻿# Phase 10 — Polls (F15): native Discord polls, wrapped
 
 > 🟢 **10b IS BUILT (2026-08-27)** — branch `worktree-agent-a9f9dbcabf9636130`
 > off `main` @ `3eb7e4f` (10a's own tip), **five commits**: `16c1db4` the date
@@ -44,7 +44,7 @@
 > **10b then took all of it** — the panel surface, recurrence, the dashboard
 > tab, `POST /api/polls` and the `<t:…>` measurement. See the banner above.
 
-> **Audience:** the Phase 10 build agents and the reviewer. **Status:** LOCAL ONLY (gitignored 2026-08-26).
+> **Audience:** the Phase 10 build agents and the reviewer. **Status:** TRACKED (2026-08-31; private repo).
 > Last verified: **2026-08-27** — the 15 owner decisions were taken one at a time (`TODO.md`, the
 > polls decisions entry); every technical claim below is inherited from
 > [`polls-research.md`](polls-research.md) §4 (measured against discord.py 2.7.1) and §6 (the

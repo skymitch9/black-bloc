@@ -1,7 +1,7 @@
-# YAGPDB dashboard — what it is configured to do for *Black in a Flash!*
+﻿# YAGPDB dashboard — what it is configured to do for *Black in a Flash!*
 
 > **Audience:** F1/F2 (streaming) and the role-menus feature. **Status:**
-> LOCAL ONLY, one-off capture. **Last verified: 2026-08-26 ~17:50 Phoenix** —
+> TRACKED (2026-08-31; private repo), one-off capture. **Last verified: 2026-08-26 ~17:50 Phoenix** —
 > read from `yagpdb.xyz/manage/1073710702776299640/*` in the owner's logged-in
 > browser; the home page prints every plugin's on/off state, so unlike Carl
 > these are real values.

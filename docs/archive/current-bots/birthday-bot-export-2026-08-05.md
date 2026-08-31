@@ -1,6 +1,6 @@
-# Birthday Bot export — 2026-08-05 11:00 AM (server time)
+﻿# Birthday Bot export — 2026-08-05 11:00 AM (server time)
 
-> **Audience:** the F6 (birthdays) builder. **Status:** LOCAL ONLY (gitignored 2026-08-26) (private
+> **Audience:** the F6 (birthdays) builder. **Status:** TRACKED (2026-08-31; private repo) (private
 > repo), one-off data dump — this is SOURCE DATA for the import, not a living
 > doc. Pasted by the owner into the session 2026-08-26; not re-checked against
 > Birthday Bot since. **Last verified: 2026-08-26** (transcription only).

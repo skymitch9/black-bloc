@@ -1,8 +1,9 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-08-27 20:20** — "verified" below means a human did it in the real server; everything else is
-> test-suite evidence only. Tick a row by moving it to the verified table with the date.
+> **2026-08-31** — rows 18–20 and the phase-script appendix moved in whole from `TODO.md`; this file
+> is the ONE home for un-exercised items. "Verified" below means a human did it in the real server;
+> everything else is test-suite evidence only. Tick a row by moving it to the verified table with the date.
 
 All of this happens in **`#mute-me-bot-test-spam`** (test mode) or on **https://blackbloc.heygabi.ai**.
 
@@ -33,6 +34,84 @@ All of this happens in **`#mute-me-bot-test-spam`** (test mode) or on **https://
 | 15 | Requests — member | have a non-staff member sign in at https://blackbloc.heygabi.ai and file one; or `/request create` as a member | they see ONLY the Requests page (file + their own); the row lands in Pending; Approve / Decline from the page → DM; `/request withdraw <id>` while pending |
 | 16 | Via column | change one setting from Discord (`/settings set-value …`) and one from the website | Logs page → Settings audit shows **Discord** and **Website** in the Via column; `/settings logs` says the same |
 | 17 | Cyberpunk look | cog → Cyberpunk | the estate's cyan/yellow palette again (no magenta) — say if it still reads wrong |
+| 18 | `/help` (batch 2) | `/help`, then `/help filter:temp` | command list with `(staff)` marks on staff-only entries |
+| 19 | Round-1 fixes | `/rolemenu showall`; open the `/twitch link` picker; `/tempvoice setup` | showall lists every menu (ephemeral); the picker says **channel**, never *login*; setup says **repaired / took it over** (never a second lobby), lobby named "join to create a channel", Member + staff can connect |
+| 20 | Temp-voice memory (batch 4) | in your temp channel: `/voice permit @someone`, `/voice ban @someone-else`, `/voice region us-west` → leave (channel deletes) → re-join the lobby | the new channel has the same region and the same two people set; `/voice info` shows both halves; `/voice reset` clears it |
+
+## Detailed phase scripts (1–8a) — moved whole from `TODO.md` 2026-08-31
+
+The step-by-step click scripts for the seven core phases + 8a, as accumulated
+while each landed. Rows 1–20 above are the priority order; these are the long
+form for a full pass.
+
+- **Phase 1 (live):** in `#mute-me-bot-test-spam` run `/settings show` (expect the
+  three keys with the test channel as default) → `/rolemenu seed-defaults` →
+  `/rolemenu list` → `/rolemenu post pronouns` → pick roles on the panel (expect an
+  ephemeral "Added: …/Removed: …" and your roles change) → `/rolemenu show
+  interests`. Try `/rolemenu list` from a non-staff account: expect the staff
+  sentence. Check the action-log embeds landed in the same channel.
+- **Phase 2 (live, mode `shadow`):** `/golive status` (expect mode shadow, channel =
+  test channel, Twitch polling running with a last-ok time) → `/golive test` (ephemeral
+  preview, no ping) → `/twitch link <your channel>` (expect "linked" or "could not be
+  checked") → go live on Twitch once with Discord showing the Streaming status: expect
+  a `golive.would_announce` embed in the test channel within seconds (presence) — and
+  nothing in `#live-now`. Stop streaming: expect `golive.end` ~2 min later. Try
+  `/golive optout` then `/golive optin`. `/settings show` now lists the 8 golive keys.
+- **Phase 3 (live; honeypot `shadow`):** `/tempvoice setup` (expect a "join to
+  create a channel" voice channel created INSIDE the test channel's category while
+  TEST_MODE, and the reply saying so) → join it: expect `<you>'s bloc` to appear next
+  to it and you moved in; the control panel goes into `#mute-me-bot-test-spam` with a
+  first line naming the voice channel it controls, logged as
+  `tempvoice.panel_elsewhere`, and its buttons work from there; press Rename and
+  Lock → leave: channel deleted within ~60 s. `/tempvoice status`. Also try the new
+  group: `/voice info`, `/voice bitrate`, `/voice region`. Then `/honeypot setup`
+  (trap created in the test category; notice skipped in test mode) → post in it from
+  a throwaway account: message deleted, a `honeypot.would_ban` embed with a **Ban
+  now** button in the test channel; nobody banned. `/honeypot status` (expect the
+  resolved staff-role count > 0). Role rider: `/rolemenu seed-defaults` again
+  (expect "already there" for the five, created `runner-status`) → `/rolemenu assign
+  runner-status @someone` (staff picker) → `/rolemenu post event-alerts` shows the
+  real `:JoyGAMING:` emoji only if you delete and re-seed that menu (the seed never
+  rewrites existing options).
+- **Phase 4 (live):** `/timezone set America/Phoenix` (autocomplete; expect the current
+  local time back) → `/event create` (modal, 5 fields; start `YYYY-MM-DD HH:MM` about
+  3 minutes ahead, duration `30m`) → expect a `pending-<you>-<title>` channel INSIDE
+  the test category and the review card posted in the test channel with Approve/Deny
+  → click Approve: channel renamed `approved-…`, announcement in the test channel,
+  `event.would_create_scheduled` in the log (no real scheduled event in test mode),
+  DM to you → wait for start: "starting now" post; after the end: `done-…`. Create
+  a second one and Deny it with a reason: `denied-…` + DM. `/event list`, `/event
+  settings` (shows loop health), `/event cancel <id>`.
+- **Phase 5 (live, mode `shadow`):** `/birthday import` (staff; expect a report:
+  N imported / ambiguous / not found, searched 118 members) → `/birthday next` →
+  `/birthday list` → `/birthday set <today's month> <day>` for yourself → within 5 min
+  expect a `birthday.would_announce` line in the test channel (flip `/birthday mode on`
+  to see the actual embed, colour `#4eefff`) → `/birthday status` (loop health,
+  resolved staff) → `/birthday remove`. `/settings clear birthday_role_id` exists now.
+- **Phase 7 (live, `modmail_enabled` false):** `/modmail status` (resolved staff,
+  loop health) → `/modmail settings enabled:true` → from a second account DM the bot:
+  expect a ticket channel `<username>` INSIDE the test category, the header card +
+  your DM relayed into the test channel (guarded send), ✅ on the DM → in the test
+  channel `/reply ticket:<n> hello` (relayed to the DM, shows your name) → `/areply`
+  (shows "Staff", default colour) → `/note` or a message starting `=` (never
+  relayed) → `/close reason:done` → transcript `.txt` + summary in the test channel,
+  DM to the member. Try `/snippet add`, `/modmail block`. Then `/modmail settings
+  enabled:false` again so the incumbent keeps the real tickets.
+- **Phase 6 (live, automod `shadow`):** `/automod status` (mode shadow, resolved staff,
+  rules: mention_spam armed, others log-only) → from a second account post 5 @mentions
+  within 30 s in the test channel: expect ONE `automod.would_*` case card with an
+  **Apply now** button (nothing deleted/timed out), and a following "sorry" message
+  does NOT re-fire → `/warn @second reason` (allowed) → `/timeout @second 5m x`
+  (expect the test-mode refusal + `mod.would_timeout`) → `/cases @second`, `/case 1`
+  → `/settings show` (chunked, no 400). `/automod mode on` must REFUSE while the
+  staff channel is still the test channel.
+- **Phase 8a (live):** open https://blackbloc.heygabi.ai → expect the signed-out
+  state with a "Sign in with Discord" button (no bare errors) → sign in (Discord
+  authorise; you are staff via Manage Server) → expect the dashboard: health, uptime,
+  7 feature mode chips (all shadow/off/on as set), loop health per cog, the last 50
+  action-log rows (your sweep's `would_*` lines should be there), open counts. Theme
+  dropdown: 5 themes. Try a second, non-staff account: expect the amber "not staff"
+  sentence. Sign out → signed-out state again.
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that

@@ -1,7 +1,7 @@
-# Phase 8b design — the full dashboard: tabs, names, settings pages, moderation tools
+﻿# Phase 8b design — the full dashboard: tabs, names, settings pages, moderation tools
 
 > **Audience:** the two 8b build agents (API / pages) and the reviewer.
-> **Status:** LOCAL ONLY. **Last verified: 2026-08-26 ~23:00** — written
+> **Status:** TRACKED (2026-08-31; private repo). **Last verified: 2026-08-26 ~23:00** — written
 > against `main` @ `618dcd1` (8a live, sign-in verified by the owner).
 > Owner feedback that triggered it, verbatim: *"the who category i assume is
 > a discord user id number, that's not helpful we need to resolve that to

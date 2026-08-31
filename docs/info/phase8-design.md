@@ -1,7 +1,7 @@
-# Phase 8 design — the config website for mods and admins (F12)
+﻿# Phase 8 design — the config website for mods and admins (F12)
 
 > **Audience:** the owner (this is the acknowledgment and the plan) and the
-> Phase 8 build agents. **Status:** LOCAL ONLY. **Last verified:
+> Phase 8 build agents. **Status:** TRACKED (2026-08-31; private repo). **Last verified:
 > 2026-08-26** — the estate template inventory was read from
 > `catalog-platform/sites/heygabi-home/public/` and
 > `catalog-platform/docs/info/estate-themes.md` that day; the dashboard

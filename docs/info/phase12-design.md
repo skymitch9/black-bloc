@@ -1,4 +1,4 @@
-# Phase 12 — Logs: quiet Discord, loud website, `/… logs` everywhere
+﻿# Phase 12 — Logs: quiet Discord, loud website, `/… logs` everywhere
 
 > ✅ **12a BUILT (2026-08-27)** on branch `agent-ac3b8dd35b6cc0c5d` off `main` @ `0090fd8`, in seven
 > commits: `313fa48` (`logkinds.py` + the classification test), `e352f33` (the twelve
@@ -12,7 +12,7 @@
 > and the decisions.
 
 
-> **Audience:** the Phase 12 build agents and the reviewer. **Status:** LOCAL ONLY (gitignored 2026-08-26).
+> **Audience:** the Phase 12 build agents and the reviewer. **Status:** TRACKED (2026-08-31; private repo).
 > Last verified: **2026-08-27** — owner decisions taken 17:14–17:17; code facts from `black_bloc/actionlog.py`
 > and the per-phase code-notes kind lists (every phase reported its `log_action` kinds). NOT verified:
 > nothing has run. **Build after the Sunday 2026-08-30 16:00 weekly reset** unless the owner says otherwise.

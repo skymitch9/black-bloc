@@ -1,4 +1,4 @@
-# Phase 9 — Role menus 2: approval, time limits, reconciliation
+﻿# Phase 9 — Role menus 2: approval, time limits, reconciliation
 
 > **9a built 2026-08-27** in `341757a` (storage, schema 13), `940927c` (the cog:
 > approval flow, `/rolemenu edit`, `/role grant`, `/role extend`, the hourly
@@ -25,7 +25,7 @@
 > and the not-verified list are in `code-notes.md`
 > § "role menus 2 — dashboard (9b)".
 
-> **Audience:** the Phase 9 build agent and the reviewer. **Status:** LOCAL ONLY (gitignored 2026-08-26).
+> **Audience:** the Phase 9 build agent and the reviewer. **Status:** TRACKED (2026-08-31; private repo).
 > Last verified: **2026-08-27** — decisions taken with the owner one at a time (see `TODO.md`, the
 > role-menu decisions entry); code facts read from `cogs/community/role_menus.py` at `8b8f792`.
 > NOT verified: nothing here has run.

@@ -1,7 +1,7 @@
-# Carl-bot dashboard — what it is configured to do for *Black in a Flash!*
+﻿# Carl-bot dashboard — what it is configured to do for *Black in a Flash!*
 
 > **Audience:** F7 (moderation) and the reaction-roles feature. **Status:**
-> LOCAL ONLY, one-off capture. **Last verified: 2026-08-26 ~17:45 Phoenix** —
+> TRACKED (2026-08-31; private repo), one-off capture. **Last verified: 2026-08-26 ~17:45 Phoenix** —
 > read from `carl.gg/dashboard/1073710702776299640/*` as page text in the
 > owner's logged-in browser. ⚠️ Page *text* does not expose toggle/checkbox
 > STATES or selected dropdown values; where a value is shown below it was

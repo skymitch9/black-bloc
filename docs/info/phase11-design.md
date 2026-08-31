@@ -1,4 +1,4 @@
-# Phase 11 — Chat 2 (F10 step 2): editable lines, data intents, routing, manners
+﻿# Phase 11 — Chat 2 (F10 step 2): editable lines, data intents, routing, manners
 
 > ✅ **11a built in `e508232` + `6a91b87` + `f00e8de`** (branch `worktree-agent-aba2337a090a6d590`
 > off `main` @ `ebf99a2`, 2026-08-27). Sections 1 (storage, seed, classification
@@ -8,7 +8,7 @@
 > settings section — is still to build.** How it was built, and the three places
 > the build deviated from this document, are in `code-notes.md` § *chat 2 (11a)*.
 
-> **Audience:** the Phase 11 build agents and the reviewer. **Status:** LOCAL ONLY (gitignored 2026-08-26).
+> **Audience:** the Phase 11 build agents and the reviewer. **Status:** TRACKED (2026-08-31; private repo).
 > Last verified: **2026-08-27** — owner decision taken 14:12 ("yes lets do all of those"); code facts from
 > `black_bloc/chat.py` and `cogs/content/chat.py` at `1899f6e` (`code-notes.md` § "chat — @-mention
 > replies"). NOT verified: nothing has run. **Priority: after Phase 10 (polls).**
