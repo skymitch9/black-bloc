@@ -1,5 +1,6 @@
 import { api, listOf, names, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
+import { openSection as goToSection } from './layout.js';
 import { logsSection } from './logs.js';
 import {
   ago,
@@ -14,6 +15,7 @@ import {
   foldout,
   idsIn,
   keepSaying,
+  linkAction,
   modeSwitch,
   nameNode,
   notice,
@@ -27,6 +29,7 @@ import {
   segment,
   settingsPanel,
   table,
+  textAction,
   untilWhen,
 } from './ui.js';
 
@@ -64,6 +67,8 @@ const CREATE_NOTE = 'The same rules as /poll create in Discord — Black Bloc pi
   'from what you ask for and tells you which one it picked.';
 const SETTINGS_NOTE = 'Who may start a poll, how long one runs, where a poll made here goes, ' +
   'and when a finished one moves to the archive.';
+
+const makeOne = () => textAction('Create a poll', () => goToSection('create-a-poll'));
 
 const NO_OPEN = 'Nothing is taking votes right now. Start one below.';
 const NO_REVIEW = 'Nobody is waiting on a Lead. A poll only waits when poll_review_mode is on.';
@@ -199,7 +204,7 @@ function openSection(rows, say) {
       { label: 'Where', cell: (row) => nameNode(row.channel_id, row.channel_name) },
       { label: 'Closes', cell: closesCell },
       { label: '', cell: (row) => pollActions(row, say) },
-    ], rows, { empty: NO_OPEN }),
+    ], rows, { empty: NO_OPEN, emptyAction: makeOne() }),
     say,
   );
   return one.node;
@@ -263,7 +268,7 @@ function reviewSection(rows, say) {
   const one = section('Pending review', REVIEW_NOTE, { count: rows.length, open: rows.length > 0 });
   one.body.append(
     rows.length === 0
-      ? sayNothing(NO_REVIEW)
+      ? sayNothing(NO_REVIEW, linkAction('Where review is switched on', '/settings.html'))
       : el('div', { class: 'section-body' }, rows.map((row) => reviewCard(row, say))),
     say,
   );
@@ -362,7 +367,7 @@ function closedSection(payload, rows) {
   const one = section('Closed', CLOSED_NOTE, { count: payload.total ?? rows.length });
   one.body.append(
     rows.length === 0
-      ? sayNothing(NO_CLOSED)
+      ? sayNothing(NO_CLOSED, makeOne())
       : el('div', { class: 'section-body' }, rows.map(closedCard)),
     pager({
       page: state.page,
@@ -382,7 +387,7 @@ function archiveSection(rows) {
   one.body.append(foldout(
     'Archived polls',
     [rows.length === 0
-      ? sayNothing(NO_ARCHIVE)
+      ? sayNothing(NO_ARCHIVE, makeOne())
       : el('div', { class: 'section-body' }, rows.map(closedCard))],
     { count: rows.length },
   ));

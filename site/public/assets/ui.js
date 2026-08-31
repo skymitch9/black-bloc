@@ -125,8 +125,30 @@ export function duration(seconds) {
   return `${s}s`;
 }
 
-export function sayNothing(text) {
-  return el('p', { class: 'say-nothing', text });
+/**
+ * An empty state is one sentence and, wherever there is one, one thing to do
+ * about it — never a blank box. `action` is a node, so a caller can hand it a
+ * button that opens the section that fills this list or a link to the page
+ * that does.
+ */
+export function sayNothing(text, action = null) {
+  return el('p', { class: 'say-nothing' }, [
+    el('span', { class: 'say-nothing-text', text }),
+    action || null,
+  ]);
+}
+
+export function textAction(label, onClick) {
+  return el('button', {
+    class: 'say-nothing-do',
+    type: 'button',
+    text: label,
+    on: { click: onClick },
+  });
+}
+
+export function linkAction(label, href) {
+  return el('a', { class: 'say-nothing-do', href, text: label });
 }
 
 export function slugOf(text) {
@@ -169,6 +191,14 @@ export function searchField(options = {}) {
   return el('div', { class: 'searchfield' }, [icon('search', 14, 'search-mark'), input]);
 }
 
+/** Empties the box a searchField wraps and re-runs its filter. */
+export function clearSearch(wrapper) {
+  const input = wrapper.querySelector('input');
+  if (!input) return;
+  input.value = '';
+  input.dispatchEvent(new Event('search'));
+}
+
 export function filterRows(root, query) {
   let shown = 0;
   let total = 0;
@@ -197,7 +227,7 @@ export function searchOver(root, {
   empty = 'Nothing here matches what you typed.',
 } = {}) {
   const said = el('span', { class: 'table-count' });
-  const none = sayNothing(empty);
+  const none = sayNothing(empty, textAction('Clear the search', () => clearSearch(input)));
   none.hidden = true;
   root.append(none);
   const paint = (query) => {
@@ -450,10 +480,11 @@ const LONG_FROM = 12;
 
 export function table(columns, rows, {
   empty = 'Nothing here yet.',
+  emptyAction = null,
   search = 'auto',
   searchLabel = 'Search this table',
 } = {}) {
-  if (!rows || rows.length === 0) return sayNothing(empty);
+  if (!rows || rows.length === 0) return sayNothing(empty, emptyAction);
   const head = el('tr', {}, columns.map((column) =>
     el('th', { scope: 'col', text: column.label })));
   const body = rows.map((row, index) => el('tr', {}, columns.map((column) => {
@@ -478,7 +509,10 @@ export function table(columns, rows, {
   if (!wanted) return scroll;
 
   const shown = el('span', { class: 'table-count', text: `${rows.length} row(s)` });
-  const none = sayNothing('Nothing in this table matches what you typed.');
+  const none = sayNothing(
+    'Nothing in this table matches what you typed.',
+    textAction('Clear the search', () => clearSearch(input)),
+  );
   none.hidden = true;
   const input = searchField({
     label: searchLabel,

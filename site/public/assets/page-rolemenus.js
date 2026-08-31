@@ -1,5 +1,6 @@
 import { api, listOf, names, refRoles, saveSetting, send, settings, settingsNamespace } from './api.js';
 import { start, tabHref } from './app.js';
+import { openSection } from './layout.js';
 import { logsSection } from './logs.js';
 import {
   ago,
@@ -29,6 +30,7 @@ import {
   section,
   segment,
   settingsPanel,
+  textAction,
   table,
   untilWhen,
 } from './ui.js';
@@ -383,7 +385,10 @@ function requestsSection(rows, menus, say) {
 
   one.body.append(
     pending.length === 0
-      ? sayNothing(state.member ? 'They are not waiting on anything.' : NO_REQUESTS)
+      ? sayNothing(
+        state.member ? 'They are not waiting on anything.' : NO_REQUESTS,
+        textAction('Open the menus', () => openSection('menus')),
+      )
       : el('div', { class: 'section-body' }, pending.map((row) =>
         pendingCard(row, byName.get(row.menu_name) || null, say))),
     foldout('Decided', [decidedTable(decided)], { count: decided.length }),
@@ -501,7 +506,9 @@ async function grantForm(say) {
 /** B7: the /rolemenu assign picker, as a form — one menu, one member, its own roles. */
 function assignForm(menus, say) {
   const usable = menus.filter((menu) => (menu.options || []).length > 0);
-  if (usable.length === 0) return sayNothing(NO_MENU_TO_ASSIGN);
+  if (usable.length === 0) {
+    return sayNothing(NO_MENU_TO_ASSIGN, textAction('Open the menus', () => openSection('menus')));
+  }
   const picker = memberPicker({ label: 'Member' });
   const which = el('select', { class: 'input' }, usable.map((menu) =>
     el('option', { value: menu.name, text: `${menu.name} — ${menu.mode}` })));

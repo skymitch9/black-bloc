@@ -200,6 +200,15 @@ export function mountColumns() {
   dash.replaceChildren(...blocks);
 }
 
+/** Opens a section and takes the page to it — what an empty state's one action does. */
+export function openSection(slug) {
+  const node = document.querySelector(`section.sect[data-sect="${slug}"]`);
+  if (!node) return;
+  const details = node.querySelector('details.sect-card');
+  if (details) details.open = true;
+  node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 let watching = null;
 
 /**

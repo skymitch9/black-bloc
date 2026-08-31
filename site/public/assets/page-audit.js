@@ -17,6 +17,7 @@ import {
   section,
   sentenceFor,
   table,
+  textAction,
   valueNode,
   when,
 } from './ui.js';
@@ -165,7 +166,7 @@ function logsSurface() {
     const notes = notesOf(payload);
     results.replaceChildren(
       ...(notes.length ? [el('p', { class: 'section-note', text: notes.join(' ') })] : []),
-      logsTable(rows, nothingSaid(state)),
+      logsTable(rows, nothingSaid(state), rows.length === 0 ? wayOut() : null),
       pager({
         page: state.page,
         hasMore: state.page * PER_PAGE < total,
@@ -223,6 +224,25 @@ function logsSurface() {
     },
   });
 
+  const only = importantSwitch(state.important, (wanted) => {
+    state.important = wanted;
+    again();
+  });
+
+  /** The one thing to do about an empty log: widen whatever narrowed it. */
+  const wayOut = () => {
+    if (state.important) {
+      return textAction('Show every line', () => {
+        state.important = false;
+        only.setValue('all');
+        again();
+      });
+    }
+    const filtered = state.feature || state.kind || state.query || state.since
+      || state.until || state.actor || state.target;
+    return filtered ? textAction('Clear the filters', () => clear.click()) : null;
+  };
+
   const clear = button('Clear filters', () => {
     Object.assign(state, {
       feature: '', kind: '', query: '', since: '', until: '', actor: null, target: null,
@@ -240,10 +260,7 @@ function logsSurface() {
   group.body.append(
     el('div', { class: 'table-tools logs-tools' }, [
       search,
-      importantSwitch(state.important, (only) => {
-        state.important = only;
-        again();
-      }),
+      only,
       count,
       el('span', { class: 'topbar-gap' }),
       csv,

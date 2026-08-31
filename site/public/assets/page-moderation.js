@@ -1,5 +1,6 @@
 import { api, listOf, names, send, settings } from './api.js';
 import { start, tabHref } from './app.js';
+import { openSection } from './layout.js';
 import { logsSection } from './logs.js';
 import { memberTally, shellStatus } from './shell.js';
 import {
@@ -19,10 +20,12 @@ import {
   notice,
   pager,
   run,
+  sayNothing,
   searchField,
   section,
   settingsPanel,
   shortWhen,
+  textAction,
   when,
 } from './ui.js';
 
@@ -223,10 +226,15 @@ function casesCard(payload, rows) {
   return el('div', { class: 'card' }, [
     tools,
     rows.length === 0
-      ? el('div', {
-        class: 'grid-foot',
-        text: state.userFilter ? 'That member has no cases.' : 'No cases have been written yet.',
-      })
+      ? sayNothing(
+        state.userFilter ? 'That member has no cases.' : 'No cases have been written yet.',
+        state.userFilter
+          ? textAction('Show every member', () => {
+            state.userFilter = null;
+            refresh();
+          })
+          : textAction('Take an action', () => openSection('take-an-action')),
+      )
       : el('div', { class: 'table-scroll' }, [body]),
     pager({
       page: state.page,
