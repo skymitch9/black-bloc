@@ -1,13 +1,20 @@
 # Black Bloc — docs map
 
-> **Audience:** Claude sessions first, the owner second. **Status:** LOCAL ONLY
-> — `docs/` is gitignored (owner, 2026-08-26: peers get curated docs, not this
-> working tree) and was purged from GitHub history the same day. It exists on
-> this machine (OneDrive-synced) and nowhere else; see `access/RECOVERY.md`.
-> Secret NAMES only, never values, regardless.
-> Last verified: **2026-08-26** — the day the tree was created; every file in
-> it was written against the code as it stood that afternoon. ⚠️ Nothing here
-> has been checked against a *deployed* bot yet, because none exists.
+> **Audience:** Claude sessions first, the owner second. **Status:** TRACKED
+> — `docs/` is in git and pushed (owner, 2026-08-31: "actually lets keep it
+> tracked", commit `1eb8870`, which also dropped `docs/` from `.gitignore`).
+> This retires the 2026-08-26 local-only rule, under which the tree was
+> gitignored and purged from GitHub history. ⚠️ A clone now carries this tree,
+> so: **secret NAMES only, never values.** See `access/RECOVERY.md`.
+> Last verified: **2026-08-31** — a docs-wide staleness audit measured against
+> the repo: `git log` / `deploys.log` (37 deploys, last `8036918` at 2026-08-27
+> 20:15), `pytest --co` (**2158 tests**), `node site/mock/check.mjs` (**17
+> pages / 89 routes**), `ruff check black_bloc tests site` (clean),
+> `SCHEMA_VERSION` (**16**), `bot.py:COGS` (**14 cogs**).
+> ⚠️ **NOT checked:** anything against the live bot or the live dashboard in a
+> browser; `info/code-notes.md`'s `path:line` keys (spot-checked and found
+> STALE — see the red block at the top of that file); the `archive/` dumps'
+> contents; and the per-item wording of `info/review-checklist.md`.
 >
 > 📐 **The rules for this tree — filing, formatting, when to move things — live
 > in [`DOCS_STANDARD.md`](DOCS_STANDARD.md) (§9 is the only project-specific
@@ -31,6 +38,8 @@ HTTP-interactions model — a different animal; see `info/hosting.md` for why).
 | [`access/`](access/README.md) | How do I run / deploy / reach / recover it? | Operating it |
 | [`info/`](info/README.md) | How does it work, and why built this way? | Changing it |
 | [`archive/`](archive/README.md) | What did this look like before? | Rarely |
+| [`DOCS_STANDARD.md`](DOCS_STANDARD.md) | What shape must this tree keep? | Before adding a doc |
+| [`deploys.log`](deploys.log) | What is live, and when did it ship? | Before any deploy or rollback |
 
 ## Ten-second orientation
 

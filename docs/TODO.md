@@ -1,7 +1,15 @@
 # Black Bloc — TODO (active work only)
 
-> **Audience:** Claude sessions and the owner. **Status:** LOCAL ONLY (gitignored 2026-08-26).
-> Last verified: **2026-08-27**.
+> **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
+> 2026-08-31 — was local-only until then; secret NAMES only).
+> Last verified: **2026-08-31** — the docs audit re-measured every *deployment
+> status* line against `deploys.log` and `git merge-base`: the batch-1/2/3/4,
+> 8b and integration entries that said "NOT pushed / NOT deployed / Still to
+> deploy" are all ancestors of the live commit `8036918` (2026-08-27 20:15) and
+> now say so. The headline counts in the F-table status line were re-measured
+> too. ⚠️ **NOT checked:** whether any of these items should now MOVE to
+> `DONE.md` — that is the owner's/parent session's call, and the audit
+> deliberately moved nothing.
 >
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
@@ -20,7 +28,7 @@ most moderation settings from other bots, exceptions list to be fined tuned
 https://tempvoice.xyz — Steal this / https://www.honeypotbot.com — Steal this /
 Personality for the bot can be @d"*
 
-Status: **BUILDING IN PARALLEL (owner, 2026-08-26 20:38: "do what you can to start working in parallel").** **EVERYTHING BUILT SO FAR IS LIVE — `256f43d`, 2026-08-27 07:46 Phoenix, 1195 tests, 30 slash commands, schema 11:** seven core phases (shadow/test mode), the full dashboard (53-route write API, 13 tabs, UX pass, security-reviewed), `/voice` + panel + complete per-user memory, `/help`, bot About Me + "Cookout attendees: N" status, parity/Carl removed, Health tab lists all 7 loops. Owner's test sweep in progress; feedback → batches. `deploys.log` has every deploy. Phases 5, 6, 7 building in git worktrees under `.claude/worktrees/` (gitignored) on their own branches, schema versions pre-assigned 6/7/8, shared files touched append-only. **Merge order: Phase 4 fixes → deploy → merge 5 → review/fix → merge 6 → review/fix → merge 7 → review/fix; re-key `code-notes.md` after each merge; deploy from `main` only.** If a session inherits this mid-flight: `git worktree list` shows the branches; never deploy with a dirty main tree. Build order
+Status: **BUILDING IN PARALLEL (owner, 2026-08-26 20:38: "do what you can to start working in parallel").** **EVERYTHING BUILT SO FAR IS LIVE — `8036918`, 2026-08-27 20:15 Phoenix, 2158 tests, 35 slash commands, schema 16, 17 dashboard pages / 89 routes** (all six figures re-measured 2026-08-31; this line previously read `256f43d` / 07:46 / 1195 tests / 30 commands / schema 11 / 13 tabs)**:** the seven core phases (shadow/test mode), the full dashboard, `/voice` + panel + per-user memory, `/help`, bot About Me + "Cookout attendees: N" status, parity/Carl removed, Health tab lists all 7 loops, plus Phase 9 role approvals, **Phase 10 polls, Phase 11 chat 2, Phase 12 logs and Phase 13 requests**. Owner's test sweep in progress; feedback → batches. `deploys.log` has every deploy (**37** to date, counted 2026-08-31). Phases 5, 6, 7 building in git worktrees under `.claude/worktrees/` (gitignored) on their own branches, schema versions pre-assigned 6/7/8, shared files touched append-only. **Merge order: Phase 4 fixes → deploy → merge 5 → review/fix → merge 6 → review/fix → merge 7 → review/fix; re-key `code-notes.md` after each merge; deploy from `main` only.** If a session inherits this mid-flight: `git worktree list` shows the branches; never deploy with a dirty main tree. Build order
 approved (Q13): see `info/feature-list.md`. Design docs: `info/phase1-design.md`
 (settings, action log, role menus), `info/phase2-design.md` (go-live feed);
 later phases get theirs before dispatch.
@@ -68,10 +76,14 @@ per feature, so the old bot keeps running until the new one is proven.
 
 ## 🧪 Owner test sweep — round 1 findings (2026-08-26 ~22:55)
 
-Four findings, all four **fixed on `main`, committed, NOT pushed and NOT
-deployed**: `8fe0677` (temp voice) and `9d948ca` (role menus + `/twitch link`).
-817 tests pass, ruff clean. What is still open is deployment and live
-re-verification.
+Four findings, all four **fixed on `main`, committed, and since DEPLOYED**:
+`8fe0677` (temp voice) and `9d948ca` (role menus + `/twitch link`) — both are
+ancestors of the live commit `8036918` (verified 2026-08-31 with
+`git merge-base --is-ancestor`), so all four fixes have been live since
+2026-08-27 at the latest. 817 tests passed at the time (the suite is now
+**2158**). What is still open is **live re-verification by a person**, not
+deployment. *(Status line corrected by the docs audit 2026-08-31; the "Still to
+do" column below still reads as if undeployed.)*
 
 | # | Owner's words | Fixed by | Still to do |
 |---|---|---|---|
@@ -179,9 +191,11 @@ truncation bug fix: there was no truncation to fix.
   Cloudflare dashboard read live, the rest marketing-only; three directions
   — A "Discord-native", B "Ops console", C "Cookout" — with dark+light
   palettes, self-hostable type stacks and ASCII wireframes; recommendation =
-  A's shell + B's tables, mock A and C). ⏸ **Four owner questions at the end
-  of that doc are unanswered and block step (3):** dark-only vs both · keep
-  the 5-theme dropdown? · nav icons or text-only · which direction;
+  A's shell + B's tables, mock A and C). **The four owner questions DECIDED
+  2026-08-31 ~10:30 (asked one at a time): direction = "I want a A/C hybrid" ·
+  "Both, dark default" · "Keep all 5 themes" · nav "Icons + text".** Step (3)
+  unblocked: Fable writes the restyle brief (`info/site-restyle-design.md`),
+  build queued AFTER the B4–B8 builder lands (both touch `site/`);
   (2) a design-canvas mock (artboards: Overview, a feature page, Settings) in
   the candidate directions for the owner to react to — **LANDED 2026-08-27 ~09:35:** canvas https://claude.ai/code/artifact/ad76df70-49f4-4fcd-a66a-07c8969d0ddd (A + C × Overview/Moderation/Settings, 1440×900, dark only; working `.dc.html` files live in the session scratchpad `mock/`, not the repo); (3) the winner becomes
   the site restyle brief (estate theme snapshot may be replaced — owner's
@@ -217,8 +231,11 @@ truncation bug fix: there was no truncation to fix.
 - **8b MERGED and reconciled into `main` 2026-08-27** — `178fe69` (API) then
   `6bf4669` (pages), then one reconcile commit. **1105 tests, ruff clean**, and
   `node site/mock/check.mjs` reports 13 pages / 49 routes with every key the
-  pages read present. NOT pushed, NOT deployed — that is the next step, and
-  batch 3 (below) merges first or after, but the two touch `tempvoice.py`.
+  pages read present. ✅ **DEPLOYED since** — `178fe69` is an ancestor of the live
+  commit `8036918` (2026-08-27 20:15); 8b first shipped in `5da62b3` at
+  2026-08-27 06:14. *(Was "NOT pushed, NOT deployed"; corrected by the docs
+  audit 2026-08-31. The mock now reports **17 pages / 89 routes**, not 13/49.)*
+  Batch 3 (below) also merged.
   ⚠️ **NOT verified: any page against the real API in a browser** — only
   against the mock, whose shapes are now checked against the same table
   (`site/mock/contract.json`) the routers are. Nothing has run against live
@@ -234,7 +251,7 @@ truncation bug fix: there was no truncation to fix.
     shoved to a different tab but we need all the moderation tool menus"):
     design + API/page contract in `info/phase8b-design.md`; Builder A (API) and
     Builder B (pages, with a Node mock server) in parallel worktrees.
-- **Test-sweep batch 4 LANDED on `main` 2026-08-27, NOT pushed and NOT deployed**
+- **Test-sweep batch 4 LANDED on `main` 2026-08-27 and is DEPLOYED** (`47634b8` is an ancestor of the live `8036918`; verified 2026-08-31 — was "NOT pushed and NOT deployed")
   — three commits, all three owner asks done, **1173 tests, ruff clean,
   `node site/mock/check.mjs` clean**:
   - `47634b8` — **the incumbent bot and the parity tool are gone** (owner: "Carl
@@ -265,16 +282,19 @@ truncation bug fix: there was no truncation to fix.
     both halves; `/voice reset` clears it. And the dashboard tab icon.
 - **Batch 3 MERGED into `main` `6b75c11` 2026-08-27** (see `DONE.md`) — the panel
   now posts into the test channel and `/voice` exists. **1134 tests, ruff clean,
-  `node site/mock/check.mjs` clean. NOT pushed, NOT deployed, NOT run against a
-  live bot.** Still to do: review the merged `tempvoice.py`, deploy, then the
+  `node site/mock/check.mjs` clean.** ✅ **DEPLOYED** — `6b75c11` is an ancestor of
+  the live `8036918` (verified 2026-08-31; was "NOT pushed, NOT deployed"). Still
+  to do: review the merged `tempvoice.py`, then the
   owner tests the panel in `#mute-me-bot-test-spam` (press Rename and Lock from
   there — the click has to find its way back to the voice channel) and
   `/voice info` / `/voice bitrate` / `/voice region`. Owner also had the stale
   `🍯-do-not-post-here` trap deleted (2026-08-26 23:33) — `/honeypot setup`
   recreates it.
-- **Test-sweep batch 2 FIXED on `main`, NOT pushed and NOT deployed** (see
+- **Test-sweep batch 2 FIXED on `main` and DEPLOYED** (was "NOT pushed and NOT
+  deployed"; corrected by the docs audit 2026-08-31 — it is in the live
+  `8036918`, and the owner confirmed `/help` works 2026-08-27 ~06:00) (see
   `DONE.md`, 2026-08-27): `/help` and temp-voice lobby adoption. Still to do:
-  deploy, sync commands, then (a) run `/help` and `/help filter:temp` and check
+  (a) run `/help` and `/help filter:temp` and check
   the `(staff)` marks, (b) run `/tempvoice status` — it should name any lobby it
   is not keeping track of — and `/tempvoice setup`, which should say it **took
   it over** rather than making a second channel.
@@ -369,7 +389,7 @@ truncation bug fix: there was no truncation to fix.
 
 - **Owner 2026-08-27 ~17:27, verbatim: "im getting on a plane tomorrow morning (friday and im not back until sunday night after reset) so we have wiffle"** → the 90% weekly stop is lifted for THIS window only (owner away Fri 08-28 → Sun 08-30 night; weekly resets Sun 16:00): spend the remainder on 12b now (parallel with 12a); at the Sunday reset, a one-shot wake-up resumes with the audit leftovers B4–B8 (temp-voice per-room actions, role-menu un-post/seed/staff-assign, event detail/edit) unless the owner has said otherwise. The 90 rule returns after the reset. Status: **12b dispatched 17:28 in parallel; Sunday 16:05 wake-up scheduled.**
 
-- **Owner 2026-08-27 ~17:33, verbatim: "yes start keeping the docs up to date every task and creating our normal set of access docs. temporarily committ the docs folder so i can use it while away, and any scripts i'll need"** → `docs/` force-added and pushed as a TEMPORARY exception to the local-only rule (secret scan clean: names only); `access/runbook.md` + `access/sweeps.md` added; `scripts/docs/move_done.py` committed. ⚠️ **When the owner is back: purge `docs/` from history again (filter-repo) or decide to keep it tracked — owner decision, one question.** Status: **committed + pushed 17:35; purge decision pending the owner's return.**
+- **Owner 2026-08-27 ~17:33, verbatim: "yes start keeping the docs up to date every task and creating our normal set of access docs. temporarily committ the docs folder so i can use it while away, and any scripts i'll need"** → `docs/` force-added and pushed as a TEMPORARY exception to the local-only rule (secret scan clean: names only); `access/runbook.md` + `access/sweeps.md` added; `scripts/doctools/move_done.py` committed (the folder was `scripts/docs/` until `7b7840b`, 2026-08-31 — it tripped the session-start docs-shape hook). Status: **committed + pushed 17:35. ✅ RESOLVED 2026-08-31: the owner chose to KEEP `docs/` tracked permanently** ("actually lets keep it tracked", `1eb8870`, which also dropped `docs/` from `.gitignore`); no history purge. The temporary exception is now the rule — see `DOCS_STANDARD.md` §9.
 
 - **Owner 2026-08-27 ~17:37, verbatim: "committ anything i'll need. also i probably need a copy of the .env on my laptop… can we store the .env in a firebase or something safely and then write it to a local file with a script?"** → decided: no Firebase (a service-account key is a second secret to protect); `scripts/env-lock.sh` / `scripts/env-unlock.sh` (OpenSSL AES-256-CBC + PBKDF2, passphrase-only) committed; `.env.enc` allowed by `.gitignore`; the owner runs `lock` in their own terminal and commits `.env.enc` — Claude never handles the values. Laptop checklist in `access/runbook.md`. Status: **scripts + docs committed 17:40; the owner runs `sh scripts/env-lock.sh` and commits `.env.enc` before leaving.**
 
@@ -377,9 +397,9 @@ truncation bug fix: there was no truncation to fix.
 
 - **Owner 2026-08-27 ~18:17, verbatim: "lets mute all the would calls too, keep that in discord logs"** → read as: every `would_*` (shadow) kind is ROUTINE — never posted to the Discord log channel under the default `important` level, always kept in the DB / website Logs / `/… logs`. Matches the Phase 12 design; pinned to 12a explicitly. (`all` per feature still shows them in Discord for a test sweep.) Status: **confirmed to 12a 18:18.**
 
-- **Defect found by 13b (18:25), Sunday: the pager scroll-to-top does not work.** `ui.js:pager` — `#dash` `replaceChildren` resets the scroller to 0 before the helper runs, so its "already at the top" early return always fires; the page lands at the top of the PAGE, not the list (11b's "25923 → 276.67" does not reproduce). Fix: scroll AFTER the new rows render (requestAnimationFrame / after `onPage` resolves) to the list block's top minus the top bar, unconditionally. Affects Polls, Chat, Members, Requests. Also from 13b: outcome sentences render `**bold**` literally (one shared fix in `ui.js:run`); `foldout()` had no CSS since 10b (13b styled it); Requests page owes `await logsSection('request')` once 12b is merged. Owner 18:31: "fixs the defects now" → Status: **LANDED in `a4e7fcd`** on the integration branch (off `main` @ `16c5781`), after `641e53b` merged 13b. All three: `ui.js:pager` now scrolls unconditionally AFTER the rows render — two rAFs racing a 60 ms timer, because rAF does not fire in a backgrounded tab at all (measured: Requests 9340 → 930 with the list top at 8.18px, against 938.18px unfixed; Members and Polls likewise); `**bold**` becomes `<strong>` through `ui.js:boldParts` in `notice()`'s `say`, text nodes only, never innerHTML; `await logsSection('request')` is at the foot of the Requests staff view. `foldout()`'s CSS came in with 13b's own commit. **Still to deploy.**
+- **Defect found by 13b (18:25), Sunday: the pager scroll-to-top does not work.** `ui.js:pager` — `#dash` `replaceChildren` resets the scroller to 0 before the helper runs, so its "already at the top" early return always fires; the page lands at the top of the PAGE, not the list (11b's "25923 → 276.67" does not reproduce). Fix: scroll AFTER the new rows render (requestAnimationFrame / after `onPage` resolves) to the list block's top minus the top bar, unconditionally. Affects Polls, Chat, Members, Requests. Also from 13b: outcome sentences render `**bold**` literally (one shared fix in `ui.js:run`); `foldout()` had no CSS since 10b (13b styled it); Requests page owes `await logsSection('request')` once 12b is merged. Owner 18:31: "fixs the defects now" → Status: **LANDED in `a4e7fcd`** on the integration branch (off `main` @ `16c5781`), after `641e53b` merged 13b. All three: `ui.js:pager` now scrolls unconditionally AFTER the rows render — two rAFs racing a 60 ms timer, because rAF does not fire in a backgrounded tab at all (measured: Requests 9340 → 930 with the list top at 8.18px, against 938.18px unfixed; Members and Polls likewise); `**bold**` becomes `<strong>` through `ui.js:boldParts` in `notice()`'s `say`, text nodes only, never innerHTML; `await logsSection('request')` is at the foot of the Requests staff view. `foldout()`'s CSS came in with 13b's own commit. **DEPLOYED** — shipped in `8036918`, live 2026-08-27 20:15 (`deploys.log`); status line corrected by the docs audit 2026-08-31. Not yet exercised by a person: see `access/sweeps.md` rows 14–17.
 
 - **Owner 2026-08-27 ~18:28, verbatim: "no you're correct, just mak sure all decisions we make here can be configured in dashboard and with bot"** → (1) confirms the `would_*` muting reading; (2) standing rule: every decision is a registry key or has both a slash path and a dashboard control — added to `CLAUDE.md`, review-checklist item 33, and memory. Status: **rule in force; audit of existing decisions = every `*_mode`, `*_log_level`, poll/request/chat keys are registry keys; per-item fields have both paths (9a `/rolemenu edit` + 9b editor; 10 `/poll create` + create form; 13 `/request set` + board).**
 
 - **Owner 2026-08-27 ~18:52, verbatim: "yes lets be done when this lands, we'll save the last 9% for bugs"** → after the integration build lands: merge, test, deploy, docs, STOP. The remaining weekly budget (~9%) is reserved for bug fixes only until the Sunday 16:00 reset; the Sunday wake-up (B4–B8 on fresh budget) stays scheduled. Status: **in force.**
-- **Owner 2026-08-27 ~18:51, verbatim: "also in the logs we should add how someone has set a setting, if they set it in discord or on the website"** → the settings audit + Logs rows show **Via: Discord / website** — derived today from the kind prefix (`web.settings.set` vs `settings.set`), and made explicit as `details.via` on every write path (`/settings set-value` → discord, `settings_api` → website); `/… logs` lines carry it too. Status: **LANDED** on the integration branch. `logkinds.via_of` is the one home (recorded word wins, `web.` head decides the rest); `actionlog.log_action` stamps `details['via']` on EVERY row so no writer can forget, and the two settings doors pass it explicitly as well. `GET /api/actions` rows, the CSV and the Settings audit rows all carry `via`; the Logs table and the Settings audit table have a **Via** column; `/… logs` lines end `· via Discord` outside the 100-character cap. ⚠️ Residual, accepted: a website path that logs a BARE feature kind (`apply_decision`) reads Discord, with its `web.` twin beside it reading Website — settings have no such pair. **Still to deploy.**
+- **Owner 2026-08-27 ~18:51, verbatim: "also in the logs we should add how someone has set a setting, if they set it in discord or on the website"** → the settings audit + Logs rows show **Via: Discord / website** — derived today from the kind prefix (`web.settings.set` vs `settings.set`), and made explicit as `details.via` on every write path (`/settings set-value` → discord, `settings_api` → website); `/… logs` lines carry it too. Status: **LANDED** on the integration branch. `logkinds.via_of` is the one home (recorded word wins, `web.` head decides the rest); `actionlog.log_action` stamps `details['via']` on EVERY row so no writer can forget, and the two settings doors pass it explicitly as well. `GET /api/actions` rows, the CSV and the Settings audit rows all carry `via`; the Logs table and the Settings audit table have a **Via** column; `/… logs` lines end `· via Discord` outside the 100-character cap. ⚠️ Residual, accepted: a website path that logs a BARE feature kind (`apply_decision`) reads Discord, with its `web.` twin beside it reading Website — settings have no such pair. **DEPLOYED** — shipped in `8036918`, live 2026-08-27 20:15 (`deploys.log`); status line corrected by the docs audit 2026-08-31. Not yet exercised by a person: see `access/sweeps.md` rows 14–17.

@@ -1,8 +1,13 @@
 # The config website — runbook
 
 > **Audience:** whoever deploys or fixes the site, and the reviewer doing the
-> first live sign-in. **Status:** LOCAL ONLY (gitignored). **Last verified:
-> 2026-08-27** — the routes table and the mock section below were added at the
+> first live sign-in. **Status:** TRACKED (owner, 2026-08-31 — was local-only
+> until then; secret NAMES only). **Last verified:
+> 2026-08-31** — the PAGE COUNT and the mock's page/route figures were
+> re-measured today (17 pages / 89 routes; `ls site/public/*.html` = 17) and the
+> route table is now marked incomplete. ⚠️ **NOT re-verified today:** the deploy
+> steps, the OAuth redirect URI, the CSP/cookie claims, or anything in a browser.
+> Previously **2026-08-27** — the routes table and the mock section below were added at the
 > **Phase 8b merge** and read off the merged tree (`black_bloc/api/tools/*`,
 > `site/mock/`); the deploy steps above them are unchanged and still
 > **2026-08-26**, rewritten for **Option A** (one hostname) after the Phase 8a
@@ -182,10 +187,13 @@ In order, because each step's failure looks different:
 
 ## The pages
 
-Thirteen HTML files in `site/public/`, served by the same app at `/`:
+**Seventeen** HTML files in `site/public/`, served by the same app at `/`
+(counted 2026-08-31 — this said "Thirteen" until then, which predates Polls,
+Chat, Requests and Members):
 `index.html` (Overview), `moderation.html`, `automod.html`, `modmail.html`,
 `events.html`, `golive.html`, `rolemenus.html`, `birthdays.html`,
-`tempvoice.html`, `honeypot.html`, `settings.html`, `audit.html`,
+`tempvoice.html`, `honeypot.html`, `polls.html`, `chat.html`, `requests.html`,
+`members.html`, `settings.html`, `audit.html`,
 `health.html`. `site/README.md` says what each one does.
 
 ⚠️ **Every page links `/favicon.ico`** (added 2026-08-27 — the log showed a
@@ -197,6 +205,13 @@ later without the `<link rel="icon">` brings the 404 back;
 serves the file.
 
 ## The routes, after Phase 8b (2026-08-27)
+
+⚠️ **This table is the Phase 8b snapshot and is INCOMPLETE as of 2026-08-31.**
+`node site/mock/check.mjs` reports **89 routes** today; Phases 9–13 added the
+polls, chat, requests, members and timed-role routers
+(`black_bloc/api/tools/{polls,chat,requests,members,roles}.py`) and they are not
+listed below. **`site/mock/contract.json` is the one home for the route
+shapes** — read it rather than trusting this table's completeness.
 
 Every one is under `/api`, JSON, staff-gated by the same
 `staff_dependency` 8a introduced (401 `not_signed_in`, 403 `not_staff`,
@@ -262,7 +277,7 @@ MOCK_TEST_MODE=0 MOCK_PORT=8788 node site/mock/server.mjs &
 MOCK_PORT=8788 node site/mock/check.mjs
 ```
 
-It fetches all thirteen pages and every route and asserts the keys in
+It fetches all **17** pages and every route (**89** as of 2026-08-31) and asserts the keys in
 `site/mock/contract.json`. ⚠️ **`site/mock/contract.json` is the one home for
 those shapes**, and `tests/api/test_contract.py` asserts the **real** routers
 against the same file — so the mock cannot teach a shape the bot does not

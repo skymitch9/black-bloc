@@ -1,6 +1,6 @@
 # Reference bots — feature inventory for cloning
 
-> Audience: Black Bloc design docs. Status: LOCAL ONLY. Last verified: 2026-08-26 — fetched from the cited URLs that day.
+> Audience: Black Bloc design docs. Status: TRACKED (owner, 2026-08-31 — was local-only until then). Last verified: 2026-08-26 — fetched from the cited URLs that day; only the STATUS line was re-checked 2026-08-31, no URL was re-fetched.
 
 Six products Black Bloc is meant to replace or copy, inventoried feature by
 feature. Every section cites the URL it came from. Anything marked

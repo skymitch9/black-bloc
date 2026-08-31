@@ -1,28 +1,33 @@
 # info/ — how Black Bloc works, and why it is built this way
 
-> **Audience:** Claude sessions and the owner. **Status:** LOCAL ONLY (gitignored 2026-08-26).
-> Last verified: **2026-08-27** (added `phase8b-design.md` and
-> `dashboard-inspiration.md` rows; the other rows were not re-checked).
+> **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
+> 2026-08-31 — was local-only until then).
+> Last verified: **2026-08-31** — every file in `info/` was listed and matched
+> against the rows below; the missing `mock-direction-a/` row was added and the
+> `review-checklist.md` item count corrected (20 → **33**, counted today).
+> ⚠️ **NOT checked:** the contents of the phase design docs themselves.
 
 | File | Answers |
 |---|---|
 | [`phase1-design.md`](phase1-design.md) · [`phase2-design.md`](phase2-design.md) · [`phase3-design.md`](phase3-design.md) · [`phase4-design.md`](phase4-design.md) · [`phase5-design.md`](phase5-design.md) · [`phase6-design.md`](phase6-design.md) · [`phase7-design.md`](phase7-design.md) · [`phase8-design.md`](phase8-design.md) | Per-phase build specs (the builder's brief source): 1 settings/log/role menus · 2 go-live · 3 temp voice + honeypot · 4 events · 5 birthdays · 6 moderation (shadow) · 7 modmail · **8 the config website** |
-| [`phase13-design.md`](phase13-design.md) | **Requests (F18)** (2026-08-27): `/request` (what / why / due date, requester automatic), staff auto-approved, the pending-features list on a Requests page; two slices — after the Sunday reset |
-| [`phase12-design.md`](phase12-design.md) | **Logs** (2026-08-27): Discord gets only important lines (acted on a member / failed; approvals always notify), per-feature `_log_level`, Logs sections on every page + a global Logs page, `/… logs` on every group; two slices — after the Sunday reset |
-| [`phase11-design.md`](phase11-design.md) | **Chat 2 (F10 step 2)** (2026-08-27): editable intents/lines page, data intents (live / next / birthdays / count / roles / timezone), modmail routing, manners settings; two slices — after polls |
-| [`phase10-design.md`](phase10-design.md) | **Polls (F15)** (2026-08-27): the 15 owner decisions, deltas from the research design, the test-mode rule, two build slices — build after Phase 9 |
+| [`site-restyle-design.md`](site-restyle-design.md) | **The A/C-hybrid restyle brief** (2026-08-31): the owner's four decisions, what comes from A vs C, the new default "Black Bloc" theme (dark+light), nav icons, two build slices R1/R2 — build after B4–B8 |
+| [`phase13-design.md`](phase13-design.md) | **Requests (F18)** (2026-08-27): `/request` (what / why / due date, requester automatic), staff auto-approved, the pending-features list on a Requests page. ✅ **SHIPPED** `8036918`, live 2026-08-27 20:15 |
+| [`phase12-design.md`](phase12-design.md) | **Logs** (2026-08-27): Discord gets only important lines (acted on a member / failed; approvals always notify), per-feature `_log_level`, Logs sections on every page + a global Logs page, `/… logs` on every group. ✅ **SHIPPED** `417ef23`, live 2026-08-27 18:38 |
+| [`phase11-design.md`](phase11-design.md) | **Chat 2 (F10 step 2)** (2026-08-27): editable intents/lines page, data intents (live / next / birthdays / count / roles / timezone), modmail routing, manners settings. ✅ **SHIPPED** `5f5741a`, live 2026-08-27 17:05 |
+| [`phase10-design.md`](phase10-design.md) | **Polls (F15)** (2026-08-27): the 15 owner decisions, deltas from the research design, the test-mode rule, two build slices. ✅ **SHIPPED** `3eb7e4f` + `ebf99a2`, live 2026-08-27 14:46 / 15:44 |
 | [`phase9-design.md`](phase9-design.md) | **Role menus 2** (2026-08-27): approval-gated menus (staff Approve/Deny, settable channel), time-limited grants with an expiry loop, reconciliation of hand-made role changes — the four owner decisions and the storage/flows/surfaces |
 | [`phase8b-design.md`](phase8b-design.md) | The full dashboard: the 13 tabs, the API/page contract both 8b builders code against |
-| [`polls-research.md`](polls-research.md) | **F17 polls**: Polly is Slack-only; EasyPoll/Simple Poll vs Discord native polls feature matrix, typed-answer matrix, discord.py 2.7.1 limits measured, the recommended native-plus-wrapper design, 15 owner decisions |
+| [`polls-research.md`](polls-research.md) | **F15 polls** (this row said "F17" until 2026-08-31 — wrong; F17 is the role-process takeover, and `feature-list.md:53` / `phase10-design.md` both call polls F15): Polly is Slack-only; EasyPoll/Simple Poll vs Discord native polls feature matrix, typed-answer matrix, discord.py 2.7.1 limits measured, the recommended native-plus-wrapper design, 15 owner decisions |
 | [`site-feature-audit.md`](site-feature-audit.md) | **Every dashboard section classed control / data / display** (2026-08-27 read-only audit): the ranked A/B/C change list that feeds the "no displays, only controls" build, incl. the Automod `[object Object]` bug |
 | [`dashboard-inspiration.md`](dashboard-inspiration.md) | **What the site should LOOK like.** Survey of 11 bot/admin dashboards (Carl, YAGPDB, MEE6, Dyno, Wick, ProBot, Sapphire, Discord, Linear, Vercel, Cloudflare), what is wrong with ours today, and three candidate directions with palettes, type stacks and wireframes |
-| [`review-checklist.md`](review-checklist.md) | ⚠️ **Read before building or reviewing any phase** — 20 items, each traced to a confirmed finding or incident in this repo |
-| [`feature-list.md`](feature-list.md) | **The full feature list** (F1–F16): incumbents → replacements, decisions, measured constraints, proposed build order |
+| [`review-checklist.md`](review-checklist.md) | ⚠️ **Read before building or reviewing any phase** — **33 items** (counted 2026-08-31; it began at 20), each traced to a confirmed finding or incident in this repo |
+| [`feature-list.md`](feature-list.md) | **The full feature list** — rows F1–F16 and F18 (measured 2026-08-31; this row said "F1–F16", which predates F18 requests). ⚠️ **F17 (role-process takeover) has NO row here** — it lives only in `../TODO.md`; add it when someone touches this file |
 | [`architecture.md`](architecture.md) | Package layout, the cog convention, config, storage, the optional API |
 | [`code-notes.md`](code-notes.md) | ⚠️ **The comments the source no longer carries.** Every explanation stripped out of `black_bloc/**` and `tests/**`, keyed by `path:line` (owner rule, 2026-08-26) |
 | [`hosting.md`](hosting.md) | Why not Cloudflare Workers; why Fly.io; what the alternatives cost |
 | [`gotchas.md`](gotchas.md) | Traps that will cost real time: intents, command sync, OneDrive + SQLite, Ctrl+C with the API on |
 | [`reference-bots.md`](reference-bots.md) | Feature-by-feature inventory of the bots we are cloning/replacing: TempVoice, Honeypot, YAGPDB, Carl-bot, Birthday Bot, Modmail — plus Discord platform limits (modals, scheduled events, `<t:…>`, intents) |
+| [`mock-direction-a/`](mock-direction-a/) | The **Direction A** design-canvas artboards (`Main`, `AModeration`, `ASettings` as `.dc.html`) the dashboard restyle was drawn from. Not Markdown — open them in a browser or the canvas editor |
 
 Design docs for individual features go here too, one file each
 (`<feature>-design.md`), written BEFORE the cog when the feature has a

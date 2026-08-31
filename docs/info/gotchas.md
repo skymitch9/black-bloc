@@ -1,7 +1,9 @@
 # Gotchas — traps that cost real time
 
-> **Audience:** Claude sessions and the owner. **Status:** LOCAL ONLY (gitignored 2026-08-26).
-> Last verified: **2026-08-26**. Entries marked *(anticipated)* come from
+> **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
+> 2026-08-31 — was local-only until then; secret NAMES only).
+> Last verified: **2026-08-26** (STATUS line only re-checked 2026-08-31; no
+> entry below was re-tested). Entries marked *(anticipated)* come from
 > library knowledge, not from an incident here; promote them to a dated
 > incident the first time one bites.
 

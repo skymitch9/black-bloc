@@ -1,4 +1,4 @@
-"""Move TODO items to DONE whole. Usage: move_done.py <heading> <note-file> <prefix> [<prefix> ...]"""
+"""Move TODO items to DONE whole: move_done.py <heading> <note-file> <prefix> [<prefix> ...]"""
 import sys
 from pathlib import Path
 
@@ -12,9 +12,10 @@ note = Path(note_file).read_text(encoding="utf-8").strip()
 lines = todo.read_text(encoding="utf-8").splitlines(keepends=True)
 moved = []
 for prefix in prefixes:
-    idx = next(i for i, l in enumerate(lines) if l.startswith(prefix))
+    idx = next(i for i, ln in enumerate(lines) if ln.startswith(prefix))
     moved.append(lines.pop(idx))
-    if idx > 0 and lines[idx - 1].strip() == "" and idx < len(lines) and lines[idx].strip() == "":
+    blank_before = idx > 0 and lines[idx - 1].strip() == ""
+    if blank_before and idx < len(lines) and lines[idx].strip() == "":
         lines.pop(idx)
 todo.write_text("".join(lines), encoding="utf-8")
 

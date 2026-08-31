@@ -1,13 +1,21 @@
 # Black Bloc — the full feature list
 
 > **Audience:** the owner (to approve the shape and order) and every future
-> session (as the map of what gets built). **Status:** LOCAL ONLY.
+> session (as the map of what gets built). **Status:** TRACKED (owner,
+> 2026-08-31 — was local-only until then; secret NAMES only).
 > **Last verified: 2026-08-26 evening** — every "measured" fact below comes
 > from that day's captures: `archive/current-bots/discord-scan-2026-08-26.md`
 > (128/128 channels, 12,488 messages), `carl-bot-dashboard-2026-08-26.md`,
 > `yagpdb-dashboard-2026-08-26.md`, `birthday-bot-export-2026-08-05.md`, and
 > `info/reference-bots.md` (vendor docs). Owner decisions are dated in
-> `TODO.md`. ⚠️ Nothing here is built; statuses are design states.
+> `TODO.md`.
+> ⚠️ **The "nothing here is built" line that stood here until 2026-08-31 was
+> false and is removed.** Measured 2026-08-31: nearly all of F1–F18 is built and
+> LIVE — `docs/deploys.log` records 37 deploys, the last `8036918` at
+> 2026-08-27 20:15 (35 slash commands, schema 16, 17 dashboard pages / 89
+> routes, 2158 tests). The per-row **Status** column below is the authority on
+> what shipped; the *incumbent* measurements in this file are still the
+> 2026-08-26 captures and were NOT re-taken.
 
 ## What the server runs today, and what replaces it
 

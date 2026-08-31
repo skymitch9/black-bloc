@@ -1,6 +1,7 @@
 # Owner guide — before the trip, on the road, when you're back
 
-> **Audience:** you (the owner), on your phone or the laptop. **Status:** TEMPORARILY TRACKED (2026-08-27).
+> **Audience:** you (the owner), on your phone or the laptop. **Status:** TRACKED (owner, 2026-08-31 —
+> permanently, not temporarily; secret NAMES only).
 > Last verified: **2026-08-27 20:22** — commands were run from the main machine this week; the laptop steps
 > are the same tools on a fresh clone and have NOT been rehearsed on your laptop.
 > Details live in [`runbook.md`](runbook.md) (operations) and [`sweeps.md`](sweeps.md) (what to test); this

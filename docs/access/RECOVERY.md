@@ -1,9 +1,13 @@
 # Disaster recovery — rebuild Black Bloc from nothing
 
 > **Audience:** whoever has to rebuild this with no memory of it — a weaker
-> executor must be able to follow it cold. **Status:** LOCAL ONLY (gitignored 2026-08-26), secret NAMES
-> only. Last verified: **2026-08-26 (evening)** — inventory checked against
-> the repo, GitHub and the Fly app after the first deploy.
+> executor must be able to follow it cold. **Status:** TRACKED (owner,
+> 2026-08-31 — was local-only until then), secret NAMES
+> only. Last verified: **2026-08-31** — only the `docs/` gap row and the
+> tracking status were re-measured today (`git ls-files docs` = 48 files,
+> `.gitignore` no longer lists `docs/`). The Fly/GitHub/secret inventory below
+> is still the **2026-08-26 (evening)** reading and was NOT re-checked against
+> the live Fly app or the Developer Portal today.
 > ⚠️ **Nothing in this file has been DRILLED.** Every restore claim below is
 > inference until a dated drill line says otherwise.
 
@@ -11,8 +15,8 @@
 
 | Gap | Consequence today | Closes when |
 |---|---|---|
-| **`docs/` is local-only** | The whole docs tree (TODO/DONE/runbooks/this file) exists on ONE machine, under OneDrive sync. OneDrive is sync, not backup — a bad edit syncs too. | A periodic archive of `docs/` to somewhere else (the estate's R2 docs backup, `catalog-platform/scripts/backup-docs.mjs`, is the precedent) |
-| **No DB backup** | Acceptable now: the DB holds nothing. | The first table with real data → add a scheduled `fly ssh sftp get` or a dump job |
+| ~~**`docs/` is local-only**~~ **CLOSED 2026-08-31** | Was: the whole docs tree existed on ONE machine under OneDrive sync. Now `docs/` is **tracked in git and pushed** to `github.com/skymitch9/black-bloc` (owner, 2026-08-31, commit `1eb8870`) — measured: `git ls-files docs` returns 48 files. A clone restores the docs tree with the code. | Closed. ⚠️ Consequence: the repo is the backup, so **never write a secret VALUE under `docs/`** — names and custody only. |
+| **No DB backup** | ⚠️ **No longer "the DB holds nothing"** — schema is at **16** and the live volume carries real rows (birthdays imported, settings, action log, polls, requests). A lost volume loses all of it. | Was "the first table with real data" — that threshold has PASSED. Add a scheduled `fly ssh sftp get` of `/data/black_bloc.sqlite3` or a dump job. **This is now an open gap, not a deferred one.** |
 
 ## Inventory
 

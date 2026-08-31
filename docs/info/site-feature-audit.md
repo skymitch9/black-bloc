@@ -1,7 +1,8 @@
 # Dashboard feature audit — displays vs controls (2026-08-27)
 
-> **Audience:** Claude sessions and the owner. **Status:** LOCAL ONLY (gitignored 2026-08-26).
-> Last verified: **2026-08-27** — a READ-ONLY code audit of `site/public` at `666dd8e` by an
+> **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
+> 2026-08-31 — was local-only until then).
+> Last verified: **2026-08-27** (STATUS line only re-checked 2026-08-31) — a READ-ONLY code audit of `site/public` at `666dd8e` by an
 > Opus agent; nothing was executed or rendered. The `[object Object]` finding is a
 > high-confidence code read, not a measurement — one browser load confirms it. The
 > concurrent themes+Members build may already have moved some `file:line` anchors.

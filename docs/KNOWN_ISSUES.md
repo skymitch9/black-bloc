@@ -1,7 +1,11 @@
 # Black Bloc — Known Issues, Waivers & Exceptions
 
-> **Audience:** Claude sessions and the owner. **Status:** LOCAL ONLY (gitignored 2026-08-26).
-> Last verified: **2026-08-27** — KI-9 added (anonymous poll votes are a per-poll hash, accepted); before that KI-8 added when the role-menu panels started
+> **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
+> 2026-08-31 — was local-only until then).
+> Last verified: **2026-08-31 for the STATUS line only.** ⚠️ **No entry below
+> was re-tested today**, and two carry thresholds that may already have been
+> crossed — see the note under KI-6. The dated history that follows is the
+> 2026-08-27 reading: KI-9 added (anonymous poll votes are a per-poll hash, accepted); before that KI-8 added when the role-menu panels started
 > following the mode (measured in tests only; no panel has ever been deleted
 > against live Discord). Before that, KI-2 gained a second-sync note when command
 > visibility landed (measured only in tests; no sync has been sent to Discord).
@@ -90,6 +94,16 @@ theft needs the browser itself.
 **What would change it:** a second staff member (i.e. any user other than
 the owner) signing in — then add a `sessions` table with a per-session id
 in the signed payload and a revocation on logout. Number: **>1 site user**.
+
+⚠️ **THRESHOLD LIKELY CROSSED — owner decision needed (flagged by the docs
+audit, 2026-08-31, not acted on).** Phase 13 (live `8036918`, 2026-08-27 20:15)
+opened the dashboard to **any signed-in guild member** in the member-only
+Requests view, so ">1 site user" is no longer a hypothetical: the design intends
+many. The same reasoning touches **KI-9** (anonymous poll votes: "Number: >1
+person with `/data` access, or 1 sensitive poll"). Neither number was measured
+today — nobody checked how many distinct accounts have actually signed in. Both
+entries stay `ACCEPTED` until the owner rules; this note exists so the next
+session does not read the old threshold as still un-met.
 
 ## KI-8 — A role-menu panel in a channel Black Bloc cannot reach is retried on every flip — `ACCEPTED`
 

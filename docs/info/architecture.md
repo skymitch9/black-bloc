@@ -1,7 +1,32 @@
 # Architecture
 
-> **Audience:** Claude sessions and the owner. **Status:** LOCAL ONLY (gitignored 2026-08-26).
-> Last verified: **2026-08-27** — matches the code after **presence**
+> **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
+> 2026-08-31 — was local-only until then).
+> Last verified: **2026-08-31** — the **Shape** tree and the schema number below
+> were re-measured against the working tree today: `SCHEMA_VERSION` is **16**
+> (`black_bloc/storage/db.py:11`), `bot.py:COGS` holds **14** cogs, `site/public`
+> holds **17** pages, `node site/mock/check.mjs` reports **17 pages / 89 routes**,
+> `pytest --co` collects **2158** tests and `ruff check black_bloc tests site` is
+> clean. Three cogs (polls, requests, chat) and eleven modules the tree did not
+> list have been added, and the **Carl parity** entries removed — parity was
+> deleted in `47634b8` and `grep -ri carl black_bloc site` is empty.
+>
+> ⚠️ **NOT verified today:** the *prose* below the tree (the rules, the library
+> table, the API section) was read but not re-traced to the code; and nothing
+> here was checked against the running bot or a browser.
+>
+> 🔴 **The "NOT verified" paragraph that used to end this header was itself
+> stale and is replaced.** It claimed the site had never been opened in a
+> browser and that `blackbloc.heygabi.ai` had "no DNS record and no certificate
+> yet". Both are false: the owner signed in and saw the dashboard on 2026-08-26
+> ~23:00, the site has been served from the Fly app on that hostname since, and
+> `docs/deploys.log` records **37 deploys**, the last `8036918` at **2026-08-27
+> 20:15**. What IS still unexercised by a person is tracked, per feature, in
+> [`../access/sweeps.md`](../access/sweeps.md) — that file is the one home for
+> "shipped but never clicked", and this header should not grow a second copy.
+>
+> *(Historical build-order narrative, left as written and NOT re-checked:)*
+> matches the code after **presence**
 > (`presence.py`, `cogs/presence.py`, the `bot_bio` and `status_prefix` registry keys;
 > **1194 tests pass, ruff clean**), on top of the **Phase 8b merge
 > and reconciliation** (the full dashboard: `api/{writes,names,ref,settings_api}.py`
@@ -85,10 +110,21 @@ black_bloc/
 ├── events.py         ← pure event logic: slugs, durations, the status machine, the one card
 ├── birthdays.py      ← pure birthday logic: local midnight, ages, the colour, the import matcher
 ├── modmail.py        ← pure modmail logic: the topic, the three embeds, the transcript, the byte-safe cut
-├── automod.py        ← pure rule engine: the rule book, the windows, the verdict, the parity report
+├── automod.py        ← pure rule engine: the rule book, the windows, the verdict
 ├── modcases.py       ← the shared mod-case store: the row, the one card, the DM policy, the modlog post
 ├── presence.py       ← the bot's own face: the About Me (application description) and the
 │                       "Cookout attendees: N" custom status. Pure formatters + two appliers
+├── polls.py          ← F15: pure poll logic — kinds, date slots, the close/reminder clock, results
+├── requests.py       ← F18: pure request logic — the status machine, auto-approval, the card
+├── chat.py           ← F10: @-mention intent classification and the reply, one seam: reply_for()
+├── chat_data.py      ← the data intents behind chat (live / next / birthdays / count / roles / tz)
+├── rolegrants.py     ← F16/Phase 9: time-limited role grants and the expiry/reconcile logic
+├── rolemenu_panels.py ← posting and un-posting role-menu panels when rolemenu_mode flips
+├── command_visibility.py ← hides a feature's slash commands while the feature is off (re-syncs)
+├── logkinds.py       ← ⚠️ THE ONE HOME for log-kind classification: important vs routine, and
+│                       `via_of()` (Discord vs website) which stamps every action-log row
+├── emoji.py          ← skin-tone application for the bot's own emoji (emoji_skin_tone)
+├── prefix.py         ← no_prefix_commands: the bot answers no text prefix (slash only)
 ├── data/             ← shipped package data (`pyproject.toml` → package-data)
 │   └── birthday_import_2026-08-05.json  ← the 39-row Birthday Bot export, seed for /birthday import
 ├── logging_setup.py
@@ -97,18 +133,21 @@ black_bloc/
 │   ├── presence.py   ← the About Me on `on_ready`, the member-count status (10-min loop +
 │   │                   a 5-second debounce on join/leave), /presence apply
 │   ├── community/    ← one cog per community feature
-│   │   ├── role_menus.py  ← F16: /rolemenu + persistent select panels + staff assign
+│   │   ├── role_menus.py  ← F16: /rolemenu + persistent select panels + staff assign + approvals
 │   │   ├── tempvoice.py   ← F8: join-to-create voice channels, the owner control panel, /voice
 │   │   ├── events.py      ← F4/F5: /event + /timezone, review channels, Approve/Deny, go-live
-│   │   └── birthdays.py   ← F6: the five-minute sweep, /birthday, the day role, the import
+│   │   ├── birthdays.py   ← F6: the five-minute sweep, /birthday, the day role, the daily import
+│   │   ├── polls.py       ← F15: /poll on native Discord polls + Black Bloc's own panel, /poll recur
+│   │   └── requests.py    ← F18: /request, the member intake, the pending-features board
 │   ├── moderation/   ← one cog per moderation feature
 │   │   ├── honeypot.py    ← F9: the trap channel, delete + ban, shadow first
 │   │   ├── modmail.py     ← F11: inbound DM → ticket channel or private thread, /reply, /close, transcript
-│   │   ├── automod.py     ← F7: the message listener, the Apply-now button, /automod + /automod parity
+│   │   ├── automod.py     ← F7: the message listener, the Apply-now button, /automod
 │   │   └── modcmds.py     ← F7: /warn /timeout /untimeout /kick /ban /unban /purge /case /cases
 │   └── content/      ← one cog per content feature
-│       └── golive.py ← F1/F2: presence listener, Twitch poller, /golive + /twitch
-├── storage/db.py     ← aiosqlite connection + schema bootstrap (SCHEMA_VERSION 10)
+│       ├── golive.py ← F1/F2: presence listener, Twitch poller, /golive + /twitch
+│       └── chat.py   ← F10: the @-mention listener, cooldown, modmail routing, /chat
+├── storage/db.py     ← aiosqlite connection + schema bootstrap (SCHEMA_VERSION 16)
 └── api/             ← the dashboard API, one router per surface (API_ENABLED)
     ├── server.py    ← create_app: /health (public), security headers, routers, then site/ at /
     ├── auth.py      ← Discord OAuth2 + the signed session cookie. The site's ONLY gate
@@ -118,16 +157,22 @@ black_bloc/
     ├── names.py     ← the resolver every table uses. CACHE ONLY — no fetch_* call anywhere in it
     ├── ref.py       ← /api/ref/{channels,roles,members,names} — the pickers' data
     ├── settings_api.py ← /api/settings + /api/settings/audit. Owns NAMESPACE_OVERRIDE
+    ├── assets.py    ← the cache-busting asset stamp (?v=…) and the no-store headers
     └── tools/       ← ONE ROUTER PER FEATURE TAB; each calls the cog's own plain helpers,
         │              never a second copy of the rule
-        ├── mod.py        ← cases, the action bar, the rule book, the Carl parity report
+        ├── mod.py        ← cases, the action bar, the rule book
         ├── modmail.py    ← tickets, replies, closes, snippets, blocks
         ├── events.py     ← the approval queue: approve / deny / cancel
         ├── golive.py     ← links, opt-outs, recent sessions
         ├── rolemenus.py  ← menus, options, post
         ├── birthdays.py  ← the list, set / remove, and the Birthday Bot import
         ├── honeypot.py   ← hits, Ban-now, setup
-        └── tempvoice.py  ← the live channel list, setup / repair
+        ├── tempvoice.py  ← the live channel list, setup / repair
+        ├── polls.py      ← the poll list, create, end / cancel, results
+        ├── requests.py   ← the requests board + the member-only routes (the one non-staff gate)
+        ├── chat.py       ← the editable intents and lines, the manners settings
+        ├── members.py    ← the Members tab: the roster, roles, grant chips
+        └── roles.py      ← timed role grants: list, extend, end now
 site/                 ← THE DASHBOARD (8a status page, 8b tabs). Static, no build step, COMMITTED
 ├── README.md         ← the developer-facing half (committed; `docs/access/site.md` is the runbook)
 ├── mock/             ← the contract's EXECUTABLE form. Node's own `http`, no dependency
@@ -139,9 +184,10 @@ site/                 ← THE DASHBOARD (8a status page, 8b tabs). Static, no bu
 └── public/
     ├── index.html    ← Overview; <meta name="api-origin"> is EMPTY = "the origin I came from"
     ├── {moderation,automod,modmail,events,golive,rolemenus,birthdays,tempvoice,honeypot,
-    │    settings,audit,health}.html ← the other twelve tabs. Each is an empty shell:
+    │    polls,chat,requests,members,settings,audit,health}.html ← the other sixteen tabs
+    │                   (17 pages total, measured 2026-08-31). Each is an empty shell:
     │                   #tabnav + #dash, filled by its page module. The nav is built from ONE
-    │                   array in app.js, never thirteen hand-written copies
+    │                   array in app.js, never seventeen hand-written copies
     └── assets/
         ├── api.js    ← the ONLY fetch. Outage vs refusal, the name cache, the ref caches
         ├── app.js    ← the shell: the tab list, the five permission states, start()/reload()
@@ -208,7 +254,7 @@ The source carries near-zero comments (rule 0 below); the explanations live in
    invite URL, error mapping, guards — is its own module with helpers. A
    feature that "just needs a line in app.py" is in the wrong place.
 2. **One cog per feature.** A cog is a class in its own module under
-   `cogs/moderation/` or `cogs/content/` with `async def setup(bot)`, registered
+   `cogs/community/`, `cogs/moderation/` or `cogs/content/` with `async def setup(bot)`, registered
    by adding its dotted path to `bot.py:COGS`. Cogs talk to the DB through
    `bot.db`, to config through `bot.settings`. Cogs do not import each other;
    shared logic goes in a plain module the cogs both import.

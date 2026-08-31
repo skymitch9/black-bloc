@@ -1,7 +1,12 @@
 # Dashboard inspiration — what the good bot panels do, and three ways we could look
 
-> **Audience:** the owner + the mock builder. **Status:** LOCAL ONLY. **Last
-> verified: 2026-08-27** — every observation cites its page.
+> **Audience:** the owner + the mock builder. **Status:** TRACKED (owner,
+> 2026-08-31 — was local-only until then). **Last
+> verified: 2026-08-27** (STATUS line only re-checked 2026-08-31) — every
+> observation cites its page.
+> ℹ️ The restyle this doc fed has SHIPPED: **Direction A** was chosen and
+> deployed 2026-08-27 (`666dd8e`), with the theme dropdown kept. The four open
+> owner questions in §7 are therefore answered by that build, not still open.
 
 Owner's ask, verbatim (2026-08-27 ~08:40): *"It's still not quite the look and
 feel I want. Can you research some other bot sites for inspiration and then make

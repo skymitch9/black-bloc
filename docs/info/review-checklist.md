@@ -1,10 +1,16 @@
 # Review checklist — traced to real findings in this repo
 
 > **Audience:** every build agent (read BEFORE building) and every review
-> agent (score against it). **Status:** LOCAL ONLY. **Last verified:
-> 2026-08-26** — every item below is a CONFIRMED finding from the Phase 2
+> agent (score against it). **Status:** TRACKED (owner, 2026-08-31 — was
+> local-only until then). **Last verified:
+> 2026-08-31** — the file now holds **33 numbered items** (counted today), not
+> the 20 it started with: items 1–20 are CONFIRMED findings from the Phase 2
 > adversarial review (`phase2-design.md` build, commit `ece5e3b`) or an
-> incident earlier the same day. Generic advice is deliberately absent.
+> incident earlier the same day; 21–33 were added by later phases, the newest
+> being **33** (every decision configurable from both the dashboard and the bot
+> — owner, 2026-08-27, commit `ad1ab5a`). Generic advice is deliberately absent.
+> ⚠️ Only the COUNT and item 33's provenance were re-verified today; the wording
+> of items 1–32 was not re-traced to its incident.
 
 ## Test policy and rollout
 

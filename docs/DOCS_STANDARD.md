@@ -1,8 +1,11 @@
 # The Docs Standard — one shape for every project
 
 > **Audience:** every future AI session (Claude, Kiro, anything else) and the
-> owner. **Status:** LOCAL ONLY (gitignored 2026-08-26).
-> Last verified: **2026-08-21**.
+> owner. **Status:** TRACKED (owner, 2026-08-31 — was local-only until then;
+> secret NAMES only).
+> Last verified: **2026-08-31** — only the STATUS line and §9's tracking bullet
+> were re-checked (against `git ls-files docs` and `.gitignore`). §1–§8 are the
+> portable standard and were NOT re-read against the estate copy.
 >
 > ⚠️ **§1–§8 ARE GENERIC AND PORTABLE. Copy this file into any project
 > unchanged.** Nothing in them names a company, a stack, a service or a repo.
@@ -303,9 +306,12 @@ In a multi-repo checkout this means **every** repo's `docs/`.
 
 *Everything above is portable. Everything below describes Black Bloc only.*
 
-- `docs/` is ❌ **LOCAL ONLY** — gitignored and purged from GitHub history on
-  2026-08-26 (owner: peers get a curated set, not the working tree). A clone
-  does NOT have it; the only copy is this machine + OneDrive sync. Still:
+- `docs/` is ✅ **TRACKED** — in git and pushed (owner, 2026-08-31: "actually
+  lets keep it tracked", commit `1eb8870`, which also dropped `docs/` from
+  `.gitignore`). A clone HAS it. This retires the 2026-08-26 local-only rule,
+  under which the tree was gitignored and purged from GitHub history; it was
+  force-added as a temporary away-window exception on 2026-08-27 and that
+  exception is now permanent. ⚠️ Because a clone now carries it:
   **never write a secret VALUE anywhere under `docs/`**; names and custody only.
 - Secret names in this project: `DISCORD_TOKEN` (custody: Discord Developer
   Portal; deployed copy: `fly secrets`). Inventory and custody table:

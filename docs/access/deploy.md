@@ -1,10 +1,14 @@
 # Deploying to Fly.io
 
-> **Audience:** Claude sessions and the owner. **Status:** LOCAL ONLY (gitignored 2026-08-26).
-> Last verified: **2026-08-26** — the first-launch sequence below was RUN that
-> day, in this order, and the bot logged in from Fly (machine `85e744c4d959d8`,
-> region `lax`). ⚠️ "Every later deploy" has been run once (the first one);
-> rotate/SFTP/scale commands are from Fly's docs, not exercised.
+> **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
+> 2026-08-31 — was local-only until then; secret NAMES only).
+> Last verified: **2026-08-31** — the first-launch sequence below was RUN on
+> 2026-08-26, in this order, and the bot logged in from Fly (machine
+> `85e744c4d959d8`, region `lax`). The **redeploy** path is now well exercised:
+> [`../deploys.log`](../deploys.log) records **37 deploys** (counted 2026-08-31), the last
+> `8036918` at **2026-08-27 20:15**. ⚠️ rotate/SFTP/scale commands are still
+> from Fly's docs and have NOT been exercised. ⚠️ Only the header was
+> re-verified today; the command bodies below were not re-run.
 > Hosting decision: Fly.io (owner, 2026-08-26). Rationale:
 > [`../info/hosting.md`](../info/hosting.md). Every deploy appends a line to
 > [`../deploys.log`](../deploys.log).

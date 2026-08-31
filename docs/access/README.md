@@ -1,7 +1,8 @@
 # access/ — how to OPERATE Black Bloc
 
-> **Audience:** Claude sessions and the owner. **Status:** TEMPORARILY TRACKED (owner order 2026-08-27; normally LOCAL ONLY) — secret
-> NAMES only. Last verified: **2026-08-27** — deploy and site have been run many times since 2026-08-26; runbook + sweeps added.
+> **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not
+> temporarily) — secret NAMES only. Last verified: **2026-08-31** — every row below points at a file that
+> exists (checked today); the files' own contents carry their own "Last verified" dates.
 
 | File | Answers |
 |---|---|

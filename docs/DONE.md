@@ -1,7 +1,10 @@
 # Black Bloc — DONE (dated archive, newest first, append only)
 
-> **Audience:** Claude sessions and the owner. **Status:** LOCAL ONLY (gitignored 2026-08-26).
-> Last verified: **2026-08-27**.
+> **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
+> 2026-08-31 — was local-only until then; secret NAMES only).
+> Last verified: **2026-08-31** — the HEADER only. The entries below are an
+> append-only archive and were deliberately NOT re-verified or edited; a wrong
+> one gets a superseding entry, never a correction in place.
 >
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.

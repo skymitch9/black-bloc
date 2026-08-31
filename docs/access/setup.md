@@ -1,7 +1,8 @@
 # Local setup and first run
 
-> **Audience:** Claude sessions and the owner. **Status:** LOCAL ONLY (gitignored 2026-08-26).
-> Last verified: **2026-08-26** — §1, §3 and §4 executed that day in a fresh
+> **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
+> 2026-08-31 — was local-only until then; secret NAMES only).
+> Last verified: **2026-08-26** (STATUS line only re-checked 2026-08-31) — §1, §3 and §4 executed that day in a fresh
 > `.venv` on Windows 11 / Python 3.12.10; §2 was walked through by the owner
 > the same afternoon (the bot logged in). ⚠️ The exact portal button labels in
 > §2 were not re-checked by Claude — the owner followed them successfully.

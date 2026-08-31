@@ -1,11 +1,16 @@
 # Hosting — why not Cloudflare, why Fly.io
 
 > **Audience:** the owner (this is a decision doc) and Claude sessions.
-> **Status:** LOCAL ONLY (gitignored 2026-08-26). Last verified: **2026-08-26** — the *reasoning* is
+> **Status:** TRACKED (owner, 2026-08-31 — was local-only until then; secret
+> NAMES only). Last verified: **2026-08-31** — the *reasoning* is
 > checked against how Discord's gateway and Workers work; the *prices* are
-> from memory (knowledge cutoff Jan 2026) and must be confirmed on the
-> providers' pages before anyone relies on them. **Decision: PENDING the
-> owner** (`../TODO.md`).
+> from memory (knowledge cutoff Jan 2026), were NOT re-checked today, and must
+> be confirmed on the providers' pages before anyone relies on them.
+> ✅ **DECIDED and SHIPPED: Fly.io** (owner, 2026-08-26). The "PENDING the owner"
+> line that stood here until 2026-08-31 was stale — the app has been running on
+> Fly (`black-bloc`, machine `85e744c4d959d8`, region `lax`) since 2026-08-26,
+> with 37 deploys in [`../deploys.log`](../deploys.log). Runbook:
+> [`../access/deploy.md`](../access/deploy.md).
 
 ## The owner's ask
 

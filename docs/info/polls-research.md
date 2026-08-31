@@ -1,8 +1,11 @@
 # Polls (F15) — what the popular poll apps do, what Discord gives free, and what Black Bloc should build
 
 > **Audience:** the owner (to make the decisions at the bottom) and the build
-> agent that eventually ships F15. **Status:** LOCAL ONLY (gitignored).
-> **Last verified: 2026-08-27.**
+> agent that eventually ships F15. **Status:** TRACKED (owner, 2026-08-31 —
+> was local-only until then).
+> **Last verified: 2026-08-27** (STATUS line only re-checked 2026-08-31).
+> ℹ️ F15 has since SHIPPED — Polls 10a/10b, live 2026-08-27; this doc is now
+> the research record behind that build, not a pending brief.
 >
 > **What IS measured:** every Discord-API constraint in §3 and §4 is read out of
 > the repo's own `.venv` — `discord.py` **2.7.1**

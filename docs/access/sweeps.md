@@ -1,6 +1,6 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
-> **Audience:** the owner. **Status:** TEMPORARILY TRACKED (owner order 2026-08-27). Last verified:
+> **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
 > **2026-08-27 20:20** — "verified" below means a human did it in the real server; everything else is
 > test-suite evidence only. Tick a row by moving it to the verified table with the date.
 
