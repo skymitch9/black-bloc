@@ -81,7 +81,22 @@ not a wider door; channel creation is place-gated to the test category.
 mistake — then add a `TEST_DM_ALLOWLIST` of user ids the guard permits.
 Number: **1 incident**.
 
-## KI-6 — A stolen session cookie stays valid for up to 7 days after sign-out — `ACCEPTED`
+## KI-6 — (SUPERSEDED 2026-08-31) A stolen session cookie stays valid after sign-out — `CLOSED`
+
+**Was:** the entry below — a stateless signed cookie that logout could not revoke,
+accepted while the owner was the only site user. **Its threshold (">1 site user")
+was crossed by Phase 13**, which opened the dashboard to any signed-in guild
+member. **Now:** schema 17 adds a `sessions` table; the cookie payload carries a
+session id, every authenticated request checks it live (30 s in-process verdict
+cache, logout poisons the cache before the row), and `POST /api/auth/logout`
+revokes. Deployed 2026-08-31 (`0c49257`) — every cookie minted before it became
+invalid at that deploy, one sign-in each. **Residual, accepted:** if the database
+is down, `alive()` answers True and the request proceeds on signature + expiry
+alone — refusing would turn a sqlite blip into "everyone signed out" while every
+data route already refuses via `require_db`; revocation is unenforceable exactly
+while nothing else works.
+
+## KI-6 (original text, kept for the record) — A stolen session cookie stays valid for up to 7 days after sign-out — `ACCEPTED`
 
 **Symptom:** the site session is a stateless signed cookie
 (`__Host-bb_session`); `/api/auth/logout` clears it in the browser but
@@ -170,7 +185,19 @@ reachable from outside the machine/container.
 (a dashboard, a webhook receiver). At that point auth is a blocker for the
 exposure, not a follow-up.
 
-## KI-9 — Anonymous panel-poll votes are hashed, not unlinkable — `ACCEPTED`
+## KI-9 — (SUPERSEDED 2026-08-31) Anonymous panel-poll votes are hashed, not unlinkable — `CLOSED` for new polls
+
+**Was:** the entry below — a truncated per-poll SHA-256 anyone with the DB could
+confirm a guess against; its "what would change it" (a second person with data
+access / the member-facing turn) arrived with Phase 13. **Now:** schema 18 stores
+a `vote_scheme` per poll; polls created while `POLL_VOTE_SECRET` is set (it was
+set 2026-08-31) use HMAC-SHA256, so confirming a guess needs the key, not just
+the table. Old polls keep their scheme — changing it under an open poll would
+hand voters a second vote. A poll keyed to a lost secret refuses votes in words
+(never double-counts). The live `poll_votes` table was empty at cut-over, so in
+practice every real anonymous vote will be keyed.
+
+## KI-9 (original text, kept for the record) — Anonymous panel-poll votes are hashed, not unlinkable — `ACCEPTED`
 
 **Symptom:** a poll created with `anonymous` on runs on Black Bloc's own panel and stores one `poll_votes` row per voter keyed by a truncated per-poll SHA-256 of the member id (no name, no id). Someone holding BOTH the database and a member list could confirm a guess ("did member X vote?") by recomputing the hash; they cannot enumerate voters from the table alone.
 **Why tolerated:** a panel must store one row per person to stop double voting; a keyed MAC would need a secret that has to live somewhere (env + Fly secret + recovery doc) for a threat that requires database access, which already exposes far more than poll choices. The dashboard and every embed never show per-voter rows for anonymous polls. Recorded in `info/code-notes.md` § "polls (10b)".

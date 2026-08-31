@@ -14,7 +14,7 @@
 | Thing | Where |
 |---|---|
 | Bot process | Fly.io app `black-bloc`, machine `85e744c4d959d8`, region `lax`, volume `black_bloc_data` at `/data` |
-| Database | SQLite `/data/black_bloc.sqlite3` on that volume (schema **16** — `black_bloc/storage/db.py:SCHEMA_VERSION`, read 2026-08-31) |
+| Database | SQLite `/data/black_bloc.sqlite3` on that volume (schema **18** — `black_bloc/storage/db.py:SCHEMA_VERSION`; 17 added `sessions`, 18 added `polls.vote_scheme`, both live 2026-08-31) |
 | Dashboard | https://blackbloc.heygabi.ai (same Fly app; Discord sign-in; staff roles = roles that can see `#mute-me-bot-test-spam`) |
 | Health | https://blackbloc.heygabi.ai/health (public JSON: `ok`, `ready`, `guilds`, `latency_ms`) — and the dashboard's **Health** tab (loops, last 50 actions) |
 | Logs | `flyctl logs --app black-bloc --no-tail` (below), the dashboard **Logs/Audit** tab, and `/<feature> logs` in Discord (Phase 12, live since 2026-08-27 18:38) |
@@ -64,7 +64,7 @@ Boot sequence to expect: `database ready` → `loaded cog …` ×14 → `synced 
 Black_Bloc#6132` → `birthdays: the daily import …` → `chat: seeded N intent(s)` (first boot per guild only).
 
 ## Secrets (names; custody in [`RECOVERY.md`](RECOVERY.md))
-`DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `SESSION_SECRET`, `TWITCH_CLIENT_ID`,
+`DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `SESSION_SECRET`, `POLL_VOTE_SECRET` (⚠️ losing it makes polls created under it unvotable — they refuse in words rather than double-count), `TWITCH_CLIENT_ID`,
 `TWITCH_CLIENT_SECRET`, `TEST_MODE`, `TEST_CHANNEL_ID`, `DEV_GUILD_ID`, `DATABASE_PATH`.
 Set on Fly with `<flyctl> secrets set NAME=value --app black-bloc` (each set restarts the machine);
 importing many: write an ASCII file and `cmd /c "<flyctl> secrets import --app black-bloc < file"` — a
@@ -112,6 +112,6 @@ manager), commit the resulting `.env.enc`, push. On the laptop: `sh scripts/env-
 Windows; the passphrase never leaves your head/password manager and Claude never sees the values. If
 you rotate a secret, re-run lock and commit the new `.env.enc`. (A Firebase/Firestore store would work
 too but would need a service-account key on the laptop — a second secret to protect for no gain.)
-Variable NAMES in `.env`: `DISCORD_TOKEN DISCORD_CLIENT_ID DISCORD_CLIENT_SECRET SESSION_SECRET
+Variable NAMES in `.env`: `DISCORD_TOKEN DISCORD_CLIENT_ID DISCORD_CLIENT_SECRET SESSION_SECRET POLL_VOTE_SECRET
 TWITCH_CLIENT_ID TWITCH_CLIENT_SECRET DEV_GUILD_ID TEST_MODE TEST_CHANNEL_ID DATABASE_PATH API_ENABLED
 API_HOST API_PORT SITE_ORIGIN COMMAND_PREFIX LOG_LEVEL`.

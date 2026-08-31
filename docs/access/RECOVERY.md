@@ -53,10 +53,12 @@ data and `docs/` is tracked).
 | Fly account | `flyctl auth login` as the owner's Fly login | — |
 | GitHub | `gh auth` as `skymitch9` | — |
 | `DEV_GUILD_ID` | Not secret; readable in Discord with Developer Mode | `fly secrets` or `[env]` |
+| `SESSION_SECRET` | Re-mintable at will (any long random string) — rotating signs everyone out, nothing else | `fly secrets` + local `.env` |
+| `POLL_VOTE_SECRET` | ⚠️ **NOT freely re-mintable** (set 2026-08-31): anonymous polls created while it is set key their vote hashes to it — without it those polls refuse votes in words. Custody = local `.env` + `fly secrets` (write-only). If both copies die, close the affected polls and mint a new one. | `fly secrets` + local `.env` |
 
-There is no secret with NO reachable copy: the token can always be re-minted
-from the portal, which is the intended recovery path (invalidating any leaked
-copy in the same motion).
+Every secret has a reachable copy or a recovery path: the token can always be
+re-minted from the portal (invalidating any leaked copy in the same motion);
+`POLL_VOTE_SECRET` is the one whose loss has a real cost — see its row.
 
 ## Full rebuild, in order
 

@@ -9,6 +9,54 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-08-31 — KI-6/KI-9 closed and restyle R1 live in one deploy
+
+Moved whole from `TODO.md` (both dispatched ~11:45 in parallel worktrees, merged and
+deployed together as `0c49257` at ~12:20 Phoenix; `deploys.log` has the two lines —
+the secret-set restart and the deploy; **2257 tests**, ruff clean, 17 pages / 98 routes):
+
+- **KI-6 / KI-9 thresholds CROSSED by Phase 13** (found by the docs audit
+  2026-08-31): the dashboard now admits any signed-in guild member, so KI-6's
+  ">1 site user" trigger (sessions table + a per-session id in the cookie +
+  revocation on logout) and KI-9's (HMAC poll-vote hashing with a
+  `POLL_VOTE_SECRET`) are due. Status: **Opus builder dispatched 2026-08-31 ~11:45 in a worktree** (schema 17 sessions + per-poll hash scheme; expect a one-time sign-out for site users at deploy).
+- **Site restyle R1** (of the R1 + R2 item; owner decisions 2026-08-31, all six
+  taken; brief = `info/site-restyle-design.md`): R1 shell — grouped nav + icons,
+  width-filling grid, docked dirty save bar, human labels. R2 stays on TODO.
+
+**KI-6** (`90afc3e`, Opus ~219k for both security items): schema 17 `sessions` table,
+`sid` in the signed cookie, live check on every authenticated request (30 s in-process
+verdict cache, bounded 4096; logout poisons the cache BEFORE the DB write), logout
+revokes. Old cookies = one-time sign-out at deploy (sweeps row 25). Documented
+fail-open: DB down → signature + expiry only, because every data route already
+refuses via `require_db`. **KI-9** (`272ea66`): schema 18 `polls.vote_scheme` stored
+per poll at creation — an open poll NEVER changes scheme (no double votes); new polls
+use HMAC-SHA256 keyed by `POLL_VOTE_SECRET` (via `config.py` only; minted and set on
+Fly + `.env` by the session ~12:15, value never displayed); a keyed poll with the
+secret missing refuses in words, never double-counts; unset secret = old scheme + one
+startup warning, never a broken deploy. Deliberately NOT a registry key (a MAC key
+the dashboard can show is not a MAC key) — recorded against checklist 33.
+KNOWN_ISSUES: both entries superseded → CLOSED with residuals recorded.
+
+**R1** (`b6a1fb3`→`87108ec`, Opus ~323k): the builder first measured that the top bar,
+4-group rail and settingsEditor/saveBar plumbing had ALREADY shipped 2026-08-27
+(`666dd8e`) — the restyle brief's "nothing built yet" was stale; corrected. Newly
+built: one SVG-sprite icon per nav item (`icons.js`, currentColor, 3.46–10.69:1
+across all 12 theme/mode pairs), width-filling 2-up grid (`layout.js`; tables go
+full-width), docked dirty save bar everywhere `settingsEditor` runs (per-field
+Save/Clear gone; ⌫ reset per row), `labels.js` with **90/90 registry keys** mapped
+(checked programmatically against `settings_store.py`), empty-cell `—` / sentence +
+action empty states, 24px title cap — plus a found-by-measuring shell bug: the docked
+bar sat OFF-SCREEN in 5 of 6 themes (`grid-template-rows` auto vs `minmax(0,1fr)`),
+invisible in the one theme being tested. All 17 pages rendered in Chrome against the
+mock, zero console errors; permission machine / pager / search / section memory
+re-checked live. **Verified live after deploy:** `/health` ok, 35 commands synced,
+`added polls.vote_scheme` migration in the Fly logs, sessions table + vote_scheme
+present on the live DB, R1 assets serving 200. **NOT verified:** no real browser has
+signed in since the deploy (the one-time sign-out has not been SEEN), no anonymous
+poll exists to prove an `hmac` row, the sub-1100px single-column layout was verified
+by forcing the media query, not a narrow window. Owner sweep rows 25–27.
+
 ## 2026-08-31 — DB backup drilled: the first dated drill line in RECOVERY.md
 
 Moved whole from `TODO.md`:

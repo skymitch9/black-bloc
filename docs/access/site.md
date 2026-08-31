@@ -77,6 +77,7 @@ commonest way to deploy a page that says "signing in is not switched on yet".
 | `DISCORD_CLIENT_ID` | the Black Bloc application's client id — not a secret, but sign-in is off without it | Developer Portal → Black Bloc → OAuth2 |
 | `DISCORD_CLIENT_SECRET` | the same application's secret | Developer Portal (re-mintable there) |
 | `SESSION_SECRET` | any long random string; it signs the session cookie | `fly secrets` and `.env` only. **Changing it signs everybody out** — that is also the emergency lever if a cookie is ever believed compromised |
+| `POLL_VOTE_SECRET` | long random string; keys the HMAC that hashes anonymous poll votes (set 2026-08-31) | `fly secrets` and `.env` only. ⚠️ **Never lose or casually rotate it**: a poll created while it was set refuses votes in words without it (refusing beats double-counting). Deliberately NOT a settings-registry key — a MAC key the dashboard can show is not a MAC key |
 | `SITE_ORIGIN` | the one hostname (default `https://blackbloc.heygabi.ai`) | `fly.toml`/`fly secrets`. It is the OAuth redirect base, where sign-in returns to, and whether the cookies get `Secure` |
 | `SITE_ROOT` | the directory served (default `site/public`); the Dockerfile puts it at `/app/site/public` | nothing to set — listed so a "the page 404s" hunt has a name to grep |
 

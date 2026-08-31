@@ -1,8 +1,19 @@
 # Site restyle — the A/C hybrid (design brief)
 
 > **Audience:** the restyle builder + the owner. **Status:** TRACKED.
-> **Last verified: 2026-08-31** — written against `main` `1eb8870` and the owner's
-> four decisions taken this morning; nothing here has been built yet.
+> **Last verified: 2026-08-31 (afternoon)** — ⚠️ the morning draft claimed "nothing
+> here has been built yet"; the R1 builder measured otherwise: the top bar (server
+> name, health dot, user chip, theme cog), the 4-group rail and the
+> settingsEditor/saveBar/humanLabel plumbing had ALL already shipped with the
+> 2026-08-27 Direction-A restyle (`666dd8e`). **R1 is now LANDED and LIVE
+> (`0c49257`, deployed 2026-08-31 ~12:20):** nav icons, width-filling 2-up grid,
+> docked dirty save bar (per-field Save/Clear gone), 90/90 human labels with mono
+> key sub-lines, empty-state pass, title cap, plus a cross-theme shell fix (the
+> docked bar sat off-screen in 5 of 6 themes — `grid-template-rows` auto vs 1fr).
+> R1 deviations worth knowing: Requests sits under Overview and Members under
+> Moderation (as shipped 08-27, contrary to §2 — one line in `shell.js:GROUPS` to
+> change); labels are short noun phrases (the sentence voice is R2's copy pass).
+> **R2 (the skin) is the remaining build.**
 > Research base: [`dashboard-inspiration.md`](dashboard-inspiration.md) (§ refs below).
 > Mock canvas the owner reacted to: https://claude.ai/code/artifact/ad76df70-49f4-4fcd-a66a-07c8969d0ddd
 

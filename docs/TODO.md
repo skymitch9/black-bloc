@@ -105,21 +105,18 @@ per feature, so the old bot keeps running until the new one is proven.
 
 - **Move the SQLite file out of the OneDrive-synced tree** — KI-1.
 
-- **Site restyle R1 + R2** (owner decisions 2026-08-31, all six taken; brief =
-  [`info/site-restyle-design.md`](info/site-restyle-design.md)): R1 shell
-  (top bar, grouped nav + icons, width-filling grid, docked dirty save bar,
-  human labels) then R2 skin (the "Black Bloc" theme dark+light as default,
-  wordmark, copy voice, table furniture, Ctrl+K palette, show-keys toggle).
-  Status: **R1 Opus builder dispatched 2026-08-31 ~11:45 in a worktree** (R2 after R1 lands).
+- **Site restyle R2 — the skin** (R1 is LIVE `0c49257`, see `DONE.md`; brief =
+  [`info/site-restyle-design.md`](info/site-restyle-design.md)): the "Black
+  Bloc" theme dark+light as the new default (existing 5 themes stay), wordmark
+  + display face, the sentence-voice copy pass (C's group names and labels),
+  table toolbar/drawer furniture, Ctrl+K command palette, show-keys toggle.
+  Also fold in R1's overridable calls if the owner wants them changed: nav
+  grouping (Requests under Overview, Members under Moderation — one line in
+  `shell.js:GROUPS`), noun-phrase labels. Ready to dispatch.
 - **`code-notes.md` re-key** — measured 2026-08-31: 88 files / 22,333 insertions
   since the last re-key (`666dd8e`); 4 of 4 spot-checked `bot.py` keys miss.
   A build-sized diff-driven pass (the file carries a red warning meanwhile).
-  Queue after B4–B8 merges (the builder appends entries to the same file).
-- **KI-6 / KI-9 thresholds CROSSED by Phase 13** (found by the docs audit
-  2026-08-31): the dashboard now admits any signed-in guild member, so KI-6's
-  ">1 site user" trigger (sessions table + a per-session id in the cookie +
-  revocation on logout) and KI-9's (HMAC poll-vote hashing with a
-  `POLL_VOTE_SECRET`) are due. Status: **Opus builder dispatched 2026-08-31 ~11:45 in a worktree** (schema 17 sessions + per-poll hash scheme; expect a one-time sign-out for site users at deploy).
+  Three more builds appended sections today — re-key covers through `0c49257`.
 
 - **Owner 2026-08-27 ~11:49, verbatim: "Probably should make a deploy button api so you can deploy for me if you can't permission"** → idea logged. Today: the owner's standing authorisation works — the last four deploys ran from the session. A deploy endpoint on the bot would need a Fly API token on the machine and a self-redeploy path; higher risk than value while the session can deploy. Status: **parked unless the classifier blocks again.**
 
