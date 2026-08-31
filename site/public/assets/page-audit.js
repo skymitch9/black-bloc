@@ -68,11 +68,11 @@ function dateBox(value, onSet) {
 function settingsTable(rows) {
   return table([
     { label: 'When', cell: (row) => when(row.updated_at || row.at), className: 'mono' },
-    { label: 'Key', cell: (row) => el('span', { class: 'mono', text: row.key }) },
-    { label: 'Value', cell: (row) => valueNode(row.value), className: 'wrap' },
+    { label: 'Key', help: 'The registry key, the name the bot knows the setting by.', cell: (row) => el('span', { class: 'mono', text: row.key }) },
+    { label: 'Value', help: 'What it was set TO. An empty value means it was put back to its default.', cell: (row) => valueNode(row.value), className: 'wrap' },
     { label: 'By', cell: (row) => nameNode(row.updated_by_id, row.updated_by_name) },
-    { label: 'Via', cell: (row) => viaCell(row.via) },
-  ], rows, { empty: 'No setting has been changed yet.' });
+    { label: 'Via', help: 'Where the change was made: in Discord, or on this dashboard.', cell: (row) => viaCell(row.via) },
+  ], rows, { empty: 'No setting has been changed yet.', foot: { noun: 'change', total: rows.length } });
 }
 
 function idsInValues(rows) {
@@ -113,7 +113,6 @@ function logsSurface() {
   };
   const group = section('Logs', LOGS_NOTE, { id: 'logs' });
   const results = el('div', { class: 'logs-results' });
-  const count = el('span', { class: 'table-count' });
   const chips = el('div', { class: 'chipbar logs-chips' });
   const csv = el('a', {
     class: 'btn small quiet',
@@ -155,18 +154,20 @@ function logsSurface() {
       payload = await api(`/api/actions?${paramsFor(state).toString()}`);
     } catch (error) {
       results.replaceChildren(sayNothing(sentenceFor(error).text));
-      count.textContent = '';
       return;
     }
     const rows = listOf(payload, 'actions');
     await names(idsIn(rows, ['actor_id', 'target_id']));
     const total = typeof payload.total === 'number' ? payload.total : rows.length;
-    count.textContent = `${rows.length} of ${total} line${total === 1 ? '' : 's'}`;
     group.count(total);
     const notes = notesOf(payload);
     results.replaceChildren(
       ...(notes.length ? [el('p', { class: 'section-note', text: notes.join(' ') })] : []),
-      logsTable(rows, nothingSaid(state), rows.length === 0 ? wayOut() : null),
+      logsTable(rows, nothingSaid(state), rows.length === 0 ? wayOut() : null, {
+        noun: 'line',
+        total,
+        from: (state.page - 1) * PER_PAGE + 1,
+      }),
       pager({
         page: state.page,
         hasMore: state.page * PER_PAGE < total,
@@ -261,8 +262,7 @@ function logsSurface() {
     el('div', { class: 'table-tools logs-tools' }, [
       search,
       only,
-      count,
-      el('span', { class: 'topbar-gap' }),
+      el('span', { class: 'table-gap' }),
       csv,
     ]),
     chips,

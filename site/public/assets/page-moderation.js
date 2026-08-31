@@ -16,6 +16,7 @@ import {
   idsIn,
   memberPicker,
   modeSwitch,
+  openDrawer,
   nameNode,
   notice,
   pager,
@@ -51,7 +52,15 @@ const STATS = [
   ['Bans', 'ban'],
 ];
 
-const COLUMNS = ['Case', 'Member', 'Type', 'Reason', 'By', 'When', ''];
+const COLUMNS = [
+  ['Case', 'The case number. The same number the slash commands use.'],
+  ['Member', null],
+  ['Type', 'What was done. A "shadow" tag means automod would have done it but did not.'],
+  ['Reason', 'What the member was told, word for word.'],
+  ['By', null],
+  ['When', 'Hover for the exact time.'],
+  ['', null],
+];
 
 /** `moderation.html?member=<id>` is how the Members tab hands a row over. */
 function askedFor() {
@@ -137,12 +146,7 @@ function caseRow(row) {
     class: 'grid-row',
     type: 'button',
     'data-search': `${row.id} ${row.kind} ${row.user_name || row.user_id || ''} ${row.reason || ''} ${row.moderator_name || ''}`.toLowerCase(),
-    on: {
-      click: () => {
-        state.openCase = row.id;
-        refresh();
-      },
-    },
+    on: { click: () => showCase(row.id) },
   }, [
     el('span', { class: 'cell-id', text: `#${row.id}` }),
     el('span', { class: 'cell-name' }, [nameNode(row.user_id, row.user_name)]),
@@ -158,8 +162,7 @@ function caseRow(row) {
   ]);
 }
 
-function toolbar(rows, onPaint) {
-  const said = el('span', { class: 'table-count' });
+function toolbar(onPaint) {
   const chips = FILTERS.map(([key, label]) => el('button', {
     class: 'chip-filter',
     type: 'button',
@@ -184,26 +187,20 @@ function toolbar(rows, onPaint) {
       onPaint();
     },
   });
-  const node = el('div', { class: 'card-head' }, [
-    search,
-    el('div', { class: 'chipbar' }, chips),
-    el('span', { class: 'topbar-gap' }),
-    said,
-  ]);
-  node.say = (shown) => {
-    said.textContent = `${shown} case${shown === 1 ? '' : 's'}`;
-  };
-  node.say(rows.length);
-  return node;
+  return el('div', { class: 'card-head' }, [search, el('div', { class: 'chipbar' }, chips)]);
 }
 
 function casesCard(payload, rows) {
-  const head = el('div', { class: 'grid-row head' }, COLUMNS.map((label) => el('span', { text: label })));
+  const head = el('div', { class: 'grid-row head' }, COLUMNS.map(([label, help]) => el('span', {
+    title: help || undefined,
+  }, [el('span', { text: label }), help ? el('span', { class: 'th-mark', 'aria-hidden': 'true', text: 'ⓘ' }) : null])));
   const lines = rows.map(caseRow);
   const foot = el('div', { class: 'grid-foot' });
   const body = el('div', { class: 'grid-table' }, [head, ...lines, foot]);
 
-  let tools = null;
+  const total = payload && typeof payload.total === 'number' ? payload.total : rows.length;
+  const perPage = payload && payload.per_page ? Number(payload.per_page) : rows.length;
+  const from = (state.page - 1) * (perPage || rows.length) + 1;
   const paint = () => {
     const wanted = FILTERS.find(([key]) => key === state.kind);
     const kinds = wanted ? wanted[2] : null;
@@ -216,10 +213,11 @@ function casesCard(payload, rows) {
       line.hidden = !hit;
       if (hit) shown += 1;
     });
-    foot.textContent = `Showing ${shown} of ${rows.length} case${rows.length === 1 ? '' : 's'}`;
-    if (tools) tools.say(shown);
+    foot.textContent = shown === rows.length
+      ? `Showing ${from}–${from + rows.length - 1} of ${total} case${total === 1 ? '' : 's'}`
+      : `Showing ${shown} of the ${rows.length} case${rows.length === 1 ? '' : 's'} on this page`;
   };
-  tools = toolbar(rows, paint);
+  const tools = toolbar(paint);
   paint();
 
   const hasMore = payload && payload.pages ? state.page < payload.pages : rows.length >= 10;
@@ -310,7 +308,7 @@ async function caseDetail(id) {
     const done = await run(say, () => send(`/api/mod/cases/${encodeURIComponent(row.id)}/apply`, 'POST', {}),
       'Applied. The case now says it was carried out.');
     if (done.ok) refresh();
-  });
+  }, { tone: 'danger' });
 
   return card(null, [
     el('div', { class: 'formrow' }, [
@@ -327,6 +325,14 @@ async function caseDetail(id) {
     row.applied ? null : bar([apply]),
     say,
   ]);
+}
+
+/** The case opens in the right-hand drawer; the page under it does not move. */
+async function showCase(id) {
+  state.openCase = id;
+  const shut = () => { state.openCase = null; };
+  openDrawer(`Case #${id}`, sayNothing('Asking the bot for this case…'), { onClose: shut });
+  openDrawer(`Case #${id}`, await caseDetail(id), { onClose: shut });
 }
 
 async function load() {
@@ -383,14 +389,9 @@ async function load() {
   }));
 
   const nodes = [statStrip(payload, rows, tally), casesCard(payload, rows), act.node, only.node];
-  if (state.openCase !== null) {
-    const detail = section(`Case ${state.openCase}`, null, { id: 'case', open: true });
-    detail.body.append(await caseDetail(state.openCase));
-    nodes.push(detail.node);
-  }
-
   nodes.push(levelBox.node, await logsSection('mod'));
   document.getElementById('dash').replaceChildren(...nodes);
+  if (state.openCase !== null) await showCase(state.openCase);
 }
 
 refresh = start({ tab: 'moderation', load });

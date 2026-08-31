@@ -198,13 +198,17 @@ function openSection(rows, say) {
   one.body.append(
     table([
       { label: 'Question', cell: (row) => row.question, className: 'wrap' },
-      { label: 'Kind', cell: (row) => badge(row.kind) },
-      { label: 'Surface', cell: surfaceChip },
-      { label: 'Votes', cell: (row) => String(totalOf(row)) },
+      { label: 'Kind', help: 'Single choice, multiple choice, or a date poll.', cell: (row) => badge(row.kind) },
+      {
+        label: 'Surface',
+        help: 'Whether the poll is Discord’s own poll widget or the bot’s buttons.',
+        cell: surfaceChip,
+      },
+      { label: 'Votes', help: 'Every vote cast so far, across all the options.', cell: (row) => String(totalOf(row)) },
       { label: 'Where', cell: (row) => nameNode(row.channel_id, row.channel_name) },
-      { label: 'Closes', cell: closesCell },
+      { label: 'Closes', help: 'When voting stops. Hover for the exact time.', cell: closesCell },
       { label: '', cell: (row) => pollActions(row, say) },
-    ], rows, { empty: NO_OPEN, emptyAction: makeOne() }),
+    ], rows, { empty: NO_OPEN, emptyAction: makeOne(), foot: { noun: 'open poll', total: rows.length } }),
     say,
   );
   return one.node;
@@ -324,13 +328,13 @@ function recurringSection(rows, say) {
   one.body.append(
     table([
       { label: 'Question', cell: (row) => row.question, className: 'wrap' },
-      { label: 'Kind', cell: (row) => badge(row.kind) },
+      { label: 'Kind', help: 'Single choice, multiple choice, or a date poll.', cell: (row) => badge(row.kind) },
       { label: 'How often', cell: (row) => row.cadence_said, className: 'wrap' },
-      { label: 'Next', cell: nextCell },
+      { label: 'Next', help: 'When this one is due to be posted again. Paused ones say so.', cell: nextCell },
       { label: 'Where', cell: (row) => nameNode(row.channel_id, row.channel_name) },
-      { label: 'Open for', cell: (row) => `${row.hours}h` },
+      { label: 'Open for', help: 'How long each posting stays open for votes.', cell: (row) => `${row.hours}h` },
       { label: '', cell: (row) => recurActions(row, say) },
-    ], rows, { empty: NO_RECUR }),
+    ], rows, { empty: NO_RECUR, foot: { noun: 'repeating poll', total: rows.length } }),
     say,
   );
   return one.node;

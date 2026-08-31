@@ -28,7 +28,13 @@ const STATS = [
   ['Joined this week', 'new_7d'],
 ];
 
-const COLUMNS = ['Member', 'Joined', 'Roles', 'Cases', ''];
+const COLUMNS = [
+  ['Member', null],
+  ['Joined', 'When they joined the server. Hover for the date.'],
+  ['Roles', 'Every role they wear. A role Black Bloc is holding a clock on says how long is left.'],
+  ['Cases', 'How many moderation cases have their name on them.'],
+  ['', null],
+];
 const ROLES_SHOWN = 3;
 
 /** A Logs row links here by name, so the box starts filled in with what it asked for. */
@@ -112,7 +118,7 @@ function memberRow(row) {
   ]);
 }
 
-function toolbar(payload, rows) {
+function toolbar() {
   const chips = FILTERS.map(([key, label]) => el('button', {
     class: 'chip-filter',
     type: 'button',
@@ -127,7 +133,6 @@ function toolbar(payload, rows) {
       },
     },
   }));
-  const total = payload && typeof payload.total === 'number' ? payload.total : rows.length;
   return el('div', { class: 'card-head' }, [
     searchField({
       label: 'Search members',
@@ -141,11 +146,6 @@ function toolbar(payload, rows) {
       },
     }),
     el('div', { class: 'chipbar' }, chips),
-    el('span', { class: 'topbar-gap' }),
-    el('span', {
-      class: 'table-count',
-      text: `${rows.length} of ${total} member${total === 1 ? '' : 's'}`,
-    }),
   ]);
 }
 
@@ -169,14 +169,24 @@ function nothingToDo() {
 }
 
 function membersCard(payload, rows) {
-  const head = el('div', { class: 'grid-row head' }, COLUMNS.map((label) => el('span', { text: label })));
+  const head = el('div', { class: 'grid-row head' }, COLUMNS.map(([label, help]) => el('span', {
+    title: help || undefined,
+  }, [el('span', { text: label }), help ? el('span', { class: 'th-mark', 'aria-hidden': 'true', text: 'ⓘ' }) : null])));
   const body = el('div', { class: 'grid-table members' }, [head, ...rows.map(memberRow)]);
   const perPage = payload && payload.per_page ? Number(payload.per_page) : rows.length;
+  const total = payload && typeof payload.total === 'number' ? payload.total : rows.length;
+  const from = (state.page - 1) * (perPage || rows.length) + 1;
   return el('div', { class: 'card' }, [
-    toolbar(payload, rows),
+    toolbar(),
     rows.length === 0
       ? sayNothing(nothingSaid(), nothingToDo())
       : el('div', { class: 'table-scroll' }, [body]),
+    rows.length === 0
+      ? null
+      : el('div', {
+        class: 'grid-foot',
+        text: `Showing ${from}–${from + rows.length - 1} of ${total} member${total === 1 ? '' : 's'}`,
+      }),
     pager({
       page: state.page,
       hasMore: rows.length > 0 && rows.length >= perPage,
