@@ -3884,3 +3884,69 @@ because `check.mjs` and the pytest side fill it from two different tables.
 | ⚠️ `black_bloc/api/tools/events.py:238` | **What an edit does NOT do is in the answer, not left to be discovered.** `rename_channel` (the cog's own helper, guard-aware, `would_rename` in test mode) follows the title, so the review channel keeps up. An announcement already posted and a Discord scheduled event already made **keep the old details**, and `notes` says so in words for whichever applies — there is no existing helper that rewrites either, and claiming a change that did not happen is checklist 10. `announced` and `scheduled` are on every row so the page can warn before the save, not only after. |
 | `black_bloc/api/tools/events.py:88` | `GET /api/events/{event_id}` exists so the page has a detail route to name, though the list already carried every field the card shows — the audit's finding was that the page *fetched* them and rendered none of them. |
 | `site/public/assets/page-events.js:44 localStart` | The prefilled start is the stored instant **rendered in this browser's zone**, which is the same zone the save is read in — the two have to agree or an untouched Save would move the event. |
+
+# R1 — the restyle shell (`docs/info/site-restyle-design.md` §4), 2026-08-31
+
+Front-end only; no route, contract or Python change. `node site/mock/check.mjs`
+stayed green (17 pages / 98 routes) at every commit.
+
+⚠️ **Read this first: three of R1's six items were ALREADY BUILT** by the
+Direction A restyle of 2026-08-27 (`666dd8e`), and the brief — written against
+`1eb8870` — does not know it. The top bar (server name, health dot, user chip,
+theme cog holding the same five/six themes) exists identically on all 17 pages;
+the rail was already grouped into four groups; the docked-dirty-bar pattern and
+`humanLabel` already existed. R1 built what was missing and fixed what the
+existing pattern got wrong.
+
+### `site/public/assets/icons.js` — the one sprite
+
+| Key | Note |
+|---|---|
+| `icons.js ICONS` | **Every glyph the site draws, in one object.** Lifted out of `ui.js` unchanged (the four it already had) and extended with one `nav*` glyph per rail item plus `backspace`. `ui.js icon()` is still the only reader, so no other file's imports moved. |
+| `site.css .nav-icon` | Sized in **`em`, painted with `currentColor` through `--bb-nav-icon`**, so a theme dresses the rail without the sprite naming a colour. `icon()` writes `width`/`height` attributes in px; the CSS rule overrides both. The active row's glyph takes `--bb-nav-icon-active` (the theme's accent). Measured across all six themes x light+dark: icon-against-rail contrast 3.46–10.69:1, so every one clears the 3:1 non-text bar. |
+| ⚠️ `shell.js GROUPS` | Grouping is UNCHANGED from what shipped — the brief's suggested grouping puts Requests under Community and Members under Server; the code has Requests under Overview and Members under Moderation. Left as-is deliberately (it is shipped and in use); moving either is a one-line move of the item object. |
+
+### `site/public/assets/layout.js mountColumns` — the page fills the window
+
+| Key | Note |
+|---|---|
+| ⚠️ `layout.js mountColumns` | **Must run AFTER `show('dash')`, and that is why it is called from `app.js` and not from inside `mountSections`.** It balances by measured `offsetHeight`, and a `hidden` element measures zero — `mountSections` runs while `#dash` is still hidden, so a balance done there would put everything in the left column. |
+| `layout.js wide()` | A block that carries a table, the stat strip, a save bar, a note or a bare `.bar`/`.pager` **spans the full width and BREAKS the run**. Contiguous narrow blocks between two wide ones are balanced into the `.twocol` the Overview and Settings already used, so the reading order stays whole-block by whole-block instead of interleaving. `data-span="full"` on a node overrides the guess. |
+| `layout.js balance()` | Heights are read for every block **before any of them moves**, because wrapping changes all of them. Then greedy: each block joins whichever column is shorter. Same idea as `page-settings.js share()`, which counts rows instead of pixels and is left alone. |
+| ⚠️ `site.css #dash` | Gained `display:flex; gap:16px`. It was `display:block` with **no gap at all** — sections touched. The 16px matches what `.twocol`/`.colstack` already used, so a full-width block and a two-up run now sit on one rhythm. This is a visible spacing change on every page. |
+| ⚠️ under 1100px | `.twocol` collapses to one column through the media query that already existed, and the reading order becomes **left column entirely, then right column** — the behaviour `page-settings.js` has always had. Verified by forcing the declaration in the browser, NOT by rendering at a narrow viewport: `resize_window` did not move `innerWidth` on this machine. |
+
+### `site/public/assets/ui.js` — the dock, and the reset on the row
+
+| Key | Note |
+|---|---|
+| ⚠️ `ui.js dockZone` / `saveBar` | **The bar places itself now.** It appends to one `.dockzone` strip built as a sibling of `.content` inside `.shell-main`, so callers no longer put `editor.bar` anywhere — `settingsPanel`, `page-settings.js` and the three `templateEditor` pages each dropped that line. A sibling and not an overlay: it takes layout space when a bar in it is visible and none when they are all hidden, so it can never cover a row. |
+| ⚠️ `app.js clearDock()` | Called immediately **before** `page.load()` in both `paint` and `reload`. Without it a reload's new bars stack on top of the previous render's orphans, which are still visible and still wired to rows that no longer exist. `show()` also hides the whole zone whenever the gate is showing. |
+| `ui.js saveBar where` | A page can carry more than one editor (Automod has three), so a bar says which panel it belongs to — `"All automod settings — 1 change pending"`. `namespaceSettings` passes its section title; `templateEditor` defaults to the key's own label; the seven `settingsPanel` call sites pass theirs. Without a name two dirty bars would be indistinguishable. |
+| `ui.js settingRow wipe` | Clear-to-default is a **backspace text action on the row**, shown only while the row holds something and only for a type that has an empty state — `clearable()` refuses a segment (it always holds one of its choices) and a colour. It blanks the control and marks the row dirty; `settingsEditor.write` turns a blanked row that used to hold something into `clearSetting`, which is the behaviour that already existed. Per-row refusals still render beside their own row through `row.say`. |
+| ⚠️ `site.css .shell grid-template-rows` | **`minmax(0, 1fr)`, and the fix is not cosmetic.** The shell's single implicit row was `auto`, an auto row is sized to its tallest item, and `align-content: stretch` only ever GROWS a row — so the docked bar pushed the whole column past the bottom of the window in **five of the six themes** (discord fit by luck). `.content` also moved from `flex-grow: 1` to `flex: 1 1 0`, so the body gives way instead of setting the column's height. Measured across six themes x light+dark: bar inside the window 12/12, `.content` still the scroller 12/12 — which is what `ui.js pager` depends on. |
+
+### `site/public/assets/labels.js` — what a settings key is called
+
+| Key | Note |
+|---|---|
+| ⚠️ `labels.js LABELS` | `/api/settings` carries `key`, `type`, `value`, `default` and `help` — and **no label**, so there is nothing on the wire to derive one from. The map is the one home; `ui.js` re-exports `humanLabel` so no consumer moved. All **90** registry keys are named (checked against `black_bloc/settings_store.py KEY_TYPES`; the mock serves 86 of them). |
+| `labels.js derived()` | The old key-tidying rule, kept as the fallback, so a registry key added tomorrow still reads rather than rendering blank. Adding it to the map is the whole change. |
+
+### Empty states and the title cap
+
+| Key | Note |
+|---|---|
+| `ui.js sayNothing(text, action)` | An empty state is one sentence **and one thing to do about it**. `table()` takes `emptyAction`; `logsTable` passes one through. Callers that have no honest action pass none — deliberate, not an oversight. |
+| `logs.js wayOut()` / `page-audit.js wayOut()` | The action **widens whatever narrowed the list**: "Show every line" while the Important switch is on, then "Clear the filters" if a kind or a query is set, then nothing when the log is genuinely empty — because then there is nothing to do. The Logs page's version reuses its existing Clear-filters button rather than repeating its reset. |
+| ⚠️ empties left as a sentence only | Automod's rule book, birthdays, modmail, go-live, honeypot, chat, temp voice, events and health. Each already names the way out in words and none has a control on the page that would fill the list, so an action would have to be invented. Wired: every Logs section and the Logs page, the case book, Members, all five Requests lists, Polls (open / closed / archive / review), Role menus, and the "nothing matches what you typed" line inside `table()` and `searchOver()`. |
+| `site.css --bb-page-title-size` | `min(var(--et-ui-xl), 24px)`. `--et-ui-xl` runs 24–30px across the six themes; the page title and the stat number now measure 24px in all twelve theme/mode pairs. |
+| `site.css :root` block | ⚠️ **The site now owns tokens of its own**, defined RELATIVELY off `--et-*` at the top of `site.css`, so all six themes x light+dark get a value and `estate-theme.css` — an estate snapshot — is not edited. `--bb-nav-icon`, `--bb-nav-icon-active`, `--bb-page-title-size`, `--bb-stat-size`, `--bb-dock-bg`, `--bb-dock-border`, `--bb-reset-fg`, `--bb-reset-fg-hover`, `--bb-empty-gap`. |
+
+### What R1 did NOT do
+
+| Key | Note |
+|---|---|
+| per-rule Save buttons | Automod's rule cards and Requests' "Save the note" keep their own buttons. They are not `settingsEditor` rows — each writes a different route with its own body — so the docked bar does not own them. |
+| `?v=` on module imports | `black_bloc/api/assets.py` stamps `href`/`src` in HTML only; an `import './icons.js'` inside a stamped module resolves without the query, exactly as `api.js` and `ui.js` already did. New files inherit the existing behaviour, they do not change it. |
+| R2 | The new theme, the wordmark and display face, the copy voice, the show-keys toggle, the table toolbar/drawer and the command palette are all R2. R1 changed no theme's palette. |
