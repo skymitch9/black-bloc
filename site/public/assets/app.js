@@ -1,5 +1,5 @@
 import { api, Outage, signInHref } from './api.js';
-import { lastTab, mountSections, rememberTab } from './layout.js';
+import { lastTab, mountColumns, mountSections, rememberTab } from './layout.js';
 import { MEMBER_TAB, forgetShellStatus, isMemberOnly, mountShell, paintShell, renderNav } from './shell.js';
 
 export const TABS = [
@@ -214,6 +214,7 @@ export function start(page) {
       mountSections(page.tab);
       stamp();
       show('dash');
+      mountColumns();
     } catch (error) {
       handle(error);
     }
@@ -225,6 +226,7 @@ export function start(page) {
     mountSections(page.tab);
     stamp();
     show('dash');
+    mountColumns();
   };
 
   const verify = async () => {

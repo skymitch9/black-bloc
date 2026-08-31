@@ -394,6 +394,12 @@ a.rowlist-row:focus-visible { outline: var(--et-focus-ring); outline-offset: -2p
 .actline[data-tone="would"] .actline-text { color: var(--et-warn); }
 .actline[data-tone="failed"] .actline-text { color: var(--et-danger); }
 
+/* The page's blocks, one under the other, until layout.js balances a run of
+   them into .twocol. The gap is what the two columns already use, so a
+   full-width block and a two-up run sit on the same rhythm. */
+#dash { display: flex; flex-direction: column; gap: 16px; }
+#dash[hidden] { display: none; }
+
 .twocol {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
