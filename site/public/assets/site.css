@@ -21,6 +21,23 @@
   --bb-reset-fg: var(--et-muted);
   --bb-reset-fg-hover: var(--et-fg);
   --bb-empty-gap: 10px;
+  --bb-title-font: var(--et-font-display);
+  --bb-chrome-font: var(--et-font-display);
+  --bb-wordmark-size: var(--et-ui-md);
+  --bb-wordmark-weight: var(--et-weight-heavy);
+  --bb-mark-size: 16px;
+}
+
+/* The display-face rule, and the only theme-keyed token block the site owns:
+   in Black Bloc the display face is Bangers, and it may reach the wordmark
+   and the page title ONLY — everything else that reads --et-font-display
+   (the server name, stat and tile numbers, the confirm dialog's heading) is
+   under 20px or inside a control, so it takes the UI face instead. */
+:root[data-theme="blackbloc"] {
+  --bb-chrome-font: var(--et-font);
+  --bb-wordmark-size: 20px;
+  --bb-wordmark-weight: var(--et-weight-body);
+  --bb-mark-size: 20px;
 }
 
 /* ---- the shell ----------------------------------------------------------- */
@@ -60,12 +77,18 @@ body { overflow: hidden; }
   color: var(--et-fg);
   text-decoration: none;
 }
-.side-brand svg { flex: none; color: var(--et-brand-fill, var(--et-accent)); }
+.side-brand svg {
+  flex: none;
+  width: var(--bb-mark-size);
+  height: var(--bb-mark-size);
+  color: var(--et-brand-fill, var(--et-accent));
+}
 .side-brand:focus-visible { outline: var(--et-focus-ring); outline-offset: -2px; }
 .side-wordmark {
-  font-family: var(--et-font-display);
-  font-size: var(--et-ui-md);
-  font-weight: var(--et-weight-heavy);
+  font-family: var(--bb-title-font);
+  font-size: var(--bb-wordmark-size);
+  font-weight: var(--bb-wordmark-weight);
+  line-height: 1;
   letter-spacing: var(--et-label-tracking);
   text-transform: var(--et-label-transform);
 }
@@ -162,7 +185,7 @@ body { overflow: hidden; }
 }
 .topbar-gap { flex-grow: 1; }
 .topbar-guild {
-  font-family: var(--et-font-display);
+  font-family: var(--bb-chrome-font);
   font-size: var(--et-ui-lg);
   font-weight: var(--et-weight-strong);
   overflow: hidden;
@@ -280,7 +303,7 @@ body { overflow: hidden; }
    nobody in the survey puts display type in a control at all. */
 .page-head h1 {
   margin: 0;
-  font-family: var(--et-font-display);
+  font-family: var(--bb-title-font);
   font-size: var(--bb-page-title-size);
   font-weight: var(--et-heading-weight);
   letter-spacing: var(--et-title-spacing);
@@ -437,7 +460,7 @@ a.rowlist-row:focus-visible { outline: var(--et-focus-ring); outline-offset: -2p
 a.stat:hover { background: var(--et-row-hover); }
 a.stat:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; }
 .stat-value {
-  font-family: var(--et-font-display);
+  font-family: var(--bb-chrome-font);
   font-size: var(--bb-stat-size);
   font-weight: var(--et-weight-strong);
   line-height: 1.1;
@@ -1178,7 +1201,7 @@ a.btn { text-decoration: none; }
   box-shadow: var(--et-card-shadow);
 }
 .tile-value {
-  font-family: var(--et-font-display);
+  font-family: var(--bb-chrome-font);
   font-size: var(--et-ui-xl);
   font-weight: var(--et-weight-strong);
   line-height: 1.1;
@@ -1239,7 +1262,7 @@ dialog.ask {
 }
 dialog.ask::backdrop { background: var(--et-transit-bg, rgb(0 0 0 / .55)); }
 .ask-inner { padding: 16px; display: grid; gap: 8px; }
-.ask-inner h2 { margin: 0; font-family: var(--et-font-display); font-size: var(--et-ui-lg); }
+.ask-inner h2 { margin: 0; font-family: var(--bb-chrome-font); font-size: var(--et-ui-lg); }
 .ask-body { margin: 0; font-size: var(--et-ui-md); text-wrap: pretty; }
 
 .msglist { display: grid; gap: 8px; list-style: none; margin: 0; padding: 0; }
