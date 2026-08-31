@@ -10,6 +10,9 @@ import {
   settingsNamespace,
 } from './api.js';
 import { ICONS } from './icons.js';
+import { humanLabel } from './labels.js';
+
+export { humanLabel };
 
 const OUTAGE_WRITE = 'Black Bloc did not answer, so nothing was changed. That is an outage, not a ' +
   'permission problem — try again in a minute.';
@@ -870,23 +873,6 @@ function storedValue(reply, key) {
     if (key in reply) return reply[key];
   }
   return reply;
-}
-
-const NAMESPACES = ['golive', 'tempvoice', 'honeypot', 'events', 'birthday', 'modmail', 'automod', 'rolemenu'];
-
-/** The human name a key wears; the raw key survives as the mono sub-line. */
-export function humanLabel(key) {
-  let name = String(key || '');
-  for (const namespace of NAMESPACES) {
-    if (name.startsWith(`${namespace}_`) && name.length > namespace.length + 1) {
-      name = name.slice(namespace.length + 1);
-      break;
-    }
-  }
-  name = name.replace(/_ids?$/, '');
-  name = name.replace(/_/g, ' ').trim();
-  if (!name) name = String(key);
-  return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
 function same(a, b) {
