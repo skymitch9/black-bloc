@@ -86,7 +86,7 @@ node site/mock/server.mjs                   # dashboard against fake data on htt
 Stop a leftover mock server on Windows: find the `node` PID on the port (`Get-NetTCPConnection -LocalPort 8788`) and `Stop-Process`.
 
 ## Docs bookkeeping
-`scripts/docs/move_done.py "<heading>" <note-file> "<TODO line prefix>" [...]` moves TODO items whole
+`scripts/doctools/move_done.py "<heading>" <note-file> "<TODO line prefix>" [...]` moves TODO items whole
 into DONE with a landing note (append-only, newest first). Every ask goes on `TODO.md` the moment it is
 mentioned; finished items move in the session they land.
 
