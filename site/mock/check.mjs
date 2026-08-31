@@ -272,6 +272,7 @@ async function checkActionKinds() {
   await post(`/api/tempvoice/rooms/${IDS.room_channel_id}/hide`, { hidden: true });
   await post(`/api/tempvoice/rooms/${IDS.room_channel_id}/hide`, { hidden: false });
   await post('/api/rolemenus/contract/unpost', {});
+  await post('/api/rolemenus/seed', {});
   // The six web.chat.* kinds, each left by the write that spells it rather than merely listed.
   await post('/api/chat/intents', { name: 'contract_check', triggers: ['contract check'], lines: ['Hello {name}.'] });
   await send('PUT', `/api/chat/intents/${IDS.chat_intent_id}`, { enabled: true });

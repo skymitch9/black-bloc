@@ -1382,6 +1382,45 @@ route('POST', '/api/rolemenus/:name/post', async (context) => {
   return { posted: true, name: menu.name, channel_id: menu.channel_id, message_id: menu.message_id };
 });
 
+// The six names black_bloc/cogs/community/role_menus.py:SEED creates; a name this server
+// already has is left exactly as it is, options and all.
+const SEED_MENUS = ['pronouns', 'playstyle', 'mentoring', 'interests', 'event-alerts', 'runner-status'];
+
+route('POST', '/api/rolemenus/seed', (context) => {
+  requireStaff(context.session);
+  const created = [];
+  const skipped = [];
+  for (const name of SEED_MENUS) {
+    if (state.menus.some((entry) => entry.name === name)) {
+      skipped.push(name);
+      continue;
+    }
+    state.menus.push({
+      id: state.nextMenu++,
+      name,
+      title: name,
+      description: null,
+      mode: name === 'runner-status' ? 'staff' : 'multiple',
+      channel_id: null,
+      message_id: null,
+      approval: false,
+      expires_days: null,
+      retry_days: 7,
+      options: [],
+    });
+    created.push(name);
+  }
+  const parts = [];
+  if (created.length) parts.push(`Created: ${created.join(', ')}`);
+  if (skipped.length) {
+    parts.push(`Already there, left alone: ${skipped.join(', ')}`);
+    parts.push('A menu that already exists is left exactly as it is, options and all.');
+  }
+  parts.push('Post each one with `/rolemenu post <name>` — except `runner-status`, which staff hand out with `/rolemenu assign`.');
+  logAction('web.role_menu.seeded', { details: { created, skipped } });
+  return { created, skipped, message: parts.join(' · ') };
+});
+
 route('POST', '/api/rolemenus/:name/unpost', (context) => {
   requireStaff(context.session);
   const menu = state.menus.find((entry) => entry.name === context.params.name);

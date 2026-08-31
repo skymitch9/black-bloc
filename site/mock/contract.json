@@ -368,6 +368,20 @@
     },
     {
       "method": "POST",
+      "path": "/api/rolemenus/seed",
+      "body": {},
+      "read_by": [
+        "page-rolemenus.js Seed defaults"
+      ],
+      "shape": "object",
+      "keys": [
+        "created",
+        "skipped",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
       "path": "/api/rolemenus/contract/unpost",
       "body": {},
       "needs": "the contract menu posted by the seed",
@@ -2107,6 +2121,7 @@
     "web.rolemenu.delete",
     "web.rolemenu.post",
     "web.role_menu.unposted",
+    "web.role_menu.seeded",
     "web.golive.link",
     "web.golive.unlink",
     "web.golive.optout",

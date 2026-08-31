@@ -21,6 +21,7 @@ ROUTES = [
     ("DELETE", "/api/rolemenus/colours", None),
     ("POST", "/api/rolemenus/colours/post", {"channel_id": "500"}),
     ("POST", "/api/rolemenus/colours/unpost", None),
+    ("POST", "/api/rolemenus/seed", None),
 ]
 
 
@@ -208,6 +209,41 @@ async def test_unpost_deletes_the_message_and_forgets_it(client, sign_in, web, g
     assert menu["message_id"] is None
     assert menu["channel_id"] == wf.TEST_CHANNEL_ID
     assert "web.role_menu.unposted" in await wf.kinds_in(web.db)
+
+
+async def test_seed_creates_the_defaults_and_says_what_it_did(client, sign_in, web, wf):
+    sign_in(client)
+
+    response = client.post("/api/rolemenus/seed", json={})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "pronouns" in body["created"] and body["skipped"] == []
+    assert "Created: pronouns" in body["message"]
+    assert {menu["name"] for menu in client.get("/api/rolemenus").json()} >= set(body["created"])
+    assert "web.role_menu.seeded" in await wf.kinds_in(web.db)
+
+
+async def test_seeding_twice_rewrites_nothing_and_says_which_were_already_there(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    await a_menu(client, wf, "pronouns")
+    client.put(
+        "/api/rolemenus/pronouns",
+        json={"options": [{"role_id": str(wf.PLAIN_ROLE_ID), "label": "Kept"}]},
+    )
+
+    body = client.post("/api/rolemenus/seed", json={}).json()
+
+    assert "pronouns" in body["skipped"] and "pronouns" not in body["created"]
+    assert "Already there, left alone: pronouns" in body["message"]
+    menu = await get_menu(web.db, wf.GUILD_ID, "pronouns")
+    kept = await get_options(web.db, menu["id"])
+    assert [row["label"] for row in kept] == ["Kept"]
+
+    again = client.post("/api/rolemenus/seed", json={}).json()
+    assert again["created"] == [] and "pronouns" in again["skipped"]
 
 
 async def test_unposting_a_menu_with_no_panel_refuses_in_words(client, sign_in, web, wf):

@@ -87,6 +87,7 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.rolemenu.delete",
         "web.rolemenu.edit",
         "web.rolemenu.post",
+        "web.role_menu.seeded",
         "web.settings.clear",
         "web.settings.set",
         "web.tempvoice.forget",

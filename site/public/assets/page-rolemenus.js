@@ -44,6 +44,10 @@ const TURNED_OFF = 'Off. The posted panels are removed and the /rolemenu command
 const NO_KEY = 'The bot did not report a rolemenu_mode key, so this switch is not shown rather ' +
   'than guessed at.';
 
+const SEED_BODY = 'Six menus this server expects — pronouns, playstyle, mentoring, interests, ' +
+  'event-alerts and runner-status. A name you already have is left exactly as it is, options ' +
+  'and all, and nothing is posted until you post it.';
+
 const APPROVAL_HELP = 'On, picking this role asks staff first instead of handing it over.';
 const EXPIRES_HELP = 'Blank means the role never runs out.';
 const RETRY_HELP = 'How long after a no before they may ask again.';
@@ -607,6 +611,24 @@ async function load() {
         state.editing = null;
         refresh();
       }, { small: false }),
+      button('Seed defaults', async () => {
+        const sure = await ask({
+          title: 'Create the default role menus?',
+          body: [SEED_BODY],
+          confirmLabel: 'Create them',
+          tone: 'warn',
+        });
+        if (!sure) return;
+        const done = await run(
+          say,
+          () => send('/api/rolemenus/seed', 'POST', {}),
+          (found) => found?.message || 'Seeded.',
+        );
+        if (done.ok) {
+          keepSaying('menus', say);
+          refresh();
+        }
+      }, { small: false, tone: 'quiet' }),
     ], { sticky: true }),
     list,
     sayAgain('menus', say),

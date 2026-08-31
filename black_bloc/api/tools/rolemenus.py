@@ -31,6 +31,8 @@ from ...cogs.community.role_menus import (
     post_panel,
     remove_option,
     retry_days_of,
+    seed_default_menus,
+    seed_summary,
     update_menu,
 )
 from ...logkinds import VIA_WEBSITE
@@ -323,6 +325,25 @@ def build_router(bot: Any) -> APIRouter:
             menu_row(menu, await get_options(bot.db, menu["id"]))
             for menu in await list_menus(bot.db, guild.id)
         ]
+
+    @router.post("/seed")
+    async def rolemenu_seed(request: Request) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        created, skipped = await seed_default_menus(bot.db, guild.id)
+        await note(
+            bot,
+            guild,
+            "web.role_menu.seeded",
+            who,
+            details={"created": created, "skipped": skipped},
+        )
+        return {
+            "created": created,
+            "skipped": skipped,
+            "message": seed_summary(created, skipped),
+        }
 
     @router.get("/requests")
     async def rolemenu_requests(status: str = "") -> list[dict[str, Any]]:
