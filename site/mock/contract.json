@@ -382,6 +382,27 @@
     },
     {
       "method": "POST",
+      "path": "/api/rolemenus/contract/assign",
+      "body": {
+        "user_id": "{member_id}",
+        "role_ids": [
+          "{plain_role_id}"
+        ]
+      },
+      "needs": "one option",
+      "read_by": [
+        "page-rolemenus.js assignForm"
+      ],
+      "shape": "object",
+      "keys": [
+        "assigned",
+        "name",
+        "user_id",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
       "path": "/api/rolemenus/contract/unpost",
       "body": {},
       "needs": "the contract menu posted by the seed",
@@ -2122,6 +2143,8 @@
     "web.rolemenu.post",
     "web.role_menu.unposted",
     "web.role_menu.seeded",
+    "web.role_menu.assign",
+    "web.role_menu.unassign",
     "web.golive.link",
     "web.golive.unlink",
     "web.golive.optout",

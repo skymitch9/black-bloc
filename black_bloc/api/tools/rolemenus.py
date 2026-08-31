@@ -9,6 +9,8 @@ from ... import rolegrants as grants
 from ... import rolemenu_panels as panels
 from ...cogs.community.role_menus import (
     MODES,
+    NO_SUCH_MEMBER,
+    NOTHING_ON_THIS_MENU,
     ROLE_MENUS_OFF,
     STAFF_MODE,
     UNSET,
@@ -33,6 +35,7 @@ from ...cogs.community.role_menus import (
     retry_days_of,
     seed_default_menus,
     seed_summary,
+    staff_assign,
     update_menu,
 )
 from ...logkinds import VIA_WEBSITE
@@ -507,6 +510,44 @@ def build_router(bot: Any) -> APIRouter:
             "name": name,
             "channel_id": str(target.id),
             "message_id": str(message.id),
+        }
+
+    @router.post("/{name}/assign")
+    async def rolemenu_assign(
+        request: Request, name: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        menu, options = await read_menu(bot, guild, name)
+        if not options:
+            raise Refused(400, "no_options", NOTHING_ON_THIS_MENU.format(name=name))
+        if not picking_is_on(bot, guild.id):
+            raise Refused(409, "rolemenu_off", ROLE_MENUS_OFF)
+        given = payload.get("user_id")
+        member = guild.get_member(as_id(given)) if as_id(given) is not None else None
+        if member is None:
+            raise Refused(404, "no_such_member", NO_SUCH_MEMBER.format(user_id=given))
+        remove = bool(payload.get("remove"))
+        wanted = [as_id(one) for one in payload.get("role_ids") or ()]
+        done, said = await staff_assign(
+            bot,
+            guild,
+            actor_for(bot, who, guild),
+            menu,
+            options,
+            member,
+            [one for one in wanted if one is not None],
+            remove=remove,
+            via=VIA_WEBSITE,
+        )
+        if not done:
+            raise Refused(409, "role_refused", said)
+        return {
+            "assigned": not remove,
+            "name": name,
+            "user_id": str(member.id),
+            "message": said,
         }
 
     @router.post("/{name}/unpost")

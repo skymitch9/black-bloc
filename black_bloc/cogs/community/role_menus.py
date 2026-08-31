@@ -18,6 +18,7 @@ from ...actionlog import (
 )
 from ...command_errors import NETWORK_ERRORS, AnswersErrors, SafeDynamicItem
 from ...golive import now_iso
+from ...logkinds import VIA_DISCORD, VIA_WEBSITE, WEB
 from ...modcases import pages_under_limit
 from ...settings_store import DB_UNAVAILABLE, ROLEMENU_MODES, require_staff
 
@@ -158,6 +159,17 @@ SEED_EMOJI_NOTE = (
 )
 
 
+ALREADY_EXACTLY = (
+    "**{name}** already has exactly those roles, so nothing changed."
+)
+NO_SUCH_MEMBER = (
+    "**{user_id}** is not somebody Black Bloc can see in this server, so nothing was changed. "
+    "Pick them from the list rather than typing an id."
+)
+NOTHING_ON_THIS_MENU = (
+    "**{name}** has no roles on it yet, so there is nothing to hand out. Add one to the menu "
+    "first."
+)
 NOTHING_TO_UNPOST = (
     "**{name}** has no panel up right now, so there was nothing to take down. Post it with "
     "`/rolemenu post {name}` first."
@@ -1281,6 +1293,63 @@ class RoleMenuView(discord.ui.View):
         self.add_item(RoleMenuSelect(menu_id, options, mode))
 
 
+async def staff_assign(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    menu: Any,
+    options: Any,
+    target: Any,
+    selected: Any,
+    *,
+    remove: bool,
+    via: str = VIA_DISCORD,
+) -> tuple[bool, str]:
+    """Hand a menu's roles out or take them back: the staff picker and the dashboard, one path."""
+    rows = list(options or ())
+    role_ids = [row["role_id"] for row in rows]
+    labels = {row["role_id"]: row["label"] for row in rows}
+    wanted = {int(value) for value in selected or ()}
+    if remove:
+        to_add, to_remove = set(), wanted & set(role_ids)
+    else:
+        to_add, to_remove = role_diff((role.id for role in target.roles), role_ids, wanted)
+    if not to_add and not to_remove:
+        return True, ALREADY_EXACTLY.format(name=target.display_name)
+    if not await change_roles(
+        bot, target, guild, to_add, to_remove, f"Black Bloc role menu by {actor}"
+    ):
+        return False, CANNOT_EDIT_THEIRS.format(name=target.display_name)
+    added = [labels.get(role_id, str(role_id)) for role_id in to_add]
+    removed = [labels.get(role_id, str(role_id)) for role_id in to_remove]
+    await grants.record_added(
+        bot.db,
+        guild.id,
+        target.id,
+        to_add,
+        grants.STAFF,
+        granted_by=getattr(actor, "id", actor),
+        until=grants.expires_at(expires_days_of(menu)),
+    )
+    await grants.record_removed(bot.db, guild.id, target.id, to_remove, grants.ENDED_BY_STAFF)
+    head = f"{WEB}." if via == VIA_WEBSITE else ""
+    kind = f"{head}role_menu.{'unassign' if remove else 'assign'}"
+    await log_action(
+        bot,
+        guild,
+        kind,
+        actor=actor,
+        target=target,
+        details={
+            "menu_id": menu["id"] if menu is not None else None,
+            "added": added,
+            "removed": removed,
+            "via": via,
+        },
+    )
+    return True, f"**{target.display_name}** — {summary(added, removed)}"
+
+
 class StaffAssignSelect(discord.ui.Select):
     def __init__(self, menu_id: int, options: Any, target: Any, *, remove: bool) -> None:
         held = {role.id for role in target.roles}
@@ -1299,10 +1368,9 @@ class StaffAssignSelect(discord.ui.Select):
             ],
         )
         self.menu_id = menu_id
+        self.rows = list(options)
         self.target = target
         self.remove = remove
-        self.role_ids = [row["role_id"] for row in options]
-        self.labels = {row["role_id"]: row["label"] for row in options}
 
     async def callback(self, interaction: discord.Interaction) -> None:
         bot = interaction.client
@@ -1317,62 +1385,19 @@ class StaffAssignSelect(discord.ui.Select):
         if not picking_is_on(bot, guild.id):
             await interaction.response.send_message(ROLE_MENUS_OFF, ephemeral=True)
             return
-        selected = {int(value) for value in self.values}
-        if self.remove:
-            to_add, to_remove = set(), selected & set(self.role_ids)
-        else:
-            to_add, to_remove = role_diff(
-                (role.id for role in self.target.roles), self.role_ids, selected
-            )
-        if not to_add and not to_remove:
-            await interaction.response.send_message(
-                f"**{self.target.display_name}** already has exactly those roles, so nothing "
-                "changed.",
-                ephemeral=True,
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
-            return
-        if not await change_roles(
-            bot,
-            self.target,
-            guild,
-            to_add,
-            to_remove,
-            f"Black Bloc role menu by {interaction.user}",
-        ):
-            await interaction.response.send_message(
-                CANNOT_EDIT_THEIRS.format(name=self.target.display_name),
-                ephemeral=True,
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
-            return
-        added = [self.labels.get(i, str(i)) for i in to_add]
-        removed = [self.labels.get(i, str(i)) for i in to_remove]
-        await interaction.response.send_message(
-            f"**{self.target.display_name}** — {summary(added, removed)}",
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
         menu = await get_menu_by_id(bot.db, self.menu_id)
-        await grants.record_added(
-            bot.db,
-            guild.id,
-            self.target.id,
-            to_add,
-            grants.STAFF,
-            granted_by=interaction.user.id,
-            until=grants.expires_at(expires_days_of(menu)),
-        )
-        await grants.record_removed(
-            bot.db, guild.id, self.target.id, to_remove, grants.ENDED_BY_STAFF
-        )
-        await log_action(
+        _, said = await staff_assign(
             bot,
             guild,
-            "role_menu.unassign" if self.remove else "role_menu.assign",
-            actor=interaction.user,
-            target=self.target,
-            details={"menu_id": self.menu_id, "added": added, "removed": removed},
+            interaction.user,
+            menu,
+            self.rows,
+            self.target,
+            self.values,
+            remove=self.remove,
+        )
+        await interaction.response.send_message(
+            said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
         )
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import discord
 import pytest
 
 from black_bloc import rolegrants as grants
@@ -22,6 +23,7 @@ ROUTES = [
     ("POST", "/api/rolemenus/colours/post", {"channel_id": "500"}),
     ("POST", "/api/rolemenus/colours/unpost", None),
     ("POST", "/api/rolemenus/seed", None),
+    ("POST", "/api/rolemenus/colours/assign", {"user_id": "900", "role_ids": []}),
 ]
 
 
@@ -244,6 +246,152 @@ async def test_seeding_twice_rewrites_nothing_and_says_which_were_already_there(
 
     again = client.post("/api/rolemenus/seed", json={}).json()
     assert again["created"] == [] and "pronouns" in again["skipped"]
+
+
+async def a_staff_menu(client, web, wf, name: str = "runner") -> None:
+    await menus_on(web, wf)
+    await a_menu(client, wf, name)
+    client.put(
+        f"/api/rolemenus/{name}",
+        json={
+            "mode": "staff",
+            "options": [{"role_id": str(wf.STAFF_ROLE_ID), "label": "Runner"}],
+        },
+    )
+
+
+async def test_assign_gives_the_role_through_the_same_path_as_the_picker(
+    client, sign_in, web, guild, wf
+):
+    sign_in(client)
+    await a_staff_menu(client, web, wf)
+    member = wf.member(guild, MEMBER, name="ada")
+
+    response = client.post(
+        "/api/rolemenus/runner/assign",
+        json={"user_id": str(MEMBER), "role_ids": [str(wf.STAFF_ROLE_ID)]},
+    )
+
+    assert response.status_code == 200
+    assert "Added: Runner" in response.json()["message"]
+    assert wf.STAFF_ROLE_ID in [role.id for role in member.roles]
+    grant = await grants.open_grant(web.db, wf.GUILD_ID, MEMBER, wf.STAFF_ROLE_ID)
+    assert grant is not None and grant["source"] == grants.STAFF
+    assert "web.role_menu.assign" in await wf.kinds_in(web.db)
+
+
+async def test_assign_with_remove_takes_the_role_off_again(client, sign_in, web, guild, wf):
+    sign_in(client)
+    await a_staff_menu(client, web, wf)
+    member = wf.member(guild, MEMBER, name="ada")
+    client.post(
+        "/api/rolemenus/runner/assign",
+        json={"user_id": str(MEMBER), "role_ids": [str(wf.STAFF_ROLE_ID)]},
+    )
+
+    response = client.post(
+        "/api/rolemenus/runner/assign",
+        json={"user_id": str(MEMBER), "role_ids": [str(wf.STAFF_ROLE_ID)], "remove": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["assigned"] is False
+    assert "Removed: Runner" in response.json()["message"]
+    assert wf.STAFF_ROLE_ID not in [role.id for role in member.roles]
+    assert "web.role_menu.unassign" in await wf.kinds_in(web.db)
+
+
+async def test_assign_only_ever_touches_the_roles_that_menu_owns(
+    client, sign_in, web, guild, wf
+):
+    sign_in(client)
+    await a_staff_menu(client, web, wf)
+    member = wf.member(guild, MEMBER, name="ada")
+    member.roles = [*member.roles, guild.get_role(wf.ADMIN_ROLE_ID)]
+
+    client.post(
+        "/api/rolemenus/runner/assign",
+        json={"user_id": str(MEMBER), "role_ids": [str(wf.STAFF_ROLE_ID)]},
+    )
+
+    held = [role.id for role in member.roles]
+    assert wf.ADMIN_ROLE_ID in held and wf.STAFF_ROLE_ID in held
+
+
+async def test_assigning_what_they_already_have_says_so_and_changes_nothing(
+    client, sign_in, web, guild, wf
+):
+    sign_in(client)
+    await a_staff_menu(client, web, wf)
+    member = wf.member(guild, MEMBER, name="ada")
+    client.post(
+        "/api/rolemenus/runner/assign",
+        json={"user_id": str(MEMBER), "role_ids": [str(wf.STAFF_ROLE_ID)]},
+    )
+    before = len(member.edits)
+
+    again = client.post(
+        "/api/rolemenus/runner/assign",
+        json={"user_id": str(MEMBER), "role_ids": [str(wf.STAFF_ROLE_ID)]},
+    )
+
+    assert again.status_code == 200
+    assert "already has exactly those roles" in again.json()["message"]
+    assert len(member.edits) == before
+
+
+async def test_assign_refuses_a_member_the_bot_cannot_see_and_an_empty_menu(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    await a_staff_menu(client, web, wf)
+    await a_menu(client, wf, "empty")
+
+    stranger = client.post(
+        "/api/rolemenus/runner/assign", json={"user_id": "4242", "role_ids": []}
+    )
+    empty = client.post("/api/rolemenus/empty/assign", json={"user_id": str(MEMBER)})
+
+    assert stranger.status_code == 404 and "not somebody Black Bloc can see" in (
+        stranger.json()["message"]
+    )
+    assert empty.status_code == 400 and "nothing to hand out" in empty.json()["message"]
+
+
+async def test_assign_is_refused_while_role_menus_are_turned_off(
+    client, sign_in, web, guild, wf
+):
+    sign_in(client)
+    await a_staff_menu(client, web, wf)
+    wf.member(guild, MEMBER, name="ada")
+    await web.store.set(wf.GUILD_ID, "rolemenu_mode", "off")
+
+    response = client.post(
+        "/api/rolemenus/runner/assign",
+        json={"user_id": str(MEMBER), "role_ids": [str(wf.STAFF_ROLE_ID)]},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"] == "rolemenu_off"
+
+
+async def test_a_role_change_discord_refuses_comes_back_as_a_sentence(
+    client, sign_in, web, guild, wf
+):
+    sign_in(client)
+    await a_staff_menu(client, web, wf)
+    member = wf.member(guild, MEMBER, name="ada")
+    member.edit_raises = discord.HTTPException(
+        type("Refused", (), {"status": 403, "reason": "refused"})(), "no"
+    )
+
+    response = client.post(
+        "/api/rolemenus/runner/assign",
+        json={"user_id": str(MEMBER), "role_ids": [str(wf.STAFF_ROLE_ID)]},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"] == "role_refused"
 
 
 async def test_unposting_a_menu_with_no_panel_refuses_in_words(client, sign_in, web, wf):

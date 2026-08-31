@@ -1421,6 +1421,42 @@ route('POST', '/api/rolemenus/seed', (context) => {
   return { created, skipped, message: parts.join(' · ') };
 });
 
+// Roles are changed by the same helper the /rolemenu assign picker uses, and neither asks the
+// guard: a member's roles are not a channel, so this is not one of the test-mode refusals.
+route('POST', '/api/rolemenus/:name/assign', async (context) => {
+  requireStaff(context.session);
+  const menu = state.menus.find((entry) => entry.name === context.params.name);
+  if (!menu) throw new Refused(404, 'no_such_menu', `This server has no role menu called **${context.params.name}**, so nothing was changed.`);
+  if (!(menu.options || []).length) {
+    throw new Refused(400, 'no_options', `**${menu.name}** has no roles on it yet, so there is nothing to hand out. Add one to the menu first.`);
+  }
+  if (state.settings.get('rolemenu_mode') !== 'on') throw new Refused(409, 'rolemenu_off', ROLE_MENUS_OFF);
+  const body = await context.body();
+  const wanted = String(body.user_id || '');
+  if (!MEMBERS.some((member) => member.id === wanted)) {
+    throw new Refused(404, 'no_such_member', `**${wanted}** is not somebody Black Bloc can see in this server, so nothing was changed. Pick them from the list rather than typing an id.`);
+  }
+  const remove = body.remove === true;
+  const owned = new Map((menu.options || []).map((option) => [String(option.role_id), option.label]));
+  const picked = (body.role_ids || []).map(String).filter((id) => owned.has(id));
+  if (picked.length === 0) {
+    return {
+      assigned: !remove,
+      name: menu.name,
+      user_id: wanted,
+      message: `**${memberName(wanted)}** already has exactly those roles, so nothing changed.`,
+    };
+  }
+  const words = picked.map((id) => owned.get(id)).join(', ');
+  logAction(remove ? 'web.role_menu.unassign' : 'web.role_menu.assign', { target_id: wanted, details: { menu_id: menu.id } });
+  return {
+    assigned: !remove,
+    name: menu.name,
+    user_id: wanted,
+    message: `**${memberName(wanted)}** — ${remove ? 'Removed' : 'Added'}: ${words}`,
+  };
+});
+
 route('POST', '/api/rolemenus/:name/unpost', (context) => {
   requireStaff(context.session);
   const menu = state.menus.find((entry) => entry.name === context.params.name);

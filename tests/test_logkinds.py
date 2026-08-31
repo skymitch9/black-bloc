@@ -190,6 +190,14 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "modmail.log_channel_forgotten",
     ),
     "black_bloc/command_visibility.py::LOG_KIND": ("commands.visibility",),
+    # B7: one helper serves the staff picker and the dashboard, so the head and the word are
+    # both built at call time rather than being two literals in two places.
+    "black_bloc/cogs/community/role_menus.py::kind": (
+        "role_menu.assign",
+        "role_menu.unassign",
+        "web.role_menu.assign",
+        "web.role_menu.unassign",
+    ),
     "black_bloc/rolemenu_panels.py::f'{head}{kind}'": (
         "role_menu.unposted",
         "role_menu.unpost_failed",
