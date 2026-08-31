@@ -543,7 +543,7 @@ function seedState() {
     { user_id: MEMBERS[7].id, month: 4, day: 8, year: 1999, opted_in: true, source: 'import', set_at: minutesAgo(19000) },
   ],
   tempvoice: [
-    { channel_id: '800000000000000010', owner_id: MEMBERS[1].id, creator_id: '800000000000000009', created_at: minutesAgo(45) },
+    { channel_id: '800000000000000010', owner_id: MEMBERS[1].id, creator_id: '800000000000000009', created_at: minutesAgo(45), user_limit: 0, locked: false, hidden: false },
   ],
   honeypot: [
     { id: 7, user_id: MEMBERS[4].id, channel_id: '800000000000000007', message_id: '820000000000000001', content: 'free nitro at scam-link.example', at: minutesAgo(30), mode: 'shadow', action: 'would_ban' },
@@ -2133,21 +2133,105 @@ route('POST', '/api/birthdays/import', (context) => {
   };
 });
 
+function roomRow(row) {
+  const live = CHANNELS.find((channel) => channel.id === String(row.channel_id)) || null;
+  return {
+    channel_id: String(row.channel_id),
+    name: row.name ?? (live ? live.name : null),
+    gone: live === null,
+    owner_id: String(row.owner_id),
+    owner_name: memberName(row.owner_id),
+    creator_id: String(row.creator_id),
+    created_at: row.created_at,
+    connected: row.connected ?? 0,
+    user_limit: row.user_limit ?? 0,
+    locked: row.locked === true,
+    hidden: row.hidden === true,
+  };
+}
+
+// The real gate on a room action is black_bloc/cogs/community/tempvoice.py:may_act_in — the
+// room has to sit in the test channel's own category, because a channel edit is a side effect
+// guard.py cannot see. A room spawned from a lobby the guard placed is in that category, which
+// is why these four are not in check.mjs's GUARDED list.
+function roomFor(given) {
+  const wanted = String(given || '');
+  const row = state.tempvoice.find((one) => String(one.channel_id) === wanted);
+  if (!row) {
+    throw new Refused(404, 'no_such_room', 'Black Bloc is not keeping track of a temporary voice channel with that id, so nothing was changed. The Open now list on this page is the ones it knows about.');
+  }
+  const live = CHANNELS.find((channel) => channel.id === wanted) || null;
+  const test = CHANNELS.find((channel) => channel.id === '800000000000000003') || null;
+  if (live === null) {
+    throw new Refused(404, 'channel_gone', 'That temporary voice channel is gone, so nothing was changed. Join the join-to-create channel again to get a fresh one.');
+  }
+  if (testMode && live.category_id !== (test ? test.category_id : null)) {
+    throw new Refused(409, 'test_mode', `**${live.name}** sits outside the test channel's category, so test mode stopped that change and nothing happened.`);
+  }
+  return { row, live };
+}
+
 route('GET', '/api/tempvoice/channels', (context) => {
   requireStaff(context.session);
-  return state.tempvoice.map((row) => {
-    const live = CHANNELS.find((channel) => channel.id === String(row.channel_id)) || null;
-    return {
-      channel_id: String(row.channel_id),
-      name: live ? live.name : null,
-      gone: live === null,
-      owner_id: String(row.owner_id),
-      owner_name: memberName(row.owner_id),
-      creator_id: String(row.creator_id),
-      created_at: row.created_at,
-      connected: row.connected ?? 0,
-    };
-  });
+  return state.tempvoice.map(roomRow);
+});
+
+route('POST', '/api/tempvoice/rooms/:channel_id/rename', async (context) => {
+  requireStaff(context.session);
+  const { row } = roomFor(context.params.channel_id);
+  const wanted = String((await context.body()).name || '').trim().slice(0, 100);
+  if (!wanted) {
+    throw new Refused(400, 'no_name', 'A channel needs a name, so nothing was changed. Type what it should be called and save again.');
+  }
+  row.name = wanted;
+  logAction('web.tempvoice.rename', { target_id: row.channel_id, details: { name: wanted } });
+  return { room: roomRow(row), message: `Renamed to **${wanted}**, and remembered for next time.` };
+});
+
+route('POST', '/api/tempvoice/rooms/:channel_id/limit', async (context) => {
+  requireStaff(context.session);
+  const { row } = roomFor(context.params.channel_id);
+  const given = (await context.body()).limit;
+  const value = Number(given);
+  if (!/^\d+$/.test(String(given ?? '')) || value < 0 || value > 99) {
+    throw new Refused(400, 'bad_limit', `**${given}** is not a number of people Black Bloc can use, so nothing was changed. Pick a whole number from 0 to 99 — 0 means no limit.`);
+  }
+  row.user_limit = value;
+  logAction('web.tempvoice.limit', { target_id: row.channel_id, details: { user_limit: value } });
+  return {
+    room: roomRow(row),
+    message: value === 0 ? 'Anyone can join now.' : `Capped at **${value}** people.`,
+  };
+});
+
+route('POST', '/api/tempvoice/rooms/:channel_id/lock', async (context) => {
+  requireStaff(context.session);
+  const { row } = roomFor(context.params.channel_id);
+  const want = (await context.body()).locked !== false;
+  if (want === row.locked) {
+    return { room: roomRow(row), message: `This channel is already ${want ? 'locked' : 'unlocked'}, so nothing was changed.` };
+  }
+  row.locked = want;
+  logAction(want ? 'web.tempvoice.lock' : 'web.tempvoice.unlock', { target_id: row.channel_id });
+  return {
+    room: roomRow(row),
+    message: want ? 'Locked — nobody new may join.' : 'Unlocked — anyone may join.',
+  };
+});
+
+route('POST', '/api/tempvoice/rooms/:channel_id/hide', async (context) => {
+  requireStaff(context.session);
+  const { row } = roomFor(context.params.channel_id);
+  const want = (await context.body()).hidden !== false;
+  if (want === row.hidden) {
+    return { room: roomRow(row), message: `This channel is already ${want ? 'hidden' : 'visible to everyone'}, so nothing was changed.` };
+  }
+  row.hidden = want;
+  logAction(want ? 'web.tempvoice.hide' : 'web.tempvoice.show', { target_id: row.channel_id });
+  return {
+    room: roomRow(row),
+    message: want ? 'Hidden — only people already in it can see it.' : 'Visible again to everyone.',
+  };
 });
 
 route('POST', '/api/tempvoice/setup', (context) => {

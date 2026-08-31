@@ -112,7 +112,7 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "event.category_forgotten",
         "event.announce_channel_forgotten",
     ),
-    "black_bloc/cogs/community/tempvoice.py::f'tempvoice.{kind}'": (
+    "black_bloc/cogs/community/tempvoice.py::f'{head}tempvoice.{kind}'": (
         "tempvoice.ban",
         "tempvoice.ban_failed",
         "tempvoice.bitrate",
@@ -137,6 +137,17 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "tempvoice.unlock",
         "tempvoice.unpermit",
         "tempvoice.unpermit_failed",
+        # The dashboard's room actions (B4) go through the same helper with a website doer,
+        # so the head is `web.` and these are the six-plus-failures it can leave.
+        "web.tempvoice.hide",
+        "web.tempvoice.limit",
+        "web.tempvoice.limit_failed",
+        "web.tempvoice.lock",
+        "web.tempvoice.privacy_failed",
+        "web.tempvoice.rename",
+        "web.tempvoice.rename_failed",
+        "web.tempvoice.show",
+        "web.tempvoice.unlock",
     ),
     "black_bloc/cogs/community/requests.py::f'request.{status}'": (
         "request.approved",

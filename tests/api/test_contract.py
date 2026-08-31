@@ -267,6 +267,7 @@ async def seeded(client, sign_in, web, guild, wf):
         "hit_id": str(hit_id),
         "test_channel_id": str(wf.TEST_CHANNEL_ID),
         "lobby_channel_id": str(wf.VOICE_CHANNEL_ID),
+        "room_channel_id": str(wf.VOICE_CHANNEL_ID),
         "plain_role_id": str(wf.PLAIN_ROLE_ID),
         "request_id": str(request_id),
         "grant_id": str(grant_id),
