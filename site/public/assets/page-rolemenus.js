@@ -259,9 +259,31 @@ async function postCard(menu, say) {
         });
         if (!sure) return;
         const done = await run(say, () => send(`/api/rolemenus/${encodeURIComponent(menu.name)}/post`, 'POST', { channel_id: channelId }), 'Posted.');
-        if (done.ok) refresh();
+        if (done.ok) {
+          keepSaying('menus', say);
+          refresh();
+        }
       }, { tone: 'warn' }),
+      button('Un-post', async () => {
+        const sure = await ask({
+          title: `Take ${menu.name}'s panel down?`,
+          body: ['The message is deleted. The menu, its roles and everybody who already has one are untouched, and you can post it again whenever you want.'],
+          confirmLabel: 'Take it down',
+          tone: 'warn',
+        });
+        if (!sure) return;
+        const done = await run(
+          say,
+          () => send(`/api/rolemenus/${encodeURIComponent(menu.name)}/unpost`, 'POST', {}),
+          (found) => found?.message || 'The panel is down.',
+        );
+        if (done.ok) {
+          keepSaying('menus', say);
+          refresh();
+        }
+      }, { tone: 'quiet', disabled: !menu.message_id }),
     ]),
+    menu.message_id ? null : el('p', { class: 'field-help', text: 'Nothing is posted yet, so there is nothing to take down.' }),
   ]);
 }
 

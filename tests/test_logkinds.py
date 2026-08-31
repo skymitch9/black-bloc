@@ -189,13 +189,18 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "modmail.log_channel_forgotten",
     ),
     "black_bloc/command_visibility.py::LOG_KIND": ("commands.visibility",),
-    "black_bloc/rolemenu_panels.py::kind": (
+    "black_bloc/rolemenu_panels.py::f'{head}{kind}'": (
         "role_menu.unposted",
         "role_menu.unpost_failed",
         "role_menu.would_unpost",
         "role_menu.reposted",
         "role_menu.repost_failed",
         "role_menu.would_repost",
+        # B5: the dashboard's Un-post, and the panel move a channel change makes, both call
+        # `unpost` with a website via, so the same three kinds arrive under a `web.` head.
+        "web.role_menu.unposted",
+        "web.role_menu.unpost_failed",
+        "web.role_menu.would_unpost",
     ),
 }
 

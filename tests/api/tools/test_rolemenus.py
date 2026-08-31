@@ -20,6 +20,7 @@ ROUTES = [
     ("PUT", "/api/rolemenus/colours", {"title": "Colours"}),
     ("DELETE", "/api/rolemenus/colours", None),
     ("POST", "/api/rolemenus/colours/post", {"channel_id": "500"}),
+    ("POST", "/api/rolemenus/colours/unpost", None),
 ]
 
 
@@ -149,6 +150,7 @@ def test_a_menu_nobody_has_is_a_404_with_a_sentence(client, sign_in):
         ("PUT", "/api/rolemenus/ghost"),
         ("DELETE", "/api/rolemenus/ghost"),
         ("POST", "/api/rolemenus/ghost/post"),
+        ("POST", "/api/rolemenus/ghost/unpost"),
     ):
         response = client.request(method, route, json={})
         assert response.status_code == 404
@@ -188,6 +190,56 @@ async def test_posting_a_panel_puts_it_in_the_channel_and_remembers_the_message(
     menu = await get_menu(web.db, wf.GUILD_ID, "colours")
     assert menu["message_id"] == channel.messages[0].id
     assert "web.rolemenu.post" in await wf.kinds_in(web.db)
+
+
+async def test_unpost_deletes_the_message_and_forgets_it(client, sign_in, web, guild, wf):
+    sign_in(client)
+    await a_posted_menu(client, web, wf, wf.TEST_CHANNEL_ID)
+    channel = guild.get_channel(wf.TEST_CHANNEL_ID)
+    assert channel.messages
+
+    response = client.post("/api/rolemenus/colours/unpost", json={})
+
+    assert response.status_code == 200
+    assert response.json()["unposted"] is True
+    assert "panel is down" in response.json()["message"]
+    assert channel.messages == []
+    menu = await get_menu(web.db, wf.GUILD_ID, "colours")
+    assert menu["message_id"] is None
+    assert menu["channel_id"] == wf.TEST_CHANNEL_ID
+    assert "web.role_menu.unposted" in await wf.kinds_in(web.db)
+
+
+async def test_unposting_a_menu_with_no_panel_refuses_in_words(client, sign_in, web, wf):
+    sign_in(client)
+    await a_menu(client, wf)
+
+    response = client.post("/api/rolemenus/colours/unpost", json={})
+
+    assert response.status_code == 400
+    assert "nothing to take down" in response.json()["message"]
+
+
+async def test_unpost_of_a_panel_outside_the_test_channel_is_refused_and_shadow_logged(
+    client, sign_in, web, guild, wf
+):
+    sign_in(client)
+    await a_posted_menu(client, web, wf, wf.TEST_CHANNEL_ID)
+    await web.db.conn.execute(
+        "UPDATE role_menus SET channel_id = ? WHERE name = 'colours'", (wf.OTHER_CHANNEL_ID,)
+    )
+    await web.db.conn.commit()
+    web.guard = wf.Guard()
+
+    response = client.post("/api/rolemenus/colours/unpost", json={})
+
+    assert response.status_code == 409
+    assert response.json()["error"] == "test_mode"
+    kinds = await wf.kinds_in(web.db)
+    assert "web.role_menu.would_unpost" in kinds
+    assert "web.role_menu.unposted" not in kinds
+    menu = await get_menu(web.db, wf.GUILD_ID, "colours")
+    assert menu["message_id"] is not None
 
 
 async def test_posting_outside_the_test_channel_is_refused_while_the_guard_is_on(

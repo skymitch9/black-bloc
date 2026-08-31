@@ -168,6 +168,9 @@ async function seed() {
       options: [{ role_id: '900000000000000005', label: 'Members', emoji: null }],
     }),
   });
+  // Posted here so the unpost entry has a panel to take down; refused while the guard is on,
+  // which is exactly what the GUARDED pass asserts a moment later.
+  await post('/api/rolemenus/contract/post', { channel_id: IDS.test_channel_id });
   await post('/api/modmail/snippets', { name: 'contract', content: 'hello' });
   await post('/api/modmail/blocks', { user_id: IDS.member_id, reason: 'contract check' });
   // The opt-out the DELETE entry takes away again; the seed's own opt-out is somebody else.
@@ -268,6 +271,7 @@ async function checkActionKinds() {
   await post(`/api/tempvoice/rooms/${IDS.room_channel_id}/lock`, { locked: false });
   await post(`/api/tempvoice/rooms/${IDS.room_channel_id}/hide`, { hidden: true });
   await post(`/api/tempvoice/rooms/${IDS.room_channel_id}/hide`, { hidden: false });
+  await post('/api/rolemenus/contract/unpost', {});
   // The six web.chat.* kinds, each left by the write that spells it rather than merely listed.
   await post('/api/chat/intents', { name: 'contract_check', triggers: ['contract check'], lines: ['Hello {name}.'] });
   await send('PUT', `/api/chat/intents/${IDS.chat_intent_id}`, { enabled: true });

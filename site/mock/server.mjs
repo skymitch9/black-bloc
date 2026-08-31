@@ -1382,6 +1382,24 @@ route('POST', '/api/rolemenus/:name/post', async (context) => {
   return { posted: true, name: menu.name, channel_id: menu.channel_id, message_id: menu.message_id };
 });
 
+route('POST', '/api/rolemenus/:name/unpost', (context) => {
+  requireStaff(context.session);
+  const menu = state.menus.find((entry) => entry.name === context.params.name);
+  if (!menu) throw new Refused(404, 'no_such_menu', `This server has no role menu called **${context.params.name}**, so nothing was changed.`);
+  if (!menu.message_id) {
+    throw new Refused(400, 'not_posted', `**${menu.name}** has no panel up right now, so there was nothing to take down. Post it from the Post a menu section first.`);
+  }
+  const where = menu.channel_id;
+  menu.message_id = null;
+  logAction('web.role_menu.unposted', { target_id: where, details: { menu: menu.name, channel_id: where } });
+  return {
+    unposted: true,
+    name: menu.name,
+    channel_id: where === null || where === undefined ? null : String(where),
+    message: `**${menu.name}**'s panel is down. The menu and its roles are untouched and nobody loses a role — post it again whenever you want it back.`,
+  };
+});
+
 route('GET', '/api/rolemenus/requests', (context) => {
   requireStaff(context.session);
   const asked = (context.url.searchParams.get('status') || '').split(',').filter(Boolean);

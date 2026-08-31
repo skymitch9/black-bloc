@@ -367,6 +367,22 @@
       ]
     },
     {
+      "method": "POST",
+      "path": "/api/rolemenus/contract/unpost",
+      "body": {},
+      "needs": "the contract menu posted by the seed",
+      "read_by": [
+        "page-rolemenus.js postCard"
+      ],
+      "shape": "object",
+      "keys": [
+        "unposted",
+        "name",
+        "channel_id",
+        "message"
+      ]
+    },
+    {
       "method": "DELETE",
       "path": "/api/rolemenus/contract",
       "read_by": [
@@ -2090,6 +2106,7 @@
     "web.rolemenu.edit",
     "web.rolemenu.delete",
     "web.rolemenu.post",
+    "web.role_menu.unposted",
     "web.golive.link",
     "web.golive.unlink",
     "web.golive.optout",

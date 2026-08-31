@@ -232,6 +232,7 @@ ROUTINE: frozenset[str] = frozenset(
         "role_menu.mode",
         "role_menu.post",
         "role_menu.reposted",
+        "role_menu.seeded",
         "role_menu.unassign",
         "role_menu.unposted",
         "role_menu.update",

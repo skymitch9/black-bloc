@@ -158,6 +158,21 @@ SEED_EMOJI_NOTE = (
 )
 
 
+NOTHING_TO_UNPOST = (
+    "**{name}** has no panel up right now, so there was nothing to take down. Post it with "
+    "`/rolemenu post {name}` first."
+)
+PANEL_STUCK = (
+    "Black Bloc could not take **{name}**'s panel down, so it is still where it was. It needs to "
+    "see that channel and be able to delete its own message there — ask a Lead to check both, "
+    "then try again."
+)
+PANEL_TAKEN_DOWN = (
+    "**{name}**'s panel is down. The menu and its roles are untouched and nobody loses a role — "
+    "post it again whenever you want it back."
+)
+
+
 TOO_LONG = (
     "That {what} is {given} characters and Discord will not show more than {limit}, so nothing "
     "was changed. Shorten it and try again — Black Bloc will not cut down words you typed."
@@ -601,6 +616,21 @@ async def clear_message(db: Any, menu_id: int) -> None:
         "UPDATE role_menus SET message_id = NULL WHERE id = ?", (menu_id,)
     )
     await db.conn.commit()
+
+
+def seed_summary(created: list[str], skipped: list[str]) -> str:
+    """What seeding did, in the one wording the slash command and the dashboard both show."""
+    parts = []
+    if created:
+        parts.append("Created: " + ", ".join(created))
+    if skipped:
+        parts.append("Already there, left alone: " + ", ".join(skipped))
+        parts.append(SEED_EMOJI_NOTE)
+    parts.append(
+        "Post each one with `/rolemenu post <name>` — except `runner-status`, which staff "
+        "hand out with `/rolemenu assign`."
+    )
+    return " · ".join(parts)
 
 
 async def seed_default_menus(db: Any, guild_id: int) -> tuple[list[str], list[str]]:
@@ -1932,6 +1962,27 @@ class RoleMenus(commands.Cog):
             details={"menu": name, "channel_id": target.id, "message_id": message.id},
         )
 
+    @rolemenu.command(name="unpost", description="Take a role menu's panel down")
+    async def unpost(self, interaction: discord.Interaction, name: str) -> None:
+        from ... import rolemenu_panels as panels
+
+        if not await require_staff(interaction):
+            return
+        menu = await get_menu(self.bot.db, interaction.guild.id, name)
+        if menu is None:
+            await interaction.response.send_message(self._no_such_menu(name), ephemeral=True)
+            return
+        if not menu["message_id"]:
+            await interaction.response.send_message(
+                NOTHING_TO_UNPOST.format(name=name), ephemeral=True
+            )
+            return
+        await interaction.response.defer(ephemeral=True)
+        if not await panels.unpost(self.bot, menu, interaction.user):
+            await interaction.followup.send(PANEL_STUCK.format(name=name), ephemeral=True)
+            return
+        await interaction.followup.send(PANEL_TAKEN_DOWN.format(name=name), ephemeral=True)
+
     @rolemenu.command(name="assign", description="Give a member roles from a menu")
     @app_commands.describe(name="The menu the roles come from", member="Who gets them")
     async def assign(
@@ -2042,17 +2093,16 @@ class RoleMenus(commands.Cog):
         if not await require_staff(interaction):
             return
         created, skipped = await seed_default_menus(self.bot.db, interaction.guild.id)
-        parts = []
-        if created:
-            parts.append("Created: " + ", ".join(created))
-        if skipped:
-            parts.append("Already there, left alone: " + ", ".join(skipped))
-            parts.append(SEED_EMOJI_NOTE)
-        parts.append(
-            "Post each one with `/rolemenu post <name>` — except `runner-status`, which staff "
-            "hand out with `/rolemenu assign`."
+        await interaction.response.send_message(
+            seed_summary(created, skipped), ephemeral=True
         )
-        await interaction.response.send_message(" · ".join(parts), ephemeral=True)
+        await log_action(
+            self.bot,
+            interaction.guild,
+            "role_menu.seeded",
+            actor=interaction.user,
+            details={"created": created, "skipped": skipped},
+        )
 
     def _default_channel(self, interaction: discord.Interaction) -> Any:
         configured = self.bot.store.get(interaction.guild.id, "role_menu_channel_id")

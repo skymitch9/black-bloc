@@ -33,6 +33,7 @@ from ...cogs.community.role_menus import (
     retry_days_of,
     update_menu,
 )
+from ...logkinds import VIA_WEBSITE
 from ..auth import Refused, staff_dependency
 from ..names import as_id, avatar_url, resolve_one
 from ..writes import (
@@ -111,6 +112,19 @@ PANEL_NOT_MOVED = (
 DENY_NEEDS_A_REASON = (
     "A denied request needs one line the member is sent, so nothing was done. Say why and send "
     "it again."
+)
+NOTHING_TO_UNPOST = (
+    "**{name}** has no panel up right now, so there was nothing to take down. Post it from the "
+    "Post a menu section first."
+)
+PANEL_STUCK = (
+    "Black Bloc could not take **{name}**'s panel down, so it is still where it was. It needs to "
+    "see that channel and be able to delete its own message there — ask a Lead to check both, "
+    "then try again."
+)
+PANEL_TAKEN_DOWN = (
+    "**{name}**'s panel is down. The menu and its roles are untouched and nobody loses a role — "
+    "post it again whenever you want it back."
 )
 
 
@@ -289,7 +303,7 @@ async def move_panel(bot: Any, guild: Any, name: str, channel_id: int, who: Any)
     menu, options = await read_menu(bot, guild, name)
     await can_move(bot, guild, menu, options, channel_id)
     target = await wanted_target(bot, guild, menu, options, channel_id)
-    if not await panels.unpost(bot, menu, actor_for(bot, who, guild)):
+    if not await panels.unpost(bot, menu, actor_for(bot, who, guild), via=VIA_WEBSITE):
         raise Refused(409, "panel_stuck", PANEL_NOT_MOVED.format(name=name))
     fresh, options = await read_menu(bot, guild, name)
     return await post_panel(bot, fresh, options, target)
@@ -472,6 +486,27 @@ def build_router(bot: Any) -> APIRouter:
             "name": name,
             "channel_id": str(target.id),
             "message_id": str(message.id),
+        }
+
+    @router.post("/{name}/unpost")
+    async def rolemenu_unpost(request: Request, name: str) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        menu, _ = await read_menu(bot, guild, name)
+        if not menu["message_id"]:
+            raise Refused(400, "not_posted", NOTHING_TO_UNPOST.format(name=name))
+        guard = guard_of(bot)
+        blocked = guard is not None and not guard.allows_channel(menu["channel_id"])
+        if not await panels.unpost(bot, menu, actor_for(bot, who, guild), via=VIA_WEBSITE):
+            if blocked:
+                refuse_guarded(guard.refusal_message())
+            raise Refused(409, "panel_stuck", PANEL_STUCK.format(name=name))
+        return {
+            "unposted": True,
+            "name": name,
+            "channel_id": str(menu["channel_id"]) if menu["channel_id"] else None,
+            "message": PANEL_TAKEN_DOWN.format(name=name),
         }
 
     return router
