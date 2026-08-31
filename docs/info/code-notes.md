@@ -3992,3 +3992,79 @@ existing pattern got wrong.
 | per-rule Save buttons | Automod's rule cards and Requests' "Save the note" keep their own buttons. They are not `settingsEditor` rows — each writes a different route with its own body — so the docked bar does not own them. |
 | `?v=` on module imports | `black_bloc/api/assets.py` stamps `href`/`src` in HTML only; an `import './icons.js'` inside a stamped module resolves without the query, exactly as `api.js` and `ui.js` already did. New files inherit the existing behaviour, they do not change it. |
 | R2 | The new theme, the wordmark and display face, the copy voice, the show-keys toggle, the table toolbar/drawer and the command palette are all R2. R1 changed no theme's palette. |
+
+# R2 — the restyle skin (`docs/info/site-restyle-design.md` §4), 2026-08-31
+
+Front-end only; no route, contract or Python change. `node site/mock/check.mjs`
+stayed green (17 pages / 98 routes) at every commit; `pytest -q` 2257 passed and
+`ruff check .` clean at the end.
+
+⚠️ **Read this first: the brief says "the 5 existing estate themes stay in the
+dropdown". There are SIX** — `discord`, `classic`, `apple`, `cyberpunk`, `retro`,
+`hearts` — so the dropdown now holds **seven**, not six. None of the six moved.
+
+### `estate-theme.css` — the Black Bloc theme
+
+| Key | Note |
+|---|---|
+| ⚠️ `:root[data-theme="blackbloc"]` | **The theme block goes in `estate-theme.css`, not in `site.css`.** R1 put the `--bb-*` helpers in `site.css` because they had to reach every theme without editing the snapshot; a THEME is different — `discord` is already a local addition to this same file ("this dashboard's own identity"), so a second one follows the precedent rather than inventing a place. `theme.js`'s `THEMES`/`LABELS` gained `blackbloc` as the first entry; that file is a snapshot too and the addition is marked as local. |
+| `--et-danger: #f4707e` (dark) / `#b01b36` (light) | ⚠️ **The one COLD hue in a warm theme, on purpose.** The C direction's stated risk is that warmth reads as unserious beside a Ban button, so danger sits at hue ~350 where the accent sits at ~25. It reads as *not the accent* at a glance, which is the whole job. |
+| the four values moved from § 4 C | `--et-accent` light is `#AA4109`, not the doc's `#C2500B`: at `#C2500B` the accent measures **4.15:1** on the rail's own active row, under AA. `--et-accent-2` light is `#8A5A00` (doc: `#B57C00`, 3.9:1 on white), `--et-muted` light `#68503F` (doc: `#6E584A`), `--et-danger` both modes per the row above. Everything else is the doc's table verbatim. |
+| measured contrast | Worst text ratio anywhere in the theme: **4.51:1** (`--et-accent-2`/`--et-warn` on the light rail's active row). Dark runs 5.29–17.01; light 4.51–17.48. Button label on the primary fill: 7.21 dark, 6.05 light. Computed from the token hexes, not sampled off pixels. |
+| `--et-bg-texture` | Two low-alpha radial gradients, no image — CSP `img-src` would allow a `data:` URI but a gradient costs nothing to ship. The `prefers-contrast: more` block that drops texture gained `blackbloc`. |
+| the light block restates only what CHANGES | `:root[data-theme="blackbloc"][data-mode="light"]` matches the same element as the base block, so an undeclared token keeps the base value. `discord` restates its type scale in both; this one does not need to. |
+
+### The display face
+
+| Key | Note |
+|---|---|
+| ⚠️ `site.css --bb-title-font` / `--bb-chrome-font` | **`--et-font-display` had SIX readers and only two of them are titles.** The other four are the server name (16px), the stat number, the tile number and the confirm dialog's heading — all under 20px or inside a control, which the direction bans display type from. So the two title places take `--bb-title-font` and the other four take `--bb-chrome-font`; both resolve to `--et-font-display` on `:root`, so the six estate themes are unchanged, and `:root[data-theme="blackbloc"]` drops the chrome font to `--et-font`. |
+| `--et-font-display: 'Bangers'` | Already self-hosted for `retro`/`hearts` (OFL, `assets/fonts/bangers.woff2` with `OFL-bangers-luckiestguy.txt` beside it), so **no font was vendored** and no new bytes ship. `Bricolage Grotesque` — the brief's first choice — would have meant fetching a file this machine cannot reach; the inspiration doc names Bangers as the on-disk alternative. |
+| `--bb-wordmark-size: 20px` | The rail head was `--et-ui-md` (14px), which would put Bangers under the 20px floor. `--bb-mark-size` grows the bolt to match. Both stay at their old values in the six estate themes. |
+| the page title stays 24px | `--bb-page-title-size` is R1's `min(var(--et-ui-xl), 24px)` and `--et-ui-xl` is 26px here, so the cap binds. Inside the brief's 20–26px window. |
+
+### The copy voice
+
+| Key | Note |
+|---|---|
+| `shell.js GROUPS` | Heads only: "Runs the server" / "Runs the cookout" / "The desk". ⚠️ **Membership is UNCHANGED** — Requests still sits under Overview and Members under Runs-the-server, exactly as R1 left them. |
+| ⚠️ `labels.js LABELS` | All **90** rewritten from noun phrases to sentences. The key SET is byte-identical to R1's (checked by diffing the sorted key lists); only the values moved. `derived()` still returns a noun phrase for a key added tomorrow — deliberate, an honest fallback beats a fabricated sentence. |
+| `page-settings.js NAMESPACE_NAMES` | The group headings were the raw namespace (`golive`, `rolemenu`, `tempvoice`). ⚠️ `section()` is called with `{ id: namespace }` so the **remembered open/closed slugs do not move** — without it every reader's saved state would silently reset. |
+| ⚠️ `page-overview.js todayStrip` | **It REPLACED the "Needs a human" card, it does not sit beside it.** Both would have said the same three counts, and "one fact, one home" applies to surfaces. Built entirely from `/api/status` + the 10 important actions the page already fetched — no new request. The lead is about FAILURE (`_failed` kinds among the last actions), the clauses are about the QUEUE, and each clause is a link to the page that clears it. With no `status.open` it says the counts could not be read rather than printing zeros. |
+
+### Table furniture
+
+| Key | Note |
+|---|---|
+| `ui.js table()` | Three new options: `tools` (nodes into the toolbar), `foot` (`{noun,total,from}`) and a per-column `help`. Returns the bare `.table-scroll` exactly as before when none of search/tools/foot is wanted, so no existing caller's shape changed. |
+| ⚠️ `ui.js footText` | **The foot OWNS the count.** Every surface that gained a foot lost its toolbar `.table-count` — Logs, both log sections, Members and Cases each had a second copy of the same number. `from` is the 1-based index of this page's first row, so a server-paged table counts across pages instead of restarting at 1. |
+| `ui.js headCell` | The sentence goes on the `th`'s `title` and the `ⓘ` is `aria-hidden`, so hover and a screen reader get the same text once. Only columns that genuinely need explaining carry one. |
+| ⚠️ `ui.js openDrawer` | A native modal `<dialog>` — Escape, the focus trap and the backdrop are the platform's, which is why it is ~30 lines. Cases uses it: a row used to set `state.openCase` and call `refresh()`, which refetched the whole page to append a section at the bottom. It now opens the drawer directly; `load()` re-opens it when `state.openCase` survives a refresh from inside the drawer. |
+| ⚠️ Requests has NO drawer | It renders CARDS, not rows. There is no row for a drawer to belong to, and giving it one means rewriting the page into a table first — outside "furniture". Said out loud rather than forced. |
+| ⚠️ `site.css --bb-scrim` | **Two defects fixed on the way.** `dialog.ask::backdrop` and the mobile sidebar `.scrim` were painted `var(--et-transit-bg, …)`, and `--et-transit-bg` is an OPAQUE notice tint, not a scrim — `:root` defines it, so the fallback never applied and every theme's modal blacked the page out completely. Both take `--bb-scrim` now. |
+| `page-moderation.js` "Apply now" | Carrying out a shadow punishment for real was wearing the accent fill. `{ tone: 'danger' }` — the destructive path stays cold in every theme. |
+
+### The command palette
+
+| Key | Note |
+|---|---|
+| `palette.js railPages` | Pages come from the **live DOM** (`.nav-link` that is not hidden), not from `app.js TABS`. That is what makes a member-only session see only Requests without the palette knowing who is looking — the same trick `shell.js paintNavFor` already relies on. |
+| `palette.js settingsEntries` | Indexed by label AND raw key. The Show-keys switch hides the key sub-line with CSS, not by omitting it, so a key search still works while the keys are out of sight. Gated on the Settings rail link being visible. |
+| ⚠️ `page-settings.js jumpToKey` | **`behavior: 'auto'`, not `'smooth'`.** Measured: a smooth scroll started at the end of `load()` is cancelled by the next layout and the row is never reached — it stayed 1160px down the page. It also runs from `setTimeout(…, 0)` and not inline, because `app.js` calls `mountSections` (which re-applies the remembered open/closed state) and `mountColumns` (which re-parents every block) AFTER `page.load()` resolves. |
+| `palette.js JUMP` | A `CustomEvent` on `document`, not a `window` global: when the row is already on this page the palette says so where it stands instead of reloading the page out from under it, and the event is inert on the sixteen pages that do not listen. |
+| the `Ctrl K` hint | Injected by `mountPalette()` into `.topbar` rather than added to 17 HTML files, and it opens the same palette on click. |
+
+### Show keys
+
+| Key | Note |
+|---|---|
+| ⚠️ `ui.js` module top level | `data-showkeys` is stamped on `<html>` at IMPORT time, before a row is drawn — every page imports `ui.js`, so a reader who wants the keys never watches them appear a frame late. Reading and writing `localStorage` are both inside `try`/`catch`; a browser that refuses storage still works, the choice just is not remembered. |
+| `site.css :root:not([data-showkeys="true"]) .setrow-key` | Hidden by CSS and **not** by omitting the node, which is what keeps the palette's key search working. |
+
+### What R2 did NOT do
+
+| Key | Note |
+|---|---|
+| the estate themes' own contrast | Untouched, and several of them are still sub-AA. The brief scopes the 4.5:1 promise to the new theme in both modes. |
+| ⚠️ long group captions in `cyberpunk` | That theme sets `--et-nav-head-size: var(--et-ui-lg)`, so "RUNS THE COOKOUT" wraps to two lines in the rail. Seen, left alone: fixing it means either shortening the owner's words or overriding a theme's own type scale from page CSS. |
+| a `themes` note in `estate-theme.css`'s header | The header still says "FIVE NAMED THEMES" and lists neither `discord` nor `blackbloc`. It was already wrong before this build. |
