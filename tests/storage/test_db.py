@@ -12,7 +12,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 17
+        assert SCHEMA_VERSION == 18
         cur = await db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = {r["name"] for r in await cur.fetchall()}
         assert {"settings", "action_log", "role_menus", "role_menu_options"} <= tables
@@ -377,6 +377,30 @@ async def test_a_role_menu_gains_the_approval_columns_on_an_older_file(tmp_path)
         cur = await again.conn.execute("SELECT * FROM role_menus WHERE name = 'runner'")
         row = await cur.fetchone()
         assert (row["approval"], row["expires_days"], row["retry_days"]) == (0, None, 7)
+    finally:
+        await again.close()
+
+
+async def test_an_open_poll_gains_a_vote_scheme_column_and_keeps_its_old_scheme(tmp_path):
+    """KI-9: a poll written before the column stays NULL, which reads as the old hash."""
+    path = tmp_path / "old.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("ALTER TABLE polls DROP COLUMN vote_scheme")
+    await db.conn.execute(
+        "INSERT INTO polls(id, guild_id, creator_id, question, anonymous, status, created_at) "
+        "VALUES (1, 7, 9, 'now?', 1, 'open', '2026-08-27T00:00:00+00:00')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("PRAGMA table_info(polls)")
+        assert "vote_scheme" in {row["name"] for row in await cur.fetchall()}
+        cur = await again.conn.execute("SELECT vote_scheme FROM polls WHERE id = 1")
+        assert (await cur.fetchone())["vote_scheme"] is None
     finally:
         await again.close()
 

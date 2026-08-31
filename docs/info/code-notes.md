@@ -3908,3 +3908,22 @@ because `check.mjs` and the pytest side fill it from two different tables.
 | ⚠️ `black_bloc/api/server.py create_app` | `app.state.bot = bot` exists so the **test** sign-in fixture can find the database the app was built with. It is the FastAPI-idiomatic place for it and nothing in `black_bloc` reads it; the alternative was a per-file fixture in twenty test files naming the right database by hand, which is exactly the wiring that goes stale. |
 | ⚠️ `tests/conftest.py record_session` | The fixture writes the `sessions` row with **plain `sqlite3` on the same file**, because `sign_in` is a sync fixture called from both sync and async tests and cannot await the real `sessions.start`. It is a real row in the real database, not a seeded cache, so the 270 existing sign-ins exercise the same lookup the site does. |
 | **not verified** | No browser has held one of these cookies; no session has been revoked against the live site; the 30-second cache has only ever been exercised with a hand-set clock. |
+
+## KI-9 — keyed anonymous poll votes (2026-08-31)
+
+> Same worktree, the commit after KI-6. **Last verified: 2026-08-31** —
+> `pytest -q` **2257 passed** (2244 after KI-6), `ruff check black_bloc tests site` clean.
+> ⚠️ **Nothing here has run against live Discord**: every vote is a fake button press in
+> the repo's harness, and no anonymous poll has ever been cast in the server.
+> ⚠️ **`POLL_VOTE_SECRET` is optional and the deploy does not need it** — without it new
+> polls keep the old hash and the bot logs one warning when the polls cog loads.
+
+| Key | Note |
+|---|---|
+| ⚠️ `black_bloc/cogs/community/polls.py voter_key` | **The scheme is per POLL, not per deploy, and that is the whole migration.** A poll that is already open has `poll_votes` rows keyed with the old per-poll `sha256("<poll_id>:<user_id>")`; if the scheme changed underneath it, the same person would key to a different number and be able to vote a second time. So the row remembers what it was created with (`polls.vote_scheme`, additive, schema 18) and this function follows the row. New polls are `hmac` when `POLL_VOTE_SECRET` is set, `sha256` when it is not. The truncation is unchanged — top 63 bits of the digest, so `poll_votes.user_id` stays an INTEGER and nothing else moved. |
+| ⚠️ `black_bloc/cogs/community/polls.py can_key` | **A keyed poll whose key has gone is REFUSED, never downgraded.** Falling back to the hash would key the same person to a new number and hand them a second vote — the exact failure the per-poll scheme exists to prevent. `can_key` asks the question and `voting_row` answers the presser with `VOTE_KEY_MISSING` before anything is written; the `ValueError` is the belt to that braces, so a call site added later fails loudly instead of quietly double-counting. |
+| `black_bloc/cogs/community/polls.py scheme_of` | Tolerates a row with no `vote_scheme` **key at all** (a `sqlite3.Row` from before the column, or a plain dict in a test) and reads it as the old scheme. NULL and missing mean the same thing here: this poll predates the column. |
+| ⚠️ `black_bloc/cogs/community/polls.py voting_row` | The single gate all three vote buttons already went through, which is why the missing-key refusal is one check rather than three. The log line names the poll id and **never the key or a preimage** — a preimage is a member id, which is the thing anonymity is protecting. |
+| `black_bloc/cogs/community/polls.py cog_load` | The one startup warning, and only when the key is unset. It says what the fallback IS (the old hash, on new polls) rather than only that something is missing, because the behaviour is deliberate and safe — a deploy without the secret must not read as broken. |
+| ⚠️ `black_bloc/config.py poll_vote_secret` | **A secret, so it is deliberately NOT a settings-registry key** — checklist 33 asks for both doors on every decision, but a registry key is readable on the Settings page and editable with `/settings set-value`, and a MAC key that the dashboard can show is not a MAC key. It follows `SESSION_SECRET`: env only, `fly secrets` in production, blank counts as unset. What IS configurable both ways is the thing people actually decide — a poll's `anonymous` flag — and that already has a slash path and a dashboard control. |
+| **not verified** | No key has been set on the Fly machine; no poll has been created under `hmac` outside the tests; nothing has measured the old scheme against a real `poll_votes` table (the live one is empty). |

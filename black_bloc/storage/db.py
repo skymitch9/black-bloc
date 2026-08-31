@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -296,6 +296,7 @@ CREATE TABLE IF NOT EXISTS polls (
     decided_by        INTEGER,
     decided_at        TEXT,
     deny_reason       TEXT,
+    vote_scheme       TEXT,
     created_at        TEXT    NOT NULL
 );
 
@@ -421,6 +422,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("tempvoice_prefs", "region", "TEXT"),
     ("tempvoice_prefs", "permitted_ids", "TEXT"),
     ("tempvoice_prefs", "banned_ids", "TEXT"),
+    ("polls", "vote_scheme", "TEXT"),
 )
 
 MOD_CASES_CARRIED_OVER = (
