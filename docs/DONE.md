@@ -9,6 +9,50 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-08-31 — B4–B8: the last five audit leftovers, live
+
+The 2026-08-27 site-feature audit's open tail (`info/site-feature-audit.md` §2), queued for
+the post-reset resume and dispatched the morning the owner returned ("lets get started with
+whats left on our todo list", ~10:13). One Opus builder (~485k), one commit per item off
+`7b7840b`, merged `3cae955`, **deployed 11:32 Phoenix** (`deploys.log`); verified live:
+`/health` ok, 35 commands synced, logged in 18:31:58Z. **2227 tests** (+65), ruff clean,
+`check.mjs` 17 pages / **98 routes** (+9).
+
+- **B4** `4f0f399` — temp-voice rooms get Rename / Cap / Lock / Hide on the dashboard.
+  `do_rename`/`do_limit`/`do_privacy` refactored off `Interaction` onto a `Doer` NamedTuple
+  (client, guild, user, via) that an Interaction already satisfies — panel and `/voice` call
+  sites unchanged, ONE implementation; helpers return `Said` (a str carrying `ok`) so the API
+  can pick 200 vs a refusal. Place-gated by `may_act_in` (test mode = only rooms in the test
+  category, `409` in words). Skipped on purpose: region + kick (each needs a per-row picker;
+  nothing blocks adding them).
+- **B5** `47628b7` — `POST /api/rolemenus/{name}/unpost` + an Un-post button + **`/rolemenu
+  unpost`** in Discord (checklist 33). Goes through `rolemenu_panels.unpost`, NOT
+  `clear_message` (which would forget the id and leave the panel live — the KI-8 trap);
+  guard asked twice to tell `409 test_mode` from `409 panel_stuck`; `note()` gained `via` so
+  website panel actions log under a `web.` head (also fixes the same residual on `move_panel`).
+- **B6** `2c65db0` — `POST /api/rolemenus/seed` + Seed defaults button; `created`/`skipped`
+  as lists; `seed_summary` is the one wording both surfaces show; never rewrites an existing
+  menu. New kind `role_menu.seeded` (routine).
+- **B7** `d8f44c7` — staff assign from the site (`POST /api/rolemenus/{name}/assign`).
+  `staff_assign` = the select callback's body lifted whole; the extraction fixed a
+  checklist-12 ordering bug (the select answered the clicker BEFORE writing `role_grants` +
+  the action line, so a failed reply ate the record). `role_diff` untouched — only menu-owned
+  roles ever move. Deliberately NO test-mode refusal (roles aren't a channel; `/rolemenu
+  assign` behaves identically today). Deviation: the form offers every menu with roles, not
+  only `staff`-mode ones, matching the slash command; options labelled `name — mode`.
+- **B8** `379b0c1` — `GET/PUT /api/events/{id}`: detail card + "Change it" for
+  pending/approved events. `checked_fields` = the modal's whole validation chain shared, so
+  the two doors cannot drift; the body names its IANA zone (browser zone shown above the
+  field, staffer's `/timezone` as fallback); review channel renames via the guard-aware
+  helper; an already-posted announcement or scheduled event keeps its old details and
+  `notes` says so in words. New kind `event.edited` (routine).
+
+**NOT verified live:** nothing ran against real Discord — no room renamed, no panel
+deleted, no role granted, no event edited, no page rendered in a browser (contract + parse
+checks only). Owner sweep = `access/sweeps.md` rows 21–24. Builder process notes worth
+keeping: `pytest | tail` returns tail's exit code (check the summary line), and editing
+source during a background full-suite run produces spurious `test_logkinds` failures.
+
 ## 2026-08-31 — Post-trip bookkeeping sweep: landed 2026-08-26/27 items moved off TODO
 
 Moved whole from `TODO.md` (every item below was verified shipped by the 2026-08-31 docs

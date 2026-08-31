@@ -37,6 +37,10 @@ All of this happens in **`#mute-me-bot-test-spam`** (test mode) or on **https://
 | 18 | `/help` (batch 2) | `/help`, then `/help filter:temp` | command list with `(staff)` marks on staff-only entries |
 | 19 | Round-1 fixes | `/rolemenu showall`; open the `/twitch link` picker; `/tempvoice setup` | showall lists every menu (ephemeral); the picker says **channel**, never *login*; setup says **repaired / took it over** (never a second lobby), lobby named "join to create a channel", Member + staff can connect |
 | 20 | Temp-voice memory (batch 4) | in your temp channel: `/voice permit @someone`, `/voice ban @someone-else`, `/voice region us-west` → leave (channel deletes) → re-join the lobby | the new channel has the same region and the same two people set; `/voice info` shows both halves; `/voice reset` clears it |
+| 21 | Temp-voice room controls (B4, live 2026-08-31) | with a temp channel open: https://blackbloc.heygabi.ai/tempvoice.html → Open now | each row shows In it / Cap / Access + Rename, Cap, Lock, Hide buttons; press Rename — the channel renames and the reply says "remembered for next time" |
+| 22 | Role-menu Un-post + Seed (B5+B6, live 2026-08-31) | /rolemenus.html → Un-post beside Post on a posted card; the Seed defaults button beside New menu; also `/rolemenu unpost` in Discord | un-post takes the panel down in the channel (in test mode: a `would_unpost` log line instead); seed says created/left-alone in words and never rewrites an existing menu |
+| 23 | Staff assign from the site (B7, live 2026-08-31) | /rolemenus.html → Timed roles → "Hand roles out": pick a member, a menu, roles → Give these | the member's roles change (⚠️ REAL roles even in test mode, same as `/rolemenu assign`); the Logs page shows `web.role_menu.assign` with Via: Website |
+| 24 | Event detail + edit (B8, live 2026-08-31) | /events.html → Queue → Open on a pending event → change the title or start in "Change it" | detail card shows every field; the review channel renames to match the new title; an already-posted announcement keeps its old text and the reply says so |
 
 ## Detailed phase scripts (1–8a) — moved whole from `TODO.md` 2026-08-31
 
