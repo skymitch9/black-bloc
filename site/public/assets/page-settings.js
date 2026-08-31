@@ -15,6 +15,25 @@ const NAMESPACE_NOTES = {
   automod: 'automod_rules has its own editor on the Automod tab; the JSON box here is the fallback.',
 };
 
+const NAMESPACE_NAMES = {
+  core: 'The basics',
+  mod: 'Moderation',
+  automod: 'Automod',
+  honeypot: 'Honeypot',
+  modmail: 'Modmail',
+  golive: 'Go-live',
+  events: 'Events',
+  birthday: 'Birthdays',
+  tempvoice: 'Temp voice',
+  rolemenu: 'Role menus',
+  poll: 'Polls',
+  chat: 'Chat',
+  request: 'Requests',
+};
+
+const named = (namespace) => NAMESPACE_NAMES[namespace]
+  || String(namespace).replace(/^./, (c) => c.toUpperCase());
+
 function order(payload) {
   const found = Object.keys(payload || {}).filter((key) => Array.isArray(payload[key]));
   found.sort((a, b) => {
@@ -95,7 +114,7 @@ async function load() {
 
   const groups = namespaces.map((namespace) => {
     const rows = payload[namespace];
-    const group = section(namespace, NAMESPACE_NOTES[namespace] || null, { count: rows.length });
+    const group = section(named(namespace), NAMESPACE_NOTES[namespace] || null, { count: rows.length, id: namespace });
     group.details.querySelector('.sect-inner').classList.add('flush');
     group.body.append(...rows.map((spec) => byKey.get(spec.key).node));
     return { node: group.node, count: group.count, size: rows.length };

@@ -3,6 +3,8 @@ import { FEATURE_TABS, start, tabHref } from './app.js';
 import { GROUPS, shellStatus } from './shell.js';
 import { card, el, icon, idsIn, modeSwitch, nameNode, notice, sayNothing, shortWhen } from './ui.js';
 
+const LIST_LAST = ' and ';
+
 const many = (n, one, more) => `${n} ${Number(n) === 1 ? one : more}`;
 
 const OPEN_NOTE = {
@@ -82,7 +84,7 @@ function featureRow(row, open, specs, say) {
 function featuresCard(status, payload) {
   const rows = (status && status.features) || [];
   if (rows.length === 0) {
-    return card('Features', [sayNothing('No feature reports a mode yet.')], { flush: true });
+    return card('Features', [sayNothing('Nothing has told the bot what it is meant to be doing yet.')], { flush: true });
   }
   const specs = new Map();
   for (const group of Object.values(payload || {})) {
@@ -95,24 +97,70 @@ function featuresCard(status, payload) {
   ], { count: rows.length, flush: true });
 }
 
-function needsCard(status) {
+/** Clauses read as one sentence: "a, b and c". */
+function joined(parts) {
+  if (parts.length <= 1) return parts;
+  const out = [];
+  parts.forEach((part, at) => {
+    if (at > 0) out.push(at === parts.length - 1 ? LIST_LAST : ', ');
+    out.push(part);
+  });
+  return out;
+}
+
+function queueLink(one, count) {
+  return el('a', { class: 'today-link', href: tabHref(one.tab), 'data-tone': one.tone }, [
+    el('span', { class: 'dot-sm', 'data-tone': one.tone }),
+    el('span', { text: one.say(count) }),
+  ]);
+}
+
+function modesSaid(status) {
+  const rows = (status && status.features) || [];
+  const shadow = rows.filter((row) => String(row.mode) === 'shadow').length;
+  const off = rows.filter((row) => String(row.mode) === 'off').length;
+  if (shadow === 0 && off === 0) return null;
+  const parts = [];
+  if (shadow > 0) parts.push(`${shadow} ${shadow === 1 ? 'feature is' : 'features are'} watching without acting`);
+  if (off > 0) parts.push(`${off} ${off === 1 ? 'is' : 'are'} switched off`);
+  return `${parts.join(LIST_LAST)}.`;
+}
+
+/**
+ * The Overview leads with a sentence rather than a grid of counters, and it is
+ * the ONE home for "what wants a person" — the counter card it replaces said
+ * the same numbers a second time.
+ */
+function todayStrip(status, rows) {
   const open = status && status.open;
+  const said = el('p', { class: 'today-line' });
   if (!open) {
-    return card('Needs a human', [
-      sayNothing('The open counts could not be read, so they are left blank rather than shown as zero.'),
-    ], { flush: true });
+    said.append('The bot did not answer with its open counts, so today is left blank rather than ' +
+      'shown as a row of zeros.');
+    return el('div', { class: 'today', 'data-span': 'full', 'data-tone': 'unknown' }, [
+      el('span', { class: 'today-head', text: 'Today' }),
+      said,
+    ]);
   }
-  const rows = NEEDS
+  const failed = rows.filter((row) => verbOf(row.kind).failed).length;
+  said.append(failed === 0
+    ? 'Nothing’s on fire.'
+    : `${failed} thing${failed === 1 ? '' : 's'} the bot tried has failed.`);
+  const waiting = NEEDS
     .filter((one) => Number(open[one.key]) > 0)
-    .map((one) => el('a', { class: 'chip', href: tabHref(one.tab) }, [
-      el('span', { class: 'dot-sm', 'data-tone': one.tone }),
-      el('span', { class: 'rowlist-line', text: one.say(Number(open[one.key])) }),
-      icon('chevronRight', 16),
-    ]));
-  if (rows.length === 0) {
-    return card('Needs a human', [sayNothing('Nothing is waiting on a person right now.')], { flush: true });
-  }
-  return card('Needs a human', rows, { count: rows.length, flush: true });
+    .map((one) => queueLink(one, Number(open[one.key])));
+  if (waiting.length === 0) said.append(' Nothing is waiting on a person.');
+  else said.append(' ', ...joined(waiting), '.');
+  const modes = modesSaid(status);
+  if (modes) said.append(` ${modes}`);
+  return el('div', {
+    class: 'today',
+    'data-span': 'full',
+    'data-tone': failed === 0 ? 'calm' : 'danger',
+  }, [
+    el('span', { class: 'today-head', text: 'Today' }),
+    said,
+  ]);
 }
 
 /**
@@ -142,8 +190,8 @@ function sentence(row) {
   return node;
 }
 
-const NOTHING_IMPORTANT = 'Nothing important has happened — nothing has acted on a member ' +
-  'or failed. The Logs page has the routine lines.';
+const NOTHING_IMPORTANT = 'Nothing’s happened worth waking anyone for — nothing has acted on a ' +
+  'member, and nothing has failed. The routine lines are all on Logs.';
 
 /** Overview shows only what acted on somebody; the Logs page shows the rest. */
 function allLink() {
@@ -186,10 +234,11 @@ async function load() {
 
   const notes = notesOf(status || {}).concat(notesOf(actions));
   document.getElementById('dash').replaceChildren(
+    todayStrip(status, rows),
     ...(notes.length ? [el('p', { class: 'section-note', text: notes.join(' ') })] : []),
     el('div', { class: 'twocol' }, [
       featuresCard(status, payload),
-      el('div', { class: 'colstack' }, [needsCard(status), actionsCard(rows)]),
+      el('div', { class: 'colstack' }, [actionsCard(rows)]),
     ]),
   );
 }

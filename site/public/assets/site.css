@@ -26,6 +26,9 @@
   --bb-wordmark-size: var(--et-ui-md);
   --bb-wordmark-weight: var(--et-weight-heavy);
   --bb-mark-size: 16px;
+  --bb-today-bg: var(--et-bg-2);
+  --bb-today-border: var(--et-panel-border, var(--et-hairline));
+  --bb-today-edge: var(--et-accent);
 }
 
 /* The display-face rule, and the only theme-keyed token block the site owns:
@@ -314,6 +317,41 @@ body { overflow: hidden; }
 .page-head .sub { margin: 0; font-size: var(--et-ui-md); color: var(--et-muted); }
 .page-head-aside { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .page-head-aside:empty { display: none; }
+
+/* The Overview's opening sentence. It is the ONE place the "what wants a
+   person" counts are stated — the counter card that used to say them again
+   was removed with it. */
+.today {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: var(--et-border-w) solid var(--bb-today-border);
+  border-left: 3px solid var(--bb-today-edge);
+  border-radius: var(--et-radius-lg);
+  background: var(--bb-today-bg);
+  box-shadow: var(--et-card-shadow);
+}
+.today[data-tone="danger"] { --bb-today-edge: var(--et-danger); }
+.today[data-tone="unknown"] { --bb-today-edge: var(--et-muted); }
+.today-head {
+  font-family: var(--et-font-label);
+  font-size: var(--et-ui-2xs);
+  font-weight: var(--et-label-weight);
+  letter-spacing: var(--et-label-tracking);
+  text-transform: uppercase;
+  color: var(--et-muted);
+}
+.today-line { margin: 0; font-size: var(--et-ui-lg); line-height: 1.45; text-wrap: pretty; }
+.today-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--et-fg);
+  text-underline-offset: 3px;
+}
+.today-link:hover { color: var(--et-accent); }
+.today-link:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; }
 
 .scrim { display: none; }
 
