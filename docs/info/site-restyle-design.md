@@ -13,7 +13,16 @@
 > R1 deviations worth knowing: Requests sits under Overview and Members under
 > Moderation (as shipped 08-27, contrary to §2 — one line in `shell.js:GROUPS` to
 > change); labels are short noun phrases (the sentence voice is R2's copy pass).
-> **R2 (the skin) is the remaining build.**
+> **R2 (the skin) is BUILT and awaiting review** (`a28caef`..`c9d14b7`, not yet
+> deployed): the Black Bloc theme dark+light as the default, the wordmark and the
+> display-face rule, the copy voice (group captions, all 90 sentence labels, the
+> Overview's TODAY sentence), table toolbars/tooltip heads/row-count feet plus a
+> Cases detail drawer, the Ctrl K command palette, and the Show keys switch.
+> ⚠️ R2 deviations: there are **six** estate themes, not five, so the dropdown
+> holds seven; the display face is **Bangers** (already on disk, OFL) rather than
+> Bricolage Grotesque, which would have had to be fetched; **Requests gets no
+> drawer** — it renders cards, not rows; and four of § 4 C's palette values were
+> darkened to clear 4.5:1. Full reasoning in `code-notes.md § R2`.
 > Research base: [`dashboard-inspiration.md`](dashboard-inspiration.md) (§ refs below).
 > Mock canvas the owner reacted to: https://claude.ai/code/artifact/ad76df70-49f4-4fcd-a66a-07c8969d0ddd
 
