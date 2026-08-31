@@ -522,7 +522,7 @@ function emptySaid(which, payload, base, filterable = false) {
 
 /** The row-count footer the big lists wear: "Showing 1-10 of 24 requests". */
 function footFor(which, payload, rows, perPage) {
-  if (rows.length === 0) return null;
+  if (rows.length === 0) return document.createDocumentFragment();
   const size = payload.per_page ?? perPage;
   const total = payload.total ?? rows.length;
   const from = (state[which] - 1) * size + 1;

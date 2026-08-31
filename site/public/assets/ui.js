@@ -639,6 +639,7 @@ async function backToTop({ scroller, block, at }) {
 
 export function pager({ page, hasMore, onPage, count = null }) {
   const at = Number(page) || 1;
+  if (at <= 1 && !hasMore && count === 0) return document.createDocumentFragment();
   const node = el('div', { class: 'pager' });
   const go = async (to) => {
     const where = listTop(node);
