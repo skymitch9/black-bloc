@@ -76,8 +76,10 @@ per feature, so the old bot keeps running until the new one is proven.
 
 - **F-table open questions:** only F2's "scan for inactive streamers" is still TBD; everything else in the table is decided.
 - **Test sweep — the whole list lives in [`access/sweeps.md`](access/sweeps.md)** (20 rows in priority order + the detailed phase 1–8a scripts, moved there whole 2026-08-31; it is the ONE home for what a person has not yet exercised).
-- **Twitch developer app** — owner is creating it (2026-08-26); `TWITCH_CLIENT_ID` /
-  `TWITCH_CLIENT_SECRET` go in `.env`. Fallback path only; F1 ships on presence first.
+- ~~Twitch developer app~~ **ALREADY DONE — stale line caught by the owner
+  2026-08-31 ("didnt we already connect twitch dev").** Measured: `TWITCH_CLIENT_ID`
+  + `TWITCH_CLIENT_SECRET` are Deployed on Fly and present in `.env`, and the boot
+  log says `twitch: app token obtained` (20:13:48Z). Nothing to do.
 - **Cleanup (later, owner):** kick the dormant bots `Verification Bot`, `baf`,
   `Black Block` once Black Bloc is stable.
 
