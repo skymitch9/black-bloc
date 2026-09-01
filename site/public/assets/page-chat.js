@@ -106,6 +106,7 @@ const OWN_TOKENS = {
   whats_next: ['{title}', '{when}', '{where}'],
   birthdays: ['{birthdays}', '{count}'],
   head_count: ['{count}'],
+  who_has: ['{role}', '{count}', '{holders}', '{more}', '{escalate}', '{trouble}'],
   my_roles: ['{menus}', '{roles}'],
   time_for_me: ['{their_time}', '{zone}'],
   need_a_mod: ['{staff_roles}', '{ticket_how}'],
@@ -126,6 +127,11 @@ const TOKEN_SAID = {
   '{zone}': 'their zone',
   '{staff_roles}': 'the staff roles',
   '{ticket_how}': 'how to open a ticket',
+  '{role}': 'the role that was asked about',
+  '{holders}': 'who holds it, by display name',
+  '{more}': 'how many were left off the list',
+  '{escalate}': 'the extra line when it is a staff role',
+  '{trouble}': 'why the role could not be counted',
 };
 
 const state = { page: 1 };

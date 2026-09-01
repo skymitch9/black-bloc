@@ -8,7 +8,9 @@ from black_bloc.chat_data import (
     at_local,
     clock,
     display_of,
+    matching_roles,
     tokens_for,
+    wanted_role,
     wanted_time,
 )
 from black_bloc.cogs.community.birthdays import save_birthday
@@ -29,10 +31,11 @@ CHANNEL = 111
 
 
 class FakeRole:
-    def __init__(self, role_id, name, viewers=()):
+    def __init__(self, role_id, name, viewers=(), members=()):
         self.id = role_id
         self.name = name
         self.viewers = set(viewers)
+        self.members = list(members)
 
     def is_default(self):
         return self.id == GUILD
@@ -57,11 +60,11 @@ class FakeChannel:
 
 
 class FakeMember:
-    def __init__(self, user_id=MEMBER, display_name="Nia", roles=()):
+    def __init__(self, user_id=MEMBER, display_name="Nia", roles=(), bot=False):
         self.id = user_id
         self.display_name = display_name
         self.name = display_name
-        self.bot = False
+        self.bot = bot
         self.roles = list(roles)
 
 
@@ -325,6 +328,155 @@ async def test_need_a_mod_with_no_staff_channel_still_says_something(bot):
     await bot.store.clear(GUILD, "staff_channel_id")
     tokens, filled = await asked(bot, "need_a_mod")
     assert filled is False and tokens["roles"] == "the mods"
+
+
+def people(count, first=2000, name="Person {n}"):
+    return [FakeMember(first + n, name.format(n=n)) for n in range(count)]
+
+
+def with_roles(bot, *roles):
+    bot.guild.roles = [FakeRole(GUILD, "@everyone"), *roles]
+    return bot
+
+
+def test_the_role_a_member_asked_about_is_read_off_the_end_of_the_sentence():
+    assert wanted_role("<@1> whos a lead") == "lead"
+    assert wanted_role("who is a mentor") == "mentor"
+    assert wanted_role("who are the leads") == "leads"
+    assert wanted_role("tell me who's a mentor") == "mentor"
+    assert wanted_role("who has the Leads role") == "leads"
+    assert wanted_role("who has role mentor") == "mentor"
+    assert wanted_role("whos got the mod hat") == "mod hat"
+    assert wanted_role("whos a lead right now") == "lead"
+    assert wanted_role("whos our leads please") == "leads"
+    assert wanted_role("who is the") == ""
+    assert wanted_role("") == ""
+
+
+def test_a_role_is_matched_whole_then_by_a_word_then_by_a_part():
+    roles = [FakeRole(1, "Leads"), FakeRole(2, "Mentor"), FakeRole(3, "Cookout Crew")]
+
+    assert [r.name for r in matching_roles(roles, "leads")] == ["Leads"]
+    assert [r.name for r in matching_roles(roles, "lead")] == ["Leads"]
+    assert [r.name for r in matching_roles(roles, "mentors")] == ["Mentor"]
+    assert [r.name for r in matching_roles(roles, "crew")] == ["Cookout Crew"]
+    assert [r.name for r in matching_roles(roles, "ment")] == ["Mentor"]
+    assert matching_roles(roles, "nothing at all") == []
+
+
+async def test_who_has_names_the_role_the_count_and_the_display_names(bot):
+    with_roles(bot, FakeRole(30, "Leads", members=people(3, name="Lead {n}")))
+
+    tokens, filled = await asked(bot, "who_has", text="whos a lead")
+
+    assert filled is True
+    assert tokens["role"] == "Leads" and tokens["count"] == 3
+    assert tokens["holders"] == "Lead 0, Lead 1, Lead 2"
+    assert tokens["more"] == "" and tokens["escalate"] == ""
+
+
+async def test_who_has_never_pings_anybody(bot):
+    with_roles(bot, FakeRole(30, "Leads", members=[FakeMember(4001, "Kai")]))
+
+    tokens, _ = await asked(bot, "who_has", text="who has the leads role")
+
+    assert "<@" not in tokens["holders"] and "@" not in tokens["holders"]
+
+
+async def test_a_long_role_says_how_many_were_left_off_the_list(bot):
+    with_roles(bot, FakeRole(30, "Members", members=people(28)))
+
+    tokens, filled = await asked(bot, "who_has", text="whos a member")
+
+    assert filled is True and tokens["count"] == 28
+    assert tokens["more"] == " …and 3 more"
+    assert len(tokens["holders"].split(", ")) == 25
+
+
+async def test_bots_are_left_out_unless_the_role_is_nothing_but_bots(bot):
+    with_roles(
+        bot,
+        FakeRole(30, "Leads", members=[FakeMember(1, "Kai"), FakeMember(2, "Robo", bot=True)]),
+        FakeRole(31, "Webhooks", members=[FakeMember(3, "Robo", bot=True)]),
+    )
+
+    tokens, _ = await asked(bot, "who_has", text="whos a lead")
+    assert tokens["holders"] == "Kai" and tokens["count"] == 1
+
+    tokens, filled = await asked(bot, "who_has", text="who has the webhooks role")
+    assert filled is True and tokens["holders"] == "Robo"
+
+
+async def test_a_staff_role_gets_the_line_that_points_at_a_mod(bot):
+    with_roles(bot, FakeRole(11, "Aunties / Uncles", members=[FakeMember(1, "Kai")]))
+
+    tokens, _ = await asked(bot, "who_has", text="whos an auntie")
+    assert tokens["escalate"].endswith("I will name the staff to ask.")
+
+    await bot.store.set(GUILD, "modmail_enabled", True)
+    tokens, _ = await asked(bot, "who_has", text="whos an auntie")
+    assert tokens["escalate"].endswith("I will point you at modmail.")
+
+
+async def test_a_role_nobody_holds_says_so_in_words(bot):
+    with_roles(bot, FakeRole(30, "Leads"))
+
+    tokens, filled = await asked(bot, "who_has", text="whos a lead")
+
+    assert filled is False
+    assert tokens["trouble"] == "**Leads** has nobody in it right now."
+
+
+async def test_two_roles_that_both_fit_refuse_and_name_them(bot):
+    with_roles(bot, FakeRole(30, "Team Lead"), FakeRole(31, "Lead Cook"))
+
+    tokens, filled = await asked(bot, "who_has", text="whos a lead")
+
+    assert filled is False
+    assert "**Team Lead**" in tokens["trouble"] and "**Lead Cook**" in tokens["trouble"]
+    assert " or " in tokens["trouble"]
+
+
+async def test_no_such_role_names_the_closest_it_has(bot):
+    with_roles(bot, FakeRole(30, "Cookout Lead"), FakeRole(31, "Member"))
+
+    tokens, filled = await asked(bot, "who_has", text="who has the grill lead role")
+
+    assert filled is False
+    assert "**Cookout Lead**" in tokens["trouble"]
+
+
+async def test_no_such_role_and_nothing_close_says_that_too(bot):
+    with_roles(bot, FakeRole(30, "Member"))
+
+    tokens, filled = await asked(bot, "who_has", text="whos a wizard")
+
+    assert filled is False
+    assert tokens["trouble"] == (
+        "there is no role here called **wizard**, and nothing else comes close."
+    )
+
+
+async def test_who_has_with_no_role_named_asks_for_one(bot):
+    with_roles(bot, FakeRole(30, "Leads"))
+
+    tokens, filled = await asked(bot, "who_has", text="who is the")
+
+    assert filled is False and "`who has the Leads role`" in tokens["trouble"]
+
+
+async def test_who_has_in_a_dm_says_it_needs_the_server(bot):
+    tokens, filled = await tokens_for(bot, None, FakeMember(), "who_has", "whos a lead")
+
+    assert filled is False and "inside the server itself" in tokens["trouble"]
+
+
+async def test_everyone_is_never_the_role_that_was_meant(bot):
+    with_roles(bot, FakeRole(30, "Leads"))
+
+    tokens, filled = await asked(bot, "who_has", text="whos an everyone")
+
+    assert filled is False
 
 
 async def test_a_lookup_that_throws_falls_back_to_the_empty_line(bot, monkeypatch, caplog):
