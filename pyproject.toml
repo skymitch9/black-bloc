@@ -5,6 +5,7 @@ description = "Black Bloc — a Discord moderation and content bot"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "anthropic>=1.0,<2",
     "discord.py>=2.4,<3",
     "pydantic-settings>=2.4,<3",
     "aiosqlite>=0.20",

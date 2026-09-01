@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 19
+SCHEMA_VERSION = 20
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -360,6 +360,68 @@ CREATE TABLE IF NOT EXISTS chat_lines (
 );
 
 CREATE INDEX IF NOT EXISTS chat_lines_by_intent ON chat_lines(intent_id, id);
+
+CREATE TABLE IF NOT EXISTS knowledge_sections (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id   INTEGER NOT NULL,
+    title      TEXT    NOT NULL,
+    body       TEXT    NOT NULL,
+    source     TEXT    NOT NULL DEFAULT 'staff'
+               CHECK (source IN ('staff', 'server')),
+    tag        TEXT,
+    updated_at TEXT    NOT NULL,
+    updated_by INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS knowledge_sections_by_source
+    ON knowledge_sections(guild_id, source, id);
+
+CREATE TABLE IF NOT EXISTS personality_tropes (
+    name       TEXT    PRIMARY KEY,
+    label      TEXT    NOT NULL,
+    voice      TEXT    NOT NULL,
+    neighbours TEXT    NOT NULL DEFAULT '[]',
+    enabled    INTEGER NOT NULL DEFAULT 1,
+    sort       INTEGER NOT NULL DEFAULT 0,
+    source     TEXT    NOT NULL DEFAULT 'gabi',
+    updated_at TEXT    NOT NULL,
+    updated_by INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS chat_window (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id   INTEGER,
+    channel_id INTEGER NOT NULL,
+    user_id    INTEGER NOT NULL,
+    at         TEXT    NOT NULL,
+    speaker    TEXT    NOT NULL CHECK (speaker IN ('member', 'bot')),
+    content    TEXT    NOT NULL,
+    tier       TEXT
+);
+
+CREATE INDEX IF NOT EXISTS chat_window_by_place ON chat_window(channel_id, user_id, id);
+CREATE INDEX IF NOT EXISTS chat_window_by_age ON chat_window(at);
+
+CREATE TABLE IF NOT EXISTS llm_ledger (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    at                 TEXT    NOT NULL,
+    guild_id           INTEGER,
+    user_id            INTEGER,
+    turn               TEXT    NOT NULL,
+    provider           TEXT    NOT NULL,
+    model              TEXT    NOT NULL,
+    tier               TEXT    NOT NULL,
+    outcome            TEXT    NOT NULL DEFAULT 'ok'
+                       CHECK (outcome IN ('ok', 'error')),
+    input_tokens       INTEGER NOT NULL DEFAULT 0,
+    output_tokens      INTEGER NOT NULL DEFAULT 0,
+    cache_read_tokens  INTEGER NOT NULL DEFAULT 0,
+    cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+    cost_microdollars  INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS llm_ledger_by_at ON llm_ledger(at);
+CREATE INDEX IF NOT EXISTS llm_ledger_by_person ON llm_ledger(user_id, at);
 
 CREATE TABLE IF NOT EXISTS requests (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
