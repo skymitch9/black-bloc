@@ -160,6 +160,9 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
     ),
     "black_bloc/cogs/content/chat.py::LOG_KIND": ("chat.insult",),
     "black_bloc/cogs/content/chat.py::ROUTE_KIND": ("chat.route",),
+    "black_bloc/cogs/content/chat.py::KNOWLEDGE_ADDED": ("chat.knowledge_added",),
+    "black_bloc/cogs/content/chat.py::KNOWLEDGE_REMOVED": ("chat.knowledge_removed",),
+    "black_bloc/cogs/content/chat.py::KNOWLEDGE_INGESTED": ("chat.knowledge_ingested",),
     "black_bloc/cogs/content/golive.py::kind": (
         "golive.optin",
         "golive.optout",
