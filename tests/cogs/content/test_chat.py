@@ -574,6 +574,65 @@ async def test_chat_settings_lists_every_chat_key_including_its_log_level(
     assert "/settings set" in said
 
 
+class FakeChoice:
+    def __init__(self, value):
+        self.name = value
+        self.value = value
+
+
+async def test_the_voice_and_the_pool_are_both_shown(cog, bot, member, monkeypatch):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    await cog.seed_guilds()
+    interaction = FakeInteraction(bot, member)
+
+    await Chat.personality_show.callback(cog, interaction)
+
+    said = interaction.sent
+    assert "The voice is **cookout**" in said
+    assert "**noir** (noir) — on" in said
+
+
+async def test_the_voice_is_set_through_the_registry_so_the_website_sees_it_too(
+    cog, bot, member, db, monkeypatch
+):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    interaction = FakeInteraction(bot, member)
+
+    await Chat.personality_set.callback(cog, interaction, FakeChoice("pool"))
+
+    assert "The voice is **pool**" in interaction.sent
+    assert bot.store.get(GUILD, "chat_personality") == "pool"
+    assert await rows(db, "chat.personality")
+
+
+async def test_a_mood_is_switched_off_and_the_cached_pool_is_dropped(
+    cog, bot, member, db, monkeypatch
+):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    await cog.seed_guilds()
+    bot._chat_tropes = ("stale",)
+    interaction = FakeInteraction(bot, member)
+
+    await Chat.personality_mood.callback(cog, interaction, "Flirty", False)
+
+    assert "**flirty** is off" in interaction.sent
+    assert not hasattr(bot, "_chat_tropes")
+    cur = await db.conn.execute("SELECT enabled FROM personality_tropes WHERE name = 'flirty'")
+    assert (await cur.fetchone())["enabled"] == 0
+    assert await rows(db, "chat.trope")
+
+
+async def test_a_mood_nobody_has_is_refused_in_words(cog, bot, member, db, monkeypatch):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    await cog.seed_guilds()
+    interaction = FakeInteraction(bot, member)
+
+    await Chat.personality_mood.callback(cog, interaction, "grumpy", False)
+
+    assert "is not one of the moods" in interaction.sent
+    assert await rows(db, "chat.trope") == []
+
+
 async def add_a_note(cog, bot, member, monkeypatch, title="Cookout hours", body="Fridays.",
                      tag=""):
     monkeypatch.setattr(cog_module, "require_staff", _always_staff)

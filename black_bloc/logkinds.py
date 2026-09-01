@@ -142,6 +142,8 @@ ROUTINE: frozenset[str] = frozenset(
         "chat.knowledge_added",
         "chat.knowledge_ingested",
         "chat.knowledge_removed",
+        "chat.personality",
+        "chat.trope",
         "chat.intent_created",
         "chat.intent_deleted",
         "chat.intent_edited",

@@ -18,6 +18,7 @@ from .automod import (
 from .config import Settings
 from .emoji import SKIN_TONE_DEFAULT, SKIN_TONE_NAMES
 from .logkinds import FEATURE_LABELS, FEATURES, LEVEL_DEFAULT, LEVELS, log_level_key
+from .personas import COOKOUT, PERSONALITY_CHOICES
 from .polls import DATE_LABEL_FORMS as POLL_DATE_LABEL_FORMS
 from .polls import MAX_HOURS as POLL_MAX_HOURS
 from .polls import MIN_HOURS as POLL_MIN_HOURS
@@ -84,6 +85,7 @@ CHAT_MODES = ("off", "on")
 CHAT_COOLDOWN_SECONDS = 20
 CHAT_COOLDOWN_MIN_SECONDS = 5
 CHAT_COOLDOWN_MAX_SECONDS = 600
+CHAT_PERSONALITY_DEFAULT = COOKOUT
 
 BOT_BIO_TEMPLATE = (
     "Black Bloc — moderation & content bot for Black in a Flash!. Staff dashboard: {site}"
@@ -165,6 +167,7 @@ KEY_TYPES: dict[str, str] = {
     "chat_greeting_reaction": "bool",
     "chat_reply_in_threads": "bool",
     "chat_route_ping_staff": "bool",
+    "chat_personality": "enum",
     "rolemenu_approval_channel_id": "channel",
     "rolemenu_approver_role_id": "role",
     "emoji_skin_tone": "enum",
@@ -188,6 +191,7 @@ KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "request_mode": REQUEST_MODES,
     "request_who_can_file": REQUEST_FILERS,
     "chat_mode": CHAT_MODES,
+    "chat_personality": PERSONALITY_CHOICES,
     "emoji_skin_tone": SKIN_TONE_NAMES,
 }
 
@@ -394,6 +398,11 @@ KEY_HELP: dict[str, str] = {
     "chat_route_ping_staff": (
         "true to drop one line in the staff channel when somebody asks the bot for a mod; only "
         "used while modmail_enabled is true"
+    ),
+    "chat_personality": (
+        "the voice Black Bloc writes a conversational answer in: cookout is the house voice, "
+        "pool lets a conversation pick one of the moods and drift a step at a time, or name one "
+        "mood to keep it. Only used when chat_llm_mode is on"
     ),
     "rolemenu_approval_channel_id": (
         "where a role request waits for Approve or Deny; blank uses staff_channel_id"
@@ -804,6 +813,8 @@ class SettingsStore:
             return True
         if key == "chat_route_ping_staff":
             return False
+        if key == "chat_personality":
+            return CHAT_PERSONALITY_DEFAULT
         if key == "emoji_skin_tone":
             return SKIN_TONE_DEFAULT
         if key.endswith("_log_level"):

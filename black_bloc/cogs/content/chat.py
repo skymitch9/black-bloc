@@ -42,6 +42,16 @@ from ...knowledge import (
     search,
     server_sections,
 )
+from ...personas import (
+    COOKOUT,
+    PERSONALITY_CHOICES,
+    POOL,
+    forget_tropes,
+    get_trope,
+    list_tropes,
+    seed_tropes,
+    set_enabled,
+)
 from ...settings_store import (
     CHAT_COOLDOWN_SECONDS,
     KEY_TYPES,
@@ -94,6 +104,25 @@ DB_DOWN = (
     "and run the command again, and tell a Lead if it keeps happening."
 )
 
+PERSONALITY_KEY = "chat_personality"
+PERSONALITY_SET = "chat.personality"
+TROPE_SET = "chat.trope"
+VOICE_NOW = "The voice is **{voice}** — {what}"
+VOICE_MEANS: dict[str, str] = {
+    COOKOUT: "the house voice, warm and easy, with no mood on top of it.",
+    POOL: "each conversation picks one of the moods below and drifts a step at a time.",
+}
+VOICE_IS_A_MOOD = "every conversation sounds like this one mood until the setting changes."
+VOICE_CHANGED = "The voice is **{voice}** from the next answer on."
+MOODS_HEADER = "\n\n**The pool** — a mood that is off is never picked:"
+MOOD_LINE = "· **{name}** ({label}) — {state}"
+NO_MOODS = "\n\nThe pool has not been written yet; it fills itself in when Black Bloc starts up."
+NO_SUCH_MOOD = (
+    "**{name}** is not one of the moods, so nothing was changed. `/chat personality show` lists "
+    "them."
+)
+MOOD_CHANGED = "**{name}** is {state}."
+
 
 def mentions_bot(message: Any, me: Any) -> bool:
     """A direct @-mention of Black Bloc; @everyone and role pings are not one."""
@@ -138,6 +167,93 @@ class Chat(commands.Cog):
     def usable_db(self) -> Any:
         db = getattr(self.bot, "db", None)
         return db if db is not None and getattr(db, "is_connected", False) else None
+
+    chat_personality = app_commands.Group(
+        name="personality", description="The voice Black Bloc answers in", parent=chat
+    )
+
+    @chat_personality.command(name="show", description="Which voice is on, and what is in the pool")
+    async def personality_show(self, interaction: discord.Interaction) -> None:
+        if not await require_staff(interaction):
+            return
+        voice = str(self.bot.store.get(interaction.guild.id, PERSONALITY_KEY))
+        parts = [VOICE_NOW.format(voice=voice, what=VOICE_MEANS.get(voice, VOICE_IS_A_MOOD))]
+        db = self.usable_db()
+        rows = await list_tropes(db) if db is not None else []
+        if not rows:
+            parts.append(NO_MOODS)
+        else:
+            parts.append(MOODS_HEADER)
+            parts += [
+                MOOD_LINE.format(
+                    name=row["name"],
+                    label=row["label"],
+                    state="on" if row["enabled"] else "off",
+                )
+                for row in rows
+            ]
+        await interaction.response.send_message(
+            "\n".join(parts), ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+        )
+
+    @chat_personality.command(name="set", description="Choose the voice for this server")
+    @app_commands.describe(voice="cookout, pool, or one mood by name")
+    @app_commands.choices(
+        voice=[app_commands.Choice(name=one, value=one) for one in PERSONALITY_CHOICES]
+    )
+    async def personality_set(
+        self, interaction: discord.Interaction, voice: app_commands.Choice[str]
+    ) -> None:
+        if not await require_staff(interaction):
+            return
+        await self.bot.store.set(
+            interaction.guild.id, PERSONALITY_KEY, voice.value, by=interaction.user.id
+        )
+        await interaction.response.send_message(
+            VOICE_CHANGED.format(voice=voice.value),
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        await log_action(
+            self.bot,
+            interaction.guild,
+            PERSONALITY_SET,
+            actor=interaction.user,
+            details={"voice": voice.value},
+        )
+
+    @chat_personality.command(name="mood", description="Turn one mood in the pool on or off")
+    @app_commands.describe(name="The mood's name", on="True to let the pool pick it again")
+    async def personality_mood(
+        self, interaction: discord.Interaction, name: str, on: bool
+    ) -> None:
+        if not await require_staff(interaction):
+            return
+        db = self.usable_db()
+        if db is None:
+            await interaction.response.send_message(DB_DOWN, ephemeral=True)
+            return
+        if await get_trope(db, name) is None:
+            await interaction.response.send_message(
+                NO_SUCH_MOOD.format(name=str(name)[:40]),
+                ephemeral=True,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+            return
+        await set_enabled(db, name, on, by=interaction.user.id)
+        forget_tropes(self.bot)
+        await interaction.response.send_message(
+            MOOD_CHANGED.format(name=str(name).lower(), state="on" if on else "off"),
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        await log_action(
+            self.bot,
+            interaction.guild,
+            TROPE_SET,
+            actor=interaction.user,
+            details={"mood": str(name).lower(), "enabled": bool(on)},
+        )
 
     @chat_knowledge.command(name="add", description="Write something down for Black Bloc to quote")
     @app_commands.describe(
@@ -339,6 +455,11 @@ class Chat(commands.Cog):
         db = getattr(self.bot, "db", None)
         if db is None or not getattr(db, "is_connected", False):
             return
+        try:
+            if await seed_tropes(db):
+                forget_tropes(self.bot)
+        except Exception as exc:
+            log.warning("chat: the mood pool was not seeded — %s: %s", type(exc).__name__, exc)
         for guild in getattr(self.bot, "guilds", ()) or ():
             if guild.id in self._seeded:
                 continue
