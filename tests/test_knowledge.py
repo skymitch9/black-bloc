@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from black_bloc.chat_data import HOLDERS_SHOWN
 from black_bloc.knowledge import (
     ALL_OF,
     ANY_OF,
@@ -24,6 +25,7 @@ from black_bloc.knowledge import (
     menu_section,
     remove_section,
     replace_server_sections,
+    role_holder_sections,
     role_sections,
     score,
     search,
@@ -234,6 +236,65 @@ def test_the_role_ingest_leaves_out_everyone():
         SimpleNamespace(roles=[SimpleNamespace(name="@everyone"), SimpleNamespace(name="Member")])
     )
     assert found == [("Roles in this server", "Member", "role")]
+
+
+def person(name, bot=False):
+    return SimpleNamespace(display_name=name, name=name, bot=bot)
+
+
+def a_role(name, members=()):
+    return SimpleNamespace(name=name, members=list(members))
+
+
+def test_a_small_role_is_written_out_by_name():
+    found = role_holder_sections(
+        SimpleNamespace(roles=[a_role("Leads", [person("Ada"), person("Kai"), person("Bo")])])
+    )
+
+    assert found == [("Who has the Leads role", "Leads — 3 members: Ada, Bo, Kai.", "role")]
+
+
+def test_one_holder_is_a_member_not_members():
+    found = role_holder_sections(SimpleNamespace(roles=[a_role("Mentor", [person("Ada")])]))
+    assert found[0][1] == "Mentor — 1 member: Ada."
+
+
+def test_a_role_bigger_than_the_cap_keeps_the_name_only_row_and_nothing_else():
+    crowd = [person(f"Person {n}") for n in range(HOLDERS_SHOWN + 1)]
+    guild = SimpleNamespace(roles=[a_role("Member", crowd), a_role("Leads", [person("Ada")])])
+
+    assert [row[0] for row in role_holder_sections(guild)] == ["Who has the Leads role"]
+    assert role_sections(guild)[0][1] == "Member, Leads"
+
+
+def test_a_role_exactly_at_the_cap_is_still_written_out():
+    crowd = [person(f"Person {n}") for n in range(HOLDERS_SHOWN)]
+    found = role_holder_sections(SimpleNamespace(roles=[a_role("Member", crowd)]))
+
+    assert len(found) == 1 and f"{HOLDERS_SHOWN} members" in found[0][1]
+
+
+def test_a_role_nobody_holds_gets_no_note_of_its_own():
+    assert role_holder_sections(SimpleNamespace(roles=[a_role("Leads")])) == []
+
+
+def test_the_holder_notes_leave_out_bots_unless_that_is_all_there_is():
+    guild = SimpleNamespace(
+        roles=[
+            a_role("Leads", [person("Ada"), person("Robo", bot=True)]),
+            a_role("Webhooks", [person("Robo", bot=True)]),
+        ]
+    )
+
+    found = {row[0]: row[1] for row in role_holder_sections(guild)}
+
+    assert found["Who has the Leads role"] == "Leads — 1 member: Ada."
+    assert found["Who has the Webhooks role"] == "Webhooks — 1 member: Robo."
+
+
+def test_everyone_never_gets_a_holder_note():
+    guild = SimpleNamespace(roles=[a_role("@everyone", [person("Ada")]), a_role("Leads")])
+    assert role_holder_sections(guild) == []
 
 
 def test_an_event_note_says_when_and_where_it_is():

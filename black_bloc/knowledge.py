@@ -27,6 +27,13 @@ TITLE_LIMIT = 100
 BODY_LIMIT = 4000
 TAG_LIMIT = 40
 
+EVERYONE = "@everyone"
+ROLE_TAG = "role"
+ROLE_HOLDERS_TITLE = "Who has the {role} role"
+ROLE_HOLDERS_BODY = "{role} — {count} {word}: {names}."
+ONE_MEMBER = "member"
+SOME_MEMBERS = "members"
+
 ALL_OF = "all"
 ANY_OF = "any"
 
@@ -385,15 +392,52 @@ def channel_sections(guild: Any) -> list[tuple[str, str, str]]:
     return found
 
 
+def role_names(guild: Any) -> list[tuple[Any, str]]:
+    found = []
+    for role in getattr(guild, "roles", ()) or ():
+        name = str(getattr(role, "name", "") or "").strip()
+        if name and name != EVERYONE:
+            found.append((role, name))
+    return found
+
+
 def role_sections(guild: Any) -> list[tuple[str, str, str]]:
-    names = [
-        str(getattr(role, "name", "") or "").strip()
-        for role in getattr(guild, "roles", ()) or ()
-        if str(getattr(role, "name", "") or "").strip() not in ("", "@everyone")
-    ]
+    names = [name for _, name in role_names(guild)]
     if not names:
         return []
-    return [("Roles in this server", shorten(", ".join(names), BODY_LIMIT), "role")]
+    return [("Roles in this server", shorten(", ".join(names), BODY_LIMIT), ROLE_TAG)]
+
+
+def role_holder_sections(guild: Any) -> list[tuple[str, str, str]]:
+    """A small role is written out by name; a big one keeps the name-only row and nothing else."""
+    from .chat_data import HOLDERS_SHOWN, holders_of
+
+    found = []
+    for role, name in role_names(guild):
+        people = [
+            one
+            for one in getattr(role, "members", ()) or ()
+            if not getattr(one, "bot", False)
+        ]
+        if len(people) > HOLDERS_SHOWN:
+            continue
+        held = holders_of(role)
+        if not held:
+            continue
+        body = ROLE_HOLDERS_BODY.format(
+            role=name,
+            count=len(held),
+            word=ONE_MEMBER if len(held) == 1 else SOME_MEMBERS,
+            names=", ".join(held),
+        )
+        found.append(
+            (
+                shorten(ROLE_HOLDERS_TITLE.format(role=name), TITLE_LIMIT),
+                shorten(body, BODY_LIMIT),
+                ROLE_TAG,
+            )
+        )
+    return found
 
 
 def event_section(row: Any) -> tuple[str, str, str] | None:
@@ -452,7 +496,7 @@ async def server_sections(bot: Any, guild: Any, db: Any) -> list[tuple[str, str,
             section = menu_section(menu, await get_options(db, value_of(menu, "id", 0)), guild)
             if section is not None:
                 found.append(section)
-    return found
+    return [*found, *role_holder_sections(guild)]
 
 
 async def replace_server_sections(db: Any, guild_id: int, sections: Any) -> int:

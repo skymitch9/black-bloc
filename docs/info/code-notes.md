@@ -4318,3 +4318,24 @@ The table below is the map, and the reason each choice went the way it did.
 - **The escalate sentence has never been seen with real staff roles.** It is
   exercised against `resolved_staff_roles` with a fake channel whose
   `permissions_for` is a set-membership test.
+
+## The ingest learns who holds each small role
+
+| Key | Note |
+|---|---|
+| ⚠️ `knowledge.py:411` | **`role_holder_sections` imports `chat_data`'s `HOLDERS_SHOWN` and `holders_of` rather than keeping its own copies**, so the note the model is grounded on and the answer `who_has` gives are built by the SAME function — bots excluded the same way, names sorted the same way, the same 25. Two copies would drift the day somebody changed one, and the visible symptom would be the Haiku tier contradicting the intent about who is a Lead. The import is function-local for the reason `:425` already gives: `chat_data` pulls in half the cogs. |
+| ⚠️ `knowledge.py:499` | **The holder rows are appended LAST, and the order is what decides who loses.** `replace_server_sections` truncates to `SECTIONS_MAX` (200); a server with three hundred roles would otherwise push the channels, events and role menus out of the bundle entirely. Last means the holder lists — the newest and least essential of the server rows — are what falls off the end. |
+| `knowledge.py:411` | The cap counts **humans**, but the list written is `holders_of`'s, which falls back to the bots when a role has nothing else. So an integration role still gets a note, and a role with 30 bots and 2 humans is written out as its two humans rather than skipped. A role nobody holds gets no note at all — it is already named in the "Roles in this server" row, and a note saying "0 members:" would score on every role query while answering none of them. |
+| `knowledge.py:32` | The title is **`Who has the {role} role`**, not the bare role name, because the search weights titles ×8 — the note is meant to be found by somebody asking that question in those words. The body carries the count and the names, which is what `grounding` quotes. Titles are unique per `(guild_id, source, title)`, and Discord allows two roles with the same name: the second one's `INSERT OR IGNORE` is skipped, the same skip-don't-refuse the ingest already makes for duplicate channel names. |
+| `knowledge.py:395` | `role_names` was pulled out so the name-only row and the holder rows cannot disagree about which roles exist or about `@everyone` being left out. |
+
+### What was NOT verified
+
+- ⚠️ **No ingest has run against a real server.** The role fixtures are
+  `SimpleNamespace`s with a `members` list; nothing has confirmed that a live
+  guild's `role.members` is complete at the moment the daily loop fires, and a
+  partially-filled member cache would write a SHORT holder list that reads as
+  complete. That is the one failure mode of this change worth watching.
+- **Nothing has been asked of the Haiku tier with these notes in the bundle.**
+  That the grounding actually improves the phrasings `who_has` misses is the
+  design's claim, not a measurement.
