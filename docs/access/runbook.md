@@ -64,7 +64,7 @@ Boot sequence to expect: `database ready` → `loaded cog …` ×14 → `synced 
 Black_Bloc#6132` → `birthdays: the daily import …` → `chat: seeded N intent(s)` (first boot per guild only).
 
 ## Secrets (names; custody in [`RECOVERY.md`](RECOVERY.md))
-`DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `SESSION_SECRET`, `POLL_VOTE_SECRET` (⚠️ losing it makes polls created under it unvotable — they refuse in words rather than double-count), `TWITCH_CLIENT_ID`,
+`DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `SESSION_SECRET`, `POLL_VOTE_SECRET` (⚠️ losing it makes polls created under it unvotable — they refuse in words rather than double-count), `ANTHROPIC_API_KEY` + `GROQ_API_KEY` (chat LLM tiers, Phase 14 — unset means those tiers don't exist, never an error), `TWITCH_CLIENT_ID`,
 `TWITCH_CLIENT_SECRET`, `TEST_MODE`, `TEST_CHANNEL_ID`, `DEV_GUILD_ID`, `DATABASE_PATH`.
 Set on Fly with `<flyctl> secrets set NAME=value --app black-bloc` (each set restarts the machine);
 importing many: write an ASCII file and `cmd /c "<flyctl> secrets import --app black-bloc < file"` — a

@@ -104,3 +104,12 @@ redirect it via `cmd /c "flyctl … < file"` (`access/deploy.md` §4).
 
 A plain `urllib` call to `discord.com/api` got `403 error code: 1010` — Cloudflare's WAF rejecting the `Python-urllib` UA, not Discord judging the request. Same call with `User-Agent: DiscordBot (https://github.com/skymitch9/black-bloc, 0.1.0)` succeeded. discord.py and aiohttp inside the bot set their own UA; only hand-rolled scripts hit this. It cost one false 'secret invalid' reading.
 
+
+## A worktree cut BEFORE its spec was committed has no spec (incident, 2026-09-01)
+
+The 14a builder's worktree was branched from main at a commit made minutes
+before `phase14-design.md` landed — its brief named a spec file its own tree
+did not contain. It recovered by reading the shared checkout read-only, but the
+rule for the conductor is: **commit the design doc to main FIRST, then dispatch
+the worktree builders.** A dispatch that references any repo file must be cut
+from a commit that contains it.

@@ -55,6 +55,8 @@ data and `docs/` is tracked).
 | `DEV_GUILD_ID` | Not secret; readable in Discord with Developer Mode | `fly secrets` or `[env]` |
 | `SESSION_SECRET` | Re-mintable at will (any long random string) — rotating signs everyone out, nothing else | `fly secrets` + local `.env` |
 | `POLL_VOTE_SECRET` | ⚠️ **NOT freely re-mintable** (set 2026-08-31): anonymous polls created while it is set key their vote hashes to it — without it those polls refuse votes in words. Custody = local `.env` + `fly secrets` (write-only). If both copies die, close the affected polls and mint a new one. | `fly secrets` + local `.env` |
+| `ANTHROPIC_API_KEY` | Re-mintable at console.anthropic.com (owner's Anthropic account; rotating just swaps the key). Powers the chat "important" tier (Phase 14). ⚠️ The image must contain the `anthropic` dependency (any deploy ≥ Phase 14) or the tier silently never exists. | `fly secrets` + local `.env` (unset until the owner mints it) |
+| `GROQ_API_KEY` | Re-mintable at console.groq.com (owner's Groq account, free tier). Powers the chat "simple" tier (Phase 14). | `fly secrets` + local `.env` (unset until the owner mints it) |
 
 Every secret has a reachable copy or a recovery path: the token can always be
 re-minted from the portal (invalidating any leaked copy in the same motion);
