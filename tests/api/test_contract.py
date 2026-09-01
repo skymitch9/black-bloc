@@ -9,6 +9,7 @@ from discord.ext import tasks
 
 from black_bloc import rolegrants as grants
 from black_bloc.api.settings_api import grouped
+from black_bloc.api.tools import chat_store
 from black_bloc.chat import add_line as add_chat_line
 from black_bloc.chat import create_intent
 from black_bloc.chat import seed_defaults as seed_chat
@@ -243,6 +244,15 @@ async def seeded(client, sign_in, web, guild, wf):
         db, guild_id, "cookout_hours", ["when is the cookout"], by=7
     )
     chat_line_id = await add_chat_line(db, chat_intent_id, "Doors at six, {name}.", by=7)
+    # 14b. {chat_section_id} is a STAFF note, the only kind the write entries may touch; the
+    # server-written one beside it is what makes the list's two sources both real.
+    await chat_store.ensure_tables(db)
+    chat_section_id = await chat_store.add_section(
+        db, guild_id, "Cookout hours", "Doors at six, food at seven.", tag="cookout", by=7
+    )
+    await chat_store.add_section(
+        db, guild_id, "Channels", "general, cookout-planning", source=chat_store.SERVER
+    )
     # {feature_request_id} is the signed-in staffer's own pending row, so /api/requests/mine
     # is never empty and the decide routes have something to move; {member_request_id} is
     # somebody else's, already planned. The mock seeds the same pair as 25 and 30.
@@ -279,6 +289,7 @@ async def seeded(client, sign_in, web, guild, wf):
         "poll_recurrence_id": str(recurrence_id),
         "chat_intent_id": str(chat_intent_id),
         "chat_line_id": str(chat_line_id),
+        "chat_section_id": str(chat_section_id),
         "feature_request_id": str(feature_request_id),
         "member_request_id": str(member_request_id),
     }
