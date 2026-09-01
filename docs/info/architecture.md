@@ -2,12 +2,12 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-08-31** — the **Shape** tree and the schema number below
-> were re-measured against the working tree today: `SCHEMA_VERSION` is **16**
-> (`black_bloc/storage/db.py:11`), `bot.py:COGS` holds **14** cogs, `site/public`
-> holds **17** pages, `node site/mock/check.mjs` reports **17 pages / 89 routes**,
-> `pytest --co` collects **2158** tests and `ruff check black_bloc tests site` is
-> clean. Three cogs (polls, requests, chat) and eleven modules the tree did not
+> Last verified: **2026-09-01** — the fast-moving figures re-measured today:
+> `SCHEMA_VERSION` is **19** (17 sessions, 18 `polls.vote_scheme`, 19
+> `golive_sessions.live_role_id`), `check.mjs` reports **17 pages / 98 routes**,
+> `pytest` collects **2265** tests, `ruff check .` clean; `bot.py:COGS` still
+> **14** cogs. ⚠️ NOT re-checked today: the Shape tree's per-file annotations
+> (verified 2026-08-31). Three cogs (polls, requests, chat) and eleven modules the tree did not
 > list have been added, and the **Carl parity** entries removed — parity was
 > deleted in `47634b8` and `grep -ri carl black_bloc site` is empty.
 >
@@ -147,7 +147,7 @@ black_bloc/
 │   └── content/      ← one cog per content feature
 │       ├── golive.py ← F1/F2: presence listener, Twitch poller, /golive + /twitch
 │       └── chat.py   ← F10: the @-mention listener, cooldown, modmail routing, /chat
-├── storage/db.py     ← aiosqlite connection + schema bootstrap (SCHEMA_VERSION 16)
+├── storage/db.py     ← aiosqlite connection + schema bootstrap (SCHEMA_VERSION 19)
 └── api/             ← the dashboard API, one router per surface (API_ENABLED)
     ├── server.py    ← create_app: /health (public), security headers, routers, then site/ at /
     ├── auth.py      ← Discord OAuth2 + the signed session cookie. The site's ONLY gate

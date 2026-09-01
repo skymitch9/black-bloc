@@ -9,6 +9,46 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-01 — Go-live hardening, requester-in-channel, the settings audit, nightly backups
+
+Moved whole from `TODO.md`:
+
+- **F4 follow-ups (owner, 2026-08-26):** (a) add the requesting user to their
+  own event channel so they can post updates / answer mod questions — or show
+  them a ticket page on the F12 site; (b) the approver-roles / event-category /
+  create-scheduled-event toggle all become F12 site settings.
+- **F5 follow-ups (owner, 2026-08-26):** announce channel + ping role editable
+  in the options menu now and on the F12 site later.
+- **Go-live follow-ups from the review fixer (2026-08-26):** (a) `live_role_added`
+  is a 0/1 flag — store the role *id* so a mid-stream change of
+  `golive_live_role_id` cannot strand the old role; (b) session age-out only ticks
+  when Twitch creds exist (the poller) — add a creds-independent tick; (c) a failed
+  Helix live-check leaves a session open (age-out is the backstop). None block shadow.
+
+**Landed as merge `5f22c20`, deployed 2026-09-01 09:16 Phoenix** (Opus ~242k, four
+commits; 2265 tests, ruff, 17/98 green; migration `added golive_sessions.live_role_id`
+seen in the Fly logs). (a) schema **19**: the session stores the role id that was
+actually added; removal reads it first, legacy rows fall back to the setting.
+(b) was a REAL gap with a different root than written: the sweep body already ran
+pre-Helix-check, but `cog_load` only STARTED the poller when creds existed — now it
+starts unconditionally and `/golive status` says "the sweep still runs and still ages
+sessions out" on a credential-less deploy. (c) `golive.poll_degraded` (routine) after
+exactly 3 consecutive TwitchErrors — one line per outage naming failures + open
+sessions; nothing is closed on a failed check. (F4a) requesters get an explicit
+view/send/history overwrite on their own review channel, surviving renames (verified
+by reading `rename_channel`, tested through a `done-` rename); access deliberately
+stays after decision. (F4b/F5) **audit result: all five toggles already existed** as
+registry keys reachable both ways (`staff_channel_id`, `events_category_id`,
+`events_create_scheduled`, `events_announce_channel_id`, `events_ping_role_id`) —
+nothing was missing; one nuance: the category is set on Discord via `/event settings
+category:` because generic `/settings set` takes text channels only. **Same deploy:**
+`black_bloc/dbsnapshot.py` shipped and the **nightly backup went end-to-end**
+(scheduled task "BlackBloc DB backup", daily 04:00; test pull 311,296 bytes, "ok" in
+`backup.log`) — RECOVERY's backup gap CLOSED with the machine-state residual recorded.
+**NOT verified live:** no real role add/remove, no real credential-less deploy, no
+real Twitch outage, no requester has posted in a review channel. Owner sweep rows
+31–32.
+
 ## 2026-08-31 — Owner bug report: empty Requests queues said "null"
 
 Owner, ~13:20, verbatim: *"https://blackbloc.heygabi.ai/requests.html it says null

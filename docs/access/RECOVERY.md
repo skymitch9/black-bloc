@@ -16,7 +16,7 @@
 | Gap | Consequence today | Closes when |
 |---|---|---|
 | ~~**`docs/` is local-only**~~ **CLOSED 2026-08-31** | Was: the whole docs tree existed on ONE machine under OneDrive sync. Now `docs/` is **tracked in git and pushed** to `github.com/skymitch9/black-bloc` (owner, 2026-08-31, commit `1eb8870`) — measured: `git ls-files docs` returns 48 files. A clone restores the docs tree with the code. | Closed. ⚠️ Consequence: the repo is the backup, so **never write a secret VALUE under `docs/`** — names and custody only. |
-| **DB backup is manual, not scheduled** | The pull below works and was **DRILLED 2026-08-31** (backup verified: 30 tables, 38 birthdays, 15 chat intents, 6 settings), but nothing runs it on a schedule — a lost volume loses everything since the last manual pull. | A scheduled job (local cron/Task Scheduler running the three commands below, or a bot-side export loop). Until then: pull one after anything import-shaped. |
+| ~~DB backup is manual~~ **CLOSED 2026-09-01** | Windows scheduled task **"BlackBloc DB backup"** (daily 04:00, StartWhenAvailable, on the owner's main machine) runs `scripts/backup_db.ps1`: consistent snapshot via `python3 -m black_bloc.dbsnapshot` on the Fly machine, sftp pull to `%USERPROFILE%\black-bloc-backups\backup-<date>.sqlite3`, keeps 14, logs to `backup.log` there. **End-to-end tested 2026-09-01** (311,296 bytes pulled, "ok" logged). | Residual: runs only while THAT machine exists and is signed into flyctl — it is machine state; re-register with the one `Register-ScheduledTask` block in `deploy.md`-style docs (or re-run the drill by hand) after a rebuild. Check `backup.log` if in doubt — a silent stop is the failure mode. |
 
 ### DB backup — the drilled procedure (2026-08-31)
 

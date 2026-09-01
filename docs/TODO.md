@@ -94,17 +94,6 @@ per feature, so the old bot keeps running until the new one is proven.
 ## 🔧 Open engineering items
 
 
-- **F4 follow-ups (owner, 2026-08-26):** (a) add the requesting user to their
-  own event channel so they can post updates / answer mod questions — or show
-  them a ticket page on the F12 site; (b) the approver-roles / event-category /
-  create-scheduled-event toggle all become F12 site settings.
-- **F5 follow-ups (owner, 2026-08-26):** announce channel + ping role editable
-  in the options menu now and on the F12 site later.
-- **Go-live follow-ups from the review fixer (2026-08-26):** (a) `live_role_added`
-  is a 0/1 flag — store the role *id* so a mid-stream change of
-  `golive_live_role_id` cannot strand the old role; (b) session age-out only ticks
-  when Twitch creds exist (the poller) — add a creds-independent tick; (c) a failed
-  Helix live-check leaves a session open (age-out is the backstop). None block shadow.
 
 - **Curated docs for peers** (owner, 2026-08-26: "give them the curated docs
   they need"). Since 2026-08-31 `docs/` is tracked, so a peer who clones gets the

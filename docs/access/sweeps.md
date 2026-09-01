@@ -48,6 +48,8 @@ All of this happens in **`#mute-me-bot-test-spam`** (test mode) or on **https://
 | 28 | The Black Bloc look (R2, live 2026-08-31 ~13:14) | https://blackbloc.heygabi.ai — you'll land in the new default theme | warm charcoal + ember, the BLACK BLOC wordmark and page titles in Bangers, the Overview opens with a TODAY sentence ("Nothing's on fire. …") whose clauses link to their pages; ⚙ → flip Appearance to Light and back; your previously chosen theme (if you ever picked one) still wins over the default |
 | 29 | Ctrl+K palette (R2) | press **Ctrl K** on any page, type `birthday_role`, Enter; then Ctrl K → type `theme: cyber` | lands on Settings with the row flashed ember; the theme switches instantly; the palette also finds pages and actions (sign out, show keys) |
 | 30 | Show keys + Cases drawer (R2) | Settings → **Show keys** top-right, toggle + reload; Moderation → click a case row | keys hidden by default, toggle remembered per browser; the case opens in a right-hand drawer, Esc closes; note the table toolbars and "Showing 1–N of M" feet on Logs/Members/Cases/Polls/Requests |
+| 31 | Live role survives a repoint (live 2026-09-01) | set `golive_live_role_id`, go live, CHANGE the setting to a different role mid-stream, stop | the **first** role comes off (not the new one); `/golive logs` shows `remove_role` with the original id |
+| 32 | Requester in their review channel (live 2026-09-01) | `/event create` (in the test channel while TEST_MODE) | the reply says the pending channel is yours to post in; you can see + type in `pending-<you>-<title>`, and still can after Approve renames it |
 
 ## Detailed phase scripts (1–8a) — moved whole from `TODO.md` 2026-08-31
 
