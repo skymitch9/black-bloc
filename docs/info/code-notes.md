@@ -4069,3 +4069,37 @@ dropdown". There are SIX** — `discord`, `classic`, `apple`, `cyberpunk`, `retr
 | the estate themes' own contrast | Untouched, and several of them are still sub-AA. The brief scopes the 4.5:1 promise to the new theme in both modes. |
 | ⚠️ long group captions in `cyberpunk` | That theme sets `--et-nav-head-size: var(--et-ui-lg)`, so "RUNS THE COOKOUT" wraps to two lines in the rail. Seen, left alone: fixing it means either shortening the owner's words or overriding a theme's own type scale from page CSS. |
 | a `themes` note in `estate-theme.css`'s header | The header still says "FIVE NAMED THEMES" and lists neither `discord` nor `blackbloc`. It was already wrong before this build. |
+
+# Phase 14b — the Chat page's knowledge, personality and spend (`docs/info/phase14-design.md` §§3–5, §7)
+
+> Built in parallel with 14a against the design's shapes. ⚠️ **Everything in
+> `black_bloc/api/tools/chat_store.py` is a STAND-IN** whose canonical home is
+> 14a (`storage/db.py` schema 20 plus its own modules); it exists so the routes,
+> the page and the mock could be built and verified before 14a landed, and it is
+> expected to be DELETED at the merge. The route shapes are the part meant to
+> survive.
+
+### `black_bloc/api/tools/chat_store.py` — the stand-in store
+
+| Key | Note |
+|---|---|
+| ⚠️ `chat_store.py:40 SCHEMA` | The four schema-20 tables, created with `CREATE TABLE IF NOT EXISTS` from `ensure_tables` (`:185`) at the top of every route rather than in `storage/db.py`. That is what keeps 14b out of 14a's schema file: the merge deletes this constant and the tables arrive at `SCHEMA_VERSION = 20` instead. ⚠️ Two deliberate deviations from the design's abbreviated column lists: `knowledge_sections` and `llm_ledger` both carry a **`guild_id`**, because every other table in this bot does and every route filters on it. |
+| ⚠️ `chat_store.py:51` | `UNIQUE (guild_id, source, title)` — **on the source as well as the title**, so the daily server-ingest loop and a staffer may both hold a note called `Channels` without either one stopping the other from writing. One writer per row is the design's rule (§3); a bare `UNIQUE(guild_id, title)` would have made the loop's write fail the day somebody wrote a note with a heading it uses. |
+| `chat_store.py:90 POOL_SOURCE` | The provenance header the design asks for, as DATA rather than as a comment, so `GET /api/chat/personality` can hand it to the page (`ported_from`). The eleven tropes at `:92` are GABI's roster in shape and order, with the book-world wording turned into cookout wording wherever it named books; the labels (`cozy` → **cosy**) are hers. |
+| `chat_store.py:267 seed_tropes` | `INSERT OR IGNORE`, so it is idempotent and **never overwrites a row a staffer has switched off**. It returns how many it wrote, which is what the test asserts goes 11 then 0. |
+| ⚠️ `chat_store.py:30 LLM_MODE_DEFAULT` | The fallback the spend route uses while `chat_llm_mode` is not in the registry (14a adds the key). It is a module constant and not a literal precisely so the tests can move it — every tier-liveness branch is otherwise unreachable in 14b's tree, and an untestable branch is one nobody has run. |
+| `chat_store.py:339` | Month-to-date and turns-today are SQL aggregates over `llm_ledger`, not counters kept anywhere — a counter is a second home for a number the ledger already holds. `COALESCE(…, 0)` so an empty ledger reads as zero rather than as `None`. |
+
+### `black_bloc/api/tools/chat.py` — the routes 14b adds
+
+| Key | Note |
+|---|---|
+| ⚠️ `chat.py:88 SERVER_ROW_LOCKED` | A `source='server'` row is **shown, and refused in words** — it is not hidden and it is not silently read-only. The sentence rides the row itself (`locked_why`, `:241`) as well as the 409, so the page prints the reason beside the locked note instead of inventing its own wording. One sentence, one home. |
+| `chat.py:241 section_row` | `editable` is `source == 'staff'`, derived once here and read by both the page and the guard (`_staff_row_only`, `:582`). `characters` is the note's length, because the grounding budget refuses a section rather than trimming it (design §3) and a staffer needs to see which note is the fat one. |
+| ⚠️ `chat.py:289 setting_or` | Reads a registry key **only when the registry has it**, and falls back otherwise. `chat_llm_mode`, `chat_monthly_cap_usd` and `chat_daily_turns` are 14a's keys (design §7 puts settings keys in that slice), so in 14b's tree every read falls back to the design's own defaults — $20, 200 turns, mode off. ⚠️ At the merge those fallbacks go dead and this helper should collapse to `bot.store.get`. |
+| ⚠️ `chat.py:805 _tier` | Liveness is **measured, in this order: the mode, then the key, then the cap** — and each failure says which one it was, because "not answering" has four different fixes. It never calls a tier live on the strength of the mode alone. Checklist 9 and 10: a tier that is down shows as down, and says why in words rather than as a bare `false`. |
+| `chat.py:767` | Turning a trope off is refused when it is the one voice in use (`TROPE_IN_USE`) and when it is the last one on while the mode is `pool` (`LAST_TROPE_ON`) — the two ways the switch could leave Black Bloc with no voice at all. Both are 409 with a sentence naming the way out. |
+| `chat.py:729` | Setting the voice to a trope that is switched off is refused rather than quietly switching it back on: a write that does two things is a write nobody can predict. |
+| ⚠️ `chat.py:703 _personality` | `GET /api/chat/personality` **seeds the pool on a read**, exactly as `GET /api/chat/intents` does (`:156`) and for the same reason: a blank personality list is indistinguishable from a broken one. Idempotent, once per guild ever. |
+| `chat.py` every new write | Carries `"via": VIA_WEBSITE` in `details`, which `logkinds.via_of` would have derived from the `web.` head anyway — it is written out so a later merge that moves one of these writes into a cog cannot silently start claiming Discord set it. `actionlog.SUMMARY_SKIPS` keeps it out of the summary line. |
+| ⚠️ the six new kinds | `chat.knowledge_added` / `_edited` / `_removed`, `chat.personality_mode`, `chat.trope_enabled` / `_disabled`, all ROUTINE in `logkinds.py`. ⚠️ `chat.knowledge_removed` ends in `.removed`, which is an `IMPORTANT_SUFFIXES` entry — `is_important` checks `ROUTINE` FIRST so the explicit classification wins, but the pair is worth knowing before anybody reorders that function. They are also listed in `tests/test_logkinds.py KNOWN_DYNAMIC` under `writes.py::kind`, the table that stops a new kind going unclassified. |

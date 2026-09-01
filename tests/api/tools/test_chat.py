@@ -1,5 +1,6 @@
 import pytest
 
+from black_bloc.api.tools import chat_store
 from black_bloc.chat import BUILTIN_ORDER, UNKNOWN, loaded_intents, seed_defaults
 
 
@@ -297,3 +298,308 @@ async def test_the_rows_the_bot_reads_match_what_the_page_shows(seeded, client, 
     for name, row in stored.items():
         assert list(row["triggers"]) == shown[name]["triggers"]
         assert row["kind"] == shown[name]["kind"]
+
+
+async def test_the_knowledge_list_says_who_wrote_each_note_and_when(seeded, client):
+    made = client.post(
+        "/api/chat/knowledge",
+        json={"title": "Cookout hours", "body": "Doors at six, food at seven.", "tag": "cookout"},
+    )
+    assert made.status_code == 200, made.text
+
+    payload = client.get("/api/chat/knowledge").json()
+    row = payload["sections"][0]
+
+    assert payload["counts"] == {"total": 1, "staff": 1, "server": 0}
+    assert row["title"] == "Cookout hours" and row["tag"] == "cookout"
+    assert row["source"] == "staff" and row["source_word"]
+    assert row["editable"] is True and row["locked_why"] is None
+    assert row["updated_by"]["id"] == "7" and row["updated_by"]["name"] == "Lead"
+    assert row["characters"] == len("Doors at six, food at seven.")
+    assert payload["budget"]["sections"] == 3 and payload["budget"]["word"]
+
+
+async def test_a_note_can_be_written_edited_and_removed(seeded, client):
+    made = client.post("/api/chat/knowledge", json={"title": "Rules", "body": "Be kind."}).json()[
+        "section"
+    ]
+
+    edited = client.put(
+        f"/api/chat/knowledge/{made['id']}", json={"body": "Be kind. Bring a chair."}
+    )
+    assert edited.status_code == 200, edited.text
+    assert edited.json()["section"]["body"] == "Be kind. Bring a chair."
+    assert "Rules" in edited.json()["message"]
+
+    gone = client.delete(f"/api/chat/knowledge/{made['id']}")
+    assert gone.status_code == 200 and gone.json()["removed"] is True
+    assert client.get("/api/chat/knowledge").json()["sections"] == []
+
+
+async def test_a_note_the_bot_wrote_itself_is_shown_but_refused_in_words(seeded, client, web, wf):
+    await chat_store.ensure_tables(web.db)
+    section_id = await chat_store.add_section(
+        web.db, wf.GUILD_ID, "Channels", "general, cookout", source=chat_store.SERVER
+    )
+
+    row = next(
+        one
+        for one in client.get("/api/chat/knowledge").json()["sections"]
+        if one["source"] == "server"
+    )
+    edited = client.put(f"/api/chat/knowledge/{section_id}", json={"body": "mine now"})
+    gone = client.delete(f"/api/chat/knowledge/{section_id}")
+
+    assert row["editable"] is False
+    assert "cannot be changed by hand" in row["locked_why"]
+    assert edited.status_code == 409 and "cannot be changed by hand" in edited.json()["message"]
+    assert gone.status_code == 409 and gone.json()["message"]
+
+
+async def test_a_note_needs_a_heading_and_some_words_and_is_bounded(seeded, client):
+    for payload in (
+        {"title": "  ", "body": "words"},
+        {"title": "Rules", "body": "   "},
+        {"title": "x" * 81, "body": "words"},
+        {"title": "Rules", "body": "x" * 4001},
+        {"title": "Rules", "body": "words", "tag": "x" * 41},
+    ):
+        refused = client.post("/api/chat/knowledge", json=payload)
+        assert refused.status_code == 400, payload
+        assert refused.json()["message"]
+
+
+async def test_two_notes_cannot_share_a_heading(seeded, client):
+    client.post("/api/chat/knowledge", json={"title": "Rules", "body": "Be kind."})
+
+    again = client.post("/api/chat/knowledge", json={"title": "Rules", "body": "Be kinder."})
+
+    assert again.status_code == 409
+    assert "already has a note" in again.json()["message"]
+
+
+async def test_a_note_from_another_server_is_not_found(seeded, client, web):
+    await chat_store.ensure_tables(web.db)
+    elsewhere = await chat_store.add_section(web.db, 9999, "Theirs", "not ours")
+
+    assert client.put(f"/api/chat/knowledge/{elsewhere}", json={"body": "x"}).status_code == 404
+    assert client.delete(f"/api/chat/knowledge/{elsewhere}").status_code == 404
+
+
+async def test_the_personality_page_seeds_the_ported_pool_on_the_first_read(seeded, client):
+    first = client.get("/api/chat/personality").json()
+    second = client.get("/api/chat/personality").json()
+
+    assert first["mode"] == "cookout" and first["mode_kind"] == "cookout"
+    assert first["counts"] == {"total": 11, "enabled": 11}
+    assert [row["name"] for row in first["tropes"]] == [row["name"] for row in second["tropes"]]
+    assert all(row["voice"] and row["label"] for row in first["tropes"])
+    assert "personality.ts" in first["ported_from"]
+    assert first["mode_word"]
+
+
+async def test_the_voice_can_move_to_the_pool_and_to_one_named_trope(seeded, client):
+    pooled = client.put("/api/chat/personality", json={"mode": "pool"})
+    assert pooled.status_code == 200, pooled.text
+    assert pooled.json()["mode_kind"] == "pool" and "11 voices" in pooled.json()["mode_word"]
+
+    pinned = client.put("/api/chat/personality", json={"mode": "noir"})
+
+    assert pinned.status_code == 200
+    assert pinned.json()["mode"] == "noir" and pinned.json()["mode_kind"] == "trope"
+    assert "noir" in pinned.json()["message"]
+    shown = client.get("/api/chat/personality").json()["tropes"]
+    assert next(row for row in shown if row["name"] == "noir")["in_use"] is True
+
+
+async def test_a_voice_nobody_has_is_refused_in_words(seeded, client):
+    refused = client.put("/api/chat/personality", json={"mode": "swashbuckling"})
+    empty = client.put("/api/chat/personality", json={"mode": "  "})
+
+    assert refused.status_code == 404 and "not one of the voices" in refused.json()["message"]
+    assert empty.status_code == 400 and empty.json()["message"]
+
+
+async def test_a_trope_can_be_switched_off_and_back_on(seeded, client):
+    client.get("/api/chat/personality")
+
+    off = client.put("/api/chat/personality/noir", json={"enabled": False})
+    assert off.status_code == 200, off.text
+    assert off.json()["trope"]["enabled"] is False
+    assert client.get("/api/chat/personality").json()["counts"]["enabled"] == 10
+
+    on = client.put("/api/chat/personality/noir", json={"enabled": True})
+
+    assert on.status_code == 200 and on.json()["trope"]["enabled"] is True
+
+
+async def test_a_voice_that_is_off_cannot_be_the_one_black_bloc_uses(seeded, client):
+    client.put("/api/chat/personality/noir", json={"enabled": False})
+
+    refused = client.put("/api/chat/personality", json={"mode": "noir"})
+
+    assert refused.status_code == 409
+    assert "switched off" in refused.json()["message"]
+
+
+async def test_the_voice_in_use_cannot_be_switched_off_underneath_itself(seeded, client):
+    client.put("/api/chat/personality", json={"mode": "noir"})
+
+    refused = client.put("/api/chat/personality/noir", json={"enabled": False})
+
+    assert refused.status_code == 409
+    assert "cannot be switched off" in refused.json()["message"]
+
+
+async def test_the_last_voice_in_the_pool_stays_on_while_the_pool_is_what_is_used(seeded, client):
+    client.put("/api/chat/personality", json={"mode": "pool"})
+    for name in [row["name"] for row in client.get("/api/chat/personality").json()["tropes"]][:-1]:
+        client.put(f"/api/chat/personality/{name}", json={"enabled": False})
+
+    last = client.get("/api/chat/personality").json()["tropes"][-1]["name"]
+    refused = client.put(f"/api/chat/personality/{last}", json={"enabled": False})
+
+    assert refused.status_code == 409
+    assert "last voice left on" in refused.json()["message"]
+
+
+async def test_a_trope_nobody_has_is_not_found(seeded, client):
+    refused = client.put("/api/chat/personality/swashbuckling", json={"enabled": False})
+
+    assert refused.status_code == 404 and refused.json()["message"]
+
+
+async def test_the_spend_route_words_the_month_the_day_and_every_tier(seeded, client, web, wf):
+    await chat_store.ensure_tables(web.db)
+    await chat_store.add_ledger_entry(
+        web.db,
+        wf.GUILD_ID,
+        provider="anthropic",
+        model="claude-haiku-4-5",
+        input_tokens=900,
+        output_tokens=200,
+        cost_microdollars=1_900_000,
+    )
+
+    payload = client.get("/api/chat/spend").json()
+
+    assert payload["month"]["spent_usd"] == 1.9
+    assert payload["month"]["cap_usd"] == 20
+    assert payload["month"]["left_usd"] == 18.1
+    assert "$1.90" in payload["month"]["word"] and "$20.00" in payload["month"]["word"]
+    assert payload["today"]["turns"] == 1 and "1 answers" in payload["today"]["word"]
+    assert payload["capped"] is False
+    assert [row["name"] for row in payload["tiers"]] == ["intents", "important", "simple"]
+    assert payload["tiers"][0]["live"] is True
+    assert payload["cap_key"] == "chat_monthly_cap_usd"
+    assert payload["last_turn_at"]
+
+
+async def test_a_tier_with_no_key_says_so_rather_than_claiming_it_is_live(
+    seeded, client, monkeypatch
+):
+    monkeypatch.setattr(chat_store, "LLM_MODE_DEFAULT", "on")
+
+    payload = client.get("/api/chat/spend").json()
+    haiku = next(row for row in payload["tiers"] if row["name"] == "important")
+
+    assert haiku["live"] is False
+    assert "ANTHROPIC_API_KEY" in haiku["word"]
+
+
+async def test_a_tier_with_a_key_and_the_mode_on_is_live(seeded, client, web, monkeypatch):
+    monkeypatch.setattr(chat_store, "LLM_MODE_DEFAULT", "on")
+    web.settings.__dict__["anthropic_api_key"] = "sk-contract"
+
+    haiku = next(
+        row for row in client.get("/api/chat/spend").json()["tiers"] if row["name"] == "important"
+    )
+
+    assert haiku["live"] is True and haiku["word"].startswith("Live")
+
+
+async def test_the_mode_being_off_is_why_a_tier_is_quiet_and_it_says_which(seeded, client, web):
+    web.settings.__dict__["anthropic_api_key"] = "sk-contract"
+
+    haiku = next(
+        row for row in client.get("/api/chat/spend").json()["tiers"] if row["name"] == "important"
+    )
+
+    assert haiku["live"] is False and "chat_llm_mode" in haiku["word"]
+
+
+async def test_a_spent_month_shuts_both_model_tiers_and_says_so(
+    seeded, client, web, wf, monkeypatch
+):
+    monkeypatch.setattr(chat_store, "LLM_MODE_DEFAULT", "on")
+    web.settings.__dict__["anthropic_api_key"] = "sk-contract"
+    web.settings.__dict__["groq_api_key"] = "gsk-contract"
+    await chat_store.ensure_tables(web.db)
+    await chat_store.add_ledger_entry(
+        web.db,
+        wf.GUILD_ID,
+        provider="anthropic",
+        model="claude-haiku-4-5",
+        cost_microdollars=20_000_000,
+    )
+
+    payload = client.get("/api/chat/spend").json()
+
+    assert payload["capped"] is True
+    assert payload["month"]["left_usd"] == 0
+    assert "shut until" in payload["month"]["word"]
+    assert all(row["live"] is False for row in payload["tiers"] if row["name"] != "intents")
+    assert all("$20.00" in row["word"] for row in payload["tiers"] if row["name"] != "intents")
+
+
+async def test_every_new_write_leaves_its_own_web_chat_line_with_the_website_on_it(
+    seeded, client, web, wf
+):
+    made = client.post("/api/chat/knowledge", json={"title": "Rules", "body": "Be kind."}).json()[
+        "section"
+    ]
+    client.put(f"/api/chat/knowledge/{made['id']}", json={"body": "Be kinder."})
+    client.delete(f"/api/chat/knowledge/{made['id']}")
+    client.put("/api/chat/personality", json={"mode": "pool"})
+    client.put("/api/chat/personality/noir", json={"enabled": False})
+    client.put("/api/chat/personality/noir", json={"enabled": True})
+
+    kinds = [kind for kind in await wf.kinds_in(web.db) if kind.startswith("web.chat")]
+
+    assert kinds == [
+        "web.chat.knowledge_added",
+        "web.chat.knowledge_edited",
+        "web.chat.knowledge_removed",
+        "web.chat.personality_mode",
+        "web.chat.trope_disabled",
+        "web.chat.trope_enabled",
+    ]
+    cur = await web.db.conn.execute(
+        "SELECT details FROM action_log WHERE kind = 'web.chat.knowledge_added'"
+    )
+    assert '"via": "website"' in str((await cur.fetchone())["details"])
+
+
+async def test_reading_the_new_pages_writes_no_action_row(seeded, client, web, wf):
+    client.get("/api/chat/knowledge")
+    client.get("/api/chat/personality")
+    client.get("/api/chat/spend")
+
+    assert [kind for kind in await wf.kinds_in(web.db) if kind.startswith("web.chat")] == []
+
+
+async def test_the_new_routes_are_staff_only_too(client, sign_in, guild, wf):
+    wf.member(guild, 8, name="ada")
+    sign_in(client, uid=8, staff=False)
+
+    for method, path, body in (
+        ("GET", "/api/chat/knowledge", None),
+        ("POST", "/api/chat/knowledge", {"title": "x", "body": "y"}),
+        ("GET", "/api/chat/personality", None),
+        ("PUT", "/api/chat/personality", {"mode": "pool"}),
+        ("PUT", "/api/chat/personality/noir", {"enabled": False}),
+        ("GET", "/api/chat/spend", None),
+    ):
+        response = client.request(method, path, json=body)
+        assert response.status_code == 403, path
+        assert response.json()["message"]
