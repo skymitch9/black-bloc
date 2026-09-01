@@ -26,7 +26,7 @@ import {
 
 const PER_PAGE = 50;
 const LINE_LIMIT = 200;
-const TITLE_LIMIT = 80;
+const TITLE_LIMIT = 100;
 const BODY_LIMIT = 4000;
 const TAG_LIMIT = 40;
 

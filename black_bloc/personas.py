@@ -16,6 +16,8 @@ log = logging.getLogger(__name__)
 COOKOUT = "cookout"
 POOL = "pool"
 GABI = "gabi"
+PERSONALITY_KEY = "chat_personality"
+POOL_SOURCE = "catalog-platform/apps/discord-worker/src/personality.ts (GABI, 2026-08-18)"
 
 DRIFT_EVERY_TURNS = 4
 DRIFT_CHANCE = 0.25

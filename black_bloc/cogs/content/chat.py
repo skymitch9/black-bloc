@@ -27,7 +27,14 @@ from ...chat import (
     invalidate,
     seed_defaults,
 )
-from ...chat_llm import REPLY_KIND, allowance, money, sweep_window, tier_errors
+from ...chat_llm import (
+    LLM_MODE_KEY,
+    REPLY_KIND,
+    allowance,
+    money,
+    sweep_window,
+    tier_errors,
+)
 from ...emoji import tone_for, toned
 from ...knowledge import (
     SERVER,
@@ -48,6 +55,7 @@ from ...llm import IMPORTANT, SIMPLE
 from ...personas import (
     COOKOUT,
     PERSONALITY_CHOICES,
+    PERSONALITY_KEY,
     POOL,
     forget_tropes,
     get_trope,
@@ -107,7 +115,6 @@ DB_DOWN = (
     "and run the command again, and tell a Lead if it keeps happening."
 )
 
-LLM_MODE_KEY = "chat_llm_mode"
 STATUS_MODE = "Answering @-mentions: **{mode}**. Conversation model: **{llm}**."
 STATUS_OFF_TAIL = " Every answer comes from Black Bloc's own written lines."
 STATUS_TIERS = "Tiers — the quick one: {simple}. The careful one: {important}."
@@ -129,7 +136,6 @@ STATUS_NOTES_NEVER = (
 STATUS_INGEST_TROUBLE = "The last daily read did not finish: {why}."
 NO_CEILING = "no ceiling"
 
-PERSONALITY_KEY = "chat_personality"
 PERSONALITY_SET = "chat.personality_mode"
 TROPE_ENABLED = "chat.trope_enabled"
 TROPE_DISABLED = "chat.trope_disabled"

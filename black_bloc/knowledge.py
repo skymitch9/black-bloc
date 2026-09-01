@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -48,6 +49,10 @@ BODY_TOO_LONG = (
     "with their own titles — the search answers with whole notes, and a shorter one answers better."
 )
 TAG_TOO_LONG = "A note's tag has to be {limit} characters or fewer, so nothing was saved."
+TITLE_TAKEN = (
+    "This server already has a note called **{title}**, so nothing was saved. Edit that one, or "
+    "give this one a heading of its own."
+)
 NOT_A_SOURCE = (
     "**{given}** is not somewhere a note can come from. They are {known} — `staff` is written by "
     "hand, `server` is rewritten from Discord every day."
@@ -308,11 +313,14 @@ async def add_section(
     source: str = STAFF,
     by: int | None = None,
 ) -> int:
-    cur = await db.conn.execute(
-        "INSERT INTO knowledge_sections(guild_id, title, body, source, tag, updated_at, "
-        "updated_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (int(guild_id), str(title), str(body), str(source), str(tag), now_iso(), by),
-    )
+    try:
+        cur = await db.conn.execute(
+            "INSERT INTO knowledge_sections(guild_id, title, body, source, tag, updated_at, "
+            "updated_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (int(guild_id), str(title), str(body), str(source), str(tag), now_iso(), by),
+        )
+    except sqlite3.IntegrityError as exc:
+        raise KnowledgeError(TITLE_TAKEN.format(title=str(title))) from exc
     await db.conn.commit()
     return int(cur.lastrowid)
 
@@ -331,9 +339,12 @@ async def update_section(db: Any, section_id: int, **fields: Any) -> None:
         parts.append("updated_by = ?")
         values.append(fields["by"])
     values.append(int(section_id))
-    await db.conn.execute(
-        f"UPDATE knowledge_sections SET {', '.join(parts)} WHERE id = ?", values
-    )
+    try:
+        await db.conn.execute(
+            f"UPDATE knowledge_sections SET {', '.join(parts)} WHERE id = ?", values
+        )
+    except sqlite3.IntegrityError as exc:
+        raise KnowledgeError(TITLE_TAKEN.format(title=str(fields.get("title", "")))) from exc
     await db.conn.commit()
 
 
@@ -452,11 +463,13 @@ async def replace_server_sections(db: Any, guild_id: int, sections: Any) -> int:
         (int(guild_id), SERVER),
     )
     at = now_iso()
+    written = 0
     for title, body, tag in rows[:SECTIONS_MAX]:
-        await db.conn.execute(
-            "INSERT INTO knowledge_sections(guild_id, title, body, source, tag, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+        cur = await db.conn.execute(
+            "INSERT OR IGNORE INTO knowledge_sections(guild_id, title, body, source, tag, "
+            "updated_at) VALUES (?, ?, ?, ?, ?, ?)",
             (int(guild_id), str(title), str(body), SERVER, str(tag), at),
         )
+        written += int(cur.rowcount or 0)
     await db.conn.commit()
-    return len(rows[:SECTIONS_MAX])
+    return written

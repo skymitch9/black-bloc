@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 from discord.ext import tasks
 
+from black_bloc import knowledge
 from black_bloc import rolegrants as grants
 from black_bloc.api.settings_api import grouped
-from black_bloc.api.tools import chat_store
 from black_bloc.chat import add_line as add_chat_line
 from black_bloc.chat import create_intent
 from black_bloc.chat import seed_defaults as seed_chat
@@ -246,12 +246,11 @@ async def seeded(client, sign_in, web, guild, wf):
     chat_line_id = await add_chat_line(db, chat_intent_id, "Doors at six, {name}.", by=7)
     # 14b. {chat_section_id} is a STAFF note, the only kind the write entries may touch; the
     # server-written one beside it is what makes the list's two sources both real.
-    await chat_store.ensure_tables(db)
-    chat_section_id = await chat_store.add_section(
+    chat_section_id = await knowledge.add_section(
         db, guild_id, "Cookout hours", "Doors at six, food at seven.", tag="cookout", by=7
     )
-    await chat_store.add_section(
-        db, guild_id, "Channels", "general, cookout-planning", source=chat_store.SERVER
+    await knowledge.add_section(
+        db, guild_id, "Channels", "general, cookout-planning", source=knowledge.SERVER
     )
     # {feature_request_id} is the signed-in staffer's own pending row, so /api/requests/mine
     # is never empty and the decide routes have something to move; {member_request_id} is

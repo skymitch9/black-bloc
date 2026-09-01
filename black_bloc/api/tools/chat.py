@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
+from ... import chat_llm, knowledge, personas
 from ...chat import (
     BUILTIN_NAMES,
     CANNED,
@@ -44,7 +46,6 @@ from ..writes import (
     require_guild,
     writer_dependency,
 )
-from . import chat_store
 
 log = logging.getLogger(__name__)
 
@@ -91,27 +92,6 @@ SERVER_ROW_LOCKED = (
     "from scratch every day, and an edit here would be gone by morning. Write your own note "
     "beside it and Black Bloc reads both."
 )
-NEEDS_TITLE = (
-    "A note needs a heading, so nothing was saved. That is the line Black Bloc matches a question "
-    "against — something like `Cookout hours`."
-)
-TITLE_TOO_LONG = (
-    "A note's heading has to be {limit} characters or fewer, so nothing was saved. Shorten it and "
-    "send it again."
-)
-NEEDS_BODY = (
-    "A note needs some words under the heading, so nothing was saved. Write what you would tell "
-    "somebody who asked."
-)
-BODY_TOO_LONG = (
-    "A note has to be {limit} characters or fewer, so nothing was saved. Anything longer will not "
-    "fit in an answer — split it into two notes with headings of their own."
-)
-TAG_TOO_LONG = "A tag has to be {limit} characters or fewer, so nothing was saved."
-TITLE_TAKEN = (
-    "This server already has a note called **{title}**, so nothing was saved. Edit that one, or "
-    "give this one a heading of its own."
-)
 SECTION_MADE = "**{title}** is in. Black Bloc quotes it when somebody asks something it matches."
 SECTION_SAVED = "**{title}** is saved."
 SECTION_GONE = "**{title}** is gone. Black Bloc will not quote it again."
@@ -156,6 +136,8 @@ POOL_WORD = (
     "people talk."
 )
 TROPE_WORD = "Black Bloc is **{label}** with everybody, and it does not drift."
+
+ONE_VOICE = "trope"
 
 TIER_INTENTS = "intents"
 TIER_IMPORTANT = "important"
@@ -240,7 +222,7 @@ def person(guild: Any, user_id: Any) -> dict[str, Any] | None:
 
 def section_row(guild: Any, row: Any) -> dict[str, Any]:
     source = str(row["source"])
-    own = source == chat_store.STAFF
+    own = source == knowledge.STAFF
     title = str(row["title"])
     return {
         "id": str(row["id"]),
@@ -271,60 +253,52 @@ def trope_row(guild: Any, row: Any, mode: str) -> dict[str, Any]:
 
 
 def mode_kind(mode: str) -> str:
-    if mode == chat_store.COOKOUT:
-        return chat_store.COOKOUT
-    return chat_store.POOL if mode == chat_store.POOL else chat_store.TROPE
+    if mode == personas.COOKOUT:
+        return personas.COOKOUT
+    return personas.POOL if mode == personas.POOL else ONE_VOICE
 
 
 def mode_word(mode: str, tropes: list[Any]) -> str:
     kind = mode_kind(mode)
-    if kind == chat_store.COOKOUT:
+    if kind == personas.COOKOUT:
         return COOKOUT_WORD
-    if kind == chat_store.POOL:
+    if kind == personas.POOL:
         return POOL_WORD.format(count=sum(1 for row in tropes if row["enabled"]))
     label = next((str(row["label"]) for row in tropes if row["name"] == mode), mode)
     return TROPE_WORD.format(label=label)
 
 
-def setting_or(bot: Any, guild_id: int, key: str, fallback: Any) -> Any:
-    """A registry key when the bot has one; 14a's keys land after 14b's page does."""
-    if key not in KEY_TYPES:
-        return fallback
-    found = bot.store.get(guild_id, key)
-    return fallback if found is None else found
+def persona_mode(bot: Any, guild_id: int) -> str:
+    return str(bot.store.get(guild_id, personas.PERSONALITY_KEY) or personas.COOKOUT)
 
 
 def money(dollars: float) -> str:
     return f"${dollars:,.2f}"
 
 
+def note_refused(exc: knowledge.KnowledgeError) -> Refused:
+    return Refused(400, "chat_refused", str(exc))
+
+
 def clean_title(value: Any) -> str:
-    said = " ".join(str(value or "").split())
-    if not said:
-        raise Refused(400, "chat_refused", NEEDS_TITLE)
-    if len(said) > chat_store.TITLE_LIMIT:
-        raise Refused(
-            400, "chat_refused", TITLE_TOO_LONG.format(limit=chat_store.TITLE_LIMIT)
-        )
-    return said
+    try:
+        return knowledge.clean_title(value)
+    except knowledge.KnowledgeError as exc:
+        raise note_refused(exc) from exc
 
 
 def clean_body(value: Any) -> str:
-    said = str(value or "").strip()
-    if not said:
-        raise Refused(400, "chat_refused", NEEDS_BODY)
-    if len(said) > chat_store.BODY_LIMIT:
-        raise Refused(400, "chat_refused", BODY_TOO_LONG.format(limit=chat_store.BODY_LIMIT))
-    return said
+    try:
+        return knowledge.clean_body(value)
+    except knowledge.KnowledgeError as exc:
+        raise note_refused(exc) from exc
 
 
-def clean_tag(value: Any) -> str | None:
-    said = " ".join(str(value or "").split())
-    if not said:
-        return None
-    if len(said) > chat_store.TAG_LIMIT:
-        raise Refused(400, "chat_refused", TAG_TOO_LONG.format(limit=chat_store.TAG_LIMIT))
-    return said
+def clean_tag(value: Any) -> str:
+    try:
+        return knowledge.clean_tag(value)
+    except knowledge.KnowledgeError as exc:
+        raise note_refused(exc) from exc
 
 
 def refused(exc: ChatError) -> Refused:
@@ -574,32 +548,32 @@ def build_router(bot: Any) -> APIRouter:
         }
 
     async def _wanted_section(guild: Any, section_id: int) -> Any:
-        row = await chat_store.get_section(bot.db, section_id)
+        row = await knowledge.get_section(bot.db, section_id)
         if row is None or row["guild_id"] != guild.id:
             raise Refused(404, "no_such_section", NO_SUCH_SECTION.format(section_id=section_id))
         return row
 
     def _staff_row_only(row: Any) -> None:
-        if str(row["source"]) != chat_store.STAFF:
+        if str(row["source"]) != knowledge.STAFF:
             raise Refused(
                 409, "written_by_the_bot", SERVER_ROW_LOCKED.format(title=str(row["title"]))
             )
 
     async def _knowledge(guild: Any) -> dict[str, Any]:
-        rows = await chat_store.list_sections(bot.db, guild.id)
+        rows = await knowledge.list_sections(bot.db, guild.id)
         shown = [section_row(guild, row) for row in rows]
         return {
             "sections": shown,
             "counts": {
                 "total": len(shown),
-                "staff": sum(1 for row in shown if row["source"] == chat_store.STAFF),
-                "server": sum(1 for row in shown if row["source"] == chat_store.SERVER),
+                "staff": sum(1 for row in shown if row["source"] == knowledge.STAFF),
+                "server": sum(1 for row in shown if row["source"] == knowledge.SERVER),
             },
             "budget": {
-                "sections": chat_store.GROUNDING_SECTIONS,
-                "characters": chat_store.GROUNDING_BUDGET_BYTES,
+                "sections": knowledge.HITS_DEFAULT,
+                "characters": knowledge.GROUNDING_BYTES,
                 "word": (
-                    f"At most {chat_store.GROUNDING_SECTIONS} notes ride an answer, and a note "
+                    f"At most {knowledge.HITS_DEFAULT} notes ride an answer, and a note "
                     "that will not fit is left out rather than cut short."
                 ),
             },
@@ -610,7 +584,6 @@ def build_router(bot: Any) -> APIRouter:
     async def chat_knowledge() -> dict[str, Any]:
         guild = require_guild(bot)
         require_db(bot)
-        await chat_store.ensure_tables(bot.db)
         return await _knowledge(guild)
 
     @router.post("/knowledge")
@@ -618,16 +591,15 @@ def build_router(bot: Any) -> APIRouter:
         who = await writer(request)
         guild = require_guild(bot)
         require_db(bot)
-        await chat_store.ensure_tables(bot.db)
         title = clean_title(payload.get("title"))
         body = clean_body(payload.get("body"))
         tag = clean_tag(payload.get("tag"))
         try:
-            section_id = await chat_store.add_section(
+            section_id = await knowledge.add_section(
                 bot.db, guild.id, title, body, tag=tag, by=int(who["id"])
             )
-        except sqlite3.IntegrityError as exc:
-            raise Refused(409, "title_taken", TITLE_TAKEN.format(title=title)) from exc
+        except knowledge.KnowledgeError as exc:
+            raise Refused(409, "title_taken", str(exc)) from exc
         await note(
             bot,
             guild,
@@ -635,7 +607,7 @@ def build_router(bot: Any) -> APIRouter:
             who,
             details={"title": title, "via": VIA_WEBSITE},
         )
-        row = await chat_store.get_section(bot.db, section_id)
+        row = await knowledge.get_section(bot.db, section_id)
         return {
             "section": section_row(guild, row),
             "message": SECTION_MADE.format(title=title),
@@ -648,7 +620,6 @@ def build_router(bot: Any) -> APIRouter:
         who = await writer(request)
         guild = require_guild(bot)
         require_db(bot)
-        await chat_store.ensure_tables(bot.db)
         row = await _wanted_section(guild, section_id)
         _staff_row_only(row)
         fields: dict[str, Any] = {}
@@ -659,11 +630,9 @@ def build_router(bot: Any) -> APIRouter:
         if "tag" in payload:
             fields["tag"] = clean_tag(payload["tag"])
         try:
-            await chat_store.update_section(bot.db, section_id, by=int(who["id"]), **fields)
-        except sqlite3.IntegrityError as exc:
-            raise Refused(
-                409, "title_taken", TITLE_TAKEN.format(title=fields.get("title"))
-            ) from exc
+            await knowledge.update_section(bot.db, section_id, by=int(who["id"]), **fields)
+        except knowledge.KnowledgeError as exc:
+            raise Refused(409, "title_taken", str(exc)) from exc
         await note(
             bot,
             guild,
@@ -671,7 +640,7 @@ def build_router(bot: Any) -> APIRouter:
             who,
             details={"section_id": section_id, "changed": sorted(fields), "via": VIA_WEBSITE},
         )
-        fresh = await chat_store.get_section(bot.db, section_id)
+        fresh = await knowledge.get_section(bot.db, section_id)
         return {
             "section": section_row(guild, fresh),
             "message": SECTION_SAVED.format(title=str(fresh["title"])),
@@ -682,11 +651,10 @@ def build_router(bot: Any) -> APIRouter:
         who = await writer(request)
         guild = require_guild(bot)
         require_db(bot)
-        await chat_store.ensure_tables(bot.db)
         row = await _wanted_section(guild, section_id)
         _staff_row_only(row)
         title = str(row["title"])
-        await chat_store.delete_section(bot.db, section_id)
+        await knowledge.remove_section(bot.db, section_id)
         await note(
             bot,
             guild,
@@ -701,9 +669,9 @@ def build_router(bot: Any) -> APIRouter:
         }
 
     async def _personality(guild: Any) -> dict[str, Any]:
-        await chat_store.seed_tropes(bot.db, guild.id)
-        rows = await chat_store.list_tropes(bot.db, guild.id)
-        mode = await chat_store.persona_mode(bot.db, guild.id)
+        await personas.seed_tropes(bot.db)
+        rows = await personas.list_tropes(bot.db)
+        mode = persona_mode(bot, guild.id)
         shown = [trope_row(guild, row, mode) for row in rows]
         return {
             "mode": mode,
@@ -714,7 +682,7 @@ def build_router(bot: Any) -> APIRouter:
                 "total": len(shown),
                 "enabled": sum(1 for row in shown if row["enabled"]),
             },
-            "ported_from": chat_store.POOL_SOURCE,
+            "ported_from": personas.POOL_SOURCE,
             "notes": [],
         }
 
@@ -723,7 +691,6 @@ def build_router(bot: Any) -> APIRouter:
         """A guild that has never been seeded gets the ported pool here, so it is never blank."""
         guild = require_guild(bot)
         require_db(bot)
-        await chat_store.ensure_tables(bot.db)
         return await _personality(guild)
 
     @router.put("/personality")
@@ -733,22 +700,21 @@ def build_router(bot: Any) -> APIRouter:
         who = await writer(request)
         guild = require_guild(bot)
         require_db(bot)
-        await chat_store.ensure_tables(bot.db)
-        await chat_store.seed_tropes(bot.db, guild.id)
+        await personas.seed_tropes(bot.db)
         wanted = str(payload.get("mode") or "").strip().lower()
         if not wanted:
             raise Refused(400, "chat_refused", MODE_NEEDS_A_NAME)
         said = MODE_SET_COOKOUT
-        if wanted not in (chat_store.COOKOUT, chat_store.POOL):
-            row = await chat_store.get_trope(bot.db, guild.id, wanted)
+        if wanted not in (personas.COOKOUT, personas.POOL):
+            row = await personas.get_trope(bot.db, wanted)
             if row is None:
                 raise Refused(404, "no_such_trope", NO_SUCH_TROPE.format(name=wanted))
             if not row["enabled"]:
                 raise Refused(409, "voice_is_off", TROPE_IS_OFF.format(label=str(row["label"])))
             said = MODE_SET_TROPE.format(label=str(row["label"]))
-        elif wanted == chat_store.POOL:
+        elif wanted == personas.POOL:
             said = MODE_SET_POOL
-        await chat_store.set_persona_mode(bot.db, guild.id, wanted, by=int(who["id"]))
+        await bot.store.set(guild.id, personas.PERSONALITY_KEY, wanted, by=int(who["id"]))
         await note(
             bot,
             guild,
@@ -771,24 +737,22 @@ def build_router(bot: Any) -> APIRouter:
         who = await writer(request)
         guild = require_guild(bot)
         require_db(bot)
-        await chat_store.ensure_tables(bot.db)
-        await chat_store.seed_tropes(bot.db, guild.id)
-        row = await chat_store.get_trope(bot.db, guild.id, str(name).strip().lower())
+        await personas.seed_tropes(bot.db)
+        row = await personas.get_trope(bot.db, str(name).strip().lower())
         if row is None:
             raise Refused(404, "no_such_trope", NO_SUCH_TROPE.format(name=name))
         label = str(row["label"])
         wanted = payload.get("enabled") is not False
-        mode = await chat_store.persona_mode(bot.db, guild.id)
+        mode = persona_mode(bot, guild.id)
         if not wanted and mode == str(row["name"]):
             raise Refused(409, "voice_in_use", TROPE_IN_USE.format(label=label))
-        rows = await chat_store.list_tropes(bot.db, guild.id)
+        rows = await personas.list_tropes(bot.db)
         on_now = [one for one in rows if one["enabled"]]
         last_one = len(on_now) == 1 and on_now[0]["name"] == row["name"]
-        if not wanted and last_one and mode == chat_store.POOL:
+        if not wanted and last_one and mode == personas.POOL:
             raise Refused(409, "last_voice", LAST_TROPE_ON.format(label=label))
-        await chat_store.set_trope_enabled(
-            bot.db, guild.id, str(row["name"]), wanted, by=int(who["id"])
-        )
+        await personas.set_enabled(bot.db, str(row["name"]), wanted, by=int(who["id"]))
+        personas.forget_tropes(bot)
         await note(
             bot,
             guild,
@@ -796,7 +760,7 @@ def build_router(bot: Any) -> APIRouter:
             who,
             details={"trope": str(row["name"]), "via": VIA_WEBSITE},
         )
-        fresh = await chat_store.get_trope(bot.db, guild.id, str(row["name"]))
+        fresh = await personas.get_trope(bot.db, str(row["name"]))
         return {
             "trope": trope_row(guild, fresh, mode),
             "message": (TROPE_ON if wanted else TROPE_OFF).format(label=label),
@@ -819,17 +783,13 @@ def build_router(bot: Any) -> APIRouter:
         """What the month has cost, what today has asked for, and which tiers are answering."""
         guild = require_guild(bot)
         require_db(bot)
-        await chat_store.ensure_tables(bot.db)
-        spent = await chat_store.spent_this_month(bot.db, guild.id)
-        turns = await chat_store.turns_today(bot.db, guild.id)
-        cap_usd = float(
-            setting_or(bot, guild.id, chat_store.CAP_KEY, chat_store.MONTHLY_CAP_USD)
-        )
-        daily = setting_or(bot, guild.id, chat_store.DAILY_KEY, chat_store.DAILY_TURNS)
-        mode_on = str(
-            setting_or(bot, guild.id, chat_store.LLM_MODE_KEY, chat_store.LLM_MODE_DEFAULT)
-        ) == "on"
-        spent_usd = round(spent / chat_store.MICRODOLLARS, 2)
+        at = datetime.now(UTC)
+        spent = await chat_llm.month_spend(bot.db, chat_llm.month_start(at))
+        turns = await chat_llm.server_turns(bot.db, chat_llm.day_start(at))
+        cap_usd = float(bot.store.get(guild.id, chat_llm.MONTHLY_CAP_KEY))
+        daily = bot.store.get(guild.id, chat_llm.DAILY_TURNS_KEY)
+        mode_on = str(bot.store.get(guild.id, chat_llm.LLM_MODE_KEY)) == chat_llm.ON
+        spent_usd = round(spent / chat_llm.MICRODOLLARS_IN_A_DOLLAR, 2)
         left_usd = round(max(cap_usd - spent_usd, 0.0), 2)
         capped = cap_usd > 0 and spent_usd >= cap_usd
         cap_said = money(cap_usd)
@@ -863,8 +823,8 @@ def build_router(bot: Any) -> APIRouter:
             },
             "tiers": tiers,
             "capped": capped,
-            "cap_key": chat_store.CAP_KEY,
-            "last_turn_at": await chat_store.last_turn_at(bot.db, guild.id),
+            "cap_key": chat_llm.MONTHLY_CAP_KEY,
+            "last_turn_at": await chat_llm.last_turn_at(bot.db),
             "notes": [],
         }
 

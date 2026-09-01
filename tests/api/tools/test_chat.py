@@ -1,7 +1,8 @@
 import pytest
 
-from black_bloc.api.tools import chat_store
+from black_bloc import knowledge
 from black_bloc.chat import BUILTIN_ORDER, UNKNOWN, loaded_intents, seed_defaults
+from black_bloc.llm import ANTHROPIC, IMPORTANT, MODEL, Usage, record
 
 
 @pytest.fixture
@@ -10,6 +11,19 @@ async def seeded(client, sign_in, web, wf, guild):
     sign_in(client)
     await seed_defaults(web.db, wf.GUILD_ID)
     return client
+
+
+async def a_ledger_row(web, wf, usage):
+    await record(
+        web.db,
+        guild_id=wf.GUILD_ID,
+        user_id=7,
+        turn="one",
+        provider=ANTHROPIC,
+        model=MODEL,
+        tier=IMPORTANT,
+        usage=usage,
+    )
 
 
 def intents_of(client):
@@ -343,9 +357,8 @@ async def test_a_note_can_be_written_edited_and_removed(seeded, client):
 
 
 async def test_a_note_the_bot_wrote_itself_is_shown_but_refused_in_words(seeded, client, web, wf):
-    await chat_store.ensure_tables(web.db)
-    section_id = await chat_store.add_section(
-        web.db, wf.GUILD_ID, "Channels", "general, cookout", source=chat_store.SERVER
+    section_id = await knowledge.add_section(
+        web.db, wf.GUILD_ID, "Channels", "general, cookout", source=knowledge.SERVER
     )
 
     row = next(
@@ -366,7 +379,7 @@ async def test_a_note_needs_a_heading_and_some_words_and_is_bounded(seeded, clie
     for payload in (
         {"title": "  ", "body": "words"},
         {"title": "Rules", "body": "   "},
-        {"title": "x" * 81, "body": "words"},
+        {"title": "x" * 101, "body": "words"},
         {"title": "Rules", "body": "x" * 4001},
         {"title": "Rules", "body": "words", "tag": "x" * 41},
     ):
@@ -385,8 +398,7 @@ async def test_two_notes_cannot_share_a_heading(seeded, client):
 
 
 async def test_a_note_from_another_server_is_not_found(seeded, client, web):
-    await chat_store.ensure_tables(web.db)
-    elsewhere = await chat_store.add_section(web.db, 9999, "Theirs", "not ours")
+    elsewhere = await knowledge.add_section(web.db, 9999, "Theirs", "not ours")
 
     assert client.put(f"/api/chat/knowledge/{elsewhere}", json={"body": "x"}).status_code == 404
     assert client.delete(f"/api/chat/knowledge/{elsewhere}").status_code == 404
@@ -476,16 +488,7 @@ async def test_a_trope_nobody_has_is_not_found(seeded, client):
 
 
 async def test_the_spend_route_words_the_month_the_day_and_every_tier(seeded, client, web, wf):
-    await chat_store.ensure_tables(web.db)
-    await chat_store.add_ledger_entry(
-        web.db,
-        wf.GUILD_ID,
-        provider="anthropic",
-        model="claude-haiku-4-5",
-        input_tokens=900,
-        output_tokens=200,
-        cost_microdollars=1_900_000,
-    )
+    await a_ledger_row(web, wf, Usage(input_tokens=900_000, output_tokens=200_000))
 
     payload = client.get("/api/chat/spend").json()
 
@@ -501,10 +504,8 @@ async def test_the_spend_route_words_the_month_the_day_and_every_tier(seeded, cl
     assert payload["last_turn_at"]
 
 
-async def test_a_tier_with_no_key_says_so_rather_than_claiming_it_is_live(
-    seeded, client, monkeypatch
-):
-    monkeypatch.setattr(chat_store, "LLM_MODE_DEFAULT", "on")
+async def test_a_tier_with_no_key_says_so_rather_than_claiming_it_is_live(seeded, client, web, wf):
+    await web.store.set(wf.GUILD_ID, "chat_llm_mode", "on", by=7)
 
     payload = client.get("/api/chat/spend").json()
     haiku = next(row for row in payload["tiers"] if row["name"] == "important")
@@ -513,8 +514,8 @@ async def test_a_tier_with_no_key_says_so_rather_than_claiming_it_is_live(
     assert "ANTHROPIC_API_KEY" in haiku["word"]
 
 
-async def test_a_tier_with_a_key_and_the_mode_on_is_live(seeded, client, web, monkeypatch):
-    monkeypatch.setattr(chat_store, "LLM_MODE_DEFAULT", "on")
+async def test_a_tier_with_a_key_and_the_mode_on_is_live(seeded, client, web, wf):
+    await web.store.set(wf.GUILD_ID, "chat_llm_mode", "on", by=7)
     web.settings.__dict__["anthropic_api_key"] = "sk-contract"
 
     haiku = next(
@@ -534,20 +535,11 @@ async def test_the_mode_being_off_is_why_a_tier_is_quiet_and_it_says_which(seede
     assert haiku["live"] is False and "chat_llm_mode" in haiku["word"]
 
 
-async def test_a_spent_month_shuts_both_model_tiers_and_says_so(
-    seeded, client, web, wf, monkeypatch
-):
-    monkeypatch.setattr(chat_store, "LLM_MODE_DEFAULT", "on")
+async def test_a_spent_month_shuts_both_model_tiers_and_says_so(seeded, client, web, wf):
+    await web.store.set(wf.GUILD_ID, "chat_llm_mode", "on", by=7)
     web.settings.__dict__["anthropic_api_key"] = "sk-contract"
     web.settings.__dict__["groq_api_key"] = "gsk-contract"
-    await chat_store.ensure_tables(web.db)
-    await chat_store.add_ledger_entry(
-        web.db,
-        wf.GUILD_ID,
-        provider="anthropic",
-        model="claude-haiku-4-5",
-        cost_microdollars=20_000_000,
-    )
+    await a_ledger_row(web, wf, Usage(output_tokens=4_000_000))
 
     payload = client.get("/api/chat/spend").json()
 

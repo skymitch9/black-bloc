@@ -218,6 +218,24 @@ function isImportantKind(kind) {
 }
 
 // [feature namespace, the word the help uses, the slash group that shows its logs]
+// Mirrors black_bloc/personas.py:TROPES — the eleven ported from GABI's
+// personality.ts. `noir` ships switched off so the page has an off row to draw.
+const TROPE_POOL = [
+  ['peppy', 'peppy', 'You are BRIGHT and fast today — genuinely glad to have been asked. Short exclamations, visible delight in the question, quick to celebrate somebody’s good news.'],
+  ['dramatic', 'dramatic', 'You are THEATRICAL today — grand pronouncements about small things, a flair for the reveal. The drama is in the framing; what you actually tell somebody stays plain.'],
+  ['mischievous', 'mischievous', 'You are PLAYFUL today — light teasing, a raised eyebrow, enjoying yourself. Never mean, and never holding something back to be coy about it.'],
+  ['flirty', 'flirty', 'You are CHARMING today, with a playful wink — light compliments, affectionate teasing. CHARM, NOT HEAT, and you never get flustered into dropping the answer.'],
+  ['warm', 'warm', 'You are WARM today — familiar, unhurried, glad to see them. Kind without being saccharine.'],
+  ['cozy', 'cozy', 'You are COSY today — the voice of a folding chair in the shade and a full plate. Calm rather than sleepy.'],
+  ['shy', 'shy', 'You are a little SHY today — soft, hedging, apologetic about taking up room. BUT YOU STILL GIVE THE WHOLE ANSWER, first time.'],
+  ['scholar', 'scholarly', 'You are SCHOLARLY today — precise, fond of getting a detail exactly right. Pedantic about accuracy, never about the person.'],
+  ['noir', 'noir', 'You are HARD-BOILED today — clipped sentences, a little world-weary, everything faintly a metaphor about rain and long odds.'],
+  ['deadpan', 'deadpan', 'You are DEADPAN today — flat, economical, dry. The joke is the flatness. Few words, all of them load-bearing.'],
+  ['tsundere', 'tsundere', 'You are BRUSQUE today, and helping anyway — mildly put upon. THE GRUMBLING IS ALL SURFACE: you still answer fully and promptly.'],
+];
+
+const PERSONALITY_CHOICES = ['cookout', 'pool', ...TROPE_POOL.map(([name]) => name)];
+
 const LOG_LEVEL_FEATURES = [
   ['core', 'core', null],
   ['automod', 'automod', 'automod'],
@@ -303,12 +321,12 @@ const SETTING_SPECS = [
   ['chat_greeting_reaction', 'bool', false, false, 'true to answer a bare hello with a wave reaction instead of a sentence; anything longer still gets a reply'],
   ['chat_reply_in_threads', 'bool', true, true, 'true to answer @-mentions inside threads as well as channels'],
   ['chat_route_ping_staff', 'bool', false, false, 'true to drop one line in the staff channel when somebody asks the bot for a mod; only used while modmail_enabled is true'],
-  // 14b's three keys. ⚠️ 14a owns them in black_bloc/settings_store.py (phase14-design §7);
-  // the mock registers them so the Chat page's Personality and Spend sections have something
-  // real to edit, and the merge reconciles the two lists.
-  ['chat_llm_mode', 'enum', 'on', 'off', 'off, or on (Black Bloc may ask a model when its own phrases do not match). Off is the ordinary state and nothing breaks without a key', ['off', 'on']],
-  ['chat_personality', 'text', 'cookout', 'cookout', 'the voice Black Bloc talks in: cookout, pool (one of the pool per conversation), or the name of one voice from the pool'],
-  ['chat_monthly_cap_usd', 'int', 20, 20, 'what Black Bloc may spend on model answers in a month; at the cap it answers from its own phrases until the 1st', null, 500],
+  ['chat_llm_mode', 'enum', 'on', 'off', 'off, or on (an @-mention no built-in intent recognises is answered by a language model instead of the catch-all line). Off is the default and off is safe: with it off, or with no keys set, Black Bloc answers exactly as it does today', ['off', 'on']],
+  ['chat_simple_model', 'text', 'llama-3.3-70b-versatile', 'llama-3.3-70b-versatile', 'which Groq model the quick tier asks; it is a setting because Groq retires model names faster than a deploy can follow'],
+  ['chat_personality', 'enum', 'cookout', 'cookout', 'the voice Black Bloc writes a conversational answer in: cookout is the house voice, pool lets a conversation pick one of the moods and drift a step at a time, or name one mood to keep it. Only used when chat_llm_mode is on', PERSONALITY_CHOICES],
+  ['chat_person_hourly_turns', 'int', 20, 20, "how many conversational answers one member may get in a rolling hour, up to 10000; 0 means no ceiling of its own. Past it they still get Black Bloc's own written lines", null, 10000],
+  ['chat_daily_turns', 'int', 200, 200, 'how many conversational answers the whole server may get in a UTC day, up to 10000; 0 means no ceiling of its own', null, 10000],
+  ['chat_monthly_cap_usd', 'int', 20, 20, "whole dollars a month Black Bloc may run the conversation models for, up to 1000. At the figure it stops calling them until the 1st and answers from its own written lines; 0 stops them altogether", null, 1000],
   ...LOG_LEVEL_FEATURES.map(([feature, label, command]) => [
     `${feature}_log_level`,
     'enum',
@@ -642,21 +660,6 @@ function seedState() {
   };
 }
 
-// Mirrors black_bloc/api/tools/chat_store.py:POOL_TROPES — the eleven ported from GABI's
-// personality.ts. `noir` ships switched off so the page has an off row to draw.
-const TROPE_POOL = [
-  ['peppy', 'peppy', 'You are BRIGHT and fast today — genuinely glad to have been asked. Short exclamations, visible delight in the question, quick to celebrate somebody’s good news.'],
-  ['dramatic', 'dramatic', 'You are THEATRICAL today — grand pronouncements about small things, a flair for the reveal. The drama is in the framing; what you actually tell somebody stays plain.'],
-  ['mischievous', 'mischievous', 'You are PLAYFUL today — light teasing, a raised eyebrow, enjoying yourself. Never mean, and never holding something back to be coy about it.'],
-  ['flirty', 'flirty', 'You are CHARMING today, with a playful wink — light compliments, affectionate teasing. CHARM, NOT HEAT, and you never get flustered into dropping the answer.'],
-  ['warm', 'warm', 'You are WARM today — familiar, unhurried, glad to see them. Kind without being saccharine.'],
-  ['cozy', 'cosy', 'You are COSY today — the voice of a folding chair in the shade and a full plate. Calm rather than sleepy.'],
-  ['shy', 'shy', 'You are a little SHY today — soft, hedging, apologetic about taking up room. BUT YOU STILL GIVE THE WHOLE ANSWER, first time.'],
-  ['scholar', 'scholarly', 'You are SCHOLARLY today — precise, fond of getting a detail exactly right. Pedantic about accuracy, never about the person.'],
-  ['noir', 'noir', 'You are HARD-BOILED today — clipped sentences, a little world-weary, everything faintly a metaphor about rain and long odds.'],
-  ['deadpan', 'deadpan', 'You are DEADPAN today — flat, economical, dry. The joke is the flatness. Few words, all of them load-bearing.'],
-  ['tsundere', 'tsundere', 'You are BRUSQUE today, and helping anyway — mildly put upon. THE GRUMBLING IS ALL SURFACE: you still answer fully and promptly.'],
-];
 
 function seedTropes() {
   return TROPE_POOL.map(([name, label, voice], sort) => ({
@@ -2823,7 +2826,8 @@ const CHAT_TOKENS = {
 };
 const CHAT_SETTING_KEYS = ['chat_mode', 'chat_cooldown_seconds', 'chat_ignore_channels',
   'chat_greeting_reaction', 'chat_reply_in_threads', 'chat_route_ping_staff',
-  'chat_llm_mode', 'chat_personality', 'chat_monthly_cap_usd'];
+  'chat_llm_mode', 'chat_simple_model', 'chat_personality', 'chat_person_hourly_turns',
+  'chat_daily_turns', 'chat_monthly_cap_usd', 'chat_log_level'];
 const CHAT_UNKNOWN_LINE = 'Not sure I follow, {name} — try `/help` for what I can do.';
 const CHAT_NO_SUCH_INTENT = 'Black Bloc has no chat intent **#%s** any more, so nothing was done. The Chat page lists the ones it has.';
 const CHAT_NO_SUCH_LINE = 'Black Bloc has no chat line **#%s** any more, so nothing was done. Somebody may have removed it while this page was open.';
@@ -3116,7 +3120,7 @@ route('POST', '/api/chat/try', async (context) => {
 
 // Chat step 3 (14b). Mirrors black_bloc/api/tools/chat.py: ids as strings, refusals in words,
 // a server-written note shown but locked, and liveness measured rather than assumed.
-const KNOWLEDGE_TITLE_LIMIT = 80;
+const KNOWLEDGE_TITLE_LIMIT = 100;
 const KNOWLEDGE_BODY_LIMIT = 4000;
 const KNOWLEDGE_TAG_LIMIT = 40;
 const GROUNDING_SECTIONS = 3;

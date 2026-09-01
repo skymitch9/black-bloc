@@ -376,6 +376,9 @@ CREATE TABLE IF NOT EXISTS knowledge_sections (
 CREATE INDEX IF NOT EXISTS knowledge_sections_by_source
     ON knowledge_sections(guild_id, source, id);
 
+CREATE UNIQUE INDEX IF NOT EXISTS knowledge_sections_one_title
+    ON knowledge_sections(guild_id, source, title);
+
 CREATE TABLE IF NOT EXISTS personality_tropes (
     name       TEXT    PRIMARY KEY,
     label      TEXT    NOT NULL,

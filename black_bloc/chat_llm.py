@@ -23,7 +23,14 @@ from .llm import (
     LLMError,
     record,
 )
-from .personas import COOKOUT, pick_trope, pooled, system_blocks, system_text
+from .personas import (
+    COOKOUT,
+    PERSONALITY_KEY,
+    pick_trope,
+    pooled,
+    system_blocks,
+    system_text,
+)
 from .settings_store import (
     CHAT_DAILY_TURNS,
     CHAT_MONTHLY_CAP_USD,
@@ -61,7 +68,6 @@ ERROR_KIND = "chat.llm_error"
 ON = "on"
 LLM_MODE_KEY = "chat_llm_mode"
 SIMPLE_MODEL_KEY = "chat_simple_model"
-PERSONALITY_KEY = "chat_personality"
 REPLY_LIMIT = 1900
 CLIENTS_ATTR = "_chat_clients"
 ERRORS_ATTR = "_chat_tier_errors"
@@ -310,6 +316,17 @@ async def month_spend(db: Any, since: str) -> int:
     return await counted(
         db, "SELECT SUM(cost_microdollars) FROM llm_ledger WHERE at >= ?", (since,)
     )
+
+
+async def last_turn_at(db: Any) -> str | None:
+    try:
+        cur = await db.conn.execute("SELECT MAX(at) FROM llm_ledger")
+        row = await cur.fetchone()
+    except Exception as exc:
+        log.warning("chat: the ledger's last turn could not be read — %s", exc)
+        return None
+    found = row[0] if row is not None else None
+    return str(found) if found else None
 
 
 def setting(store: Any, guild_id: Any, key: str, fallback: int) -> int:
