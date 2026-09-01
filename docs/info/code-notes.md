@@ -4234,3 +4234,52 @@ dropdown". There are SIX** — `discord`, `classic`, `apple`, `cyberpunk`, `retr
 | `server.mjs state.llmKeys` | The mock's stand-in for the two `config.py` keys: Anthropic set, Groq not, so the Spend section always renders a live tier and a keyless one side by side rather than three of the same thing. |
 | ⚠️ `contract.json {chat_section_id}` | Points at a **staff-written** note in both halves' fixtures, because a server-written one refuses PUT and DELETE and this table only checks the 200 path. The server-written row still exists in both fixtures so `GET /api/chat/knowledge` proves both sources. The trope entry names `noir` outright — the pool is fixed ported data, not rows whose ids move. |
 | `check.mjs checkActionKinds` | The six new `web.chat.*` kinds are each left by the write that spells it, and `trope_enabled`/`trope_disabled` are two kinds off one route the way tempvoice's lock/unlock are. 17 pages, **106 routes** (was 98). |
+
+## chat 3 — where 14a and 14b were joined (2026-09-01)
+
+> **Read this before the two sections above**, which were each written while the
+> other half did not exist. Where they disagree, this section is what the tree
+> actually does. **Last verified: 2026-09-01** — `pytest -q` **2451 passed**
+> (2438 + 21 failing at the merge, minus `test_chat_store.py`'s 8, which died
+> with the file it tested; no other test was deleted), `ruff check .` clean,
+> `node site/mock/check.mjs` **17 pages / 106 routes**, and the Chat page
+> exercised by hand in Chrome on the Black Bloc theme, dark.
+> ⚠️ Still true after the merge: **no real model call has ever been made**, and
+> nothing has run against live Discord.
+
+### `black_bloc/api/tools/chat_store.py` is GONE
+
+The stand-in and its eight tests were deleted; the routes read 14a's modules.
+The table below is the map, and the reason each choice went the way it did.
+
+| Key | Note |
+|---|---|
+| ⚠️ `storage/db.py:379` | **The one piece of 14b's schema that survived the deletion.** 14a's `knowledge_sections` already had `guild_id` but no uniqueness at all; 14b's had `UNIQUE (guild_id, source, title)`, and that is the constraint the lane needs — **on the source as well as the title**, so the daily loop and a staffer may both hold a note headed `Channels` without either one stopping the other. It arrives as a `CREATE UNIQUE INDEX IF NOT EXISTS` inside `SCHEMA`, which `connect()` runs on every start, so it is the additive migration and needs no schema bump (no column changed; `SCHEMA_VERSION` stays 20). Adding it to a database that already held duplicates would fail at startup — schema 20 has never shipped, so there are none. |
+| ⚠️ `knowledge.py:469` | **The unique index made the daily ingest a hazard, so the ingest writes `INSERT OR IGNORE` and counts what landed.** Discord lets two channels in different categories share a name, and `shorten()` can trim two long distinct names to the same title; either would raise inside `replace_server_sections` and take down the whole pass for the other two hundred rows. Same split the lane already had — **the ingest skips, the commands refuse** — now with the skip made real rather than assumed. |
+| `knowledge.py:52`, `:322`, `:346` | The duplicate-heading sentence lives here and **both doors say it**: `add_section`/`update_section` catch `sqlite3.IntegrityError` and raise `KnowledgeError`, the slash command prints it, and `api/tools/chat.py:602`/`:635` wrap it as the 409 `title_taken` the page already knew how to draw. 14b had its own copy of that sentence and of all four note validators; those copies are gone, and `chat.py:283`'s cleaners now delegate to `knowledge.py`'s. The visible consequence: **a note heading may be 100 characters, not 80** — 14a's limit won, and `page-chat.js TITLE_LIMIT` and `server.mjs KNOWLEDGE_TITLE_LIMIT` were both moved to match. |
+| ⚠️ `api/tools/chat.py:271` and `:717` | **The persona mode is the `chat_personality` registry key and nothing else.** 14b's `chat_persona` table died with the stand-in; the PUT writes through `bot.store.set`, which is what makes the Chat page's segment and `/settings set-value` and `/chat personality set` one control over one fact (checklist 33). The route still logs `web.chat.personality_mode` — `store.set` writes no action row of its own, so there is exactly one audit line per change and `via_of` tells the two doors apart. |
+| ⚠️ `api/tools/chat.py:755` | **Switching a voice off from the website now drops the cached pool**, which the slash command already did and the stand-in had no cache to drop. Without it the bot would keep picking a mood staff had just switched off, until a restart. |
+| `api/tools/chat.py:786` | `setting_or` is gone: every key it guarded exists in the registry, so the spend route reads `bot.store.get` directly. It also reads the ledger through `chat_llm.month_spend`/`server_turns`/`last_turn_at` (`chat_llm.py:321` is new), **so the figure the page shows and the figure the fuse closes the tier on are the same query.** ⚠️ Note what that inherits: those readers deliberately **ignore `guild_id`** (`chat_llm.py:308`) because the bill belongs to one API account, while 14b's stand-in scoped its sums to the guild. One server today, so the numbers agree; on a second server the page would show the account's spend, not that server's, which is the honest reading of a single monthly cap. |
+| ⚠️ `logkinds.py ROUTINE` | The auto-merge left `chat.knowledge_added` and `chat.knowledge_removed` in the set **twice**, and the two halves had named the same decision differently: the cog logged `chat.personality` and `chat.trope`, the website `web.chat.personality_mode`, `web.chat.trope_enabled` and `web.chat.trope_disabled`. One decision now has one base kind — the cog's constants at `cogs/content/chat.py:139` are `chat.personality_mode` / `chat.trope_enabled` / `chat.trope_disabled`, told apart from the website's by the `web.` head. Splitting the trope kind in two is also checklist 2's shape: on and off are distinguishable at a glance in the log. |
+| `personas.py:19`, `:20` | `PERSONALITY_KEY` had three homes (here, `chat_llm.py`, the cog) and `LLM_MODE_KEY` two; `personas.py` and `chat_llm.py` own them now and everything else imports. `POOL_SOURCE` moved out of the stand-in so `GET /api/chat/personality` can still hand the page its `ported_from` provenance. |
+| ⚠️ `server.mjs:237`, `:2827` | **The mock registered six chat keys and the real registry has thirteen.** It now registers all thirteen, with the router's own help text, and `chat_personality` as the **enum** it really is rather than free text — its choices are derived from `TROPE_POOL` so the list cannot drift from the pool it names. `TROPE_POOL` moved above `SETTING_SPECS` to make that derivation possible and its header now points at `personas.py`, not the deleted file. Verified rendered: the Settings page's Chat group draws 13 rows, and `chat_personality` there reads back the value the Chat page's segment just wrote. |
+
+### What was NOT verified at the merge
+
+- ⚠️ **The `cozy` mood's label.** 14b's port labelled it **`cosy`** and said that
+  spelling is GABI's; 14a's `personas.py` labels it `cozy`. The mock was aligned
+  to `personas.py` because the router is canonical for content — but **14a may
+  have lost a deliberate spelling**, and nobody has checked GABI's file to say
+  which is right. It is one word in one label and changes nothing else.
+- **Nothing new was exercised against the real router in a browser.** The page
+  was driven against the mock; that the mock and the router answer the same
+  shapes is `tests/api/test_contract.py` plus `check.mjs`, not a rendered page.
+- **The daily ingest has never met a duplicate channel name.** The
+  `INSERT OR IGNORE` above is reasoned from Discord's rules and covered by no
+  test that builds two same-named channels.
+- **Exercised by hand:** adding a note (count 3 → 4, outcome sentence bolded),
+  the personality segment on all three of its states including the third choice
+  appearing only once a voice is pinned, the refusal when the voice in use is
+  taken out, and the spend meter at 1.7% with two of three tiers answering.
+  **Not exercised:** editing or removing a note, the search boxes, the trope
+  search, and the capped state of the meter.
