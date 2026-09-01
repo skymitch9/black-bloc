@@ -16,6 +16,7 @@ from black_bloc.cogs.community.events import (
     event_for_channel,
     events_by_status,
     get_event,
+    rename_channel,
     review_view,
     set_review,
     set_status,
@@ -474,13 +475,28 @@ async def test_a_proposal_makes_a_row_a_channel_and_a_card(cog, bot, member, db)
     assert interaction.response.messages[0].get("deferred") is True
 
 
-async def test_the_review_channel_is_staff_only_and_leaves_the_requester_out(cog, bot, member):
+async def test_the_review_channel_is_staff_only_plus_the_person_who_proposed_it(
+    cog, bot, member
+):
     await submit(cog, bot, member)
 
     overwrites = bot.guild.created[0].given_overwrites
     assert overwrites[bot.guild.default_role].view_channel is False
     assert overwrites[bot.guild.roles[0]].view_channel is True
-    assert member not in overwrites
+    mine = overwrites[member]
+    assert mine.view_channel is True and mine.send_messages is True
+    assert mine.read_message_history is True
+
+
+async def test_a_rename_leaves_the_requesters_overwrite_alone(cog, bot, member, db):
+    await submit(cog, bot, member)
+    made = bot.guild.created[0]
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+
+    await rename_channel(bot, bot.guild, row, DONE, member.display_name)
+
+    assert made.name.startswith("done-")
+    assert made.given_overwrites[member].view_channel is True
 
 
 async def test_the_review_card_carries_approve_and_deny_buttons_keyed_by_the_event(
