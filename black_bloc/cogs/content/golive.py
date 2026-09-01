@@ -55,6 +55,7 @@ TWITCH_OFF = (
 POLLING_NO_CREDS = (
     "off — no Twitch credentials; the sweep still runs and still ages sessions out"
 )
+POLL_FAILURES_BEFORE_DEGRADED = 3
 OPTED_OUT = (
     "Done — Black Bloc will not announce your streams. Run `/golive optin` if you change "
     "your mind."
@@ -304,6 +305,7 @@ class GoLive(commands.Cog):
         self._locks: dict[int, asyncio.Lock] = {}
         self.last_poll_ok_at: str | None = None
         self.last_poll_error: str | None = None
+        self.poll_failures = 0
 
     golive = app_commands.Group(name="golive", description="Go-live announcements")
     twitch = app_commands.Group(name="twitch", description="Link your Twitch channel")
@@ -746,6 +748,32 @@ class GoLive(commands.Cog):
                 )
                 await self._close_session(guild, row, "aged_out")
 
+    def _poll_worked(self) -> None:
+        self.last_poll_ok_at = now_iso()
+        self.last_poll_error = None
+        self.poll_failures = 0
+
+    async def _poll_failed(self, exc: TwitchError) -> None:
+        """One action-log line per outage, at the point the sweep stops being trustworthy."""
+        self.last_poll_error = str(exc)
+        self.poll_failures += 1
+        log.warning(
+            "go-live: Twitch poll failed (%d in a row): %s", self.poll_failures, exc
+        )
+        if self.poll_failures != POLL_FAILURES_BEFORE_DEGRADED:
+            return
+        for guild in list(getattr(self.bot, "guilds", ())):
+            await log_action(
+                self.bot,
+                guild,
+                "golive.poll_degraded",
+                details={
+                    "failures": self.poll_failures,
+                    "reason": f"{type(exc).__name__}: {exc}",
+                    "open_sessions": len(await open_sessions(self.bot.db, guild.id)),
+                },
+            )
+
     async def poll_once(self) -> None:
         """One Twitch sweep: live logins with no open session go live, gone ones end."""
         if not self.bot.db.is_connected:
@@ -767,17 +795,14 @@ class GoLive(commands.Cog):
                 continue
             by_login[login] = row["user_id"]
         if not by_login:
-            self.last_poll_ok_at = now_iso()
-            self.last_poll_error = None
+            self._poll_worked()
             return
         try:
             streams = await self.helix.get_streams(list(by_login))
         except TwitchError as exc:
-            self.last_poll_error = str(exc)
-            log.warning("go-live: Twitch poll failed: %s", exc)
+            await self._poll_failed(exc)
             return
-        self.last_poll_ok_at = now_iso()
-        self.last_poll_error = None
+        self._poll_worked()
         live = {stream.user_login: stream for stream in streams}
         for login, user_id in by_login.items():
             member = self._find_member(user_id)
@@ -849,7 +874,8 @@ class GoLive(commands.Cog):
             f"**cooldown** — {store.get(guild.id, 'golive_cooldown_minutes')} minute(s)",
             f"**twitch polling** — {polling}",
             f"**last good poll** — {self.last_poll_ok_at or 'never'}",
-            f"**last poll error** — {self.last_poll_error or 'none'}",
+            f"**last poll error** — {self.last_poll_error or 'none'}"
+            + (f" ({self.poll_failures} in a row)" if self.poll_failures else ""),
             f"**links** — {totals['links']} · **opt-outs** — {totals['optouts']} · "
             f"**live now** — {totals['open_sessions']}",
         ]

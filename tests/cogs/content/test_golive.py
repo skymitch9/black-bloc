@@ -1123,8 +1123,43 @@ async def test_status_reports_the_last_poll_error(cog, bot, member, db, monkeypa
     interaction = FakeInteraction(bot, member, bot.guild)
     await GoLive.status.callback(cog, interaction)
 
-    assert "**last poll error** — twitch unreachable: boom" in interaction.sent
+    assert "**last poll error** — twitch unreachable: boom (1 in a row)" in interaction.sent
     assert "**last good poll** — never" in interaction.sent
+
+
+async def test_a_run_of_failed_polls_is_logged_once_and_ends_nothing(cog, bot, member, db):
+    await set_link(db, member.id, "alice")
+    await start_session(db, GUILD, member.id, "twitch", StreamInfo(url="u"), "on")
+    cog.helix = FakeHelix(raises=TwitchError("twitch unreachable: boom"))
+
+    for _ in range(cog_module.POLL_FAILURES_BEFORE_DEGRADED + 2):
+        await cog.poll_once()
+
+    kinds = await action_kinds(db)
+    assert kinds.count("golive.poll_degraded") == 1
+    details = json.loads(await action_details(db, "golive.poll_degraded"))
+    assert details["failures"] == cog_module.POLL_FAILURES_BEFORE_DEGRADED
+    assert details["open_sessions"] == 1
+    assert await open_session_for(db, GUILD, member.id) is not None
+
+
+async def test_a_good_poll_clears_the_run_so_the_next_outage_is_logged_again(
+    cog, bot, member, db
+):
+    await set_link(db, member.id, "alice")
+    cog.helix = FakeHelix(raises=TwitchError("boom"))
+    for _ in range(cog_module.POLL_FAILURES_BEFORE_DEGRADED):
+        await cog.poll_once()
+
+    cog.helix = FakeHelix(streams=[])
+    await cog.poll_once()
+    assert cog.poll_failures == 0
+
+    cog.helix = FakeHelix(raises=TwitchError("boom"))
+    for _ in range(cog_module.POLL_FAILURES_BEFORE_DEGRADED):
+        await cog.poll_once()
+
+    assert (await action_kinds(db)).count("golive.poll_degraded") == 2
 
 
 async def test_status_reports_a_good_poll(cog, bot, member, db, monkeypatch):

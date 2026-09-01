@@ -165,6 +165,7 @@ ROUTINE: frozenset[str] = frozenset(
         "golive.mode",
         "golive.optin",
         "golive.optout",
+        "golive.poll_degraded",
         "golive.remove_role",
         "golive.test",
         "golive.unlink",
