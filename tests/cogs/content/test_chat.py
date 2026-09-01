@@ -4,6 +4,7 @@ import discord
 import pytest
 
 from black_bloc import actionlog
+from black_bloc import chat_llm as chat_llm_module
 from black_bloc.actionlog import log_action
 from black_bloc.chat import (
     BUILTIN_ORDER,
@@ -16,9 +17,11 @@ from black_bloc.chat import (
     seed_defaults,
     update_line,
 )
+from black_bloc.chat_llm import tier_errors
 from black_bloc.cogs.content import chat as cog_module
 from black_bloc.cogs.content.chat import Chat, in_a_thread, mentions_bot
 from black_bloc.config import load_settings
+from black_bloc.llm import ANTHROPIC, MODEL, Usage, record
 from black_bloc.settings_store import CHAT_COOLDOWN_SECONDS, SettingsStore
 from black_bloc.storage.db import Database
 
@@ -572,6 +575,367 @@ async def test_chat_settings_lists_every_chat_key_including_its_log_level(
     assert "`chat_mode` — **on**" in said
     assert "`chat_log_level` — **off**" in said
     assert "/settings set" in said
+
+
+class FakeChoice:
+    def __init__(self, value):
+        self.name = value
+        self.value = value
+
+
+def answering(said="Pull up a chair, Nia.", tier="simple"):
+    seen = []
+
+    async def reply(bot, *, guild, member, channel, text):
+        seen.append({"text": text, "channel": getattr(channel, "id", None)})
+        return (said, tier)
+
+    return reply, seen
+
+
+async def test_an_intent_that_matches_never_reaches_a_model(cog, bot, member, monkeypatch):
+    """The intents stay the front door: a greeting is answered for free."""
+    reply, seen = answering()
+    monkeypatch.setattr(chat_llm_module, "conversational_reply", reply)
+    await bot.store.set(GUILD, "chat_llm_mode", "on")
+
+    await cog.on_message(pinged(bot, member, "<@55> hi there"))
+
+    assert seen == []
+
+
+async def test_a_message_no_intent_knows_is_answered_by_the_model_and_logged(
+    cog, bot, member, db, monkeypatch
+):
+    reply, seen = answering()
+    monkeypatch.setattr(chat_llm_module, "conversational_reply", reply)
+    await bot.store.set(GUILD, "chat_llm_mode", "on")
+    message = pinged(bot, member, "<@55> what do you make of all this then")
+
+    await cog.on_message(message)
+
+    assert seen and seen[0]["channel"] == CHANNEL
+    assert message.replies[0]["content"] == "Pull up a chair, Nia."
+    assert message.replies[0]["kwargs"]["allowed_mentions"].everyone is False
+    assert [row["kind"] for row in await rows(db, "chat.llm_reply")] == ["chat.llm_reply"]
+
+
+async def test_a_model_that_says_nothing_leaves_the_written_line_to_answer(
+    cog, bot, member, db, monkeypatch
+):
+    reply, _ = answering(said=None, tier=None)
+    monkeypatch.setattr(chat_llm_module, "conversational_reply", reply)
+    await bot.store.set(GUILD, "chat_llm_mode", "on")
+    message = pinged(bot, member, "<@55> what do you make of all this then")
+
+    await cog.on_message(message)
+
+    assert "/help" in message.replies[0]["content"]
+    assert await rows(db, "chat.llm_reply") == []
+
+
+async def test_a_model_that_throws_leaves_the_written_line_to_answer(
+    cog, bot, member, monkeypatch, caplog
+):
+    async def boom(bot_arg, *, guild, member, channel, text):
+        raise RuntimeError("the sky fell in")
+
+    monkeypatch.setattr(chat_llm_module, "conversational_reply", boom)
+    await bot.store.set(GUILD, "chat_llm_mode", "on")
+    message = pinged(bot, member, "<@55> what do you make of all this then")
+
+    with caplog.at_level("WARNING"):
+        await cog.on_message(message)
+
+    assert "/help" in message.replies[0]["content"]
+    assert "the sky fell in" in caplog.text
+
+
+async def test_status_says_what_is_on_and_that_nothing_is_keyed_yet(
+    cog, bot, member, monkeypatch
+):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    interaction = FakeInteraction(bot, member)
+
+    await Chat.chat_status.callback(cog, interaction)
+
+    said = interaction.sent
+    assert "Conversation model: **off**" in said
+    assert said.count("no key set") == 2
+    assert "Answers today: **0** of 200" in said
+    assert "Yours in the last hour: **0** of 20" in said
+    assert "This month so far: **$0.00** of $20" in said
+    assert "the daily read has not run yet" in said
+
+
+async def test_status_counts_what_the_ledger_holds_and_says_when_it_is_closed(
+    cog, bot, member, db, monkeypatch
+):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    await bot.store.set(GUILD, "chat_monthly_cap_usd", 1)
+    for turn in ("t1", "t2"):
+        await record(
+            db,
+            guild_id=GUILD,
+            user_id=USER,
+            turn=turn,
+            provider=ANTHROPIC,
+            model=MODEL,
+            tier="important",
+            usage=Usage(input_tokens=600_000),
+        )
+    interaction = FakeInteraction(bot, member)
+
+    await Chat.chat_status.callback(cog, interaction)
+
+    said = interaction.sent
+    assert "Answers today: **2**" in said
+    assert "This month so far: **$1.20** of $1" in said
+    assert "resting until the 1st" in said
+
+
+async def test_status_says_a_tier_is_down_rather_than_calling_it_ready(
+    cog, bot, member, monkeypatch
+):
+    """poll_degraded honesty: a tier that failed says so instead of reading as fine."""
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    monkeypatch.setattr(type(bot.settings), "simple_tier_configured", property(lambda s: True))
+    tier_errors(bot)["simple"] = "unreachable"
+    interaction = FakeInteraction(bot, member)
+
+    await Chat.chat_status.callback(cog, interaction)
+
+    assert "last call failed (unreachable)" in interaction.sent
+
+
+async def test_status_reports_the_notes_and_a_daily_read_that_did_not_finish(
+    cog, bot, member, monkeypatch
+):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    bot.guild.text_channels = [SimpleNamespace(name="general", topic="Chat.")]
+    bot.guild.roles = []
+    await cog.ingest_once()
+    cog.last_ingest_error = "RuntimeError: no"
+    interaction = FakeInteraction(bot, member)
+
+    await Chat.chat_status.callback(cog, interaction)
+
+    said = interaction.sent
+    assert "**2** written down" in said
+    assert "The last daily read did not finish: RuntimeError: no" in said
+
+
+async def test_the_voice_and_the_pool_are_both_shown(cog, bot, member, monkeypatch):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    await cog.seed_guilds()
+    interaction = FakeInteraction(bot, member)
+
+    await Chat.personality_show.callback(cog, interaction)
+
+    said = interaction.sent
+    assert "The voice is **cookout**" in said
+    assert "**noir** (noir) — on" in said
+
+
+async def test_the_voice_is_set_through_the_registry_so_the_website_sees_it_too(
+    cog, bot, member, db, monkeypatch
+):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    interaction = FakeInteraction(bot, member)
+
+    await Chat.personality_set.callback(cog, interaction, FakeChoice("pool"))
+
+    assert "The voice is **pool**" in interaction.sent
+    assert bot.store.get(GUILD, "chat_personality") == "pool"
+    assert await rows(db, "chat.personality_mode")
+
+
+async def test_a_mood_is_switched_off_and_the_cached_pool_is_dropped(
+    cog, bot, member, db, monkeypatch
+):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    await cog.seed_guilds()
+    bot._chat_tropes = ("stale",)
+    interaction = FakeInteraction(bot, member)
+
+    await Chat.personality_mood.callback(cog, interaction, "Flirty", False)
+
+    assert "**flirty** is off" in interaction.sent
+    assert not hasattr(bot, "_chat_tropes")
+    cur = await db.conn.execute("SELECT enabled FROM personality_tropes WHERE name = 'flirty'")
+    assert (await cur.fetchone())["enabled"] == 0
+    assert await rows(db, "chat.trope_disabled")
+
+
+async def test_a_mood_nobody_has_is_refused_in_words(cog, bot, member, db, monkeypatch):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    await cog.seed_guilds()
+    interaction = FakeInteraction(bot, member)
+
+    await Chat.personality_mood.callback(cog, interaction, "grumpy", False)
+
+    assert "is not one of the moods" in interaction.sent
+    assert await rows(db, "chat.trope_disabled") == []
+
+
+async def add_a_note(cog, bot, member, monkeypatch, title="Cookout hours", body="Fridays.",
+                     tag=""):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    interaction = FakeInteraction(bot, member)
+    await Chat.knowledge_add.callback(cog, interaction, title, body, tag)
+    return interaction
+
+
+async def test_a_staff_note_is_saved_logged_and_then_listed(cog, bot, member, db, monkeypatch):
+    interaction = await add_a_note(cog, bot, member, monkeypatch, tag="events")
+
+    assert "Saved as note" in interaction.sent
+    assert interaction.response.messages[-1]["ephemeral"] is True
+    assert [row["kind"] for row in await rows(db, "chat.knowledge_added")] == [
+        "chat.knowledge_added"
+    ]
+
+    listing = FakeInteraction(bot, member)
+    await Chat.knowledge_list.callback(cog, listing, "")
+    assert "Cookout hours" in listing.sent
+    assert "events" in listing.sent
+
+
+async def test_a_note_that_is_refused_says_why_and_saves_nothing(cog, bot, member, db,
+                                                                 monkeypatch):
+    interaction = await add_a_note(cog, bot, member, monkeypatch, title="   ", body="Fridays.")
+
+    assert "needs a title" in interaction.sent
+    cur = await db.conn.execute("SELECT COUNT(*) AS n FROM knowledge_sections")
+    assert (await cur.fetchone())["n"] == 0
+
+
+async def test_listing_with_words_searches_rather_than_paging(cog, bot, member, monkeypatch):
+    await add_a_note(cog, bot, member, monkeypatch, title="Cookout hours", body="Fridays.")
+    await add_a_note(cog, bot, member, monkeypatch, title="Rules", body="Be kind.")
+
+    hit = FakeInteraction(bot, member)
+    await Chat.knowledge_list.callback(cog, hit, "cookout")
+    assert "Cookout hours" in hit.sent and "Rules" not in hit.sent
+
+    miss = FakeInteraction(bot, member)
+    await Chat.knowledge_list.callback(cog, miss, "parliament")
+    assert "Nothing written down matches" in miss.sent
+
+
+async def test_an_empty_list_says_how_to_start_one(cog, bot, member, monkeypatch):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    interaction = FakeInteraction(bot, member)
+    await Chat.knowledge_list.callback(cog, interaction, "")
+    assert "Nothing has been written down yet" in interaction.sent
+
+
+async def test_a_note_is_removed_by_the_number_the_list_shows(cog, bot, member, db, monkeypatch):
+    await add_a_note(cog, bot, member, monkeypatch)
+    cur = await db.conn.execute("SELECT id FROM knowledge_sections")
+    note_id = (await cur.fetchone())["id"]
+
+    interaction = FakeInteraction(bot, member)
+    await Chat.knowledge_remove.callback(cog, interaction, note_id)
+
+    assert "is gone" in interaction.sent
+    assert await rows(db, "chat.knowledge_removed")
+    cur = await db.conn.execute("SELECT COUNT(*) AS n FROM knowledge_sections")
+    assert (await cur.fetchone())["n"] == 0
+
+
+async def test_a_note_from_another_server_is_not_reachable_by_its_number(cog, bot, member,
+                                                                        db, monkeypatch):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    await db.conn.execute(
+        "INSERT INTO knowledge_sections(id, guild_id, title, body, source, tag, updated_at) "
+        "VALUES (5, 999, 'Elsewhere', 'Not yours.', 'staff', '', 'now')"
+    )
+    await db.conn.commit()
+
+    interaction = FakeInteraction(bot, member)
+    await Chat.knowledge_remove.callback(cog, interaction, 5)
+
+    assert "no note" in interaction.sent
+    cur = await db.conn.execute("SELECT COUNT(*) AS n FROM knowledge_sections")
+    assert (await cur.fetchone())["n"] == 1
+
+
+async def test_a_server_written_note_refuses_to_be_removed_by_hand(cog, bot, member, db,
+                                                                   monkeypatch):
+    """One writer per row: tomorrow's ingest would put it straight back."""
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    await db.conn.execute(
+        "INSERT INTO knowledge_sections(id, guild_id, title, body, source, tag, updated_at) "
+        "VALUES (6, ?, '#general', 'Chat here.', 'server', 'channel', 'now')",
+        (GUILD,),
+    )
+    await db.conn.commit()
+
+    interaction = FakeInteraction(bot, member)
+    await Chat.knowledge_remove.callback(cog, interaction, 6)
+
+    assert "overwritten by tomorrow" in interaction.sent
+    cur = await db.conn.execute("SELECT COUNT(*) AS n FROM knowledge_sections")
+    assert (await cur.fetchone())["n"] == 1
+
+
+async def test_the_daily_ingest_writes_the_server_rows_and_leaves_staff_rows_alone(
+    cog, bot, member, db, monkeypatch
+):
+    await add_a_note(cog, bot, member, monkeypatch, title="Rules", body="Be kind.")
+    bot.guild.text_channels = [SimpleNamespace(name="general", topic="Chat about anything.")]
+    bot.guild.roles = [SimpleNamespace(name="Member")]
+
+    written = await cog.ingest_once()
+
+    assert written >= 2
+    cur = await db.conn.execute("SELECT title, source FROM knowledge_sections ORDER BY id")
+    found = {(row["title"], row["source"]) for row in await cur.fetchall()}
+    assert ("Rules", "staff") in found
+    assert ("#general", "server") in found
+    assert ("Channels in this server", "server") in found
+    assert await rows(db, "chat.knowledge_ingested")
+
+
+async def test_the_ingest_runs_again_without_doubling_anything(cog, bot, db):
+    bot.guild.text_channels = [SimpleNamespace(name="general", topic="Chat.")]
+    bot.guild.roles = []
+
+    await cog.ingest_once()
+    await cog.ingest_once()
+
+    cur = await db.conn.execute(
+        "SELECT COUNT(*) AS n FROM knowledge_sections WHERE title = '#general'"
+    )
+    assert (await cur.fetchone())["n"] == 1
+
+
+async def test_an_unavailable_server_is_skipped_rather_than_emptied(cog, bot, db):
+    bot.guild.text_channels = [SimpleNamespace(name="general", topic="Chat.")]
+    bot.guild.roles = []
+    await cog.ingest_once()
+    bot.guild.unavailable = True
+
+    await cog.ingest_once()
+
+    cur = await db.conn.execute("SELECT COUNT(*) AS n FROM knowledge_sections")
+    assert (await cur.fetchone())["n"] > 0
+
+
+async def test_the_ingest_loop_records_its_health_and_restarts_when_it_stops(cog, monkeypatch):
+    async def boom():
+        raise RuntimeError("no")
+
+    monkeypatch.setattr(cog, "ingest_once", boom)
+    await cog._ingest()
+    assert cog.loop_health("_ingest") == (None, "RuntimeError: no")
+
+    restarted = []
+    monkeypatch.setattr(cog._ingest, "restart", lambda: restarted.append(True))
+    await cog._ingest_stopped(RuntimeError("stopped"))
+    assert restarted == [True]
+    assert cog.loop_health("_ingest")[1] == "RuntimeError: stopped"
 
 
 def test_a_thread_is_told_apart_from_an_ordinary_channel():

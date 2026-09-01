@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
+from ... import chat_llm, knowledge, personas
 from ...chat import (
     BUILTIN_NAMES,
     CANNED,
@@ -31,8 +33,10 @@ from ...chat import (
     update_intent,
     update_line,
 )
+from ...logkinds import VIA_WEBSITE
 from ...settings_store import KEY_TYPES
 from ..auth import Refused, staff_dependency
+from ..names import as_id, resolve_one
 from ..settings_api import key_row, namespace_of
 from ..writes import (
     actor_for,
@@ -78,6 +82,95 @@ LINE_ADDED = "That line is in — **{name}** may say it from now on."
 LINE_SAVED = "That line is saved."
 LINE_GONE = "That line is gone."
 
+NO_SUCH_SECTION = (
+    "Black Bloc has no note **#{section_id}** any more, so nothing was done. Somebody may have "
+    "removed it while this page was open."
+)
+SERVER_ROW_LOCKED = (
+    "**{title}** is one of the notes Black Bloc writes for itself out of the server — the channel "
+    "list, the roles, what is coming up — so it cannot be changed by hand. It is written again "
+    "from scratch every day, and an edit here would be gone by morning. Write your own note "
+    "beside it and Black Bloc reads both."
+)
+SECTION_MADE = "**{title}** is in. Black Bloc quotes it when somebody asks something it matches."
+SECTION_SAVED = "**{title}** is saved."
+SECTION_GONE = "**{title}** is gone. Black Bloc will not quote it again."
+
+STAFF_WROTE_IT = "written here by staff"
+SERVER_WROTE_IT = "written by Black Bloc from the server itself, every day"
+
+NO_SUCH_TROPE = (
+    "**{name}** is not one of the voices Black Bloc knows, so nothing was changed. The list on "
+    "this page is all of them."
+)
+MODE_NEEDS_A_NAME = (
+    "That arrived with no voice in it, so nothing was changed. Pick the cookout voice, the pool, "
+    "or one of the names on the list."
+)
+TROPE_IS_OFF = (
+    "**{label}** is switched off in the pool, so Black Bloc cannot be it. Turn it back on first, "
+    "or pick another one."
+)
+LAST_TROPE_ON = (
+    "**{label}** is the last voice left on and the pool is what Black Bloc is using, so it was "
+    "left alone. Turn another one on first, or move the voice to the cookout one."
+)
+TROPE_IN_USE = (
+    "Black Bloc is set to be **{label}** and nothing else, so that voice cannot be switched off. "
+    "Point it at the cookout voice or the pool first."
+)
+MODE_SET_COOKOUT = "Black Bloc talks in the cookout voice from now on."
+MODE_SET_POOL = (
+    "Black Bloc picks a voice out of the pool for each conversation from now on, and moves a step "
+    "at a time as people talk."
+)
+MODE_SET_TROPE = "Black Bloc is **{label}** with everybody from now on."
+TROPE_ON = "**{label}** is back in the pool."
+TROPE_OFF = "**{label}** is out of the pool. Black Bloc will not pick it again."
+
+COOKOUT_WORD = (
+    "Everybody gets the cookout voice — warm, playful, the one the rest of the site is written in."
+)
+POOL_WORD = (
+    "Each conversation gets one of the {count} voices left on, and it moves a step at a time as "
+    "people talk."
+)
+TROPE_WORD = "Black Bloc is **{label}** with everybody, and it does not drift."
+
+ONE_VOICE = "trope"
+
+TIER_INTENTS = "intents"
+TIER_IMPORTANT = "important"
+TIER_SIMPLE = "simple"
+
+INTENTS_ALWAYS = (
+    "Always on. The phrases on this page answer first, they cost nothing, and they are checked "
+    "before any model is asked."
+)
+TIER_LIVE = {
+    TIER_IMPORTANT: "Live. Grounded answers and longer questions go here.",
+    TIER_SIMPLE: "Live. Greetings and one-liners that slipped past the phrases go here.",
+}
+TIER_MODE_OFF = (
+    "Not in use: `chat_llm_mode` is off, so Black Bloc answers from the phrases on this page and "
+    "nothing else."
+)
+TIER_NO_KEY = (
+    "Black Bloc has not been given a **{key}** yet, so this tier does not exist and the answer "
+    "falls through to the next one. A Lead sets it on the host."
+)
+TIER_CAPPED = (
+    "Closed until the 1st: this month's {cap} is spent. Black Bloc is answering from the phrases "
+    "on this page in the meantime."
+)
+MONTH_WORD = "{spent} of the {cap} Black Bloc may spend this month, so {left} is left."
+MONTH_CAPPED_WORD = (
+    "{spent} of the {cap} Black Bloc may spend this month, so the two model tiers are shut until "
+    "the 1st."
+)
+TODAY_WORD = "{turns} answers came from a model today, out of the {limit} a day Black Bloc gives."
+TODAY_WORD_NO_LIMIT = "{turns} answers came from a model today."
+
 
 def _id(value: Any) -> str | None:
     return str(value) if value is not None else None
@@ -118,6 +211,94 @@ def chat_settings(bot: Any, guild_id: int) -> list[dict[str, Any]]:
         for key in KEY_TYPES
         if namespace_of(key) == NAMESPACE
     ]
+
+
+def person(guild: Any, user_id: Any) -> dict[str, Any] | None:
+    number = as_id(user_id)
+    if number is None:
+        return None
+    return {"id": str(number), "name": resolve_one(guild, number)["display_name"] or str(number)}
+
+
+def section_row(guild: Any, row: Any) -> dict[str, Any]:
+    source = str(row["source"])
+    own = source == knowledge.STAFF
+    title = str(row["title"])
+    return {
+        "id": str(row["id"]),
+        "title": title,
+        "body": str(row["body"]),
+        "tag": row["tag"],
+        "source": source,
+        "source_word": STAFF_WROTE_IT if own else SERVER_WROTE_IT,
+        "editable": own,
+        "locked_why": None if own else SERVER_ROW_LOCKED.format(title=title),
+        "characters": len(str(row["body"])),
+        "updated_at": row["updated_at"],
+        "updated_by": person(guild, row["updated_by"]),
+    }
+
+
+def trope_row(guild: Any, row: Any, mode: str) -> dict[str, Any]:
+    name = str(row["name"])
+    return {
+        "name": name,
+        "label": str(row["label"]),
+        "voice": str(row["voice"]),
+        "enabled": bool(row["enabled"]),
+        "in_use": mode == name,
+        "updated_at": row["updated_at"],
+        "updated_by": person(guild, row["updated_by"]),
+    }
+
+
+def mode_kind(mode: str) -> str:
+    if mode == personas.COOKOUT:
+        return personas.COOKOUT
+    return personas.POOL if mode == personas.POOL else ONE_VOICE
+
+
+def mode_word(mode: str, tropes: list[Any]) -> str:
+    kind = mode_kind(mode)
+    if kind == personas.COOKOUT:
+        return COOKOUT_WORD
+    if kind == personas.POOL:
+        return POOL_WORD.format(count=sum(1 for row in tropes if row["enabled"]))
+    label = next((str(row["label"]) for row in tropes if row["name"] == mode), mode)
+    return TROPE_WORD.format(label=label)
+
+
+def persona_mode(bot: Any, guild_id: int) -> str:
+    return str(bot.store.get(guild_id, personas.PERSONALITY_KEY) or personas.COOKOUT)
+
+
+def money(dollars: float) -> str:
+    return f"${dollars:,.2f}"
+
+
+def note_refused(exc: knowledge.KnowledgeError) -> Refused:
+    return Refused(400, "chat_refused", str(exc))
+
+
+def clean_title(value: Any) -> str:
+    try:
+        return knowledge.clean_title(value)
+    except knowledge.KnowledgeError as exc:
+        raise note_refused(exc) from exc
+
+
+def clean_body(value: Any) -> str:
+    try:
+        return knowledge.clean_body(value)
+    except knowledge.KnowledgeError as exc:
+        raise note_refused(exc) from exc
+
+
+def clean_tag(value: Any) -> str:
+    try:
+        return knowledge.clean_tag(value)
+    except knowledge.KnowledgeError as exc:
+        raise note_refused(exc) from exc
 
 
 def refused(exc: ChatError) -> Refused:
@@ -364,6 +545,287 @@ def build_router(bot: Any) -> APIRouter:
             "kind": answer.kind,
             "slot": answer.slot,
             "line": answer.text,
+        }
+
+    async def _wanted_section(guild: Any, section_id: int) -> Any:
+        row = await knowledge.get_section(bot.db, section_id)
+        if row is None or row["guild_id"] != guild.id:
+            raise Refused(404, "no_such_section", NO_SUCH_SECTION.format(section_id=section_id))
+        return row
+
+    def _staff_row_only(row: Any) -> None:
+        if str(row["source"]) != knowledge.STAFF:
+            raise Refused(
+                409, "written_by_the_bot", SERVER_ROW_LOCKED.format(title=str(row["title"]))
+            )
+
+    async def _knowledge(guild: Any) -> dict[str, Any]:
+        rows = await knowledge.list_sections(bot.db, guild.id)
+        shown = [section_row(guild, row) for row in rows]
+        return {
+            "sections": shown,
+            "counts": {
+                "total": len(shown),
+                "staff": sum(1 for row in shown if row["source"] == knowledge.STAFF),
+                "server": sum(1 for row in shown if row["source"] == knowledge.SERVER),
+            },
+            "budget": {
+                "sections": knowledge.HITS_DEFAULT,
+                "characters": knowledge.GROUNDING_BYTES,
+                "word": (
+                    f"At most {knowledge.HITS_DEFAULT} notes ride an answer, and a note "
+                    "that will not fit is left out rather than cut short."
+                ),
+            },
+            "notes": [],
+        }
+
+    @router.get("/knowledge")
+    async def chat_knowledge() -> dict[str, Any]:
+        guild = require_guild(bot)
+        require_db(bot)
+        return await _knowledge(guild)
+
+    @router.post("/knowledge")
+    async def chat_knowledge_add(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        title = clean_title(payload.get("title"))
+        body = clean_body(payload.get("body"))
+        tag = clean_tag(payload.get("tag"))
+        try:
+            section_id = await knowledge.add_section(
+                bot.db, guild.id, title, body, tag=tag, by=int(who["id"])
+            )
+        except knowledge.KnowledgeError as exc:
+            raise Refused(409, "title_taken", str(exc)) from exc
+        await note(
+            bot,
+            guild,
+            "web.chat.knowledge_added",
+            who,
+            details={"title": title, "via": VIA_WEBSITE},
+        )
+        row = await knowledge.get_section(bot.db, section_id)
+        return {
+            "section": section_row(guild, row),
+            "message": SECTION_MADE.format(title=title),
+        }
+
+    @router.put("/knowledge/{section_id}")
+    async def chat_knowledge_edit(
+        request: Request, section_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        row = await _wanted_section(guild, section_id)
+        _staff_row_only(row)
+        fields: dict[str, Any] = {}
+        if payload.get("title") is not None:
+            fields["title"] = clean_title(payload["title"])
+        if payload.get("body") is not None:
+            fields["body"] = clean_body(payload["body"])
+        if "tag" in payload:
+            fields["tag"] = clean_tag(payload["tag"])
+        try:
+            await knowledge.update_section(bot.db, section_id, by=int(who["id"]), **fields)
+        except knowledge.KnowledgeError as exc:
+            raise Refused(409, "title_taken", str(exc)) from exc
+        await note(
+            bot,
+            guild,
+            "web.chat.knowledge_edited",
+            who,
+            details={"section_id": section_id, "changed": sorted(fields), "via": VIA_WEBSITE},
+        )
+        fresh = await knowledge.get_section(bot.db, section_id)
+        return {
+            "section": section_row(guild, fresh),
+            "message": SECTION_SAVED.format(title=str(fresh["title"])),
+        }
+
+    @router.delete("/knowledge/{section_id}")
+    async def chat_knowledge_delete(request: Request, section_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        row = await _wanted_section(guild, section_id)
+        _staff_row_only(row)
+        title = str(row["title"])
+        await knowledge.remove_section(bot.db, section_id)
+        await note(
+            bot,
+            guild,
+            "web.chat.knowledge_removed",
+            who,
+            details={"title": title, "via": VIA_WEBSITE},
+        )
+        return {
+            "removed": True,
+            "section_id": str(section_id),
+            "message": SECTION_GONE.format(title=title),
+        }
+
+    async def _personality(guild: Any) -> dict[str, Any]:
+        await personas.seed_tropes(bot.db)
+        rows = await personas.list_tropes(bot.db)
+        mode = persona_mode(bot, guild.id)
+        shown = [trope_row(guild, row, mode) for row in rows]
+        return {
+            "mode": mode,
+            "mode_kind": mode_kind(mode),
+            "mode_word": mode_word(mode, rows),
+            "tropes": shown,
+            "counts": {
+                "total": len(shown),
+                "enabled": sum(1 for row in shown if row["enabled"]),
+            },
+            "ported_from": personas.POOL_SOURCE,
+            "notes": [],
+        }
+
+    @router.get("/personality")
+    async def chat_personality() -> dict[str, Any]:
+        """A guild that has never been seeded gets the ported pool here, so it is never blank."""
+        guild = require_guild(bot)
+        require_db(bot)
+        return await _personality(guild)
+
+    @router.put("/personality")
+    async def chat_personality_mode(
+        request: Request, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        await personas.seed_tropes(bot.db)
+        wanted = str(payload.get("mode") or "").strip().lower()
+        if not wanted:
+            raise Refused(400, "chat_refused", MODE_NEEDS_A_NAME)
+        said = MODE_SET_COOKOUT
+        if wanted not in (personas.COOKOUT, personas.POOL):
+            row = await personas.get_trope(bot.db, wanted)
+            if row is None:
+                raise Refused(404, "no_such_trope", NO_SUCH_TROPE.format(name=wanted))
+            if not row["enabled"]:
+                raise Refused(409, "voice_is_off", TROPE_IS_OFF.format(label=str(row["label"])))
+            said = MODE_SET_TROPE.format(label=str(row["label"]))
+        elif wanted == personas.POOL:
+            said = MODE_SET_POOL
+        await bot.store.set(guild.id, personas.PERSONALITY_KEY, wanted, by=int(who["id"]))
+        await note(
+            bot,
+            guild,
+            "web.chat.personality_mode",
+            who,
+            details={"mode": wanted, "via": VIA_WEBSITE},
+        )
+        found = await _personality(guild)
+        return {
+            "mode": found["mode"],
+            "mode_kind": found["mode_kind"],
+            "mode_word": found["mode_word"],
+            "message": said,
+        }
+
+    @router.put("/personality/{name}")
+    async def chat_trope_switch(
+        request: Request, name: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        await personas.seed_tropes(bot.db)
+        row = await personas.get_trope(bot.db, str(name).strip().lower())
+        if row is None:
+            raise Refused(404, "no_such_trope", NO_SUCH_TROPE.format(name=name))
+        label = str(row["label"])
+        wanted = payload.get("enabled") is not False
+        mode = persona_mode(bot, guild.id)
+        if not wanted and mode == str(row["name"]):
+            raise Refused(409, "voice_in_use", TROPE_IN_USE.format(label=label))
+        rows = await personas.list_tropes(bot.db)
+        on_now = [one for one in rows if one["enabled"]]
+        last_one = len(on_now) == 1 and on_now[0]["name"] == row["name"]
+        if not wanted and last_one and mode == personas.POOL:
+            raise Refused(409, "last_voice", LAST_TROPE_ON.format(label=label))
+        await personas.set_enabled(bot.db, str(row["name"]), wanted, by=int(who["id"]))
+        personas.forget_tropes(bot)
+        await note(
+            bot,
+            guild,
+            "web.chat.trope_enabled" if wanted else "web.chat.trope_disabled",
+            who,
+            details={"trope": str(row["name"]), "via": VIA_WEBSITE},
+        )
+        fresh = await personas.get_trope(bot.db, str(row["name"]))
+        return {
+            "trope": trope_row(guild, fresh, mode),
+            "message": (TROPE_ON if wanted else TROPE_OFF).format(label=label),
+        }
+
+    def _tier(name: str, label: str, key: str, *, mode_on: bool, cap_said: str | None):
+        """Liveness is measured — the mode, the key and the cap — never assumed."""
+        said = TIER_LIVE[name]
+        live = True
+        if not mode_on:
+            said, live = TIER_MODE_OFF, False
+        elif not str(getattr(bot.settings, key.lower(), "") or ""):
+            said, live = TIER_NO_KEY.format(key=key), False
+        elif cap_said is not None:
+            said, live = TIER_CAPPED.format(cap=cap_said), False
+        return {"name": name, "label": label, "live": live, "word": said}
+
+    @router.get("/spend")
+    async def chat_spend() -> dict[str, Any]:
+        """What the month has cost, what today has asked for, and which tiers are answering."""
+        guild = require_guild(bot)
+        require_db(bot)
+        at = datetime.now(UTC)
+        spent = await chat_llm.month_spend(bot.db, chat_llm.month_start(at))
+        turns = await chat_llm.server_turns(bot.db, chat_llm.day_start(at))
+        cap_usd = float(bot.store.get(guild.id, chat_llm.MONTHLY_CAP_KEY))
+        daily = bot.store.get(guild.id, chat_llm.DAILY_TURNS_KEY)
+        mode_on = str(bot.store.get(guild.id, chat_llm.LLM_MODE_KEY)) == chat_llm.ON
+        spent_usd = round(spent / chat_llm.MICRODOLLARS_IN_A_DOLLAR, 2)
+        left_usd = round(max(cap_usd - spent_usd, 0.0), 2)
+        capped = cap_usd > 0 and spent_usd >= cap_usd
+        cap_said = money(cap_usd)
+        month_word = (
+            MONTH_CAPPED_WORD if capped else MONTH_WORD
+        ).format(spent=money(spent_usd), cap=cap_said, left=money(left_usd))
+        shut = cap_said if capped else None
+        tiers = [
+            {"name": TIER_INTENTS, "label": "Phrases", "live": True, "word": INTENTS_ALWAYS},
+            _tier(
+                TIER_IMPORTANT, "Claude Haiku", "ANTHROPIC_API_KEY", mode_on=mode_on, cap_said=shut
+            ),
+            _tier(TIER_SIMPLE, "Groq Llama", "GROQ_API_KEY", mode_on=mode_on, cap_said=shut),
+        ]
+        return {
+            "month": {
+                "spent_usd": spent_usd,
+                "cap_usd": cap_usd,
+                "left_usd": left_usd,
+                "share": round(spent_usd / cap_usd, 4) if cap_usd > 0 else 0.0,
+                "word": month_word,
+            },
+            "today": {
+                "turns": turns,
+                "limit": int(daily) if daily else None,
+                "word": (
+                    TODAY_WORD.format(turns=turns, limit=int(daily))
+                    if daily
+                    else TODAY_WORD_NO_LIMIT.format(turns=turns)
+                ),
+            },
+            "tiers": tiers,
+            "capped": capped,
+            "cap_key": chat_llm.MONTHLY_CAP_KEY,
+            "last_turn_at": await chat_llm.last_turn_at(bot.db),
+            "notes": [],
         }
 
     return router

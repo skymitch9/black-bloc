@@ -4069,3 +4069,217 @@ dropdown". There are SIX** — `discord`, `classic`, `apple`, `cyberpunk`, `retr
 | the estate themes' own contrast | Untouched, and several of them are still sub-AA. The brief scopes the 4.5:1 promise to the new theme in both modes. |
 | ⚠️ long group captions in `cyberpunk` | That theme sets `--et-nav-head-size: var(--et-ui-lg)`, so "RUNS THE COOKOUT" wraps to two lines in the rail. Seen, left alone: fixing it means either shortening the owner's words or overriding a theme's own type scale from page CSS. |
 | a `themes` note in `estate-theme.css`'s header | The header still says "FIVE NAMED THEMES" and lists neither `discord` nor `blackbloc`. It was already wrong before this build. |
+
+## chat 3 — the conversation model (14a) (2026-09-01)
+
+> **Phase 14's bot/core half** — schema 20, the two provider clients, `tier_for`,
+> the knowledge lane, the persona pool, the fuses and the wiring — on branch
+> `worktree-agent-a6d7f4dd1f09ab0bf` cut from `main` @ `6bf18bf`, seven commits
+> `b64241a` → `07fc453`, one per numbered area of the brief.
+> **Last verified: 2026-09-01** — `pytest -q` **2421 passed** (2265 before,
+> +156), `ruff check .` clean, `site/mock/check.mjs` clean at 17 pages / 98
+> routes (no site file was touched; 14b owns those).
+> ⚠️ **NO REAL MODEL CALL HAS EVER BEEN MADE.** Every client test drives an
+> injected fake. Nothing has run against live Discord either.
+
+### Schema 20 — four tables, and why the ledger carries more than the design named
+
+| Key | Note |
+|---|---|
+| `black_bloc/storage/db.py:405` | ⚠️ **`llm_ledger` is the FUSE COUNTER as well as the bill, which is why it has columns §5 of the design did not name.** `user_id` is what makes the per-person hourly fuse countable at all; `turn` is a per-answer id so that a Groq failure falling through to Haiku is **two rows and one turn** (`COUNT(DISTINCT turn)`), which a row count would have got wrong by exactly the amount the failure ladder is used; `outcome` records a call that failed, because a failed call still spends the attempt and a fuse that only counted successes would let an outage spend without limit. `cache_read_tokens` / `cache_write_tokens` exist because Haiku prices those at 0.1× and 1.25× and a ledger that folded them into `input_tokens` would over-charge a cache hit tenfold. |
+| `black_bloc/storage/db.py:391` | `chat_window.guild_id` is nullable and `channel_id` is not: a DM has no server but always has a place, and the window is keyed on place + person. `speaker` is CHECKed to `member`/`bot` so a third writer cannot appear silently. `tier` on a bot row is what `llm_turns` counts — a canned answer stores NULL and is not a conversation. |
+| `black_bloc/storage/db.py:364` | `knowledge_sections.source` is CHECKed to `staff`/`server` because the whole design of the lane is **one writer per row**: the daily loop deletes and rewrites every `server` row, the commands refuse to touch one, and a third value would belong to nobody. |
+| `black_bloc/storage/db.py:379` | ⚠️ **`personality_tropes` has no `guild_id`, deliberately.** The owner asked for a *global* personality pool; keying it by name makes `seed_tropes` idempotent by construction (it skips a name already there), so a mood somebody switched off survives every restart. A per-guild pool is the thing to add if a second server ever appears — it is a column and a migration, not a re-design. |
+
+### The two clients
+
+| Key | Note |
+|---|---|
+| `black_bloc/llm.py:186` | ⚠️ **The SDK's exception classes are resolved LAZILY and cached, and the module imports `anthropic` nowhere at the top.** Two reasons: the tests must be able to drive the client with an injected `create` and no SDK installed, and a bot whose dependency failed to install must degrade to "that tier does not exist" rather than failing to import a cog. `RateLimitError` **is** a subclass of `APIStatusError` (checked against the installed SDK, 1.3.0), so the except chain at `:235` is ordered most-specific-first and the order is load-bearing; `APIConnectionError` is not in that hierarchy and is its own clause. A fourth `except Exception` maps anything unforeseen to `broken` rather than letting it escape into `on_message`. |
+| `black_bloc/llm.py:86` | ⚠️ **A token at $1/MTok is exactly one microdollar**, which is why the cost function is the price table multiplied by token counts with no scaling factor and no floating-point division. Rounded once, at the end. |
+| `black_bloc/llm.py:77` | ⚠️ **An unknown model is charged at its PROVIDER's rate, not at zero.** Charging an unrecognised Anthropic model nothing would let a model rename silently uncap the monthly figure, which is the one failure the figure exists to prevent. Groq's unknown falls to zero because its tier genuinely is free today; that is a decision to revisit when it is not. |
+| `black_bloc/llm.py:136` | `record` swallows its own exceptions and returns `None`. A ledger that cannot be written must not take down a reply a member is waiting for — but note the honest consequence, which is that the fuses under-count for as long as that is true. |
+| `black_bloc/groq.py:53` | Transport errors are wrapped at the client boundary into `LLMError(unreachable)` with an explicit `ClientTimeout` (checklist 7), so the ladder catches exactly one type from both providers. `LLMError` is re-raised untouched at `:82` so a wrapped error is not double-wrapped into `broken`. |
+| `black_bloc/groq.py:21` | The default model is a constant here and the *setting's* default in `settings_store.py`, one deriving from the other, because Groq retires model names faster than a deploy can follow. `groq()` in `chat_llm` rebuilds the client when the setting changes rather than caching a stale model name. |
+
+### `tier_for`, and the ladder
+
+| Key | Note |
+|---|---|
+| `black_bloc/chat_llm.py:142` | ⚠️ **Four rules, one function, table-driven tests — GABI's hardest-won lesson is that the router fires BEFORE any model sees the message.** A knowledge hit wins outright because the answer has to be grounded; a question mark plus more than twelve words is a real question; two model turns already in the window means a conversation is happening; a staff/mod/report topic is never handed to the cheap model. Everything else is banter. The thresholds at `:35` are **constants, not settings** — they are tuning numbers rather than an operator's decision, which is the same call GABI made. |
+| `black_bloc/chat_llm.py:155` | ⚠️ **An IMPORTANT turn never falls back to the cheap tier while both exist, and that asymmetry is the point.** A grounded or staff-shaped answer from the wrong model is worse than the canned line, so Haiku's failure ends the ladder. A SIMPLE turn does fall through to one Haiku attempt. A tier with no key is not on the list at all rather than an error — that is what makes a missing key a non-event. |
+| `black_bloc/chat_llm.py:165` | The forbidden-word check is a real function rather than a code comment so tests can assert it over the persona texts: GABI's rule is that budget/cap/quota/limit words in a user-facing sentence read as a malfunction. ⚠️ It is deliberately NOT applied to `/chat status`, whose entire job is to show staff those numbers. |
+
+### The knowledge lane
+
+| Key | Note |
+|---|---|
+| `black_bloc/knowledge.py:131` | ⚠️ **GABI's `searchBundle` weights ported with one substitution: she scores heading ×8, path ×4, title ×3, body-occurrences; a Discord note has no path, so it is title ×8, TAG ×4, body-occurrences (capped at five).** The cap matters — without it one section that repeats a word forty times outranks the section that is actually about it. |
+| `black_bloc/knowledge.py:190` | Two passes, and the result **says which one answered**: every token first (precision, which is what somebody typing three words wants), any token only if that found nothing. A caller can then say "closest matches" rather than presenting a loose hit as an exact one. Ties break on title then id so one query answers one way every time. |
+| `black_bloc/knowledge.py:228` | ⚠️ **The 6 KB grounding budget DROPS a whole note rather than trimming one.** Half a rule is worse than no rule — a truncated note reads as a complete one and the model will quote it as such. The budget is counted in **bytes**, not characters, because that is what actually rides the wire. |
+| `black_bloc/knowledge.py:447` | ⚠️ **`replace_server_sections` deletes and rewrites, scoped to `guild_id` AND `source='server'`.** Losing either half of that WHERE clause is the bug this design exists to prevent: without the source it eats every staff note on the next tick, without the guild it eats another server's. Both are pinned by name. |
+| `black_bloc/knowledge.py:348` | ⚠️ **The ingest TRIMS a long channel name or topic; the commands REFUSE one.** Opposite policies on purpose: staff typing a note get told what was wrong and can fix it, while one badly named channel must not stop the whole daily pass for the other two hundred. |
+| `black_bloc/knowledge.py:425` | The Discord-side imports are function-local. `knowledge` is imported by the chat cog, and the cogs it reads (`events`, `role_menus`) pull in half the package; a module-level import would make the import order load-bearing for no gain. |
+
+### Personas
+
+| Key | Note |
+|---|---|
+| `black_bloc/personas.py:187` | ⚠️ **The mood block is APPENDED after the core, never substituted into it** — that is GABI's structural safety argument made real in one list append, and a test asserts the core block is always first and always carries the `cache_control`. ⚠️ **The cache marker will very probably NOT cache at this size:** Haiku 4.5's minimum cacheable prefix is **4096 tokens** and the core plus the cookout voice is roughly a tenth of that, so `cache_creation_input_tokens` will read 0 and the marker is free insurance rather than a saving. Read off the API documentation, not measured from a call. |
+| `black_bloc/personas.py:78` | The eleven are GABI's locked roster, adapted off her book world — a test greps every voice for `book`/`catalogue`/`librarian`/`shelf`, which is what keeps a future paste honest. The adjacency graph travels with them: it is a CHAIN, so `shy` and `noir` stay five steps apart and a conversation cannot wander from timid to hard-boiled in an evening. |
+| `black_bloc/personas.py:242` | ⚠️ **The drift is DETERMINISTIC from the conversation's own key rather than stored, and that is the one real deviation from design §4.** GABI keeps a `PersonaState` row; schema 20 has no column for one, and adding a mood column to `chat_window` would have put the same fact in two places. `random.Random(f"{key}:{step}")` gives a stable roll per conversation, a fresh one for a new conversation, a step only every four model turns, and tests that do not have to run a thousand times to observe a 25% chance. |
+| `black_bloc/personas.py:259` | A named mood that has been switched off falls back to the **house voice**, with a warning, rather than to another mood or to an error: a staff member turning a mood off should not silently re-point the setting at something they did not choose. |
+
+### The fuses
+
+| Key | Note |
+|---|---|
+| `black_bloc/chat_llm.py:342` | ⚠️ **Three counters, never folded into one** (GABI: a cheap turn's forgiveness must not buy an expensive one), and they are checked **dollar figure first**: the money is the ceiling that matters, the turn counters are politeness. ⚠️ **Zero means opposite things on the two kinds and the help text says which** — zero on either turn counter means "no ceiling of its own", zero on the dollar figure means **stop altogether**, because zero money can only sensibly mean zero calls. A test pins both readings. |
+| `black_bloc/chat_llm.py:294` | The fuses count the **ledger**, not a process flag, so a deploy or a crash cannot reset them — and `COUNT(DISTINCT turn)` is what makes a two-call turn cost one. `server_turns` deliberately ignores `guild_id`: the bill belongs to one API account, not to one server. |
+| `black_bloc/chat_llm.py:587` | ⚠️ **"Logged once per closure" is answered by ASKING THE ACTION LOG whether it already said so this month.** An in-process flag would re-announce the closure on every restart, which is the same silent-staleness trap in another shape. |
+| `black_bloc/chat_llm.py:261` | ⚠️ **The window is kept for an HOUR but read for THIRTY MINUTES.** The reply only wants the recent conversation and nothing needs the older rows, since the fuses read the ledger instead — the extra half hour is slack so a sweep that runs late cannot eat a live conversation. Swept by the daily ingest loop rather than by a second five-minute loop. |
+
+### The wiring
+
+| Key | Note |
+|---|---|
+| `black_bloc/chat.py:522` | ⚠️ **`chat_llm` is imported INSIDE the function, because `chat_llm` imports this module.** `chat_llm` needs `normalise`/`has_phrase`/`MENTION` — the same word handling the intents use, one home — and a module-level import here would close the cycle. The same call also catches `Exception` around the whole conversation step: it runs inside `on_message`, and anything it raises would cost the member their answer entirely. |
+| `black_bloc/chat.py:537` | ⚠️ **`llm` defaults to FALSE and only the cog passes `True`.** `POST /api/chat/try` and `reply_for` therefore cannot spend anything — somebody typing sentences into the dashboard's Try-it box would otherwise burn the day's turns in a minute. |
+| `black_bloc/chat_llm.py:478` | The order inside one turn is: allowance → window → notes → tier → ladder → persona → call(s) → ledger → remember. The member's turn and the answer are remembered **only on success**, so a failed turn does not leave a half-exchange in the window for the next call to read back. |
+| `black_bloc/chat_llm.py:446` | The grounding rides the **member's own turn**, not the system prompt (GABI's catalog-lane inline pattern), which is simpler than tool_use for a bot with no tool loop and keeps the system prefix stable for the cache marker. |
+| `black_bloc/chat_llm.py:423` | ⚠️ **Affirmative only:** off, unreadable, or a DM all read as "not on". A DM has no server whose setting could say yes, so a DM never reaches a model at all. |
+| `black_bloc/cogs/content/chat.py:513` | The daily loop sweeps the window first and then rewrites the notes per guild, skipping `guild.unavailable` (checklist 32) and stepping over a guild that throws rather than abandoning the pass. It has the `@loop.error` restart and the `last_ok`/`last_error` pair `/chat status` reads (checklist 28). |
+| `black_bloc/cogs/content/chat.py:237` | ⚠️ **A tier that failed says so in `/chat status` instead of reading as `ready`** — the same honesty `golive.poll_degraded` buys. The dict lives on the BOT rather than on the cog, so a cog reload does not silently clear a known outage. |
+
+### What was NOT verified
+
+- ⚠️ **NOT ONE REAL MODEL CALL HAS BEEN MADE, by either provider.** No key exists
+  in this tree; every client test injects a fake `create`/`request`. The request
+  *shape* is asserted against the fake and read off the SDK's own documentation,
+  and the SDK's three exception classes were confirmed to exist and to be ordered
+  correctly against the installed `anthropic` 1.3.0 — but no HTTP request has left
+  this machine, so nothing here proves Anthropic or Groq accepts what is built.
+- ⚠️ **The prompt-cache marker is expected to do NOTHING at this prompt size**
+  (Haiku 4.5's minimum cacheable prefix is 4096 tokens; the stack is a few
+  hundred). Unmeasured — the first real call's `cache_creation_input_tokens` is
+  the check.
+- **No token count or cost figure has ever been observed.** Every ledger figure
+  in the tests is arithmetic over invented token counts. What a real turn costs,
+  and therefore how far $20 goes, is unknown.
+- ⚠️ **Nothing has run against live Discord.** No member has @-mentioned the bot
+  and got a model answer; no `/chat knowledge`, `/chat personality` or
+  `/chat status` has been run in a real client; the daily ingest has never seen a
+  real channel topic or a real role list.
+- **The trope pool has never been read by a model**, so nobody knows whether the
+  adapted voices actually sound right — only that they no longer mention books.
+- **`chat_llm_mode` has never been `on` anywhere.** Every path below the switch is
+  exercised by tests only.
+- **No dashboard exists for any of this** — the Knowledge, Personality and Spend
+  sections are 14b, and `/api/chat` grew no routes here.
+## chat 3 — the dashboard (14b) — the Chat page's knowledge, personality and spend (`docs/info/phase14-design.md` §§3–5, §7)
+
+> Built in parallel with 14a against the design's shapes. ⚠️ **Everything in
+> `black_bloc/api/tools/chat_store.py` is a STAND-IN** whose canonical home is
+> 14a (`storage/db.py` schema 20 plus its own modules); it exists so the routes,
+> the page and the mock could be built and verified before 14a landed, and it is
+> expected to be DELETED at the merge. The route shapes are the part meant to
+> survive.
+
+### `black_bloc/api/tools/chat_store.py` — the stand-in store
+
+| Key | Note |
+|---|---|
+| ⚠️ `chat_store.py:40 SCHEMA` | The four schema-20 tables, created with `CREATE TABLE IF NOT EXISTS` from `ensure_tables` (`:185`) at the top of every route rather than in `storage/db.py`. That is what keeps 14b out of 14a's schema file: the merge deletes this constant and the tables arrive at `SCHEMA_VERSION = 20` instead. ⚠️ Two deliberate deviations from the design's abbreviated column lists: `knowledge_sections` and `llm_ledger` both carry a **`guild_id`**, because every other table in this bot does and every route filters on it. |
+| ⚠️ `chat_store.py:51` | `UNIQUE (guild_id, source, title)` — **on the source as well as the title**, so the daily server-ingest loop and a staffer may both hold a note called `Channels` without either one stopping the other from writing. One writer per row is the design's rule (§3); a bare `UNIQUE(guild_id, title)` would have made the loop's write fail the day somebody wrote a note with a heading it uses. |
+| `chat_store.py:90 POOL_SOURCE` | The provenance header the design asks for, as DATA rather than as a comment, so `GET /api/chat/personality` can hand it to the page (`ported_from`). The eleven tropes at `:92` are GABI's roster in shape and order, with the book-world wording turned into cookout wording wherever it named books; the labels (`cozy` → **cosy**) are hers. |
+| `chat_store.py:267 seed_tropes` | `INSERT OR IGNORE`, so it is idempotent and **never overwrites a row a staffer has switched off**. It returns how many it wrote, which is what the test asserts goes 11 then 0. |
+| ⚠️ `chat_store.py:30 LLM_MODE_DEFAULT` | The fallback the spend route uses while `chat_llm_mode` is not in the registry (14a adds the key). It is a module constant and not a literal precisely so the tests can move it — every tier-liveness branch is otherwise unreachable in 14b's tree, and an untestable branch is one nobody has run. |
+| `chat_store.py:339` | Month-to-date and turns-today are SQL aggregates over `llm_ledger`, not counters kept anywhere — a counter is a second home for a number the ledger already holds. `COALESCE(…, 0)` so an empty ledger reads as zero rather than as `None`. |
+
+### `black_bloc/api/tools/chat.py` — the routes 14b adds
+
+| Key | Note |
+|---|---|
+| ⚠️ `chat.py:88 SERVER_ROW_LOCKED` | A `source='server'` row is **shown, and refused in words** — it is not hidden and it is not silently read-only. The sentence rides the row itself (`locked_why`, `:241`) as well as the 409, so the page prints the reason beside the locked note instead of inventing its own wording. One sentence, one home. |
+| `chat.py:241 section_row` | `editable` is `source == 'staff'`, derived once here and read by both the page and the guard (`_staff_row_only`, `:582`). `characters` is the note's length, because the grounding budget refuses a section rather than trimming it (design §3) and a staffer needs to see which note is the fat one. |
+| ⚠️ `chat.py:289 setting_or` | Reads a registry key **only when the registry has it**, and falls back otherwise. `chat_llm_mode`, `chat_monthly_cap_usd` and `chat_daily_turns` are 14a's keys (design §7 puts settings keys in that slice), so in 14b's tree every read falls back to the design's own defaults — $20, 200 turns, mode off. ⚠️ At the merge those fallbacks go dead and this helper should collapse to `bot.store.get`. |
+| ⚠️ `chat.py:805 _tier` | Liveness is **measured, in this order: the mode, then the key, then the cap** — and each failure says which one it was, because "not answering" has four different fixes. It never calls a tier live on the strength of the mode alone. Checklist 9 and 10: a tier that is down shows as down, and says why in words rather than as a bare `false`. |
+| `chat.py:767` | Turning a trope off is refused when it is the one voice in use (`TROPE_IN_USE`) and when it is the last one on while the mode is `pool` (`LAST_TROPE_ON`) — the two ways the switch could leave Black Bloc with no voice at all. Both are 409 with a sentence naming the way out. |
+| `chat.py:729` | Setting the voice to a trope that is switched off is refused rather than quietly switching it back on: a write that does two things is a write nobody can predict. |
+| ⚠️ `chat.py:703 _personality` | `GET /api/chat/personality` **seeds the pool on a read**, exactly as `GET /api/chat/intents` does (`:156`) and for the same reason: a blank personality list is indistinguishable from a broken one. Idempotent, once per guild ever. |
+| `chat.py` every new write | Carries `"via": VIA_WEBSITE` in `details`, which `logkinds.via_of` would have derived from the `web.` head anyway — it is written out so a later merge that moves one of these writes into a cog cannot silently start claiming Discord set it. `actionlog.SUMMARY_SKIPS` keeps it out of the summary line. |
+| ⚠️ the six new kinds | `chat.knowledge_added` / `_edited` / `_removed`, `chat.personality_mode`, `chat.trope_enabled` / `_disabled`, all ROUTINE in `logkinds.py`. ⚠️ `chat.knowledge_removed` ends in `.removed`, which is an `IMPORTANT_SUFFIXES` entry — `is_important` checks `ROUTINE` FIRST so the explicit classification wins, but the pair is worth knowing before anybody reorders that function. They are also listed in `tests/test_logkinds.py KNOWN_DYNAMIC` under `writes.py::kind`, the table that stops a new kind going unclassified. |
+
+### `site/public/assets/page-chat.js` — the three new sections
+
+| Key | Note |
+|---|---|
+| ⚠️ `page-chat.js:542 said()` | **Every sentence the API wrote is rendered through `boldParts`, never as `text`.** Caught by rendering rather than by reading: the first pass printed `**Channels** is one of the notes…` with the asterisks showing. `notice()` already does this for outcome sentences; `locked_why`, `mode_word` and each tier's `word` are the three places a *stored* sentence lands on this page. |
+| ⚠️ `page-chat.js:561 noteCard` | A `source='server'` note is **drawn in full with disabled boxes and NO buttons**, and its own `locked_why` sentence sits where Save/Remove would be. Hiding it would have been the easy version and the wrong one — the notes Black Bloc writes for itself are most of what it knows, and staff who cannot see them cannot tell whether it knows the wrong thing. |
+| `page-chat.js:561` | Save refuses **in the page** when nothing differs (`NOTE_UNCHANGED`) rather than sending a no-op PUT that would leave a `web.chat.knowledge_edited` line saying nothing changed. Same instinct as a line's disabled Save in the Intents section (`:162`), reached differently because a note has three fields. |
+| `page-chat.js:712 knowledgeSection` | Empty state is a sentence **plus an action** (`Write the first note`) that focuses the add form, which stays on the page either way — an add form that only appears when the list is empty is a form nobody finds twice. |
+| ⚠️ `page-chat.js:802` | **The segment's third choice exists only while one voice is pinned.** A permanent "one voice" option would have needed a name before there was one to name; building the choice list from `mode_kind` means the control always shows what is true, `Be only this one` on a row is the way onto it, and picking either of the other two is the way off. |
+| ⚠️ `page-chat.js:751 tropeCard` | A voice that is out of the pool gets **no `Be only this one` button at all**, because the API refuses that combination (`TROPE_IS_OFF`) — a control that exists to be refused is the thing the process rule about bare statuses is really about. The one refusal the page CAN reach is taking out the voice in use, and that one is worth reaching: it is the shape of mistake somebody makes on purpose. |
+| ⚠️ `page-chat.js:33 SETTING_KEYS` | `chat_llm_mode` and `chat_monthly_cap_usd` were added; **`chat_personality` was deliberately NOT**, because the Personality segment already writes it and two controls on one field is the duplicate-surface trap. Its other door is `/settings set-value` on the bot, per checklist 33. |
+| `page-chat.js:865 spendSection` | The section's count is **how many tiers are answering**, not how much was spent — a rail badge is a glanceable state, and "2" meaning two live tiers is the thing somebody wants from the rail. The cap is not edited here: one line says it is a setting and the action opens the Settings section below. |
+| ⚠️ `site.css:1776 .spend-meter` | Measured against the real fixture: a month of chat at Haiku 4.5's $1/$5 per MTok is **pennies against a $20 cap**, so the meter sits near zero most of the time and the FIGURE and the sentence carry the meaning. It is 8px, it has a `min-width: 2px` fill so 1.7% is still visible, and it turns `--et-danger` at the cap. Verified rendered at 1.7%, at 34% and over the cap. |
+
+### `site/mock/` — the contract and the stand-in API
+
+| Key | Note |
+|---|---|
+| ⚠️ `server.mjs SETTING_SPECS` | The mock registers `chat_llm_mode`, `chat_personality` and `chat_monthly_cap_usd`; **the real `settings_store.py` does not, because design §7 puts settings keys in 14a's slice.** So the mock is deliberately AHEAD of the router here — it is what let the Personality segment and the cap row be exercised before 14a landed, and the merge is expected to delete the difference rather than keep two lists. The page survives either way: `SETTING_KEYS` filters out a key the payload does not carry. |
+| ⚠️ `server.mjs personaMode()` | The mock keeps the voice in the **settings map** and nowhere else, which is the shape the merged bot should have. `black_bloc/api/tools/chat_store.py` keeps it in a `chat_persona` table instead, only because the registry key does not exist yet — **the mock is the one to copy, not the stand-in.** |
+| ⚠️ `server.mjs seedLedger` | Spread across THIS month rather than the last 25 days, and the costs are the real $1/$5-per-MTok arithmetic rather than a round number chosen to fill a bar. Both were found by rendering: a fixture seeded 25 days back read **$0.01 on the 1st**, which is exactly the day the page most needs checking, and pretty round numbers would have hidden that a real month of chat is cents. |
+| `server.mjs state.llmKeys` | The mock's stand-in for the two `config.py` keys: Anthropic set, Groq not, so the Spend section always renders a live tier and a keyless one side by side rather than three of the same thing. |
+| ⚠️ `contract.json {chat_section_id}` | Points at a **staff-written** note in both halves' fixtures, because a server-written one refuses PUT and DELETE and this table only checks the 200 path. The server-written row still exists in both fixtures so `GET /api/chat/knowledge` proves both sources. The trope entry names `noir` outright — the pool is fixed ported data, not rows whose ids move. |
+| `check.mjs checkActionKinds` | The six new `web.chat.*` kinds are each left by the write that spells it, and `trope_enabled`/`trope_disabled` are two kinds off one route the way tempvoice's lock/unlock are. 17 pages, **106 routes** (was 98). |
+
+## chat 3 — where 14a and 14b were joined (2026-09-01)
+
+> **Read this before the two sections above**, which were each written while the
+> other half did not exist. Where they disagree, this section is what the tree
+> actually does. **Last verified: 2026-09-01** — `pytest -q` **2451 passed**
+> (2438 + 21 failing at the merge, minus `test_chat_store.py`'s 8, which died
+> with the file it tested; no other test was deleted), `ruff check .` clean,
+> `node site/mock/check.mjs` **17 pages / 106 routes**, and the Chat page
+> exercised by hand in Chrome on the Black Bloc theme, dark.
+> ⚠️ Still true after the merge: **no real model call has ever been made**, and
+> nothing has run against live Discord.
+
+### `black_bloc/api/tools/chat_store.py` is GONE
+
+The stand-in and its eight tests were deleted; the routes read 14a's modules.
+The table below is the map, and the reason each choice went the way it did.
+
+| Key | Note |
+|---|---|
+| ⚠️ `storage/db.py:379` | **The one piece of 14b's schema that survived the deletion.** 14a's `knowledge_sections` already had `guild_id` but no uniqueness at all; 14b's had `UNIQUE (guild_id, source, title)`, and that is the constraint the lane needs — **on the source as well as the title**, so the daily loop and a staffer may both hold a note headed `Channels` without either one stopping the other. It arrives as a `CREATE UNIQUE INDEX IF NOT EXISTS` inside `SCHEMA`, which `connect()` runs on every start, so it is the additive migration and needs no schema bump (no column changed; `SCHEMA_VERSION` stays 20). Adding it to a database that already held duplicates would fail at startup — schema 20 has never shipped, so there are none. |
+| ⚠️ `knowledge.py:469` | **The unique index made the daily ingest a hazard, so the ingest writes `INSERT OR IGNORE` and counts what landed.** Discord lets two channels in different categories share a name, and `shorten()` can trim two long distinct names to the same title; either would raise inside `replace_server_sections` and take down the whole pass for the other two hundred rows. Same split the lane already had — **the ingest skips, the commands refuse** — now with the skip made real rather than assumed. |
+| `knowledge.py:52`, `:322`, `:346` | The duplicate-heading sentence lives here and **both doors say it**: `add_section`/`update_section` catch `sqlite3.IntegrityError` and raise `KnowledgeError`, the slash command prints it, and `api/tools/chat.py:602`/`:635` wrap it as the 409 `title_taken` the page already knew how to draw. 14b had its own copy of that sentence and of all four note validators; those copies are gone, and `chat.py:283`'s cleaners now delegate to `knowledge.py`'s. The visible consequence: **a note heading may be 100 characters, not 80** — 14a's limit won, and `page-chat.js TITLE_LIMIT` and `server.mjs KNOWLEDGE_TITLE_LIMIT` were both moved to match. |
+| ⚠️ `api/tools/chat.py:271` and `:717` | **The persona mode is the `chat_personality` registry key and nothing else.** 14b's `chat_persona` table died with the stand-in; the PUT writes through `bot.store.set`, which is what makes the Chat page's segment and `/settings set-value` and `/chat personality set` one control over one fact (checklist 33). The route still logs `web.chat.personality_mode` — `store.set` writes no action row of its own, so there is exactly one audit line per change and `via_of` tells the two doors apart. |
+| ⚠️ `api/tools/chat.py:755` | **Switching a voice off from the website now drops the cached pool**, which the slash command already did and the stand-in had no cache to drop. Without it the bot would keep picking a mood staff had just switched off, until a restart. |
+| `api/tools/chat.py:786` | `setting_or` is gone: every key it guarded exists in the registry, so the spend route reads `bot.store.get` directly. It also reads the ledger through `chat_llm.month_spend`/`server_turns`/`last_turn_at` (`chat_llm.py:321` is new), **so the figure the page shows and the figure the fuse closes the tier on are the same query.** ⚠️ Note what that inherits: those readers deliberately **ignore `guild_id`** (`chat_llm.py:308`) because the bill belongs to one API account, while 14b's stand-in scoped its sums to the guild. One server today, so the numbers agree; on a second server the page would show the account's spend, not that server's, which is the honest reading of a single monthly cap. |
+| ⚠️ `logkinds.py ROUTINE` | The auto-merge left `chat.knowledge_added` and `chat.knowledge_removed` in the set **twice**, and the two halves had named the same decision differently: the cog logged `chat.personality` and `chat.trope`, the website `web.chat.personality_mode`, `web.chat.trope_enabled` and `web.chat.trope_disabled`. One decision now has one base kind — the cog's constants at `cogs/content/chat.py:139` are `chat.personality_mode` / `chat.trope_enabled` / `chat.trope_disabled`, told apart from the website's by the `web.` head. Splitting the trope kind in two is also checklist 2's shape: on and off are distinguishable at a glance in the log. |
+| `personas.py:19`, `:20` | `PERSONALITY_KEY` had three homes (here, `chat_llm.py`, the cog) and `LLM_MODE_KEY` two; `personas.py` and `chat_llm.py` own them now and everything else imports. `POOL_SOURCE` moved out of the stand-in so `GET /api/chat/personality` can still hand the page its `ported_from` provenance. |
+| ⚠️ `server.mjs:237`, `:2827` | **The mock registered six chat keys and the real registry has thirteen.** It now registers all thirteen, with the router's own help text, and `chat_personality` as the **enum** it really is rather than free text — its choices are derived from `TROPE_POOL` so the list cannot drift from the pool it names. `TROPE_POOL` moved above `SETTING_SPECS` to make that derivation possible and its header now points at `personas.py`, not the deleted file. Verified rendered: the Settings page's Chat group draws 13 rows, and `chat_personality` there reads back the value the Chat page's segment just wrote. |
+
+### What was NOT verified at the merge
+
+- ⚠️ **The `cozy` mood's label.** 14b's port labelled it **`cosy`** and said that
+  spelling is GABI's; 14a's `personas.py` labels it `cozy`. The mock was aligned
+  to `personas.py` because the router is canonical for content — but **14a may
+  have lost a deliberate spelling**, and nobody has checked GABI's file to say
+  which is right. It is one word in one label and changes nothing else.
+- **Nothing new was exercised against the real router in a browser.** The page
+  was driven against the mock; that the mock and the router answer the same
+  shapes is `tests/api/test_contract.py` plus `check.mjs`, not a rendered page.
+- **The daily ingest has never met a duplicate channel name.** The
+  `INSERT OR IGNORE` above is reasoned from Discord's rules and covered by no
+  test that builds two same-named channels.
+- **Exercised by hand:** adding a note (count 3 → 4, outcome sentence bolded),
+  the personality segment on all three of its states including the third choice
+  appearing only once a voice is pinned, the refusal when the voice in use is
+  taken out, and the spend meter at 1.7% with two of three tiers answering.
+  **Not exercised:** editing or removing a note, the search boxes, the trope
+  search, and the capped state of the meter.

@@ -68,9 +68,17 @@ class Settings(BaseSettings):
         default=None, description="Key for the anonymous poll-vote MAC; unset falls back to a hash"
     )
 
+    anthropic_api_key: str | None = Field(
+        default=None, description="Anthropic key for the important chat tier; unset = no tier"
+    )
+    groq_api_key: str | None = Field(
+        default=None, description="Groq key for the simple chat tier; unset = no tier"
+    )
+
     @field_validator(
         "dev_guild_id", "test_channel_id", "twitch_client_id", "twitch_client_secret",
         "discord_client_id", "discord_client_secret", "session_secret", "poll_vote_secret",
+        "anthropic_api_key", "groq_api_key",
         mode="before",
     )
     @classmethod
@@ -110,6 +118,14 @@ class Settings(BaseSettings):
     @property
     def poll_votes_keyed(self) -> bool:
         return bool(self.poll_vote_secret)
+
+    @property
+    def important_tier_configured(self) -> bool:
+        return bool(self.anthropic_api_key)
+
+    @property
+    def simple_tier_configured(self) -> bool:
+        return bool(self.groq_api_key)
 
     @property
     def origin(self) -> str:

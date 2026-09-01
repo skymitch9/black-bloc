@@ -1753,6 +1753,42 @@ dialog.drawer::backdrop { background: var(--bb-scrim); }
   text-wrap: pretty;
 }
 
+/* Chat step 3. A note Black Bloc wrote for itself is drawn in full and its
+   controls are gone rather than disabled-looking, so the card reads as somebody
+   else's writing rather than as a broken form. */
+.knowledge-note[data-source="server"] .input,
+.trope[data-enabled="false"] .chat-answer-line {
+  color: var(--et-muted);
+}
+.knowledge-note[data-source="server"] {
+  border-left: 2px solid var(--et-warn);
+}
+.trope[data-enabled="false"] .chat-answer-line { border-left-color: var(--et-hairline); }
+
+/* The month against the cap. It has to read at 2% as honestly as at 99%, so the
+   figure and the sentence carry the meaning and the meter is only a glance. */
+.spend-figure {
+  font-size: var(--et-ui-xl);
+  font-weight: var(--et-weight-strong);
+  color: var(--et-fg);
+  line-height: 1.1;
+}
+.spend-meter {
+  margin: 10px 0 6px;
+  height: 8px;
+  overflow: hidden;
+  border: var(--et-hairline-w) solid var(--et-hairline);
+  border-radius: var(--et-radius-pill);
+  background: var(--et-shell-inset);
+}
+.spend-meter-fill {
+  height: 100%;
+  min-width: 2px;
+  background: var(--et-accent);
+}
+.spend-meter[data-capped="true"] .spend-meter-fill { background: var(--et-danger); }
+.tier-word { flex: 1 1 20rem; min-width: 0; color: var(--et-muted); font-size: var(--et-ui-sm); }
+
 /* The options on a review card: a plain numbered list, indented in tokens. */
 .plain-list {
   margin: 6px 0;

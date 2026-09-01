@@ -1940,6 +1940,235 @@
       ]
     },
     {
+      "_": "Chat step 3 (14b). {chat_section_id} is a STAFF-written note, because a server-written one refuses PUT and DELETE in words and this table only exercises the 200 path. The trope routes name `noir` directly: the pool is fixed data ported from GABI, not a row with an id that moves.",
+      "method": "GET",
+      "path": "/api/chat/knowledge",
+      "read_by": [
+        "14b page-chat.js Knowledge section"
+      ],
+      "shape": "object",
+      "keys": [
+        "sections",
+        "counts",
+        "budget",
+        "notes"
+      ],
+      "rows": {
+        "sections": [
+          "id",
+          "title",
+          "body",
+          "tag",
+          "source",
+          "source_word",
+          "editable",
+          "locked_why",
+          "characters",
+          "updated_at",
+          "updated_by"
+        ]
+      },
+      "nested": {
+        "counts": [
+          "total",
+          "staff",
+          "server"
+        ],
+        "budget": [
+          "sections",
+          "characters",
+          "word"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/knowledge",
+      "body": {
+        "title": "Contract note",
+        "body": "Written on the contract run so the shape is checked."
+      },
+      "read_by": [
+        "14b page-chat.js Knowledge add form"
+      ],
+      "shape": "object",
+      "keys": [
+        "section",
+        "message"
+      ],
+      "nested": {
+        "section": [
+          "id",
+          "title",
+          "body",
+          "tag",
+          "source",
+          "source_word",
+          "editable",
+          "locked_why",
+          "characters",
+          "updated_at",
+          "updated_by"
+        ]
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chat/knowledge/{chat_section_id}",
+      "body": {
+        "body": "Edited on the contract run."
+      },
+      "read_by": [
+        "14b page-chat.js Knowledge edit form"
+      ],
+      "shape": "object",
+      "keys": [
+        "section",
+        "message"
+      ],
+      "nested": {
+        "section": [
+          "id",
+          "title",
+          "body",
+          "source",
+          "editable",
+          "locked_why",
+          "updated_at",
+          "updated_by"
+        ]
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/chat/knowledge/{chat_section_id}",
+      "read_by": [
+        "14b page-chat.js Knowledge row"
+      ],
+      "shape": "object",
+      "keys": [
+        "removed",
+        "section_id",
+        "message"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/chat/personality",
+      "read_by": [
+        "14b page-chat.js Personality section"
+      ],
+      "shape": "object",
+      "keys": [
+        "mode",
+        "mode_kind",
+        "mode_word",
+        "tropes",
+        "counts",
+        "ported_from",
+        "notes"
+      ],
+      "rows": {
+        "tropes": [
+          "name",
+          "label",
+          "voice",
+          "enabled",
+          "in_use",
+          "updated_at",
+          "updated_by"
+        ]
+      },
+      "nested": {
+        "counts": [
+          "total",
+          "enabled"
+        ]
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chat/personality",
+      "body": {
+        "mode": "pool"
+      },
+      "read_by": [
+        "14b page-chat.js Personality mode segment"
+      ],
+      "shape": "object",
+      "keys": [
+        "mode",
+        "mode_kind",
+        "mode_word",
+        "message"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chat/personality/noir",
+      "body": {
+        "enabled": true
+      },
+      "read_by": [
+        "14b page-chat.js trope list"
+      ],
+      "shape": "object",
+      "keys": [
+        "trope",
+        "message"
+      ],
+      "nested": {
+        "trope": [
+          "name",
+          "label",
+          "voice",
+          "enabled",
+          "in_use",
+          "updated_at",
+          "updated_by"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/chat/spend",
+      "read_by": [
+        "14b page-chat.js Spend and tiers section"
+      ],
+      "shape": "object",
+      "keys": [
+        "month",
+        "today",
+        "tiers",
+        "capped",
+        "cap_key",
+        "last_turn_at",
+        "notes"
+      ],
+      "rows": {
+        "tiers": [
+          "name",
+          "label",
+          "live",
+          "word"
+        ]
+      },
+      "nested": {
+        "month": [
+          "spent_usd",
+          "cap_usd",
+          "left_usd",
+          "share",
+          "word"
+        ],
+        "today": [
+          "turns",
+          "limit",
+          "word"
+        ]
+      }
+    },
+    {
       "_": "Requests. {feature_request_id} is the signed-in staffer's own PENDING row (the mock seeds it as 25) and {member_request_id} is the member session's own pending row (30), the only kind Withdraw takes — both halves seed the pair so /api/requests/mine is never empty and the decide routes always have something to move. GET /api/requests/export.csv is NOT here: it answers CSV, not JSON, and this table only checks JSON keys. POST /api/requests/{feature_request_id}/withdraw is NOT here either: it only ever answers 200 for the person who filed the row, which one fixture session cannot exercise both ways.",
       "method": "GET",
       "path": "/api/requests",
@@ -2259,6 +2488,12 @@
     "web.chat.line_added",
     "web.chat.line_edited",
     "web.chat.line_deleted",
+    "web.chat.knowledge_added",
+    "web.chat.knowledge_edited",
+    "web.chat.knowledge_removed",
+    "web.chat.personality_mode",
+    "web.chat.trope_enabled",
+    "web.chat.trope_disabled",
     "web.request.filed",
     "web.request.approved",
     "web.request.declined",

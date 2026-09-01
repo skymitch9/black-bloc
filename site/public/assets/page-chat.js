@@ -5,6 +5,7 @@ import {
   ask,
   badge,
   bar,
+  boldParts,
   button,
   card,
   el,
@@ -15,13 +16,19 @@ import {
   run,
   sayAgain,
   sayNothing,
+  searchOver,
   section,
   segment,
   settingsPanel,
+  textAction,
+  when,
 } from './ui.js';
 
 const PER_PAGE = 50;
 const LINE_LIMIT = 200;
+const TITLE_LIMIT = 100;
+const BODY_LIMIT = 4000;
+const TAG_LIMIT = 40;
 
 const SETTING_KEYS = [
   'chat_mode',
@@ -30,6 +37,8 @@ const SETTING_KEYS = [
   'chat_greeting_reaction',
   'chat_reply_in_threads',
   'chat_route_ping_staff',
+  'chat_llm_mode',
+  'chat_monthly_cap_usd',
   'chat_log_level',
   'emoji_skin_tone',
 ];
@@ -44,6 +53,30 @@ const NEW_NOTE = 'A canned intent of your own. It is matched before the built-in
   'phrase you claim here wins.';
 const SETTINGS_NOTE = 'Whether Black Bloc answers at all, how often the same person gets a ' +
   'reply, and the channels it stays out of.';
+
+const KNOWLEDGE_NOTE = 'What Black Bloc knows about this server in its own words. When somebody ' +
+  'asks something the phrases above do not cover, the closest few notes ride along with the ' +
+  'question so the answer quotes them instead of inventing something.';
+const PERSONALITY_NOTE = 'How Black Bloc sounds. The cookout voice is the house one; the pool is ' +
+  'eleven voices it picks between, a different one per conversation, moving a step at a time. ' +
+  'None of them changes what it says — only how it says it.';
+const SPEND_NOTE = 'What answering has cost this month, how many answers came from a model ' +
+  'today, and which of the three tiers is actually answering right now.';
+const NO_KNOWLEDGE = 'Black Bloc has nothing written down about this server yet, so it answers ' +
+  'every question from the phrases above and its own wording.';
+const NO_TROPES = 'The voice pool is empty, so Black Bloc keeps the cookout voice whatever this ' +
+  'is set to.';
+const NEED_A_TITLE = 'Give the note a heading first — that is the line a question is matched ' +
+  'against.';
+const NEED_A_BODY = 'Write the note first, or there is nothing for Black Bloc to quote.';
+const NOTE_UNCHANGED = 'Nothing in that note is different, so nothing was saved.';
+const CAP_LIVES_IN_SETTINGS = 'The cap itself is a setting.';
+const TIER_LIVE_WORD = 'answering';
+const TIER_QUIET_WORD = 'not answering';
+
+const MODE_COOKOUT = 'cookout';
+const MODE_POOL = 'pool';
+const MODE_LABELS = { cookout: 'The cookout voice', pool: 'The pool' };
 
 const NO_INTENTS = 'Black Bloc has no intents stored yet. It falls back to the lines in its own ' +
   'code until something is saved here.';
@@ -505,6 +538,371 @@ function newIntentSection(say) {
   return one.node;
 }
 
+/** A sentence the API wrote, with its **bold** kept — the wording has one home. */
+function said(text) {
+  return el('p', { class: 'say-nothing' }, [
+    el('span', { class: 'say-nothing-text' }, boldParts(text || '')),
+  ]);
+}
+
+function openSettings() {
+  const found = document.getElementById('sect-settings');
+  if (!found) return;
+  const details = found.querySelector('details');
+  if (details) details.open = true;
+  found.scrollIntoView({ behavior: 'auto', block: 'start' });
+}
+
+/**
+ * One knowledge note. A `server` row is drawn in full and its own `locked_why`
+ * sentence is printed under it — the API owns that wording, so the page never
+ * writes a second version of the reason.
+ */
+function noteCard(row, say) {
+  const title = el('input', {
+    class: 'input',
+    type: 'text',
+    value: row.title,
+    maxlength: String(TITLE_LIMIT),
+    'aria-label': 'The heading Black Bloc matches a question against',
+    disabled: !row.editable,
+  });
+  const body = el('textarea', {
+    class: 'input area',
+    rows: '4',
+    maxlength: String(BODY_LIMIT),
+    'aria-label': 'What the note says',
+    disabled: !row.editable,
+    set: { value: row.body },
+  });
+  const tag = el('input', {
+    class: 'input',
+    type: 'text',
+    value: row.tag || '',
+    maxlength: String(TAG_LIMIT),
+    placeholder: 'optional',
+    'aria-label': 'A word for what this note is about',
+    disabled: !row.editable,
+  });
+
+  const save = button('Save', async () => {
+    const wanted = {
+      title: title.value.trim(),
+      body: body.value.trim(),
+      tag: tag.value.trim(),
+    };
+    if (!wanted.title) {
+      say.say(NEED_A_TITLE, 'warn');
+      return;
+    }
+    if (!wanted.body) {
+      say.say(NEED_A_BODY, 'warn');
+      return;
+    }
+    if (wanted.title === row.title && wanted.body === row.body && wanted.tag === (row.tag || '')) {
+      say.say(NOTE_UNCHANGED, 'warn');
+      return;
+    }
+    const done = await run(
+      say,
+      () => send(`/api/chat/knowledge/${encodeURIComponent(row.id)}`, 'PUT', wanted),
+      (found) => found?.message || 'Saved.',
+    );
+    if (done.ok) {
+      keepSaying('chat-knowledge', say);
+      refresh();
+    }
+  }, { tone: 'quiet' });
+
+  const drop = button('Remove', async () => {
+    const sure = await ask({
+      title: `Remove ${row.title}?`,
+      body: [
+        'Black Bloc stops quoting it. Its own phrases and its other notes stay exactly as they are.',
+        row.body,
+      ],
+      confirmLabel: 'Remove it',
+    });
+    if (!sure) return;
+    const done = await run(
+      say,
+      () => api(`/api/chat/knowledge/${encodeURIComponent(row.id)}`, { method: 'DELETE' }),
+      (found) => found?.message || 'Removed.',
+    );
+    if (done.ok) {
+      keepSaying('chat-knowledge', say);
+      refresh();
+    }
+  }, { tone: 'danger' });
+
+  const wrote = row.updated_by
+    ? `${row.source_word} — ${row.updated_by.name}, ${when(row.updated_at)}`
+    : `${row.source_word} — last written ${when(row.updated_at)}`;
+
+  return el('div', { class: 'card knowledge-note', 'data-source': row.source }, [
+    el('div', { class: 'card-body' }, [
+      el('div', { class: 'formrow' }, [
+        field('Heading', title, 'What a question is matched against.'),
+        field('About', tag, 'One word, so you can find it again. Optional.'),
+        el('div', { class: 'chipbar' }, [
+          badge(row.source === 'server' ? 'Black Bloc wrote this' : 'staff wrote this',
+            row.source === 'server' ? 'warn' : null),
+          el('span', { class: 'chat-answer-label', text: `${row.characters} characters` }),
+        ]),
+      ]),
+      field('What it says', body, 'Plain words. Black Bloc quotes this rather than paraphrasing it.'),
+      el('p', { class: 'section-note', text: wrote }),
+      row.editable ? bar([save, drop]) : said(row.locked_why),
+    ]),
+  ]);
+}
+
+function newNoteCard(say) {
+  const title = el('input', {
+    class: 'input',
+    type: 'text',
+    maxlength: String(TITLE_LIMIT),
+    placeholder: 'Cookout hours',
+  });
+  const body = el('textarea', {
+    class: 'input area',
+    rows: '3',
+    maxlength: String(BODY_LIMIT),
+    placeholder: 'The grill goes on at six on a Saturday.',
+  });
+  const tag = el('input', {
+    class: 'input',
+    type: 'text',
+    maxlength: String(TAG_LIMIT),
+    placeholder: 'cookout',
+  });
+
+  const add = button('Write it down', async () => {
+    const wanted = title.value.trim();
+    const words = body.value.trim();
+    if (!wanted) {
+      say.say(NEED_A_TITLE, 'warn');
+      return;
+    }
+    if (!words) {
+      say.say(NEED_A_BODY, 'warn');
+      return;
+    }
+    const done = await run(
+      say,
+      () => send('/api/chat/knowledge', 'POST', { title: wanted, body: words, tag: tag.value.trim() }),
+      (found) => found?.message || 'Added.',
+    );
+    if (done.ok) {
+      keepSaying('chat-knowledge', say);
+      refresh();
+    }
+  }, { tone: 'warn', small: false });
+
+  return card('A new note', [
+    el('div', { class: 'formrow' }, [
+      field('Heading', title, `Up to ${TITLE_LIMIT} characters.`),
+      field('About', tag, 'Optional, and only for finding it again.'),
+    ]),
+    field('What it says', body, `Up to ${BODY_LIMIT} characters. A note that will not fit in an answer is left out whole rather than cut short.`),
+    bar([add]),
+  ], { count: null });
+}
+
+function knowledgeSection(payload, say) {
+  const rows = Array.isArray(payload?.sections) ? payload.sections : [];
+  const counts = payload?.counts || {};
+  const one = section('Knowledge', KNOWLEDGE_NOTE, { count: rows.length || null });
+  const list = el('div', { class: 'section-body' });
+  const focusNew = () => {
+    const box = one.body.querySelector('.card input.input:not([disabled])');
+    if (box) box.focus();
+  };
+
+  one.body.append(say);
+  if (rows.length === 0) {
+    one.body.append(sayNothing(NO_KNOWLEDGE, textAction('Write the first note', focusNew)));
+  } else {
+    for (const row of rows) list.append(noteCard(row, say));
+    one.body.append(
+      searchOver(list, {
+        label: 'Search the notes',
+        placeholder: 'a heading or a word inside one',
+        selector: '.knowledge-note',
+        noun: 'note(s)',
+        empty: 'No note has those words in it.',
+      }),
+      list,
+      el('p', {
+        class: 'section-note',
+        text: `${counts.staff || 0} written by staff, ${counts.server || 0} written by Black Bloc. ` +
+          (payload?.budget?.word || ''),
+      }),
+    );
+  }
+  one.body.append(el('div', { class: 'chatblock' }, [newNoteCard(say)]));
+  return one.node;
+}
+
+/**
+ * One voice in the pool: its wording, whether Black Bloc may pick it, and the
+ * one button that points the whole bot at it.
+ */
+function tropeCard(row, mode, say) {
+  const flip = button(row.enabled ? 'Take it out' : 'Put it back', async () => {
+    const done = await run(
+      say,
+      () => send(`/api/chat/personality/${encodeURIComponent(row.name)}`, 'PUT', { enabled: !row.enabled }),
+      (found) => found?.message || 'Saved.',
+    );
+    if (done.ok) {
+      keepSaying('chat-personality', say);
+      refresh();
+    }
+  }, { tone: 'quiet' });
+
+  const pick = row.in_use || !row.enabled ? null : button('Be only this one', async () => {
+    const done = await run(
+      say,
+      () => send('/api/chat/personality', 'PUT', { mode: row.name }),
+      (found) => found?.message || 'Saved.',
+    );
+    if (done.ok) {
+      keepSaying('chat-personality', say);
+      refresh();
+    }
+  }, { tone: 'quiet' });
+
+  return el('div', { class: 'card trope', 'data-enabled': row.enabled ? 'true' : 'false' }, [
+    el('div', { class: 'card-body' }, [
+      el('div', { class: 'chipbar' }, [
+        el('span', { class: 'chat-fixed', text: row.label }),
+        row.in_use ? badge('the one in use', 'ok') : null,
+        row.enabled ? null : badge('out of the pool', 'warn'),
+      ]),
+      el('p', { class: 'chat-answer-line', text: row.voice }),
+      el('p', {
+        class: 'section-note',
+        text: row.updated_by
+          ? `Last changed by ${row.updated_by.name}, ${when(row.updated_at)}.`
+          : 'Never changed here — this is how it was ported.',
+      }),
+      bar([flip, pick]),
+    ]),
+  ]);
+}
+
+function personalitySection(payload, say) {
+  const rows = Array.isArray(payload?.tropes) ? payload.tropes : [];
+  const mode = String(payload?.mode || MODE_COOKOUT);
+  const kind = String(payload?.mode_kind || MODE_COOKOUT);
+  const one = section('Personality', PERSONALITY_NOTE, { count: payload?.counts?.enabled ?? null });
+
+  const named = rows.find((row) => row.name === mode);
+  const choices = [
+    { value: MODE_COOKOUT, label: MODE_LABELS.cookout },
+    { value: MODE_POOL, label: MODE_LABELS.pool },
+  ];
+  // The third choice exists only while one voice is pinned, so the segment can
+  // always show what is true and picking either of the other two is the way off it.
+  if (kind === 'trope') choices.push({ value: mode, label: `Only ${named ? named.label : mode}` });
+
+  const pick = segment(choices, mode, {
+    onChange: async () => {
+      const wanted = pick.readValue();
+      if (wanted === mode) return;
+      const done = await run(
+        say,
+        () => send('/api/chat/personality', 'PUT', { mode: wanted }),
+        (found) => found?.message || 'Saved.',
+      );
+      if (done.ok) {
+        keepSaying('chat-personality', say);
+        refresh();
+      } else pick.setValue(mode);
+    },
+  });
+
+  const list = el('div', { class: 'section-body' });
+  for (const row of rows) list.append(tropeCard(row, mode, say));
+
+  one.body.append(
+    card(null, [
+      el('div', { class: 'formrow' }, [
+        field('The voice', pick, 'A voice is tone and never truth — the same facts either way.'),
+      ]),
+      el('p', { class: 'chat-answer-line' }, boldParts(payload?.mode_word || '')),
+      say,
+    ]),
+    rows.length === 0
+      ? sayNothing(NO_TROPES)
+      : el('div', {}, [
+        searchOver(list, {
+          label: 'Search the voices',
+          placeholder: 'a name or a word from one',
+          selector: '.trope',
+          noun: 'voice(s)',
+          empty: 'No voice has those words in it.',
+        }),
+        list,
+      ]),
+    el('p', {
+      class: 'section-note',
+      text: payload?.ported_from ? `Ported from ${payload.ported_from}.` : '',
+    }),
+  );
+  return one.node;
+}
+
+function tierRow(row) {
+  return el('div', { class: 'chatline', 'data-enabled': row.live ? 'true' : 'false' }, [
+    el('span', { class: 'chat-fixed', text: row.label }),
+    badge(row.live ? TIER_LIVE_WORD : TIER_QUIET_WORD, row.live ? 'ok' : 'warn'),
+    el('span', { class: 'tier-word' }, boldParts(row.word)),
+  ]);
+}
+
+function spendSection(payload) {
+  const month = payload?.month || {};
+  const today = payload?.today || {};
+  const tiers = Array.isArray(payload?.tiers) ? payload.tiers : [];
+  const live = tiers.filter((row) => row.live).length;
+  const one = section('Spend & tiers', SPEND_NOTE, { count: live || null });
+  const share = Math.max(0, Math.min(1, Number(month.share) || 0));
+
+  one.body.append(card(null, [
+    el('div', { class: 'chipbar' }, [
+      el('span', { class: 'spend-figure', text: `$${Number(month.spent_usd || 0).toFixed(2)}` }),
+      el('span', { class: 'chat-answer-label', text: `of $${Number(month.cap_usd || 0).toFixed(2)} this month` }),
+      payload?.capped ? badge('the month is spent', 'warn') : null,
+    ]),
+    el('div', {
+      class: 'spend-meter',
+      'data-capped': payload?.capped ? 'true' : 'false',
+      role: 'img',
+      'aria-label': month.word || '',
+    }, [
+      el('div', { class: 'spend-meter-fill', style: `width: ${(share * 100).toFixed(1)}%` }),
+    ]),
+    el('p', { class: 'section-note', text: month.word || '' }),
+    el('p', { class: 'section-note', text: today.word || '' }),
+    sayNothing(
+      CAP_LIVES_IN_SETTINGS,
+      textAction(`Change ${payload?.cap_key || 'the cap'}`, openSettings),
+    ),
+  ]));
+  one.body.append(el('div', { class: 'chatblock' }, [
+    el('h4', { text: `Tiers (${live} of ${tiers.length} answering)` }),
+    tiers.length === 0
+      ? sayNothing('Black Bloc could not say which tiers are answering, so nothing is claimed here.')
+      : el('div', { class: 'chatlines' }, tiers.map(tierRow)),
+    payload?.last_turn_at
+      ? el('p', { class: 'section-note', text: `The last answer a model gave was ${when(payload.last_turn_at)}.` })
+      : el('p', { class: 'section-note', text: 'No model has answered anything yet.' }),
+  ]));
+  return one.node;
+}
+
 async function settingsSection(specs) {
   const one = section('Settings', SETTINGS_NOTE, { count: specs.length || null });
   one.body.append(await settingsPanel(specs, { where: 'Settings', empty: NO_SETTINGS }));
@@ -512,9 +910,12 @@ async function settingsSection(specs) {
 }
 
 async function load() {
-  const [payload, allSettings] = await Promise.all([
+  const [payload, allSettings, knowledge, personality, spend] = await Promise.all([
     api('/api/chat/intents'),
     settings(true),
+    api('/api/chat/knowledge'),
+    api('/api/chat/personality'),
+    api('/api/chat/spend'),
   ]);
 
   const intents = Array.isArray(payload?.intents) ? payload.intents : [];
@@ -530,11 +931,16 @@ async function load() {
 
   const intentsSay = sayAgain('chat-intents', notice());
   const createSay = notice();
+  const knowledgeSay = sayAgain('chat-knowledge', notice());
+  const personalitySay = sayAgain('chat-personality', notice());
 
   document.getElementById('dash').replaceChildren(
     trySection(),
     intentsSection(intents, intentsSay),
     newIntentSection(createSay),
+    knowledgeSection(knowledge, knowledgeSay),
+    personalitySection(personality, personalitySay),
+    spendSection(spend),
     await settingsSection(specs),
     await logsSection('chat'),
   );
