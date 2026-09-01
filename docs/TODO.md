@@ -98,12 +98,12 @@ per feature, so the old bot keeps running until the new one is proven.
 
 
 
-- **Curated docs for peers** (owner, 2026-08-26: "give them the curated docs
-  they need"). Since 2026-08-31 `docs/` is tracked, so a peer who clones gets the
-  FULL working tree — the root `README.md` still describes only "an optional
-  FastAPI companion server", not the 17-page dashboard. Open: whether the full
-  docs tree IS the peer docs now, or `README.md` gets a proper curated rewrite.
-  Ask the owner when the first peer needs it.
+- **Curated docs for peers — DECIDED + DONE 2026-09-01** (owner picked "Rewrite
+  README now"): root `README.md` rewritten as the peer front door (what the bot
+  does today, local run, the docs map, the six house rules); the tracked
+  `docs/` tree stays as the deep reference. **Deploy-button idea: owner chose
+  "Keep it parked" 2026-09-01** — revisit only if a session actually cannot
+  deploy.
 
 - **Move the SQLite file out of the OneDrive-synced tree** — KI-1.
 
