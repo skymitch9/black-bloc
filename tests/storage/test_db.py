@@ -12,7 +12,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 19
+        assert SCHEMA_VERSION == 20
         cur = await db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = {r["name"] for r in await cur.fetchall()}
         assert {"settings", "action_log", "role_menus", "role_menu_options"} <= tables
@@ -37,6 +37,8 @@ async def test_connect_bootstraps_schema(tmp_path):
         } <= tables
         assert {"polls", "poll_options", "poll_votes", "poll_results"} <= tables
         assert {"chat_intents", "chat_lines"} <= tables
+        assert {"knowledge_sections", "personality_tropes"} <= tables
+        assert {"chat_window", "llm_ledger"} <= tables
         assert {"requests", "request_comments"} <= tables
         assert "sessions" in tables
         cur = await db.conn.execute("PRAGMA table_info(sessions)")
@@ -137,6 +139,113 @@ async def test_a_deleted_intent_takes_its_lines_with_it(tmp_path):
         await db.conn.execute("DELETE FROM chat_intents WHERE id = ?", (intent_id,))
         cur = await db.conn.execute("SELECT COUNT(*) AS n FROM chat_lines")
         assert (await cur.fetchone())["n"] == 0
+    finally:
+        await db.close()
+
+
+async def test_a_knowledge_section_carries_what_the_search_and_the_page_need(tmp_path):
+    db = Database(tmp_path / "k.sqlite3")
+    await db.connect()
+    try:
+        cur = await db.conn.execute("PRAGMA table_info(knowledge_sections)")
+        columns = {row["name"] for row in await cur.fetchall()}
+        assert {"id", "guild_id", "title", "body", "source", "tag"} <= columns
+        assert {"updated_at", "updated_by"} <= columns
+        cur = await db.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='index' "
+            "AND tbl_name='knowledge_sections'"
+        )
+        assert "knowledge_sections_by_source" in {row["name"] for row in await cur.fetchall()}
+    finally:
+        await db.close()
+
+
+async def test_a_knowledge_section_is_written_by_staff_or_by_the_server_and_nothing_else(tmp_path):
+    db = Database(tmp_path / "k.sqlite3")
+    await db.connect()
+    try:
+        for source in ("staff", "server"):
+            await db.conn.execute(
+                "INSERT INTO knowledge_sections(guild_id, title, body, source, updated_at) "
+                "VALUES (7, 'Rules', 'Be kind.', ?, 'now')",
+                (source,),
+            )
+        with pytest.raises(sqlite3.IntegrityError):
+            await db.conn.execute(
+                "INSERT INTO knowledge_sections(guild_id, title, body, source, updated_at) "
+                "VALUES (7, 'Rules', 'Be kind.', 'somebody_else', 'now')"
+            )
+    finally:
+        await db.close()
+
+
+async def test_the_trope_pool_is_keyed_by_name_so_a_reseed_cannot_double_it(tmp_path):
+    db = Database(tmp_path / "t.sqlite3")
+    await db.connect()
+    try:
+        cur = await db.conn.execute("PRAGMA table_info(personality_tropes)")
+        columns = {row["name"] for row in await cur.fetchall()}
+        assert {"name", "label", "voice", "neighbours", "enabled", "sort"} <= columns
+        assert {"source", "updated_at", "updated_by"} <= columns
+        await db.conn.execute(
+            "INSERT INTO personality_tropes(name, label, voice, updated_at) "
+            "VALUES ('warm', 'warm', 'You are WARM today.', 'now')"
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            await db.conn.execute(
+                "INSERT INTO personality_tropes(name, label, voice, updated_at) "
+                "VALUES ('warm', 'warm', 'again', 'now')"
+            )
+    finally:
+        await db.close()
+
+
+async def test_a_window_turn_belongs_to_a_member_or_to_the_bot_and_nothing_else(tmp_path):
+    db = Database(tmp_path / "w.sqlite3")
+    await db.connect()
+    try:
+        cur = await db.conn.execute("PRAGMA table_info(chat_window)")
+        columns = {row["name"] for row in await cur.fetchall()}
+        assert {"id", "guild_id", "channel_id", "user_id", "at"} <= columns
+        assert {"speaker", "content", "tier"} <= columns
+        for speaker in ("member", "bot"):
+            await db.conn.execute(
+                "INSERT INTO chat_window(guild_id, channel_id, user_id, at, speaker, content) "
+                "VALUES (7, 11, 900, 'now', ?, 'hello')",
+                (speaker,),
+            )
+        with pytest.raises(sqlite3.IntegrityError):
+            await db.conn.execute(
+                "INSERT INTO chat_window(guild_id, channel_id, user_id, at, speaker, content) "
+                "VALUES (7, 11, 900, 'now', 'moderator', 'hello')"
+            )
+    finally:
+        await db.close()
+
+
+async def test_the_ledger_records_a_call_that_failed_as_well_as_one_that_answered(tmp_path):
+    """A failed call still spends a turn, so the fuses can only count what is written here."""
+    db = Database(tmp_path / "l.sqlite3")
+    await db.connect()
+    try:
+        cur = await db.conn.execute("PRAGMA table_info(llm_ledger)")
+        columns = {row["name"] for row in await cur.fetchall()}
+        assert {"id", "at", "guild_id", "user_id", "turn", "provider", "model"} <= columns
+        assert {"tier", "outcome", "input_tokens", "output_tokens"} <= columns
+        assert {"cache_read_tokens", "cache_write_tokens", "cost_microdollars"} <= columns
+        for outcome in ("ok", "error"):
+            await db.conn.execute(
+                "INSERT INTO llm_ledger(at, guild_id, user_id, turn, provider, model, tier, "
+                "outcome) VALUES ('now', 7, 900, 'abc', 'anthropic', 'claude-haiku-4-5', "
+                "'important', ?)",
+                (outcome,),
+            )
+        with pytest.raises(sqlite3.IntegrityError):
+            await db.conn.execute(
+                "INSERT INTO llm_ledger(at, guild_id, user_id, turn, provider, model, tier, "
+                "outcome) VALUES ('now', 7, 900, 'abc', 'anthropic', 'claude-haiku-4-5', "
+                "'important', 'maybe')"
+            )
     finally:
         await db.close()
 
