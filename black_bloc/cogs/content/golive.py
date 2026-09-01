@@ -52,6 +52,9 @@ TWITCH_OFF = (
     "go-live: Twitch enrichment is off (TWITCH_CLIENT_ID/TWITCH_CLIENT_SECRET are not set); "
     "detection runs on Discord presence alone"
 )
+POLLING_NO_CREDS = (
+    "off — no Twitch credentials; the sweep still runs and still ages sessions out"
+)
 OPTED_OUT = (
     "Done — Black Bloc will not announce your streams. Run `/golive optin` if you change "
     "your mind."
@@ -319,8 +322,7 @@ class GoLive(commands.Cog):
         if not self.bot.db.is_connected:
             return
         await self.reconcile_open_sessions()
-        if self.helix is not None:
-            self.poller.start()
+        self.poller.start()
 
     async def reconcile_open_sessions(self) -> None:
         """Close every session a stop left open, keeping the ones still genuinely live."""
@@ -646,6 +648,11 @@ class GoLive(commands.Cog):
             details={"role_id": role_id, "user_id": row["user_id"], "reason": stuck},
         )
 
+    def _polling_summary(self) -> str:
+        if self.helix is None:
+            return POLLING_NO_CREDS
+        return "running" if self.poller.is_running() else "stopped"
+
     def _mentions(self, guild_id: int) -> discord.AllowedMentions:
         ping_role_id = self.bot.store.get(guild_id, "golive_ping_role_id")
         return discord.AllowedMentions(
@@ -833,9 +840,7 @@ class GoLive(commands.Cog):
         store = self.bot.store
         totals = await counts(self.bot.db, guild.id)
         channel_id = store.get(guild.id, "golive_channel_id")
-        polling = "running" if self.poller.is_running() else (
-            "off — no Twitch credentials" if self.helix is None else "stopped"
-        )
+        polling = self._polling_summary()
         lines = [
             f"**mode** — {self._mode(guild.id)}",
             f"**stream end** — "

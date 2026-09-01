@@ -146,6 +146,9 @@ class FakeBot:
     def get_channel(self, channel_id):
         return self.guild.get_channel(channel_id)
 
+    async def wait_until_ready(self):
+        return None
+
 
 class FakeResponse:
     def __init__(self):
@@ -712,6 +715,15 @@ async def test_the_poller_is_inert_without_credentials(cog, bot, db):
     assert await open_sessions(db, GUILD) == []
 
 
+async def test_the_sweep_loop_starts_without_twitch_credentials(cog, bot, db):
+    await cog.cog_load()
+    try:
+        assert cog.helix is None
+        assert cog.poller.is_running()
+    finally:
+        await cog.cog_unload()
+
+
 async def test_optout_and_optin_commands(cog, bot, member, db):
     interaction = FakeInteraction(bot, member, bot.guild)
     await GoLive.optout.callback(cog, interaction)
@@ -830,6 +842,7 @@ async def test_golive_status_reports_the_setup(cog, bot, member, db, monkeypatch
     assert "**mode** — shadow" in interaction.sent
     assert f"<#{CHANNEL}>" in interaction.sent
     assert "no Twitch credentials" in interaction.sent
+    assert "ages sessions out" in interaction.sent
     assert "**links** — 1" in interaction.sent
 
 
