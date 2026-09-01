@@ -130,8 +130,9 @@ STATUS_INGEST_TROUBLE = "The last daily read did not finish: {why}."
 NO_CEILING = "no ceiling"
 
 PERSONALITY_KEY = "chat_personality"
-PERSONALITY_SET = "chat.personality"
-TROPE_SET = "chat.trope"
+PERSONALITY_SET = "chat.personality_mode"
+TROPE_ENABLED = "chat.trope_enabled"
+TROPE_DISABLED = "chat.trope_disabled"
 VOICE_NOW = "The voice is **{voice}** — {what}"
 VOICE_MEANS: dict[str, str] = {
     COOKOUT: "the house voice, warm and easy, with no mood on top of it.",
@@ -337,7 +338,7 @@ class Chat(commands.Cog):
         await log_action(
             self.bot,
             interaction.guild,
-            TROPE_SET,
+            TROPE_ENABLED if on else TROPE_DISABLED,
             actor=interaction.user,
             details={"mood": str(name).lower(), "enabled": bool(on)},
         )

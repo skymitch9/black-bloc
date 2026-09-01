@@ -747,7 +747,7 @@ async def test_the_voice_is_set_through_the_registry_so_the_website_sees_it_too(
 
     assert "The voice is **pool**" in interaction.sent
     assert bot.store.get(GUILD, "chat_personality") == "pool"
-    assert await rows(db, "chat.personality")
+    assert await rows(db, "chat.personality_mode")
 
 
 async def test_a_mood_is_switched_off_and_the_cached_pool_is_dropped(
@@ -764,7 +764,7 @@ async def test_a_mood_is_switched_off_and_the_cached_pool_is_dropped(
     assert not hasattr(bot, "_chat_tropes")
     cur = await db.conn.execute("SELECT enabled FROM personality_tropes WHERE name = 'flirty'")
     assert (await cur.fetchone())["enabled"] == 0
-    assert await rows(db, "chat.trope")
+    assert await rows(db, "chat.trope_disabled")
 
 
 async def test_a_mood_nobody_has_is_refused_in_words(cog, bot, member, db, monkeypatch):
@@ -775,7 +775,7 @@ async def test_a_mood_nobody_has_is_refused_in_words(cog, bot, member, db, monke
     await Chat.personality_mood.callback(cog, interaction, "grumpy", False)
 
     assert "is not one of the moods" in interaction.sent
-    assert await rows(db, "chat.trope") == []
+    assert await rows(db, "chat.trope_disabled") == []
 
 
 async def add_a_note(cog, bot, member, monkeypatch, title="Cookout hours", body="Fridays.",

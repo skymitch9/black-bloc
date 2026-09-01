@@ -303,6 +303,12 @@ const SETTING_SPECS = [
   ['chat_greeting_reaction', 'bool', false, false, 'true to answer a bare hello with a wave reaction instead of a sentence; anything longer still gets a reply'],
   ['chat_reply_in_threads', 'bool', true, true, 'true to answer @-mentions inside threads as well as channels'],
   ['chat_route_ping_staff', 'bool', false, false, 'true to drop one line in the staff channel when somebody asks the bot for a mod; only used while modmail_enabled is true'],
+  // 14b's three keys. ⚠️ 14a owns them in black_bloc/settings_store.py (phase14-design §7);
+  // the mock registers them so the Chat page's Personality and Spend sections have something
+  // real to edit, and the merge reconciles the two lists.
+  ['chat_llm_mode', 'enum', 'on', 'off', 'off, or on (Black Bloc may ask a model when its own phrases do not match). Off is the ordinary state and nothing breaks without a key', ['off', 'on']],
+  ['chat_personality', 'text', 'cookout', 'cookout', 'the voice Black Bloc talks in: cookout, pool (one of the pool per conversation), or the name of one voice from the pool'],
+  ['chat_monthly_cap_usd', 'int', 20, 20, 'what Black Bloc may spend on model answers in a month; at the cap it answers from its own phrases until the 1st', null, 500],
   ...LOG_LEVEL_FEATURES.map(([feature, label, command]) => [
     `${feature}_log_level`,
     'enum',
@@ -608,8 +614,22 @@ function seedState() {
   // row, so GET /api/requests/mine is never empty and Approve/Decline always have something to
   // act on; {member_request_id} = 30 is the member session's own pending row, the only kind
   // Withdraw takes. `asks` and not `requests`: state.requests is the ROLE-request list.
+  // 14b. Section 1 is a staff note on purpose — the contract's PUT and DELETE entries point at
+  // {chat_section_id} — and section 3 is the one Black Bloc writes for itself, which every
+  // write refuses in words.
+  knowledge: [
+    { id: 1, title: 'Cookout hours', body: 'The grill goes on at six on a Saturday and the last plate goes out about nine. Nobody minds if you turn up late.', source: 'staff', tag: 'cookout', updated_at: minutesAgo(300), updated_by: STAFF.id },
+    { id: 2, title: 'How to get a role', body: 'Pick one from the role menus in #roles. A few of them are asked for rather than taken, and staff answer those on the site.', source: 'staff', tag: 'roles', updated_at: minutesAgo(4000), updated_by: MEMBERS[1].id },
+    { id: 3, title: 'Channels', body: 'general — the front room. cookout-planning — who is bringing what. free-nitro-here — a trap, do not post in it.', source: 'server', tag: null, updated_at: minutesAgo(120), updated_by: null },
+  ],
+  tropes: seedTropes(),
+  ledger: seedLedger(),
+  // The mock's stand-in for the two keys config.py will carry: Anthropic is set, Groq is not,
+  // so the Spend section shows a live tier and a keyless one side by side.
+  llmKeys: { ANTHROPIC_API_KEY: true, GROQ_API_KEY: false },
   asks: seedRequests(),
   askComments: seedRequestComments(),
+  nextKnowledge: 4,
   nextAction: 47,
   nextCase: 10,
   nextMessage: 40,
@@ -620,6 +640,74 @@ function seedState() {
   nextAskComment: 16,
   actions: seedActions(),
   };
+}
+
+// Mirrors black_bloc/api/tools/chat_store.py:POOL_TROPES — the eleven ported from GABI's
+// personality.ts. `noir` ships switched off so the page has an off row to draw.
+const TROPE_POOL = [
+  ['peppy', 'peppy', 'You are BRIGHT and fast today — genuinely glad to have been asked. Short exclamations, visible delight in the question, quick to celebrate somebody’s good news.'],
+  ['dramatic', 'dramatic', 'You are THEATRICAL today — grand pronouncements about small things, a flair for the reveal. The drama is in the framing; what you actually tell somebody stays plain.'],
+  ['mischievous', 'mischievous', 'You are PLAYFUL today — light teasing, a raised eyebrow, enjoying yourself. Never mean, and never holding something back to be coy about it.'],
+  ['flirty', 'flirty', 'You are CHARMING today, with a playful wink — light compliments, affectionate teasing. CHARM, NOT HEAT, and you never get flustered into dropping the answer.'],
+  ['warm', 'warm', 'You are WARM today — familiar, unhurried, glad to see them. Kind without being saccharine.'],
+  ['cozy', 'cosy', 'You are COSY today — the voice of a folding chair in the shade and a full plate. Calm rather than sleepy.'],
+  ['shy', 'shy', 'You are a little SHY today — soft, hedging, apologetic about taking up room. BUT YOU STILL GIVE THE WHOLE ANSWER, first time.'],
+  ['scholar', 'scholarly', 'You are SCHOLARLY today — precise, fond of getting a detail exactly right. Pedantic about accuracy, never about the person.'],
+  ['noir', 'noir', 'You are HARD-BOILED today — clipped sentences, a little world-weary, everything faintly a metaphor about rain and long odds.'],
+  ['deadpan', 'deadpan', 'You are DEADPAN today — flat, economical, dry. The joke is the flatness. Few words, all of them load-bearing.'],
+  ['tsundere', 'tsundere', 'You are BRUSQUE today, and helping anyway — mildly put upon. THE GRUMBLING IS ALL SURFACE: you still answer fully and promptly.'],
+];
+
+function seedTropes() {
+  return TROPE_POOL.map(([name, label, voice], sort) => ({
+    name,
+    label,
+    voice,
+    enabled: name !== 'noir',
+    sort,
+    updated_at: name === 'noir' ? minutesAgo(700) : minutesAgo(9000),
+    updated_by: name === 'noir' ? STAFF.id : null,
+  }));
+}
+
+// ⚠️ The costs are the REAL arithmetic, not a round number picked to fill a bar: Haiku 4.5 is
+// $1 in / $5 out per MTok, so a grounded turn is about a third of a cent and a busy month of
+// chat is pennies against a $20 cap. The Spend section has to read honestly at 1% as well as
+// at 99%, which is exactly what this fixture makes it prove.
+function seedLedger() {
+  // ⚠️ Spread across THIS month rather than across the last 25 days, so the fixture is the
+  // same size on the 1st as on the 28th — a month-to-date sum seeded with last month's turns
+  // reads as zero on the day the page most needs checking.
+  const at = new Date();
+  const monthStart = Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), 1);
+  const span = Math.max(90, Math.floor((at.getTime() - monthStart) / 60000) - 20);
+  const rows = [];
+  const turns = 112;
+  for (let n = 0; n < turns; n += 1) {
+    const groq = n % 3 === 0;
+    const inputs = groq ? 380 + (n % 7) * 40 : 1700 + (n % 9) * 220;
+    const outputs = groq ? 80 + (n % 7) * 10 : 240 + (n % 9) * 30;
+    rows.push({
+      at: minutesAgo(Math.floor(span * (n / turns)) + 6),
+      provider: groq ? 'groq' : 'anthropic',
+      model: groq ? 'llama-3.3-70b-versatile' : 'claude-haiku-4-5',
+      input_tokens: inputs,
+      output_tokens: outputs,
+      cost_microdollars: groq ? 0 : inputs + outputs * 5,
+    });
+  }
+  // Three turns from before the 1st, so the month sum has something to leave out.
+  for (let n = 0; n < 3; n += 1) {
+    rows.push({
+      at: minutesAgo(Math.floor((at.getTime() - monthStart) / 60000) + 2000 + n * 300),
+      provider: 'anthropic',
+      model: 'claude-haiku-4-5',
+      input_tokens: 2600,
+      output_tokens: 400,
+      cost_microdollars: 4600,
+    });
+  }
+  return rows;
 }
 
 function seedActions() {
@@ -2734,7 +2822,8 @@ const CHAT_TOKENS = {
   need_a_mod: ['{roles}'],
 };
 const CHAT_SETTING_KEYS = ['chat_mode', 'chat_cooldown_seconds', 'chat_ignore_channels',
-  'chat_greeting_reaction', 'chat_reply_in_threads', 'chat_route_ping_staff'];
+  'chat_greeting_reaction', 'chat_reply_in_threads', 'chat_route_ping_staff',
+  'chat_llm_mode', 'chat_personality', 'chat_monthly_cap_usd'];
 const CHAT_UNKNOWN_LINE = 'Not sure I follow, {name} — try `/help` for what I can do.';
 const CHAT_NO_SUCH_INTENT = 'Black Bloc has no chat intent **#%s** any more, so nothing was done. The Chat page lists the ones it has.';
 const CHAT_NO_SUCH_LINE = 'Black Bloc has no chat line **#%s** any more, so nothing was done. Somebody may have removed it while this page was open.';
@@ -3023,6 +3112,305 @@ route('POST', '/api/chat/try', async (context) => {
   const tokens = chatTokens(row, filled);
   const said = lines.length ? lines[0].text : CHAT_UNKNOWN_LINE;
   return { intent: row.name, kind: row.kind, slot, line: chatRender(said, tokens) };
+});
+
+// Chat step 3 (14b). Mirrors black_bloc/api/tools/chat.py: ids as strings, refusals in words,
+// a server-written note shown but locked, and liveness measured rather than assumed.
+const KNOWLEDGE_TITLE_LIMIT = 80;
+const KNOWLEDGE_BODY_LIMIT = 4000;
+const KNOWLEDGE_TAG_LIMIT = 40;
+const GROUNDING_SECTIONS = 3;
+const GROUNDING_CHARACTERS = 6144;
+const MICRODOLLARS = 1000000;
+
+const KNOWLEDGE_STAFF_WROTE_IT = 'written here by staff';
+const KNOWLEDGE_SERVER_WROTE_IT = 'written by Black Bloc from the server itself, every day';
+const KNOWLEDGE_LOCKED = 'is one of the notes Black Bloc writes for itself out of the server — the channel list, the roles, what is coming up — so it cannot be changed by hand. It is written again from scratch every day, and an edit here would be gone by morning. Write your own note beside it and Black Bloc reads both.';
+const KNOWLEDGE_NO_SUCH = 'Black Bloc has no note **#%s** any more, so nothing was done. Somebody may have removed it while this page was open.';
+const KNOWLEDGE_NEEDS_TITLE = 'A note needs a heading, so nothing was saved. That is the line Black Bloc matches a question against — something like `Cookout hours`.';
+const KNOWLEDGE_NEEDS_BODY = 'A note needs some words under the heading, so nothing was saved. Write what you would tell somebody who asked.';
+const KNOWLEDGE_BUDGET_WORD = `At most ${GROUNDING_SECTIONS} notes ride an answer, and a note that will not fit is left out rather than cut short.`;
+
+const PERSONA_COOKOUT_WORD = 'Everybody gets the cookout voice — warm, playful, the one the rest of the site is written in.';
+const PERSONA_TROPE_WORD = 'Black Bloc is **%s** with everybody, and it does not drift.';
+const PERSONA_NO_SUCH = '**%s** is not one of the voices Black Bloc knows, so nothing was changed. The list on this page is all of them.';
+const PERSONA_NEEDS_A_NAME = 'That arrived with no voice in it, so nothing was changed. Pick the cookout voice, the pool, or one of the names on the list.';
+const PERSONA_IS_OFF = '**%s** is switched off in the pool, so Black Bloc cannot be it. Turn it back on first, or pick another one.';
+const PERSONA_LAST_ONE = '**%s** is the last voice left on and the pool is what Black Bloc is using, so it was left alone. Turn another one on first, or move the voice to the cookout one.';
+const PERSONA_IN_USE = 'Black Bloc is set to be **%s** and nothing else, so that voice cannot be switched off. Point it at the cookout voice or the pool first.';
+
+const TIER_INTENTS_WORD = 'Always on. The phrases on this page answer first, they cost nothing, and they are checked before any model is asked.';
+const TIER_MODE_OFF = 'Not in use: `chat_llm_mode` is off, so Black Bloc answers from the phrases on this page and nothing else.';
+const TIER_NO_KEY = 'Black Bloc has not been given a **%s** yet, so this tier does not exist and the answer falls through to the next one. A Lead sets it on the host.';
+const TIER_CAPPED = 'Closed until the 1st: this month’s %s is spent. Black Bloc is answering from the phrases on this page in the meantime.';
+
+function knowledgeRow(row) {
+  const own = row.source === 'staff';
+  return {
+    id: String(row.id),
+    title: row.title,
+    body: row.body,
+    tag: row.tag,
+    source: row.source,
+    source_word: own ? KNOWLEDGE_STAFF_WROTE_IT : KNOWLEDGE_SERVER_WROTE_IT,
+    editable: own,
+    locked_why: own ? null : `**${row.title}** ${KNOWLEDGE_LOCKED}`,
+    characters: row.body.length,
+    updated_at: row.updated_at,
+    updated_by: row.updated_by === null ? null : { id: String(row.updated_by), name: memberName(row.updated_by) || String(row.updated_by) },
+  };
+}
+
+function wantedSection(id) {
+  const found = state.knowledge.find((row) => String(row.id) === String(id));
+  if (!found) throw new Refused(404, 'no_such_section', KNOWLEDGE_NO_SUCH.replace('%s', id));
+  return found;
+}
+
+function staffSectionOnly(row) {
+  if (row.source !== 'staff') {
+    throw new Refused(409, 'written_by_the_bot', `**${row.title}** ${KNOWLEDGE_LOCKED}`);
+  }
+}
+
+function knowledgeTitle(given) {
+  const said = String(given || '').split(/\s+/).filter(Boolean).join(' ');
+  if (!said) throw new Refused(400, 'chat_refused', KNOWLEDGE_NEEDS_TITLE);
+  if (said.length > KNOWLEDGE_TITLE_LIMIT) throw new Refused(400, 'chat_refused', `A note’s heading has to be ${KNOWLEDGE_TITLE_LIMIT} characters or fewer, so nothing was saved. Shorten it and send it again.`);
+  return said;
+}
+
+function knowledgeBody(given) {
+  const said = String(given || '').trim();
+  if (!said) throw new Refused(400, 'chat_refused', KNOWLEDGE_NEEDS_BODY);
+  if (said.length > KNOWLEDGE_BODY_LIMIT) throw new Refused(400, 'chat_refused', `A note has to be ${KNOWLEDGE_BODY_LIMIT} characters or fewer, so nothing was saved. Anything longer will not fit in an answer — split it into two notes with headings of their own.`);
+  return said;
+}
+
+function knowledgeTag(given) {
+  const said = String(given || '').split(/\s+/).filter(Boolean).join(' ');
+  if (!said) return null;
+  if (said.length > KNOWLEDGE_TAG_LIMIT) throw new Refused(400, 'chat_refused', `A tag has to be ${KNOWLEDGE_TAG_LIMIT} characters or fewer, so nothing was saved.`);
+  return said;
+}
+
+function knowledgePayload() {
+  const rows = [...state.knowledge]
+    .sort((a, b) => a.source.localeCompare(b.source) || a.title.localeCompare(b.title))
+    .map(knowledgeRow);
+  return {
+    sections: rows,
+    counts: {
+      total: rows.length,
+      staff: rows.filter((row) => row.source === 'staff').length,
+      server: rows.filter((row) => row.source === 'server').length,
+    },
+    budget: { sections: GROUNDING_SECTIONS, characters: GROUNDING_CHARACTERS, word: KNOWLEDGE_BUDGET_WORD },
+    notes: [],
+  };
+}
+
+route('GET', '/api/chat/knowledge', (context) => {
+  requireStaff(context.session);
+  return knowledgePayload();
+});
+
+route('POST', '/api/chat/knowledge', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const title = knowledgeTitle(body.title);
+  const words = knowledgeBody(body.body);
+  const tag = knowledgeTag(body.tag);
+  if (state.knowledge.some((row) => row.source === 'staff' && row.title === title)) {
+    throw new Refused(409, 'title_taken', `This server already has a note called **${title}**, so nothing was saved. Edit that one, or give this one a heading of its own.`);
+  }
+  const made = { id: state.nextKnowledge++, title, body: words, source: 'staff', tag, updated_at: now(), updated_by: STAFF.id };
+  state.knowledge.push(made);
+  logAction('web.chat.knowledge_added', { details: { title, via: 'website' } });
+  return { section: knowledgeRow(made), message: `**${title}** is in. Black Bloc quotes it when somebody asks something it matches.` };
+});
+
+route('PUT', '/api/chat/knowledge/:id', async (context) => {
+  requireStaff(context.session);
+  const row = wantedSection(context.params.id);
+  staffSectionOnly(row);
+  const body = await context.body();
+  const changed = [];
+  if (body.title !== undefined && body.title !== null) {
+    row.title = knowledgeTitle(body.title);
+    changed.push('title');
+  }
+  if (body.body !== undefined && body.body !== null) {
+    row.body = knowledgeBody(body.body);
+    changed.push('body');
+  }
+  if ('tag' in body) {
+    row.tag = knowledgeTag(body.tag);
+    changed.push('tag');
+  }
+  row.updated_at = now();
+  row.updated_by = STAFF.id;
+  logAction('web.chat.knowledge_edited', { details: { section_id: row.id, changed: changed.sort(), via: 'website' } });
+  return { section: knowledgeRow(row), message: `**${row.title}** is saved.` };
+});
+
+route('DELETE', '/api/chat/knowledge/:id', (context) => {
+  requireStaff(context.session);
+  const row = wantedSection(context.params.id);
+  staffSectionOnly(row);
+  state.knowledge = state.knowledge.filter((one) => one.id !== row.id);
+  logAction('web.chat.knowledge_removed', { details: { title: row.title, via: 'website' } });
+  return { removed: true, section_id: String(row.id), message: `**${row.title}** is gone. Black Bloc will not quote it again.` };
+});
+
+function personaMode() {
+  return String(state.settings.get('chat_personality') || 'cookout');
+}
+
+function personaKind(mode) {
+  if (mode === 'cookout') return 'cookout';
+  return mode === 'pool' ? 'pool' : 'trope';
+}
+
+function tropeRow(row, mode) {
+  return {
+    name: row.name,
+    label: row.label,
+    voice: row.voice,
+    enabled: row.enabled,
+    in_use: mode === row.name,
+    updated_at: row.updated_at,
+    updated_by: row.updated_by === null ? null : { id: String(row.updated_by), name: memberName(row.updated_by) || String(row.updated_by) },
+  };
+}
+
+function personaWord(mode) {
+  const kind = personaKind(mode);
+  if (kind === 'cookout') return PERSONA_COOKOUT_WORD;
+  if (kind === 'pool') {
+    const on = state.tropes.filter((row) => row.enabled).length;
+    return `Each conversation gets one of the ${on} voices left on, and it moves a step at a time as people talk.`;
+  }
+  const found = state.tropes.find((row) => row.name === mode);
+  return PERSONA_TROPE_WORD.replace('%s', found ? found.label : mode);
+}
+
+function personalityPayload() {
+  const mode = personaMode();
+  return {
+    mode,
+    mode_kind: personaKind(mode),
+    mode_word: personaWord(mode),
+    tropes: state.tropes.map((row) => tropeRow(row, mode)),
+    counts: { total: state.tropes.length, enabled: state.tropes.filter((row) => row.enabled).length },
+    ported_from: 'catalog-platform/apps/discord-worker/src/personality.ts (GABI, 2026-08-18)',
+    notes: [],
+  };
+}
+
+route('GET', '/api/chat/personality', (context) => {
+  requireStaff(context.session);
+  return personalityPayload();
+});
+
+route('PUT', '/api/chat/personality', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const wanted = String(body.mode || '').trim().toLowerCase();
+  if (!wanted) throw new Refused(400, 'chat_refused', PERSONA_NEEDS_A_NAME);
+  let said = 'Black Bloc talks in the cookout voice from now on.';
+  if (wanted !== 'cookout' && wanted !== 'pool') {
+    const found = state.tropes.find((row) => row.name === wanted);
+    if (!found) throw new Refused(404, 'no_such_trope', PERSONA_NO_SUCH.replace('%s', wanted));
+    if (!found.enabled) throw new Refused(409, 'voice_is_off', PERSONA_IS_OFF.replace('%s', found.label));
+    said = `Black Bloc is **${found.label}** with everybody from now on.`;
+  } else if (wanted === 'pool') {
+    said = 'Black Bloc picks a voice out of the pool for each conversation from now on, and moves a step at a time as people talk.';
+  }
+  state.settings.set('chat_personality', wanted);
+  logAction('web.chat.personality_mode', { details: { mode: wanted, via: 'website' } });
+  const found = personalityPayload();
+  return { mode: found.mode, mode_kind: found.mode_kind, mode_word: found.mode_word, message: said };
+});
+
+route('PUT', '/api/chat/personality/:name', async (context) => {
+  requireStaff(context.session);
+  const name = String(context.params.name || '').trim().toLowerCase();
+  const row = state.tropes.find((one) => one.name === name);
+  if (!row) throw new Refused(404, 'no_such_trope', PERSONA_NO_SUCH.replace('%s', name));
+  const body = await context.body();
+  const wanted = body.enabled !== false;
+  const mode = personaMode();
+  if (!wanted && mode === row.name) {
+    throw new Refused(409, 'voice_in_use', PERSONA_IN_USE.replace('%s', row.label));
+  }
+  const on = state.tropes.filter((one) => one.enabled);
+  if (!wanted && mode === 'pool' && on.length === 1 && on[0].name === row.name) {
+    throw new Refused(409, 'last_voice', PERSONA_LAST_ONE.replace('%s', row.label));
+  }
+  row.enabled = wanted;
+  row.updated_at = now();
+  row.updated_by = STAFF.id;
+  logAction(wanted ? 'web.chat.trope_enabled' : 'web.chat.trope_disabled', { details: { trope: row.name, via: 'website' } });
+  return {
+    trope: tropeRow(row, mode),
+    message: wanted ? `**${row.label}** is back in the pool.` : `**${row.label}** is out of the pool. Black Bloc will not pick it again.`,
+  };
+});
+
+function money(value) {
+  return `$${value.toFixed(2)}`;
+}
+
+function chatTier(name, label, key, liveWord, modeOn, capSaid) {
+  if (!modeOn) return { name, label, live: false, word: TIER_MODE_OFF };
+  if (!state.llmKeys[key]) return { name, label, live: false, word: TIER_NO_KEY.replace('%s', key) };
+  if (capSaid) return { name, label, live: false, word: TIER_CAPPED.replace('%s', capSaid) };
+  return { name, label, live: true, word: liveWord };
+}
+
+route('GET', '/api/chat/spend', (context) => {
+  requireStaff(context.session);
+  const at = new Date();
+  const monthFrom = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), 1)).toISOString();
+  const dayFrom = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate())).toISOString();
+  const spent = state.ledger.filter((row) => row.at >= monthFrom)
+    .reduce((total, row) => total + row.cost_microdollars, 0);
+  const turns = state.ledger.filter((row) => row.at >= dayFrom).length;
+  const capUsd = Number(state.settings.get('chat_monthly_cap_usd') ?? 20);
+  const daily = 200;
+  const modeOn = String(state.settings.get('chat_llm_mode') || 'off') === 'on';
+  const spentUsd = Math.round((spent / MICRODOLLARS) * 100) / 100;
+  const leftUsd = Math.round(Math.max(capUsd - spentUsd, 0) * 100) / 100;
+  const capped = capUsd > 0 && spentUsd >= capUsd;
+  const capSaid = money(capUsd);
+  const word = capped
+    ? `${money(spentUsd)} of the ${capSaid} Black Bloc may spend this month, so the two model tiers are shut until the 1st.`
+    : `${money(spentUsd)} of the ${capSaid} Black Bloc may spend this month, so ${money(leftUsd)} is left.`;
+  const latest = state.ledger.map((row) => row.at).sort();
+  return {
+    month: {
+      spent_usd: spentUsd,
+      cap_usd: capUsd,
+      left_usd: leftUsd,
+      share: capUsd > 0 ? Math.round((spentUsd / capUsd) * 10000) / 10000 : 0,
+      word,
+    },
+    today: {
+      turns,
+      limit: daily,
+      word: `${turns} answers came from a model today, out of the ${daily} a day Black Bloc gives.`,
+    },
+    tiers: [
+      { name: 'intents', label: 'Phrases', live: true, word: TIER_INTENTS_WORD },
+      chatTier('important', 'Claude Haiku', 'ANTHROPIC_API_KEY', 'Live. Grounded answers and longer questions go here.', modeOn, capped ? capSaid : null),
+      chatTier('simple', 'Groq Llama', 'GROQ_API_KEY', 'Live. Greetings and one-liners that slipped past the phrases go here.', modeOn, capped ? capSaid : null),
+    ],
+    capped,
+    cap_key: 'chat_monthly_cap_usd',
+    last_turn_at: latest.length ? latest[latest.length - 1] : null,
+    notes: [],
+  };
 });
 
 // Requests (13a). The helpers are ask* rather than request* because requestRow above is

@@ -35,6 +35,9 @@ const IDS = {
   poll_recurrence_id: '4',
   chat_intent_id: '1',
   chat_line_id: '1',
+  // A STAFF-written knowledge note. The mock's third section is the one Black Bloc writes for
+  // itself, and every write on that one refuses in words — see the contract's own note.
+  chat_section_id: '1',
   // request_id above is a ROLE request; a feature request is a different table and gets its
   // own pair: 25 is the staff session's own pending row, 30 is somebody else's.
   feature_request_id: '25',
@@ -286,6 +289,14 @@ async function checkActionKinds() {
   await send('PUT', `/api/chat/lines/${IDS.chat_line_id}`, { text: 'An edited contract line.' });
   await send('DELETE', `/api/chat/lines/${IDS.chat_line_id}`, undefined);
   await send('DELETE', `/api/chat/intents/${IDS.chat_intent_id}`, undefined);
+  // The six web.chat.* kinds 14b adds, each left by the write that spells it. The trope pair is
+  // two kinds off one route, the way tempvoice's lock/unlock is.
+  await post('/api/chat/knowledge', { title: 'Contract note', body: 'Written on the contract run.' });
+  await send('PUT', `/api/chat/knowledge/${IDS.chat_section_id}`, { body: 'Edited on the contract run.' });
+  await send('DELETE', `/api/chat/knowledge/${IDS.chat_section_id}`, undefined);
+  await send('PUT', '/api/chat/personality', { mode: 'pool' });
+  await send('PUT', '/api/chat/personality/tsundere', { enabled: false });
+  await send('PUT', '/api/chat/personality/tsundere', { enabled: true });
   // The six web.request.* kinds. Withdraw is the member's own, so it is the one call here
   // that goes in as somebody who is not staff.
   await post('/api/requests', { what: 'contract check', why: 'so web.request.filed is left' });

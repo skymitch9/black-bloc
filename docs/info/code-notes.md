@@ -4176,3 +4176,61 @@ dropdown". There are SIX** — `discord`, `classic`, `apple`, `cyberpunk`, `retr
   exercised by tests only.
 - **No dashboard exists for any of this** — the Knowledge, Personality and Spend
   sections are 14b, and `/api/chat` grew no routes here.
+## chat 3 — the dashboard (14b) — the Chat page's knowledge, personality and spend (`docs/info/phase14-design.md` §§3–5, §7)
+
+> Built in parallel with 14a against the design's shapes. ⚠️ **Everything in
+> `black_bloc/api/tools/chat_store.py` is a STAND-IN** whose canonical home is
+> 14a (`storage/db.py` schema 20 plus its own modules); it exists so the routes,
+> the page and the mock could be built and verified before 14a landed, and it is
+> expected to be DELETED at the merge. The route shapes are the part meant to
+> survive.
+
+### `black_bloc/api/tools/chat_store.py` — the stand-in store
+
+| Key | Note |
+|---|---|
+| ⚠️ `chat_store.py:40 SCHEMA` | The four schema-20 tables, created with `CREATE TABLE IF NOT EXISTS` from `ensure_tables` (`:185`) at the top of every route rather than in `storage/db.py`. That is what keeps 14b out of 14a's schema file: the merge deletes this constant and the tables arrive at `SCHEMA_VERSION = 20` instead. ⚠️ Two deliberate deviations from the design's abbreviated column lists: `knowledge_sections` and `llm_ledger` both carry a **`guild_id`**, because every other table in this bot does and every route filters on it. |
+| ⚠️ `chat_store.py:51` | `UNIQUE (guild_id, source, title)` — **on the source as well as the title**, so the daily server-ingest loop and a staffer may both hold a note called `Channels` without either one stopping the other from writing. One writer per row is the design's rule (§3); a bare `UNIQUE(guild_id, title)` would have made the loop's write fail the day somebody wrote a note with a heading it uses. |
+| `chat_store.py:90 POOL_SOURCE` | The provenance header the design asks for, as DATA rather than as a comment, so `GET /api/chat/personality` can hand it to the page (`ported_from`). The eleven tropes at `:92` are GABI's roster in shape and order, with the book-world wording turned into cookout wording wherever it named books; the labels (`cozy` → **cosy**) are hers. |
+| `chat_store.py:267 seed_tropes` | `INSERT OR IGNORE`, so it is idempotent and **never overwrites a row a staffer has switched off**. It returns how many it wrote, which is what the test asserts goes 11 then 0. |
+| ⚠️ `chat_store.py:30 LLM_MODE_DEFAULT` | The fallback the spend route uses while `chat_llm_mode` is not in the registry (14a adds the key). It is a module constant and not a literal precisely so the tests can move it — every tier-liveness branch is otherwise unreachable in 14b's tree, and an untestable branch is one nobody has run. |
+| `chat_store.py:339` | Month-to-date and turns-today are SQL aggregates over `llm_ledger`, not counters kept anywhere — a counter is a second home for a number the ledger already holds. `COALESCE(…, 0)` so an empty ledger reads as zero rather than as `None`. |
+
+### `black_bloc/api/tools/chat.py` — the routes 14b adds
+
+| Key | Note |
+|---|---|
+| ⚠️ `chat.py:88 SERVER_ROW_LOCKED` | A `source='server'` row is **shown, and refused in words** — it is not hidden and it is not silently read-only. The sentence rides the row itself (`locked_why`, `:241`) as well as the 409, so the page prints the reason beside the locked note instead of inventing its own wording. One sentence, one home. |
+| `chat.py:241 section_row` | `editable` is `source == 'staff'`, derived once here and read by both the page and the guard (`_staff_row_only`, `:582`). `characters` is the note's length, because the grounding budget refuses a section rather than trimming it (design §3) and a staffer needs to see which note is the fat one. |
+| ⚠️ `chat.py:289 setting_or` | Reads a registry key **only when the registry has it**, and falls back otherwise. `chat_llm_mode`, `chat_monthly_cap_usd` and `chat_daily_turns` are 14a's keys (design §7 puts settings keys in that slice), so in 14b's tree every read falls back to the design's own defaults — $20, 200 turns, mode off. ⚠️ At the merge those fallbacks go dead and this helper should collapse to `bot.store.get`. |
+| ⚠️ `chat.py:805 _tier` | Liveness is **measured, in this order: the mode, then the key, then the cap** — and each failure says which one it was, because "not answering" has four different fixes. It never calls a tier live on the strength of the mode alone. Checklist 9 and 10: a tier that is down shows as down, and says why in words rather than as a bare `false`. |
+| `chat.py:767` | Turning a trope off is refused when it is the one voice in use (`TROPE_IN_USE`) and when it is the last one on while the mode is `pool` (`LAST_TROPE_ON`) — the two ways the switch could leave Black Bloc with no voice at all. Both are 409 with a sentence naming the way out. |
+| `chat.py:729` | Setting the voice to a trope that is switched off is refused rather than quietly switching it back on: a write that does two things is a write nobody can predict. |
+| ⚠️ `chat.py:703 _personality` | `GET /api/chat/personality` **seeds the pool on a read**, exactly as `GET /api/chat/intents` does (`:156`) and for the same reason: a blank personality list is indistinguishable from a broken one. Idempotent, once per guild ever. |
+| `chat.py` every new write | Carries `"via": VIA_WEBSITE` in `details`, which `logkinds.via_of` would have derived from the `web.` head anyway — it is written out so a later merge that moves one of these writes into a cog cannot silently start claiming Discord set it. `actionlog.SUMMARY_SKIPS` keeps it out of the summary line. |
+| ⚠️ the six new kinds | `chat.knowledge_added` / `_edited` / `_removed`, `chat.personality_mode`, `chat.trope_enabled` / `_disabled`, all ROUTINE in `logkinds.py`. ⚠️ `chat.knowledge_removed` ends in `.removed`, which is an `IMPORTANT_SUFFIXES` entry — `is_important` checks `ROUTINE` FIRST so the explicit classification wins, but the pair is worth knowing before anybody reorders that function. They are also listed in `tests/test_logkinds.py KNOWN_DYNAMIC` under `writes.py::kind`, the table that stops a new kind going unclassified. |
+
+### `site/public/assets/page-chat.js` — the three new sections
+
+| Key | Note |
+|---|---|
+| ⚠️ `page-chat.js:542 said()` | **Every sentence the API wrote is rendered through `boldParts`, never as `text`.** Caught by rendering rather than by reading: the first pass printed `**Channels** is one of the notes…` with the asterisks showing. `notice()` already does this for outcome sentences; `locked_why`, `mode_word` and each tier's `word` are the three places a *stored* sentence lands on this page. |
+| ⚠️ `page-chat.js:561 noteCard` | A `source='server'` note is **drawn in full with disabled boxes and NO buttons**, and its own `locked_why` sentence sits where Save/Remove would be. Hiding it would have been the easy version and the wrong one — the notes Black Bloc writes for itself are most of what it knows, and staff who cannot see them cannot tell whether it knows the wrong thing. |
+| `page-chat.js:561` | Save refuses **in the page** when nothing differs (`NOTE_UNCHANGED`) rather than sending a no-op PUT that would leave a `web.chat.knowledge_edited` line saying nothing changed. Same instinct as a line's disabled Save in the Intents section (`:162`), reached differently because a note has three fields. |
+| `page-chat.js:712 knowledgeSection` | Empty state is a sentence **plus an action** (`Write the first note`) that focuses the add form, which stays on the page either way — an add form that only appears when the list is empty is a form nobody finds twice. |
+| ⚠️ `page-chat.js:802` | **The segment's third choice exists only while one voice is pinned.** A permanent "one voice" option would have needed a name before there was one to name; building the choice list from `mode_kind` means the control always shows what is true, `Be only this one` on a row is the way onto it, and picking either of the other two is the way off. |
+| ⚠️ `page-chat.js:751 tropeCard` | A voice that is out of the pool gets **no `Be only this one` button at all**, because the API refuses that combination (`TROPE_IS_OFF`) — a control that exists to be refused is the thing the process rule about bare statuses is really about. The one refusal the page CAN reach is taking out the voice in use, and that one is worth reaching: it is the shape of mistake somebody makes on purpose. |
+| ⚠️ `page-chat.js:33 SETTING_KEYS` | `chat_llm_mode` and `chat_monthly_cap_usd` were added; **`chat_personality` was deliberately NOT**, because the Personality segment already writes it and two controls on one field is the duplicate-surface trap. Its other door is `/settings set-value` on the bot, per checklist 33. |
+| `page-chat.js:865 spendSection` | The section's count is **how many tiers are answering**, not how much was spent — a rail badge is a glanceable state, and "2" meaning two live tiers is the thing somebody wants from the rail. The cap is not edited here: one line says it is a setting and the action opens the Settings section below. |
+| ⚠️ `site.css:1776 .spend-meter` | Measured against the real fixture: a month of chat at Haiku 4.5's $1/$5 per MTok is **pennies against a $20 cap**, so the meter sits near zero most of the time and the FIGURE and the sentence carry the meaning. It is 8px, it has a `min-width: 2px` fill so 1.7% is still visible, and it turns `--et-danger` at the cap. Verified rendered at 1.7%, at 34% and over the cap. |
+
+### `site/mock/` — the contract and the stand-in API
+
+| Key | Note |
+|---|---|
+| ⚠️ `server.mjs SETTING_SPECS` | The mock registers `chat_llm_mode`, `chat_personality` and `chat_monthly_cap_usd`; **the real `settings_store.py` does not, because design §7 puts settings keys in 14a's slice.** So the mock is deliberately AHEAD of the router here — it is what let the Personality segment and the cap row be exercised before 14a landed, and the merge is expected to delete the difference rather than keep two lists. The page survives either way: `SETTING_KEYS` filters out a key the payload does not carry. |
+| ⚠️ `server.mjs personaMode()` | The mock keeps the voice in the **settings map** and nowhere else, which is the shape the merged bot should have. `black_bloc/api/tools/chat_store.py` keeps it in a `chat_persona` table instead, only because the registry key does not exist yet — **the mock is the one to copy, not the stand-in.** |
+| ⚠️ `server.mjs seedLedger` | Spread across THIS month rather than the last 25 days, and the costs are the real $1/$5-per-MTok arithmetic rather than a round number chosen to fill a bar. Both were found by rendering: a fixture seeded 25 days back read **$0.01 on the 1st**, which is exactly the day the page most needs checking, and pretty round numbers would have hidden that a real month of chat is cents. |
+| `server.mjs state.llmKeys` | The mock's stand-in for the two `config.py` keys: Anthropic set, Groq not, so the Spend section always renders a live tier and a keyless one side by side rather than three of the same thing. |
+| ⚠️ `contract.json {chat_section_id}` | Points at a **staff-written** note in both halves' fixtures, because a server-written one refuses PUT and DELETE and this table only checks the 200 path. The server-written row still exists in both fixtures so `GET /api/chat/knowledge` proves both sources. The trope entry names `noir` outright — the pool is fixed ported data, not rows whose ids move. |
+| `check.mjs checkActionKinds` | The six new `web.chat.*` kinds are each left by the write that spells it, and `trope_enabled`/`trope_disabled` are two kinds off one route the way tempvoice's lock/unlock are. 17 pages, **106 routes** (was 98). |
