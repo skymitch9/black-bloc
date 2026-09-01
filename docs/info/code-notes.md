@@ -4283,3 +4283,59 @@ The table below is the map, and the reason each choice went the way it did.
   taken out, and the spend meter at 1.7% with two of three tiers answering.
   **Not exercised:** editing or removing a note, the search boxes, the trope
   search, and the capped state of the meter.
+
+# `who_has` — the seventh data intent (owner ask, 2026-09-01)
+
+> *"the bot cant currently find roles, I want the bot to know who has what role
+> so it can help escalate. so I can say hey @black_bloc tell me who's a lead or
+> a mentor or something"*
+
+| Key | Note |
+|---|---|
+| ⚠️ `chat.py:290` | **`who_has` sits directly BELOW `who_is_live` in `BUILTIN_ORDER`, and that placement is the whole safety argument.** Its triggers are the most generic in the table — "who is the", "who has" — so anything asked earlier has to be asked first: `who_is_live` owns "who is streaming", `love` owns "best bot" ("who is the best bot"), `whats_next` owns "the next event", `birthdays` owns "whose birthday". Pinned by *asking who does not swallow the questions that came first*. |
+| ⚠️ `chat.py:179` | **There is deliberately no bare `who is` / `who are` trigger.** `what_can_you_do` owns "who are you", and it sits below `who_has`; a bare "who are" would have swallowed it and answered "there is no role here called **you**". Every trigger therefore carries its article — "who are the", "who are our" — and the redundant-looking longer forms ("who has the", "who has the role") exist for the EXTRACTION at `chat_data.py:218`, not for matching: the longest matching phrase is what the role name is read from the end of. |
+| `chat.py:276` | `{trouble}` is advertised as a token even though only the `empty` line uses it, the same deliberate superset `need_a_mod`'s `{roles}` already is. There is one `empty` line and four ways to fail — no role named, no such role, two roles that both fit, a role nobody holds — so the reason is a token rather than four lines nobody could choose between. |
+| ⚠️ `chat_data.py:211`, `:218`, `:249` | **`chat_data` imports `chat` INSIDE the functions, because `chat` imports `chat_data` at its top.** The same cycle `chat.py:522` names in the other direction. What it buys: the trigger phrases live in ONE place (`DATA_INTENTS["who_has"]`), so editing a trigger cannot leave the extractor reading the sentence with a phrase list that no longer matches, and `normalise`/`has_phrase` are the same word handling every other intent uses. |
+| `chat_data.py:207` | Plural tolerance is a stem, not a dictionary: a trailing `s` comes off any word longer than three characters, on BOTH sides of the comparison. "lead" and "Leads" meet at `lead`; "mentors" and "Mentor" meet at `mentor`. Three characters is the floor so "mods" keeps its own shape rather than becoming "mod" — which it does anyway on the third pass below, by substring. |
+| ⚠️ `chat_data.py:249` | **Three passes, and the FIRST one that finds anything wins — a later pass never widens an earlier one's answer.** Whole name, then the name as a whole word inside a longer one, then any substring. Without the ordering, "lead" against a server holding both **Leads** and **Team Leader** would tie on pass three and refuse, when pass one has an exact answer. More than one role out of whichever pass answered is a refusal that NAMES them, never a guess — picking one silently is how a bot tells somebody the wrong people to ask. |
+| ⚠️ `chat_data.py:288` | **Display names, never mentions.** `display_of` (`:36`) falls back to `<@id>` for a member the cache never saw, which is a ping; `holders_of` never uses it — it reads `display_name` off the cached member and drops anybody it cannot name. A list of twenty-five pings in answer to "who's a lead" is the exact failure this intent would otherwise ship. The cog's send already passes `allowed_mentions=none`, so this is the second of two locks, not the only one. |
+| `chat_data.py:288` | Bots are filtered out **unless that empties the list**, so an integration-managed role still answers with something rather than reading as "nobody holds it". Names sort case-insensitively so the same question answers the same way twice. |
+| `chat_data.py:299` | The escalate sentence is added only when the matched role is one of `resolved_staff_roles(guild, staff_channel)` — the same list `need_a_mod` and every staff refusal reads (one fact, one home, checklist 15) — and its wording follows `modmail_enabled` for the same reason `need_a_mod`'s two states do: promising modmail to a server that has it switched off is a promise the bot cannot keep. |
+| `chat_data.py:30` | The filler words are stripped from the ENDS only, and the list is kept short on purpose. "server", "guild" and "this" are NOT in it: a role really is called **Server Booster**, and a stripper that eats "server" would answer a different question than the one asked. |
+| `chat_data.py:26` | 25 holders and 3 closest names are **constants, not settings** — tuning numbers, the same call Phase 14 made for the tier thresholds. 25 is what fits in a Discord message beside the rest of the sentence; past it the answer says "…and N more" rather than truncating silently. |
+| ⚠️ How an ALREADY-SEEDED guild gets it | **No new mechanism was needed, and none was built.** Two things carry it: (1) `chat.py:classify` falls back to `BUILTIN_TRIGGERS` for any built-in with no row, and `pool`/`kind_of` fall back to the code tables the same way — so **the intent answers immediately, before any row exists**; (2) `cogs/content/chat.py:seed_guilds` calls `seed_defaults` at `cog_load`, `on_ready` and `on_guild_join`, and `seed_defaults` skips names already there and creates the ones that are not — so the row that makes it EDITABLE on the Chat page appears at the next restart. ⚠️ **`GET /api/chat/intents` is NOT that mechanism**: it seeds only when a guild has no rows at all. Both halves pinned — *a guild seeded before a new built-in gets it on the next pass* and *a new built-in answers from the code table before its row lands*. |
+| `logkinds.py` | **No new log kind.** A data intent logs nothing of its own; only `chat.insult` and `chat.route` do, and `who_has` is neither. |
+| `server.mjs:2814`, `:2820` | The mock learns the name and the token list so the Chat page draws its chips and refuses `who_has` as a custom name. It is deliberately NOT added to the `chatIntents` fixture: `who_is_live` is the only data intent that fixture carries, and a second one would need its own branch in `chatFilled`/`chatTokens` to answer honestly. |
+
+### What was NOT verified
+
+- ⚠️ **Nothing has run against live Discord.** Every role in every test is a
+  fake with a `members` list set by hand. In particular: that `role.members` is
+  populated for a role nobody has spoken in (it should be — `intents.members`
+  is on and the member cache fills at connect), that a real server's role names
+  stem the way the tests assume, and that the answer stays inside Discord's
+  2000-character limit with 25 long display names in it.
+- **The escalate sentence has never been seen with real staff roles.** It is
+  exercised against `resolved_staff_roles` with a fake channel whose
+  `permissions_for` is a set-membership test.
+
+## The ingest learns who holds each small role
+
+| Key | Note |
+|---|---|
+| ⚠️ `knowledge.py:411` | **`role_holder_sections` imports `chat_data`'s `HOLDERS_SHOWN` and `holders_of` rather than keeping its own copies**, so the note the model is grounded on and the answer `who_has` gives are built by the SAME function — bots excluded the same way, names sorted the same way, the same 25. Two copies would drift the day somebody changed one, and the visible symptom would be the Haiku tier contradicting the intent about who is a Lead. The import is function-local for the reason `:425` already gives: `chat_data` pulls in half the cogs. |
+| ⚠️ `knowledge.py:499` | **The holder rows are appended LAST, and the order is what decides who loses.** `replace_server_sections` truncates to `SECTIONS_MAX` (200); a server with three hundred roles would otherwise push the channels, events and role menus out of the bundle entirely. Last means the holder lists — the newest and least essential of the server rows — are what falls off the end. |
+| `knowledge.py:411` | The cap counts **humans**, but the list written is `holders_of`'s, which falls back to the bots when a role has nothing else. So an integration role still gets a note, and a role with 30 bots and 2 humans is written out as its two humans rather than skipped. A role nobody holds gets no note at all — it is already named in the "Roles in this server" row, and a note saying "0 members:" would score on every role query while answering none of them. |
+| `knowledge.py:32` | The title is **`Who has the {role} role`**, not the bare role name, because the search weights titles ×8 — the note is meant to be found by somebody asking that question in those words. The body carries the count and the names, which is what `grounding` quotes. Titles are unique per `(guild_id, source, title)`, and Discord allows two roles with the same name: the second one's `INSERT OR IGNORE` is skipped, the same skip-don't-refuse the ingest already makes for duplicate channel names. |
+| `knowledge.py:395` | `role_names` was pulled out so the name-only row and the holder rows cannot disagree about which roles exist or about `@everyone` being left out. |
+
+### What was NOT verified
+
+- ⚠️ **No ingest has run against a real server.** The role fixtures are
+  `SimpleNamespace`s with a `members` list; nothing has confirmed that a live
+  guild's `role.members` is complete at the moment the daily loop fires, and a
+  partially-filled member cache would write a SHORT holder list that reads as
+  complete. That is the one failure mode of this change worth watching.
+- **Nothing has been asked of the Haiku tier with these notes in the bundle.**
+  That the grounding actually improves the phrasings `who_has` misses is the
+  design's claim, not a measurement.

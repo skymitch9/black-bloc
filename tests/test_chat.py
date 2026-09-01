@@ -34,6 +34,7 @@ from black_bloc.chat import (
     clean_text,
     clean_triggers,
     create_intent,
+    delete_intent,
     display_name,
     guild_intents,
     invalidate,
@@ -339,6 +340,32 @@ async def test_seeding_twice_changes_nothing_and_leaves_edits_alone(db):
     assert "Edited hello, {name}." in stored["greeting"]["lines"][FILLED]
 
 
+async def test_a_guild_seeded_before_a_new_built_in_gets_it_on_the_next_pass(db):
+    """How a NEW built-in reaches an old guild: `seed_defaults` runs again every startup."""
+    await seed_defaults(db, GUILD)
+    before = await named(db, "who_has")
+    await delete_intent(db, before["id"])
+
+    assert await seed_defaults(db, GUILD) == 1
+
+    stored = {row["name"]: row for row in await rows(db)}
+    assert stored["who_has"]["kind"] == DATA
+    assert stored["who_has"]["triggers"] == DATA_INTENTS["who_has"]
+    assert stored["who_has"]["lines"][FILLED] and stored["who_has"]["lines"][EMPTY]
+
+
+async def test_a_new_built_in_answers_from_the_code_table_before_its_row_lands(db):
+    await seed_defaults(db, GUILD)
+    row = await named(db, "who_has")
+    await delete_intent(db, row["id"])
+
+    stored = await rows(db)
+
+    assert classify("whos a lead", stored) == "who_has"
+    assert kind_of("who_has", stored) == DATA
+    assert pool("who_has", intents=stored, slot=FILLED) == DATA_LINES["who_has"][FILLED]
+
+
 async def test_a_second_guild_gets_its_own_copy(db):
     await seed_defaults(db, GUILD)
     assert await seed_defaults(db, 8) == len(BUILTIN_ORDER) + 1
@@ -465,6 +492,14 @@ def test_the_built_in_tables_all_line_up():
         ("i need a mod", "need_a_mod"),
         ("staff please", "need_a_mod"),
         ("help me", "need_a_mod"),
+        ("whos a lead", "who_has"),
+        ("who is a mentor", "who_has"),
+        ("who are the leads", "who_has"),
+        ("tell me who's a mentor", "who_has"),
+        ("who has the mentor role", "who_has"),
+        ("whos our leads", "who_has"),
+        ("whos got the mod hat", "who_has"),
+        ("who is the auntie around here", "who_has"),
     ],
 )
 def test_the_data_and_route_phrases_land_on_their_own_intents(text, intent):
@@ -474,6 +509,20 @@ def test_the_data_and_route_phrases_land_on_their_own_intents(text, intent):
 def test_a_birthday_question_is_not_read_as_the_next_event():
     """`when is the next` is a whats_next phrase, so birthdays has to be asked first."""
     assert classify("when is the next birthday") == "birthdays"
+
+
+@pytest.mark.parametrize(
+    "text, intent",
+    [
+        ("who is live", "who_is_live"),
+        ("whos streaming", "who_is_live"),
+        ("who are you", "what_can_you_do"),
+        ("who are you exactly", "what_can_you_do"),
+        ("who is the best bot", "love"),
+    ],
+)
+def test_asking_who_does_not_swallow_the_questions_that_came_first(text, intent):
+    assert classify(text) == intent
 
 
 def test_every_token_a_seeded_line_uses_is_one_the_page_advertises():

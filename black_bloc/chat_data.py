@@ -23,6 +23,26 @@ NO_LINKS = "no links"
 NOTHING_HELD = "nothing from them yet"
 SOME_MODS = "the mods"
 
+WHO_HAS = "who_has"
+HOLDERS_SHOWN = 25
+CLOSEST_SHOWN = 3
+EVERYONE = "@everyone"
+LEADING_FILLER = ("a", "an", "the", "our", "my", "your", "all", "of", "us", "role", "roles")
+TRAILING_FILLER = ("role", "roles", "here", "now", "right", "please", "rn", "then", "again")
+
+NO_ROLE_ASKED = (
+    "I did not catch which role you meant. Name it — `who has the Leads role` — and I will count "
+    "them."
+)
+NOT_IN_A_SERVER = "I can only count roles inside the server itself, and this is not in one."
+NO_SUCH_ROLE = "there is no role here called **{asked}**, and nothing else comes close."
+NO_SUCH_ROLE_BUT = "there is no role here called **{asked}**. The closest I have are {close}."
+TOO_MANY_ROLES = "**{asked}** could be {close} — say which one and I will count it."
+NOBODY_HOLDS_IT = "**{role}** has nobody in it right now."
+AND_MORE = " …and {count} more"
+ESCALATE_MODMAIL = " Any of them can help — or ask for a mod and I will point you at modmail."
+ESCALATE_STAFF = " Any of them can help — or ask for a mod and I will name the staff to ask."
+
 STAMP = re.compile(r"<t:(-?\d{1,12})(?::[a-zA-Z])?>")
 CLOCK_12 = re.compile(r"(?<![\d:])(1[0-2]|0?[1-9])(?::([0-5]\d))?\s*([ap])\.?m\.?", re.IGNORECASE)
 CLOCK_24 = re.compile(r"(?<![\d:])([01]?\d|2[0-3]):([0-5]\d)(?![\d:])")
@@ -184,6 +204,141 @@ async def my_roles(bot: Any, guild: Any, member: Any, text: Any) -> tuple[dict[s
     }, True
 
 
+def stem(word: str) -> str:
+    return word[:-1] if len(word) > 3 and word.endswith("s") else word
+
+
+def role_key(value: Any) -> str:
+    """A role name reduced to the words a member would type, singular and punctuation-free."""
+    from .chat import normalise
+
+    return " ".join(stem(word) for word in normalise(value).split())
+
+
+def wanted_role(text: Any) -> str:
+    """Whatever the member put after the trigger phrase, with the polite words taken off."""
+    from .chat import DATA_INTENTS, normalise
+
+    words = normalise(text)
+    if not words:
+        return ""
+    padded = f" {words} "
+    rest = ""
+    for phrase in sorted((normalise(one) for one in DATA_INTENTS[WHO_HAS]), key=len, reverse=True):
+        at = padded.find(f" {phrase} ")
+        if at == -1:
+            continue
+        rest = padded[at + len(phrase) + 2 :].strip()
+        break
+    parts = rest.split()
+    while parts and parts[0] in LEADING_FILLER:
+        parts.pop(0)
+    while parts and parts[-1] in TRAILING_FILLER:
+        parts.pop()
+    return " ".join(parts)
+
+
+def named_roles(guild: Any) -> list[Any]:
+    return [
+        role
+        for role in getattr(guild, "roles", ()) or ()
+        if str(getattr(role, "name", "") or "").strip() not in ("", EVERYONE)
+    ]
+
+
+def matching_roles(roles: Any, asked: str) -> list[Any]:
+    """Whole name, then the name as a word inside it, then any part of it."""
+    from .chat import has_phrase
+
+    key = role_key(asked)
+    if not key:
+        return []
+    keyed = [(role, role_key(getattr(role, "name", ""))) for role in roles or ()]
+    for found in (
+        [role for role, name in keyed if name == key],
+        [role for role, name in keyed if has_phrase(name, key)],
+        [role for role, name in keyed if name and (key in name or name in key)],
+    ):
+        if found:
+            return found
+    return []
+
+
+def closest_roles(roles: Any, asked: str) -> list[Any]:
+    words = [word for word in role_key(asked).split() if word]
+    scored = []
+    for role in roles or ():
+        name = role_key(getattr(role, "name", ""))
+        near = sum(1 for word in words if word in name.split()) + sum(
+            1 for word in words if word in name
+        )
+        if near:
+            scored.append((-near, str(getattr(role, "name", "")), role))
+    scored.sort()
+    return [role for _, _, role in scored[:CLOSEST_SHOWN]]
+
+
+def role_words(roles: Any, joiner: str) -> str:
+    names = [f"**{getattr(role, 'name', '')}**" for role in roles or ()]
+    if len(names) < 2:
+        return "".join(names)
+    return f"{', '.join(names[:-1])}{joiner}{names[-1]}"
+
+
+def holders_of(role: Any) -> list[str]:
+    """Bots are left out of the listing unless they are all there is."""
+    members = list(getattr(role, "members", ()) or ())
+    people = [one for one in members if not getattr(one, "bot", False)] or members
+    names = [
+        str(getattr(one, "display_name", "") or getattr(one, "name", "") or "").strip()
+        for one in people
+    ]
+    return sorted((name for name in names if name), key=str.casefold)
+
+
+def escalation(bot: Any, guild: Any, role: Any) -> str:
+    channel_id = bot.store.get(guild.id, "staff_channel_id")
+    channel = guild.get_channel(channel_id) if channel_id else None
+    staff = {getattr(one, "id", None) for one in resolved_staff_roles(guild, channel)}
+    if getattr(role, "id", None) not in staff:
+        return ""
+    return ESCALATE_MODMAIL if bot.store.get(guild.id, "modmail_enabled") else ESCALATE_STAFF
+
+
+async def who_has(bot: Any, guild: Any, member: Any, text: Any) -> tuple[dict[str, Any], bool]:
+    """The live gateway cache answers this one; nothing is stored and nobody is pinged."""
+    if guild is None:
+        return {"trouble": NOT_IN_A_SERVER}, False
+    asked = wanted_role(text)
+    if not asked:
+        return {"trouble": NO_ROLE_ASKED}, False
+    roles = named_roles(guild)
+    found = matching_roles(roles, asked)
+    if len(found) > 1:
+        close = role_words(found[:CLOSEST_SHOWN], " or ")
+        return {"trouble": TOO_MANY_ROLES.format(asked=asked, close=close)}, False
+    if not found:
+        close = closest_roles(roles, asked)
+        if close:
+            return {
+                "trouble": NO_SUCH_ROLE_BUT.format(asked=asked, close=role_words(close, " and "))
+            }, False
+        return {"trouble": NO_SUCH_ROLE.format(asked=asked)}, False
+    role = found[0]
+    names = holders_of(role)
+    if not names:
+        return {"trouble": NOBODY_HOLDS_IT.format(role=str(role.name))}, False
+    shown = names[:HOLDERS_SHOWN]
+    left = len(names) - len(shown)
+    return {
+        "role": str(role.name),
+        "count": len(names),
+        "holders": ", ".join(shown),
+        "more": AND_MORE.format(count=left) if left else "",
+        "escalate": escalation(bot, guild, role),
+    }, True
+
+
 async def time_for_me(bot: Any, guild: Any, member: Any, text: Any) -> tuple[dict[str, Any], bool]:
     db = usable_db(bot)
     when = wanted_time(text)
@@ -216,6 +371,7 @@ RESOLVERS = {
     "whats_next": whats_next,
     "birthdays": birthdays,
     "head_count": head_count,
+    WHO_HAS: who_has,
     "my_roles": my_roles,
     "time_for_me": time_for_me,
     "need_a_mod": need_a_mod,

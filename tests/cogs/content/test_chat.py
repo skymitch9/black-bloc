@@ -924,6 +924,52 @@ async def test_the_daily_ingest_writes_the_server_rows_and_leaves_staff_rows_alo
     assert await rows(db, "chat.knowledge_ingested")
 
 
+async def test_the_daily_ingest_writes_out_who_holds_a_small_role(cog, bot, db):
+    """Grounding for the phrasings `who_has` misses — and the holder rows come LAST."""
+    bot.guild.text_channels = []
+    bot.guild.roles = [
+        SimpleNamespace(name="@everyone", members=[]),
+        SimpleNamespace(
+            name="Leads",
+            members=[
+                SimpleNamespace(display_name="Ada", name="Ada", bot=False),
+                SimpleNamespace(display_name="Kai", name="Kai", bot=False),
+            ],
+        ),
+    ]
+
+    await cog.ingest_once()
+
+    cur = await db.conn.execute(
+        "SELECT title, body, source, tag FROM knowledge_sections ORDER BY id"
+    )
+    found = list(await cur.fetchall())
+    assert found[-1]["title"] == "Who has the Leads role"
+    assert found[-1]["body"] == "Leads — 2 members: Ada, Kai."
+    assert found[-1]["source"] == "server" and found[-1]["tag"] == "role"
+    assert "Roles in this server" in [row["title"] for row in found]
+
+
+async def test_a_hand_written_note_survives_the_role_holder_ingest(
+    cog, bot, member, db, monkeypatch
+):
+    await add_a_note(cog, bot, member, monkeypatch, title="Rules", body="Be kind.")
+    bot.guild.text_channels = []
+    bot.guild.roles = [
+        SimpleNamespace(
+            name="Leads", members=[SimpleNamespace(display_name="Ada", name="Ada", bot=False)]
+        )
+    ]
+
+    await cog.ingest_once()
+    await cog.ingest_once()
+
+    cur = await db.conn.execute("SELECT title, source FROM knowledge_sections ORDER BY id")
+    found = [(row["title"], row["source"]) for row in await cur.fetchall()]
+    assert ("Rules", "staff") in found
+    assert found.count(("Who has the Leads role", "server")) == 1
+
+
 async def test_the_ingest_runs_again_without_doubling_anything(cog, bot, db):
     bot.guild.text_channels = [SimpleNamespace(name="general", topic="Chat.")]
     bot.guild.roles = []

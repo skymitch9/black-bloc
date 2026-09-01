@@ -2812,7 +2812,7 @@ route('DELETE', '/api/modmail/blocks/:user_id', (context) => {
 
 const CHAT_SLOTS = ['filled', 'empty', 'attendee'];
 const CHAT_BUILT_INS = ['insult', 'love', 'thanks', 'need_a_mod', 'birthdays', 'whats_next',
-  'who_is_live', 'head_count', 'my_roles', 'time_for_me', 'what_can_you_do', 'help',
+  'who_is_live', 'who_has', 'head_count', 'my_roles', 'time_for_me', 'what_can_you_do', 'help',
   'how_are_you', 'greeting', 'unknown'];
 const CHAT_NAME = /^[a-z][a-z0-9_]*$/;
 // Mirrors black_bloc/chat.py:TOKENS — the chips the Chat page offers for each intent.
@@ -2821,6 +2821,7 @@ const CHAT_TOKENS = {
   whats_next: ['{title}', '{when}', '{channel}'],
   birthdays: ['{list}'],
   head_count: ['{count}'],
+  who_has: ['{role}', '{count}', '{holders}', '{more}', '{escalate}', '{trouble}'],
   my_roles: ['{menus}', '{roles}'],
   time_for_me: ['{time}'],
   need_a_mod: ['{roles}'],
