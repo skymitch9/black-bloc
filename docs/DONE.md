@@ -9,6 +9,40 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-01 — Phase 14: the bot can really talk (three tiers, knowledge, personas — shipped dormant)
+
+Moved whole from `TODO.md`:
+
+- **Owner 2026-09-01 ~11:00, verbatim: "lets do the parked items"** → F10 chat step 3 un-parked. Four decisions taken one at a time (§0 of the design): three tiers ("can we do a mix of 1 and 3 to help save token cost?" → intents free / "groq/llama for simple things and then Haiku for more important things" / "We'll do a context ingestion like we did for Gabi"), cap "$20/month", personality "start with 1 [Cookout] but port over all the other personalities too. we can start building a global personality pool". GABI survey (Opus explore, catalog-platform) fed the design: lexical-not-vector knowledge, deterministic routing before any model call, independent fuses, worded refusals, affirmative-only gates. Design = `info/phase14-design.md`. Status: **14a (core+bot) and 14b (dashboard) Opus builders dispatched ~11:30 in parallel worktrees; ships with `chat_llm_mode off`.**
+
+**Landed as merge `a49e77d`, deployed 13:21 Phoenix** (`deploys.log`; verified: `/health`
+ok, chat cog loaded, 35 commands, logged in 20:21:23Z). Three Opus builds: **14a**
+(~473k, 8 commits): schema **20** (knowledge_sections/personality_tropes/chat_window/
+llm_ledger), `llm.py` (anthropic SDK, Haiku 4.5, 400 max_tokens, prices pinned) +
+`groq.py` (aiohttp, `chat_simple_model` default llama-3.3-70b-versatile), `tier_for`
+(one pure function: knowledge hit / long question / live conversation / staff topic →
+IMPORTANT; important never falls back to the cheap model), knowledge store + lexical
+port + daily server ingest + `/chat knowledge`, personas (core + cookout + 11 GABI
+tropes as data with provenance; drift derived not stored), fuses (20/person/hr,
+200/day, $-cap vs ledger; cap 0 = zero calls by pinned test), 6 registry keys, wired
+behind affirmative-only `chat_llm_mode`. **14b** (~383k, 3 commits): 9 staff-gated
+`/api/chat` routes (tier liveness measured mode→key→cap, refusals in sentences),
+the Chat page's Knowledge/Personality/Spend sections, contract to **17 pages / 106
+routes**. **Integration** (~227k, 4 commits): 14b's stand-in store deleted and routes
+repointed at 14a's canonical modules; `UNIQUE(guild_id, source, title)` index added
+(ingest writes INSERT OR IGNORE against duplicate channel names); persona mode
+collapsed onto the `chat_personality` registry key (website switch-off now busts the
+trope cache — a real bug the stand-in hid); one base kind per decision (`web.` head
+tells the doors apart); mock registers all 13 chat keys with enum choices derived
+from the pool; two auto-merge defects fixed (duplicated ROUTINE entries, split kind
+names). `cozy` vs `cosy`: checked against GABI's `personality.ts` — canonical key and
+label are `cozy`; 14a was right. **2451 tests** (+186 net), ruff clean, check.mjs
+17/106. **NOT verified: no real model call has EVER been made by this code** — both
+keys are unset everywhere; the first `/chat status` after the owner's switch-on is
+the first real cost figure. Owner go-live steps on TODO; sweeps rows 33–35.
+Peer README rewrite + deploy-button decisions landed the same morning (see TODO
+session log): README `91b3ab7`, deploy button stays parked.
+
 ## 2026-09-01 — Go-live hardening, requester-in-channel, the settings audit, nightly backups
 
 Moved whole from `TODO.md`:

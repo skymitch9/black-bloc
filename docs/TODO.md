@@ -80,8 +80,14 @@ per feature, so the old bot keeps running until the new one is proven.
   (c) bot kicks in a few weeks — cutover-plan §3 records the horizon;
   (d) "get started on everything in this list" → go-live hardening a/b/c + F4 requester-in-channel + F4(b)/F5 toggle verification: **Opus builder dispatched ~09:05 in a worktree**; KI-1 CLOSED (local `DATABASE_PATH` → `C:/Users/nbasl/black-bloc-data/`, old copy left inert in `data/`); **nightly DB backup built**: `black_bloc/dbsnapshot.py` + `scripts/backup_db.ps1` + Windows scheduled task "BlackBloc DB backup" daily 04:00 (StartWhenAvailable) — end-to-end test pending the next deploy shipping the module; **`info/cutover-plan.md` drafted** (the shadow→on ladder). Restyle overrides deliberately NOT flipped (owner named none).
 
-- **Owner 2026-09-01 ~11:00, verbatim: "lets do the parked items"** → F10 chat step 3 un-parked. Four decisions taken one at a time (§0 of the design): three tiers ("can we do a mix of 1 and 3 to help save token cost?" → intents free / "groq/llama for simple things and then Haiku for more important things" / "We'll do a context ingestion like we did for Gabi"), cap "$20/month", personality "start with 1 [Cookout] but port over all the other personalities too. we can start building a global personality pool". GABI survey (Opus explore, catalog-platform) fed the design: lexical-not-vector knowledge, deterministic routing before any model call, independent fuses, worded refusals, affirmative-only gates. Design = [`info/phase14-design.md`](info/phase14-design.md). Status: **14a (core+bot) and 14b (dashboard) Opus builders dispatched ~11:30 in parallel worktrees; ships with `chat_llm_mode off`.** ⚠️ **Owner actions to go live after the merge: mint `ANTHROPIC_API_KEY` (console.anthropic.com) and `GROQ_API_KEY` (console.groq.com), `flyctl secrets set` each + add to `.env`, then flip `chat_llm_mode on`.** Future note: the "global personality pool" (one trope store shared across estate bots) is an estate-level design, not this build.
-- **Parked items remaining after chat:** peer docs question + deploy-button (being asked one at a time).
+- ⚠️ **Chat go-live is waiting on the owner (Phase 14 is LIVE `a49e77d` but dormant):**
+  (1) mint `ANTHROPIC_API_KEY` at console.anthropic.com and `GROQ_API_KEY` at
+  console.groq.com; (2) `flyctl secrets set ANTHROPIC_API_KEY=... GROQ_API_KEY=... --app black-bloc`
+  (one command, restarts the bot on the already-rebuilt image) + add both to local
+  `.env`; (3) `/settings set-value key:chat_llm_mode value:on` (or the Settings
+  page). Each step alone changes nothing; sweeps rows 33–35 are the check-out.
+  Future (estate-level, not this repo alone): the "global personality pool" —
+  one trope store shared across estate bots.
 
 ## ⏳ Waiting on the owner
 
