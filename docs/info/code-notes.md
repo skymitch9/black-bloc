@@ -4339,3 +4339,21 @@ The table below is the map, and the reason each choice went the way it did.
 - **Nothing has been asked of the Haiku tier with these notes in the bundle.**
   That the grounding actually improves the phrasings `who_has` misses is the
   design's claim, not a measurement.
+
+# Chat guardrails (2026-09-01) — what the bot may read, name and ping
+
+> **Every item here traces to a live exchange the owner had with the newly-armed
+> LLM chat on 2026-09-01.** Built on a branch cut from `main` @ `cf11cdc`, one
+> commit per numbered item. ⚠️ **Nothing here has been verified against live
+> Discord or a real model call** — every test drives fakes.
+
+## 1. The ingest reads PUBLIC channels only
+
+| Key | Note |
+|---|---|
+| ⚠️ `black_bloc/directory.py:47` | **`everyone_sees` fails CLOSED, and that is the whole point of the module.** A channel with no `permissions_for`, a guild with no `default_role`, and a `permissions_for` that raises all answer *not visible*. The measured leak on 2026-09-01 was the other posture: the ingest took every text channel with a topic, so five incumbent-Modmail ticket channels — whose topics carry `ModMail Channel <user-id> <channel-id>` — became LLM grounding, and `#black-support-hub` (real, but in the `archive` category) got recommended to a member as somewhere to go. A privacy filter that guesses "probably public" when it cannot tell ships the same leak with more code. |
+| `black_bloc/directory.py:20` | The archive rule is a **substring of the CATEGORY name, case-folded**, not an id: the archive is one category today, but "Archive 2024" and "archived events" are the shapes a server grows and none of them would be in a list somebody remembered to update. A channel called `#archive` inside a live category is deliberately NOT caught — it is a public channel with a name, and hiding it would be the bot refusing to answer about somewhere members can read. |
+| `black_bloc/directory.py:24` | `chat_ignore_categories` and `modmail_category_id` are read by the SAME function so the two doors (`/settings set-value`, the Settings and Chat pages) cannot disagree with the ingest. Reading `modmail_category_id` rather than keeping a second copy is one-fact-one-home: the category the tickets are made in is the category the tickets are hidden from. |
+| ⚠️ `black_bloc/knowledge.py:372` | **`channel_sections` now takes the CHANNELS, not the guild.** The signature change IS the enforcement: there is no longer any way to call it with a guild and have it help itself to `text_channels` — which is exactly the line that leaked. Every caller has to have gone through `open_channels` first. |
+| `black_bloc/knowledge.py:483` | The `open_channels` import is function-local like the others in `server_sections`; the file's convention is that this function pulls its dependencies in at call time. |
+| Role rows are untouched | `role_sections` and `role_holder_sections` carry no channel data, so the scoping has nothing to reach there. Role NAMES are already public — `@everyone` sees the role list in the member sidebar — and the holder rows list display names, not channels. |

@@ -171,6 +171,7 @@ KEY_TYPES: dict[str, str] = {
     "chat_mode": "enum",
     "chat_cooldown_seconds": "int",
     "chat_ignore_channels": "channels",
+    "chat_ignore_categories": "channels",
     "chat_greeting_reaction": "bool",
     "chat_reply_in_threads": "bool",
     "chat_route_ping_staff": "bool",
@@ -420,6 +421,12 @@ KEY_HELP: dict[str, str] = {
         f"{CHAT_COOLDOWN_MIN_SECONDS} to {CHAT_COOLDOWN_MAX_SECONDS}"
     ),
     "chat_ignore_channels": "channels Black Bloc never answers an @-mention in",
+    "chat_ignore_categories": (
+        "categories Black Bloc leaves out of everything it reads and tells people about — the "
+        "channel names and topics it learns each day, and the channel list every conversational "
+        "answer is written against. The modmail category and any category with `archive` in its "
+        "name are left out already, and so is every channel @everyone cannot see"
+    ),
     "chat_greeting_reaction": (
         "true to answer a bare hello with a wave reaction instead of a sentence; anything "
         "longer still gets a reply"

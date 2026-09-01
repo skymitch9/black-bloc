@@ -95,6 +95,7 @@ export const LABELS = {
   chat_mode: 'Whether the bot talks back',
   chat_cooldown_seconds: 'How long the bot waits before answering again',
   chat_ignore_channels: 'Which channels the bot never answers in',
+  chat_ignore_categories: 'Which categories the bot never reads or mentions',
   chat_greeting_reaction: 'Whether a bare hello gets a wave',
   chat_reply_in_threads: 'Whether the bot answers inside threads',
   chat_route_ping_staff: 'Whether staff are told when a mod is asked for',

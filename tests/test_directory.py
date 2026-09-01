@@ -1,0 +1,117 @@
+from types import SimpleNamespace
+
+from black_bloc.directory import (
+    everyone_sees,
+    hidden_category_ids,
+    is_archive,
+    open_channels,
+)
+
+GUILD = 7
+EVERYONE = SimpleNamespace(id=GUILD, name="@everyone")
+
+
+class Store:
+    def __init__(self, **values):
+        self.values = values
+
+    def get(self, guild_id, key):
+        return self.values.get(key)
+
+
+class AngryStore:
+    def get(self, guild_id, key):
+        raise RuntimeError("no")
+
+
+def category(category_id, name):
+    return SimpleNamespace(id=category_id, name=name)
+
+
+def channel(name, *, seen=True, cat=None, topic=None, broken=False):
+    def permissions_for(role):
+        if broken:
+            raise RuntimeError("no")
+        return SimpleNamespace(view_channel=seen and role is EVERYONE)
+
+    return SimpleNamespace(
+        id=abs(hash(name)) % 10_000,
+        name=name,
+        topic=topic,
+        category=cat,
+        category_id=getattr(cat, "id", None),
+        permissions_for=permissions_for,
+    )
+
+
+def guild(*channels):
+    return SimpleNamespace(id=GUILD, default_role=EVERYONE, text_channels=list(channels))
+
+
+def bot(**values):
+    return SimpleNamespace(store=Store(**values))
+
+
+def test_a_category_is_an_archive_when_the_word_is_anywhere_in_its_name():
+    assert is_archive(category(1, "archive")) is True
+    assert is_archive(category(1, "ARCHIVE")) is True
+    assert is_archive(category(1, "Old Archives")) is True
+    assert is_archive(category(1, "Cookout")) is False
+    assert is_archive(None) is False
+
+
+def test_the_hidden_categories_are_the_modmail_one_and_whatever_staff_listed():
+    found = hidden_category_ids(
+        bot(modmail_category_id=11, chat_ignore_categories=[22, 33]), guild()
+    )
+    assert found == {11, 22, 33}
+
+
+def test_nothing_set_hides_nothing():
+    assert hidden_category_ids(bot(), guild()) == set()
+
+
+def test_a_store_that_will_not_answer_hides_nothing_rather_than_raising():
+    found = hidden_category_ids(SimpleNamespace(store=AngryStore()), guild())
+    assert found == set()
+
+
+def test_a_channel_everyone_can_see_is_the_only_visible_one():
+    assert everyone_sees(guild(), channel("general")) is True
+    assert everyone_sees(guild(), channel("staff", seen=False)) is False
+
+
+def test_a_channel_that_will_not_say_what_everyone_sees_is_treated_as_private():
+    assert everyone_sees(guild(), channel("odd", broken=True)) is False
+    assert everyone_sees(SimpleNamespace(default_role=None), channel("odd")) is False
+    assert everyone_sees(guild(), SimpleNamespace(name="odd")) is False
+
+
+def test_the_ingest_takes_only_public_channels_outside_archive_and_modmail():
+    archive = category(50, "Archive")
+    modmail = category(11, "ModMail")
+    quiet = category(60, "Cookout")
+    open_one = channel("general", cat=quiet)
+    found = open_channels(
+        bot(modmail_category_id=11, chat_ignore_categories=[]),
+        guild(
+            open_one,
+            channel("staff-room", seen=False),
+            channel("black-support-hub", cat=archive),
+            channel("ticket-0001", cat=modmail, topic="ModMail Channel 123 456"),
+        ),
+    )
+    assert [one.name for one in found] == ["general"]
+
+
+def test_a_category_staff_listed_is_left_out_too():
+    listed = category(99, "Committee")
+    found = open_channels(
+        bot(chat_ignore_categories=[99]),
+        guild(channel("general"), channel("planning", cat=listed)),
+    )
+    assert [one.name for one in found] == ["general"]
+
+
+def test_a_guild_with_no_channels_gives_nothing():
+    assert open_channels(bot(), guild()) == []

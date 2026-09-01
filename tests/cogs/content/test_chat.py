@@ -65,12 +65,37 @@ class FakeChannel:
         return None
 
 
+EVERYONE = StaffRole(GUILD, "@everyone")
+
+
+def open_channel(name, topic=None, category=None):
+    return SimpleNamespace(
+        name=name,
+        topic=topic,
+        category=category,
+        category_id=getattr(category, "id", None),
+        permissions_for=lambda role: FakePermissions(True),
+    )
+
+
+def shut_channel(name, topic=None, category=None):
+    return SimpleNamespace(
+        name=name,
+        topic=topic,
+        category=category,
+        category_id=getattr(category, "id", None),
+        permissions_for=lambda role: FakePermissions(False),
+    )
+
+
 class FakeGuild:
     def __init__(self):
         self.id = GUILD
         self.member_count = 12
         self.members = []
         self.roles = []
+        self.default_role = EVERYONE
+        self.text_channels = []
         self.channels = {CHANNEL: FakeChannel(CHANNEL), LOG_CHANNEL: FakeChannel(LOG_CHANNEL)}
 
     def get_channel(self, channel_id):
@@ -713,7 +738,7 @@ async def test_status_reports_the_notes_and_a_daily_read_that_did_not_finish(
     cog, bot, member, monkeypatch
 ):
     monkeypatch.setattr(cog_module, "require_staff", _always_staff)
-    bot.guild.text_channels = [SimpleNamespace(name="general", topic="Chat.")]
+    bot.guild.text_channels = [open_channel("general", "Chat.")]
     bot.guild.roles = []
     await cog.ingest_once()
     cog.last_ingest_error = "RuntimeError: no"
@@ -910,7 +935,7 @@ async def test_the_daily_ingest_writes_the_server_rows_and_leaves_staff_rows_alo
     cog, bot, member, db, monkeypatch
 ):
     await add_a_note(cog, bot, member, monkeypatch, title="Rules", body="Be kind.")
-    bot.guild.text_channels = [SimpleNamespace(name="general", topic="Chat about anything.")]
+    bot.guild.text_channels = [open_channel("general", "Chat about anything.")]
     bot.guild.roles = [SimpleNamespace(name="Member")]
 
     written = await cog.ingest_once()
@@ -922,6 +947,48 @@ async def test_the_daily_ingest_writes_the_server_rows_and_leaves_staff_rows_alo
     assert ("#general", "server") in found
     assert ("Channels in this server", "server") in found
     assert await rows(db, "chat.knowledge_ingested")
+
+
+async def test_the_daily_ingest_leaves_out_private_archive_and_modmail_channels(cog, bot, db):
+    """The 2026-09-01 leak: a dead archive channel recommended, five tickets with member ids."""
+    archive = SimpleNamespace(id=50, name="Archive")
+    modmail = SimpleNamespace(id=11, name="ModMail")
+    await bot.store.set(GUILD, "modmail_category_id", 11)
+    bot.guild.text_channels = [
+        open_channel("general", "Chat about anything."),
+        shut_channel("staff-room", "Staff only."),
+        open_channel("black-support-hub", "Ask for help.", category=archive),
+        open_channel("ticket-0001", "ModMail Channel 900 111", category=modmail),
+    ]
+    bot.guild.roles = []
+
+    await cog.ingest_once()
+
+    cur = await db.conn.execute("SELECT title, body FROM knowledge_sections ORDER BY id")
+    found = list(await cur.fetchall())
+    titles = [row["title"] for row in found]
+    assert titles == ["Channels in this server", "#general"]
+    listing = next(row["body"] for row in found if row["title"] == "Channels in this server")
+    assert listing == "#general"
+    assert not any("ModMail Channel" in row["body"] for row in found)
+
+
+async def test_a_category_staff_asked_the_ingest_to_ignore_stays_out(cog, bot, db):
+    committee = SimpleNamespace(id=99, name="Committee")
+    await bot.store.set(GUILD, "chat_ignore_categories", [99])
+    bot.guild.text_channels = [
+        open_channel("general", "Chat."),
+        open_channel("planning", "Committee talk.", category=committee),
+    ]
+    bot.guild.roles = []
+
+    await cog.ingest_once()
+
+    cur = await db.conn.execute("SELECT title FROM knowledge_sections ORDER BY id")
+    assert [row["title"] for row in await cur.fetchall()] == [
+        "Channels in this server",
+        "#general",
+    ]
 
 
 async def test_the_daily_ingest_writes_out_who_holds_a_small_role(cog, bot, db):
@@ -971,7 +1038,7 @@ async def test_a_hand_written_note_survives_the_role_holder_ingest(
 
 
 async def test_the_ingest_runs_again_without_doubling_anything(cog, bot, db):
-    bot.guild.text_channels = [SimpleNamespace(name="general", topic="Chat.")]
+    bot.guild.text_channels = [open_channel("general", "Chat.")]
     bot.guild.roles = []
 
     await cog.ingest_once()
@@ -984,7 +1051,7 @@ async def test_the_ingest_runs_again_without_doubling_anything(cog, bot, db):
 
 
 async def test_an_unavailable_server_is_skipped_rather_than_emptied(cog, bot, db):
-    bot.guild.text_channels = [SimpleNamespace(name="general", topic="Chat.")]
+    bot.guild.text_channels = [open_channel("general", "Chat.")]
     bot.guild.roles = []
     await cog.ingest_once()
     bot.guild.unavailable = True

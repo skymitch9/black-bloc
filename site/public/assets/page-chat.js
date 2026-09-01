@@ -34,6 +34,7 @@ const SETTING_KEYS = [
   'chat_mode',
   'chat_cooldown_seconds',
   'chat_ignore_channels',
+  'chat_ignore_categories',
   'chat_greeting_reaction',
   'chat_reply_in_threads',
   'chat_route_ping_staff',
