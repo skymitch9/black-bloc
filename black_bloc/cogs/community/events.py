@@ -140,7 +140,10 @@ CANNOT_CREATE = (
 SUBMITTED = (
     "**{title}** is in — the mods will review it and Black Bloc will DM you either way. {where}"
 )
-SUBMITTED_HERE = "Their review card is in {channel}."
+SUBMITTED_HERE = (
+    "Their review card is in {channel} — you can see and post in there too, so answer anything "
+    "they ask and put updates in the same place."
+)
 SUBMITTED_TEST = (
     "Test mode is on, so the review card is in this channel rather than in {channel}, which is "
     "where it will go once the owner lifts it."
@@ -441,7 +444,9 @@ def card_for(row: Any) -> discord.Embed:
     )
 
 
-def review_overwrites(guild: Any, staff_roles: Any, me: Any = None) -> dict[Any, Any]:
+def review_overwrites(
+    guild: Any, staff_roles: Any, me: Any = None, requester: Any = None
+) -> dict[Any, Any]:
     overwrites: dict[Any, Any] = {
         guild.default_role: discord.PermissionOverwrite(view_channel=False)
     }
@@ -450,6 +455,10 @@ def review_overwrites(guild: Any, staff_roles: Any, me: Any = None) -> dict[Any,
     if me is not None:
         overwrites[me] = discord.PermissionOverwrite(
             view_channel=True, send_messages=True, manage_channels=True
+        )
+    if requester is not None:
+        overwrites[requester] = discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, read_message_history=True
         )
     return overwrites
 
@@ -1379,7 +1388,9 @@ class Events(commands.Cog):
             return await guild.create_text_channel(
                 channel_name(PENDING, interaction.user.display_name, row["title"]),
                 category=category,
-                overwrites=review_overwrites(guild, staff, getattr(guild, "me", None)),
+                overwrites=review_overwrites(
+                    guild, staff, getattr(guild, "me", None), interaction.user
+                ),
                 reason=f"Black Bloc event {row['id']}",
             )
         except NETWORK_ERRORS as exc:

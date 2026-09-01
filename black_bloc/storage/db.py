@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -409,6 +409,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("role_menus", "retry_days", "INTEGER NOT NULL DEFAULT 7"),
     ("golive_sessions", "live_role_added", "INTEGER NOT NULL DEFAULT 0"),
     ("golive_sessions", "platform", "TEXT"),
+    ("golive_sessions", "live_role_id", "INTEGER"),
     ("events", "card_channel_id", "INTEGER"),
     ("birthdays", "role_added_id", "INTEGER"),
     ("modmail_messages", "delivered", "INTEGER NOT NULL DEFAULT 1"),

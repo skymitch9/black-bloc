@@ -36,6 +36,7 @@ GUILD = 7
 CHANNEL = 111
 LOG_CHANNEL = 222
 LIVE_ROLE = 4242
+OTHER_LIVE_ROLE = 4343
 USER = 900
 
 
@@ -95,7 +96,7 @@ class FakeGuild:
         return self.channels.get(channel_id)
 
     def get_role(self, role_id):
-        return FakeRole(role_id) if role_id == LIVE_ROLE else None
+        return FakeRole(role_id) if role_id in (LIVE_ROLE, OTHER_LIVE_ROLE) else None
 
     def get_member(self, user_id):
         return self.members.get(user_id)
@@ -144,6 +145,9 @@ class FakeBot:
 
     def get_channel(self, channel_id):
         return self.guild.get_channel(channel_id)
+
+    async def wait_until_ready(self):
+        return None
 
 
 class FakeResponse:
@@ -711,6 +715,15 @@ async def test_the_poller_is_inert_without_credentials(cog, bot, db):
     assert await open_sessions(db, GUILD) == []
 
 
+async def test_the_sweep_loop_starts_without_twitch_credentials(cog, bot, db):
+    await cog.cog_load()
+    try:
+        assert cog.helix is None
+        assert cog.poller.is_running()
+    finally:
+        await cog.cog_unload()
+
+
 async def test_optout_and_optin_commands(cog, bot, member, db):
     interaction = FakeInteraction(bot, member, bot.guild)
     await GoLive.optout.callback(cog, interaction)
@@ -829,6 +842,7 @@ async def test_golive_status_reports_the_setup(cog, bot, member, db, monkeypatch
     assert "**mode** — shadow" in interaction.sent
     assert f"<#{CHANNEL}>" in interaction.sent
     assert "no Twitch credentials" in interaction.sent
+    assert "ages sessions out" in interaction.sent
     assert "**links** — 1" in interaction.sent
 
 
@@ -970,6 +984,37 @@ async def test_a_role_that_cannot_be_removed_is_logged_as_stuck(cog, bot, member
     assert details["role_id"] == LIVE_ROLE and details["user_id"] == member.id
 
 
+async def test_the_role_that_went_on_is_the_one_taken_back_after_the_setting_moves(
+    cog, bot, member, db
+):
+    await bot.store.set(GUILD, "golive_mode", "on")
+    await bot.store.set(GUILD, "golive_live_role_id", LIVE_ROLE)
+    bot.guard = None
+    await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
+    assert (await open_session_for(db, GUILD, member.id))["live_role_id"] == LIVE_ROLE
+
+    await bot.store.set(GUILD, "golive_live_role_id", OTHER_LIVE_ROLE)
+    await cog._end_live(bot.guild, member, "presence")
+
+    assert member.removed == [LIVE_ROLE]
+    assert json.loads(await action_details(db, "golive.remove_role"))["role_id"] == LIVE_ROLE
+
+
+async def test_a_legacy_row_with_only_the_flag_falls_back_to_the_setting(cog, bot, member, db):
+    await bot.store.set(GUILD, "golive_live_role_id", LIVE_ROLE)
+    bot.guard = None
+    session_id = await start_session(db, GUILD, member.id, "presence", StreamInfo(url="u"), "on")
+    await db.conn.execute(
+        "UPDATE golive_sessions SET live_role_added = 1, live_role_id = NULL WHERE id = ?",
+        (session_id,),
+    )
+    await db.conn.commit()
+
+    await cog._end_live(bot.guild, member, "presence")
+
+    assert member.removed == [LIVE_ROLE]
+
+
 async def test_a_session_with_no_role_added_removes_nothing(cog, bot, member, db):
     await bot.store.set(GUILD, "golive_live_role_id", LIVE_ROLE)
     bot.guard = None
@@ -1078,8 +1123,43 @@ async def test_status_reports_the_last_poll_error(cog, bot, member, db, monkeypa
     interaction = FakeInteraction(bot, member, bot.guild)
     await GoLive.status.callback(cog, interaction)
 
-    assert "**last poll error** — twitch unreachable: boom" in interaction.sent
+    assert "**last poll error** — twitch unreachable: boom (1 in a row)" in interaction.sent
     assert "**last good poll** — never" in interaction.sent
+
+
+async def test_a_run_of_failed_polls_is_logged_once_and_ends_nothing(cog, bot, member, db):
+    await set_link(db, member.id, "alice")
+    await start_session(db, GUILD, member.id, "twitch", StreamInfo(url="u"), "on")
+    cog.helix = FakeHelix(raises=TwitchError("twitch unreachable: boom"))
+
+    for _ in range(cog_module.POLL_FAILURES_BEFORE_DEGRADED + 2):
+        await cog.poll_once()
+
+    kinds = await action_kinds(db)
+    assert kinds.count("golive.poll_degraded") == 1
+    details = json.loads(await action_details(db, "golive.poll_degraded"))
+    assert details["failures"] == cog_module.POLL_FAILURES_BEFORE_DEGRADED
+    assert details["open_sessions"] == 1
+    assert await open_session_for(db, GUILD, member.id) is not None
+
+
+async def test_a_good_poll_clears_the_run_so_the_next_outage_is_logged_again(
+    cog, bot, member, db
+):
+    await set_link(db, member.id, "alice")
+    cog.helix = FakeHelix(raises=TwitchError("boom"))
+    for _ in range(cog_module.POLL_FAILURES_BEFORE_DEGRADED):
+        await cog.poll_once()
+
+    cog.helix = FakeHelix(streams=[])
+    await cog.poll_once()
+    assert cog.poll_failures == 0
+
+    cog.helix = FakeHelix(raises=TwitchError("boom"))
+    for _ in range(cog_module.POLL_FAILURES_BEFORE_DEGRADED):
+        await cog.poll_once()
+
+    assert (await action_kinds(db)).count("golive.poll_degraded") == 2
 
 
 async def test_status_reports_a_good_poll(cog, bot, member, db, monkeypatch):

@@ -52,6 +52,10 @@ TWITCH_OFF = (
     "go-live: Twitch enrichment is off (TWITCH_CLIENT_ID/TWITCH_CLIENT_SECRET are not set); "
     "detection runs on Discord presence alone"
 )
+POLLING_NO_CREDS = (
+    "off — no Twitch credentials; the sweep still runs and still ages sessions out"
+)
+POLL_FAILURES_BEFORE_DEGRADED = 3
 OPTED_OUT = (
     "Done — Black Bloc will not announce your streams. Run `/golive optin` if you change "
     "your mind."
@@ -208,9 +212,11 @@ async def discard_session(db: Any, session_id: int) -> None:
     await db.conn.commit()
 
 
-async def set_live_role_added(db: Any, session_id: int) -> None:
+async def set_live_role_added(db: Any, session_id: int, role_id: int) -> None:
+    """Record which role went on, so that role comes off however the setting changes."""
     await db.conn.execute(
-        "UPDATE golive_sessions SET live_role_added = 1 WHERE id = ?", (session_id,)
+        "UPDATE golive_sessions SET live_role_added = 1, live_role_id = ? WHERE id = ?",
+        (int(role_id), session_id),
     )
     await db.conn.commit()
 
@@ -299,6 +305,7 @@ class GoLive(commands.Cog):
         self._locks: dict[int, asyncio.Lock] = {}
         self.last_poll_ok_at: str | None = None
         self.last_poll_error: str | None = None
+        self.poll_failures = 0
 
     golive = app_commands.Group(name="golive", description="Go-live announcements")
     twitch = app_commands.Group(name="twitch", description="Link your Twitch channel")
@@ -317,8 +324,7 @@ class GoLive(commands.Cog):
         if not self.bot.db.is_connected:
             return
         await self.reconcile_open_sessions()
-        if self.helix is not None:
-            self.poller.start()
+        self.poller.start()
 
     async def reconcile_open_sessions(self) -> None:
         """Close every session a stop left open, keeping the ones still genuinely live."""
@@ -452,8 +458,9 @@ class GoLive(commands.Cog):
             target=member,
             details=details,
         )
-        if await self._live_role(guild, member, add=True):
-            await set_live_role_added(self.bot.db, session_id)
+        added = await self._live_role(guild, member, add=True)
+        if added is not None:
+            await set_live_role_added(self.bot.db, session_id, added)
 
     async def _end_live(self, guild: Any, member: Any, source: str | None) -> None:
         if not self.bot.db.is_connected:
@@ -563,14 +570,15 @@ class GoLive(commands.Cog):
             return PostResult(reason=f"{type(exc).__name__}: {exc}")
         return PostResult(message=message)
 
-    async def _live_role(self, guild: Any, member: Any, *, add: bool) -> bool:
+    async def _live_role(self, guild: Any, member: Any, *, add: bool) -> int | None:
+        """The id of the role that actually moved, or None when none did."""
         role_id = self.bot.store.get(guild.id, "golive_live_role_id")
         if not role_id:
-            return False
+            return None
         role = guild.get_role(role_id)
         if role is None:
             log.warning("go-live: live role %s is not in this server", role_id)
-            return False
+            return None
         if not self._may_change_roles(guild.id):
             log.info(
                 "go-live: would %s the live role %s for %s",
@@ -585,7 +593,7 @@ class GoLive(commands.Cog):
                 target=member,
                 details={"role_id": role_id},
             )
-            return False
+            return None
         try:
             if add:
                 await member.add_roles(role, reason="Black Bloc go-live")
@@ -593,7 +601,7 @@ class GoLive(commands.Cog):
                 await member.remove_roles(role, reason="Black Bloc go-live")
         except discord.HTTPException as exc:
             log.warning("go-live: could not change the live role for %s: %s", member.id, exc)
-            return False
+            return None
         await log_action(
             self.bot,
             guild,
@@ -601,12 +609,14 @@ class GoLive(commands.Cog):
             target=member,
             details={"role_id": role_id},
         )
-        return True
+        return int(role_id)
 
     async def _remove_live_role(self, guild: Any, member: Any, row: Any) -> None:
         if not _row_value(row, "live_role_added"):
             return
-        role_id = self.bot.store.get(guild.id, "golive_live_role_id")
+        role_id = _row_value(row, "live_role_id") or self.bot.store.get(
+            guild.id, "golive_live_role_id"
+        )
         role = guild.get_role(role_id) if role_id else None
         stuck = None
         if role is None:
@@ -639,6 +649,11 @@ class GoLive(commands.Cog):
             target=member if member is not None else row["user_id"],
             details={"role_id": role_id, "user_id": row["user_id"], "reason": stuck},
         )
+
+    def _polling_summary(self) -> str:
+        if self.helix is None:
+            return POLLING_NO_CREDS
+        return "running" if self.poller.is_running() else "stopped"
 
     def _mentions(self, guild_id: int) -> discord.AllowedMentions:
         ping_role_id = self.bot.store.get(guild_id, "golive_ping_role_id")
@@ -733,6 +748,32 @@ class GoLive(commands.Cog):
                 )
                 await self._close_session(guild, row, "aged_out")
 
+    def _poll_worked(self) -> None:
+        self.last_poll_ok_at = now_iso()
+        self.last_poll_error = None
+        self.poll_failures = 0
+
+    async def _poll_failed(self, exc: TwitchError) -> None:
+        """One action-log line per outage, at the point the sweep stops being trustworthy."""
+        self.last_poll_error = str(exc)
+        self.poll_failures += 1
+        log.warning(
+            "go-live: Twitch poll failed (%d in a row): %s", self.poll_failures, exc
+        )
+        if self.poll_failures != POLL_FAILURES_BEFORE_DEGRADED:
+            return
+        for guild in list(getattr(self.bot, "guilds", ())):
+            await log_action(
+                self.bot,
+                guild,
+                "golive.poll_degraded",
+                details={
+                    "failures": self.poll_failures,
+                    "reason": f"{type(exc).__name__}: {exc}",
+                    "open_sessions": len(await open_sessions(self.bot.db, guild.id)),
+                },
+            )
+
     async def poll_once(self) -> None:
         """One Twitch sweep: live logins with no open session go live, gone ones end."""
         if not self.bot.db.is_connected:
@@ -754,17 +795,14 @@ class GoLive(commands.Cog):
                 continue
             by_login[login] = row["user_id"]
         if not by_login:
-            self.last_poll_ok_at = now_iso()
-            self.last_poll_error = None
+            self._poll_worked()
             return
         try:
             streams = await self.helix.get_streams(list(by_login))
         except TwitchError as exc:
-            self.last_poll_error = str(exc)
-            log.warning("go-live: Twitch poll failed: %s", exc)
+            await self._poll_failed(exc)
             return
-        self.last_poll_ok_at = now_iso()
-        self.last_poll_error = None
+        self._poll_worked()
         live = {stream.user_login: stream for stream in streams}
         for login, user_id in by_login.items():
             member = self._find_member(user_id)
@@ -827,9 +865,7 @@ class GoLive(commands.Cog):
         store = self.bot.store
         totals = await counts(self.bot.db, guild.id)
         channel_id = store.get(guild.id, "golive_channel_id")
-        polling = "running" if self.poller.is_running() else (
-            "off — no Twitch credentials" if self.helix is None else "stopped"
-        )
+        polling = self._polling_summary()
         lines = [
             f"**mode** — {self._mode(guild.id)}",
             f"**stream end** — "
@@ -838,7 +874,8 @@ class GoLive(commands.Cog):
             f"**cooldown** — {store.get(guild.id, 'golive_cooldown_minutes')} minute(s)",
             f"**twitch polling** — {polling}",
             f"**last good poll** — {self.last_poll_ok_at or 'never'}",
-            f"**last poll error** — {self.last_poll_error or 'none'}",
+            f"**last poll error** — {self.last_poll_error or 'none'}"
+            + (f" ({self.poll_failures} in a row)" if self.poll_failures else ""),
             f"**links** — {totals['links']} · **opt-outs** — {totals['optouts']} · "
             f"**live now** — {totals['open_sessions']}",
         ]
