@@ -80,14 +80,18 @@ per feature, so the old bot keeps running until the new one is proven.
   (c) bot kicks in a few weeks — cutover-plan §3 records the horizon;
   (d) "get started on everything in this list" → go-live hardening a/b/c + F4 requester-in-channel + F4(b)/F5 toggle verification: **Opus builder dispatched ~09:05 in a worktree**; KI-1 CLOSED (local `DATABASE_PATH` → `C:/Users/nbasl/black-bloc-data/`, old copy left inert in `data/`); **nightly DB backup built**: `black_bloc/dbsnapshot.py` + `scripts/backup_db.ps1` + Windows scheduled task "BlackBloc DB backup" daily 04:00 (StartWhenAvailable) — end-to-end test pending the next deploy shipping the module; **`info/cutover-plan.md` drafted** (the shadow→on ladder). Restyle overrides deliberately NOT flipped (owner named none).
 
-- ⚠️ **Chat go-live is waiting on the owner (Phase 14 is LIVE `a49e77d` but dormant):**
-  (1) mint `ANTHROPIC_API_KEY` at console.anthropic.com and `GROQ_API_KEY` at
-  console.groq.com; (2) `flyctl secrets set ANTHROPIC_API_KEY=... GROQ_API_KEY=... --app black-bloc`
-  (one command, restarts the bot on the already-rebuilt image) + add both to local
-  `.env`; (3) `/settings set-value key:chat_llm_mode value:on` (or the Settings
-  page). Each step alone changes nothing; sweeps rows 33–35 are the check-out.
-  Future (estate-level, not this repo alone): the "global personality pool" —
-  one trope store shared across estate bots.
+- ✅ **Chat is LIVE AND ARMED (2026-09-01 ~14:50):** owner minted both keys and
+  chose `.env` as the management place ("add the lines to the .env and we can
+  push from there"); Claude pushed both to Fly from `.env` (values never
+  displayed; format-checked) and — on the owner's "Yes, flip it now" — set
+  `chat_llm_mode on` through the dashboard Settings page in the owner's
+  browser (audited Via: Website; row read back ON after save). ⚠️ **No model
+  call has happened yet** — the owner's first @-mention that no intent knows
+  will be the first ever; sweeps rows 33–35 are the check-out and row 33's
+  `/chat status` shows the first real cost figure. Owner still to run
+  `sh scripts/env-lock.sh` so `.env.enc` includes the new keys.
+  Future (estate-level): the "global personality pool" — one trope store
+  shared across estate bots.
 
 ## ⏳ Waiting on the owner
 
