@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -417,9 +418,24 @@ def test_the_grounding_rides_the_members_own_turn():
     assert user_turn("<@55> hi", []) == "hi"
 
 
+EVERYONE = SimpleNamespace(id=7, name="@everyone")
+
+
+def seen_channel(name, topic=None, *, seen=True):
+    return SimpleNamespace(
+        name=name,
+        topic=topic,
+        category=None,
+        category_id=None,
+        permissions_for=lambda role: SimpleNamespace(view_channel=seen),
+    )
+
+
 class FakeGuild:
-    def __init__(self, guild_id=7):
+    def __init__(self, guild_id=7, channels=()):
         self.id = guild_id
+        self.default_role = EVERYONE
+        self.text_channels = list(channels)
 
 
 class FakeMember:
@@ -660,3 +676,44 @@ async def test_a_long_answer_is_clipped_to_something_discord_will_take(wired, mo
     said, _ = await ask(wired)
 
     assert len(said) <= 1900
+
+
+async def test_the_careful_tier_is_given_the_channel_list_after_the_cached_core(
+    wired, monkeypatch
+):
+    wired.guild = FakeGuild(
+        channels=[
+            seen_channel("general", "Chat about anything."),
+            seen_channel("staff-room", "Staff only.", seen=False),
+        ]
+    )
+    careful = Answering(ANTHROPIC, MODEL)
+    wire(wired, monkeypatch, haiku=careful)
+    wired.settings.groq_api_key = None
+
+    await ask(wired, "where do I ask about the cookout, exactly, and who do I ask?")
+
+    system = careful.seen[0]["system"]
+    assert system[0]["cache_control"] == {"type": "ephemeral"}
+    assert "#general — Chat about anything." in system[1]["text"]
+    assert "staff-room" not in system[1]["text"]
+    assert "cache_control" not in system[1]
+
+
+async def test_the_quick_tier_gets_the_same_list_as_one_string(wired, monkeypatch):
+    wired.guild = FakeGuild(channels=[seen_channel("general", "Chat here.")])
+    quick = Answering(GROQ, "llama")
+    wire(wired, monkeypatch, groq=quick)
+
+    await ask(wired)
+
+    assert "#general — Chat here." in quick.seen[0]["system"]
+
+
+async def test_a_guild_with_nothing_public_is_told_to_name_no_channel(wired, monkeypatch):
+    quick = Answering(GROQ, "llama")
+    wire(wired, monkeypatch, groq=quick)
+
+    await ask(wired)
+
+    assert "name no channel at all" in quick.seen[0]["system"]

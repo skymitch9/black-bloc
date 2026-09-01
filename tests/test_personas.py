@@ -95,6 +95,25 @@ def test_the_house_voice_sends_one_block_and_no_mood_at_all():
     assert trope_block(None) == ""
 
 
+def test_the_core_tells_the_bot_to_name_only_what_it_was_given():
+    said = " ".join(CORE.lower().split())
+    assert "point people only at channels that are in the channel list below" in said
+    assert "never name a channel, a role or a member that is not in that list" in said
+
+
+def test_the_channel_list_sits_after_the_cached_core_and_before_the_mood():
+    blocks = system_blocks(BY_NAME["noir"], "## The channels of this server\n#general")
+    assert [block["text"] for block in blocks][0] == stable_core()
+    assert "#general" in blocks[1]["text"]
+    assert "cache_control" not in blocks[1]
+    assert "HARD-BOILED" in blocks[2]["text"]
+
+
+def test_a_blank_channel_list_adds_no_block_of_its_own():
+    assert len(system_blocks(None, "")) == 1
+    assert len(system_blocks(None, "   ")) == 1
+
+
 def test_every_mood_block_carries_the_register_and_the_invariance_clause():
     for trope in TROPES:
         said = trope_block(trope)

@@ -9,6 +9,7 @@ from typing import Any
 
 from .actionlog import log_action
 from .chat import MENTION, has_phrase, normalise
+from .directory import DIRECTORY_NONE, directory_block
 from .groq import GroqClient
 from .knowledge import grounding, list_sections, search
 from .llm import (
@@ -483,13 +484,25 @@ async def try_tier(
     model_setting: str,
     system: Any,
     messages: Any,
+    directory: str = "",
 ) -> Any:
     client = haiku(bot) if name == IMPORTANT else groq(bot, model_setting)
     if client is None:
         return None
     if name == IMPORTANT:
-        return await client.reply(system=system_blocks(system), messages=messages)
-    return await client.reply(system=system_text(system), messages=messages)
+        return await client.reply(system=system_blocks(system, directory), messages=messages)
+    return await client.reply(system=system_text(system, directory), messages=messages)
+
+
+def channels_block(bot: Any, guild: Any) -> str:
+    """Built fresh for every call: a channel made this morning is in this afternoon's answer."""
+    if guild is None:
+        return DIRECTORY_NONE
+    try:
+        return directory_block(bot, guild)
+    except Exception as exc:
+        log.warning("chat: the channel list was not built — %s: %s", type(exc).__name__, exc)
+        return DIRECTORY_NONE
 
 
 async def conversational_reply(
@@ -533,13 +546,19 @@ async def conversational_reply(
     model_setting = str(read_setting(bot.store, guild_id, SIMPLE_MODEL_KEY, "") or "")
     asked = user_turn(text, hits)
     messages = [*as_messages(window), {"role": "user", "content": asked}]
+    directory = channels_block(bot, guild)
     turn = uuid.uuid4().hex
     errors = tier_errors(bot)
 
     for name in order:
         try:
             answer = await try_tier(
-                bot, name, model_setting=model_setting, system=voice, messages=messages
+                bot,
+                name,
+                model_setting=model_setting,
+                system=voice,
+                messages=messages,
+                directory=directory,
             )
         except LLMError as exc:
             errors[name] = exc.reason

@@ -1,10 +1,15 @@
 from types import SimpleNamespace
 
 from black_bloc.directory import (
+    DIRECTORY_HEADING,
+    DIRECTORY_NONE,
+    channel_names,
+    directory_block,
     everyone_sees,
     hidden_category_ids,
     is_archive,
     open_channels,
+    within,
 )
 
 GUILD = 7
@@ -115,3 +120,48 @@ def test_a_category_staff_listed_is_left_out_too():
 
 def test_a_guild_with_no_channels_gives_nothing():
     assert open_channels(bot(), guild()) == []
+
+
+def test_the_directory_names_every_public_channel_and_trims_its_topic():
+    said = directory_block(
+        bot(),
+        guild(
+            channel("general", topic="Chat about anything you like."),
+            channel("quiet"),
+            channel("staff-room", topic="Staff only.", seen=False),
+        ),
+    )
+    assert said.startswith(DIRECTORY_HEADING)
+    assert "#general — Chat about anything you like." in said
+    assert "#quiet" in said
+    assert "staff-room" not in said
+
+
+def test_a_topic_longer_than_the_trim_is_shortened_rather_than_dropped():
+    said = directory_block(bot(), guild(channel("general", topic="x" * 400)))
+    assert "…" in said
+    assert len(said) < 400
+
+
+def test_nothing_public_says_so_rather_than_leaving_the_model_to_guess():
+    assert directory_block(bot(), guild()) == DIRECTORY_NONE
+    assert directory_block(bot(), guild(channel("staff", seen=False))) == DIRECTORY_NONE
+
+
+def test_past_the_cap_the_longest_topic_goes_first_and_the_names_all_stay():
+    rows = [("general", "x" * 100), ("quiet", "y" * 10), ("loud", "z" * 50)]
+    kept = within(rows, budget=60)
+    assert [name for name, _ in kept] == ["general", "quiet", "loud"]
+    assert [topic for _, topic in kept] == ["", "y" * 10, ""]
+
+
+def test_when_even_the_bare_names_will_not_fit_the_last_ones_fall_off():
+    kept = within([("aaaa", ""), ("bbbb", ""), ("cccc", "")], budget=12)
+    assert [name for name, _ in kept] == ["aaaa", "bbbb"]
+
+
+def test_the_guard_vocabulary_is_every_public_name_case_folded():
+    found = channel_names(
+        bot(), guild(channel("General"), channel("Quiet"), channel("staff", seen=False))
+    )
+    assert found == {"general", "quiet"}
