@@ -24,7 +24,7 @@ from .names import as_id, named
 log = logging.getLogger(__name__)
 
 HONEYPOT_WINDOW_DAYS = 7
-NOT_A_FEATURE = ("golive_end_mode", "poll_review_mode")
+NOT_A_FEATURE = ("golive_end_mode", "poll_review_mode", "chat_llm_mode")
 ACTIONS_DEFAULT_LIMIT = 50
 ACTIONS_MAX_LIMIT = 200
 CSV_MEDIA_TYPE = "text/csv"

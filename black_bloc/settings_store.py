@@ -17,6 +17,7 @@ from .automod import (
 )
 from .config import Settings
 from .emoji import SKIN_TONE_DEFAULT, SKIN_TONE_NAMES
+from .groq import DEFAULT_MODEL as GROQ_DEFAULT_MODEL
 from .logkinds import FEATURE_LABELS, FEATURES, LEVEL_DEFAULT, LEVELS, log_level_key
 from .personas import COOKOUT, PERSONALITY_CHOICES
 from .polls import DATE_LABEL_FORMS as POLL_DATE_LABEL_FORMS
@@ -86,6 +87,12 @@ CHAT_COOLDOWN_SECONDS = 20
 CHAT_COOLDOWN_MIN_SECONDS = 5
 CHAT_COOLDOWN_MAX_SECONDS = 600
 CHAT_PERSONALITY_DEFAULT = COOKOUT
+CHAT_TURNS_MAX = 10_000
+CHAT_MONTHLY_CAP_MAX = 1_000
+CHAT_PERSON_HOURLY_TURNS = 20
+CHAT_DAILY_TURNS = 200
+CHAT_MONTHLY_CAP_USD = 20
+CHAT_LLM_MODES = ("off", "on")
 
 BOT_BIO_TEMPLATE = (
     "Black Bloc — moderation & content bot for Black in a Flash!. Staff dashboard: {site}"
@@ -167,7 +174,12 @@ KEY_TYPES: dict[str, str] = {
     "chat_greeting_reaction": "bool",
     "chat_reply_in_threads": "bool",
     "chat_route_ping_staff": "bool",
+    "chat_llm_mode": "enum",
+    "chat_simple_model": "text",
     "chat_personality": "enum",
+    "chat_person_hourly_turns": "int",
+    "chat_daily_turns": "int",
+    "chat_monthly_cap_usd": "int",
     "rolemenu_approval_channel_id": "channel",
     "rolemenu_approver_role_id": "role",
     "emoji_skin_tone": "enum",
@@ -191,6 +203,7 @@ KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "request_mode": REQUEST_MODES,
     "request_who_can_file": REQUEST_FILERS,
     "chat_mode": CHAT_MODES,
+    "chat_llm_mode": CHAT_LLM_MODES,
     "chat_personality": PERSONALITY_CHOICES,
     "emoji_skin_tone": SKIN_TONE_NAMES,
 }
@@ -201,6 +214,9 @@ KEY_MAX: dict[str, int] = {
     "events_max_late_minutes": EVENTS_LATE_CEILING_MINUTES,
     "automod_warn_threshold": WARN_THRESHOLD_MAX,
     "chat_cooldown_seconds": CHAT_COOLDOWN_MAX_SECONDS,
+    "chat_person_hourly_turns": CHAT_TURNS_MAX,
+    "chat_daily_turns": CHAT_TURNS_MAX,
+    "chat_monthly_cap_usd": CHAT_MONTHLY_CAP_MAX,
     "poll_default_hours": POLL_MAX_HOURS,
     "poll_reminder_minutes": POLL_REMINDER_MAX_MINUTES,
     "poll_archive_days": POLL_ARCHIVE_MAX_DAYS,
@@ -264,6 +280,19 @@ KEY_MAX_REASON: dict[str, str] = {
         "A poll kept out of the archive for more than {limit} days is one nobody will ever "
         "tidy away. Nothing is deleted at the archive except the per-voter rows, and only when "
         "`poll_archive_drop_votes` says so."
+    ),
+    "chat_person_hourly_turns": (
+        "More than {limit} conversational answers to one person in an hour is not a ceiling, it "
+        "is a typo. Set it to 0 if you genuinely want no ceiling of its own — the dollar figure "
+        "still applies."
+    ),
+    "chat_daily_turns": (
+        "More than {limit} conversational answers in a day is not a ceiling, it is a typo. Set "
+        "it to 0 if you genuinely want no ceiling of its own."
+    ),
+    "chat_monthly_cap_usd": (
+        "Black Bloc refuses to be pointed at more than ${limit} a month by accident. If that is "
+        "really what you want, a Lead should say so out loud first."
     ),
 }
 
@@ -399,10 +428,33 @@ KEY_HELP: dict[str, str] = {
         "true to drop one line in the staff channel when somebody asks the bot for a mod; only "
         "used while modmail_enabled is true"
     ),
+    "chat_llm_mode": (
+        "off, or on (an @-mention no built-in intent recognises is answered by a language model "
+        "instead of the catch-all line). Off is the default and off is safe: with it off, or "
+        "with no keys set, Black Bloc answers exactly as it does today"
+    ),
+    "chat_simple_model": (
+        "which Groq model the quick tier asks; it is a setting because Groq retires model names "
+        "faster than a deploy can follow"
+    ),
     "chat_personality": (
         "the voice Black Bloc writes a conversational answer in: cookout is the house voice, "
         "pool lets a conversation pick one of the moods and drift a step at a time, or name one "
         "mood to keep it. Only used when chat_llm_mode is on"
+    ),
+    "chat_person_hourly_turns": (
+        f"how many conversational answers one member may get in a rolling hour, up to "
+        f"{CHAT_TURNS_MAX}; 0 means no ceiling of its own. Past it they still get Black Bloc's "
+        f"own written lines"
+    ),
+    "chat_daily_turns": (
+        f"how many conversational answers the whole server may get in a UTC day, up to "
+        f"{CHAT_TURNS_MAX}; 0 means no ceiling of its own"
+    ),
+    "chat_monthly_cap_usd": (
+        f"whole dollars a month Black Bloc may run the conversation models for, up to "
+        f"{CHAT_MONTHLY_CAP_MAX}. At the figure it stops calling them until the 1st and answers "
+        f"from its own written lines; 0 stops them altogether"
     ),
     "rolemenu_approval_channel_id": (
         "where a role request waits for Approve or Deny; blank uses staff_channel_id"
@@ -813,8 +865,18 @@ class SettingsStore:
             return True
         if key == "chat_route_ping_staff":
             return False
+        if key == "chat_llm_mode":
+            return "off"
+        if key == "chat_simple_model":
+            return GROQ_DEFAULT_MODEL
         if key == "chat_personality":
             return CHAT_PERSONALITY_DEFAULT
+        if key == "chat_person_hourly_turns":
+            return CHAT_PERSON_HOURLY_TURNS
+        if key == "chat_daily_turns":
+            return CHAT_DAILY_TURNS
+        if key == "chat_monthly_cap_usd":
+            return CHAT_MONTHLY_CAP_USD
         if key == "emoji_skin_tone":
             return SKIN_TONE_DEFAULT
         if key.endswith("_log_level"):

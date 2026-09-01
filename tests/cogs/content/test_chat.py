@@ -19,6 +19,7 @@ from black_bloc.chat import (
 from black_bloc.cogs.content import chat as cog_module
 from black_bloc.cogs.content.chat import Chat, in_a_thread, mentions_bot
 from black_bloc.config import load_settings
+from black_bloc.llm import ANTHROPIC, MODEL, Usage, record
 from black_bloc.settings_store import CHAT_COOLDOWN_SECONDS, SettingsStore
 from black_bloc.storage.db import Database
 
@@ -578,6 +579,80 @@ class FakeChoice:
     def __init__(self, value):
         self.name = value
         self.value = value
+
+
+async def test_status_says_what_is_on_and_that_nothing_is_keyed_yet(
+    cog, bot, member, monkeypatch
+):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    interaction = FakeInteraction(bot, member)
+
+    await Chat.chat_status.callback(cog, interaction)
+
+    said = interaction.sent
+    assert "Conversation model: **off**" in said
+    assert said.count("no key set") == 2
+    assert "Answers today: **0** of 200" in said
+    assert "Yours in the last hour: **0** of 20" in said
+    assert "This month so far: **$0.00** of $20" in said
+    assert "the daily read has not run yet" in said
+
+
+async def test_status_counts_what_the_ledger_holds_and_says_when_it_is_closed(
+    cog, bot, member, db, monkeypatch
+):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    await bot.store.set(GUILD, "chat_monthly_cap_usd", 1)
+    for turn in ("t1", "t2"):
+        await record(
+            db,
+            guild_id=GUILD,
+            user_id=USER,
+            turn=turn,
+            provider=ANTHROPIC,
+            model=MODEL,
+            tier="important",
+            usage=Usage(input_tokens=600_000),
+        )
+    interaction = FakeInteraction(bot, member)
+
+    await Chat.chat_status.callback(cog, interaction)
+
+    said = interaction.sent
+    assert "Answers today: **2**" in said
+    assert "This month so far: **$1.20** of $1" in said
+    assert "resting until the 1st" in said
+
+
+async def test_status_says_a_tier_is_down_rather_than_calling_it_ready(
+    cog, bot, member, monkeypatch
+):
+    """poll_degraded honesty: a tier that failed says so instead of reading as fine."""
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    monkeypatch.setattr(type(bot.settings), "simple_tier_configured", property(lambda s: True))
+    cog.tier_errors["simple"] = "unreachable"
+    interaction = FakeInteraction(bot, member)
+
+    await Chat.chat_status.callback(cog, interaction)
+
+    assert "last call failed (unreachable)" in interaction.sent
+
+
+async def test_status_reports_the_notes_and_a_daily_read_that_did_not_finish(
+    cog, bot, member, monkeypatch
+):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    bot.guild.text_channels = [SimpleNamespace(name="general", topic="Chat.")]
+    bot.guild.roles = []
+    await cog.ingest_once()
+    cog.last_ingest_error = "RuntimeError: no"
+    interaction = FakeInteraction(bot, member)
+
+    await Chat.chat_status.callback(cog, interaction)
+
+    said = interaction.sent
+    assert "**2** written down" in said
+    assert "The last daily read did not finish: RuntimeError: no" in said
 
 
 async def test_the_voice_and_the_pool_are_both_shown(cog, bot, member, monkeypatch):

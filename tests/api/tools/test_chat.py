@@ -52,7 +52,12 @@ async def test_the_page_gets_the_chat_settings_in_the_shape_settings_uses(seeded
         "chat_greeting_reaction",
         "chat_reply_in_threads",
         "chat_route_ping_staff",
+        "chat_llm_mode",
+        "chat_simple_model",
         "chat_personality",
+        "chat_person_hourly_turns",
+        "chat_daily_turns",
+        "chat_monthly_cap_usd",
         "chat_log_level",
     }
     for row in rows:

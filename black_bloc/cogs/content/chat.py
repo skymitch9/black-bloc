@@ -15,6 +15,7 @@ from ...actionlog import (
     LOGS_MIN,
     log_action,
     send_logs,
+    stamp,
 )
 from ...chat import (
     GREETING,
@@ -26,6 +27,7 @@ from ...chat import (
     invalidate,
     seed_defaults,
 )
+from ...chat_llm import allowance, money, sweep_window
 from ...emoji import tone_for, toned
 from ...knowledge import (
     SERVER,
@@ -42,6 +44,7 @@ from ...knowledge import (
     search,
     server_sections,
 )
+from ...llm import IMPORTANT, SIMPLE
 from ...personas import (
     COOKOUT,
     PERSONALITY_CHOICES,
@@ -104,6 +107,28 @@ DB_DOWN = (
     "and run the command again, and tell a Lead if it keeps happening."
 )
 
+LLM_MODE_KEY = "chat_llm_mode"
+STATUS_MODE = "Answering @-mentions: **{mode}**. Conversation model: **{llm}**."
+STATUS_OFF_TAIL = " Every answer comes from Black Bloc's own written lines."
+STATUS_TIERS = "Tiers — the quick one: {simple}. The careful one: {important}."
+TIER_READY = "ready"
+TIER_NO_KEY = "no key set, so it does not exist"
+TIER_TROUBLE = "last call failed ({why})"
+STATUS_TURNS = (
+    "Answers today: **{today}** of {today_of}. Yours in the last hour: **{mine}** of {of}."
+)
+STATUS_MONEY = "This month so far: **{spent}** of {cap}."
+STATUS_CLOSED = (
+    "The models are resting until the 1st, so every answer comes from the written lines. Nothing "
+    "is broken."
+)
+STATUS_NOTES = "The server's own notes: **{count}** written down, last read {when}."
+STATUS_NOTES_NEVER = (
+    "The server's own notes: **{count}** written down; the daily read has not run yet."
+)
+STATUS_INGEST_TROUBLE = "The last daily read did not finish: {why}."
+NO_CEILING = "no ceiling"
+
 PERSONALITY_KEY = "chat_personality"
 PERSONALITY_SET = "chat.personality"
 TROPE_SET = "chat.trope"
@@ -153,6 +178,7 @@ class Chat(commands.Cog):
         self._seeded: set[int] = set()
         self.last_ingest_at: str | None = None
         self.last_ingest_error: str | None = None
+        self.tier_errors: dict[str, str] = {}
 
     def loop_health(self, name: str) -> tuple[str | None, str | None]:
         if name == "_ingest":
@@ -167,6 +193,62 @@ class Chat(commands.Cog):
     def usable_db(self) -> Any:
         db = getattr(self.bot, "db", None)
         return db if db is not None and getattr(db, "is_connected", False) else None
+
+    @chat.command(name="status", description="What chat is doing, and what it has spent")
+    async def chat_status(self, interaction: discord.Interaction) -> None:
+        if not await require_staff(interaction):
+            return
+        guild_id = interaction.guild.id
+        store = self.bot.store
+        llm_on = store.get(guild_id, LLM_MODE_KEY) == ON
+        parts = [
+            STATUS_MODE.format(mode=store.get(guild_id, "chat_mode"), llm="on" if llm_on else "off")
+            + ("" if llm_on else STATUS_OFF_TAIL),
+            STATUS_TIERS.format(
+                simple=self.tier_words(SIMPLE), important=self.tier_words(IMPORTANT)
+            ),
+        ]
+        db = self.usable_db()
+        if db is not None:
+            spent = await allowance(db, store, guild_id, interaction.user.id)
+            parts.append(
+                STATUS_TURNS.format(
+                    today=spent.today,
+                    today_of=spent.today_of or NO_CEILING,
+                    mine=spent.person,
+                    of=spent.person_of or NO_CEILING,
+                )
+            )
+            parts.append(
+                STATUS_MONEY.format(spent=money(spent.spent), cap=f"${int(spent.cap)}")
+            )
+            if not spent.ok:
+                parts.append(STATUS_CLOSED)
+            parts.append(await self.notes_words(db, guild_id))
+        if self.last_ingest_error:
+            parts.append(STATUS_INGEST_TROUBLE.format(why=self.last_ingest_error))
+        await interaction.response.send_message(
+            "\n".join(parts), ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+        )
+
+    def tier_words(self, tier: str) -> str:
+        """A tier that is down says so, the way a degraded poll does."""
+        settings = self.bot.settings
+        keyed = (
+            settings.important_tier_configured
+            if tier == IMPORTANT
+            else settings.simple_tier_configured
+        )
+        if not keyed:
+            return TIER_NO_KEY
+        trouble = self.tier_errors.get(tier)
+        return TIER_TROUBLE.format(why=trouble) if trouble else TIER_READY
+
+    async def notes_words(self, db: Any, guild_id: int) -> str:
+        rows = await list_sections(db, guild_id)
+        if self.last_ingest_at:
+            return STATUS_NOTES.format(count=len(rows), when=stamp(self.last_ingest_at))
+        return STATUS_NOTES_NEVER.format(count=len(rows))
 
     chat_personality = app_commands.Group(
         name="personality", description="The voice Black Bloc answers in", parent=chat
@@ -428,6 +510,10 @@ class Chat(commands.Cog):
         db = self.usable_db()
         if db is None:
             return 0
+        try:
+            await sweep_window(db)
+        except Exception as exc:
+            log.warning("chat: the window was not swept — %s: %s", type(exc).__name__, exc)
         written = 0
         for guild in list(getattr(self.bot, "guilds", ()) or ()):
             if getattr(guild, "unavailable", False):

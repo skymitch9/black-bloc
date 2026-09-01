@@ -85,6 +85,7 @@ async def test_every_feature_group_has_a_logs_command(settings):
         "settings",
         "knowledge",
         "personality",
+        "status",
     }
     await bot.close()
 
