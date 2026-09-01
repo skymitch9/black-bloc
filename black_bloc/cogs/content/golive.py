@@ -208,9 +208,11 @@ async def discard_session(db: Any, session_id: int) -> None:
     await db.conn.commit()
 
 
-async def set_live_role_added(db: Any, session_id: int) -> None:
+async def set_live_role_added(db: Any, session_id: int, role_id: int) -> None:
+    """Record which role went on, so that role comes off however the setting changes."""
     await db.conn.execute(
-        "UPDATE golive_sessions SET live_role_added = 1 WHERE id = ?", (session_id,)
+        "UPDATE golive_sessions SET live_role_added = 1, live_role_id = ? WHERE id = ?",
+        (int(role_id), session_id),
     )
     await db.conn.commit()
 
@@ -452,8 +454,9 @@ class GoLive(commands.Cog):
             target=member,
             details=details,
         )
-        if await self._live_role(guild, member, add=True):
-            await set_live_role_added(self.bot.db, session_id)
+        added = await self._live_role(guild, member, add=True)
+        if added is not None:
+            await set_live_role_added(self.bot.db, session_id, added)
 
     async def _end_live(self, guild: Any, member: Any, source: str | None) -> None:
         if not self.bot.db.is_connected:
@@ -563,14 +566,15 @@ class GoLive(commands.Cog):
             return PostResult(reason=f"{type(exc).__name__}: {exc}")
         return PostResult(message=message)
 
-    async def _live_role(self, guild: Any, member: Any, *, add: bool) -> bool:
+    async def _live_role(self, guild: Any, member: Any, *, add: bool) -> int | None:
+        """The id of the role that actually moved, or None when none did."""
         role_id = self.bot.store.get(guild.id, "golive_live_role_id")
         if not role_id:
-            return False
+            return None
         role = guild.get_role(role_id)
         if role is None:
             log.warning("go-live: live role %s is not in this server", role_id)
-            return False
+            return None
         if not self._may_change_roles(guild.id):
             log.info(
                 "go-live: would %s the live role %s for %s",
@@ -585,7 +589,7 @@ class GoLive(commands.Cog):
                 target=member,
                 details={"role_id": role_id},
             )
-            return False
+            return None
         try:
             if add:
                 await member.add_roles(role, reason="Black Bloc go-live")
@@ -593,7 +597,7 @@ class GoLive(commands.Cog):
                 await member.remove_roles(role, reason="Black Bloc go-live")
         except discord.HTTPException as exc:
             log.warning("go-live: could not change the live role for %s: %s", member.id, exc)
-            return False
+            return None
         await log_action(
             self.bot,
             guild,
@@ -601,12 +605,14 @@ class GoLive(commands.Cog):
             target=member,
             details={"role_id": role_id},
         )
-        return True
+        return int(role_id)
 
     async def _remove_live_role(self, guild: Any, member: Any, row: Any) -> None:
         if not _row_value(row, "live_role_added"):
             return
-        role_id = self.bot.store.get(guild.id, "golive_live_role_id")
+        role_id = _row_value(row, "live_role_id") or self.bot.store.get(
+            guild.id, "golive_live_role_id"
+        )
         role = guild.get_role(role_id) if role_id else None
         stuck = None
         if role is None:

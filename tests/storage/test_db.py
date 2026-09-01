@@ -12,7 +12,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 18
+        assert SCHEMA_VERSION == 19
         cur = await db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = {r["name"] for r in await cur.fetchall()}
         assert {"settings", "action_log", "role_menus", "role_menu_options"} <= tables
@@ -255,7 +255,8 @@ async def test_the_live_role_column_and_the_open_session_index_are_added(tmp_pat
     await db.connect()
     try:
         cur = await db.conn.execute("PRAGMA table_info(golive_sessions)")
-        assert "live_role_added" in {row["name"] for row in await cur.fetchall()}
+        names = {row["name"] for row in await cur.fetchall()}
+        assert {"live_role_added", "live_role_id"} <= names
         cur = await db.conn.execute("SELECT name FROM sqlite_master WHERE type='index'")
         assert "golive_open_session" in {row["name"] for row in await cur.fetchall()}
     finally:
@@ -274,6 +275,7 @@ async def test_the_migration_step_is_idempotent(tmp_path):
         cur = await db.conn.execute("PRAGMA table_info(golive_sessions)")
         names = [row["name"] for row in await cur.fetchall()]
         assert names.count("live_role_added") == 1
+        assert names.count("live_role_id") == 1
         assert names.count("platform") == 1
     finally:
         await db.close()

@@ -36,6 +36,7 @@ GUILD = 7
 CHANNEL = 111
 LOG_CHANNEL = 222
 LIVE_ROLE = 4242
+OTHER_LIVE_ROLE = 4343
 USER = 900
 
 
@@ -95,7 +96,7 @@ class FakeGuild:
         return self.channels.get(channel_id)
 
     def get_role(self, role_id):
-        return FakeRole(role_id) if role_id == LIVE_ROLE else None
+        return FakeRole(role_id) if role_id in (LIVE_ROLE, OTHER_LIVE_ROLE) else None
 
     def get_member(self, user_id):
         return self.members.get(user_id)
@@ -968,6 +969,37 @@ async def test_a_role_that_cannot_be_removed_is_logged_as_stuck(cog, bot, member
     assert member.removed == []
     details = json.loads(await action_details(db, "golive.role_stuck"))
     assert details["role_id"] == LIVE_ROLE and details["user_id"] == member.id
+
+
+async def test_the_role_that_went_on_is_the_one_taken_back_after_the_setting_moves(
+    cog, bot, member, db
+):
+    await bot.store.set(GUILD, "golive_mode", "on")
+    await bot.store.set(GUILD, "golive_live_role_id", LIVE_ROLE)
+    bot.guard = None
+    await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
+    assert (await open_session_for(db, GUILD, member.id))["live_role_id"] == LIVE_ROLE
+
+    await bot.store.set(GUILD, "golive_live_role_id", OTHER_LIVE_ROLE)
+    await cog._end_live(bot.guild, member, "presence")
+
+    assert member.removed == [LIVE_ROLE]
+    assert json.loads(await action_details(db, "golive.remove_role"))["role_id"] == LIVE_ROLE
+
+
+async def test_a_legacy_row_with_only_the_flag_falls_back_to_the_setting(cog, bot, member, db):
+    await bot.store.set(GUILD, "golive_live_role_id", LIVE_ROLE)
+    bot.guard = None
+    session_id = await start_session(db, GUILD, member.id, "presence", StreamInfo(url="u"), "on")
+    await db.conn.execute(
+        "UPDATE golive_sessions SET live_role_added = 1, live_role_id = NULL WHERE id = ?",
+        (session_id,),
+    )
+    await db.conn.commit()
+
+    await cog._end_live(bot.guild, member, "presence")
+
+    assert member.removed == [LIVE_ROLE]
 
 
 async def test_a_session_with_no_role_added_removes_nothing(cog, bot, member, db):
