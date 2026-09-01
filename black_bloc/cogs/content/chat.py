@@ -85,6 +85,11 @@ WATCHED = (
     "chat_route_ping_staff",
 )
 STAFF_NOTE = "{who} asked for a mod in {where}. {link}"
+STATUS_ADMIN_ONLY = (
+    "`/chat status` shows what the conversation models are spending, and this server keeps "
+    "that to administrators — nothing was shown. Ask an Admin to read it out, or an Admin can "
+    "switch `chat_status_admin_only` off if staff should see it too."
+)
 CHAT_KEYS = tuple(key for key in KEY_TYPES if key.startswith("chat_"))
 SETTINGS_FOOTER = (
     "`/settings set` changes any of these, and the Chat page on the dashboard edits the words "
@@ -210,6 +215,11 @@ class Chat(commands.Cog):
             return
         guild_id = interaction.guild.id
         store = self.bot.store
+        if store.get(guild_id, "chat_status_admin_only") and not (
+            interaction.user.guild_permissions.administrator
+        ):
+            await interaction.response.send_message(STATUS_ADMIN_ONLY, ephemeral=True)
+            return
         llm_on = store.get(guild_id, LLM_MODE_KEY) == ON
         parts = [
             STATUS_MODE.format(mode=store.get(guild_id, "chat_mode"), llm="on" if llm_on else "off")

@@ -39,6 +39,7 @@ const SETTING_KEYS = [
   'chat_route_ping_staff',
   'chat_llm_mode',
   'chat_monthly_cap_usd',
+  'chat_status_admin_only',
   'chat_log_level',
   'emoji_skin_tone',
 ];

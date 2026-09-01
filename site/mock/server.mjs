@@ -327,6 +327,7 @@ const SETTING_SPECS = [
   ['chat_person_hourly_turns', 'int', 20, 20, "how many conversational answers one member may get in a rolling hour, up to 10000; 0 means no ceiling of its own. Past it they still get Black Bloc's own written lines", null, 10000],
   ['chat_daily_turns', 'int', 200, 200, 'how many conversational answers the whole server may get in a UTC day, up to 10000; 0 means no ceiling of its own', null, 10000],
   ['chat_monthly_cap_usd', 'int', 20, 20, "whole dollars a month Black Bloc may run the conversation models for, up to 1000. At the figure it stops calling them until the 1st and answers from its own written lines; 0 stops them altogether", null, 1000],
+  ['chat_status_admin_only', 'bool', true, true, "on keeps `/chat status` (what the conversation models are spending) to server administrators; off lets any staff member read it. The dashboard's Spend section stays staff-visible either way"],
   ...LOG_LEVEL_FEATURES.map(([feature, label, command]) => [
     `${feature}_log_level`,
     'enum',

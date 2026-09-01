@@ -73,6 +73,7 @@ async def test_the_page_gets_the_chat_settings_in_the_shape_settings_uses(seeded
         "chat_person_hourly_turns",
         "chat_daily_turns",
         "chat_monthly_cap_usd",
+        "chat_status_admin_only",
         "chat_log_level",
     }
     for row in rows:

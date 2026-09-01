@@ -81,13 +81,14 @@ class FakeGuild:
 
 
 class FakeMember:
-    def __init__(self, guild, user_id=USER, display_name="Nia", bot=False):
+    def __init__(self, guild, user_id=USER, display_name="Nia", bot=False, admin=True):
         self.id = user_id
         self.guild = guild
         self.display_name = display_name
         self.name = display_name
         self.bot = bot
         self.mention = f"<@{user_id}>"
+        self.guild_permissions = SimpleNamespace(administrator=admin)
 
 
 class FakeMessage:
@@ -723,6 +724,31 @@ async def test_status_reports_the_notes_and_a_daily_read_that_did_not_finish(
     said = interaction.sent
     assert "**2** written down" in said
     assert "The last daily read did not finish: RuntimeError: no" in said
+
+
+async def test_status_is_for_administrators_by_default(cog, bot, monkeypatch):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    staffer = FakeMember(bot.guild, user_id=USER + 1, display_name="Uncle", admin=False)
+    interaction = FakeInteraction(bot, staffer)
+
+    await Chat.chat_status.callback(cog, interaction)
+
+    said = interaction.sent
+    assert "administrators" in said
+    assert "chat_status_admin_only" in said
+    assert "$" not in said
+    assert interaction.response.messages[-1]["ephemeral"] is True
+
+
+async def test_status_opens_to_staff_when_the_key_is_off(cog, bot, monkeypatch):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    await bot.store.set(GUILD, "chat_status_admin_only", False)
+    staffer = FakeMember(bot.guild, user_id=USER + 1, display_name="Uncle", admin=False)
+    interaction = FakeInteraction(bot, staffer)
+
+    await Chat.chat_status.callback(cog, interaction)
+
+    assert "Conversation model" in interaction.sent
 
 
 async def test_the_voice_and_the_pool_are_both_shown(cog, bot, member, monkeypatch):

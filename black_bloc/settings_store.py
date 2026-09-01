@@ -180,6 +180,7 @@ KEY_TYPES: dict[str, str] = {
     "chat_person_hourly_turns": "int",
     "chat_daily_turns": "int",
     "chat_monthly_cap_usd": "int",
+    "chat_status_admin_only": "bool",
     "rolemenu_approval_channel_id": "channel",
     "rolemenu_approver_role_id": "role",
     "emoji_skin_tone": "enum",
@@ -455,6 +456,11 @@ KEY_HELP: dict[str, str] = {
         f"whole dollars a month Black Bloc may run the conversation models for, up to "
         f"{CHAT_MONTHLY_CAP_MAX}. At the figure it stops calling them until the 1st and answers "
         f"from its own written lines; 0 stops them altogether"
+    ),
+    "chat_status_admin_only": (
+        "on keeps `/chat status` (what the conversation models are spending) to server "
+        "administrators; off lets any staff member read it. The dashboard's Spend section "
+        "stays staff-visible either way"
     ),
     "rolemenu_approval_channel_id": (
         "where a role request waits for Approve or Deny; blank uses staff_channel_id"
@@ -865,6 +871,8 @@ class SettingsStore:
             return True
         if key == "chat_route_ping_staff":
             return False
+        if key == "chat_status_admin_only":
+            return True
         if key == "chat_llm_mode":
             return "off"
         if key == "chat_simple_model":

@@ -98,6 +98,7 @@ export const LABELS = {
   chat_greeting_reaction: 'Whether a bare hello gets a wave',
   chat_reply_in_threads: 'Whether the bot answers inside threads',
   chat_route_ping_staff: 'Whether staff are told when a mod is asked for',
+  chat_status_admin_only: 'Whether /chat status is for administrators only',
   chat_log_level: 'How much of chat is repeated into Discord',
 
   request_mode: 'Whether people can ask for things',
