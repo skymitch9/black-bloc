@@ -172,6 +172,7 @@ KEY_TYPES: dict[str, str] = {
     "chat_cooldown_seconds": "int",
     "chat_ignore_channels": "channels",
     "chat_ignore_categories": "channels",
+    "chat_home_channel_id": "channel",
     "chat_greeting_reaction": "bool",
     "chat_reply_in_threads": "bool",
     "chat_route_ping_staff": "bool",
@@ -426,6 +427,12 @@ KEY_HELP: dict[str, str] = {
         "channel names and topics it learns each day, and the channel list every conversational "
         "answer is written against. The modmail category and any category with `archive` in its "
         "name are left out already, and so is every channel @everyone cannot see"
+    ),
+    "chat_home_channel_id": (
+        "where somebody is sent when a conversational answer points at a channel that does not "
+        "exist. Blank is safe: the sentence is written again without the channel in it rather "
+        "than pointing anywhere. Either way the invention is logged, so `/chat logs` and the "
+        "Logs page count how often it happens"
     ),
     "chat_greeting_reaction": (
         "true to answer a bare hello with a wave reaction instead of a sentence; anything "

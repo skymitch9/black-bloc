@@ -9,6 +9,7 @@ from typing import Any
 
 from .actionlog import log_action
 from .chat import MENTION, has_phrase, normalise
+from .chat_check import FIXED_KIND, check_reply
 from .directory import DIRECTORY_NONE, directory_block
 from .groq import GroqClient
 from .knowledge import grounding, list_sections, search
@@ -494,6 +495,35 @@ async def try_tier(
     return await client.reply(system=system_text(system, directory), messages=messages)
 
 
+async def made_real(bot: Any, guild: Any, text: Any) -> str:
+    """A named channel or role the server does not have never reaches anybody."""
+    said = str(text or "")
+    if guild is None:
+        return said
+    try:
+        found = check_reply(bot, guild, said)
+    except Exception as exc:
+        log.warning("chat: the reply was not checked — %s: %s", type(exc).__name__, exc)
+        return said
+    if not found.fixed:
+        return said
+    log.info(
+        "chat: a reply named %s that this server does not have",
+        ", ".join([*found.channels, *found.roles]),
+    )
+    await log_action(
+        bot,
+        guild,
+        FIXED_KIND,
+        details={
+            "channels": found.channels,
+            "roles": found.roles,
+            "fixed": found.fixed,
+        },
+    )
+    return found.text
+
+
 def channels_block(bot: Any, guild: Any) -> str:
     """Built fresh for every call: a channel made this morning is in this afternoon's answer."""
     if guild is None:
@@ -594,7 +624,7 @@ async def conversational_reply(
             usage=answer.usage,
             at=at,
         )
-        said = clip(answer.text, REPLY_LIMIT)
+        said = clip(await made_real(bot, guild, answer.text), REPLY_LIMIT)
         if not said:
             continue
         await remember(

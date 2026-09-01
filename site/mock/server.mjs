@@ -319,6 +319,7 @@ const SETTING_SPECS = [
   ['chat_cooldown_seconds', 'int', 20, 20, 'seconds before the same person gets another @-mention reply, 5 to 600', null, 600, 5],
   ['chat_ignore_channels', 'channels', [], [], 'channels Black Bloc never answers an @-mention in'],
   ['chat_ignore_categories', 'channels', [], [], 'categories Black Bloc leaves out of everything it reads and tells people about — the channel names and topics it learns each day, and the channel list every conversational answer is written against. The modmail category and any category with `archive` in its name are left out already, and so is every channel @everyone cannot see'],
+  ['chat_home_channel_id', 'channel', null, null, 'where somebody is sent when a conversational answer points at a channel that does not exist. Blank is safe: the sentence is written again without the channel in it rather than pointing anywhere. Either way the invention is logged, so `/chat logs` and the Logs page count how often it happens'],
   ['chat_greeting_reaction', 'bool', false, false, 'true to answer a bare hello with a wave reaction instead of a sentence; anything longer still gets a reply'],
   ['chat_reply_in_threads', 'bool', true, true, 'true to answer @-mentions inside threads as well as channels'],
   ['chat_route_ping_staff', 'bool', false, false, 'true to drop one line in the staff channel when somebody asks the bot for a mod; only used while modmail_enabled is true'],
@@ -2828,7 +2829,7 @@ const CHAT_TOKENS = {
   need_a_mod: ['{roles}'],
 };
 const CHAT_SETTING_KEYS = ['chat_mode', 'chat_cooldown_seconds', 'chat_ignore_channels',
-  'chat_ignore_categories', 'chat_greeting_reaction', 'chat_reply_in_threads',
+  'chat_ignore_categories', 'chat_home_channel_id', 'chat_greeting_reaction', 'chat_reply_in_threads',
   'chat_route_ping_staff', 'chat_llm_mode', 'chat_simple_model', 'chat_personality',
   'chat_person_hourly_turns', 'chat_daily_turns', 'chat_monthly_cap_usd', 'chat_log_level'];
 const CHAT_UNKNOWN_LINE = 'Not sure I follow, {name} — try `/help` for what I can do.';

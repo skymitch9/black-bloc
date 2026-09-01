@@ -175,6 +175,7 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
     "black_bloc/cogs/content/chat.py::REPLY_KIND": ("chat.llm_reply",),
     "black_bloc/chat_llm.py::CAPPED_KIND": ("chat.llm_capped",),
     "black_bloc/chat_llm.py::ERROR_KIND": ("chat.llm_error",),
+    "black_bloc/chat_llm.py::FIXED_KIND": ("chat.reply_reference_fixed",),
     "black_bloc/cogs/content/golive.py::kind": (
         "golive.optin",
         "golive.optout",
