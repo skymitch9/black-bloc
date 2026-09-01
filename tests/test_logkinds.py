@@ -165,6 +165,9 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
     "black_bloc/cogs/content/chat.py::KNOWLEDGE_INGESTED": ("chat.knowledge_ingested",),
     "black_bloc/cogs/content/chat.py::PERSONALITY_SET": ("chat.personality",),
     "black_bloc/cogs/content/chat.py::TROPE_SET": ("chat.trope",),
+    "black_bloc/cogs/content/chat.py::REPLY_KIND": ("chat.llm_reply",),
+    "black_bloc/chat_llm.py::CAPPED_KIND": ("chat.llm_capped",),
+    "black_bloc/chat_llm.py::ERROR_KIND": ("chat.llm_error",),
     "black_bloc/cogs/content/golive.py::kind": (
         "golive.optin",
         "golive.optout",

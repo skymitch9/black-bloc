@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from black_bloc import chat_llm
 from black_bloc.chat_llm import (
     BOT,
     BUDGET_WORDS,
@@ -21,6 +22,7 @@ from black_bloc.chat_llm import (
     as_messages,
     capped_already_logged,
     clip,
+    conversational_reply,
     ladder,
     llm_turns,
     money,
@@ -33,12 +35,25 @@ from black_bloc.chat_llm import (
     setting,
     spoken,
     sweep_window,
+    tier_errors,
     tier_for,
+    user_turn,
     window_for,
     window_key,
     word_count,
 )
-from black_bloc.llm import ANTHROPIC, IMPORTANT, MODEL, SIMPLE, Usage, record
+from black_bloc.knowledge import add_section
+from black_bloc.llm import (
+    ANTHROPIC,
+    GROQ,
+    IMPORTANT,
+    MODEL,
+    SIMPLE,
+    LLMError,
+    Reply,
+    Usage,
+    record,
+)
 from black_bloc.storage.db import Database
 
 NOW = datetime(2026, 9, 15, 12, 0, tzinfo=UTC)
@@ -392,3 +407,256 @@ def test_money_reads_as_dollars_and_cents():
     assert money(0) == "$0.00"
     assert money(1_234_567) == "$1.23"
     assert money(None) == "$0.00"
+
+
+def test_the_grounding_rides_the_members_own_turn():
+    hits = [{"title": "Rules", "body": "Be kind."}]
+    said = user_turn("<@55> what are the rules?", hits)
+    assert said.startswith("what are the rules?")
+    assert "quote it rather than inventing" in said
+    assert user_turn("<@55> hi", []) == "hi"
+
+
+class FakeGuild:
+    def __init__(self, guild_id=7):
+        self.id = guild_id
+
+
+class FakeMember:
+    def __init__(self, user_id=900):
+        self.id = user_id
+
+
+class FakeChannel:
+    def __init__(self, channel_id=11):
+        self.id = channel_id
+
+
+class Bot:
+    def __init__(self, db, store, settings):
+        self.db = db
+        self.store = store
+        self.settings = settings
+        self.guild = FakeGuild()
+        self.logged: list[tuple[str, dict]] = []
+
+
+class Settings:
+    def __init__(self, *, important=True, simple=True):
+        self.anthropic_api_key = "sk-ant-x" if important else None
+        self.groq_api_key = "gsk-x" if simple else None
+
+    @property
+    def important_tier_configured(self):
+        return bool(self.anthropic_api_key)
+
+    @property
+    def simple_tier_configured(self):
+        return bool(self.groq_api_key)
+
+
+class Answering:
+    def __init__(self, provider, model, text="Pull up a chair.", raises=None):
+        self.model = model
+        self._provider = provider
+        self._text = text
+        self._raises = raises
+        self.seen: list[dict] = []
+
+    async def reply(self, *, system, messages):
+        self.seen.append({"system": system, "messages": messages})
+        if self._raises is not None:
+            raise self._raises
+        return Reply(
+            text=self._text,
+            provider=self._provider,
+            model=self.model,
+            usage=Usage(input_tokens=100, output_tokens=20),
+        )
+
+
+@pytest.fixture
+async def wired(tmp_path, monkeypatch):
+    db = Database(tmp_path / "x.sqlite3")
+    await db.connect()
+    store = FakeStore(
+        {
+            "chat_llm_mode": "on",
+            "chat_personality": "cookout",
+            "chat_simple_model": "llama-3.3-70b-versatile",
+            "chat_monthly_cap_usd": 20,
+            "chat_person_hourly_turns": 20,
+            "chat_daily_turns": 200,
+        }
+    )
+    bot = Bot(db, store, Settings())
+
+    async def note(bot_arg, guild, kind, **kwargs):
+        """Writes the row as well as remembering it: "once" is answered by the log itself."""
+        bot.logged.append((kind, kwargs.get("details") or {}))
+        await db.conn.execute(
+            "INSERT INTO action_log(guild_id, at, kind) VALUES (?, ?, ?)",
+            (guild.id, datetime.now(UTC).isoformat(), kind),
+        )
+        await db.conn.commit()
+
+    monkeypatch.setattr(chat_llm, "log_action", note)
+    try:
+        yield bot
+    finally:
+        await db.close()
+
+
+def wire(bot, monkeypatch, *, haiku=None, groq=None):
+    monkeypatch.setattr(chat_llm, "haiku", lambda _bot: haiku)
+    monkeypatch.setattr(chat_llm, "groq", lambda _bot, model: groq)
+
+
+async def ask(bot, text="just chatting here"):
+    return await conversational_reply(
+        bot, guild=bot.guild, member=FakeMember(), channel=FakeChannel(), text=text
+    )
+
+
+async def test_a_simple_turn_goes_to_the_cheap_tier_and_lands_in_the_ledger(wired, monkeypatch):
+    quick = Answering(GROQ, "llama-3.3-70b-versatile")
+    wire(wired, monkeypatch, haiku=Answering(ANTHROPIC, MODEL), groq=quick)
+
+    said, tier = await ask(wired)
+
+    assert (said, tier) == ("Pull up a chair.", SIMPLE)
+    assert len(quick.seen) == 1
+    cur = await wired.db.conn.execute("SELECT provider, tier, outcome FROM llm_ledger")
+    assert [tuple(row) for row in await cur.fetchall()] == [(GROQ, SIMPLE, "ok")]
+
+
+async def test_a_groq_failure_buys_exactly_one_haiku_attempt(wired, monkeypatch):
+    careful = Answering(ANTHROPIC, MODEL, text="I have got you.")
+    wire(
+        wired,
+        monkeypatch,
+        haiku=careful,
+        groq=Answering(GROQ, "llama", raises=LLMError("unreachable", "groq unreachable")),
+    )
+
+    said, tier = await ask(wired)
+
+    assert (said, tier) == ("I have got you.", IMPORTANT)
+    assert len(careful.seen) == 1
+    cur = await wired.db.conn.execute("SELECT tier, outcome, turn FROM llm_ledger ORDER BY id")
+    rows = [tuple(row) for row in await cur.fetchall()]
+    assert [(row[0], row[1]) for row in rows] == [(SIMPLE, "error"), (IMPORTANT, "ok")]
+    assert rows[0][2] == rows[1][2]
+    assert ("chat.llm_error", {"tier": SIMPLE, "why": "unreachable"}) in wired.logged
+
+
+async def test_both_tiers_failing_leaves_the_canned_line_to_answer(wired, monkeypatch):
+    wire(
+        wired,
+        monkeypatch,
+        haiku=Answering(ANTHROPIC, MODEL, raises=LLMError("refused", "anthropic answered 400")),
+        groq=Answering(GROQ, "llama", raises=LLMError("rate_limited", "groq is rate limiting")),
+    )
+
+    assert await ask(wired) == (None, None)
+    assert tier_errors(wired) == {SIMPLE: "rate_limited", IMPORTANT: "refused"}
+
+
+async def test_a_tier_that_answers_again_stops_being_called_down(wired, monkeypatch):
+    tier_errors(wired)[SIMPLE] = "unreachable"
+    wire(wired, monkeypatch, groq=Answering(GROQ, "llama"))
+
+    await ask(wired)
+
+    assert tier_errors(wired) == {}
+
+
+async def test_the_models_are_never_called_while_the_mode_is_off(wired, monkeypatch):
+    quick = Answering(GROQ, "llama")
+    wire(wired, monkeypatch, groq=quick)
+    wired.store.values["chat_llm_mode"] = "off"
+
+    assert await ask(wired) == (None, None)
+    assert quick.seen == []
+
+
+async def test_a_missing_key_means_that_tier_is_simply_not_tried(wired, monkeypatch):
+    wired.settings.groq_api_key = None
+    careful = Answering(ANTHROPIC, MODEL)
+    wire(wired, monkeypatch, haiku=careful, groq=None)
+
+    said, tier = await ask(wired)
+
+    assert tier == IMPORTANT and len(careful.seen) == 1
+
+
+async def test_with_no_keys_at_all_nothing_is_called_and_nothing_is_written(wired, monkeypatch):
+    wired.settings.anthropic_api_key = None
+    wired.settings.groq_api_key = None
+    wire(wired, monkeypatch)
+
+    assert await ask(wired) == (None, None)
+    cur = await wired.db.conn.execute("SELECT COUNT(*) AS n FROM llm_ledger")
+    assert (await cur.fetchone())["n"] == 0
+
+
+async def test_a_note_that_matches_grounds_the_turn_and_sends_it_to_the_careful_tier(
+    wired, monkeypatch
+):
+    await add_section(wired.db, 7, "Cookout hours", "The cookout runs Friday evenings.")
+    careful = Answering(ANTHROPIC, MODEL)
+    wire(wired, monkeypatch, haiku=careful, groq=Answering(GROQ, "llama"))
+
+    said, tier = await ask(wired, "when is the cookout")
+
+    assert tier == IMPORTANT
+    asked = careful.seen[0]["messages"][-1]["content"]
+    assert "Friday evenings" in asked
+    assert "quote it rather than inventing" in asked
+
+
+async def test_the_window_is_carried_into_the_next_turn_and_nothing_older_is(wired, monkeypatch):
+    quick = Answering(GROQ, "llama", text="First answer.")
+    wire(wired, monkeypatch, groq=quick)
+
+    await ask(wired, "first question")
+    await ask(wired, "second question")
+
+    messages = quick.seen[-1]["messages"]
+    assert [row["content"] for row in messages] == [
+        "first question",
+        "First answer.",
+        "second question",
+    ]
+
+
+async def test_the_persona_stack_rides_the_system_and_never_the_member_turn(wired, monkeypatch):
+    careful = Answering(ANTHROPIC, MODEL)
+    wire(wired, monkeypatch, haiku=careful)
+    wired.settings.groq_api_key = None
+
+    await ask(wired, "is a mod around")
+
+    system = careful.seen[0]["system"]
+    assert system[0]["cache_control"] == {"type": "ephemeral"}
+    assert "You are Black Bloc" in system[0]["text"]
+
+
+async def test_the_closure_is_announced_once_and_the_models_are_not_called(wired, monkeypatch):
+    wired.store.values["chat_monthly_cap_usd"] = 0
+    quick = Answering(GROQ, "llama")
+    wire(wired, monkeypatch, groq=quick)
+
+    assert await ask(wired) == (None, None)
+    await ask(wired)
+
+    assert quick.seen == []
+    assert [kind for kind, _ in wired.logged] == ["chat.llm_capped"]
+
+
+async def test_a_long_answer_is_clipped_to_something_discord_will_take(wired, monkeypatch):
+    wire(wired, monkeypatch, groq=Answering(GROQ, "llama", text="z" * 5000))
+
+    said, _ = await ask(wired)
+
+    assert len(said) <= 1900

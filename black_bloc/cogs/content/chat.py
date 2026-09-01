@@ -27,7 +27,7 @@ from ...chat import (
     invalidate,
     seed_defaults,
 )
-from ...chat_llm import allowance, money, sweep_window
+from ...chat_llm import REPLY_KIND, allowance, money, sweep_window, tier_errors
 from ...emoji import tone_for, toned
 from ...knowledge import (
     SERVER,
@@ -139,6 +139,10 @@ VOICE_MEANS: dict[str, str] = {
 }
 VOICE_IS_A_MOOD = "every conversation sounds like this one mood until the setting changes."
 VOICE_CHANGED = "The voice is **{voice}** from the next answer on."
+VOICE_OFF = (
+    "\nNothing is using it yet: `chat_llm_mode` is off, so every answer still comes from Black "
+    "Bloc's own written lines."
+)
 MOODS_HEADER = "\n\n**The pool** — a mood that is off is never picked:"
 MOOD_LINE = "· **{name}** ({label}) — {state}"
 NO_MOODS = "\n\nThe pool has not been written yet; it fills itself in when Black Bloc starts up."
@@ -178,7 +182,6 @@ class Chat(commands.Cog):
         self._seeded: set[int] = set()
         self.last_ingest_at: str | None = None
         self.last_ingest_error: str | None = None
-        self.tier_errors: dict[str, str] = {}
 
     def loop_health(self, name: str) -> tuple[str | None, str | None]:
         if name == "_ingest":
@@ -241,7 +244,7 @@ class Chat(commands.Cog):
         )
         if not keyed:
             return TIER_NO_KEY
-        trouble = self.tier_errors.get(tier)
+        trouble = tier_errors(self.bot).get(tier)
         return TIER_TROUBLE.format(why=trouble) if trouble else TIER_READY
 
     async def notes_words(self, db: Any, guild_id: int) -> str:
@@ -260,6 +263,8 @@ class Chat(commands.Cog):
             return
         voice = str(self.bot.store.get(interaction.guild.id, PERSONALITY_KEY))
         parts = [VOICE_NOW.format(voice=voice, what=VOICE_MEANS.get(voice, VOICE_IS_A_MOOD))]
+        if self.bot.store.get(interaction.guild.id, LLM_MODE_KEY) != ON:
+            parts.append(VOICE_OFF)
         db = self.usable_db()
         rows = await list_tropes(db) if db is not None else []
         if not rows:
@@ -621,7 +626,7 @@ class Chat(commands.Cog):
         if self.cooling(user_id, self.cooldown_seconds(guild_id), now):
             return
         text = str(getattr(message, "content", "") or "")
-        answer = await answer_for(text, author, self.bot)
+        answer = await answer_for(text, author, self.bot, channel=channel, llm=True)
         if not answer.text:
             return
         if await self.waved_instead(message, text, guild_id, answer.intent):
@@ -642,6 +647,10 @@ class Chat(commands.Cog):
         log.info("chat: answered %s (%s)", user_id, answer.intent)
         if guild is None:
             return
+        if answer.tier:
+            await log_action(
+                self.bot, guild, REPLY_KIND, actor=author, details={"tier": answer.tier}
+            )
         if answer.intent == INSULT:
             await log_action(
                 self.bot, guild, LOG_KIND, actor=author, details={"intent": answer.intent}

@@ -2,12 +2,28 @@ from __future__ import annotations
 
 import logging
 import re
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from .actionlog import log_action
 from .chat import MENTION, has_phrase, normalise
-from .llm import IMPORTANT, SIMPLE
+from .groq import GroqClient
+from .knowledge import grounding, list_sections, search
+from .llm import (
+    ANTHROPIC,
+    ERROR,
+    GROQ,
+    IMPORTANT,
+    MODEL,
+    OK,
+    SIMPLE,
+    HaikuClient,
+    LLMError,
+    record,
+)
+from .personas import COOKOUT, pick_trope, pooled, system_blocks, system_text
 from .settings_store import (
     CHAT_DAILY_TURNS,
     CHAT_MONTHLY_CAP_USD,
@@ -39,6 +55,16 @@ PERSON_FULL = "person"
 SERVER_FULL = "server"
 CAPPED = "capped"
 CAPPED_KIND = "chat.llm_capped"
+REPLY_KIND = "chat.llm_reply"
+ERROR_KIND = "chat.llm_error"
+
+ON = "on"
+LLM_MODE_KEY = "chat_llm_mode"
+SIMPLE_MODEL_KEY = "chat_simple_model"
+PERSONALITY_KEY = "chat_personality"
+REPLY_LIMIT = 1900
+CLIENTS_ATTR = "_chat_clients"
+ERRORS_ATTR = "_chat_tier_errors"
 
 STAFF_WORDS: tuple[str, ...] = (
     "staff",
@@ -340,6 +366,222 @@ async def allowance(
         spent=spent,
         cap=cap,
     )
+
+
+def tier_errors(bot: Any) -> dict[str, str]:
+    """What each tier's last call did, so `/chat status` can say a tier is down."""
+    found = getattr(bot, ERRORS_ATTR, None)
+    if not isinstance(found, dict):
+        found = {}
+        setattr(bot, ERRORS_ATTR, found)
+    return found
+
+
+def clients_for(bot: Any) -> dict[str, Any]:
+    """One client per tier, built once. A key that is not set is a tier that is not here."""
+    found = getattr(bot, CLIENTS_ATTR, None)
+    if not isinstance(found, dict):
+        found = {}
+        setattr(bot, CLIENTS_ATTR, found)
+    return found
+
+
+def haiku(bot: Any) -> Any:
+    settings = bot.settings
+    if not settings.important_tier_configured:
+        return None
+    made = clients_for(bot)
+    if IMPORTANT not in made:
+        made[IMPORTANT] = HaikuClient(settings.anthropic_api_key)
+    return made[IMPORTANT]
+
+
+def groq(bot: Any, model: str) -> Any:
+    """Rebuilt when the model setting changes, so a Groq retirement is a settings edit."""
+    settings = bot.settings
+    if not settings.simple_tier_configured:
+        return None
+    made = clients_for(bot)
+    found = made.get(SIMPLE)
+    if found is None or found.model != model:
+        found = GroqClient(settings.groq_api_key, model=model)
+        made[SIMPLE] = found
+    return found
+
+
+def read_setting(store: Any, guild_id: Any, key: str, fallback: Any) -> Any:
+    if store is None or guild_id is None:
+        return fallback
+    try:
+        found = store.get(int(guild_id), key)
+    except Exception as exc:
+        log.warning("chat: %s was unreadable — %s: %s", key, type(exc).__name__, exc)
+        return fallback
+    return fallback if found is None else found
+
+
+def llm_is_on(bot: Any, guild_id: Any) -> bool:
+    """Affirmative only: off, unreadable, or a DM all mean the models are not in play."""
+    store = getattr(bot, "store", None)
+    if store is None or guild_id is None:
+        return False
+    return read_setting(store, guild_id, LLM_MODE_KEY, "off") == ON
+
+
+def usable_db(bot: Any) -> Any:
+    db = getattr(bot, "db", None)
+    return db if db is not None and getattr(db, "is_connected", False) else None
+
+
+async def hits_for(db: Any, guild_id: Any, text: Any) -> Any:
+    if guild_id is None:
+        return ()
+    try:
+        return search(await list_sections(db, int(guild_id)), text)
+    except Exception as exc:
+        log.warning("chat: the notes were not searched — %s: %s", type(exc).__name__, exc)
+        return ()
+
+
+def user_turn(text: Any, hits: Any) -> str:
+    said = spoken(text)
+    ground = grounding(hits)
+    return f"{said}\n\n{ground}" if ground else said
+
+
+async def say_capped(bot: Any, guild: Any, at: datetime) -> None:
+    db = usable_db(bot)
+    guild_id = getattr(guild, "id", None)
+    if db is None or guild_id is None:
+        return
+    if await capped_already_logged(db, guild_id, month_start(at)):
+        return
+    await log_action(bot, guild, CAPPED_KIND, details={"month": month_start(at)[:7]})
+
+
+async def try_tier(
+    bot: Any,
+    name: str,
+    *,
+    model_setting: str,
+    system: Any,
+    messages: Any,
+) -> Any:
+    client = haiku(bot) if name == IMPORTANT else groq(bot, model_setting)
+    if client is None:
+        return None
+    if name == IMPORTANT:
+        return await client.reply(system=system_blocks(system), messages=messages)
+    return await client.reply(system=system_text(system), messages=messages)
+
+
+async def conversational_reply(
+    bot: Any, *, guild: Any, member: Any, channel: Any, text: Any
+) -> tuple[str | None, str | None]:
+    """The whole second rung: knowledge, tier, one or two calls, and the ledger for each."""
+    guild_id = getattr(guild, "id", None)
+    if not llm_is_on(bot, guild_id):
+        return (None, None)
+    db = usable_db(bot)
+    if db is None:
+        return (None, None)
+    settings = bot.settings
+    important, simple = settings.important_tier_configured, settings.simple_tier_configured
+    if not (important or simple):
+        return (None, None)
+
+    at = datetime.now(UTC)
+    user_id = int(getattr(member, "id", 0) or 0)
+    channel_id = getattr(channel, "id", None)
+    spent = await allowance(db, bot.store, guild_id, user_id, now=at)
+    if not spent.ok:
+        if spent.why == CAPPED:
+            await say_capped(bot, guild, at)
+        log.info("chat: the models are closed for now (%s)", spent.why)
+        return (None, None)
+
+    window = await window_for(db, channel_id, user_id, now=at)
+    hits = await hits_for(db, guild_id, text)
+    tier = tier_for(text, hits, window)
+    order = ladder(tier, important=important, simple=simple)
+    if not order:
+        return (None, None)
+
+    voice = pick_trope(
+        read_setting(bot.store, guild_id, PERSONALITY_KEY, COOKOUT),
+        await pooled(bot),
+        key=window_key(channel_id, user_id),
+        turns=llm_turns(window),
+    )
+    model_setting = str(read_setting(bot.store, guild_id, SIMPLE_MODEL_KEY, "") or "")
+    asked = user_turn(text, hits)
+    messages = [*as_messages(window), {"role": "user", "content": asked}]
+    turn = uuid.uuid4().hex
+    errors = tier_errors(bot)
+
+    for name in order:
+        try:
+            answer = await try_tier(
+                bot, name, model_setting=model_setting, system=voice, messages=messages
+            )
+        except LLMError as exc:
+            errors[name] = exc.reason
+            await record(
+                db,
+                guild_id=guild_id,
+                user_id=user_id,
+                turn=turn,
+                provider=ANTHROPIC if name == IMPORTANT else GROQ,
+                model=MODEL if name == IMPORTANT else model_setting,
+                tier=name,
+                outcome=ERROR,
+                at=at,
+            )
+            log.warning("chat: the %s tier did not answer — %s", name, exc.reason)
+            if guild is not None:
+                await log_action(
+                    bot, guild, ERROR_KIND, details={"tier": name, "why": exc.reason}
+                )
+            continue
+        if answer is None:
+            continue
+        errors.pop(name, None)
+        await record(
+            db,
+            guild_id=guild_id,
+            user_id=user_id,
+            turn=turn,
+            provider=answer.provider,
+            model=answer.model,
+            tier=name,
+            outcome=OK,
+            usage=answer.usage,
+            at=at,
+        )
+        said = clip(answer.text, REPLY_LIMIT)
+        if not said:
+            continue
+        await remember(
+            db,
+            guild_id=guild_id,
+            channel_id=channel_id,
+            user_id=user_id,
+            speaker=MEMBER,
+            content=spoken(text),
+            at=at,
+        )
+        await remember(
+            db,
+            guild_id=guild_id,
+            channel_id=channel_id,
+            user_id=user_id,
+            speaker=BOT,
+            content=said,
+            tier=name,
+            at=at,
+        )
+        return (said, name)
+    return (None, None)
 
 
 async def capped_already_logged(db: Any, guild_id: int, since: str) -> bool:

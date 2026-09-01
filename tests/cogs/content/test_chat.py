@@ -4,6 +4,7 @@ import discord
 import pytest
 
 from black_bloc import actionlog
+from black_bloc import chat_llm as chat_llm_module
 from black_bloc.actionlog import log_action
 from black_bloc.chat import (
     BUILTIN_ORDER,
@@ -16,6 +17,7 @@ from black_bloc.chat import (
     seed_defaults,
     update_line,
 )
+from black_bloc.chat_llm import tier_errors
 from black_bloc.cogs.content import chat as cog_module
 from black_bloc.cogs.content.chat import Chat, in_a_thread, mentions_bot
 from black_bloc.config import load_settings
@@ -581,6 +583,74 @@ class FakeChoice:
         self.value = value
 
 
+def answering(said="Pull up a chair, Nia.", tier="simple"):
+    seen = []
+
+    async def reply(bot, *, guild, member, channel, text):
+        seen.append({"text": text, "channel": getattr(channel, "id", None)})
+        return (said, tier)
+
+    return reply, seen
+
+
+async def test_an_intent_that_matches_never_reaches_a_model(cog, bot, member, monkeypatch):
+    """The intents stay the front door: a greeting is answered for free."""
+    reply, seen = answering()
+    monkeypatch.setattr(chat_llm_module, "conversational_reply", reply)
+    await bot.store.set(GUILD, "chat_llm_mode", "on")
+
+    await cog.on_message(pinged(bot, member, "<@55> hi there"))
+
+    assert seen == []
+
+
+async def test_a_message_no_intent_knows_is_answered_by_the_model_and_logged(
+    cog, bot, member, db, monkeypatch
+):
+    reply, seen = answering()
+    monkeypatch.setattr(chat_llm_module, "conversational_reply", reply)
+    await bot.store.set(GUILD, "chat_llm_mode", "on")
+    message = pinged(bot, member, "<@55> what do you make of all this then")
+
+    await cog.on_message(message)
+
+    assert seen and seen[0]["channel"] == CHANNEL
+    assert message.replies[0]["content"] == "Pull up a chair, Nia."
+    assert message.replies[0]["kwargs"]["allowed_mentions"].everyone is False
+    assert [row["kind"] for row in await rows(db, "chat.llm_reply")] == ["chat.llm_reply"]
+
+
+async def test_a_model_that_says_nothing_leaves_the_written_line_to_answer(
+    cog, bot, member, db, monkeypatch
+):
+    reply, _ = answering(said=None, tier=None)
+    monkeypatch.setattr(chat_llm_module, "conversational_reply", reply)
+    await bot.store.set(GUILD, "chat_llm_mode", "on")
+    message = pinged(bot, member, "<@55> what do you make of all this then")
+
+    await cog.on_message(message)
+
+    assert "/help" in message.replies[0]["content"]
+    assert await rows(db, "chat.llm_reply") == []
+
+
+async def test_a_model_that_throws_leaves_the_written_line_to_answer(
+    cog, bot, member, monkeypatch, caplog
+):
+    async def boom(bot_arg, *, guild, member, channel, text):
+        raise RuntimeError("the sky fell in")
+
+    monkeypatch.setattr(chat_llm_module, "conversational_reply", boom)
+    await bot.store.set(GUILD, "chat_llm_mode", "on")
+    message = pinged(bot, member, "<@55> what do you make of all this then")
+
+    with caplog.at_level("WARNING"):
+        await cog.on_message(message)
+
+    assert "/help" in message.replies[0]["content"]
+    assert "the sky fell in" in caplog.text
+
+
 async def test_status_says_what_is_on_and_that_nothing_is_keyed_yet(
     cog, bot, member, monkeypatch
 ):
@@ -630,7 +700,7 @@ async def test_status_says_a_tier_is_down_rather_than_calling_it_ready(
     """poll_degraded honesty: a tier that failed says so instead of reading as fine."""
     monkeypatch.setattr(cog_module, "require_staff", _always_staff)
     monkeypatch.setattr(type(bot.settings), "simple_tier_configured", property(lambda s: True))
-    cog.tier_errors["simple"] = "unreachable"
+    tier_errors(bot)["simple"] = "unreachable"
     interaction = FakeInteraction(bot, member)
 
     await Chat.chat_status.callback(cog, interaction)
