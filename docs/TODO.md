@@ -93,6 +93,8 @@ per feature, so the old bot keeps running until the new one is proven.
   Future (estate-level): the "global personality pool" — one trope store
   shared across estate bots.
 
+- **Owner 2026-09-01 ~15:0x, verbatim: "the bot cant currently find roles, I want the bot to know who has what role so it can help escalate. so I can say hey @black_bloc tell me who's a lead or a mentor or something"** → a `who_has` DATA intent (deterministic, live gateway cache, display names never pings, ≤25 listed, staff-role answers end with the escalate pointer) + role-holder sections in the daily knowledge ingest for roles ≤25 humans so the Haiku tier grounds odd phrasings. Status: **Opus builder dispatched ~15:10 in a worktree.** (Same session, earlier: `/chat status` admin-locked behind `chat_status_admin_only` `45176ed`; managed role renamed `role_black_bloc` via the API — both live.)
+
 ## ⏳ Waiting on the owner
 
 - **Cutover, at your pace** — [`info/cutover-plan.md`](info/cutover-plan.md): prerequisites P1–P5 (channel rename, staff channel, TEST_MODE lift — the lift is yours alone), then the per-feature ladder.
