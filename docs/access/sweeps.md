@@ -13,6 +13,7 @@ All of this happens in **`#mute-me-bot-test-spam`** (test mode) or on **https://
 | 2026-08-27 | `@Black Bloc hi` (chat step 1) | replies |
 | 2026-08-27 | `/golive test` (card with game art) | posts |
 | 2026-08-27 | dashboard Direction A, themes, Members, Polls, Chat pages render | seen by Claude in the owner's browser |
+| 2026-09-01 | **Site sweep round 1** — rows 25 (one-time sign-out + sign-in), 26 and 28 (R1 shell + Black Bloc look), plus general clicking | owner: "i did the sweep of the site and its good for now"; keeps sweeping the rest |
 
 ## Not yet verified — in the order that matters
 | # | Feature | Do this | Expect |

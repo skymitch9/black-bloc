@@ -21,7 +21,14 @@
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
 
-## KI-1 — SQLite database lives inside a OneDrive-synced folder — `WATCHING`
+## KI-1 — (CLOSED 2026-09-01) SQLite database lives inside a OneDrive-synced folder
+
+**Was:** the entry below. **Now:** local `.env` `DATABASE_PATH` points at
+`C:/Users/nbasl/black-bloc-data/black_bloc.sqlite3` (outside OneDrive); the old
+file was copied there and the original under `data/` is inert (deletable at
+will). The hosted deployment always used the Fly volume and was never affected.
+
+## KI-1 (original text, kept for the record) — SQLite database lives inside a OneDrive-synced folder — `WATCHING`
 
 **Symptom:** the default `DATABASE_PATH=data/black_bloc.sqlite3` sits under
 `OneDrive/Documents/...`. OneDrive syncing a live SQLite file (plus its `-wal`
