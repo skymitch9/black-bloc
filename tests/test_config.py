@@ -91,3 +91,28 @@ def test_a_short_session_secret_disables_sign_in_and_warns(monkeypatch, caplog):
 
     monkeypatch.setenv("SESSION_SECRET", "x" * SESSION_SECRET_MIN)
     assert load_settings(_env_file=None).site_login_configured is True
+
+
+def test_a_missing_model_key_means_that_tier_does_not_exist_rather_than_an_error(monkeypatch):
+    for name in ("ANTHROPIC_API_KEY", "GROQ_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    none = load_settings(_env_file=None)
+    assert none.anthropic_api_key is None and none.groq_api_key is None
+    assert none.important_tier_configured is False
+    assert none.simple_tier_configured is False
+
+
+def test_a_blank_model_key_counts_as_unset_the_same_way_every_other_key_does(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "   ")
+    monkeypatch.setenv("GROQ_API_KEY", "")
+    blank = load_settings(_env_file=None)
+    assert blank.important_tier_configured is False
+    assert blank.simple_tier_configured is False
+
+
+def test_one_tier_keyed_and_the_other_not_is_a_normal_state(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-something")
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    one = load_settings(_env_file=None)
+    assert one.important_tier_configured is True
+    assert one.simple_tier_configured is False
