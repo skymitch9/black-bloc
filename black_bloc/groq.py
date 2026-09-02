@@ -18,7 +18,7 @@ from .llm import (
 log = logging.getLogger(__name__)
 
 CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
-DEFAULT_MODEL = "llama-3.3-70b-versatile"
+DEFAULT_MODEL = "openai/gpt-oss-120b"
 REQUEST_TIMEOUT_SECONDS = 15
 TOO_MANY = 429
 SERVER_TROUBLE = 500

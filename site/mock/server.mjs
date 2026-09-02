@@ -327,7 +327,7 @@ const SETTING_SPECS = [
   ['chat_reply_in_threads', 'bool', true, true, 'true to answer @-mentions inside threads as well as channels'],
   ['chat_route_ping_staff', 'bool', false, false, 'true to drop one line in the staff channel when somebody asks the bot for a mod; only used while modmail_enabled is true'],
   ['chat_llm_mode', 'enum', 'on', 'off', 'off, or on (an @-mention no built-in intent recognises is answered by a language model instead of the catch-all line). Off is the default and off is safe: with it off, or with no keys set, Black Bloc answers exactly as it does today', ['off', 'on']],
-  ['chat_simple_model', 'text', 'llama-3.3-70b-versatile', 'llama-3.3-70b-versatile', 'which Groq model the quick tier asks; it is a setting because Groq retires model names faster than a deploy can follow'],
+  ['chat_simple_model', 'text', 'openai/gpt-oss-120b', 'openai/gpt-oss-120b', 'which Groq model the quick tier asks; it is a setting because Groq retires model names faster than a deploy can follow'],
   ['chat_personality', 'enum', 'cookout', 'cookout', 'the voice Black Bloc writes a conversational answer in: cookout is the house voice, pool lets a conversation pick one of the moods and drift a step at a time, or name one mood to keep it. Only used when chat_llm_mode is on', PERSONALITY_CHOICES],
   ['chat_person_hourly_turns', 'int', 20, 20, "how many conversational answers one member may get in a rolling hour, up to 10000; 0 means no ceiling of its own. Past it they still get Black Bloc's own written lines", null, 10000],
   ['chat_daily_turns', 'int', 200, 200, 'how many conversational answers the whole server may get in a UTC day, up to 10000; 0 means no ceiling of its own', null, 10000],
@@ -700,7 +700,7 @@ function seedLedger() {
     rows.push({
       at: minutesAgo(Math.floor(span * (n / turns)) + 6),
       provider: groq ? 'groq' : 'anthropic',
-      model: groq ? 'llama-3.3-70b-versatile' : 'claude-haiku-4-5',
+      model: groq ? 'openai/gpt-oss-120b' : 'claude-haiku-4-5',
       input_tokens: inputs,
       output_tokens: outputs,
       cost_microdollars: groq ? 0 : inputs + outputs * 5,

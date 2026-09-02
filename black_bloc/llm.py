@@ -41,6 +41,7 @@ class Price:
 PRICES: dict[str, Price] = {
     "claude-haiku-4-5": Price(input=1.0, output=5.0, cache_write=1.25, cache_read=0.10),
     "llama-3.3-70b-versatile": Price(input=0.0, output=0.0),
+    "openai/gpt-oss-120b": Price(input=0.0, output=0.0),
 }
 
 UNKNOWN_PRICE: dict[str, Price] = {
