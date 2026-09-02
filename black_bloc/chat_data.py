@@ -41,6 +41,7 @@ ESCALATION_NAMES = 2
 OFFLINE = ("offline", "invisible", "")
 
 NO_ROLES_YET = "no roles yet"
+NO_STAFF_ROLES = "no staff roles"
 IS_STAFF = "Yes — that is staff, so they can help."
 NOT_STAFF = (
     "They are not staff, which is nothing against them — ask me for a mod and I will say who "
@@ -513,10 +514,15 @@ async def about_member(
         one = guild.get_member(named[0])
         return {"trouble": ONLY_ME if one is not None else MEMBER_UNKNOWN}, False
     who = people[0]
-    roles = role_names_of(who)
+    staff_ids = {getattr(one, "id", None) for one in staff_roles_of(bot, guild)}
+    held = [
+        str(getattr(role, "name", ""))
+        for role in getattr(who, "roles", ()) or ()
+        if getattr(role, "id", None) in staff_ids
+    ]
     return {
         "who": display_of(guild, getattr(who, "id", 0)),
-        "roles": ", ".join(f"**{name}**" for name in roles) or NO_ROLES_YET,
+        "roles": ", ".join(f"**{name}**" for name in held) or NO_STAFF_ROLES,
         "verdict": IS_STAFF if bot.store.is_staff(who) else NOT_STAFF,
     }, True
 

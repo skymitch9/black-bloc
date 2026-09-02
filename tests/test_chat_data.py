@@ -552,7 +552,7 @@ async def test_a_member_who_is_not_staff_gets_their_roles_named_without_judgemen
 
     tokens, filled = await asked(bot, "about_member", text="<@4002> is a mod")
 
-    assert filled is True and tokens["roles"] == "**Member**"
+    assert filled is True and tokens["roles"] == "no staff roles"
     assert "not staff" in tokens["verdict"]
     assert "ask me for a mod" in tokens["verdict"]
 
@@ -562,7 +562,7 @@ async def test_a_member_with_no_roles_says_so_rather_than_leaving_a_gap(bot):
 
     tokens, _ = await asked(bot, "about_member", text="<@4003> is staff")
 
-    assert tokens["roles"] == "no roles yet"
+    assert tokens["roles"] == "no staff roles"
 
 
 async def test_asking_about_nobody_asks_for_an_at_mention(bot):
