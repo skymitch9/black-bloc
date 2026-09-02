@@ -12,7 +12,7 @@ from .chat import MENTION, has_phrase, normalise
 from .chat_check import FIXED_KIND, check_reply
 from .directory import DIRECTORY_NONE, directory_block
 from .groq import GroqClient
-from .knowledge import grounding, list_sections, search
+from .knowledge import grounding, is_strong, list_sections, search
 from .llm import (
     ANTHROPIC,
     ERROR,
@@ -155,7 +155,7 @@ def a_conversation(window: Any) -> bool:
 
 def tier_for(message: Any, hits: Any = (), window: Any = ()) -> str:
     """IMPORTANT when the answer has to be right; SIMPLE for the banter. One home."""
-    if list(hits or ()):
+    if is_strong(hits):
         return IMPORTANT
     if a_real_question(message):
         return IMPORTANT
@@ -462,7 +462,7 @@ async def hits_for(db: Any, guild_id: Any, text: Any) -> Any:
     if guild_id is None:
         return ()
     try:
-        return search(await list_sections(db, int(guild_id)), text)
+        return search(await list_sections(db, int(guild_id)), spoken(text))
     except Exception as exc:
         log.warning("chat: the notes were not searched — %s: %s", type(exc).__name__, exc)
         return ()

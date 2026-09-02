@@ -43,7 +43,7 @@ from black_bloc.chat_llm import (
     window_key,
     word_count,
 )
-from black_bloc.knowledge import add_section
+from black_bloc.knowledge import ALL_OF, add_section, grounding, search
 from black_bloc.llm import (
     ANTHROPIC,
     GROQ,
@@ -101,9 +101,34 @@ def test_only_a_turn_a_model_answered_counts_towards_a_conversation():
     assert CONVERSATION_TURNS == 2
 
 
+NOTES = [
+    {
+        "id": 1,
+        "title": "Cookout hours",
+        "body": "The grill is on Friday from six and Sunday from noon.",
+        "source": "staff",
+        "tag": "rules",
+    },
+    {
+        "id": 2,
+        "title": "Channels in this server",
+        "body": "#general, #off-topic, #cookout-chat",
+        "source": "server",
+        "tag": "channel",
+    },
+]
+
+
+def looked_up(query):
+    """The real search over real notes: a hit's strength is not something a test invents."""
+    return search(NOTES, query)
+
+
 RULES = [
-    ("a knowledge hit means the answer must be grounded", "when is the cookout", ["a hit"], [],
-     IMPORTANT),
+    ("a strong knowledge hit means the answer must be grounded", "cookout hours",
+     looked_up("cookout hours"), [], IMPORTANT),
+    ("a weak hit rides along as grounding without buying the careful tier", "lol whatever",
+     looked_up("lol whatever"), [], SIMPLE),
     ("a long question is a real question", LONG, [], [], IMPORTANT),
     ("a short question is still banter", SHORT_Q, [], [], SIMPLE),
     ("two model turns already means a conversation", "and then?", [],
@@ -123,8 +148,23 @@ def test_the_tier_table(why, message, hits, window, wanted):
     assert tier_for(message, hits, window) == wanted
 
 
-def test_a_hit_wins_over_everything_else_because_grounding_is_the_point():
-    assert tier_for("lol", ["a hit"], []) == IMPORTANT
+def test_a_strong_hit_wins_over_everything_else_because_grounding_is_the_point():
+    found = looked_up("cookout hours")
+    assert found.strong is True
+    assert tier_for("lol", found, []) == IMPORTANT
+
+
+def test_a_casual_message_with_only_weak_hits_stays_on_the_cheap_tier():
+    """Measured 2026-09-01: 8 of 8 live calls went IMPORTANT because ANY hit promoted."""
+    found = looked_up("hi")
+    assert found.hits and found.matched == ALL_OF
+    assert found.strong is False
+    assert tier_for("hi", found, []) == SIMPLE
+    assert grounding(found), "the notes still ride along, they just do not cost more"
+
+
+def test_a_bare_list_of_hits_is_never_strong_because_it_says_which_pass_answered_nothing():
+    assert tier_for("lol", ["a hit"], []) == SIMPLE
 
 
 def test_the_ladder_tries_the_cheap_tier_first_then_one_expensive_attempt():
@@ -638,12 +678,39 @@ async def test_a_note_that_matches_grounds_the_turn_and_sends_it_to_the_careful_
     careful = Answering(ANTHROPIC, MODEL)
     wire(wired, monkeypatch, haiku=careful, groq=Answering(GROQ, "llama"))
 
-    said, tier = await ask(wired, "when is the cookout")
+    said, tier = await ask(wired, "<@1> cookout hours")
 
     assert tier == IMPORTANT
     asked = careful.seen[0]["messages"][-1]["content"]
     assert "Friday evenings" in asked
     assert "quote it rather than inventing" in asked
+
+
+async def test_a_loose_match_grounds_the_cheap_tier_instead_of_paying_for_the_careful_one(
+    wired, monkeypatch
+):
+    """The measured bug: any hit promoted, so Groq was never once chosen."""
+    await add_section(wired.db, 7, "Cookout hours", "The cookout runs Friday evenings.")
+    quick = Answering(GROQ, "llama-3.3-70b-versatile")
+    wire(wired, monkeypatch, haiku=Answering(ANTHROPIC, MODEL), groq=quick)
+
+    said, tier = await ask(wired, "<@1> when is the cookout")
+
+    assert tier == SIMPLE
+    asked = quick.seen[0]["messages"][-1]["content"]
+    assert "Friday evenings" in asked
+
+
+async def test_black_blocs_own_mention_is_not_one_of_the_words_the_notes_are_searched_for(
+    wired, monkeypatch
+):
+    """The id in `<@1>` tokenised as a word that matches no note, so the every-token pass
+    could never answer a real @-mention and every call fell to the loose one."""
+    await add_section(wired.db, 7, "Cookout hours", "The cookout runs Friday evenings.")
+    found = await chat_llm.hits_for(wired.db, 7, "<@1234567890> cookout hours")
+
+    assert "1234567890" not in found.terms
+    assert found.strong is True
 
 
 async def test_the_window_is_carried_into_the_next_turn_and_nothing_older_is(wired, monkeypatch):

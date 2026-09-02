@@ -4437,3 +4437,23 @@ The table below is the map, and the reason each choice went the way it did.
 | `black_bloc/api/tools/chat.py:207` | Nothing was added to the router: `chat_settings` already returns every key whose namespace is `chat`, so a new `chat_*` key reaches the page by being registered. `site/public/assets/page-chat.js:33` is the curated subset the CHAT page shows, and all four were added there; the Settings page shows every key regardless. |
 | `site/public/assets/labels.js:98` | Each key gets a human label, because the fallback (`derived`) would render `chat_home_channel_id` as "Home channel" — losing the "when the bot names a channel that is not real" that is the whole reason it exists. |
 | `site/mock/server.mjs:320` | The mock's rows are hand-maintained and there is no parity test between them and `KEY_TYPES`, so a key added to the registry and not to the mock simply does not appear in a mock render. Both were changed in the same commit as each key. |
+
+# Chat follow-up (2026-09-01) — the four things a live evening found
+
+> **Every item traces to something the owner or a member saw the armed chat do
+> on 2026-09-01.** Built on a branch cut from `main` @ `ed2710c`, one commit per
+> item. ⚠️ **Still no verification against a real model call** — every test here
+> drives fakes, and what a prompt change does to a real answer cannot be
+> measured from this tree at all.
+
+## 1. Only a STRONG hit is worth the dear tier
+
+| Key | Note |
+|---|---|
+| ⚠️ **MEASURED first, and it found a second cause** | The live ledger: **8 calls, every one `anthropic` / `important` / `ok`, zero Groq attempts.** Reproduced here over a realistic note set, which showed something the ledger could not: **the bot's own mention tokenises into a WORD.** `<@1234567890>` splits to `1234567890`, which lands in no note, so the every-token pass could never answer a real @-mention and *every* live call fell through to the loose pass — where 29 server notes match nearly anything. `any hit → IMPORTANT` was therefore not merely generous, it was unconditional. |
+| ⚠️ `black_bloc/chat_llm.py:461` | **The fix that makes the rest possible: the notes are searched on `spoken(text)`, not on the raw message.** The id was never a search term anybody wanted; it is an accident of `tokenize` splitting on non-word characters. Everything else in this section is dead code while the id is still in the query. |
+| ⚠️ `black_bloc/knowledge.py:252` | **`is_strong` lives in `knowledge.py` rather than in `tier_for`, because the search is the thing that knows how it answered.** Three conditions, each for a measured failure: the **every-token pass** answered (the loose pass is "closest matches" and always finds something); the top hit reaches **`STRONG_SCORE`** (a body-only coincidence scores 1, a note actually about the question scores 8 or more); and every term lands on a **whole word** — `hi` is inside `this`, so `<@bot> hi` scored a title hit of 8 against "Channels in **this** server" and would have passed a bare AND-pass test. |
+| `black_bloc/knowledge.py:238` | `whole_word` bounds on `[a-z0-9]` only, so a token that already carries punctuation (`off-topic`, which `tokenize` deliberately keeps whole) still matches at its hyphen. |
+| ⚠️ `black_bloc/knowledge.py:108` | `Found.strong` is a property over the same function rather than a stored field: strength is derived from the hits and the pass, and a copy in the row would be a second thing to keep true. |
+| ⚠️ `black_bloc/chat_llm.py:156` | **A bare list of hits is never strong, on purpose.** The one caller that matters passes a `Found`; anything else carries no record of which pass answered, and assuming "probably strong" is exactly how the original bug read. |
+| **The accepted cost, said plainly** | Stopwords are not stripped, so the every-token pass is brittle against ordinary sentences: `cookout hours` is strong, `when is the cookout` is not, because `when` lands in no note. That second question goes to **Groq with the note attached** rather than to Haiku. That is the design's own trade — weak hits still ride as grounding — and the lever if it reads badly in practice is a stopword list in `tokenize`, not a looser threshold, which is the bug this replaced. |

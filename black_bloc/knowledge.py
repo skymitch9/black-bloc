@@ -16,6 +16,7 @@ SOURCES: tuple[str, ...] = (STAFF, SERVER)
 TITLE_WEIGHT = 8
 TAG_WEIGHT = 4
 BODY_CAP = 5
+STRONG_SCORE = TITLE_WEIGHT
 SNIPPET_CHARS = 400
 TOKEN_MIN = 2
 TOKENS_MAX = 8
@@ -39,6 +40,7 @@ ANY_OF = "any"
 
 WORD = re.compile(r"[^a-z0-9_./-]+")
 SPACES = re.compile(r"\s+")
+EDGE = re.compile(r"[a-z0-9]")
 
 GROUNDING_OPENER = (
     "(What the server's notes say, for your answer — quote it rather than inventing:"
@@ -101,6 +103,10 @@ class Found:
 
     def __iter__(self) -> Any:
         return iter(self.hits)
+
+    @property
+    def strong(self) -> bool:
+        return is_strong(self)
 
 
 def now_iso() -> str:
@@ -227,6 +233,35 @@ def search(rows: Any, query: Any, limit: int = HITS_DEFAULT) -> Found:
         total=len(hits),
         terms=tokens,
     )
+
+
+def whole_word(haystack: str, token: str) -> bool:
+    """`hi` is not in `this`: a token counts only where a letter or digit does not touch it."""
+    if not token:
+        return False
+    at = haystack.find(token)
+    while at != -1:
+        before = haystack[at - 1] if at else ""
+        after = haystack[at + len(token) : at + len(token) + 1]
+        if not (EDGE.match(before) or EDGE.match(after)):
+            return True
+        at = haystack.find(token, at + 1)
+    return False
+
+
+def is_strong(found: Any) -> bool:
+    """Every token, on whole words, scoring like a note that is ABOUT the question."""
+    hits = tuple(getattr(found, "hits", ()) or ())
+    if not hits or getattr(found, "matched", ANY_OF) != ALL_OF:
+        return False
+    top = hits[0]
+    if int(getattr(top, "score", 0) or 0) < STRONG_SCORE:
+        return False
+    haystack = " ".join(
+        str(value_of(top, name)) for name in ("title", "tag", "body")
+    ).lower()
+    terms = tuple(getattr(found, "terms", ()) or ())
+    return bool(terms) and all(whole_word(haystack, term) for term in terms)
 
 
 def section_text(hit: Any) -> str:
