@@ -109,9 +109,13 @@ already said go.** Order recommended by the 5.0 session, owner did not reorder:
    **per-streamer favourite roles** ("people that want to see SuperNamu only …
    can get her pings") wired into announcements + the role menus. Everything it
    needs exists: role menus (incl. approval/staff modes), `golive_ping_role_id`
-   / `events_ping_role_id`, the announcement paths. Design doc first
-   (`info/phase15-design.md`), owner decisions likely small (who may create a
-   streamer role; auto-create on `/twitch link`?). ~One build.
+   / `events_ping_role_id`, the announcement paths. **DESIGNED 2026-09-02 16:45
+   → [`info/phase15-design.md`](info/phase15-design.md)**; the seven small
+   decisions (who creates a fan role, its name, one Events role for both feeds,
+   keep-on-unlink, delete-on-remove, mode off at deploy, three opt-in surfaces)
+   were taken with defaults and are ALL settings keys, so the owner flips them
+   on the dashboard rather than in chat. **Opus worktree builder dispatched
+   2026-09-02 ~16:50.**
 2. **F3 — YouTube upload announcements**: go-live via YouTube presence already
    works (sweeps row 4); this adds NEW-UPLOAD posts, which needs the YouTube
    Data API (owner mints an API key — free quota) + a channel-link store like
