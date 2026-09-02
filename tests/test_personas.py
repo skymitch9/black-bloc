@@ -76,6 +76,33 @@ def test_the_core_carries_the_four_hard_rules():
     assert "quote them rather than inventing" in said
 
 
+def test_the_core_tells_it_to_take_a_side_rather_than_bounce_the_question_back():
+    """Live 2026-09-01: "who is the strongest DBZ character" got "way outside my
+    wheelhouse… Who's your pick?" and a member said to have it pick a character."""
+    said = " ".join(CORE.lower().split())
+    assert "take a side" in said
+    assert "so pick one and give one playful reason for it" in said
+    assert "outside my wheelhouse" in said and "is not an answer" in said
+    assert "never make \"what's your pick?\" the whole reply" in said
+    assert "an aside at the end, never the answer itself" in said
+    assert said.index("take a side") > said.index("what is true")
+
+
+def test_taking_a_side_did_not_loosen_the_two_rules_it_sits_between():
+    said = " ".join(CORE.lower().split())
+    assert "do not invent a fact about this server or about a member to back a pick up" in said
+    assert "somebody's personal details, a moderation decision" in said
+    assert "never invent a fact about a member" in said
+    assert "quote them rather than inventing" in said
+
+
+def test_the_new_rule_is_in_the_core_and_never_in_a_mood():
+    said = "Take a side"
+    assert said in stable_core()
+    assert all(said not in trope.voice for trope in TROPES)
+    assert said not in trope_block(BY_NAME["deadpan"])
+
+
 def test_no_part_of_the_voice_teaches_the_bot_to_talk_about_its_own_spending():
     for text in (CORE, stable_core(), REGISTER, INVARIANT, *(t.voice for t in TROPES)):
         assert says_a_budget_word(text) is None, text[:60]

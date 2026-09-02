@@ -4491,3 +4491,16 @@ The table below is the map, and the reason each choice went the way it did.
 | ⚠️ `site/public/assets/page-chat.js:71` | **The Chat page's dollar figure is an `<a>` to `#sect-costs`, and the section note says the money lives on Health.** One number, one home: the Chat page keeps tier liveness (which is a chat fact) and hands the money to the page that also knows hosting and the keys. `a.spend-figure` drops the underline so it still reads as the number. |
 | `black_bloc/settings_store.py` (`cost_hosting_usd`) | A key whose namespace is its own — `namespace_of` splits on the first underscore, so it lands in a **Costs** group on the Settings page with no override needed, and `page-settings.js` gives that group a name and a note pointing back at the Health card. |
 | ⚠️ **RENDERED, not reasoned about (2026-09-01)** | Driven in a browser against `site/mock/server.mjs`: the Costs card renders the total, the four cost lines, the two model rows with this month and the month before, and the nine key names behind a fold. **`cost_hosting_usd` was actually EDITED to 12 through the Settings page's docked Save Changes bar**, and the Health card then read **$12.34** with the hosting row green and the "Fill it in" prompt gone — the round trip, not just the pixels. The Chat page's figure was clicked and landed on `/health.html#sect-costs` with the card open. No console errors. |
+
+## 4. Play, do not deflect
+
+> Live 2026-09-01, member PT: *"who is the strongest DBZ character"* → *"way
+> outside my wheelhouse… you'd get better arguments in #off-topic… Who's your
+> pick?"*, and the member said to have the bot at least pick a character.
+
+| Key | Note |
+|---|---|
+| ⚠️ `black_bloc/personas.py:35` | **A CORE section, not a mood, because a mood can be off and every mood is appended after the core anyway** — the file's standing structural argument. The failing answer was in the HOUSE voice with no mood on it at all, so a mood could never have fixed it. |
+| ⚠️ `black_bloc/personas.py:35` | **The rule names the three shapes of the failure separately, because the live answer did all three:** it said the topic was outside its wheelhouse, it pointed at a channel *instead of* answering, and it handed the question straight back. So the text forbids each one by name and allows the two that are fine in their place — "what's your pick?" AFTER a pick, a channel as an aside at the end. |
+| ⚠️ `black_bloc/personas.py:35` | **Placed between "What is true" and "What you may name", and the surrounding rules were not touched.** The new paragraph restates their boundary in its own words — do not invent a fact about the server or a member to back a pick up; keep the ducking for personal details, moderation decisions and real harm — so a model reading only this section cannot read it as permission to make things up. A test asserts both old rules are still in the core beside the new one. |
+| ⚠️ **What was NOT verified** | **Everything about the effect.** No real model has read this text, so whether it actually stops the deflection is unmeasurable from this tree. What is tested is that the sentences are in the stack, that they are in the core rather than in a mood, that the two rules they sit between survive intact, and that no forbidden budget word crept in. The check that matters is the owner asking a live opinion question after the next deploy. |
