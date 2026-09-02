@@ -4,6 +4,7 @@ import discord
 import pytest
 
 from black_bloc import actionlog
+from black_bloc import chat as chat_module
 from black_bloc import chat_llm as chat_llm_module
 from black_bloc.actionlog import log_action
 from black_bloc.chat import (
@@ -756,6 +757,29 @@ async def test_a_model_that_throws_leaves_the_written_line_to_answer(
 
     assert "/help" in message.replies[0]["content"]
     assert "the sky fell in" in caplog.text
+
+
+async def test_a_role_question_matching_no_role_at_all_goes_to_the_model(
+    cog, bot, member, monkeypatch
+):
+    async def a_pick(bot_arg, home, member_arg, channel, text):
+        return ("Beerus, easily — destruction beats training arcs.", "simple")
+
+    monkeypatch.setattr(chat_module, "a_model_answer", a_pick)
+    await bot.store.set(GUILD, "chat_llm_mode", "on")
+    message = pinged(bot, member, "<@55> whos the strongest dbz character")
+
+    await cog.on_message(message)
+
+    assert "Beerus" in message.replies[0]["content"]
+
+
+async def test_the_same_question_with_no_model_keeps_the_worded_refusal(cog, bot, member):
+    message = pinged(bot, member, "<@55> whos the strongest dbz character")
+
+    await cog.on_message(message)
+
+    assert "no role here called" in message.replies[0]["content"]
 
 
 async def test_status_says_what_is_on_and_that_nothing_is_keyed_yet(

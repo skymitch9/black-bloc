@@ -24,6 +24,7 @@ NOTHING_HELD = "nothing from them yet"
 SOME_MODS = "the mods"
 
 WHO_HAS = "who_has"
+PASS_TO_MODEL = "pass_to_model"
 HOLDERS_SHOWN = 25
 CLOSEST_SHOWN = 3
 EVERYONE = "@everyone"
@@ -412,7 +413,7 @@ async def who_has(bot: Any, guild: Any, member: Any, text: Any) -> tuple[dict[st
             return {
                 "trouble": NO_SUCH_ROLE_BUT.format(asked=asked, close=role_words(close, " and "))
             }, False
-        return {"trouble": NO_SUCH_ROLE.format(asked=asked)}, False
+        return {"trouble": NO_SUCH_ROLE.format(asked=asked), PASS_TO_MODEL: True}, False
     role = found[0]
     names = holders_of(role)
     if not names:

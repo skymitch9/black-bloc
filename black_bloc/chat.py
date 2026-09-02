@@ -744,13 +744,13 @@ async def answer_for(
     intents = await guild_intents(bot, guild_id)
     intent = classify(text, intents, mentions_member=bool(others_mentioned(text, bot)))
     kind = kind_of(intent, intents)
-    if llm and intent == UNKNOWN:
+    tokens, filled = await chat_data.tokens_for(bot, home, member, intent, text)
+    if llm and (intent == UNKNOWN or tokens.get(chat_data.PASS_TO_MODEL)):
         said, tier = await a_model_answer(bot, home, member, channel, text)
         if said:
             return Answer(
                 intent, kind, FILLED, toned_text(said, tone_for(bot, guild_id)), tier=tier
             )
-    tokens, filled = await chat_data.tokens_for(bot, home, member, intent, text)
     slot = FILLED if kind == CANNED or filled else EMPTY
     line = respond(
         intent,
