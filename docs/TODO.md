@@ -88,13 +88,16 @@ per feature, so the old bot keeps running until the new one is proven.
   browser (audited Via: Website; row read back ON after save). ⚠️ **No model
   call has happened yet** — the owner's first @-mention that no intent knows
   will be the first ever; sweeps rows 33–35 are the check-out and row 33's
-  `/chat status` shows the first real cost figure. Owner still to run
-  `sh scripts/env-lock.sh` so `.env.enc` includes the new keys.
+  `/chat status` shows the first real cost figure. ✅ `.env.enc` refreshed by the owner
+  2026-09-02 11:31 (via the full Git-bash path — `sh` is not on the owner's
+  PATH; runbook command updated accordingly) and pushed in `8e81a03`.
   Future (estate-level): the "global personality pool" — one trope store
   shared across estate bots.
 
 
 
+
+- **Owner 2026-09-02 ~11:30–11:50: secret custody moved to 1Password.** Owner asks, verbatim: "we use an estate vault for gabi in 1 password, can we do something like that here?" → "should we use the estate vault or make a new one? I assume a new one that way i can share the vault with another dev" → "we should do individual entries for the vault not 1 big one". Done live: vault **`Black Bloc`** created (separate from `Estate` for shareability), **nine bare-titled items** created from `.env` via the `op` CLI (values never in any transcript; owner clicked the authorization prompts), verified by title listing. Custody docs updated (RECOVERY header + runbook laptop flow): vault master → `.env` working copy → `.env.enc` offline fallback. Same window: `.env.enc` refreshed by the owner + pushed `8e81a03`; **CI stood up and GREEN on the first run** (ubuntu, 5m21s — the suite's first non-Windows execution) + the gated `scripts/deploy.ps1` is THE deploy path (runbook updated; incident-named). Gotcha recorded in RECOVERY: `op` needs an unsandboxed shell to reach the desktop app.
 
 ## ⏳ Waiting on the owner
 

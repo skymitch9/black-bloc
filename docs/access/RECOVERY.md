@@ -47,6 +47,23 @@ data and `docs/` is tracked).
 
 ## Secrets — by NAME, with custody
 
+> 🔐 **THE VAULT IS THE MASTER — 2026-09-02.** All nine secret values live as
+> individual bare-titled items in the 1Password vault **`Black Bloc`**
+> (id `2cbj6khhcydxeohuygvv7zrsju`, tags `estate`/`black-bloc`/`credential`),
+> created from `.env` via the `op` CLI with owner approval; the vault is
+> deliberately SEPARATE from the estate's `Estate` vault so it can be shared
+> with a future Black Bloc dev without exposing estate master credentials.
+> Custody order on any disagreement: **vault → `.env` (working copy) →
+> `.env.enc` (offline fallback; passphrase in the owner's head)** — resolve
+> toward the vault, never away from it. Rotation: change the vault item, paste
+> into `.env`, then push to Fly. Laptop: open 1Password, copy each value into a
+> `.env` built from the tracked `.env.example`. ⚠️ Gotcha, measured 2026-09-02:
+> the `op` CLI cannot reach the desktop app from a SANDBOXED session shell
+> ("cannot connect to 1Password app" / "authorization timeout" while the app
+> runs fine) — it needs an unsandboxed shell plus the owner clicking the
+> authorization prompts; GABI's 2026-08-26 adoption hit none of this only
+> because its shells were unsandboxed.
+
 | Name | Custody (where a copy lives / who re-mints) | Deployed copy |
 |---|---|---|
 | `DISCORD_TOKEN` | Discord Developer Portal → application *Black Bloc* (id `1542317881822281739`) → Bot → **Reset Token** (re-mint; old one dies). Owner's Discord login is the root of trust. | `fly secrets` on app `black-bloc` (write-only; cannot be read back) + local `.env` |

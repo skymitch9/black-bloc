@@ -106,13 +106,16 @@ node --version                            # for site/mock/check.mjs (Node 20+)
 ```
 Deploy = the block under **Deploy** above (`git pull` first). Docs are tracked temporarily, so `docs/` comes with the clone.
 
-**`.env` on another machine, without pasting secrets around:** on the main machine run
-`sh scripts/env-lock.sh` in YOUR OWN terminal (it prompts for a passphrase; keep it in your password
-manager), commit the resulting `.env.enc`, push. On the laptop: `sh scripts/env-unlock.sh` → writes
-`.env` (gitignored). AES-256-CBC with PBKDF2 (600k iterations) via the OpenSSL that ships with Git for
-Windows; the passphrase never leaves your head/password manager and Claude never sees the values. If
-you rotate a secret, re-run lock and commit the new `.env.enc`. (A Firebase/Firestore store would work
-too but would need a service-account key on the laptop — a second secret to protect for no gain.)
+**`.env` on another machine — 🔐 the 1Password vault `Black Bloc` is the master
+(2026-09-02):** on the laptop, open 1Password (the vault syncs to it), copy
+`.env.example` to `.env`, and paste each of the nine secret values from its
+bare-titled vault item. Sharing that vault + repo access fully onboards a dev.
+FALLBACK (offline / no 1Password): `sh scripts/env-lock.sh` on the main machine
+(passphrase prompt — yours alone), commit `.env.enc`, push; laptop runs
+`sh scripts/env-unlock.sh`. ⚠️ On the owner's machines `sh` is NOT on PATH —
+use `& "C:\Program Files\Git\bin\bash.exe" scripts/env-lock.sh`. After any
+rotation: vault item first, then `.env`, then Fly, then (optionally) a fresh
+`.env.enc`.
 Variable NAMES in `.env`: `DISCORD_TOKEN DISCORD_CLIENT_ID DISCORD_CLIENT_SECRET SESSION_SECRET POLL_VOTE_SECRET
 TWITCH_CLIENT_ID TWITCH_CLIENT_SECRET DEV_GUILD_ID TEST_MODE TEST_CHANNEL_ID DATABASE_PATH API_ENABLED
 API_HOST API_PORT SITE_ORIGIN COMMAND_PREFIX LOG_LEVEL`.
