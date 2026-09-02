@@ -30,6 +30,9 @@ EVERYONE = "@everyone"
 LEADING_FILLER = ("a", "an", "the", "our", "my", "your", "all", "of", "us", "role", "roles")
 TRAILING_FILLER = ("role", "roles", "here", "now", "right", "please", "rn", "then", "again")
 
+ROLE_MENU_CHANNEL_KEY = "role_menu_channel_id"
+MENUS_LIVE_IN = " The menus are posted in {where}."
+
 ABOUT_MEMBER = "about_member"
 MEMBERS_GROUNDED = 5
 ESCALATION_NAMES_KEY = "chat_escalation_names"
@@ -202,6 +205,16 @@ async def head_count(bot: Any, guild: Any, member: Any, text: Any) -> tuple[dict
     return {"count": count}, True
 
 
+def where_the_menus_are(bot: Any, guild: Any) -> str:
+    """A sentence naming the posted menus' channel, and nothing at all when none is set."""
+    try:
+        channel_id = bot.store.get(guild.id, ROLE_MENU_CHANNEL_KEY)
+    except Exception as exc:
+        log.warning("chat: where the menus live was unreadable — %s", exc)
+        return ""
+    return MENUS_LIVE_IN.format(where=f"<#{int(channel_id)}>") if channel_id else ""
+
+
 async def my_roles(bot: Any, guild: Any, member: Any, text: Any) -> tuple[dict[str, Any], bool]:
     db = usable_db(bot)
     if db is None or guild is None or not picking_is_on(bot, guild.id):
@@ -223,6 +236,7 @@ async def my_roles(bot: Any, guild: Any, member: Any, text: Any) -> tuple[dict[s
         "menus": ", ".join(offered),
         "roles": ", ".join(held) or NOTHING_HELD,
         "count": len(offered),
+        "extra": where_the_menus_are(bot, guild),
     }, True
 
 

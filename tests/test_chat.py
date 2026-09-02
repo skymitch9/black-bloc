@@ -152,6 +152,40 @@ def test_normalise_leaves_words_only():
     assert normalise("<@42> Hey!!! How's it going?") == "hey hows it going"
 
 
+SELF_SERVICE = [
+    # The owner's own sentence, 2026-09-01: it was answered "hit up @Admin".
+    ("i want to host an event, can you show me how to do that", "host_an_event", "/event create"),
+    ("how do i make an event", "host_an_event", "/event create"),
+    ("can i file a request", "file_a_request", "/request create"),
+    ("i want to make a suggestion", "file_a_request", "/request create"),
+    ("how do i link my twitch", "link_twitch", "/twitch link"),
+    ("can you announce my streams", "link_twitch", "/twitch link"),
+    ("how do i set my birthday", "set_a_birthday", "/birthday set"),
+    ("where do i add my birthday", "set_a_birthday", "/birthday set"),
+]
+
+
+@pytest.mark.parametrize(
+    "said, intent, command", SELF_SERVICE, ids=[row[0] for row in SELF_SERVICE]
+)
+def test_the_bot_names_its_own_command_instead_of_sending_somebody_to_staff(said, intent, command):
+    assert classify(f"<@1> {said}") == intent
+    assert all(command in line for line in LINES[intent]), intent
+
+
+def test_asking_for_roles_lands_on_the_role_menus_rather_than_on_who_holds_what():
+    assert classify("<@1> how do i get roles") == "my_roles"
+    assert classify("<@1> where are the role menus") == "my_roles"
+    assert classify("<@1> who has the lead role") == "who_has"
+
+
+def test_the_new_self_service_intents_do_not_swallow_the_questions_that_came_first():
+    assert classify("<@1> whats the next event") == "whats_next"
+    assert classify("<@1> whose birthday is it") == "birthdays"
+    assert classify("<@1> i need a mod") == "need_a_mod"
+    assert classify("<@1> whos streaming") == "who_is_live"
+
+
 def test_every_intent_has_at_least_five_lines():
     for intent in (*ORDER, UNKNOWN):
         assert len(LINES[intent]) >= 5, intent

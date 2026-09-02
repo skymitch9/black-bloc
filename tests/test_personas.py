@@ -6,6 +6,7 @@ from black_bloc.personas import (
     COOKOUT,
     CORE,
     DRIFT_EVERY_TURNS,
+    FEATURES,
     GABI,
     INVARIANT,
     PERSONALITY_CHOICES,
@@ -93,6 +94,37 @@ def test_the_house_voice_sends_one_block_and_no_mood_at_all():
     blocks = system_blocks(None)
     assert len(blocks) == 1
     assert trope_block(None) == ""
+
+
+async def test_every_command_a_member_can_run_is_in_the_block_the_model_reads(settings):
+    """Live 2026-09-01: "i want to host an event" was answered "hit up @Admin".
+    The table is hand-kept, so this is what fails the day a command is added to
+    the tree and not to it."""
+    from black_bloc.bot import COGS, BlackBlocBot
+
+    bot = BlackBlocBot(settings)
+    for name in COGS:
+        await bot.load_extension(name)
+    open_to_members = [
+        one.name for one in bot.tree.get_commands() if one.default_permissions is None
+    ]
+    await bot.close()
+
+    assert open_to_members
+    for name in open_to_members:
+        assert f"`/{name}`" in FEATURES, name
+
+
+def test_the_command_block_is_inside_the_part_that_is_cached_and_never_a_mood(settings):
+    assert FEATURES in stable_core()
+    assert FEATURES not in trope_block(BY_NAME["noir"])
+    assert system_blocks(BY_NAME["noir"])[0]["text"] == stable_core()
+
+
+def test_the_core_says_to_name_its_own_command_before_pointing_at_staff():
+    said = " ".join(CORE.lower().split())
+    assert "read your own command list below first" in said
+    assert "name that command" in said
 
 
 def test_the_core_tells_the_bot_to_name_only_what_it_was_given():
