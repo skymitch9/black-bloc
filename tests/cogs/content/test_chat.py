@@ -106,14 +106,17 @@ class FakeGuild:
 
 
 class FakeMember:
-    def __init__(self, guild, user_id=USER, display_name="Nia", bot=False, admin=True):
+    def __init__(
+        self, guild, user_id=USER, display_name="Nia", bot=False, admin=True, roles=()
+    ):
         self.id = user_id
         self.guild = guild
         self.display_name = display_name
         self.name = display_name
         self.bot = bot
+        self.roles = list(roles)
         self.mention = f"<@{user_id}>"
-        self.guild_permissions = SimpleNamespace(administrator=admin)
+        self.guild_permissions = SimpleNamespace(administrator=admin, manage_guild=False)
 
 
 class FakeMessage:
@@ -247,6 +250,56 @@ async def test_an_at_mention_gets_a_reply_that_pings_nobody(cog, bot, member):
     assert reply["kwargs"]["allowed_mentions"].everyone is False
     assert reply["kwargs"]["allowed_mentions"].users is False
     assert reply["kwargs"]["allowed_mentions"].roles is False
+
+
+async def a_staff_member(bot):
+    """The canonical rule: a role that can see the staff channel. Nothing else is invented."""
+    role = StaffRole(11, "Aunties / Uncles")
+    bot.guild.roles = [role, StaffRole(GUILD, "@everyone")]
+    bot.guild.channels[LOG_CHANNEL].viewers = {11}
+    await bot.store.set(GUILD, "staff_channel_id", LOG_CHANNEL)
+    return FakeMember(bot.guild, user_id=901, display_name="Pawpette", roles=[role])
+
+
+async def test_a_staff_member_may_let_the_answer_mention_a_role(cog, bot):
+    lead = await a_staff_member(bot)
+
+    message = pinged(bot, lead, "<@55> hi there")
+    await cog.on_message(message)
+
+    allowed = message.replies[0]["kwargs"]["allowed_mentions"]
+    assert allowed.roles is True
+    assert allowed.everyone is False and allowed.users is False
+
+
+async def test_the_exception_can_be_switched_off_and_then_staff_ping_nobody_either(cog, bot):
+    lead = await a_staff_member(bot)
+    await bot.store.set(GUILD, "chat_staff_can_ping_roles", False)
+
+    message = pinged(bot, lead, "<@55> hi there")
+    await cog.on_message(message)
+
+    assert message.replies[0]["kwargs"]["allowed_mentions"].roles is False
+
+
+async def test_a_member_who_is_not_staff_can_never_make_it_ping_a_role(cog, bot, member):
+    await a_staff_member(bot)
+
+    message = pinged(bot, member, "<@55> hi there")
+    await cog.on_message(message)
+
+    allowed = message.replies[0]["kwargs"]["allowed_mentions"]
+    assert allowed.roles is False and allowed.everyone is False and allowed.users is False
+
+
+async def test_a_dm_pings_nobody_whoever_sent_it(cog, bot, member):
+    message = pinged(bot, member, "<@55> hi there")
+    message.guild = None
+
+    await cog.on_message(message)
+
+    allowed = message.replies[0]["kwargs"]["allowed_mentions"]
+    assert allowed.roles is False and allowed.everyone is False
 
 
 async def test_another_bot_is_never_answered(cog, bot):

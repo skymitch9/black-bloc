@@ -75,6 +75,7 @@ log = logging.getLogger(__name__)
 MESSAGE_TYPES = (discord.MessageType.default, discord.MessageType.reply)
 THREAD_TYPES = ("public_thread", "private_thread", "news_thread")
 ON = "on"
+STAFF_PING_KEY = "chat_staff_can_ping_roles"
 LOG_KIND = "chat.insult"
 ROUTE_KIND = "chat.route"
 WAVE = "\U0001f44b"
@@ -653,7 +654,7 @@ class Chat(commands.Cog):
             await message.reply(
                 answer.text,
                 mention_author=False,
-                allowed_mentions=discord.AllowedMentions.none(),
+                allowed_mentions=self.mentions_for(guild, author),
             )
         except Exception as exc:
             log.warning(
@@ -677,6 +678,23 @@ class Chat(commands.Cog):
             await log_action(
                 self.bot, guild, ROUTE_KIND, actor=author, details={"intent": answer.intent}
             )
+
+    def mentions_for(self, guild: Any, author: Any) -> discord.AllowedMentions:
+        """Nobody, ever — unless staff started it and the server left the exception on."""
+        quiet = discord.AllowedMentions.none()
+        if guild is None:
+            return quiet
+        try:
+            if not self.bot.store.get(guild.id, STAFF_PING_KEY):
+                return quiet
+            if not self.bot.store.is_staff(author):
+                return quiet
+        except Exception as exc:
+            log.warning("chat: who may ping was unreadable — %s: %s", type(exc).__name__, exc)
+            return quiet
+        return discord.AllowedMentions(
+            everyone=False, users=False, roles=True, replied_user=False
+        )
 
     async def waved_instead(
         self, message: Any, text: str, guild_id: int | None, intent: str

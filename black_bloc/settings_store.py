@@ -173,6 +173,7 @@ KEY_TYPES: dict[str, str] = {
     "chat_ignore_channels": "channels",
     "chat_ignore_categories": "channels",
     "chat_home_channel_id": "channel",
+    "chat_staff_can_ping_roles": "bool",
     "chat_greeting_reaction": "bool",
     "chat_reply_in_threads": "bool",
     "chat_route_ping_staff": "bool",
@@ -433,6 +434,12 @@ KEY_HELP: dict[str, str] = {
         "exist. Blank is safe: the sentence is written again without the channel in it rather "
         "than pointing anywhere. Either way the invention is logged, so `/chat logs` and the "
         "Logs page count how often it happens"
+    ),
+    "chat_staff_can_ping_roles": (
+        "on lets Black Bloc's conversational answers mention a role when the person who "
+        "@-mentioned it is staff — an Auntie or Uncle and up. Nobody else can make it ping "
+        "anything, and `@everyone` and `@here` never go through for anyone. Off means a "
+        "conversational answer pings nobody at all, whoever asked"
     ),
     "chat_greeting_reaction": (
         "true to answer a bare hello with a wave reaction instead of a sentence; anything "
@@ -886,6 +893,8 @@ class SettingsStore:
         if key == "chat_route_ping_staff":
             return False
         if key == "chat_status_admin_only":
+            return True
+        if key == "chat_staff_can_ping_roles":
             return True
         if key == "chat_llm_mode":
             return "off"
