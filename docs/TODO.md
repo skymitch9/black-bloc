@@ -119,8 +119,12 @@ already said go.** Order recommended by the 5.0 session, owner did not reorder:
 2. **F3 — YouTube upload announcements**: go-live via YouTube presence already
    works (sweeps row 4); this adds NEW-UPLOAD posts, which needs the YouTube
    Data API (owner mints an API key — free quota) + a channel-link store like
-   `/twitch link` + a poll loop like the Twitch one. Design decisions: who links,
-   where posts go, opt-in shape.
+   `/twitch link` + a poll loop like the Twitch one. **DESIGNED 2026-09-02
+   17:05 → [`info/phase16-design.md`](info/phase16-design.md)**: the public
+   Atom feed is the primary source (NO key needed); `YOUTUBE_API_KEY` is an
+   optional upgrade (handle resolution, live/Shorts classification) — the owner
+   may mint one at their pace. Ten defaults taken as settings keys. Builder
+   dispatches after Phase 15 lands (schema 22 follows 21).
 3. **Chat long-term memory** — GABI-style distilled member profiles (her design:
    cheap-model distillation when a conversation goes quiet, ≤2KB per person,
    injected as a memory block; see `catalog-platform` gabi-memory-design.md).
