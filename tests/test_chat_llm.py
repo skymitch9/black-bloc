@@ -418,6 +418,21 @@ def test_the_grounding_rides_the_members_own_turn():
     assert user_turn("<@55> hi", []) == "hi"
 
 
+def test_the_people_a_message_named_ride_the_turn_with_the_notes():
+    said = user_turn(
+        "<@55> can i trust <@4001>",
+        [],
+        ["Pawpette — holds Aunties / Uncles; staff: yes"],
+    )
+    assert said.startswith("can i trust")
+    assert "this is the truth about them" in said
+    assert "Pawpette — holds Aunties / Uncles; staff: yes" in said
+
+
+def test_a_message_that_named_nobody_carries_no_people_block():
+    assert user_turn("just chatting", [], []) == "just chatting"
+
+
 EVERYONE = SimpleNamespace(id=7, name="@everyone")
 
 

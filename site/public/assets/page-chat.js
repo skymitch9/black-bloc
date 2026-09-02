@@ -37,6 +37,7 @@ const SETTING_KEYS = [
   'chat_ignore_categories',
   'chat_home_channel_id',
   'chat_staff_can_ping_roles',
+  'chat_escalation_names',
   'chat_greeting_reaction',
   'chat_reply_in_threads',
   'chat_route_ping_staff',

@@ -36,6 +36,7 @@ TEXT_LIMIT = 500
 NAME_SHAPE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 MENTION = re.compile(r"<@[!&]?\d+>")
+USER_MENTION = re.compile(r"<@!?(\d+)>")
 KEEP = re.compile(r"[^0-9a-z ]+")
 LOVE_MARKS = ("❤", "♥", "\U0001f5a4", "\U0001f49c", "\U0001f496", "<3")
 
@@ -195,6 +196,33 @@ DATA_INTENTS: dict[str, tuple[str, ...]] = {
         "whos got the",
         "who has got the",
     ),
+    "about_member": (
+        "is a mod",
+        "is a moderator",
+        "is an admin",
+        "is a admin",
+        "is an auntie",
+        "is an uncle",
+        "is a lead",
+        "is staff",
+        "is a staff",
+        "is on staff",
+        "are staff",
+        "are a mod",
+        "are they staff",
+        "are they a mod",
+        "is he a mod",
+        "is she a mod",
+        "is they a mod",
+        "can i trust",
+        "can we trust",
+        "should i trust",
+        "do i trust",
+        "trustworthy",
+        "what roles does",
+        "what roles do they have",
+        "what roles has",
+    ),
     "my_roles": (
         "my roles",
         "what roles do i have",
@@ -221,6 +249,8 @@ ROUTE_INTENTS: dict[str, tuple[str, ...]] = {
         "i need staff",
         "help me",
         "report",
+        "looking for a mod",
+        "im looking for a mod",
     ),
 }
 
@@ -244,6 +274,10 @@ DATA_LINES: dict[str, dict[str, tuple[str, ...]]] = {
     "who_has": {
         FILLED: ("Holding **{role}**, {name} — {count} in all: {holders}{more}.{escalate}",),
         EMPTY: ("No luck there, {name} — {trouble}",),
+    },
+    "about_member": {
+        FILLED: ("**{who}** holds {roles}, {name}. {verdict}",),
+        EMPTY: ("Not quite, {name} — {trouble}",),
     },
     "my_roles": {
         FILLED: ("You can pick from {menus}, {name}. Right now you have {roles}.",),
@@ -274,6 +308,7 @@ TOKENS: dict[str, tuple[str, ...]] = {
     "birthdays": ("{list}",),
     "head_count": ("{count}",),
     "who_has": ("{role}", "{count}", "{holders}", "{more}", "{escalate}", "{trouble}"),
+    "about_member": ("{who}", "{roles}", "{verdict}", "{trouble}"),
     "my_roles": ("{menus}", "{roles}"),
     "time_for_me": ("{time}",),
     "need_a_mod": ("{roles}",),
@@ -283,6 +318,7 @@ BUILTIN_ORDER: tuple[str, ...] = (
     "insult",
     "love",
     "thanks",
+    "about_member",
     "need_a_mod",
     "birthdays",
     "whats_next",
@@ -312,6 +348,8 @@ BUILTIN_KINDS: dict[str, str] = (
 )
 
 BUILTIN_NAMES: frozenset[str] = frozenset(BUILTIN_TRIGGERS)
+NEEDS_A_MEMBER: frozenset[str] = frozenset({"about_member"})
+EXTRA = "extra"
 
 LINES: dict[str, tuple[str, ...]] = {
     "greeting": (
@@ -434,7 +472,7 @@ def has_something_to_say(row: Any) -> bool:
     return bool((row.get("lines") or {}).get(FILLED))
 
 
-def classify(text: Any, intents: Any = ()) -> str:
+def classify(text: Any, intents: Any = (), *, mentions_member: bool = False) -> str:
     """One intent name: a guild's own intents first, then the built-in ones, then unknown."""
     raw = MENTION.sub(" ", str(text or ""))
     words = normalise(raw)
@@ -452,10 +490,27 @@ def classify(text: Any, intents: Any = ()) -> str:
         row = rows.get(name)
         if row is not None and not row["enabled"]:
             continue
+        if name in NEEDS_A_MEMBER and not mentions_member:
+            continue
         triggers = row["triggers"] if row is not None else BUILTIN_TRIGGERS[name]
         if matches(words, triggers):
             return name
     return UNKNOWN
+
+
+def mentioned_user_ids(text: Any) -> tuple[int, ...]:
+    """Every `<@id>` in the raw message, in order, role pings excluded."""
+    found: list[int] = []
+    for said in USER_MENTION.findall(str(text or "")):
+        number = int(said)
+        if number not in found:
+            found.append(number)
+    return tuple(found)
+
+
+def others_mentioned(text: Any, bot: Any) -> tuple[int, ...]:
+    me = getattr(getattr(bot, "user", None), "id", None)
+    return tuple(one for one in mentioned_user_ids(text) if one != me)
 
 
 def bare_greeting(text: Any, intents: Any = ()) -> bool:
@@ -573,7 +628,7 @@ async def answer_for(
     home = guild if guild is not None else getattr(member, "guild", None)
     guild_id = getattr(home, "id", None)
     intents = await guild_intents(bot, guild_id)
-    intent = classify(text, intents)
+    intent = classify(text, intents, mentions_member=bool(others_mentioned(text, bot)))
     kind = kind_of(intent, intents)
     if llm and intent == UNKNOWN:
         said, tier = await a_model_answer(bot, home, member, channel, text)
@@ -592,7 +647,15 @@ async def answer_for(
         slot=slot,
         tokens=tokens,
     )
-    return Answer(intent, kind, slot, toned_text(line, tone_for(bot, guild_id)))
+    return Answer(intent, kind, slot, toned_text(with_extra(line, tokens), tone_for(bot, guild_id)))
+
+
+def with_extra(line: str, tokens: Any) -> str:
+    """A sentence a stored line could not have carried, because its row predates it."""
+    said = str((tokens or {}).get(EXTRA) or "")
+    if not said or said in line:
+        return line
+    return f"{line}{said}"
 
 
 async def reply_for(
@@ -843,7 +906,24 @@ async def seed_defaults(db: Any, guild_id: int, by: int | None = None) -> int:
         made += 1
     if made:
         log.info("chat: seeded %d intent(s) for guild %s", made, guild_id)
-    return made
+    return made + await top_up_triggers(db, guild_id)
+
+
+async def top_up_triggers(db: Any, guild_id: int) -> int:
+    """A phrase added to a built-in reaches a guild that was seeded before it existed."""
+    added = 0
+    for row in await list_intents(db, guild_id):
+        name = str(row["name"])
+        if name not in BUILTIN_NAMES:
+            continue
+        have = list(read_triggers(row["triggers"]))
+        missing = [one for one in BUILTIN_TRIGGERS[name] if one not in have]
+        if not missing:
+            continue
+        await update_intent(db, int(row["id"]), triggers=[*have, *missing])
+        added += len(missing)
+        log.info("chat: %s gained %d trigger(s) in guild %s", name, len(missing), guild_id)
+    return added
 
 
 async def loaded_intents(db: Any, guild_id: int) -> tuple[dict[str, Any], ...]:

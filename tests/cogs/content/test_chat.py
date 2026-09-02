@@ -556,6 +556,34 @@ async def test_asking_for_a_mod_with_modmail_off_names_the_staff_roles(cog, bot,
     assert len(await rows(db, "chat.route")) == 1
 
 
+async def test_the_owners_live_sentence_answers_about_the_person_they_named(cog, bot, member):
+    """2026-09-01: "im looking for a mod can I trust @Pawpette" got "I don't know, ping @Admin"."""
+    lead = await a_staff_member(bot)
+    bot.guild.members = [lead]
+    bot.guild.get_member = lambda user_id: lead if int(user_id) == lead.id else None
+
+    message = pinged(bot, member, f"<@55> im looking for a mod can i trust <@{lead.id}>")
+    await cog.on_message(message)
+
+    said = message.replies[0]["content"]
+    assert "Pawpette" in said
+    assert "Aunties / Uncles" in said
+    assert said.count("Yes — that is staff") == 1
+
+
+async def test_asking_for_a_mod_names_who_is_about_without_pinging_them(cog, bot, member):
+    lead = await a_staff_member(bot)
+    lead.status = SimpleNamespace(name="online")
+    bot.guild.roles[0].members = [lead]
+
+    message = pinged(bot, member, "<@55> im looking for a mod")
+    await cog.on_message(message)
+
+    said = message.replies[0]["content"]
+    assert "Online right now: Pawpette" in said
+    assert f"<@{lead.id}>" not in said
+
+
 async def test_the_staff_note_is_posted_only_when_the_setting_asks_for_it(cog, bot, member):
     await bot.store.set(GUILD, "modmail_enabled", True)
     await bot.store.set(GUILD, "staff_channel_id", LOG_CHANNEL)
