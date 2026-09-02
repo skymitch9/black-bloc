@@ -97,6 +97,7 @@ export const LABELS = {
   chat_ignore_channels: 'Which channels the bot never answers in',
   chat_ignore_categories: 'Which categories the bot never reads or mentions',
   chat_home_channel_id: 'Where the bot points when it names a channel that is not real',
+  chat_visibility_role_id: 'Whose view of the server is the bot’s map',
   chat_staff_can_ping_roles: 'Whether a staffer’s question lets the bot ping a role',
   chat_escalation_names: 'How many online staff the bot names when a mod is asked for',
   chat_greeting_reaction: 'Whether a bare hello gets a wave',

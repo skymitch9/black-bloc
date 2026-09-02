@@ -8,6 +8,7 @@ log = logging.getLogger(__name__)
 
 IGNORE_CATEGORIES_KEY = "chat_ignore_categories"
 MODMAIL_CATEGORY_KEY = "modmail_category_id"
+VISIBILITY_ROLE_KEY = "chat_visibility_role_id"
 ARCHIVE_WORD = "archive"
 
 DIRECTORY_BYTES = 4 * 1024
@@ -60,9 +61,23 @@ def hidden_category_ids(bot: Any, guild: Any) -> set[int]:
     return found
 
 
-def everyone_sees(guild: Any, channel: Any) -> bool:
+def visibility_role(bot: Any, guild: Any) -> Any:
+    """Whose view of the server IS the map — the Member role here, since @everyone sees ~nothing."""
+    store = getattr(bot, "store", None)
+    guild_id = getattr(guild, "id", None)
+    wanted = None
+    if store is not None and guild_id is not None:
+        try:
+            wanted = as_id(store.get(int(guild_id), VISIBILITY_ROLE_KEY))
+        except Exception as exc:
+            log.warning("directory: the visibility role was unreadable — %s", exc)
+    role = guild.get_role(wanted) if wanted and hasattr(guild, "get_role") else None
+    return role if role is not None else getattr(guild, "default_role", None)
+
+
+def everyone_sees(guild: Any, channel: Any, viewer: Any = None) -> bool:
     """False whenever it cannot be worked out — a channel of unknown reach is a private one."""
-    default = getattr(guild, "default_role", None)
+    default = viewer if viewer is not None else getattr(guild, "default_role", None)
     resolve = getattr(channel, "permissions_for", None)
     if default is None or resolve is None:
         return False
@@ -70,8 +85,9 @@ def everyone_sees(guild: Any, channel: Any) -> bool:
         perms = resolve(default)
     except Exception as exc:
         log.warning(
-            "directory: %s would not say what @everyone sees — %s",
+            "directory: %s would not say what %s sees — %s",
             getattr(channel, "id", "?"),
+            getattr(default, "name", "the viewer role"),
             exc,
         )
         return False
@@ -87,13 +103,14 @@ def in_a_hidden_category(channel: Any, hidden: set[int]) -> bool:
 
 
 def open_channels(bot: Any, guild: Any) -> list[Any]:
-    """The text channels a member with no roles can read, and only those."""
+    """The text channels a plain verified member can read, and only those."""
     hidden = hidden_category_ids(bot, guild)
+    viewer = visibility_role(bot, guild)
     found = []
     for channel in getattr(guild, "text_channels", ()) or ():
         if in_a_hidden_category(channel, hidden):
             continue
-        if not everyone_sees(guild, channel):
+        if not everyone_sees(guild, channel, viewer):
             continue
         found.append(channel)
     return found

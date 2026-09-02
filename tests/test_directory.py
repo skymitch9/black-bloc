@@ -165,3 +165,41 @@ def test_the_guard_vocabulary_is_every_public_name_case_folded():
         bot(), guild(channel("General"), channel("Quiet"), channel("staff", seen=False))
     )
     assert found == {"general", "quiet"}
+
+
+MEMBER = SimpleNamespace(id=444, name="Member")
+
+
+def member_gated_guild(*channels):
+    found = SimpleNamespace(id=GUILD, default_role=EVERYONE, text_channels=list(channels))
+    found.get_role = lambda role_id: MEMBER if role_id == MEMBER.id else None
+    return found
+
+
+def member_channel(name, topic=None):
+    def permissions_for(role):
+        return SimpleNamespace(view_channel=role is MEMBER)
+
+    return SimpleNamespace(
+        id=abs(hash(name)) % 10_000,
+        name=name,
+        topic=topic,
+        category=None,
+        category_id=None,
+        permissions_for=permissions_for,
+    )
+
+
+def test_the_member_roles_view_is_the_map_on_a_rules_gated_server():
+    home = member_gated_guild(member_channel("speed-and-pbs", topic="post your pbs here"))
+
+    assert [c.name for c in open_channels(bot(chat_visibility_role_id=444), home)] == [
+        "speed-and-pbs"
+    ]
+    assert open_channels(bot(), home) == []
+
+
+def test_a_visibility_role_the_guild_does_not_hold_falls_back_to_everyone():
+    home = member_gated_guild(member_channel("speed-and-pbs"))
+
+    assert open_channels(bot(chat_visibility_role_id=999), home) == []

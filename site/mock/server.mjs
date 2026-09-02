@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+﻿import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
@@ -320,6 +320,7 @@ const SETTING_SPECS = [
   ['chat_ignore_channels', 'channels', [], [], 'channels Black Bloc never answers an @-mention in'],
   ['chat_ignore_categories', 'channels', [], [], 'categories Black Bloc leaves out of everything it reads and tells people about — the channel names and topics it learns each day, and the channel list every conversational answer is written against. The modmail category and any category with `archive` in its name are left out already, and so is every channel @everyone cannot see'],
   ['chat_home_channel_id', 'channel', null, null, 'where somebody is sent when a conversational answer points at a channel that does not exist. Blank is safe: the sentence is written again without the channel in it rather than pointing anywhere. Either way the invention is logged, so `/chat logs` and the Logs page count how often it happens'],
+  ['chat_visibility_role_id', 'role', '1073741054563602532', '1073741054563602532', "the role whose view of the server IS the bot's map: channels this role can read are the ones the bot may learn about, list and point people at. This server hides everything from @everyone until the rules screen grants Member, so the default is the Member role - clearing it falls back to @everyone, which on this server means almost no channels at all"],
   ['chat_staff_can_ping_roles', 'bool', true, true, "on lets Black Bloc's conversational answers mention a role when the person who @-mentioned it is staff — an Auntie or Uncle and up. Nobody else can make it ping anything, and `@everyone` and `@here` never go through for anyone. Off means a conversational answer pings nobody at all, whoever asked"],
   ['chat_escalation_names', 'int', 2, 2, 'how many online staff Black Bloc names when somebody asks for a mod, 0 to name nobody and up to 10. They are named in plain words, never pinged — the person does that themselves. Nobody online says so instead', null, 10],
   ['chat_greeting_reaction', 'bool', false, false, 'true to answer a bare hello with a wave reaction instead of a sentence; anything longer still gets a reply'],
@@ -2973,7 +2974,7 @@ const CHAT_TOKENS = {
   need_a_mod: ['{roles}'],
 };
 const CHAT_SETTING_KEYS = ['chat_mode', 'chat_cooldown_seconds', 'chat_ignore_channels',
-  'chat_ignore_categories', 'chat_home_channel_id', 'chat_staff_can_ping_roles', 'chat_escalation_names',
+  'chat_ignore_categories', 'chat_home_channel_id', 'chat_visibility_role_id', 'chat_staff_can_ping_roles', 'chat_escalation_names',
   'chat_greeting_reaction', 'chat_reply_in_threads',
   'chat_route_ping_staff', 'chat_llm_mode', 'chat_simple_model', 'chat_personality',
   'chat_person_hourly_turns', 'chat_daily_turns', 'chat_monthly_cap_usd', 'chat_log_level'];

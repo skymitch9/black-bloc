@@ -178,6 +178,7 @@ KEY_TYPES: dict[str, str] = {
     "chat_ignore_channels": "channels",
     "chat_ignore_categories": "channels",
     "chat_home_channel_id": "channel",
+    "chat_visibility_role_id": "role",
     "chat_staff_can_ping_roles": "bool",
     "chat_escalation_names": "int",
     "chat_greeting_reaction": "bool",
@@ -451,6 +452,13 @@ KEY_HELP: dict[str, str] = {
         "exist. Blank is safe: the sentence is written again without the channel in it rather "
         "than pointing anywhere. Either way the invention is logged, so `/chat logs` and the "
         "Logs page count how often it happens"
+    ),
+    "chat_visibility_role_id": (
+        "the role whose view of the server IS the bot's map: channels this role can read are "
+        "the ones the bot may learn about, list and point people at. This server hides "
+        "everything from @everyone until the rules screen grants Member, so the default is the "
+        "Member role — clearing it falls back to @everyone, which on this server means almost "
+        "no channels at all"
     ),
     "chat_staff_can_ping_roles": (
         "on lets Black Bloc's conversational answers mention a role when the person who "
@@ -824,6 +832,8 @@ class SettingsStore:
         if key == "tempvoice_creator_name":
             return TEMPVOICE_CREATOR_NAME
         if key == "tempvoice_allowed_role_id":
+            return MEMBER_ROLE_ID
+        if key == "chat_visibility_role_id":
             return MEMBER_ROLE_ID
         if key == "honeypot_mode":
             return "shadow"

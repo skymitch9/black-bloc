@@ -66,6 +66,7 @@ async def test_the_page_gets_the_chat_settings_in_the_shape_settings_uses(seeded
         "chat_ignore_channels",
         "chat_ignore_categories",
         "chat_home_channel_id",
+        "chat_visibility_role_id",
         "chat_staff_can_ping_roles",
         "chat_escalation_names",
         "chat_greeting_reaction",
