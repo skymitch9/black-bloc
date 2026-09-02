@@ -137,3 +137,13 @@ per feature, so the old bot keeps running until the new one is proven.
 - **Owner 2026-08-27 ~11:49, verbatim: "Probably should make a deploy button api so you can deploy for me if you can't permission"** → idea logged. Today: the owner's standing authorisation works — the last four deploys ran from the session. A deploy endpoint on the bot would need a Fly API token on the machine and a self-redeploy path; higher risk than value while the session can deploy. Status: **parked unless the classifier blocks again.**
 
 
+
+## [ ] Groq model pin is DEAD - llama-3.3-70b-versatile was deprecated by Groq 2026-08-16
+
+Found 2026-09-01 by catalog-platform's GABI rung, which inherited this repo's
+pin (black_bloc/groq.py:21) and got HTTP 404 on every live call - this repo
+has never made a live Groq call (code-notes.md says so), so the pin was never
+exercised here either. Groq's named replacements: openai/gpt-oss-120b (what
+GABI repinned to) or qwen/qwen3.6-27b. Fix: repin in black_bloc/groq.py +
+whatever test pins it, and make ONE live call before trusting it.
+Source: console.groq.com/docs/deprecations
