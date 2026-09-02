@@ -121,8 +121,6 @@ per feature, so the old bot keeps running until the new one is proven.
   "Keep it parked" 2026-09-01** — revisit only if a session actually cannot
   deploy.
 
-- **Move the SQLite file out of the OneDrive-synced tree** — KI-1.
-
 - **Restyle look-and-feel calls the owner may still override** (each cheap):
   nav grouping (Requests under Overview, Members under Moderation — one line in
   `shell.js:GROUPS`); the TODAY strip replaced the "Needs a human" card
@@ -134,12 +132,13 @@ per feature, so the old bot keeps running until the new one is proven.
 
 
 
-## [ ] Groq model pin is DEAD - llama-3.3-70b-versatile was deprecated by Groq 2026-08-16
+## ✅ (RESOLVED 2026-09-02) Groq model pin was DEAD — llama-3.3-70b deprecated
 
-Found 2026-09-01 by catalog-platform's GABI rung, which inherited this repo's
-pin (black_bloc/groq.py:21) and got HTTP 404 on every live call - this repo
-has never made a live Groq call (code-notes.md says so), so the pin was never
-exercised here either. Groq's named replacements: openai/gpt-oss-120b (what
-GABI repinned to) or qwen/qwen3.6-27b. Fix: repin in black_bloc/groq.py +
-whatever test pins it, and make ONE live call before trusting it.
-Source: console.groq.com/docs/deprecations
+The catalog-platform session's entry above was independently confirmed here the
+same day (owner: "0 api calls on groq" → measured 404 model_not_found on 4 live
+attempts). Fixed: live setting repinned to `openai/gpt-oss-120b` via the
+dashboard, code default + mock repinned in `5e15778`, ONE live call made and
+verified 200 with real content at the bot's 400-token ceiling (note: gpt-oss
+spends tokens on a `reasoning` field first — tiny max_tokens returns empty
+content). KI-1 line above also removed — closed 2026-09-01 (DATABASE_PATH moved
+out of OneDrive, recorded in KNOWN_ISSUES).
