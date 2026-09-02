@@ -218,9 +218,7 @@ def channel(name, topic=None):
 
 
 def test_the_channel_ingest_indexes_every_name_and_writes_a_note_per_topic():
-    found = channel_sections(
-        SimpleNamespace(text_channels=[channel("general", "Chat here."), channel("quiet")])
-    )
+    found = channel_sections([channel("general", "Chat here."), channel("quiet")])
     assert found[0][0] == "Channels in this server"
     assert "#general" in found[0][1] and "#quiet" in found[0][1]
     assert found[1] == ("#general", "Chat here.", "channel")
@@ -228,7 +226,7 @@ def test_the_channel_ingest_indexes_every_name_and_writes_a_note_per_topic():
 
 
 def test_a_server_with_no_channels_writes_no_channel_notes():
-    assert channel_sections(SimpleNamespace(text_channels=[])) == []
+    assert channel_sections([]) == []
 
 
 def test_the_role_ingest_leaves_out_everyone():

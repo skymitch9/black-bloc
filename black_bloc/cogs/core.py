@@ -8,7 +8,7 @@ from discord.ext import commands
 
 from .. import __version__
 from ..actionlog import log_action
-from ..command_visibility import hidden_names
+from ..command_visibility import STAFF_ONLY, hidden_names
 from ..logkinds import VIA_DISCORD
 from ..modcases import pages_under_limit
 from ..settings_store import (
@@ -137,7 +137,8 @@ class Core(commands.Cog):
         return discord.Object(id=dev_guild_id) if dev_guild_id else None
 
     settings = app_commands.Group(
-        name="settings", description="Read and change Black Bloc's settings for this server"
+        name="settings", description="Read and change Black Bloc's settings for this server",
+        default_permissions=STAFF_ONLY,
     )
 
     @settings.command(name="show", description="Show Black Bloc's settings for this server")

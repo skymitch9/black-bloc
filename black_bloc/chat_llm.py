@@ -9,6 +9,8 @@ from typing import Any
 
 from .actionlog import log_action
 from .chat import MENTION, has_phrase, normalise
+from .chat_check import FIXED_KIND, check_reply
+from .directory import DIRECTORY_NONE, directory_block
 from .groq import GroqClient
 from .knowledge import grounding, list_sections, search
 from .llm import (
@@ -104,6 +106,12 @@ STAFF_WORDS: tuple[str, ...] = (
 )
 
 BUDGET_WORDS: tuple[str, ...] = ("budget", "cap", "quota", "limit", "spend", "credit")
+
+PEOPLE_OPENER = (
+    "(Who they pointed at, from the server itself — this is the truth about them, so say this "
+    "and nothing more about them:"
+)
+PEOPLE_CLOSER = ")"
 
 SPACES = re.compile(r"\s+")
 
@@ -460,10 +468,27 @@ async def hits_for(db: Any, guild_id: Any, text: Any) -> Any:
         return ()
 
 
-def user_turn(text: Any, hits: Any) -> str:
+def people_note(notes: Any) -> str:
+    found = [str(one) for one in notes or () if str(one).strip()]
+    return f"{PEOPLE_OPENER} {' · '.join(found)}{PEOPLE_CLOSER}" if found else ""
+
+
+def who_they_named(bot: Any, guild: Any, text: Any) -> list[tuple[str, str]]:
+    from .chat_data import member_notes
+
+    if guild is None:
+        return []
+    try:
+        return member_notes(bot, guild, text)
+    except Exception as exc:
+        log.warning("chat: the people named were not read — %s: %s", type(exc).__name__, exc)
+        return []
+
+
+def user_turn(text: Any, hits: Any, notes: Any = ()) -> str:
     said = spoken(text)
-    ground = grounding(hits)
-    return f"{said}\n\n{ground}" if ground else said
+    parts = [said, grounding(hits), people_note(notes)]
+    return "\n\n".join(one for one in parts if one)
 
 
 async def say_capped(bot: Any, guild: Any, at: datetime) -> None:
@@ -483,13 +508,54 @@ async def try_tier(
     model_setting: str,
     system: Any,
     messages: Any,
+    directory: str = "",
 ) -> Any:
     client = haiku(bot) if name == IMPORTANT else groq(bot, model_setting)
     if client is None:
         return None
     if name == IMPORTANT:
-        return await client.reply(system=system_blocks(system), messages=messages)
-    return await client.reply(system=system_text(system), messages=messages)
+        return await client.reply(system=system_blocks(system, directory), messages=messages)
+    return await client.reply(system=system_text(system, directory), messages=messages)
+
+
+async def made_real(bot: Any, guild: Any, text: Any, people: Any = ()) -> str:
+    """A named channel or role the server does not have never reaches anybody."""
+    said = str(text or "")
+    if guild is None:
+        return said
+    try:
+        found = check_reply(bot, guild, said, people)
+    except Exception as exc:
+        log.warning("chat: the reply was not checked — %s: %s", type(exc).__name__, exc)
+        return said
+    if not found.fixed:
+        return said
+    log.info(
+        "chat: a reply named %s that this server does not have",
+        ", ".join([*found.channels, *found.roles]),
+    )
+    await log_action(
+        bot,
+        guild,
+        FIXED_KIND,
+        details={
+            "channels": found.channels,
+            "roles": found.roles,
+            "fixed": found.fixed,
+        },
+    )
+    return found.text
+
+
+def channels_block(bot: Any, guild: Any) -> str:
+    """Built fresh for every call: a channel made this morning is in this afternoon's answer."""
+    if guild is None:
+        return DIRECTORY_NONE
+    try:
+        return directory_block(bot, guild)
+    except Exception as exc:
+        log.warning("chat: the channel list was not built — %s: %s", type(exc).__name__, exc)
+        return DIRECTORY_NONE
 
 
 async def conversational_reply(
@@ -531,15 +597,22 @@ async def conversational_reply(
         turns=llm_turns(window),
     )
     model_setting = str(read_setting(bot.store, guild_id, SIMPLE_MODEL_KEY, "") or "")
-    asked = user_turn(text, hits)
+    named = who_they_named(bot, guild, text)
+    asked = user_turn(text, hits, [note for _, note in named])
     messages = [*as_messages(window), {"role": "user", "content": asked}]
+    directory = channels_block(bot, guild)
     turn = uuid.uuid4().hex
     errors = tier_errors(bot)
 
     for name in order:
         try:
             answer = await try_tier(
-                bot, name, model_setting=model_setting, system=voice, messages=messages
+                bot,
+                name,
+                model_setting=model_setting,
+                system=voice,
+                messages=messages,
+                directory=directory,
             )
         except LLMError as exc:
             errors[name] = exc.reason
@@ -575,7 +648,8 @@ async def conversational_reply(
             usage=answer.usage,
             at=at,
         )
-        said = clip(answer.text, REPLY_LIMIT)
+        people = [who for who, _ in named]
+        said = clip(await made_real(bot, guild, answer.text, people), REPLY_LIMIT)
         if not said:
             continue
         await remember(

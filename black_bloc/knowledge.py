@@ -369,10 +369,10 @@ def shorten(value: Any, limit: int) -> str:
     return said if len(said) <= limit else f"{said[: limit - 1]}…"
 
 
-def channel_sections(guild: Any) -> list[tuple[str, str, str]]:
+def channel_sections(channels: Any) -> list[tuple[str, str, str]]:
     named: list[str] = []
     found: list[tuple[str, str, str]] = []
-    for channel in getattr(guild, "text_channels", ()) or ():
+    for channel in channels or ():
         name = str(getattr(channel, "name", "") or "").strip()
         if not name:
             continue
@@ -481,9 +481,10 @@ async def server_sections(bot: Any, guild: Any, db: Any) -> list[tuple[str, str,
     """What the server itself says about itself, as sections the search can read."""
     from .cogs.community.events import events_by_status
     from .cogs.community.role_menus import get_options, list_menus, picking_is_on
+    from .directory import open_channels
     from .events import APPROVED
 
-    found = [*channel_sections(guild), *role_sections(guild)]
+    found = [*channel_sections(open_channels(bot, guild)), *role_sections(guild)]
     now = datetime.now(UTC).isoformat()
     for row in await events_by_status(db, guild.id, (APPROVED,)):
         if str(value_of(row, "starts_at")) < now:

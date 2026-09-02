@@ -25,6 +25,97 @@ LOGS_GROUPS = {
 }
 
 
+STAFF_COMMANDS = {
+    "areply",
+    "automod",
+    "ban",
+    "case",
+    "cases",
+    "chat",
+    "close",
+    "honeypot",
+    "kick",
+    "mod",
+    "modmail",
+    "note",
+    "presence",
+    "purge",
+    "reply",
+    "role",
+    "rolemenu",
+    "settings",
+    "snippet",
+    "tempvoice",
+    "timeout",
+    "unban",
+    "untimeout",
+    "warn",
+}
+MEMBER_COMMANDS = {
+    "about",
+    "birthday",
+    "event",
+    "golive",
+    "help",
+    "ping",
+    "poll",
+    "request",
+    "timezone",
+    "twitch",
+    "voice",
+}
+GATE_IS_TWO_HOPS_AWAY = {"/reply", "/areply"}
+
+
+def leaves(command, path):
+    if isinstance(command, app_commands.Group):
+        for child in command.commands:
+            yield from leaves(child, f"{path} {child.name}")
+    else:
+        yield path, command
+
+
+async def test_a_command_only_staff_can_run_is_only_shown_to_staff(settings):
+    """Measured 2026-09-01: among human roles only Leads and Aunties/Uncles hold
+    manage_messages, so it is the permission that hides a command below them."""
+    from black_bloc.command_visibility import STAFF_ONLY
+
+    bot = BlackBlocBot(settings)
+    for name in COGS:
+        await bot.load_extension(name)
+
+    top = bot.tree.get_commands()
+    locked = {one.name for one in top if one.default_permissions is not None}
+    visible = {one.name for one in top if one.default_permissions is None}
+
+    assert locked == STAFF_COMMANDS
+    assert visible == MEMBER_COMMANDS
+    assert all(
+        one.default_permissions == STAFF_ONLY
+        for one in top
+        if one.default_permissions is not None
+    )
+    await bot.close()
+
+
+async def test_nothing_a_member_can_run_is_hidden_behind_the_lock(settings):
+    """The lock is UX; the runtime gate is the enforcement, and it is untouched."""
+    from black_bloc.settings_store import is_staff_command
+
+    bot = BlackBlocBot(settings)
+    for name in COGS:
+        await bot.load_extension(name)
+
+    for one in bot.tree.get_commands():
+        if one.default_permissions is None:
+            continue
+        for path, command in leaves(one, f"/{one.name}"):
+            if path in GATE_IS_TWO_HOPS_AWAY:
+                continue
+            assert is_staff_command(command), path
+    await bot.close()
+
+
 async def test_bot_builds_and_cogs_load(settings):
     bot = BlackBlocBot(settings)
     assert bot.intents.members and bot.intents.message_content and bot.intents.presences

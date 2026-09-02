@@ -42,15 +42,19 @@ from black_bloc.chat import (
     lines_for,
     list_intents,
     loaded_intents,
+    mentioned_user_ids,
     normalise,
+    others_mentioned,
     pool,
     render,
     reply_for,
     respond,
     seed_defaults,
     tokens_of,
+    top_up_triggers,
     update_intent,
     update_line,
+    with_extra,
 )
 from black_bloc.emoji import SKIN_TONES
 from black_bloc.storage.db import Database
@@ -612,6 +616,74 @@ def test_triggers_are_tidied_de_duplicated_and_capped():
     for given in ([], [""], ["x" * 61], [f"p{n}" for n in range(41)]):
         with pytest.raises(ChatError):
             clean_triggers(given)
+
+
+BOT = SimpleNamespace(user=SimpleNamespace(id=55))
+
+
+def test_a_trust_question_only_lands_when_somebody_was_actually_pointed_at():
+    for said in ("<@4001> is a mod", "<@4001> can i trust", "<@4001> is staff"):
+        assert classify(said, mentions_member=True) == "about_member", said
+        assert classify(said) != "about_member", said
+
+
+def test_asking_who_holds_a_role_still_reaches_who_has_when_nobody_is_named():
+    assert classify("whos a mod") == "who_has"
+    assert classify("who is a lead") == "who_has"
+    assert classify("who has the leads role") == "who_has"
+
+
+def test_looking_for_a_mod_never_reaches_a_model():
+    """The owner's live phrasing, 2026-09-01."""
+    assert classify("im looking for a mod") == "need_a_mod"
+    assert classify("looking for a mod") == "need_a_mod"
+    assert classify("i am looking for a mod right now") == "need_a_mod"
+
+
+def test_the_owners_live_sentence_answers_the_trust_question_first():
+    said = "im looking for a mod can i trust <@4001>"
+    assert classify(said, mentions_member=True) == "about_member"
+
+
+def test_black_blocs_own_mention_is_not_somebody_being_pointed_at():
+    assert mentioned_user_ids("<@55> <@!4001> <@&900> hi") == (55, 4001)
+    assert others_mentioned("<@55> hi", BOT) == ()
+    assert others_mentioned("<@55> <@4001> hi", BOT) == (4001,)
+    assert others_mentioned("<@4001> hi", SimpleNamespace()) == (4001,)
+
+
+def test_a_sentence_a_stored_line_could_not_carry_is_appended_once():
+    assert with_extra("Staff to ask.", {"extra": " Online: A."}) == "Staff to ask. Online: A."
+    assert with_extra("Staff to ask. Online: A.", {"extra": " Online: A."}) == (
+        "Staff to ask. Online: A."
+    )
+    assert with_extra("Staff to ask.", {}) == "Staff to ask."
+    assert with_extra("Staff to ask.", None) == "Staff to ask."
+
+
+async def test_a_phrase_added_to_a_built_in_reaches_a_guild_seeded_before_it(db):
+    """The row already exists in every live guild, so a code-table edit needs a top-up."""
+    await seed_defaults(db, GUILD)
+    row = await named(db, "need_a_mod")
+    await update_intent(db, row["id"], triggers=["i need a mod", "a phrase staff added"])
+
+    assert await top_up_triggers(db, GUILD) == len(ROUTE_INTENTS["need_a_mod"]) - 1
+
+    stored = {one["name"]: one for one in await rows(db)}
+    assert "a phrase staff added" in stored["need_a_mod"]["triggers"]
+    assert "looking for a mod" in stored["need_a_mod"]["triggers"]
+    assert classify("im looking for a mod", await rows(db)) == "need_a_mod"
+
+
+async def test_the_top_up_is_idempotent_and_never_touches_an_intent_of_your_own(db):
+    await seed_defaults(db, GUILD)
+    mine = await create_intent(db, GUILD, "cookout_hours", ["when is the cookout"])
+
+    assert await top_up_triggers(db, GUILD) == 0
+
+    stored = {one["name"]: one for one in await rows(db)}
+    assert stored["cookout_hours"]["triggers"] == ("when is the cookout",)
+    assert mine
 
 
 def test_a_line_needs_words_and_a_slot_has_to_be_one_of_three():

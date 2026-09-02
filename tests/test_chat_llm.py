@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -417,9 +418,39 @@ def test_the_grounding_rides_the_members_own_turn():
     assert user_turn("<@55> hi", []) == "hi"
 
 
+def test_the_people_a_message_named_ride_the_turn_with_the_notes():
+    said = user_turn(
+        "<@55> can i trust <@4001>",
+        [],
+        ["Pawpette — holds Aunties / Uncles; staff: yes"],
+    )
+    assert said.startswith("can i trust")
+    assert "this is the truth about them" in said
+    assert "Pawpette — holds Aunties / Uncles; staff: yes" in said
+
+
+def test_a_message_that_named_nobody_carries_no_people_block():
+    assert user_turn("just chatting", [], []) == "just chatting"
+
+
+EVERYONE = SimpleNamespace(id=7, name="@everyone")
+
+
+def seen_channel(name, topic=None, *, seen=True):
+    return SimpleNamespace(
+        name=name,
+        topic=topic,
+        category=None,
+        category_id=None,
+        permissions_for=lambda role: SimpleNamespace(view_channel=seen),
+    )
+
+
 class FakeGuild:
-    def __init__(self, guild_id=7):
+    def __init__(self, guild_id=7, channels=()):
         self.id = guild_id
+        self.default_role = EVERYONE
+        self.text_channels = list(channels)
 
 
 class FakeMember:
@@ -660,3 +691,100 @@ async def test_a_long_answer_is_clipped_to_something_discord_will_take(wired, mo
     said, _ = await ask(wired)
 
     assert len(said) <= 1900
+
+
+async def test_the_careful_tier_is_given_the_channel_list_after_the_cached_core(
+    wired, monkeypatch
+):
+    wired.guild = FakeGuild(
+        channels=[
+            seen_channel("general", "Chat about anything."),
+            seen_channel("staff-room", "Staff only.", seen=False),
+        ]
+    )
+    careful = Answering(ANTHROPIC, MODEL)
+    wire(wired, monkeypatch, haiku=careful)
+    wired.settings.groq_api_key = None
+
+    await ask(wired, "where do I ask about the cookout, exactly, and who do I ask?")
+
+    system = careful.seen[0]["system"]
+    assert system[0]["cache_control"] == {"type": "ephemeral"}
+    assert "#general — Chat about anything." in system[1]["text"]
+    assert "staff-room" not in system[1]["text"]
+    assert "cache_control" not in system[1]
+
+
+async def test_the_quick_tier_gets_the_same_list_as_one_string(wired, monkeypatch):
+    wired.guild = FakeGuild(channels=[seen_channel("general", "Chat here.")])
+    quick = Answering(GROQ, "llama")
+    wire(wired, monkeypatch, groq=quick)
+
+    await ask(wired)
+
+    assert "#general — Chat here." in quick.seen[0]["system"]
+
+
+async def test_a_channel_the_server_does_not_have_never_reaches_the_member(wired, monkeypatch):
+    """The owner's live failure: the bot sent somebody to an invented #black-support-hub."""
+    wired.guild = FakeGuild(channels=[seen_channel("general", "Chat.")])
+    wire(wired, monkeypatch, groq=Answering(GROQ, "llama", text="Head to #black-support-hub."))
+
+    said, _ = await ask(wired)
+
+    assert "black-support-hub" not in said
+    assert said == "Head."
+    assert wired.logged[0][0] == "chat.reply_reference_fixed"
+    assert wired.logged[0][1] == {"channels": ["black-support-hub"], "roles": [], "fixed": 1}
+
+
+async def test_the_home_channel_is_where_an_invented_one_is_swapped_for(wired, monkeypatch):
+    wired.guild = FakeGuild(channels=[seen_channel("general", "Chat.")])
+    wired.store.values["chat_home_channel_id"] = 800
+    wire(wired, monkeypatch, groq=Answering(GROQ, "llama", text="Ask in #nowhere about it."))
+
+    said, _ = await ask(wired)
+
+    assert said == "Ask in <#800> about it."
+
+
+async def test_a_role_the_server_does_not_have_is_taken_out_and_counted(wired, monkeypatch):
+    wired.guild = FakeGuild(channels=[seen_channel("general", "Chat.")])
+    wired.guild.roles = [SimpleNamespace(name="Leads")]
+    wire(wired, monkeypatch, groq=Answering(GROQ, "llama", text="Ping @Admin about it."))
+
+    said, _ = await ask(wired)
+
+    assert said == "Ping about it."
+    assert wired.logged[0][1]["roles"] == ["Admin"]
+
+
+async def test_a_reply_that_names_only_real_things_is_not_logged_as_fixed(wired, monkeypatch):
+    wired.guild = FakeGuild(channels=[seen_channel("general", "Chat.")])
+    wire(wired, monkeypatch, groq=Answering(GROQ, "llama", text="Ask in #general."))
+
+    said, _ = await ask(wired)
+
+    assert said == "Ask in #general."
+    assert wired.logged == []
+
+
+async def test_the_window_remembers_the_fixed_answer_not_the_invented_one(wired, monkeypatch):
+    wired.guild = FakeGuild(channels=[seen_channel("general", "Chat.")])
+    wire(wired, monkeypatch, groq=Answering(GROQ, "llama", text="Ask in #nowhere."))
+
+    await ask(wired)
+
+    cur = await wired.db.conn.execute(
+        "SELECT content FROM chat_window WHERE speaker = ?", (BOT,)
+    )
+    assert [row["content"] for row in await cur.fetchall()] == ["Ask."]
+
+
+async def test_a_guild_with_nothing_public_is_told_to_name_no_channel(wired, monkeypatch):
+    quick = Answering(GROQ, "llama")
+    wire(wired, monkeypatch, groq=quick)
+
+    await ask(wired)
+
+    assert "name no channel at all" in quick.seen[0]["system"]

@@ -153,6 +153,7 @@ ROUTINE: frozenset[str] = frozenset(
         "chat.llm_error",
         "chat.llm_reply",
         "chat.personality_mode",
+        "chat.reply_reference_fixed",
         "chat.route",
         "chat.trope_disabled",
         "chat.trope_enabled",

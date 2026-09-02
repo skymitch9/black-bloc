@@ -17,6 +17,7 @@ from ...actionlog import (
     send_logs,
 )
 from ...command_errors import NETWORK_ERRORS, AnswersErrors, SafeDynamicItem
+from ...command_visibility import STAFF_ONLY
 from ...golive import now_iso
 from ...logkinds import VIA_DISCORD, VIA_WEBSITE, WEB
 from ...modcases import pages_under_limit
@@ -1414,10 +1415,12 @@ class RoleMenus(commands.Cog):
         self.last_error: dict[str, str | None] = {name: None for name in LOOP_NAMES}
 
     rolemenu = app_commands.Group(
-        name="rolemenu", description="Self-serve role panels people pick from"
+        name="rolemenu", description="Self-serve role panels people pick from",
+        default_permissions=STAFF_ONLY,
     )
     role = app_commands.Group(
-        name="role", description="Hand a role out for a while, and push the end date back"
+        name="role", description="Hand a role out for a while, and push the end date back",
+        default_permissions=STAFF_ONLY,
     )
 
     async def cog_load(self) -> None:

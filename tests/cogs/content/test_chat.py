@@ -65,12 +65,37 @@ class FakeChannel:
         return None
 
 
+EVERYONE = StaffRole(GUILD, "@everyone")
+
+
+def open_channel(name, topic=None, category=None):
+    return SimpleNamespace(
+        name=name,
+        topic=topic,
+        category=category,
+        category_id=getattr(category, "id", None),
+        permissions_for=lambda role: FakePermissions(True),
+    )
+
+
+def shut_channel(name, topic=None, category=None):
+    return SimpleNamespace(
+        name=name,
+        topic=topic,
+        category=category,
+        category_id=getattr(category, "id", None),
+        permissions_for=lambda role: FakePermissions(False),
+    )
+
+
 class FakeGuild:
     def __init__(self):
         self.id = GUILD
         self.member_count = 12
         self.members = []
         self.roles = []
+        self.default_role = EVERYONE
+        self.text_channels = []
         self.channels = {CHANNEL: FakeChannel(CHANNEL), LOG_CHANNEL: FakeChannel(LOG_CHANNEL)}
 
     def get_channel(self, channel_id):
@@ -81,14 +106,17 @@ class FakeGuild:
 
 
 class FakeMember:
-    def __init__(self, guild, user_id=USER, display_name="Nia", bot=False, admin=True):
+    def __init__(
+        self, guild, user_id=USER, display_name="Nia", bot=False, admin=True, roles=()
+    ):
         self.id = user_id
         self.guild = guild
         self.display_name = display_name
         self.name = display_name
         self.bot = bot
+        self.roles = list(roles)
         self.mention = f"<@{user_id}>"
-        self.guild_permissions = SimpleNamespace(administrator=admin)
+        self.guild_permissions = SimpleNamespace(administrator=admin, manage_guild=False)
 
 
 class FakeMessage:
@@ -222,6 +250,56 @@ async def test_an_at_mention_gets_a_reply_that_pings_nobody(cog, bot, member):
     assert reply["kwargs"]["allowed_mentions"].everyone is False
     assert reply["kwargs"]["allowed_mentions"].users is False
     assert reply["kwargs"]["allowed_mentions"].roles is False
+
+
+async def a_staff_member(bot):
+    """The canonical rule: a role that can see the staff channel. Nothing else is invented."""
+    role = StaffRole(11, "Aunties / Uncles")
+    bot.guild.roles = [role, StaffRole(GUILD, "@everyone")]
+    bot.guild.channels[LOG_CHANNEL].viewers = {11}
+    await bot.store.set(GUILD, "staff_channel_id", LOG_CHANNEL)
+    return FakeMember(bot.guild, user_id=901, display_name="Pawpette", roles=[role])
+
+
+async def test_a_staff_member_may_let_the_answer_mention_a_role(cog, bot):
+    lead = await a_staff_member(bot)
+
+    message = pinged(bot, lead, "<@55> hi there")
+    await cog.on_message(message)
+
+    allowed = message.replies[0]["kwargs"]["allowed_mentions"]
+    assert allowed.roles is True
+    assert allowed.everyone is False and allowed.users is False
+
+
+async def test_the_exception_can_be_switched_off_and_then_staff_ping_nobody_either(cog, bot):
+    lead = await a_staff_member(bot)
+    await bot.store.set(GUILD, "chat_staff_can_ping_roles", False)
+
+    message = pinged(bot, lead, "<@55> hi there")
+    await cog.on_message(message)
+
+    assert message.replies[0]["kwargs"]["allowed_mentions"].roles is False
+
+
+async def test_a_member_who_is_not_staff_can_never_make_it_ping_a_role(cog, bot, member):
+    await a_staff_member(bot)
+
+    message = pinged(bot, member, "<@55> hi there")
+    await cog.on_message(message)
+
+    allowed = message.replies[0]["kwargs"]["allowed_mentions"]
+    assert allowed.roles is False and allowed.everyone is False and allowed.users is False
+
+
+async def test_a_dm_pings_nobody_whoever_sent_it(cog, bot, member):
+    message = pinged(bot, member, "<@55> hi there")
+    message.guild = None
+
+    await cog.on_message(message)
+
+    allowed = message.replies[0]["kwargs"]["allowed_mentions"]
+    assert allowed.roles is False and allowed.everyone is False
 
 
 async def test_another_bot_is_never_answered(cog, bot):
@@ -478,6 +556,34 @@ async def test_asking_for_a_mod_with_modmail_off_names_the_staff_roles(cog, bot,
     assert len(await rows(db, "chat.route")) == 1
 
 
+async def test_the_owners_live_sentence_answers_about_the_person_they_named(cog, bot, member):
+    """2026-09-01: "im looking for a mod can I trust @Pawpette" got "I don't know, ping @Admin"."""
+    lead = await a_staff_member(bot)
+    bot.guild.members = [lead]
+    bot.guild.get_member = lambda user_id: lead if int(user_id) == lead.id else None
+
+    message = pinged(bot, member, f"<@55> im looking for a mod can i trust <@{lead.id}>")
+    await cog.on_message(message)
+
+    said = message.replies[0]["content"]
+    assert "Pawpette" in said
+    assert "Aunties / Uncles" in said
+    assert said.count("Yes — that is staff") == 1
+
+
+async def test_asking_for_a_mod_names_who_is_about_without_pinging_them(cog, bot, member):
+    lead = await a_staff_member(bot)
+    lead.status = SimpleNamespace(name="online")
+    bot.guild.roles[0].members = [lead]
+
+    message = pinged(bot, member, "<@55> im looking for a mod")
+    await cog.on_message(message)
+
+    said = message.replies[0]["content"]
+    assert "Online right now: Pawpette" in said
+    assert f"<@{lead.id}>" not in said
+
+
 async def test_the_staff_note_is_posted_only_when_the_setting_asks_for_it(cog, bot, member):
     await bot.store.set(GUILD, "modmail_enabled", True)
     await bot.store.set(GUILD, "staff_channel_id", LOG_CHANNEL)
@@ -713,7 +819,7 @@ async def test_status_reports_the_notes_and_a_daily_read_that_did_not_finish(
     cog, bot, member, monkeypatch
 ):
     monkeypatch.setattr(cog_module, "require_staff", _always_staff)
-    bot.guild.text_channels = [SimpleNamespace(name="general", topic="Chat.")]
+    bot.guild.text_channels = [open_channel("general", "Chat.")]
     bot.guild.roles = []
     await cog.ingest_once()
     cog.last_ingest_error = "RuntimeError: no"
@@ -910,7 +1016,7 @@ async def test_the_daily_ingest_writes_the_server_rows_and_leaves_staff_rows_alo
     cog, bot, member, db, monkeypatch
 ):
     await add_a_note(cog, bot, member, monkeypatch, title="Rules", body="Be kind.")
-    bot.guild.text_channels = [SimpleNamespace(name="general", topic="Chat about anything.")]
+    bot.guild.text_channels = [open_channel("general", "Chat about anything.")]
     bot.guild.roles = [SimpleNamespace(name="Member")]
 
     written = await cog.ingest_once()
@@ -922,6 +1028,48 @@ async def test_the_daily_ingest_writes_the_server_rows_and_leaves_staff_rows_alo
     assert ("#general", "server") in found
     assert ("Channels in this server", "server") in found
     assert await rows(db, "chat.knowledge_ingested")
+
+
+async def test_the_daily_ingest_leaves_out_private_archive_and_modmail_channels(cog, bot, db):
+    """The 2026-09-01 leak: a dead archive channel recommended, five tickets with member ids."""
+    archive = SimpleNamespace(id=50, name="Archive")
+    modmail = SimpleNamespace(id=11, name="ModMail")
+    await bot.store.set(GUILD, "modmail_category_id", 11)
+    bot.guild.text_channels = [
+        open_channel("general", "Chat about anything."),
+        shut_channel("staff-room", "Staff only."),
+        open_channel("black-support-hub", "Ask for help.", category=archive),
+        open_channel("ticket-0001", "ModMail Channel 900 111", category=modmail),
+    ]
+    bot.guild.roles = []
+
+    await cog.ingest_once()
+
+    cur = await db.conn.execute("SELECT title, body FROM knowledge_sections ORDER BY id")
+    found = list(await cur.fetchall())
+    titles = [row["title"] for row in found]
+    assert titles == ["Channels in this server", "#general"]
+    listing = next(row["body"] for row in found if row["title"] == "Channels in this server")
+    assert listing == "#general"
+    assert not any("ModMail Channel" in row["body"] for row in found)
+
+
+async def test_a_category_staff_asked_the_ingest_to_ignore_stays_out(cog, bot, db):
+    committee = SimpleNamespace(id=99, name="Committee")
+    await bot.store.set(GUILD, "chat_ignore_categories", [99])
+    bot.guild.text_channels = [
+        open_channel("general", "Chat."),
+        open_channel("planning", "Committee talk.", category=committee),
+    ]
+    bot.guild.roles = []
+
+    await cog.ingest_once()
+
+    cur = await db.conn.execute("SELECT title FROM knowledge_sections ORDER BY id")
+    assert [row["title"] for row in await cur.fetchall()] == [
+        "Channels in this server",
+        "#general",
+    ]
 
 
 async def test_the_daily_ingest_writes_out_who_holds_a_small_role(cog, bot, db):
@@ -971,7 +1119,7 @@ async def test_a_hand_written_note_survives_the_role_holder_ingest(
 
 
 async def test_the_ingest_runs_again_without_doubling_anything(cog, bot, db):
-    bot.guild.text_channels = [SimpleNamespace(name="general", topic="Chat.")]
+    bot.guild.text_channels = [open_channel("general", "Chat.")]
     bot.guild.roles = []
 
     await cog.ingest_once()
@@ -984,7 +1132,7 @@ async def test_the_ingest_runs_again_without_doubling_anything(cog, bot, db):
 
 
 async def test_an_unavailable_server_is_skipped_rather_than_emptied(cog, bot, db):
-    bot.guild.text_channels = [SimpleNamespace(name="general", topic="Chat.")]
+    bot.guild.text_channels = [open_channel("general", "Chat.")]
     bot.guild.roles = []
     await cog.ingest_once()
     bot.guild.unavailable = True

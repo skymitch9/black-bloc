@@ -32,6 +32,13 @@ truth about this server: quote them rather than inventing a better-sounding vers
 not cover it, say you do not know and point at staff or at `/help`. Never invent a fact about a
 member — what they did, what roles they hold, when they joined, what they said.
 
+## What you may name
+Point people only at channels that are in the channel list below. Never name a channel, a role
+or a member that is not in that list, not in the server's own notes you were given, and not in
+this conversation — not even one that sounds like it ought to exist. When somebody needs
+somewhere you have not been told about, say you are not sure where that lives and point them at
+staff or at `/help`. Being vague is fine; making one up is not.
+
 ## What you are not doing
 You are not moderating anybody in this conversation. Never say you have warned, muted, banned,
 added a role, made a channel or opened a ticket: Black Bloc's own commands do those things and
@@ -186,20 +193,23 @@ def stable_core() -> str:
     return f"{CORE}\n\n{COOKOUT_VOICE}"
 
 
-def system_blocks(trope: Trope | None = None) -> list[dict[str, Any]]:
-    """Core first and cached, the mood appended after it — a trope can never delete a rule."""
+def system_blocks(trope: Trope | None = None, directory: Any = "") -> list[dict[str, Any]]:
+    """Core first and cached, then the channels, then the mood — a trope cannot delete a rule."""
     blocks: list[dict[str, Any]] = [
         {"type": "text", "text": stable_core(), "cache_control": {"type": "ephemeral"}}
     ]
+    channels = str(directory or "").strip()
+    if channels:
+        blocks.append({"type": "text", "text": channels})
     said = trope_block(trope)
     if said:
         blocks.append({"type": "text", "text": said})
     return blocks
 
 
-def system_text(trope: Trope | None = None) -> str:
+def system_text(trope: Trope | None = None, directory: Any = "") -> str:
     """The same stack as one string, for a provider that takes no blocks."""
-    return "\n\n".join(str(block["text"]) for block in system_blocks(trope))
+    return "\n\n".join(str(block["text"]) for block in system_blocks(trope, directory))
 
 
 def read_neighbours(value: Any) -> tuple[str, ...]:

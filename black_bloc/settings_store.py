@@ -93,6 +93,8 @@ CHAT_PERSON_HOURLY_TURNS = 20
 CHAT_DAILY_TURNS = 200
 CHAT_MONTHLY_CAP_USD = 20
 CHAT_LLM_MODES = ("off", "on")
+CHAT_ESCALATION_NAMES = 2
+CHAT_ESCALATION_NAMES_MAX = 10
 
 BOT_BIO_TEMPLATE = (
     "Black Bloc — moderation & content bot for Black in a Flash!. Staff dashboard: {site}"
@@ -171,6 +173,10 @@ KEY_TYPES: dict[str, str] = {
     "chat_mode": "enum",
     "chat_cooldown_seconds": "int",
     "chat_ignore_channels": "channels",
+    "chat_ignore_categories": "channels",
+    "chat_home_channel_id": "channel",
+    "chat_staff_can_ping_roles": "bool",
+    "chat_escalation_names": "int",
     "chat_greeting_reaction": "bool",
     "chat_reply_in_threads": "bool",
     "chat_route_ping_staff": "bool",
@@ -215,6 +221,7 @@ KEY_MAX: dict[str, int] = {
     "events_max_late_minutes": EVENTS_LATE_CEILING_MINUTES,
     "automod_warn_threshold": WARN_THRESHOLD_MAX,
     "chat_cooldown_seconds": CHAT_COOLDOWN_MAX_SECONDS,
+    "chat_escalation_names": CHAT_ESCALATION_NAMES_MAX,
     "chat_person_hourly_turns": CHAT_TURNS_MAX,
     "chat_daily_turns": CHAT_TURNS_MAX,
     "chat_monthly_cap_usd": CHAT_MONTHLY_CAP_MAX,
@@ -294,6 +301,10 @@ KEY_MAX_REASON: dict[str, str] = {
     "chat_monthly_cap_usd": (
         "Black Bloc refuses to be pointed at more than ${limit} a month by accident. If that is "
         "really what you want, a Lead should say so out loud first."
+    ),
+    "chat_escalation_names": (
+        "Naming more than {limit} people is a list nobody reads, and the point is to hand "
+        "somebody one or two names they can go to. Set it to 0 to name nobody at all."
     ),
 }
 
@@ -420,6 +431,29 @@ KEY_HELP: dict[str, str] = {
         f"{CHAT_COOLDOWN_MIN_SECONDS} to {CHAT_COOLDOWN_MAX_SECONDS}"
     ),
     "chat_ignore_channels": "channels Black Bloc never answers an @-mention in",
+    "chat_ignore_categories": (
+        "categories Black Bloc leaves out of everything it reads and tells people about — the "
+        "channel names and topics it learns each day, and the channel list every conversational "
+        "answer is written against. The modmail category and any category with `archive` in its "
+        "name are left out already, and so is every channel @everyone cannot see"
+    ),
+    "chat_home_channel_id": (
+        "where somebody is sent when a conversational answer points at a channel that does not "
+        "exist. Blank is safe: the sentence is written again without the channel in it rather "
+        "than pointing anywhere. Either way the invention is logged, so `/chat logs` and the "
+        "Logs page count how often it happens"
+    ),
+    "chat_staff_can_ping_roles": (
+        "on lets Black Bloc's conversational answers mention a role when the person who "
+        "@-mentioned it is staff — an Auntie or Uncle and up. Nobody else can make it ping "
+        "anything, and `@everyone` and `@here` never go through for anyone. Off means a "
+        "conversational answer pings nobody at all, whoever asked"
+    ),
+    "chat_escalation_names": (
+        "how many online staff Black Bloc names when somebody asks for a mod, 0 to name "
+        "nobody and up to 10. They are named in plain words, never pinged — the person "
+        "does that themselves. Nobody online says so instead"
+    ),
     "chat_greeting_reaction": (
         "true to answer a bare hello with a wave reaction instead of a sentence; anything "
         "longer still gets a reply"
@@ -873,6 +907,10 @@ class SettingsStore:
             return False
         if key == "chat_status_admin_only":
             return True
+        if key == "chat_staff_can_ping_roles":
+            return True
+        if key == "chat_escalation_names":
+            return CHAT_ESCALATION_NAMES
         if key == "chat_llm_mode":
             return "off"
         if key == "chat_simple_model":

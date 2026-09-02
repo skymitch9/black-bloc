@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -60,12 +61,17 @@ class FakeChannel:
 
 
 class FakeMember:
-    def __init__(self, user_id=MEMBER, display_name="Nia", roles=(), bot=False):
+    def __init__(
+        self, user_id=MEMBER, display_name="Nia", roles=(), bot=False, status=None
+    ):
         self.id = user_id
         self.display_name = display_name
         self.name = display_name
         self.bot = bot
         self.roles = list(roles)
+        self.guild_permissions = SimpleNamespace(manage_guild=False)
+        if status is not None:
+            self.status = SimpleNamespace(name=status)
 
 
 class FakeGuild:
@@ -489,3 +495,157 @@ async def test_a_lookup_that_throws_falls_back_to_the_empty_line(bot, monkeypatc
     with caplog.at_level("WARNING"):
         assert await asked(bot, "head_count") == ({}, False)
     assert any("head_count" in record.getMessage() for record in caplog.records)
+
+
+def a_member(bot, user_id, name, *, roles=(), status=None, bot_account=False):
+    one = FakeMember(user_id, name, roles=roles, status=status, bot=bot_account)
+    one.guild = bot.guild
+    bot.guild.members[user_id] = one
+    for role in roles:
+        role.members.append(one)
+    return one
+
+
+async def test_a_staff_member_is_named_as_staff_with_the_roles_they_hold(bot):
+    staff = bot.guild.get_role(11)
+    a_member(bot, 4001, "Pawpette", roles=[staff])
+
+    tokens, filled = await asked(bot, "about_member", text="<@4001> can i trust")
+
+    assert filled is True
+    assert tokens["who"] == "Pawpette"
+    assert tokens["roles"] == "**Aunties / Uncles**"
+    assert tokens["verdict"].startswith("Yes")
+
+
+async def test_a_member_who_is_not_staff_gets_their_roles_named_without_judgement(bot):
+    plain = bot.guild.get_role(22)
+    a_member(bot, 4002, "Ash", roles=[plain])
+
+    tokens, filled = await asked(bot, "about_member", text="<@4002> is a mod")
+
+    assert filled is True and tokens["roles"] == "**Member**"
+    assert "not staff" in tokens["verdict"]
+    assert "ask me for a mod" in tokens["verdict"]
+
+
+async def test_a_member_with_no_roles_says_so_rather_than_leaving_a_gap(bot):
+    a_member(bot, 4003, "New")
+
+    tokens, _ = await asked(bot, "about_member", text="<@4003> is staff")
+
+    assert tokens["roles"] == "no roles yet"
+
+
+async def test_asking_about_nobody_asks_for_an_at_mention(bot):
+    tokens, filled = await asked(bot, "about_member", text="can i trust")
+
+    assert filled is False and "point at somebody with an @" in tokens["trouble"]
+
+
+async def test_asking_about_somebody_the_cache_never_saw_says_so(bot):
+    tokens, filled = await asked(bot, "about_member", text="<@9999> can i trust")
+
+    assert filled is False and "cannot see them" in tokens["trouble"]
+
+
+async def test_asking_about_another_bot_says_it_is_a_bot(bot):
+    a_member(bot, 4004, "Robo", bot_account=True)
+
+    tokens, filled = await asked(bot, "about_member", text="<@4004> can i trust")
+
+    assert filled is False and "I am a bot" in tokens["trouble"]
+
+
+async def test_about_member_in_a_dm_says_it_needs_the_server(bot):
+    found = await tokens_for(bot, None, FakeMember(), "about_member", "<@4001> can i trust")
+
+    assert found[1] is False and "inside the server" in found[0]["trouble"]
+
+
+def test_a_presence_nobody_can_read_is_not_a_promise_that_somebody_is_there():
+    assert chat_data.is_online(FakeMember(1, "A", status="online")) is True
+    assert chat_data.is_online(FakeMember(1, "A", status="idle")) is True
+    assert chat_data.is_online(FakeMember(1, "A", status="dnd")) is True
+    assert chat_data.is_online(FakeMember(1, "A", status="offline")) is False
+    assert chat_data.is_online(FakeMember(1, "A", status="invisible")) is False
+    assert chat_data.is_online(FakeMember(1, "A")) is False
+
+
+def test_only_online_people_are_named_and_only_as_many_as_asked_for():
+    role = FakeRole(
+        30,
+        "Leads",
+        members=[
+            FakeMember(1, "Zoe", status="online"),
+            FakeMember(2, "Ada", status="idle"),
+            FakeMember(3, "Kai", status="offline"),
+            FakeMember(4, "Robo", status="online", bot=True),
+        ],
+    )
+    assert chat_data.online_holders([role], 2) == ["Ada", "Zoe"]
+    assert chat_data.online_holders([role], 0) == []
+
+
+async def test_asking_for_a_mod_names_two_online_staff_in_plain_words(bot):
+    staff = bot.guild.get_role(11)
+    a_member(bot, 4001, "Pawpette", roles=[staff], status="online")
+    a_member(bot, 4002, "PT", roles=[staff], status="idle")
+    a_member(bot, 4003, "Away", roles=[staff], status="offline")
+
+    tokens, _ = await asked(bot, "need_a_mod", text="im looking for a mod")
+
+    assert tokens["extra"] == " Online right now: Pawpette and PT — give one of them a shout."
+    assert "<@" not in tokens["extra"]
+
+
+async def test_nobody_online_says_so_and_the_line_still_points_somewhere(bot):
+    staff = bot.guild.get_role(11)
+    a_member(bot, 4003, "Away", roles=[staff], status="offline")
+
+    tokens, filled = await asked(bot, "need_a_mod", text="i need a mod")
+
+    assert tokens["extra"] == " None of them are online right now."
+    assert filled is False and tokens["roles"] == "**Aunties / Uncles**"
+
+
+async def test_naming_nobody_is_a_setting_and_it_is_respected(bot):
+    staff = bot.guild.get_role(11)
+    a_member(bot, 4001, "Pawpette", roles=[staff], status="online")
+    await bot.store.set(GUILD, "chat_escalation_names", 0)
+
+    tokens, _ = await asked(bot, "need_a_mod", text="i need a mod")
+
+    assert tokens["extra"] == ""
+
+
+async def test_who_has_on_a_staff_role_also_names_who_is_about(bot):
+    with_roles(bot, FakeRole(11, "Aunties / Uncles", members=[]))
+    staff = bot.guild.get_role(11)
+    a_member(bot, 4001, "Pawpette", roles=[staff], status="online")
+
+    tokens, _ = await asked(bot, "who_has", text="whos an auntie")
+
+    assert tokens["extra"] == " Online right now: Pawpette — give one of them a shout."
+
+
+async def test_who_has_on_an_ordinary_role_names_nobody_extra(bot):
+    with_roles(bot, FakeRole(30, "Marathons", members=[FakeMember(1, "Kai", status="online")]))
+
+    tokens, _ = await asked(bot, "who_has", text="whos a marathon")
+
+    assert tokens["escalate"] == "" and tokens["extra"] == ""
+
+
+async def test_every_member_the_message_named_gets_one_grounding_line(bot):
+    staff = bot.guild.get_role(11)
+    a_member(bot, 4001, "Pawpette", roles=[staff])
+    a_member(bot, 4002, "Ash", roles=[bot.guild.get_role(22)])
+    a_member(bot, 4004, "Robo", bot_account=True)
+
+    found = chat_data.member_notes(bot, bot.guild, "<@4001> <@4002> <@4004> who is who")
+
+    assert found == [
+        ("Pawpette", "Pawpette — holds Aunties / Uncles; staff: yes"),
+        ("Ash", "Ash — holds Member; staff: no"),
+    ]

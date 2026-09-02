@@ -8,6 +8,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
+from ..command_visibility import STAFF_ONLY
 from ..presence import ensure_bio, update_status
 from ..settings_store import require_staff
 
@@ -39,7 +40,8 @@ class Presence(commands.Cog):
         self.last_error: str | None = None
 
     presence = app_commands.Group(
-        name="presence", description="Black Bloc's own status and About Me"
+        name="presence", description="Black Bloc's own status and About Me",
+        default_permissions=STAFF_ONLY,
     )
 
     def loop_health(self, name: str) -> tuple[str | None, str | None]:

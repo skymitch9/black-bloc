@@ -11,6 +11,8 @@ from .actionlog import log_action
 
 log = logging.getLogger(__name__)
 
+STAFF_ONLY = discord.Permissions(manage_messages=True)
+
 HIDDEN_WHEN_OFF: dict[str, tuple[str, ...]] = {
     "rolemenu_mode": ("rolemenu",),
     "request_mode": ("request",),

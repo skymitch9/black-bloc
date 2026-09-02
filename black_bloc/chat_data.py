@@ -30,6 +30,28 @@ EVERYONE = "@everyone"
 LEADING_FILLER = ("a", "an", "the", "our", "my", "your", "all", "of", "us", "role", "roles")
 TRAILING_FILLER = ("role", "roles", "here", "now", "right", "please", "rn", "then", "again")
 
+ABOUT_MEMBER = "about_member"
+MEMBERS_GROUNDED = 5
+ESCALATION_NAMES_KEY = "chat_escalation_names"
+ESCALATION_NAMES = 2
+OFFLINE = ("offline", "invisible", "")
+
+NO_ROLES_YET = "no roles yet"
+IS_STAFF = "Yes — that is staff, so they can help."
+NOT_STAFF = (
+    "They are not staff, which is nothing against them — ask me for a mod and I will say who "
+    "to go to."
+)
+NOBODY_MENTIONED = (
+    "point at somebody with an @ and I will say what they hold — `is @somebody a mod` does it."
+)
+ONLY_ME = "that is me, and I am a bot, so there is nothing to vouch for."
+MEMBER_UNKNOWN = "I cannot see them in this server, so I cannot say what they hold."
+
+ONLINE_NOW = " Online right now: {names} — give one of them a shout."
+NOBODY_ONLINE = " None of them are online right now."
+MEMBER_NOTE = "{who} — holds {roles}; staff: {staff}"
+
 NO_ROLE_ASKED = (
     "I did not catch which role you meant. Name it — `who has the Leads role` — and I will count "
     "them."
@@ -296,13 +318,66 @@ def holders_of(role: Any) -> list[str]:
     return sorted((name for name in names if name), key=str.casefold)
 
 
-def escalation(bot: Any, guild: Any, role: Any) -> str:
+def staff_roles_of(bot: Any, guild: Any) -> list[Any]:
+    """The canonical list — roles that can see the staff channel — and nothing of its own."""
     channel_id = bot.store.get(guild.id, "staff_channel_id")
     channel = guild.get_channel(channel_id) if channel_id else None
-    staff = {getattr(one, "id", None) for one in resolved_staff_roles(guild, channel)}
+    return resolved_staff_roles(guild, channel)
+
+
+def escalation(bot: Any, guild: Any, role: Any) -> str:
+    staff = {getattr(one, "id", None) for one in staff_roles_of(bot, guild)}
     if getattr(role, "id", None) not in staff:
         return ""
     return ESCALATE_MODMAIL if bot.store.get(guild.id, "modmail_enabled") else ESCALATE_STAFF
+
+
+def is_online(member: Any) -> bool:
+    """A presence nobody can read is not a promise that somebody is there."""
+    status = getattr(member, "status", None)
+    said = str(getattr(status, "name", status) or "").strip().lower()
+    return said not in OFFLINE
+
+
+def people_words(names: Any) -> str:
+    found = [str(one) for one in names or ()]
+    if len(found) < 2:
+        return "".join(found)
+    return f"{', '.join(found[:-1])} and {found[-1]}"
+
+
+def how_many_names(bot: Any, guild: Any) -> int:
+    try:
+        return int(bot.store.get(guild.id, ESCALATION_NAMES_KEY) or 0)
+    except Exception as exc:
+        log.warning("chat: how many names to give was unreadable — %s", exc)
+        return ESCALATION_NAMES
+
+
+def online_holders(roles: Any, limit: int) -> list[str]:
+    """Display names, never mentions — the member does the @-ing themselves."""
+    seen: set[int] = set()
+    found: list[str] = []
+    for role in roles or ():
+        for one in getattr(role, "members", ()) or ():
+            number = getattr(one, "id", None)
+            if getattr(one, "bot", False) or number in seen or not is_online(one):
+                continue
+            name = str(getattr(one, "display_name", "") or getattr(one, "name", "") or "").strip()
+            if not name:
+                continue
+            seen.add(number)
+            found.append(name)
+    return sorted(found, key=str.casefold)[: max(0, limit)]
+
+
+def who_is_about(bot: Any, guild: Any, roles: Any) -> str:
+    """The sentence appended to an escalation answer, whichever intent asked for it."""
+    limit = how_many_names(bot, guild)
+    if limit <= 0:
+        return ""
+    names = online_holders(roles, limit)
+    return ONLINE_NOW.format(names=people_words(names)) if names else NOBODY_ONLINE
 
 
 async def who_has(bot: Any, guild: Any, member: Any, text: Any) -> tuple[dict[str, Any], bool]:
@@ -330,12 +405,14 @@ async def who_has(bot: Any, guild: Any, member: Any, text: Any) -> tuple[dict[st
         return {"trouble": NOBODY_HOLDS_IT.format(role=str(role.name))}, False
     shown = names[:HOLDERS_SHOWN]
     left = len(names) - len(shown)
+    escalate = escalation(bot, guild, role)
     return {
         "role": str(role.name),
         "count": len(names),
         "holders": ", ".join(shown),
         "more": AND_MORE.format(count=left) if left else "",
-        "escalate": escalation(bot, guild, role),
+        "escalate": escalate,
+        "extra": who_is_about(bot, guild, [role]) if escalate else "",
     }, True
 
 
@@ -357,13 +434,76 @@ async def time_for_me(bot: Any, guild: Any, member: Any, text: Any) -> tuple[dic
 async def need_a_mod(bot: Any, guild: Any, member: Any, text: Any) -> tuple[dict[str, Any], bool]:
     """Filled means modmail is answering; empty means the staff roles are the way in."""
     if guild is None:
-        return {"roles": SOME_MODS}, False
+        return {"roles": SOME_MODS, "extra": ""}, False
+    roles = staff_roles_of(bot, guild)
+    extra = who_is_about(bot, guild, roles)
     if bool(bot.store.get(guild.id, "modmail_enabled")):
-        return {"roles": SOME_MODS}, True
-    channel_id = bot.store.get(guild.id, "staff_channel_id")
-    channel = guild.get_channel(channel_id) if channel_id else None
-    names = [f"**{role.name}**" for role in resolved_staff_roles(guild, channel)]
-    return {"roles": ", ".join(names) or SOME_MODS}, False
+        return {"roles": SOME_MODS, "extra": extra}, True
+    names = [f"**{role.name}**" for role in roles]
+    return {"roles": ", ".join(names) or SOME_MODS, "extra": extra}, False
+
+
+def mentioned_members(bot: Any, guild: Any, text: Any) -> list[Any]:
+    """The people this message pointed at — Black Bloc, other bots and strangers left out."""
+    from .chat import others_mentioned
+
+    found = []
+    for user_id in others_mentioned(text, bot):
+        one = guild.get_member(user_id) if guild is not None else None
+        if one is None or getattr(one, "bot", False):
+            continue
+        found.append(one)
+    return found[:MEMBERS_GROUNDED]
+
+
+def role_names_of(member: Any) -> list[str]:
+    return [
+        str(getattr(role, "name", "") or "").strip()
+        for role in getattr(member, "roles", ()) or ()
+        if str(getattr(role, "name", "") or "").strip() not in ("", EVERYONE)
+    ]
+
+
+def member_notes(bot: Any, guild: Any, text: Any) -> list[tuple[str, str]]:
+    """A display name and a line about them per person the message named."""
+    found = []
+    for one in mentioned_members(bot, guild, text):
+        who = display_of(guild, getattr(one, "id", 0))
+        found.append(
+            (
+                who,
+                MEMBER_NOTE.format(
+                    who=who,
+                    roles=", ".join(role_names_of(one)) or NO_ROLES_YET,
+                    staff="yes" if bot.store.is_staff(one) else "no",
+                ),
+            )
+        )
+    return found
+
+
+async def about_member(
+    bot: Any, guild: Any, member: Any, text: Any
+) -> tuple[dict[str, Any], bool]:
+    """Roles and staff standing from the live cache and the ONE canonical staff check."""
+    from .chat import others_mentioned
+
+    if guild is None:
+        return {"trouble": NOT_IN_A_SERVER}, False
+    named = others_mentioned(text, bot)
+    if not named:
+        return {"trouble": NOBODY_MENTIONED}, False
+    people = mentioned_members(bot, guild, text)
+    if not people:
+        one = guild.get_member(named[0])
+        return {"trouble": ONLY_ME if one is not None else MEMBER_UNKNOWN}, False
+    who = people[0]
+    roles = role_names_of(who)
+    return {
+        "who": display_of(guild, getattr(who, "id", 0)),
+        "roles": ", ".join(f"**{name}**" for name in roles) or NO_ROLES_YET,
+        "verdict": IS_STAFF if bot.store.is_staff(who) else NOT_STAFF,
+    }, True
 
 
 RESOLVERS = {
@@ -372,6 +512,7 @@ RESOLVERS = {
     "birthdays": birthdays,
     "head_count": head_count,
     WHO_HAS: who_has,
+    ABOUT_MEMBER: about_member,
     "my_roles": my_roles,
     "time_for_me": time_for_me,
     "need_a_mod": need_a_mod,
