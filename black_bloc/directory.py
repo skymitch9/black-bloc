@@ -71,7 +71,12 @@ def visibility_role(bot: Any, guild: Any) -> Any:
             wanted = as_id(store.get(int(guild_id), VISIBILITY_ROLE_KEY))
         except Exception as exc:
             log.warning("directory: the visibility role was unreadable — %s", exc)
-    role = guild.get_role(wanted) if wanted and hasattr(guild, "get_role") else None
+    role = None
+    if wanted and hasattr(guild, "get_role"):
+        try:
+            role = guild.get_role(wanted)
+        except Exception as exc:
+            log.warning("directory: the visibility role could not be resolved — %s", exc)
     return role if role is not None else getattr(guild, "default_role", None)
 
 
