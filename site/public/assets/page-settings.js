@@ -15,6 +15,7 @@ const CORE_LOGS_NOTE = 'Everything done from this dashboard and every settings c
 const NAMESPACE_NOTES = {
   core: 'staff_channel_id is what decides who may see this dashboard.',
   automod: 'automod_rules has its own editor on the Automod tab; the JSON box here is the fallback.',
+  cost: 'The Costs card on the Health page is where this figure is read; nothing on the bot can see an invoice.',
 };
 
 const NAMESPACE_NAMES = {
@@ -31,6 +32,7 @@ const NAMESPACE_NAMES = {
   poll: 'Polls',
   chat: 'Chat',
   request: 'Requests',
+  cost: 'Costs',
 };
 
 const named = (namespace) => NAMESPACE_NAMES[namespace]

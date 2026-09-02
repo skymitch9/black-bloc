@@ -111,6 +111,8 @@ export const LABELS = {
   request_notify_channel_id: 'Where a new request is announced',
   request_dm_on_decision: 'Whether the asker is DMed the decision',
   request_log_level: 'How much of requests is repeated into Discord',
+
+  cost_hosting_usd: 'What hosting costs a month, off the invoice',
 };
 
 const NAMESPACES = ['golive', 'tempvoice', 'honeypot', 'events', 'birthday', 'modmail', 'automod', 'rolemenu'];

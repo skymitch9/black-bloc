@@ -10,7 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from .. import __version__
-from . import auth, ref, settings_api, status
+from . import auth, costs, ref, settings_api, status
 from .assets import NO_STORE, SiteFiles, build_id
 from .auth import Refused, refused_handler, validation_handler
 from .status import latency_ms
@@ -137,6 +137,7 @@ def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
     app.add_exception_handler(RequestValidationError, validation_handler)
     app.include_router(auth.build_router(bot, oauth_request=oauth_request))
     app.include_router(status.build_router(bot))
+    app.include_router(costs.build_router(bot))
     app.include_router(ref.build_router(bot))
     app.include_router(settings_api.build_router(bot))
     app.include_router(rolemenus.build_router(bot))

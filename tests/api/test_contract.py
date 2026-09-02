@@ -29,6 +29,9 @@ from black_bloc.cogs.content.golive import set_link, set_optout, start_session
 from black_bloc.cogs.moderation.honeypot import record_hit
 from black_bloc.cogs.moderation.modmail import add_message, create_ticket, set_ticket_place
 from black_bloc.golive import StreamInfo
+from black_bloc.llm import ANTHROPIC, GROQ, Usage
+from black_bloc.llm import MODEL as HAIKU
+from black_bloc.llm import record as llm_record
 from black_bloc.modcases import add_case
 from black_bloc.modmail import IN
 from black_bloc.polls import next_occurrence
@@ -251,6 +254,28 @@ async def seeded(client, sign_in, web, guild, wf):
     )
     await knowledge.add_section(
         db, guild_id, "Channels", "general, cookout-planning", source=knowledge.SERVER
+    )
+    # One paid turn and one free one, so /api/costs' model rows are never an empty list —
+    # an empty one there would mean the ledger query broke, not that nothing was spent.
+    await llm_record(
+        db,
+        guild_id=guild_id,
+        user_id=MEMBER_ID,
+        turn="contract-haiku",
+        provider=ANTHROPIC,
+        model=HAIKU,
+        tier="important",
+        usage=Usage(input_tokens=1200, output_tokens=300),
+    )
+    await llm_record(
+        db,
+        guild_id=guild_id,
+        user_id=MEMBER_ID,
+        turn="contract-groq",
+        provider=GROQ,
+        model="llama-3.3-70b-versatile",
+        tier="simple",
+        usage=Usage(input_tokens=400, output_tokens=90),
     )
     # {feature_request_id} is the signed-in staffer's own pending row, so /api/requests/mine
     # is never empty and the decide routes have something to move; {member_request_id} is
