@@ -2,11 +2,14 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-01** — the fast-moving figures re-measured today:
-> `SCHEMA_VERSION` is **19** (17 sessions, 18 `polls.vote_scheme`, 19
-> `golive_sessions.live_role_id`), `check.mjs` reports **17 pages / 98 routes**,
-> `pytest` collects **2265** tests, `ruff check .` clean; `bot.py:COGS` still
-> **14** cogs. ⚠️ NOT re-checked today: the Shape tree's per-file annotations
+> Last verified: **2026-09-02** — the fast-moving figures re-measured:
+> `SCHEMA_VERSION` is **20** (17 sessions, 18 `polls.vote_scheme`, 19
+> `golive_sessions.live_role_id`, 20 the chat tables), `check.mjs` reports
+> **17 pages / 107 routes**, `pytest` runs **2610** tests (also green on
+> ubuntu CI), `ruff check .` clean; `bot.py:COGS` still **14** cogs. New since
+> the tree below was drawn: `chat_llm.py`, `llm.py`, `groq.py`, `knowledge.py`,
+> `personas.py`, `directory.py`, `chat_check.py`, `dbsnapshot.py`,
+> `api/costs.py`. ⚠️ NOT re-checked: the Shape tree's per-file annotations
 > (verified 2026-08-31). Three cogs (polls, requests, chat) and eleven modules the tree did not
 > list have been added, and the **Carl parity** entries removed — parity was
 > deleted in `47634b8` and `grep -ri carl black_bloc site` is empty.

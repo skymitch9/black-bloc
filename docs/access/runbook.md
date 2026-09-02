@@ -14,7 +14,7 @@
 | Thing | Where |
 |---|---|
 | Bot process | Fly.io app `black-bloc`, machine `85e744c4d959d8`, region `lax`, volume `black_bloc_data` at `/data` |
-| Database | SQLite `/data/black_bloc.sqlite3` on that volume (schema **19** — `black_bloc/storage/db.py:SCHEMA_VERSION`; 17 `sessions`, 18 `polls.vote_scheme` (2026-08-31), 19 `golive_sessions.live_role_id` (2026-09-01)) |
+| Database | SQLite `/data/black_bloc.sqlite3` on that volume (schema **20** — `black_bloc/storage/db.py:SCHEMA_VERSION`; 17 `sessions`, 18 `polls.vote_scheme`, 19 `golive_sessions.live_role_id`, 20 the Phase-14 chat tables) |
 | Dashboard | https://blackbloc.heygabi.ai (same Fly app; Discord sign-in; staff roles = roles that can see `#mute-me-bot-test-spam`) |
 | Health | https://blackbloc.heygabi.ai/health (public JSON: `ok`, `ready`, `guilds`, `latency_ms`) — and the dashboard's **Health** tab (loops, last 50 actions) |
 | Logs | `flyctl logs --app black-bloc --no-tail` (below), the dashboard **Logs/Audit** tab, and `/<feature> logs` in Discord (Phase 12, live since 2026-08-27 18:38) |

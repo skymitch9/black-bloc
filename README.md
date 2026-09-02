@@ -20,8 +20,10 @@ Hosted on Fly.io; the dashboard lives at https://blackbloc.heygabi.ai
   polls (native Discord polls wrapped, plus an anonymous panel), feature
   requests (`/request` + a dashboard board), member timezone store.
 - **Content** — go-live announcements (Discord presence + Twitch polling for
-  linked channels, opt-out honored), chat replies when @-mentioned (editable
-  intents, live data answers), configurable emoji skin tone.
+  linked channels, opt-out honored), real conversation when @-mentioned (a
+  three-tier answer ladder: editable intents free, then Groq, then Claude
+  Haiku with server knowledge, personas, and a hard monthly spend cap),
+  configurable emoji skin tone.
 - **Operations** — every action logged to a searchable Logs page with
   per-feature levels, every setting editable from both `/settings` and the
   dashboard, per-feature shadow/on modes, health page with loop monitoring.
@@ -36,7 +38,7 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
 Copy-Item .env.example .env      # then fill in DISCORD_TOKEN and DEV_GUILD_ID
-pytest                           # ~2.3k tests, no network needed
+pytest                           # ~2.6k tests, no network needed (CI runs them on every push)
 python -m black_bloc
 ```
 
