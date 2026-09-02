@@ -29,17 +29,18 @@ The Claude session shells never have `flyctl` on PATH. Always spell it out:
 ```
 (`winget install --id Fly-io.flyctl` on a new machine; then `flyctl auth login` in an interactive shell.)
 
-## Deploy (owner-authorised for Claude, 2026-08-27)
+## Deploy (owner-authorised for Claude, 2026-08-27; MECHANICALLY GATED since 2026-09-02)
 ```
-git status --short            # must be empty
-.venv/Scripts/python -m pytest -q && .venv/Scripts/python -m ruff check .
-node site/mock/server.mjs &  node site/mock/check.mjs      # 17 pages / 89 routes ok (2026-08-31)
-git push origin main
-<flyctl> deploy --app black-bloc --ha=false --remote-only --yes
+powershell -File scripts\deploy.ps1     # THE deploy path. Refuses a dirty tree or a red gate.
 curl -s https://blackbloc.heygabi.ai/health
 <flyctl> logs --app black-bloc --no-tail | grep -i "logged in\|synced\|error\|traceback" | tail
 ```
-Then ONE line in `docs/deploys.log`: `<ISO> black-bloc <commit> machine=85e744c4d959d8 region=lax by=<who> <note>; verified: <what>`.
+`deploy.ps1` runs ruff + pytest + `check.mjs`, pushes, deploys, and appends a
+`deploys.log` skeleton line — EDIT that line (what shipped / what was verified)
+and commit it. Escape hatch for a genuine emergency only: `BLACKBLOC_SKIP_GATE=1`.
+Incident that made it a script: 2026-09-01, an ungated `;`-chain deployed on a red
+suite. GitHub Actions (`.github/workflows/ci.yml`) also proves every push
+independently — a red ✗ on main is a stop-everything signal.
 A deploy restarts the bot (~10 s offline); expect one Fly proxy "refused connection" line in that window.
 
 ## Restart / stop / start
