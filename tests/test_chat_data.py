@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from black_bloc import chat_data
+from black_bloc.chat import with_extra
 from black_bloc.chat_data import (
     at_local,
     clock,
@@ -267,6 +268,33 @@ async def test_my_roles_says_nothing_held_rather_than_leaving_a_hole(bot, db):
     tokens, filled = await asked(bot, "my_roles", member=FakeMember())
 
     assert filled is True and tokens["roles"] == "nothing from them yet"
+
+
+async def test_my_roles_names_the_channel_the_menus_were_posted_in_when_one_is_set(bot, db):
+    """A sentence appended at render time, because the stored line predates it."""
+    await bot.store.set(GUILD, "rolemenu_mode", "on")
+    await bot.store.set(GUILD, "role_menu_channel_id", 4242)
+    await create_menu(db, GUILD, "colours", "Colours")
+    menu = await get_menu(db, GUILD, "colours")
+    await add_option(db, menu["id"], 22, "Member", None)
+
+    tokens, filled = await asked(bot, "my_roles", member=FakeMember())
+
+    assert filled is True
+    assert tokens["extra"] == " The menus are posted in <#4242>."
+    assert with_extra("You can pick from Colours.", tokens).endswith("<#4242>.")
+
+
+async def test_my_roles_says_nothing_about_a_channel_nobody_has_pointed_it_at(bot, db):
+    await bot.store.set(GUILD, "rolemenu_mode", "on")
+    assert bot.store.get(GUILD, "role_menu_channel_id") is None
+    await create_menu(db, GUILD, "colours", "Colours")
+    menu = await get_menu(db, GUILD, "colours")
+    await add_option(db, menu["id"], 22, "Member", None)
+
+    tokens, _ = await asked(bot, "my_roles", member=FakeMember())
+
+    assert tokens["extra"] == ""
 
 
 async def test_my_roles_is_the_empty_state_while_picking_is_off(bot, db):

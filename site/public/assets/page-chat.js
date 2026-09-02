@@ -65,8 +65,11 @@ const KNOWLEDGE_NOTE = 'What Black Bloc knows about this server in its own words
 const PERSONALITY_NOTE = 'How Black Bloc sounds. The cookout voice is the house one; the pool is ' +
   'eleven voices it picks between, a different one per conversation, moving a step at a time. ' +
   'None of them changes what it says — only how it says it.';
-const SPEND_NOTE = 'What answering has cost this month, how many answers came from a model ' +
-  'today, and which of the three tiers is actually answering right now.';
+const SPEND_NOTE = 'How many answers came from a model today and which of the three tiers is ' +
+  'actually answering right now. The money itself lives on the Health page, where hosting and ' +
+  'the keys are — this figure links to it.';
+const COSTS_CARD = '/health.html#sect-costs';
+const COSTS_TITLE = 'What everything costs, on the Health page';
 const NO_KNOWLEDGE = 'Black Bloc has nothing written down about this server yet, so it answers ' +
   'every question from the phrases above and its own wording.';
 const NO_TROPES = 'The voice pool is empty, so Black Bloc keeps the cookout voice whatever this ' +
@@ -883,7 +886,12 @@ function spendSection(payload) {
 
   one.body.append(card(null, [
     el('div', { class: 'chipbar' }, [
-      el('span', { class: 'spend-figure', text: `$${Number(month.spent_usd || 0).toFixed(2)}` }),
+      el('a', {
+        class: 'spend-figure',
+        href: COSTS_CARD,
+        title: COSTS_TITLE,
+        text: `$${Number(month.spent_usd || 0).toFixed(2)}`,
+      }),
       el('span', { class: 'chat-answer-label', text: `of $${Number(month.cap_usd || 0).toFixed(2)} this month` }),
       payload?.capped ? badge('the month is spent', 'warn') : null,
     ]),

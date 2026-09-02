@@ -96,6 +96,9 @@ CHAT_LLM_MODES = ("off", "on")
 CHAT_ESCALATION_NAMES = 2
 CHAT_ESCALATION_NAMES_MAX = 10
 
+COST_HOSTING_USD = 0
+COST_HOSTING_MAX_USD = 10_000
+
 BOT_BIO_TEMPLATE = (
     "Black Bloc — moderation & content bot for Black in a Flash!. Staff dashboard: {site}"
 )
@@ -190,6 +193,7 @@ KEY_TYPES: dict[str, str] = {
     "rolemenu_approval_channel_id": "channel",
     "rolemenu_approver_role_id": "role",
     "emoji_skin_tone": "enum",
+    "cost_hosting_usd": "int",
 }
 
 KEY_CHOICES: dict[str, tuple[str, ...]] = {
@@ -228,6 +232,7 @@ KEY_MAX: dict[str, int] = {
     "poll_default_hours": POLL_MAX_HOURS,
     "poll_reminder_minutes": POLL_REMINDER_MAX_MINUTES,
     "poll_archive_days": POLL_ARCHIVE_MAX_DAYS,
+    "cost_hosting_usd": COST_HOSTING_MAX_USD,
 }
 
 KEY_MIN: dict[str, int] = {
@@ -305,6 +310,10 @@ KEY_MAX_REASON: dict[str, str] = {
     "chat_escalation_names": (
         "Naming more than {limit} people is a list nobody reads, and the point is to hand "
         "somebody one or two names they can go to. Set it to 0 to name nobody at all."
+    ),
+    "cost_hosting_usd": (
+        "A hosting bill over ${limit} a month is not this bot, it is a typo. Check the invoice "
+        "and put in the monthly figure."
     ),
 }
 
@@ -505,6 +514,11 @@ KEY_HELP: dict[str, str] = {
     "emoji_skin_tone": (
         f"the skin tone Black Bloc's hand and people emoji wear: "
         f"{', '.join(SKIN_TONE_NAMES)}"
+    ),
+    "cost_hosting_usd": (
+        "what the always-on container costs a month in whole dollars — read it off your Fly "
+        "invoice; 0 = not filled in yet, and the Costs card on the Health page says so rather "
+        "than claiming hosting is free"
     ),
 }
 
@@ -925,6 +939,8 @@ class SettingsStore:
             return CHAT_MONTHLY_CAP_USD
         if key == "emoji_skin_tone":
             return SKIN_TONE_DEFAULT
+        if key == "cost_hosting_usd":
+            return COST_HOSTING_USD
         if key.endswith("_log_level"):
             return LEVEL_DEFAULT
         if KEY_TYPES.get(key) in ("channels", "roles"):

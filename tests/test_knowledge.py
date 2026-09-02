@@ -10,7 +10,9 @@ from black_bloc.knowledge import (
     GROUNDING_BYTES,
     SERVER,
     STAFF,
+    STRONG_SCORE,
     TITLE_LIMIT,
+    TITLE_WEIGHT,
     KnowledgeError,
     add_section,
     channel_sections,
@@ -21,6 +23,7 @@ from black_bloc.knowledge import (
     event_section,
     get_section,
     grounding,
+    is_strong,
     list_sections,
     menu_section,
     remove_section,
@@ -33,6 +36,7 @@ from black_bloc.knowledge import (
     snippet_of,
     tokenize,
     update_section,
+    whole_word,
 )
 from black_bloc.storage.db import Database
 
@@ -82,6 +86,33 @@ def test_the_search_says_which_pass_answered_so_a_loose_match_is_never_sold_as_e
     loose = search(NOTES, "cookout parliament")
     assert loose.matched == ANY_OF
     assert loose.hits
+
+
+def test_only_the_every_token_pass_landing_on_whole_words_counts_as_a_strong_hit():
+    """Measured 2026-09-01: the loose pass matched nearly everything, so `any hit`
+    routed 8 of 8 live calls to the dear tier and Groq was never once chosen."""
+    assert is_strong(search(NOTES, "cookout hours")) is True
+    assert is_strong(search(NOTES, "cookout parliament")) is False
+    assert is_strong(search(NOTES, "parliament")) is False
+    assert is_strong(["a hit"]) is False
+    assert search(NOTES, "cookout hours").strong is True
+
+
+def test_a_word_hiding_inside_another_word_is_not_a_hit_worth_paying_more_for():
+    """`hi` is inside `this`, which is how a greeting scored a title hit."""
+    found = search(NOTES, "hi")
+    assert found.matched == ALL_OF and found.hits
+    assert found.strong is False
+    assert whole_word("chat about anything", "hi") is False
+    assert whole_word("say hi to them", "hi") is True
+    assert whole_word("#off-topic is quiet", "off-topic") is True
+
+
+def test_a_body_only_coincidence_does_not_reach_the_score_a_note_about_it_would():
+    note = [{"id": 1, "title": "Rules", "body": "Be kind.", "tag": "", "source": STAFF}]
+    assert search(note, "kind").hits[0].score < STRONG_SCORE
+    assert is_strong(search(note, "kind")) is False
+    assert STRONG_SCORE == TITLE_WEIGHT
 
 
 def test_a_query_that_lands_nowhere_finds_nothing_rather_than_everything():

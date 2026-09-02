@@ -1,6 +1,29 @@
 import { api, listOf, names, notesOf } from './api.js';
 import { start } from './app.js';
-import { duration, el, idsIn, nameNode, sayNothing, section, table, when } from './ui.js';
+import {
+  badge,
+  boldParts,
+  card,
+  duration,
+  el,
+  foldout,
+  idsIn,
+  linkAction,
+  nameNode,
+  sayNothing,
+  section,
+  table,
+  when,
+} from './ui.js';
+
+const COSTS_NOTE = 'Every dollar Black Bloc costs, in one place. The model figures are ' +
+  'measured from its own ledger; hosting is what somebody typed in off the invoice; the free ' +
+  'things are named at $0 rather than left out.';
+const SECRETS_NOTE = 'The keys Black Bloc is configured with, by name. No value is ever read ' +
+  'out of the bot, so this says set or unset and nothing else.';
+const NO_MODELS = 'No model call has been paid for this month.';
+const HOSTING_SETTING = '/settings.html#cost_hosting_usd';
+const HOSTING_LINK = 'Fill it in';
 
 const COUNT_LABELS = {
   role_menus_posted: 'Role menus posted',
@@ -83,10 +106,83 @@ function actions(items) {
   ], items, { empty: 'Black Bloc has not logged anything yet.' });
 }
 
+function dollars(value) {
+  return `$${Number(value || 0).toFixed(2)}`;
+}
+
+function thousands(value) {
+  return Number(value || 0).toLocaleString();
+}
+
+function costRow(item) {
+  return row({
+    name: item.name,
+    badge: item.kind === 'configured' && !item.amount_usd ? 'not filled in' : dollars(item.amount_usd),
+    state: item.kind === 'free' ? 'ok' : item.amount_usd ? 'ok' : 'warn',
+    detail: item.word,
+  });
+}
+
+function models(rows) {
+  return table([
+    { label: 'Model', cell: (item) => `${item.provider_label} · ${item.model}`, className: 'mono' },
+    { label: 'Tier', cell: (item) => item.tier },
+    { label: 'Answers', cell: (item) => String(item.turns) },
+    {
+      label: 'Tokens',
+      cell: (item) => thousands(Number(item.input_tokens) + Number(item.output_tokens)),
+    },
+    { label: 'This month', cell: (item) => dollars(item.spent_usd) },
+    { label: 'Month before', cell: (item) => dollars(item.prior_usd) },
+  ], rows, { empty: NO_MODELS });
+}
+
+function secrets(rows) {
+  return table([
+    { label: 'Name', cell: (item) => item.name, className: 'mono' },
+    { label: 'Set', cell: (item) => badge(item.set ? 'set' : 'not set', item.set ? 'ok' : 'warn') },
+    { label: 'What it is for', cell: (item) => item.what, className: 'wrap' },
+  ], rows, { empty: 'Black Bloc reports no configured keys at all.' });
+}
+
+function costs(payload) {
+  const total = payload?.total || {};
+  const items = payload?.items || [];
+  // Counted explicitly: left to itself the shared rail counts TABLE rows, which here would
+  // read as eleven costs when it is really two model rows and nine key names.
+  const one = section('Costs', COSTS_NOTE, { count: items.length + (payload?.models || []).length });
+  one.body.append(card(null, [
+    el('div', { class: 'chipbar' }, [
+      el('span', { class: 'spend-figure', text: dollars(total.month_usd) }),
+      el('span', { class: 'chat-answer-label', text: 'this month, everything in' }),
+    ]),
+    el('p', { class: 'section-note' }, boldParts(total.word || '')),
+    el('p', { class: 'section-note', text: payload?.prior?.word || '' }),
+    ...notesOf(payload).map((said) => el('p', { class: 'section-note', text: said })),
+    total.hosting_usd
+      ? null
+      : sayNothing(
+        'Hosting is the one figure nobody can read off the bot.',
+        linkAction(HOSTING_LINK, HOSTING_SETTING),
+      ),
+  ]));
+  one.body.append(rows(items.map(costRow)));
+  one.body.append(el('div', { class: 'chatblock' }, [
+    el('h4', { text: 'What the models charged' }),
+    models(payload?.models || []),
+  ]));
+  one.body.append(foldout('Keys, by name', [secrets(payload?.secrets || [])], {
+    count: (payload?.secrets || []).length || null,
+  }));
+  one.body.append(el('p', { class: 'section-note', text: SECRETS_NOTE }));
+  return one.node;
+}
+
 async function load() {
-  const [status, log] = await Promise.all([
+  const [status, log, money] = await Promise.all([
     api('/api/status'),
     api('/api/actions?limit=50'),
+    api('/api/costs'),
   ]);
   const items = listOf(log, 'actions');
   await names(idsIn(items, ['actor_id', 'target_id']));
@@ -102,6 +198,7 @@ async function load() {
   document.getElementById('dash').replaceChildren(
     ...(notes.length ? [el('p', { class: 'section-note', text: notes.join(' ') })] : []),
     one.node,
+    costs(money),
     three.node,
     four.node,
   );

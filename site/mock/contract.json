@@ -55,6 +55,72 @@
       }
     },
     {
+      "_": "THE one home for money (owner ask, 2026-09-01). `models` is the llm_ledger grouped by provider, model and tier — both fixtures seed a paid row and a free one, so an empty list here means the ledger query broke rather than that nothing was spent. `secrets` is derived from config.py's own fields and carries NAMES and set/unset only.",
+      "method": "GET",
+      "path": "/api/costs",
+      "read_by": [
+        "page-health.js Costs card"
+      ],
+      "shape": "object",
+      "keys": [
+        "month",
+        "prior",
+        "models",
+        "items",
+        "total",
+        "secrets",
+        "hosting_key",
+        "notes",
+        "checked_at"
+      ],
+      "nested": {
+        "month": [
+          "from",
+          "spent_usd",
+          "word"
+        ],
+        "prior": [
+          "from",
+          "to",
+          "spent_usd",
+          "word"
+        ],
+        "total": [
+          "month_usd",
+          "models_usd",
+          "hosting_usd",
+          "word"
+        ]
+      },
+      "rows": {
+        "models": [
+          "provider",
+          "provider_label",
+          "model",
+          "tier",
+          "turns",
+          "calls",
+          "input_tokens",
+          "output_tokens",
+          "spent_usd",
+          "prior_usd",
+          "word"
+        ],
+        "items": [
+          "name",
+          "kind",
+          "amount_usd",
+          "key",
+          "word"
+        ],
+        "secrets": [
+          "name",
+          "set",
+          "what"
+        ]
+      }
+    },
+    {
       "method": "GET",
       "path": "/api/actions?limit=10",
       "read_by": [
@@ -201,6 +267,7 @@
         "core",
         "automod",
         "birthday",
+        "cost",
         "events",
         "golive",
         "honeypot",

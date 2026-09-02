@@ -345,6 +345,7 @@ const SETTING_SPECS = [
   ['request_auto_approve_staff', 'bool', true, true, 'true to approve a request the moment a mod or admin files it, instead of holding it for a decision'],
   ['request_notify_channel_id', 'channel', '800000000000000003', null, 'where one line goes when a request is filed; blank tells nobody and the site is the only place they show up'],
   ['request_dm_on_decision', 'bool', true, true, 'true to DM the person who asked when their request is approved, declined or done'],
+  ['cost_hosting_usd', 'int', 0, 0, 'what the always-on container costs a month in whole dollars — read it off your Fly invoice; 0 = not filled in yet, and the Costs card on the Health page says so rather than claiming hosting is free', null, 10000],
 ];
 
 const RULES = {
@@ -1029,6 +1030,147 @@ route('POST', '/api/auth/logout', () => ({
 route('GET', '/api/status', (context) => {
   requireStaff(context.session);
   return statusBody();
+});
+
+// The one home for money (owner ask, 2026-09-01). Mirrors black_bloc/api/costs.py: the model
+// rows are the ledger grouped, hosting is a setting, the free things are named at $0 and the
+// keys are NAMES with set/unset. ⚠️ The mock's ledger rows carry no tier or turn column, so a
+// tier is derived from the provider and a turn is a row; 14a's real ledger has both.
+const COST_MICRODOLLARS = 1000000;
+const COST_PROVIDER_LABELS = { anthropic: 'Anthropic', groq: 'Groq' };
+const COST_TIERS = { anthropic: 'important', groq: 'simple' };
+const COST_HOSTING_NAME = 'Hosting — the always-on container';
+const COST_HOSTING_BLANK = 'Nobody has filled this in yet, so the total below is only what the models have cost. Read the monthly figure off your Fly invoice and put it in `cost_hosting_usd`.';
+const COST_FREE_ITEMS = [
+  ['Discord', 'The gateway, the API and the slash commands are free at any size this bot is.'],
+  ['Twitch API', 'Helix costs nothing for the go-live checks Black Bloc makes.'],
+  ['Groq — the quick chat tier', 'Free while their tier is. Every call is still written to the ledger with its real token counts, so the day it is not free the figure is already there.'],
+];
+const COST_SECRETS = [
+  ['DISCORD_TOKEN', true, "the bot's own login. Without it Black Bloc does not start at all."],
+  ['TWITCH_CLIENT_ID', true, 'reads Twitch for go-live posts. Free; unset means presence only.'],
+  ['TWITCH_CLIENT_SECRET', true, 'the other half of the Twitch app.'],
+  ['DISCORD_CLIENT_ID', true, 'the dashboard’s sign-in. Without it nobody can sign in to this site.'],
+  ['DISCORD_CLIENT_SECRET', true, 'the other half of the dashboard sign-in.'],
+  ['SESSION_SECRET', true, 'signs the sign-in cookie. Changing it signs everybody out.'],
+  ['POLL_VOTE_SECRET', false, 'keys anonymous poll votes. Unset falls back to a plain hash.'],
+  ['ANTHROPIC_API_KEY', true, 'pays for the careful chat tier. Unset means that tier does not exist.'],
+  ['GROQ_API_KEY', false, 'the free chat tier. Unset means that tier does not exist.'],
+];
+
+function costMonthName(iso) {
+  return new Date(iso).toLocaleString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+}
+
+function costGrouped(rows) {
+  const found = new Map();
+  for (const row of rows) {
+    const key = `${row.provider}|${row.model}`;
+    const seen = found.get(key) || {
+      provider: row.provider,
+      model: row.model,
+      tier: COST_TIERS[row.provider] || 'important',
+      turns: 0,
+      calls: 0,
+      input_tokens: 0,
+      output_tokens: 0,
+      spent: 0,
+    };
+    seen.turns += 1;
+    seen.calls += 1;
+    seen.input_tokens += row.input_tokens;
+    seen.output_tokens += row.output_tokens;
+    seen.spent += row.cost_microdollars;
+    found.set(key, seen);
+  }
+  return [...found.values()].sort((a, b) => b.spent - a.spent);
+}
+
+function costRound(microdollars) {
+  return Math.round((microdollars / COST_MICRODOLLARS) * 100) / 100;
+}
+
+route('GET', '/api/costs', (context) => {
+  requireStaff(context.session);
+  const at = new Date();
+  const thisMonth = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), 1)).toISOString();
+  const lastMonth = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() - 1, 1)).toISOString();
+  const now = costGrouped(state.ledger.filter((row) => row.at >= thisMonth));
+  const was = costGrouped(state.ledger.filter((row) => row.at >= lastMonth && row.at < thisMonth));
+  const before = new Map(was.map((row) => [`${row.provider}|${row.model}`, row.spent]));
+
+  const models = now.map((row) => {
+    const spent = costRound(row.spent);
+    const tokens = row.input_tokens + row.output_tokens;
+    return {
+      provider: row.provider,
+      provider_label: COST_PROVIDER_LABELS[row.provider] || row.provider,
+      model: row.model,
+      tier: row.tier,
+      turns: row.turns,
+      calls: row.calls,
+      input_tokens: row.input_tokens,
+      output_tokens: row.output_tokens,
+      cache_read_tokens: 0,
+      cache_write_tokens: 0,
+      spent_usd: spent,
+      prior_usd: costRound(before.get(`${row.provider}|${row.model}`) || 0),
+      word: spent === 0
+        ? `${row.turns} answer(s), ${tokens} tokens, free at this tier.`
+        : `${row.turns} answer(s), ${tokens} tokens, ${money(spent)}.`,
+    };
+  });
+  const spentUsd = Math.round(models.reduce((total, row) => total + row.spent_usd, 0) * 100) / 100;
+  const priorUsd = costRound(was.reduce((total, row) => total + row.spent, 0));
+  const hosting = Number(state.settings.get('cost_hosting_usd') ?? 0);
+  const totalUsd = Math.round((spentUsd + hosting) * 100) / 100;
+
+  return {
+    month: {
+      from: thisMonth,
+      spent_usd: spentUsd,
+      word: models.length
+        ? `${money(spentUsd)} on models so far this month.`
+        : 'No model has been asked anything this month, so the models have cost nothing.',
+    },
+    prior: {
+      from: lastMonth,
+      to: thisMonth,
+      spent_usd: priorUsd,
+      word: was.length
+        ? `${money(priorUsd)} on models in ${costMonthName(lastMonth)}.`
+        : `Nothing was spent on models in ${costMonthName(lastMonth)}.`,
+    },
+    models,
+    items: [
+      {
+        name: COST_HOSTING_NAME,
+        kind: 'configured',
+        amount_usd: hosting,
+        key: 'cost_hosting_usd',
+        word: hosting > 0
+          ? `$${hosting} a month, as somebody typed it in off the invoice.`
+          : COST_HOSTING_BLANK,
+      },
+      ...COST_FREE_ITEMS.map(([name, word]) => ({
+        name, kind: 'free', amount_usd: 0, key: null, word,
+      })),
+    ],
+    total: {
+      month_usd: totalUsd,
+      models_usd: spentUsd,
+      hosting_usd: hosting,
+      word: hosting > 0
+        ? `${money(totalUsd)} this month: ${money(spentUsd)} on models and ${money(hosting)} on hosting.`
+        : `${money(spentUsd)} this month, all of it models — hosting has not been filled in.`,
+    },
+    secrets: COST_SECRETS.map(([name, set, what]) => ({ name, set, what })),
+    hosting_key: 'cost_hosting_usd',
+    notes: models.length || was.length
+      ? []
+      : ['Black Bloc has never called a model, so there is nothing on the models line yet. That is what an unspent month looks like, not a fault.'],
+    checked_at: at.toISOString(),
+  };
 });
 
 // actionlog.py:SUMMARY_SKIPS — `via` is its own column, so it never joins the summary.

@@ -4437,3 +4437,70 @@ The table below is the map, and the reason each choice went the way it did.
 | `black_bloc/api/tools/chat.py:207` | Nothing was added to the router: `chat_settings` already returns every key whose namespace is `chat`, so a new `chat_*` key reaches the page by being registered. `site/public/assets/page-chat.js:33` is the curated subset the CHAT page shows, and all four were added there; the Settings page shows every key regardless. |
 | `site/public/assets/labels.js:98` | Each key gets a human label, because the fallback (`derived`) would render `chat_home_channel_id` as "Home channel" — losing the "when the bot names a channel that is not real" that is the whole reason it exists. |
 | `site/mock/server.mjs:320` | The mock's rows are hand-maintained and there is no parity test between them and `KEY_TYPES`, so a key added to the registry and not to the mock simply does not appear in a mock render. Both were changed in the same commit as each key. |
+
+# Chat follow-up (2026-09-01) — the four things a live evening found
+
+> **Every item traces to something the owner or a member saw the armed chat do
+> on 2026-09-01.** Built on a branch cut from `main` @ `ed2710c`, one commit per
+> item. ⚠️ **Still no verification against a real model call** — every test here
+> drives fakes, and what a prompt change does to a real answer cannot be
+> measured from this tree at all.
+
+## 1. Only a STRONG hit is worth the dear tier
+
+| Key | Note |
+|---|---|
+| ⚠️ **MEASURED first, and it found a second cause** | The live ledger: **8 calls, every one `anthropic` / `important` / `ok`, zero Groq attempts.** Reproduced here over a realistic note set, which showed something the ledger could not: **the bot's own mention tokenises into a WORD.** `<@1234567890>` splits to `1234567890`, which lands in no note, so the every-token pass could never answer a real @-mention and *every* live call fell through to the loose pass — where 29 server notes match nearly anything. `any hit → IMPORTANT` was therefore not merely generous, it was unconditional. |
+| ⚠️ `black_bloc/chat_llm.py:461` | **The fix that makes the rest possible: the notes are searched on `spoken(text)`, not on the raw message.** The id was never a search term anybody wanted; it is an accident of `tokenize` splitting on non-word characters. Everything else in this section is dead code while the id is still in the query. |
+| ⚠️ `black_bloc/knowledge.py:252` | **`is_strong` lives in `knowledge.py` rather than in `tier_for`, because the search is the thing that knows how it answered.** Three conditions, each for a measured failure: the **every-token pass** answered (the loose pass is "closest matches" and always finds something); the top hit reaches **`STRONG_SCORE`** (a body-only coincidence scores 1, a note actually about the question scores 8 or more); and every term lands on a **whole word** — `hi` is inside `this`, so `<@bot> hi` scored a title hit of 8 against "Channels in **this** server" and would have passed a bare AND-pass test. |
+| `black_bloc/knowledge.py:238` | `whole_word` bounds on `[a-z0-9]` only, so a token that already carries punctuation (`off-topic`, which `tokenize` deliberately keeps whole) still matches at its hyphen. |
+| ⚠️ `black_bloc/knowledge.py:108` | `Found.strong` is a property over the same function rather than a stored field: strength is derived from the hits and the pass, and a copy in the row would be a second thing to keep true. |
+| ⚠️ `black_bloc/chat_llm.py:156` | **A bare list of hits is never strong, on purpose.** The one caller that matters passes a `Found`; anything else carries no record of which pass answered, and assuming "probably strong" is exactly how the original bug read. |
+| **The accepted cost, said plainly (item 1)** | Stopwords are not stripped, so the every-token pass is brittle against ordinary sentences: `cookout hours` is strong, `when is the cookout` is not, because `when` lands in no note. That second question goes to **Groq with the note attached** rather than to Haiku. That is the design's own trade — weak hits still ride as grounding — and the lever if it reads badly in practice is a stopword list in `tokenize`, not a looser threshold, which is the bug this replaced. |
+
+## 2. The bot knows what it can do itself
+
+> Live, 2026-09-01: *"i want to host an event, can you show me how to do that"* →
+> **"hit up @Admin"**. It owns `/event create` and did not know.
+
+| Key | Note |
+|---|---|
+| ⚠️ `black_bloc/chat.py:388` | **The four new intents sit between `need_a_mod` and the data intents, and that band is the whole ordering argument.** Above them, `about_member` and `need_a_mod` keep the two questions that are genuinely about people. Below them, `birthdays`, `whats_next` and `who_is_live` keep *"whose birthday is it"* and *"whats the next event"* — none of which contains a self-service phrase, which is what the ordering test pins. `help` and `what_can_you_do` stay last, so the generic `how do i` never swallows `how do i host an event`. |
+| ⚠️ `black_bloc/chat.py:103` | **A NEW built-in reaches a guild that was seeded months ago for free**, because `seed_defaults` creates the rows it does not find and only those. New *triggers on an existing row* are the hard case, and that is `top_up_triggers`' job — which is why the role-menu phrasings could be added to `my_roles` at `:287` rather than needing a sixth intent. |
+| ⚠️ `black_bloc/chat_data.py:208` | **The role-menu channel is appended as `extra`, not put in the line as a token**, for the reason `need_a_mod` already documents: `my_roles`' row already exists in every live guild and `seed_defaults` never rewrites one, so a `{where}` token added to the code table would render for a guild seeded tomorrow and be invisible in the guild that asked. Blank when no channel is set — the sentence simply is not there, rather than pointing nowhere. |
+| ⚠️ `black_bloc/personas.py:58` | **`FEATURES` is a hand-kept table and NOT derived from the live command tree, which is a deliberate loss.** `/help` walks `bot.tree`, and the tree needs a built bot and a guild; this block has to be a **constant** so it can sit inside the `cache_control` prefix and be byte-identical on every call. The honesty tax is `tests/test_personas.py`, which builds the real bot, takes every top-level command with no `default_permissions`, and fails when one of them is missing from the block — so the table cannot silently fall behind the tree. |
+| ⚠️ `black_bloc/personas.py:58` | The wording avoids `limit`, `cap`, `spend`, `budget`, `quota` and `credit` — `/voice` "sets how many people can join" rather than "limits" them — because `says_a_budget_word` is asserted over the whole stable core. That test caught the first draft. |
+| ⚠️ `black_bloc/personas.py:47` | **The instruction lives in CORE and the list in `FEATURES`, and the split is on purpose.** A rule in the core cannot be displaced by a mood (the file's standing structural argument); the list is data that changes when a command is added. The rule reads *before you send anybody to staff*, because the measured failure was not ignorance of the command — it was reaching for staff first. |
+| `black_bloc/personas.py:212` | The block joins `stable_core`, so **both tiers get it**: `system_blocks` (Haiku) and `system_text` (Groq) are built from the same function, and a fact only one provider knew would be the worst kind of drift. |
+
+## 3. The Costs card — THE one home for money
+
+> Owner, 2026-09-01: *"on the dashboard somewhere can put a cost breakdown for
+> the hosting, apis keys, models, etc. so we can track spend"*.
+
+| Key | Note |
+|---|---|
+| ⚠️ `black_bloc/api/costs.py:88` | **The key inventory is DERIVED from `config.py`'s own fields, not hand-listed** — every field whose name ends `_token`, `_secret`, `_key` or `_client_id`. A hand list is a list that goes stale the first time somebody adds a key, and this is exactly the page where a missing one matters. A test pins the derivation against `Settings.model_fields` and pins that every derived name has a sentence. |
+| ⚠️ `black_bloc/api/costs.py:93` | **`secret_rows` reads `bool(getattr(...))` and nothing else, so a VALUE cannot reach the page even by accident.** Two tests attack it from both sides: one asserts each row has exactly `name`/`set`/`what`, another builds a `Settings` with real-looking values and asserts neither string appears anywhere in the rows. |
+| ⚠️ `black_bloc/api/costs.py:105` | **`outcome = 'ok'` is in the WHERE clause, and the ledger's other reader deliberately leaves it out.** The fuses in `chat_llm` count failed calls too — a failed attempt still spends the allowance — but a failed call cost no money, so the bill must not carry it. Same table, two questions, two filters. `COUNT(DISTINCT turn)` for the same reason the fuses use it: a Groq failure falling through to Haiku is two rows and one answer. |
+| `black_bloc/api/costs.py:74` | The prior month is computed by walking the day-1 boundary back one, rather than by subtracting 30 days — a 30-day step lands inside the same month in March. |
+| ⚠️ `black_bloc/api/costs.py:151` | **Zero hosting means UNFILLED, not free, and the wording is what carries that.** `cost_hosting_usd` defaults to 0 because there is no honest default: Fly exposes no billing without a token on the machine (the same risk class as the parked deploy button). So the row says nobody has filled it in, the total says the same, and neither pretends the bill is zero. |
+| `black_bloc/api/costs.py:161` | Discord, the Twitch API and Groq's free tier are listed **at $0 rather than left out**, because a costs page that omits the free things reads as a costs page that forgot them. Groq's line says the ledger already records its real token counts, so the day the tier stops being free the figure is there. |
+| ⚠️ `black_bloc/api/costs.py` (the notes list) | The unfilled-hosting sentence is the hosting ROW's own `word` and is **not** repeated in `notes` — one card must not print one fact twice. A test pins that no note mentions the invoice. |
+| ⚠️ `site/public/assets/page-health.js:148` | **The section is given an EXPLICIT count.** Left alone the shared rail counts `.log-table tbody` rows, which here is two model rows plus nine key names — a card headed "Costs 11" when there are four cost lines. Measured in a browser, not reasoned about: it read 11 before the count was passed. |
+| ⚠️ `site/public/assets/page-chat.js:71` | **The Chat page's dollar figure is an `<a>` to `#sect-costs`, and the section note says the money lives on Health.** One number, one home: the Chat page keeps tier liveness (which is a chat fact) and hands the money to the page that also knows hosting and the keys. `a.spend-figure` drops the underline so it still reads as the number. |
+| `black_bloc/settings_store.py` (`cost_hosting_usd`) | A key whose namespace is its own — `namespace_of` splits on the first underscore, so it lands in a **Costs** group on the Settings page with no override needed, and `page-settings.js` gives that group a name and a note pointing back at the Health card. |
+| ⚠️ **RENDERED, not reasoned about (2026-09-01)** | Driven in a browser against `site/mock/server.mjs`: the Costs card renders the total, the four cost lines, the two model rows with this month and the month before, and the nine key names behind a fold. **`cost_hosting_usd` was actually EDITED to 12 through the Settings page's docked Save Changes bar**, and the Health card then read **$12.34** with the hosting row green and the "Fill it in" prompt gone — the round trip, not just the pixels. The Chat page's figure was clicked and landed on `/health.html#sect-costs` with the card open. No console errors. |
+
+## 4. Play, do not deflect
+
+> Live 2026-09-01, member PT: *"who is the strongest DBZ character"* → *"way
+> outside my wheelhouse… you'd get better arguments in #off-topic… Who's your
+> pick?"*, and the member said to have the bot at least pick a character.
+
+| Key | Note |
+|---|---|
+| ⚠️ `black_bloc/personas.py:35` | **A CORE section, not a mood, because a mood can be off and every mood is appended after the core anyway** — the file's standing structural argument. The failing answer was in the HOUSE voice with no mood on it at all, so a mood could never have fixed it. |
+| ⚠️ `black_bloc/personas.py:35` | **The rule names the three shapes of the failure separately, because the live answer did all three:** it said the topic was outside its wheelhouse, it pointed at a channel *instead of* answering, and it handed the question straight back. So the text forbids each one by name and allows the two that are fine in their place — "what's your pick?" AFTER a pick, a channel as an aside at the end. |
+| ⚠️ `black_bloc/personas.py:35` | **Placed between "What is true" and "What you may name", and the surrounding rules were not touched.** The new paragraph restates their boundary in its own words — do not invent a fact about the server or a member to back a pick up; keep the ducking for personal details, moderation decisions and real harm — so a model reading only this section cannot read it as permission to make things up. A test asserts both old rules are still in the core beside the new one. |
+| ⚠️ **What was NOT verified** | **Everything about the effect.** No real model has read this text, so whether it actually stops the deflection is unmeasurable from this tree. What is tested is that the sentences are in the stack, that they are in the core rather than in a mood, that the two rules they sit between survive intact, and that no forbidden budget word crept in. The check that matters is the owner asking a live opinion question after the next deploy. |
