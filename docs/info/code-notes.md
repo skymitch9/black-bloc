@@ -4421,3 +4421,19 @@ The table below is the map, and the reason each choice went the way it did.
 | ⚠️ `tests/test_bot.py:57` | **`/reply` and `/areply` are locked even though `is_staff_command` calls them open** — their gate is two hops away (`reply` → `self._reply` → `self._ready` → `require_staff`) and that helper only walks one. They are genuinely staff-only; the test lists them as the two known exceptions rather than loosening the checker, because loosening it to two hops makes `/help` a false POSITIVE (it calls `is_staff_command`, whose own body names `require_staff`). |
 | `black_bloc/command_visibility.py:95` | **The lock composes with the mode-based hiding for free.** `_hide` removes the command OBJECT from the guild tree and `_show` puts the same object back, and `default_permissions` is an attribute of that object — so a `/rolemenu` that goes off and on again comes back locked. `copy_global_to` copies it too. Pinned by a test that hides and shows and then reads the permission. |
 | Takes effect at the next sync | Discord learns the permission when the tree is synced, which happens at boot and on every debounced visibility run. Nothing new was added to trigger it. |
+
+## 7. The four new keys, and where they surface
+
+| Key | Type | Default | Where it is edited |
+|---|---|---|---|
+| `chat_ignore_categories` | channels | `[]` | Settings page · Chat page → SETTINGS · `/settings set-value` · `/chat settings` reads it back |
+| `chat_home_channel_id` | channel | blank | the same four |
+| `chat_staff_can_ping_roles` | bool | `true` | the same four |
+| `chat_escalation_names` | int, 0–10 | `2` | the same four |
+
+| Key | Note |
+|---|---|
+| ⚠️ **RENDERED, not reasoned about (2026-09-01)** | Both pages were driven in a browser against `site/mock/server.mjs`: all four keys appear in the Chat page's SETTINGS panel and on the Settings page, each with the control its type asks for — a multi-select for `chat_ignore_categories`, a single channel select for `chat_home_channel_id`, On/Off for `chat_staff_can_ping_roles`, a number box for `chat_escalation_names`. **`chat_escalation_names` was actually EDITED to 3 through the Chat page's docked Save Changes bar and read back from `/api/settings` as `3`** — the round trip, not just the pixels. |
+| `black_bloc/api/tools/chat.py:207` | Nothing was added to the router: `chat_settings` already returns every key whose namespace is `chat`, so a new `chat_*` key reaches the page by being registered. `site/public/assets/page-chat.js:33` is the curated subset the CHAT page shows, and all four were added there; the Settings page shows every key regardless. |
+| `site/public/assets/labels.js:98` | Each key gets a human label, because the fallback (`derived`) would render `chat_home_channel_id` as "Home channel" — losing the "when the bot names a channel that is not real" that is the whole reason it exists. |
+| `site/mock/server.mjs:320` | The mock's rows are hand-maintained and there is no parity test between them and `KEY_TYPES`, so a key added to the registry and not to the mock simply does not appear in a mock render. Both were changed in the same commit as each key. |
