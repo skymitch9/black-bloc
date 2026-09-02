@@ -35,6 +35,7 @@ from ...chat_llm import (
     sweep_window,
     tier_errors,
 )
+from ...command_visibility import STAFF_ONLY
 from ...emoji import tone_for, toned
 from ...knowledge import (
     SERVER,
@@ -201,7 +202,10 @@ class Chat(commands.Cog):
             return (self.last_ingest_at, self.last_ingest_error)
         return (None, None)
 
-    chat = app_commands.Group(name="chat", description="How Black Bloc answers @-mentions")
+    chat = app_commands.Group(
+        name="chat", description="How Black Bloc answers @-mentions",
+        default_permissions=STAFF_ONLY,
+    )
     chat_knowledge = app_commands.Group(
         name="knowledge", description="What Black Bloc knows about this server", parent=chat
     )

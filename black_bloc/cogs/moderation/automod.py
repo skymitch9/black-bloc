@@ -34,6 +34,7 @@ from ...automod import (
     rule_config,
 )
 from ...command_errors import SafeDynamicItem
+from ...command_visibility import STAFF_ONLY
 from ...modcases import (
     ALREADY_APPLIED_BY_SOMEBODY,
     add_case,
@@ -405,7 +406,8 @@ class AutoMod(commands.Cog):
         self._staff: dict[int, tuple[float, set[int]]] = {}
 
     automod = app_commands.Group(
-        name="automod", description="The rules that watch what people post"
+        name="automod", description="The rules that watch what people post",
+        default_permissions=STAFF_ONLY,
     )
     rule = app_commands.Group(name="rule", description="One automod rule", parent=automod)
     exempt = app_commands.Group(

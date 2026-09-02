@@ -18,6 +18,7 @@ from ...actionlog import (
     send_logs,
 )
 from ...command_errors import SafeDynamicItem
+from ...command_visibility import STAFF_ONLY
 from ...settings_store import (
     DB_UNAVAILABLE,
     HONEYPOT_MODES,
@@ -411,7 +412,8 @@ class Honeypot(commands.Cog):
         self._locks: dict[int, asyncio.Lock] = {}
 
     honeypot = app_commands.Group(
-        name="honeypot", description="The trap channel that catches spam bots"
+        name="honeypot", description="The trap channel that catches spam bots",
+        default_permissions=STAFF_ONLY,
     )
     exempt = app_commands.Group(
         name="exempt", description="Roles the trap ignores", parent=honeypot

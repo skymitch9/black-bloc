@@ -18,6 +18,7 @@ from ...actionlog import (
     send_logs,
 )
 from ...command_errors import AnswersErrors
+from ...command_visibility import STAFF_ONLY
 from ...golive import now_iso, parse_ts
 from ...logkinds import VIA_DISCORD, VIA_WEBSITE, WEB
 from ...settings_store import (
@@ -1377,7 +1378,8 @@ class TempVoice(commands.Cog):
         self.last_error: str | None = None
 
     tempvoice = app_commands.Group(
-        name="tempvoice", description="Temporary voice channels people make by joining one"
+        name="tempvoice", description="Temporary voice channels people make by joining one",
+        default_permissions=STAFF_ONLY,
     )
     voice = app_commands.Group(
         name="voice", description="Change your own temporary voice channel"

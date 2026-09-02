@@ -18,6 +18,7 @@ from ...actionlog import (
     log_action,
     send_logs,
 )
+from ...command_visibility import STAFF_ONLY
 from ...events import clamp
 from ...golive import now_iso, parse_ts
 from ...modmail import (
@@ -807,7 +808,10 @@ class Modmail(commands.Cog):
             return (None, None)
         return (self.last_ok_at, self.last_error)
 
-    modmail = app_commands.Group(name="modmail", description="Run the modmail inbox")
+    modmail = app_commands.Group(
+        name="modmail", description="Run the modmail inbox",
+        default_permissions=STAFF_ONLY,
+    )
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
@@ -1117,6 +1121,7 @@ class Modmail(commands.Cog):
         return str(text)
 
     @app_commands.command(name="reply", description="Reply to the member in a modmail ticket")
+    @app_commands.default_permissions(STAFF_ONLY)
     @app_commands.describe(
         text="What the member is sent",
         snippet="A saved reply to send instead — /snippet list has them",
@@ -1132,6 +1137,7 @@ class Modmail(commands.Cog):
         await self._reply(interaction, text, snippet, ticket, anonymous=False)
 
     @app_commands.command(name="areply", description="Reply as Staff, without naming yourself")
+    @app_commands.default_permissions(STAFF_ONLY)
     @app_commands.describe(
         text="What the member is sent",
         snippet="A saved reply to send instead — /snippet list has them",
@@ -1176,6 +1182,7 @@ class Modmail(commands.Cog):
         )
 
     @app_commands.command(name="note", description="Leave a private note the member never sees")
+    @app_commands.default_permissions(STAFF_ONLY)
     @app_commands.describe(
         text="The note", ticket="The ticket number, when you are not in its channel"
     )
@@ -1226,6 +1233,7 @@ class Modmail(commands.Cog):
         await remove_place(self.bot, guild, ticket)
 
     @app_commands.command(name="close", description="Close a ticket and file its transcript")
+    @app_commands.default_permissions(STAFF_ONLY)
     @app_commands.describe(
         reason="What the member is told, and what the transcript records",
         silent="Close without telling the member",
@@ -1563,7 +1571,10 @@ class Modmail(commands.Cog):
                 self.bot, guild, "modmail.settings", actor=interaction.user, details=changed
             )
 
-    snippet = app_commands.Group(name="snippet", description="Saved modmail replies")
+    snippet = app_commands.Group(
+        name="snippet", description="Saved modmail replies",
+        default_permissions=STAFF_ONLY,
+    )
 
     @snippet.command(name="add", description="Save a reply you send often")
     @app_commands.describe(

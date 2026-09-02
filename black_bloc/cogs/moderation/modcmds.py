@@ -16,6 +16,7 @@ from ...actionlog import (
     send_logs,
 )
 from ...automod import TIMEOUT_MAX_SECONDS
+from ...command_visibility import STAFF_ONLY
 from ...modcases import (
     CASES_PER_PAGE,
     PURGE_MAX,
@@ -389,7 +390,10 @@ class ModCommands(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    mod = app_commands.Group(name="mod", description="What Black Bloc has done to members")
+    mod = app_commands.Group(
+        name="mod", description="What Black Bloc has done to members",
+        default_permissions=STAFF_ONLY,
+    )
 
     @mod.command(name="logs", description="The last few moderation log lines")
     @app_commands.describe(
@@ -451,6 +455,7 @@ class ModCommands(commands.Cog):
         await tell_member(self.bot, guild, member, kind, reason, duration_s=duration_s)
 
     @app_commands.command(name="warn", description="Warn a member and record it")
+    @app_commands.default_permissions(STAFF_ONLY)
     @app_commands.describe(member="Who to warn", reason="Why — they are told this")
     async def warn(
         self, interaction: discord.Interaction, member: discord.Member, reason: str
@@ -464,6 +469,7 @@ class ModCommands(commands.Cog):
         )
 
     @app_commands.command(name="timeout", description="Time a member out")
+    @app_commands.default_permissions(STAFF_ONLY)
     @app_commands.describe(
         member="Who to time out", duration="How long — 10m, 2h, 1d (28 days at most)",
         reason="Why — they are told this",
@@ -498,6 +504,7 @@ class ModCommands(commands.Cog):
         )
 
     @app_commands.command(name="untimeout", description="Lift a member's timeout early")
+    @app_commands.default_permissions(STAFF_ONLY)
     @app_commands.describe(member="Who to let out", reason="Why")
     async def untimeout(
         self, interaction: discord.Interaction, member: discord.Member, reason: str | None = None
@@ -518,6 +525,7 @@ class ModCommands(commands.Cog):
         )
 
     @app_commands.command(name="kick", description="Kick a member out of the server")
+    @app_commands.default_permissions(STAFF_ONLY)
     @app_commands.describe(member="Who to kick", reason="Why — they are told this")
     async def kick(
         self, interaction: discord.Interaction, member: discord.Member, reason: str | None = None
@@ -534,6 +542,7 @@ class ModCommands(commands.Cog):
         )
 
     @app_commands.command(name="ban", description="Ban a member from the server")
+    @app_commands.default_permissions(STAFF_ONLY)
     @app_commands.describe(
         member="Who to ban",
         reason="Why — they are told this",
@@ -560,6 +569,7 @@ class ModCommands(commands.Cog):
         )
 
     @app_commands.command(name="unban", description="Lift a ban")
+    @app_commands.default_permissions(STAFF_ONLY)
     @app_commands.describe(user_id="The banned account's id", reason="Why")
     async def unban(
         self, interaction: discord.Interaction, user_id: str, reason: str | None = None
@@ -586,6 +596,7 @@ class ModCommands(commands.Cog):
         )
 
     @app_commands.command(name="purge", description="Delete the last few messages in this channel")
+    @app_commands.default_permissions(STAFF_ONLY)
     @app_commands.describe(
         count=f"How many messages to look at, 1 to {PURGE_MAX}",
         member="Only delete this member's messages",
@@ -659,6 +670,7 @@ class ModCommands(commands.Cog):
         )
 
     @app_commands.command(name="case", description="Show one mod case")
+    @app_commands.default_permissions(STAFF_ONLY)
     @app_commands.describe(case_id="The case number")
     async def case(self, interaction: discord.Interaction, case_id: int) -> None:
         if not await self._ready(interaction):
@@ -685,6 +697,7 @@ class ModCommands(commands.Cog):
         )
 
     @app_commands.command(name="cases", description="List a member's mod cases")
+    @app_commands.default_permissions(STAFF_ONLY)
     @app_commands.describe(member="Whose cases", page="Which page, starting at 1")
     async def cases(
         self, interaction: discord.Interaction, member: discord.Member, page: int = 1

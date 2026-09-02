@@ -265,11 +265,39 @@ async def test_the_real_command_tree_hides_and_gives_back_the_group(tmp_path, mo
     await black_bloc.store.set(GUILD, MODE_KEY, "on", by=5)
 
     assert black_bloc.tree.get_command("rolemenu", guild=DEV_GUILD) is group
+    assert group.default_permissions == cv.STAFF_ONLY
     waits.gate.set()
     await control.task
     await black_bloc.close()
 
     assert synced == [GUILD]
+
+
+async def test_the_staff_lock_survives_a_copy_to_the_guild_and_a_hide_and_show(
+    tmp_path, monkeypatch, waits
+):
+    """The lock lives on the command object, so removing and re-adding it cannot lose it."""
+    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
+    settings = load_settings(
+        _env_file=None,
+        dev_guild_id=GUILD,
+        test_mode=True,
+        test_channel_id=TEST_CHANNEL,
+        database_path=tmp_path / "lock.sqlite3",
+    )
+    black_bloc = BlackBlocBot(settings)
+    await black_bloc.db.connect()
+    await black_bloc.store.load()
+    await black_bloc.load_extension("black_bloc.cogs.community.role_menus")
+    black_bloc.tree.copy_global_to(guild=DEV_GUILD)
+
+    control = cv.VisibilitySync(black_bloc)
+    assert control._hide(DEV_GUILD, "rolemenu") is True
+    assert control._show(DEV_GUILD, "rolemenu") is True
+
+    found = black_bloc.tree.get_command("rolemenu", guild=DEV_GUILD)
+    assert found.default_permissions == cv.STAFF_ONLY
+    await black_bloc.close()
 
 
 async def test_a_registered_job_runs_once_with_the_actor_before_the_sync(bot, waits):
