@@ -8,14 +8,23 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import PlainTextResponse
 
-from ...cogs.community.requests import apply_decision, notify, resume_request
+from ...cogs.community.requests import (
+    accept,
+    apply_decision,
+    mark_ready,
+    notify,
+    resume_request,
+    send_back,
+)
 from ...logkinds import VIA_WEBSITE
 from ...requests import (
     API_PAGE,
+    BUILT_LIMIT,
     COMMENT_LIMIT,
     COMMENT_NEEDS_TEXT,
     DECLINED,
     HOLD,
+    HOW_TO_TEST_LIMIT,
     NEEDS_A_REASON,
     NO_SUCH_REQUEST,
     NOT_YOURS,
@@ -24,9 +33,13 @@ from ...requests import (
     REASON_LIMIT,
     REASON_NEEDED,
     REQUESTS_OFF,
+    REVIEW,
     SEARCH_LIMIT,
+    SENT_BACK,
+    SENT_BACK_LIMIT,
     STAFF_ONLY_FILES,
     STATUS_WORDS,
+    TEXT_NEEDED,
     TOO_LATE_TO_WITHDRAW,
     UNASSIGNED,
     WITHDRAWABLE,
@@ -87,6 +100,10 @@ CSV_COLUMNS = (
     "decided_at",
     "decline_reason",
     "held_from",
+    "built",
+    "how_to_test",
+    "ready_by",
+    "sent_back_reason",
     "done_at",
     "comments",
 )
@@ -139,6 +156,15 @@ def request_row(guild: Any, row: Any, comments: int = 0) -> dict[str, Any]:
         "decline_reason": row["decline_reason"],
         "held_from": row_value(row, "held_from"),
         "held_word": held_words(row),
+        "built": row_value(row, "built"),
+        "how_to_test": row_value(row, "how_to_test"),
+        "ready_by": str(row_value(row, "ready_by")) if row_value(row, "ready_by") else None,
+        "ready_by_name": (
+            resolve_one(guild, row_value(row, "ready_by"))["display_name"]
+            if row_value(row, "ready_by")
+            else None
+        ),
+        "sent_back_reason": row_value(row, "sent_back_reason"),
         "moves": list(moves_from(row["status"])),
         "resume_to": resume_target(row) if row["status"] == HOLD else None,
         "done_at": row["done_at"],
@@ -183,6 +209,10 @@ def export_csv(guild: Any, rows: Any, counts: dict[int, int]) -> str:
                 shown["decided_at"] or "",
                 shown["decline_reason"] or "",
                 shown["held_from"] or "",
+                shown["built"] or "",
+                shown["how_to_test"] or "",
+                shown["ready_by"] or "",
+                shown["sent_back_reason"] or "",
                 shown["done_at"] or "",
                 shown["comment_count"],
             ]
@@ -455,11 +485,71 @@ def build_router(bot: Any) -> APIRouter:
             raise Refused(409, "not_on_hold", said)
         return {"request": await _shown(guild, fresh), "message": said}
 
+    @router.post("/{request_id}/ready")
+    async def request_ready(
+        request: Request, request_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """The Ready-to-check button: what was built, and how somebody tries it."""
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        await _wanted(guild, request_id)
+        built = clamp(payload.get("built"), BUILT_LIMIT)
+        if not built:
+            raise Refused(400, "no_built", TEXT_NEEDED[REVIEW])
+        said, fresh = await mark_ready(
+            bot,
+            guild,
+            request_id,
+            actor_for(bot, who, guild),
+            built,
+            clamp(payload.get("how_to_test"), HOW_TO_TEST_LIMIT),
+            via=VIA_WEBSITE,
+        )
+        if fresh is None:
+            raise Refused(409, "not_decided", said)
+        return {"request": await _shown(guild, fresh), "message": said}
+
+    @router.post("/{request_id}/accept")
+    async def request_accept(
+        request: Request, request_id: int, payload: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """The Accept button on a review card — the only way a request reaches done."""
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        await _wanted(guild, request_id)
+        said, fresh = await accept(
+            bot, guild, request_id, actor_for(bot, who, guild), via=VIA_WEBSITE
+        )
+        if fresh is None:
+            raise Refused(409, "not_decided", said)
+        return {"request": await _shown(guild, fresh), "message": said}
+
+    @router.post("/{request_id}/sendback")
+    async def request_sendback(
+        request: Request, request_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Back to whoever is working on it, with the line saying what is still to do."""
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        await _wanted(guild, request_id)
+        reason = clamp(payload.get("reason"), SENT_BACK_LIMIT)
+        if not reason:
+            raise Refused(400, "no_reason", TEXT_NEEDED[SENT_BACK])
+        said, fresh = await send_back(
+            bot, guild, request_id, actor_for(bot, who, guild), reason, via=VIA_WEBSITE
+        )
+        if fresh is None:
+            raise Refused(409, "not_decided", said)
+        return {"request": await _shown(guild, fresh), "message": said}
+
     @router.post("/{request_id}/status")
     async def request_status(
         request: Request, request_id: int, payload: dict[str, Any]
     ) -> dict[str, Any]:
-        """Status, assignee, priority and notes in one save; the status moves last."""
+        """Status, assignee, priority, notes and the two review fields; the status moves last."""
         who = await writer(request)
         guild = require_guild(bot)
         require_db(bot)
@@ -477,11 +567,23 @@ def build_router(bot: Any) -> APIRouter:
             guild, payload["assignee_id"] if "assignee_id" in payload else ...
         )
         notes = clamp(payload["notes"], NOTES_LIMIT) or None if "notes" in payload else ...
+        built = clamp(payload["built"], BUILT_LIMIT) or None if "built" in payload else ...
+        how_to_test = (
+            clamp(payload["how_to_test"], HOW_TO_TEST_LIMIT) or None
+            if "how_to_test" in payload
+            else ...
+        )
         reason = clamp(payload.get("reason"), REASON_LIMIT)
         if status in NEEDS_A_REASON and not reason:
             raise Refused(400, "no_reason", REASON_NEEDED[status])
         changed = await set_fields(
-            bot.db, request_id, assignee_id=assignee, priority=priority, notes=notes
+            bot.db,
+            request_id,
+            assignee_id=assignee,
+            priority=priority,
+            notes=notes,
+            built=built,
+            how_to_test=how_to_test,
         )
         if status is None and not changed:
             raise Refused(400, "nothing_to_save", NOTHING_TO_SAVE)
@@ -502,6 +604,8 @@ def build_router(bot: Any) -> APIRouter:
                 status,
                 actor_for(bot, who, guild),
                 reason=reason or None,
+                built=payload.get("built"),
+                note=payload.get("sent_back_reason") or payload.get("reason"),
                 via=VIA_WEBSITE,
             )
             if fresh is None:

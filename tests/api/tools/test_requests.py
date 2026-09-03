@@ -71,6 +71,11 @@ async def test_a_filed_row_carries_every_field_the_requests_page_reads(as_member
         "decline_reason",
         "held_from",
         "held_word",
+        "built",
+        "how_to_test",
+        "ready_by",
+        "ready_by_name",
+        "sent_back_reason",
         "moves",
         "resume_to",
         "done_at",
@@ -277,16 +282,148 @@ async def test_a_search_matches_the_requesters_name_as_well_as_the_text(
 async def test_the_status_route_walks_the_table_and_refuses_a_move_that_skips_it(as_staff, client):
     await file_one(client)
 
-    skipped = client.post("/api/requests/1/status", json={"status": "done"})
+    skipped = client.post("/api/requests/1/status", json={"status": "review"})
 
     assert skipped.status_code == 409 and "cannot move it" in skipped.json()["message"]
 
     picked = client.post("/api/requests/1/status", json={"status": "in_progress"})
+    ready = client.post("/api/requests/1/ready", json={"built": "the board"})
     finished = client.post("/api/requests/1/status", json={"status": "done"})
 
     assert picked.status_code == 200 and picked.json()["request"]["status"] == "in_progress"
+    assert ready.status_code == 200 and ready.json()["request"]["status"] == "review"
     assert finished.status_code == 200 and finished.json()["request"]["status"] == "done"
     assert finished.json()["request"]["moves"] == []
+
+
+async def test_the_status_route_refuses_done_from_anywhere_but_review_in_words(as_staff, client):
+    """Owner, 2026-09-03: `done` is reachable only from `review`, and the refusal says how."""
+    await file_one(client)
+    client.post("/api/requests/1/status", json={"status": "in_progress"})
+
+    early = client.post("/api/requests/1/status", json={"status": "done"})
+
+    assert early.status_code == 409
+    said = early.json()["message"]
+    assert "checked it" in said and "Ready to check" in said
+    assert client.get("/api/requests/1").json()["request"]["status"] == "in_progress"
+
+
+async def test_the_ready_route_records_both_fields_and_leaves_one_log_row(
+    as_staff, client, web, wf
+):
+    await file_one(client)
+    client.post("/api/requests/1/status", json={"status": "in_progress"})
+    await wf.web_rows_in(web.db)
+    await web.db.conn.execute("DELETE FROM action_log")
+    await web.db.conn.commit()
+
+    ready = client.post(
+        "/api/requests/1/ready",
+        json={"built": "the board, with a CSV export", "how_to_test": "press Export"},
+    )
+
+    assert ready.status_code == 200
+    row = ready.json()["request"]
+    assert row["status"] == "review" and row["status_word"] == "ready to check"
+    assert row["built"] == "the board, with a CSV export"
+    assert row["how_to_test"] == "press Export"
+    assert row["ready_by"] == str(LEAD) and row["ready_by_name"]
+    assert (await wf.one_web_row(web.db, "web.request.review"))["request_id"] == 1
+
+
+async def test_the_ready_route_refuses_an_empty_what_was_built_in_words(as_staff, client):
+    await file_one(client)
+    client.post("/api/requests/1/status", json={"status": "in_progress"})
+
+    bare = client.post("/api/requests/1/ready", json={"built": "   "})
+
+    assert bare.status_code == 400 and "what was actually built" in bare.json()["message"]
+    assert client.get("/api/requests/1").json()["request"]["status"] == "in_progress"
+
+
+async def test_the_accept_route_finishes_it_and_leaves_one_log_row(as_staff, client, web, wf):
+    await file_one(client)
+    client.post("/api/requests/1/status", json={"status": "in_progress"})
+    client.post("/api/requests/1/ready", json={"built": "the board"})
+    await web.db.conn.execute("DELETE FROM action_log")
+    await web.db.conn.commit()
+
+    done = client.post("/api/requests/1/accept", json={})
+
+    assert done.status_code == 200 and done.json()["request"]["status"] == "done"
+    assert done.json()["request"]["done_at"]
+    assert (await wf.one_web_row(web.db, "web.request.done"))["was"] == "review"
+
+
+async def test_the_accept_route_refuses_the_same_pair_of_eyes_when_the_server_asks_for_two(
+    as_staff, client, web
+):
+    await file_one(client)
+    client.post("/api/requests/1/status", json={"status": "in_progress"})
+    client.post("/api/requests/1/ready", json={"built": "the board"})
+    await web.store.set(web.guild.id, "request_review_by_other", True)
+
+    refused_now = client.post("/api/requests/1/accept", json={})
+
+    assert refused_now.status_code == 409
+    assert "somebody else on staff" in refused_now.json()["message"]
+    assert client.get("/api/requests/1").json()["request"]["status"] == "review"
+
+
+async def test_the_sendback_route_needs_a_note_and_leaves_one_log_row(as_staff, client, web, wf):
+    await file_one(client)
+    client.post("/api/requests/1/status", json={"status": "in_progress"})
+    client.post("/api/requests/1/ready", json={"built": "the board"})
+
+    bare = client.post("/api/requests/1/sendback", json={})
+
+    assert bare.status_code == 400 and "what is still to do" in bare.json()["message"]
+
+    await web.db.conn.execute("DELETE FROM action_log")
+    await web.db.conn.commit()
+    sent = client.post("/api/requests/1/sendback", json={"reason": "the CSV has no header row"})
+
+    assert sent.status_code == 200
+    row = sent.json()["request"]
+    assert row["status"] == "in_progress"
+    assert row["sent_back_reason"] == "the CSV has no header row"
+    assert row["ready_by"] == str(LEAD)
+    assert (await wf.one_web_row(web.db, "web.request.sent_back"))["was"] == "review"
+
+
+async def test_the_sendback_route_refuses_a_request_nobody_has_marked_ready(as_staff, client):
+    await file_one(client)
+    client.post("/api/requests/1/status", json={"status": "in_progress"})
+
+    early = client.post("/api/requests/1/sendback", json={"reason": "not yet"})
+
+    assert early.status_code == 409 and "not ready to check" in early.json()["message"]
+
+
+async def test_built_and_how_to_test_are_editable_on_a_review_or_done_card(
+    as_staff, client, web, wf
+):
+    """A typo in "how to test" must not need a state change to fix (owner, 2026-09-03)."""
+    await file_one(client)
+    client.post("/api/requests/1/status", json={"status": "in_progress"})
+    client.post("/api/requests/1/ready", json={"built": "the board", "how_to_test": "press it"})
+    await web.db.conn.execute("DELETE FROM action_log")
+    await web.db.conn.commit()
+
+    fixed = client.post("/api/requests/1/status", json={"how_to_test": "press Export"})
+
+    assert fixed.status_code == 200
+    assert fixed.json()["request"]["how_to_test"] == "press Export"
+    assert fixed.json()["request"]["status"] == "review"
+    assert (await wf.one_web_row(web.db, "web.request.updated"))["changed"] == ["how_to_test"]
+
+    client.post("/api/requests/1/accept", json={})
+    after = client.post("/api/requests/1/status", json={"built": "the board and its export"})
+
+    assert after.status_code == 200
+    assert after.json()["request"]["built"] == "the board and its export"
+    assert after.json()["request"]["status"] == "done"
 
 
 async def test_hold_needs_a_reason_remembers_where_it_came_from_and_resume_puts_it_back(
@@ -531,8 +668,23 @@ async def test_the_export_is_a_csv_with_a_header_and_one_line_per_request(as_sta
     assert "requests.csv" in export.headers["content-disposition"]
     lines = export.text.strip().splitlines()
     assert lines[0].startswith("id,status,what,why,due_on")
+    assert "built,how_to_test,ready_by,sent_back_reason" in lines[0]
     assert "a request board" in lines[1] and "2026-09-15" in lines[1]
     assert lines[1].endswith(",1")
+
+
+async def test_the_export_carries_what_was_built_and_how_to_test_it(as_staff, client):
+    """The CSV is the record of what asking actually got built, so it carries the words."""
+    await file_one(client, what="a request board")
+    client.post("/api/requests/1/status", json={"status": "in_progress"})
+    client.post(
+        "/api/requests/1/ready", json={"built": "the board", "how_to_test": "press Export"}
+    )
+
+    export = client.get("/api/requests/export.csv")
+
+    assert "review" in export.text
+    assert "the board" in export.text and "press Export" in export.text
 
 
 async def test_the_export_takes_the_same_filters_the_list_does(as_staff, client):
