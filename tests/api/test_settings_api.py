@@ -288,5 +288,5 @@ async def test_every_action_row_the_page_reads_carries_a_via(client, sign_in, we
     rows = client.get("/api/actions?limit=10").json()["actions"]
 
     assert rows
-    assert all(row["via"] in ("discord", "website") for row in rows)
+    assert all(row["via"] in ("discord", "website", "operator") for row in rows)
     assert next(row for row in rows if row["kind"] == "web.settings.set")["via"] == "website"

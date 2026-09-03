@@ -110,6 +110,29 @@ def test_a_short_session_secret_disables_sign_in_and_warns(monkeypatch, caplog):
     assert load_settings(_env_file=None).site_login_configured is True
 
 
+def test_the_operator_read_token_is_off_until_it_is_set_and_blank_counts_as_unset(monkeypatch):
+    monkeypatch.delenv("OPERATOR_READ_TOKEN", raising=False)
+    assert load_settings(_env_file=None).operator_read_token is None
+    assert load_settings(_env_file=None).operator_read_enabled is False
+
+    monkeypatch.setenv("OPERATOR_READ_TOKEN", "   ")
+    assert load_settings(_env_file=None).operator_read_enabled is False
+
+    monkeypatch.setenv("OPERATOR_READ_TOKEN", "z" * SESSION_SECRET_MIN)
+    assert load_settings(_env_file=None).operator_read_enabled is True
+
+
+def test_a_short_operator_read_token_disables_the_door_and_warns(monkeypatch, caplog):
+    """Too short is treated as unset, so a typo cannot leave a guessable door open."""
+    monkeypatch.setenv("OPERATOR_READ_TOKEN", "z" * (SESSION_SECRET_MIN - 1))
+    with caplog.at_level("WARNING"):
+        short = load_settings(_env_file=None)
+    assert short.operator_read_enabled is False
+    assert short.operator_read_token == "z" * (SESSION_SECRET_MIN - 1)
+    assert "OPERATOR_READ_TOKEN" in caplog.text
+    assert "secrets.token_urlsafe" in caplog.text
+
+
 def test_a_missing_model_key_means_that_tier_does_not_exist_rather_than_an_error(monkeypatch):
     for name in ("ANTHROPIC_API_KEY", "GROQ_API_KEY"):
         monkeypatch.delenv(name, raising=False)

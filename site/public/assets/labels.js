@@ -11,6 +11,7 @@ export const LABELS = {
   core_log_level: 'How much of the dashboard’s own work is repeated into Discord',
   bot_bio: 'What the bot’s About Me says',
   status_prefix: 'What the bot’s status says',
+  operator_read_log: 'Whether an operator-token read leaves a log line',
   emoji_skin_tone: 'Which skin tone the bot’s emoji wear',
 
   golive_mode: 'Whether the bot announces streams',

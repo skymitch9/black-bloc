@@ -3,6 +3,8 @@
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not
 > temporarily) — secret NAMES only. Last verified: **2026-08-31** — every row below points at a file that
 > exists (checked today); the files' own contents carry their own "Last verified" dates.
+> Since then: **2026-09-03** — one row ADDED, [`operator-read.md`](operator-read.md), by the
+> operator-read-token build. Nothing else in this index was re-checked that day.
 
 | File | Answers |
 |---|---|
@@ -12,4 +14,5 @@
 | [`RECOVERY.md`](RECOVERY.md) | Rebuild from nothing: inventory, secret custody, named gaps |
 | [`runbook.md`](runbook.md) | **Day to day:** where everything is, the flyctl path, deploy/restart/rollback/logs, secret names, common failures and what they mean, local run, docs bookkeeping |
 | [`sweeps.md`](sweeps.md) | **What the owner has not yet exercised by hand**, in priority order, with what to expect — the verification checklist |
+| [`operator-read.md`](operator-read.md) | **`OPERATOR_READ_TOKEN`**: the one command the OWNER runs to mint it (it never prints the value), how a session reads live state with `scripts/read.ps1`, the table of readable paths, and how to rotate or revoke. Unset = the door does not exist |
 | [`site.md`](site.md) | The config website: Pages deploy, the custom domain, and the EXACT Discord OAuth redirect URI to register. Verified live 2026-08-26/27 (single hostname on the Fly app) |

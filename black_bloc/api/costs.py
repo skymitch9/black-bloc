@@ -22,6 +22,10 @@ SECRET_NOTES: dict[str, str] = {
     "discord_client_id": "the dashboard's sign-in. Without it nobody can sign in to this site.",
     "discord_client_secret": "the other half of the dashboard sign-in.",
     "session_secret": "signs the sign-in cookie. Changing it signs everybody out.",
+    "operator_read_token": (
+        "lets a Claude session READ this API and change nothing. Unset means that door does "
+        "not exist; re-minting one costs nothing."
+    ),
     "twitch_client_id": "reads Twitch for go-live posts. Free; unset means presence only.",
     "twitch_client_secret": "the other half of the Twitch app.",
     "youtube_api_key": (

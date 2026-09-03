@@ -219,7 +219,7 @@ function featureOfKind(kind) {
 
 // The mock's copy of black_bloc/logkinds.py:via_of — what the writer recorded wins,
 // and the `web.` head decides every row written before anybody recorded it.
-const VIA_WORDS = { discord: 'Discord', website: 'Website' };
+const VIA_WORDS = { discord: 'Discord', website: 'Website', operator: 'Operator token' };
 function viaOfKind(kind, details) {
   const said = String((details && details.via) || '').trim().toLowerCase();
   if (VIA_WORDS[said]) return said;

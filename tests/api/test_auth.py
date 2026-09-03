@@ -10,6 +10,7 @@ from black_bloc.api import sessions
 from black_bloc.api.auth import (
     BUCKET_MAX_KEYS,
     LOGIN_RATE,
+    OPERATOR_RATE,
     SESSION_COOKIE,
     STATE_COOKIE,
     Refused,
@@ -486,3 +487,127 @@ def test_is_admitted_falls_back_to_the_payload_roles_when_the_member_is_not_cach
     assert is_admitted(guild, bot.store, USER_ID, {fakes.PLAIN_ROLE_ID}) is False
     assert is_admitted(guild, bot.store, guild.owner_id, set()) is True
     assert is_admitted(None, bot.store, USER_ID, {fakes.STAFF_ROLE_ID}) is False
+
+
+# ---------------------------------------------------------------- operator read token
+
+OPERATOR_TOKEN = "operator-read-token-long-enough-to-be-taken"
+BEARER = {"Authorization": f"Bearer {OPERATOR_TOKEN}"}
+WRONG_BEARER = {"Authorization": "Bearer not-the-token-this-server-holds-at-all"}
+
+
+def with_token(web) -> None:
+    web.settings.operator_read_token = OPERATOR_TOKEN
+
+
+def test_a_bearer_is_ignored_entirely_until_the_token_is_configured(client):
+    """An unconfigured server behaves exactly as it did before this landed."""
+    refused = client.get("/api/auth/me", headers=BEARER)
+    assert refused.status_code == 401
+    assert refused.json()["error"] == "not_signed_in"
+
+
+async def test_a_wrong_operator_token_is_refused_in_words_and_leaves_no_row(client, web, wf):
+    with_token(web)
+
+    refused = client.get("/api/settings", headers=WRONG_BEARER)
+
+    assert refused.status_code == 401
+    assert refused.json()["error"] == "bad_operator_token"
+    said = refused.json()["message"]
+    assert "OPERATOR_READ_TOKEN" in said and "nothing was read" in said
+    assert OPERATOR_TOKEN not in said
+    assert await wf.web_rows_in(web.db) == []
+
+
+def test_guessing_the_operator_token_runs_out_of_attempts(client, web):
+    """A guess costs a token from the same per-IP bucket a sign-in attempt does."""
+    with_token(web)
+    mine = dict(WRONG_BEARER, **{"Fly-Client-IP": "1.2.3.4"})
+    for _ in range(OPERATOR_RATE):
+        assert client.get("/api/settings", headers=mine).status_code == 401
+
+    refused = client.get("/api/settings", headers=mine)
+
+    assert refused.status_code == 429
+    assert refused.json()["error"] == "slow_down"
+    assert "wait a minute" in refused.json()["message"]
+    elsewhere = dict(WRONG_BEARER, **{"Fly-Client-IP": "5.6.7.8"})
+    assert client.get("/api/settings", headers=elsewhere).status_code == 401
+
+
+def test_the_operator_token_reads_exactly_what_a_staff_cookie_reads(client, web, sign_in):
+    with_token(web)
+    sign_in(client, uid=USER_ID)
+    signed_in = client.get("/api/settings")
+    client.cookies.clear()
+
+    read = client.get("/api/settings", headers=BEARER)
+
+    assert signed_in.status_code == 200 and read.status_code == 200
+    assert read.json() == signed_in.json()
+
+
+def test_the_me_route_says_the_reader_is_the_operator(client, web):
+    with_token(web)
+
+    body = client.get("/api/auth/me", headers=BEARER).json()
+
+    assert body["operator"] is True
+    assert body["staff"] is True and body["state"] == "staff"
+    assert body["member"] is False
+    assert body["user"] == {"id": "0", "name": "operator", "avatar": None}
+    assert client.get("/api/auth/me", headers=BEARER).status_code == 200
+
+
+def test_a_signed_in_staffer_is_not_an_operator(client, sign_in):
+    sign_in(client, uid=USER_ID)
+    assert client.get("/api/auth/me").json()["operator"] is False
+
+
+async def test_the_operator_token_may_look_and_never_change(client, web, wf, monkeypatch):
+    """Writes are refused before anything builds an actor, so `WebActor` is never reached."""
+    from black_bloc.api import writes
+
+    with_token(web)
+    monkeypatch.setattr(
+        writes, "WebActor", lambda *a, **kw: pytest.fail("a write reached WebActor")
+    )
+
+    refused = client.put("/api/settings/golive_mode", json={"value": "on"}, headers=BEARER)
+
+    assert refused.status_code == 403
+    assert refused.json()["error"] == "operator_read_only"
+    assert "can only look, never change" in refused.json()["message"]
+    assert web.store.get(wf.GUILD_ID, "golive_mode") == "shadow"
+    assert await wf.web_rows_in(web.db) == []
+
+
+async def test_one_read_leaves_exactly_one_log_row_saying_which_path(client, web, wf):
+    with_token(web)
+
+    assert client.get("/api/settings", headers=BEARER).status_code == 200
+
+    rows = await wf.web_rows_in(web.db)
+    assert [kind for kind, _ in rows] == ["web.operator.read"]
+    assert rows[0][1] == {"path": "/api/settings", "via": "operator"}
+
+
+async def test_a_route_whose_gate_runs_twice_still_leaves_one_row(client, web, wf):
+    """`/api/members` depends on staff AND reader, so the guard is per request, not per gate."""
+    with_token(web)
+
+    assert client.get("/api/members", headers=BEARER).status_code == 200
+
+    rows = await wf.web_rows_in(web.db)
+    assert [kind for kind, _ in rows] == ["web.operator.read"]
+    assert rows[0][1]["path"] == "/api/members"
+
+
+async def test_operator_read_log_off_reads_the_same_data_and_writes_nothing(client, web, wf):
+    with_token(web)
+    await web.store.set(wf.GUILD_ID, "operator_read_log", False, by=7)
+
+    assert client.get("/api/settings", headers=BEARER).status_code == 200
+
+    assert await wf.web_rows_in(web.db) == []

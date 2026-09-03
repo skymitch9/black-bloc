@@ -27,6 +27,7 @@ CORE_KEYS = (
     "role_menu_channel_id",
     "bot_bio",
     "status_prefix",
+    "operator_read_log",
 )
 CORE = "core"
 NAMESPACE_OVERRIDE = {
