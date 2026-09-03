@@ -9,6 +9,39 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-02 — Phase 15: ping roles (F14), NEXT WAVE item 1
+
+Moved whole from `TODO.md`. Designed 16:45 (`d293193`, `info/phase15-design.md`),
+built by one Opus worktree builder 16:50–17:35 (509k tokens, four clean-boundary
+commits `55990db` `68e422a` `37407bd` `4357c1d`), Fable-reviewed against the design +
+checklist, merged `c577b06`, **deployed `d777f57` 17:43 Phoenix** via the gated
+`scripts/deploy.ps1` (2714 tests, ruff clean, 17 pages / 111 routes). Verified live:
+boot log shows 15 cogs incl. `content.pings`, the Ping roles section (7 keys) on
+Settings and the Pings section on the Go-live page both render; `pings_mode` flipped
+**on** from the dashboard 17:47 (persisted across reload). ⚠️ NOT verified: any live
+Discord role create/assign/delete, the two-role ping prefix on a real announcement —
+those are the owner's sweep. Builder's four deviations accepted at review: self-serve
+follow/unfollow logged routine (role-menu precedent); no `pings.would_*` kinds (off
+means refuse-in-words, nothing to emit); `/pingroles setup` works while the mode is
+off (so it can be prepared before the flip); `_fill_menu` clears before re-adding
+(`add_option` preserves position). Residual: the old process logged `asyncio:
+Unclosed client session` at shutdown during the rolling deploy — pre-existing, not
+from this build; watch.
+
+- NEXT WAVE item 1, verbatim: **F14 — ping roles** (the last unbuilt item from the original 2026-08-26 list):
+   an opt-in **Events** role pinged on go-live/event announcements, and
+   **per-streamer favourite roles** ("people that want to see SuperNamu only …
+   can get her pings") wired into announcements + the role menus. Everything it
+   needs exists: role menus (incl. approval/staff modes), `golive_ping_role_id`
+   / `events_ping_role_id`, the announcement paths. **DESIGNED 2026-09-02 16:45
+   → [`info/phase15-design.md`](info/phase15-design.md)**; the seven small
+   decisions (who creates a fan role, its name, one Events role for both feeds,
+   keep-on-unlink, delete-on-remove, mode off at deploy, three opt-in surfaces)
+   were taken with defaults and are ALL settings keys, so the owner flips them
+   on the dashboard rather than in chat. **Opus worktree builder dispatched
+   2026-09-02 ~16:50.**
+- Feature-table row, verbatim: | F14 | **Ping roles** (owner, 2026-08-26): an opt-in **Events** role for go-live/event pings, and **favourite-streamer roles** — per-streamer opt-in pings ("people that want to see SuperNamu only … can get her pings"). Wire into F1/F5 announcements and the role menus. | 🚀 NEXT WAVE item 1 |
+
 ## 2026-09-01 — The chat-hardening wave: an afternoon of live findings, one deploy
 
 Moved whole from `TODO.md` (every bullet below was a live finding the owner or a member

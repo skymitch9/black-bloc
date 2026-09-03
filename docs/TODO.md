@@ -54,7 +54,7 @@ per feature, so the old bot keeps running until the new one is proven.
 | F3 | **YouTube** — *maybe* | Go-live via YouTube presence WORKS (sweeps row 4); uploads = 🚀 NEXT WAVE item 2. | next wave |
 | F4 | **Event form → Discord Scheduled Event**, via review | **DECIDED 2026-08-26 (all blanks filled):** `/event create` **modal**. **Timezone:** Discord exposes no user timezone to bots (only language locale) → entered once via `/timezone set` with city autocomplete, default = server zone (America/Phoenix). **Review = a channel per submission** (like Modmail today) under an **Events** category, named `<status>-<user>-<event>` e.g. `pending-sky-block-party` → renamed `approved-…` / `denied-…` (Discord channel names are lowercase a-z0-9-_ only, so `!` and spaces are normalised). **Approvers = anyone who can see `#mute-me-bot-test-spam`** — i.e. Aunties/Uncles, Leads, Committee, etc.; implement as "roles with View on the configured staff channel/category", not a hard-coded list. **Create a real Discord Scheduled Event: toggle, default ON.** | BUILT (status corrected 2026-09-02; live modes per cutover-plan) |
 | F5 | **Ping when an event goes live** | **DECIDED 2026-08-26:** announce in **`#live-now`** (channel set in an options menu); **role ping is a setting**, default *none* (YAG pings nobody today). See F14 for the roles. | BUILT (status corrected 2026-09-02; live modes per cutover-plan) |
-| F14 | **Ping roles** (owner, 2026-08-26): an opt-in **Events** role for go-live/event pings, and **favourite-streamer roles** — per-streamer opt-in pings ("people that want to see SuperNamu only … can get her pings"). Wire into F1/F5 announcements and the role menus. | 🚀 NEXT WAVE item 1 |
+| F14 | **Ping roles** (owner, 2026-08-26): an opt-in **Events** role for go-live/event pings, and **favourite-streamer roles** — per-streamer opt-in pings ("people that want to see SuperNamu only … can get her pings"). Wire into F1/F5 announcements and the role menus. | SHIPPED `d777f57` 2026-09-02 (Phase 15, `info/phase15-design.md`); `pings_mode` ON; live-Discord role sweep = owner's |
 | F6 | **Birthday announcements**, opt-in, with a "cutover time" | **Seed data:** Birthday Bot export (39 rows) at `archive/current-bots/birthday-bot-export-2026-08-05.md`. **Measured incumbent (rescan, 16 posts):** channel **`#return-of-the-gen`** (`1411816390414962700`), an embed `Happy Birthday **{display_name}**!` colour `#4eefff`, no ping, no role; fires at **≈00:03 local midnight in a PER-MEMBER timezone** (UTC-4 ×8, -5 ×4, -6 ×2, -7 ×1, +1 ×1) — contradicts the bot's own "server time zone" blurb. 🔴 **Phoenix gotcha: 15 of 16 landed the evening BEFORE the birthday in Phoenix terms.** **DECIDED 2026-08-26 (Q12): per-member midnight** (uses the F4 `/timezone` store); **fallback = server midnight (America/Phoenix)** when a member has no timezone set. The `🎂` role's grantor is unknown (Birthday Bot lacks manage_roles). | BUILT (status corrected 2026-09-02; live modes per cutover-plan) |
 | F7 | **Moderation** — copy the *usual* settings from other bots; exceptions list fine-tuned later (mass pings, role-based exceptions) | **Carl's live config captured** (`archive/current-bots/carl-bot-dashboard-2026-08-26.md`): only mention-spam (5/30s → delete+warn+5-min timeout) is armed; whitelists empty; warn threshold 8 with no punishment. **YAGPDB automod measured OFF.** `#carlbot-logs`: 7 warn cases in ~2 years — quiet server, do not over-tune. **DECIDED 2026-08-26 (Q11): "follow what exists"** — reproduce Carl's live config as-is (mention-spam 5/30s → delete+warn+5-min timeout; everything else log-only), warn/timeout/kick/ban commands, modlog, exempt roles = staff set; **tune in shadow mode**, change later. | BUILT (status corrected 2026-09-02; live modes per cutover-plan) |
 | F8 | **Temporary voice channels** — replicate tempvoice.xyz | **DECIDED 2026-08-26:** one creator voice channel named **"join to create a channel"** in the existing voice-channel area, positioned **directly above "You Still Here?"** (the AFK channel — keep it above, never below); spawned channels named **`{user}'s bloc`**, placed next to the creator, deleted when empty; owner control panel (rename / limit / lock / hide / kick / ban / claim / transfer) per `info/reference-bots.md`; usable by **`Member`** to start. | BUILT (status corrected 2026-09-02; live modes per cutover-plan) |
@@ -104,18 +104,9 @@ per feature, so the old bot keeps running until the new one is proven.
 **The session picking this up: read this block, design, dispatch — the owner has
 already said go.** Order recommended by the 5.0 session, owner did not reorder:
 
-1. **F14 — ping roles** (the last unbuilt item from the original 2026-08-26 list):
-   an opt-in **Events** role pinged on go-live/event announcements, and
-   **per-streamer favourite roles** ("people that want to see SuperNamu only …
-   can get her pings") wired into announcements + the role menus. Everything it
-   needs exists: role menus (incl. approval/staff modes), `golive_ping_role_id`
-   / `events_ping_role_id`, the announcement paths. **DESIGNED 2026-09-02 16:45
-   → [`info/phase15-design.md`](info/phase15-design.md)**; the seven small
-   decisions (who creates a fan role, its name, one Events role for both feeds,
-   keep-on-unlink, delete-on-remove, mode off at deploy, three opt-in surfaces)
-   were taken with defaults and are ALL settings keys, so the owner flips them
-   on the dashboard rather than in chat. **Opus worktree builder dispatched
-   2026-09-02 ~16:50.**
+1. ~~F14 — ping roles~~ **SHIPPED `d777f57` 2026-09-02 17:43** — moved whole to
+   [`DONE.md`](DONE.md) ("Phase 15"). Owner's live-Discord sweep still open
+   (role create/assign, the two-role prefix on a real announcement).
 2. **F3 — YouTube upload announcements**: go-live via YouTube presence already
    works (sweeps row 4); this adds NEW-UPLOAD posts, which needs the YouTube
    Data API (owner mints an API key — free quota) + a channel-link store like

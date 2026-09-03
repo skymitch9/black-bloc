@@ -2,8 +2,9 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-08-31 for the STATUS line only.** ⚠️ **No entry below
-> was re-tested today**, and two carry thresholds that may already have been
+> Last verified: **2026-09-02 — KI-10 added from a live Fly log line during the
+> `d777f57` rolling deploy; nothing else re-tested.** Before that, 2026-08-31 for the STATUS line only. ⚠️ **No entry below
+> was re-tested then**, and two carry thresholds that may already have been
 > crossed — see the note under KI-6. The dated history that follows is the
 > 2026-08-27 reading: KI-9 added (anonymous poll votes are a per-poll hash, accepted); before that KI-8 added when the role-menu panels started
 > following the mode (measured in tests only; no panel has ever been deleted
@@ -20,6 +21,28 @@
 >
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
+
+## KI-10 — The OLD process logs `asyncio: Unclosed client session` while a rolling deploy replaces it — `WATCHING`
+
+**Symptom.** In the Fly log stream during the `d777f57` deploy (2026-09-03
+00:42:59Z), the machine being retired printed `ERROR asyncio: Unclosed client
+session` on its way down. The NEW process booted clean (15 cogs, logged in,
+birthdays import ran) and the line has not reappeared since.
+
+**Status.** `WATCHING` — seen once, at shutdown only, on the process that was
+already being stopped.
+
+**Why tolerated.** An aiohttp `ClientSession` that was never `close()`d is
+reported by its finaliser at interpreter exit; it costs nothing after the
+process is gone and cannot affect the replacement machine. Candidates are the
+Twitch/YouTube/Groq/webhook clients that are opened lazily and never closed in
+`bot.py`'s `close()` path — not confirmed; the log line does not name the
+owner.
+
+**What would change it.** The same line appearing on a RUNNING machine (not at
+shutdown), or more than one per deploy — then it is a leak, not a finaliser
+grumble, and `bot.py`'s shutdown path gets an explicit close for each lazily
+opened session. Next deploy: read the retiring machine's tail and count.
 
 ## KI-1 — (CLOSED 2026-09-01) SQLite database lives inside a OneDrive-synced folder
 
