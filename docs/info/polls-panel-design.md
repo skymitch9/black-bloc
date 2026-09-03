@@ -173,7 +173,7 @@ arguments (`:1821–1822`) are LOST, as they were for `/request`; the site's Log
 | Key | Type | Default | What it decides |
 |---|---|---|---|
 | `poll_panel_minutes` | `int` | **10** | how long the panel stays live. Help text must carry the KI-20 sentence verbatim in shape: the "gone quiet" footer can only be written while Discord's 15-minute interaction token is open, so **15 or more means the buttons stop with no footer**. Nothing is clamped |
-| `poll_creator_may_end` | `bool` | **owner's F-B1 answer** (True = today's behaviour) | whether the `End` button renders for the poll's creator; staff always get it. §I-2 |
+| `poll_creator_may_end` | `bool` | **True** (owner, 2026-09-03 12:20, via birthdays F-B1: keep today's behaviour) | whether the `End` button renders for the poll's creator; staff always get it. §I-2 |
 
 Registered the three places `request_panel_minutes` is — `settings_store.py:876` `KEY_TYPES`,
 `:892` `KEY_HELP`, `:1305` `default()` — appended in the polls block so wave-1 merges stay
@@ -284,7 +284,8 @@ Rows 6, 8, 9 and 27 are rewritten in place, not added.
    creator-or-staff today (`:1978`). **Settled the same way as birthdays F-B1** — the owner
    answers ONE question for both: keep today's member permission as the default, or go
    staff-only as requests did (deviation 12). Either way it is a key, `poll_creator_may_end`
-   (bool), registered beside `poll_panel_minutes` (§D); only the default waits on him.
+   (bool), registered beside `poll_panel_minutes` (§D). ✅ **DECIDED 2026-09-03 12:20: keep
+   today's behaviour — default True.** If you can post it, you can close it; staff sit above.
 3. ✅ **SETTLED (reviewer): nothing is written before `Post it`.** One write, one log row
    (checklist 34), no orphan rows, and `draft` stays unused. A timed-out create costs one
    modal's typing, which the 10-minute default and the "gone quiet" footer already bound.

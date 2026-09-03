@@ -258,9 +258,8 @@ docs bookkeeping lands with the work, not after.
   waits until `feat/applications-no-role` lands — its cog is being rewritten. **All three
   LANDED and REVIEWED against §2** (2026-09-03 ~12:15; 171k / 185k / 197k Opus). The
   staff-final-say rule settled three of five forks in-doc (polls `denied → open`, events
-  `denied → approved` + a DM'd cancel note, no draft rows). **Waiting on the owner, one at a
-  time:** F-B1 (member lookup of another's birthday / creator may end own poll — keep today's
-  default or staff-only like requests) then events I2 (does `/timezone` go). Then Opus builds
+  `denied → approved` + a DM'd cancel note, no draft rows). F-B1 DECIDED 12:20 (keep today's behaviour: member lookup on, creator may end own poll).
+  **Waiting on the owner:** events I2 (does `/timezone` go). Then Opus builds
   in worktrees, merge in wave order, re-key `code-notes.md` per merge, deploy per wave.
 
 - **Via-labelling gap: `raidtrain.cancel_train` logs one row but calls a website cancel

@@ -263,7 +263,12 @@ is 65 at `:180`). The prose block at `:133–138` is replaced by these rows.
 
 ## I. Forks — the owner decides, one at a time
 
-**F-B1 — may a member look up somebody else's birthday?** Today `/birthday show @user`
+✅ **F-B1 — DECIDED by the owner 2026-09-03 12:20 ("Follow your choice"): keep today's
+behaviour — `birthday_panel_lookup` defaults True.** Reasoning kept for the record: the
+"Coming up" list already shows the next five to everyone, and `Opt out` is the member's own
+privacy control, so the lookup reveals nothing a member did not choose to store. The same answer
+sets polls' `poll_creator_may_end` default True. Original question:
+May a member look up somebody else's birthday? Today `/birthday show @user`
 (`:747`) is open to every member, and this design keeps that (`birthday_panel_lookup` default
 **True**). But the owner made the analogous call the other way on requests three hours after it
 shipped (deviation 12: viewing became staff-only, default **off**). Default True keeps today's
