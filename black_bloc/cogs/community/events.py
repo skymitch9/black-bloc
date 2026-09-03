@@ -1,495 +1,156 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
 from datetime import UTC, datetime, timedelta
-from typing import Any, NamedTuple
+from typing import Any
 
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from ...actionlog import (
-    LOGS_DEFAULT,
-    LOGS_MAX,
-    LOGS_MIN,
-    log_action,
-    send_logs,
-)
+from ...actionlog import log_action, send_logs
 from ...command_errors import NETWORK_ERRORS, AnswersErrors, SafeDynamicItem
 from ...events import (
+    ALREADY_DECIDED as EVENT_ALREADY_DECIDED,
+)
+from ...events import (
     APPROVED,
-    BAD_DURATION,
-    CANCELLED,
-    DEFAULT_DURATION_MINUTES,
+    CALL_ONE_OFF,
+    CANCEL_NOTE_LIMIT,
+    COLOURS,
     DENIED,
+    DENY_LIMIT,
     DESCRIPTION_LIMIT,
+    DM_MISSED,
     DONE,
-    EVENT_NAME_LIMIT,
+    EVENTS_OFF,
+    LIST_PAGE,
     LIVE,
     LOCATION_LIMIT,
+    MODAL_ZONE_HINT,
+    MOVE_TARGETS,
+    NO_SUCH_EVENT,
+    NOTHING_OPEN,
     OPEN_STATUSES,
+    PANEL_EMPTY,
+    PANEL_INTRO,
+    PANEL_TIMEOUT_FOOTER,
+    PANEL_TITLE,
     PENDING,
-    START_IN_THE_PAST,
+    REVIEW_ROOM_BUTTON,
+    SELECT_CAP,
+    SITE_BUTTON,
     SWEPT_STATUSES,
-    TERMINAL_STATUSES,
     TITLE_LIMIT,
-    announce_text,
-    build_card,
+    ZONE_BUTTON,
+    apply_decision,
     can_transition,
-    channel_name,
+    cancel_event,
+    cancel_for,
+    card_buttons,
+    card_footer_override,
+    card_for,
+    checked_fields,
+    checked_numbers,
     clamp,
-    describe_duration,
-    ends_at,
+    counts_line,
+    counts_of,
+    dm,
+    drop_lock,
+    due_events,
+    event_for_channel,
+    event_line,
+    event_lock,
+    events_by_status,
+    get_event,
     golive_text,
-    mentions,
-    parse_duration,
-    start_error,
+    list_lines,
+    may_cancel,
+    option_label,
+    own_events,
+    panel_minutes,
+    panel_shows_own_list,
+    pick_placeholder,
+    post_to_announce,
+    rename_channel,
+    review_channel_url,
+    set_review,
+    set_status,
+    settings_lines,
+    site_page_url,
+    stored_zone,
+    submit_event,
+    tell_or_log,
+    when_line,
+    write_settings,
+    zone_line,
+)
+from ...events import (
+    NUMBERS_LABELS as EVENT_NUMBERS_LABELS,
+)
+from ...events import (
+    set_zone as store_zone,
 )
 from ...golive import now_iso, parse_ts
-from ...logkinds import VIA_DISCORD, kind_via
+from ...panels import NoteModal as PanelNoteModal
+from ...panels import Panel, answer, db_ready, retire, still_staff
 from ...settings_store import (
     DB_UNAVAILABLE,
-    EVENTS_LATE_CEILING_MINUTES,
     EVENTS_MODES,
-    EVENTS_RETENTION_MAX_DAYS,
-    EVENTS_RETENTION_MIN_DAYS,
     GUILD_ONLY,
     require_staff,
-    staff_roles_sentence,
 )
-from ...timezones import (
-    AMBIGUOUS,
-    CHOICE_LIMIT,
-    DEFAULT_TZ,
-    GAP,
-    START_EXAMPLE,
-    clock_trouble,
-    get_timezone,
-    is_known,
-    local_time,
-    parse_start,
-    set_timezone,
-    stored_timezone,
-    suggest,
-)
+from ...timezones import START_EXAMPLE, get_timezone
 
 log = logging.getLogger(__name__)
 
 DECISION_TEMPLATE = r"event:(?P<event_id>[0-9]+):(?P<action>approve|deny)"
-LOCKS_ATTR = "_event_locks"
 GOLIVE_MINUTES = 1
 RECONCILE_MINUTES = 5
 LOOP_NAMES = ("golive", "reconcile")
 ORPHAN_GRACE_MINUTES = 5
-LOCATION_FALLBACK = "Ask in the server"
+COG_NAME = "Events"
 
-UNKNOWN_TZ = (
-    "**{given}** is not a time zone Black Bloc knows, so nothing was saved. Start typing a city "
-    "— `Phoenix`, `London`, `Tokyo` — and pick one of the suggestions, which are the "
-    "`Region/City` names Discord and your phone both use."
-)
-TZ_SET = (
-    "Your time zone is **{tz}**, where it is now **{now}**. Times you type into `/event create` "
-    f"are read in that zone, so `{START_EXAMPLE}` means half past seven in the evening for you."
-)
-TZ_SHOW = "Your time zone is **{tz}**, where it is now **{now}**. `/timezone set` changes it."
-TZ_SHOW_DEFAULT = (
-    "You have not set a time zone, so Black Bloc reads the times you type as **{tz}**, where it "
-    "is now **{now}**. `/timezone set` changes that."
-)
+SETTINGS_TITLE = "Events — settings"
+PROPOSE_BUTTON = "Propose an event"
+SETTINGS_BUTTON = "Settings"
+NUMBERS_BUTTON = "Numbers…"
+FORGET_BUTTON = "Forget…"
+FORGET_PLACEHOLDER = "Forget which one?"
+SCHEDULED_BUTTON = "Scheduled events: {state}"
+MODE_PLACEHOLDER = "How events behave…"
+CATEGORY_PLACEHOLDER = "Where review channels go (pick nothing to forget it)"
+ANNOUNCE_PLACEHOLDER = "Where approved events are announced"
+PING_PLACEHOLDER = "Role mentioned when one is announced"
+ZONE_MODAL_TITLE = "Your time zone"
+ZONE_MODAL_LABEL = "Region/City — Phoenix is America/Phoenix"
+ZONE_INPUT_LIMIT = 60
+NUMBERS_MODAL_TITLE = "Events — numbers"
+FORGOT_NOTHING = "Nothing was picked, so nothing was forgotten."
 
-EVENTS_OFF = (
-    "Event proposals are turned off on this server, so nothing was submitted. A Lead turns them "
-    "back on with `/event settings` — ask one if you have something to run."
-)
-NO_TEST_CHANNEL = (
-    "Black Bloc is in test mode and cannot work out where a review channel would be allowed, so "
-    "nothing was submitted. Its test channel has to exist AND has to sit inside a category — set "
-    "TEST_CHANNEL_ID to a channel the bot can read, put that channel in a category, restart it, "
-    "then try again."
-)
-NO_TITLE = (
-    "An event needs a name, so nothing was submitted. Put something in the Title box — it is the "
-    "heading everybody sees on the card."
-)
-DST_GAP = (
-    "**{given}** never happens in **{tz}** — the clocks jump forward over that hour, so nothing "
-    "was submitted. Pick a time before or after the hour that is skipped, or run `/timezone set` "
-    "if that zone is not the one you are in."
-)
-DST_AMBIGUOUS = (
-    "**{given}** happens twice in **{tz}** — the clocks go back and that hour runs again, so "
-    "Black Bloc will not guess which of the two you meant and nothing was submitted. Pick a time "
-    "an hour either side of it."
-)
-MODAL_ZONE_HINT = "{example} — read in {tz}; /timezone set changes it"
-CANCELLED_ANNOUNCEMENT = "**{title}** is cancelled and is no longer happening."
-NO_CATEGORY = (
-    "Black Bloc has nowhere to put the review channel, so nothing was submitted. A Lead points it "
-    "at a category with `/event settings category:<the Events category>`, then this works."
-)
-NOT_A_CATEGORY = (
-    "**events_category_id** points at something that is not a category, so nothing was "
-    "submitted. A Lead fixes it with `/event settings category:<the Events category>`."
-)
-CANNOT_CREATE = (
-    "Discord refused to make the review channel, so nothing was submitted. Black Bloc needs the "
-    "Manage Channels permission in that category. Tell a Lead, then try again."
-)
-SUBMITTED = (
-    "**{title}** is in — the mods will review it and Black Bloc will DM you either way. {where}"
-)
-SUBMITTED_HERE = (
-    "Their review card is in {channel} — you can see and post in there too, so answer anything "
-    "they ask and put updates in the same place."
-)
-SUBMITTED_TEST = (
-    "Test mode is on, so the review card is in this channel rather than in {channel}, which is "
-    "where it will go once the owner lifts it."
-)
-SUBMITTED_NO_CARD = (
-    "Black Bloc could not post the review card in {channel} — the log says why, and a Lead can "
-    "still decide it there by hand."
-)
-NO_SUCH_EVENT = (
-    "Black Bloc has no record of that event any more, so nothing was changed. `/event list` shows "
-    "the ones it still knows about."
-)
-ALREADY_DECIDED = (
-    "Somebody got there first — event #{event_id} is already **{status}**, so nothing was "
-    "changed. Its card above shows who decided and when."
-)
-APPROVED_SAID = "Approved. {extra}"
-DENIED_SAID = "Denied, and the requester has been told why."
-DM_APPROVED = (
-    "Your event **{title}** was approved on **{guild}**. It starts {stamp}."
-)
-DM_DENIED = (
-    "Your event **{title}** was not approved on **{guild}**. The reason given was: {reason}. Ask "
-    "a Lead there if you want to talk it over — Black Bloc cannot change the decision."
-)
-DM_CANCELLED = "Your event **{title}** on **{guild}** has been cancelled — {why}"
-CANCEL_WHY: dict[str, str] = {
-    "never_got_a_channel": (
-        "Black Bloc could not finish setting it up, so nobody was ever able to review it. Propose "
-        "it again with `/event create`."
-    ),
-    "review_channel_gone": (
-        "the channel the mods were reviewing it in is no longer there. Propose it again with "
-        "`/event create` if it should still happen."
-    ),
-    "review_channel_deleted": (
-        "the channel the mods were reviewing it in was deleted. Propose it again with `/event "
-        "create` if it should still happen."
-    ),
-    "unreadable_start": (
-        "Black Bloc could not read the start time stored for it. Propose it again with `/event "
-        "create` and write the time as `YYYY-MM-DD HH:MM`."
-    ),
+BUTTON_STYLES: dict[str, discord.ButtonStyle] = {
+    "primary": discord.ButtonStyle.primary,
+    "secondary": discord.ButtonStyle.secondary,
+    "success": discord.ButtonStyle.success,
+    "danger": discord.ButtonStyle.danger,
 }
-CANCEL_WHY_DEFAULT = (
-    "either you or a member of staff called it off. Ask a Lead there if that is a surprise."
+NOTE_TITLES: dict[str, str] = {"deny": "Why not?", "cancel": "Why is it off?"}
+NOTE_LABELS: dict[str, str] = {
+    "deny": "One line the requester will be sent",
+    "cancel": "One line the requester will be sent",
+}
+NOTE_LIMITS: dict[str, int] = {"deny": DENY_LIMIT, "cancel": CANCEL_NOTE_LIMIT}
+NOTE_REQUIRED: dict[str, bool] = {"deny": True, "cancel": False}
+FORGETTABLE: tuple[tuple[str, str], ...] = (
+    ("events_category_id", "the category review channels go in"),
+    ("events_announce_channel_id", "where approved events are announced"),
+    ("events_ping_role_id", "the role that gets mentioned"),
 )
-DM_MISSED = (
-    "Your event **{title}** on **{guild}** finished before Black Bloc ever announced it, so "
-    "nobody was told it was on. It has been marked done. Sorry — propose it again with `/event "
-    "create` if you want another go."
-)
-NO_ANNOUNCE_CHANNEL = (
-    "there is nowhere to announce it — a Lead sets `/event settings announce_channel:`"
-)
-NOT_YOURS = (
-    "Event #{event_id} is not yours, so nothing was cancelled. Only the person who proposed it or "
-    "a member of staff can cancel it."
-)
-CANCELLED_SAID = "Event #{event_id} is cancelled."
-NOT_OPEN = (
-    "Event #{event_id} is already **{status}**, so there was nothing to cancel."
-)
-NOT_AN_ID = "**{given}** is not an event number, so nothing was cancelled. `/event list` has them."
-NO_STAFF_WARNING = (
-    "⚠️ **No staff roles resolve**, so nobody but server admins can see a review channel or press "
-    "Approve. Point `staff_channel_id` at a channel only staff can see with `/settings set "
-    "staff_channel_id`, then check `/event list` again."
-)
-
-
-async def create_event(
-    db: Any,
-    guild_id: int,
-    requester_id: int,
-    *,
-    title: str,
-    description: str | None,
-    location: str | None,
-    starts_at: datetime,
-    finishes_at: datetime,
-) -> int | None:
-    cur = await db.conn.execute(
-        "INSERT INTO events(guild_id, requester_id, title, description, location, starts_at, "
-        "ends_at, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (
-            guild_id,
-            requester_id,
-            title,
-            description or None,
-            location or None,
-            starts_at.isoformat(),
-            finishes_at.isoformat(),
-            PENDING,
-            now_iso(),
-        ),
-    )
-    await db.conn.commit()
-    return cur.lastrowid
-
-
-class EventFields(NamedTuple):
-    title: str
-    description: str
-    location: str
-    starts: datetime
-    minutes: int
-
-
-def checked_fields(
-    *,
-    title: Any,
-    description: Any,
-    location: Any,
-    start: Any,
-    duration: Any,
-    tz_name: str,
-    now: datetime,
-) -> tuple[EventFields | None, str]:
-    """Every rule an event's fields have to pass, for the modal and the dashboard alike."""
-    wanted = clamp(title, TITLE_LIMIT)
-    if not wanted:
-        return None, NO_TITLE
-    starts = parse_start(start, tz_name)
-    if starts is None:
-        return None, start_error(start, tz_name, START_EXAMPLE)
-    trouble = clock_trouble(start, tz_name)
-    if trouble == GAP:
-        return None, DST_GAP.format(given=clamp(start, 80), tz=tz_name)
-    if trouble == AMBIGUOUS:
-        return None, DST_AMBIGUOUS.format(given=clamp(start, 80), tz=tz_name)
-    if starts <= now:
-        return None, START_IN_THE_PAST.format(given=clamp(start, 80), tz=tz_name)
-    minutes = parse_duration(duration)
-    if minutes is None:
-        return None, BAD_DURATION.format(given=clamp(duration, 40))
-    return (
-        EventFields(
-            wanted,
-            clamp(description, DESCRIPTION_LIMIT),
-            clamp(location, LOCATION_LIMIT),
-            starts,
-            minutes,
-        ),
-        "",
-    )
-
-
-async def update_event(
-    db: Any,
-    event_id: int,
-    *,
-    title: str,
-    description: str | None,
-    location: str | None,
-    starts_at: datetime,
-    finishes_at: datetime,
-) -> None:
-    await db.conn.execute(
-        "UPDATE events SET title = ?, description = ?, location = ?, starts_at = ?, ends_at = ? "
-        "WHERE id = ?",
-        (
-            title,
-            description or None,
-            location or None,
-            starts_at.isoformat(),
-            finishes_at.isoformat(),
-            event_id,
-        ),
-    )
-    await db.conn.commit()
-
-
-async def get_event(db: Any, event_id: int) -> Any:
-    cur = await db.conn.execute("SELECT * FROM events WHERE id = ?", (event_id,))
-    return await cur.fetchone()
-
-
-async def events_by_status(db: Any, guild_id: int, statuses: Any) -> list[Any]:
-    marks = ", ".join("?" for _ in statuses)
-    cur = await db.conn.execute(
-        f"SELECT * FROM events WHERE guild_id = ? AND status IN ({marks}) ORDER BY starts_at",
-        (guild_id, *statuses),
-    )
-    return list(await cur.fetchall())
-
-
-async def due_events(db: Any, status: str, column: str, before: str) -> list[Any]:
-    cur = await db.conn.execute(
-        f"SELECT * FROM events WHERE status = ? AND {column} IS NOT NULL AND {column} <= ? "
-        "ORDER BY id",
-        (status, before),
-    )
-    return list(await cur.fetchall())
-
-
-async def set_review(
-    db: Any,
-    event_id: int,
-    channel_id: int | None,
-    message_id: int | None,
-    card_channel_id: int | None = None,
-) -> None:
-    await db.conn.execute(
-        "UPDATE events SET review_channel_id = ?, review_message_id = ?, card_channel_id = ? "
-        "WHERE id = ?",
-        (channel_id, message_id, card_channel_id, event_id),
-    )
-    await db.conn.commit()
-
-
-async def set_status(
-    db: Any,
-    event_id: int,
-    status: str,
-    *,
-    decided_by: int | None = None,
-    deny_reason: str | None = None,
-) -> None:
-    await db.conn.execute(
-        "UPDATE events SET status = ?, decided_by = COALESCE(?, decided_by), "
-        "decided_at = COALESCE(?, decided_at), deny_reason = COALESCE(?, deny_reason) WHERE id = ?",
-        (
-            status,
-            decided_by,
-            now_iso() if decided_by is not None else None,
-            deny_reason,
-            event_id,
-        ),
-    )
-    await db.conn.commit()
-
-
-async def set_scheduled(db: Any, event_id: int, scheduled_event_id: int) -> None:
-    await db.conn.execute(
-        "UPDATE events SET scheduled_event_id = ? WHERE id = ?", (scheduled_event_id, event_id)
-    )
-    await db.conn.commit()
-
-
-async def set_announced(db: Any, event_id: int, message_id: int) -> None:
-    await db.conn.execute(
-        "UPDATE events SET announce_message_id = ? WHERE id = ?", (message_id, event_id)
-    )
-    await db.conn.commit()
-
-
-async def event_for_channel(db: Any, channel_id: int) -> Any:
-    cur = await db.conn.execute(
-        "SELECT * FROM events WHERE review_channel_id = ? ORDER BY id DESC LIMIT 1", (channel_id,)
-    )
-    return await cur.fetchone()
-
-
-def event_lock(bot: Any, event_id: int) -> asyncio.Lock:
-    locks = getattr(bot, LOCKS_ATTR, None)
-    if locks is None:
-        locks = {}
-        setattr(bot, LOCKS_ATTR, locks)
-    lock = locks.get(event_id)
-    if lock is None:
-        lock = locks[event_id] = asyncio.Lock()
-    return lock
-
-
-def drop_lock(bot: Any, event_id: int) -> None:
-    """A settled event will never be raced again, so its lock stops being kept."""
-    locks = getattr(bot, LOCKS_ATTR, None)
-    if locks is not None:
-        locks.pop(event_id, None)
 
 
 def decision_id(event_id: int, action: str) -> str:
     return f"event:{event_id}:{action}"
-
-
-def duration_minutes(row: Any) -> int:
-    starts = parse_ts(row["starts_at"])
-    finishes = parse_ts(row["ends_at"])
-    if starts is None or finishes is None:
-        return DEFAULT_DURATION_MINUTES
-    return max(int((finishes - starts).total_seconds() // 60), 1)
-
-
-def card_for(row: Any) -> discord.Embed:
-    """One place turns a stored event into the card every surface shows."""
-    starts = parse_ts(row["starts_at"]) or datetime.now(UTC)
-    return build_card(
-        event_id=row["id"],
-        title=row["title"],
-        requester_id=row["requester_id"],
-        starts_at=starts,
-        minutes=duration_minutes(row),
-        location=row["location"],
-        description=row["description"],
-        status=row["status"],
-        deny_reason=row["deny_reason"],
-    )
-
-
-def review_overwrites(
-    guild: Any, staff_roles: Any, me: Any = None, requester: Any = None
-) -> dict[Any, Any]:
-    overwrites: dict[Any, Any] = {
-        guild.default_role: discord.PermissionOverwrite(view_channel=False)
-    }
-    for role in staff_roles:
-        overwrites[role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
-    if me is not None:
-        overwrites[me] = discord.PermissionOverwrite(
-            view_channel=True, send_messages=True, manage_channels=True
-        )
-    if requester is not None:
-        overwrites[requester] = discord.PermissionOverwrite(
-            view_channel=True, send_messages=True, read_message_history=True
-        )
-    return overwrites
-
-
-def events_category(bot: Any, guild: Any) -> tuple[Any, str]:
-    """Where review channels go: the test channel's category while the guard is installed."""
-    guard = getattr(bot, "guard", None)
-    if guard is not None:
-        test_channel = bot.get_channel(guard.test_channel_id) if guard.test_channel_id else None
-        category = getattr(test_channel, "category", None)
-        if test_channel is None or category is None:
-            return None, "no_test_channel"
-        return category, "test_category"
-    category_id = bot.store.get(guild.id, "events_category_id")
-    if not category_id:
-        return None, "no_category"
-    category = guild.get_channel(category_id)
-    if category is None:
-        return None, "no_category"
-    if not isinstance(category, discord.CategoryChannel) and not hasattr(category, "channels"):
-        return None, "not_a_category"
-    return category, "category"
-
-
-def card_channel(bot: Any, review_channel: Any) -> Any:
-    """The review card goes to the test channel while the guard would refuse the review one."""
-    guard = getattr(bot, "guard", None)
-    if guard is None or guard.allows_channel(review_channel.id):
-        return review_channel
-    return bot.get_channel(guard.test_channel_id) if guard.test_channel_id else None
 
 
 def review_view(event_id: int) -> discord.ui.View:
@@ -499,347 +160,6 @@ def review_view(event_id: int) -> discord.ui.View:
     return view
 
 
-async def answer(interaction: discord.Interaction, text: str) -> None:
-    if interaction.response.is_done():
-        await interaction.followup.send(
-            text, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-        )
-        return
-    await interaction.response.send_message(
-        text, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-    )
-
-
-async def dm(user: Any, text: str, embed: discord.Embed | None = None) -> bool:
-    """Whether the person actually got told."""
-    send = getattr(user, "send", None)
-    if send is None:
-        return False
-    try:
-        await send(text, embed=embed, allowed_mentions=discord.AllowedMentions.none())
-    except Exception as exc:
-        log.info("events: could not DM %s: %s", getattr(user, "id", "?"), exc)
-        return False
-    return True
-
-
-async def tell_or_log(bot: Any, guild: Any, user: Any, row: Any, text: str) -> None:
-    """A DM the requester is owed; a failure is a logged fact, never a silent one."""
-    if await dm(user, text, card_for(row)):
-        return
-    await log_action(
-        bot,
-        guild,
-        "event.dm_failed",
-        target=row["requester_id"],
-        details={"event_id": row["id"]},
-    )
-
-
-async def rename_channel(bot: Any, guild: Any, row: Any, status: str, user_name: str) -> None:
-    channel = guild.get_channel(row["review_channel_id"]) if row["review_channel_id"] else None
-    if channel is None:
-        return
-    wanted = channel_name(status, user_name, row["title"])
-    if getattr(channel, "name", None) == wanted:
-        return
-    guard = getattr(bot, "guard", None)
-    if guard is not None and not guard.allows_place(channel):
-        await log_action(
-            bot,
-            guild,
-            "event.would_rename",
-            details={"event_id": row["id"], "channel_id": channel.id, "name": wanted},
-        )
-        return
-    try:
-        await channel.edit(name=wanted, reason=f"Black Bloc event {row['id']}")
-    except NETWORK_ERRORS as exc:
-        log.warning("events: could not rename %s to %s: %s", channel.id, wanted, exc)
-        await log_action(
-            bot,
-            guild,
-            "event.rename_failed",
-            details={
-                "event_id": row["id"],
-                "channel_id": channel.id,
-                "reason": f"{type(exc).__name__}: {exc}",
-            },
-        )
-
-
-async def create_scheduled_event(bot: Any, guild: Any, row: Any) -> tuple[Any, str | None]:
-    """The scheduled event Discord made, or the reason there is not one."""
-    if not bot.store.get(guild.id, "events_create_scheduled"):
-        return None, "turned_off"
-    starts = parse_ts(row["starts_at"])
-    finishes = parse_ts(row["ends_at"])
-    if starts is None:
-        return None, "unreadable_start"
-    if finishes is None:
-        finishes = ends_at(starts, DEFAULT_DURATION_MINUTES)
-    if getattr(bot, "guard", None) is not None:
-        log.warning("events: TEST MODE — no scheduled event made for event %s", row["id"])
-        await log_action(
-            bot,
-            guild,
-            "event.would_create_scheduled",
-            target=row["requester_id"],
-            details={"event_id": row["id"], "reason": "test_mode"},
-        )
-        return None, "test_mode"
-    try:
-        made = await guild.create_scheduled_event(
-            name=clamp(row["title"], EVENT_NAME_LIMIT),
-            description=clamp(row["description"], DESCRIPTION_LIMIT) or None,
-            start_time=starts,
-            end_time=finishes,
-            entity_type=discord.EntityType.external,
-            location=clamp(row["location"], LOCATION_LIMIT) or LOCATION_FALLBACK,
-            privacy_level=discord.PrivacyLevel.guild_only,
-            reason=f"Black Bloc event {row['id']}",
-        )
-    except NETWORK_ERRORS as exc:
-        log.warning("events: could not make a scheduled event for %s: %s", row["id"], exc)
-        await log_action(
-            bot,
-            guild,
-            "event.create_scheduled_failed",
-            target=row["requester_id"],
-            details={"event_id": row["id"], "reason": f"{type(exc).__name__}: {exc}"},
-        )
-        return None, f"{type(exc).__name__}: {exc}"
-    await set_scheduled(bot.db, row["id"], made.id)
-    return made, None
-
-
-async def find_scheduled_event(guild: Any, scheduled_id: int) -> Any:
-    """The cache first, then Discord — a restart empties the cache, not the calendar."""
-    cached = getattr(guild, "get_scheduled_event", None)
-    found = cached(scheduled_id) if cached is not None else None
-    if found is not None:
-        return found
-    fetch = getattr(guild, "fetch_scheduled_event", None)
-    if fetch is None:
-        return None
-    return await fetch(scheduled_id)
-
-
-async def cancel_scheduled_event(bot: Any, guild: Any, row: Any) -> None:
-    scheduled_id = row["scheduled_event_id"]
-    if not scheduled_id:
-        return
-    details = {"event_id": row["id"], "scheduled_event_id": scheduled_id}
-    if getattr(bot, "guard", None) is not None:
-        await log_action(
-            bot,
-            guild,
-            "event.would_cancel_scheduled",
-            details=details | {"reason": "test_mode"},
-        )
-        return
-    reason = f"Black Bloc event {row['id']} cancelled"
-    try:
-        event = await find_scheduled_event(guild, scheduled_id)
-        if event is None:
-            raise ValueError("Discord has no such scheduled event")
-        if getattr(event, "status", None) is discord.EventStatus.active:
-            await event.end(reason=reason)
-        else:
-            await event.cancel(reason=reason)
-    except NETWORK_ERRORS as exc:
-        log.warning("events: could not cancel scheduled event %s: %s", scheduled_id, exc)
-        await log_action(
-            bot,
-            guild,
-            "event.cancel_scheduled_failed",
-            details=details | {"reason": f"{type(exc).__name__}: {exc}"},
-        )
-
-
-async def post_to_announce(
-    bot: Any, guild: Any, row: Any, text: str, embed: discord.Embed | None, kind: str
-) -> int | None:
-    """The one guarded way anything of this feature reaches a public channel."""
-    ping_role_id = bot.store.get(guild.id, "events_ping_role_id")
-    details = {"event_id": row["id"]}
-    mode = bot.store.get(guild.id, "events_mode")
-    if mode != "on":
-        await log_action(
-            bot, guild, f"event.would_{kind}", details=details | {"reason": f"mode_{mode}"}
-        )
-        return None
-    channel_id = bot.store.get(guild.id, "events_announce_channel_id")
-    channel = bot.get_channel(channel_id) if channel_id else None
-    if channel is None:
-        await log_action(
-            bot, guild, f"event.{kind}_failed", details=details | {"reason": "no_channel"}
-        )
-        return None
-    guard = getattr(bot, "guard", None)
-    if guard is not None and not guard.allows_channel(channel.id):
-        await log_action(
-            bot, guild, f"event.would_{kind}", details=details | {"reason": "test_mode"}
-        )
-        return None
-    try:
-        message = await channel.send(
-            text, embed=embed, allowed_mentions=mentions(ping_role_id)
-        )
-    except Exception as exc:
-        log.warning("events: could not post %s for event %s: %s", kind, row["id"], exc)
-        await log_action(
-            bot,
-            guild,
-            f"event.{kind}_failed",
-            details=details | {"reason": f"{type(exc).__name__}: {exc}"},
-        )
-        return None
-    await log_action(bot, guild, f"event.{kind}", details=details | {"channel_id": channel.id})
-    return message.id
-
-
-async def edit_announcement(bot: Any, guild: Any, row: Any) -> None:
-    """A public post must stop advertising an event that is off."""
-    message_id = row["announce_message_id"]
-    if not message_id:
-        return
-    channel_id = bot.store.get(guild.id, "events_announce_channel_id")
-    channel = bot.get_channel(channel_id) if channel_id else None
-    details = {"event_id": row["id"], "message_id": message_id}
-    if channel is None:
-        await log_action(
-            bot,
-            guild,
-            "event.edit_announcement_failed",
-            details=details | {"reason": "no_channel"},
-        )
-        return
-    guard = getattr(bot, "guard", None)
-    if guard is not None and not guard.allows_channel(channel):
-        await log_action(bot, guild, "event.would_edit_announcement", details=details)
-        return
-    partial = getattr(channel, "get_partial_message", None)
-    try:
-        message = (
-            partial(message_id) if partial is not None else await channel.fetch_message(message_id)
-        )
-        await message.edit(
-            content=CANCELLED_ANNOUNCEMENT.format(title=clamp(row["title"], TITLE_LIMIT)),
-            embed=card_for(row),
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-    except NETWORK_ERRORS as exc:
-        log.warning("events: could not edit the announcement for %s: %s", row["id"], exc)
-        await log_action(
-            bot,
-            guild,
-            "event.edit_announcement_failed",
-            details=details | {"reason": f"{type(exc).__name__}: {exc}"},
-        )
-        return
-    await log_action(bot, guild, "event.announcement_edited", details=details)
-
-
-async def cancel_event(
-    bot: Any, guild: Any, row: Any, reason: str, *, by: int | None = None, via: str = VIA_DISCORD
-) -> bool:
-    """Cancel one event and undo what it left behind; False when it was past cancelling."""
-    async with event_lock(bot, row["id"]):
-        fresh = await get_event(bot.db, row["id"])
-        if fresh is None or not can_transition(fresh["status"], CANCELLED):
-            return False
-        await set_status(bot.db, fresh["id"], CANCELLED)
-        drop_lock(bot, fresh["id"])
-        await log_action(
-            bot,
-            guild,
-            kind_via("event.cancelled", via),
-            target=fresh["requester_id"],
-            reason=reason,
-            details={"event_id": fresh["id"], "title": fresh["title"], "via": via},
-        )
-        await cancel_scheduled_event(bot, guild, fresh)
-        fresh = await get_event(bot.db, row["id"])
-        await edit_announcement(bot, guild, fresh)
-        if by == fresh["requester_id"]:
-            return True
-        await tell_or_log(
-            bot,
-            guild,
-            guild.get_member(fresh["requester_id"]),
-            fresh,
-            DM_CANCELLED.format(
-                title=fresh["title"],
-                guild=guild.name,
-                why=CANCEL_WHY.get(reason, CANCEL_WHY_DEFAULT),
-            ),
-        )
-        return True
-
-
-async def apply_decision(
-    bot: Any,
-    guild: Any,
-    event_id: int,
-    status: str,
-    actor: Any,
-    reason: str | None = None,
-    *,
-    via: str = VIA_DISCORD,
-) -> tuple[str, Any]:
-    """Approve or deny, once, whoever gets the lock first: (what to say, the settled row)."""
-    async with event_lock(bot, event_id):
-        row = await get_event(bot.db, event_id)
-        if row is None:
-            return (NO_SUCH_EVENT, None)
-        if not can_transition(row["status"], status):
-            return (ALREADY_DECIDED.format(event_id=event_id, status=row["status"]), None)
-        await set_status(
-            bot.db, event_id, status, decided_by=getattr(actor, "id", actor), deny_reason=reason
-        )
-        if status in TERMINAL_STATUSES:
-            drop_lock(bot, event_id)
-        await log_action(
-            bot,
-            guild,
-            kind_via(f"event.{status}", via),
-            actor=actor,
-            target=row["requester_id"],
-            reason=reason,
-            details={"event_id": event_id, "title": row["title"], "via": via},
-        )
-        fresh = await get_event(bot.db, event_id)
-        requester = guild.get_member(row["requester_id"])
-        why_not: str | None = None
-        message_id: int | None = None
-        if status == APPROVED:
-            made, why_not = await create_scheduled_event(bot, guild, fresh)
-            fresh = await get_event(bot.db, event_id)
-            ping_role_id = bot.store.get(guild.id, "events_ping_role_id")
-            message_id = await post_to_announce(
-                bot,
-                guild,
-                fresh,
-                announce_text(
-                    ping_role_id,
-                    has_scheduled=made is not None,
-                    event_url=getattr(made, "url", None),
-                ),
-                card_for(fresh),
-                "announce",
-            )
-            if message_id is not None:
-                await set_announced(bot.db, event_id, message_id)
-                fresh = await get_event(bot.db, event_id)
-        await _tell_requester(guild, requester, fresh, status, reason)
-        name = getattr(requester, "display_name", str(row["requester_id"]))
-        await rename_channel(bot, guild, fresh, status, name)
-        if status == DENIED:
-            return (DENIED_SAID, fresh)
-        return (APPROVED_SAID.format(extra=_approve_extra(why_not, message_id)), fresh)
-
-
 async def decide(
     interaction: discord.Interaction, event_id: int, status: str, reason: str | None = None
 ) -> None:
@@ -847,51 +167,11 @@ async def decide(
         interaction.client, interaction.guild, event_id, status, interaction.user, reason
     )
     if fresh is not None:
-        await _close_card(interaction, fresh)
+        await close_card(interaction, fresh)
     await answer(interaction, said)
 
 
-async def _tell_requester(
-    guild: Any, requester: Any, row: Any, status: str, reason: str | None
-) -> None:
-    if status == DENIED:
-        await dm(
-            requester,
-            DM_DENIED.format(
-                title=row["title"], guild=guild.name, reason=reason or "none given"
-            ),
-            card_for(row),
-        )
-        return
-    starts = parse_ts(row["starts_at"])
-    await dm(
-        requester,
-        DM_APPROVED.format(
-            title=row["title"],
-            guild=guild.name,
-            stamp=f"<t:{int(starts.timestamp())}:F>" if starts else "soon",
-        ),
-        card_for(row),
-    )
-
-
-def _approve_extra(why_not: str | None, message_id: int | None) -> str:
-    parts = []
-    if why_not == "test_mode":
-        parts.append(
-            "Test mode is on, so no real Discord scheduled event was made — the log says "
-            "`event.would_create_scheduled`."
-        )
-    elif why_not == "turned_off":
-        parts.append("Scheduled events are turned off in `/event settings`.")
-    elif why_not is not None:
-        parts.append("Discord refused to make the scheduled event — the log says why.")
-    if message_id is None:
-        parts.append("Nothing was announced publicly; the log says why.")
-    return " ".join(parts) or "The event is announced and the requester has been told."
-
-
-async def _close_card(interaction: discord.Interaction, row: Any) -> None:
+async def close_card(interaction: discord.Interaction, row: Any) -> None:
     message = getattr(interaction, "message", None)
     if message is None:
         return
@@ -922,11 +202,594 @@ async def decision_context(interaction: discord.Interaction, event_id: int) -> A
     return row
 
 
+class EventView(Panel):
+    def __init__(self, minutes: int) -> None:
+        super().__init__(minutes, footer=PANEL_TIMEOUT_FOOTER)
+
+
+def origin_of(bot: Any) -> str:
+    return str(getattr(getattr(bot, "settings", None), "origin", "") or "")
+
+
+async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, EventView]:
+    store = bot.store
+    staff = store.is_staff(actor)
+    on = store.get(guild.id, "events_mode") != "off"
+    zone_name, chosen = await stored_zone(bot.db, actor.id)
+    own = await own_events(bot.db, guild.id, actor.id)
+    staff_rows: list[Any] = []
+
+    lines = [PANEL_INTRO, zone_line(zone_name, chosen=chosen)]
+    if staff:
+        staff_rows = await events_by_status(bot.db, guild.id, OPEN_STATUSES)
+        lines.append(counts_line(counts_of(staff_rows)))
+        lines.extend(list_lines(staff_rows[:LIST_PAGE], store.staff_roles(guild)))
+    elif panel_shows_own_list(store, guild.id):
+        lines.extend(
+            [event_line(row) for row in own[:LIST_PAGE]] if own else [PANEL_EMPTY]
+        )
+    if not on:
+        lines.append(EVENTS_OFF)
+    if staff and not staff_rows:
+        lines.append(NOTHING_OPEN)
+
+    embed = discord.Embed(
+        title=PANEL_TITLE, description="\n".join(lines), colour=discord.Colour(COLOURS[PENDING])
+    )
+    view = EventView(panel_minutes(store, guild.id))
+    if on:
+        view.add_item(ProposeButton())
+        view.add_item(ZoneButton())
+    view.add_item(RefreshButton())
+    page = site_page_url(origin_of(bot))
+    if page:
+        view.add_item(
+            discord.ui.Button(
+                style=discord.ButtonStyle.link, label=SITE_BUTTON, url=page, row=0
+            )
+        )
+    mine = [row for row in own if may_cancel(store, row, actor)]
+    if mine:
+        view.add_item(CallOffPick(mine))
+    if staff and staff_rows:
+        view.add_item(EventPick(staff_rows[:SELECT_CAP], len(staff_rows)))
+    if staff:
+        view.add_item(SettingsButton())
+        view.add_item(LogsButton())
+    return embed, view
+
+
+def build_card(bot: Any, guild: Any, row: Any, actor: Any) -> tuple[discord.Embed, EventView]:
+    room = guild.get_channel(row["review_channel_id"]) if row["review_channel_id"] else None
+    embed = card_for(row)
+    override = card_footer_override(row["status"], room_resolves=room is not None)
+    if override:
+        embed.set_footer(text=override)
+    view = EventView(panel_minutes(bot.store, guild.id))
+    for spec in card_buttons(
+        row["status"],
+        may_cancel_here=may_cancel(bot.store, row, actor),
+        room_resolves=room is not None,
+    ):
+        view.add_item(CardMoveButton(row["id"], spec))
+    view.add_item(BackButton())
+    if room is not None:
+        view.add_item(
+            discord.ui.Button(
+                style=discord.ButtonStyle.link,
+                label=REVIEW_ROOM_BUTTON,
+                url=review_channel_url(guild.id, room.id),
+                row=1,
+            )
+        )
+    return embed, view
+
+
+def build_settings(bot: Any, guild: Any, health: Any = ()) -> tuple[discord.Embed, EventView]:
+    store = bot.store
+    embed = discord.Embed(
+        title=SETTINGS_TITLE,
+        description="\n".join(settings_lines(store, guild, health)),
+        colour=discord.Colour(COLOURS[PENDING]),
+    )
+    view = EventView(panel_minutes(store, guild.id))
+    view.add_item(ModeSelect(str(store.get(guild.id, "events_mode"))))
+    view.add_item(CategorySelect())
+    view.add_item(AnnounceSelect())
+    view.add_item(PingRoleSelect())
+    view.add_item(ScheduledButton(bool(store.get(guild.id, "events_create_scheduled"))))
+    view.add_item(NumbersButton())
+    view.add_item(ForgetButton())
+    page = site_page_url(origin_of(bot))
+    if page:
+        view.add_item(
+            discord.ui.Button(
+                style=discord.ButtonStyle.link, label=SITE_BUTTON, url=page, row=4
+            )
+        )
+    view.add_item(BackButton(row=4))
+    return embed, view
+
+
+def build_forget(bot: Any, guild: Any) -> tuple[discord.Embed, EventView]:
+    embed = discord.Embed(
+        title=SETTINGS_TITLE,
+        description="\n".join(settings_lines(bot.store, guild)),
+        colour=discord.Colour(COLOURS[PENDING]),
+    )
+    view = EventView(panel_minutes(bot.store, guild.id))
+    view.add_item(ForgetPick())
+    view.add_item(SettingsButton(row=1))
+    return embed, view
+
+
+async def render_panel(interaction: discord.Interaction, previous: Any = None) -> None:
+    embed, view = await build_panel(interaction.client, interaction.guild, interaction.user)
+    retire(previous)
+    view.message = await interaction.edit_original_response(embed=embed, view=view)
+
+
+async def render_settings(interaction: discord.Interaction, previous: Any = None) -> None:
+    cog = interaction.client.get_cog(COG_NAME)
+    health = cog.health_lines() if cog is not None else ()
+    embed, view = build_settings(interaction.client, interaction.guild, health)
+    retire(previous)
+    view.message = await interaction.edit_original_response(embed=embed, view=view)
+
+
+async def back_to_panel(interaction: discord.Interaction, previous: Any = None) -> None:
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    await render_panel(interaction, previous)
+
+
+async def open_settings(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await still_staff(interaction):
+        return
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    await render_settings(interaction, previous)
+
+
+async def open_forget(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await still_staff(interaction):
+        return
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    embed, view = build_forget(interaction.client, interaction.guild)
+    retire(previous)
+    view.message = await interaction.edit_original_response(embed=embed, view=view)
+
+
+async def change_settings(
+    interaction: discord.Interaction, changes: dict[str, Any], previous: Any = None
+) -> None:
+    """Every settings control lands here: one write per key, one log row, one re-render."""
+    if not await still_staff(interaction):
+        return
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    bot = interaction.client
+    changed = await write_settings(
+        bot.store, interaction.guild.id, interaction.user.id, changes
+    )
+    await render_settings(interaction, previous)
+    if changed:
+        await log_action(
+            bot, interaction.guild, "event.settings", actor=interaction.user, details=changed
+        )
+
+
+async def open_card(
+    interaction: discord.Interaction, event_id: int, previous: Any = None
+) -> None:
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    bot = interaction.client
+    row = await get_event(bot.db, event_id)
+    if row is None or row["guild_id"] != interaction.guild.id:
+        await interaction.followup.send(
+            NO_SUCH_EVENT, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+        )
+        return
+    embed, view = build_card(bot, interaction.guild, row, interaction.user)
+    retire(previous)
+    view.message = await interaction.edit_original_response(embed=embed, view=view)
+
+
+async def finish_card(
+    interaction: discord.Interaction,
+    event_id: int,
+    said: str,
+    fresh: Any,
+    previous: Any = None,
+) -> None:
+    bot = interaction.client
+    row = fresh if fresh is not None else await get_event(bot.db, event_id)
+    if row is None:
+        await render_panel(interaction, previous)
+    else:
+        embed, view = build_card(bot, interaction.guild, row, interaction.user)
+        retire(previous)
+        view.message = await interaction.edit_original_response(embed=embed, view=view)
+    await interaction.followup.send(
+        said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+async def run_move(
+    interaction: discord.Interaction, event_id: int, action: str, previous: Any = None
+) -> None:
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    said, fresh = await apply_decision(
+        interaction.client, interaction.guild, event_id, MOVE_TARGETS[action], interaction.user
+    )
+    await finish_card(interaction, event_id, said, fresh, previous)
+
+
+async def open_cancel_confirm(
+    interaction: discord.Interaction, event_id: int, previous: Any = None
+) -> None:
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    bot = interaction.client
+    row = await get_event(bot.db, event_id)
+    if row is None or row["guild_id"] != interaction.guild.id:
+        await render_panel(interaction, previous)
+        await interaction.followup.send(
+            NO_SUCH_EVENT, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+        )
+        return
+    if not may_cancel(bot.store, row, interaction.user):
+        await render_panel(interaction, previous)
+        await interaction.followup.send(
+            EVENT_ALREADY_DECIDED.format(event_id=event_id, status=row["status"]),
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        return
+    view = EventView(panel_minutes(bot.store, interaction.guild.id))
+    view.add_item(CancelYesButton(event_id))
+    view.add_item(CancelKeepButton())
+    retire(previous)
+    view.message = await interaction.edit_original_response(embed=card_for(row), view=view)
+
+
+async def confirm_cancel(
+    interaction: discord.Interaction, event_id: int, previous: Any = None
+) -> None:
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    bot = interaction.client
+    row = await get_event(bot.db, event_id)
+    if row is None:
+        await render_panel(interaction, previous)
+        return
+    said, _ = await cancel_for(bot, interaction.guild, row, interaction.user)
+    await render_panel(interaction, previous)
+    await interaction.followup.send(
+        said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+class ProposeButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label=PROPOSE_BUTTON, style=discord.ButtonStyle.primary, row=0)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        bot = interaction.client
+        if bot.store.get(interaction.guild.id, "events_mode") == "off":
+            await answer(interaction, EVENTS_OFF)
+            return
+        if not bot.db.is_connected:
+            await answer(interaction, DB_UNAVAILABLE)
+            return
+        tz_name = await get_timezone(bot.db, interaction.user.id)
+        await interaction.response.send_modal(EventModal(bot.get_cog(COG_NAME), tz_name))
+
+
+class ZoneButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label=ZONE_BUTTON, style=discord.ButtonStyle.secondary, row=0)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        bot = interaction.client
+        if not bot.db.is_connected:
+            await answer(interaction, DB_UNAVAILABLE)
+            return
+        zone_name, chosen = await stored_zone(bot.db, interaction.user.id)
+        await interaction.response.send_modal(
+            ZoneModal(bot.get_cog(COG_NAME), zone_name if chosen else "", self.view)
+        )
+
+
+class RefreshButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label="Refresh", style=discord.ButtonStyle.secondary, row=0)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await back_to_panel(interaction, self.view)
+
+
+class BackButton(discord.ui.Button):
+    def __init__(self, row: int = 1) -> None:
+        super().__init__(label="Back", style=discord.ButtonStyle.secondary, row=row)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await back_to_panel(interaction, self.view)
+
+
+class SettingsButton(discord.ui.Button):
+    def __init__(self, row: int = 3) -> None:
+        super().__init__(label=SETTINGS_BUTTON, style=discord.ButtonStyle.secondary, row=row)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_settings(interaction, self.view)
+
+
+class LogsButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label="Logs", style=discord.ButtonStyle.secondary, row=3)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await send_logs(interaction, "events")
+
+
+class NumbersButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label=NUMBERS_BUTTON, style=discord.ButtonStyle.secondary, row=4)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await still_staff(interaction):
+            return
+        store = interaction.client.store
+        await interaction.response.send_modal(
+            NumbersModal(
+                interaction.client.get_cog(COG_NAME),
+                store.get(interaction.guild.id, "events_channel_retention_days"),
+                store.get(interaction.guild.id, "events_max_late_minutes"),
+                self.view,
+            )
+        )
+
+
+class ForgetButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label=FORGET_BUTTON, style=discord.ButtonStyle.secondary, row=4)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_forget(interaction, self.view)
+
+
+class ScheduledButton(discord.ui.Button):
+    def __init__(self, on: bool) -> None:
+        super().__init__(
+            label=SCHEDULED_BUTTON.format(state="on" if on else "off"),
+            style=discord.ButtonStyle.success if on else discord.ButtonStyle.secondary,
+            row=4,
+        )
+        self.on = on
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await change_settings(
+            interaction, {"events_create_scheduled": not self.on}, self.view
+        )
+
+
+class ModeSelect(discord.ui.Select):
+    def __init__(self, current: str) -> None:
+        super().__init__(
+            placeholder=MODE_PLACEHOLDER,
+            options=[
+                discord.SelectOption(label=name, value=name, default=name == current)
+                for name in EVENTS_MODES
+            ],
+            min_values=1,
+            max_values=1,
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await change_settings(interaction, {"events_mode": self.values[0]}, self.view)
+
+
+class CategorySelect(discord.ui.ChannelSelect):
+    def __init__(self) -> None:
+        super().__init__(
+            placeholder=CATEGORY_PLACEHOLDER,
+            channel_types=[discord.ChannelType.category],
+            min_values=0,
+            max_values=1,
+            row=1,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        picked = self.values[0].id if self.values else None
+        await change_settings(interaction, {"events_category_id": picked}, self.view)
+
+
+class AnnounceSelect(discord.ui.ChannelSelect):
+    def __init__(self) -> None:
+        super().__init__(
+            placeholder=ANNOUNCE_PLACEHOLDER,
+            channel_types=[discord.ChannelType.text],
+            min_values=0,
+            max_values=1,
+            row=2,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        picked = self.values[0].id if self.values else None
+        await change_settings(interaction, {"events_announce_channel_id": picked}, self.view)
+
+
+class PingRoleSelect(discord.ui.RoleSelect):
+    def __init__(self) -> None:
+        super().__init__(placeholder=PING_PLACEHOLDER, min_values=0, max_values=1, row=3)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        picked = self.values[0].id if self.values else None
+        await change_settings(interaction, {"events_ping_role_id": picked}, self.view)
+
+
+class ForgetPick(discord.ui.Select):
+    def __init__(self) -> None:
+        super().__init__(
+            placeholder=FORGET_PLACEHOLDER,
+            options=[
+                discord.SelectOption(label=words, value=key) for key, words in FORGETTABLE
+            ],
+            min_values=0,
+            max_values=1,
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not self.values:
+            await answer(interaction, FORGOT_NOTHING)
+            return
+        await change_settings(interaction, {self.values[0]: None}, self.view)
+
+
+class EventPick(discord.ui.Select):
+    def __init__(self, rows: list[Any], total: int) -> None:
+        super().__init__(
+            placeholder=pick_placeholder(len(rows), total),
+            options=[
+                discord.SelectOption(label=option_label(row), value=str(row["id"]))
+                for row in rows
+            ],
+            min_values=1,
+            max_values=1,
+            row=2,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_card(interaction, int(self.values[0]), self.view)
+
+
+class CallOffPick(discord.ui.Select):
+    def __init__(self, rows: list[Any]) -> None:
+        super().__init__(
+            placeholder=CALL_ONE_OFF,
+            options=[
+                discord.SelectOption(label=option_label(row), value=str(row["id"]))
+                for row in rows[:SELECT_CAP]
+            ],
+            min_values=1,
+            max_values=1,
+            row=1,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_cancel_confirm(interaction, int(self.values[0]), self.view)
+
+
+class CancelYesButton(discord.ui.Button):
+    def __init__(self, event_id: int) -> None:
+        super().__init__(label="Yes, call it off", style=discord.ButtonStyle.danger, row=0)
+        self.event_id = event_id
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await confirm_cancel(interaction, self.event_id, self.view)
+
+
+class CancelKeepButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label="Keep it", style=discord.ButtonStyle.secondary, row=0)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await back_to_panel(interaction, self.view)
+
+
+class CardMoveButton(discord.ui.Button):
+    def __init__(self, event_id: int, spec: Any) -> None:
+        super().__init__(label=spec.label, style=BUTTON_STYLES[spec.style], row=0)
+        self.event_id = event_id
+        self.spec = spec
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await still_staff(interaction):
+            return
+        if self.spec.needs_modal:
+            await interaction.response.send_modal(
+                NoteModal(
+                    interaction.client.get_cog(COG_NAME),
+                    self.event_id,
+                    self.spec.action,
+                    self.view,
+                )
+            )
+            return
+        await run_move(interaction, self.event_id, self.spec.action, self.view)
+
+
+class NoteModal(PanelNoteModal):
+    def __init__(self, cog: Events, event_id: int, kind: str, previous: Any = None) -> None:
+        self.cog = cog
+        self.event_id = event_id
+        self.kind = kind
+        self.previous = previous
+        super().__init__(
+            title=NOTE_TITLES[kind],
+            label=NOTE_LABELS[kind],
+            max_length=NOTE_LIMITS[kind],
+            required=NOTE_REQUIRED[kind],
+            on_submit=self.note_submit,
+        )
+
+    async def note_submit(self, interaction: discord.Interaction, text: str) -> None:
+        await self.cog.note_submit(interaction, self.event_id, self.kind, text, self.previous)
+
+
+class ZoneModal(AnswersErrors, discord.ui.Modal, title=ZONE_MODAL_TITLE):
+    zone = discord.ui.TextInput(
+        label=ZONE_MODAL_LABEL, placeholder="America/Phoenix", max_length=ZONE_INPUT_LIMIT
+    )
+
+    def __init__(self, cog: Events, current: str = "", previous: Any = None) -> None:
+        super().__init__()
+        self.cog = cog
+        self.previous = previous
+        self.zone.default = current or None
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await self.cog.zone_submit(interaction, str(self.zone), self.previous)
+
+
+class NumbersModal(AnswersErrors, discord.ui.Modal, title=NUMBERS_MODAL_TITLE):
+    retention = discord.ui.TextInput(label=EVENT_NUMBERS_LABELS["retention"], max_length=6)
+    late = discord.ui.TextInput(label=EVENT_NUMBERS_LABELS["late"], max_length=6)
+
+    def __init__(
+        self, cog: Events, retention: Any = None, late: Any = None, previous: Any = None
+    ) -> None:
+        super().__init__()
+        self.cog = cog
+        self.previous = previous
+        self.retention.default = str(retention) if retention is not None else None
+        self.late.default = str(late) if late is not None else None
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await self.cog.numbers_submit(
+            interaction, str(self.retention), str(self.late), self.previous
+        )
+
+
 class DenyModal(AnswersErrors, discord.ui.Modal, title="Why not?"):
     reason = discord.ui.TextInput(
         label="One line the requester will be sent",
         style=discord.TextStyle.paragraph,
-        max_length=400,
+        max_length=DENY_LIMIT,
     )
 
     def __init__(self, event_id: int) -> None:
@@ -935,7 +798,7 @@ class DenyModal(AnswersErrors, discord.ui.Modal, title="Why not?"):
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
-        await decide(interaction, self.event_id, DENIED, clamp(self.reason, 400))
+        await decide(interaction, self.event_id, DENIED, clamp(self.reason, DENY_LIMIT))
 
 
 class DecisionButton(
@@ -964,7 +827,7 @@ class DecisionButton(
         wanted = APPROVED if self.action == "approve" else DENIED
         if not can_transition(row["status"], wanted):
             await interaction.response.send_message(
-                ALREADY_DECIDED.format(event_id=self.event_id, status=row["status"]),
+                EVENT_ALREADY_DECIDED.format(event_id=self.event_id, status=row["status"]),
                 ephemeral=True,
             )
             return
@@ -1017,11 +880,6 @@ class Events(commands.Cog):
         self.last_ok_at: dict[str, str | None] = {name: None for name in LOOP_NAMES}
         self.last_error: dict[str, str | None] = {name: None for name in LOOP_NAMES}
         self._missing_since: dict[int, str] = {}
-
-    event = app_commands.Group(name="event", description="Propose and run server events")
-    timezone = app_commands.Group(
-        name="timezone", description="The zone Black Bloc reads the times you type in"
-    )
 
     async def cog_load(self) -> None:
         self.bot.add_dynamic_items(DecisionButton)
@@ -1274,41 +1132,43 @@ class Events(commands.Cog):
         if row is not None and row["status"] in OPEN_STATUSES:
             await self._cancel(guild, row, "review_channel_deleted")
 
+    def health_lines(self) -> list[str]:
+        """Checklist 9: the loops report last success and last error, never `is_running`."""
+        lines = []
+        for name in LOOP_NAMES:
+            ok = self.last_ok_at[name] or "never yet"
+            broke = self.last_error[name]
+            trouble = f" · last error {broke}" if broke else " · no errors"
+            lines.append(f"**{name} loop** — last finished {ok}{trouble}")
+        return lines
+
     async def _database_ready(self, interaction: discord.Interaction) -> bool:
         if self.bot.db.is_connected:
             return True
         log.warning("events: refused a command — the database is not connected")
-        await interaction.response.send_message(DB_UNAVAILABLE, ephemeral=True)
+        await answer(interaction, DB_UNAVAILABLE)
         return False
 
     async def _ready(self, interaction: discord.Interaction) -> bool:
         if interaction.guild is None:
-            await interaction.response.send_message(GUILD_ONLY, ephemeral=True)
+            await answer(interaction, GUILD_ONLY)
             return False
         return await self._database_ready(interaction)
 
-    @event.command(name="logs", description="The last few events log lines")
-    @app_commands.describe(
-        count="How many lines, 1 to 50 (10 by default)",
-        important_only="True to leave out the dry runs and the housekeeping",
+    @app_commands.command(
+        name="event", description="Propose an event, or run the ones already on the go"
     )
-    async def event_logs(
-        self,
-        interaction: discord.Interaction,
-        count: app_commands.Range[int, LOGS_MIN, LOGS_MAX] = LOGS_DEFAULT,
-        important_only: bool = False,
-    ) -> None:
-        await send_logs(interaction, "events", count=count, important_only=important_only)
-
-    @event.command(name="create", description="Propose an event for the mods to review")
-    async def event_create(self, interaction: discord.Interaction) -> None:
+    async def event(self, interaction: discord.Interaction) -> None:
         if not await self._ready(interaction):
             return
-        if self.bot.store.get(interaction.guild.id, "events_mode") == "off":
-            await interaction.response.send_message(EVENTS_OFF, ephemeral=True)
-            return
-        tz_name = await get_timezone(self.bot.db, interaction.user.id)
-        await interaction.response.send_modal(EventModal(self, tz_name))
+        embed, view = await build_panel(self.bot, interaction.guild, interaction.user)
+        await interaction.response.send_message(
+            embed=embed,
+            view=view,
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        view.message = await interaction.original_response()
 
     async def submit(
         self,
@@ -1334,327 +1194,122 @@ class Events(commands.Cog):
         if fields is None:
             await answer(interaction, why)
             return
-        title, description, location = fields.title, fields.description, fields.location
-        starts, minutes = fields.starts, fields.minutes
-        guild = interaction.guild
-        category, where = events_category(self.bot, guild)
-        if where == "no_test_channel":
-            await answer(interaction, NO_TEST_CHANNEL)
-            return
-        if where == "no_category":
-            await answer(interaction, NO_CATEGORY)
-            return
-        if where == "not_a_category":
-            await answer(interaction, NOT_A_CATEGORY)
-            return
-        await interaction.response.defer(ephemeral=True)
-        event_id = await create_event(
-            self.bot.db,
-            guild.id,
-            interaction.user.id,
-            title=title,
-            description=description,
-            location=location,
-            starts_at=starts,
-            finishes_at=ends_at(starts, minutes),
-        )
-        row = await get_event(self.bot.db, event_id)
-        channel = await self._make_review_channel(interaction, guild, row)
-        if channel is None:
-            return
-        await set_review(self.bot.db, event_id, channel.id, None)
-        await log_action(
-            self.bot,
-            guild,
-            "event.created",
-            actor=interaction.user,
-            target=interaction.user,
-            details={"event_id": event_id, "title": title, "channel_id": channel.id},
-        )
-        row = await get_event(self.bot.db, event_id)
-        posted = await self._post_review_card(guild, row, channel)
-        if posted is None:
-            said = SUBMITTED_NO_CARD
-        elif posted == channel.id:
-            said = SUBMITTED_HERE
-        else:
-            said = SUBMITTED_TEST
-        await answer(
-            interaction,
-            SUBMITTED.format(title=title, where=said.format(channel=f"<#{channel.id}>")),
-        )
-        await dm(interaction.user, f"Submitted on **{guild.name}**.", card_for(row))
-
-    async def _make_review_channel(
-        self, interaction: discord.Interaction, guild: Any, row: Any
-    ) -> Any:
-        category, _ = events_category(self.bot, guild)
-        staff = self.bot.store.staff_roles(guild)
-        if not staff:
-            log.warning("events: no staff roles resolve, so %s is admin-only", row["id"])
-        try:
-            return await guild.create_text_channel(
-                channel_name(PENDING, interaction.user.display_name, row["title"]),
-                category=category,
-                overwrites=review_overwrites(
-                    guild, staff, getattr(guild, "me", None), interaction.user
-                ),
-                reason=f"Black Bloc event {row['id']}",
-            )
-        except NETWORK_ERRORS as exc:
-            log.warning("events: could not make a review channel for %s: %s", row["id"], exc)
-            await set_status(self.bot.db, row["id"], CANCELLED)
-            await log_action(
-                self.bot,
-                guild,
-                "event.channel_failed",
-                target=interaction.user,
-                details={"event_id": row["id"], "reason": f"{type(exc).__name__}: {exc}"},
-            )
-            await answer(interaction, CANNOT_CREATE)
-            return None
-
-    async def _post_review_card(self, guild: Any, row: Any, channel: Any) -> int | None:
-        """Where the card actually went, so the reply can say so."""
-        target = card_channel(self.bot, channel)
-        if target is None:
-            await log_action(
-                self.bot,
-                guild,
-                "event.would_post_card",
-                details={"event_id": row["id"], "channel_id": channel.id},
-            )
-            return None
-        try:
-            message = await target.send(
-                embed=card_for(row),
-                view=review_view(row["id"]),
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
-        except Exception as exc:
-            log.warning("events: could not post the card for %s: %s", row["id"], exc)
-            await log_action(
-                self.bot,
-                guild,
-                "event.card_failed",
-                details={"event_id": row["id"], "reason": f"{type(exc).__name__}: {exc}"},
-            )
-            return None
-        await set_review(self.bot.db, row["id"], channel.id, message.id, target.id)
-        return target.id
-
-    @event.command(name="list", description="Show the events waiting on a decision")
-    async def event_list(self, interaction: discord.Interaction) -> None:
-        if not await require_staff(interaction):
-            return
-        if not await self._database_ready(interaction):
-            return
-        guild = interaction.guild
-        rows = await events_by_status(self.bot.db, guild.id, OPEN_STATUSES)
-        staff = self.bot.store.staff_roles(guild)
-        lines = [f"**staff (who may approve)** — {staff_roles_sentence(staff)}"]
-        if not rows:
-            lines.append("Nothing is waiting — `/event create` proposes one.")
-        for row in rows:
-            starts = parse_ts(row["starts_at"])
-            where = f" · <#{row['review_channel_id']}>" if row["review_channel_id"] else ""
-            when = f"<t:{int(starts.timestamp())}:R>" if starts else "at an unreadable time"
-            lines.append(
-                f"**#{row['id']}** {clamp(row['title'], 60)} — {row['status']} · {when}"
-                f" · {describe_duration(duration_minutes(row))}{where}"
-            )
-        if not staff:
-            lines.append(NO_STAFF_WARNING)
-        await interaction.response.send_message(
-            "\n".join(lines), ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-        )
-
-    @event.command(name="cancel", description="Call off an event you proposed, or any as staff")
-    @app_commands.describe(event_id="The number `/event list` shows")
-    async def event_cancel(self, interaction: discord.Interaction, event_id: str) -> None:
         if not await self._ready(interaction):
             return
-        digits = event_id.strip().lstrip("#")
-        if not digits.isdigit():
-            await interaction.response.send_message(
-                NOT_AN_ID.format(given=clamp(event_id, 40)),
-                ephemeral=True,
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
-            return
-        guild = interaction.guild
-        row = await get_event(self.bot.db, int(digits))
-        if row is None or row["guild_id"] != guild.id:
-            await interaction.response.send_message(NO_SUCH_EVENT, ephemeral=True)
-            return
-        if row["requester_id"] != interaction.user.id and not self.bot.store.is_staff(
-            interaction.user
-        ):
-            await interaction.response.send_message(
-                NOT_YOURS.format(event_id=row["id"]), ephemeral=True
-            )
-            return
-        if row["status"] not in OPEN_STATUSES:
-            await interaction.response.send_message(
-                NOT_OPEN.format(event_id=row["id"], status=row["status"]), ephemeral=True
-            )
-            return
         await interaction.response.defer(ephemeral=True)
-        await self._cancel(
-            guild, row, f"cancelled_by_{interaction.user.id}", by=interaction.user.id
+        said, row = await submit_event(
+            self.bot, interaction.guild, interaction.user, fields, review_view=review_view
         )
-        fresh = await get_event(self.bot.db, row["id"])
-        if fresh["status"] != CANCELLED:
-            await answer(
-                interaction, NOT_OPEN.format(event_id=row["id"], status=fresh["status"])
-            )
+        if row is None:
+            await answer(interaction, said)
             return
-        member = guild.get_member(row["requester_id"])
-        await rename_channel(
-            self.bot,
-            guild,
-            fresh,
-            CANCELLED,
-            getattr(member, "display_name", str(row["requester_id"])),
-        )
-        await answer(interaction, CANCELLED_SAID.format(event_id=row["id"]))
+        await answer(interaction, f"{said} {when_line(fields.starts, tz_name)}")
+        await dm(interaction.user, f"Submitted on **{interaction.guild.name}**.", card_for(row))
 
-    @event.command(name="settings", description="Show or change how events are set up")
-    @app_commands.describe(
-        category="Where review channels are made",
-        announce_channel="Where approved events are announced",
-        ping_role="Role mentioned when an event is announced or starts",
-        create_scheduled="Make a real Discord scheduled event when one is approved",
-        retention_days="Days a finished event's channel is kept",
-        max_late_minutes="Minutes an event may start late and still be announced",
-        mode="off, shadow (no public announcement) or on",
-        clear_ping_role="Stop mentioning any role",
-        clear_category="Forget the category review channels are made in",
-        clear_announce_channel="Forget where approved events are announced",
-    )
-    @app_commands.choices(
-        mode=[app_commands.Choice(name=name, value=name) for name in EVENTS_MODES]
-    )
-    async def event_settings(
+    async def zone_submit(
+        self, interaction: discord.Interaction, given: str, previous: Any = None
+    ) -> None:
+        """What the time-zone modal does: store it or refuse, then re-render the panel."""
+        await interaction.response.defer()
+        if not await db_ready(interaction):
+            return
+        _, said = await store_zone(self.bot.db, interaction.user.id, given)
+        await render_panel(interaction, previous)
+        await interaction.followup.send(
+            said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+        )
+
+    async def note_submit(
         self,
         interaction: discord.Interaction,
-        category: discord.CategoryChannel | None = None,
-        announce_channel: discord.TextChannel | None = None,
-        ping_role: discord.Role | None = None,
-        create_scheduled: bool | None = None,
-        retention_days: (
-            app_commands.Range[int, EVENTS_RETENTION_MIN_DAYS, EVENTS_RETENTION_MAX_DAYS] | None
-        ) = None,
-        max_late_minutes: app_commands.Range[int, 0, EVENTS_LATE_CEILING_MINUTES] | None = None,
-        mode: app_commands.Choice[str] | None = None,
-        clear_ping_role: bool = False,
-        clear_category: bool = False,
-        clear_announce_channel: bool = False,
+        event_id: int,
+        kind: str,
+        text: str,
+        previous: Any = None,
     ) -> None:
-        if not await require_staff(interaction):
+        """What Deny and Call it off both do once their one line is in."""
+        if not await still_staff(interaction):
             return
-        if not await self._database_ready(interaction):
+        await interaction.response.defer()
+        if not await db_ready(interaction):
             return
-        guild = interaction.guild
-        store = self.bot.store
-        changed: dict[str, Any] = {}
-        for key, value in (
-            ("events_category_id", category),
-            ("events_announce_channel_id", announce_channel),
-            ("events_ping_role_id", ping_role),
-            ("events_create_scheduled", create_scheduled),
-            ("events_channel_retention_days", retention_days),
-            ("events_max_late_minutes", max_late_minutes),
-            ("events_mode", mode.value if mode is not None else None),
-        ):
-            if value is not None:
-                changed[key] = await store.set(guild.id, key, value, by=interaction.user.id)
-        for wanted, key in (
-            (clear_ping_role, "events_ping_role_id"),
-            (clear_category, "events_category_id"),
-            (clear_announce_channel, "events_announce_channel_id"),
-        ):
-            if wanted:
-                await store.clear(guild.id, key)
-                changed[key] = None
-        category_id = store.get(guild.id, "events_category_id")
-        announce_id = store.get(guild.id, "events_announce_channel_id")
-        role_id = store.get(guild.id, "events_ping_role_id")
-        lines = [
-            f"**mode** — {store.get(guild.id, 'events_mode')}",
-            "**category** — " + (f"<#{category_id}>" if category_id else "not set"),
-            "**announce channel** — " + (f"<#{announce_id}>" if announce_id else "not set"),
-            "**ping role** — " + (f"<@&{role_id}>" if role_id else "nobody"),
-            f"**scheduled events** — {store.get(guild.id, 'events_create_scheduled')}",
-            f"**channels kept** — {store.get(guild.id, 'events_channel_retention_days')} day(s)",
-            f"**announced up to** — {store.get(guild.id, 'events_max_late_minutes')} minute(s) "
-            "after it should have started",
-            f"**staff (who may approve)** — "
-            f"{staff_roles_sentence(store.staff_roles(guild))}",
-            *self._health_lines(),
-        ]
-        await interaction.response.send_message(
-            "\n".join(lines), ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-        )
-        if changed:
-            await log_action(
-                self.bot,
-                guild,
-                "event.settings",
-                actor=interaction.user,
-                details=changed,
+        if kind == "deny":
+            said, fresh = await apply_decision(
+                self.bot, interaction.guild, event_id, DENIED, interaction.user, text
             )
-
-    def _health_lines(self) -> list[str]:
-        """Checklist 9: the loops report last success and last error, never `is_running`."""
-        lines = []
-        for name in LOOP_NAMES:
-            ok = self.last_ok_at[name] or "never yet"
-            broke = self.last_error[name]
-            trouble = f" · last error {broke}" if broke else " · no errors"
-            lines.append(f"**{name} loop** — last finished {ok}{trouble}")
-        return lines
-
-    async def _suggest_timezones(
-        self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[str]]:
-        return [app_commands.Choice(name=name, value=name) for name in suggest(current)][
-            :CHOICE_LIMIT
-        ]
-
-    @timezone.command(name="set", description="Tell Black Bloc which time zone you are in")
-    @app_commands.describe(tz="Start typing a city — Phoenix, London, Tokyo")
-    @app_commands.autocomplete(tz=_suggest_timezones)
-    async def timezone_set(self, interaction: discord.Interaction, tz: str) -> None:
-        if not await self._database_ready(interaction):
+            await finish_card(interaction, event_id, said, fresh, previous)
             return
-        name = tz.strip()
-        if not is_known(name):
-            await interaction.response.send_message(
-                UNKNOWN_TZ.format(given=clamp(name, 60)),
-                ephemeral=True,
-                allowed_mentions=discord.AllowedMentions.none(),
+        row = await get_event(self.bot.db, event_id)
+        if row is None:
+            await render_panel(interaction, previous)
+            await interaction.followup.send(
+                NO_SUCH_EVENT, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
             )
             return
-        await set_timezone(self.bot.db, interaction.user.id, name)
-        await interaction.response.send_message(
-            TZ_SET.format(tz=name, now=local_time(name)),
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
+        said, fresh = await cancel_for(
+            self.bot, interaction.guild, row, interaction.user, note=text or None
         )
+        await finish_card(interaction, event_id, said, fresh, previous)
 
-    @timezone.command(name="show", description="Show which time zone Black Bloc has for you")
-    async def timezone_show(self, interaction: discord.Interaction) -> None:
-        if not await self._database_ready(interaction):
+    async def numbers_submit(
+        self,
+        interaction: discord.Interaction,
+        retention: str,
+        late: str,
+        previous: Any = None,
+    ) -> None:
+        """The two numbers `/event settings` clamped, clamped by the same bounds."""
+        if not await still_staff(interaction):
             return
-        chosen = await stored_timezone(self.bot.db, interaction.user.id)
-        name = chosen or DEFAULT_TZ
-        await interaction.response.send_message(
-            (TZ_SHOW if chosen else TZ_SHOW_DEFAULT).format(tz=name, now=local_time(name)),
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
+        changes, why = checked_numbers(retention, late)
+        if changes is None:
+            await answer(interaction, why)
+            return
+        await change_settings(interaction, changes, previous)
 
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(Events(bot))
+
+
+__all__ = [
+    "BackButton",
+    "CallOffPick",
+    "CancelKeepButton",
+    "CancelYesButton",
+    "CardMoveButton",
+    "DecisionButton",
+    "DenyModal",
+    "EventModal",
+    "EventPick",
+    "EventView",
+    "Events",
+    "ForgetPick",
+    "LogsButton",
+    "ModeSelect",
+    "NoteModal",
+    "NumbersModal",
+    "ProposeButton",
+    "RefreshButton",
+    "SettingsButton",
+    "ZoneButton",
+    "ZoneModal",
+    "back_to_panel",
+    "build_card",
+    "build_panel",
+    "build_settings",
+    "change_settings",
+    "close_card",
+    "confirm_cancel",
+    "decide",
+    "decision_context",
+    "decision_id",
+    "finish_card",
+    "open_card",
+    "open_cancel_confirm",
+    "open_settings",
+    "render_panel",
+    "render_settings",
+    "review_view",
+    "run_move",
+]

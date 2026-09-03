@@ -16,11 +16,10 @@ from black_bloc.chat_data import (
     wanted_time,
 )
 from black_bloc.cogs.community.birthdays import save_birthday
-from black_bloc.cogs.community.events import create_event, set_status
 from black_bloc.cogs.community.role_menus import add_option, create_menu, get_menu
 from black_bloc.cogs.content.golive import set_link, start_session
 from black_bloc.config import load_settings
-from black_bloc.events import APPROVED
+from black_bloc.events import APPROVED, create_event, set_status
 from black_bloc.golive import StreamInfo
 from black_bloc.settings_store import SettingsStore
 from black_bloc.storage.db import Database

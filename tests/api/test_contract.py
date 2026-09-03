@@ -17,7 +17,6 @@ from black_bloc.chat_memory import Note as MemoryNote
 from black_bloc.chat_memory import Profile as MemoryProfile
 from black_bloc.chat_memory import save_profile
 from black_bloc.cogs.community.birthdays import save_birthday
-from black_bloc.cogs.community.events import create_event
 from black_bloc.cogs.community.polls import add_options as add_poll_options
 from black_bloc.cogs.community.polls import (
     create_poll,
@@ -35,6 +34,7 @@ from black_bloc.cogs.content.youtube import YouTube
 from black_bloc.cogs.content.youtube import set_link as set_youtube_link
 from black_bloc.cogs.moderation.honeypot import record_hit
 from black_bloc.cogs.moderation.modmail import add_message, create_ticket, set_ticket_place
+from black_bloc.events import create_event
 from black_bloc.golive import StreamInfo
 from black_bloc.llm import ANTHROPIC, GROQ, Usage
 from black_bloc.llm import MODEL as HAIKU

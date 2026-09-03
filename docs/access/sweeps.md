@@ -1,18 +1,24 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-03** — rows **87–93** added by the birthdays panel build (`/birthday` is ONE
+> **2026-09-03** — rows **73–79** added by the EVENTS PANEL build (`/event` becomes one command
+> that opens a panel and the whole `/timezone` group is retired — the program's first real
+> `commands synced` drop, 44 → 43). ⚠️ Rows 73–79 are **BUILT on `feat/events-panel`, not merged,
+> not deployed**, and not one of them has been run against Discord (this build cannot reach it);
+> row 79's empty-select half is the one item the build could not check at all. Rows 32 and 48 and
+> the Phase 4 appendix script below were rewritten in place for the same build. The file now holds
+> **79** un-exercised rows. 
+> Same day, earlier — rows **87–93** added by the birthdays panel build (`/birthday` is ONE
 > command that opens a panel; the twelve subcommands are retired). On that branch the file
 > holds **79** un-exercised rows, numbered to 93; rows **73–86** are reserved by the events
 > (73–79) and polls (80–86) builds running in parallel and are not in this branch. The
 > Phase 5 prose block above was replaced by rows 87–93 — it named six subcommands that no
-> longer exist plus `/birthday import`, deleted 2026-08-27. ⚠️ Rows 87–93 are **BUILT, not
-> yet live**, and none has been run against Discord (this build cannot reach it).
+> longer exist plus `/birthday import`, deleted 2026-08-27. Rows 87–93 are **live in v63** and none has been run by eye yet.
 > Before that — rows **69–72** added by the applications no-role build (a form may keep a
 > LIST instead of handing a role over; merged `main` at 12:40, LIVE in v62 12:48); rows **66–68**
 > added by the requests SIXTH pass ("Ask them to check": the DM, the channel ping when their
 > DMs are closed, and the auto-ask at ready) — LIVE in v61 (`44170f4`, 12:29). The file now holds
-> **72** un-exercised rows; none of 66–72 has been run against Discord or the live site.
+> **79** un-exercised rows; none of 66–79 has been run against Discord or the live site.
 > Same day — row **62** now says the done card does NOT post (owner: "suppress the
 > request.done box in discord" — `request_channel_moves` default drops `done`). Same
 > morning, row **65** added, and rows **14–15** corrected again, by the owner's
@@ -76,7 +82,7 @@ All of this happens in **`#mute-me-bot-test-spam`** (test mode) or on **https://
 | 29 | Ctrl+K palette (R2) | press **Ctrl K** on any page, type `birthday_role`, Enter; then Ctrl K → type `theme: cyber` | lands on Settings with the row flashed ember; the theme switches instantly; the palette also finds pages and actions (sign out, show keys) |
 | 30 | Show keys + Cases drawer (R2) | Settings → **Show keys** top-right, toggle + reload; Moderation → click a case row | keys hidden by default, toggle remembered per browser; the case opens in a right-hand drawer, Esc closes; note the table toolbars and "Showing 1–N of M" feet on Logs/Members/Cases/Polls/Requests |
 | 31 | Live role survives a repoint (live 2026-09-01) | set `golive_live_role_id`, go live, CHANGE the setting to a different role mid-stream, stop | the **first** role comes off (not the new one); `/golive logs` shows `remove_role` with the original id |
-| 32 | Requester in their review channel (live 2026-09-01) | `/event create` (in the test channel while TEST_MODE) | the reply says the pending channel is yours to post in; you can see + type in `pending-<you>-<title>`, and still can after Approve renames it |
+| 32 | Requester in their review channel (live 2026-09-01) | `/event` → **Propose an event** (in the test channel while TEST_MODE; was `/event create` before 2026-09-03) | the reply says the pending channel is yours to post in; you can see + type in `pending-<you>-<title>`, and still can after Approve renames it |
 | 33 | Chat LLM — before/after the switch (Phase 14, live 2026-09-01, OFF) | `/chat status` now (expect "off", tiers named as not ready); after you set both keys + flip `chat_llm_mode on`: `/chat status` again, then `@Black Bloc what do you make of all this then` | a real in-voice answer instead of "Not sure I follow"; `/chat status` shows answers today 1 and the month above $0.00 — **the first real cost figure anyone will have seen** |
 | 34 | Knowledge grounding (Phase 14) | `/chat knowledge add title:Cookout hours body:The cookout runs Friday evenings.` → `@Black Bloc when is the cookout?`; `/chat knowledge list`; try `remove` on a server-written note | the answer quotes your note; the list shows yours + the server-written ones once the daily loop runs; removing a server note refuses in words |
 | 36 | The chat-hardening wave (live 2026-09-01 19:01) | the 6-line list Claude posted in chat (role lookups, member-trust, hidden commands from a non-staff account, DBZ retest, Groq routing via `/chat status`, event-hosting answer) | each line names its expected answer; `/chat logs` shows `chat.reply_reference_fixed` when the guard catches an invention |
@@ -91,7 +97,7 @@ All of this happens in **`#mute-me-bot-test-spam`** (test mode) or on **https://
 | 45 | YouTube uploads — Shorts and live streams | publish a Short; separately, start a YouTube live stream | the Short is skipped with `youtube.skipped reason=short` (turn `youtube_announce_shorts` on and the next one posts); a live stream is skipped only while Discord shows you live on YouTube — see **KI-11**, that is the gap `YOUTUBE_API_KEY` would close |
 | 46 | YouTube uploads — the dashboard | Dashboard → Go-live → **YouTube uploads** | the sweep card says running with a last-good time; the links table shows who is linked and whether their feed has answered yet; Recent uploads colours each row announced / would / skipped; Unlink asks first; **Upload settings** and **Upload logs** sit under it |
 | 47 | YouTube uploads — the staff paths | `/uploads setup channel:#somewhere ping_role:@…`, `/uploads link-for @member <channel>`, `/uploads list` | setup names where posts will go; link-for counts their history the same way; list shows the mode, the channel, the sweep health and **api key — not set (feed only)** |
-| 48 | Raid trains — build one (F19, `raidtrain_mode` ships **off**) | `/raidtrains mode on` (or Events page → Raid train settings), then `/raidtrain create` — title, what it is, `2026-09-14 19:30`, 60, 4 | the form is read in YOUR `/timezone`; the reply names where the lineup went; in the test channel a lineup post appears with four `open` rows and a thread under it. ⚠️ In TEST_MODE the post only lands if `raidtrain_channel_id` is the test channel — otherwise `/raidtrains logs` has one `raidtrain.post_skipped_test_mode` line and nothing is posted |
+| 48 | Raid trains — build one (F19, `raidtrain_mode` ships **off**) | `/raidtrains mode on` (or Events page → Raid train settings), then `/raidtrain create` — title, what it is, `2026-09-14 19:30`, 60, 4 | the form is read in YOUR stored zone (set it with **My time zone** on `/event`; `/timezone` was retired 2026-09-03); the reply names where the lineup went; in the test channel a lineup post appears with four `open` rows and a thread under it. ⚠️ In TEST_MODE the post only lands if `raidtrain_channel_id` is the test channel — otherwise `/raidtrains logs` has one `raidtrain.post_skipped_test_mode` line and nothing is posted |
 | 49 | Raid trains — claim, release, the cap | `/raidtrain list`, then `/raidtrain claim` with no slot; try `/raidtrain claim` a second time; `/raidtrain mine`; `/raidtrain release` | the first claim takes slot **#1** and the lineup post EDITS itself (no second message); the second refuses in words naming `raidtrain_max_slots_per_member`; `mine` shows the hour in your own clock; release opens it again. From an account with no `/twitch link`, claim refuses and names `/twitch link` |
 | 50 | Raid trains — the reminder DM | claim a slot that starts **inside the next 30 minutes** (make a train starting ~35 min out), then wait one sweep (5 min) | ⚠️ **a DM, not a channel post** — it names your slot time, who raids INTO you and who you raid NEXT, with their twitch.tv links, plus a jump link to the lineup. Exactly once, ever. `/raidtrains logs` has one `raidtrain.remind`; in `shadow` it is `raidtrain.would_remind` and no DM |
 | 51 | Raid trains — the train moves | with a train running (`live`) and `raidtrain_live_posts` on: have a slot holder actually go live on Twitch | within one sweep the slot gets a ✅ on the lineup and a line lands in the train's thread: "**login** is live — next up **login** at …". ⚠️ It sees only what go-live sees — a hidden presence with no Twitch link is never noticed (**KI-16**) |
@@ -133,15 +139,17 @@ form for a full pass.
   runner-status @someone` (staff picker) → `/rolemenu post event-alerts` shows the
   real `:JoyGAMING:` emoji only if you delete and re-seed that menu (the seed never
   rewrites existing options).
-- **Phase 4 (live):** `/timezone set America/Phoenix` (autocomplete; expect the current
-  local time back) → `/event create` (modal, 5 fields; start `YYYY-MM-DD HH:MM` about
+- **Phase 4 (live; rewritten 2026-09-03 for the panel — every subcommand below is gone):**
+  `/event` → **My time zone** → type `America/Phoenix` (expect the current local time
+  back) → **Propose an event** (the same modal, 5 fields; start `YYYY-MM-DD HH:MM` about
   3 minutes ahead, duration `30m`) → expect a `pending-<you>-<title>` channel INSIDE
   the test category and the review card posted in the test channel with Approve/Deny
   → click Approve: channel renamed `approved-…`, announcement in the test channel,
   `event.would_create_scheduled` in the log (no real scheduled event in test mode),
   DM to you → wait for start: "starting now" post; after the end: `done-…`. Create
-  a second one and Deny it with a reason: `denied-…` + DM. `/event list`, `/event
-  settings` (shows loop health), `/event cancel <id>`.
+  a second one and Deny it with a reason from the panel's **Pick an event…** →
+  **Deny**: `denied-…` + DM. The staff panel's list, **Settings** (shows loop health)
+  and **Call it off** replace `/event list`, `/event settings` and `/event cancel`.
 - **Phase 5 (live, mode `shadow`):** superseded by rows **87–93** below — `/birthday`
   is one panel now and every subcommand this block named is retired. The sweep the
   wishes themselves still get is: set your own birthday to today on the panel → within
@@ -203,7 +211,15 @@ form for a full pass.
 | 71 | The roster, and Copy as text | on the Role menus page open **Approved for <form>** under that form | one row per approved member: their name, **twitch.tv/<login>** as a link (or a quiet "not linked"), how long since staff said yes, and who decided. Somebody who has left the server is still listed with "left the server" beside them — `/settings set-value key:applications_roster_shows_left value:false` hides them instead. **Copy as text** puts one line per member on the clipboard, ready to paste into the official team page |
 | 72 | Taking somebody off the list | on the roster press **Take off the list**, type a reason, confirm. (In Discord: `/applications show <id>` on an approved application — the same **Take off the list** button is on the panel) | they are DMed the reason and when they may apply again; the Decided table shows the row as **removed**; the roster is one shorter; `/applications list form:<name> status:approved` no longer names them. On a form that DOES hand a role over the button is not offered at all, and the route refuses in words pointing at `/role revoke` |
 
-### Birthdays — `/birthday` is ONE panel (wave 1). ⚠️ On the branch `worktree-agent-a19bdce15408f8243`; not merged, not deployed.
+| 73 | Events — the panel, member (`/timezone` is GONE) | `/event` as a non-staff member | ONE ephemeral panel: the intro, **your time zone line** (the old `/timezone show`, word for word), and the row **Propose an event · My time zone · Refresh · Open on the site**. **NO list of events** — `event_panel_own_list` ships off, exactly like requests. `/timezone` no longer exists in the command list at all |
+| 74 | Events — setting your zone from the panel | **My time zone** → type `America/Phoenix`; open it again and type `Phoenix`; then type `nonsense` | the first saves and the panel re-renders with the local time; `Phoenix` on its own is refused in words and **suggests `America/Phoenix`** ("Did you mean…"), which is more help than the old autocomplete gave; `nonsense` is refused with no guess. Nothing is saved by either refusal. ⚠️ The box is a plain modal, not a picker — Discord caps a select at 25 options and this machine knows 598 zones |
+| 75 | Events — proposing one | **Propose an event** | the same five-field modal `/event create` opened, unchanged. The reply now shows **both readings of the time you typed** — "7:00 PM your time (America/Phoenix) · `<t:…:F>`" — so you can see what the bot understood and what everybody else's client will render. A `pending-<you>-<title>` channel and its Approve/Deny card as before |
+| 76 | Events — the panel, staff | `/event` as a Lead | the member panel **plus** a counts line (`N pending · N approved · N live`), the open events written out with who may approve, a **Pick an event…** select (capped at 25 — past that the placeholder says "25 of N — the rest are on the site"), **Settings** and **Logs**. Press **Logs**: it answers a **NEW** message and the panel stays where it is |
+| 77 | Events — deciding from the panel | **Pick an event…** → a `pending` one → **Approve**; pick another → **Deny** and type a reason | the card re-renders approved/denied in place, the requester is DMed, the review channel renames — identical to pressing the buttons on the review card, because it is the same `apply_decision`. A `denied` card then offers **Approve after all** (staff always get the final say) while its review room still exists; once the room has been swept the card says so in words instead |
+| 78 | Events — calling one off, both doors | on the staff card press **Call it off** and type a line; separately, as the member who proposed one, use **Call one off…** on your own panel | staff: the note is **optional** (dismiss the box and it still goes off) and whatever you type is appended to the requester's DM. Member: a plain **Yes, call it off / Keep it** confirm and no DM to yourself. Either way the event is cancelled, the channel renamed and an already-posted announcement edited |
+| 79 | Events — settings without a subcommand | **Settings** on the staff panel | one sub-panel: a **mode** select, a category picker, an announce-channel picker, a ping-role picker, **Scheduled events: on/off**, **Numbers…** (retention days + how late is still announceable, refused in words when outside their bounds), **Forget…** and **Back**. The lines above update after every write and `/event logs` shows one `event.settings` row per press. ⚠️ **Try clearing a picker by submitting it EMPTY** — that is the one thing this build could not check without Discord; if your client will not send an empty select, **Forget…** does the same job and the write path is identical |
+
+### Birthdays — `/birthday` is ONE panel (wave 1). Live in v63 (`616adb3`, 2026-09-03).
 
 | # | What | Do this | Expect |
 |---|---|---|---|

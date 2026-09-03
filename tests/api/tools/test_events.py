@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from black_bloc.cogs.community.events import create_event, get_event
+from black_bloc.events import create_event, get_event
 
 ROUTES = [
     ("GET", "/api/events", None),

@@ -6,24 +6,22 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
-from ...cogs.community.events import (
-    apply_decision,
-    cancel_event,
-    checked_fields,
-    duration_minutes,
-    events_by_status,
-    get_event,
-    rename_channel,
-    update_event,
-)
 from ...events import (
     APPROVED,
     DENIED,
     PENDING,
     STATUSES,
+    apply_decision,
+    cancel_for,
+    checked_fields,
     clamp,
     describe_duration,
+    duration_minutes,
     ends_at,
+    events_by_status,
+    get_event,
+    rename_channel,
+    update_event,
 )
 from ...logkinds import VIA_WEBSITE
 from ...timezones import get_timezone, is_known
@@ -223,15 +221,15 @@ def build_router(bot: Any) -> APIRouter:
         require_db(bot)
         row = await wanted_event(bot, guild, event_id)
         reason = clamp((payload or {}).get("reason"), REASON_LIMIT) or "staff"
-        if not await cancel_event(
-            bot, guild, row, reason, by=int(who["id"]), via=VIA_WEBSITE
-        ):
+        _, fresh = await cancel_for(
+            bot, guild, row, int(who["id"]), reason=reason, via=VIA_WEBSITE
+        )
+        if fresh is None:
             raise Refused(
                 409,
                 "not_cancellable",
                 NOT_CANCELLABLE.format(event_id=event_id, status=row["status"]),
             )
-        fresh = await wanted_event(bot, guild, event_id)
         return {"event": event_row(guild, fresh), "message": "Cancelled."}
 
     return router

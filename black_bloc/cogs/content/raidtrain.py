@@ -796,7 +796,7 @@ class RaidTrains(commands.Cog):
         scheduled_id = _row(train, "scheduled_event_id")
         if not scheduled_id or getattr(self.bot, "guard", None) is not None:
             return
-        from ..community.events import find_scheduled_event
+        from ...events import find_scheduled_event
 
         try:
             found = await find_scheduled_event(guild, int(scheduled_id))

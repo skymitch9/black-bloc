@@ -173,7 +173,9 @@ black_bloc/
 │   ├── community/    ← one cog per community feature
 │   │   ├── role_menus.py  ← F16: /rolemenu + persistent select panels + staff assign + approvals
 │   │   ├── tempvoice.py   ← F8: join-to-create voice channels, the owner control panel, /voice
-│   │   ├── events.py      ← F4/F5: /event + /timezone, review channels, Approve/Deny, go-live
+│   │   ├── events.py      ← F4/F5: /event — ONE command, one panel (the `timezone` group is
+│   │   │                    retired); review channels, Approve/Deny, go-live. The shared DB
+│   │   │                    and move layer lives in `black_bloc/events.py`, not here
 │   │   ├── birthdays.py   ← F6: the five-minute sweep, the /birthday panel, the day role, the daily import
 │   │   ├── polls.py       ← F15: /poll on native Discord polls + Black Bloc's own panel, /poll recur
 │   │   └── requests.py    ← F18: /request, the member intake, the pending-features board

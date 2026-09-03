@@ -97,19 +97,19 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.application.question_changed",
         "web.application.panel_posted",
     ),
-    "black_bloc/cogs/community/events.py::f'event.{kind}'": (
+    "black_bloc/events.py::f'event.{kind}'": (
         "event.announce",
         "event.go_live",
     ),
-    "black_bloc/cogs/community/events.py::f'event.would_{kind}'": (
+    "black_bloc/events.py::f'event.would_{kind}'": (
         "event.would_announce",
         "event.would_go_live",
     ),
-    "black_bloc/cogs/community/events.py::f'event.{kind}_failed'": (
+    "black_bloc/events.py::f'event.{kind}_failed'": (
         "event.announce_failed",
         "event.go_live_failed",
     ),
-    "black_bloc/cogs/community/events.py::f'event.{status}'": (
+    "black_bloc/events.py::f'event.{status}'": (
         "event.approved",
         "event.denied",
         "web.event.approved",

@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -11,6 +12,7 @@ from black_bloc.events import (
     DONE,
     LIVE,
     MAX_DURATION_MINUTES,
+    MOVE_TARGETS,
     OPEN_STATUSES,
     PENDING,
     STATUSES,
@@ -21,16 +23,33 @@ from black_bloc.events import (
     announce_text,
     build_card,
     can_transition,
+    card_buttons,
+    card_footer_override,
     channel_name,
+    checked_numbers,
     clamp,
+    counts_line,
+    counts_of,
     describe_duration,
     ends_at,
+    event_line,
     golive_text,
     is_due,
+    list_lines,
+    may_cancel,
     mentions,
+    option_label,
     parse_duration,
+    pick_placeholder,
+    review_channel_url,
+    settings_lines,
+    site_page_url,
     slugify,
     start_error,
+    wanted_event_id,
+    when_line,
+    write_settings,
+    zone_line,
 )
 from black_bloc.timezones import START_EXAMPLE, unix
 
@@ -97,7 +116,7 @@ def test_the_status_machine_refuses_the_moves_that_would_lose_a_decision():
     assert can_transition(PENDING, DENIED) is True
     assert can_transition(APPROVED, LIVE) is True
     assert can_transition(LIVE, DONE) is True
-    assert can_transition(DENIED, APPROVED) is False
+    assert can_transition(DENIED, APPROVED) is True
     assert can_transition(DONE, LIVE) is False
     assert can_transition(CANCELLED, APPROVED) is False
     assert can_transition(APPROVED, DENIED) is False
@@ -225,7 +244,7 @@ def test_the_start_refusal_shows_an_example_and_names_the_zone():
     said = start_error("next tuesday", "America/Phoenix", START_EXAMPLE)
     assert "next tuesday" in said
     assert START_EXAMPLE in said and "America/Phoenix" in said
-    assert "/timezone set" in said
+    assert "My time zone" in said
 
 
 def test_clamp_trims_and_cuts():
@@ -258,6 +277,235 @@ def test_the_statuses_a_finished_channel_sweep_covers_are_the_settled_ones():
 
 
 def test_the_terminal_statuses_are_exactly_the_ones_nothing_leaves():
-    assert set(TERMINAL_STATUSES) == {DENIED, DONE, CANCELLED}
+    assert set(TERMINAL_STATUSES) == {DONE, CANCELLED}
     for status in TERMINAL_STATUSES:
         assert TRANSITIONS[status] == ()
+
+
+# --- the panel's own pure layer (wave 1) -------------------------------------------------------
+
+
+class FakeRow(dict):
+    """A stored event as sqlite3.Row hands it over: subscriptable by column name."""
+
+
+def a_row(**fields):
+    starts = fields.pop("starts", WHEN)
+    row = {
+        "id": 1,
+        "guild_id": 7,
+        "requester_id": 900,
+        "title": "Block Party",
+        "description": None,
+        "location": "the park",
+        "starts_at": starts.isoformat(),
+        "ends_at": (starts + timedelta(minutes=90)).isoformat(),
+        "status": PENDING,
+        "deny_reason": None,
+        "review_channel_id": None,
+        "review_message_id": None,
+        "card_channel_id": None,
+        "announce_message_id": None,
+        "scheduled_event_id": None,
+        "created_at": starts.isoformat(),
+    }
+    row.update(fields)
+    return FakeRow(row)
+
+
+class FakeStore:
+    def __init__(self, staff_ids=(), values=None):
+        self.staff_ids = set(staff_ids)
+        self.values = dict(values or {})
+        self.written = []
+        self.cleared = []
+
+    def is_staff(self, actor):
+        return getattr(actor, "id", actor) in self.staff_ids
+
+    def get(self, guild_id, key):
+        return self.values.get(key)
+
+    async def set(self, guild_id, key, value, by=None):
+        self.values[key] = value
+        self.written.append((key, value, by))
+        return value
+
+    async def clear(self, guild_id, key):
+        self.values.pop(key, None)
+        self.cleared.append(key)
+
+    def staff_roles(self, guild):
+        return []
+
+
+class FakeActor:
+    def __init__(self, user_id):
+        self.id = user_id
+
+
+def test_the_card_table_only_ever_offers_a_move_the_state_machine_allows():
+    """§C is data, and the data is checked against TRANSITIONS rather than trusted."""
+    for status in STATUSES:
+        for move in card_buttons(status):
+            assert MOVE_TARGETS[move.action] in TRANSITIONS[status], (status, move)
+
+
+def test_every_status_that_can_still_move_renders_at_least_one_button():
+    for status in STATUSES:
+        if TRANSITIONS[status]:
+            assert card_buttons(status), status
+        else:
+            assert card_buttons(status) == ()
+
+
+def test_no_state_is_one_staff_cannot_leave_while_it_is_still_open():
+    """The owner's staff-final-say rule: Call it off renders in every non-terminal state."""
+    for status in OPEN_STATUSES:
+        assert any(move.action == "cancel" for move in card_buttons(status)), status
+
+
+def test_a_denied_event_can_be_approved_after_all_while_its_room_is_still_there():
+    assert [one.label for one in card_buttons(DENIED)] == ["Approve after all"]
+    assert card_buttons(DENIED, room_resolves=False) == ()
+    assert "cleaned up" in card_footer_override(DENIED, room_resolves=False)
+    assert card_footer_override(DENIED) is None
+
+
+def test_a_finished_card_says_so_in_its_footer_rather_than_showing_nothing():
+    assert "nothing moves it now" in card_footer_override(DONE)
+    assert "nothing moves it now" in card_footer_override(CANCELLED)
+    assert card_footer_override(PENDING) is None
+
+
+def test_a_card_drops_call_it_off_for_somebody_who_may_not():
+    labels = [one.label for one in card_buttons(PENDING, may_cancel_here=False)]
+
+    assert labels == ["Approve", "Deny"]
+
+
+def test_the_id_parser_reads_a_hash_and_refuses_anything_else():
+    assert wanted_event_id("#12") == 12
+    assert wanted_event_id("12") == 12
+    assert wanted_event_id("the block party") is None
+    assert wanted_event_id("") is None
+    assert wanted_event_id(None) is None
+
+
+def test_who_may_call_one_off_is_the_requester_or_staff_and_only_while_it_is_open():
+    store = FakeStore(staff_ids={1})
+    row = a_row()
+
+    assert may_cancel(store, row, FakeActor(900)) is True
+    assert may_cancel(store, row, FakeActor(1)) is True
+    assert may_cancel(store, row, FakeActor(2)) is False
+    assert may_cancel(store, a_row(status=DENIED), FakeActor(900)) is False
+    assert may_cancel(store, None, FakeActor(900)) is False
+
+
+def test_one_line_per_event_names_the_number_the_status_and_when():
+    said = event_line(a_row(review_channel_id=99))
+
+    assert said.startswith("**#1** Block Party — pending")
+    assert "<#99>" in said and "1h 30m" in said
+
+
+def test_the_staff_list_names_who_may_approve_and_warns_when_nobody_does():
+    lines = list_lines([a_row()], [])
+
+    assert lines[0].startswith("**staff (who may approve)**")
+    assert "Block Party" in lines[1]
+    assert "No staff roles resolve" in lines[-1]
+
+
+def test_the_counts_line_counts_only_the_open_states():
+    counts = counts_of([a_row(), a_row(status=APPROVED), a_row(status=DONE)])
+
+    assert counts == {PENDING: 1, APPROVED: 1, LIVE: 0}
+    assert counts_line(counts) == "**1** pending · **1** approved · **0** live"
+
+
+def test_a_select_option_names_the_id_and_the_status_and_stays_inside_discords_cap():
+    label = option_label(a_row(title="x" * 200))
+
+    assert label.startswith("#1 · pending · ")
+    assert len(label) == 100
+
+
+def test_the_select_placeholder_says_how_many_are_left_once_it_is_capped():
+    assert pick_placeholder(3, 3) == "Pick an event…"
+    assert pick_placeholder(25, 30) == "25 of 30 — the rest are on the site"
+
+
+def test_the_zone_line_is_what_timezone_show_said():
+    chosen = zone_line("Asia/Tokyo", chosen=True)
+    default = zone_line("America/Phoenix", chosen=False)
+
+    assert "Asia/Tokyo" in chosen and "My time zone" in chosen
+    assert "not set a time zone" in default and "America/Phoenix" in default
+
+
+def test_a_confirmation_shows_the_typed_time_and_the_stamp_everybody_else_reads():
+    said = when_line(WHEN, "America/Phoenix")
+
+    assert "America/Phoenix" in said
+    assert f"<t:{unix(WHEN)}:F>" in said
+
+
+def test_the_numbers_modal_takes_only_whole_numbers_inside_their_bounds():
+    wanted, why = checked_numbers("3", "45")
+    assert wanted == {"events_channel_retention_days": 3, "events_max_late_minutes": 45}
+    assert why == ""
+
+    refused, why = checked_numbers("three", "45")
+    assert refused is None and "three" in why and "between" in why
+
+    refused, why = checked_numbers("9999", "45")
+    assert refused is None and "9999" in why
+
+    refused, why = checked_numbers("3", "-1")
+    assert refused is None
+
+
+async def test_writing_settings_sets_what_was_given_and_clears_what_was_not():
+    store = FakeStore(values={"events_ping_role_id": 4242})
+
+    changed = await write_settings(
+        store, 7, 1, {"events_mode": "on", "events_ping_role_id": None, "nonsense": 1}
+    )
+
+    assert changed == {"events_mode": "on", "events_ping_role_id": None}
+    assert store.written == [("events_mode", "on", 1)]
+    assert store.cleared == ["events_ping_role_id"]
+
+
+def test_the_settings_lines_say_every_key_and_end_with_the_health_they_were_given():
+    store = FakeStore(
+        values={
+            "events_mode": "on",
+            "events_category_id": 50,
+            "events_channel_retention_days": 3,
+            "events_max_late_minutes": 45,
+            "events_create_scheduled": True,
+        }
+    )
+    guild = SimpleNamespace(id=7)
+
+    lines = settings_lines(store, guild, ["**golive loop** — last finished never yet"])
+
+    assert lines[0] == "**mode** — on"
+    assert "<#50>" in lines[1]
+    assert "not set" in lines[2]
+    assert "nobody" in lines[3]
+    assert "3 day(s)" in lines[5]
+    assert "45 minute(s)" in lines[6]
+    assert lines[-1].startswith("**golive loop**")
+
+
+def test_the_site_link_needs_an_origin_and_points_at_the_events_page():
+    assert site_page_url("") is None
+    assert site_page_url("https://x.test/") == "https://x.test/events.html"
+
+
+def test_a_review_channel_link_is_a_real_discord_url():
+    assert review_channel_url(7, 99) == "https://discord.com/channels/7/99"

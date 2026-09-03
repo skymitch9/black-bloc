@@ -54,7 +54,7 @@ reply with `mention_author=False`, `chat.insult` action row. Every reply passes 
 | `birthdays` | birthdays, whose birthday, next birthday | `birthdays.upcoming(limit=3)` respecting opt-outs |
 | `head_count` | how many of us, how many people, member count | `presence.human_count` |
 | `my_roles` | my roles, what roles can I pick | menus the member can pick from (`rolemenu_mode` on) + the roles they hold from those menus |
-| `time_for_me` | what time is that for me, in my time zone | F4: parse a `<t:…>` or a time in the message → convert with the member's stored zone; no zone → point at `/timezone set` |
+| `time_for_me` | what time is that for me, in my time zone | F4: parse a `<t:…>` or a time in the message → convert with the member's stored zone; no zone → point at the zone box (⚠️ 2026-09-03: `/timezone set` is retired — it is **My time zone** on `/event`, and `chat.py`'s sentence was rewritten) |
 Each data intent renders through a short template line that IS editable on the Chat page (e.g. "{count} of us at the cookout right now").
 
 ### 3. Routing (kind `route`)

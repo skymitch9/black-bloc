@@ -958,6 +958,25 @@ KEY_HELP.update(
 )
 
 
+# Events panel (wave 1) — the two decisions `/event`'s panel makes, in their own block so the
+# parallel wave-1 branches merge textually.
+KEY_TYPES.update({"event_panel_minutes": "int", "event_panel_own_list": "bool"})
+KEY_HELP.update(
+    {
+        "event_panel_minutes": (
+            "minutes the /event panel stays live before its buttons disable themselves; 10 "
+            "by default. The 'this panel has gone quiet' footer can only be written while "
+            "Discord's 15-minute interaction window is still open, so 15 or more means the "
+            "buttons simply stop working with no footer to explain it"
+        ),
+        "event_panel_own_list": (
+            "true to show members the events they proposed on the /event panel; staff always "
+            "see theirs, and members can still propose one and call one off either way"
+        ),
+    }
+)
+
+
 GUILD_ONLY = (
     "That command changes settings for a server, so it has to be run in the server itself "
     "rather than in a DM. Run it again from a channel Black Bloc can answer in."
@@ -1325,6 +1344,10 @@ class SettingsStore:
             return True
         if key == "birthday_panel_lookup":
             return True
+        if key == "event_panel_minutes":
+            return 10
+        if key == "event_panel_own_list":
+            return False
         if key == "modmail_enabled":
             return False
         if key == "modmail_mode":
