@@ -12,14 +12,16 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 15:05, v66 live, wave 1 complete)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 16:20, v67 live, wave 2 forks all decided)
 
-**`main` = `853776c`** (applications panel merge; v66 live 15:00, 3697 tests, 42 commands). Panels
-wave 1 is COMPLETE — all four landings are in `DONE.md` 2026-09-03. Nothing is in flight. **Next:**
-(1) the owner's yes/no on the operator read token (🔧 below); (2) the small review findings (🔧
-below) folded into whatever touches those files; (3) wave 2 of the panels program
-(`info/panels-program.md` §5 — the next feature gets a design doc first, forks to the owner one at
-a time, then an Opus build in its own worktree); (4) owner by-eye sweeps 14–15, 58–102. Merged
+**`main` = `285b5e3`** (operator token merge; v67 live 16:04, 3710 tests, 42 commands). Panels
+wave 1 is COMPLETE and all five wave-2 design docs are committed with every fork decided (🔧 panels
+item below). Nothing is in flight. **Next:** (1) the operator token MINT is owed — classifier-blocked,
+see the 🔧 item; (2) wave-2 builds in cost order, memory first (Opus, own worktree, brief carries the
+decided forks + `info/review-checklist.md` + the design doc), merge/deploy each as it lands; (3) the
+small review findings (🔧 below) folded into whatever touches those files; (4) owner by-eye sweeps
+14–15, 58–103; (5) Pawpette's Twitch Team form still needs the owner's walk-through
+(`access/sweeps.md` → "The owner's Twitch Team form") — no form exists on the live site as of 15:54. Merged
 worktrees/branches (`agent-a19bdce15408f8243` birthdays, `agent-a448c7ab780ed3c2b` events,
 `agent-aa735ab092d13477d` polls, `agent-abf063b9177e02f17` applications) can be pruned.
 
@@ -197,16 +199,13 @@ docs bookkeeping lands with the work, not after.
 
 ## 🔧 Open engineering items
 
-- 🆕 **Operator read access for the session (owner, 2026-09-03 14:24: "Make apis that you can
-  access so you can see things. Or use my explicit permission to check it").** Today a live
-  read means `flyctl ssh console` + SQLite, which the permission classifier blocks about half
-  the time. Proposed (awaiting owner yes/no): one `OPERATOR_READ_TOKEN` (Fly secret, name only
-  here) accepted as a bearer on GET-only `/api/*` — the same JSON the dashboard reads, no new
-  endpoints, no writes; every use logged with Via: operator; rate-limited like a session.
-  ~40k Opus build. Interim: the owner's explicit permission in chat, then retry the `flyctl ssh`
-  read. **DECIDED YES (owner, 2026-09-03 15:07: "Yes do it") — build DISPATCHED 15:10** (Opus,
-  own worktree; design in the brief → `info/operator-read-design.md`; access doc
-  `access/operator-read.md`; the token is minted and set by the owner, never seen by a session).
+- **Operator read token — MINT STILL OWED (code live v67 `285b5e3` 16:04; the build record is in
+  `DONE.md` 2026-09-03).** The blind mint (`docs/access/operator-read.md`, one command: python mints,
+  `flyctl secrets set --stage`, HKCU `BLACK_BLOC_OPERATOR_TOKEN`, value never printed) was approved by
+  the owner 16:00 ("Yes") but the permission classifier BLOCKED the command at 16:15. Options: the
+  owner runs the one command himself at the PC, or allows it in chat and it is retried, or adds a
+  Bash permission rule. Until the secret is set the door does not exist (`/health` + a bearer answer
+  `not_signed_in`, verified live by the builder). `--stage` means it applies at the NEXT deploy — v68.
 
 
 - 🆕 **Panels over slash commands — the rest of the app (owner, 2026-09-03: "then carry it
@@ -249,14 +248,16 @@ docs bookkeeping lands with the work, not after.
   192k, `info/pings-panel-design.md` 199k, `info/memory-panel-design.md` 204k — ⚠️ the 60k estimate was
   off 3×; calibrate design docs at ~200k). Golive REVIEWED against §2 15:52 (consistent: 4 rows in caps,
   member/staff split, one function per move with `via`, one key, no Settings sub-panel with the reason).
-  The other four await Fable review. **Nine owner forks queued, one at a time:** golive I1 (`/golive` vs
-  `/twitch`, rec. `/golive`), golive I2 (staff `Streamers…` sub-panel, rec. build), voice F1 (the
-  in-channel control post: leave/rebuild/drop, rec. leave), pings I1 (streamer may remove a staff-started
-  ping role, rec. yes = today), pings I2 (one Events toggle or two when the keys differ, rec. two when they
-  differ), youtube F-Y1 (`/youtube` also carries the Twitch link, rec. no), youtube F-Y2 (flip
-  `youtube_mode` to shadow at landing, rec. yes), memory I-M1 (reach your memory while the mode is off,
-  rec. yes). Then builds in worktrees in cost order: memory (120–180k) → golive (200–280k) → youtube
-  (230–300k) → pings (300–360k) → voice (420–480k). Events I2 DECIDED 12:40 (`/timezone` retired).
+  The other four await Fable review. **All eight owner forks DECIDED 16:10–16:15 (owner asked for them
+  rapid-fire in one form, 16:05 — a one-time exception to one-at-a-time):** golive I1 = **`/golive`**;
+  golive I2 = **build the staff `Streamers…` sub-panel**; voice F1 = **leave the in-channel control post
+  as it is**; pings I1 = **keep today's — a streamer may always take their own ping role away**; pings
+  I2 = **two Events toggles when the two keys differ, one when they agree**; youtube F-Y1 = **keep
+  `/youtube` and `/golive` separate**; youtube F-Y2 = **flip `youtube_mode` to shadow at the panel's
+  landing** (operational, the conductor does it via the site); memory I-M1 = **open it — `/memory`
+  stays visible with the mode off, the Forget controls keep working**. Builds in worktrees in cost
+  order: memory (120–180k) → golive (200–280k) → youtube (230–300k) → pings (300–360k) → voice
+  (420–480k); each brief carries its decided forks. Events I2 DECIDED 12:40 (`/timezone` retired).
   **Wave-1 builds all landed 13:40–13:50** (birthdays merged `58974e1`; events on
   `worktree-agent-a448c7ab780ed3c2b`, polls on `worktree-agent-aa735ab092d13477d`, both under Fable
   review); the applications build follows once I-A3 is answered. Merge in wave order, re-key

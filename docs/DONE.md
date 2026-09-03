@@ -9,6 +9,42 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-03 — Operator read token: the session's read-only door (v67, `285b5e3`)
+
+Release **v67** (`285b5e3`, 16:04; `deploys.log` line 66). Merge `--no-ff` of
+`worktree-agent-aa960a4c8635193e0` (Opus build, 268k, four commits off `c790efb`) after Fable review —
+no blocking defect: `operator_session` runs before the cookie path and returns `None` when no bearer is
+offered or none is configured (an unconfigured server is byte-for-byte today's behaviour, verified live
+by the builder: `/health` + a bearer answered `not_signed_in`); `hmac.compare_digest` on the token; a
+dedicated 30/min bucket per client IP consumed on every bearer request; GET/HEAD only, anything else
+`403 operator_read_only` in words; one `web.operator.read` Core row per request guarded by
+`request.state.operator_noted` (checklist 34) and switchable by `operator_read_log` (bool, default true,
+`CORE_KEYS` 5 → 6, registry 162 → 163 — checklist 33); the identity is `{"id": "0", "name": "operator",
+"staff": True, "member": False}` so `/api/requests/mine` is deliberately unreadable. Third Via word
+**Operator token** (`VIA_WORDS`, a Logs-page pill). `scripts/read.ps1 -Path /api/…` is the one command a
+session reads live state with (env var, falling back to the HKCU User variable so a long-running parent
+shell sees a fresh mint). 3697 → **3710 tests**, ruff clean; `commands synced` 42 unchanged. Design
+[`info/operator-read-design.md`](info/operator-read-design.md) (six deviations at its foot), access
+[`access/operator-read.md`](access/operator-read.md); sweep row 103; `RECOVERY.md` names the secret.
+The builder's GET-route audit: no `current_session` GET writes; the two OAuth GETs never see the bearer.
+Verified: boot log 23:04:42Z database ready + synced 42, 23:04:46Z logged in, no Traceback. **NOT
+verified / NOT done: the secret is not set.** The owner approved the blind mint 16:00 ("Yes"); the
+permission classifier blocked the command at 16:15, so the mint moved back to `TODO.md` as owed. The
+door does not exist live until `OPERATOR_READ_TOKEN` is set AND the next deploy runs (`--stage`).
+
+The item as it stood on `TODO.md`, moved whole:
+
+> 🆕 **Operator read access for the session (owner, 2026-09-03 14:24: "Make apis that you can
+> access so you can see things. Or use my explicit permission to check it").** Today a live
+> read means `flyctl ssh console` + SQLite, which the permission classifier blocks about half
+> the time. Proposed (awaiting owner yes/no): one `OPERATOR_READ_TOKEN` (Fly secret, name only
+> here) accepted as a bearer on GET-only `/api/*` — the same JSON the dashboard reads, no new
+> endpoints, no writes; every use logged with Via: operator; rate-limited like a session.
+> ~40k Opus build. Interim: the owner's explicit permission in chat, then retry the `flyctl ssh`
+> read. **DECIDED YES (owner, 2026-09-03 15:07: "Yes do it") — build DISPATCHED 15:10** (Opus,
+> own worktree; design in the brief → `info/operator-read-design.md`; access doc
+> `access/operator-read.md`; the token is minted and set by the owner, never seen by a session).
+
 ## 2026-09-03 — Panels wave 1 COMPLETE, fourth landing: `/apply` is one command (v66, `853776c`)
 
 Release **v66** (`853776c`, 15:00; `deploys.log` line 65). Merge `--no-ff` of
