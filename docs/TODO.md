@@ -250,9 +250,14 @@ docs bookkeeping lands with the work, not after.
   in-thread `/reply` set, F3 `/settings`). **Wave 0 is MERGED** (`1861923`, 2026-09-03 ~11:50:
   `black_bloc/panels.py` + `tests/test_panels.py`, 26 tests, the requests cog now inherits
   `Panel`; 160k Opus / 20 min; `code-notes.md` re-keyed at the merge) **and LIVE in v60**
-  (2026-09-03 11:39; the wave-0 record itself is in `DONE.md` that date). Next: the "ping the
-  requester" item above (same cog, small), then wave 1 events · polls · birthdays ·
-  applications as design docs first.
+  (2026-09-03 11:39; the wave-0 record itself is in `DONE.md` that date). **Wave 1 design
+  docs IN FLIGHT** (owner "Build all, keep going", 2026-09-03 ~12:40): three Opus design
+  agents writing `info/events-panel-design.md`, `info/polls-panel-design.md`,
+  `info/birthdays-panel-design.md` (sweep rows reserved: events from 73, polls from 80,
+  birthdays from 87; 66–72 belong to the two feature builds). `applications-panel-design.md`
+  waits until `feat/applications-no-role` lands — its cog is being rewritten. Then Fable
+  reviews each against §2, owner sees only genuine forks (one at a time), Opus builds in
+  worktrees, merge in wave order, re-key `code-notes.md` per merge, deploy per wave.
 
 - **Via-labelling gap: `raidtrain.cancel_train` logs one row but calls a website cancel
   Via = Discord** (found by the double-logging build, 2026-09-03 — see `DONE.md` that
