@@ -1,0 +1,144 @@
+from __future__ import annotations
+
+import logging
+from collections.abc import Awaitable, Callable
+from typing import Any
+
+import discord
+
+from .command_errors import AnswersErrors
+from .settings_store import DB_UNAVAILABLE
+
+log = logging.getLogger(__name__)
+
+CAPPED_PLACEHOLDER = "{shown} of {total} — the rest are on the site"
+
+
+async def answer(interaction: discord.Interaction, text: str) -> None:
+    if interaction.response.is_done():
+        await interaction.followup.send(
+            text, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+        )
+        return
+    await interaction.response.send_message(
+        text, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+async def still_staff(interaction: discord.Interaction) -> bool:
+    """Staff can be demoted while a card is open, so every move re-asks instead of trusting it."""
+    store = interaction.client.store
+    if store.is_staff(interaction.user):
+        return True
+    await answer(interaction, store.staff_refusal(interaction.guild.id))
+    return False
+
+
+def retire(previous: Any) -> None:
+    """The view being replaced stops, so its own timeout never edits the render that replaced it."""
+    if previous is None:
+        return
+    previous.replaced = True
+    previous.stop()
+
+
+async def db_ready(interaction: discord.Interaction) -> bool:
+    """Called after a component/modal has already deferred; answers a followup, never a crash."""
+    if interaction.client.db.is_connected:
+        return True
+    await interaction.followup.send(
+        DB_UNAVAILABLE, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+    )
+    return False
+
+
+def capped_placeholder(
+    shown: int, total: int, *, pick: str, capped: str = CAPPED_PLACEHOLDER
+) -> str:
+    if total > shown:
+        return capped.format(shown=shown, total=total)
+    return pick
+
+
+def panel_minutes(store: Any, guild_id: int, key: str) -> int:
+    return int(store.get(guild_id, key))
+
+
+class Panel(AnswersErrors, discord.ui.View):
+    """The one ephemeral panel view every feature's panel inherits."""
+
+    def __init__(self, minutes: int, *, footer: str) -> None:
+        super().__init__(timeout=max(1, int(minutes or 1)) * 60)
+        self.footer = footer
+        self.message: Any = None
+        self.last_interaction: Any = None
+        self.replaced = False
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        self.last_interaction = interaction
+        return True
+
+    async def on_timeout(self) -> None:
+        if self.replaced or self.message is None:
+            return
+        for item in self.children:
+            item.disabled = True
+        embeds = list(self.message.embeds)
+        if embeds:
+            embeds[0] = embeds[0].copy()
+            embeds[0].set_footer(text=self.footer)
+        await self.went_quiet(embeds)
+
+    async def went_quiet(self, embeds: list[Any]) -> None:
+        """The freshest interaction token first, the message's own second, neither ever raising."""
+        for edit in (self.through_last_interaction, self.through_message):
+            try:
+                if await edit(embeds):
+                    return
+            except discord.HTTPException as exc:
+                log.info("panel: could not disable a timed-out panel: %s", exc)
+
+    async def through_last_interaction(self, embeds: list[Any]) -> bool:
+        if self.last_interaction is None:
+            return False
+        await self.last_interaction.edit_original_response(embeds=embeds, view=self)
+        return True
+
+    async def through_message(self, embeds: list[Any]) -> bool:
+        await self.message.edit(embeds=embeds, view=self)
+        return True
+
+
+class NoteModal(AnswersErrors, discord.ui.Modal):
+    """One paragraph field whose label names what the note is for and who is sent it."""
+
+    note = discord.ui.TextInput(style=discord.TextStyle.paragraph)
+
+    def __init__(
+        self,
+        *,
+        title: str,
+        label: str,
+        max_length: int,
+        on_submit: Callable[[discord.Interaction, str], Awaitable[None]],
+    ) -> None:
+        super().__init__(title=title)
+        self.note.label = label
+        self.note.max_length = max_length
+        self.takes_note = on_submit
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await self.takes_note(interaction, str(self.note))
+
+
+__all__ = [
+    "CAPPED_PLACEHOLDER",
+    "NoteModal",
+    "Panel",
+    "answer",
+    "capped_placeholder",
+    "db_ready",
+    "panel_minutes",
+    "retire",
+    "still_staff",
+]
