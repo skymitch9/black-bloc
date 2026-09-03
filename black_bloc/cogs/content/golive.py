@@ -12,20 +12,19 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 from ... import pings
-from ...actionlog import (
-    LOGS_DEFAULT,
-    LOGS_MAX,
-    LOGS_MIN,
-    log_action,
-    send_logs,
-)
+from ...actionlog import log_action, send_logs
+from ...command_errors import AnswersErrors
 from ...golive import (
     END_GRACE_SECONDS,
+    PANEL_TIMEOUT_FOOTER,
+    PANEL_TITLE,
     POLL_SECONDS,
+    SITE_BUTTON,
     TWITCH,
     YOUTUBE,
     StreamInfo,
     announcement_embed,
+    card_lines,
     edits_on_end,
     embed_summary,
     end_details,
@@ -36,15 +35,28 @@ from ...golive import (
     extract_stream,
     from_twitch,
     now_iso,
+    panel_buttons,
+    panel_minutes,
     parse_ts,
     passes_role_filters,
     render,
     should_announce,
+    site_page_url,
     twitch_enrichable,
     twitch_login_from_url,
     with_box_art,
 )
-from ...settings_store import DB_UNAVAILABLE, GOLIVE_MODES, require_staff
+from ...logkinds import VIA_DISCORD, kind_via
+from ...panels import (
+    SELECT_OPTION_LIMIT,
+    Panel,
+    answer,
+    capped_placeholder,
+    db_ready,
+    retire,
+    still_staff,
+)
+from ...settings_store import DB_UNAVAILABLE, GOLIVE_MODES, GUILD_ONLY
 from ...twitch import TwitchClient, TwitchError
 
 log = logging.getLogger(__name__)
@@ -56,37 +68,82 @@ TWITCH_OFF = (
 POLLING_NO_CREDS = (
     "off — no Twitch credentials; the sweep still runs and still ages sessions out"
 )
+POLLING_NO_COG = "not known — the go-live cog is not loaded, so nothing is polling or announcing"
 POLL_FAILURES_BEFORE_DEGRADED = 3
+FEATURE = "golive"
+COG_NAME = "GoLive"
+LOGIN_MAX = 25
+SELECT_CAP = 25
 OPTED_OUT = (
-    "Done — Black Bloc will not announce your streams. Run `/golive optin` if you change "
-    "your mind."
+    "Done — Black Bloc will not announce your streams. **Announce my streams again** on the "
+    "same panel changes your mind."
 )
 OPTED_IN = (
     "Done — Black Bloc will announce your streams again when it sees you go live. "
-    "`/golive optout` turns it back off."
-)
-NOT_OPTED_OUT = (
-    "You were not opted out, so nothing changed — Black Bloc already announces your streams."
+    "**Stop announcing my streams** turns it back off."
 )
 BAD_LOGIN = (
     "That does not look like a Twitch channel name, so nothing was linked. Use the channel name "
     "from your channel address (the part after twitch.tv/), for example `blackbloc`."
 )
-NOT_LINKED = (
-    "You had no Twitch channel linked, so nothing changed. Link one with `/twitch link "
-    "<your twitch channel name>`."
+NO_SUCH_CHANNEL = (
+    "Twitch has no channel called **{channel}**, so nothing was linked. Check the spelling "
+    "against your channel address and try again."
+)
+LINKED = (
+    "Linked **{channel}** to you. Black Bloc will use it to fill in the game and title when you "
+    "go live, and to spot streams Discord does not show. **Unlink** undoes it."
 )
 LINK_NOT_CHECKED = (
     "Linked **{channel}** to you, but Twitch could not be reached to check that the channel name "
     "exists, so it has not been verified. If announcements do not fill in your game and title, "
-    "run `/twitch link` again later to re-check it."
+    "**Change my channel** re-checks it later."
 )
 LINK_TAKEN = (
     "**{channel}** is already linked to another member here, so nothing was changed. A Twitch "
     "channel name can only belong to one member — if that channel is yours, ask a Lead to remove "
     "the other link first."
 )
+UNLINKED = (
+    "Done — Black Bloc has forgotten your Twitch channel. Discord presence still announces your "
+    "streams; **Stop announcing my streams** stops that too."
+)
+MODE_SET = "Go-live announcements are now **{mode}**."
 PLATFORM_UNKNOWN = "an unknown platform"
+TEST_MODE_NOTE = "test mode means nothing is posted outside <#{test_channel_id}>"
+TEST_MODE_LINE = "Right now {note}, so nothing of yours reaches the announcement channel."
+COMMAND_DESCRIPTION = "Your Twitch channel, and whether your streams get announced"
+LINK_MODAL_TITLE = "Your Twitch channel"
+LINK_MODAL_LABEL = "The name after twitch.tv/"
+LINK_MODAL_PLACEHOLDER = "blackbloc"
+PREVIEW_SELF = "self"
+PREVIEW_PICK = "Preview an announcement…"
+PREVIEW_AS_YOU_ARE = "As you are now"
+MODE_PICK = "Announcements: off / shadow / on"
+MODE_OPTION = "Announcements: {mode}"
+PICK_A_STREAMER = "Somebody who has linked a channel…"
+STREAMERS_TITLE = "Streamers"
+STREAMERS_INTRO = (
+    "Everyone who has linked a Twitch channel. Picking one shows what Black Bloc knows about "
+    "them, and lets you undo it for them — the same as the Go-live page on the site."
+)
+STREAMERS_EMPTY = "Nobody has linked a Twitch channel yet."
+STREAMER_CARD = "**{name}** — twitch.tv/{login}"
+STREAMER_OPTION = "{name} — twitch.tv/{login}"
+STREAMER_UNVERIFIED = " — not verified with Twitch"
+STREAMER_OPTED_OUT = "Opted out, so none of their streams are announced."
+STREAMER_ANNOUNCED = "Announced whenever Black Bloc sees them go live."
+STREAMER_UNLINK_CONFIRM = (
+    "Unlink **{name}** from twitch.tv/{login}? They keep every role they already have, and "
+    "Discord presence still announces them."
+)
+THEY_UNLINKED = "Done — **{name}** is no longer linked to a Twitch channel."
+THEY_OPTED_OUT = "Done — no stream of **{name}**'s is announced from now on."
+THEY_OPTED_IN = "Done — **{name}**'s streams can be announced again."
+UNLINK_THEM = "Unlink them"
+OPT_THEM_OUT = "Opt them out"
+OPT_THEM_IN = "Opt them back in"
+STAFF_ONLY_LINE = "The go-live feed's own settings are for staff."
 TEST_STREAMS = {
     TWITCH: StreamInfo(
         url="https://www.twitch.tv/blackbloc",
@@ -291,11 +348,219 @@ async def counts(db: Any, guild_id: int) -> dict[str, int]:
 
 def clean_login(raw: str) -> str | None:
     login = twitch_login_from_url(raw) or raw.strip().lower().lstrip("@")
-    if not login or len(login) > 25:
+    if not login or len(login) > LOGIN_MAX:
         return None
     if not all(ch.isalnum() or ch == "_" for ch in login):
         return None
     return login
+
+
+def target_id(target: Any) -> int:
+    return int(getattr(target, "id", target))
+
+
+def member_for(guild: Any, target: Any) -> Any:
+    if getattr(target, "id", None) is not None:
+        return target
+    return guild.get_member(int(target))
+
+
+async def auto_fan_role(bot: Any, guild: Any, target: Any, *, by: int | None) -> str:
+    """`pings_fan_role_creation auto` is the only setting that makes a role from a link."""
+    member = member_for(guild, target)
+    if member is None:
+        return ""
+    outcome = await pings.maybe_auto_create(bot, guild, member, by=by)
+    return f" {outcome.message}" if outcome is not None and outcome.ok else ""
+
+
+async def fan_role_after_leaving(bot: Any, guild: Any, target: Any, *, by: int | None) -> str:
+    """`pings_fan_role_on_unlink` decides; `keep` — the default — says nothing at all."""
+    outcome = await pings.on_streamer_left(bot, guild, target_id(target), by=by)
+    return f" {outcome.message}" if outcome is not None and outcome.ok else ""
+
+
+async def link_channel(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    target: Any,
+    given: Any,
+    *,
+    helix: Any = None,
+    via: str = VIA_DISCORD,
+) -> tuple[str, str]:
+    """The one place a Twitch channel is linked: (what happened, the fan-role sentence)."""
+    cleaned = clean_login(str(given or ""))
+    if cleaned is None:
+        return "bad_login", ""
+    wanted = target_id(target)
+    owner = await link_owner(bot.db, cleaned)
+    if owner is not None and owner != wanted:
+        return "taken", ""
+    twitch_user_id = None
+    checked = helix is None
+    if helix is not None:
+        try:
+            users = await helix.get_users([cleaned])
+        except TwitchError as exc:
+            log.warning("go-live: could not check the login %s: %s", cleaned, exc)
+            users = None
+        if users == []:
+            return "no_such_channel", ""
+        if users:
+            checked = True
+            twitch_user_id = users[0].id
+    await set_link(bot.db, wanted, cleaned, twitch_user_id)
+    extra = await auto_fan_role(bot, guild, target, by=target_id(actor))
+    await log_action(
+        bot,
+        guild,
+        kind_via("golive.link", via),
+        actor=actor,
+        target=target,
+        details={"login": cleaned, "checked": checked, "via": via},
+    )
+    return ("linked" if checked else "linked_unchecked"), extra
+
+
+async def unlink_channel(
+    bot: Any, guild: Any, actor: Any, target: Any, *, via: str = VIA_DISCORD
+) -> tuple[bool, str]:
+    """(whether a row went, the fan-role sentence) — one write, one `golive.unlink` row."""
+    removed = await remove_link(bot.db, target_id(target))
+    if not removed:
+        return False, ""
+    extra = await fan_role_after_leaving(bot, guild, target, by=target_id(actor))
+    await log_action(
+        bot,
+        guild,
+        kind_via("golive.unlink", via),
+        actor=actor,
+        target=target,
+        details={"via": via},
+    )
+    return True, extra
+
+
+async def opt_out(
+    bot: Any, guild: Any, actor: Any, target: Any, *, via: str = VIA_DISCORD
+) -> str:
+    await set_optout(bot.db, target_id(target))
+    extra = await fan_role_after_leaving(bot, guild, target, by=target_id(actor))
+    await log_action(
+        bot,
+        guild,
+        kind_via("golive.optout", via),
+        actor=actor,
+        target=target,
+        details={"via": via},
+    )
+    return extra
+
+
+async def opt_in(
+    bot: Any, guild: Any, actor: Any, target: Any, *, via: str = VIA_DISCORD
+) -> bool:
+    cleared = await clear_optout(bot.db, target_id(target))
+    if cleared:
+        await log_action(
+            bot,
+            guild,
+            kind_via("golive.optin", via),
+            actor=actor,
+            target=target,
+            details={"via": via},
+        )
+    return cleared
+
+
+async def set_mode(
+    bot: Any, guild: Any, actor: Any, value: str, *, via: str = VIA_DISCORD
+) -> str:
+    await bot.store.set(guild.id, "golive_mode", value, by=target_id(actor))
+    await log_action(
+        bot,
+        guild,
+        kind_via("golive.mode", via),
+        actor=actor,
+        details={"mode": value, "via": via},
+    )
+    return MODE_SET.format(mode=value)
+
+
+def test_mode_note(bot: Any, guild: Any) -> str | None:
+    """The honest answer to 'why was my real stream not announced' — never a stack trace."""
+    channel_id = bot.store.get(guild.id, "golive_channel_id")
+    guard = getattr(bot, "guard", None)
+    if not channel_id or guard is None or guard.allows_channel(channel_id):
+        return None
+    return TEST_MODE_NOTE.format(test_channel_id=guard.test_channel_id)
+
+
+async def status_lines(bot: Any, cog: Any, guild: Any) -> list[str]:
+    """What `/golive status` said, now the staff half of the panel's embed."""
+    store = bot.store
+    totals = await counts(bot.db, guild.id)
+    channel_id = store.get(guild.id, "golive_channel_id")
+    note = test_mode_note(bot, guild)
+    where = f"<#{channel_id}>" if channel_id else "not set"
+    ending = end_summary(
+        store.get(guild.id, "golive_end_mode"), store.get(guild.id, "golive_end_suffix")
+    )
+    failures = getattr(cog, "poll_failures", 0)
+    lines = [
+        f"**mode** — {store.get(guild.id, 'golive_mode')}",
+        f"**stream end** — {ending}",
+        f"**channel** — {where}" + (f" — but {note}" if note else ""),
+        f"**cooldown** — {store.get(guild.id, 'golive_cooldown_minutes')} minute(s)",
+        f"**twitch polling** — {polling_summary(cog)}",
+        f"**last good poll** — {getattr(cog, 'last_poll_ok_at', None) or 'never'}",
+        f"**last poll error** — {getattr(cog, 'last_poll_error', None) or 'none'}"
+        + (f" ({failures} in a row)" if failures else ""),
+        f"**links** — {totals['links']} · **opt-outs** — {totals['optouts']} · "
+        f"**live now** — {totals['open_sessions']}",
+    ]
+    lines += [
+        f"• {display_name_of(guild, row['user_id'])} on "
+        f"{_row_value(row, 'platform') or PLATFORM_UNKNOWN}"
+        for row in await open_sessions(bot.db, guild.id)
+    ]
+    return lines
+
+
+def polling_summary(cog: Any) -> str:
+    """Health, not liveness — the last good poll and the last error are lines of their own."""
+    if cog is None:
+        return POLLING_NO_COG
+    if cog.helix is None:
+        return POLLING_NO_CREDS
+    return "running" if cog.poller.is_running() else "stopped"
+
+
+def display_name_of(guild: Any, user_id: Any) -> str:
+    member = guild.get_member(int(user_id))
+    return str(getattr(member, "display_name", None) or user_id)
+
+
+def preview(bot: Any, guild: Any, actor: Any, platform: Any) -> tuple[str, Any, dict[str, Any]]:
+    """What an announcement would look like — never posted, never pinged (checklist 13)."""
+    info = (
+        TEST_STREAMS[platform]
+        if platform in TEST_STREAMS
+        else extract_stream(getattr(actor, "activities", ())) or TEST_STREAMS[TWITCH]
+    )
+    text = render(bot.store.get(guild.id, "golive_template"), info, actor)
+    source = "twitch" if (info.platform or "").casefold() == TWITCH.casefold() else "presence"
+    embed = (
+        announcement_embed(info, actor, source)
+        if bot.store.get(guild.id, "golive_embed")
+        else None
+    )
+    details: dict[str, Any] = {"text": text, "platform": info.platform}
+    if embed is not None:
+        details["embed"] = embed_summary(embed)
+    return text, embed, details
 
 
 class GoLive(commands.Cog):
@@ -307,9 +572,6 @@ class GoLive(commands.Cog):
         self.last_poll_ok_at: str | None = None
         self.last_poll_error: str | None = None
         self.poll_failures = 0
-
-    golive = app_commands.Group(name="golive", description="Go-live announcements")
-    twitch = app_commands.Group(name="twitch", description="Link your Twitch channel")
 
     def loop_health(self, name: str) -> tuple[str | None, str | None]:
         if name != "poller":
@@ -523,7 +785,7 @@ class GoLive(commands.Cog):
         existing = list(getattr(message, "embeds", None) or ())
         if not existing:
             return {}
-        name = self._display_name(guild, row)
+        name = display_name_of(guild, row["user_id"])
         return {"embed": ended_embed(existing[0], name, _row_value(row, "platform"), suffix)}
 
     async def _box_art(self, guild: Any, info: StreamInfo) -> StreamInfo:
@@ -661,11 +923,6 @@ class GoLive(commands.Cog):
             details={"role_id": role_id, "user_id": row["user_id"], "reason": stuck},
         )
 
-    def _polling_summary(self) -> str:
-        if self.helix is None:
-            return POLLING_NO_CREDS
-        return "running" if self.poller.is_running() else "stopped"
-
     def _mentions(
         self, guild_id: int, fan_role_id: int | None = None
     ) -> discord.AllowedMentions:
@@ -700,10 +957,6 @@ class GoLive(commands.Cog):
         if not channel_id:
             return None
         return self.bot.get_channel(channel_id) or guild.get_channel(channel_id)
-
-    def _display_name(self, guild: Any, row: Any) -> str:
-        member = guild.get_member(row["user_id"])
-        return str(getattr(member, "display_name", None) or row["user_id"])
 
     def _find_member(self, user_id: int) -> Any:
         for guild in self.bot.guilds:
@@ -833,132 +1086,245 @@ class GoLive(commands.Cog):
             elif await open_session_for(self.bot.db, guild_id, user_id, "twitch") is not None:
                 await self._end_live(member.guild, member, "twitch")
 
-    async def _database_ready(self, interaction: discord.Interaction) -> bool:
+    async def _ready(self, interaction: discord.Interaction) -> bool:
+        if interaction.guild is None:
+            await answer(interaction, GUILD_ONLY)
+            return False
         if self.bot.db.is_connected:
             return True
         log.warning("go-live: refused a command — the database is not connected")
-        await interaction.response.send_message(DB_UNAVAILABLE, ephemeral=True)
+        await answer(interaction, DB_UNAVAILABLE)
         return False
 
-    @golive.command(name="logs", description="The last few go-live log lines")
-    @app_commands.describe(
-        count="How many lines, 1 to 50 (10 by default)",
-        important_only="True to leave out the dry runs and the housekeeping",
-    )
-    async def golive_logs(
-        self,
-        interaction: discord.Interaction,
-        count: app_commands.Range[int, LOGS_MIN, LOGS_MAX] = LOGS_DEFAULT,
-        important_only: bool = False,
-    ) -> None:
-        await send_logs(interaction, "golive", count=count, important_only=important_only)
-
-    @golive.command(name="optout", description="Stop Black Bloc announcing your streams")
-    async def optout(self, interaction: discord.Interaction) -> None:
-        if not await self._database_ready(interaction):
+    @app_commands.command(name="golive", description=COMMAND_DESCRIPTION)
+    async def golive(self, interaction: discord.Interaction) -> None:
+        if not await self._ready(interaction):
             return
-        await set_optout(self.bot.db, interaction.user.id)
+        embed, view = await build_panel(self.bot, interaction.guild, interaction.user)
         await interaction.response.send_message(
-            OPTED_OUT + await self._fan_role_after_leaving(interaction),
+            embed=embed,
+            view=view,
             ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
         )
-        await self._log_command(interaction, "golive.optout")
+        view.message = await interaction.original_response()
 
-    @golive.command(name="optin", description="Let Black Bloc announce your streams again")
-    async def optin(self, interaction: discord.Interaction) -> None:
-        if not await self._database_ready(interaction):
-            return
-        cleared = await clear_optout(self.bot.db, interaction.user.id)
-        await interaction.response.send_message(
-            OPTED_IN if cleared else NOT_OPTED_OUT, ephemeral=True
-        )
-        if cleared:
-            await self._log_command(interaction, "golive.optin")
 
-    @golive.command(name="status", description="Show how the go-live feed is set up")
-    async def status(self, interaction: discord.Interaction) -> None:
-        if not await require_staff(interaction):
-            return
-        if not await self._database_ready(interaction):
-            return
-        guild = interaction.guild
-        store = self.bot.store
-        totals = await counts(self.bot.db, guild.id)
-        channel_id = store.get(guild.id, "golive_channel_id")
-        polling = self._polling_summary()
-        lines = [
-            f"**mode** — {self._mode(guild.id)}",
-            f"**stream end** — "
-            f"{end_summary(self._end_mode(guild.id), store.get(guild.id, 'golive_end_suffix'))}",
-            f"**channel** — {f'<#{channel_id}>' if channel_id else 'not set'}",
-            f"**cooldown** — {store.get(guild.id, 'golive_cooldown_minutes')} minute(s)",
-            f"**twitch polling** — {polling}",
-            f"**last good poll** — {self.last_poll_ok_at or 'never'}",
-            f"**last poll error** — {self.last_poll_error or 'none'}"
-            + (f" ({self.poll_failures} in a row)" if self.poll_failures else ""),
-            f"**links** — {totals['links']} · **opt-outs** — {totals['optouts']} · "
-            f"**live now** — {totals['open_sessions']}",
-        ]
-        lines += [
-            f"• {self._display_name(guild, row)} on "
-            f"{_row_value(row, 'platform') or PLATFORM_UNKNOWN}"
-            for row in await open_sessions(self.bot.db, guild.id)
-        ]
-        await interaction.response.send_message(
-            "\n".join(lines), ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+class GoLivePanel(Panel):
+    def __init__(self, minutes: int) -> None:
+        super().__init__(minutes, footer=PANEL_TIMEOUT_FOOTER)
+
+
+def styles() -> dict[str, discord.ButtonStyle]:
+    return {
+        "primary": discord.ButtonStyle.primary,
+        "secondary": discord.ButtonStyle.secondary,
+        "success": discord.ButtonStyle.success,
+        "danger": discord.ButtonStyle.danger,
+    }
+
+
+def minutes_for(bot: Any, guild_id: int) -> int:
+    return panel_minutes(bot.store, guild_id)
+
+
+def cog_of(bot: Any) -> Any:
+    getter = getattr(bot, "get_cog", None)
+    return getter(COG_NAME) if callable(getter) else None
+
+
+async def db_up(interaction: discord.Interaction) -> bool:
+    """`db_ready` answers a followup; this one is for the reads that happen BEFORE a defer."""
+    if interaction.client.db.is_connected:
+        return True
+    await answer(interaction, DB_UNAVAILABLE)
+    return False
+
+
+def add_site_link(view: Any, bot: Any, row: int) -> None:
+    url = site_page_url(getattr(getattr(bot, "settings", None), "origin", ""))
+    if url:
+        view.add_item(
+            discord.ui.Button(
+                style=discord.ButtonStyle.link, label=SITE_BUTTON, url=url, row=row
+            )
         )
 
-    @golive.command(name="mode", description="Turn go-live announcements off, shadow or on")
-    @app_commands.describe(mode="off, shadow (log only) or on (post announcements)")
-    @app_commands.choices(
-        mode=[app_commands.Choice(name=name, value=name) for name in GOLIVE_MODES]
+
+def link_said(outcome: str, given: Any) -> str:
+    channel = clean_login(str(given or "")) or str(given or "")[:LOGIN_MAX]
+    return {
+        "bad_login": BAD_LOGIN,
+        "taken": LINK_TAKEN.format(channel=channel),
+        "no_such_channel": NO_SUCH_CHANNEL.format(channel=channel),
+        "linked": LINKED.format(channel=channel),
+        "linked_unchecked": LINK_NOT_CHECKED.format(channel=channel),
+    }[outcome]
+
+
+async def own_unlink(bot: Any, guild: Any, actor: Any) -> str:
+    _, extra = await unlink_channel(bot, guild, actor, actor)
+    return UNLINKED + extra
+
+
+async def own_opt_out(bot: Any, guild: Any, actor: Any) -> str:
+    return OPTED_OUT + await opt_out(bot, guild, actor, actor)
+
+
+async def own_opt_in(bot: Any, guild: Any, actor: Any) -> str:
+    await opt_in(bot, guild, actor, actor)
+    return OPTED_IN
+
+
+OWN_MOVES: dict[str, Any] = {
+    "unlink": own_unlink,
+    "optout": own_opt_out,
+    "optin": own_opt_in,
+}
+
+
+async def their_move(bot: Any, guild: Any, actor: Any, user_id: int, action: str) -> str:
+    """Staff's half of the same three functions, with a target who is not the actor."""
+    name = display_name_of(guild, user_id)
+    if action == "unlink":
+        await unlink_channel(bot, guild, actor, user_id)
+        return THEY_UNLINKED.format(name=name)
+    if action == "optout":
+        await opt_out(bot, guild, actor, user_id)
+        return THEY_OPTED_OUT.format(name=name)
+    await opt_in(bot, guild, actor, user_id)
+    return THEY_OPTED_IN.format(name=name)
+
+
+async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, Any]:
+    """One command, two panels: what a member may do and what staff may do, from one embed."""
+    store = bot.store
+    staff = bool(store.is_staff(actor))
+    row = await get_link(bot.db, actor.id)
+    login = _row_value(row, "twitch_login")
+    opted_out = await is_opted_out(bot.db, actor.id)
+    note = test_mode_note(bot, guild)
+    mode = store.get(guild.id, "golive_mode")
+    lines = card_lines(
+        login,
+        _row_value(row, "twitch_user_id"),
+        opted_out,
+        mode=mode,
+        channel_note=None if staff or not note else TEST_MODE_LINE.format(note=note),
     )
-    async def mode(
-        self, interaction: discord.Interaction, mode: app_commands.Choice[str]
-    ) -> None:
-        if not await require_staff(interaction):
+    if staff:
+        lines += await status_lines(bot, cog_of(bot), guild)
+    else:
+        lines.append(STAFF_ONLY_LINE)
+    embed = discord.Embed(title=PANEL_TITLE, description="\n".join(lines))
+    view = GoLivePanel(minutes_for(bot, guild.id))
+    for move in panel_buttons(linked=bool(login), opted_out=opted_out, staff=staff):
+        view.add_item(MoveButton(move))
+    add_site_link(view, bot, 2)
+    if staff:
+        view.add_item(PreviewPick())
+        view.add_item(ModePick(mode))
+    return embed, view
+
+
+async def render_panel(interaction: discord.Interaction, previous: Any = None) -> None:
+    embed, view = await build_panel(interaction.client, interaction.guild, interaction.user)
+    retire(previous)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+async def run_move(interaction: discord.Interaction, move: Any, previous: Any = None) -> None:
+    action = move.action
+    if action == "logs":
+        await send_logs(interaction, FEATURE)
+        return
+    if move.needs_modal:
+        if not await db_up(interaction):
             return
-        await self.bot.store.set(
-            interaction.guild.id, "golive_mode", mode.value, by=interaction.user.id
+        row = await get_link(interaction.client.db, interaction.user.id)
+        await interaction.response.send_modal(
+            LinkModal(_row_value(row, "twitch_login"), previous)
         )
-        await interaction.response.send_message(
-            f"Go-live announcements are now **{mode.value}**.", ephemeral=True
-        )
-        await log_action(
-            self.bot,
+        return
+    if action == "streamers":
+        if not await still_staff(interaction):
+            return
+        await interaction.response.defer()
+        if not await db_ready(interaction):
+            return
+        await render_streamers(interaction, None, previous)
+        return
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    if action == "refresh":
+        await render_panel(interaction, previous)
+        return
+    said = await OWN_MOVES[action](interaction.client, interaction.guild, interaction.user)
+    await render_panel(interaction, previous)
+    await answer(interaction, said)
+
+
+class MoveButton(discord.ui.Button):
+    def __init__(self, move: Any) -> None:
+        super().__init__(label=move.label, style=styles()[move.style], row=move.row)
+        self.move = move
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_move(interaction, self.move, self.view)
+
+
+class LinkModal(AnswersErrors, discord.ui.Modal, title=LINK_MODAL_TITLE):
+    """One short line, so it is not `panels.NoteModal`'s paragraph field."""
+
+    channel = discord.ui.TextInput(
+        label=LINK_MODAL_LABEL, placeholder=LINK_MODAL_PLACEHOLDER, max_length=LOGIN_MAX
+    )
+
+    def __init__(self, login: Any = None, previous: Any = None) -> None:
+        super().__init__()
+        self.previous = previous
+        if login:
+            self.channel.default = str(login)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
+        if not await db_ready(interaction):
+            return
+        bot = interaction.client
+        given = str(self.channel)
+        outcome, extra = await link_channel(
+            bot,
             interaction.guild,
-            "golive.mode",
-            actor=interaction.user,
-            details={"mode": mode.value},
+            interaction.user,
+            interaction.user,
+            given,
+            helix=getattr(cog_of(bot), "helix", None),
+        )
+        await render_panel(interaction, self.previous)
+        await answer(interaction, link_said(outcome, given) + extra)
+
+
+class PreviewPick(discord.ui.Select):
+    def __init__(self) -> None:
+        super().__init__(
+            placeholder=PREVIEW_PICK,
+            options=[discord.SelectOption(label=PREVIEW_AS_YOU_ARE, value=PREVIEW_SELF)]
+            + [discord.SelectOption(label=name, value=name) for name in TEST_STREAMS],
+            min_values=1,
+            max_values=1,
+            row=3,
         )
 
-    @golive.command(name="test", description="Show what a go-live announcement would look like")
-    @app_commands.describe(platform="Pretend the stream is on this platform instead of your own")
-    @app_commands.choices(
-        platform=[app_commands.Choice(name=name, value=name) for name in TEST_STREAMS]
-    )
-    async def test(
-        self,
-        interaction: discord.Interaction,
-        platform: app_commands.Choice[str] | None = None,
-    ) -> None:
-        if not await require_staff(interaction):
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await still_staff(interaction):
             return
-        store = self.bot.store
-        guild = interaction.guild
-        info = (
-            TEST_STREAMS[platform.value]
-            if platform is not None
-            else extract_stream(getattr(interaction.user, "activities", ()))
-            or TEST_STREAMS[TWITCH]
-        )
-        text = render(store.get(guild.id, "golive_template"), info, interaction.user)
-        source = "twitch" if (info.platform or "").casefold() == TWITCH.casefold() else "presence"
-        embed = self._embed(guild, info, interaction.user, source)
-        details: dict[str, Any] = {"text": text, "platform": info.platform}
-        if embed is not None:
-            details["embed"] = embed_summary(embed)
+        if not await db_up(interaction):
+            return
+        bot = interaction.client
+        text, embed, details = preview(bot, interaction.guild, interaction.user, self.values[0])
         await interaction.response.send_message(
             text,
             ephemeral=True,
@@ -966,112 +1332,210 @@ class GoLive(commands.Cog):
             **({"embed": embed} if embed is not None else {}),
         )
         await log_action(
-            self.bot, guild, "golive.test", actor=interaction.user, details=details
+            bot, interaction.guild, "golive.test", actor=interaction.user, details=details
         )
 
-    @twitch.command(name="link", description="Tell Black Bloc your Twitch channel name")
-    @app_commands.describe(channel="Your Twitch channel name (the part after twitch.tv/)")
-    async def link(self, interaction: discord.Interaction, channel: str) -> None:
-        if not await self._database_ready(interaction):
-            return
-        cleaned = clean_login(channel)
-        if cleaned is None:
-            await interaction.response.send_message(BAD_LOGIN, ephemeral=True)
-            return
-        owner = await link_owner(self.bot.db, cleaned)
-        if owner is not None and owner != interaction.user.id:
-            await interaction.response.send_message(
-                LINK_TAKEN.format(channel=cleaned),
-                ephemeral=True,
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
-            return
-        twitch_user_id = None
-        checked = self.helix is None
-        if self.helix is not None:
-            try:
-                users = await self.helix.get_users([cleaned])
-            except TwitchError as exc:
-                log.warning("go-live: could not check the login %s: %s", cleaned, exc)
-                users = None
-            if users == []:
-                await interaction.response.send_message(
-                    f"Twitch has no channel called **{cleaned}**, so nothing was linked. Check "
-                    "the spelling against your channel address and run the command again.",
-                    ephemeral=True,
+
+class ModePick(discord.ui.Select):
+    def __init__(self, current: Any) -> None:
+        super().__init__(
+            placeholder=MODE_PICK,
+            options=[
+                discord.SelectOption(
+                    label=MODE_OPTION.format(mode=name), value=name, default=name == current
                 )
-                return
-            if users:
-                checked = True
-                twitch_user_id = users[0].id
-        await set_link(self.bot.db, interaction.user.id, cleaned, twitch_user_id)
-        made = await self._auto_fan_role(interaction)
-        await interaction.response.send_message(
-            (
-                (
-                    f"Linked **{cleaned}** to you. Black Bloc will use it to fill in the game and "
-                    "title when you go live, and to spot streams Discord does not show. "
-                    "`/twitch unlink` undoes it."
-                )
-                if checked
-                else LINK_NOT_CHECKED.format(channel=cleaned)
-            )
-            + made,
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-        await self._log_command(
-            interaction, "golive.link", details={"login": cleaned, "checked": checked}
+                for name in GOLIVE_MODES
+            ],
+            min_values=1,
+            max_values=1,
+            row=4,
         )
 
-    @twitch.command(name="unlink", description="Forget your Twitch channel")
-    async def unlink(self, interaction: discord.Interaction) -> None:
-        if not await self._database_ready(interaction):
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await still_staff(interaction):
             return
-        removed = await remove_link(self.bot.db, interaction.user.id)
-        if not removed:
-            await interaction.response.send_message(NOT_LINKED, ephemeral=True)
+        await interaction.response.defer()
+        if not await db_ready(interaction):
             return
-        await interaction.response.send_message(
-            "Done — Black Bloc has forgotten your Twitch channel. Discord presence still "
-            "announces your streams; `/golive optout` stops that too."
-            + await self._fan_role_after_leaving(interaction),
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
+        said = await set_mode(
+            interaction.client, interaction.guild, interaction.user, self.values[0]
         )
-        await self._log_command(interaction, "golive.unlink")
+        await render_panel(interaction, self.view)
+        await answer(interaction, said)
 
-    async def _auto_fan_role(self, interaction: discord.Interaction) -> str:
-        """`pings_fan_role_creation auto` is the only setting that makes a role from a link."""
-        if interaction.guild is None:
-            return ""
-        outcome = await pings.maybe_auto_create(
-            self.bot, interaction.guild, interaction.user, by=interaction.user.id
-        )
-        return f" {outcome.message}" if outcome is not None and outcome.ok else ""
 
-    async def _fan_role_after_leaving(self, interaction: discord.Interaction) -> str:
-        """`pings_fan_role_on_unlink` decides; `keep` — the default — says nothing at all."""
-        if interaction.guild is None:
-            return ""
-        outcome = await pings.on_streamer_left(
-            self.bot, interaction.guild, interaction.user.id, by=interaction.user.id
-        )
-        return f" {outcome.message}" if outcome is not None and outcome.ok else ""
+def streamer_lines(guild: Any, row: Any, opted_out: bool) -> list[str]:
+    line = STREAMER_CARD.format(
+        name=display_name_of(guild, row["user_id"]), login=row["twitch_login"]
+    )
+    if not row["twitch_user_id"]:
+        line += STREAMER_UNVERIFIED
+    return [line, STREAMER_OPTED_OUT if opted_out else STREAMER_ANNOUNCED]
 
-    async def _log_command(
-        self, interaction: discord.Interaction, kind: str, details: dict[str, Any] | None = None
+
+async def build_streamers(
+    bot: Any, guild: Any, picked: Any = None
+) -> tuple[discord.Embed, Any]:
+    rows = await all_links(bot.db)
+    chosen = (
+        next((row for row in rows if int(row["user_id"]) == int(picked)), None)
+        if picked is not None
+        else None
+    )
+    lines = [STREAMERS_INTRO] if rows else [STREAMERS_EMPTY]
+    view = GoLivePanel(minutes_for(bot, guild.id))
+    if rows:
+        view.add_item(StreamerPick(guild, rows[:SELECT_CAP], len(rows), chosen))
+    if chosen is not None:
+        away = await is_opted_out(bot.db, chosen["user_id"])
+        lines += streamer_lines(guild, chosen, away)
+        view.add_item(TheirMoveButton("unlink", chosen["user_id"]))
+        view.add_item(TheirMoveButton("optin" if away else "optout", chosen["user_id"]))
+    view.add_item(BackButton(row=2))
+    add_site_link(view, bot, 2)
+    embed = discord.Embed(title=STREAMERS_TITLE, description="\n".join(lines))
+    return embed, view
+
+
+async def render_streamers(
+    interaction: discord.Interaction, picked: Any = None, previous: Any = None
+) -> None:
+    embed, view = await build_streamers(interaction.client, interaction.guild, picked)
+    retire(previous)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+class StreamerPick(discord.ui.Select):
+    def __init__(
+        self, guild: Any, rows: list[Any], total: int, chosen: Any = None
     ) -> None:
-        if interaction.guild is None:
-            return
-        await log_action(
-            self.bot,
-            interaction.guild,
-            kind,
-            actor=interaction.user,
-            target=interaction.user,
-            details=details,
+        super().__init__(
+            placeholder=capped_placeholder(len(rows), total, pick=PICK_A_STREAMER),
+            options=[
+                discord.SelectOption(
+                    label=STREAMER_OPTION.format(
+                        name=display_name_of(guild, row["user_id"]),
+                        login=row["twitch_login"],
+                    )[:SELECT_OPTION_LIMIT],
+                    value=str(row["user_id"]),
+                    default=chosen is not None
+                    and int(row["user_id"]) == int(chosen["user_id"]),
+                )
+                for row in rows
+            ],
+            min_values=1,
+            max_values=1,
+            row=0,
         )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await still_staff(interaction):
+            return
+        await interaction.response.defer()
+        if not await db_ready(interaction):
+            return
+        await render_streamers(interaction, int(self.values[0]), self.view)
+
+
+class TheirMoveButton(discord.ui.Button):
+    LABELS = {"unlink": UNLINK_THEM, "optout": OPT_THEM_OUT, "optin": OPT_THEM_IN}
+
+    def __init__(self, action: str, user_id: Any) -> None:
+        super().__init__(
+            label=self.LABELS[action],
+            style=(
+                discord.ButtonStyle.success
+                if action == "optin"
+                else discord.ButtonStyle.danger
+            ),
+            row=1,
+        )
+        self.action = action
+        self.user_id = int(user_id)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await still_staff(interaction):
+            return
+        await interaction.response.defer()
+        if not await db_ready(interaction):
+            return
+        if self.action == "unlink":
+            await render_unlink_confirm(interaction, self.user_id, self.view)
+            return
+        said = await their_move(
+            interaction.client, interaction.guild, interaction.user, self.user_id, self.action
+        )
+        await render_streamers(interaction, self.user_id, self.view)
+        await answer(interaction, said)
+
+
+async def render_unlink_confirm(
+    interaction: discord.Interaction, user_id: int, previous: Any = None
+) -> None:
+    bot = interaction.client
+    guild = interaction.guild
+    row = await get_link(bot.db, user_id)
+    if row is None:
+        await render_streamers(interaction, None, previous)
+        return
+    embed = discord.Embed(
+        title=STREAMERS_TITLE,
+        description=STREAMER_UNLINK_CONFIRM.format(
+            name=display_name_of(guild, user_id), login=row["twitch_login"]
+        ),
+    )
+    view = GoLivePanel(minutes_for(bot, guild.id))
+    view.add_item(UnlinkYesButton(user_id))
+    view.add_item(StreamersBackButton(user_id))
+    retire(previous)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+class UnlinkYesButton(discord.ui.Button):
+    def __init__(self, user_id: int) -> None:
+        super().__init__(label="Yes, unlink them", style=discord.ButtonStyle.danger, row=0)
+        self.user_id = int(user_id)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await still_staff(interaction):
+            return
+        await interaction.response.defer()
+        if not await db_ready(interaction):
+            return
+        said = await their_move(
+            interaction.client, interaction.guild, interaction.user, self.user_id, "unlink"
+        )
+        await render_streamers(interaction, None, self.view)
+        await answer(interaction, said)
+
+
+class StreamersBackButton(discord.ui.Button):
+    def __init__(self, user_id: Any = None, row: int = 0) -> None:
+        super().__init__(label="Back", style=discord.ButtonStyle.secondary, row=row)
+        self.user_id = None if user_id is None else int(user_id)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await still_staff(interaction):
+            return
+        await interaction.response.defer()
+        if not await db_ready(interaction):
+            return
+        await render_streamers(interaction, self.user_id, self.view)
+
+
+class BackButton(discord.ui.Button):
+    def __init__(self, row: int = 0) -> None:
+        super().__init__(label="Back", style=discord.ButtonStyle.secondary, row=row)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
+        if not await db_ready(interaction):
+            return
+        await render_panel(interaction, self.view)
 
 
 async def setup(bot: commands.Bot) -> None:

@@ -288,6 +288,7 @@ const SETTING_SPECS = [
   ['golive_cooldown_minutes', 'int', 60, 60, 'minutes before the same person is announced again'],
   ['golive_ping_role_id', 'role', null, null, 'role mentioned in front of every go-live announcement'],
   ['golive_max_session_hours', 'int', 12, 12, 'hours before a stream still marked live is closed anyway'],
+  ['golive_panel_minutes', 'int', 10, 10, "minutes the /golive panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
   ['youtube_mode', 'enum', 'off', 'off', 'off, shadow (log only) or on (post an announcement for a new upload)', ['off', 'shadow', 'on']],
   ['youtube_channel_id', 'channel', null, null, 'where a new-upload announcement is posted; leave it unset and the go-live channel is used instead'],
   ['youtube_ping_role_id', 'role', null, null, 'role mentioned in front of every upload announcement'],
