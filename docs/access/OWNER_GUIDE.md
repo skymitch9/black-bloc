@@ -2,7 +2,10 @@
 
 > **Audience:** you (the owner), on your phone or the laptop. **Status:** TRACKED (owner, 2026-08-31 —
 > permanently, not temporarily; secret NAMES only).
-> Last verified: **2026-09-03** for the applications row (a form may keep a LIST instead of handing a
+> Last verified: **2026-09-03** for the EVENTS row (`/event` is one command that opens a panel and
+> `/timezone` is gone — BUILT on `feat/events-panel`, not merged, not deployed, not run against
+> Discord) and the sweeps count (**79** rows). Before that the same day, for the applications row
+> (a form may keep a LIST instead of handing a
 > role over — BUILT on `feat/applications-no-role`, not merged, not deployed) and the sweeps count
 > (69 rows, numbered to 72; 66–68 belong to the sibling requests-check build). Before that the same
 > day, for the requests row only — the `/request` panel no longer writes a
@@ -59,7 +62,8 @@
 | See if the bot is up | https://blackbloc.heygabi.ai/health (should say `"ok":true,"ready":true`) |
 | See what it has been doing | https://blackbloc.heygabi.ai → **Logs** (every feature page has its own Logs section too; `/golive logs` etc. in Discord) |
 | See the team's requests | https://blackbloc.heygabi.ai/requests.html — members file with `/request` in Discord (opens a panel — **File a request**) or sign in and file on that page (they see only Requests). ⚠️ The panel's **list** of requests is staff-only: a member sees File a request, Refresh, the site link and a **Take one back…** select, but not their own requests written out. Set `request_panel_own_list` to `true` (Settings page or `/settings set-value`) to give members their list back |
-| Test something | [`sweeps.md`](sweeps.md) — 72 rows in priority order, each with what to expect (+ the detailed phase 1–8a scripts) |
+| Test something | [`sweeps.md`](sweeps.md) — 79 rows in priority order, each with what to expect (+ the detailed phase 1–8a scripts) |
+| Put an event on, or decide one | `/event` in Discord — **one** command that opens a panel. Members get **Propose an event** (the same form as before), **My time zone** and, once they have one on the go, **Call one off…**. Staff get the counts, the open list, **Pick an event…** → Approve / Deny / Call it off, plus **Settings** and **Logs**. ⚠️ `/event create`, `/event list`, `/event cancel`, `/event settings`, `/event logs` and the whole `/timezone` group are **gone** (2026-09-03) — everything they did is a button. The panel's **list** of your own events is staff-only; set `event_panel_own_list` to `true` to give members theirs back, and `event_panel_minutes` decides how long the panel stays live (10 by default) |
 | Keep a list of people instead of handing a role out | https://blackbloc.heygabi.ai/rolemenus.html#applications → **Applications**. A form's role is now optional: leave **Role it hands over** on **No role — keep a list** and an approval stores the record, DMs the person and gives nothing. Each form gets an **Approved for …** foldout — everyone who was said yes to, their Twitch login where they have linked one, and **Copy as text** for pasting into the official team page. Staff take somebody off with the roster's **Take off the list** (or `/applications show <id>` in Discord); they are DMed the reason. A form that DOES hand a role over keeps `/role revoke` as the way off |
 | Turn a feature on/off | Dashboard → that feature's page → the ON / SHADOW / OFF switch (or **Settings**) |
 | Quiet the Discord log channel | Settings → `<feature>_log_level` (off / important / all) |

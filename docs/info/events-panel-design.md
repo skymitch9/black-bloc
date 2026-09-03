@@ -1,13 +1,24 @@
 # Events — `/event` is ONE command that opens a panel (wave 1)
 
-> **Audience:** the build agent and the reviewer. **Status:** TRACKED · **PLANNING — not built.**
-> **Last verified: 2026-09-03** against `9a326ac` (`main`; code identical to `59ac96f` — only
-> `docs/TODO.md` moved between them). Every `path:line` below was read at that commit.
-> ⚠️ **NOT verified:** anything against live Discord — in particular whether the client submits
-> an EMPTY `ChannelSelect`/`RoleSelect` when `min_values=0` (the library permits `0`:
-> `discord/components.py` `SelectMenu` docstring, discord.py 2.7.1 — the *client* half is the
-> build's to check, checklist 29; §C names the fallback). The 598 zones in §B are this machine's
-> `tzdata` (`zoneinfo.available_timezones()`, measured), not a promise about Fly's.
+> **Audience:** the build agent and the reviewer. **Status:** TRACKED · **BUILT on
+> `feat/events-panel`** (worktree branch `worktree-agent-a448c7ab780ed3c2b`, commits `9a1beb4`
+> code + `d85274e` tests + the docs commit that follows) — **not merged, not deployed.**
+> **Last verified: 2026-09-03** on that branch: `ruff check .` clean, **3502 tests pass** (3442 at
+> the base `d3da02c`), `commands synced` measured at **43** through
+> `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`, and
+> `import black_bloc.events, black_bloc.cogs.community.events, black_bloc.api.tools.events,
+> black_bloc.chat_data, black_bloc.knowledge` succeeds. The `path:line` references below were
+> read at `9a326ac` and are **stale by design after the move** — §F relocated most of them from
+> `cogs/community/events.py` into `black_bloc/events.py`; trust the anchor text, not the number.
+> ⚠️ **NOT verified:** anything against live Discord — no panel has been opened, no button
+> pressed, no modal submitted, and the bot was never booted (no token in this environment; the
+> import check is the substitute, as in wave 0 deviation 5). In particular, **whether the client
+> submits an EMPTY `ChannelSelect`/`RoleSelect` when `min_values=0` is still unproven** — the
+> library permits `0` (`discord/components.py` `SelectMenu` docstring, discord.py 2.7.1) and the
+> code handles the empty submit, but only a person in Discord can say whether it arrives. §C's
+> fallback (`Forget…`) was BUILT alongside it so clearing works either way — deviation 6. The 598
+> zones in §B are this machine's `tzdata` (`zoneinfo.available_timezones()`, measured), not a
+> promise about Fly's.
 
 **This doc restates NOTHING from [`panels-program.md`](panels-program.md) §2 (P1–P17), which is
 inherited whole**; §4 there is the library (`black_bloc/panels.py`).
@@ -268,6 +279,135 @@ polls take 80+, birthdays 87+):
 
 ## Deviations
 
-Written by the build agent. Everything not listed here was built as specified.
+Written by the build agent, 2026-09-03. Everything not listed here was built as specified.
 
-*(none yet — this design has not been built)*
+1. **`submit_event` takes a keyword-only `review_view` callable; §F's signature does not name
+   one.** The design's signature is `submit_event(bot, guild, actor, fields, *, via=VIA_DISCORD)`,
+   but the body it absorbs ends by posting the review card, and that card's Approve/Deny buttons
+   are `DecisionButton` — a `DynamicItem` the design leaves in the cog. A pure module cannot
+   import the cog, so the cog passes its own `review_view` in. Omitting it posts the card with no
+   view rather than crashing, which is what a future web door would want. The alternative (a
+   module-level hook the cog sets on import) hides the dependency; a named argument states it.
+2. **`cancel_for` also takes `reason=`, and the site route now calls it instead of
+   `cancel_event`.** §F says `cancel_for` is "`cancel_event` **plus the `rename_channel` the site
+   never does** — one behaviour, both doors", so the route had to move onto it; but the route
+   passes its own free-text `reason` (the lookup key), which the design's signature had no room
+   for. `reason=None` still defaults to `f"cancelled_by_{actor_id}"`, so the Discord door is
+   unchanged. ⚠️ **This is a real behaviour change for the website**: cancelling from
+   `events.html` now renames the review channel, which it never did. That is the point of the
+   function, but it is not "import paths only" as §G's last row claims for
+   `tests/api/tools/test_events.py` — those tests still pass unchanged in assertion, because none
+   of them asserted the absence of a rename.
+3. **`card_buttons` takes a third keyword, `room_resolves`.** §F's signature is
+   `card_buttons(status, *, may_cancel_here=True)`, but §I's settled `denied` exit says
+   `Approve after all` "renders only while the review channel still resolves". That fact is not
+   derivable from a status, so it is an argument. `card_footer_override(status, *,
+   room_resolves=True)` carries the matching sentence.
+4. **`Call it off` opens the note modal directly; there is no Yes/Keep confirm on the STAFF
+   card.** §C says a confirm, §I1 (settled later, by the owner's standing staff-final-say rule)
+   says a `NoteModal(required=False)` where "submit is yes, dismiss is keep". Those cannot both be
+   true, so §I1 wins as the later decision — and it is strictly better, because the modal IS the
+   confirm and carries the reason in the same click. The MEMBER's own `Call one off…` keeps the
+   plain Yes / Keep confirm exactly as §C describes. Sweep row 78 was written to match what was
+   built. `panels.NoteModal` gained `required: bool = True` (a generic addition to the library,
+   with its own test in `tests/test_panels.py`), rather than a private copy.
+5. **`event.created` now goes through `kind_via`.** §F's `submit_event` takes `via`, and checklist
+   34 says a shared path that takes `via` builds its kind with `kind_via` and records
+   `details["via"]`. Nothing writes `web.event.created` today (there is no create route), but the
+   shape is now correct for the day there is one, and `test_logkinds.py` accepts it with no new
+   enumeration because the kind is a string literal inside `kind_via`.
+6. ⚠️ **BOTH the `min_values=0` selects AND §C's `Forget…` fallback were built, because the
+   client half could not be checked.** The three selects take `min_values=0` and an empty submit
+   clears the key, as §C asks; `Forget…` is also on the sub-panel's button row, opening a
+   3-option select of which key to clear, writing through the same `write_settings`. Building
+   only the unproven path would have shipped a settings panel that might have no way to clear a
+   key at all. Row 4 of the sub-panel is therefore exactly Discord's 5-per-row cap: **Scheduled
+   events · Numbers… · Forget… · Open on the site · Back** (four when no origin is configured).
+7. **`Numbers…` validates in `black_bloc/events.py`, not at the settings validator.** §C says the
+   modal is "clamped by the same bounds `/event settings` uses" — those were
+   `app_commands.Range` annotations, which a modal has no equivalent of. `checked_numbers` reads
+   the same `EVENTS_RETENTION_MIN_DAYS` / `EVENTS_RETENTION_MAX_DAYS` /
+   `EVENTS_LATE_CEILING_MINUTES` constants and refuses out-of-range or non-numeric input in
+   words, naming the range. Nothing is silently clamped.
+8. **Every user-facing string that named a retired command was rewritten**, which §B's "`TZ_SHOW`
+   / `TZ_SHOW_DEFAULT` unchanged" did not allow for. A sentence that tells a member to run
+   `/timezone set` after `/timezone` is deleted is worse than a stale doc — it is a dead end
+   inside the product (P9). Rewritten: `TZ_SHOW`, `TZ_SHOW_DEFAULT`, `TZ_SET`, `BAD_START`,
+   `START_IN_THE_PAST`, `DST_GAP`, `MODAL_ZONE_HINT`, `EVENTS_OFF`, `NO_CATEGORY`,
+   `NOT_A_CATEGORY`, `NO_SUCH_EVENT`, `NOT_AN_ID`, `NO_STAFF_WARNING`, `DM_MISSED`, every
+   `CANCEL_WHY` entry, and `approve_extra`'s "Scheduled events are turned off" line. Outside the
+   feature, `black_bloc/personas.py` and `black_bloc/chat.py` said `/event create` and
+   `/timezone set` to members' faces; both now say `/event` and the button.
+9. **`UNKNOWN_TZ` no longer tells people to "start typing a city and pick a suggestion"** —
+   there is no autocomplete behind a button. It names the `Region/City` shape, and `set_zone`
+   appends up to five real `suggest()` matches as "Did you mean …", which §B asked for. Typing
+   `Phoenix` now gets `America/Phoenix` offered back; the old slash command would simply have had
+   it in a dropdown.
+10. **The staff panel writes the OPEN list out, not just a counts line.** §B's staff table lists
+    only the counts line plus the select. Built that way, `list_lines` and `NO_STAFF_WARNING`
+    (both named in §F as extractions of `/event list`) would have had no caller, and the "no staff
+    roles resolve" warning — the loudest thing `/event list` said — would have been lost with the
+    subcommand. So the staff half of the embed is `counts_line` + `list_lines(open[:10],
+    staff_roles)`, which is `/event list` verbatim, and `event_panel_own_list` is now purely a
+    MEMBER key (staff see every open event including their own, which is a superset of "staff
+    always see theirs").
+11. **`decision_id`, `review_view`, `decide`, `close_card` and `decision_context` stayed in the
+    cog** — §F's move list is "the shared DB/move layer", and these five are interaction- or
+    `DynamicItem`-shaped. `_tell_requester` / `_approve_extra` / `_make_review_channel` /
+    `_post_review_card` moved and lost their leading underscore (`tell_requester`,
+    `approve_extra`, `make_review_channel`, `post_review_card`) — they are module API now, and
+    `make_review_channel` returns `None` instead of answering an interaction, so the sentence is
+    the caller's to say.
+12. ⚠️ **`TERMINAL_STATUSES` losing `denied` changes when a lock is dropped**, which §I's settled
+    `denied` exit did not mention. `apply_decision` drops an event's `asyncio.Lock` once the
+    status is terminal; `denied` is no longer terminal, so a denied event keeps its lock until it
+    is cancelled (or approved after all and then finished). That is correct — a row that can still
+    move must still be raceable-safely — but it means a denied-and-forgotten event holds one
+    `asyncio.Lock` object for the life of the process. `tests/cogs/community/test_events.py::
+    test_a_settled_event_stops_being_kept_a_lock` now pins exactly this: denied keeps it,
+    cancelled drops it.
+13. **`python -m black_bloc` (invariant P17, §H item 1) was NOT run** — no bot token in this
+    environment, same as wave 0 deviation 5. `commands synced` was **measured** instead through
+    `tests/test_bot.py`, which builds the real tree by loading every cog and counts
+    `bot.tree.get_commands()`: **43 on this branch**, 44 at the base. The import check (§H item 3)
+    was run and passes; it is what a boot would have caught, and this build creates real new
+    import edges (`black_bloc/events.py` → `actionlog`, `command_errors`, `panels`,
+    `settings_store`). `node site/mock/check.mjs` and the `labels.js` parse (§H item 4) were NOT
+    run: the site is untouched by this build — no `site/` file changed, and the seven `events_*`
+    keys the general Settings page labels are unchanged.
+14. ⚠️ **`docs/TODO.md` was NOT touched, though §E asks for it.** The common build brief says the
+    conductor lands `TODO.md`, `DONE.md` and `deploys.log`, and that instruction wins over §E's
+    "F4's decision line gets a dated pointer". **The pointer is still owed**: F4's row
+    (`docs/TODO.md:94`) still describes `/event create` and `/timezone set` as the way in, and
+    needs a dated line saying the slash surface changed on 2026-09-03 and pointing here. Every
+    OTHER doc §E lists was rewritten in the docs commit, plus three §E did not name —
+    `phase11-design.md:57` (chat's `time_for_me` pointed at `/timezone set`),
+    `phase18-design.md:64` (raid trains "type the start in their `/timezone` like `/event
+    create`") and `polls-research.md:416`.
+15. **§H's sweep rows were rewritten where the build diverged.** Row 74 now says the refusal
+    suggests a zone (deviation 9), row 78 says the staff note replaces the confirm (deviation 4),
+    and row 79 names `Forget…` beside the empty select (deviation 6). Rows 73, 75, 76 and 77 are
+    as designed.
+
+### What §H could and could not prove
+
+| # | §H item | Proven? |
+|---|---|---|
+| 1 | boot reports `commands synced` **43** | **Measured, not booted** — `tests/test_bot.py` counts the real tree at 43 (44 at base). A live boot is deviation 13 |
+| 2 | the parametrised card test | **Proven** — `test_the_card_renders_exactly_the_buttons_the_table_says` over all six statuses, plus `test_the_card_table_only_ever_offers_a_move_the_state_machine_allows` checking the table against `TRANSITIONS` itself |
+| 3 | the five-module import check | **Proven** — run, passes |
+| 4 | ruff, full pytest, `check.mjs`, `labels.js` | **Partly** — ruff clean and 3502 tests pass; the two site checks were skipped because no site file changed (deviation 13) |
+| — | the empty `ChannelSelect`/`RoleSelect` submit | **NOT proven, and cannot be here** — needs a Discord client. The fallback is built (deviation 6) |
+| — | anything a person sees | **NOT proven** — no panel has been opened in Discord |
+
+### One flaky test, not caused by this build
+
+`tests/api/test_settings_api.py::test_writes_are_rate_limited_per_session` fails under
+`pytest -n auto` on this machine and passes under `-n 4` (**3502 passed, 0 failed**) and on its
+own. The limiter is 60 writes in a **60-second wall-clock window** (`api/writes.py:23–24`), so 60
+sequential `PUT`s straddle the window when the workers are contended. ⚠️ **Measured on the base
+commit too, in a throwaway worktree of `d3da02c`: `-n auto` gives `1 failed, 3441 passed` — the
+same test, the same way.** It is pre-existing and load-sensitive, not a regression; nothing under
+`black_bloc/api/` changed in this build except `api/tools/events.py`, which that test does not
+touch. Reported, not fixed. The honest test counts: **base 3442 (3441 + this flake), this branch
+3502 (3501 + this flake)** — +60 tests, none lost.

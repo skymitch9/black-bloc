@@ -61,7 +61,7 @@ audience travels down the lineup.
 | D12 | Pings on the lineup post | **nobody**; a role when set | `raidtrain_ping_role_id` role, blank |
 | D13 | Discord Scheduled Event for the train | **on** if §J finds the Phase 4 helper reusable without editing `events.py`; otherwise the key ships **`false`** and the report says so | `raidtrain_scheduled_event` bool |
 | D14 | Logging | per-feature level like every cog | `raidtrain_log_level` level `important` |
-| D15 | Time display | always Discord `<t:…:t>` / `<t:…:R>`; organizers type the start in their `/timezone` like `/event create` (no new tz machinery) | — |
+| D15 | Time display | always Discord `<t:…:t>` / `<t:…:R>`; organizers type the start in their stored zone like the event form (⚠️ 2026-09-03: `/timezone` is retired and the form is `/event`'s **Propose an event**; `black_bloc/timezones.py` and the stored zone are unchanged, which is why this row still holds) (no new tz machinery) | — |
 
 ## A. Storage — schema **24** (additive; 23 is Phase 17's — §K)
 

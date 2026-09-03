@@ -413,7 +413,7 @@ for the panel, where we are the authority.
 /poll results     id                     → re-post the results embed
 /poll cancel      id
 /poll schedule    … cadence, at, tz      → a row in poll_schedules
-/poll settings    the keys below         → the same shape as /event settings
+/poll settings    the keys below         → the same shape as /event settings  (⚠️ 2026-09-03: that subcommand is retired; events' settings are a sub-panel now)
 ```
 
 ### 6.5 Settings keys (rows in `settings_store.py:KEY_TYPES`, per rule 4)

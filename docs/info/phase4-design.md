@@ -90,12 +90,17 @@ nothing punishes; shadow only suppresses the public announcement).
    review channel is **archived**: renamed `done-…` and moved/left in place
    (deleting is the owner's call; default keep for 7 days then delete —
    setting `events_channel_retention_days`, default 7).
-5. **Commands** — `/event list` (staff: pending/approved with links),
-   `/event cancel <id>` (staff or requester; cancels the scheduled event),
-   `/timezone set <tz>` (autocomplete over `zoneinfo.available_timezones()`
-   filtered by the typed text; shows the current local time as confirmation),
-   `/timezone show`, `/event settings …` (staff: category, announce channel,
-   ping role, create-scheduled toggle).
+5. **Commands** — ⚠️ **SUPERSEDED 2026-09-03 by the panel**
+   ([`events-panel-design.md`](events-panel-design.md)): every subcommand below
+   is gone and `/event` is one command that opens an ephemeral panel. `/timezone`
+   was retired whole — the zone is the **My time zone** button beside **Propose an
+   event**, and `black_bloc/timezones.py` is unchanged (raid trains and the site
+   editor still read the stored zone). What it used to be: `/event list` (staff:
+   pending/approved with links), `/event cancel <id>` (staff or requester; cancels
+   the scheduled event), `/timezone set <tz>` (autocomplete over
+   `zoneinfo.available_timezones()` filtered by the typed text; shows the current
+   local time as confirmation), `/timezone show`, `/event settings …` (staff:
+   category, announce channel, ping role, create-scheduled toggle).
 
 ## HammerTime
 
