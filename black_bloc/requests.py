@@ -43,12 +43,15 @@ NEEDS_A_REASON = (HOLD, DECLINED)
 
 FILED_LOOK = "filed"
 SENT_BACK = "sent_back"
-LOOKS = (FILED_LOOK, IN_PROGRESS, REVIEW, SENT_BACK, DONE, HOLD, DECLINED)
+CHECK_ASKED = "check_asked"
+LOOKS = (FILED_LOOK, IN_PROGRESS, REVIEW, SENT_BACK, DONE, HOLD, DECLINED, CHECK_ASKED)
 DM_LOOKS = (IN_PROGRESS, HOLD, DONE, DECLINED)
 CHANNEL_MOVES_KEY = "request_channel_moves"
 REVIEW_BY_OTHER_KEY = "request_review_by_other"
 PANEL_MINUTES_KEY = "request_panel_minutes"
 PANEL_OWN_LIST_KEY = "request_panel_own_list"
+CHECK_FALLBACK_KEY = "request_check_fallback_channel"
+CHECK_ON_READY_KEY = "request_check_on_ready"
 
 SELECT_CAP = 25
 SELECT_OPTION_LIMIT = 100
@@ -161,7 +164,7 @@ REVIEW_BY_SOMEBODY_ELSE = (
 )
 NOT_READY_TO_CHECK = (
     "Request **#{request_id}** is **{status}**, not ready to check, so there was nothing to "
-    "{doing}. `/request ready {request_id}` is what puts one there."
+    "{doing}. **Ready to check** on its card is what puts one there."
 )
 NOT_ON_HOLD = (
     "Request **#{request_id}** is **{status}**, not on hold, so there was nothing to resume. "
@@ -176,6 +179,19 @@ COMMENT_NEEDS_TEXT = (
     "it again."
 )
 WITHDRAWN_SAID = "Request **#{request_id}** is withdrawn. Nobody will pick it up now."
+CHECK_ASKED_DM = "Request **#{request_id}** — {who} has been asked by DM to try it."
+CHECK_ASKED_CHANNEL = (
+    "Request **#{request_id}** — {who}'s DMs are closed, so they were pinged in the request "
+    "channel instead."
+)
+CHECK_ASKED_NOBODY = (
+    "Request **#{request_id}** — {who}'s DMs are closed and the channel fallback is off, so "
+    "nobody was told. A Lead can turn `request_check_fallback_channel` on."
+)
+CHECK_ASKED_DESCRIPTION = (
+    "Try it and tell {asked_by} how it went — say what works and what does not. Staff mark it "
+    "done once you are happy."
+)
 FILED = (
     "Filed as **#{request_id}** — staff will see it on the site. You will get a DM every time it "
     "moves."
@@ -200,6 +216,9 @@ MOVE_LINE: dict[str, str] = {
     DONE: "Request **#{request_id}** from {who} is done: {what}",
     HOLD: "Request **#{request_id}** from {who} is on hold — {reason}",
     DECLINED: "Request **#{request_id}** from {who} was declined — {reason}",
+    CHECK_ASKED: (
+        "Request **#{request_id}** from {who} — they have been asked to check it: {what}"
+    ),
 }
 NOTIFY_SKIPPED_KIND = "request.notify_skipped_test_mode"
 NOTIFY_FAILED_KIND = "request.notify_failed"
@@ -214,6 +233,7 @@ EMBED_COLOURS: dict[str, int] = {
     DONE: 0x57F287,
     HOLD: 0x99AAB5,
     DECLINED: 0xED4245,
+    CHECK_ASKED: 0x3498DB,
 }
 EMBED_TITLES: dict[str, str] = {
     FILED_LOOK: "New request #{request_id}",
@@ -223,15 +243,17 @@ EMBED_TITLES: dict[str, str] = {
     DONE: "Request #{request_id} is done ✅",
     HOLD: "Request #{request_id} is on hold",
     DECLINED: "Request #{request_id} was declined",
+    CHECK_ASKED: "Request #{request_id} is ready for you to try 🙌",
 }
 EMBED_FIELDS: dict[str, tuple[str, ...]] = {
     FILED_LOOK: ("what", "why", "requester", "due"),
     IN_PROGRESS: ("what", "requester", "assignee"),
-    REVIEW: ("what", "built", "how_to_test", "ready_by", "requester"),
+    REVIEW: ("what", "built", "how_to_test", "ready_by", "requester", "asked"),
     SENT_BACK: ("what", "needs_doing", "sent_back_by", "ready_by"),
-    DONE: ("what", "built", "how_to_test", "accepted_by", "requester"),
+    DONE: ("what", "built", "how_to_test", "accepted_by", "requester", "asked"),
     HOLD: ("what", "waiting", "was", "requester"),
     DECLINED: ("what", "reason", "requester"),
+    CHECK_ASKED: ("what", "built", "how_to_test", "ready_by", "asked_by"),
 }
 FIELD_LABELS: dict[str, str] = {
     "what": "Asked for",
@@ -248,9 +270,21 @@ FIELD_LABELS: dict[str, str] = {
     "sent_back_by": "Sent back by",
     "due": "Due",
     "was": "Was",
+    "asked": "Asked to check",
+    "asked_by": "Asked by",
 }
 INLINE_FIELDS = frozenset(
-    {"requester", "assignee", "ready_by", "accepted_by", "sent_back_by", "due", "was"}
+    {
+        "requester",
+        "assignee",
+        "ready_by",
+        "accepted_by",
+        "sent_back_by",
+        "due",
+        "was",
+        "asked",
+        "asked_by",
+    }
 )
 EMBED_FOOTER = "Black Bloc · requests"
 SITE_BUTTON = "Open on the site"
@@ -531,6 +565,14 @@ def review_by_other(store: Any, guild_id: int) -> bool:
     return bool(store.get(guild_id, REVIEW_BY_OTHER_KEY))
 
 
+def check_falls_back(store: Any, guild_id: int) -> bool:
+    return bool(store.get(guild_id, CHECK_FALLBACK_KEY))
+
+
+def checks_on_ready(store: Any, guild_id: int) -> bool:
+    return bool(store.get(guild_id, CHECK_ON_READY_KEY))
+
+
 def may_accept(store: Any, guild_id: int, row: Any, actor: Any) -> bool:
     """False only when the server asks for a second pair of eyes and this is the first pair."""
     if not review_by_other(store, guild_id):
@@ -576,6 +618,20 @@ def moment(row: Any, look: str) -> datetime:
     return found if found.tzinfo is not None else found.replace(tzinfo=UTC)
 
 
+def asked_stamp(row: Any) -> str:
+    """Who last asked the requester to check, and when — empty on a card nobody has asked on."""
+    raw = row_value(row, "check_asked_at")
+    if not raw:
+        return ""
+    try:
+        at = datetime.fromisoformat(str(raw))
+    except ValueError:
+        return mention(row_value(row, "check_asked_by"))
+    if at.tzinfo is None:
+        at = at.replace(tzinfo=UTC)
+    return f"{mention(row_value(row, 'check_asked_by'))} · <t:{int(at.timestamp())}:R>"
+
+
 def field_value(row: Any, name: str) -> str:
     """One field's text; an empty one is left off the card rather than printed as nothing."""
     found = {
@@ -593,6 +649,8 @@ def field_value(row: Any, name: str) -> str:
         "sent_back_by": mention(row_value(row, "decided_by")),
         "due": due_stamp(row_value(row, "due_on")) or "",
         "was": held_words(row),
+        "asked": asked_stamp(row),
+        "asked_by": mention(row_value(row, "check_asked_by")),
     }.get(name, "")
     return clamp(found, FIELD_LIMIT)
 
@@ -613,6 +671,10 @@ def request_embed(row: Any, *, move: str, origin: Any = "", guild: Any = None) -
     name = getattr(guild, "name", None)
     if name:
         embed.set_author(name=clamp(name, TITLE_LIMIT))
+    if look == CHECK_ASKED:
+        embed.description = CHECK_ASKED_DESCRIPTION.format(
+            asked_by=mention(row_value(row, "check_asked_by")) or "staff"
+        )
     for one in EMBED_FIELDS[look]:
         text = field_value(row, one)
         if text:
@@ -846,6 +908,15 @@ async def set_fields(
     return list(wanted)
 
 
+async def set_check_asked(db: Any, request_id: int, who: int | None, at: str) -> None:
+    """Who last asked the requester to try it, and when; asking again simply overwrites both."""
+    await db.conn.execute(
+        "UPDATE requests SET check_asked_by = ?, check_asked_at = ? WHERE id = ?",
+        (who, at, request_id),
+    )
+    await db.conn.commit()
+
+
 async def set_message(db: Any, request_id: int, message_id: int | None) -> None:
     await db.conn.execute(
         "UPDATE requests SET message_id = ? WHERE id = ?", (message_id, request_id)
@@ -925,6 +996,13 @@ async def withdraw_request(
 
 __all__ = [
     "CARD_BUTTONS",
+    "CHECK_ASKED",
+    "CHECK_ASKED_CHANNEL",
+    "CHECK_ASKED_DESCRIPTION",
+    "CHECK_ASKED_DM",
+    "CHECK_ASKED_NOBODY",
+    "CHECK_FALLBACK_KEY",
+    "CHECK_ON_READY_KEY",
     "COUNT_STATUSES",
     "DECLINED",
     "DM_LOOKS",
@@ -961,12 +1039,15 @@ __all__ = [
     "WITHDRAWN",
     "RequestError",
     "add_comment",
+    "asked_stamp",
     "can_move",
     "card_buttons",
     "card_footer_override",
     "channel_moves",
+    "check_falls_back",
     "checked_fields",
     "checked_move",
+    "checks_on_ready",
     "clamp",
     "comment_counts",
     "comments_for",
@@ -999,6 +1080,7 @@ __all__ = [
     "resume_target",
     "review_by_other",
     "row_value",
+    "set_check_asked",
     "set_fields",
     "set_message",
     "set_status",

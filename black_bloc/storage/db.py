@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 26
+SCHEMA_VERSION = 27
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -495,6 +495,8 @@ CREATE TABLE IF NOT EXISTS requests (
     how_to_test    TEXT,
     ready_by       INTEGER,
     sent_back_reason TEXT,
+    check_asked_by INTEGER,
+    check_asked_at TEXT,
     assignee_id    INTEGER,
     notes          TEXT,
     created_at     TEXT    NOT NULL,
@@ -649,6 +651,8 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("requests", "how_to_test", "TEXT"),
     ("requests", "ready_by", "INTEGER"),
     ("requests", "sent_back_reason", "TEXT"),
+    ("requests", "check_asked_by", "INTEGER"),
+    ("requests", "check_asked_at", "TEXT"),
 )
 
 RETIRED_REQUEST_STATUSES = ("pending", "approved", "planned")

@@ -503,21 +503,44 @@ CARD_ROW = {
     "held_from": pure.IN_PROGRESS,
     "created_at": "2026-09-03T01:00:00+00:00",
     "decided_at": "2026-09-03T02:00:00+00:00",
+    "check_asked_by": STAFFER,
+    "check_asked_at": "2026-09-03T02:30:00+00:00",
 }
 
 CARD_FIELDS = {
     pure.FILED_LOOK: ["Asked for", "Why", "Requested by", "Due"],
     pure.IN_PROGRESS: ["Asked for", "Requested by", "Assignee"],
-    pure.REVIEW: ["Asked for", "What was built", "How to test", "Marked ready by", "Requested by"],
+    pure.REVIEW: [
+        "Asked for",
+        "What was built",
+        "How to test",
+        "Marked ready by",
+        "Requested by",
+        "Asked to check",
+    ],
     pure.SENT_BACK: ["Asked for", "What needs doing", "Sent back by", "Marked ready by"],
-    pure.DONE: ["Asked for", "What was built", "How to test", "Accepted by", "Requested by"],
+    pure.DONE: [
+        "Asked for",
+        "What was built",
+        "How to test",
+        "Accepted by",
+        "Requested by",
+        "Asked to check",
+    ],
     pure.HOLD: ["Asked for", "Why it is waiting", "Was", "Requested by"],
     pure.DECLINED: ["Asked for", "Why", "Requested by"],
+    pure.CHECK_ASKED: [
+        "Asked for",
+        "What was built",
+        "How to test",
+        "Marked ready by",
+        "Asked by",
+    ],
 }
 
 
 @pytest.mark.parametrize("look", pure.LOOKS)
-def test_one_builder_draws_each_of_the_seven_looks_with_its_own_title_colour_and_fields(look):
+def test_one_builder_draws_each_of_the_eight_looks_with_its_own_title_colour_and_fields(look):
     card = pure.request_embed(
         CARD_ROW, move=look, origin="https://blackbloc.test", guild=None
     ).to_dict()
@@ -599,12 +622,93 @@ def test_the_plain_line_survives_for_the_log_when_a_card_is_never_posted():
     assert pure.move_line(CARD_ROW, "not a look") == ""
 
 
+def test_the_check_asked_look_is_last_and_every_look_has_a_colour_title_and_fields():
+    """Sixth pass: a look, not a state — the row stays `review` while the card says otherwise."""
+    assert pure.LOOKS[-1] == pure.CHECK_ASKED == "check_asked"
+    assert pure.CHECK_ASKED not in pure.STATUSES
+    assert pure.CHECK_ASKED not in pure.DM_LOOKS
+    for look in pure.LOOKS:
+        assert look in pure.EMBED_COLOURS and look in pure.EMBED_TITLES
+        assert look in pure.EMBED_FIELDS and look in pure.MOVE_LINE
+
+
+def test_the_asked_field_is_absent_until_somebody_has_asked_and_then_says_who_and_when():
+    nobody = dict(CARD_ROW) | {"check_asked_by": None, "check_asked_at": None}
+
+    assert pure.field_value(nobody, "asked") == ""
+    assert pure.field_value(nobody, "asked_by") == ""
+
+    said = pure.field_value(CARD_ROW, "asked")
+
+    assert said.startswith(f"<@{STAFFER}> · <t:") and said.endswith(":R>")
+    assert pure.field_value(CARD_ROW, "asked_by") == f"<@{STAFFER}>"
+    assert "Asked to check" not in [
+        field["name"] for field in pure.request_embed(nobody, move=pure.REVIEW).to_dict()["fields"]
+    ]
+
+
+def test_a_stamp_the_bot_cannot_read_still_names_who_asked_rather_than_crashing():
+    broken = dict(CARD_ROW) | {"check_asked_at": "sometime last week"}
+
+    assert pure.field_value(broken, "asked") == f"<@{STAFFER}>"
+
+
+def test_the_check_asked_card_is_the_only_one_that_carries_a_line_of_its_own():
+    card = pure.request_embed(CARD_ROW, move=pure.CHECK_ASKED, guild=None).to_dict()
+
+    assert "ready for you to try" in card["title"]
+    assert card["description"].startswith(f"Try it and tell <@{STAFFER}> how it went")
+    assert "description" not in pure.request_embed(CARD_ROW, move=pure.REVIEW).to_dict()
+    nobody = dict(CARD_ROW) | {"check_asked_by": None}
+    said = pure.request_embed(nobody, move=pure.CHECK_ASKED).to_dict()["description"]
+    assert said.startswith("Try it and tell staff how it went")
+
+
+def test_the_refusal_names_the_button_rather_than_a_subcommand_that_no_longer_exists():
+    """The fourth pass took `/request ready` away; this sentence still recommended it."""
+    said = pure.NOT_READY_TO_CHECK.format(
+        request_id=7, status="being worked on", doing="ask them to check"
+    )
+
+    assert "/request ready" not in said
+    assert "**Ready to check** on its card is what puts one there." in said
+    assert "ask them to check" in said
+
+
 class Store:
     def __init__(self, **values):
         self.values = values
 
     def get(self, guild_id, key):
         return self.values.get(key)
+
+
+def test_the_two_check_settings_read_off_the_registry_and_never_out_of_the_cog():
+    assert pure.CHECK_FALLBACK_KEY == "request_check_fallback_channel"
+    assert pure.CHECK_ON_READY_KEY == "request_check_on_ready"
+    assert pure.check_falls_back(Store(request_check_fallback_channel=True), GUILD) is True
+    assert pure.check_falls_back(Store(request_check_fallback_channel=False), GUILD) is False
+    assert pure.checks_on_ready(Store(request_check_on_ready=True), GUILD) is True
+    assert pure.checks_on_ready(Store(), GUILD) is False
+
+
+async def test_asking_again_overwrites_who_asked_and_when_rather_than_stacking_rows(db):
+    request_id = await file_one(db)
+
+    await pure.set_check_asked(db, request_id, STAFFER, "2026-09-03T02:30:00+00:00")
+    row = await pure.get_request(db, request_id)
+
+    assert row["check_asked_by"] == STAFFER
+    assert row["check_asked_at"] == "2026-09-03T02:30:00+00:00"
+
+    await pure.set_check_asked(db, request_id, ASKER, "2026-09-03T03:00:00+00:00")
+    again = await pure.get_request(db, request_id)
+
+    assert (again["check_asked_by"], again["check_asked_at"]) == (
+        ASKER,
+        "2026-09-03T03:00:00+00:00",
+    )
+    assert again["status"] == pure.OPEN
 
 
 def test_every_move_posts_a_card_until_the_server_says_otherwise():
