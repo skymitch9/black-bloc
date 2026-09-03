@@ -4,7 +4,9 @@
 > permanently, not temporarily; secret NAMES only).
 > Last verified: **2026-09-03** for the requests row only — the `/request` panel no longer writes a
 > member's own requests out (`request_panel_own_list`, off by default), and the sweeps count was
-> re-counted against [`sweeps.md`](sweeps.md) (65, was 42). ⚠️ Not run against live Discord. Before that,
+> re-counted against [`sweeps.md`](sweeps.md) (**68**, was 65 this morning and 42 before that; rows
+> 66–68 are the sixth pass, built on `feat/requests-check` and not yet merged).
+> ⚠️ Not run against live Discord. Before that,
 > **2026-08-27 20:22** — commands were run from the main machine that week; the laptop steps
 > are the same tools on a fresh clone and have NOT been rehearsed on your laptop.
 > Details live in [`runbook.md`](runbook.md) (operations) and [`sweeps.md`](sweeps.md) (what to test); this
@@ -54,7 +56,7 @@
 | See if the bot is up | https://blackbloc.heygabi.ai/health (should say `"ok":true,"ready":true`) |
 | See what it has been doing | https://blackbloc.heygabi.ai → **Logs** (every feature page has its own Logs section too; `/golive logs` etc. in Discord) |
 | See the team's requests | https://blackbloc.heygabi.ai/requests.html — members file with `/request` in Discord (opens a panel — **File a request**) or sign in and file on that page (they see only Requests). ⚠️ The panel's **list** of requests is staff-only: a member sees File a request, Refresh, the site link and a **Take one back…** select, but not their own requests written out. Set `request_panel_own_list` to `true` (Settings page or `/settings set-value`) to give members their list back |
-| Test something | [`sweeps.md`](sweeps.md) — 65 rows in priority order, each with what to expect (+ the detailed phase 1–8a scripts) |
+| Test something | [`sweeps.md`](sweeps.md) — 68 rows in priority order, each with what to expect (+ the detailed phase 1–8a scripts) |
 | Turn a feature on/off | Dashboard → that feature's page → the ON / SHADOW / OFF switch (or **Settings**) |
 | Quiet the Discord log channel | Settings → `<feature>_log_level` (off / important / all) |
 

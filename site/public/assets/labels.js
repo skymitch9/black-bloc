@@ -138,6 +138,8 @@ export const LABELS = {
   request_dm_on_decision: 'Whether the asker is DMed on every status change',
   request_channel_moves: 'Which moves put a card in the request channel',
   request_review_by_other: 'Whether somebody else has to check a request before it is done',
+  request_check_fallback_channel: 'Ping in the channel when a check-DM is refused',
+  request_check_on_ready: 'Ask the requester to check automatically at ready',
   request_log_level: 'How much of requests is repeated into Discord',
 
   cost_hosting_usd: 'What hosting costs a month, off the invoice',

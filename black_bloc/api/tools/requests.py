@@ -11,6 +11,7 @@ from fastapi.responses import PlainTextResponse
 from ...cogs.community.requests import (
     accept,
     apply_decision,
+    ask_check,
     mark_ready,
     notify,
     resume_request,
@@ -161,6 +162,15 @@ def request_row(guild: Any, row: Any, comments: int = 0) -> dict[str, Any]:
             else None
         ),
         "sent_back_reason": row_value(row, "sent_back_reason"),
+        "check_asked_by": (
+            str(row_value(row, "check_asked_by")) if row_value(row, "check_asked_by") else None
+        ),
+        "check_asked_by_name": (
+            resolve_one(guild, row_value(row, "check_asked_by"))["display_name"]
+            if row_value(row, "check_asked_by")
+            else None
+        ),
+        "check_asked_at": row_value(row, "check_asked_at"),
         "moves": list(moves_from(row["status"])),
         "resume_to": resume_target(row) if row["status"] == HOLD else None,
         "done_at": row["done_at"],
@@ -518,6 +528,22 @@ def build_router(bot: Any) -> APIRouter:
         require_db(bot)
         await _wanted(guild, request_id)
         said, fresh = await accept(
+            bot, guild, request_id, actor_for(bot, who, guild), via=VIA_WEBSITE
+        )
+        if fresh is None:
+            raise Refused(409, "not_decided", said)
+        return {"request": await _shown(guild, fresh), "message": said}
+
+    @router.post("/{request_id}/check")
+    async def request_check(
+        request: Request, request_id: int, payload: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Ask the person who filed it to try the work; the request stays ready to check."""
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        await _wanted(guild, request_id)
+        said, fresh = await ask_check(
             bot, guild, request_id, actor_for(bot, who, guild), via=VIA_WEBSITE
         )
         if fresh is None:

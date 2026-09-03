@@ -201,7 +201,7 @@ const ROUTINE_KINDS = [
   'poll.closed', 'tempvoice.ban', 'tempvoice.kick', 'honeypot.ban',
   'request.filed', 'request.withdrawn', 'request.resumed',
   'request.notify_skipped_test_mode',
-  'request.in_progress', 'request.updated', 'request.comment',
+  'request.in_progress', 'request.updated', 'request.comment', 'request.check_asked',
   'chat.memory_distilled', 'chat.memory_expired', 'chat.memory_optin',
   'application.submitted', 'application.withdrawn', 'application.panel_posted',
   'application.form_created', 'application.form_updated', 'application.form_deleted',
@@ -388,8 +388,10 @@ const SETTING_SPECS = [
   ['request_notify_channel_id', 'channel', '800000000000000003', null, 'where one line goes when a request is filed; blank tells nobody and the site is the only place they show up'],
   ['request_status_channel_id', 'channel', null, null, 'where a line goes each time staff move a request — picked up, on hold, done, declined; blank uses request_notify_channel_id, so one channel carries both'],
   ['request_dm_on_decision', 'bool', true, true, 'true to DM the person who asked every time staff move their request — picked up, on hold, done or declined'],
-  ['request_channel_moves', 'enums', ['filed', 'in_progress', 'review', 'sent_back', 'done', 'hold', 'declined'], ['filed', 'in_progress', 'review', 'sent_back', 'done', 'hold', 'declined'], 'which moves put a card in the request channel: filed, in_progress, review, sent_back, done, hold, declined; all seven by default, and an empty list posts nothing at all', ['filed', 'in_progress', 'review', 'sent_back', 'done', 'hold', 'declined']],
+  ['request_channel_moves', 'enums', ['filed', 'in_progress', 'review', 'sent_back', 'hold', 'declined'], ['filed', 'in_progress', 'review', 'sent_back', 'hold', 'declined'], 'which moves put a card in the request channel: filed, in_progress, review, sent_back, done, hold, declined, check_asked; every one but done and check_asked by default (the done card repeats what the site log already says, and the check card is a DM to one person), and an empty list posts nothing at all', ['filed', 'in_progress', 'review', 'sent_back', 'done', 'hold', 'declined', 'check_asked']],
   ['request_review_by_other', 'bool', false, false, 'true to make somebody other than the staffer who marked a request ready to check be the one who accepts it'],
+  ['request_check_fallback_channel', 'bool', true, true, 'true to ping the person who asked in the request channel when Ask-them-to-check cannot DM them (closed DMs); false to tell staff nobody was reached and leave it there'],
+  ['request_check_on_ready', 'bool', false, false, 'true to ask the person who asked to try the work the moment a request is marked ready to check, without a staffer pressing Ask them to check'],
   ['cost_hosting_usd', 'int', 0, 0, 'what the always-on container costs a month in whole dollars — read it off your Fly invoice; 0 = not filled in yet, and the Costs card on the Health page says so rather than claiming hosting is free', null, 10000],
   ['raidtrain_mode', 'enum', 'off', 'off', 'off, shadow (log what would be sent and send nothing) or on (post the lineup and DM slot holders before their hour)', ['off', 'shadow', 'on']],
   ['raidtrain_organizer_role_id', 'role', null, null, 'role that may build and change a raid train’s lineup as well as staff; blank leaves it to staff alone'],
@@ -4427,7 +4429,8 @@ const REQUEST_REASON_NEEDED = { declined: REQUEST_DECLINE_NEEDS_A_REASON, hold: 
 const REQUEST_READY_NEEDS_BUILT = 'Marking a request ready to check needs a line saying what was actually built, so nothing was changed. That sentence is what the person who asked reads on the card. `/request ready {id}` opens a box for it — or use the **Ready to check** button on the site.';
 const REQUEST_SENDBACK_NEEDS_A_NOTE = 'Sending a request back needs one line saying what is still to do, so nothing was changed. The staffer who marked it ready is sent exactly what you type — say what is missing and send it again.';
 const REQUEST_DONE_NEEDS_A_CHECK = 'Request **#{id}** is **{status}**, and a request only finishes once somebody has checked it, so nothing was changed. `/request ready {id}` marks it ready to check — what was built, and how to try it — and `/request accept {id}` finishes it after that. On the site it is the **Ready to check** button on the card.';
-const REQUEST_NOT_READY = 'Request **#{id}** is **{status}**, not ready to check, so there was nothing to send back. `/request ready {id}` is what puts one there.';
+const REQUEST_NOT_READY = 'Request **#{id}** is **{status}**, not ready to check, so there was nothing to {doing}. **Ready to check** on its card is what puts one there.';
+const REQUEST_CHECK_ASKED = 'Request **#{id}** — {who} has been asked by DM to try it.';
 const REQUEST_REVIEW_BY_OTHER = 'You are the one who marked request **#{id}** ready to check, and this server asks somebody else on staff to check it, so nothing was changed. Ask another staffer to press Accept, or a Lead can turn `request_review_by_other` off if one pair of eyes is enough.';
 const REQUEST_COMMENT_NEEDS_TEXT = 'There is nothing to add, so no comment was left. Type what you want on the request and send it again.';
 const REQUEST_NOTHING_TO_SAVE = 'That change arrived with nothing in it, so nothing was saved. It is a fault in the page rather than in what you typed — reload the requests page and try again.';
@@ -4462,6 +4465,9 @@ function askRow(row) {
     ready_by: row.ready_by ? String(row.ready_by) : null,
     ready_by_name: row.ready_by ? memberName(row.ready_by) : null,
     sent_back_reason: row.sent_back_reason || null,
+    check_asked_by: row.check_asked_by ? String(row.check_asked_by) : null,
+    check_asked_by_name: row.check_asked_by ? memberName(row.check_asked_by) : null,
+    check_asked_at: row.check_asked_at || null,
     moves: REQUEST_TRANSITIONS[row.status] || [],
     resume_to: row.status === 'hold' ? askResumeTarget(row) : null,
     done_at: row.done_at,
@@ -4578,6 +4584,13 @@ function askDecide(row, status, reason, extra = {}) {
   if (look === 'sent_back') return `Request **#${row.id}** is back with whoever is working on it.`;
   if (status === 'done') return `Request **#${row.id}** is done. The person who asked has been told.`;
   return `Request **#${row.id}** is now **${REQUEST_STATUS_WORDS[status]}**.`;
+}
+
+function notReadyToCheck(row, doing) {
+  return REQUEST_NOT_READY
+    .split('{id}').join(row.id)
+    .split('{status}').join(REQUEST_STATUS_WORDS[row.status] || row.status)
+    .split('{doing}').join(doing);
 }
 
 function askResume(row) {
@@ -4759,10 +4772,26 @@ route('POST', '/api/requests/:id/sendback', async (context) => {
   const reason = String(body.reason || '').trim().slice(0, 500);
   if (!reason) throw new Refused(400, 'no_reason', REQUEST_SENDBACK_NEEDS_A_NOTE);
   if (row.status !== 'review') {
-    throw new Refused(409, 'not_decided', REQUEST_NOT_READY.split('{id}').join(row.id).split('{status}').join(REQUEST_STATUS_WORDS[row.status] || row.status));
+    throw new Refused(409, 'not_decided', notReadyToCheck(row, 'send back'));
   }
   const said = askDecide(row, 'in_progress', null, { sent_back_reason: reason });
   return { request: askRow(row), message: said };
+});
+
+route('POST', '/api/requests/:id/check', async (context) => {
+  requireStaff(context.session);
+  const row = wantedAsk(context.params.id);
+  await context.body();
+  if (row.status !== 'review') {
+    throw new Refused(409, 'not_decided', notReadyToCheck(row, 'ask them to check'));
+  }
+  row.check_asked_by = STAFF.id;
+  row.check_asked_at = now();
+  logAction('web.request.check_asked', { target_id: row.user_id, details: { request_id: row.id, told: 'dm' } });
+  return {
+    request: askRow(row),
+    message: REQUEST_CHECK_ASKED.split('{id}').join(row.id).split('{who}').join(`<@${row.user_id}>`),
+  };
 });
 
 route('POST', '/api/requests/:id/status', async (context) => {

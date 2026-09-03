@@ -14,6 +14,10 @@ from ...panels import NoteModal as PanelNoteModal
 from ...panels import Panel, answer, db_ready, retire, still_staff
 from ...requests import (
     BUILT_LIMIT,
+    CHECK_ASKED,
+    CHECK_ASKED_CHANNEL,
+    CHECK_ASKED_DM,
+    CHECK_ASKED_NOBODY,
     COUNT_STATUSES,
     DECLINED,
     DM_LOOKS,
@@ -57,8 +61,10 @@ from ...requests import (
     RequestError,
     card_buttons,
     card_footer_override,
+    check_falls_back,
     checked_fields,
     checked_move,
+    checks_on_ready,
     clamp,
     count_requests,
     counts_line,
@@ -70,7 +76,9 @@ from ...requests import (
     look_for_status,
     look_of,
     may_accept,
+    mention,
     move_line,
+    now_iso,
     option_label,
     panel_minutes,
     panel_shows_own_list,
@@ -80,6 +88,7 @@ from ...requests import (
     requests_are_on,
     resume_target,
     row_value,
+    set_check_asked,
     set_fields,
     set_message,
     set_status,
@@ -206,6 +215,7 @@ async def post_line(
     *,
     embed: Any = None,
     view: Any = None,
+    ping: Any = None,
 ) -> Any:
     """One guarded card where staff watch; a channel the guard refuses is skipped, not raised."""
     if not channel_id:
@@ -223,9 +233,17 @@ async def post_line(
             details={"request_id": row["id"], "move": move, "channel_id": int(channel_id)},
         )
         return None
+    allowed = (
+        discord.AllowedMentions(users=[discord.Object(id=int(ping))])
+        if ping
+        else discord.AllowedMentions.none()
+    )
     try:
         return await channel.send(
-            embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+            content=mention(ping) if ping else None,
+            embed=embed,
+            view=view,
+            allowed_mentions=allowed,
         )
     except NETWORK_ERRORS as exc:
         log.warning("requests: could not post %r for %s: %s", line, row["id"], exc)
@@ -351,7 +369,7 @@ async def mark_ready(
     via: str = VIA_DISCORD,
 ) -> tuple[str, Any]:
     """The panel's Ready-to-check button and the site's — in progress into review."""
-    return await apply_decision(
+    said, fresh = await apply_decision(
         bot,
         guild,
         request_id,
@@ -361,6 +379,10 @@ async def mark_ready(
         how_to_test=how_to_test,
         via=via,
     )
+    if fresh is not None and checks_on_ready(bot.store, guild.id):
+        _, asked = await ask_check(bot, guild, request_id, actor, via=via)
+        fresh = asked if asked is not None else fresh
+    return (said, fresh)
 
 
 async def accept(
@@ -429,9 +451,78 @@ async def resume_request(
     )
 
 
+CHECK_SAID: dict[str, str] = {
+    "dm": CHECK_ASKED_DM,
+    "channel": CHECK_ASKED_CHANNEL,
+    "nobody": CHECK_ASKED_NOBODY,
+}
+
+
+async def ask_check(
+    bot: Any, guild: Any, request_id: int, actor: Any, *, via: str = VIA_DISCORD
+) -> tuple[str, Any]:
+    """The panel's Ask-them-to-check button and the site's — the requester is told the work
+    is theirs to try; the request does not move."""
+    row = await get_request(bot.db, request_id)
+    if row is None or row["guild_id"] != guild.id:
+        return (NO_SUCH_REQUEST.format(request_id=request_id), None)
+    if row["status"] != REVIEW:
+        return (
+            NOT_READY_TO_CHECK.format(
+                request_id=request_id,
+                status=STATUS_WORDS.get(row["status"], row["status"]),
+                doing="ask them to check",
+            ),
+            None,
+        )
+    wanted = row["user_id"]
+    await set_check_asked(bot.db, request_id, getattr(actor, "id", None), now_iso())
+    fresh = await get_request(bot.db, request_id)
+    embed, view = card(bot, guild, fresh, CHECK_ASKED)
+    member = guild.get_member(wanted) or bot.get_user(wanted)
+    told = "dm"
+    if not await dm(member, embed=embed, view=view):
+        told = "nobody"
+        await log_action(
+            bot,
+            guild,
+            "request.dm_failed",
+            target=wanted,
+            details={"request_id": request_id, "status": CHECK_ASKED},
+        )
+        if check_falls_back(bot.store, guild.id):
+            posted = await post_line(
+                bot,
+                guild,
+                status_channel_id(bot.store, guild.id),
+                fresh,
+                move_line(fresh, CHECK_ASKED),
+                CHECK_ASKED,
+                embed=embed,
+                view=view,
+                ping=wanted,
+            )
+            told = "channel" if posted is not None else "nobody"
+    await log_action(
+        bot,
+        guild,
+        kind_via("request.check_asked", via),
+        actor=actor,
+        target=wanted,
+        details={"request_id": request_id, "told": told, "via": via},
+    )
+    if told != "channel":
+        await notify_move(bot, guild, fresh, CHECK_ASKED)
+    return (
+        CHECK_SAID[told].format(request_id=request_id, who=mention(wanted)),
+        fresh,
+    )
+
+
 MOVE_FUNCS: dict[str, Any] = {
     "pickup": lambda bot, guild, rid, actor: apply_decision(bot, guild, rid, IN_PROGRESS, actor),
     "accept": lambda bot, guild, rid, actor: accept(bot, guild, rid, actor),
+    "check": lambda bot, guild, rid, actor: ask_check(bot, guild, rid, actor),
     "resume": lambda bot, guild, rid, actor: resume_request(bot, guild, rid, actor),
 }
 
@@ -711,7 +802,7 @@ class LogsButton(discord.ui.Button):
 
 class BackButton(discord.ui.Button):
     def __init__(self) -> None:
-        super().__init__(label="Back", style=discord.ButtonStyle.secondary, row=0)
+        super().__init__(label="Back", style=discord.ButtonStyle.secondary, row=1)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         await back_to_panel(interaction, self.view)
@@ -993,6 +1084,7 @@ __all__ = [
     "WithdrawYesButton",
     "accept",
     "apply_decision",
+    "ask_check",
     "back_to_panel",
     "build_card",
     "build_panel",

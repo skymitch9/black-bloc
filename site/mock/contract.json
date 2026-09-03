@@ -2495,6 +2495,9 @@
           "ready_by",
           "ready_by_name",
           "sent_back_reason",
+          "check_asked_by",
+          "check_asked_by_name",
+          "check_asked_at",
           "moves",
           "resume_to",
           "done_at"
@@ -2593,6 +2596,9 @@
           "ready_by",
           "ready_by_name",
           "sent_back_reason",
+          "check_asked_by",
+          "check_asked_by_name",
+          "check_asked_at",
           "moves",
           "resume_to",
           "done_at"
@@ -2714,6 +2720,35 @@
           "moves",
           "decided_by",
           "decided_at"
+        ]
+      }
+    },
+    {
+      "_": "Sixth pass. Ask them to check is a staff ACTION on a review row, not a move: the row is still `review` afterwards, and the two check_asked_* fields are what the card's chip reads.",
+      "method": "POST",
+      "path": "/api/requests/{review_request_id}/check",
+      "body": {},
+      "read_by": [
+        "13d page-requests.js Ask them to check"
+      ],
+      "shape": "object",
+      "keys": [
+        "request",
+        "message"
+      ],
+      "nested": {
+        "request": [
+          "id",
+          "status",
+          "status_word",
+          "built",
+          "how_to_test",
+          "ready_by",
+          "ready_by_name",
+          "check_asked_by",
+          "check_asked_by_name",
+          "check_asked_at",
+          "moves"
         ]
       }
     },
@@ -3391,6 +3426,7 @@
     "web.request.in_progress",
     "web.request.review",
     "web.request.sent_back",
+    "web.request.check_asked",
     "web.request.done",
     "web.request.withdrawn",
     "web.request.updated",

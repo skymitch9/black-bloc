@@ -655,6 +655,7 @@ def test_a_request_is_loud_only_when_it_is_answered_or_fails():
         "request.filed",
         "request.withdrawn",
         "request.resumed",
+        "request.check_asked",
         "request.in_progress",
         "request.updated",
         "request.comment",

@@ -88,6 +88,8 @@ const SETTING_KEYS = [
   'request_dm_on_decision',
   'request_channel_moves',
   'request_review_by_other',
+  'request_check_fallback_channel',
+  'request_check_on_ready',
   'request_log_level',
 ];
 
@@ -245,7 +247,12 @@ function headBlock(row) {
       el('p', { class: 'req-what', text: row.what }),
       metaLine(row),
     ]),
-    el('div', { class: 'req-marks' }, [statusPill(row), heldChip(row), dueChip(row)]),
+    el('div', { class: 'req-marks' }, [
+      statusPill(row),
+      heldChip(row),
+      askedChip(row),
+      dueChip(row),
+    ]),
   ]);
 }
 
@@ -554,6 +561,19 @@ function acceptButton(row, say, which) {
   }, { tone: 'ok', small: false });
 }
 
+function askCheckButton(row, say, which) {
+  return button('Ask them to check', async () => {
+    const done = await run(
+      say,
+      () => send(`/api/requests/${encodeURIComponent(row.id)}/check`, 'POST', {}),
+      (found) => found?.message || 'They have been asked to check it.',
+    );
+    if (!done.ok) return;
+    keepSaying(which, say);
+    refresh();
+  }, { tone: 'quiet', small: false });
+}
+
 function sendBackButton(row, say, which) {
   return button('Send back', async () => {
     const box = el('input', {
@@ -626,6 +646,15 @@ function readyChip(row) {
   return badge(`ready by ${row.ready_by_name}`, null);
 }
 
+/** Who last asked the requester to try it, so nobody asks twice without meaning to. */
+function askedChip(row) {
+  if (!row.check_asked_at) return null;
+  const when = ago(row.check_asked_at);
+  const chip = badge(`asked by ${row.check_asked_by_name || 'somebody'} · ${when.text}`, 'info');
+  if (when.title) chip.title = when.title;
+  return chip;
+}
+
 function boardCard(row) {
   const say = notice();
   return anchored(row, card(null, [
@@ -653,13 +682,19 @@ function reviewCard(row) {
         el('p', { class: 'req-what', text: row.what }),
         metaLine(row),
       ]),
-      el('div', { class: 'req-marks' }, [statusPill(row), readyChip(row), dueChip(row)]),
+      el('div', { class: 'req-marks' }, [
+        statusPill(row),
+        readyChip(row),
+        askedChip(row),
+        dueChip(row),
+      ]),
     ]),
     whyBlock(row.why),
     writtenRow(row, say, 'built', 'What was built', 'The whole answer the person who asked gets.'),
     writtenRow(row, say, 'how_to_test', 'How to test it', 'Optional — the steps to see it working.'),
     bar([
       acceptButton(row, say, 'review'),
+      askCheckButton(row, say, 'review'),
       sendBackButton(row, say, 'review'),
       ...moveButtons({ ...row, moves }, say, 'review'),
     ]),

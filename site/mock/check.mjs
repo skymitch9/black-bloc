@@ -329,15 +329,17 @@ async function checkActionKinds() {
   await send('PUT', '/api/chat/personality/tsundere', { enabled: true });
   // Phase 17: the one web.chat.memory_* kind the website can leave.
   await send('DELETE', `/api/chat/memory/${IDS.member_id}`, undefined);
-  // The nine web.request.* kinds. Hold then resume walks the state machine both ways off one
-  // row, and ready → sendback → ready → accept walks the review pass off another. Withdraw is
-  // the member's own, so it is the one call here that goes in as somebody who is not staff.
+  // The ten web.request.* kinds. Hold then resume walks the state machine both ways off one
+  // row, and ready → check → sendback → ready → accept walks the review pass off another.
+  // Withdraw is the member's own, so it is the one call here that goes in as somebody who is
+  // not staff.
   await post('/api/requests', { what: 'contract check', why: 'so web.request.filed is left' });
   await post(`/api/requests/${IDS.feature_request_id}/comments`, { text: 'contract check' });
   await post(`/api/requests/${IDS.feature_request_id}/status`, { priority: 2 });
   await post(`/api/requests/${IDS.feature_request_id}/hold`, { reason: 'contract check' });
   await post(`/api/requests/${IDS.feature_request_id}/resume`, {});
   await post(`/api/requests/${IDS.progress_request_id}/ready`, { built: 'contract check', how_to_test: 'press it' });
+  await post(`/api/requests/${IDS.review_request_id}/check`, {});
   await post(`/api/requests/${IDS.review_request_id}/sendback`, { reason: 'contract check' });
   await post(`/api/requests/${IDS.review_request_id}/ready`, { built: 'contract check' });
   await post(`/api/requests/${IDS.review_request_id}/accept`, {});

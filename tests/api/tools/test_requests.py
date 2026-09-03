@@ -76,6 +76,9 @@ async def test_a_filed_row_carries_every_field_the_requests_page_reads(as_member
         "ready_by",
         "ready_by_name",
         "sent_back_reason",
+        "check_asked_by",
+        "check_asked_by_name",
+        "check_asked_at",
         "moves",
         "resume_to",
         "done_at",
@@ -369,6 +372,41 @@ async def test_the_accept_route_refuses_the_same_pair_of_eyes_when_the_server_as
     assert refused_now.status_code == 409
     assert "somebody else on staff" in refused_now.json()["message"]
     assert client.get("/api/requests/1").json()["request"]["status"] == "review"
+
+
+async def test_the_check_route_asks_the_requester_and_leaves_one_log_row(
+    as_staff, client, sign_in, web, wf
+):
+    sign_in(client, uid=ASKER, staff=False)
+    await file_one(client)
+    sign_in(client, uid=LEAD, staff=True)
+    client.post("/api/requests/1/status", json={"status": "in_progress"})
+    client.post("/api/requests/1/ready", json={"built": "the board"})
+    await web.db.conn.execute("DELETE FROM action_log")
+    await web.db.conn.commit()
+
+    asked = client.post("/api/requests/1/check", json={})
+
+    assert asked.status_code == 200
+    row = asked.json()["request"]
+    assert row["status"] == "review"
+    assert row["check_asked_by"] == str(LEAD) and row["check_asked_by_name"]
+    assert row["check_asked_at"]
+    assert "#1" in asked.json()["message"]
+    left = await wf.web_rows_in(web.db)
+    assert [kind for kind, _ in left] == ["web.request.check_asked"], left
+    assert left[0][1]["via"] == wf.VIA_WEBSITE and left[0][1]["told"] == "dm"
+    assert [kind for kind in await kinds(web, wf) if kind == "request.check_asked"] == []
+
+
+async def test_the_check_route_refuses_a_request_nobody_has_marked_ready(as_staff, client, web):
+    await file_one(client)
+
+    early = client.post("/api/requests/1/check", json={})
+
+    assert early.status_code == 409 and early.json()["error"] == "not_decided"
+    assert "not ready to check" in early.json()["message"]
+    assert client.get("/api/requests/1").json()["request"]["check_asked_at"] is None
 
 
 async def test_the_sendback_route_needs_a_note_and_leaves_one_log_row(as_staff, client, web, wf):

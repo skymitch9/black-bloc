@@ -12,11 +12,16 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 26
+        assert SCHEMA_VERSION == 27
         cur = await db.conn.execute("PRAGMA table_info(requests)")
-        assert {"built", "how_to_test", "ready_by", "sent_back_reason"} <= {
-            r["name"] for r in await cur.fetchall()
-        }
+        assert {
+            "built",
+            "how_to_test",
+            "ready_by",
+            "sent_back_reason",
+            "check_asked_by",
+            "check_asked_at",
+        } <= {r["name"] for r in await cur.fetchall()}
         cur = await db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = {r["name"] for r in await cur.fetchall()}
         assert {"settings", "action_log", "role_menus", "role_menu_options"} <= tables
@@ -776,6 +781,46 @@ async def test_a_schema_25_file_gains_the_four_review_columns_and_keeps_its_rows
         assert row["status"] == "done" and row["done_at"] == "2026-09-02T00:00:00+00:00"
         assert (row["built"], row["how_to_test"]) == (None, None)
         assert (row["ready_by"], row["sent_back_reason"]) == (None, None)
+        cur = await again.conn.execute(
+            "SELECT value FROM schema_meta WHERE key='schema_version'"
+        )
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await again.close()
+
+
+async def test_a_schema_26_file_gains_the_two_check_asked_columns_and_keeps_its_rows(tmp_path):
+    """Schema 27 is additive: a review row from before Ask-them-to-check keeps its status and
+    reads both new columns as nothing."""
+    path = tmp_path / "old26.sqlite3"
+    db = Database(path)
+    await db.connect()
+    for column in ("check_asked_by", "check_asked_at"):
+        await db.conn.execute(f"ALTER TABLE requests DROP COLUMN {column}")
+    await db.conn.execute(
+        "INSERT INTO requests(id, guild_id, user_id, what, why, status, created_at, ready_by) "
+        "VALUES (1, 7, 9, 'a request board', 'because', 'review', "
+        "'2026-09-03T00:00:00+00:00', 5)"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '26')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("PRAGMA table_info(requests)")
+        assert {"check_asked_by", "check_asked_at"} <= {
+            row["name"] for row in await cur.fetchall()
+        }
+        cur = await again.conn.execute(
+            "SELECT status, ready_by, check_asked_by, check_asked_at FROM requests WHERE id = 1"
+        )
+        row = await cur.fetchone()
+        assert (row["status"], row["ready_by"]) == ("review", 5)
+        assert (row["check_asked_by"], row["check_asked_at"]) == (None, None)
         cur = await again.conn.execute(
             "SELECT value FROM schema_meta WHERE key='schema_version'"
         )

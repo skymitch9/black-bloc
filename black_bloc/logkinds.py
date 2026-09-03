@@ -278,6 +278,7 @@ ROUTINE: frozenset[str] = frozenset(
         "raidtrain.unassign",
         "raidtrain.unlock",
         "presence.bio_set",
+        "request.check_asked",
         "request.comment",
         "request.filed",
         "request.in_progress",

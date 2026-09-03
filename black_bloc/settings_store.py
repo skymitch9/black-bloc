@@ -866,8 +866,11 @@ REQUEST_CARD_MOVES = (
     "done",
     "hold",
     "declined",
+    "check_asked",
 )
-REQUEST_CARD_DEFAULT = tuple(move for move in REQUEST_CARD_MOVES if move != "done")
+REQUEST_CARD_DEFAULT = tuple(
+    move for move in REQUEST_CARD_MOVES if move not in ("done", "check_asked")
+)
 
 KEY_TYPES.update(
     {
@@ -875,6 +878,8 @@ KEY_TYPES.update(
         "request_review_by_other": "bool",
         "request_panel_minutes": "int",
         "request_panel_own_list": "bool",
+        "request_check_fallback_channel": "bool",
+        "request_check_on_ready": "bool",
     }
 )
 KEY_CHOICES["request_channel_moves"] = REQUEST_CARD_MOVES
@@ -882,8 +887,9 @@ KEY_HELP.update(
     {
         "request_channel_moves": (
             "which moves put a card in the request channel: filed, in_progress, review, "
-            "sent_back, done, hold, declined; every one but done by default (the done card "
-            "repeats what the site's log already says), and an empty list posts nothing at all"
+            "sent_back, done, hold, declined, check_asked; every one but done and check_asked "
+            "by default (the done card repeats what the site's log already says, and the "
+            "check card is a DM to one person), and an empty list posts nothing at all"
         ),
         "request_review_by_other": (
             "true to make somebody other than the staffer who marked a request ready to check "
@@ -898,6 +904,15 @@ KEY_HELP.update(
         "request_panel_own_list": (
             "true to show members their own requests on the /request panel; staff always see "
             "them, and members can still file and take one back"
+        ),
+        "request_check_fallback_channel": (
+            "true to ping the person who asked in the request channel when Ask-them-to-check "
+            "cannot DM them (closed DMs); false to tell staff nobody was reached and leave it "
+            "there"
+        ),
+        "request_check_on_ready": (
+            "true to ask the person who asked to try the work the moment a request is marked "
+            "ready to check, without a staffer pressing Ask them to check"
         ),
     }
 )
@@ -1305,6 +1320,10 @@ class SettingsStore:
         if key == "request_panel_minutes":
             return 10
         if key == "request_panel_own_list":
+            return False
+        if key == "request_check_fallback_channel":
+            return True
+        if key == "request_check_on_ready":
             return False
         if key == "chat_mode":
             return "on"

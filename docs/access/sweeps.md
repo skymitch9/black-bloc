@@ -1,7 +1,11 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-03** — row **62** now says the done card does NOT post (owner: "suppress the
+> **2026-09-03** — rows **66–68** added by the requests SIXTH pass ("Ask them to check": the
+> DM, the channel ping when their DMs are closed, and the auto-ask at ready), so the file now
+> holds **68** un-exercised rows. ⚠️ Rows 66–68 are **BUILT on `feat/requests-check`, not
+> merged and not deployed**; nothing in them has been run against Discord or the live site.
+> Same day — row **62** now says the done card does NOT post (owner: "suppress the
 > request.done box in discord" — `request_channel_moves` default drops `done`). Same
 > morning, row **65** added, and rows **14–15** corrected again, by the owner's
 > "make the view request thing staff only" (viewing requests on the panel): a member no
@@ -178,6 +182,9 @@ form for a full pass.
 | 63 | Requests — panel move, Send back | on a review card, press **Send back**, fill "What's left?" | the card re-renders **being worked on**; whoever marked it ready is DMed the note |
 | 64 | Requests — panel move, Resume | on a held card, press **Resume** | the card re-renders back where it was held from — usually being worked on, sometimes ready to check |
 | 65 | Requests — giving members their list back | `/settings set-value key:request_panel_own_list value:true`, then `/request` as a non-staff member who has filed something | the member's own requests are summarised on the panel again (and "You have not asked for anything yet" when they have none) — exactly row 15's old behaviour. Set it back to `false` and the lines go away again; the Settings page has the same switch |
+| 66 | Requests — Ask them to check (sixth pass) | `/request` as staff, open a request that is **ready to check**, press **Ask them to check** | the person who filed it gets a DM titled *"Request #N is ready for you to try 🙌"* with what was built, how to test it, who marked it ready and a line asking them to try it and say how it went; the card you are looking at re-renders with a new **Asked to check · @you · just now** field and stays **ready to check** (it does NOT move); the ephemeral reply says they were asked by DM; one `request.check_asked` line on the Requests log. The same button is on the review card at https://blackbloc.heygabi.ai/requests.html, between Accept and Send back, with an *asked by … · just now* chip beside the status |
+| 67 | Requests — the ping when their DMs are closed | turn Discord DMs off for the account that filed the request (Privacy Settings → allow DMs from server members: off), then press **Ask them to check** again | the DM fails, so the card is posted in the request channel with a **real @mention** of the person who asked — the only place the requests bot ever pings anybody; the reply says their DMs are closed and they were pinged instead; the log carries a `request.dm_failed` line as well as `request.check_asked`. Then `/settings set-value key:request_check_fallback_channel value:false` and press it again: nothing is posted, and the reply names the key a Lead turns back on |
+| 68 | Requests — asking automatically at ready | `/settings set-value key:request_check_on_ready value:true`, then take a request that is **being worked on** and press **Ready to check** | the DM from row 66 arrives with no second button press, and the log shows `request.review` followed by `request.check_asked`; set it back to `false` and the next Ready-to-check tells nobody. Both switches are on the Settings page too |
 
 ## The owner's Twitch Team form — the walk-through
 

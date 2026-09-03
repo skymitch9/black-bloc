@@ -1,3 +1,5 @@
+import json
+
 import discord
 import pytest
 
@@ -607,7 +609,7 @@ async def test_the_refresh_button_re_renders_the_panel(cog, bot, member):
 EXPECTED_BUTTONS = {
     pure.OPEN: ["Pick up", "Hold", "Decline"],
     pure.IN_PROGRESS: ["Ready to check", "Hold", "Decline"],
-    pure.REVIEW: ["Accept", "Send back", "Hold", "Decline"],
+    pure.REVIEW: ["Accept", "Ask them to check", "Send back", "Hold", "Decline"],
     pure.HOLD: ["Resume", "Decline"],
     pure.DONE: [],
     pure.DECLINED: [],
@@ -625,6 +627,10 @@ async def test_the_card_renders_exactly_the_buttons_the_table_says(cog, bot, mem
     assert [item.label for item in view.children] == [*EXPECTED_BUTTONS[status], "Back"]
     if not EXPECTED_BUTTONS[status]:
         assert "finishes" in embed.footer.text
+    # Discord takes five items an action row; review's fifth move filled the first one, so
+    # Back sits on its own below rather than making a sixth.
+    assert len([item for item in view.children if item.row == 0]) <= 5
+    assert find_item(view, "Back").row == 1
 
 
 async def test_accept_is_not_rendered_when_the_server_asks_for_a_second_pair_of_eyes(
@@ -685,6 +691,7 @@ async def test_back_returns_to_the_panel(cog, bot, member, lead):
         (pure.OPEN, "Pick up", "apply_decision"),
         (pure.HOLD, "Resume", "resume_request"),
         (pure.REVIEW, "Accept", "accept"),
+        (pure.REVIEW, "Ask them to check", "ask_check"),
     ],
 )
 async def test_a_direct_move_button_calls_its_shared_function_and_leaves_via_alone(
@@ -1197,3 +1204,232 @@ async def test_the_logs_button_answers_with_a_new_ephemeral_message(cog, bot, le
 
     assert clicked.response.messages[0]["embed"].title.startswith("Request")
     assert clicked.response.messages[0]["ephemeral"] is True
+
+
+# --- sixth pass: Ask them to check -------------------------------------------------------------
+
+
+async def check_rows(db):
+    cur = await db.conn.execute(
+        "SELECT kind, details FROM action_log WHERE kind LIKE '%check_asked%' ORDER BY id"
+    )
+    return [(row["kind"], json.loads(row["details"] or "{}")) for row in await cur.fetchall()]
+
+
+async def test_asking_them_to_check_dms_the_requester_and_leaves_the_request_where_it_is(
+    cog, bot, member, lead, db
+):
+    request_id = await request_at(bot, member, lead, pure.REVIEW)
+    member.dms.clear()
+
+    said, fresh = await requests_cog.ask_check(bot, bot.guild, request_id, lead)
+
+    assert f"#{request_id}" in said and "asked by DM" in said
+    assert fresh["status"] == pure.REVIEW
+    assert fresh["check_asked_by"] == lead.id and fresh["check_asked_at"]
+    assert len(member.dms) == 1
+    card = card_of(member.dms[0])
+    assert card["title"] == f"Request #{request_id} is ready for you to try 🙌"
+    assert "Try it and tell" in card["description"]
+    assert "a board" in words_in(card)
+    rows = await check_rows(db)
+    assert [kind for kind, _ in rows] == ["request.check_asked"]
+    assert rows[0][1] == {"request_id": request_id, "told": "dm", "via": "discord"}
+
+
+async def test_the_check_dm_carries_the_site_button_like_every_other_card(
+    cog, bot, member, lead
+):
+    """It goes through the same `card()` builder, so the DM opens on the request's own anchor."""
+    request_id = await request_at(bot, member, lead, pure.REVIEW)
+    member.dms.clear()
+
+    await requests_cog.ask_check(bot, bot.guild, request_id, lead)
+
+    assert link_of(member.dms[0]) == pure.request_url(bot.settings.origin, request_id)
+
+
+async def test_a_closed_dm_pings_the_requester_in_the_request_channel_instead(
+    cog, bot, member, lead, db
+):
+    request_id = await request_at(bot, member, lead, pure.REVIEW)
+    channel = bot.guild.get_channel(TEST_CHANNEL)
+    channel.messages.clear()
+    member.dm_raises = refused()
+
+    said, _ = await requests_cog.ask_check(bot, bot.guild, request_id, lead)
+
+    assert "DMs are closed" in said and "pinged in the request channel" in said
+    assert len(channel.messages) == 1
+    sent = channel.messages[0]
+    assert sent.content == f"<@{member.id}>"
+    assert [one.id for one in sent.kwargs["allowed_mentions"].users] == [member.id]
+    assert card_of(sent)["title"].endswith("ready for you to try 🙌")
+    kinds = await action_kinds(db)
+    assert kinds.count("request.dm_failed") == 1
+    rows = await check_rows(db)
+    assert rows[-1][1]["told"] == "channel"
+
+
+async def test_the_fallback_ping_is_the_only_place_this_cog_mentions_anybody(
+    cog, bot, member, lead
+):
+    """Every other send is AllowedMentions.none(); this one names exactly one person."""
+    request_id = await request_at(bot, member, lead, pure.REVIEW)
+    channel = bot.guild.get_channel(TEST_CHANNEL)
+    channel.messages.clear()
+
+    await requests_cog.ask_check(bot, bot.guild, request_id, lead)
+
+    assert channel.messages == []
+    assert member.dms[-1]["allowed_mentions"].everyone is False
+
+
+async def test_with_the_fallback_off_nobody_is_told_and_the_reply_names_the_key(
+    cog, bot, member, lead, db
+):
+    await bot.store.set(GUILD, "request_check_fallback_channel", False)
+    request_id = await request_at(bot, member, lead, pure.REVIEW)
+    channel = bot.guild.get_channel(TEST_CHANNEL)
+    channel.messages.clear()
+    member.dm_raises = refused()
+
+    said, _ = await requests_cog.ask_check(bot, bot.guild, request_id, lead)
+
+    assert "nobody was told" in said and "request_check_fallback_channel" in said
+    assert channel.messages == []
+    rows = await check_rows(db)
+    assert rows[-1][1]["told"] == "nobody"
+
+
+async def test_asking_on_something_that_is_not_ready_to_check_is_refused_in_words(
+    cog, bot, member, lead, db
+):
+    request_id = await request_at(bot, member, lead, pure.IN_PROGRESS)
+    member.dms.clear()
+
+    said, fresh = await requests_cog.ask_check(bot, bot.guild, request_id, lead)
+
+    assert fresh is None
+    assert "not ready to check" in said and "ask them to check" in said
+    assert "/request ready" not in said
+    assert member.dms == []
+    assert await check_rows(db) == []
+    row = await pure.get_request(db, request_id)
+    assert row["check_asked_at"] is None
+
+
+async def test_a_number_nobody_filed_is_a_sentence_rather_than_a_crash(cog, bot, lead, db):
+    said, fresh = await requests_cog.ask_check(bot, bot.guild, 404, lead)
+
+    assert fresh is None and "no request" in said
+    assert await check_rows(db) == []
+
+
+async def test_the_channel_copy_is_off_by_default_and_never_doubles_the_ping(
+    cog, bot, member, lead
+):
+    await bot.store.set(GUILD, "request_channel_moves", ["check_asked"])
+    request_id = await request_at(bot, member, lead, pure.REVIEW)
+    channel = bot.guild.get_channel(TEST_CHANNEL)
+    channel.messages.clear()
+
+    await requests_cog.ask_check(bot, bot.guild, request_id, lead)
+
+    assert len(channel.messages) == 1
+    assert channel.messages[0].content == ""
+
+    channel.messages.clear()
+    member.dm_raises = refused()
+    await requests_cog.ask_check(bot, bot.guild, request_id, lead)
+
+    assert len(channel.messages) == 1
+    assert channel.messages[0].content == f"<@{member.id}>"
+
+
+async def test_marking_ready_asks_automatically_only_when_the_server_says_so(
+    cog, bot, member, lead, db
+):
+    request_id = await request_at(bot, member, lead, pure.IN_PROGRESS)
+    member.dms.clear()
+
+    await requests_cog.mark_ready(bot, bot.guild, request_id, lead, "a board", "press it")
+
+    assert await check_rows(db) == []
+    assert member.dms == []
+
+    await bot.store.set(GUILD, "request_check_on_ready", True)
+    second = await request_at(bot, member, lead, pure.IN_PROGRESS)
+    member.dms.clear()
+
+    said, fresh = await requests_cog.mark_ready(
+        bot, bot.guild, second, lead, "a board", "press it"
+    )
+
+    assert "ready to check" in said
+    assert fresh["status"] == pure.REVIEW and fresh["check_asked_by"] == lead.id
+    assert len(member.dms) == 1
+    kinds = await action_kinds(db)
+    assert kinds[-2:] == ["request.review", "request.check_asked"]
+
+
+async def test_the_card_shows_who_asked_and_when_so_nobody_asks_twice_by_accident(
+    cog, bot, member, lead
+):
+    request_id = await request_at(bot, member, lead, pure.REVIEW)
+    row = await pure.get_request(bot.db, request_id)
+    before, _ = requests_cog.build_card(bot, bot.guild, row, lead)
+
+    assert "Asked to check" not in [field.name for field in before.fields]
+
+    await requests_cog.ask_check(bot, bot.guild, request_id, lead)
+    fresh = await pure.get_request(bot.db, request_id)
+    after, view = requests_cog.build_card(bot, bot.guild, fresh, lead)
+    asked = next(field for field in after.fields if field.name == "Asked to check")
+
+    assert asked.value.startswith(f"<@{lead.id}> · <t:")
+    assert "Ask them to check" in [item.label for item in view.children]
+
+
+async def test_the_first_pair_of_eyes_may_still_ask_the_requester(cog, bot, member, lead):
+    """`may_accept` takes Accept away; asking the person who filed it is nobody else's job."""
+    await bot.store.set(GUILD, "request_review_by_other", True)
+    request_id = await request_at(bot, member, lead, pure.REVIEW)
+    row = await pure.get_request(bot.db, request_id)
+
+    _, view = requests_cog.build_card(bot, bot.guild, row, lead)
+    labels = [item.label for item in view.children]
+
+    assert "Accept" not in labels and "Ask them to check" in labels
+
+
+async def test_the_button_records_the_panel_via_and_re_renders_the_card(
+    cog, bot, member, lead, db
+):
+    request_id = await request_at(bot, member, lead, pure.REVIEW)
+    row = await pure.get_request(bot.db, request_id)
+    _, view = requests_cog.build_card(bot, bot.guild, row, lead)
+    member.dms.clear()
+
+    interaction = await click(bot, lead, find_item(view, "Ask them to check"))
+
+    assert "asked by DM" in interaction.sent
+    assert card_embed(interaction) is not None
+    rows = await check_rows(db)
+    assert [kind for kind, _ in rows] == ["request.check_asked"]
+    assert rows[0][1]["via"] == "discord"
+
+
+async def test_a_staffer_demoted_while_the_review_card_is_open_asks_nobody(
+    cog, bot, member, lead, db
+):
+    request_id = await request_at(bot, member, lead, pure.REVIEW)
+    row = await pure.get_request(bot.db, request_id)
+    _, view = requests_cog.build_card(bot, bot.guild, row, lead)
+    member.dms.clear()
+
+    interaction = await click(bot, member, find_item(view, "Ask them to check"))
+
+    assert "staff only" in interaction.sent
+    assert member.dms == []
+    assert await check_rows(db) == []

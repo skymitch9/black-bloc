@@ -926,6 +926,8 @@ async def test_requests_ship_on_and_open_to_everyone_with_nothing_auto_approved(
         "request_review_by_other",
         "request_panel_minutes",
         "request_panel_own_list",
+        "request_check_fallback_channel",
+        "request_check_on_ready",
     ):
         assert key in KEY_TYPES and KEY_HELP.get(key)
 
@@ -942,13 +944,31 @@ async def test_every_card_but_done_posts_and_one_pair_of_eyes_is_enough_until_a_
         "hold",
         "declined",
     ]
-    assert "done" in REQUEST_CARD_MOVES
+    assert "done" in REQUEST_CARD_MOVES and "check_asked" in REQUEST_CARD_MOVES
+    assert len(REQUEST_CARD_MOVES) == 8
     assert store.get(7, "request_review_by_other") is False
     assert KEY_TYPES["request_channel_moves"] == "enums"
     assert KEY_CHOICES["request_channel_moves"] == REQUEST_CARD_MOVES
 
 
-def test_the_card_moves_key_takes_any_of_the_seven_and_nothing_else():
+async def test_the_two_ask_them_to_check_decisions_are_keys_both_ways(store):
+    """Checklist 33 — the fallback ping and the auto-ask are settings, never constants."""
+    from black_bloc.cogs.core import VALUE_KEYS
+
+    assert store.get(7, "request_check_fallback_channel") is True
+    assert store.get(7, "request_check_on_ready") is False
+    for key in ("request_check_fallback_channel", "request_check_on_ready"):
+        assert KEY_TYPES[key] == "bool"
+        assert key in VALUE_KEYS
+        with pytest.raises(SettingError):
+            coerce_value(key, "true")
+    assert "closed DMs" in KEY_HELP["request_check_fallback_channel"]
+    assert "ready to check" in KEY_HELP["request_check_on_ready"]
+    await store.set(7, "request_check_on_ready", True)
+    assert store.get(7, "request_check_on_ready") is True
+
+
+def test_the_card_moves_key_takes_any_of_the_eight_and_nothing_else():
     assert coerce_value("request_channel_moves", []) == []
     assert coerce_value("request_channel_moves", ["done"]) == ["done"]
     assert coerce_value("request_channel_moves", ["done", "done"]) == ["done"]
