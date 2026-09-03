@@ -144,6 +144,8 @@ IMPORTANT: frozenset[str] = frozenset(
         "request.declined",
         "request.done",
         "request.hold",
+        "request.review",
+        "request.sent_back",
         "chat.memory_forgot",
         "chat.memory_optout",
         "role.extended",

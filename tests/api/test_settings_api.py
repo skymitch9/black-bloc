@@ -157,6 +157,37 @@ def test_a_list_of_channels_arrives_as_strings_and_stores_as_numbers(client, sig
     ]
 
 
+def test_a_multi_enum_round_trips_and_comes_back_in_the_registrys_own_order(
+    client, sign_in, web, wf
+):
+    """Checklist 33 — the dashboard half of `request_channel_moves`, stored order-stable."""
+    sign_in(client)
+    response = client.put(
+        "/api/settings/request_channel_moves", json={"value": ["done", "filed"]}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["value"] == ["filed", "done"]
+    assert web.store.get(wf.GUILD_ID, "request_channel_moves") == ["filed", "done"]
+    assert response.json()["choices"] == [
+        "filed",
+        "in_progress",
+        "review",
+        "sent_back",
+        "done",
+        "hold",
+        "declined",
+    ]
+
+    empty = client.put("/api/settings/request_channel_moves", json={"value": []})
+    assert empty.status_code == 200 and empty.json()["value"] == []
+
+    for bad in ("done", ["shipped"]):
+        refused = client.put("/api/settings/request_channel_moves", json={"value": bad})
+        assert refused.status_code == 400, bad
+        assert "request_channel_moves" in refused.json()["message"]
+
+
 def test_a_bool_takes_true_and_refuses_a_word(client, sign_in, web, wf):
     sign_in(client)
     assert client.put("/api/settings/birthday_show_age", json={"value": True}).status_code == 200

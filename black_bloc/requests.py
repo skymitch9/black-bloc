@@ -4,23 +4,27 @@ import logging
 from datetime import UTC, date, datetime
 from typing import Any
 
+import discord
+
 from .timezones import DEFAULT_TZ, zone
 
 log = logging.getLogger(__name__)
 
 OPEN = "open"
 IN_PROGRESS = "in_progress"
+REVIEW = "review"
 HOLD = "hold"
 DONE = "done"
 DECLINED = "declined"
 WITHDRAWN = "withdrawn"
 
-STATUSES = (OPEN, IN_PROGRESS, HOLD, DONE, DECLINED, WITHDRAWN)
+STATUSES = (OPEN, IN_PROGRESS, REVIEW, HOLD, DONE, DECLINED, WITHDRAWN)
 
 TRANSITIONS: dict[str, frozenset[str]] = {
     OPEN: frozenset({IN_PROGRESS, HOLD, DECLINED}),
-    IN_PROGRESS: frozenset({DONE, HOLD, DECLINED}),
-    HOLD: frozenset({IN_PROGRESS, DECLINED}),
+    IN_PROGRESS: frozenset({REVIEW, HOLD, DECLINED}),
+    REVIEW: frozenset({IN_PROGRESS, DONE, HOLD, DECLINED}),
+    HOLD: frozenset({IN_PROGRESS, REVIEW, DECLINED}),
     DONE: frozenset(),
     DECLINED: frozenset(),
     WITHDRAWN: frozenset(),
@@ -29,25 +33,37 @@ WITHDRAWABLE = (OPEN, HOLD)
 STAFF_STATUSES = tuple(
     sorted({one for moves in TRANSITIONS.values() for one in moves})
 )
-OPEN_STATUSES = (OPEN, IN_PROGRESS, HOLD)
+OPEN_STATUSES = (OPEN, IN_PROGRESS, REVIEW, HOLD)
 FINAL_STATUSES = tuple(one for one in STATUSES if not TRANSITIONS[one])
 NEEDS_A_REASON = (HOLD, DECLINED)
-DM_STATUSES = (IN_PROGRESS, HOLD, DONE, DECLINED)
+
+FILED_LOOK = "filed"
+SENT_BACK = "sent_back"
+LOOKS = (FILED_LOOK, IN_PROGRESS, REVIEW, SENT_BACK, DONE, HOLD, DECLINED)
+DM_LOOKS = (IN_PROGRESS, HOLD, DONE, DECLINED)
+CHANNEL_MOVES_KEY = "request_channel_moves"
+REVIEW_BY_OTHER_KEY = "request_review_by_other"
 
 WHAT_LIMIT = 1000
 WHY_LIMIT = 1000
 REASON_LIMIT = 400
 NOTES_LIMIT = 1000
 COMMENT_LIMIT = 1000
+BUILT_LIMIT = 1000
+HOW_TO_TEST_LIMIT = 1000
+SENT_BACK_LIMIT = 500
 PRIORITY_MAX = 5
 DUE_SHAPE = "YYYY-MM-DD"
 LIST_PAGE = 10
 API_PAGE = 20
 SEARCH_LIMIT = 80
+FIELD_LIMIT = 1024
+TITLE_LIMIT = 256
 
 STATUS_WORDS: dict[str, str] = {
     OPEN: "open",
     IN_PROGRESS: "being worked on",
+    REVIEW: "ready to check",
     HOLD: "on hold",
     DONE: "done",
     DECLINED: "declined",
@@ -108,6 +124,36 @@ REASON_NEEDED: dict[str, str] = {
     DECLINED: DECLINE_NEEDS_A_REASON,
     HOLD: HOLD_NEEDS_A_REASON,
 }
+READY_NEEDS_WHAT_WAS_BUILT = (
+    "Marking a request ready to check needs a line saying what was actually built, so nothing was "
+    "changed. That sentence is what the person who asked reads on the card. "
+    "`/request ready {request_id}` opens a box for it — or use the **Ready to check** button on "
+    "the site."
+)
+SENDING_BACK_NEEDS_A_NOTE = (
+    "Sending a request back needs one line saying what is still to do, so nothing was changed. The "
+    "staffer who marked it ready is sent exactly what you type — say what is missing and send it "
+    "again."
+)
+TEXT_NEEDED: dict[str, str] = {
+    REVIEW: READY_NEEDS_WHAT_WAS_BUILT,
+    SENT_BACK: SENDING_BACK_NEEDS_A_NOTE,
+}
+DONE_NEEDS_A_CHECK = (
+    "Request **#{request_id}** is **{status}**, and a request only finishes once somebody has "
+    "checked it, so nothing was changed. `/request ready {request_id}` marks it ready to check — "
+    "what was built, and how to try it — and `/request accept {request_id}` finishes it after "
+    "that. On the site it is the **Ready to check** button on the card."
+)
+REVIEW_BY_SOMEBODY_ELSE = (
+    "You are the one who marked request **#{request_id}** ready to check, and this server asks "
+    "somebody else on staff to check it, so nothing was changed. Ask another staffer to press "
+    "Accept, or a Lead can turn `request_review_by_other` off if one pair of eyes is enough."
+)
+NOT_READY_TO_CHECK = (
+    "Request **#{request_id}** is **{status}**, not ready to check, so there was nothing to "
+    "{doing}. `/request ready {request_id}` is what puts one there."
+)
 NOT_ON_HOLD = (
     "Request **#{request_id}** is **{status}**, not on hold, so there was nothing to resume. "
     "`/request set` moves it from where it is."
@@ -129,38 +175,69 @@ NOTHING_FILED_YET = "Nothing has been filed yet — `/request` puts the first on
 NOTHING_OPEN = "Nothing is open — every request has been finished, declined or withdrawn."
 NOTHING_OF_YOURS = "You have not filed a request yet — `/request` puts one in."
 
-DM_IN_PROGRESS = "Your request **#{request_id}** on **{guild}** is being worked on: {what}"
-DM_HOLD = (
-    "Your request **#{request_id}** on **{guild}** is on hold — {reason}\n\nIt was: {held_from}"
-    "\n\nWhat you asked for: {what}"
-)
-DM_DECLINED = (
-    "Your request **#{request_id}** on **{guild}** was declined — {reason}\n\nWhat you asked for: "
-    "{what}"
-)
-DM_DONE = "Your request **#{request_id}** on **{guild}** is done: {what}"
-DM_TEXT: dict[str, str] = {
-    IN_PROGRESS: DM_IN_PROGRESS,
-    HOLD: DM_HOLD,
-    DECLINED: DM_DECLINED,
-    DONE: DM_DONE,
-}
-
-NOTIFY_LINE = "New request **#{request_id}** from {who}: {what}"
-NOTIFY_IN_PROGRESS = "Request **#{request_id}** from {who} is being worked on: {what}"
-NOTIFY_HOLD = "Request **#{request_id}** from {who} is on hold — {reason}"
-NOTIFY_DONE = "Request **#{request_id}** from {who} is done: {what}"
-NOTIFY_DECLINED = "Request **#{request_id}** from {who} was declined — {reason}"
-NOTIFY_MOVE: dict[str, str] = {
-    IN_PROGRESS: NOTIFY_IN_PROGRESS,
-    HOLD: NOTIFY_HOLD,
-    DONE: NOTIFY_DONE,
-    DECLINED: NOTIFY_DECLINED,
+MOVE_LINE: dict[str, str] = {
+    FILED_LOOK: "New request **#{request_id}** from {who}: {what}",
+    IN_PROGRESS: "Request **#{request_id}** from {who} is being worked on: {what}",
+    REVIEW: "Request **#{request_id}** from {who} is ready to check: {what}",
+    SENT_BACK: "Request **#{request_id}** from {who} was sent back — {note}",
+    DONE: "Request **#{request_id}** from {who} is done: {what}",
+    HOLD: "Request **#{request_id}** from {who} is on hold — {reason}",
+    DECLINED: "Request **#{request_id}** from {who} was declined — {reason}",
 }
 NOTIFY_SKIPPED_KIND = "request.notify_skipped_test_mode"
 NOTIFY_FAILED_KIND = "request.notify_failed"
 STATUS_CHANNEL_KEY = "request_status_channel_id"
 NOTIFY_CHANNEL_KEY = "request_notify_channel_id"
+
+EMBED_COLOURS: dict[str, int] = {
+    FILED_LOOK: 0x5865F2,
+    IN_PROGRESS: 0xFEE75C,
+    REVIEW: 0x1ABC9C,
+    SENT_BACK: 0xE67E22,
+    DONE: 0x57F287,
+    HOLD: 0x99AAB5,
+    DECLINED: 0xED4245,
+}
+EMBED_TITLES: dict[str, str] = {
+    FILED_LOOK: "New request #{request_id}",
+    IN_PROGRESS: "Request #{request_id} is being worked on",
+    REVIEW: "Request #{request_id} is ready to check 🔎",
+    SENT_BACK: "Request #{request_id} was sent back",
+    DONE: "Request #{request_id} is done ✅",
+    HOLD: "Request #{request_id} is on hold",
+    DECLINED: "Request #{request_id} was declined",
+}
+EMBED_FIELDS: dict[str, tuple[str, ...]] = {
+    FILED_LOOK: ("what", "why", "requester", "due"),
+    IN_PROGRESS: ("what", "requester", "assignee"),
+    REVIEW: ("what", "built", "how_to_test", "ready_by", "requester"),
+    SENT_BACK: ("what", "needs_doing", "sent_back_by", "ready_by"),
+    DONE: ("what", "built", "how_to_test", "accepted_by", "requester"),
+    HOLD: ("what", "waiting", "was", "requester"),
+    DECLINED: ("what", "reason", "requester"),
+}
+FIELD_LABELS: dict[str, str] = {
+    "what": "Asked for",
+    "why": "Why",
+    "built": "What was built",
+    "how_to_test": "How to test",
+    "needs_doing": "What needs doing",
+    "waiting": "Why it is waiting",
+    "reason": "Why",
+    "requester": "Requested by",
+    "assignee": "Assignee",
+    "ready_by": "Marked ready by",
+    "accepted_by": "Accepted by",
+    "sent_back_by": "Sent back by",
+    "due": "Due",
+    "was": "Was",
+}
+INLINE_FIELDS = frozenset(
+    {"requester", "assignee", "ready_by", "accepted_by", "sent_back_by", "due", "was"}
+)
+EMBED_FOOTER = "Black Bloc · requests"
+SITE_BUTTON = "Open on the site"
+REQUEST_ANCHOR = "{origin}/requests#r-{request_id}"
 
 
 class RequestError(ValueError):
@@ -240,8 +317,22 @@ def wanted_status(given: Any) -> str:
     return text
 
 
-def checked_move(request_id: Any, status: Any, wanted: Any, reason: Any = "") -> str:
-    """The whole gate in one place: known state, a legal move, and a reason where one is owed."""
+def look_of(was: Any, status: Any) -> str:
+    """`sent_back` is a card look, not a state — the row is in progress again, from review."""
+    where, to = str(was or ""), str(status or "")
+    return SENT_BACK if to == IN_PROGRESS and where == REVIEW else to
+
+
+def checked_move(
+    request_id: Any,
+    status: Any,
+    wanted: Any,
+    reason: Any = "",
+    *,
+    built: Any = "",
+    note: Any = "",
+) -> str:
+    """The whole gate in one place: known state, a legal move, and the words a move is owed."""
     where = str(status or "")
     to = wanted_status(wanted)
     if where == to:
@@ -251,6 +342,12 @@ def checked_move(request_id: Any, status: Any, wanted: Any, reason: Any = "") ->
             )
         )
     if not can_move(where, to):
+        if to == DONE and where in OPEN_STATUSES:
+            raise RequestError(
+                DONE_NEEDS_A_CHECK.format(
+                    request_id=request_id, status=STATUS_WORDS.get(where, where)
+                )
+            )
         raise RequestError(
             NO_SUCH_MOVE.format(
                 request_id=request_id,
@@ -261,6 +358,10 @@ def checked_move(request_id: Any, status: Any, wanted: Any, reason: Any = "") ->
         )
     if to in NEEDS_A_REASON and not str(reason or "").strip():
         raise RequestError(REASON_NEEDED[to])
+    look = look_of(where, to)
+    owed = {REVIEW: built, SENT_BACK: note}.get(look)
+    if look in TEXT_NEEDED and not str(owed or "").strip():
+        raise RequestError(TEXT_NEEDED[look].format(request_id=request_id))
     return to
 
 
@@ -302,6 +403,30 @@ def status_channel_id(store: Any, guild_id: int) -> Any:
     return store.get(guild_id, STATUS_CHANNEL_KEY) or store.get(guild_id, NOTIFY_CHANNEL_KEY)
 
 
+def channel_moves(store: Any, guild_id: int) -> tuple[str, ...]:
+    found = store.get(guild_id, CHANNEL_MOVES_KEY)
+    if not isinstance(found, list | tuple):
+        return LOOKS
+    return tuple(str(one) for one in found if str(one) in LOOKS)
+
+
+def posts_a_card(store: Any, guild_id: int, look: str) -> bool:
+    return look in channel_moves(store, guild_id)
+
+
+def review_by_other(store: Any, guild_id: int) -> bool:
+    return bool(store.get(guild_id, REVIEW_BY_OTHER_KEY))
+
+
+def may_accept(store: Any, guild_id: int, row: Any, actor: Any) -> bool:
+    """False only when the server asks for a second pair of eyes and this is the first pair."""
+    if not review_by_other(store, guild_id):
+        return True
+    marked = row_value(row, "ready_by")
+    who = getattr(actor, "id", None)
+    return marked is None or who is None or int(marked) != int(who)
+
+
 def held_words(row: Any) -> str:
     found = row_value(row, "held_from")
     return STATUS_WORDS.get(str(found or ""), str(found or "")) if found else ""
@@ -322,6 +447,94 @@ def summary_line(row: Any) -> str:
     was = held_words(row)
     held = f" (was: {was})" if row["status"] == HOLD and was else ""
     return f"**#{row['id']}** {clamp(row['what'], 70)} — {where}{held}{when}"
+
+
+def mention(user_id: Any) -> str:
+    return f"<@{int(user_id)}>" if user_id else ""
+
+
+def moment(row: Any, look: str) -> datetime:
+    """The move's own time, so a card is stamped when it happened and not when it rendered."""
+    raw = row_value(row, "created_at") if look == FILED_LOOK else row_value(row, "decided_at")
+    try:
+        found = datetime.fromisoformat(str(raw or ""))
+    except ValueError:
+        return datetime.now(UTC)
+    return found if found.tzinfo is not None else found.replace(tzinfo=UTC)
+
+
+def field_value(row: Any, name: str) -> str:
+    """One field's text; an empty one is left off the card rather than printed as nothing."""
+    found = {
+        "what": row_value(row, "what"),
+        "why": row_value(row, "why"),
+        "built": row_value(row, "built"),
+        "how_to_test": row_value(row, "how_to_test"),
+        "needs_doing": row_value(row, "sent_back_reason"),
+        "waiting": row_value(row, "decline_reason"),
+        "reason": row_value(row, "decline_reason"),
+        "requester": mention(row_value(row, "user_id")),
+        "assignee": mention(row_value(row, "assignee_id")),
+        "ready_by": mention(row_value(row, "ready_by")),
+        "accepted_by": mention(row_value(row, "decided_by")),
+        "sent_back_by": mention(row_value(row, "decided_by")),
+        "due": due_stamp(row_value(row, "due_on")) or "",
+        "was": held_words(row),
+    }.get(name, "")
+    return clamp(found, FIELD_LIMIT)
+
+
+def request_url(origin: Any, request_id: Any) -> str:
+    return REQUEST_ANCHOR.format(origin=str(origin or "").rstrip("/"), request_id=request_id)
+
+
+def request_embed(row: Any, *, move: str, origin: Any = "", guild: Any = None) -> discord.Embed:
+    """One builder, seven looks — the channel card and the DM are the same rendering."""
+    look = move if move in EMBED_TITLES else IN_PROGRESS
+    request_id = row_value(row, "id", "?")
+    embed = discord.Embed(
+        title=clamp(EMBED_TITLES[look].format(request_id=request_id), TITLE_LIMIT),
+        colour=discord.Colour(EMBED_COLOURS[look]),
+        timestamp=moment(row, look),
+    )
+    name = getattr(guild, "name", None)
+    if name:
+        embed.set_author(name=clamp(name, TITLE_LIMIT))
+    for one in EMBED_FIELDS[look]:
+        text = field_value(row, one)
+        if text:
+            embed.add_field(name=FIELD_LABELS[one], value=text, inline=one in INLINE_FIELDS)
+    embed.set_footer(text=EMBED_FOOTER)
+    return embed
+
+
+def site_view(origin: Any, request_id: Any) -> discord.ui.View | None:
+    """One link button to the request's own anchor; no origin means no button, never a bad link."""
+    if not str(origin or "").strip():
+        return None
+    view = discord.ui.View(timeout=None)
+    view.add_item(
+        discord.ui.Button(
+            style=discord.ButtonStyle.link,
+            label=SITE_BUTTON,
+            url=request_url(origin, request_id),
+        )
+    )
+    return view
+
+
+def move_line(row: Any, look: str) -> str:
+    """The plain one-liner the server log keeps when a card is skipped or refused."""
+    template = MOVE_LINE.get(look)
+    if template is None:
+        return ""
+    return template.format(
+        request_id=row_value(row, "id", "?"),
+        who=mention(row_value(row, "user_id")) or "somebody",
+        what=clamp(row_value(row, "what"), 200),
+        reason=clamp(row_value(row, "decline_reason"), 200) or "no reason was given",
+        note=clamp(row_value(row, "sent_back_reason"), 200) or "no note was left",
+    )
 
 
 def page_of(rows: list[Any], page: int, per_page: int = LIST_PAGE) -> tuple[list[Any], int, int]:
@@ -459,27 +672,36 @@ async def set_status(
     decided_by: int | None = None,
     decline_reason: str | None = None,
     was: str | None = None,
+    ready_by: int | None = None,
+    sent_back_reason: str | None = None,
 ) -> None:
-    """`held_from` is written on the way into hold and cleared on the way out — one home."""
+    """Every column a move rewrites, in one place; a column with no rule for it is left alone."""
     at = now_iso()
-    held_from = str(was or "") if status == HOLD else None
+    where = str(was or "")
+    look = look_of(where, status)
+    values: dict[str, Any] = {
+        "status": status,
+        "decline_reason": decline_reason if status in NEEDS_A_REASON else None,
+        "held_from": (where or None) if status == HOLD else None,
+    }
+    if decided_by is not None:
+        values["decided_by"] = decided_by
+        values["decided_at"] = at
+    if status == DONE:
+        values["done_at"] = at
+    if status == REVIEW:
+        values["ready_by"] = ready_by
+        values["sent_back_reason"] = None
+    elif look == SENT_BACK:
+        values["sent_back_reason"] = sent_back_reason or None
+    sets = ", ".join(f"{name} = ?" for name in values)
     await db.conn.execute(
-        "UPDATE requests SET status = ?, decided_by = COALESCE(?, decided_by), "
-        "decided_at = COALESCE(?, decided_at), decline_reason = ?, held_from = ?, "
-        "done_at = CASE WHEN ? = ? THEN ? ELSE done_at END WHERE id = ?",
-        (
-            status,
-            decided_by,
-            at if decided_by is not None else None,
-            decline_reason if status in NEEDS_A_REASON else None,
-            held_from or None,
-            status,
-            DONE,
-            at,
-            request_id,
-        ),
+        f"UPDATE requests SET {sets} WHERE id = ?", (*values.values(), request_id)
     )
     await db.conn.commit()
+
+
+SETTABLE_FIELDS = ("assignee_id", "priority", "notes", "built", "how_to_test")
 
 
 async def set_fields(
@@ -489,23 +711,26 @@ async def set_fields(
     assignee_id: Any = ...,
     priority: Any = ...,
     notes: Any = ...,
+    built: Any = ...,
+    how_to_test: Any = ...,
 ) -> list[str]:
     """Only the fields actually sent are written; `...` means 'leave it as it is'."""
-    sets: list[str] = []
-    params: list[Any] = []
-    for name, value in (("assignee_id", assignee_id), ("priority", priority), ("notes", notes)):
-        if value is ...:
-            continue
-        sets.append(f"{name} = ?")
-        params.append(value)
-    if not sets:
+    given = dict(
+        zip(
+            SETTABLE_FIELDS,
+            (assignee_id, priority, notes, built, how_to_test),
+            strict=True,
+        )
+    )
+    wanted = {name: value for name, value in given.items() if value is not ...}
+    if not wanted:
         return []
-    params.append(request_id)
-    await db.conn.execute(f"UPDATE requests SET {', '.join(sets)} WHERE id = ?", tuple(params))
+    sets = ", ".join(f"{name} = ?" for name in wanted)
+    await db.conn.execute(
+        f"UPDATE requests SET {sets} WHERE id = ?", (*wanted.values(), request_id)
+    )
     await db.conn.commit()
-    return [name for name, value in (
-        ("assignee_id", assignee_id), ("priority", priority), ("notes", notes)
-    ) if value is not ...]
+    return list(wanted)
 
 
 async def set_message(db: Any, request_id: int, message_id: int | None) -> None:
@@ -561,16 +786,20 @@ def resume_target(row: Any) -> str:
 
 __all__ = [
     "DECLINED",
-    "DM_STATUSES",
-    "DM_TEXT",
+    "DM_LOOKS",
     "DONE",
+    "EMBED_COLOURS",
+    "FILED_LOOK",
     "FINAL_STATUSES",
     "HOLD",
     "IN_PROGRESS",
+    "LOOKS",
+    "MOVE_LINE",
     "NEEDS_A_REASON",
-    "NOTIFY_MOVE",
     "OPEN",
     "OPEN_STATUSES",
+    "REVIEW",
+    "SENT_BACK",
     "STAFF_STATUSES",
     "STATUSES",
     "STATUS_WORDS",
@@ -580,6 +809,7 @@ __all__ = [
     "RequestError",
     "add_comment",
     "can_move",
+    "channel_moves",
     "checked_fields",
     "checked_move",
     "clamp",
@@ -588,20 +818,30 @@ __all__ = [
     "count_requests",
     "create_request",
     "due_stamp",
+    "field_value",
     "get_comment",
     "get_request",
     "held_words",
     "list_requests",
+    "look_of",
+    "may_accept",
+    "mention",
+    "move_line",
     "moves_from",
     "moves_sentence",
     "open_count",
     "page_of",
     "parse_due",
+    "posts_a_card",
+    "request_embed",
+    "request_url",
     "resume_target",
+    "review_by_other",
     "row_value",
     "set_fields",
     "set_message",
     "set_status",
+    "site_view",
     "status_channel_id",
     "wanted_priority",
     "wanted_status",

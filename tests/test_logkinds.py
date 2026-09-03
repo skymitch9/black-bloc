@@ -161,15 +161,19 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.tempvoice.show",
         "web.tempvoice.unlock",
     ),
-    "black_bloc/cogs/community/requests.py::f'request.{wanted}'": (
+    "black_bloc/cogs/community/requests.py::f'request.{look}'": (
         "request.declined",
         "request.done",
         "request.hold",
         "request.in_progress",
+        "request.review",
+        "request.sent_back",
         "web.request.declined",
         "web.request.done",
         "web.request.hold",
         "web.request.in_progress",
+        "web.request.review",
+        "web.request.sent_back",
     ),
     "black_bloc/cogs/community/requests.py::NOTIFY_SKIPPED_KIND": (
         "request.notify_skipped_test_mode",

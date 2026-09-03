@@ -922,6 +922,25 @@ async function control(spec, onChange) {
     }
     return { node: select, read: (n) => (n.value === '' ? null : n.value) };
   }
+  // A multi-enum: every choice is a checkbox, because the answer is a SET and a
+  // segment control would say only one of them can be on. Order comes from the
+  // registry's own choices list, so the saved value reads the same every time.
+  if (kind === 'enums') {
+    const wanted = new Set((spec.value || []).map(String));
+    const boxes = (spec.choices || []).map((choice) => {
+      const box = el('input', { type: 'checkbox', 'data-value': String(choice) });
+      box.checked = wanted.has(String(choice));
+      if (onChange) box.addEventListener('change', onChange);
+      return el('label', { class: 'checkline' }, [box, el('span', { text: String(choice) })]);
+    });
+    const node = el('div', { class: 'checkset' }, boxes);
+    return {
+      node,
+      read: (n) => [...n.querySelectorAll('input[type=checkbox]')]
+        .filter((box) => box.checked)
+        .map((box) => box.getAttribute('data-value')),
+    };
+  }
   if (kind === 'int') {
     const input = el('input', {
       class: 'input',

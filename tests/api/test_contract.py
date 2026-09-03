@@ -42,8 +42,9 @@ from black_bloc.llm import record as llm_record
 from black_bloc.modcases import add_case
 from black_bloc.modmail import IN
 from black_bloc.polls import next_occurrence
-from black_bloc.requests import HOLD, OPEN, create_request
+from black_bloc.requests import HOLD, IN_PROGRESS, OPEN, REVIEW, create_request
 from black_bloc.requests import add_comment as add_request_comment
+from black_bloc.requests import set_fields as set_request_fields
 from black_bloc.requests import set_status as set_request_status
 from black_bloc.youtube import Video
 
@@ -372,6 +373,27 @@ async def seeded(client, sign_in, web, guild, wf):
         decline_reason="waiting on the role menu rewrite",
         was=OPEN,
     )
+    # Third pass: {review_request_id} is already ready to check, because /accept and
+    # /sendback are only legal from there, and {progress_request_id} is being worked on,
+    # which is where /ready is legal. The mock seeds the same two as 11 and 12.
+    review_request_id = await make_request(
+        db, guild_id, MEMBER_ID, "Threads should not get an answer", OPEN
+    )
+    await set_request_fields(
+        db,
+        review_request_id,
+        built="A chat_reply_in_threads setting, on by default.",
+        how_to_test="Turn it off, @-mention the bot in a thread, watch it stay quiet.",
+    )
+    await set_request_status(
+        db, review_request_id, REVIEW, decided_by=7, was=IN_PROGRESS, ready_by=7
+    )
+    progress_request_id = await make_request(
+        db, guild_id, MEMBER_ID, "Honeypot should say what it caught", OPEN
+    )
+    await set_request_status(
+        db, progress_request_id, IN_PROGRESS, decided_by=7, was=OPEN
+    )
     # Phase 17: one profile, so GET /api/chat/memory has a row shape to read and DELETE has
     # something to clear. Preferences only, and one of them scoped to a DM.
     await save_profile(
@@ -467,6 +489,8 @@ async def seeded(client, sign_in, web, guild, wf):
         "feature_request_id": str(feature_request_id),
         "member_request_id": str(member_request_id),
         "held_request_id": str(held_request_id),
+        "review_request_id": str(review_request_id),
+        "progress_request_id": str(progress_request_id),
         "raid_train_id": str(raid_train_id),
         "ping_member_id": str(PING_MEMBER_ID),
         "application_form_id": str(application_form_id),

@@ -1933,6 +1933,61 @@ a.spend-figure:hover, a.spend-figure:focus-visible { text-decoration: underline;
 .req-assign-now { color: var(--et-fg); font-size: var(--et-ui-sm); }
 .req-assign .picker { flex: 1 1 14rem; min-width: 0; }
 
+/* A multi-enum setting: one checkbox per choice, wrapping, so a seven-way set
+   fits a settings row without becoming a scrolling list. */
+.checkset {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  min-height: var(--et-control-h);
+}
+.checkline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--et-fg);
+  font-size: var(--et-ui-sm);
+  cursor: pointer;
+}
+.checkline input { accent-color: var(--et-accent); cursor: pointer; }
+.checkline input:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; }
+
+/* What was built and how to test it, on a review or a done card. Same shape as
+   the reason block, different border, because it is an answer and not a refusal. */
+.req-built {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-left: 2px solid var(--et-accent);
+  border-radius: var(--et-radius);
+  background: var(--et-shell-inset);
+  color: var(--et-fg);
+  font-size: var(--et-ui-sm);
+  text-wrap: pretty;
+}
+
+/* A request reached by {origin}/requests#r-N. On the page it flashes for two
+   seconds; off it, it is fetched and pinned above the sections instead. */
+.req-pinned {
+  display: grid;
+  gap: 0;
+  margin-bottom: 16px;
+  border: 1px solid var(--et-accent);
+  border-radius: var(--et-radius);
+  background: var(--et-surface);
+  overflow: hidden;
+}
+.is-linked {
+  animation: req-linked 2s ease-out 1;
+}
+@keyframes req-linked {
+  from { box-shadow: 0 0 0 2px var(--et-accent); }
+  to { box-shadow: 0 0 0 2px transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .is-linked { animation: none; box-shadow: 0 0 0 2px var(--et-accent); }
+}
+
 .req-notes { display: flex; flex-direction: column; gap: 10px; }
 .req-note { padding-left: 10px; border-left: 2px solid var(--et-hairline); }
 .req-note-who { display: block; color: var(--et-muted); font-size: var(--et-ui-2xs); }

@@ -25,7 +25,9 @@ from ..timezones import CHOICE_LIMIT
 CHANNEL_KEYS = [key for key, kind in KEY_TYPES.items() if kind == "channel"]
 ROLE_KEYS = [key for key, kind in KEY_TYPES.items() if kind == "role"]
 VALUE_KEYS = [
-    key for key, kind in KEY_TYPES.items() if kind in ("enum", "int", "text", "bool", "color")
+    key
+    for key, kind in KEY_TYPES.items()
+    if kind in ("enum", "enums", "int", "text", "bool", "color")
 ]
 CLEARABLE_KEYS = [key for key, kind in KEY_TYPES.items() if kind in ("channel", "role")]
 CLEARED = "**{key}** is no longer set, so Black Bloc is back to its own default for it."

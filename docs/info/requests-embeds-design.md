@@ -1,10 +1,15 @@
 # Requests, third pass — embeds, "what was built", "how to test", the site link
 
-**Audience:** the builder and the reviewer. **Status:** TRACKED · **DESIGN — not
-built.** Owner's ask 2026-09-03 ~00:50 (verbatim in `../TODO.md`, "🔧 Open
-engineering items"). **Last verified: 2026-09-03** against `black_bloc/requests.py`,
-`cogs/community/requests.py`, `api/tools/requests.py`, `site/public/assets/page-requests.js`
-at `40fbfc4`. Extends [`requests-states-design.md`](requests-states-design.md); the
+**Audience:** the builder and the reviewer. **Status:** TRACKED · **BUILT on branch
+`feat/requests-third-pass`, 2026-09-03, NOT merged and NOT deployed** — see the
+`## Deviations` list and the landing one-off at the foot. Owner's ask 2026-09-03
+~00:50 (verbatim in `../TODO.md`, "🔧 Open engineering items"). **Last verified:
+2026-09-03** against `black_bloc/requests.py`, `cogs/community/requests.py`,
+`api/tools/requests.py`, `site/public/assets/page-requests.js` as built (3260 tests,
+ruff clean, `check.mjs` 17 pages / 139 routes; the page rendered against the mock).
+⚠️ **NOT verified against live Discord or the live dashboard** — no card has been
+posted and no live row has been moved. Extends
+[`requests-states-design.md`](requests-states-design.md); the
 state machine grows ONE state (`review`, owner decision 2026-09-03 ~01:00, below).
 **Build order:** the double-logging fix landed as `df393ab` (2026-09-03) — cut the build
 from that or later. ⚠️ Both of the files above now take `via`: `apply_decision` and
@@ -194,6 +199,143 @@ it: the owner's "appealing" is judged by eye, and a field that wraps badly (a lo
 `why`) is found here, not after deploy. Record what changed in the `## Deviations`
 foot.
 
-## Deviations
+## §J — what the measurement actually changed
 
-(the builder fills this)
+Written by the build agent, 2026-09-03. §J was run as
+`scripts/scan/embed_preview.py` (gitignored, NOT committed): it builds one card of
+each of the seven looks from a row whose `why`, `built`, `how_to_test`,
+`sent_back_reason` and `decline_reason` are each ~900 characters, prints every
+`to_dict()`, and asserts the caps and the link URL. **Nothing was posted to
+Discord** — the conductor posts the real cards.
+
+| Look | Whole embed | Fields |
+|---|---|---|
+| filed | 1211 | 4 |
+| in_progress | 209 | 3 |
+| review | 2004 | 5 |
+| sent_back | 718 | 4 |
+| done | 1990 | 5 |
+| hold | 794 | 4 |
+| declined | 764 | 3 |
+
+Discord's caps are 256 (title), 1024 (field value) and 6000 (whole embed). The
+worst look is **a third of the total cap**, so nothing needed reshaping — the
+per-field `clamp(…, 1024)` this document asked for is what keeps it there, and
+removing it fails `test_no_card_field_or_title_can_outgrow_what_discord_will_take`
+(proved by mutation, not by reading).
+
+⚠️ **The one thing §J caught is not about Discord at all**: the review title's 🔎
+and the footer's `·` raise `UnicodeEncodeError` on a cp1252 Windows console, which
+looks exactly like a builder fault and is not one. The script reconfigures stdout
+to UTF-8; anybody re-running it on Windows needs that line.
+
+## Deviations — where the build departed from this document, and why
+
+Written by the build agent, 2026-09-03. Everything not listed here was built as
+specified.
+
+1. **`hold` can go to `review`, which this document's table leaves blank.** The
+   table says "resume → `held_from` (may be `review`)", and `resume_target` only
+   returns `held_from` when it is in `TRANSITIONS[HOLD]` — so leaving `review` out
+   would have silently resumed a held review row into `in_progress`. It is in.
+   Side effect: `/request set status:review` is legal from `hold`, which is
+   harmless because `built` is still required to enter review.
+2. **`checked_move` raises a DIFFERENT sentence for `done` than the table's
+   generic one.** `DONE_NEEDS_A_CHECK` fires when the row is `open`,
+   `in_progress` or `hold` and names `/request ready <id>`, `/request accept <id>`
+   and the site's Ready-to-check button. A `declined` or `withdrawn` row still
+   gets the "is where a request finishes" sentence, because pointing somebody at
+   the ready step there would be a lie.
+3. **`request_channel_moves` needed a new registry TYPE, `enums`.** The registry
+   had `enum` (one of) and `channels`/`roles` (a list of ids) but nothing for "any
+   of these words". `coerce_value` validates against `KEY_CHOICES` and returns the
+   set in the registry's own order (so the stored value is stable), `parse_value`
+   splits a comma list for `/settings set-value`, `display_value` says "none of
+   them" for an empty one, and `ui.js:control` draws a checkbox per choice.
+   ⚠️ `cogs/core.py:VALUE_KEYS` had to learn `enums` too, or the key would have
+   been dashboard-only — the exact half of checklist 33 that matters.
+4. **`request_review_by_other` is judged inside `apply_decision`, not inside
+   `accept`.** Putting it in the wrapper would have left
+   `POST /{id}/status {status:"done"}` as a way around it. One judge, one place.
+5. **`sent_back` is derived, never stored.** `look_of(was, status)` returns it when
+   `in_progress` is arrived at from `review`; the log kind, the card look and the
+   DM recipient all read that one function. This is why `apply_decision` logs
+   `f"request.{look}"` and not `f"request.{wanted}"` — `tests/test_logkinds.py`'s
+   `KNOWN_DYNAMIC` key moved with it.
+6. **`tell_requester` is now `tell_person`**, because on `sent_back` the person
+   told is the staffer in `ready_by`, not the requester. `person_told` is the one
+   place that decides which. The `ready_by` DM is NOT gated by
+   `request_dm_on_decision` — that key is described as the requester's switch, and
+   silently widening it to staff notices would be a second meaning for one key.
+7. **The card carries an author line with the server's name.** The plain `DM_*`
+   strings said "on **{guild}**" and the embed's field table has nowhere for it,
+   so a DM'd card would not have said which server it came from. `guild=None`
+   leaves the author line off entirely.
+8. **`post_line` keeps its name and its `line` argument, and the line is never
+   sent.** The embed is the message (`content` is `None`); `line` is what the
+   server log names when a post is skipped by the guard or refused by Discord, so
+   `move_line` survives as the one-line plain form.
+9. **`set_status` builds its UPDATE from a dict instead of one fixed statement.**
+   Five columns now have per-move rules (`held_from`, `decline_reason`, `done_at`,
+   `ready_by`, `sent_back_reason`) and the "leave this one alone" cases were
+   already being faked with `COALESCE`. A column with no rule for a move is simply
+   not in the statement.
+10. **The requests page's `done` MOVE button is gone**, not hidden. `MOVES` no
+    longer has a `done` entry, so a Done button cannot be drawn from `row.moves`
+    on any card; the review card's Accept is its own button, and its `moves` are
+    filtered down to hold and decline.
+11. **Editing `built`/`how_to_test` on a done card is allowed.** The document says
+    "editable afterwards on the review and done cards", and `POST …/status` with
+    only those fields does it — it leaves ONE `web.request.updated` row and moves
+    nothing.
+12. ⚠️ **A defect found on the way, fixed in its own commit and NOT part of this
+    design: `site/public/assets/labels.js` had not parsed since `7b1c592`.** The
+    Phase 19 merge pasted the applications labels after the `LABELS` object's
+    closing brace, so **every dashboard page rendered blank**. `node --check` on
+    `labels.js` at `43eb17b` reproduces it. Fixed by moving the block inside the
+    object and merging the two `NAMESPACES` lists (which also restores the
+    `raidtrain_` prefix trim the duplicate had dropped).
+13. **The mock's `/accept` and `/sendback` read the row AFTER the move.**
+    JavaScript evaluates `{ request: askRow(row), message: askDecide(row, …) }`
+    left to right, so the pre-existing `/hold`, `/decline` and `/status` entries
+    answer with the state the row was in. Only the two new routes were changed;
+    the older three are left as found and are noted here so the next person is not
+    surprised by them.
+
+## The landing data step — the exact one-off (conductor's, NOT run here)
+
+Owner, 2026-09-03 ~03:55: *"Move the 2 done ones to ready to check, leave the
+other as hold"*. `done → review` is not a staff move and must not become one, so
+this is a one-off against the live database. ⚠️ **Run it only after the deploy
+that carries schema 26**, or the four columns do not exist yet. The image has no
+`sqlite3` CLI, so it is a single Python statement:
+
+```sh
+fly ssh console -a black-bloc -C "python3 -c \"
+import sqlite3
+db = sqlite3.connect('/data/black_bloc.sqlite3')
+db.row_factory = sqlite3.Row
+how = {1: 'The sweep rows in docs/access/sweeps.md, rows 48-52.',
+       2: 'The sweep rows in docs/access/sweeps.md, rows 53-57.'}
+for row in db.execute('SELECT id, notes, decided_by FROM requests WHERE id IN (1,2)').fetchall():
+    db.execute(
+        'UPDATE requests SET status=?, ready_by=?, done_at=NULL, built=?, how_to_test=?, '
+        'sent_back_reason=NULL WHERE id=? AND status=?',
+        ('review', row['decided_by'], row['notes'], how[row['id']], row['id'], 'done'))
+db.commit()
+print([dict(r) for r in db.execute('SELECT id,status,ready_by,built,how_to_test,done_at FROM requests WHERE id IN (1,2,3)')])
+\""
+```
+
+- ⚠️ **`ready_by` is read from each row's own `decided_by` column**, which is the
+  staffer who last moved it — the owner, on both, since he marked them done at the
+  17/18/19 landing. Nothing is hard-coded, and the `print` at the end is the
+  verification: two rows `review` with a non-null `ready_by` and a null `done_at`.
+- `built` is each row's existing `notes` — the one-line shipped note already
+  there.
+- **#3 is untouched** and stays `hold`; the `SELECT` at the end includes it so its
+  status can be eyeballed in the same output.
+- `AND status='done'` makes the statement safe to run twice: a second run matches
+  nothing.
+- Afterwards, check `/api/requests` and post the two review cards (a staff move on
+  each, or the conductor's own call).

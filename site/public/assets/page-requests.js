@@ -30,6 +30,9 @@ import {
 const PER_PAGE = 25;
 const SHUT_PER_PAGE = 10;
 const WHY_MAX = 1000;
+const BUILT_MAX = 1000;
+const SENT_BACK_MAX = 500;
+const LINKED_MS = 2000;
 
 const SETTINGS_NOTE = 'Whether requests are open, who may file one, where the bot says a request ' +
   'arrived, where it says one moved, and whether it DMs the person who asked each time.';
@@ -39,6 +42,8 @@ const BOARD_NOTE = 'Being worked on. The buttons here save as you press them —
   'separate Save for the status, the priority or who is on it.';
 const HELD_NOTE = 'Parked with a reason, and the reason is what the person who asked was sent. ' +
   'Resume puts one back where it came from.';
+const REVIEW_NOTE = 'Built and waiting for somebody to look at it. Accept is the only way a ' +
+  'request reaches Done, so what is written here is what the person who asked ends up reading.';
 const DONE_NOTE = 'Requests that shipped. Nothing here needs anything from you; it is the ' +
   'record of what asking actually got built.';
 const DECLINED_NOTE = 'The answers that were no, with the reason the person who asked was sent, ' +
@@ -53,6 +58,8 @@ const MEMBER_FILE_NOTE = 'What you want built, and why it is worth building. Sta
 const NO_OPEN = 'Nothing is open. Everything filed has been picked up, finished or answered.';
 const NO_BOARD = 'Nothing is being worked on. Pick something up above and it lands here.';
 const NO_HELD = 'Nothing is on hold.';
+const NO_REVIEW = 'Nothing is waiting to be checked. Press Ready to check on something being ' +
+  'worked on and it lands here.';
 const NO_DONE = 'Nothing has shipped yet.';
 const NO_DECLINED = 'Nothing has been declined.';
 const NO_WITHDRAWN = 'Nobody has taken a request back.';
@@ -65,6 +72,13 @@ const NEED_A_WHY = 'Say why it is worth building. That is the part that decides 
 const NEED_A_PERSON = 'Nobody is picked yet, so nothing was changed. Type part of a name and ' +
   'choose somebody from the list.';
 const NEED_A_NOTE = 'There is nothing to add yet.';
+const NEED_A_BUILT = 'Say what was built first. That line is what the person who asked reads on ' +
+  'the card, so the form will not send without it.';
+const NEED_A_SENDBACK = 'Say what is still to do. Whoever marked it ready is sent exactly this.';
+const NO_SUCH_ONE = 'There is no request with that number, or it is not one this server has. ' +
+  'The lists below are everything Black Bloc has.';
+const NOT_YOURS_TO_SEE = 'That request is not one you filed, and only staff read the rest. Your ' +
+  'own are below.';
 
 const SETTING_KEYS = [
   'request_mode',
@@ -72,12 +86,15 @@ const SETTING_KEYS = [
   'request_notify_channel_id',
   'request_status_channel_id',
   'request_dm_on_decision',
+  'request_channel_moves',
+  'request_review_by_other',
   'request_log_level',
 ];
 
 const SAID = {
   open: 'open',
   in_progress: 'in progress',
+  review: 'ready to check',
   hold: 'on hold',
   done: 'done',
   declined: 'declined',
@@ -87,6 +104,7 @@ const SAID = {
 const TONE = {
   open: 'warn',
   in_progress: 'info',
+  review: 'info',
   hold: 'warn',
   done: 'ok',
   declined: null,
@@ -100,7 +118,6 @@ const TONE = {
  */
 const MOVES = {
   in_progress: { label: 'Pick it up', tone: 'warn' },
-  done: { label: 'Mark it done', tone: 'warn' },
   hold: {
     label: 'Put it on hold',
     tone: 'quiet',
@@ -137,7 +154,9 @@ const ASSIGNEE_FILTERS = [
   ['me', 'On me'],
 ];
 
-const state = { open: 1, board: 1, held: 1, done: 1, declined: 1, mine: 1, q: '', assignee: '' };
+const state = {
+  open: 1, board: 1, review: 1, held: 1, done: 1, declined: 1, mine: 1, q: '', assignee: '',
+};
 
 let refresh = () => {};
 let viewer = null;
@@ -208,6 +227,15 @@ function metaLine(row) {
   if (row.assignee) parts.push(`${row.assignee.name} is on it`);
   if (row.done_at) parts.push(`shipped ${ago(row.done_at).text}`);
   return el('span', { class: 'req-meta', title: asked.title, text: parts.join(' · ') });
+}
+
+/**
+ * A card's own anchor, so the link button on every Discord embed
+ * ({origin}/requests#r-N) lands on the request it names.
+ */
+function anchored(row, node) {
+  node.id = `r-${row.id}`;
+  return node;
 }
 
 function headBlock(row) {
@@ -474,37 +502,187 @@ function resumeButton(row, say, which) {
   }, { tone: 'warn', small: false });
 }
 
+/**
+ * The move into review, which is the only one that asks for text the person who
+ * asked will read. `built` is required and the API refuses an empty one in
+ * words, so the dialog says so before the round trip rather than after it.
+ */
+function readyButton(row, say, which) {
+  return button('Ready to check', async () => {
+    const built = el('textarea', { class: 'input area', rows: '3', maxlength: String(BUILT_MAX) });
+    built.value = row.built || '';
+    const how = el('textarea', { class: 'input area', rows: '3', maxlength: String(BUILT_MAX) });
+    how.value = row.how_to_test || '';
+    const sure = await ask({
+      title: `Say what was built for ${row.requester ? row.requester.name : 'this'}?`,
+      body: [
+        'Both lines show on the card in Discord and on this page. Either can be edited afterwards without moving the request.',
+        field('What was built', built, 'One or two sentences. This is the whole answer they get.'),
+        field('How to test it', how, 'Optional — the steps somebody follows to see it working.'),
+      ],
+      confirmLabel: 'Mark it ready to check',
+    });
+    if (!sure) return;
+    if (!built.value.trim()) {
+      say.say(NEED_A_BUILT, 'warn');
+      return;
+    }
+    const done = await run(
+      say,
+      () => send(`/api/requests/${encodeURIComponent(row.id)}/ready`, 'POST', {
+        built: built.value.trim(),
+        how_to_test: how.value.trim(),
+      }),
+      (found) => found?.message || 'Ready to check.',
+    );
+    if (!done.ok) return;
+    keepSaying(which, say);
+    refresh();
+  }, { tone: 'warn', small: false });
+}
+
+function acceptButton(row, say, which) {
+  return button('Accept', async () => {
+    const done = await run(
+      say,
+      () => send(`/api/requests/${encodeURIComponent(row.id)}/accept`, 'POST', {}),
+      (found) => found?.message || 'Done.',
+    );
+    if (!done.ok) return;
+    keepSaying(which, say);
+    refresh();
+  }, { tone: 'ok', small: false });
+}
+
+function sendBackButton(row, say, which) {
+  return button('Send back', async () => {
+    const box = el('input', {
+      class: 'input', type: 'text', maxlength: String(SENT_BACK_MAX),
+      placeholder: 'what is still to do',
+    });
+    const sure = await ask({
+      title: 'Send this one back?',
+      body: [
+        `${row.ready_by_name || 'Whoever marked it ready'} is sent exactly what you type, and it goes back to In progress.`,
+        field('What needs doing', box, 'Say what is missing — this is the whole answer they get.'),
+      ],
+      confirmLabel: 'Send it back',
+    });
+    if (!sure) return;
+    if (!box.value.trim()) {
+      say.say(NEED_A_SENDBACK, 'warn');
+      return;
+    }
+    const done = await run(
+      say,
+      () => send(`/api/requests/${encodeURIComponent(row.id)}/sendback`, 'POST', {
+        reason: box.value.trim(),
+      }),
+      (found) => found?.message || 'Sent back.',
+    );
+    if (!done.ok) return;
+    keepSaying(which, say);
+    refresh();
+  }, { tone: 'quiet', small: false });
+}
+
+/**
+ * `built` and `how_to_test` edited in place on a review or done card: a typo in
+ * how-to-test must not need a state change to fix, so this is a partial
+ * `/status` save and nothing moves.
+ */
+function writtenRow(row, say, name, label, hint) {
+  const box = el('textarea', { class: 'input area', rows: '2', maxlength: String(BUILT_MAX) });
+  box.value = row[name] || '';
+  const save = button('Save', async () => {
+    const wanted = box.value.trim();
+    const found = await saveRow(say, row, { [name]: wanted === '' ? null : wanted });
+    if (!found) return;
+    row[name] = found[name];
+    save.disabled = true;
+  }, { disabled: true });
+  box.addEventListener('input', () => {
+    save.disabled = box.value.trim() === String(row[name] || '').trim();
+  });
+  return el('div', { class: 'formrow' }, [field(label, box, hint), bar([save])]);
+}
+
+function writtenBlock(row) {
+  const shown = [];
+  if (row.built) shown.push(el('p', { class: 'req-built' }, [
+    el('strong', { text: 'What was built: ' }),
+    el('span', { text: row.built }),
+  ]));
+  if (row.how_to_test) shown.push(el('p', { class: 'req-built' }, [
+    el('strong', { text: 'How to test it: ' }),
+    el('span', { text: row.how_to_test }),
+  ]));
+  if (row.sent_back_reason) shown.push(el('p', { class: 'req-reason', text: `Sent back: ${row.sent_back_reason}` }));
+  return shown;
+}
+
+function readyChip(row) {
+  if (!row.ready_by_name) return null;
+  return badge(`ready by ${row.ready_by_name}`, null);
+}
+
 function boardCard(row) {
   const say = notice();
-  return card(null, [
+  return anchored(row, card(null, [
     headBlock(row),
     whyBlock(row.why),
+    ...writtenBlock(row).filter((one) => one.className === 'req-reason'),
     el('div', { class: 'formrow' }, [
       field('Priority', prioritySelect(row, say)),
       field('Who is on it', assigneeControl(row, say)),
     ]),
     notesRow(row, say),
-    bar(moveButtons(row, say, 'board')),
+    bar([readyButton(row, say, 'board'), ...moveButtons(row, say, 'board')]),
     commentsDrawer(row),
     say,
-  ]);
+  ]));
+}
+
+function reviewCard(row) {
+  const say = notice();
+  const moves = (row.moves || []).filter((one) => one !== 'done' && one !== 'in_progress');
+  return anchored(row, card(null, [
+    el('div', { class: 'req-head' }, [
+      requesterNode(row.requester),
+      el('div', { class: 'req-headtext' }, [
+        el('p', { class: 'req-what', text: row.what }),
+        metaLine(row),
+      ]),
+      el('div', { class: 'req-marks' }, [statusPill(row), readyChip(row), dueChip(row)]),
+    ]),
+    whyBlock(row.why),
+    writtenRow(row, say, 'built', 'What was built', 'The whole answer the person who asked gets.'),
+    writtenRow(row, say, 'how_to_test', 'How to test it', 'Optional — the steps to see it working.'),
+    bar([
+      acceptButton(row, say, 'review'),
+      sendBackButton(row, say, 'review'),
+      ...moveButtons({ ...row, moves }, say, 'review'),
+    ]),
+    commentsDrawer(row),
+    say,
+  ]));
 }
 
 function openCard(row) {
   const say = notice();
-  return card(null, [
+  return anchored(row, card(null, [
     headBlock(row),
     whyBlock(row.why),
     bar(moveButtons(row, say, 'open')),
     commentsDrawer(row),
     say,
-  ]);
+  ]));
 }
 
 function heldCard(row) {
   const say = notice();
   const moves = (row.moves || []).filter((one) => one !== row.resume_to);
-  return card(null, [
+  return anchored(row, card(null, [
     headBlock(row),
     whyBlock(row.why),
     row.decline_reason
@@ -516,18 +694,26 @@ function heldCard(row) {
     ]),
     commentsDrawer(row),
     say,
-  ]);
+  ]));
 }
 
 function shutCard(row) {
-  return card(null, [
+  const say = row.status === 'done' ? notice() : null;
+  return anchored(row, card(null, [
     headBlock(row),
     whyBlock(row.why),
     row.decline_reason
       ? el('p', { class: 'req-reason', text: `Why not: ${row.decline_reason}` })
       : null,
+    ...(row.status === 'done'
+      ? [
+        writtenRow(row, say, 'built', 'What was built', 'Editable — fixing a typo moves nothing.'),
+        writtenRow(row, say, 'how_to_test', 'How to test it', 'Optional — the steps to see it working.'),
+      ]
+      : []),
     commentsDrawer(row),
-  ]);
+    say,
+  ]));
 }
 
 /**
@@ -631,6 +817,22 @@ function heldSection(payload, rows, say) {
       : el('div', { class: 'section-body' }, rows.map(heldCard)),
     footFor('held', payload, rows, PER_PAGE),
     pagerFor('held', payload, rows, PER_PAGE),
+    say,
+  );
+  return one.node;
+}
+
+function reviewSection(payload, rows, say) {
+  const one = section('Ready to check', REVIEW_NOTE, {
+    count: payload.total ?? rows.length,
+    open: true,
+  });
+  one.body.append(
+    rows.length === 0
+      ? sayNothing(emptySaid('review', payload, NO_REVIEW, true), emptyDo('review', payload, true))
+      : el('div', { class: 'section-body' }, rows.map(reviewCard)),
+    footFor('review', payload, rows, PER_PAGE),
+    pagerFor('review', payload, rows, PER_PAGE),
     say,
   );
   return one.node;
@@ -833,7 +1035,7 @@ function mineCard(row, say) {
     }, { tone: 'quiet' })
     : null;
 
-  return card(null, [
+  return anchored(row, card(null, [
     el('div', { class: 'req-head' }, [
       el('div', { class: 'req-headtext' }, [
         el('p', { class: 'req-what', text: row.what }),
@@ -848,8 +1050,9 @@ function mineCard(row, say) {
         text: `${row.status === 'hold' ? 'On hold because' : 'Why not'}: ${row.decline_reason}`,
       })
       : null,
+    ...writtenBlock(row),
     withdraw ? bar([withdraw]) : null,
-  ]);
+  ]));
 }
 
 function mineSection(payload, rows, say) {
@@ -868,6 +1071,119 @@ function mineSection(payload, rows, say) {
   return one.node;
 }
 
+/**
+ * The number in `#r-7`, which every Discord card's link button carries. It is
+ * read once per load and cleared as soon as it has been honoured, so a refresh
+ * after a button press does not scroll the reader back up to it.
+ */
+function linkedId() {
+  const found = /^#r-(\d+)$/.exec(String(window.location.hash || ''));
+  return found ? found[1] : null;
+}
+
+let pinned = null;
+
+/**
+ * A request that is not on the page — a later pager page, or somebody else's
+ * row a member cannot see in their own list. It is fetched on its own and
+ * pinned above the sections rather than paging the reader around to find it.
+ */
+function pinnedCard(row, draw) {
+  return el('div', { class: 'req-pinned' }, [
+    el('div', { class: 'card-head' }, [
+      el('h3', { text: `Request #${row.id}` }),
+      el('span', { class: 'topbar-gap' }),
+      textAction('Back to all', () => {
+        pinned = null;
+        window.history.replaceState(null, '', window.location.pathname);
+        refresh();
+      }),
+    ]),
+    draw(row),
+  ]);
+}
+
+function pinnedSaid(text) {
+  return el('div', { class: 'req-pinned' }, [
+    el('div', { class: 'card-head' }, [
+      el('h3', { text: 'That request' }),
+      el('span', { class: 'topbar-gap' }),
+      textAction('Back to all', () => {
+        pinned = null;
+        window.history.replaceState(null, '', window.location.pathname);
+        refresh();
+      }),
+    ]),
+    sayNothing(text),
+  ]);
+}
+
+/**
+ * The card is on the page: open whatever it is shut inside, scroll to it and
+ * flash it for two seconds.
+ *
+ * ⚠️ Measured against the mock, not assumed. TWO things bite here. The section
+ * and the foldout are both `<details>`, and a card inside a shut one sits in a
+ * `.card` with `overflow: hidden` and a clientHeight of 32 — `scrollIntoView`
+ * silently does nothing. AND opening them is not enough on its own: the scroll
+ * has to wait a frame for the layout to settle, or it measures the collapsed
+ * height and stays put. Opening and scrolling in the same tick left the reader
+ * at the top of the page with no error anywhere.
+ */
+function flashLinked(wanted) {
+  const node = document.getElementById(`r-${wanted}`);
+  if (!node) return false;
+  for (let up = node.parentElement; up; up = up.parentElement) {
+    if (up.tagName === 'DETAILS') up.open = true;
+  }
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }));
+  node.classList.add('is-linked');
+  setTimeout(() => node.classList.remove('is-linked'), LINKED_MS);
+  return true;
+}
+
+/** Staff read any row; a member reads only their own, so each asks its own route. */
+/**
+ * The pinned card is drawn as whatever the row actually IS. Drawing every one as
+ * a review card would put Accept and Send back on an open request, and the API
+ * would then refuse the click — a control that would be refused is never drawn.
+ */
+function cardFor(row) {
+  if (row.status === 'review') return reviewCard(row);
+  if (row.status === 'in_progress') return boardCard(row);
+  if (row.status === 'hold') return heldCard(row);
+  if (row.status === 'open') return openCard(row);
+  return shutCard(row);
+}
+
+async function fetchOne(wanted, staff) {
+  if (staff) return (await api(`/api/requests/${encodeURIComponent(wanted)}`)).request;
+  const mine = await api('/api/requests/mine?per_page=200');
+  return listOf(mine, 'requests').find((row) => String(row.id) === String(wanted)) || null;
+}
+
+async function honourTheLink(staff, draw) {
+  const wanted = linkedId();
+  if (!wanted || pinned === wanted) return;
+  if (flashLinked(wanted)) {
+    pinned = wanted;
+    return;
+  }
+  pinned = wanted;
+  const holder = document.getElementById('dash');
+  try {
+    const row = await fetchOne(wanted, staff);
+    holder.prepend(row ? pinnedCard(row, draw) : pinnedSaid(staff ? NO_SUCH_ONE : NOT_YOURS_TO_SEE));
+  } catch (error) {
+    // A 404 or a 403 here is "that number is not one you can read", not an outage — the two
+    // get different sentences, because the fixes are different (global refusal rule).
+    const missing = error.status === 404 || error.status === 403;
+    holder.prepend(pinnedSaid(missing ? (staff ? NO_SUCH_ONE : NOT_YOURS_TO_SEE) : sentenceFor(error).text));
+  }
+}
+
 async function loadMember() {
   const mine = await api(`/api/requests/mine?page=${state.mine}&per_page=${PER_PAGE}`);
   const rows = listOf(mine, 'requests');
@@ -878,15 +1194,17 @@ async function loadMember() {
     mineSection(mine, rows, mineSay),
   );
   remeasure();
+  await honourTheLink(false, (row) => mineCard(row, mineSay));
 }
 
 async function loadStaff() {
   const active = document.activeElement;
   const typed = active && active.classList && active.classList.contains('search') ? active.value : null;
 
-  const [waiting, working, parked, shipped, refused, gone, allSettings] = await Promise.all([
+  const [waiting, working, checking, parked, shipped, refused, gone, allSettings] = await Promise.all([
     api(`/api/requests?${filtered({ status: 'open', page: String(state.open), per_page: String(PER_PAGE) })}`),
     api(`/api/requests?${filtered({ status: 'in_progress', page: String(state.board), per_page: String(PER_PAGE) })}`),
+    api(`/api/requests?${filtered({ status: 'review', page: String(state.review), per_page: String(PER_PAGE) })}`),
     api(`/api/requests?${filtered({ status: 'hold', page: String(state.held), per_page: String(PER_PAGE) })}`),
     api(`/api/requests?status=done&page=${state.done}&per_page=${SHUT_PER_PAGE}`),
     api(`/api/requests?status=declined&page=${state.declined}&per_page=${SHUT_PER_PAGE}`),
@@ -899,6 +1217,7 @@ async function loadStaff() {
 
   const openSay = sayAgain('open', notice());
   const boardSay = sayAgain('board', notice());
+  const reviewSay = sayAgain('review', notice());
   const heldSay = sayAgain('held', notice());
   const fileSay = sayAgain('file', notice());
 
@@ -912,6 +1231,7 @@ async function loadStaff() {
     toolbar(waiting, working),
     openSectionOf(waiting, listOf(waiting, 'requests'), openSay),
     boardSection(working, listOf(working, 'requests'), boardSay),
+    reviewSection(checking, listOf(checking, 'requests'), reviewSay),
     heldSection(parked, listOf(parked, 'requests'), heldSay),
     doneSection(shipped, listOf(shipped, 'requests')),
     declinedSection(refused, listOf(refused, 'requests'), listOf(gone, 'requests')),
@@ -921,6 +1241,7 @@ async function loadStaff() {
   );
   keepTyping(typed);
   remeasure();
+  await honourTheLink(true, cardFor);
 }
 
 async function load(me) {

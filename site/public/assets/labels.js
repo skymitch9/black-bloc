@@ -136,6 +136,8 @@ export const LABELS = {
   request_notify_channel_id: 'Where a new request is announced',
   request_status_channel_id: 'Where a request’s status changes are announced',
   request_dm_on_decision: 'Whether the asker is DMed on every status change',
+  request_channel_moves: 'Which moves put a card in the request channel',
+  request_review_by_other: 'Whether somebody else has to check a request before it is done',
   request_log_level: 'How much of requests is repeated into Discord',
 
   cost_hosting_usd: 'What hosting costs a month, off the invoice',
@@ -153,9 +155,7 @@ export const LABELS = {
   raidtrain_max_slots_per_member: 'How many slots one person may claim',
   raidtrain_scheduled_event: 'Whether Discord gets a scheduled event too',
   raidtrain_log_level: 'How much of raid trains is repeated into Discord',
-};
 
-const NAMESPACES = ['golive', 'youtube', 'pings', 'tempvoice', 'honeypot', 'events', 'birthday', 'modmail', 'automod', 'rolemenu', 'raidtrain'];
   applications_mode: 'Whether people can apply for a role',
   applications_channel_id: 'Where an application card is posted',
   applications_approver_role_id: 'Who may say yes to an application',
@@ -165,7 +165,7 @@ const NAMESPACES = ['golive', 'youtube', 'pings', 'tempvoice', 'honeypot', 'even
   applications_log_level: 'How much of applications is repeated into Discord',
 };
 
-const NAMESPACES = ['golive', 'youtube', 'pings', 'tempvoice', 'honeypot', 'events', 'birthday', 'modmail', 'automod', 'rolemenu', 'applications'];
+const NAMESPACES = ['golive', 'youtube', 'pings', 'tempvoice', 'honeypot', 'events', 'birthday', 'modmail', 'automod', 'rolemenu', 'raidtrain', 'applications'];
 
 function derived(key) {
   let name = String(key || '');
