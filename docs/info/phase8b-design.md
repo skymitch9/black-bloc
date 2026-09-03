@@ -1,5 +1,10 @@
 ﻿# Phase 8b design — the full dashboard: tabs, names, settings pages, moderation tools
 
+> ⚠️ **2026-09-03: this document's `/request list` mention is a slash path superseded by
+> the panel** — `/request` is now ONE command that opens an interactive panel; see
+> [`requests-panel-design.md`](requests-panel-design.md). Everything else here (names,
+> tabs, settings pages, moderation tools) is unaffected.
+
 > **Audience:** the two 8b build agents (API / pages) and the reviewer.
 > **Status:** TRACKED (2026-08-31; private repo). **Last verified: 2026-08-26 ~23:00** — written
 > against `main` @ `618dcd1` (8a live, sign-in verified by the owner).

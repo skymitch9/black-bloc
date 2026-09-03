@@ -1,13 +1,23 @@
 # Requests, fourth pass — `/request` is ONE command that opens a panel
 
-**Audience:** the builder and the reviewer. **Status:** TRACKED · **BUILDABLE**, 2026-09-03.
-Owner's ask ~06:50 (verbatim in `../TODO.md`, "🔧 Open engineering items"): *"The flow
+**Audience:** the builder and the reviewer. **Status:** TRACKED · ✅ **BUILT on branch
+`feat/requests-panel`, commit `4743b01`, worktree `.claude/worktrees/agent-requests-panel`
+— NOT merged and NOT deployed.** 172 new/rewritten tests
+(`tests/cogs/community/test_requests.py` 51, `tests/test_requests.py` +26 pure-helper and
+`withdraw_request` tests, `tests/test_settings_store.py` +1); **3321 tests pass**, ruff
+clean, `check.mjs` 17 pages / 139 routes, `labels.js` still parses (site untouched). See
+`## Deviations` at the foot. Owner's ask ~06:50 (verbatim in `../TODO.md`, "🔧 Open
+engineering items"): *"The flow
 seems tough, and request set and request ready seem overlapping."* → *"Let's also have
 /request open a menu maybe. Let's try and minimize slash commands and maximize interactive
 windows"* → *"Let's start this process with request then carry it through the rest of the
 app. Request first."* **Last verified: 2026-09-03** against `black_bloc/requests.py` and
 `cogs/community/requests.py` at `3e18e4a` (the third pass, deployed `70a6720`). ⚠️ This is
-the PATTERN for every later feature — see the project `CLAUDE.md` rule.
+the PATTERN for every later feature — see the project `CLAUDE.md` rule. ⚠️ **NOT verified:**
+anything against live Discord — this build cannot reach it; a member gate, staff gate,
+component defer, or modal-from-component flow that only real Discord's dispatch would
+distinguish (`code-notes.md` says exactly which lines were checked against installed
+library source instead).
 
 ## What is wrong today (measured)
 
@@ -137,4 +147,71 @@ the design docs get a dated "superseded by the panel" line, not a rewrite of his
 
 ## Deviations
 
-(the builder appends here, numbered, with the reason)
+Written by the build agent, 2026-09-03. Everything not listed here was built as
+specified.
+
+1. **The card re-renders through `interaction.response.defer()` then
+   `interaction.edit_original_response(...)`, not a direct
+   `interaction.response.edit_message(...)`.** Every shared function a card button
+   calls (`apply_decision`, `mark_ready`, `send_back`, `resume_request`,
+   `withdraw_request`) writes the DB and can also post a channel card and/or send a
+   DM, which occasionally runs past Discord's 3-second interaction window. Checked
+   against the installed `discord/interactions.py` (checklist 29): for a component
+   or modal-submit interaction, a non-`thinking` `defer()` IS a
+   `deferred_message_update` — the same "update this message" contract
+   `edit_message` offers, acknowledged first so the slow work gets the ~15-minute
+   interaction-token window instead of 3 seconds. `code-notes.md` has the exact
+   lines checked.
+2. **`RequestView(timeout=...)` is a fresh clock on every render, not one running
+   total from when `/request` was first opened.** Each click replaces the
+   displayed view with a brand-new `RequestView`; only the LAST one nobody
+   touches ever reaches `on_timeout`. This reads as an inactivity timeout rather
+   than a session length, is the natural result of "re-render on every move,"
+   and is what `test_a_view_with_no_message_yet_does_nothing_on_timeout` and
+   `test_the_view_disables_every_item_and_says_so_on_timeout` guard directly.
+3. **"Requests off" and "staff-only filing" hide the File button and add one
+   line to the embed; they do not refuse the whole `/request` command.**
+   `request_mode` and `request_who_can_file` have only ever gated FILING (the old
+   `/request create`, now `submit()`, unchanged) — listing, moving and
+   withdrawing existing requests were never gated by either key. "Gates
+   unchanged" is read literally: only the database being down (which breaks
+   every query the panel makes) refuses the whole command, matching
+   `_ready`/`_database_ready`'s behaviour everywhere else in this cog.
+4. **The member's "Take one back…" select silently caps at 25 with no "N of M"
+   placeholder**, unlike the staff "Pick a request…" select. The design asks
+   for the capped-placeholder wording only on the staff select; a member with
+   25+ open-or-held requests of their own is not a realistic case today, so the
+   asymmetry is left rather than inventing a second wording nobody asked for.
+5. **The interactive staff card carries no "Open on the site" link button**,
+   unlike the channel/DM card. `review`'s row already renders 4 move buttons +
+   `Back` — Discord's 5-per-row cap — so a site link has nowhere to go without a
+   second row; the design's own button table lists no site link on the card,
+   only on the top-level panel and the channel/DM cards, so this reads as
+   intentional rather than an omission.
+6. **Every component/modal action re-checks `bot.db.is_connected` after its own
+   `defer()`** (`db_ready`), not only the top-level `/request` command. The
+   design names the database-down gate once, at the command; extending the same
+   check to every button/select/modal click is a small addition so a database
+   dropping mid-session answers `DB_UNAVAILABLE` in words rather than raising
+   into the generic `AnswersErrors` fallback.
+7. **§J's own claim needed correcting, not just proving.** "`commands synced`
+   reports the smaller count" (§J item 1) is not quite right: `commands synced`
+   (`command_sync.py:31`, `len(bot.tree.sync(...))`) counts TOP-LEVEL commands,
+   and a `Group` already counted as ONE top-level slot — turning it into a bare
+   command keeps that slot, so the number is **unchanged at 44**
+   (`tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`,
+   measured, not merely asserted). What actually drops by nine is the total
+   command-tree size (the nine subcommands that no longer exist beneath
+   `/request`), which is not what Discord calls "synced." `LOGS_GROUPS` in
+   `tests/test_bot.py` lost its `"request": "request"` entry, since `/request`
+   is no longer a `Group` with a `logs` child to find.
+8. **`black_bloc/requests.py:withdraw_request` widens checklist item 34's own
+   text**, which listed "withdraw" among the routes where `note()` is the sole
+   logger — true when that item was written, before withdraw had a shared
+   function. Extracting it (as this document asked) gives it the same
+   `via`/`kind_via` shape every other move already has, and the web route's
+   `note("web.request.withdrawn", …)` was deleted rather than kept, matching the
+   checklist's INTENT (one write, one row) over its now-stale enumeration.
+   `code-notes.md` carries the detail; `review-checklist.md` itself was left
+   untouched — updating that enumeration is the reviewer's call, not this
+   build's.
