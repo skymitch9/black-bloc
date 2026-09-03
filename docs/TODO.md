@@ -19,12 +19,13 @@ live, `deploys.log` line 59 edited, DONE entry written. Worktrees `agent-request
 `agent-own-list`, `agent-a056909c738b178df` and branches `feat/requests-panel*`,
 `feat/panels-library` are merged and can be pruned.
 
-**Next, the standing direction (owner 2026-09-03: "Keep building"):** the "ping the
-requester" 🔧 item — write `info/requests-check-design.md` (the design is decided; the item
-below carries it in short), add its `info/README.md` row, then an Opus build on a branch cut
-from `main`, review, merge, deploy, sweep row, DONE. Then wave 1 of `info/panels-program.md`
-(events · polls · birthdays · applications, design docs first). Owner's by-eye sweep of the
-panel is still owed (`access/sweeps.md` rows 14–15, 58–65; he is doing 15 and 65 himself).
+**Next, the standing direction (owner 2026-09-03: "Build all, keep going"):** "Ask them to
+check" is LIVE in v61 (`44170f4`, 12:29 — moved whole to `DONE.md`; owner sweeps 66–68). In
+flight: the applications-no-role Opus build on `feat/applications-no-role` (schema 28), and a
+code-notes re-key against `44170f4`. Then: the applications panel design (wave 1's fourth
+doc), and Opus builds of the three reviewed wave-1 designs — events waits on fork I2
+(`/timezone` retire or keep). Owner's by-eye sweeps still owed: `access/sweeps.md` rows 14–15,
+58–68.
 
 **Landing ritual (unchanged):** branch → `git merge --no-ff` on `main` → `scripts/deploy.ps1`
 DETACHED (refuses a dirty tree; ~3 min now: ruff → pytest `-n auto` → ES-module parse of every
@@ -216,29 +217,8 @@ docs bookkeeping lands with the work, not after.
   re-keys. Owner answered the one question 2026-09-03 ~12:30: **"Always give staff final say
   and permission"** — staff removal stays in, and the sentence is now a `CLAUDE.md` rule.
   Then "Build all, keep going" → Opus build dispatched on `feat/applications-no-role`
-  (2026-09-03 ~12:35), beside `feat/requests-check`.
-
-- 🆕 **"We also need a way to ping the requester from the request app. I want to have it
-  message the requesters to check the work." (owner, 2026-09-03 11:15).** A staff move on the
-  request card (panel AND the site's request card — one shared function, one log row) that
-  tells the person who asked that the work is ready for THEM to try: a DM built from the same
-  `request_embed` (built + how-to-test filled in) with a sentence asking them to check it and
-  say so, falling back to a mention in the request channel when their DMs are closed. Which
-  states offer it, whether it is its own state or a flag on `review`, and the fallback are
-  design calls — the owner said "Keep building", so no fork went to him. Status:
-  **BUILDABLE** (2026-09-03 ~12:05) — [`info/requests-check-design.md`](info/requests-check-design.md)
-  written: an ACTION on the review card, not a state (§B); `check_asked` look + DM, channel
-  ping fallback (`request_check_fallback_channel`, default on), `request_check_on_ready`
-  (default off), schema 27, `POST /api/requests/{id}/check`; six owner-flippable calls in §D.
-  Owner 2026-09-03 ~12:30: "Build all, keep going" → Opus build dispatched on
-  `feat/requests-check` from `main` ≥ `fbb1191` (~12:35), beside `feat/applications-no-role`.
-  Status: **BUILT, not merged, not deployed** (2026-09-03, branch `feat/requests-check`, four
-  commits) — `ask_check` shared by the panel button and `POST /api/requests/{id}/check`, the
-  `check_asked` card, the channel-ping fallback, both settings, schema 27, 28 new tests
-  (3399 pass, ruff clean, mock 17 pages / **140** routes). Owner checks are sweeps
-  [66–68](access/sweeps.md). ⚠️ Both this branch and `feat/applications-no-role` bump
-  `SCHEMA_VERSION` to 27 — whichever merges second re-keys to 28. Nothing here has been seen
-  in live Discord or on the deployed site.
+  (2026-09-03 ~12:35), beside `feat/requests-check` — which merged first (`44170f4`, v61,
+  schema 27), so this build's schema **28** stands as designed.
 
 - 🆕 **Panels over slash commands — the rest of the app (owner, 2026-09-03: "then carry it
   through the rest of the app"; confirmed ~11:25: "do the change to all / commands. I like

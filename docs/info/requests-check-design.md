@@ -1,8 +1,9 @@
 # Requests, sixth pass — "Ask them to check": ping the requester from the card
 
-**Audience:** the builder and the reviewer. **Status:** TRACKED · **BUILT** (design
-2026-09-03 ~12:00, Fable; built the same afternoon on `feat/requests-check`, not merged and
-not deployed — see `## Deviations` at the foot, 11 of them). Owner's ask, 2026-09-03 11:15, verbatim in
+**Audience:** the builder and the reviewer. **Status:** TRACKED · **SHIPPED** (design
+2026-09-03 ~12:00, Fable; built the same afternoon on `feat/requests-check`, merged `44170f4`
+with one review fix — `moment()` now stamps the check card with `check_asked_at` — and live in
+**v61** at 12:29, schema 27; see `## Deviations` at the foot, 11 of them). Owner's ask, 2026-09-03 11:15, verbatim in
 `../TODO.md` ("🔧 Open engineering items"): *"We also need a way to ping the requester from the
 request app. I want to have it message the requesters to check the work."* — then *"Keep
 building"*, so the design calls below were made by the conductor and are listed under §D for

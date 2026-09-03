@@ -9,6 +9,38 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-03 — Requests sixth pass: "Ask them to check" (v61, `44170f4`)
+
+Release **v61** (`44170f4`, 12:29; `deploys.log` line 60). The 🔧 item moved here whole:
+
+- 🆕 **"We also need a way to ping the requester from the request app. I want to have it
+  message the requesters to check the work." (owner, 2026-09-03 11:15).** A staff move on the
+  request card (panel AND the site's request card — one shared function, one log row) that
+  tells the person who asked that the work is ready for THEM to try: a DM built from the same
+  `request_embed` (built + how-to-test filled in) with a sentence asking them to check it and
+  say so, falling back to a mention in the request channel when their DMs are closed. Which
+  states offer it, whether it is its own state or a flag on `review`, and the fallback are
+  design calls — the owner said "Keep building", so no fork went to him. Status:
+  **BUILDABLE** (2026-09-03 ~12:05) — [`info/requests-check-design.md`](info/requests-check-design.md)
+  written: an ACTION on the review card, not a state (§B); `check_asked` look + DM, channel
+  ping fallback (`request_check_fallback_channel`, default on), `request_check_on_ready`
+  (default off), schema 27, `POST /api/requests/{id}/check`; six owner-flippable calls in §D.
+  Owner 2026-09-03 ~12:30: "Build all, keep going" → Opus build dispatched on
+  `feat/requests-check` from `main` ≥ `fbb1191` (~12:35), beside `feat/applications-no-role`.
+  Status: **BUILT, not merged, not deployed** (2026-09-03, branch `feat/requests-check`, four
+  commits) — `ask_check` shared by the panel button and `POST /api/requests/{id}/check`, the
+  `check_asked` card, the channel-ping fallback, both settings, schema 27, 28 new tests
+  (3399 pass, ruff clean, mock 17 pages / **140** routes). Owner checks are sweeps
+  [66–68](access/sweeps.md). ⚠️ Both this branch and `feat/applications-no-role` bump
+  `SCHEMA_VERSION` to 27 — whichever merges second re-keys to 28. Nothing here has been seen
+  in live Discord or on the deployed site.
+  **SHIPPED** (2026-09-03 12:29, v61 `44170f4`): merged first, so this one kept schema **27**
+  and the applications build already carries 28. Fable review found one defect — `moment()`
+  stamped the DM'd check card with `decided_at` (the ready time) instead of `check_asked_at` —
+  fixed at the merge with a column map and a test line. 3399 tests in the gate, release 15 s
+  after exit, boot log 19:29Z clean (synced 44 commands). By eye NOT done: sweeps 66–68 are the
+  owner's.
+
 ## 2026-09-03 — Panels wave 0 (`black_bloc/panels.py`) and the deploy gate that fits inside a tool call
 
 Landed together in release **v60** (`46e3ba4`, 11:39; `deploys.log` line 59). Three things,
