@@ -130,6 +130,7 @@ ROSTER_EMPTY = "Nobody is on this list yet."
 ROSTER_LINE = "<@{user_id}>{gone}{twitch} · on since {stamp}"
 ROSTER_GONE = " (left the server)"
 NO_QUESTIONS_LINE = "No questions on it yet, so nobody can apply for it."
+FORM_COUNTS_LINE = "**{questions}** question(s) · **{waiting}** waiting · **{approved}** approved"
 POST_WHERE = "Where does the Apply button go?"
 FILL_IT_IN = "Fill it in"
 PICK_A_QUESTION = "A question…"
@@ -1132,12 +1133,6 @@ def read_yes_no(text: Any) -> bool | None:
     return found in ("yes", "y", "true", "1", "on")
 
 
-async def own_pending(bot: Any, guild: Any, user: Any) -> list[Any]:
-    return await forms.applications_for(
-        bot.db, guild.id, user_id=user.id, statuses=(grants.PENDING,), limit=SELECT_CAP
-    )
-
-
 async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, Any]:
     """One command, two panels: what a member may do, and what staff may do, from one embed."""
     store = bot.store
@@ -1633,9 +1628,11 @@ def form_lines_for(bot: Any, guild: Any, form: Any, questions: Any, counts: Any)
         f"Role lasts: {forms.expires_days_of(form) or 'forever'} · "
         f"apply again after {forms.retry_days_of(form)} day(s)",
         f"The Apply button is in: {f'<#{where}>' if where else '**nowhere yet**'}",
-        forms.COUNTS_LINE.format(
-            forms=len(questions), waiting=counts[grants.PENDING], approved=counts[grants.APPROVED]
-        ).replace("form(s)", "question(s)"),
+        FORM_COUNTS_LINE.format(
+            questions=len(questions),
+            waiting=counts[grants.PENDING],
+            approved=counts[grants.APPROVED],
+        ),
     ]
     if not questions:
         lines.append(NO_QUESTIONS_LINE)
