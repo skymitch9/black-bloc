@@ -244,10 +244,19 @@ docs bookkeeping lands with the work, not after.
   14:12 — "Build the question sub panel"** (§C's Questions sub-panel as designed). Applications
   build landed 14:55 (401k), merged `853776c`, **live in v66 15:00** (43 → 42 commands). **WAVE 1
   COMPLETE** — four landings in `DONE.md` 2026-09-03. Waves 2–4 remain (§5 of the program).
-  **Wave 2 design docs DISPATCHED 15:45** (five Opus design agents, one file each:
-  `info/voice-panel-design.md`, `info/pings-panel-design.md`, `info/golive-panel-design.md`,
-  `info/youtube-panel-design.md`, `info/memory-panel-design.md`; ~60k each). Next: Fable reviews
-  each against §2, forks go to the owner one at a time, then builds in worktrees. Events I2 DECIDED 12:40 (`/timezone` retired).
+  **Wave 2 design docs ALL LANDED 15:50–15:54** (five Opus design agents, one file each:
+  `info/golive-panel-design.md` 205k, `info/voice-panel-design.md` 210k, `info/youtube-panel-design.md`
+  192k, `info/pings-panel-design.md` 199k, `info/memory-panel-design.md` 204k — ⚠️ the 60k estimate was
+  off 3×; calibrate design docs at ~200k). Golive REVIEWED against §2 15:52 (consistent: 4 rows in caps,
+  member/staff split, one function per move with `via`, one key, no Settings sub-panel with the reason).
+  The other four await Fable review. **Nine owner forks queued, one at a time:** golive I1 (`/golive` vs
+  `/twitch`, rec. `/golive`), golive I2 (staff `Streamers…` sub-panel, rec. build), voice F1 (the
+  in-channel control post: leave/rebuild/drop, rec. leave), pings I1 (streamer may remove a staff-started
+  ping role, rec. yes = today), pings I2 (one Events toggle or two when the keys differ, rec. two when they
+  differ), youtube F-Y1 (`/youtube` also carries the Twitch link, rec. no), youtube F-Y2 (flip
+  `youtube_mode` to shadow at landing, rec. yes), memory I-M1 (reach your memory while the mode is off,
+  rec. yes). Then builds in worktrees in cost order: memory (120–180k) → golive (200–280k) → youtube
+  (230–300k) → pings (300–360k) → voice (420–480k). Events I2 DECIDED 12:40 (`/timezone` retired).
   **Wave-1 builds all landed 13:40–13:50** (birthdays merged `58974e1`; events on
   `worktree-agent-a448c7ab780ed3c2b`, polls on `worktree-agent-aa735ab092d13477d`, both under Fable
   review); the applications build follows once I-A3 is answered. Merge in wave order, re-key
