@@ -45,6 +45,8 @@ PANEL_TIMEOUT_FOOTER = forms.PANEL_TIMEOUT_FOOTER
 TAKE_OFF_LABEL = "Take off the list"
 TAKE_OFF_MODAL_TITLE = "Take them off the list?"
 TAKE_OFF_MODAL_LABEL = "One line they will be sent"
+DENY_MODAL_TITLE = "Why not?"
+DENY_MODAL_LABEL = "One line the applicant will be sent"
 
 NOT_IN_GUILD = (
     "Applications only work inside the server, and this did not come from one, so nothing was "
@@ -933,18 +935,19 @@ class ApplyModal(AnswersErrors, discord.ui.Modal):
         await answer(interaction, said)
 
 
-class DenyModal(AnswersErrors, discord.ui.Modal, title="Why not?"):
-    reason = discord.ui.TextInput(
-        label="One line the applicant will be sent",
-        style=discord.TextStyle.paragraph,
-        max_length=forms.REASON_MAX,
-    )
+class DenyModal(NoteModal):
+    """The channel card's Deny — the shared note modal, not a second copy of one."""
 
     def __init__(self, application_id: int) -> None:
-        super().__init__()
-        self.application_id = application_id
+        self.application_id = int(application_id)
+        super().__init__(
+            title=DENY_MODAL_TITLE,
+            label=DENY_MODAL_LABEL,
+            max_length=forms.REASON_MAX,
+            on_submit=self.denied,
+        )
 
-    async def on_submit(self, interaction: discord.Interaction) -> None:
+    async def denied(self, interaction: discord.Interaction, note: str) -> None:
         await interaction.response.defer(ephemeral=True)
         said, _ = await apply_decision(
             interaction.client,
@@ -952,7 +955,7 @@ class DenyModal(AnswersErrors, discord.ui.Modal, title="Why not?"):
             self.application_id,
             grants.DENIED,
             interaction.user,
-            reason=str(self.reason),
+            reason=note,
         )
         await answer(interaction, said)
 
@@ -2676,6 +2679,7 @@ __all__ = [
     "TAKE_OFF_LABEL",
     "Applications",
     "ApplicationsPanel",
+    "DenyModal",
     "ApplyButton",
     "ApplyModal",
     "ApplyPick",
