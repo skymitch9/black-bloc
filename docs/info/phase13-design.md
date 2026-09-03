@@ -1,5 +1,8 @@
 # Phase 13 — Requests (F18): `/request` replaces the ideas doc
 
+> ⚠️ **2026-09-03: slash paths superseded by the panel** — `/request` is now ONE
+> command that opens an interactive panel; see [`requests-panel-design.md`](requests-panel-design.md).
+
 > ✅ **13a built in `5d637b4` (storage), `e7e0f9e` (settings), `cf23268` (cog),
 > `27ec297` (API + member gate) and `415eb8c` (contract + mock)**, on branch
 > `worktree-agent-ae90babf488323552` off `main` @ `40b7782`. The dashboard page is

@@ -1,9 +1,12 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-02** — rows **53–57** added by the Phase 19 (applications) build and rows
-> **48–52** by the Phase 18 (F19, raid trains) build, both built in parallel; the file now
-> holds **57** un-exercised rows. ✅ Rows 43–57 are LIVE: 43–47 shipped with Phase 16
+> **2026-09-03** — rows **58–64** added by the requests fourth pass (`/request` becomes one
+> panel; rows 14–15 rewritten in place for the same build — the file now holds **64**
+> un-exercised rows). ⚠️ Rows 14–15 and 58–64 are **BUILT, not yet live** — merge and deploy
+> land them; not run against Discord (this build cannot reach it). Before that, **2026-09-02**
+> — rows **53–57** added by the Phase 19 (applications) build and rows
+> **48–52** by the Phase 18 (F19, raid trains) build, both built in parallel. ✅ Rows 43–57 are LIVE: 43–47 shipped with Phase 16
 > (`049881b`, 2026-09-02 22:18) and 48–57 with the 17 → 18 → 19 merge deployed `7b1c592`
 > on 2026-09-03; every one of them may be attempted now (all three modes ship **off** — flip
 > `chat_memory_mode` / `raidtrain_mode` / `applications_mode` first). Before that, rows
@@ -38,8 +41,8 @@ All of this happens in **`#mute-me-bot-test-spam`** (test mode) or on **https://
 | 11 | Birthday daily import | nothing to do — read the log after a restart | `birthdays: the daily import took nothing new — {… 'already': 38 …}` |
 | 12 | Logs (Phase 12, live 18:38) | flip `golive_log_level` to `all`, `/golive test`, then back to `important`, `/golive test` again; `/golive logs` | Discord line only in `all`; dashboard shows both; a role request still posts its card with `rolemenu_log_level = off` |
 | 13 | Emoji tone | `@Black Bloc hi` until a 👋 line comes up | dark tone by default; `emoji_skin_tone` setting changes it |
-| 14 | Requests — staff (Phase 13, live 20:15) | `/request create` in the test channel as staff (What / Why / due date) | ephemeral "Filed as #N … approved straight away"; the row appears on https://blackbloc.heygabi.ai/requests.html under Planned & in progress; `/request list`, `/request logs` |
-| 15 | Requests — member | have a non-staff member sign in at https://blackbloc.heygabi.ai and file one; or `/request create` as a member | they see ONLY the Requests page (file + their own); the row lands in Pending; Approve / Decline from the page → DM; `/request withdraw <id>` while pending |
+| 14 | Requests — the panel, staff (fourth pass, `/request` is now ONE command) | `/request` in the test channel as staff | an ephemeral panel: a counts line (open / being worked on / ready to check / on hold), your own requests, **File a request** / **Refresh** / **Open on the site**, a **Pick a request…** select (capped at 25, says "N of M — the rest are on the site" past that), and a **Logs** button that answers with a NEW ephemeral message (the panel stays put) |
+| 15 | Requests — the panel, member | `/request` as a non-staff member | the same panel minus the staff controls: File a request / Refresh / Open on the site, and your own requests; once you have an open or held one, a **Take one back…** select appears — picking one shows its card with **Yes, take it back** / **Keep it** |
 | 16 | Via column | change one setting from Discord (`/settings set-value …`) and one from the website | Logs page → Settings audit shows **Discord** and **Website** in the Via column; `/settings logs` says the same |
 | 17 | Cyberpunk look | cog → Cyberpunk | the estate's cyan/yellow palette again (no magenta) — say if it still reads wrong |
 | 18 | `/help` (batch 2) | `/help`, then `/help filter:temp` | command list with `(staff)` marks on staff-only entries |
@@ -162,6 +165,13 @@ form for a full pass.
 | 55 | Applications — applying | in `#mute-me-bot-test-spam`: `/apply start twitch-team` (or press **Apply** on the posted panel) | a modal with your five questions; on submit an ephemeral "Sent to staff…", a DM "…is with staff now", and a card with **Approve** / **Deny** in the test channel (test mode redirects it there and the reply says so) |
 | 56 | Applications — deciding | press **Approve** on that card | the applicant gets the role; the card is edited to say who has it and carries `@<owner> — next step: the Team owner sends your twitch.tv invite…`; the applicant is DMed the same thing; /rolemenus.html → Applications shows it under Decided and the Timed roles table has a clock on it if the form set one. Then apply again as somebody else and press **Deny** with a reason: the DM carries the reason AND the date they may apply again |
 | 57 | Applications — the second application guard | apply twice on the same form without withdrawing | the second one refuses in words ("you already have an application waiting"); `/apply withdraw twitch-team` takes it back and lets you apply again; after a **deny**, applying again says *when* you may, not just no |
+| 58 | Requests — panel move, Pick up (fourth pass) | `/request` as staff, pick an **open** request, press **Pick up** | the card re-renders **being worked on**; a card posts to the status channel if one is configured |
+| 59 | Requests — panel move, Hold | on an open / in-progress / review card, press **Hold**, fill "Why is it on hold?" | the card re-renders **on hold**; the asker is DMed the reason (`request_dm_on_decision`) |
+| 60 | Requests — panel move, Decline | press **Decline**, fill "Why?" | the card re-renders **declined**, final ("nothing moves it now"); the asker is DMed |
+| 61 | Requests — panel move, Ready to check | on an in-progress card, press **Ready to check**, fill "What was built?" (+ optional "How does somebody test it?") | the card re-renders **ready to check**; nobody is DMed — it is staff-facing |
+| 62 | Requests — panel move, Accept | on a review card, press **Accept** | the card re-renders **done**, final; the asker is DMed with what was built. Turn `request_review_by_other` on and reopen the same card as the staffer who marked it ready: Accept is gone, the footer says who may press it |
+| 63 | Requests — panel move, Send back | on a review card, press **Send back**, fill "What's left?" | the card re-renders **being worked on**; whoever marked it ready is DMed the note |
+| 64 | Requests — panel move, Resume | on a held card, press **Resume** | the card re-renders back where it was held from — usually being worked on, sometimes ready to check |
 
 ## The owner's Twitch Team form — the walk-through
 

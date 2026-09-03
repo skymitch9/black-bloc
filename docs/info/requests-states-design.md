@@ -1,5 +1,9 @@
 # Requests, second pass — the state machine and the notifications
 
+> ⚠️ **2026-09-03: slash paths superseded by the panel** — `/request` is now ONE
+> command that opens an interactive panel; see [`requests-panel-design.md`](requests-panel-design.md).
+> The state machine itself (this document's `TRANSITIONS` table) is unchanged.
+
 **Audience:** the builder carrying this (rides along in the Phase 17 build),
 and the reviewer. **Status:** TRACKED · **BUILT on branch `worktree-agent-a268aa7fa2979dd4a`,
 2026-09-02, NOT merged and NOT deployed** — see the `## Deviations` list at the

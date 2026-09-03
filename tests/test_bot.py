@@ -21,7 +21,6 @@ LOGS_GROUPS = {
     "poll": "poll",
     "chat": "chat",
     "mod": "mod",
-    "request": "request",
     "pingroles": "pings",
     "uploads": "youtube",
     "raidtrains": "raidtrain",

@@ -2,7 +2,10 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-02 — KI-17 and KI-18 added by the Phase 19 (applications)
+> Last verified: **2026-09-03 — KI-20 added by the requests fourth pass build, from
+> reading its own code (the panel's View has a real timeout, not a persistent one)
+> rather than an incident; not run against live Discord.** Before that, **2026-09-02
+> — KI-17 and KI-18 added by the Phase 19 (applications)
 > build; KI-15 and KI-16 by the Phase 18 (F19, raid trains) build, from reading its own
 > code rather than from an incident; KI-14 by the Phase 17 build from its own §J
 > measurement (two leaked third-person threads in run 1, none in run 2 after the fix).
@@ -127,6 +130,35 @@ rather than disagreeing.
 **What would change it.** Nothing planned. Number: **1 report** of a stale kind
 confusing somebody reading the Logs page — the fix would be a display alias, not
 a migration.
+
+## KI-20 — A `/request` panel's buttons die on a bot restart — `WATCHING`
+
+**Symptom.** The requests fourth pass (`requests-panel-design.md`) makes
+`/request` open an ephemeral `discord.ui.View` with a real timeout
+(`request_panel_minutes`), not a persistent `View(timeout=None)` re-registered
+with `bot.add_view()` on `cog_load` (the pattern `TempVoicePanel` uses). If the
+bot restarts while a member's panel or request card is still open, every button
+and select on it answers Discord's own "This interaction failed" — the view's
+Python object is gone, and nothing on the message itself says so. ⚠️ **A second way the same footer goes
+missing, and this one is a setting anybody can walk into:** `request_panel_minutes`
+of **15 or more** loses the "this panel has gone quiet" footer entirely, because
+the footer is written through a Discord interaction token that expires 15 minutes
+after the click that made it — the buttons simply stop answering with nothing to
+explain why. The default was lowered from 15 to **10** for exactly this reason and
+the key's own help text (`settings_store.py`, `KEY_HELP["request_panel_minutes"]`)
+carries the warning; the value is deliberately NOT clamped.
+
+**Why tolerated.** A panel is a moment, not a post: it exists for the seconds a
+member spends filing or a staffer spends triaging, then it is gone (its own
+timeout disables it and says "run /request again"). Restarts are rare and short,
+and the only other affected surface today with a real timeout, `MemberPickView`
+in temp voice, has carried the same limitation since Phase 2 with no report.
+
+**What would change it.** A persistent `DynamicItem`-based panel (`custom_id`
+carrying the request id, so a restart can re-derive an item's target) if staff
+ask for it — the same shape `TempVoicePanel`'s own buttons already use, minus
+the request-card state that currently lives only in the View's Python object.
+Number: **0 reports** so far; nothing planned.
 
 ## KI-18 — Editing a question changes the form, never the answers already sent — `ACCEPTED`
 

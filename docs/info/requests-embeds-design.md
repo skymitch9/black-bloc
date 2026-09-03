@@ -1,5 +1,10 @@
 # Requests, third pass — embeds, "what was built", "how to test", the site link
 
+> ⚠️ **2026-09-03: slash paths superseded by the panel** — `/request` is now ONE
+> command that opens an interactive panel; see [`requests-panel-design.md`](requests-panel-design.md).
+> The embed builder (`request_embed`, the seven looks) this document designed is unchanged
+> and is exactly what the panel's card reuses.
+
 **Audience:** the builder and the reviewer. **Status:** TRACKED · ✅ **SHIPPED — merge
 `355d6e9` + anchor fix `70a6720`, deployed `70a6720` 2026-09-03 06:34; the landing one-off
 at the foot was RUN at 06:41 (#1, #2 `done → review`; #3 `hold`)** — see the

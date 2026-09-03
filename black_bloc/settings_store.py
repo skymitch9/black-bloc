@@ -872,6 +872,7 @@ KEY_TYPES.update(
     {
         "request_channel_moves": "enums",
         "request_review_by_other": "bool",
+        "request_panel_minutes": "int",
     }
 )
 KEY_CHOICES["request_channel_moves"] = REQUEST_CARD_MOVES
@@ -885,6 +886,12 @@ KEY_HELP.update(
         "request_review_by_other": (
             "true to make somebody other than the staffer who marked a request ready to check "
             "be the one who accepts it"
+        ),
+        "request_panel_minutes": (
+            "minutes the /request panel stays live before its buttons disable themselves; 10 "
+            "by default. The 'this panel has gone quiet' footer can only be written while "
+            "Discord's 15-minute interaction window is still open, so 15 or more means the "
+            "buttons simply stop working with no footer to explain it"
         ),
     }
 )
@@ -1289,6 +1296,8 @@ class SettingsStore:
             return list(REQUEST_CARD_MOVES)
         if key == "request_review_by_other":
             return False
+        if key == "request_panel_minutes":
+            return 10
         if key == "chat_mode":
             return "on"
         if key == "chat_cooldown_seconds":
