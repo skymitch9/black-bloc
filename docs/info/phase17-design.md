@@ -2,11 +2,12 @@
 
 > **Audience:** the owner first (the five privacy decisions in §Decisions are
 > HIS, asked one at a time), then the Opus builder, then reviewers.
-> **Status:** TRACKED — DESIGN DRAFT, written 2026-09-02 by the Fable session
-> (NEXT WAVE item 3). ⚠️ **Not buildable until the owner has answered D1–D5**
-> — the TODO block says "privacy decisions from owner BEFORE building". The
-> "proposed" column is the default the builder ships if he says "go with the
-> proposal"; each is a settings key either way.
+> **Status:** TRACKED — **BUILDABLE. All five owner decisions taken 2026-09-02
+> 17:20–18:38, one at a time** (D1 opt-out · D2 preferences with the
+> §D2-definition · D3 180 days, no raw archive · D4 separate scopes · D5 counts
+> only). Written 2026-09-02 by the Fable session (NEXT WAVE item 3). Each
+> decision is a settings key with the decided value as its default; the builder
+> ships exactly the "proposed" column.
 > Last verified: **2026-09-02** — the "what exists" rows were read in
 > `black_bloc/chat_llm.py` (`remember`, `window_for`, `sweep_window`,
 > `as_messages`, `user_turn`) and `cogs/content/chat.py:ingest_once` today.
@@ -40,7 +41,7 @@ window closes. Today Phase 14's window IS the memory; it is deleted after an hou
 | D2 | **What is remembered.** | ✅ **DECIDED 2026-09-02 17:55 (owner: "Let's do proposal but define what preferences vs content is")** — **Preferences, not content**, with the definition in §D2-definition below: what to call them, how they like to be talked to, up to 6 short notes (≤120 chars each), up to 5 open threads ("was asking about the Thursday event"). **Never**: quotes of what they said, anything about a third person, anything from a moderation/staff conversation (the `about_staff` gate already exists — those turns are excluded from distillation), availability ("they're usually on at 9"). | `chat_memory_notes_max` int 6, `chat_memory_threads_max` int 5 (the *never* list is code + prompt, not a setting) |
 | D3 | **Retention.** How long does a profile live untouched, and are raw turns archived beyond the hour? | ✅ **DECIDED 2026-09-02 18:20 (owner: "Okay let's do that, and we'll adjust later")** — **Profile: 180 days** since last update, then deleted; **raw turns: no archive** (the hour-long window stays the only raw store — the GABI tier-3 90-day archive is NOT ported; nothing in the feature list asks for "what did I say last month"). Leaving the server deletes the profile at once. | `chat_memory_retention_days` int 180 (0 = forever) |
 | D4 | **DMs vs the server.** Is what the bot learns in a DM usable in a public channel? | ✅ **DECIDED 2026-09-02 18:22 (owner: "i agree, do separate", after asking for the downsides of shared — the deciding case: a member who sets a name/pronouns by DM but has not told the guild gets outed by the next public reply)** — **Two scopes, one profile**: notes carry `where: dm|server`; a public-channel reply only sees the `server` notes, a DM sees both. The prompt-level guard GABI relies on becomes a data-level one — a DM note can never reach a public channel. | `chat_memory_dm_scope` = `separate` / `shared` |
-| D5 | **Who can read a profile.** Can staff see a member's memory on the dashboard? | **Counts only**: the Chat page shows how many profiles exist, when each was updated, and a Forget button; the *contents* are visible only to the person themselves (`/chat memory show`, ephemeral) and to the owner via the DB. Reason: staff already have modmail and case notes for what they need to know; a bot's private impressions of a member are not a moderation record. | `chat_memory_staff_view` = `counts` / `full` |
+| D5 | **Who can read a profile.** Can staff see a member's memory on the dashboard? | ✅ **DECIDED 2026-09-02 18:38 (owner: "yea agreed, we dont need to leak data here to all staff. I won't use the db much at all")** — **Counts only**: the Chat page shows how many profiles exist, when each was updated, and a Forget button; the *contents* are visible only to the person themselves (`/chat memory show`, ephemeral) and to the owner via the DB. Reason: staff already have modmail and case notes for what they need to know; a bot's private impressions of a member are not a moderation record. | `chat_memory_staff_view` = `counts` / `full` |
 
 ### D2-definition — preference vs content (owner asked for the line, 2026-09-02)
 

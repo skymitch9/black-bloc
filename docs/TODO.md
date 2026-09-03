@@ -123,10 +123,11 @@ already said go.** Order recommended by the 5.0 session, owner did not reorder:
    member opt-out, retention). **DRAFT DESIGN 2026-09-02 17:10 →
    [`info/phase17-design.md`](info/phase17-design.md)**: tier 1 already
    exists (`chat_window`); adds schema 23 profiles distilled on the hourly
-   sweep, `/chat memory`, a Memory section on the Chat page. ⏳ **WAITING ON
-   THE OWNER: D1 consent · D2 what is kept · D3 retention · D4 DM scope ·
-   D5 staff visibility — asked one at a time, proposals in the doc.** No
-   builder until answered.
+   sweep, `/chat memory`, a Memory section on the Chat page. ✅ **ALL FIVE
+   DECIDED 2026-09-02 17:20–18:38, one at a time** (D1 opt-out · D2
+   preferences with a written definition · D3 180 d, no raw archive · D4
+   separate DM/server scopes · D5 counts only) — **BUILDABLE**; builder
+   dispatches after Phase 16 (schema 23 follows 22).
 4. **Global personality pool** — one trope store shared across estate bots
    (Black Bloc's `personality_tropes` + GABI's `personality.ts` unify). This is
    an ESTATE design spanning two repos: design doc first, likely a small shared
