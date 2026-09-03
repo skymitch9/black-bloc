@@ -6,6 +6,7 @@ from typing import Any
 
 import discord
 
+from .logkinds import FEATURE_PAGES
 from .timezones import DEFAULT_TZ, zone
 
 log = logging.getLogger(__name__)
@@ -237,7 +238,7 @@ INLINE_FIELDS = frozenset(
 )
 EMBED_FOOTER = "Black Bloc · requests"
 SITE_BUTTON = "Open on the site"
-REQUEST_ANCHOR = "{origin}/requests#r-{request_id}"
+REQUEST_ANCHOR = "{origin}/" + FEATURE_PAGES["request"] + "#r-{request_id}"
 
 
 class RequestError(ValueError):

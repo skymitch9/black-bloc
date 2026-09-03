@@ -1966,7 +1966,7 @@ a.spend-figure:hover, a.spend-figure:focus-visible { text-decoration: underline;
   text-wrap: pretty;
 }
 
-/* A request reached by {origin}/requests#r-N. On the page it flashes for two
+/* A request reached by {origin}/requests.html#r-N. On the page it flashes for two
    seconds; off it, it is fetched and pinned above the sections instead. */
 .req-pinned {
   display: grid;

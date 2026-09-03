@@ -79,7 +79,7 @@ time so a request is confirmed in public the moment it exists.
 | "how to test the feature" | New column `how_to_test`, filled by staff when marking the request **ready to check**; shown on the review and done cards when non-empty |
 | "a short explanation of what was built" | New column `built`, **required** to enter `review`; shown on the review and done cards |
 | "an acceptance pending so a staffer can check" | The `review` state: Accept → done, Send back → in_progress with a note |
-| "a link to the request on the website" | New per-request URL `{origin}/requests#r-{id}`; a link button on every card |
+| "a link to the request on the website" | New per-request URL `{origin}/requests.html#r-{id}`; a link button on every card |
 | "post that same request link in discord … a message at the start" | The filing card, to `request_notify_channel_id` (already the filing channel) |
 | "once at the end when done. Also one for the in hold or declined states" | A card on every staff move, to `request_status_channel_id` (falls back to the notify channel, as today) — done / hold / declined, **and in_progress / review / sent back** (one template covers them all, and the owner can turn any move's card off — settings below) |
 
@@ -124,7 +124,7 @@ Nobody is DM'd on `review` — it is staff-facing; the channel card is its notic
 
 Every card: footer `Black Bloc · requests`, timestamp = the move time, and a
 `discord.ui.View` with one **link button** "Open on the site" →
-`{bot.settings.origin}/requests#r-{id}`. `what` clamps at 256 in the title-ish field
+`{bot.settings.origin}/requests.html#r-{id}`. `what` clamps at 256 in the title-ish field
 and 1024 in any field body (Discord's cap — `events.clamp`). Mentions stay
 `AllowedMentions.none()`. Colours are data (`EMBED_COLOURS: dict[str, int]`) not
 five literals.
@@ -301,6 +301,14 @@ specified.
     answer with the state the row was in. Only the two new routes were changed;
     the older three are left as found and are noted here so the next person is not
     surprised by them.
+14. **The card link is `{origin}/requests.html#r-N`, not `/requests#r-N`** —
+    a defect in THIS document, found by the conductor at the merge (2026-09-03
+    06:19): the dashboard is a `StaticFiles(html=True)` mount and live `/requests`
+    answered `{"detail":"Not Found"}`. `REQUEST_ANCHOR` now takes the page name
+    from `logkinds.FEATURE_PAGES["request"]`, the same table the log embeds link
+    through, so the two cannot drift. Fixed on `main` after the merge, before the
+    deploy; the URL tests, the page/CSS comments and this document's two mentions
+    were rewritten with it.
 
 ## The landing data step — the exact one-off (conductor's, NOT run here)
 

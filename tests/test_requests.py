@@ -582,9 +582,9 @@ def test_every_card_carries_one_link_button_to_the_request_on_the_site():
     view = pure.site_view("https://blackbloc.test/", 7)
 
     assert len(view.children) == 1
-    assert view.children[0].url == "https://blackbloc.test/requests#r-7"
+    assert view.children[0].url == "https://blackbloc.test/requests.html#r-7"
     assert view.children[0].label == "Open on the site"
-    assert pure.request_url("https://blackbloc.test", 7) == "https://blackbloc.test/requests#r-7"
+    assert pure.request_url("https://blackbloc.test", 7) == "https://blackbloc.test/requests.html#r-7"
 
 
 def test_no_origin_means_no_button_rather_than_a_link_that_goes_nowhere():

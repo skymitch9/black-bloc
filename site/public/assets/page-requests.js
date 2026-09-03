@@ -231,7 +231,7 @@ function metaLine(row) {
 
 /**
  * A card's own anchor, so the link button on every Discord embed
- * ({origin}/requests#r-N) lands on the request it names.
+ * ({origin}/requests.html#r-N) lands on the request it names.
  */
 function anchored(row, node) {
   node.id = `r-${row.id}`;

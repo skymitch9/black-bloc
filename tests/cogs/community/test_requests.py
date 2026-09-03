@@ -414,7 +414,7 @@ async def test_one_line_lands_in_the_notice_channel_and_its_message_is_remembere
     assert len(channel.messages) == 1
     assert card_of(channel.messages[0])["title"] == "New request #1"
     assert channel.messages[0].content == ""
-    assert link_of(channel.messages[0]).endswith("/requests#r-1")
+    assert link_of(channel.messages[0]).endswith("/requests.html#r-1")
     assert row["message_id"] == channel.messages[0].id
 
 
@@ -701,7 +701,7 @@ async def test_every_staff_move_puts_one_card_in_the_status_channel(cog, bot, me
         "Request #1 is ready to check 🔎",
         "Request #1 is done ✅",
     ]
-    assert all(link_of(message).endswith("/requests#r-1") for message in channel.messages)
+    assert all(link_of(message).endswith("/requests.html#r-1") for message in channel.messages)
 
 
 async def test_a_server_can_turn_any_move_card_off_and_the_rest_still_post(cog, bot, member, lead):
