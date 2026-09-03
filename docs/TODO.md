@@ -129,7 +129,13 @@ already said go.** Order recommended by the 5.0 session, owner did not reorder:
    cheap-model distillation when a conversation goes quiet, ≤2KB per person,
    injected as a memory block; see `catalog-platform` gabi-memory-design.md).
    Privacy decisions needed from the owner BEFORE building (what is remembered,
-   member opt-out, retention).
+   member opt-out, retention). **DRAFT DESIGN 2026-09-02 17:25 →
+   [`info/phase17-design.md`](info/phase17-design.md)**: tier 1 already
+   exists (`chat_window`); adds schema 23 profiles distilled on the hourly
+   sweep, `/chat memory`, a Memory section on the Chat page. ⏳ **WAITING ON
+   THE OWNER: D1 consent · D2 what is kept · D3 retention · D4 DM scope ·
+   D5 staff visibility — asked one at a time, proposals in the doc.** No
+   builder until answered.
 4. **Global personality pool** — one trope store shared across estate bots
    (Black Bloc's `personality_tropes` + GABI's `personality.ts` unify). This is
    an ESTATE design spanning two repos: design doc first, likely a small shared
