@@ -12,7 +12,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 21
+        assert SCHEMA_VERSION == 22
         cur = await db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = {r["name"] for r in await cur.fetchall()}
         assert {"settings", "action_log", "role_menus", "role_menu_options"} <= tables
@@ -22,6 +22,30 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("PRAGMA table_info(golive_fan_roles)")
         columns = {r["name"] for r in await cur.fetchall()}
         assert {"guild_id", "user_id", "role_id", "created_at", "created_by"} == columns
+        assert {"youtube_links", "youtube_videos"} <= tables
+        cur = await db.conn.execute("PRAGMA table_info(youtube_links)")
+        assert {
+            "user_id",
+            "channel_id",
+            "handle",
+            "title",
+            "linked_at",
+            "etag",
+            "seeded",
+        } == {r["name"] for r in await cur.fetchall()}
+        cur = await db.conn.execute("PRAGMA table_info(youtube_videos)")
+        assert {
+            "video_id",
+            "user_id",
+            "channel_id",
+            "title",
+            "published_at",
+            "seen_at",
+            "kind",
+            "announced_at",
+            "announced_message_id",
+            "mode",
+        } == {r["name"] for r in await cur.fetchall()}
         assert {"tempvoice_channels", "tempvoice_prefs", "honeypot_hits"} <= tables
         assert {"user_timezones", "events", "mod_cases"} <= tables
         cur = await db.conn.execute("PRAGMA table_info(mod_cases)")
@@ -436,7 +460,7 @@ async def test_a_schema_20_file_gains_the_fan_role_table_and_keeps_its_rows(tmp_
         cur = await again.conn.execute(
             "SELECT value FROM schema_meta WHERE key='schema_version'"
         )
-        assert (await cur.fetchone())["value"] == "21"
+        assert (await cur.fetchone())["value"] == "22"
         cur = await again.conn.execute("SELECT user_id FROM golive_sessions")
         assert [row["user_id"] for row in await cur.fetchall()] == [5]
         await again.conn.execute(
@@ -450,6 +474,69 @@ async def test_a_schema_20_file_gains_the_fan_role_table_and_keeps_its_rows(tmp_
             )
     finally:
         await again.close()
+
+
+async def test_a_schema_21_file_gains_the_youtube_tables_and_keeps_its_rows(tmp_path):
+    """Schema 22 is additive: the file that ships without upload posts gets the two tables on
+    the next boot and nothing already in it is rewritten."""
+    path = tmp_path / "old21.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await open_session(db, 5)
+    await db.conn.execute("DROP TABLE youtube_links")
+    await db.conn.execute("DROP TABLE youtube_videos")
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '21')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        assert {"youtube_links", "youtube_videos"} <= {row["name"] for row in await cur.fetchall()}
+        cur = await again.conn.execute(
+            "SELECT value FROM schema_meta WHERE key='schema_version'"
+        )
+        assert (await cur.fetchone())["value"] == "22"
+        cur = await again.conn.execute("SELECT user_id FROM golive_sessions")
+        assert [row["user_id"] for row in await cur.fetchall()] == [5]
+        await again.conn.execute(
+            "INSERT INTO youtube_links(user_id, channel_id, linked_at) "
+            "VALUES (5, 'UCsXVk37bltHxD1rDPwtNM8Q', '2026-09-02T00:00:00+00:00')"
+        )
+        cur = await again.conn.execute("SELECT seeded FROM youtube_links WHERE user_id = 5")
+        assert (await cur.fetchone())["seeded"] == 0
+        with pytest.raises(sqlite3.IntegrityError):
+            await again.conn.execute(
+                "INSERT INTO youtube_links(user_id, channel_id, linked_at) "
+                "VALUES (5, 'UCother', '2026-09-02T00:00:00+00:00')"
+            )
+    finally:
+        await again.close()
+
+
+async def test_a_video_is_recorded_once_however_often_the_feed_repeats_it(tmp_path):
+    """`youtube_videos.video_id` is the primary key, so a re-poll cannot announce twice."""
+    db = Database(tmp_path / "v.sqlite3")
+    await db.connect()
+    try:
+        await db.conn.execute(
+            "INSERT INTO youtube_videos(video_id, user_id, channel_id, published_at, seen_at) "
+            "VALUES ('abc', 5, 'UC1', '2026-09-01T00:00:00+00:00', '2026-09-02T00:00:00+00:00')"
+        )
+        cur = await db.conn.execute("SELECT kind, announced_at, mode FROM youtube_videos")
+        row = await cur.fetchone()
+        assert (row["kind"], row["announced_at"], row["mode"]) == ("video", None, None)
+        with pytest.raises(sqlite3.IntegrityError):
+            await db.conn.execute(
+                "INSERT INTO youtube_videos(video_id, user_id, channel_id, published_at, "
+                "seen_at) VALUES ('abc', 6, 'UC2', '2026-09-01T00:00:00+00:00', "
+                "'2026-09-02T00:00:00+00:00')"
+            )
+    finally:
+        await db.close()
 
 
 async def test_only_one_session_per_member_may_be_open(tmp_path):

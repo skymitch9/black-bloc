@@ -29,6 +29,7 @@ from .tools import (
     rolemenus,
     roles,
     tempvoice,
+    youtube,
 )
 
 log = logging.getLogger(__name__)
@@ -144,6 +145,7 @@ def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
     app.include_router(rolemenus.build_router(bot))
     app.include_router(roles.build_router(bot))
     app.include_router(golive.build_router(bot))
+    app.include_router(youtube.build_router(bot))
     app.include_router(pings.build_router(bot))
     app.include_router(events.build_router(bot))
     app.include_router(polls.build_router(bot))

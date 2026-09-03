@@ -26,6 +26,8 @@ from black_bloc.cogs.community.polls import (
 from black_bloc.cogs.community.role_menus import add_option, create_menu, get_menu
 from black_bloc.cogs.community.tempvoice import add_channel
 from black_bloc.cogs.content.golive import set_link, set_optout, start_session
+from black_bloc.cogs.content.youtube import YouTube
+from black_bloc.cogs.content.youtube import set_link as set_youtube_link
 from black_bloc.cogs.moderation.honeypot import record_hit
 from black_bloc.cogs.moderation.modmail import add_message, create_ticket, set_ticket_place
 from black_bloc.golive import StreamInfo
@@ -37,10 +39,38 @@ from black_bloc.modmail import IN
 from black_bloc.polls import next_occurrence
 from black_bloc.requests import PENDING, PLANNED, create_request
 from black_bloc.requests import add_comment as add_request_comment
+from black_bloc.youtube import Video
 
 CONTRACT = Path(__file__).resolve().parents[2] / "site" / "mock" / "contract.json"
 MEMBER_ID = 21
+YT_CHANNEL = "UCsXVk37bltHxD1rDPwtNM8Q"
 PING_MEMBER_ID = 22
+
+
+class FakeFeed:
+    """The uploads client, offline: the contract checks payload shapes, never YouTube."""
+
+    keyed = False
+
+    async def resolve(self, text):
+        return (YT_CHANNEL, "Ada Makes")
+
+    async def fetch_feed(self, channel_id, etag=None):
+        return (200, None, [seed_video()])
+
+    async def close(self):
+        return None
+
+
+def seed_video() -> Video:
+    return Video(
+        video_id="vidcontract",
+        title="How the cookout runs",
+        url="https://www.youtube.com/watch?v=vidcontract",
+        published="2026-09-01T00:00:00+00:00",
+        channel_id=YT_CHANNEL,
+        author="Ada Makes",
+    )
 
 
 class FakeCog:
@@ -191,6 +221,11 @@ async def seeded(client, sign_in, web, guild, wf):
         db, guild_id, MEMBER_ID, wf.OTHER_CHANNEL_ID, 999, "buy my coins", "shadow", "would_ban"
     )
     await set_link(db, MEMBER_ID, "adastreams", "t-1")
+    uploads = YouTube(web)
+    uploads.client = FakeFeed()
+    web.cogs["YouTube"] = uploads
+    await set_youtube_link(db, MEMBER_ID, YT_CHANNEL, "@ada", "Ada Makes")
+    await uploads._seed(MEMBER_ID, await uploads_link(db), [seed_video()], None)
     await set_optout(db, MEMBER_ID)
     await start_session(
         db,
@@ -324,6 +359,12 @@ async def seeded(client, sign_in, web, guild, wf):
         "member_request_id": str(member_request_id),
         "ping_member_id": str(PING_MEMBER_ID),
     }
+
+
+async def uploads_link(db):
+    from black_bloc.cogs.content.youtube import get_link as get_youtube_link
+
+    return await get_youtube_link(db, MEMBER_ID)
 
 
 def fill(text: str, ids: dict) -> str:

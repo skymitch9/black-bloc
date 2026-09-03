@@ -119,6 +119,11 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "event.approved",
         "event.denied",
     ),
+    "black_bloc/cogs/content/youtube.py::kind": (
+        "youtube.link",
+        "youtube.unlink",
+        "youtube.resolve_failed",
+    ),
     "black_bloc/cogs/community/events.py::kind": (
         "event.category_forgotten",
         "event.announce_channel_forgotten",
@@ -457,8 +462,8 @@ def test_an_unknown_level_is_todays_behaviour():
 
 
 def test_every_feature_has_one_settings_key():
-    assert len(FEATURES) == 14
-    assert len(set(FEATURES)) == 14
+    assert len(FEATURES) == 15
+    assert len(set(FEATURES)) == 15
     assert log_level_key("golive") == "golive_log_level"
     assert LEVELS == (OFF, IMPORTANT_ONLY, ALL)
 

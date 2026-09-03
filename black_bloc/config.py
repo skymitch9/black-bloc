@@ -55,6 +55,11 @@ class Settings(BaseSettings):
         default=None, description="Twitch application client secret"
     )
 
+    youtube_api_key: str | None = Field(
+        default=None,
+        description="YouTube Data API key; unset leaves uploads on the public feed alone",
+    )
+
     test_mode: bool = True
     test_channel_id: int | None = None
 
@@ -78,7 +83,7 @@ class Settings(BaseSettings):
     @field_validator(
         "dev_guild_id", "test_channel_id", "twitch_client_id", "twitch_client_secret",
         "discord_client_id", "discord_client_secret", "session_secret", "poll_vote_secret",
-        "anthropic_api_key", "groq_api_key",
+        "anthropic_api_key", "groq_api_key", "youtube_api_key",
         mode="before",
     )
     @classmethod
@@ -105,6 +110,10 @@ class Settings(BaseSettings):
     @property
     def twitch_configured(self) -> bool:
         return bool(self.twitch_client_id and self.twitch_client_secret)
+
+    @property
+    def youtube_api_configured(self) -> bool:
+        return bool(self.youtube_api_key)
 
     @property
     def site_login_configured(self) -> bool:

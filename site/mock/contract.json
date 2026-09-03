@@ -803,6 +803,105 @@
     },
     {
       "method": "GET",
+      "path": "/api/youtube/links",
+      "read_by": [
+        "page-golive.js uploadsSection"
+      ],
+      "shape": "list",
+      "keys": [
+        "user_id",
+        "user_name",
+        "channel_id",
+        "handle",
+        "title",
+        "linked_at",
+        "seeded",
+        "last_video",
+        "last_video_at"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/youtube/links",
+      "body": {
+        "member_id": "{member_id}",
+        "channel": "UCsXVk37bltHxD1rDPwtNM8Q"
+      },
+      "read_by": [
+        "page-golive.js uploadsLinkCard"
+      ],
+      "shape": "object",
+      "keys": [
+        "user_id",
+        "user_name",
+        "channel_id",
+        "handle",
+        "title",
+        "linked_at",
+        "seeded",
+        "last_video",
+        "last_video_at",
+        "message"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/youtube/links/{member_id}",
+      "read_by": [
+        "page-golive.js uploadsSection"
+      ],
+      "shape": "object",
+      "keys": [
+        "unlinked",
+        "user_id"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/youtube/videos?limit=50",
+      "read_by": [
+        "page-golive.js uploadsSection"
+      ],
+      "shape": "list",
+      "keys": [
+        "user_id",
+        "user_name",
+        "video_id",
+        "channel_id",
+        "title",
+        "url",
+        "kind",
+        "published_at",
+        "seen_at",
+        "announced_at",
+        "mode",
+        "state",
+        "announced_message_id"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/youtube/status",
+      "read_by": [
+        "page-golive.js uploadsSection"
+      ],
+      "shape": "object",
+      "keys": [
+        "api_key_set",
+        "running",
+        "last_ok_at",
+        "last_error",
+        "failures",
+        "fetches",
+        "unchanged",
+        "unchanged_ratio",
+        "links",
+        "videos",
+        "announced"
+      ]
+    },
+    {
+      "method": "GET",
       "path": "/api/pings/streamers",
       "read_by": [
         "page-golive.js pingsSection"
@@ -2574,6 +2673,8 @@
     "web.golive.unlink",
     "web.golive.optout",
     "web.golive.optin",
+    "web.youtube.link",
+    "web.youtube.unlink",
     "web.pings.setup",
     "web.pings.fan_role_created",
     "web.pings.fan_role_removed",

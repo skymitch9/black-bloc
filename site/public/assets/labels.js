@@ -27,6 +27,15 @@ export const LABELS = {
   golive_max_session_hours: 'How long a stream may run before it is closed',
   golive_log_level: 'How much of go-live is repeated into Discord',
 
+  youtube_mode: 'Whether the bot posts new YouTube uploads',
+  youtube_channel_id: 'Where an upload announcement is posted',
+  youtube_ping_role_id: 'Who is pinged when somebody uploads',
+  youtube_ping_fan_roles: 'Whether the uploader’s own fans are pinged too',
+  youtube_announce_shorts: 'Whether Shorts are announced as well',
+  youtube_template: 'What an upload announcement says',
+  youtube_poll_minutes: 'How often the bot checks for new uploads',
+  youtube_log_level: 'How much of uploads is repeated into Discord',
+
   pings_mode: 'Whether people can opt in to pings',
   pings_events_role_name: 'What the shared Events role is called',
   pings_fan_role_creation: 'Who may start a streamer’s own ping role',
@@ -124,7 +133,7 @@ export const LABELS = {
   cost_hosting_usd: 'What hosting costs a month, off the invoice',
 };
 
-const NAMESPACES = ['golive', 'pings', 'tempvoice', 'honeypot', 'events', 'birthday', 'modmail', 'automod', 'rolemenu'];
+const NAMESPACES = ['golive', 'youtube', 'pings', 'tempvoice', 'honeypot', 'events', 'birthday', 'modmail', 'automod', 'rolemenu'];
 
 function derived(key) {
   let name = String(key || '');

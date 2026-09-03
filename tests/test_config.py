@@ -51,6 +51,23 @@ def test_twitch_is_configured_only_with_both_halves(monkeypatch):
     assert load_settings(_env_file=None).twitch_configured is True
 
 
+def test_the_youtube_key_is_optional_and_never_an_error_when_it_is_missing(monkeypatch):
+    """D1: unset means the public feed alone, which is the whole feature minus classification."""
+    monkeypatch.delenv("YOUTUBE_API_KEY", raising=False)
+    s = load_settings(_env_file=None)
+    assert s.youtube_api_key is None
+    assert s.youtube_api_configured is False
+
+
+def test_a_blank_youtube_key_counts_as_unset_the_way_every_other_key_does(monkeypatch):
+    monkeypatch.setenv("YOUTUBE_API_KEY", "   ")
+    assert load_settings(_env_file=None).youtube_api_configured is False
+    monkeypatch.setenv("YOUTUBE_API_KEY", "a-real-looking-key")
+    s = load_settings(_env_file=None)
+    assert s.youtube_api_configured is True
+    assert s.youtube_api_key == "a-real-looking-key"
+
+
 def test_a_samesite_of_none_is_refused_with_a_sentence(monkeypatch):
     monkeypatch.setenv("SESSION_COOKIE_SAMESITE", "none")
     with pytest.raises(ConfigError, match="lax") as raised:

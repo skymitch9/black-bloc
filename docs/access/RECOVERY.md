@@ -74,10 +74,15 @@ data and `docs/` is tracked).
 | `POLL_VOTE_SECRET` | ⚠️ **NOT freely re-mintable** (set 2026-08-31): anonymous polls created while it is set key their vote hashes to it — without it those polls refuse votes in words. Custody = local `.env` + `fly secrets` (write-only). If both copies die, close the affected polls and mint a new one. | `fly secrets` + local `.env` |
 | `ANTHROPIC_API_KEY` | Re-mintable at console.anthropic.com (owner's Anthropic account; rotating just swaps the key). Powers the chat "important" tier (Phase 14). ⚠️ The image must contain the `anthropic` dependency (any deploy ≥ Phase 14) or the tier silently never exists. | `fly secrets` + local `.env` (unset until the owner mints it) |
 | `GROQ_API_KEY` | Re-mintable at console.groq.com (owner's Groq account, free tier). Powers the chat "simple" tier (Phase 14). | `fly secrets` + local `.env` (unset until the owner mints it) |
+| `YOUTUBE_API_KEY` | **Not yet minted — OPTIONAL.** Would be re-minted at console.cloud.google.com → APIs & Services → Credentials, on a project with *YouTube Data API v3* enabled (owner's Google account), and would take the bare-titled vault item `YOUTUBE_API_KEY` in the `Black Bloc` vault. Powers two extras for F3 upload posts (Phase 16): turning an `@handle` into a channel id, and telling a live broadcast apart from an upload (**KI-11**). Losing it costs nothing that a re-mint does not restore, and the feature keeps working without it. | nowhere yet — unset in `fly secrets` and absent from `.env` |
 
 Every secret has a reachable copy or a recovery path: the token can always be
 re-minted from the portal (invalidating any leaked copy in the same motion);
 `POLL_VOTE_SECRET` is the one whose loss has a real cost — see its row.
+⚠️ **`YOUTUBE_API_KEY` is a NAME with no value anywhere** — it has never been
+minted, so there is nothing to lose and nothing to restore. It is listed so a
+rebuild does not treat its absence as a missing backup: the vault still holds
+**nine** items, and this is the tenth name.
 
 ## Full rebuild, in order
 
