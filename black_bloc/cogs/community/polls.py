@@ -2217,9 +2217,9 @@ MOVE_FUNCS: dict[str, Any] = {
 }
 
 RECUR_FUNCS: dict[str, Any] = {
-    "pause": pause_recurrence,
-    "resume": resume_recurrence,
-    "delete": delete_recurrence,
+    "pause": lambda bot, guild, row, actor: pause_recurrence(bot, guild, row, actor),
+    "resume": lambda bot, guild, row, actor: resume_recurrence(bot, guild, row, actor),
+    "delete": lambda bot, guild, row, actor: delete_recurrence(bot, guild, row, actor),
 }
 
 

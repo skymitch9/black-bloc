@@ -69,7 +69,8 @@ def option_label(
     if status:
         parts.append(str(status))
     prefix = " · ".join(parts) + " · "
-    return prefix + str(text or "").strip()[: max(0, limit - len(prefix))]
+    kept = str(text or "").strip()[: max(0, limit - len(prefix))]
+    return (prefix + kept)[:limit]
 
 
 def panel_minutes(store: Any, guild_id: int, key: str) -> int:
