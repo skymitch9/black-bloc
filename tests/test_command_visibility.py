@@ -187,7 +187,7 @@ async def test_the_settings_group_is_never_hidden(bot, waits, monkeypatch):
     assert bot.tree.get_command("settings", guild=DEV_GUILD) is not None
     assert "settings" not in cv.hidden_names(bot, GUILD)
     assert "rolemenu" in cv.hidden_names(bot, GUILD)
-    assert cv.hidden_names(bot, GUILD) == {"rolemenu", "memory"}
+    assert cv.hidden_names(bot, GUILD) == {"rolemenu"}
 
 
 async def test_a_second_change_waits_out_the_rate_limit_window(bot, waits):
@@ -222,14 +222,17 @@ async def test_no_dev_guild_means_no_hiding_at_all(bot, waits, monkeypatch):
 
 
 def test_hidden_names_reads_the_store_and_needs_a_guild(bot):
-    assert cv.hidden_names(bot, GUILD) == {"rolemenu", "memory"}
+    assert cv.hidden_names(bot, GUILD) == {"rolemenu"}
     assert cv.hidden_names(bot, None) == set()
 
 
-async def test_the_memory_group_is_hidden_until_the_server_turns_memory_on(bot):
-    """`chat_memory_mode` ships off, so `/memory` is not in the tree at deploy."""
-    assert cv.HIDDEN_WHEN_OFF["chat_memory_mode"] == ("memory",)
-    assert "memory" in cv.hidden_names(bot, GUILD)
+async def test_memory_stays_in_the_tree_even_while_the_mode_is_off(bot):
+    """Owner, 2026-09-03 16:12 (fork I-M1) — open it. Turning `chat_memory_mode` off does NOT
+    delete the profiles already stored, so hiding `/memory` left members holding data they
+    could neither read nor clear from Discord, and the site is staff-only and counts-only."""
+    assert "chat_memory_mode" not in cv.HIDDEN_WHEN_OFF
+    assert bot.store.get(GUILD, "chat_memory_mode") == "off"
+    assert "memory" not in cv.hidden_names(bot, GUILD)
 
     await bot.store.set(GUILD, "chat_memory_mode", "on", by=5)
 

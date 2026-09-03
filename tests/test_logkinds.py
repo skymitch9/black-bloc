@@ -510,9 +510,7 @@ def test_a_route_never_notes_an_event_its_shared_path_already_logged():
         "so one write leaves two rows and two embeds. Pass via=VIA_WEBSITE to the shared "
         f"function and delete the note(): {sorted(doubles)}"
     )
-    assert sorted(unchecked) == [
-        "black_bloc/api/tools/chat_memory.py::memory_forget::f'web.{FORGOT_KIND}'"
-    ], unchecked
+    assert sorted(unchecked) == [], unchecked
 
 
 def test_a_shared_logger_stays_discord_unless_a_route_says_otherwise():

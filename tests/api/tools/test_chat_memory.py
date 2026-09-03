@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from black_bloc.chat_memory import Note, Profile, profile_for, save_profile, set_override
@@ -99,7 +101,7 @@ async def test_one_profile_is_refused_in_words_while_the_server_keeps_it_private
     said = refused.json()["message"]
     assert "private to that member" in said
     assert "chat_memory_staff_view" in said and "full" in said
-    assert "/memory show" in said
+    assert "`/memory`" in said and "/memory show" not in said
 
 
 async def test_one_profile_reads_back_once_the_server_has_said_full(as_staff, web, wf):
@@ -121,6 +123,7 @@ async def test_a_member_with_nothing_written_down_is_a_sentence_and_a_404(as_sta
 
 
 async def test_staff_clear_a_profile_and_the_line_says_who_asked(as_staff, web, wf):
+    """One web write, ONE log row: the route calls the shared forget and never notes it again."""
     await a_profile(web, wf)
 
     gone = as_staff.delete(f"/api/chat/memory/{ASKER}")
@@ -129,7 +132,15 @@ async def test_staff_clear_a_profile_and_the_line_says_who_asked(as_staff, web, 
     assert gone.json()["member"]["name"] == "Ada"
     assert "remembers nothing about Ada" in gone.json()["message"]
     assert await profile_for(web.db, ASKER, wf.GUILD_ID) is None
-    assert "web.chat.memory_forgot" in await wf.kinds_in(web.db)
+    kinds = await wf.kinds_in(web.db)
+    assert kinds.count("web.chat.memory_forgot") == 1
+    assert "chat.memory_forgot" not in kinds
+    cur = await web.db.conn.execute(
+        "SELECT details FROM action_log WHERE kind = 'web.chat.memory_forgot'"
+    )
+    rows = await cur.fetchall()
+    assert len(rows) == 1
+    assert json.loads(rows[0]["details"]) == {"who_asked": "staff", "via": "website"}
 
 
 async def test_clearing_a_profile_that_is_not_there_is_a_sentence_and_a_404(as_staff, web, wf):

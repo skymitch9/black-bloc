@@ -1030,6 +1030,38 @@ async def test_the_poll_panel_stays_up_ten_minutes_by_default(store):
     assert parse_value("poll_panel_minutes", "45") == 45
 
 
+async def test_the_memory_panel_stays_up_ten_minutes_by_default(store):
+    """Same reason as every other panel: 15 loses Discord's window and the gone-quiet footer."""
+    from black_bloc.cogs.core import VALUE_KEYS
+
+    assert store.get(7, "memory_panel_minutes") == 10
+    assert "15" in KEY_HELP["memory_panel_minutes"]
+    assert KEY_TYPES["memory_panel_minutes"] == "int"
+    assert "memory_panel_minutes" in VALUE_KEYS
+    await store.set(7, "memory_panel_minutes", 25)
+    assert store.get(7, "memory_panel_minutes") == 25
+    with pytest.raises(SettingError):
+        coerce_value("memory_panel_minutes", -1)
+    with pytest.raises(SettingError):
+        coerce_value("memory_panel_minutes", "15")
+    assert parse_value("memory_panel_minutes", "45") == 45
+
+
+async def test_the_eight_chat_memory_keys_are_untouched_by_the_panel(store):
+    """The panel changed the door, not the room: no `chat_memory_*` default moved."""
+    assert store.get(7, "chat_memory_mode") == "off"
+    assert store.get(7, "chat_memory_consent") == "optout"
+    assert store.get(7, "chat_memory_retention_days") == 180
+    assert store.get(7, "chat_memory_dm_scope") == "separate"
+    assert store.get(7, "chat_memory_staff_view") == "counts"
+    assert store.get(7, "chat_memory_notes_max") == 6
+    assert store.get(7, "chat_memory_threads_max") == 5
+    assert store.get(7, "chat_memory_model") == ""
+    for key in ("chat_memory_consent", "chat_memory_staff_view"):
+        assert "/chat memory" not in KEY_HELP[key]
+        assert "/memory" in KEY_HELP[key]
+
+
 async def test_whoever_started_a_poll_may_close_it_until_a_lead_says_otherwise(store):
     """Owner, 2026-09-03 (design fork I-2): keep today's behaviour, and make it a key."""
     from black_bloc.cogs.core import VALUE_KEYS
