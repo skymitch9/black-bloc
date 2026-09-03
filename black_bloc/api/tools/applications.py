@@ -8,11 +8,14 @@ from fastapi import APIRouter, Depends, Request
 from ... import applications as forms
 from ... import rolegrants as grants
 from ...cogs.community.applications import (
-    ROSTER_SHOWS_LEFT_KEY,
     apply_decision,
+    change_question,
+    drop_form,
+    make_form,
     mode_of,
-    post_panel,
+    put_panel_up,
     remove,
+    save_form,
 )
 from ...logkinds import VIA_WEBSITE
 from ..auth import Refused, staff_dependency
@@ -20,12 +23,13 @@ from ..names import as_id, avatar_url, resolve_one
 from ..writes import (
     actor_for,
     guard_of,
-    note,
     refuse_guarded,
     require_db,
     require_guild,
     writer_dependency,
 )
+
+ROSTER_SHOWS_LEFT_KEY = forms.ROSTER_SHOWS_LEFT_KEY
 
 log = logging.getLogger(__name__)
 
@@ -151,14 +155,6 @@ def wanted_role(guild: Any, role_id: Any) -> Any:
     return role
 
 
-async def checked(call: Any, *args: Any, **kwargs: Any) -> Any:
-    """Every wording refusal the slash commands give, given with a 400 instead."""
-    try:
-        return await call(*args, **kwargs)
-    except forms.ApplicationError as exc:
-        raise Refused(400, "bad_request", str(exc)) from None
-
-
 async def read_form(bot: Any, guild: Any, form_id: int) -> Any:
     form = await forms.get_form_by_id(bot.db, form_id)
     if form is None or form["guild_id"] != guild.id:
@@ -220,28 +216,21 @@ def build_router(bot: Any) -> APIRouter:
         if not name or not title:
             raise Refused(400, "bad_request", NEEDS_A_NAME)
         role = wanted_role(guild, payload.get("role_id")) if payload.get("role_id") else None
-        form_id = await checked(
-            forms.create_form,
-            bot.db,
-            guild.id,
-            name,
-            title,
-            role.id if role else None,
-            int(who["id"]),
-            description=payload.get("description"),
-            review_channel_id=as_id(payload.get("review_channel_id")),
-            approver_role_id=as_id(payload.get("approver_role_id")),
-        )
-        if form_id is None:
-            raise Refused(400, "name_taken", forms.NAME_TAKEN.format(name=name))
-        await note(
+        said, form = await make_form(
             bot,
             guild,
-            "web.application.form_created",
-            who,
-            details={"form": name, "role_id": role.id if role else None},
+            actor_for(bot, who, guild),
+            name,
+            title,
+            description=payload.get("description"),
+            role_id=role.id if role else None,
+            review_channel_id=as_id(payload.get("review_channel_id")),
+            approver_role=as_id(payload.get("approver_role_id")),
+            via=VIA_WEBSITE,
         )
-        return await one_form(bot, guild, await read_form(bot, guild, form_id))
+        if form is None:
+            raise Refused(400, "bad_request", said)
+        return await one_form(bot, guild, await read_form(bot, guild, form["id"]))
 
     @router.patch("/forms/{form_id}")
     async def applications_form_update(
@@ -277,14 +266,11 @@ def build_router(bot: Any) -> APIRouter:
         ):
             if key in payload:
                 changes[field] = as_id(payload[key])
-        await checked(forms.update_form, bot.db, guild.id, form["name"], **changes)
-        await note(
-            bot,
-            guild,
-            "web.application.form_updated",
-            who,
-            details={"form": form["name"], "changed": sorted(changes)},
+        said, saved = await save_form(
+            bot, guild, actor_for(bot, who, guild), form, changes, via=VIA_WEBSITE
         )
+        if saved is None:
+            raise Refused(400, "bad_request", said)
         return await one_form(bot, guild, await read_form(bot, guild, form_id))
 
     @router.delete("/forms/{form_id}")
@@ -293,17 +279,11 @@ def build_router(bot: Any) -> APIRouter:
         guild = require_guild(bot)
         require_db(bot)
         form = await read_form(bot, guild, form_id)
-        waiting = await forms.pending_count(bot.db, form_id)
-        if waiting:
-            raise Refused(
-                409,
-                "form_has_pending",
-                forms.FORM_HAS_PENDING.format(name=form["name"], count=waiting),
-            )
-        await forms.delete_form(bot.db, form_id)
-        await note(
-            bot, guild, "web.application.form_deleted", who, details={"form": form["name"]}
+        said, gone = await drop_form(
+            bot, guild, actor_for(bot, who, guild), form, via=VIA_WEBSITE
         )
+        if gone is None:
+            raise Refused(409, "form_has_pending", said)
         return {"deleted": True, "id": form_id, "name": form["name"]}
 
     @router.put("/forms/{form_id}/questions")
@@ -317,14 +297,17 @@ def build_router(bot: Any) -> APIRouter:
         wanted = payload.get("questions")
         if not isinstance(wanted, list):
             raise Refused(400, "bad_questions", BAD_QUESTIONS)
-        await checked(forms.replace_questions, bot.db, form_id, wanted)
-        await note(
+        said, saved = await change_question(
             bot,
             guild,
-            "web.application.question_changed",
-            who,
-            details={"form": form["name"], "questions": len(wanted)},
+            actor_for(bot, who, guild),
+            form,
+            "replaced",
+            questions=wanted,
+            via=VIA_WEBSITE,
         )
+        if saved is None:
+            raise Refused(400, "bad_request", said)
         return await one_form(bot, guild, form)
 
     @router.post("/forms/{form_id}/panel")
@@ -344,18 +327,11 @@ def build_router(bot: Any) -> APIRouter:
         guard = guard_of(bot)
         if guard is not None and not guard.allows_channel(target.id):
             refuse_guarded(guard.refusal_message())
-        message = await post_panel(bot, guild, form, target)
-        await note(
-            bot,
-            guild,
-            "web.application.panel_posted",
-            who,
-            details={
-                "form": form["name"],
-                "channel_id": target.id,
-                "message_id": message.id,
-            },
+        said, message = await put_panel_up(
+            bot, guild, actor_for(bot, who, guild), form, target, via=VIA_WEBSITE
         )
+        if message is None:
+            raise Refused(400, "panel_stuck", said)
         return {
             "posted": True,
             "id": form_id,

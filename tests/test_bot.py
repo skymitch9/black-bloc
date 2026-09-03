@@ -21,12 +21,10 @@ LOGS_GROUPS = {
     "pingroles": "pings",
     "uploads": "youtube",
     "raidtrains": "raidtrain",
-    "applications": "applications",
 }
 
 
 STAFF_COMMANDS = {
-    "applications",
     "areply",
     "automod",
     "ban",
@@ -197,7 +195,7 @@ async def test_the_command_tree_stays_inside_discords_limits(settings):
 
     top = bot.tree.get_commands()
     assert len(top) <= TOP_LEVEL_MAX
-    assert len(top) == 43
+    assert len(top) == 42
     for command in top:
         if isinstance(command, app_commands.Group):
             assert len(command.commands) <= CHILDREN_MAX, command.name

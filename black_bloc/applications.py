@@ -782,6 +782,7 @@ FORM_FIELDS = (
     "retry_days",
     "open",
 )
+CLEARABLE_IDS = ("role_id", "review_channel_id", "approver_role_id", "owner_user_id")
 
 
 async def update_form(db: Any, guild_id: int, name: str, **changes: Any) -> bool:
@@ -790,8 +791,9 @@ async def update_form(db: Any, guild_id: int, name: str, **changes: Any) -> bool
     if form is None:
         return False
     wanted = {key: value for key, value in changes.items() if value is not None}
-    if wanted.get("role_id") == NO_ROLE:
-        wanted["role_id"] = None
+    for key in CLEARABLE_IDS:
+        if wanted.get(key) == NO_ROLE:
+            wanted[key] = None
     if "title" in wanted:
         wanted["title"] = check_title(wanted["title"])
     if "description" in wanted:
