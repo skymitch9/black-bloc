@@ -401,7 +401,7 @@ const SETTING_SPECS = [
   ['raidtrain_slot_minutes', 'int', 60, 60, 'how long one slot is by default, 15-720 minutes; each train may be created with its own length', null, 720, 15],
   ['raidtrain_reminder_minutes', 'int', 30, 30, 'how long before their slot a holder is DMed, with who raids into them and who they raid next; the DM is sent once', null, 1440, 5],
   ['raidtrain_poll_minutes', 'int', 5, 5, 'minutes between sweeps that send those reminders, start and finish a train, and notice who is live', null, 60, 1],
-  ['raidtrain_require_link', 'bool', true, true, 'on makes `/twitch link` a condition of claiming a slot, so the lineup carries the name the streamer before raids; off lets anybody claim and leaves the name off'],
+  ['raidtrain_require_link', 'bool', true, true, 'on makes a linked Twitch channel (`/golive` → Link my Twitch channel) a condition of claiming a slot, so the lineup carries the name the streamer before raids; off lets anybody claim and leaves the name off'],
   ['raidtrain_thread', 'bool', true, true, 'on opens a thread under the lineup post for the people on the train'],
   ['raidtrain_live_posts', 'bool', true, true, 'on says `X is live — next up Y` in that thread when a slot holder starts streaming inside their own hour, and marks the slot checked in'],
   ['raidtrain_max_slots_per_member', 'int', 1, 1, 'how many slots one member may claim on one train; 0 means as many as they like. An organizer assigning a slot is never held to it', null, 24],
@@ -2512,7 +2512,7 @@ route('POST', '/api/raidtrains/:train_id/slots/:position', async (context) => {
     const memberId = String(given);
     const link = state.golive.links.find((one) => String(one.user_id) === memberId);
     if (!link && state.settings.get('raidtrain_require_link')) {
-      throw new Refused(409, 'not_linked', '**' + (memberName(memberId) || memberId) + '** has no Twitch channel linked, so the lineup cannot say who to raid. They run `/twitch link`, or a Lead turns `raidtrain_require_link` off.');
+      throw new Refused(409, 'not_linked', '**' + (memberName(memberId) || memberId) + '** has no Twitch channel linked, so the lineup cannot say who to raid. They run `/golive` → **Link my Twitch channel**, or a Lead turns `raidtrain_require_link` off.');
     }
     Object.assign(slot, {
       user_id: memberId,

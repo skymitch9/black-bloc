@@ -331,7 +331,7 @@ async def test_fans_on_refuses_somebody_black_bloc_has_never_seen_stream(cog, bo
 
     await cog.fans_on.callback(cog, interaction)
 
-    assert "/twitch link" in interaction.said
+    assert "**Link my Twitch channel**" in interaction.said
     assert await helpers.get_fan_role(bot.db, GUILD, FAN) is None
 
 

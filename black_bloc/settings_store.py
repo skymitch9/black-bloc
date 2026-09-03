@@ -756,8 +756,9 @@ KEY_HELP: dict[str, str] = {
         "who is live"
     ),
     "raidtrain_require_link": (
-        "on makes `/twitch link` a condition of claiming a slot, so the lineup carries the name "
-        "the streamer before raids; off lets anybody claim and leaves the name off"
+        "on makes a linked Twitch channel (`/golive` → Link my Twitch channel) a condition of "
+        "claiming a slot, so the lineup carries the name the streamer before raids; off lets "
+        "anybody claim and leaves the name off"
     ),
     "raidtrain_thread": "on opens a thread under the lineup post for the people on the train",
     "raidtrain_live_posts": (

@@ -76,8 +76,8 @@ ROLE_UNASSIGNABLE = (
 )
 NOT_A_STREAMER = (
     "Black Bloc does not know you stream yet, so there is nothing to make a role for. Link your "
-    "channel with `/twitch link <your twitch channel name>` first — or ask an Auntie/Uncle to set "
-    "one up for you with `/pingroles streamer add`."
+    "channel first — run `/golive` and press **Link my Twitch channel** — or ask an Auntie/Uncle "
+    "to set one up for you with `/pingroles streamer add`."
 )
 STAFF_ONLY_CREATION = (
     "Only staff start a streamer's ping role on this server, so nothing was made. Ask an "
@@ -446,7 +446,7 @@ async def remove_fan_role(
 async def on_streamer_left(
     bot: Any, guild: Any, user_id: int, *, by: int | None, via: str = VIA_DISCORD
 ) -> Outcome | None:
-    """`/twitch unlink` and `/golive optout`: keep the role, or drop it, as the setting says."""
+    """`/golive`'s Unlink and opt-out buttons: keep the role, or drop it, as the setting says."""
     if bot.store.get(guild.id, UNLINK_KEY) != DELETE:
         return None
     if await get_fan_role(bot.db, guild.id, user_id) is None:

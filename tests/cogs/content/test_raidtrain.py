@@ -340,7 +340,7 @@ async def test_claiming_without_a_twitch_link_names_the_command_that_fixes_it(bo
     interaction = FakeInteraction(bot, alice)
     await cog.claim_command.callback(cog, interaction, str(train_id))
     assert interaction.sent == NEEDS_LINK
-    assert "`/twitch link" in interaction.sent
+    assert "**Link my Twitch channel**" in interaction.sent
     assert all(row["user_id"] is None for row in await slots_for(db, train_id))
 
 
@@ -522,7 +522,7 @@ async def test_assigning_somebody_with_no_link_says_which_command_they_run(
     train_id = await a_train(db)
     interaction = FakeInteraction(bot, organizer)
     await cog.assign_command.callback(cog, interaction, str(train_id), 1, alice)
-    assert "`/twitch link`" in interaction.sent
+    assert "**Link my Twitch channel**" in interaction.sent
     assert (await slots_for(db, train_id))[0]["user_id"] is None
 
 

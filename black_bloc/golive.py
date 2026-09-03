@@ -333,7 +333,7 @@ def end_details(end_mode: Any) -> dict[str, str]:
 
 
 def end_summary(end_mode: Any, suffix: str | None = GOLIVE_END_SUFFIX) -> str:
-    """One phrase for `/golive status`: what happens to an announcement once the stream ends."""
+    """One phrase for the staff panel: what happens to an announcement once the stream ends."""
     if edits_on_end(end_mode):
         return f'{GOLIVE_END_EDIT} ("{suffix or ""}")'
     return f"{end_mode} (left as posted)"
