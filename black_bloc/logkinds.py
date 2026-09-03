@@ -32,6 +32,7 @@ FEATURES = (
     "chat",
     "request",
     "pings",
+    "raidtrain",
 )
 
 HEADS: dict[str, str] = {
@@ -57,6 +58,7 @@ HEADS: dict[str, str] = {
     "request": "request",
     "requests": "request",
     "pings": "pings",
+    "raidtrain": "raidtrain",
 }
 
 FEATURE_LABELS: dict[str, str] = {
@@ -75,6 +77,7 @@ FEATURE_LABELS: dict[str, str] = {
     "chat": "Chat",
     "request": "Requests",
     "pings": "Ping roles",
+    "raidtrain": "Raid trains",
 }
 
 FEATURE_PAGES: dict[str, str] = {
@@ -93,6 +96,7 @@ FEATURE_PAGES: dict[str, str] = {
     "chat": "chat.html",
     "request": "requests.html",
     "pings": "golive.html",
+    "raidtrain": "events.html",
 }
 
 IMPORTANT_SUFFIXES = (
@@ -130,6 +134,8 @@ IMPORTANT: frozenset[str] = frozenset(
         "pings.fan_role_removed",
         "pings.forbidden",
         "poll.cancelled",
+        "raidtrain.cancel",
+        "raidtrain.remind",
         "request.declined",
         "request.done",
         "request.hold",
@@ -255,6 +261,22 @@ ROUTINE: frozenset[str] = frozenset(
         "poll.recurred",
         "poll.reminded",
         "poll.settings",
+        "raidtrain.assign",
+        "raidtrain.checkin",
+        "raidtrain.claim",
+        "raidtrain.create",
+        "raidtrain.done",
+        "raidtrain.live",
+        "raidtrain.lock",
+        "raidtrain.mode",
+        "raidtrain.poll_degraded",
+        "raidtrain.post",
+        "raidtrain.post_skipped_test_mode",
+        "raidtrain.release",
+        "raidtrain.setup",
+        "raidtrain.swap",
+        "raidtrain.unassign",
+        "raidtrain.unlock",
         "presence.bio_set",
         "request.comment",
         "request.filed",

@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 23
+SCHEMA_VERSION = 24
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -522,6 +522,47 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 
 CREATE INDEX IF NOT EXISTS sessions_by_user ON sessions(user_id, created_at);
+
+CREATE TABLE IF NOT EXISTS raid_trains (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id           INTEGER NOT NULL,
+    organizer_id       INTEGER NOT NULL,
+    title              TEXT    NOT NULL,
+    description        TEXT,
+    starts_at          TEXT    NOT NULL,
+    slot_minutes       INTEGER NOT NULL,
+    slot_count         INTEGER NOT NULL,
+    status             TEXT    NOT NULL DEFAULT 'open',
+    channel_id         INTEGER,
+    lineup_message_id  INTEGER,
+    thread_id          INTEGER,
+    scheduled_event_id INTEGER,
+    cancel_reason      TEXT,
+    created_at         TEXT    NOT NULL,
+    updated_at         TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS raid_trains_by_status ON raid_trains(guild_id, status, starts_at);
+
+CREATE TABLE IF NOT EXISTS raid_slots (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    train_id       INTEGER NOT NULL REFERENCES raid_trains(id) ON DELETE CASCADE,
+    position       INTEGER NOT NULL,
+    starts_at      TEXT    NOT NULL,
+    ends_at        TEXT    NOT NULL,
+    user_id        INTEGER,
+    twitch_login   TEXT,
+    claimed_at     TEXT,
+    assigned_by    INTEGER,
+    locked         INTEGER NOT NULL DEFAULT 0,
+    reminded_at    TEXT,
+    checked_in_at  TEXT,
+    live_posted_at TEXT,
+    UNIQUE (train_id, position)
+);
+
+CREATE INDEX IF NOT EXISTS raid_slots_due ON raid_slots(starts_at, reminded_at);
+CREATE INDEX IF NOT EXISTS raid_slots_by_member ON raid_slots(user_id, starts_at);
 """
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (

@@ -79,6 +79,12 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.poll.recur_paused",
         "web.poll.recur_resumed",
         "web.chat.memory_forgot",
+        "web.raidtrain.assign",
+        "web.raidtrain.create",
+        "web.raidtrain.lock",
+        "web.raidtrain.swap",
+        "web.raidtrain.unassign",
+        "web.raidtrain.unlock",
         "web.request.comment",
         "web.request.declined",
         "web.request.done",
@@ -488,8 +494,8 @@ def test_an_unknown_level_is_todays_behaviour():
 
 
 def test_every_feature_has_one_settings_key():
-    assert len(FEATURES) == 15
-    assert len(set(FEATURES)) == 15
+    assert len(FEATURES) == 16
+    assert len(set(FEATURES)) == 16
     assert log_level_key("golive") == "golive_log_level"
     assert LEVELS == (OFF, IMPORTANT_ONLY, ALL)
 

@@ -139,9 +139,23 @@ export const LABELS = {
   request_log_level: 'How much of requests is repeated into Discord',
 
   cost_hosting_usd: 'What hosting costs a month, off the invoice',
+
+  raidtrain_mode: 'Whether raid trains are on',
+  raidtrain_organizer_role_id: 'Who may build a lineup, besides staff',
+  raidtrain_channel_id: 'Where a train’s lineup post lives',
+  raidtrain_ping_role_id: 'Who is pinged when a lineup goes up',
+  raidtrain_slot_minutes: 'How long one slot is by default',
+  raidtrain_reminder_minutes: 'How long before their slot a streamer is DMed',
+  raidtrain_poll_minutes: 'How often the bot sweeps the trains',
+  raidtrain_require_link: 'Whether claiming a slot needs a linked Twitch channel',
+  raidtrain_thread: 'Whether the lineup post opens a thread',
+  raidtrain_live_posts: 'Whether the bot says the train has moved on',
+  raidtrain_max_slots_per_member: 'How many slots one person may claim',
+  raidtrain_scheduled_event: 'Whether Discord gets a scheduled event too',
+  raidtrain_log_level: 'How much of raid trains is repeated into Discord',
 };
 
-const NAMESPACES = ['golive', 'youtube', 'pings', 'tempvoice', 'honeypot', 'events', 'birthday', 'modmail', 'automod', 'rolemenu'];
+const NAMESPACES = ['golive', 'youtube', 'pings', 'tempvoice', 'honeypot', 'events', 'birthday', 'modmail', 'automod', 'rolemenu', 'raidtrain'];
 
 function derived(key) {
   let name = String(key || '');

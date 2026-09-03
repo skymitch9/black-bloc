@@ -3,6 +3,9 @@
 > **Audience:** the Opus builder first, reviewers second, the owner for the
 > decisions table. **Status:** TRACKED — DESIGN, written 2026-09-02 22:30 by
 > the Fable session (NEXT WAVE item 6). Secret NAMES only.
+> 🔨 **BUILT 2026-09-02** on branch `worktree-agent-a1c38e3df0f71fa7e` (off
+> `820c393`) — not merged, not deployed, `raidtrain_mode` ships `off`. Read the
+> `## Deviations` list at the foot before trusting the body of this doc.
 > Last verified: **2026-09-02** — the "what exists" rows were read in the code
 > today at `31b1689` (`storage/db.py` tables `events` / `golive_links` /
 > `golive_sessions` / `user_timezones`, `cogs/community/events.py` surface,
@@ -252,3 +255,78 @@ is **17 then 18**; the reviewer resolves the merge, so make it trivial:
 - `golive.py` / `events.py` / `pings.py` are READ-ONLY for you (import, call,
   never edit) — see §J.
 - Commit at clean boundaries: schema+helpers → cog → API+page → docs.
+
+## Deviations — what the build did differently, and why
+
+Written by the Opus builder at landing, 2026-09-02, on branch
+`worktree-agent-a1c38e3df0f71fa7e`. Every item below is a place the shipped code
+does NOT match the spec above; the spec is left as written so the two can be
+compared.
+
+1. **§J / D13 — `raidtrain_scheduled_event` ships `false`, but the key is not a
+   dead switch.** §J's condition ("callable from a new cog without editing
+   `events.py`") is technically met — `create_scheduled_event` is module-level —
+   and the design's answer is still `false`, because calling it would run
+   `UPDATE events SET scheduled_event_id = ? WHERE id = ?` with a **raid train's**
+   id and corrupt an unrelated `events` row. Rather than leave a key that does
+   nothing when flipped, the cog got its own twenty-line
+   `_maybe_scheduled_event` (raid-train log kinds, no writes outside
+   `raid_trains`). `find_scheduled_event` — pure, no table — IS imported from
+   `events.py` for the cancel path. `events.py` was NOT edited. Full reasoning in
+   `code-notes.md` § *Phase 18 — What section J actually measured*.
+2. **§A — two columns and two indexes differ.** `raid_trains` gained
+   `cancel_reason TEXT` (the design's cancel flow needs somewhere to keep the
+   reason the lineup post and the DMs both quote) and a
+   `raid_trains_by_status(guild_id, status, starts_at)` index; `raid_slots`
+   gained `raid_slots_by_member(user_id, starts_at)` for `/raidtrain mine`, and
+   a `REFERENCES raid_trains(id) ON DELETE CASCADE`. ⚠️ **No unique index on
+   `(train_id, user_id)`** — the per-member ceiling is a SETTING that may be 0
+   (unlimited), and a schema cannot encode a value the owner may change. The
+   race is guarded by an `asyncio.Lock` per train plus
+   `UPDATE … WHERE id = ? AND user_id IS NULL` (checklist 6).
+3. **§K — there is no numbered migration ladder to step through.**
+   `storage/db.py` has no 22→23→24 steps: it is one idempotent `SCHEMA` script of
+   `CREATE TABLE IF NOT EXISTS` plus an `ADDED_COLUMNS` list. So "an empty 23
+   step" does not exist as a construct. What shipped is the append §K actually
+   wanted: the two tables at the FOOT of `SCHEMA` and `SCHEMA_VERSION = 24`. The
+   merge is a one-line resolution on `SCHEMA_VERSION`; nothing else conflicts.
+   ⚠️ `tests/storage/test_db.py` had three hard-coded `"22"` assertions, which
+   were changed to `str(SCHEMA_VERSION)` so the same trap does not fire on
+   Phase 17's bump.
+4. **§C — the `/help` line lives in `personas.py`, not `chat_data.py`.** The
+   brief named `chat_data.py`; the member-command block a model reads is
+   `personas.py:FEATURES`, and `chat_data.py` is a `chat*.py` file Phase 17 owns
+   as read-only. `personas.py` was appended to instead.
+   `tests/test_personas.py` asserts every member command appears there, so the
+   omission would have failed the suite either way. `/help` itself needed no
+   edit — `cogs/core.py` walks the command tree.
+5. **§C — `reorder` is spelled `swap`.** §A describes a swap of two rows and the
+   command list says `swap <train> <slot_a> <slot_b>`; the prose elsewhere says
+   "reorders". Only `swap` exists.
+6. **§B — `parse_start` is not re-declared in `raidtrain.py`.** The cog calls
+   `timezones.parse_start` and `events.start_error` /
+   `events.START_IN_THE_PAST` directly, so there is one home for the date
+   sentences (checklist 15) rather than a second copy in a new module.
+7. **§B — `due_reminders` grew a sibling, `missed_reminders`.** The design has
+   one function; ageing a passed slot out (checklist 31) is a different ACTION
+   from sending, so it is a different function. The cog stamps the missed ones
+   without DMing.
+8. **§C — `SLOT_COUNT_MAX = 24`, which the design did not name.** A lineup must
+   fit in ONE message because it is edited in place; ~85 characters a line
+   against Discord's 2000 gives 24. `create` refuses a bigger train in words and
+   says why. r3dlabs allows 50.
+9. **§E — the dashboard has no organizer "claim" control.** Claiming is a
+   member action and the dashboard is staff-only, so the page carries assign /
+   unassign / swap / lock / unlock / cancel / create, and `claim` is Discord-only.
+10. **§F — three log kinds beyond the list**, all from the D13 creator that §J
+    did not expect to exist: `raidtrain.would_create_scheduled`,
+    `raidtrain.create_scheduled_failed`, `raidtrain.cancel_scheduled_failed`.
+    The `would_`/`_failed` shapes mean `logkinds.py` classifies them without a
+    new entry.
+11. **Not verified.** Nothing in this phase has run against live Discord: no
+    lineup posted, no thread opened, no reminder DM delivered, no scheduled event
+    created, no member has claimed an hour. The Events page section WAS opened in
+    a real browser against the mock (section, counts, settings namespace, logs
+    section, create form — no console errors); the **train-detail slot grid was
+    not** clicked through in the browser, because another agent took the shared
+    Chrome tab mid-check — it is covered by `check.mjs` and the API tests only.

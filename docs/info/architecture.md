@@ -3,18 +3,22 @@
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
 > Last verified: **2026-09-02** — the fast-moving figures re-measured on the
-> **Phase 16** branch: `SCHEMA_VERSION` is **22** (17 sessions, 18
+> **Phase 18** branch: `SCHEMA_VERSION` is **24** (17 sessions, 18
 > `polls.vote_scheme`, 19 `golive_sessions.live_role_id`, 20 the chat tables,
-> 21 `golive_fan_roles`, 22 `youtube_links` + `youtube_videos`), `check.mjs`
-> reports **17 pages / 116 routes**, `pytest` runs **2865** tests (⚠️ ubuntu CI
-> NOT re-run on this branch), `ruff check .` clean; `bot.py:COGS` is now **16**
-> cogs and the tree has **39** top-level slash commands. ⚠️ Phase 16 is on a
-> BRANCH — not merged and not deployed, so the LIVE bot is still schema 21 /
-> 15 cogs / 37 commands until the conductor merges it. New since
+> 21 `golive_fan_roles`, 22 `youtube_links` + `youtube_videos`, ⚠️ **23 is
+> Phase 17's and is EMPTY on this branch**, 24 `raid_trains` + `raid_slots`),
+> `check.mjs` reports **17 pages / 123 routes**, `ruff check .` clean;
+> `bot.py:COGS` is now **17** cogs and the tree has **41** top-level slash
+> commands. ⚠️ Phase 18 is on a BRANCH beside Phase 17 — neither is merged and
+> neither is deployed, so the LIVE bot is still schema 21 / 15 cogs / 37
+> commands until the conductor merges them (order: 17, then 18). Before that,
+> the same figures on the Phase 16 branch were schema 22 / 16 cogs / 39
+> commands / 116 routes / **2865** tests. New since
 > the tree below was drawn: `chat_llm.py`, `llm.py`, `groq.py`, `knowledge.py`,
 > `personas.py`, `directory.py`, `chat_check.py`, `dbsnapshot.py`,
 > `api/costs.py`, `pings.py`, `cogs/content/pings.py`, `api/tools/pings.py`,
-> `youtube.py`, `cogs/content/youtube.py`, `api/tools/youtube.py`. ⚠️ NOT re-checked: the Shape tree's per-file annotations
+> `youtube.py`, `cogs/content/youtube.py`, `api/tools/youtube.py`,
+> `raidtrain.py`, `cogs/content/raidtrain.py`, `api/tools/raidtrain.py`. ⚠️ NOT re-checked: the Shape tree's per-file annotations
 > (verified 2026-08-31). Three cogs (polls, requests, chat) and eleven modules the tree did not
 > list have been added, and the **Carl parity** entries removed — parity was
 > deleted in `47634b8` and `grep -ri carl black_bloc site` is empty.

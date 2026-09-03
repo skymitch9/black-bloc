@@ -2,10 +2,13 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-02 — KI-14 added by the Phase 17 build from its own
-> §J measurement (two leaked third-person threads in run 1, none in run 2 after
-> the fix); it describes a branch that has never run against live Discord and a
-> feature that ships OFF. Before that, KI-11, KI-12 and KI-13 added from the Phase 16
+> Last verified: **2026-09-02 — KI-15 and KI-16 added by the Phase 18 (F19, raid
+> trains) build, from reading its own code rather than from an incident; both
+> describe a branch that has never met live Discord. The same day, KI-14 added
+> by the Phase 17 build from its own §J measurement (two leaked third-person
+> threads in run 1, none in run 2 after the fix); it too describes a branch that
+> had never run against live Discord and a feature that ships OFF. Before that,
+> KI-11, KI-12 and KI-13 added from the Phase 16
 > section-J measurements against the LIVE YouTube feed (30 timed requests, the
 > response headers, and a real captured feed now kept as
 > `tests/fixtures/youtube_feed.xml`); KI-10 added earlier the same day from a
@@ -59,6 +62,47 @@ conversations — none have been distilled.
 the fix is not a longer phrase list — it is to stop keeping `threads` at all
 (§I already excludes cross-person memory), since the note leaks measured so far
 were all threads, never preferences.
+
+## KI-15 — A raid-train slot keeps the Twitch name it was claimed with — `ACCEPTED`
+
+**Symptom.** `raid_slots.twitch_login` is COPIED at claim time from
+`golive_links`. A member who runs `/twitch unlink`, or who re-links to a
+different channel, keeps their slot and the lineup keeps naming the OLD login —
+so the streamer before them may raid a channel that no longer belongs to
+anybody. Nothing tells the organizer.
+
+**Status.** `ACCEPTED` (Phase 18, §I). Measured only in the test suite; no raid
+train has ever run against live Discord.
+
+**Why tolerated.** The copy is deliberate: reading the link live would mean a
+lineup that silently rewrites itself between the reminder DM and the hour it
+describes, and a slot that empties itself when somebody unlinks for an unrelated
+reason. A stale name is visible and fixable (`/raidtrain unassign` then claim
+again); a lineup that changes under people is neither.
+
+**What would change it.** **1 report** of a raid landing on a wrong channel.
+The fix is a sweep step that re-reads `golive_links` for un-started slots and
+logs `raidtrain.login_stale` rather than rewriting anything.
+
+## KI-16 — Raid-train check-in sees only what go-live sees — `ACCEPTED`
+
+**Symptom.** D9's check-in (`checked_in_at`, and the "the train moves" line in
+the thread) reads `golive.open_sessions`. A slot holder whose Discord presence
+is hidden and who is not Twitch-linked never has an open session, so they are
+never marked live and the thread never says the train moved on — even though
+they are streaming.
+
+**Status.** `ACCEPTED` (Phase 18, §I). Test-suite evidence only.
+
+**Why tolerated.** It is the same limit as F1 go-live, from the same source, and
+the phase deliberately reuses that one signal rather than growing a second
+detector. Nothing breaks: the lineup, the reminders and the raid order are all
+unaffected — only the ✅ and the one thread line are missing.
+
+**What would change it.** Whatever closes the go-live gap closes this one too
+(Twitch EventSub with a public callback, or a `/raidtrain checkin` command a
+holder runs by hand). Number: **1 report** of a train whose lineup showed nobody
+checked in while it was visibly running.
 
 ## KI-13 — An upload announcement can be up to ~25 minutes late — `ACCEPTED`
 

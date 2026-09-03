@@ -122,6 +122,19 @@ CHAT_ESCALATION_NAMES_MAX = 10
 COST_HOSTING_USD = 0
 COST_HOSTING_MAX_USD = 10_000
 
+RAIDTRAIN_MODES = ("off", "shadow", "on")
+RAIDTRAIN_SLOT_MINUTES = 60
+RAIDTRAIN_SLOT_MIN_MINUTES = 15
+RAIDTRAIN_SLOT_MAX_MINUTES = 12 * 60
+RAIDTRAIN_REMINDER_MINUTES = 30
+RAIDTRAIN_REMINDER_MIN_MINUTES = 5
+RAIDTRAIN_REMINDER_MAX_MINUTES = 24 * 60
+RAIDTRAIN_POLL_MINUTES = 5
+RAIDTRAIN_POLL_MIN_MINUTES = 1
+RAIDTRAIN_POLL_MAX_MINUTES = 60
+RAIDTRAIN_MAX_SLOTS_PER_MEMBER = 1
+RAIDTRAIN_SLOTS_PER_MEMBER_MAX = 24
+
 BOT_BIO_TEMPLATE = (
     "Black Bloc — moderation & content bot for Black in a Flash!. Staff dashboard: {site}"
 )
@@ -239,6 +252,18 @@ KEY_TYPES: dict[str, str] = {
     "rolemenu_approver_role_id": "role",
     "emoji_skin_tone": "enum",
     "cost_hosting_usd": "int",
+    "raidtrain_mode": "enum",
+    "raidtrain_organizer_role_id": "role",
+    "raidtrain_channel_id": "channel",
+    "raidtrain_ping_role_id": "role",
+    "raidtrain_slot_minutes": "int",
+    "raidtrain_reminder_minutes": "int",
+    "raidtrain_poll_minutes": "int",
+    "raidtrain_require_link": "bool",
+    "raidtrain_thread": "bool",
+    "raidtrain_live_posts": "bool",
+    "raidtrain_max_slots_per_member": "int",
+    "raidtrain_scheduled_event": "bool",
 }
 
 KEY_CHOICES: dict[str, tuple[str, ...]] = {
@@ -270,6 +295,7 @@ KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "chat_memory_dm_scope": DM_SCOPES,
     "chat_memory_staff_view": STAFF_VIEWS,
     "emoji_skin_tone": SKIN_TONE_NAMES,
+    "raidtrain_mode": RAIDTRAIN_MODES,
 }
 
 KEY_MAX: dict[str, int] = {
@@ -289,6 +315,10 @@ KEY_MAX: dict[str, int] = {
     "poll_reminder_minutes": POLL_REMINDER_MAX_MINUTES,
     "poll_archive_days": POLL_ARCHIVE_MAX_DAYS,
     "cost_hosting_usd": COST_HOSTING_MAX_USD,
+    "raidtrain_slot_minutes": RAIDTRAIN_SLOT_MAX_MINUTES,
+    "raidtrain_reminder_minutes": RAIDTRAIN_REMINDER_MAX_MINUTES,
+    "raidtrain_poll_minutes": RAIDTRAIN_POLL_MAX_MINUTES,
+    "raidtrain_max_slots_per_member": RAIDTRAIN_SLOTS_PER_MEMBER_MAX,
 }
 
 KEY_MIN: dict[str, int] = {
@@ -297,6 +327,9 @@ KEY_MIN: dict[str, int] = {
     "poll_default_hours": POLL_MIN_HOURS,
     "poll_archive_days": POLL_ARCHIVE_MIN_DAYS,
     "youtube_poll_minutes": YOUTUBE_POLL_MIN_MINUTES,
+    "raidtrain_slot_minutes": RAIDTRAIN_SLOT_MIN_MINUTES,
+    "raidtrain_reminder_minutes": RAIDTRAIN_REMINDER_MIN_MINUTES,
+    "raidtrain_poll_minutes": RAIDTRAIN_POLL_MIN_MINUTES,
 }
 
 KEY_MIN_REASON: dict[str, str] = {
@@ -319,6 +352,18 @@ KEY_MIN_REASON: dict[str, str] = {
     "youtube_poll_minutes": (
         "YouTube's feed is cached for fifteen minutes at a time, so asking more often than every "
         "{limit} minutes fetches the same answer again and finds nothing new any sooner."
+    ),
+    "raidtrain_slot_minutes": (
+        "A raid train slot shorter than {limit} minutes is not long enough for anybody to start "
+        "a stream, be raided into and hand the audience on again."
+    ),
+    "raidtrain_reminder_minutes": (
+        "A warning less than {limit} minutes before a slot is not enough notice to get a stream "
+        "up. Turn raid trains off altogether if you would rather Black Bloc said nothing."
+    ),
+    "raidtrain_poll_minutes": (
+        "The sweep is what sends the reminders and spots who is live, and it cannot run more "
+        "often than once every {limit} minute."
     ),
 }
 
@@ -375,6 +420,22 @@ KEY_MAX_REASON: dict[str, str] = {
     "cost_hosting_usd": (
         "A hosting bill over ${limit} a month is not this bot, it is a typo. Check the invoice "
         "and put in the monthly figure."
+    ),
+    "raidtrain_slot_minutes": (
+        "A slot longer than {limit} minutes is half a day of one stream, which is not a raid "
+        "train. Run two trains instead."
+    ),
+    "raidtrain_reminder_minutes": (
+        "A reminder more than {limit} minutes before a slot arrives the day before and is "
+        "forgotten by the time it matters."
+    ),
+    "raidtrain_poll_minutes": (
+        "A sweep that runs less often than every {limit} minutes would miss its own reminder "
+        "window, so the DMs would arrive late or not at all."
+    ),
+    "raidtrain_max_slots_per_member": (
+        "No raid train Black Bloc will build has more than {limit} slots, so a ceiling above "
+        "that is the same as no ceiling — set it to 0 for that."
     ),
 }
 
@@ -665,6 +726,50 @@ KEY_HELP: dict[str, str] = {
         "what the always-on container costs a month in whole dollars — read it off your Fly "
         "invoice; 0 = not filled in yet, and the Costs card on the Health page says so rather "
         "than claiming hosting is free"
+    ),
+    "raidtrain_mode": (
+        "off, shadow (log what would be sent and send nothing) or on (post the lineup and DM "
+        "slot holders before their hour)"
+    ),
+    "raidtrain_organizer_role_id": (
+        "role that may build and change a raid train's lineup as well as staff; blank leaves it "
+        "to staff alone"
+    ),
+    "raidtrain_channel_id": (
+        "where a train's lineup post lives; blank uses events_announce_channel_id"
+    ),
+    "raidtrain_ping_role_id": (
+        "role mentioned in front of a lineup post; blank pings nobody, and members on the "
+        "lineup are never pinged by an edit"
+    ),
+    "raidtrain_slot_minutes": (
+        f"how long one slot is by default, {RAIDTRAIN_SLOT_MIN_MINUTES}-"
+        f"{RAIDTRAIN_SLOT_MAX_MINUTES} minutes; each train may be created with its own length"
+    ),
+    "raidtrain_reminder_minutes": (
+        "how long before their slot a holder is DMed, with who raids into them and who they "
+        "raid next; the DM is sent once"
+    ),
+    "raidtrain_poll_minutes": (
+        "minutes between sweeps that send those reminders, start and finish a train, and notice "
+        "who is live"
+    ),
+    "raidtrain_require_link": (
+        "on makes `/twitch link` a condition of claiming a slot, so the lineup carries the name "
+        "the streamer before raids; off lets anybody claim and leaves the name off"
+    ),
+    "raidtrain_thread": "on opens a thread under the lineup post for the people on the train",
+    "raidtrain_live_posts": (
+        "on says `X is live — next up Y` in that thread when a slot holder starts streaming "
+        "inside their own hour, and marks the slot checked in"
+    ),
+    "raidtrain_max_slots_per_member": (
+        "how many slots one member may claim on one train; 0 means as many as they like. An "
+        "organizer assigning a slot is never held to it"
+    ),
+    "raidtrain_scheduled_event": (
+        "on puts the train on Discord's own event calendar as well. Off by default: Phase 4's "
+        "calendar helper writes to the events table, so raid trains keep their own"
     ),
 }
 
@@ -1126,6 +1231,24 @@ class SettingsStore:
             return SKIN_TONE_DEFAULT
         if key == "cost_hosting_usd":
             return COST_HOSTING_USD
+        if key == "raidtrain_mode":
+            return "off"
+        if key == "raidtrain_slot_minutes":
+            return RAIDTRAIN_SLOT_MINUTES
+        if key == "raidtrain_reminder_minutes":
+            return RAIDTRAIN_REMINDER_MINUTES
+        if key == "raidtrain_poll_minutes":
+            return RAIDTRAIN_POLL_MINUTES
+        if key == "raidtrain_require_link":
+            return True
+        if key == "raidtrain_thread":
+            return True
+        if key == "raidtrain_live_posts":
+            return True
+        if key == "raidtrain_max_slots_per_member":
+            return RAIDTRAIN_MAX_SLOTS_PER_MEMBER
+        if key == "raidtrain_scheduled_event":
+            return False
         if key.endswith("_log_level"):
             return LEVEL_DEFAULT
         if KEY_TYPES.get(key) in ("channels", "roles"):

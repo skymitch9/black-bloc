@@ -48,6 +48,8 @@ const IDS = {
   // F14: {member_id} already HAS a ping role in the seed, so the GET and the DELETE act on it
   // and the POST needs somebody who does not — otherwise it answers the 409 it should.
   ping_member_id: '700000000000000004',
+  // Phase 18: train 1 is the upcoming one, still open, so lock/assign/swap all reach it.
+  raid_train_id: '1',
 };
 
 const failures = [];
@@ -209,6 +211,9 @@ const UNGUARDED = [
   // Filing a request writes a row and DMs; only the one line in request_notify_channel_id
   // is a channel post, and that is guarded on its own inside the bot.
   ['POST', '/api/requests', { what: 'contract check', why: 'the guard list needs one' }],
+  // Phase 18: making a train writes rows and then tries one lineup post; the post is guarded
+  // inside the bot (it logs raidtrain.post_skipped_test_mode) rather than refusing the route.
+  ['POST', '/api/raidtrains', { title: 'Guard check', start: '2099-09-14 19:30', tz: 'UTC', slot_minutes: 60, slot_count: 2 }],
 ];
 
 async function setGuard(on) {
@@ -327,6 +332,15 @@ async function checkActionKinds() {
     headers: { cookie: 'mock_as=member', 'content-type': 'application/json' },
     body: '{}',
   });
+  // The seven web.raidtrain.* kinds, each left by the write that spells it. Lock and unlock are
+  // two kinds off one route, the way tempvoice's lock/unlock is.
+  await post('/api/raidtrains', { title: 'Contract train', start: '2099-09-14 19:30', tz: 'UTC', slot_minutes: 60, slot_count: 2 });
+  await post(`/api/raidtrains/${IDS.raid_train_id}/slots/3`, { member_id: IDS.member_id });
+  await post(`/api/raidtrains/${IDS.raid_train_id}/slots/3`, { member_id: null });
+  await post(`/api/raidtrains/${IDS.raid_train_id}/swap`, { a: 1, b: 2 });
+  await post(`/api/raidtrains/${IDS.raid_train_id}/status`, { status: 'locked' });
+  await post(`/api/raidtrains/${IDS.raid_train_id}/status`, { status: 'open' });
+  await post(`/api/raidtrains/${IDS.raid_train_id}/status`, { status: 'cancelled', reason: 'contract check' });
   const response = await fetch(`${BASE}/api/actions?limit=200`, { headers: { cookie: 'mock_as=staff' } });
   const payload = await response.json();
   const known = new Set(contract.action_kinds);

@@ -81,6 +81,10 @@ go-live and event pings for everybody, `/pings fans on` gives your own followers
 `/pings list` says what you get. The *Streamer pings* and *Notifications* panels do the same.
 `/birthday` — `/birthday set` stores a birthday, `/birthday optout` takes it back off.
 `/poll` — `/poll create` puts a question to the room.
+`/raidtrain` — the raid trains. `/raidtrain list` shows what is coming up and which hours are
+free, `/raidtrain claim` takes one (link Twitch first), `/raidtrain release` gives it back, and
+`/raidtrain mine` says what you hold. Black Bloc DMs you before your slot with who raids into
+you and who you raid next.
 `/voice` — rename, lock, hide and hand over a temporary voice channel somebody made.
 `/timezone` — `/timezone set` is what makes a time read in somebody's own clock.
 `/memory` — does the bot remember me? `/memory show` reads it back, `/memory forget-this` drops
