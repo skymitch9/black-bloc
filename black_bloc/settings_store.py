@@ -929,6 +929,34 @@ KEY_HELP.update(
     }
 )
 
+# Birthdays, the panel pass (wave 1). Appended as its own block so the parallel branches
+# merge cleanly.
+KEY_TYPES.update(
+    {
+        "birthday_panel_minutes": "int",
+        "birthday_panel_next_for_members": "bool",
+        "birthday_panel_lookup": "bool",
+    }
+)
+KEY_HELP.update(
+    {
+        "birthday_panel_minutes": (
+            "minutes the /birthday panel stays live before its buttons disable themselves; 10 "
+            "by default. The 'this panel has gone quiet' footer can only be written while "
+            "Discord's 15-minute interaction window is still open, so 15 or more means the "
+            "buttons simply stop working with no footer to explain it"
+        ),
+        "birthday_panel_next_for_members": (
+            "true to show every member the birthdays coming up on the /birthday panel; staff "
+            "always see them. False makes the list staff-only and the panel says so in words"
+        ),
+        "birthday_panel_lookup": (
+            "true to let any member look somebody else's stored birthday up on the /birthday "
+            "panel; staff always can. Opting out is still the member's own privacy control"
+        ),
+    }
+)
+
 
 GUILD_ONLY = (
     "That command changes settings for a server, so it has to be run in the server itself "
@@ -1291,6 +1319,12 @@ class SettingsStore:
             return BIRTHDAY_COLOR
         if key == "birthday_show_age":
             return False
+        if key == "birthday_panel_minutes":
+            return 10
+        if key == "birthday_panel_next_for_members":
+            return True
+        if key == "birthday_panel_lookup":
+            return True
         if key == "modmail_enabled":
             return False
         if key == "modmail_mode":

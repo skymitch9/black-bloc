@@ -8,9 +8,10 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta, timezone
 from importlib.resources import files
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 from zoneinfo import ZoneInfo
 
+from .panels import panel_minutes as library_panel_minutes
 from .settings_store import BIRTHDAY_COLOR, BIRTHDAY_TEMPLATE, BIRTHDAY_TZ, HEX_COLOR
 
 log = logging.getLogger(__name__)
@@ -19,6 +20,45 @@ DATA_FILE = files("black_bloc") / "data" / "birthday_import_2026-08-05.json"
 FALLBACK_ZONE = timezone(timedelta(hours=-7), "America/Phoenix")
 DEFAULT_COLOR_VALUE = 0x4EEFFF
 DESCRIPTION_LIMIT = 2000
+MESSAGE_LIMIT = 1900
+NEXT_LIMIT = 5
+
+PANEL_MINUTES_KEY = "birthday_panel_minutes"
+PANEL_NEXT_KEY = "birthday_panel_next_for_members"
+PANEL_LOOKUP_KEY = "birthday_panel_lookup"
+
+PANEL_TITLE = "Birthdays"
+PANEL_INTRO = "Tell Black Bloc when your birthday is, and see whose is coming up."
+PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run /birthday again"
+PANEL_NEXT_HEADING = "**Next birthdays**"
+PANEL_NEXT_IS_STAFF_ONLY = (
+    "The list of birthdays coming up is for staff in this server, so it is not shown here."
+)
+MODE_WARNINGS: dict[str, str] = {
+    "off": (
+        "⚠️ Birthday wishes are **off**, so nothing is posted on the day yet. Your birthday is "
+        "still stored, and staff can turn wishes on."
+    ),
+    "shadow": (
+        "⚠️ Birthday wishes are in **shadow** — the day is written to the log but nothing is "
+        "posted yet. Staff can turn wishes on."
+    ),
+}
+DATE_MODAL_TITLE_LIMIT = 45
+DATE_MINE_TITLE = "Your birthday"
+DATE_THEIRS_TITLE = "Set {who}'s birthday"
+DATE_LABEL = "Your birthday — MM-DD, or MM-DD-YYYY"
+DATE_PLACEHOLDER = "09-15   or   09-15-1994"
+DATE_INPUT_LIMIT = 10
+DATE_UNREADABLE = (
+    "Black Bloc could not read that as a date. Write it as **MM-DD** — `09-15` — or add the "
+    "year as **MM-DD-YYYY** — `09-15-1994`. The year is optional, and leaving it out keeps "
+    "your age private."
+)
+LOOKUP_PLACEHOLDER = "Look someone up…"
+MONTH_PLACEHOLDER = "List a month…"
+EVERY_MONTH = "Every month"
+MODE_PLACEHOLDER = "Wishes are…"
 
 MONTHS: dict[str, int] = {
     "january": 1,
@@ -373,6 +413,174 @@ def stamp(when: datetime, style: str = "D") -> str:
 def month_day_text(month: Any, day: Any) -> str:
     m, d = clamp_month_day(month, day)
     return f"{MONTH_NAMES[m - 1]} {d}"
+
+
+DATE_PARTS = re.compile(r"[-/. ]+")
+
+
+def parse_birthday_input(text: Any) -> tuple[int, int, int | None] | None:
+    """`MM-DD` or `MM-DD-YYYY` typed any of four ways; None when it cannot be read at all."""
+    parts = [piece for piece in DATE_PARTS.split(str(text or "").strip()) if piece]
+    if len(parts) not in (2, 3) or not all(piece.isdigit() for piece in parts):
+        return None
+    numbers = [int(piece) for piece in parts]
+    if len(numbers) == 2:
+        return (numbers[0], numbers[1], None)
+    return (numbers[0], numbers[1], numbers[2])
+
+
+def date_modal_title(mine: bool, name: Any = "") -> str:
+    """Discord refuses a modal title over 45 characters, and display names are arbitrary."""
+    if mine:
+        return DATE_MINE_TITLE
+    return DATE_THEIRS_TITLE.format(who=name)[:DATE_MODAL_TITLE_LIMIT]
+
+
+def stored_prefill(month: Any, day: Any, year: Any) -> str:
+    return f"{int(month):02d}-{int(day):02d}" + (f"-{int(year)}" if year else "")
+
+
+def chunked(lines: list[str], limit: int = MESSAGE_LIMIT) -> list[str]:
+    """The lines packed into as few messages as Discord's length cap allows."""
+    pages: list[str] = []
+    current = ""
+    for line in lines:
+        piece = line[:limit]
+        if current and len(current) + len(piece) + 1 > limit:
+            pages.append(current)
+            current = piece
+        else:
+            current = f"{current}\n{piece}" if current else piece
+    if current:
+        pages.append(current)
+    return pages
+
+
+class PanelButton(NamedTuple):
+    action: str
+    label: str
+    style: str
+    needs_modal: bool = False
+
+
+SET_MINE = PanelButton("set", "Set my birthday", "primary", needs_modal=True)
+CHANGE_MINE = PanelButton("set", "Change my birthday", "primary", needs_modal=True)
+REMOVE_MINE = PanelButton("remove", "Remove", "danger")
+OPT_OUT = PanelButton("optout", "Opt out", "secondary")
+OPT_IN = PanelButton("optin", "Opt in", "success")
+REFRESH = PanelButton("refresh", "Refresh", "secondary")
+
+PANEL_BUTTONS: dict[tuple[bool, bool], tuple[PanelButton, ...]] = {
+    (False, False): (SET_MINE, REFRESH),
+    (True, False): (CHANGE_MINE, REMOVE_MINE, OPT_OUT, REFRESH),
+    (True, True): (CHANGE_MINE, REMOVE_MINE, OPT_IN, REFRESH),
+}
+
+
+def panel_buttons(has_date: bool, opted_out: bool) -> tuple[PanelButton, ...]:
+    key = (bool(has_date), bool(opted_out))
+    return PANEL_BUTTONS.get(key, PANEL_BUTTONS[(False, False)])
+
+
+def panel_minutes(store: Any, guild_id: int) -> int:
+    return library_panel_minutes(store, guild_id, PANEL_MINUTES_KEY)
+
+
+def panel_shows_next(store: Any, guild_id: int) -> bool:
+    return bool(store.get(guild_id, PANEL_NEXT_KEY))
+
+
+def panel_allows_lookup(store: Any, guild_id: int) -> bool:
+    return bool(store.get(guild_id, PANEL_LOOKUP_KEY))
+
+
+def stored_sentence(
+    whose: str, month: Any, day: Any, year: Any, zone: str, when: datetime
+) -> str:
+    return (
+        f"{whose} birthday is **{month_day_text(month, day)}**"
+        + (f" ({year})" if year else "")
+        + f". Black Bloc posts it at midnight in **{zone}**, and the next one is "
+        + stamp(when, "D")
+        + "."
+    )
+
+
+def card_lines(
+    name: str,
+    month: Any,
+    day: Any,
+    year: Any,
+    zone: str,
+    when: datetime,
+    years: int | None,
+    opted_in: bool,
+    mine: bool = False,
+) -> list[str]:
+    lines = [
+        f"**{name}** — {month_day_text(month, day)}"
+        + (f" ({year})" if year and mine else "")
+        + (f", turning {years}" if years is not None else ""),
+        f"Next: {stamp(when, 'D')} ({stamp(when, 'R')}), midnight in **{zone}**",
+    ]
+    if not opted_in:
+        lines.append(
+            "You are **opted out**, so nothing will be posted."
+            if mine
+            else "They are **opted out**, so nothing will be posted."
+        )
+    return lines
+
+
+def upcoming_lines(entries: list[dict[str, Any]], items: list[Upcoming]) -> list[str]:
+    by_id = {entry["user_id"]: entry for entry in entries}
+    return [
+        f"· <@{item.user_id}> — "
+        f"{month_day_text(by_id[item.user_id]['month'], by_id[item.user_id]['day'])} "
+        f"({stamp(item.when, 'D')}, {stamp(item.when, 'R')})"
+        for item in items
+    ]
+
+
+def month_lines(rows: Any) -> list[str]:
+    lines: list[str] = []
+    seen: int | None = None
+    for row in rows or ():
+        if row["month"] != seen:
+            seen = row["month"]
+            lines.append(f"**{MONTH_NAMES[seen - 1]}**")
+        marks = "" if row["opted_in"] else " · opted out"
+        lines.append(f"· {row['day']} — <@{row['user_id']}> ({row['source']}{marks})")
+    return lines
+
+
+def stored_line(totals: dict[str, int]) -> str:
+    return (
+        f"**stored** — {totals['stored']} ({totals['opted_in']} opted in · "
+        f"{totals['imported']} imported · {totals['self']} set by the person)"
+    )
+
+
+def status_lines(values: dict[str, Any]) -> list[str]:
+    channel_id = values.get("channel_id")
+    role_id = values.get("role_id")
+    return [
+        f"**mode** — {values['mode']}",
+        f"**channel** — {f'<#{channel_id}>' if channel_id else 'not set'}",
+        f"**template** — `{values['template']}`",
+        f"**colour** — {values['color']}",
+        f"**role** — {f'<@&{role_id}>' if role_id else 'none'}"
+        + (" (test mode gives no roles)" if values.get("test_mode") else ""),
+        f"**ages shown** — {values['show_age']}",
+        stored_line(values["totals"]),
+        f"**staff** — {values['staff']}",
+        f"**last sweep** — {values['last_run_at'] or 'not yet'} "
+        f"(every {values['loop_minutes']} minutes)",
+        f"**last error** — {values['last_error'] or 'none'}",
+        f"**last import** — {values['last_import_at'] or 'not yet'} "
+        f"(every {values['import_hours']} hours)",
+        f"**last import error** — {values['last_import_error'] or 'none'}",
+    ]
 
 
 async def member_zone_name(db: Any, user_id: int) -> str:

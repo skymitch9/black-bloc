@@ -11,7 +11,6 @@ CHILDREN_MAX = 25
 LOGS_GROUPS = {
     "golive": "golive",
     "event": "events",
-    "birthday": "birthday",
     "voice": "tempvoice",
     "rolemenu": "rolemenu",
     "role": "rolemenu",
