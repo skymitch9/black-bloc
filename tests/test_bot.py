@@ -23,6 +23,7 @@ LOGS_GROUPS = {
     "mod": "mod",
     "request": "request",
     "pingroles": "pings",
+    "uploads": "youtube",
 }
 
 
@@ -51,6 +52,7 @@ STAFF_COMMANDS = {
     "timeout",
     "unban",
     "untimeout",
+    "uploads",
     "warn",
 }
 MEMBER_COMMANDS = {
@@ -66,6 +68,7 @@ MEMBER_COMMANDS = {
     "timezone",
     "twitch",
     "voice",
+    "youtube",
 }
 GATE_IS_TWO_HOPS_AWAY = {"/reply", "/areply"}
 
@@ -192,7 +195,7 @@ async def test_the_command_tree_stays_inside_discords_limits(settings):
 
     top = bot.tree.get_commands()
     assert len(top) <= TOP_LEVEL_MAX
-    assert len(top) == 37
+    assert len(top) == 39
     for command in top:
         if isinstance(command, app_commands.Group):
             assert len(command.commands) <= CHILDREN_MAX, command.name

@@ -37,6 +37,7 @@ COGS: tuple[str, ...] = (
     "black_bloc.cogs.content.chat",
     "black_bloc.cogs.community.requests",
     "black_bloc.cogs.content.pings",
+    "black_bloc.cogs.content.youtube",
 )
 
 
