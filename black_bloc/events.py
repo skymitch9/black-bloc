@@ -346,10 +346,6 @@ DM_MISSED = (
 NO_ANNOUNCE_CHANNEL = (
     "there is nowhere to announce it — a Lead sets an announce channel in **Settings**"
 )
-NOT_YOURS = (
-    "Event #{event_id} is not yours, so nothing was cancelled. Only the person who proposed it or "
-    "a member of staff can cancel it."
-)
 CANCELLED_SAID = "Event #{event_id} is cancelled."
 NOT_OPEN = "Event #{event_id} is already **{status}**, so there was nothing to cancel."
 NOT_AN_ID = "**{given}** is not an event number, so nothing was cancelled. `/event` has them."

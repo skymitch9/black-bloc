@@ -384,7 +384,8 @@ Written by the build agent, 2026-09-03. Everything not listed here was built as 
     `phase11-design.md:57` (chat's `time_for_me` pointed at `/timezone set`),
     `phase18-design.md:64` (raid trains "type the start in their `/timezone` like `/event
     create`") and `polls-research.md:416`.
-15. **§H's sweep rows were rewritten where the build diverged.** Row 74 now says the refusal
+15. **`NOT_YOURS` was DELETED, not moved.** `/event cancel` needed a sentence for "that one is not yours"; the panel cannot produce that state — the member's `Call one off…` lists only their own rows and the staff card's button is gated by `may_cancel` — so under P9 the refusal has no caller. ⚠️ `NO_ANNOUNCE_CHANNEL` in the same file is ALSO dead, but it was dead before this build and is left alone (reported, not fixed).
+16. **§H's sweep rows were rewritten where the build diverged.** Row 74 now says the refusal
     suggests a zone (deviation 9), row 78 says the staff note replaces the confirm (deviation 4),
     and row 79 names `Forget…` beside the empty select (deviation 6). Rows 73, 75, 76 and 77 are
     as designed.
