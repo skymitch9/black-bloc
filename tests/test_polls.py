@@ -23,13 +23,18 @@ def test_a_reviewed_poll_walks_from_pending_to_open_and_never_backwards():
     assert polls.can_transition(polls.OPEN, polls.CLOSED)
     assert polls.can_transition(polls.CLOSED, polls.ARCHIVED)
     assert not polls.can_transition(polls.CLOSED, polls.OPEN)
-    assert not polls.can_transition(polls.DENIED, polls.OPEN)
     assert not polls.can_transition(polls.ARCHIVED, polls.CLOSED)
 
 
-def test_a_denied_or_archived_poll_is_the_end_of_the_line():
-    assert polls.DENIED in polls.TERMINAL_STATUSES
-    assert polls.ARCHIVED in polls.TERMINAL_STATUSES
+def test_staff_can_still_post_a_poll_they_denied():
+    """Owner rule: never a terminal state staff cannot leave (design fork I-1)."""
+    assert polls.can_transition(polls.DENIED, polls.OPEN)
+    assert polls.DENIED not in polls.TERMINAL_STATUSES
+    assert polls.CARD_BUTTONS[polls.DENIED][0].action == "post_anyway"
+
+
+def test_only_an_archived_poll_is_the_end_of_the_line():
+    assert polls.TERMINAL_STATUSES == (polls.ARCHIVED,)
     assert polls.OPEN not in polls.TERMINAL_STATUSES
 
 
