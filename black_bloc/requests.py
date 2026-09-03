@@ -8,6 +8,8 @@ import discord
 
 from .actionlog import log_action
 from .logkinds import FEATURE_PAGES, VIA_DISCORD, kind_via
+from .panels import CAPPED_PLACEHOLDER, capped_placeholder
+from .panels import panel_minutes as library_panel_minutes
 from .timezones import DEFAULT_TZ, zone
 
 log = logging.getLogger(__name__)
@@ -187,7 +189,7 @@ PANEL_EMPTY = "You have not asked for anything yet."
 PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run /request again"
 ACCEPT_NEEDS_SOMEBODY_ELSE = "Only somebody other than {who} may accept this one."
 PICK_A_REQUEST = "Pick a request…"
-PICK_CAPPED = "{shown} of {total} — the rest are on the site"
+PICK_CAPPED = CAPPED_PLACEHOLDER
 TAKE_ONE_BACK = "Take one back…"
 
 MOVE_LINE: dict[str, str] = {
@@ -449,9 +451,7 @@ def option_label(row: Any, *, with_status: bool = True) -> str:
 
 
 def pick_placeholder(shown: int, total: int) -> str:
-    if total > shown:
-        return PICK_CAPPED.format(shown=shown, total=total)
-    return PICK_A_REQUEST
+    return capped_placeholder(shown, total, pick=PICK_A_REQUEST, capped=PICK_CAPPED)
 
 
 COUNT_STATUSES = (OPEN, IN_PROGRESS, REVIEW, HOLD)
@@ -471,7 +471,7 @@ def site_page_url(origin: Any) -> str | None:
 
 
 def panel_minutes(store: Any, guild_id: int) -> int:
-    return int(store.get(guild_id, PANEL_MINUTES_KEY))
+    return library_panel_minutes(store, guild_id, PANEL_MINUTES_KEY)
 
 
 def panel_shows_own_list(store: Any, guild_id: int) -> bool:

@@ -1,10 +1,13 @@
 # Panels over slash commands — the program for the rest of the app
 
 > **Audience:** the conductor (Fable), every design and build agent, the reviewer, the owner.
-> **Status:** TRACKED · **PLANNING** — nothing below is built yet except the template
-> (`/request`, [`requests-panel-design.md`](requests-panel-design.md)).
-> **Last verified: 2026-09-03** — the command inventory in §3 was measured by grep against
-> `black_bloc/cogs/` at `a392a3f` (one row per `app_commands.Group` / `@<group>.command`);
+> **Status:** TRACKED · **PLANNING**, except **§4 wave 0, which is BUILT** (`black_bloc/panels.py`,
+> branch `feat/panels-library`, 2026-09-03). Waves 1–4 are unbuilt; the template is
+> `/request` ([`requests-panel-design.md`](requests-panel-design.md)).
+> **Last verified: 2026-09-03** — §4's BUILT line was measured on `feat/panels-library`
+> (3371 tests, ruff clean, import check); the command inventory in §3 was measured by grep
+> against `black_bloc/cogs/` at `a392a3f` (one row per `app_commands.Group` /
+> `@<group>.command`) and is unchanged by wave 0, which added no command and retired none;
 > the pattern in §2 was read out of `requests-panel-design.md` and its twelve deviations.
 > ⚠️ **NOT verified:** which features the owner wants first (§5 is a proposal), and the
 > three forks in §6, which are his to decide one at a time.
@@ -91,6 +94,15 @@ top-level; the gain is for people, not the limit.
 
 ## 4. Wave 0 — the library the template becomes (build first, alone)
 
+**BUILT** — 2026-09-03, branch `feat/panels-library`, commits `5da0081` (library + cog
+refactor + `tests/test_panels.py`) and the docs commit that follows it. **3371 tests pass**
+(1127 `tests/cogs` + 2244 the rest — 3345 before, +26 new, none lost), ruff clean, and
+`import black_bloc.cogs.community.requests, black_bloc.panels` succeeds. The 163 requests
+tests passed **unchanged in assertion**, which is the proof the refactor changed nothing.
+⚠️ A real boot (`python -m black_bloc`, invariant P17) was NOT run — the build agent has no
+bot token; the import check is the substitute. See `### Wave 0 deviations` at the foot of
+this section.
+
 **`black_bloc/panels.py`** (pure module; tests in `tests/test_panels.py`) extracted from
 `cogs/community/requests.py` with NO behaviour change — the requests tests stay green
 untouched except for import paths:
@@ -108,6 +120,43 @@ untouched except for import paths:
 mostly deletions. **Proof:** 3345 tests still pass (count may rise by the library's own),
 `ruff`, boot. This wave is one Opus agent; nothing else runs beside it because every later
 wave imports it.
+
+### Wave 0 deviations
+
+Written by the build agent, 2026-09-03. Everything not listed here was built as the table
+above says.
+
+1. **The gone-quiet footer is a constructor argument, not a `PANEL_GONE_QUIET` constant
+   "parametrised on the command name".** The table's last row asked for a shared sentence
+   with the command name substituted in; `Panel(minutes, *, footer)` takes the whole
+   sentence instead. Two reasons: `requests.PANEL_TIMEOUT_FOOTER` stays exactly the string
+   it is today (so no requests test moved), and a feature whose panel is not named after
+   its command (`/voice` renders a channel card, `/pings` a notifications card) can say
+   something that reads correctly rather than something a format string produced. The cost
+   is one string per feature; the invariant P7 wording ("writes the gone-quiet footer
+   through the last interaction") is untouched.
+2. **`option_label(id, status_words, text)` was NOT extracted.** The table lists it; the
+   build brief's piece list does not, and `requests.option_label` reads `row_value`,
+   `STATUS_WORDS` and `SELECT_OPTION_LIMIT` — a request row's shape, not a panel's. The
+   100-character clamp it exists for is `clamp`, which is already shared. Left for the
+   first feature wave that actually needs a second copy of it, which is when its generic
+   signature will be knowable rather than guessed.
+3. **`CAPPED_PLACEHOLDER` is a named module constant, so it can be the default AND be read
+   by name.** The brief spelled `capped_placeholder`'s default as an inline literal; a
+   literal cannot also be what `requests.PICK_CAPPED` reads, and the brief asks for exactly
+   that ("so the sentence has ONE home"). Same value, one name.
+4. **No requests test was MOVED into `tests/test_panels.py`.** The brief permitted it. Not
+   moving them means every one of the 163 stayed green *unchanged in assertion*, which is
+   the strongest available proof the refactor changed nothing — and the requests copies now
+   double as the integration test of the subclasses (`RequestView(Panel)`, the thin
+   `NoteModal`) that the library's own tests cannot give. 26 tests were ADDED for the
+   library on its own; nothing is tested only through the cog.
+5. **`python -m black_bloc` (invariant P17) was not run** — no bot token in the build
+   environment. `python -c "import black_bloc.cogs.community.requests, black_bloc.panels"`
+   was run instead and passes; the import edge this wave adds (`requests` → `panels` →
+   `settings_store`) is what a boot would have caught, and it is clean. `node
+   site/mock/check.mjs` and the `labels.js` parse were not run either: the site is
+   untouched by this wave.
 
 ## 5. Waves — proposed sequence (the owner picks; one feature at a time where a fork exists)
 

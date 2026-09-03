@@ -10,6 +10,8 @@ from discord.ext import commands
 from ...actionlog import log_action, send_logs
 from ...command_errors import NETWORK_ERRORS, AnswersErrors
 from ...logkinds import VIA_DISCORD, kind_via
+from ...panels import NoteModal as PanelNoteModal
+from ...panels import Panel, answer, db_ready, retire, still_staff
 from ...requests import (
     BUILT_LIMIT,
     COUNT_STATUSES,
@@ -143,34 +145,6 @@ def guard_allows(bot: Any, channel: Any) -> bool:
 def guard_refusal(bot: Any) -> str:
     guard = getattr(bot, "guard", None)
     return guard.refusal_message() if guard is not None else ""
-
-
-async def answer(interaction: discord.Interaction, text: str) -> None:
-    if interaction.response.is_done():
-        await interaction.followup.send(
-            text, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-        )
-        return
-    await interaction.response.send_message(
-        text, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-    )
-
-
-async def still_staff(interaction: discord.Interaction) -> bool:
-    """Staff can be demoted while a card is open, so every move re-asks instead of trusting it."""
-    store = interaction.client.store
-    if store.is_staff(interaction.user):
-        return True
-    await answer(interaction, store.staff_refusal(interaction.guild.id))
-    return False
-
-
-def retire(previous: Any) -> None:
-    """The view being replaced stops, so its own timeout never edits the render that replaced it."""
-    if previous is None:
-        return
-    previous.replaced = True
-    previous.stop()
 
 
 async def dm(user: Any, **payload: Any) -> bool:
@@ -462,16 +436,6 @@ MOVE_FUNCS: dict[str, Any] = {
 }
 
 
-async def db_ready(interaction: discord.Interaction) -> bool:
-    """Called after a component/modal has already deferred; answers a followup, never a crash."""
-    if interaction.client.db.is_connected:
-        return True
-    await interaction.followup.send(
-        DB_UNAVAILABLE, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-    )
-    return False
-
-
 def build_card(bot: Any, guild: Any, row: Any, actor: Any) -> tuple[discord.Embed, RequestView]:
     status = row_value(row, "status")
     origin = str(getattr(bot.settings, "origin", "") or "")
@@ -671,46 +635,9 @@ async def run_move(
     await finish_card(interaction, request_id, said, fresh, previous)
 
 
-class RequestView(AnswersErrors, discord.ui.View):
+class RequestView(Panel):
     def __init__(self, minutes: int) -> None:
-        super().__init__(timeout=max(1, int(minutes or 1)) * 60)
-        self.message: Any = None
-        self.last_interaction: Any = None
-        self.replaced = False
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        self.last_interaction = interaction
-        return True
-
-    async def on_timeout(self) -> None:
-        if self.replaced or self.message is None:
-            return
-        for item in self.children:
-            item.disabled = True
-        embeds = list(self.message.embeds)
-        if embeds:
-            embeds[0] = embeds[0].copy()
-            embeds[0].set_footer(text=PANEL_TIMEOUT_FOOTER)
-        await self.went_quiet(embeds)
-
-    async def went_quiet(self, embeds: list[Any]) -> None:
-        """The freshest interaction token first, the message's own second, neither ever raising."""
-        for edit in (self.through_last_interaction, self.through_message):
-            try:
-                if await edit(embeds):
-                    return
-            except discord.HTTPException as exc:
-                log.info("requests: could not disable a timed-out panel: %s", exc)
-
-    async def through_last_interaction(self, embeds: list[Any]) -> bool:
-        if self.last_interaction is None:
-            return False
-        await self.last_interaction.edit_original_response(embeds=embeds, view=self)
-        return True
-
-    async def through_message(self, embeds: list[Any]) -> bool:
-        await self.message.edit(embeds=embeds, view=self)
-        return True
+        super().__init__(minutes, footer=PANEL_TIMEOUT_FOOTER)
 
 
 class FileButton(discord.ui.Button):
@@ -895,24 +822,23 @@ class ReadyModal(AnswersErrors, discord.ui.Modal, title=READY_MODAL_TITLE):
         )
 
 
-class NoteModal(AnswersErrors, discord.ui.Modal):
-    note = discord.ui.TextInput(style=discord.TextStyle.paragraph)
-
+class NoteModal(PanelNoteModal):
     def __init__(
         self, cog: Requests, request_id: int, kind: str, previous: Any = None
     ) -> None:
-        super().__init__(title=NOTE_TITLES[kind])
         self.cog = cog
         self.request_id = request_id
         self.kind = kind
         self.previous = previous
-        self.note.label = NOTE_LABELS[kind]
-        self.note.max_length = NOTE_LIMITS[kind]
-
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        await self.cog.note_submit(
-            interaction, self.request_id, self.kind, str(self.note), self.previous
+        super().__init__(
+            title=NOTE_TITLES[kind],
+            label=NOTE_LABELS[kind],
+            max_length=NOTE_LIMITS[kind],
+            on_submit=self.note_submit,
         )
+
+    async def note_submit(self, interaction: discord.Interaction, text: str) -> None:
+        await self.cog.note_submit(interaction, self.request_id, self.kind, text, self.previous)
 
 
 class Requests(commands.Cog):
