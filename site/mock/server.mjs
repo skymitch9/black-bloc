@@ -4426,6 +4426,7 @@ const REQUEST_HOLD_NEEDS_A_REASON = 'A request put on hold needs one line the pe
 const REQUEST_REASON_NEEDED = { declined: REQUEST_DECLINE_NEEDS_A_REASON, hold: REQUEST_HOLD_NEEDS_A_REASON };
 const REQUEST_READY_NEEDS_BUILT = 'Marking a request ready to check needs a line saying what was actually built, so nothing was changed. That sentence is what the person who asked reads on the card. `/request ready {id}` opens a box for it — or use the **Ready to check** button on the site.';
 const REQUEST_SENDBACK_NEEDS_A_NOTE = 'Sending a request back needs one line saying what is still to do, so nothing was changed. The staffer who marked it ready is sent exactly what you type — say what is missing and send it again.';
+const REQUEST_DONE_NEEDS_A_CHECK = 'Request **#{id}** is **{status}**, and a request only finishes once somebody has checked it, so nothing was changed. `/request ready {id}` marks it ready to check — what was built, and how to try it — and `/request accept {id}` finishes it after that. On the site it is the **Ready to check** button on the card.';
 const REQUEST_NOT_READY = 'Request **#{id}** is **{status}**, not ready to check, so there was nothing to send back. `/request ready {id}` is what puts one there.';
 const REQUEST_REVIEW_BY_OTHER = 'You are the one who marked request **#{id}** ready to check, and this server asks somebody else on staff to check it, so nothing was changed. Ask another staffer to press Accept, or a Lead can turn `request_review_by_other` off if one pair of eyes is enough.';
 const REQUEST_COMMENT_NEEDS_TEXT = 'There is nothing to add, so no comment was left. Type what you want on the request and send it again.';
@@ -4539,6 +4540,11 @@ function askDecide(row, status, reason, extra = {}) {
     throw new Refused(409, 'not_decided', `Request **#${row.id}** is already **${REQUEST_STATUS_WORDS[where] || where}**, so nothing was changed.`);
   }
   if (!(REQUEST_TRANSITIONS[where] || []).includes(status)) {
+    // `done` is reachable only from `review`, so the refusal names the ready step rather
+    // than reciting the table — the same words black_bloc/requests.py:checked_move gives.
+    if (status === 'done' && REQUEST_OPEN_STATUSES.includes(where)) {
+      throw new Refused(409, 'not_decided', REQUEST_DONE_NEEDS_A_CHECK.split('{id}').join(row.id).split('{status}').join(REQUEST_STATUS_WORDS[where] || where));
+    }
     throw new Refused(409, 'not_decided', `Request **#${row.id}** is **${REQUEST_STATUS_WORDS[where] || where}**, and staff cannot move it to **${status}** from there, so nothing was changed. ${askMovesSentence(where)}`);
   }
   if (REQUEST_NEEDS_A_REASON.includes(status) && !reason) {
