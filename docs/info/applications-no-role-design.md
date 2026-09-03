@@ -1,8 +1,13 @@
 # Applications without a role — "let's have the bot store the info!"
 
-**Audience:** the Opus build agent, then the reviewer. **Status:** TRACKED · BUILDABLE.
-**Last verified:** 2026-09-03 against `46e3ba4` (v60 live) — every `path:line` below was read
-in that tree. NOT verified: nothing has been built; no Discord or site surface was exercised.
+**Audience:** the Opus build agent, then the reviewer. **Status:** TRACKED · **BUILT** on
+`feat/applications-no-role` (2026-09-03) — not merged, not deployed.
+**Last verified:** 2026-09-03 — built to this spec; 3414 tests pass, ruff clean, `check.mjs`
+reports 17 pages / 141 routes. Five deviations at the foot. NOT verified: no Discord surface
+and no deployed site surface was exercised — `docs/access/sweeps.md` rows **69–72** are the
+owner's by-eye checks. The `path:line` numbers in §A and §C are as they were in `46e3ba4` and
+have NOT been re-keyed since the build moved them; `code-notes.md`'s
+`# Applications, no-role pass` section carries the current ones.
 
 Ask (Discord, 2026-09-03): a member asked whether the Twitch-team application could be done
 *without a role*, or else a "stream team" role added as a reference point for who applied and
@@ -194,4 +199,38 @@ path (C3) and a dashboard editor (C5).
 
 ## Deviations
 
-_(the build appends here; empty means none)_
+Five, all from the build on `feat/applications-no-role` (2026-09-03, commits `02cd2bf`,
+`2d684be`, `df99135`, and this doc pass). Every one is also in `code-notes.md`'s
+`# Applications, no-role pass` section.
+
+1. **The role select's blank option was relabelled, not added** (§C5, `formEditor`). `ui.js`
+   `roleSelect` already prepends a blank `not set` option for a single select, so
+   `allowNone: true` was unnecessary; the option's text is set to **"No role — keep a list"**
+   in place. Reason: adding a second blank option would have produced two of them.
+2. **A second settings key, `applications_panel_minutes`** (§C4 asked for one). The
+   `/applications show` panel is a `Panel`, and `Panel` takes a timeout in minutes; a
+   hard-coded 10 would be a decided default the owner cannot reach, which checklist 33
+   forbids. It matches `request_panel_minutes` in shape, default and help text.
+3. **Two refusal sentences the design did not name.** `REMOVE_NOT_APPROVED`
+   ("That application is **{status}**, not approved…") — reusing `ALREADY_DECIDED` would have
+   told somebody their pending application was "already **pending**". And `ROLE_OR_NO_ROLE`,
+   for `/applications edit role: no_role:true` given together (§C3 required the refusal but
+   left it unnamed).
+4. **`check.mjs` walks the ROUTES, not the DOM** (§C5's last row). `site/mock/check.mjs` is a
+   route-contract runner with no DOM and no browser; the new `checkRoster()` performs the same
+   walk over HTTP — roster lists 3 with a Twitch login and a left-the-server flag, one removal
+   with a reason, a blank reason refused as 400, roster then 2, and the removed row under
+   `?status=removed`. Route count 139 → 141 as specified.
+5. **`last_decision` now counts a `removed` row** (§C2 did not list it). §B3 says `retry_days`
+   applies after a removal "as it does after a denial"; without this the cooling-off period
+   never starts and somebody taken off the list could re-apply the same minute.
+
+Two things worth recording that are NOT deviations:
+
+- **`SCHEMA_VERSION` is 28**, as §B5 directed; 27 is left for `feat/requests-check`. Whichever
+  merges second re-keys.
+- ⚠️ **The rebuild needed a `commit()` before `PRAGMA foreign_keys=ON` could take.** SQLite
+  ignores that pragma inside a transaction and does not raise, so the first version of §C1's
+  step left foreign keys OFF for the life of the process. Caught by the test's
+  `PRAGMA foreign_keys == 1` assertion, not by reading the code — which is why that assertion
+  is in §C1's test list and must stay.

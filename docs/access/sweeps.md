@@ -1,14 +1,17 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-03** — row **62** now says the done card does NOT post (owner: "suppress the
+> **2026-09-03** — rows **69–72** added by the applications no-role build (a form may keep a
+> LIST instead of handing a role over); they are BUILT on `feat/applications-no-role`, not
+> merged and not deployed, and were not run against Discord. Rows 66–68 belong to the
+> sibling requests-check build. Same day, row **62** now says the done card does NOT post (owner: "suppress the
 > request.done box in discord" — `request_channel_moves` default drops `done`). Same
 > morning, row **65** added, and rows **14–15** corrected again, by the owner's
 > "make the view request thing staff only" (viewing requests on the panel): a member no
 > longer sees their own list unless `request_panel_own_list` is on. Before that, the same
 > day — rows **58–64** added by the requests fourth pass (`/request` becomes one
-> panel; rows 14–15 rewritten in place for the same build — the file now holds **65**
-> un-exercised rows). ⚠️ Rows 14–15 and 58–65 are **BUILT, not yet live** — merge and deploy
+> panel; rows 14–15 rewritten in place for the same build — the file now holds **69**
+> un-exercised rows, numbered to 72). ⚠️ Rows 14–15 and 58–65 are **BUILT, not yet live** — merge and deploy
 > land them; not run against Discord (this build cannot reach it). Before that, **2026-09-02**
 > — rows **53–57** added by the Phase 19 (applications) build and rows
 > **48–52** by the Phase 18 (F19, raid trains) build, both built in parallel. ✅ Rows 43–57 are LIVE: 43–47 shipped with Phase 16
@@ -178,6 +181,15 @@ form for a full pass.
 | 63 | Requests — panel move, Send back | on a review card, press **Send back**, fill "What's left?" | the card re-renders **being worked on**; whoever marked it ready is DMed the note |
 | 64 | Requests — panel move, Resume | on a held card, press **Resume** | the card re-renders back where it was held from — usually being worked on, sometimes ready to check |
 | 65 | Requests — giving members their list back | `/settings set-value key:request_panel_own_list value:true`, then `/request` as a non-staff member who has filed something | the member's own requests are summarised on the panel again (and "You have not asked for anything yet" when they have none) — exactly row 15's old behaviour. Set it back to `false` and the lines go away again; the Settings page has the same switch |
+
+### Applications, no-role pass — a form that keeps a LIST. ⚠️ On the branch `feat/applications-no-role`; not merged, not deployed.
+
+| # | What | Do this | Expect |
+|---|---|---|---|
+| 69 | A form with no role at all | on **https://blackbloc.heygabi.ai/rolemenus.html#applications** press **New form**, fill Name + Heading, leave **Role it hands over** on **No role — keep a list**, save. (`/applications create name:stream-team title:Stream Team` with no `role:` does the same thing) | the form saves; the **Role lasts, days** box disappears while the role is blank; the forms table shows a grey **list** badge in the Role column instead of a role chip. An existing form is switched over with `/applications edit form:<name> no_role:true`, or by picking the blank option in the editor |
+| 70 | Applying and being approved with nothing to hand over | put the Apply button up, apply as a member, press **Approve** on the card | the card and the ephemeral reply say "Approved — **<name>** is on the **<heading>** list now." — no role is mentioned and none is given. The DM is the form's approved text with no "the role runs out" line. `/applications logs` shows `application.approved` with `granted: null` and NO `application.granted` line |
+| 71 | The roster, and Copy as text | on the Role menus page open **Approved for <form>** under that form | one row per approved member: their name, **twitch.tv/<login>** as a link (or a quiet "not linked"), how long since staff said yes, and who decided. Somebody who has left the server is still listed with "left the server" beside them — `/settings set-value key:applications_roster_shows_left value:false` hides them instead. **Copy as text** puts one line per member on the clipboard, ready to paste into the official team page |
+| 72 | Taking somebody off the list | on the roster press **Take off the list**, type a reason, confirm. (In Discord: `/applications show <id>` on an approved application — the same **Take off the list** button is on the panel) | they are DMed the reason and when they may apply again; the Decided table shows the row as **removed**; the roster is one shorter; `/applications list form:<name> status:approved` no longer names them. On a form that DOES hand a role over the button is not offered at all, and the route refuses in words pointing at `/role revoke` |
 
 ## The owner's Twitch Team form — the walk-through
 
