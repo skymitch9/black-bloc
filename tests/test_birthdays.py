@@ -7,18 +7,25 @@ from black_bloc.birthdays import (
     DATA_FILE,
     DESCRIPTION_LIMIT,
     FALLBACK_ZONE,
+    PANEL_BUTTONS,
     ImportRow,
     age,
+    card_lines,
     celebrates_today,
+    chunked,
     clamp_month_day,
+    date_modal_title,
     date_problem,
     import_as_of_year,
     load_import_rows,
     local_today,
     member_zone_name,
     month_day_text,
+    month_lines,
     next_occurrence,
     observed,
+    panel_buttons,
+    parse_birthday_input,
     parse_color,
     parse_export,
     render_description,
@@ -26,8 +33,12 @@ from black_bloc.birthdays import (
     score_member,
     score_members,
     stamp,
+    status_lines,
+    stored_prefill,
+    stored_sentence,
     strip_tags,
     upcoming,
+    upcoming_lines,
     year_from_age,
     year_problem,
 )
@@ -310,3 +321,161 @@ async def test_a_database_that_cannot_answer_still_gives_a_zone():
             raise RuntimeError("not connected")
 
     assert await member_zone_name(Broken(), 1) == BIRTHDAY_TZ
+
+
+# --- the panel's pure half (wave 1) ------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("typed", "expected"),
+    [
+        ("09-15", (9, 15, None)),
+        ("09/15", (9, 15, None)),
+        ("09.15", (9, 15, None)),
+        ("09 15", (9, 15, None)),
+        ("  9-5  ", (9, 5, None)),
+        ("09-15-1994", (9, 15, 1994)),
+        ("09/15/1994", (9, 15, 1994)),
+        ("2-30", (2, 30, None)),
+        ("2-29", (2, 29, None)),
+        ("09-15-2200", (9, 15, 2200)),
+    ],
+)
+def test_a_date_is_read_from_both_shapes_and_all_four_separators(typed, expected):
+    assert parse_birthday_input(typed) == expected
+
+
+@pytest.mark.parametrize(
+    "typed",
+    ["", None, "next tuesday", "15", "09-15-1994-3", "sept 15", "09--", "09-1a"],
+)
+def test_anything_that_is_not_two_or_three_numbers_is_unreadable(typed):
+    assert parse_birthday_input(typed) is None
+
+
+def test_the_modal_never_guesses_a_year():
+    assert parse_birthday_input("09-15")[2] is None
+    assert parse_birthday_input("09-15-1994")[2] == 1994
+
+
+@pytest.mark.parametrize(
+    ("has_date", "opted_out", "expected"),
+    [
+        (False, False, ("Set my birthday", "Refresh")),
+        (True, False, ("Change my birthday", "Remove", "Opt out", "Refresh")),
+        (True, True, ("Change my birthday", "Remove", "Opt in", "Refresh")),
+        (False, True, ("Set my birthday", "Refresh")),
+    ],
+)
+def test_the_button_table_is_data_and_the_unreachable_pair_falls_back(
+    has_date, opted_out, expected
+):
+    row = panel_buttons(has_date, opted_out)
+    assert tuple(one.label for one in row) == expected
+    assert all(one.style in ("primary", "secondary", "success", "danger") for one in row)
+
+
+def test_only_the_set_button_opens_a_modal():
+    for key, row in PANEL_BUTTONS.items():
+        assert [one.action for one in row if one.needs_modal] == ["set"], key
+
+
+def test_the_confirmation_sentence_names_the_zone_and_the_next_one():
+    when = datetime(2027, 8, 10, tzinfo=PHOENIX)
+
+    said = stored_sentence("Your", 8, 10, 1987, BIRTHDAY_TZ, when)
+
+    assert said.startswith("Your birthday is **August 10** (1987).")
+    assert f"midnight in **{BIRTHDAY_TZ}**" in said
+    assert stamp(when, "D") in said
+    assert "(1987)" not in stored_sentence("Your", 8, 10, None, BIRTHDAY_TZ, when)
+
+
+def test_a_card_reads_differently_for_you_and_for_somebody_else():
+    when = datetime(2027, 8, 10, tzinfo=PHOENIX)
+
+    mine = card_lines("PT", 8, 10, 1987, BIRTHDAY_TZ, when, 40, False, mine=True)
+    theirs = card_lines("PT", 8, 10, 1987, BIRTHDAY_TZ, when, 40, False, mine=False)
+
+    assert mine[0] == "**PT** — August 10 (1987), turning 40"
+    assert theirs[0] == "**PT** — August 10, turning 40"
+    assert mine[-1].startswith("You are **opted out**")
+    assert theirs[-1].startswith("They are **opted out**")
+    assert len(card_lines("PT", 8, 10, None, BIRTHDAY_TZ, when, None, True)) == 2
+
+
+def test_the_upcoming_lines_name_each_person_and_their_own_date():
+    entries = [
+        {"user_id": 1, "month": 8, "day": 10, "year": None, "tz": BIRTHDAY_TZ},
+        {"user_id": 2, "month": 1, "day": 2, "year": None, "tz": BIRTHDAY_TZ},
+    ]
+
+    lines = upcoming_lines(entries, upcoming(entries, limit=5))
+
+    assert len(lines) == 2
+    assert all(line.startswith("· <@") for line in lines)
+    assert any("August 10" in line for line in lines)
+
+
+def test_the_month_list_groups_by_month_and_marks_the_opted_out():
+    rows = [
+        {"month": 1, "day": 2, "user_id": 5, "source": "import", "opted_in": 1},
+        {"month": 1, "day": 9, "user_id": 6, "source": "self", "opted_in": 0},
+        {"month": 8, "day": 10, "user_id": 7, "source": "self", "opted_in": 1},
+    ]
+
+    lines = month_lines(rows)
+
+    assert lines[0] == "**January**"
+    assert lines[2].endswith("(self · opted out)")
+    assert lines[3] == "**August**"
+    assert month_lines([]) == []
+
+
+def test_the_status_wording_is_health_not_liveness():
+    lines = status_lines(
+        {
+            "mode": "shadow",
+            "channel_id": 111,
+            "template": "Happy Birthday **{name}**!",
+            "color": "#4eefff",
+            "role_id": None,
+            "test_mode": True,
+            "show_age": False,
+            "totals": {"stored": 2, "opted_in": 1, "imported": 1, "self": 1},
+            "staff": "2 role(s)",
+            "last_run_at": None,
+            "last_error": None,
+            "last_import_at": None,
+            "last_import_error": None,
+            "loop_minutes": 5,
+            "import_hours": 24,
+        }
+    )
+
+    text = "\n".join(lines)
+    assert "**mode** — shadow" in text
+    assert "**channel** — <#111>" in text
+    assert "**role** — none (test mode gives no roles)" in text
+    assert "**stored** — 2 (1 opted in · 1 imported · 1 set by the person)" in text
+    assert "**last sweep** — not yet (every 5 minutes)" in text
+    assert "**last import error** — none" in text
+
+
+def test_the_modal_title_never_passes_discords_forty_five_characters():
+    assert date_modal_title(True) == "Your birthday"
+    assert date_modal_title(False, "Nadia") == "Set Nadia's birthday"
+    assert len(date_modal_title(False, "N" * 90)) == 45
+
+
+def test_a_stored_date_is_offered_back_in_the_shape_it_is_typed_in():
+    assert stored_prefill(8, 10, None) == "08-10"
+    assert stored_prefill(8, 10, 1987) == "08-10-1987"
+    assert parse_birthday_input(stored_prefill(8, 10, 1987)) == (8, 10, 1987)
+
+
+def test_long_reports_are_split_into_messages_discord_will_take():
+    pages = chunked([f"line {n} " + "x" * 100 for n in range(60)])
+    assert len(pages) > 1
+    assert all(len(page) <= 1900 for page in pages)
+    assert chunked([]) == []

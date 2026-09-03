@@ -5,11 +5,19 @@ from datetime import UTC, datetime
 import discord
 import pytest
 
-from black_bloc.birthdays import ImportRow, local_today, next_occurrence
+from black_bloc.birthdays import (
+    ImportRow,
+    local_today,
+    next_occurrence,
+    panel_buttons,
+)
 from black_bloc.cogs.community import birthdays as birthdays_cog
 from black_bloc.cogs.community.birthdays import (
     Birthdays,
-    chunked,
+    BirthdayView,
+    DateModal,
+    change_opt,
+    forget_birthday,
     get_birthday,
     report_lines,
     rows_for_guild,
@@ -17,7 +25,7 @@ from black_bloc.cogs.community.birthdays import (
     stored_counts,
 )
 from black_bloc.config import load_settings
-from black_bloc.settings_store import BIRTHDAY_TZ, SettingsStore
+from black_bloc.settings_store import BIRTHDAY_MODES, BIRTHDAY_TZ, SettingsStore
 from black_bloc.storage.db import Database
 
 GUILD = 7
@@ -86,7 +94,14 @@ class FakeMember:
         self.role_calls = []
         self.role_raises = None
         self.global_name = None
+        self.dms = []
+        self.dm_raises = None
         guild.member_cache[user_id] = self
+
+    async def send(self, content=None, **kwargs):
+        if self.dm_raises is not None:
+            raise self.dm_raises
+        self.dms.append({"content": content, **kwargs})
 
     async def add_roles(self, role, reason=None):
         if self.role_raises is not None:
@@ -162,19 +177,50 @@ class FakeBot:
         self.guard = None
         self.guilds = [guild]
         self.guild = guild
+        self._cog = None
 
     def get_channel(self, channel_id):
         return self.guild.get_channel(channel_id)
+
+    def get_cog(self, name):
+        return self._cog
+
+
+class FakeMessage:
+    def __init__(self, message_id, **kwargs):
+        self.id = message_id
+        self.kwargs = kwargs
+        embed = kwargs.get("embed")
+        self.embeds = list(kwargs.get("embeds") or ([embed] if embed is not None else []))
+        self.view = kwargs.get("view")
+
+    async def edit(self, **kwargs):
+        self.kwargs = kwargs
+        if "embeds" in kwargs:
+            self.embeds = list(kwargs["embeds"])
+        if "view" in kwargs:
+            self.view = kwargs["view"]
 
 
 class FakeResponse:
     def __init__(self):
         self.messages = []
+        self.modals = []
+        self.done = False
+
+    def is_done(self):
+        return self.done
 
     async def send_message(self, content=None, ephemeral=False, **kwargs):
+        self.done = True
         self.messages.append({"content": content, "ephemeral": ephemeral, **kwargs})
 
-    async def defer(self, ephemeral=False):
+    async def send_modal(self, modal):
+        self.done = True
+        self.modals.append(modal)
+
+    async def defer(self, ephemeral=False, **kwargs):
+        self.done = True
         self.messages.append({"content": None, "deferred": True, "ephemeral": ephemeral})
 
 
@@ -187,18 +233,34 @@ class FakeFollowup:
 
 
 class FakeInteraction:
-    def __init__(self, bot, user, channel_id=TEST_CHANNEL):
+    def __init__(self, bot, user, channel_id=TEST_CHANNEL, guild=True):
         self.client = bot
         self.user = user
-        self.guild = bot.guild
-        self.guild_id = bot.guild.id
+        self.guild = bot.guild if guild else None
+        self.guild_id = bot.guild.id if guild else None
         self.channel_id = channel_id
         self.response = FakeResponse()
         self.followup = FakeFollowup(self.response)
+        self._message = None
+
+    async def edit_original_response(self, **kwargs):
+        self._message = FakeMessage(9500, **kwargs)
+        return self._message
+
+    async def original_response(self):
+        last = self.response.messages[-1]
+        kept = {k: v for k, v in last.items() if k not in ("ephemeral", "content", "deferred")}
+        self._message = FakeMessage(9500, **kept)
+        return self._message
+
+    @property
+    def message(self):
+        return self._message
 
     @property
     def sent(self):
-        return self.response.messages[-1]["content"] if self.response.messages else None
+        said = [m["content"] for m in self.response.messages if m["content"] is not None]
+        return said[-1] if said else None
 
     @property
     def texts(self):
@@ -243,7 +305,9 @@ async def bot(db, monkeypatch):
 
 @pytest.fixture
 def cog(bot):
-    return Birthdays(bot)
+    found = Birthdays(bot)
+    bot._cog = found
+    return found
 
 
 @pytest.fixture
@@ -257,6 +321,60 @@ def give_staff(bot, member, role_id=STAFF_ROLE):
     bot.guild.get_channel(TEST_CHANNEL).visible_to.add(role_id)
     member.roles.append(role)
     return role
+
+
+async def open_panel(cog, bot, who):
+    interaction = FakeInteraction(bot, who)
+    await cog.birthday.callback(cog, interaction)
+    return interaction
+
+
+def panel_view(interaction):
+    return interaction.response.messages[-1]["view"]
+
+
+def panel_embed(interaction):
+    return interaction.response.messages[-1]["embed"]
+
+
+def labels(view):
+    return [item.label for item in view.children if getattr(item, "label", None)]
+
+
+def placeholders(view):
+    return [
+        item.placeholder for item in view.children if getattr(item, "placeholder", None)
+    ]
+
+
+def find_item(view, label):
+    return next(item for item in view.children if getattr(item, "label", None) == label)
+
+
+def find_select(view, placeholder):
+    return next(
+        item for item in view.children if getattr(item, "placeholder", None) == placeholder
+    )
+
+
+async def click(bot, who, item):
+    interaction = FakeInteraction(bot, who)
+    await item.callback(interaction)
+    return interaction
+
+
+def card_embed(interaction):
+    return interaction.message.kwargs.get("embed")
+
+
+def card_view(interaction):
+    return interaction.message.kwargs.get("view")
+
+
+async def set_through_the_modal(cog, bot, who, typed, *, member=None, mine=True):
+    interaction = FakeInteraction(bot, who)
+    await cog.date_submit(interaction, member or who, typed, mine=mine)
+    return interaction
 
 
 def party_posts(bot, channel_id=TEST_CHANNEL):
@@ -472,13 +590,12 @@ async def test_removing_your_birthday_hands_the_role_back_first(bot, cog, birthd
     await bot.store.set(GUILD, "birthday_role_id", CAKE_ROLE)
     await stored(bot)
     await cog.run_once(MORNING)
-    interaction = FakeInteraction(bot, birthday_person)
 
-    await cog.remove.callback(cog, interaction)
+    said = await forget_birthday(cog, bot.guild, birthday_person)
 
     assert birthday_person.role_calls[-1] == ("remove", CAKE_ROLE, "Black Bloc birthday")
     assert await get_birthday(bot.db, USER) is None
-    assert "forgotten" in interaction.sent
+    assert "forgotten" in said
 
 
 async def test_opting_out_on_your_birthday_hands_the_role_back(bot, cog, birthday_person):
@@ -487,9 +604,8 @@ async def test_opting_out_on_your_birthday_hands_the_role_back(bot, cog, birthda
     await bot.store.set(GUILD, "birthday_role_id", CAKE_ROLE)
     await stored(bot)
     await cog.run_once(MORNING)
-    interaction = FakeInteraction(bot, birthday_person)
 
-    await cog.optout.callback(cog, interaction)
+    await change_opt(cog, bot.guild, birthday_person, opted_in=False)
 
     assert birthday_person.role_calls[-1] == ("remove", CAKE_ROLE, "Black Bloc birthday")
     row = await get_birthday(bot.db, USER)
@@ -591,36 +707,285 @@ async def test_the_age_is_only_shown_when_the_setting_says_so(bot, cog, birthday
     assert party_posts(bot)[1]["embed"].description == "PT turns 39 today!"
 
 
-async def test_setting_a_birthday_stores_it_and_answers_with_the_next_one(
-    bot, cog, birthday_person
-):
+# --- the one command and its two panels -------------------------------------------------
+
+
+async def test_the_command_answers_ephemerally_with_a_panel(cog, bot, birthday_person):
+    interaction = await open_panel(cog, bot, birthday_person)
+
+    assert interaction.response.messages[0]["ephemeral"] is True
+    assert isinstance(panel_view(interaction), BirthdayView)
+    assert panel_embed(interaction).title == "Birthdays"
+    assert panel_embed(interaction).colour.value == 0x4EEFFF
+
+
+async def test_the_command_run_in_a_dm_says_it_belongs_in_the_server(cog, bot, birthday_person):
+    interaction = FakeInteraction(bot, birthday_person, guild=False)
+
+    await cog.birthday.callback(cog, interaction)
+
+    assert "in the server itself" in interaction.sent
+
+
+async def test_the_command_refuses_in_words_when_the_database_is_down(cog, bot, birthday_person):
+    class Closed:
+        is_connected = False
+
+    bot.db = Closed()
     interaction = FakeInteraction(bot, birthday_person)
 
-    await cog.set_mine.callback(cog, interaction, 8, 10, None)
+    await cog.birthday.callback(cog, interaction)
+
+    assert "database" in interaction.sent
+
+
+def test_the_group_and_its_twelve_subcommands_are_gone():
+    assert isinstance(Birthdays.birthday, discord.app_commands.Command)
+    for gone in (
+        "birthday_role",
+        "birthday_logs",
+        "set_mine",
+        "set_for",
+        "remove",
+        "optout",
+        "optin",
+        "show",
+        "next_up",
+        "list_all",
+        "mode",
+        "role_clear",
+        "status",
+    ):
+        assert not hasattr(Birthdays, gone), gone
+
+
+@pytest.mark.parametrize(
+    ("has_date", "opted_out", "expected"),
+    [
+        (False, False, ["Set my birthday", "Refresh"]),
+        (True, False, ["Change my birthday", "Remove", "Opt out", "Refresh"]),
+        (True, True, ["Change my birthday", "Remove", "Opt in", "Refresh"]),
+    ],
+)
+async def test_every_state_renders_exactly_its_row_and_nothing_else(
+    cog, bot, birthday_person, has_date, opted_out, expected
+):
+    if has_date:
+        await stored(bot)
+    if opted_out:
+        await set_opted_out(bot.db, USER)
+
+    view = panel_view(await open_panel(cog, bot, birthday_person))
+
+    assert labels(view) == expected
+    assert placeholders(view) == ["Look someone up…"]
+    assert panel_buttons(has_date, opted_out) == birthdays_cog.panel_buttons(
+        has_date, opted_out
+    )
+
+
+async def test_a_staff_panel_fills_all_five_of_discords_rows(cog, bot, birthday_person):
+    give_staff(bot, birthday_person)
+    await stored(bot)
+
+    view = panel_view(await open_panel(cog, bot, birthday_person))
+
+    assert labels(view) == [
+        "Change my birthday",
+        "Remove",
+        "Opt out",
+        "Refresh",
+        "Status",
+        "Clear the birthday role",
+        "Logs",
+    ]
+    assert placeholders(view) == ["Look someone up…", "List a month…", "Wishes are…"]
+    assert sorted({item.row for item in view.children}) == [0, 1, 2, 3, 4]
+
+
+async def test_a_member_is_offered_no_staff_control_at_all(cog, bot, birthday_person):
+    view = panel_view(await open_panel(cog, bot, birthday_person))
+
+    assert "Logs" not in labels(view)
+    assert "Status" not in labels(view)
+    assert "List a month…" not in placeholders(view)
+    assert "Wishes are…" not in placeholders(view)
+
+
+async def test_the_panel_says_in_words_that_nothing_is_posted_yet(cog, bot, birthday_person):
+    shadow = panel_embed(await open_panel(cog, bot, birthday_person)).description
+    assert "**shadow**" in shadow and "nothing is posted" in shadow
+
+    await bot.store.set(GUILD, "birthday_mode", "off")
+    off = panel_embed(await open_panel(cog, bot, birthday_person)).description
+    assert "**off**" in off and "nothing is posted" in off
+
+    await bot.store.set(GUILD, "birthday_mode", "on")
+    on = panel_embed(await open_panel(cog, bot, birthday_person)).description
+    assert "nothing is posted" not in on
+
+
+async def test_a_member_with_nothing_stored_is_pointed_at_the_button_not_a_command(
+    cog, bot, birthday_person
+):
+    description = panel_embed(await open_panel(cog, bot, birthday_person)).description
+
+    assert "**Set my birthday** button" in description
+    assert "/birthday set" not in description
+
+
+async def test_your_own_block_carries_the_date_the_year_and_the_next_one(
+    cog, bot, birthday_person
+):
+    await stored(bot, year=1987)
+
+    interaction = await open_panel(cog, bot, birthday_person)
+
+    description = panel_embed(interaction).description
+    assert "August 10" in description and "(1987)" in description
+    assert "<t:" in description and BIRTHDAY_TZ in description
+    assert interaction.response.messages[-1]["allowed_mentions"].everyone is False
+
+
+async def test_the_age_is_worked_out_at_the_next_birthday_not_this_year(
+    cog, bot, birthday_person
+):
+    await bot.store.set(GUILD, "birthday_show_age", True)
+    await stored(bot, month=1, day=2, year=1990)
+
+    description = panel_embed(await open_panel(cog, bot, birthday_person)).description
+
+    when = next_occurrence(1, 2, BIRTHDAY_TZ)
+    assert when.date() >= local_today(BIRTHDAY_TZ)
+    assert f"turning {when.year - 1990}" in description
+
+
+async def test_the_panel_says_when_you_are_opted_out(cog, bot, birthday_person):
+    await stored(bot)
+    await set_opted_out(bot.db, USER)
+
+    description = panel_embed(await open_panel(cog, bot, birthday_person)).description
+
+    assert "You are **opted out**" in description
+
+
+async def test_coming_up_is_a_key_and_staff_see_it_either_way(cog, bot, birthday_person):
+    await stored(bot)
+
+    with_it = panel_embed(await open_panel(cog, bot, birthday_person)).description
+    assert "Next birthdays" in with_it and f"<@{USER}>" in with_it
+
+    await bot.store.set(GUILD, "birthday_panel_next_for_members", False)
+    without = panel_embed(await open_panel(cog, bot, birthday_person)).description
+    assert "Next birthdays" not in without
+    assert "for staff" in without
+
+    give_staff(bot, birthday_person)
+    staff = panel_embed(await open_panel(cog, bot, birthday_person)).description
+    assert "Next birthdays" in staff
+
+
+async def test_coming_up_shows_at_most_five_soonest_first(cog, bot):
+    for index, (month, day) in enumerate([(12, 24), (9, 3), (1, 2), (8, 26), (6, 17), (7, 2)]):
+        member = FakeMember(bot.guild, user_id=1000 + index, display_name=f"m{index}")
+        await stored(bot, month=month, day=day, user_id=member.id)
+    cog = Birthdays(bot)
+    bot._cog = cog
+
+    description = panel_embed(
+        await open_panel(cog, bot, bot.guild.get_member(1000))
+    ).description
+
+    assert description.count("· <@") == 5
+
+
+async def test_coming_up_says_so_when_there_is_nothing(cog, bot, birthday_person):
+    description = panel_embed(await open_panel(cog, bot, birthday_person)).description
+
+    assert "no birthdays to show" in description
+
+
+async def test_staff_see_the_counts_a_member_never_does(cog, bot, birthday_person):
+    await stored(bot)
+    plain = panel_embed(await open_panel(cog, bot, birthday_person)).description
+    assert "**stored**" not in plain
+
+    give_staff(bot, birthday_person)
+    staff = panel_embed(await open_panel(cog, bot, birthday_person)).description
+    assert "**stored** — 1 (1 opted in · 0 imported · 1 set by the person)" in staff
+
+
+async def test_the_lookup_select_is_a_key_and_staff_keep_it(cog, bot, birthday_person):
+    assert "Look someone up…" in placeholders(
+        panel_view(await open_panel(cog, bot, birthday_person))
+    )
+
+    await bot.store.set(GUILD, "birthday_panel_lookup", False)
+    assert "Look someone up…" not in placeholders(
+        panel_view(await open_panel(cog, bot, birthday_person))
+    )
+
+    give_staff(bot, birthday_person)
+    assert "Look someone up…" in placeholders(
+        panel_view(await open_panel(cog, bot, birthday_person))
+    )
+
+
+# --- the date modal ---------------------------------------------------------------------
+
+
+async def test_change_my_birthday_opens_a_modal_prefilled_with_what_is_stored(
+    cog, bot, birthday_person
+):
+    await stored(bot, year=1987)
+    view = panel_view(await open_panel(cog, bot, birthday_person))
+
+    interaction = await click(bot, birthday_person, find_item(view, "Change my birthday"))
+
+    modal = interaction.response.modals[0]
+    assert isinstance(modal, DateModal)
+    assert modal.title == "Your birthday"
+    assert modal.typed.default == "08-10-1987"
+    assert modal.typed.max_length == 10
+
+
+async def test_setting_a_birthday_stores_it_and_answers_with_the_next_one(
+    cog, bot, birthday_person
+):
+    interaction = await set_through_the_modal(cog, bot, birthday_person, "08-10")
 
     row = await get_birthday(bot.db, USER)
     assert (row["month"], row["day"], row["source"]) == (8, 10, "self")
     assert "August 10" in interaction.sent and "<t:" in interaction.sent
     assert interaction.response.messages[-1]["ephemeral"] is True
     assert await action_kinds(bot.db) == ["birthday.set"]
+    assert "August 10" in card_embed(interaction).description
 
 
-async def test_an_impossible_date_is_refused_with_a_sentence(bot, cog, birthday_person):
-    interaction = FakeInteraction(bot, birthday_person)
+async def test_the_modal_takes_every_separator_and_both_shapes(cog, bot, birthday_person):
+    for typed, expected in (("09/15", (9, 15)), ("09.15", (9, 15)), ("09 15", (9, 15))):
+        await set_through_the_modal(cog, bot, birthday_person, typed)
+        row = await get_birthday(bot.db, USER)
+        assert (row["month"], row["day"]) == expected
 
-    await cog.set_mine.callback(cog, interaction, 2, 30, None)
+    await set_through_the_modal(cog, bot, birthday_person, "09-15-1994")
+    assert (await get_birthday(bot.db, USER))["year"] == 1994
 
-    assert "no day" in interaction.sent
+
+async def test_the_date_modal_answers_each_refusal_with_todays_exact_sentence(
+    cog, bot, birthday_person
+):
+    unreadable = await set_through_the_modal(cog, bot, birthday_person, "next tuesday")
+    assert "could not read that as a date" in unreadable.sent
     assert await get_birthday(bot.db, USER) is None
 
+    impossible = await set_through_the_modal(cog, bot, birthday_person, "2-30")
+    assert "no day" in impossible.sent
 
-async def test_a_birth_year_in_the_future_is_refused(bot, cog, birthday_person):
-    interaction = FakeInteraction(bot, birthday_person)
-
-    await cog.set_mine.callback(cog, interaction, 2, 10, 2199)
-
-    assert "not a birth year" in interaction.sent
+    future = await set_through_the_modal(cog, bot, birthday_person, "02-10-2199")
+    assert "not a birth year" in future.sent
     assert await get_birthday(bot.db, USER) is None
+    assert await action_kinds(bot.db) == []
 
 
 async def test_setting_a_birthday_again_lets_todays_wish_still_land(bot, cog, birthday_person):
@@ -629,143 +994,248 @@ async def test_setting_a_birthday_again_lets_todays_wish_still_land(bot, cog, bi
     await cog.run_once(MORNING)
     assert len(party_posts(bot)) == 1
 
-    interaction = FakeInteraction(bot, birthday_person)
-    await cog.set_mine.callback(cog, interaction, 8, 10, None)
+    await set_through_the_modal(cog, bot, birthday_person, "08-10")
     await cog.run_once(MORNING)
 
     assert len(party_posts(bot)) == 2
 
 
-async def test_set_for_is_staff_only(bot, cog, birthday_person):
-    plain = FakeMember(bot.guild, user_id=1, display_name="Plain")
-    interaction = FakeInteraction(bot, plain)
-
-    await cog.set_for.callback(cog, interaction, birthday_person, 8, 10, None)
-    assert "staff only" in interaction.sent
-    assert await get_birthday(bot.db, USER) is None
-
-    lead = FakeMember(bot.guild, user_id=2, display_name="Lead")
-    give_staff(bot, lead)
-    staff_interaction = FakeInteraction(bot, lead)
-    await cog.set_for.callback(cog, staff_interaction, birthday_person, 8, 10, None)
-
-    assert (await get_birthday(bot.db, USER))["source"] == "staff"
-    assert "PT" in staff_interaction.sent
+# --- the member's own moves -------------------------------------------------------------
 
 
-async def test_remove_optout_and_optin(bot, cog, birthday_person):
-    interaction = FakeInteraction(bot, birthday_person)
-    await cog.remove.callback(cog, interaction)
-    assert "no birthday for you" in interaction.sent
-
+async def test_opt_out_and_opt_in_swap_the_button_and_move_the_row(cog, bot, birthday_person):
     await stored(bot)
-    await cog.optout.callback(cog, interaction)
-    assert (await get_birthday(bot.db, USER))["opted_in"] == 0
-    await cog.optout.callback(cog, interaction)
-    assert "already opted out" in interaction.sent
-    await cog.optin.callback(cog, interaction)
-    assert (await get_birthday(bot.db, USER))["opted_in"] == 1
+    view = panel_view(await open_panel(cog, bot, birthday_person))
 
-    await cog.remove.callback(cog, interaction)
+    out = await click(bot, birthday_person, find_item(view, "Opt out"))
+    assert (await get_birthday(bot.db, USER))["opted_in"] == 0
+    assert labels(card_view(out)) == ["Change my birthday", "Remove", "Opt in", "Refresh"]
+    assert "opted out" in out.sent
+
+    await click(bot, birthday_person, find_item(card_view(out), "Opt in"))
+
+    assert (await get_birthday(bot.db, USER))["opted_in"] == 1
+    assert await action_kinds(bot.db) == ["birthday.optout", "birthday.optin"]
+
+
+async def test_remove_asks_first_and_keep_it_changes_nothing(cog, bot, birthday_person):
+    await stored(bot)
+    view = panel_view(await open_panel(cog, bot, birthday_person))
+
+    confirm = await click(bot, birthday_person, find_item(view, "Remove"))
+    assert labels(card_view(confirm)) == ["Yes, forget it", "Keep it"]
+
+    kept = await click(bot, birthday_person, find_item(card_view(confirm), "Keep it"))
+    assert await get_birthday(bot.db, USER) is not None
+    assert "Change my birthday" in labels(card_view(kept))
+
+    again = await click(bot, birthday_person, find_item(card_view(kept), "Remove"))
+    gone = await click(bot, birthday_person, find_item(card_view(again), "Yes, forget it"))
+
     assert await get_birthday(bot.db, USER) is None
-    assert await action_kinds(bot.db) == [
-        "birthday.optout",
-        "birthday.optin",
-        "birthday.remove",
+    assert "forgotten" in gone.sent
+    assert await action_kinds(bot.db) == ["birthday.remove"]
+
+
+async def test_no_render_of_the_panel_can_ping_anybody(cog, bot, birthday_person):
+    """Checklist 11 — the coming-up list interpolates `<@id>` and display names."""
+    await stored(bot)
+    interaction = await open_panel(cog, bot, birthday_person)
+    assert interaction.response.messages[-1]["allowed_mentions"].users is False
+
+    refreshed = await click(
+        bot, birthday_person, find_item(panel_view(interaction), "Refresh")
+    )
+
+    assert refreshed.message.kwargs["allowed_mentions"].users is False
+    assert refreshed.message.kwargs["allowed_mentions"].everyone is False
+
+
+async def test_a_re_render_retires_the_view_it_replaced(cog, bot, birthday_person):
+    view = panel_view(await open_panel(cog, bot, birthday_person))
+
+    refreshed = await click(bot, birthday_person, find_item(view, "Refresh"))
+
+    assert view.replaced is True
+    assert card_view(refreshed) is not view
+
+
+async def test_the_view_disables_every_item_and_says_so_on_timeout(cog, bot, birthday_person):
+    interaction = await open_panel(cog, bot, birthday_person)
+    view = panel_view(interaction)
+    view.message = await interaction.original_response()
+
+    await view.on_timeout()
+
+    assert all(item.disabled for item in view.children)
+    assert view.message.embeds[0].footer.text == (
+        "This panel has gone quiet — run /birthday again"
+    )
+
+
+async def test_a_click_after_the_database_goes_away_answers_in_words(
+    cog, bot, birthday_person
+):
+    view = panel_view(await open_panel(cog, bot, birthday_person))
+    refresh = find_item(view, "Refresh")
+    set_mine = find_item(view, "Set my birthday")
+
+    class Closed:
+        is_connected = False
+
+    bot.db = Closed()
+
+    assert "database" in (await click(bot, birthday_person, refresh)).sent
+    assert "database" in (await click(bot, birthday_person, set_mine)).sent
+
+
+# --- looking somebody up ----------------------------------------------------------------
+
+
+async def test_looking_somebody_up_opens_their_card(cog, bot, birthday_person):
+    other = FakeMember(bot.guild, user_id=1001, display_name="Nadia")
+    await stored(bot, user_id=other.id, month=1, day=2)
+    view = panel_view(await open_panel(cog, bot, birthday_person))
+    select = find_select(view, "Look someone up…")
+    select._values = [other]
+
+    interaction = await click(bot, birthday_person, select)
+
+    assert "Nadia" in card_embed(interaction).title
+    assert "January 2" in card_embed(interaction).description
+    assert labels(card_view(interaction)) == ["Back"]
+
+    back = await click(bot, birthday_person, find_item(card_view(interaction), "Back"))
+    assert card_embed(back).title == "Birthdays"
+
+
+async def test_a_card_gives_staff_the_two_moves_a_member_never_sees(
+    cog, bot, birthday_person
+):
+    give_staff(bot, birthday_person)
+    other = FakeMember(bot.guild, user_id=1001, display_name="Nadia")
+    view = panel_view(await open_panel(cog, bot, birthday_person))
+    select = find_select(view, "Look someone up…")
+    select._values = [other]
+
+    empty = await click(bot, birthday_person, select)
+    assert labels(card_view(empty)) == ["Set their birthday", "Back"]
+    assert "no birthday for **Nadia**" in card_embed(empty).description
+
+    opened = await click(
+        bot, birthday_person, find_item(card_view(empty), "Set their birthday")
+    )
+    assert opened.response.modals[0].title == "Set Nadia's birthday"
+
+    filled = FakeInteraction(bot, birthday_person)
+    await cog.date_submit(filled, other, "01-02", mine=False)
+
+    row = await get_birthday(bot.db, other.id)
+    assert (row["month"], row["day"], row["source"]) == (1, 2, "staff")
+    assert "Nadia" in filled.sent
+    assert labels(card_view(filled)) == [
+        "Set their birthday",
+        "Forget their birthday",
+        "Back",
     ]
 
 
-async def test_show_and_next_render_hammertime_and_never_ping(bot, cog, birthday_person):
-    await stored(bot, year=1987)
-    interaction = FakeInteraction(bot, birthday_person)
+async def test_staff_can_forget_somebody_elses_birthday_and_that_person_is_told(
+    cog, bot, birthday_person
+):
+    give_staff(bot, birthday_person)
+    other = FakeMember(bot.guild, user_id=1001, display_name="Nadia")
+    await stored(bot, user_id=other.id)
+    _, card = await birthdays_cog.build_card(bot, bot.guild, birthday_person, other)
 
-    await cog.show.callback(cog, interaction, None)
-    assert "August 10" in interaction.sent and "<t:" in interaction.sent
-    assert interaction.response.messages[-1]["allowed_mentions"].everyone is False
+    confirm = await click(bot, birthday_person, find_item(card, "Forget their birthday"))
+    assert labels(card_view(confirm)) == ["Yes, forget it", "Keep it"]
 
-    await cog.next_up.callback(cog, interaction)
-    assert f"<@{USER}>" in interaction.sent
-    assert interaction.response.messages[-1]["allowed_mentions"].users is False
+    gone = await click(bot, birthday_person, find_item(card_view(confirm), "Yes, forget it"))
 
-
-async def test_show_gives_the_age_at_the_next_birthday_not_this_year(bot, cog, birthday_person):
-    await bot.store.set(GUILD, "birthday_show_age", True)
-    await stored(bot, month=1, day=2, year=1990)
-    interaction = FakeInteraction(bot, birthday_person)
-
-    await cog.show.callback(cog, interaction, None)
-
-    when = next_occurrence(1, 2, BIRTHDAY_TZ)
-    assert when.date() >= local_today(BIRTHDAY_TZ)
-    assert f"turning {when.year - 1990}" in interaction.sent
+    assert await get_birthday(bot.db, other.id) is None
+    assert "Nadia" in gone.sent
+    assert other.dms and "staff have removed" in other.dms[0]["content"].lower()
+    assert await action_kinds(bot.db) == ["birthday.remove"]
 
 
-async def test_show_says_when_someone_is_opted_out(bot, cog, birthday_person):
-    await stored(bot)
-    await bot.db.conn.execute("UPDATE birthdays SET opted_in = 0")
-    await bot.db.conn.commit()
-    interaction = FakeInteraction(bot, birthday_person)
+async def test_a_member_can_never_forget_or_set_somebody_elses_birthday(
+    cog, bot, birthday_person
+):
+    other = FakeMember(bot.guild, user_id=1001, display_name="Nadia")
+    await stored(bot, user_id=other.id)
 
-    await cog.show.callback(cog, interaction, None)
+    _, card = await birthdays_cog.build_card(bot, bot.guild, birthday_person, other)
 
-    assert "opted out" in interaction.sent
-
-
-async def test_next_shows_at_most_five_soonest_first(bot, cog):
-    for index, (month, day) in enumerate([(12, 24), (9, 3), (1, 2), (8, 26), (6, 17), (7, 2)]):
-        member = FakeMember(bot.guild, user_id=1000 + index, display_name=f"m{index}")
-        await stored(bot, month=month, day=day, user_id=member.id)
-    interaction = FakeInteraction(bot, bot.guild.get_member(1000))
-
-    await cog.next_up.callback(cog, interaction)
-
-    assert interaction.sent.count("·") == 5
+    assert labels(card) == ["Back"]
 
 
-async def test_next_says_so_when_there_is_nothing(bot, cog, birthday_person):
-    interaction = FakeInteraction(bot, birthday_person)
-    await cog.next_up.callback(cog, interaction)
-    assert "no birthdays to show" in interaction.sent
+# --- the staff controls -----------------------------------------------------------------
 
 
-async def test_list_is_staff_only_and_groups_by_month(bot, cog, birthday_person):
-    interaction = FakeInteraction(bot, birthday_person)
-    await cog.list_all.callback(cog, interaction, None)
-    assert "staff only" in interaction.sent
-
+async def test_listing_a_month_answers_as_followups_and_leaves_the_panel(
+    cog, bot, birthday_person
+):
     give_staff(bot, birthday_person)
     await stored(bot)
     await stored(bot, month=1, day=2, user_id=1001, source="import")
-    staff_interaction = FakeInteraction(bot, birthday_person)
+    view = panel_view(await open_panel(cog, bot, birthday_person))
+    select = find_select(view, "List a month…")
+    assert len(select.options) == 13
 
-    await cog.list_all.callback(cog, staff_interaction, None)
+    select._values = ["0"]
+    everything = await click(bot, birthday_person, select)
+    assert "**January**" in everything.sent and "**August**" in everything.sent
+    assert "import" in everything.sent
+    assert everything.message is None
 
-    assert "**January**" in staff_interaction.sent and "**August**" in staff_interaction.sent
-    assert "import" in staff_interaction.sent
+    select._values = ["8"]
+    august = await click(bot, birthday_person, select)
+    assert "**August**" in august.sent and "**January**" not in august.sent
+
+    select._values = ["3"]
+    empty = await click(bot, birthday_person, select)
+    assert "stored in **March**" in empty.sent
 
 
-async def test_mode_is_staff_only_and_records_the_change(bot, cog, birthday_person):
-    interaction = FakeInteraction(bot, birthday_person)
-    choice = discord.app_commands.Choice(name="on", value="on")
-
-    await cog.mode.callback(cog, interaction, choice)
-    assert "staff only" in interaction.sent
-    assert bot.store.get(GUILD, "birthday_mode") == "shadow"
-
+async def test_a_long_month_arrives_as_more_than_one_message(cog, bot, birthday_person):
     give_staff(bot, birthday_person)
-    staff_interaction = FakeInteraction(bot, birthday_person)
-    await cog.mode.callback(cog, staff_interaction, choice)
+    for index in range(120):
+        await stored(bot, month=8, day=1 + index % 28, user_id=3000 + index, source="import")
+    view = panel_view(await open_panel(cog, bot, birthday_person))
+    select = find_select(view, "List a month…")
+    select._values = ["8"]
+
+    interaction = await click(bot, birthday_person, select)
+
+    assert len(interaction.texts) > 1
+    assert all(len(page) <= 1900 for page in interaction.texts)
+
+
+async def test_the_mode_select_writes_the_setting_and_the_warning_changes(
+    cog, bot, birthday_person
+):
+    give_staff(bot, birthday_person)
+    view = panel_view(await open_panel(cog, bot, birthday_person))
+    select = find_select(view, "Wishes are…")
+    assert [option.value for option in select.options] == list(BIRTHDAY_MODES)
+    assert [option.value for option in select.options if option.default] == ["shadow"]
+    select._values = ["on"]
+
+    interaction = await click(bot, birthday_person, select)
 
     assert bot.store.get(GUILD, "birthday_mode") == "on"
     assert await action_kinds(bot.db) == ["birthday.mode"]
+    assert "nothing is posted" not in card_embed(interaction).description
+    assert "now **on**" in interaction.sent
 
 
-async def test_status_shows_health_not_just_liveness(bot, cog, birthday_person):
+async def test_status_shows_health_not_just_liveness(cog, bot, birthday_person):
     give_staff(bot, birthday_person)
     await stored(bot)
-    interaction = FakeInteraction(bot, birthday_person)
+    view = panel_view(await open_panel(cog, bot, birthday_person))
 
-    await cog.status.callback(cog, interaction)
+    interaction = await click(bot, birthday_person, find_item(view, "Status"))
 
     text = interaction.sent
     assert "**mode** — shadow" in text
@@ -773,6 +1243,78 @@ async def test_status_shows_health_not_just_liveness(bot, cog, birthday_person):
     assert "**last error** — none" in text
     assert "1 opted in" in text
     assert "role(s)" in text
+    assert interaction.message is None
+
+
+async def test_clearing_the_birthday_role_asks_first_and_says_when_there_was_none(
+    cog, bot, birthday_person
+):
+    give_staff(bot, birthday_person)
+    view = panel_view(await open_panel(cog, bot, birthday_person))
+
+    confirm = await click(bot, birthday_person, find_item(view, "Clear the birthday role"))
+    assert labels(card_view(confirm)) == ["Yes, clear it", "Cancel"]
+
+    empty = await click(bot, birthday_person, find_item(card_view(confirm), "Yes, clear it"))
+    assert "was no birthday role" in empty.sent
+
+    await bot.store.set(GUILD, "birthday_role_id", CAKE_ROLE)
+    again = await click(
+        bot, birthday_person, find_item(card_view(empty), "Clear the birthday role")
+    )
+    cleared = await click(bot, birthday_person, find_item(card_view(again), "Yes, clear it"))
+
+    assert bot.store.get(GUILD, "birthday_role_id") is None
+    assert "No birthday role" in cleared.sent
+    assert await action_kinds(bot.db) == ["settings.clear"]
+
+
+async def test_the_logs_button_answers_a_new_message_and_refuses_a_stranger(
+    cog, bot, birthday_person
+):
+    give_staff(bot, birthday_person)
+    view = panel_view(await open_panel(cog, bot, birthday_person))
+    logs = find_item(view, "Logs")
+
+    interaction = await click(bot, birthday_person, logs)
+    assert interaction.response.messages[-1].get("embed") is not None
+    assert interaction.message is None
+
+    stranger = FakeMember(bot.guild, user_id=1002, display_name="Plain")
+    refused = FakeInteraction(bot, stranger)
+    await logs.callback(refused)
+    assert "staff only" in refused.sent
+
+
+async def test_a_staffer_demoted_while_the_panel_is_open_moves_nothing(
+    cog, bot, birthday_person
+):
+    role = give_staff(bot, birthday_person)
+    other = FakeMember(bot.guild, user_id=1001, display_name="Nadia")
+    await stored(bot, user_id=other.id)
+    view = panel_view(await open_panel(cog, bot, birthday_person))
+    _, card = await birthdays_cog.build_card(bot, bot.guild, birthday_person, other)
+    mode = find_select(view, "Wishes are…")
+    mode._values = ["on"]
+    month = find_select(view, "List a month…")
+    month._values = ["0"]
+
+    birthday_person.roles.remove(role)
+
+    for item in (
+        mode,
+        month,
+        find_item(view, "Status"),
+        find_item(view, "Clear the birthday role"),
+        find_item(card, "Set their birthday"),
+        find_item(card, "Forget their birthday"),
+    ):
+        refused = await click(bot, birthday_person, item)
+        assert "staff only" in refused.sent, item.__class__.__name__
+
+    assert bot.store.get(GUILD, "birthday_mode") == "shadow"
+    assert await get_birthday(bot.db, other.id) is not None
+    assert await action_kinds(bot.db) == []
 
 
 async def test_import_matches_the_member_list_including_tagged_nicknames(bot, cog):
@@ -841,8 +1383,8 @@ def seed(monkeypatch, rows, as_of=2026):
 
 
 def test_the_import_is_no_longer_a_slash_command():
-    assert "import" not in {command.name for command in Birthdays.birthday.commands}
     assert not hasattr(Birthdays, "import_seed")
+    assert not hasattr(Birthdays.birthday, "commands")
 
 
 async def test_the_daily_loop_brings_the_seed_over_and_records_that_it_ran(
@@ -938,13 +1480,6 @@ async def test_the_report_counts_every_bucket_and_carries_the_age_caveat():
     assert "2026 export" in text
 
 
-def test_long_reports_are_split_into_messages_discord_will_take():
-    pages = chunked([f"line {n} " + "x" * 100 for n in range(60)])
-    assert len(pages) > 1
-    assert all(len(page) <= 1900 for page in pages)
-    assert chunked([]) == []
-
-
 async def test_the_counts_used_by_status(bot):
     await stored(bot, user_id=1, source="self")
     await stored(bot, user_id=2, source="import")
@@ -958,18 +1493,6 @@ async def test_the_counts_used_by_status(bot):
 async def set_opted_out(db, user_id):
     await db.conn.execute("UPDATE birthdays SET opted_in = 0 WHERE user_id = ?", (user_id,))
     await db.conn.commit()
-
-
-async def test_commands_say_so_when_the_database_is_not_there(bot, cog, birthday_person):
-    class Closed:
-        is_connected = False
-
-    bot.db = Closed()
-    interaction = FakeInteraction(bot, birthday_person)
-
-    await cog.set_mine.callback(cog, interaction, 8, 10, None)
-
-    assert "database" in interaction.sent
 
 
 async def test_the_loops_are_registered_on_load_and_cancelled_on_unload(bot, cog):
@@ -1009,27 +1532,6 @@ async def test_a_loop_that_stops_is_recorded_and_started_again(bot, cog):
     await cog._sweep_stopped(RuntimeError("gateway went away"))
 
     assert cog.last_error == "RuntimeError: gateway went away"
-
-
-async def test_clearing_the_birthday_role_is_staff_only_and_says_so_when_there_was_none(
-    bot, cog, birthday_person
-):
-    interaction = FakeInteraction(bot, birthday_person)
-    await cog.role_clear.callback(cog, interaction)
-    assert "staff only" in interaction.sent
-
-    give_staff(bot, birthday_person)
-    empty = FakeInteraction(bot, birthday_person)
-    await cog.role_clear.callback(cog, empty)
-    assert "was no birthday role" in empty.sent
-
-    await bot.store.set(GUILD, "birthday_role_id", CAKE_ROLE)
-    cleared = FakeInteraction(bot, birthday_person)
-    await cog.role_clear.callback(cog, cleared)
-
-    assert bot.store.get(GUILD, "birthday_role_id") is None
-    assert "No birthday role" in cleared.sent
-    assert await action_kinds(bot.db) == ["settings.clear"]
 
 
 async def test_a_sweep_that_throws_is_recorded_not_swallowed_silently(bot, cog, monkeypatch):

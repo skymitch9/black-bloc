@@ -1,7 +1,14 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-03** — rows **69–72** added by the applications no-role build (a form may keep a
+> **2026-09-03** — rows **87–93** added by the birthdays panel build (`/birthday` is ONE
+> command that opens a panel; the twelve subcommands are retired). On that branch the file
+> holds **79** un-exercised rows, numbered to 93; rows **73–86** are reserved by the events
+> (73–79) and polls (80–86) builds running in parallel and are not in this branch. The
+> Phase 5 prose block above was replaced by rows 87–93 — it named six subcommands that no
+> longer exist plus `/birthday import`, deleted 2026-08-27. ⚠️ Rows 87–93 are **BUILT, not
+> yet live**, and none has been run against Discord (this build cannot reach it).
+> Before that — rows **69–72** added by the applications no-role build (a form may keep a
 > LIST instead of handing a role over; merged `main` at 12:40, LIVE in v62 12:48); rows **66–68**
 > added by the requests SIXTH pass ("Ask them to check": the DM, the channel ping when their
 > DMs are closed, and the auto-ask at ready) — LIVE in v61 (`44170f4`, 12:29). The file now holds
@@ -135,12 +142,12 @@ form for a full pass.
   DM to you → wait for start: "starting now" post; after the end: `done-…`. Create
   a second one and Deny it with a reason: `denied-…` + DM. `/event list`, `/event
   settings` (shows loop health), `/event cancel <id>`.
-- **Phase 5 (live, mode `shadow`):** `/birthday import` (staff; expect a report:
-  N imported / ambiguous / not found, searched 118 members) → `/birthday next` →
-  `/birthday list` → `/birthday set <today's month> <day>` for yourself → within 5 min
-  expect a `birthday.would_announce` line in the test channel (flip `/birthday mode on`
-  to see the actual embed, colour `#4eefff`) → `/birthday status` (loop health,
-  resolved staff) → `/birthday remove`. `/settings clear birthday_role_id` exists now.
+- **Phase 5 (live, mode `shadow`):** superseded by rows **87–93** below — `/birthday`
+  is one panel now and every subcommand this block named is retired. The sweep the
+  wishes themselves still get is: set your own birthday to today on the panel → within
+  5 min expect a `birthday.would_announce` line in the test channel (`Wishes are… → on`
+  to see the actual embed, colour `#4eefff`). The daily Birthday Bot import runs on its
+  own loop; there has been no `/birthday import` since 2026-08-27.
 - **Phase 7 (live, `modmail_enabled` false):** `/modmail status` (resolved staff,
   loop health) → `/modmail settings enabled:true` → from a second account DM the bot:
   expect a ticket channel `<username>` INSIDE the test category, the header card +
@@ -195,6 +202,18 @@ form for a full pass.
 | 70 | Applying and being approved with nothing to hand over | put the Apply button up, apply as a member, press **Approve** on the card | the card and the ephemeral reply say "Approved — **<name>** is on the **<heading>** list now." — no role is mentioned and none is given. The DM is the form's approved text with no "the role runs out" line. `/applications logs` shows `application.approved` with `granted: null` and NO `application.granted` line |
 | 71 | The roster, and Copy as text | on the Role menus page open **Approved for <form>** under that form | one row per approved member: their name, **twitch.tv/<login>** as a link (or a quiet "not linked"), how long since staff said yes, and who decided. Somebody who has left the server is still listed with "left the server" beside them — `/settings set-value key:applications_roster_shows_left value:false` hides them instead. **Copy as text** puts one line per member on the clipboard, ready to paste into the official team page |
 | 72 | Taking somebody off the list | on the roster press **Take off the list**, type a reason, confirm. (In Discord: `/applications show <id>` on an approved application — the same **Take off the list** button is on the panel) | they are DMed the reason and when they may apply again; the Decided table shows the row as **removed**; the roster is one shorter; `/applications list form:<name> status:approved` no longer names them. On a form that DOES hand a role over the button is not offered at all, and the route refuses in words pointing at `/role revoke` |
+
+### Birthdays — `/birthday` is ONE panel (wave 1). ⚠️ On the branch `worktree-agent-a19bdce15408f8243`; not merged, not deployed.
+
+| # | What | Do this | Expect |
+|---|---|---|---|
+| 87 | The member panel with nothing stored | `/birthday` in `#mute-me-bot-test-spam` from an account with no birthday stored | one ephemeral panel: the intro, a line saying wishes are in **shadow** so nothing is posted yet, "Black Bloc has no birthday for you… **Set my birthday** button", the next five birthdays, and exactly two buttons — **Set my birthday** and **Refresh** — plus a **Look someone up…** picker. No Status, no Logs, no month list, no mode picker |
+| 88 | Setting it, and the three refusals | press **Set my birthday**, type `09-15`, submit. Then **Change my birthday** and try `13-40`, then `09-15-2200`, then `next tuesday` | the panel re-renders with **September 15**, the zone by name and the next occurrence as a date + "in N months"; the ephemeral line says the same. `13-40` answers "There is no month **13**…", `09-15-2200` answers "**2200** is not a birth year Black Bloc can use…", `next tuesday` answers "Black Bloc could not read that as a date…" — and in all three cases nothing is stored. Reopening the modal offers the stored date back, `09-15` |
+| 89 | Opting out and back in | press **Opt out**, then **Opt in** | after Opt out the panel says "You are **opted out**" and the row shows **Opt in** only (no Opt out); after Opt in it swaps back. The Birthdays log carries `birthday.optout` then `birthday.optin` |
+| 90 | Removing it | press **Remove** → **Keep it**; then **Remove** → **Yes, forget it** | Keep it puts you back on the panel with the birthday still stored; Yes, forget it answers "Your birthday is forgotten", the panel goes back to the **Set my birthday** row, and the log carries one `birthday.remove` |
+| 91 | Staff: looking somebody up and setting their birthday | as staff, `/birthday` → **Look someone up…** → pick a member with nothing stored → **Set their birthday** → `01-02` | their card names them and says Black Bloc has no birthday for them; the modal title reads *Set <name>'s birthday*; on submit the card re-renders with **January 2** and gains a **Forget their birthday** button. **Forget their birthday** → confirm: they are DMed one sentence saying staff removed it, and the log carries `birthday.remove` naming you as the actor. A member who is not staff sees only **Back** on that card |
+| 92 | Staff: the month list and the mode picker | as staff: **List a month…** → **Every month**, then **August**, then a month nobody is in; then **Wishes are…** → **on** | the list arrives as one or more NEW ephemeral messages grouped by month (`· 10 — @PT (self)`), and the panel itself stays open behind them; an empty month answers "Nobody has a birthday stored in **March**." The mode picker re-renders the panel with the shadow warning gone, and the log carries `birthday.mode` |
+| 93 | Staff: status, the role and the logs, then the quiet footer | as staff: **Status**; **Clear the birthday role** → confirm; **Logs**; then leave the panel alone for `birthday_panel_minutes` (10) minutes | Status is a new ephemeral message with mode, channel, template, colour, role, ages, the stored counts and both loops' last run/last error — the panel stays. Clear asks first, then answers "No birthday role will be given any more…" (or "There was no birthday role set" when none was). Logs opens the Birthdays log as its own ephemeral message. After ten minutes every button on the panel is greyed out and the embed footer reads *This panel has gone quiet — run /birthday again* |
 
 ## The owner's Twitch Team form — the walk-through
 

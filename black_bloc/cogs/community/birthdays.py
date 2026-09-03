@@ -9,38 +9,61 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from ...actionlog import (
-    LOGS_DEFAULT,
-    LOGS_MAX,
-    LOGS_MIN,
-    log_action,
-    send_logs,
-)
+from ...actionlog import log_action, send_logs
 from ...birthdays import (
+    DATE_INPUT_LIMIT,
+    DATE_LABEL,
+    DATE_PLACEHOLDER,
+    DATE_UNREADABLE,
+    EVERY_MONTH,
+    LOOKUP_PLACEHOLDER,
+    MODE_PLACEHOLDER,
+    MODE_WARNINGS,
     MONTH_NAMES,
+    MONTH_PLACEHOLDER,
+    NEXT_LIMIT,
+    PANEL_INTRO,
+    PANEL_NEXT_HEADING,
+    PANEL_NEXT_IS_STAFF_ONLY,
+    PANEL_TIMEOUT_FOOTER,
+    PANEL_TITLE,
     age,
+    card_lines,
     celebrates_today,
+    chunked,
     clamp_month_day,
+    date_modal_title,
     date_problem,
     import_as_of_year,
     load_import_rows,
     local_today,
     member_zone_name,
     month_day_text,
+    month_lines,
     next_occurrence,
+    panel_allows_lookup,
+    panel_buttons,
+    panel_minutes,
+    panel_shows_next,
+    parse_birthday_input,
     parse_color,
     render_description,
     resolve,
-    stamp,
+    status_lines,
+    stored_line,
+    stored_prefill,
+    stored_sentence,
     upcoming,
+    upcoming_lines,
     year_from_age,
     year_problem,
 )
+from ...command_errors import AnswersErrors
+from ...panels import Panel, answer, db_ready, retire, still_staff
 from ...settings_store import (
     BIRTHDAY_MODES,
     DB_UNAVAILABLE,
     GUILD_ONLY,
-    require_staff,
     staff_roles_sentence,
 )
 
@@ -48,33 +71,51 @@ log = logging.getLogger(__name__)
 
 LOOP_MINUTES = 5
 IMPORT_HOURS = 24
-NEXT_LIMIT = 5
-MESSAGE_LIMIT = 1900
 CANDIDATES_SHOWN = 3
 ROLE_REASON = "Black Bloc birthday"
+COG_NAME = "Birthdays"
 
 NOT_STORED = (
-    "Black Bloc has no birthday for you, so there is nothing to change. Add one with "
-    "`/birthday set` — the year is optional, and leaving it out keeps your age private."
+    "Black Bloc has no birthday for you, so there is nothing to change. Add one with the "
+    "**Set my birthday** button — the year is optional, and leaving it out keeps your age "
+    "private."
 )
 NOT_STORED_FOR = (
-    "Black Bloc has no birthday for {who}. They can add one with `/birthday set`, or staff can "
-    "with `/birthday set-for`."
+    "Black Bloc has no birthday for {who}. They can add one themselves with **Set my "
+    "birthday** on `/birthday`, and staff can with **Set their birthday** here."
 )
 REMOVED = "Your birthday is forgotten. Nothing will be posted for you."
+REMOVED_FOR = "**{who}**'s birthday is forgotten. Nothing will be posted for them."
+FORGOTTEN_BY_STAFF = (
+    "Staff have removed the birthday Black Bloc had stored for you in **{guild}**, so nothing "
+    "will be posted for you. You can set it again yourself with `/birthday`."
+)
 OPTED_OUT = (
     "You are opted out — your birthday is still stored, but nothing will be posted. "
-    "`/birthday optin` turns it back on, and `/birthday remove` forgets it entirely."
+    "**Opt in** turns it back on, and **Remove** forgets it entirely."
 )
 OPTED_IN = "You are opted back in. Black Bloc will post on the day again."
 ALREADY_OPTED = "You were already opted {state}, so nothing changed."
 NOBODY_YET = (
-    "Nobody has a birthday stored yet. People add their own with `/birthday set`, and the "
-    "Birthday Bot list is brought over automatically once a day."
+    "Nobody has a birthday stored yet. People add their own with **Set my birthday** on "
+    "`/birthday`, and the Birthday Bot list is brought over automatically once a day."
 )
 NONE_THIS_MONTH = "Nobody has a birthday stored in **{month}**."
 NOTHING_UPCOMING = (
     "There are no birthdays to show — everyone stored is opted out, or nobody has set one yet."
+)
+MODE_SET = "Birthday wishes are now **{mode}**."
+REMOVE_CONFIRM = (
+    "Forget your birthday? Black Bloc will stop posting for you and will not remember the "
+    "date. You can set it again at any time."
+)
+FORGET_CONFIRM = (
+    "Forget **{who}**'s birthday? Black Bloc will stop posting for them, and they are sent a "
+    "DM saying staff removed it. They can set it again themselves."
+)
+ROLE_CLEAR_CONFIRM = (
+    "Stop giving a birthday role at all? A role somebody already has for today still comes "
+    "off tomorrow."
 )
 ROLE_CLEARED = (
     "No birthday role will be given any more. A role somebody already has for today still "
@@ -84,6 +125,12 @@ ROLE_NOT_SET = (
     "There was no birthday role set, so nothing changed. `/settings set-role birthday_role_id` "
     "is how one is chosen."
 )
+BUTTON_STYLES: dict[str, discord.ButtonStyle] = {
+    "primary": discord.ButtonStyle.primary,
+    "secondary": discord.ButtonStyle.secondary,
+    "success": discord.ButtonStyle.success,
+    "danger": discord.ButtonStyle.danger,
+}
 
 def _row_value(row: Any, key: str, fallback: Any = None) -> Any:
     if row is None:
@@ -187,22 +234,6 @@ async def stored_counts(db: Any, guild_id: int) -> dict[str, int]:
     return totals
 
 
-def chunked(lines: list[str], limit: int = MESSAGE_LIMIT) -> list[str]:
-    """The lines packed into as few messages as Discord's length cap allows."""
-    pages: list[str] = []
-    current = ""
-    for line in lines:
-        piece = line[:limit]
-        if current and len(current) + len(piece) + 1 > limit:
-            pages.append(current)
-            current = piece
-        else:
-            current = f"{current}\n{piece}" if current else piece
-    if current:
-        pages.append(current)
-    return pages
-
-
 def candidate_text(match: Any) -> str:
     shown = ", ".join(
         f"{c.display_name} (<@{c.user_id}>)" for c in match.candidates[:CANDIDATES_SHOWN]
@@ -272,12 +303,13 @@ def report_lines(result: dict[str, list[str]], as_of_year: int, searched: int = 
     if result["imported"]:
         lines.append(
             f"Ages came from the {as_of_year} export, so a stored year can be a year out until "
-            "the person corrects it with `/birthday set`."
+            "the person corrects their own birthday."
         )
     for heading, key in (
         ("Imported", "imported"),
         ("Already stored, left alone", "already"),
-        ("Ambiguous — set these by hand with `/birthday set-for`", "ambiguous"),
+        ("Ambiguous — set these by hand, from the Birthdays page or the `/birthday` panel",
+         "ambiguous"),
         ("Not found — nobody in the server matched", "not_found"),
     ):
         if not result[key]:
@@ -285,6 +317,655 @@ def report_lines(result: dict[str, list[str]], as_of_year: int, searched: int = 
         lines.append(f"**{heading}**")
         lines += [f"· {entry}" for entry in result[key]]
     return lines
+
+
+async def dm(user: Any, text: str) -> bool:
+    """Whether the person actually got told; a closed DM is logged, never raised."""
+    send = getattr(user, "send", None)
+    if send is None:
+        return False
+    try:
+        await send(text, allowed_mentions=discord.AllowedMentions.none())
+    except Exception as exc:
+        log.info("birthdays: could not DM %s: %s", getattr(user, "id", "?"), exc)
+        return False
+    return True
+
+
+async def store_birthday(
+    cog: Any,
+    guild: Any,
+    actor: Any,
+    member: Any,
+    month: Any,
+    day: Any,
+    year: Any,
+    source: str,
+) -> str:
+    """The one path a birthday is written by — the refusal sentence, or the confirmation."""
+    bot = cog.bot
+    zone = await member_zone_name(bot.db, member.id)
+    problem = date_problem(month, day) or year_problem(year, local_today(zone))
+    if problem is not None:
+        return problem
+    m, d = clamp_month_day(month, day)
+    async with cog._lock(member.id):
+        await save_birthday(bot.db, guild.id, member.id, m, d, year, source)
+    whose = "Your" if member.id == actor.id else f"**{member.display_name}**'s"
+    await log_action(
+        bot,
+        guild,
+        "birthday.set",
+        actor=actor,
+        target=member,
+        details={"date": month_day_text(m, d), "year": year, "source": source},
+    )
+    return stored_sentence(whose, m, d, year, zone, next_occurrence(m, d, zone))
+
+
+async def forget_birthday(
+    cog: Any, guild: Any, actor: Any, member: Any = None, *, source: str = "self"
+) -> str:
+    """The row goes, and the role goes back first — review finding 3 of Phase 5."""
+    bot = cog.bot
+    target = member if member is not None else actor
+    mine = target.id == actor.id
+    async with cog._lock(target.id):
+        row = await get_birthday(bot.db, target.id)
+        if row is None:
+            return (
+                NOT_STORED
+                if mine
+                else NOT_STORED_FOR.format(who=f"**{target.display_name}**")
+            )
+        await cog._return_role(guild, row)
+        await delete_birthday(bot.db, target.id)
+    await log_action(
+        bot,
+        guild,
+        "birthday.remove",
+        actor=actor,
+        target=target,
+        details={"source": source},
+    )
+    if mine:
+        return REMOVED
+    await dm(target, FORGOTTEN_BY_STAFF.format(guild=guild.name))
+    return REMOVED_FOR.format(who=target.display_name)
+
+
+async def change_opt(cog: Any, guild: Any, actor: Any, *, opted_in: bool) -> str:
+    bot = cog.bot
+    row = await get_birthday(bot.db, actor.id)
+    if row is None:
+        return NOT_STORED
+    if bool(row["opted_in"]) == opted_in:
+        return ALREADY_OPTED.format(state="in" if opted_in else "out")
+    async with cog._lock(actor.id):
+        await set_opted_in(bot.db, actor.id, opted_in)
+        if not opted_in:
+            await cog._return_role(guild, row)
+    await log_action(
+        bot,
+        guild,
+        "birthday.optin" if opted_in else "birthday.optout",
+        actor=actor,
+    )
+    return OPTED_IN if opted_in else OPTED_OUT
+
+
+async def set_mode(bot: Any, guild: Any, actor: Any, mode: str) -> str:
+    await bot.store.set(guild.id, "birthday_mode", mode, by=actor.id)
+    await log_action(bot, guild, "birthday.mode", actor=actor, details={"mode": mode})
+    return MODE_SET.format(mode=mode)
+
+
+async def clear_role(bot: Any, guild: Any, actor: Any) -> str:
+    cleared = await bot.store.clear(guild.id, "birthday_role_id", by=actor.id)
+    if not cleared:
+        return ROLE_NOT_SET
+    await log_action(
+        bot, guild, "settings.clear", actor=actor, details={"key": "birthday_role_id"}
+    )
+    return ROLE_CLEARED
+
+
+async def person_lines(bot: Any, guild: Any, member: Any, row: Any, *, mine: bool) -> list[str]:
+    zone = await member_zone_name(bot.db, member.id)
+    when = next_occurrence(row["month"], row["day"], zone)
+    years = (
+        age(row["year"], when.date())
+        if row["year"] and bot.store.get(guild.id, "birthday_show_age")
+        else None
+    )
+    return card_lines(
+        member.display_name,
+        row["month"],
+        row["day"],
+        row["year"],
+        zone,
+        when,
+        years,
+        bool(row["opted_in"]),
+        mine,
+    )
+
+
+async def next_lines(bot: Any, guild: Any) -> list[str]:
+    rows = [row for row in await rows_for_guild(bot.db, guild.id) if row["opted_in"]]
+    if not rows:
+        return [NOTHING_UPCOMING]
+    entries = [
+        {
+            "user_id": row["user_id"],
+            "month": row["month"],
+            "day": row["day"],
+            "year": row["year"],
+            "tz": await member_zone_name(bot.db, row["user_id"]),
+        }
+        for row in rows
+    ]
+    found = upcoming_lines(entries, upcoming(entries, limit=NEXT_LIMIT))
+    return [PANEL_NEXT_HEADING, *found]
+
+
+def panel_colour(store: Any, guild_id: int) -> discord.Colour:
+    return discord.Colour(parse_color(store.get(guild_id, "birthday_color")))
+
+
+async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, BirthdayView]:
+    store = bot.store
+    staff = store.is_staff(actor)
+    row = await get_birthday(bot.db, actor.id)
+    has_date = row is not None
+    opted_out = bool(has_date and not row["opted_in"])
+    mode = str(store.get(guild.id, "birthday_mode"))
+
+    lines = [PANEL_INTRO]
+    warning = MODE_WARNINGS.get(mode)
+    if warning:
+        lines.append(warning)
+    if has_date:
+        lines.extend(await person_lines(bot, guild, actor, row, mine=True))
+    else:
+        lines.append(NOT_STORED)
+    if staff or panel_shows_next(store, guild.id):
+        lines.extend(await next_lines(bot, guild))
+    else:
+        lines.append(PANEL_NEXT_IS_STAFF_ONLY)
+    if staff:
+        lines.append(stored_line(await stored_counts(bot.db, guild.id)))
+
+    embed = discord.Embed(
+        title=PANEL_TITLE,
+        description="\n".join(lines),
+        colour=panel_colour(store, guild.id),
+    )
+    view = BirthdayView(panel_minutes(store, guild.id))
+    for spec in panel_buttons(has_date, opted_out):
+        view.add_item(MoveButton(spec))
+    if staff or panel_allows_lookup(store, guild.id):
+        view.add_item(LookupSelect())
+    if staff:
+        view.add_item(MonthSelect())
+        view.add_item(ModeSelect(mode))
+        view.add_item(StatusButton())
+        view.add_item(ClearRoleButton())
+        view.add_item(LogsButton())
+    return embed, view
+
+
+async def build_card(
+    bot: Any, guild: Any, actor: Any, member: Any
+) -> tuple[discord.Embed, BirthdayView]:
+    store = bot.store
+    staff = store.is_staff(actor)
+    mine = member.id == actor.id
+    row = await get_birthday(bot.db, member.id)
+    if row is None:
+        lines = [
+            NOT_STORED if mine else NOT_STORED_FOR.format(who=f"**{member.display_name}**")
+        ]
+    else:
+        lines = await person_lines(bot, guild, member, row, mine=mine)
+    embed = discord.Embed(
+        title=f"{member.display_name} — birthday",
+        description="\n".join(lines),
+        colour=panel_colour(store, guild.id),
+    )
+    view = BirthdayView(panel_minutes(store, guild.id))
+    if staff:
+        view.add_item(SetTheirsButton(member))
+        if row is not None:
+            view.add_item(ForgetTheirsButton(member))
+    view.add_item(BackButton())
+    return embed, view
+
+
+async def render_panel(interaction: discord.Interaction, previous: Any = None) -> None:
+    bot = interaction.client
+    embed, view = await build_panel(bot, interaction.guild, interaction.user)
+    retire(previous)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+async def render_card(
+    interaction: discord.Interaction, member: Any, previous: Any = None
+) -> None:
+    bot = interaction.client
+    embed, view = await build_card(bot, interaction.guild, interaction.user, member)
+    retire(previous)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+async def said_after(interaction: discord.Interaction, said: str) -> None:
+    await interaction.followup.send(
+        said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+async def back_to_panel(interaction: discord.Interaction, previous: Any = None) -> None:
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    await render_panel(interaction, previous)
+
+
+async def open_card(
+    interaction: discord.Interaction, member: Any, previous: Any = None
+) -> None:
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    await render_card(interaction, member, previous)
+
+
+async def open_confirm(
+    interaction: discord.Interaction, text: str, items: list[Any], previous: Any = None
+) -> None:
+    bot = interaction.client
+    embed = discord.Embed(
+        title=PANEL_TITLE,
+        description=text,
+        colour=panel_colour(bot.store, interaction.guild.id),
+    )
+    view = BirthdayView(panel_minutes(bot.store, interaction.guild.id))
+    for item in items:
+        view.add_item(item)
+    retire(previous)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+async def open_remove_confirm(interaction: discord.Interaction, previous: Any = None) -> None:
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    row = await get_birthday(interaction.client.db, interaction.user.id)
+    if row is None:
+        await render_panel(interaction, previous)
+        await said_after(interaction, NOT_STORED)
+        return
+    await open_confirm(
+        interaction, REMOVE_CONFIRM, [RemoveYesButton(), RemoveKeepButton()], previous
+    )
+
+
+async def open_forget_confirm(
+    interaction: discord.Interaction, member: Any, previous: Any = None
+) -> None:
+    if not await still_staff(interaction):
+        return
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    await open_confirm(
+        interaction,
+        FORGET_CONFIRM.format(who=member.display_name),
+        [ForgetYesButton(member), ForgetKeepButton(member)],
+        previous,
+    )
+
+
+async def open_role_clear_confirm(
+    interaction: discord.Interaction, previous: Any = None
+) -> None:
+    if not await still_staff(interaction):
+        return
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    await open_confirm(
+        interaction, ROLE_CLEAR_CONFIRM, [RoleClearYesButton(), RoleClearNoButton()], previous
+    )
+
+
+async def run_opt(
+    interaction: discord.Interaction, opted_in: bool, previous: Any = None
+) -> None:
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    cog = interaction.client.get_cog(COG_NAME)
+    said = await change_opt(cog, interaction.guild, interaction.user, opted_in=opted_in)
+    await render_panel(interaction, previous)
+    await said_after(interaction, said)
+
+
+async def run_remove(interaction: discord.Interaction, previous: Any = None) -> None:
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    cog = interaction.client.get_cog(COG_NAME)
+    said = await forget_birthday(cog, interaction.guild, interaction.user)
+    await render_panel(interaction, previous)
+    await said_after(interaction, said)
+
+
+async def run_forget(
+    interaction: discord.Interaction, member: Any, previous: Any = None
+) -> None:
+    if not await still_staff(interaction):
+        return
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    cog = interaction.client.get_cog(COG_NAME)
+    said = await forget_birthday(
+        cog, interaction.guild, interaction.user, member, source="staff"
+    )
+    await render_card(interaction, member, previous)
+    await said_after(interaction, said)
+
+
+async def run_mode(
+    interaction: discord.Interaction, mode: str, previous: Any = None
+) -> None:
+    if not await still_staff(interaction):
+        return
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    said = await set_mode(interaction.client, interaction.guild, interaction.user, mode)
+    await render_panel(interaction, previous)
+    await said_after(interaction, said)
+
+
+async def run_clear_role(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await still_staff(interaction):
+        return
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    said = await clear_role(interaction.client, interaction.guild, interaction.user)
+    await render_panel(interaction, previous)
+    await said_after(interaction, said)
+
+
+async def send_month(interaction: discord.Interaction, month: int) -> None:
+    if not await still_staff(interaction):
+        return
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    bot = interaction.client
+    rows = await rows_for_guild(bot.db, interaction.guild.id)
+    if month:
+        rows = [row for row in rows if row["month"] == month]
+    if not rows:
+        await said_after(
+            interaction,
+            NONE_THIS_MONTH.format(month=MONTH_NAMES[month - 1]) if month else NOBODY_YET,
+        )
+        return
+    for page in chunked(month_lines(rows)):
+        await said_after(interaction, page)
+
+
+async def send_status(interaction: discord.Interaction) -> None:
+    if not await still_staff(interaction):
+        return
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    bot = interaction.client
+    guild = interaction.guild
+    store = bot.store
+    cog = bot.get_cog(COG_NAME)
+    values = {
+        "mode": store.get(guild.id, "birthday_mode"),
+        "channel_id": store.get(guild.id, "birthday_channel_id"),
+        "template": store.get(guild.id, "birthday_template"),
+        "color": store.get(guild.id, "birthday_color"),
+        "role_id": store.get(guild.id, "birthday_role_id"),
+        "test_mode": getattr(bot, "guard", None) is not None,
+        "show_age": store.get(guild.id, "birthday_show_age"),
+        "totals": await stored_counts(bot.db, guild.id),
+        "staff": staff_roles_sentence(store.staff_roles(guild)),
+        "last_run_at": cog.last_run_at,
+        "last_error": cog.last_error,
+        "last_import_at": cog.last_import_at,
+        "last_import_error": cog.last_import_error,
+        "loop_minutes": LOOP_MINUTES,
+        "import_hours": IMPORT_HOURS,
+    }
+    await said_after(interaction, "\n".join(status_lines(values)))
+
+
+class BirthdayView(Panel):
+    def __init__(self, minutes: int) -> None:
+        super().__init__(minutes, footer=PANEL_TIMEOUT_FOOTER)
+
+
+class MoveButton(discord.ui.Button):
+    def __init__(self, spec: Any) -> None:
+        super().__init__(label=spec.label, style=BUTTON_STYLES[spec.style], row=0)
+        self.spec = spec
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if self.spec.needs_modal:
+            await open_date_modal(interaction, interaction.user, mine=True, previous=self.view)
+            return
+        if self.spec.action == "remove":
+            await open_remove_confirm(interaction, self.view)
+            return
+        if self.spec.action == "refresh":
+            await back_to_panel(interaction, self.view)
+            return
+        await run_opt(interaction, self.spec.action == "optin", self.view)
+
+
+class LookupSelect(discord.ui.UserSelect):
+    def __init__(self) -> None:
+        super().__init__(placeholder=LOOKUP_PLACEHOLDER, min_values=1, max_values=1, row=1)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_card(interaction, self.values[0], self.view)
+
+
+class MonthSelect(discord.ui.Select):
+    def __init__(self) -> None:
+        options = [discord.SelectOption(label=EVERY_MONTH, value="0")] + [
+            discord.SelectOption(label=name, value=str(number))
+            for number, name in enumerate(MONTH_NAMES, start=1)
+        ]
+        super().__init__(
+            placeholder=MONTH_PLACEHOLDER, options=options, min_values=1, max_values=1, row=2
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await send_month(interaction, int(self.values[0]))
+
+
+class ModeSelect(discord.ui.Select):
+    def __init__(self, current: str) -> None:
+        options = [
+            discord.SelectOption(label=name, value=name, default=name == current)
+            for name in BIRTHDAY_MODES
+        ]
+        super().__init__(
+            placeholder=MODE_PLACEHOLDER, options=options, min_values=1, max_values=1, row=3
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_mode(interaction, self.values[0], self.view)
+
+
+class StatusButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label="Status", style=discord.ButtonStyle.secondary, row=4)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await send_status(interaction)
+
+
+class ClearRoleButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(
+            label="Clear the birthday role", style=discord.ButtonStyle.danger, row=4
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_role_clear_confirm(interaction, self.view)
+
+
+class LogsButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label="Logs", style=discord.ButtonStyle.secondary, row=4)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await send_logs(interaction, "birthday")
+
+
+class BackButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label="Back", style=discord.ButtonStyle.secondary, row=1)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await back_to_panel(interaction, self.view)
+
+
+class SetTheirsButton(discord.ui.Button):
+    def __init__(self, member: Any) -> None:
+        super().__init__(label="Set their birthday", style=discord.ButtonStyle.primary, row=0)
+        self.member = member
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await still_staff(interaction):
+            return
+        await open_date_modal(interaction, self.member, mine=False, previous=self.view)
+
+
+class ForgetTheirsButton(discord.ui.Button):
+    def __init__(self, member: Any) -> None:
+        super().__init__(
+            label="Forget their birthday", style=discord.ButtonStyle.danger, row=0
+        )
+        self.member = member
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_forget_confirm(interaction, self.member, self.view)
+
+
+class RemoveYesButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label="Yes, forget it", style=discord.ButtonStyle.danger, row=0)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_remove(interaction, self.view)
+
+
+class RemoveKeepButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label="Keep it", style=discord.ButtonStyle.secondary, row=0)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await back_to_panel(interaction, self.view)
+
+
+class ForgetYesButton(discord.ui.Button):
+    def __init__(self, member: Any) -> None:
+        super().__init__(label="Yes, forget it", style=discord.ButtonStyle.danger, row=0)
+        self.member = member
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_forget(interaction, self.member, self.view)
+
+
+class ForgetKeepButton(discord.ui.Button):
+    def __init__(self, member: Any) -> None:
+        super().__init__(label="Keep it", style=discord.ButtonStyle.secondary, row=0)
+        self.member = member
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_card(interaction, self.member, self.view)
+
+
+class RoleClearYesButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label="Yes, clear it", style=discord.ButtonStyle.danger, row=0)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_clear_role(interaction, self.view)
+
+
+class RoleClearNoButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label="Cancel", style=discord.ButtonStyle.secondary, row=0)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await back_to_panel(interaction, self.view)
+
+
+class DateModal(AnswersErrors, discord.ui.Modal):
+    typed = discord.ui.TextInput(
+        label=DATE_LABEL, placeholder=DATE_PLACEHOLDER, max_length=DATE_INPUT_LIMIT
+    )
+
+    def __init__(
+        self,
+        cog: Any,
+        member: Any,
+        *,
+        mine: bool,
+        previous: Any = None,
+        current: str | None = None,
+    ) -> None:
+        super().__init__(title=date_modal_title(mine, getattr(member, "display_name", "")))
+        self.cog = cog
+        self.member = member
+        self.mine = mine
+        self.previous = previous
+        self.typed.default = current or None
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await self.cog.date_submit(
+            interaction, self.member, str(self.typed), mine=self.mine, previous=self.previous
+        )
+
+
+async def open_date_modal(
+    interaction: discord.Interaction, member: Any, *, mine: bool, previous: Any = None
+) -> None:
+    """A modal cannot follow a defer, so the prefill is read before anything is acknowledged."""
+    bot = interaction.client
+    if not bot.db.is_connected:
+        await answer(interaction, DB_UNAVAILABLE)
+        return
+    row = await get_birthday(bot.db, member.id)
+    current = (
+        stored_prefill(row["month"], row["day"], row["year"]) if row is not None else None
+    )
+    await interaction.response.send_modal(
+        DateModal(
+            bot.get_cog(COG_NAME), member, mine=mine, previous=previous, current=current
+        )
+    )
 
 
 class Birthdays(commands.Cog):
@@ -303,11 +984,6 @@ class Birthdays(commands.Cog):
         if name == "_import_loop":
             return (self.last_import_at, self.last_import_error)
         return (None, None)
-
-    birthday = app_commands.Group(name="birthday", description="Birthday wishes on the day")
-    birthday_role = app_commands.Group(
-        name="role", description="The role given for the day", parent=birthday
-    )
 
     async def cog_load(self) -> None:
         if not self.bot.db.is_connected:
@@ -593,346 +1269,67 @@ class Birthdays(commands.Cog):
 
     async def _ready(self, interaction: discord.Interaction) -> bool:
         if interaction.guild is None:
-            await interaction.response.send_message(GUILD_ONLY, ephemeral=True)
+            await answer(interaction, GUILD_ONLY)
             return False
         if not self.bot.db.is_connected:
             log.warning("birthdays: refused a command — the database is not connected")
-            await interaction.response.send_message(DB_UNAVAILABLE, ephemeral=True)
+            await answer(interaction, DB_UNAVAILABLE)
             return False
         return True
 
     async def _zone_of(self, user_id: int) -> str:
         return await member_zone_name(self.bot.db, user_id)
 
-    @birthday.command(name="logs", description="The last few birthday log lines")
-    @app_commands.describe(
-        count="How many lines, 1 to 50 (10 by default)",
-        important_only="True to leave out the dry runs and the housekeeping",
+    @app_commands.command(
+        name="birthday", description="Your birthday, and whose is coming up"
     )
-    async def birthday_logs(
-        self,
-        interaction: discord.Interaction,
-        count: app_commands.Range[int, LOGS_MIN, LOGS_MAX] = LOGS_DEFAULT,
-        important_only: bool = False,
-    ) -> None:
-        await send_logs(interaction, "birthday", count=count, important_only=important_only)
-
-    @birthday.command(name="set", description="Tell Black Bloc when your birthday is")
-    @app_commands.describe(
-        month="1 for January through 12 for December",
-        day="The day of that month",
-        year="Optional — only stored so an age can be shown",
-    )
-    async def set_mine(
-        self,
-        interaction: discord.Interaction,
-        month: app_commands.Range[int, 1, 12],
-        day: app_commands.Range[int, 1, 31],
-        year: app_commands.Range[int, 1900, 2200] | None = None,
-    ) -> None:
+    async def birthday(self, interaction: discord.Interaction) -> None:
         if not await self._ready(interaction):
             return
-        await self._store_for(interaction, interaction.user, month, day, year, "self")
+        embed, view = await build_panel(self.bot, interaction.guild, interaction.user)
+        await interaction.response.send_message(
+            embed=embed,
+            view=view,
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        view.message = await interaction.original_response()
 
-    @birthday.command(name="set-for", description="Store someone else's birthday (staff)")
-    @app_commands.describe(
-        user="Whose birthday it is",
-        month="1 for January through 12 for December",
-        day="The day of that month",
-        year="Optional — only stored so an age can be shown",
-    )
-    async def set_for(
-        self,
-        interaction: discord.Interaction,
-        user: discord.Member,
-        month: app_commands.Range[int, 1, 12],
-        day: app_commands.Range[int, 1, 31],
-        year: app_commands.Range[int, 1900, 2200] | None = None,
-    ) -> None:
-        if not await require_staff(interaction):
-            return
-        if not await self._ready(interaction):
-            return
-        await self._store_for(interaction, user, month, day, year, "staff")
-
-    async def _store_for(
+    async def date_submit(
         self,
         interaction: discord.Interaction,
         member: Any,
-        month: int,
-        day: int,
-        year: int | None,
-        source: str,
+        typed: str,
+        *,
+        mine: bool,
+        previous: Any = None,
     ) -> None:
-        today = local_today(await self._zone_of(member.id))
-        problem = date_problem(month, day) or year_problem(year, today)
-        if problem is not None:
-            await interaction.response.send_message(problem, ephemeral=True)
+        """What the one date modal does once it is filled in, for the self and staff paths."""
+        if not mine and not await still_staff(interaction):
             return
-        m, d = clamp_month_day(month, day)
-        async with self._lock(member.id):
-            await save_birthday(
-                self.bot.db, interaction.guild.id, member.id, m, d, year, source
+        await interaction.response.defer()
+        if not await db_ready(interaction):
+            return
+        parsed = parse_birthday_input(typed)
+        if parsed is None:
+            said = DATE_UNREADABLE
+        else:
+            month, day, year = parsed
+            said = await store_birthday(
+                self,
+                interaction.guild,
+                interaction.user,
+                member,
+                month,
+                day,
+                year,
+                "self" if mine else "staff",
             )
-        zone = await self._zone_of(member.id)
-        whose = "Your" if member.id == interaction.user.id else f"**{member.display_name}**'s"
-        await interaction.response.send_message(
-            f"{whose} birthday is **{month_day_text(m, d)}**"
-            + (f" ({year})" if year else "")
-            + f". Black Bloc posts it at midnight in **{zone}**, and the next one is "
-            + stamp(next_occurrence(m, d, zone), "D")
-            + ".",
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "birthday.set",
-            actor=interaction.user,
-            target=member,
-            details={"date": month_day_text(m, d), "year": year, "source": source},
-        )
-
-    @birthday.command(name="remove", description="Forget your birthday")
-    async def remove(self, interaction: discord.Interaction) -> None:
-        if not await self._ready(interaction):
-            return
-        async with self._lock(interaction.user.id):
-            row = await get_birthday(self.bot.db, interaction.user.id)
-            if row is None:
-                await interaction.response.send_message(NOT_STORED, ephemeral=True)
-                return
-            await self._return_role(interaction.guild, row)
-            await delete_birthday(self.bot.db, interaction.user.id)
-        await interaction.response.send_message(REMOVED, ephemeral=True)
-        await log_action(
-            self.bot, interaction.guild, "birthday.remove", actor=interaction.user
-        )
-
-    @birthday.command(name="optout", description="Keep your birthday stored but post nothing")
-    async def optout(self, interaction: discord.Interaction) -> None:
-        await self._change_opt(interaction, opted_in=False)
-
-    @birthday.command(name="optin", description="Let Black Bloc post on your birthday again")
-    async def optin(self, interaction: discord.Interaction) -> None:
-        await self._change_opt(interaction, opted_in=True)
-
-    async def _change_opt(self, interaction: discord.Interaction, *, opted_in: bool) -> None:
-        if not await self._ready(interaction):
-            return
-        row = await get_birthday(self.bot.db, interaction.user.id)
-        if row is None:
-            await interaction.response.send_message(NOT_STORED, ephemeral=True)
-            return
-        if bool(row["opted_in"]) == opted_in:
-            await interaction.response.send_message(
-                ALREADY_OPTED.format(state="in" if opted_in else "out"), ephemeral=True
-            )
-            return
-        async with self._lock(interaction.user.id):
-            await set_opted_in(self.bot.db, interaction.user.id, opted_in)
-            if not opted_in:
-                await self._return_role(interaction.guild, row)
-        await interaction.response.send_message(
-            OPTED_IN if opted_in else OPTED_OUT, ephemeral=True
-        )
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "birthday.optin" if opted_in else "birthday.optout",
-            actor=interaction.user,
-        )
-
-    @birthday.command(name="show", description="Show a stored birthday")
-    @app_commands.describe(user="Whose birthday to show — yours if you leave this out")
-    async def show(
-        self, interaction: discord.Interaction, user: discord.Member | None = None
-    ) -> None:
-        if not await self._ready(interaction):
-            return
-        member = user or interaction.user
-        row = await get_birthday(self.bot.db, member.id)
-        if row is None:
-            await interaction.response.send_message(
-                NOT_STORED
-                if member.id == interaction.user.id
-                else NOT_STORED_FOR.format(who=f"**{member.display_name}**"),
-                ephemeral=True,
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
-            return
-        zone = await self._zone_of(member.id)
-        when = next_occurrence(row["month"], row["day"], zone)
-        years = (
-            age(row["year"], when.date())
-            if row["year"] and self.bot.store.get(interaction.guild.id, "birthday_show_age")
-            else None
-        )
-        lines = [
-            f"**{member.display_name}** — {month_day_text(row['month'], row['day'])}"
-            + (f", turning {years}" if years is not None else ""),
-            f"Next: {stamp(when, 'D')} ({stamp(when, 'R')}), midnight in **{zone}**",
-        ]
-        if not row["opted_in"]:
-            lines.append("They are **opted out**, so nothing will be posted.")
-        await interaction.response.send_message(
-            "\n".join(lines), ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-        )
-
-    @birthday.command(name="next", description="The birthdays coming up soonest")
-    async def next_up(self, interaction: discord.Interaction) -> None:
-        if not await self._ready(interaction):
-            return
-        rows = [r for r in await rows_for_guild(self.bot.db, interaction.guild.id) if r["opted_in"]]
-        if not rows:
-            await interaction.response.send_message(NOTHING_UPCOMING, ephemeral=True)
-            return
-        entries = [
-            {
-                "user_id": row["user_id"],
-                "month": row["month"],
-                "day": row["day"],
-                "year": row["year"],
-                "tz": await self._zone_of(row["user_id"]),
-            }
-            for row in rows
-        ]
-        by_id = {entry["user_id"]: entry for entry in entries}
-        lines = [
-            f"· <@{item.user_id}> — "
-            f"{month_day_text(by_id[item.user_id]['month'], by_id[item.user_id]['day'])} "
-            f"({stamp(item.when, 'D')}, {stamp(item.when, 'R')})"
-            for item in upcoming(entries, limit=NEXT_LIMIT)
-        ]
-        await interaction.response.send_message(
-            "**Next birthdays**\n" + "\n".join(lines),
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-
-    @birthday.command(name="list", description="Every stored birthday, by month (staff)")
-    @app_commands.describe(month="Show one month only")
-    @app_commands.choices(
-        month=[
-            app_commands.Choice(name=name, value=number)
-            for number, name in enumerate(MONTH_NAMES, start=1)
-        ]
-    )
-    async def list_all(
-        self, interaction: discord.Interaction, month: app_commands.Choice[int] | None = None
-    ) -> None:
-        if not await require_staff(interaction):
-            return
-        if not await self._ready(interaction):
-            return
-        rows = await rows_for_guild(self.bot.db, interaction.guild.id)
-        if month is not None:
-            rows = [r for r in rows if r["month"] == month.value]
-        if not rows:
-            await interaction.response.send_message(
-                NONE_THIS_MONTH.format(month=month.name) if month is not None else NOBODY_YET,
-                ephemeral=True,
-            )
-            return
-        lines: list[str] = []
-        seen: int | None = None
-        for row in rows:
-            if row["month"] != seen:
-                seen = row["month"]
-                lines.append(f"**{MONTH_NAMES[seen - 1]}**")
-            marks = "" if row["opted_in"] else " · opted out"
-            lines.append(
-                f"· {row['day']} — <@{row['user_id']}> ({row['source']}{marks})"
-            )
-        pages = chunked(lines)
-        await interaction.response.send_message(
-            pages[0], ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-        )
-        for page in pages[1:]:
-            await interaction.followup.send(
-                page, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-            )
-
-    @birthday.command(name="mode", description="Turn birthday wishes off, to shadow, or on")
-    @app_commands.describe(mode="off, shadow (log only) or on (post the wish)")
-    @app_commands.choices(
-        mode=[app_commands.Choice(name=name, value=name) for name in BIRTHDAY_MODES]
-    )
-    async def mode(
-        self, interaction: discord.Interaction, mode: app_commands.Choice[str]
-    ) -> None:
-        if not await require_staff(interaction):
-            return
-        if not await self._ready(interaction):
-            return
-        await self.bot.store.set(
-            interaction.guild.id, "birthday_mode", mode.value, by=interaction.user.id
-        )
-        await interaction.response.send_message(
-            f"Birthday wishes are now **{mode.value}**.", ephemeral=True
-        )
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "birthday.mode",
-            actor=interaction.user,
-            details={"mode": mode.value},
-        )
-
-    @birthday_role.command(name="clear", description="Stop giving a birthday role at all (staff)")
-    async def role_clear(self, interaction: discord.Interaction) -> None:
-        if not await require_staff(interaction):
-            return
-        if not await self._ready(interaction):
-            return
-        cleared = await self.bot.store.clear(
-            interaction.guild.id, "birthday_role_id", by=interaction.user.id
-        )
-        await interaction.response.send_message(
-            ROLE_CLEARED if cleared else ROLE_NOT_SET, ephemeral=True
-        )
-        if not cleared:
-            return
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "settings.clear",
-            actor=interaction.user,
-            details={"key": "birthday_role_id"},
-        )
-
-    @birthday.command(name="status", description="What birthdays are set to, and how they run")
-    async def status(self, interaction: discord.Interaction) -> None:
-        if not await require_staff(interaction):
-            return
-        if not await self._ready(interaction):
-            return
-        store = self.bot.store
-        guild = interaction.guild
-        totals = await stored_counts(self.bot.db, guild.id)
-        channel_id = store.get(guild.id, "birthday_channel_id")
-        role_id = store.get(guild.id, "birthday_role_id")
-        ran = self.last_run_at or "not yet"
-        lines = [
-            f"**mode** — {store.get(guild.id, 'birthday_mode')}",
-            f"**channel** — {f'<#{channel_id}>' if channel_id else 'not set'}",
-            f"**template** — `{store.get(guild.id, 'birthday_template')}`",
-            f"**colour** — {store.get(guild.id, 'birthday_color')}",
-            f"**role** — {f'<@&{role_id}>' if role_id else 'none'}"
-            + (" (test mode gives no roles)" if getattr(self.bot, "guard", None) else ""),
-            f"**ages shown** — {store.get(guild.id, 'birthday_show_age')}",
-            f"**stored** — {totals['stored']} ({totals['opted_in']} opted in · "
-            f"{totals['imported']} imported · {totals['self']} set by the person)",
-            f"**staff** — {staff_roles_sentence(store.staff_roles(guild))}",
-            f"**last sweep** — {ran} (every {LOOP_MINUTES} minutes)",
-            f"**last error** — {self.last_error or 'none'}",
-            f"**last import** — {self.last_import_at or 'not yet'} (every {IMPORT_HOURS} hours)",
-            f"**last import error** — {self.last_import_error or 'none'}",
-        ]
-        await interaction.response.send_message(
-            "\n".join(lines), ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-        )
+        if mine:
+            await render_panel(interaction, previous)
+        else:
+            await render_card(interaction, member, previous)
+        await said_after(interaction, said)
 
     async def members_of(self, guild: Any) -> list[Any]:
         return await members_of(guild)

@@ -1031,6 +1031,39 @@ async def test_the_panel_keeps_a_members_own_requests_to_themselves_until_a_lead
     assert parse_value("request_panel_own_list", "true") is True
 
 
+async def test_the_birthday_panel_stays_up_ten_minutes_by_default(store):
+    """Ten, not fifteen: the footer needs Discord's 15-minute interaction window still open."""
+    from black_bloc.cogs.core import VALUE_KEYS
+
+    assert store.get(7, "birthday_panel_minutes") == 10
+    assert "15" in KEY_HELP["birthday_panel_minutes"]
+    assert KEY_TYPES["birthday_panel_minutes"] == "int"
+    assert "birthday_panel_minutes" in VALUE_KEYS
+    await store.set(7, "birthday_panel_minutes", 30)
+    assert store.get(7, "birthday_panel_minutes") == 30
+    with pytest.raises(SettingError):
+        coerce_value("birthday_panel_minutes", -1)
+    assert parse_value("birthday_panel_minutes", "45") == 45
+
+
+async def test_the_birthday_panel_keeps_todays_behaviour_until_a_lead_says_otherwise(store):
+    """F-B1, owner 2026-09-03: the coming-up list and the lookup stay open to members."""
+    from black_bloc.cogs.core import VALUE_KEYS
+
+    for key in ("birthday_panel_next_for_members", "birthday_panel_lookup"):
+        assert store.get(7, key) is True
+        assert KEY_TYPES[key] == "bool"
+        assert key in VALUE_KEYS
+        assert KEY_HELP.get(key)
+        with pytest.raises(SettingError):
+            coerce_value(key, "true")
+        await store.set(7, key, False)
+        assert store.get(7, key) is False
+        assert parse_value(key, "true") is True
+    assert "staff always see them" in KEY_HELP["birthday_panel_next_for_members"]
+    assert "staff always can" in KEY_HELP["birthday_panel_lookup"]
+
+
 async def test_the_status_channel_is_blank_so_one_channel_carries_both_kinds_of_line(store):
     assert store.get(7, "request_status_channel_id") is None
 
