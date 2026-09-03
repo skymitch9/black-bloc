@@ -185,7 +185,7 @@ async def test_the_settings_group_is_never_hidden(bot, waits, monkeypatch):
 
     assert bot.tree.removed == ["rolemenu"]
     assert bot.tree.get_command("settings", guild=DEV_GUILD) is not None
-    assert cv.hidden_names(bot, GUILD) == {"rolemenu"}
+    assert cv.hidden_names(bot, GUILD) == {"rolemenu", "apply"}
 
 
 async def test_a_second_change_waits_out_the_rate_limit_window(bot, waits):
@@ -220,8 +220,20 @@ async def test_no_dev_guild_means_no_hiding_at_all(bot, waits, monkeypatch):
 
 
 def test_hidden_names_reads_the_store_and_needs_a_guild(bot):
-    assert cv.hidden_names(bot, GUILD) == {"rolemenu"}
+    # `applications_mode` also ships off, so `/apply` is hidden out of the box too.
+    assert cv.hidden_names(bot, GUILD) == {"rolemenu", "apply"}
     assert cv.hidden_names(bot, None) == set()
+
+
+async def test_apply_is_hidden_while_applications_are_off_and_comes_back_when_they_are_on(bot):
+    """The staff group stays: a Lead has to be able to turn it back on from Discord."""
+    assert cv.HIDDEN_WHEN_OFF["applications_mode"] == ("apply",)
+    assert "apply" in cv.hidden_names(bot, GUILD)
+    assert "applications" not in cv.hidden_names(bot, GUILD)
+
+    await bot.store.set(GUILD, "applications_mode", "on", by=5)
+
+    assert "apply" not in cv.hidden_names(bot, GUILD)
 
 
 async def test_the_request_group_is_shown_while_requests_are_on_and_hidden_when_they_are_off(bot):

@@ -16,6 +16,7 @@ STAFF_ONLY = discord.Permissions(manage_messages=True)
 HIDDEN_WHEN_OFF: dict[str, tuple[str, ...]] = {
     "rolemenu_mode": ("rolemenu",),
     "request_mode": ("request",),
+    "applications_mode": ("apply",),
 }
 NEVER_HIDDEN: tuple[str, ...] = ("settings",)
 OFF = "off"
