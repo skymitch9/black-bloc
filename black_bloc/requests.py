@@ -436,6 +436,7 @@ CARD_BUTTONS: dict[str, tuple[MoveButton, ...]] = {
     ),
     REVIEW: (
         MoveButton("accept", "Accept", "success"),
+        MoveButton("check", "Ask them to check", "primary"),
         MoveButton("sendback", "Send back", "secondary", needs_modal=True),
         MoveButton("hold", "Hold", "secondary", needs_modal=True),
         MoveButton("decline", "Decline", "danger", needs_modal=True),
@@ -1067,6 +1068,7 @@ __all__ = [
     "move_line",
     "moves_from",
     "moves_sentence",
+    "now_iso",
     "open_count",
     "option_label",
     "page_of",

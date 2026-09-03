@@ -177,6 +177,7 @@ def test_a_multi_enum_round_trips_and_comes_back_in_the_registrys_own_order(
         "done",
         "hold",
         "declined",
+        "check_asked",
     ]
 
     empty = client.put("/api/settings/request_channel_moves", json={"value": []})

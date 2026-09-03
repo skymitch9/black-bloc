@@ -742,7 +742,7 @@ def test_every_status_maps_to_the_move_buttons_the_panel_design_names(status):
     expected = {
         pure.OPEN: ["pickup", "hold", "decline"],
         pure.IN_PROGRESS: ["ready", "hold", "decline"],
-        pure.REVIEW: ["accept", "sendback", "hold", "decline"],
+        pure.REVIEW: ["accept", "check", "sendback", "hold", "decline"],
         pure.HOLD: ["resume", "decline"],
         pure.DONE: [],
         pure.DECLINED: [],
@@ -752,7 +752,14 @@ def test_every_status_maps_to_the_move_buttons_the_panel_design_names(status):
     for spec in found:
         assert spec.style in ("primary", "secondary", "success", "danger")
     if status == pure.REVIEW:
-        assert [one.style for one in found] == ["success", "secondary", "secondary", "danger"]
+        assert [one.style for one in found] == [
+            "success",
+            "primary",
+            "secondary",
+            "secondary",
+            "danger",
+        ]
+        assert [one.needs_modal for one in found] == [False, False, True, True, True]
 
 
 def test_accept_drops_out_when_the_card_says_somebody_else_must_check():
@@ -760,7 +767,7 @@ def test_accept_drops_out_when_the_card_says_somebody_else_must_check():
     without = [one.action for one in pure.card_buttons(pure.REVIEW, may_accept_here=False)]
 
     assert "accept" in with_accept and "accept" not in without
-    assert [one for one in without] == ["sendback", "hold", "decline"]
+    assert [one for one in without] == ["check", "sendback", "hold", "decline"]
 
 
 def test_the_card_footer_says_who_may_accept_when_this_staffer_may_not():
