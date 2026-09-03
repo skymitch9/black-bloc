@@ -191,9 +191,12 @@ docs bookkeeping lands with the work, not after.
   `request_embed` (built + how-to-test filled in) with a sentence asking them to check it and
   say so, falling back to a mention in the request channel when their DMs are closed. Which
   states offer it, whether it is its own state or a flag on `review`, and the fallback are
-  design calls — `info/requests-check-design.md` to write; the owner said "Keep building", so
-  no fork goes to him unless it is genuine. Status: **DESIGNING** — after wave 0 merges (it
-  touches the same cog).
+  design calls — the owner said "Keep building", so no fork went to him. Status:
+  **BUILDABLE** (2026-09-03 ~12:05) — [`info/requests-check-design.md`](info/requests-check-design.md)
+  written: an ACTION on the review card, not a state (§B); `check_asked` look + DM, channel
+  ping fallback (`request_check_fallback_channel`, default on), `request_check_on_ready`
+  (default off), schema 27, `POST /api/requests/{id}/check`; six owner-flippable calls in §D.
+  Next: Opus build on `feat/requests-check` from `main` ≥ `46e3ba4` (usage read first).
 
 - 🆕 **Panels over slash commands — the rest of the app (owner, 2026-09-03: "then carry it
   through the rest of the app"; confirmed ~11:25: "do the change to all / commands. I like
