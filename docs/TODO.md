@@ -51,7 +51,7 @@ per feature, so the old bot keeps running until the new one is proven.
 |---|---|---|---|
 | F1 | **Go-live → `#live-now`** | **DECIDED 2026-08-26: BOTH** — presence for discovery of anyone, Twitch EventSub (websocket) for rich posts on linked accounts; opt-out covers both. **PRIMARY = Discord presence/activity; Twitch EventSub is the FALLBACK/enrichment** (owner, 2026-08-26). **Measured incumbent (rescan):** YAGPDB posts ~8/day, 30 distinct streamers, template `REGULATORS! Mount up! **{login}** is currently streaming **{game}**! Check it out: https://www.twitch.tv/{login}` — keep the prefix; 4/199 posts render game as `****` (no category) → need a fallback; Twitch login ≠ Discord name (`thepresidentnoir`→`twitch.tv/prez`) → `/twitch link` is mandatory; YAG re-posts on restart/category change → **debounce**. Rich card = Discord's own link preview (free). Channel topic is stale ("post your links here") — fix when F1 ships. | BUILT (status corrected 2026-09-02; live modes per cutover-plan) |
 | F2 | **Twitch activity tracking** — **DECIDED 2026-08-26: YAGPDB "Streaming"-style.** Presence-based; when a member goes live post "X is live" (+title/link) to the channel; optional *Live* role while streaming; require-role / ignore-role filters; opt-out. No stats/leaderboard. Merges with F1 (one design doc). **"Scan" DECIDED + already built 2026-09-01** (owner: "as long as they opt in with the /link"): the Twitch poller polls every linked login via Helix and announces without Discord presence — that IS the scan; opt-in = `/twitch link`, opt-out honored. | built (shadow) |
-| F3 | **YouTube** — *maybe* | Go-live via YouTube presence WORKS (sweeps row 4); uploads = 🚀 NEXT WAVE item 2. | next wave |
+| F3 | **YouTube** — *maybe* | Go-live via YouTube presence WORKS (sweeps row 4); uploads SHIPPED 2026-09-02 as Phase 16 (moved to `DONE.md`), `youtube_mode` off until the owner flips it. | BUILT (live mode per cutover-plan) |
 | F4 | **Event form → Discord Scheduled Event**, via review | **DECIDED 2026-08-26 (all blanks filled):** `/event create` **modal**. **Timezone:** Discord exposes no user timezone to bots (only language locale) → entered once via `/timezone set` with city autocomplete, default = server zone (America/Phoenix). **Review = a channel per submission** (like Modmail today) under an **Events** category, named `<status>-<user>-<event>` e.g. `pending-sky-block-party` → renamed `approved-…` / `denied-…` (Discord channel names are lowercase a-z0-9-_ only, so `!` and spaces are normalised). **Approvers = anyone who can see `#mute-me-bot-test-spam`** — i.e. Aunties/Uncles, Leads, Committee, etc.; implement as "roles with View on the configured staff channel/category", not a hard-coded list. **Create a real Discord Scheduled Event: toggle, default ON.** | BUILT (status corrected 2026-09-02; live modes per cutover-plan) |
 | F5 | **Ping when an event goes live** | **DECIDED 2026-08-26:** announce in **`#live-now`** (channel set in an options menu); **role ping is a setting**, default *none* (YAG pings nobody today). See F14 for the roles. | BUILT (status corrected 2026-09-02; live modes per cutover-plan) |
 | F14 | **Ping roles** (owner, 2026-08-26): an opt-in **Events** role for go-live/event pings, and **favourite-streamer roles** — per-streamer opt-in pings ("people that want to see SuperNamu only … can get her pings"). Wire into F1/F5 announcements and the role menus. | SHIPPED `d777f57` 2026-09-02 (Phase 15, `info/phase15-design.md`); `pings_mode` ON; live-Discord role sweep = owner's |
@@ -107,15 +107,10 @@ already said go.** Order recommended by the 5.0 session, owner did not reorder:
 1. ~~F14 — ping roles~~ **SHIPPED `d777f57` 2026-09-02 17:43** — moved whole to
    [`DONE.md`](DONE.md) ("Phase 15"). Owner's live-Discord sweep still open
    (role create/assign, the two-role prefix on a real announcement).
-2. **F3 — YouTube upload announcements**: go-live via YouTube presence already
-   works (sweeps row 4); this adds NEW-UPLOAD posts, which needs the YouTube
-   Data API (owner mints an API key — free quota) + a channel-link store like
-   `/twitch link` + a poll loop like the Twitch one. **DESIGNED 2026-09-02
-   17:05 → [`info/phase16-design.md`](info/phase16-design.md)**: the public
-   Atom feed is the primary source (NO key needed); `YOUTUBE_API_KEY` is an
-   optional upgrade (handle resolution, live/Shorts classification) — the owner
-   may mint one at their pace. Ten defaults taken as settings keys. Builder
-   dispatches after Phase 15 lands (schema 22 follows 21).
+2. ~~F3 — YouTube upload announcements~~ **SHIPPED merge `7295f61`, deployed
+   2026-09-02 22:18 (`049881b`)** — moved whole to [`DONE.md`](DONE.md) ("Phase 16").
+   `youtube_mode` ships **off**; owner's optional `YOUTUBE_API_KEY` still open
+   (Waiting on the owner). Never yet run against a live channel.
 3. **Chat long-term memory** — GABI-style distilled member profiles (her design:
    cheap-model distillation when a conversation goes quiet, ≤2KB per person,
    injected as a memory block; see `catalog-platform` gabi-memory-design.md).
