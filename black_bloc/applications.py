@@ -87,11 +87,11 @@ BAD_STYLE = (
 )
 TOO_MANY_QUESTIONS = (
     "Discord shows at most {limit} boxes on one form and this would be number {given}, so "
-    "nothing was added. Remove one with `/applications question remove` first."
+    "nothing was added. Take one off with **Questions…** → **Remove** first."
 )
 BAD_POSITION = (
     "**{given}** is not a slot on this form, so nothing was changed. The slots are 1 to {limit} "
-    "and `/applications question list` says which are filled."
+    "and **Questions…** says which are filled."
 )
 BAD_DAYS = (
     "**{given}** is not a number of days, so nothing was changed. Type a whole number from 0 to "
@@ -100,19 +100,19 @@ BAD_DAYS = (
 
 NO_SUCH_FORM = (
     "This server has no application form called **{name}**, so nothing was changed. "
-    "`/applications list` names the ones it has, and `/applications create` makes one."
+    "`/apply` → **A form…** names the ones it has, and **New form** makes one."
 )
 NAME_TAKEN = (
     "This server already has an application form called **{name}**, so nothing was created. "
-    "Pick another name, or change that one with `/applications edit`."
+    "Pick another name, or change that one from `/apply` → **A form…** → **Edit…**."
 )
 NO_QUESTIONS_YET = (
     "**{name}** has no questions on it yet, so there is nothing to fill in. Staff add them with "
-    "`/applications question add {name} <label>`, then it can be applied for."
+    "`/apply` → **A form…** → **Questions…**, then it can be applied for."
 )
 FORM_CLOSED = (
     "**{title}** is not taking applications right now, so nothing was sent. Staff reopen it with "
-    "`/applications edit {name} open:true`."
+    "`/apply` → **A form…** → **Open it**."
 )
 APPLICATIONS_OFF = (
     "Applications are turned off right now, so nothing was sent. A Lead turns them on from the "
@@ -120,15 +120,15 @@ APPLICATIONS_OFF = (
 )
 ALREADY_APPLIED = (
     "You already have an application waiting on **{title}**, so nothing was sent twice. "
-    "`/apply status` says where it is, and `/apply withdraw` takes it back."
+    "`/apply` says where it is, and its **Take one back…** picker withdraws it."
 )
 TOO_SOON = (
     "Staff decided your last **{title}** application on {when}, so you can apply again {stamp}. "
     "Nothing was sent."
 )
 SENT = (
-    "Sent to staff — you'll get a DM either way. `/apply status` says where it is, and "
-    "`/apply withdraw` takes it back while it is still waiting."
+    "Sent to staff — you'll get a DM either way. `/apply` says where it is, and its "
+    "**Take one back…** picker withdraws it while it is still waiting."
 )
 CARD_NOT_POSTED = (
     "Your application for **{title}** is saved, but Black Bloc could not put the card in front "
@@ -139,12 +139,12 @@ CARD_IN_TEST_CHANNEL = (
     "channel."
 )
 NOTHING_TO_WITHDRAW = (
-    "You have nothing waiting on **{title}**, so there was nothing to take back. `/apply start "
-    "{name}` sends one."
+    "You have nothing waiting on **{title}**, so there was nothing to take back. `/apply` "
+    "sends one."
 )
 NOT_YOUR_APPLICATION = (
-    "That application belongs to somebody else, so nothing was changed. `/apply status` lists "
-    "your own."
+    "That application belongs to somebody else, so nothing was changed. `/apply` lists your "
+    "own."
 )
 NOTHING_TO_DECIDE = (
     "Black Bloc has no record of that application any more, so nothing was changed. The Role "
@@ -171,7 +171,7 @@ REMOVE_NEEDS_A_REASON = (
 )
 REMOVE_NOT_APPROVED = (
     "That application is **{status}**, not approved, so there was nobody to take off the list. "
-    "`/applications list status:approved` says who is on it."
+    "`/apply` → **A form…** → **Roster** says who is on it."
 )
 ROLE_REFUSED_AFTER_DECISION = (
     "The application is marked approved, but Discord refused to add **{role}** — Black Bloc "
@@ -181,16 +181,16 @@ ROLE_REFUSED_AFTER_DECISION = (
 NO_REVIEW_CHANNEL = "no_review_channel"
 NOTHING_PENDING = "Nobody is waiting on staff right now."
 NO_FORMS_YET = (
-    "This server has no application forms yet. `/applications create <name> <title>` makes the "
+    "This server has no application forms yet. `/apply` → **New form** makes the "
     "first one."
 )
 FORM_HAS_PENDING = (
     "**{name}** still has {count} application(s) waiting on staff, so it was not deleted. "
-    "Decide them first, or close the form with `/applications edit {name} open:false`."
+    "Decide them first, or close the form with **Close it** on its card."
 )
 PANEL_NOWHERE = (
     "Black Bloc has nowhere to put the Apply button, so nothing was posted. Say which channel "
-    "with `/applications panel {name} channel:#somewhere`."
+    "with **Post the Apply button** on its card."
 )
 PANEL_STUCK = (
     "Black Bloc could not put the Apply button up for **{name}** — the log says why. It needs to "
@@ -629,7 +629,7 @@ def site_page_url(origin: Any) -> str | None:
 
 
 def own_lines(rows: Any, forms_by_id: Any) -> list[str]:
-    """A member's own applications, one line each — what `/apply status` used to print."""
+    """A member's own applications, one line each — the block the panel writes for them."""
     found = []
     for row in rows or ():
         form = (forms_by_id or {}).get(form_value(row, "form_id"))

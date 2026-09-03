@@ -430,14 +430,14 @@ async def test_the_modal_is_built_from_the_questions_staff_stored(bot, db):
     assert modal.title == "Twitch Team"
 
 
-async def test_a_form_with_no_questions_refuses_in_words_and_says_which_command(bot, db):
+async def test_a_form_with_no_questions_refuses_in_words_and_says_where_staff_add_them(bot, db):
     form = await a_form(db, questions=())
     interaction = FakeInteraction(bot, FakeMember(bot.guild))
 
     await open_form_modal(interaction, form)
 
     assert "no questions on it yet" in interaction.sent
-    assert "/applications question add" in interaction.sent
+    assert "**Questions…**" in interaction.sent
     assert interaction.response.modals == []
 
 

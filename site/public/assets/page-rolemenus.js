@@ -75,14 +75,16 @@ const A_REASON = 'Say why — they are sent exactly this.';
 const APPLICATIONS_MODE_KEY = 'applications_mode';
 const APPLICATIONS_NOTE = 'Forms staff write, that members fill in. Approving one hands the ' +
   'form\u2019s role over, tells the applicant, and names whoever has to do the human step after it.';
-const APPLICATIONS_SWITCH = 'Off hides /apply and stops the Apply buttons; shadow writes ' +
-  'everything down but posts nothing, DMs nobody and hands no role over; on is the real thing.';
+const APPLICATIONS_SWITCH = 'Off leaves /apply in Discord saying so and offering nobody a ' +
+  'form, and stops the Apply buttons; shadow writes everything down but posts nothing, DMs ' +
+  'nobody and hands no role over; on is the real thing.';
 const NO_APPLICATION_FORMS = 'No application form exists yet. Make one below \u2014 the Twitch ' +
   'Team form is what this was built for.';
 const NO_APPLICATIONS = 'Nobody is waiting on staff.';
 const NO_DECIDED_APPLICATIONS = 'No application has been decided yet.';
 const QUESTIONS_NOTE = 'Discord shows at most five boxes on one form, in this order.';
-const FORM_NAME_HELP = 'Short, lower-case, no spaces \u2014 this is what /apply start finds it by.';
+const FORM_NAME_HELP = 'Short, lower-case, no spaces \u2014 this is what the logs and the ' +
+  '/apply panel name it by.';
 const NEXT_STEP_HELP = 'The human step after an approval. The card says \u201c@owner \u2014 next ' +
   'step: \u2026\u201d and the applicant is told the same thing.';
 const APPROVED_TEXT_HELP = 'What an approved applicant is DMed.';
