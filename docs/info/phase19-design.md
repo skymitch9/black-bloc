@@ -1,5 +1,7 @@
 # Phase 19 — Applications (the Twitch Team form, member request #2)
 
+> ⚠️ **Superseded on the DOOR, 2026-09-03: every `/apply *` and `/applications *` subcommand named below is retired.** One member-visible `/apply` opens a panel and every subcommand is a button, a picker or a modal on it — [`applications-panel-design.md`](applications-panel-design.md). The forms, the questions, the states, the DMs, the logs, the settings and the site are all unchanged; only the way in is. Read this file for BEHAVIOUR, never for the command to type.
+
 > **Audience:** the Opus builder first, reviewers second, the owner for the
 > decisions table. **Status:** TRACKED — DESIGN, written 2026-09-02 22:40 by
 > the Fable session (NEXT WAVE item 7). Secret NAMES only.

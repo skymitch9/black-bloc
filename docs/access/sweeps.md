@@ -9,6 +9,13 @@
 > program's first real `commands synced` drop, 44 → 43); **live in v64** (`e670542`, 14:05),
 > none run by eye yet; row 79's empty-select half is the one item the build could not check at
 > all; rows 32 and 48 and the Phase 4 appendix script below were rewritten in place for it.
+> Same day — rows **94–102** added by the APPLICATIONS PANEL build (`/apply` is ONE command that
+> opens a panel; both the `apply` and `applications` groups and their seventeen subcommands go —
+> the program's second `commands synced` drop, 43 → 42, measured). Rows **53–57**, **69–72** and
+> the whole Twitch Team walk-through below were rewritten in place for it rather than added; row
+> 53 now tests the OPPOSITE of what it used to (owner, 2026-09-03 13:47: "Visible" — the command
+> no longer disappears when applications are off). Rows 94–102 are on the branch
+> `worktree-agent-abf063b9177e02f17`, not merged, and none was run against Discord.
 > Earlier — rows **87–93** added by the birthdays panel build (`/birthday` is ONE command that
 > opens a panel; the twelve subcommands are retired; the Phase 5 prose block was replaced by
 > those rows — it named six subcommands that no longer exist plus `/birthday import`, deleted
@@ -16,8 +23,8 @@
 > applications no-role build (a form may keep a LIST instead of handing a role over; merged
 > `main` at 12:40, LIVE in v62 12:48); rows **66–68** added by the requests SIXTH pass ("Ask them
 > to check": the DM, the channel ping when their DMs are closed, and the auto-ask at ready) —
-> LIVE in v61 (`44170f4`, 12:29). The file now holds **86** un-exercised rows, numbered to 93;
-> none of 66–93 has been run against Discord or the live site.
+> LIVE in v61 (`44170f4`, 12:29). The file now holds **95** un-exercised rows, numbered to 102;
+> none of 66–102 has been run against Discord or the live site.
 > Same day — row **62** now says the done card does NOT post (owner: "suppress the
 > request.done box in discord" — `request_channel_moves` default drops `done`). Same
 > morning, row **65** added, and rows **14–15** corrected again, by the owner's
@@ -184,11 +191,11 @@ form for a full pass.
 
 | # | Feature | Do this | Expect |
 |---|---|---|---|
-| 53 | Applications — the switch | /rolemenus.html → **Applications** → set it to **shadow**, then **on**; or `/settings set-value applications_mode on` | the segment saves in place and says so; with it **off** `/apply` disappears from Discord within about five seconds and the Apply buttons stop working |
-| 54 | Applications — the form | follow the Twitch Team walk-through below (either the slash path or the dashboard editor) | `/applications question list twitch-team` shows five questions in order; the dashboard's form editor shows the same five, and Up/Down really reorders them |
-| 55 | Applications — applying | in `#mute-me-bot-test-spam`: `/apply start twitch-team` (or press **Apply** on the posted panel) | a modal with your five questions; on submit an ephemeral "Sent to staff…", a DM "…is with staff now", and a card with **Approve** / **Deny** in the test channel (test mode redirects it there and the reply says so) |
+| 53 | Applications — the switch, and the command that does NOT vanish | /rolemenus.html → **Applications** → set it to **shadow**, then **on**, then back to **off**; or `/settings set-value applications_mode off` | the segment saves in place and says so. ⚠️ **With it off `/apply` is STILL in Discord** (owner, 2026-09-03: "Visible") — open it and the panel says *"Applications are turned off right now…"* in words and offers **no** form to apply for, while staff still get **A form…**, **New form**, **Settings** and **Logs**. The posted Apply buttons stop working. This is the opposite of what row 53 tested before the panel, when the whole member command disappeared within five seconds |
+| 54 | Applications — the form | follow the Twitch Team walk-through below (either the Discord panel or the dashboard editor) | `/apply` → **A form…** → **Questions…** shows five questions in order; the dashboard's form editor shows the same five, and Up/Down really reorders them (reorder is site-only — the sub-panel says so and links there) |
+| 55 | Applications — applying | in `#mute-me-bot-test-spam`: `/apply` → **Apply for…** → **Twitch Team** (or press **Apply** on the posted panel) | a modal with your five questions; on submit an ephemeral "Sent to staff…", a DM "…is with staff now", and a card with **Approve** / **Deny** in the test channel (test mode redirects it there and the reply says so) |
 | 56 | Applications — deciding | press **Approve** on that card | the applicant gets the role; the card is edited to say who has it and carries `@<owner> — next step: the Team owner sends your twitch.tv invite…`; the applicant is DMed the same thing; /rolemenus.html → Applications shows it under Decided and the Timed roles table has a clock on it if the form set one. Then apply again as somebody else and press **Deny** with a reason: the DM carries the reason AND the date they may apply again |
-| 57 | Applications — the second application guard | apply twice on the same form without withdrawing | the second one refuses in words ("you already have an application waiting"); `/apply withdraw twitch-team` takes it back and lets you apply again; after a **deny**, applying again says *when* you may, not just no |
+| 57 | Applications — the second application guard | apply twice on the same form without withdrawing | the second one refuses in words ("you already have an application waiting"); `/apply` → **Take one back…** → **Yes, take it back** withdraws it and lets you apply again; after a **deny**, applying again says *when* you may, not just no |
 | 58 | Requests — panel move, Pick up (fourth pass) | `/request` as staff, pick an **open** request, press **Pick up** | the card re-renders **being worked on**; a card posts to the status channel if one is configured |
 | 59 | Requests — panel move, Hold | on an open / in-progress / review card, press **Hold**, fill "Why is it on hold?" | the card re-renders **on hold**; the asker is DMed the reason (`request_dm_on_decision`) |
 | 60 | Requests — panel move, Decline | press **Decline**, fill "Why?" | the card re-renders **declined**, final ("nothing moves it now"); the asker is DMed |
@@ -205,10 +212,10 @@ form for a full pass.
 
 | # | What | Do this | Expect |
 |---|---|---|---|
-| 69 | A form with no role at all | on **https://blackbloc.heygabi.ai/rolemenus.html#applications** press **New form**, fill Name + Heading, leave **Role it hands over** on **No role — keep a list**, save. (`/applications create name:stream-team title:Stream Team` with no `role:` does the same thing) | the form saves; the **Role lasts, days** box disappears while the role is blank; the forms table shows a grey **list** badge in the Role column instead of a role chip. An existing form is switched over with `/applications edit form:<name> no_role:true`, or by picking the blank option in the editor |
-| 70 | Applying and being approved with nothing to hand over | put the Apply button up, apply as a member, press **Approve** on the card | the card and the ephemeral reply say "Approved — **<name>** is on the **<heading>** list now." — no role is mentioned and none is given. The DM is the form's approved text with no "the role runs out" line. `/applications logs` shows `application.approved` with `granted: null` and NO `application.granted` line |
-| 71 | The roster, and Copy as text | on the Role menus page open **Approved for <form>** under that form | one row per approved member: their name, **twitch.tv/<login>** as a link (or a quiet "not linked"), how long since staff said yes, and who decided. Somebody who has left the server is still listed with "left the server" beside them — `/settings set-value key:applications_roster_shows_left value:false` hides them instead. **Copy as text** puts one line per member on the clipboard, ready to paste into the official team page |
-| 72 | Taking somebody off the list | on the roster press **Take off the list**, type a reason, confirm. (In Discord: `/applications show <id>` on an approved application — the same **Take off the list** button is on the panel) | they are DMed the reason and when they may apply again; the Decided table shows the row as **removed**; the roster is one shorter; `/applications list form:<name> status:approved` no longer names them. On a form that DOES hand a role over the button is not offered at all, and the route refuses in words pointing at `/role revoke` |
+| 69 | A form with no role at all | on **https://blackbloc.heygabi.ai/rolemenus.html#applications** press **New form**, fill Name + Heading, leave **Role it hands over** on **No role — keep a list**, save. (In Discord: `/apply` → **New form**, then on its card **Edit…** and leave the role picker alone) | the form saves; the **Role lasts, days** box disappears while the role is blank; the forms table shows a grey **list** badge in the Role column instead of a role chip. An existing form is switched over by submitting **Edit…**'s role picker EMPTY, or by picking the blank option in the editor |
+| 70 | Applying and being approved with nothing to hand over | put the Apply button up, apply as a member, press **Approve** on the card | the card and the ephemeral reply say "Approved — **<name>** is on the **<heading>** list now." — no role is mentioned and none is given. The DM is the form's approved text with no "the role runs out" line. `/apply` → **Logs** shows `application.approved` with `granted: null` and NO `application.granted` line |
+| 71 | The roster, and Copy as text | on the Role menus page open **Approved for <form>** under that form; in Discord, `/apply` → **A form…** → **Roster** | one row per approved member: their name, **twitch.tv/<login>** as a link (or a quiet "not linked"), how long since staff said yes, and who decided. Somebody who has left the server is still listed with "left the server" beside them — `/settings set-value key:applications_roster_shows_left value:false` hides them instead, on both surfaces. **Copy as text** (site only) puts one line per member on the clipboard |
+| 72 | Taking somebody off the list | on the roster press **Take off the list**, type a reason, confirm. (In Discord: `/apply` → **A form…** → **Roster** → **Take somebody off…**, or **Find #…** the application and press **Take off the list** on its card) | they are DMed the reason and when they may apply again; the Decided table shows the row as **removed**; the roster is one shorter. On a form that DOES hand a role over the button is not offered at all and the card says so in words, pointing at `/role revoke` |
 | 80 | Polls — the panel opens | `/poll` in #mute-me-bot-test-spam, first as a Lead and then as a plain member | ONE ephemeral panel, not a list of subcommands: **Create · Find #… · Refresh** on the top row for everybody, **Settings · Logs** added for a Lead only; a "Pick a poll…" select under it once something is running; a Lead also sees the counts line (**N** running · **N** waiting on a decision · **N** repeating) and, with a repeating poll saved, a second "Repeating polls…" select; **Open on the site** links to https://blackbloc.heygabi.ai/polls.html. A member sees no Settings and no Logs at all rather than buttons that refuse |
 | 81 | Polls — Create through the two-step modal | on the panel press **Create**: type the question, `Pizza \| Tacos \| Neither`, leave hours blank, pick a kind on the radio, tick nothing; submit; on the preview pick a channel, a ping role, flip **Thread: off**; press **Post it** | the modal carries exactly five things (question, options, hours, the kind radio, the two switches) — Discord's cap; the preview is a card of what you typed with **Post it · Repeat… · Start over · Cancel**, and NOTHING is written until Post it (press **Cancel** on a preview and `/poll` shows no new poll). After Post it: the poll is up in the channel you picked, and `/poll` → **Logs** shows one `poll.created` and one `poll.opened` — never two of either |
 | 82 | Polls — a date poll through the extra step | **Create** with kind **date**, no options; on the preview press **Date slots…**, start `2026-09-05`, 4 slots, step 1, unit **days**; **Post it** | before the slots are given there is no **Post it** button at all and the preview says the poll needs its slots; after them, four dated answers in the order you asked for. `poll_date_labels` still decides whether they read as `Sat 05 Sep` or as each reader's own clock |
@@ -237,6 +244,25 @@ form for a full pass.
 | 92 | Staff: the month list and the mode picker | as staff: **List a month…** → **Every month**, then **August**, then a month nobody is in; then **Wishes are…** → **on** | the list arrives as one or more NEW ephemeral messages grouped by month (`· 10 — @PT (self)`), and the panel itself stays open behind them; an empty month answers "Nobody has a birthday stored in **March**." The mode picker re-renders the panel with the shadow warning gone, and the log carries `birthday.mode` |
 | 93 | Staff: status, the role and the logs, then the quiet footer | as staff: **Status**; **Clear the birthday role** → confirm; **Logs**; then leave the panel alone for `birthday_panel_minutes` (10) minutes | Status is a new ephemeral message with mode, channel, template, colour, role, ages, the stored counts and both loops' last run/last error — the panel stays. Clear asks first, then answers "No birthday role will be given any more…" (or "There was no birthday role set" when none was). Logs opens the Birthdays log as its own ephemeral message. After ten minutes every button on the panel is greyed out and the embed footer reads *This panel has gone quiet — run /birthday again* |
 
+### Applications — `/apply` is ONE panel (wave 1). On `worktree-agent-abf063b9177e02f17`; not merged, not deployed.
+
+Two commands became one: `/apply` (three subcommands) and `/applications` (fourteen) are both
+gone, and every one of the seventeen is a button, a picker or a modal on the panel `/apply`
+opens. `commands synced` drops 43 → 42. Nothing about a form, a question, an approval or a log
+row changed — only the door.
+
+| # | What | Do this | Expect |
+|---|---|---|---|
+| 94 | The member panel | `/apply` in `#mute-me-bot-test-spam` as a plain member, with a form open | ONE ephemeral panel: the intro, **your own applications written out** (or "You have not applied for anything here yet."), a line saying form-making is for staff, an **Apply for…** picker, **Refresh** and **Open on the site**. **No** queue, **no** A form…, **no** New form, **no** Settings, **no** Logs — they are not drawn rather than drawn and refused |
+| 95 | Applying from the picker | **Apply for…** → **Twitch Team** | the same modal `/apply start` used to open, unchanged; on submit the same "Sent to staff" reply, the same DM, and the same Approve/Deny card in the test channel. Then `/settings set-value key:applications_panel_own_list value:false` and open `/apply` again: your own applications are no longer written out, and the **Take one back…** picker is still there |
+| 96 | Taking one back, and changing your mind | **Take one back…** → your waiting application → **Yes, take it back**; apply again, then **Take one back…** → **Keep it** | the first withdraws it — the channel card is edited, the row reads `withdrawn`, and the Logs page carries one `application.withdrawn`. **Keep it** changes nothing and puts you back on the panel. Applying again straight afterwards is allowed: no cooling-off follows a withdrawal |
+| 97 | The staff panel | `/apply` as a Lead | the same embed **plus** a counts line (**N** form(s) · **N** waiting · **N** on a list), a **Pick an application…** picker (capped at 25 — past that its placeholder reads "25 of N — the rest are on the site"), an **A form…** picker, and the five-button row **New form · Find #… · Settings · Logs · Refresh** with **Open on the site** under it. Press **Logs**: it answers a **NEW** message and the panel stays where it is. ⚠️ Staff get no **Apply for…** picker — staff apply through **A form…** → **Fill it in** |
+| 98 | Deciding from the panel | **Pick an application…** → a waiting one → **Approve**; pick another → **Deny** and type a reason | identical to pressing the buttons on the review card, because it is the same `apply_decision`: the role (or the "on the list" wording), the DM, the channel card edited, and **exactly one** log row each. The card re-renders in place with the moves that are still valid |
+| 99 | Staff's exit from a no | on a **denied** card press **Approve after all**; take somebody off a list, then **Find #…** their number and press **Put them back on the list** | both go back to `approved`, the person is DMed the approval, a role form hands the role over, and the log shows `application.approved` (not a new kind). ⚠️ A **withdrawn** card offers nothing and says so — the member owns that one and the way back is applying again |
+| 100 | The form card, its questions and clearing a picker | **A form…** → a form → **Questions…** → **Add…**, then pick one → **Edit**, then **Remove** → confirm; **Back** → **Edit…** → submit the **Role it hands over…** picker with nothing chosen | the questions change one at a time, each leaving one `application.question_changed` row; the questions sub-panel says reordering is on the Role menus page and links there. Clearing the role picker leaves the form keeping a list — exactly what `no_role:true` did — and the card's role line reads **nothing — it keeps a list**. ⚠️ **The empty-select submit is the one thing this build could not check without Discord**; if your client will not send one, the site's editor does the same write |
+| 101 | Roster, opening and closing, and the Apply button | **A form…** → a no-role form → **Roster** → **Take somebody off…** → a reason; **Back** → **Close it**, then **Open it**; then **Post the Apply button** → pick a channel | the roster is one shorter and they are DMed the reason; the card's "Taking applications" line flips no → yes; the Apply button appears in the channel you picked (test mode refuses any channel but `#mute-me-bot-test-spam`, in words). ⚠️ **Delete** is only drawn when nobody is waiting on the form — with somebody waiting it is absent and the card says how many |
+| 102 | Settings, and the quiet footer | **Settings** → the **Mode…** picker → **shadow**; a channel picker; submit the **Who decides…** picker EMPTY; **Numbers…**; then leave the panel alone for `applications_panel_minutes` (10) minutes | the lines above update after every write, the mode write leaves one `application.mode` row, and an empty picker CLEARS its key rather than doing nothing. **Numbers…** takes the retry days and the panel minutes and refuses a value outside their bounds in words. After ten minutes every control is greyed out and the embed footer reads *This panel has gone quiet — run /apply again* |
+
 ## The owner's Twitch Team form — the walk-through
 
 This is the form Phase 19 was built for (Pawpette's request, 2026-09-02). Nothing
@@ -247,27 +273,32 @@ form the same way for anything else staff hand out.
 role and the DMs; a human still clicks *invite* on twitch.tv. That click is what the
 `owner` + `next_step` fields exist to name — see `KNOWN_ISSUES.md`.
 
-**In Discord** (every step has a dashboard twin on /rolemenus.html → Applications):
+**In Discord** — one command, `/apply`, and every step has a dashboard twin on
+/rolemenus.html → Applications:
 
-1. `/applications mode value:on`
-2. `/applications create name:twitch-team title:Twitch Team role:@Twitch Team`
-   — add `channel:` if the cards should not go to the staff channel, and
-   `approver_role:` if somebody other than staff decides them.
-3. The five questions, in this order:
-   - `/applications question add form:twitch-team label:Twitch handle placeholder:twitch.tv/…`
-   - `/applications question add form:twitch-team label:How long have you been streaming`
-   - `/applications question add form:twitch-team label:What is your usual schedule`
-   - `/applications question add form:twitch-team label:What do you stream`
-   - `/applications question add form:twitch-team label:Why the Team style:long required:False`
-4. `/applications edit form:twitch-team owner:@<the Team owner> next_step:the Team owner sends your twitch.tv invite — accept it from your Twitch notifications`
-   — and, if you want one, `approved_text:` (what the DM says) and `expires_days:`
-   (0 or blank means the role never runs out).
-5. `/applications panel form:twitch-team` — puts the **Apply** button up in that
-   channel. Run it again anywhere to move it. Members can also use `/apply start`.
-6. Check it: `/applications list`, `/applications show <id>`, `/applications logs`.
+1. `/apply` → **Settings** → the **Mode…** picker → **on**.
+2. **Back** → **New form**: name `twitch-team`, heading `Twitch Team`, and a line
+   under it. You land on the new form's card.
+3. On that card, **Edit…** → the **Role it hands over…** picker → `@Twitch Team`;
+   the **Where its cards wait…** picker if they should not go to the staff channel;
+   the **Who decides it…** picker if somebody other than staff decides them; the
+   **Who is nudged next…** picker for the Team owner. ⚠️ **Submitting a picker with
+   nothing chosen CLEARS it** — that is how a form goes back to keeping a list.
+4. **Words…** on the same sub-panel: the heading, the line under it, **what happens
+   after a yes** (`the Team owner sends your twitch.tv invite — accept it from your
+   Twitch notifications`) and what an approved applicant is DM'd. **Numbers…** takes
+   the days the role lasts (0 = forever) and the wait before somebody may apply again.
+5. **Back** → **Questions…** → **Add…**, five times, in this order — Twitch handle
+   (hint `twitch.tv/…`), How long have you been streaming, What is your usual
+   schedule, What do you stream, Why the Team (`long`, required `no`). Picking one on
+   the select gives you **Edit** and **Remove**. ⚠️ **Reordering is site-only** and the
+   sub-panel says so — Discord has nothing to drag with.
+6. **Back** → **Post the Apply button** → pick the channel. Press it again to move it.
+7. Check it: **A form…** for the forms, **Pick an application…** for the queue,
+   **Find #…** for a settled one by number, and **Logs**.
 
-**To close it for a while** (applications in progress are untouched):
-`/applications edit form:twitch-team open:False`.
+**To close it for a while** (applications in progress are untouched): `/apply` →
+**A form…** → **Close it**. **Open it** puts it back.
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that

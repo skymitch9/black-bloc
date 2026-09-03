@@ -1,5 +1,7 @@
 # Applications without a role — "let's have the bot store the info!"
 
+> ⚠️ **2026-09-03: `/applications show` is gone and its `TakeOffButton` moved.** The button lives on the application card the `/apply` panel renders, drawn from `applications.CARD_BUTTONS` for an `approved` row on a form that keeps a list — same `remove()`, same reason modal, same DM. `/apply` → **A form…** → **Roster** → **Take somebody off…** is the other door. See [`applications-panel-design.md`](applications-panel-design.md).
+
 **Audience:** the Opus build agent, then the reviewer. **Status:** TRACKED · ✅ **SHIPPED** — merged `main`
 `9891f71` 12:40, live in **v62** 12:48 (schema 28; the C1 rebuild ran on the live DB, boot log 19:47:59Z).
 **Last verified:** 2026-09-03 — built to this spec; 3414 tests pass, ruff clean, `check.mjs`

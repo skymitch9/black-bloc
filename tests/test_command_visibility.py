@@ -187,7 +187,7 @@ async def test_the_settings_group_is_never_hidden(bot, waits, monkeypatch):
     assert bot.tree.get_command("settings", guild=DEV_GUILD) is not None
     assert "settings" not in cv.hidden_names(bot, GUILD)
     assert "rolemenu" in cv.hidden_names(bot, GUILD)
-    assert cv.hidden_names(bot, GUILD) == {"rolemenu", "memory", "apply"}
+    assert cv.hidden_names(bot, GUILD) == {"rolemenu", "memory"}
 
 
 async def test_a_second_change_waits_out_the_rate_limit_window(bot, waits):
@@ -222,7 +222,7 @@ async def test_no_dev_guild_means_no_hiding_at_all(bot, waits, monkeypatch):
 
 
 def test_hidden_names_reads_the_store_and_needs_a_guild(bot):
-    assert cv.hidden_names(bot, GUILD) == {"rolemenu", "memory", "apply"}
+    assert cv.hidden_names(bot, GUILD) == {"rolemenu", "memory"}
     assert cv.hidden_names(bot, None) == set()
 
 
@@ -236,11 +236,12 @@ async def test_the_memory_group_is_hidden_until_the_server_turns_memory_on(bot):
     assert "memory" not in cv.hidden_names(bot, GUILD)
 
 
-async def test_apply_is_hidden_while_applications_are_off_and_comes_back_when_they_are_on(bot):
-    """The staff group stays: a Lead has to be able to turn it back on from Discord."""
-    assert cv.HIDDEN_WHEN_OFF["applications_mode"] == ("apply",)
-    assert "apply" in cv.hidden_names(bot, GUILD)
-    assert "applications" not in cv.hidden_names(bot, GUILD)
+async def test_apply_stays_in_the_tree_even_while_applications_are_off(bot):
+    """Owner, 2026-09-03 13:47 — "Visible". One command carries both halves, so hiding it
+    would cost staff their only Discord door to form management; the panel says off in words."""
+    assert "applications_mode" not in cv.HIDDEN_WHEN_OFF
+    assert bot.store.get(GUILD, "applications_mode") == "off"
+    assert "apply" not in cv.hidden_names(bot, GUILD)
 
     await bot.store.set(GUILD, "applications_mode", "on", by=5)
 

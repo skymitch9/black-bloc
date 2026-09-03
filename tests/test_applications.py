@@ -5,15 +5,19 @@ import pytest
 from black_bloc.applications import (
     APPROVED,
     APPROVED_ON_RECORD,
+    CARD_BUTTONS,
     DENIED,
     LABEL_MAX,
     LONG,
+    MOVE_TARGETS,
     NO_ROLE,
+    PANEL_OWN_LIST_KEY,
     PENDING,
     PLACEHOLDER_MAX,
     QUESTIONS_MAX,
     REMOVE_NEEDS_A_REASON,
     REMOVED,
+    RESTORABLE,
     RETRY_DAYS_DEFAULT,
     SETTLED,
     SHORT,
@@ -24,10 +28,15 @@ from black_bloc.applications import (
     ApplicationError,
     add_question,
     answers_json,
+    application_id_from,
+    application_lines,
     applications_for,
+    card_buttons,
     check_name,
     check_title,
     cooling_until,
+    counts_line,
+    counts_of,
     create_application,
     create_form,
     decide_application,
@@ -35,6 +44,7 @@ from black_bloc.applications import (
     delete_form,
     edit_question,
     expires_days_of,
+    form_lines,
     get_application,
     get_form,
     get_form_by_id,
@@ -42,19 +52,24 @@ from black_bloc.applications import (
     last_decision,
     list_forms,
     may_move,
+    own_lines,
     owner_nudge,
+    panel_shows_own_list,
     pending_count,
+    question_lines,
     questions_for,
     read_answers,
     remove_application,
     remove_question,
     render_card,
     replace_questions,
+    restore_application,
     retry_days_of,
     role_of,
     set_card,
     set_grant,
     set_panel,
+    site_page_url,
     twitch_logins_for,
     update_form,
     validate_question,
@@ -85,7 +100,7 @@ async def a_form(db, name="twitch-team", **kwargs):
 
 def test_a_pending_application_may_only_move_to_the_three_settled_states():
     assert set(TRANSITIONS[PENDING]) == {APPROVED, DENIED, WITHDRAWN}
-    assert all(TRANSITIONS[one] == () for one in (DENIED, WITHDRAWN, REMOVED))
+    assert TRANSITIONS[WITHDRAWN] == ()
     assert set(STATUSES) == {PENDING, APPROVED, DENIED, WITHDRAWN, REMOVED}
     assert may_move(PENDING, APPROVED) is True
     assert may_move(APPROVED, DENIED) is False
@@ -96,8 +111,17 @@ def test_an_approved_application_may_only_move_to_removed():
     assert TRANSITIONS[APPROVED] == (REMOVED,)
     assert may_move(APPROVED, REMOVED) is True
     assert may_move(PENDING, REMOVED) is False
-    assert may_move(REMOVED, APPROVED) is False
     assert set(SETTLED) == {APPROVED, DENIED, WITHDRAWN, REMOVED}
+
+
+def test_staff_can_leave_a_denied_or_removed_application_but_never_a_withdrawn_one():
+    """Owner rule: no stored state staff cannot leave — except the one the member owns."""
+    assert TRANSITIONS[DENIED] == (APPROVED,)
+    assert TRANSITIONS[REMOVED] == (APPROVED,)
+    assert may_move(DENIED, APPROVED) is True
+    assert may_move(REMOVED, APPROVED) is True
+    assert may_move(WITHDRAWN, APPROVED) is False
+    assert RESTORABLE == (DENIED, REMOVED)
 
 
 def test_a_form_name_is_a_slug_and_says_so_when_it_is_not():
@@ -567,3 +591,159 @@ async def test_the_whole_roster_s_twitch_logins_come_back_in_one_query(db):
     assert found == {MEMBER: "ada", 901: "bee"}
     assert len(counted) == 1
     assert await twitch_logins_for(db, []) == {}
+
+
+
+# The panel's data — the button table, the third writer, and the five line builders.
+
+
+@pytest.mark.parametrize("status", list(STATUSES))
+def test_every_button_the_table_offers_is_a_move_transitions_allows(status):
+    """§C's table is DATA, and the data is checked against `TRANSITIONS`, never trusted."""
+    offered = {MOVE_TARGETS[move.action] for move in CARD_BUTTONS[status]}
+    assert offered <= set(TRANSITIONS[status]), (status, offered)
+    missing = set(TRANSITIONS[status]) - offered
+    assert missing <= {WITHDRAWN}, (status, missing)
+
+
+def test_a_card_offers_nothing_to_somebody_who_may_not_decide_it():
+    for status in STATUSES:
+        assert card_buttons(status, may_decide=False) == ()
+
+
+def test_an_approved_role_form_points_at_role_revoke_rather_than_a_take_off_button():
+    assert card_buttons(APPROVED, has_role=True) == ()
+    assert [one.label for one in card_buttons(APPROVED, has_role=False)] == [
+        "Take off the list"
+    ]
+
+
+def test_a_withdrawn_application_is_the_members_and_has_no_staff_move():
+    assert card_buttons(WITHDRAWN) == ()
+    assert TRANSITIONS[WITHDRAWN] == ()
+
+
+async def test_only_a_denied_or_removed_row_can_be_restored(db):
+    form = await a_form(db)
+    denied = await create_application(db, GUILD, form["id"], MEMBER, "[]")
+    await decide_application(db, denied, DENIED, decided_by=STAFF, deny_reason="no")
+
+    assert await restore_application(db, denied, decided_by=STAFF) is True
+    fresh = await get_application(db, denied)
+    assert fresh["status"] == APPROVED and fresh["deny_reason"] is None
+    assert fresh["decided_by"] == STAFF
+
+    assert await restore_application(db, denied, decided_by=STAFF) is False
+    assert (await get_application(db, denied))["status"] == APPROVED
+
+
+async def test_restoring_never_touches_a_pending_or_withdrawn_row(db):
+    form = await a_form(db)
+    waiting = await create_application(db, GUILD, form["id"], MEMBER, "[]")
+
+    assert await restore_application(db, waiting, decided_by=STAFF) is False
+    assert (await get_application(db, waiting))["status"] == PENDING
+
+    await decide_application(db, waiting, WITHDRAWN, decided_by=MEMBER)
+    assert await restore_application(db, waiting, decided_by=STAFF) is False
+    assert (await get_application(db, waiting))["status"] == WITHDRAWN
+
+
+def test_a_number_is_read_off_a_card_with_or_without_the_hash():
+    assert application_id_from("#12") == 12
+    assert application_id_from(" 12 ") == 12
+    assert application_id_from("#  12") == 12
+    for junk in ("", None, "twelve", "12a", "-3", "#"):
+        assert application_id_from(junk) is None
+
+
+def test_a_members_own_lines_name_the_form_and_why_it_was_refused():
+    forms_by_id = {1: {"title": "Twitch Team"}}
+    rows = [
+        {"form_id": 1, "status": PENDING, "deny_reason": None},
+        {"form_id": 1, "status": DENIED, "deny_reason": "not yet"},
+        {"form_id": 2, "status": APPROVED, "deny_reason": None},
+    ]
+
+    lines = own_lines(rows, forms_by_id)
+
+    assert lines[0] == "**Twitch Team** — pending, waiting on staff"
+    assert lines[1] == "**Twitch Team** — denied — not yet"
+    assert lines[2] == "**form #2** — approved"
+
+
+def test_a_form_line_says_list_rather_than_a_role_that_is_not_there():
+    lines = form_lines(
+        [
+            {"name": "twitch-team", "role_id": 4242, "open": 1},
+            {"name": "stream-team", "role_id": None, "open": 0},
+        ]
+    )
+
+    assert lines == [
+        "**twitch-team** — open, <@&4242>",
+        "**stream-team** — closed, list",
+    ]
+    assert "<@&None>" not in " ".join(lines)
+
+
+def test_an_application_line_carries_a_twitch_login_only_for_an_approved_list_row():
+    rows = [
+        {"id": 7, "user_id": MEMBER, "form_id": 2, "status": APPROVED, "submitted_at": None},
+        {"id": 8, "user_id": MEMBER, "form_id": 1, "status": APPROVED, "submitted_at": None},
+    ]
+
+    lines = application_lines(
+        rows, {1: "twitch-team", 2: "stream-team"}, listed=(2,), logins={MEMBER: "ada"}
+    )
+
+    assert "twitch.tv/ada" in lines[0] and "stream-team" in lines[0]
+    assert "twitch.tv" not in lines[1]
+
+
+def test_question_lines_say_which_slots_are_filled_and_which_may_be_left_blank():
+    lines = question_lines(
+        [
+            {"position": 1, "label": "Twitch handle", "style": "short", "required": 1},
+            {"position": 2, "label": "Why", "style": "long", "required": 0},
+        ]
+    )
+
+    assert lines == [
+        "**1.** Twitch handle — short",
+        "**2.** Why — long, optional",
+    ]
+
+
+def test_the_counts_line_counts_the_forms_the_queue_and_the_lists():
+    rows = [
+        {"status": PENDING},
+        {"status": PENDING},
+        {"status": APPROVED},
+        {"status": REMOVED},
+        {"status": "nonsense"},
+    ]
+
+    assert counts_of(rows)[PENDING] == 2
+    assert counts_of(rows)[APPROVED] == 1
+    assert counts_line([{}, {}], rows) == "**2** form(s) · **2** waiting · **1** on a list"
+
+
+def test_the_own_list_key_is_on_by_default_and_reads_back_as_a_bool():
+    class Store:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self, guild_id, key):
+            assert key == PANEL_OWN_LIST_KEY
+            return self.value
+
+    assert panel_shows_own_list(Store(True), GUILD) is True
+    assert panel_shows_own_list(Store(None), GUILD) is False
+
+
+def test_the_site_link_needs_an_origin_and_points_at_the_role_menus_page():
+    assert site_page_url("") is None
+    assert site_page_url("https://blackbloc.heygabi.ai/") == (
+        "https://blackbloc.heygabi.ai/rolemenus.html"
+    )

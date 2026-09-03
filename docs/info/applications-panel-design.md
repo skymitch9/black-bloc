@@ -1,8 +1,20 @@
 # Applications — `/applications` is ONE command that opens a panel
 
-> **Audience:** the build agent and the reviewer. **Status:** TRACKED · **DECIDED, building** (all three forks answered; Opus build dispatched 2026-09-03 14:15).
-> **Last verified: 2026-09-03** against **`9891f71`** (`main`, the merge of `feat/applications-no-role`,
-> schema 28). Every `path:line` below was read at that commit, in `black_bloc/applications.py`,
+> **Audience:** the build agent and the reviewer. **Status:** TRACKED · ✅ **BUILT on
+> `worktree-agent-abf063b9177e02f17`** (base `main` `27452ac`, after the birthdays/events/polls
+> panels merged). Merged `--no-ff` after Fable review 2026-09-03, deploying as v66.
+> **Last verified: 2026-09-03** — the build measured `len(bot.tree.get_commands())` at **42**
+> (43 at the base: exactly the one-slot drop §B predicts), **3697 tests pass** (3644 at the base),
+> `ruff check .` clean, `node site/mock/check.mjs` **17 pages / 142 routes** (unchanged by this
+> build — 142 is what `main` reads today, not the 141 §H guessed at `9891f71`), and both site
+> assets parse under `node --input-type=module --check`.
+> ⚠️ **NOT verified: anything against live Discord.** No boot (`python -m black_bloc` needs a
+> token this environment does not have — `python -c "import …"` is the substitute, and it passes),
+> no panel opened, no button pressed, and in particular **no empty-select submit** (§C's one
+> unverified edge, the same one the events build flagged). Sweep rows 94–102 are the by-eye list.
+> The §A/§C/§E `path:line` keys below were read at **`9891f71`** and have drifted by three merges
+> plus this build; trust the anchor text. Every `path:line` below was read at that commit, in
+> `black_bloc/applications.py`,
 > `cogs/community/applications.py`, `api/tools/applications.py`, `panels.py`, `settings_store.py`,
 > `command_visibility.py`, `logkinds.py`, `personas.py`, `tests/test_bot.py`,
 > `tests/cogs/community/test_applications.py`, `docs/access/sweeps.md`, `docs/info/code-notes.md`.
@@ -364,6 +376,89 @@ The three that are genuinely his:
 
 ## Deviations
 
-Written by the build agent. Everything not listed here was built as this document says.
+Written by the build agent, 2026-09-03. Everything not listed here was built as this document
+says, including all three decided forks (I-A1 `/apply`, I-A2 Visible, I-A3 build the Questions
+sub-panel).
 
-_(none yet — this design has not been built)_
+1. **`update_form` now clears FOUR id columns from the `NO_ROLE` sentinel, not one.** §C says an
+   empty `RoleSelect` submit is CLEAR and points at `no_role:true`; but `update_form`
+   (`black_bloc/applications.py`) drops every `None` as "leave it alone", so the sentinel was the
+   only way to clear ANYTHING — and it was wired to `role_id` alone. The Edit sub-panel's other
+   three pickers (review channel, approver role, form owner) would silently have done nothing when
+   submitted empty, which is the "a control that looks like it worked and did not" defect. A new
+   `CLEARABLE_IDS = ("role_id", "review_channel_id", "approver_role_id", "owner_user_id")` maps
+   `0 → NULL` for each. Existing callers are untouched: the site never sends `0`, and the role
+   half behaves exactly as the no-role pass built it.
+2. **`settle_approval` computes `until` itself rather than taking it as an argument.** §F's
+   signature is `settle_approval(bot, guild, form, fresh, member, actor, until, via)`. `until` is
+   `grants.expires_at(forms.expires_days_of(form))` on a role form and `None` otherwise — a pure
+   function of `form`, which is already a parameter. Passing it would let the two callers
+   (`_approve`, `reinstate`) disagree about the expiry of the same approval; deriving it once
+   inside cannot.
+3. **`set_mode` takes `via` but no route calls it.** §F asks for it, and the kind is now
+   `kind_via("application.mode", via)`. The site changes the mode through the Settings page, which
+   logs its own `settings.set` row, so `web.application.mode` is a kind nothing emits today. It
+   costs nothing and it means the fifth door, if one is ever built, cannot forget.
+4. **The Settings sub-panel carries `applications_panel_own_list` as a toggle, and drops "DMs" and
+   "Roster shows people who left" onto the same row.** §C's row 4 lists five things and Discord
+   caps a row at five; adding the new key would have been a sixth. The row is now three toggles +
+   **Numbers…** + **Back**, and the **Open on the site** link moved off it (the root panel and the
+   form card both carry one). Checklist 33 is satisfied either way — the key is in the registry, so
+   the Settings page and `/settings set-value` reach it — but a Lead should not have to leave
+   Discord to flip a decision the panel itself is about.
+5. **`Find #…` and the two confirm steps use `panels.NoteModal`, and `DenyModal` became a subclass
+   of it.** §C only names `NoteModal` for Deny / Take off / Put back. `FindModal` is a one-field
+   text modal with a different label and a 12-character cap — the same shape, so a second modal
+   class would have been checklist item 17's exact defect. `DenyModal` (the CHANNEL card's, which
+   §E said to delete) is kept as a name, because the persistent `DecisionButton` that P14 leaves
+   alone constructs it — but its body is now three lines over the shared modal instead of a second
+   `TextInput` declaration.
+6. **The member's "Take one back…" select goes through a Yes/Keep confirm, and picks a FORM, not an
+   application.** §B row 1 says "the caller's own `pending` rows → Yes/Keep confirm →
+   `withdraw_application`". `withdraw_application(bot, guild, member, form)` takes a form, not an
+   application id, and finds the open row itself — so the select's value is the form id and the
+   shared function is called exactly as `/apply withdraw` called it. Same rows offered, same write.
+7. **Staff are given no "Apply for…" picker at all**, as §B's table says, and reach a form through
+   **A form…** → **Fill it in**. A non-staff APPROVER gets both (queue on row 0, Apply for… on row
+   1) — §B's split is on `is_staff or decides_anything`, but form management is staff-only, so an
+   approver who is not staff is a member with a queue rather than a staffer.
+8. **The question Edit/Add modal spells `style` and `required` as text boxes** (`short`/`long`,
+   `yes`/`no`), because §C asks for one modal carrying all four fields and a Discord modal holds
+   only `TextInput`s. A blank box keeps what the question already had; `check_style` refuses a
+   third word in its own sentence. The alternative — two toggle buttons on the question card — was
+   not built.
+9. **`PANEL_MINUTES_KEY`, `ROSTER_SHOWS_LEFT_KEY`, `PANEL_TIMEOUT_FOOTER` and the four `/apply
+   status` strings moved from the cog into `black_bloc/applications.py`**, where every other
+   feature keeps them (`requests.py`, `events.py`, `polls.py`, `birthdays.py` all do). The cog
+   re-exports the two keys by name so no import outside it moved except
+   `api/tools/applications.py`'s, which now reads `forms.ROSTER_SHOWS_LEFT_KEY`.
+10. **`api/tools/applications.py`'s `checked()` helper was deleted, not kept.** Its three callers
+    became `make_form` / `save_form` / `change_question`, each of which already returns the
+    wording refusal rather than raising, so the wrapper had nothing left to wrap. The 400s and
+    their sentences are unchanged — `tests/api/tools/test_applications.py` proves that, untouched.
+11. **§H item 1 (a real boot, reading `commands synced`) was NOT run** — no token here. The number
+    was measured the only other way it can be: `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`
+    counts `bot.tree.get_commands()` after loading every cog, which is what `command_sync.py`
+    syncs. **43 before, 42 after**, and the drop is exactly the one slot §B predicts.
+    `python -c "import black_bloc.applications, black_bloc.cogs.community.applications,
+    black_bloc.api.tools.applications, black_bloc.personas"` passes (§H item 3).
+12. **§H item 4's route count is 142, not 141.** `node site/mock/check.mjs` reports **17 pages /
+    142 routes** on `main` at `27452ac` — the design's 141 was measured at `9891f71`, before
+    polls. This build adds no route and `site/mock/contract.json` is untouched, so 142 is the
+    unchanged number.
+13. **The Roster sub-panel does not honour a 25-cap placeholder on its LIST, only on its select.**
+    The embed writes every approved row it is allowed to show (clamped at 4000 characters, one
+    query, as §C requires); the "Take somebody off…" select caps at 25 with the shared
+    `capped_placeholder`. A roster past 25 is still fully readable, just not fully actionable from
+    Discord — the site's roster is the other door and the placeholder says so.
+15. **A `db_up(interaction)` gate was added for the reads that happen BEFORE a defer.**
+    `db_ready` (the library's) answers a *followup*, so it only works once something has
+    deferred — but a button that opens a MODAL cannot defer first, and several of them read the
+    form (or its questions) to build the modal. With the database down those reads would have
+    raised into `AnswersErrors`' generic fallback instead of saying `DB_UNAVAILABLE` in words
+    (checklist 8). `run_move` was also reordered to defer → `db_ready` → read, which is P5's
+    order anyway. One test pins it.
+14. **`decidable()` was added beside `decides_anything()`.** §F names only the boolean; the staff
+    split needs the LIST too, so an approver's queue can be filtered to the forms they may decide
+    without asking `can_decide` twice per form. `decides_anything` is `bool(decidable(...))` in
+    spirit and kept as its own name because §B reads better with it.

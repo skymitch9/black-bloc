@@ -92,8 +92,8 @@ one line, `/memory forget` clears it and `/memory off` stops it writing anything
 `/help` — every command, in a list.
 `/ping` — checks Black Bloc is awake.
 `/about` — what Black Bloc is.
-`/apply` — apply for something staff hand out, like the Twitch Team. `/apply start` opens the
-form, `/apply status` says where yours is, `/apply withdraw` takes one back."""
+`/apply` — apply for something staff hand out, like the Twitch Team. It opens one window: pick a
+form to fill in, see where yours has got to, and take one back while it is still waiting."""
 
 COOKOUT_VOICE = """## How you sound
 You sound like the cookout: warm, easy, a little playful — somebody's favourite uncle working the

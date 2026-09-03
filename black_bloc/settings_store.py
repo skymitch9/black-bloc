@@ -823,6 +823,7 @@ KEY_TYPES.update(
         "applications_dm_on_decision": "bool",
         "applications_roster_shows_left": "bool",
         "applications_panel_minutes": "int",
+        "applications_panel_own_list": "bool",
     }
 )
 KEY_CHOICES["applications_mode"] = APPLICATIONS_MODES
@@ -861,10 +862,14 @@ KEY_HELP.update(
             "gone; false hides them"
         ),
         "applications_panel_minutes": (
-            "minutes the /applications show panel stays live before its buttons disable "
-            "themselves; 10 by default. The 'this panel went quiet' footer can only be written "
-            "while Discord's 15-minute interaction window is still open, so 15 or more means "
-            "the buttons simply stop working with no footer to explain it"
+            "minutes the /apply panel stays live before its buttons disable themselves; 10 by "
+            "default. The 'this panel went quiet' footer can only be written while Discord's "
+            "15-minute interaction window is still open, so 15 or more means the buttons simply "
+            "stop working with no footer to explain it"
+        ),
+        "applications_panel_own_list": (
+            "whether the /apply panel writes a member's own applications out for them; true by "
+            "default, and false makes that list staff-only"
         ),
     }
 )
@@ -1493,6 +1498,8 @@ class SettingsStore:
             return True
         if key == "applications_panel_minutes":
             return 10
+        if key == "applications_panel_own_list":
+            return True
         if key.endswith("_log_level"):
             return LEVEL_DEFAULT
         if KEY_TYPES.get(key) in ("channels", "roles"):

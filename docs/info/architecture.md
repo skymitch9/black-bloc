@@ -20,8 +20,10 @@
 > **Phase 19** branch (applications, built in parallel with 17 and 18 and merged LAST):
 > `SCHEMA_VERSION` is **25** — 23 and 24 are Phase 17's and Phase 18's and are empty on this
 > branch; 25 adds `application_forms`, `application_questions` and `applications`.
-> `bot.py:COGS` is **17** cogs and the tree has **41** top-level slash commands (`/apply`
-> for members, `/applications` for staff). `node site/mock/check.mjs` reports **17 pages /
+> `bot.py:COGS` is **17** cogs and the tree had **41** top-level slash commands on that branch
+> (`/apply` for members, `/applications` for staff). ⚠️ **Stale as a current reading:** on `main`
+> at `27452ac` the tree is **43**, and the applications panel build takes it to **42** — one
+> member-visible `/apply` carries both halves and the `applications` group is gone. `node site/mock/check.mjs` reports **17 pages /
 > 126 routes**; `ruff check black_bloc tests site` clean. New files:
 > `applications.py`, `cogs/community/applications.py`, `api/tools/applications.py` and
 > their mirrored tests. ⚠️ Measured on the Phase 19 branch only — NOT merged, NOT deployed,

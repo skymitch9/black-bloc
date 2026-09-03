@@ -1288,6 +1288,22 @@ async def test_the_show_panel_goes_quiet_after_ten_minutes_unless_a_lead_changes
     assert await store.set(1, "applications_panel_minutes", 5) == 5
 
 
+async def test_a_member_sees_their_own_applications_until_a_lead_says_otherwise(store):
+    """Today's permission is the default (owner, 2026-09-03), and it is a key, not a constant."""
+    assert KEY_TYPES["applications_panel_own_list"] == "bool"
+    assert store.get(1, "applications_panel_own_list") is True
+    assert "staff-only" in KEY_HELP["applications_panel_own_list"]
+    assert await store.set(1, "applications_panel_own_list", False) is False
+    assert store.get(1, "applications_panel_own_list") is False
+    with pytest.raises(SettingError):
+        await store.set(1, "applications_panel_own_list", "maybe")
+
+
+async def test_the_applications_panel_help_names_the_command_that_opens_it(store):
+    assert "/apply panel" in KEY_HELP["applications_panel_minutes"]
+    assert "15-minute interaction window" in KEY_HELP["applications_panel_minutes"]
+
+
 async def test_a_wait_longer_than_ten_years_is_refused_with_its_own_sentence(store):
     assert await store.set(1, "applications_retry_days", 0) == 0
     with pytest.raises(SettingError) as caught:

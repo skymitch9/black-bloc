@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 
 import discord
 import pytest
@@ -10,28 +11,46 @@ from black_bloc.cogs.community.applications import (
     MODE_SAID,
     NOT_AN_APPROVER,
     REMOVE_IS_FOR_LISTS,
-    ROLE_OR_NO_ROLE,
-    TAKE_OFF_LABEL,
     Applications,
     ApplyButton,
     ApplyModal,
+    ApplyPick,
+    CardMoveButton,
     DecisionButton,
     DenyModal,
-    TakeOffButton,
+    FormPick,
+    LogsButton,
+    QueuePick,
+    WithdrawPick,
     apply_decision,
     approver_role_id,
+    build_card,
+    build_form_card,
+    change_question,
+    drop_form,
+    make_form,
     mode_of,
     nudge_mentions,
+    open_card,
     open_form_modal,
     post_panel,
+    put_panel_up,
+    reinstate,
     remove,
+    render_panel,
+    render_questions,
+    render_roster,
+    render_settings,
     review_channel,
+    save_form,
+    set_mode,
+    still_may_decide,
     submit_application,
     withdraw_application,
 )
 from black_bloc.cogs.community.role_menus import RoleMenus
 from black_bloc.config import load_settings
-from black_bloc.settings_store import SettingsStore
+from black_bloc.settings_store import DB_UNAVAILABLE, SettingsStore
 from black_bloc.storage.db import Database
 
 GUILD = 7
@@ -68,6 +87,14 @@ class FakeMessage:
 
     async def edit(self, **kwargs):
         self.kwargs |= kwargs
+
+    @property
+    def embeds(self):
+        held = self.kwargs.get("embeds")
+        if held is not None:
+            return list(held)
+        one = self.kwargs.get("embed")
+        return [one] if one is not None else []
 
 
 class FakeChannel:
@@ -199,30 +226,62 @@ class FakeFollowup:
 
 
 class FakeInteraction:
-    def __init__(self, bot, user, channel_id=TEST_CHANNEL):
+    def __init__(self, bot, user, channel_id=TEST_CHANNEL, guild=True):
         self.client = bot
         self.user = user
-        self.guild = bot.guild
-        self.guild_id = bot.guild.id
+        self.guild = bot.guild if guild else None
+        self.guild_id = bot.guild.id if guild else None
         self.channel = bot.guild.get_channel(channel_id)
         self.channel_id = channel_id
         self.response = FakeResponse()
         self.followup = FakeFollowup(self.response)
+        self.edits = []
 
     async def original_response(self):
         return FakeMessage(1, self.channel)
 
+    async def edit_original_response(self, **kwargs):
+        self.edits.append(kwargs)
+        return FakeMessage(9500, self.channel, **kwargs)
+
+    @property
+    def rendered(self):
+        """What the panel last put on the screen — an edit if there was one, else the send."""
+        if self.edits:
+            return self.edits[-1]
+        return self.response.messages[-1] if self.response.messages else {}
+
     @property
     def view(self):
-        return self.response.messages[-1].get("view") if self.response.messages else None
+        return self.rendered.get("view")
 
     @property
     def sent(self):
-        return self.response.messages[-1]["content"] if self.response.messages else None
+        said = [
+            one["content"] for one in self.response.messages if one.get("content") is not None
+        ]
+        return said[-1] if said else None
 
     @property
     def embed(self):
-        return self.response.messages[-1].get("embed") if self.response.messages else None
+        return self.rendered.get("embed")
+
+    @property
+    def words(self):
+        found = self.embed
+        return "" if found is None else str(found.description or "")
+
+    def labels(self):
+        found = self.view
+        return [] if found is None else [
+            getattr(one, "label", None) for one in found.children
+        ]
+
+    def placeholders(self):
+        found = self.view
+        return [] if found is None else [
+            getattr(one, "placeholder", None) for one in found.children
+        ]
 
 
 @pytest.fixture
@@ -371,14 +430,14 @@ async def test_the_modal_is_built_from_the_questions_staff_stored(bot, db):
     assert modal.title == "Twitch Team"
 
 
-async def test_a_form_with_no_questions_refuses_in_words_and_says_which_command(bot, db):
+async def test_a_form_with_no_questions_refuses_in_words_and_says_where_staff_add_them(bot, db):
     form = await a_form(db, questions=())
     interaction = FakeInteraction(bot, FakeMember(bot.guild))
 
     await open_form_modal(interaction, form)
 
     assert "no questions on it yet" in interaction.sent
-    assert "/applications question add" in interaction.sent
+    assert "**Questions…**" in interaction.sent
     assert interaction.response.modals == []
 
 
@@ -729,149 +788,6 @@ async def test_the_review_channel_falls_back_through_the_settings_in_order(bot, 
     assert review_channel(bot, bot.guild, form).id == TEST_CHANNEL
 
 
-# The slash commands.
-
-
-async def test_the_mode_command_says_what_each_setting_actually_does(bot, db, lead):
-    interaction = FakeInteraction(bot, lead)
-
-    await Applications.applications_mode.callback(
-        Applications(bot), interaction, _Choice("shadow")
-    )
-
-    assert bot.store.get(GUILD, forms.MODE_KEY) == "shadow"
-    assert interaction.sent == MODE_SAID["shadow"]
-    assert "application.mode" in await action_kinds(db)
-
-
-async def test_creating_a_form_names_the_next_step_and_the_question_cap(bot, db, lead):
-    interaction = FakeInteraction(bot, lead)
-
-    await Applications.applications_create.callback(
-        Applications(bot), interaction, "twitch-team", "Twitch Team", FakeRole(ROLE)
-    )
-
-    assert await forms.get_form(db, GUILD, "twitch-team") is not None
-    assert "/applications question add twitch-team" in interaction.sent
-    assert str(forms.QUESTIONS_MAX) in interaction.sent
-    assert "application.form_created" in await action_kinds(db)
-
-
-async def test_a_form_name_that_is_not_a_slug_is_refused_before_anything_is_written(
-    bot, db, lead
-):
-    interaction = FakeInteraction(bot, lead)
-
-    await Applications.applications_create.callback(
-        Applications(bot), interaction, "Twitch Team!", "Twitch Team", FakeRole(ROLE)
-    )
-
-    assert "lower-case letters" in interaction.sent
-    assert await forms.list_forms(db, GUILD) == []
-
-
-async def test_a_form_with_people_waiting_on_it_refuses_to_be_deleted(bot, db, lead):
-    form = await a_form(db)
-    await pending_row(bot, db, form, FakeMember(bot.guild))
-    interaction = FakeInteraction(bot, lead)
-
-    await Applications.applications_delete.callback(
-        Applications(bot), interaction, "twitch-team"
-    )
-
-    assert "still has 1 application(s) waiting" in interaction.sent
-    assert await forms.get_form(db, GUILD, "twitch-team") is not None
-
-
-async def test_the_panel_command_puts_the_apply_button_up_and_remembers_it(bot, db, lead):
-    await a_form(db)
-    interaction = FakeInteraction(bot, lead)
-
-    await Applications.applications_panel.callback(
-        Applications(bot), interaction, "twitch-team", None
-    )
-
-    form = await forms.get_form(db, GUILD, "twitch-team")
-    assert form["panel_channel_id"] == TEST_CHANNEL and form["panel_message_id"]
-    assert "application.panel_posted" in await action_kinds(db)
-    assert f"<#{TEST_CHANNEL}>" in interaction.sent
-
-
-async def test_the_panel_refuses_a_channel_test_mode_will_not_let_it_speak_in(bot, db, lead):
-    bot.guard = FakeGuard(allowed=TEST_CHANNEL)
-    await a_form(db)
-    interaction = FakeInteraction(bot, lead)
-
-    await Applications.applications_panel.callback(
-        Applications(bot), interaction, "twitch-team", bot.guild.get_channel(LOG_CHANNEL)
-    )
-
-    assert interaction.sent == "test mode"
-    assert (await forms.get_form(db, GUILD, "twitch-team"))["panel_message_id"] is None
-
-
-async def test_status_lists_only_the_callers_own_applications(bot, db):
-    form = await a_form(db)
-    member = FakeMember(bot.guild)
-    other = FakeMember(bot.guild, user_id=901, display_name="Bo")
-    await pending_row(bot, db, form, member)
-    await pending_row(bot, db, form, other)
-    interaction = FakeInteraction(bot, member)
-
-    await Applications.apply_status.callback(Applications(bot), interaction)
-
-    assert interaction.sent.count("Twitch Team") == 1
-    assert "waiting on staff" in interaction.sent
-
-
-async def test_status_says_so_plainly_when_they_have_applied_for_nothing(bot, db):
-    interaction = FakeInteraction(bot, FakeMember(bot.guild))
-
-    await Applications.apply_status.callback(Applications(bot), interaction)
-
-    assert "not applied for anything" in interaction.sent
-
-
-async def test_show_renders_the_card_with_the_answers_on_it(bot, db, lead):
-    form = await a_form(db)
-    member = FakeMember(bot.guild)
-    row = await pending_row(bot, db, form, member)
-    interaction = FakeInteraction(bot, lead)
-
-    await Applications.applications_show.callback(Applications(bot), interaction, row["id"])
-
-    assert interaction.embed.title.endswith("Twitch Team")
-    assert any(field.name == "Twitch handle" for field in interaction.embed.fields)
-
-
-async def test_show_refuses_a_number_from_another_server_without_leaking_it(bot, db, lead):
-    interaction = FakeInteraction(bot, lead)
-
-    await Applications.applications_show.callback(Applications(bot), interaction, 999)
-
-    assert "no application with that number" in interaction.sent
-
-
-async def test_the_autocomplete_offers_open_forms_to_members_and_all_of_them_to_staff(
-    bot, db, lead
-):
-    await a_form(db)
-    closed = await a_form(db, name="mod-team")
-    await forms.update_form(db, GUILD, closed["name"], open=False)
-    cog = Applications(bot)
-    interaction = FakeInteraction(bot, lead)
-
-    member_side = await cog.form_choices(interaction, "")
-    staff_side = await cog.any_form_choices(interaction, "team")
-
-    assert [one.value for one in member_side] == ["twitch-team"]
-    assert sorted(one.value for one in staff_side) == ["mod-team", "twitch-team"]
-
-
-class _Choice:
-    def __init__(self, value):
-        self.value = value
-        self.name = value
 
 
 # A form that keeps a list instead of handing a role over.
@@ -958,53 +874,477 @@ async def test_taking_somebody_off_needs_a_reason_and_an_approved_row(bot, db, l
     assert (await forms.get_application(db, row["id"]))["status"] == grants.APPROVED
 
 
-async def test_a_form_can_be_created_with_no_role_at_all(bot, db, lead):
+
+# The panel — `/apply` is one command, and both halves come out of one embed.
+
+
+async def open_panel(bot, user):
+    interaction = FakeInteraction(bot, user)
+    await Applications.apply.callback(Applications(bot), interaction)
+    return interaction
+
+
+def picks(interaction, kind):
+    view = interaction.view
+    return [one for one in (view.children if view is not None else ()) if isinstance(one, kind)]
+
+
+async def test_the_command_answers_ephemerally_with_one_panel(bot, db):
+    await a_form(db)
+    interaction = await open_panel(bot, FakeMember(bot.guild))
+
+    said = interaction.response.messages[-1]
+    assert said["ephemeral"] is True
+    assert said["embed"].title == forms.PANEL_TITLE
+    assert said["allowed_mentions"].roles is False
+    assert forms.PANEL_INTRO in interaction.words
+
+
+async def test_a_member_gets_apply_for_and_none_of_the_staff_controls(bot, db):
+    await a_form(db)
+    interaction = await open_panel(bot, FakeMember(bot.guild))
+
+    assert picks(interaction, ApplyPick)
+    assert not picks(interaction, QueuePick)
+    assert not picks(interaction, FormPick)
+    assert not picks(interaction, LogsButton)
+    assert "Settings" not in interaction.labels()
+    assert "New form" not in interaction.labels()
+
+
+async def test_staff_get_the_queue_the_forms_and_the_five_buttons(bot, db, lead):
+    form = await a_form(db)
+    await pending_row(bot, db, form, FakeMember(bot.guild))
+
+    interaction = await open_panel(bot, lead)
+
+    assert picks(interaction, QueuePick) and picks(interaction, FormPick)
+    assert picks(interaction, LogsButton)
+    for label in ("New form", "Find #…", "Settings", "Logs", "Refresh"):
+        assert label in interaction.labels()
+    assert not picks(interaction, ApplyPick)
+
+
+async def test_an_approver_who_is_not_staff_sees_only_the_queue_for_their_own_form(bot, db):
+    theirs = await a_form(db, name="twitch-team", approver_role_id=APPROVER_ROLE)
+    other = await a_form(db, name="mod-team")
+    approver = FakeMember(bot.guild, user_id=903, display_name="Dee", roles=(APPROVER_ROLE,))
+    mine = await pending_row(bot, db, theirs, FakeMember(bot.guild))
+    await pending_row(bot, db, other, FakeMember(bot.guild, user_id=904, display_name="Eve"))
+
+    interaction = await open_panel(bot, approver)
+
+    queue = picks(interaction, QueuePick)[0]
+    assert [one.value for one in queue.options] == [str(mine["id"])]
+    assert not picks(interaction, FormPick)
+    assert not picks(interaction, LogsButton)
+
+
+async def test_the_mode_being_off_says_so_in_words_and_renders_no_apply_control(bot, db):
+    """Owner, 2026-09-03 13:47 — "Visible": the command stays, the control does not."""
+    await a_form(db)
+    await bot.store.set(GUILD, forms.MODE_KEY, "off")
+
+    interaction = await open_panel(bot, FakeMember(bot.guild))
+
+    assert forms.APPLICATIONS_OFF in interaction.words
+    assert not picks(interaction, ApplyPick)
+
+
+async def test_a_member_sees_their_own_applications_or_not_by_the_key(bot, db):
+    form = await a_form(db)
+    member = FakeMember(bot.guild)
+    await pending_row(bot, db, form, member)
+
+    on = await open_panel(bot, member)
+    assert "Twitch Team" in on.words
+    assert forms.STATUS_WAITING.strip(", ") in on.words
+
+    await bot.store.set(GUILD, forms.PANEL_OWN_LIST_KEY, False)
+    off = await open_panel(bot, member)
+
+    assert "Twitch Team" not in off.words
+
+
+async def test_a_member_who_has_applied_for_nothing_is_told_so_plainly(bot, db):
+    await a_form(db)
+
+    interaction = await open_panel(bot, FakeMember(bot.guild))
+
+    assert forms.NOTHING_OF_YOURS in interaction.words
+
+
+async def test_the_queue_caps_at_twenty_five_and_the_placeholder_says_so(bot, db, lead):
+    form = await a_form(db)
+    for at in range(27):
+        member = FakeMember(bot.guild, user_id=2000 + at, display_name=f"P{at}")
+        await pending_row(bot, db, form, member)
+
+    interaction = await open_panel(bot, lead)
+
+    queue = picks(interaction, QueuePick)[0]
+    assert len(queue.options) == 25
+    assert "25 of 27" in queue.placeholder
+
+
+async def test_a_staffer_with_something_of_their_own_waiting_can_take_it_back(bot, db, lead):
+    form = await a_form(db)
+    await pending_row(bot, db, form, lead)
+
+    interaction = await open_panel(bot, lead)
+    withdraw = picks(interaction, WithdrawPick)[0]
+    picking = FakeInteraction(bot, lead)
+    withdraw._values = [str(form["id"])]
+    await withdraw.callback(picking)
+    yes = next(one for one in picking.view.children if one.label.startswith("Yes"))
+    confirming = FakeInteraction(bot, lead)
+    await yes.callback(confirming)
+
+    assert await forms.open_application(db, form["id"], lead.id) is None
+    assert "application.withdrawn" in await action_kinds(db)
+
+
+# The application card — the table is data, and every status renders its own row.
+
+
+@pytest.mark.parametrize(
+    "status,expected",
+    [
+        (grants.PENDING, ["Approve", "Deny"]),
+        (grants.APPROVED, ["Take off the list"]),
+        (grants.DENIED, ["Approve after all"]),
+        (grants.WITHDRAWN, []),
+        (forms.REMOVED, ["Put them back on the list"]),
+    ],
+)
+def test_every_status_renders_exactly_its_row_of_the_button_table(status, expected):
+    moves = forms.card_buttons(status, has_role=False, may_decide=True)
+    assert [one.label for one in moves] == expected
+
+
+def test_an_approved_role_form_offers_nothing_and_a_stranger_offers_nothing_either():
+    assert forms.card_buttons(grants.APPROVED, has_role=True, may_decide=True) == ()
+    assert forms.card_buttons(grants.PENDING, has_role=False, may_decide=False) == ()
+
+
+async def test_the_card_says_where_an_approved_role_application_can_go_instead(bot, db, lead):
+    form = await a_form(db)
+    member = FakeMember(bot.guild)
+    row = await pending_row(bot, db, form, member)
+    await apply_decision(bot, bot.guild, row["id"], grants.APPROVED, lead)
+    fresh = await forms.get_application(db, row["id"])
+
+    embed, view = build_card(bot, bot.guild, form, fresh, lead)
+
+    assert [one.label for one in view.children] == ["Back"]
+    assert any("/role revoke" in field.value for field in embed.fields)
+
+
+async def test_a_withdrawn_card_says_the_member_owns_it(bot, db):
+    form = await a_form(db)
+    member = FakeMember(bot.guild)
+    row = await pending_row(bot, db, form, member)
+    await withdraw_application(bot, bot.guild, member, form)
+    fresh = await forms.get_application(db, row["id"])
+
+    embed, view = build_card(bot, bot.guild, form, fresh, member)
+
+    assert [one.label for one in view.children] == ["Back"]
+    assert any(forms.WITHDRAWN_IS_THEIRS in field.value for field in embed.fields)
+
+
+async def test_approving_from_the_card_is_the_same_write_the_channel_card_makes(bot, db, lead):
+    form = await a_list_form(db)
+    member = FakeMember(bot.guild)
+    row = await pending_row(bot, db, form, member)
+    button = CardMoveButton(row["id"], form["id"], forms.APPROVE)
     interaction = FakeInteraction(bot, lead)
 
-    await Applications.applications_create.callback(
-        Applications(bot), interaction, "stream-team", "Stream Team"
-    )
+    await button.callback(interaction)
 
-    form = await forms.get_form(db, GUILD, "stream-team")
+    fresh = await forms.get_application(db, row["id"])
+    assert fresh["status"] == grants.APPROVED
+    kinds = await action_kinds(db)
+    assert kinds.count("application.approved") == 1
+    assert "web.application.approved" not in kinds
+
+
+async def test_denying_from_the_card_goes_through_a_note_modal_that_carries_the_reason(
+    bot, db, lead
+):
+    form = await a_form(db)
+    member = FakeMember(bot.guild)
+    row = await pending_row(bot, db, form, member)
+    button = CardMoveButton(row["id"], form["id"], forms.DENY)
+    opening = FakeInteraction(bot, lead)
+
+    await button.callback(opening)
+    modal = opening.response.modals[0]
+    assert modal.note.max_length == forms.REASON_MAX
+    submitting = FakeInteraction(bot, lead)
+    await modal.sent(submitting, "not this time")
+
+    fresh = await forms.get_application(db, row["id"])
+    assert fresh["status"] == grants.DENIED and fresh["deny_reason"] == "not this time"
+    assert (await action_kinds(db)).count("application.denied") == 1
+
+
+async def test_a_staffer_demoted_while_the_card_is_open_moves_nothing(bot, db, lead):
+    form = await a_list_form(db)
+    member = FakeMember(bot.guild)
+    row = await pending_row(bot, db, form, member)
+    button = CardMoveButton(row["id"], form["id"], forms.APPROVE)
+    stranger = FakeMember(bot.guild, user_id=905, display_name="Nobody")
+    interaction = FakeInteraction(bot, stranger)
+
+    await button.callback(interaction)
+
+    assert (await forms.get_application(db, row["id"]))["status"] == grants.PENDING
+    assert "staff only" in interaction.sent
+
+
+async def test_still_may_decide_names_the_approver_role_instead_of_a_bare_refusal(bot, db):
+    form = await a_form(db, approver_role_id=APPROVER_ROLE)
+    stranger = FakeMember(bot.guild, user_id=906, display_name="Nobody")
+    interaction = FakeInteraction(bot, stranger)
+
+    assert await still_may_decide(interaction, form) is False
+    assert NOT_AN_APPROVER.format(role_id=APPROVER_ROLE, name="twitch-team") == interaction.sent
+
+
+# Staff's exit from a no — `denied` and `removed` go back to `approved`.
+
+
+async def test_a_denied_application_can_be_approved_after_all(bot, db, lead):
+    form = await a_form(db)
+    member = FakeMember(bot.guild)
+    row = await pending_row(bot, db, form, member)
+    await apply_decision(bot, bot.guild, row["id"], grants.DENIED, lead, reason="no")
+    member.dms.clear()
+
+    said, fresh = await reinstate(bot, bot.guild, row["id"], lead)
+
+    assert fresh["status"] == grants.APPROVED and fresh["deny_reason"] is None
+    assert member.edits == [[ROLE]]
+    assert (await action_kinds(db)).count("application.approved") == 1
+    assert any("approved" in one for one in member.dms)
+    assert f"#{row['id']}" in said
+
+
+async def test_somebody_taken_off_a_list_can_be_put_back_on_it(bot, db, lead):
+    form = await a_list_form(db)
+    member = FakeMember(bot.guild)
+    row = await pending_row(bot, db, form, member)
+    await apply_decision(bot, bot.guild, row["id"], grants.APPROVED, lead)
+    await remove(bot, bot.guild, row["id"], lead, "stopped streaming")
+
+    said, fresh = await reinstate(bot, bot.guild, row["id"], lead)
+
+    assert fresh["status"] == grants.APPROVED
+    assert "on the **Stream Team** list" in said or f"#{row['id']}" in said
+
+
+async def test_a_pending_or_withdrawn_application_is_not_something_to_put_back(bot, db, lead):
+    form = await a_form(db)
+    member = FakeMember(bot.guild)
+    row = await pending_row(bot, db, form, member)
+
+    waiting, nothing = await reinstate(bot, bot.guild, row["id"], lead)
+    assert nothing is None and grants.PENDING in waiting
+
+    await withdraw_application(bot, bot.guild, member, form)
+    gone, still_nothing = await reinstate(bot, bot.guild, row["id"], lead)
+
+    assert still_nothing is None and grants.WITHDRAWN in gone
+    assert (await forms.get_application(db, row["id"]))["status"] == grants.WITHDRAWN
+
+
+# Find #… reaches a settled row the queue select never lists.
+
+
+async def test_find_opens_the_card_for_a_settled_application(bot, db, lead):
+    form = await a_form(db)
+    member = FakeMember(bot.guild)
+    row = await pending_row(bot, db, form, member)
+    await apply_decision(bot, bot.guild, row["id"], grants.DENIED, lead, reason="no")
+    interaction = FakeInteraction(bot, lead)
+
+    await open_card(interaction, row["id"])
+
+    assert interaction.embed.title.endswith("Twitch Team")
+    assert "Approve after all" in interaction.labels()
+
+
+async def test_find_refuses_a_number_from_another_server_without_leaking_it(bot, db, lead):
+    interaction = FakeInteraction(bot, lead)
+
+    await open_card(interaction, 999)
+
+    assert "no application with that number" in interaction.sent
+
+
+def test_a_number_is_read_off_a_card_with_or_without_the_hash():
+    assert forms.application_id_from("#12") == 12
+    assert forms.application_id_from(" 12 ") == 12
+    assert forms.application_id_from("twelve") is None
+
+
+# The form card, its sub-panels, and the five writes that used to be inline.
+
+
+async def test_the_mode_write_leaves_one_row_and_says_what_it_does(bot, db, lead):
+    said, value = await set_mode(bot, bot.guild, lead, "shadow")
+
+    assert bot.store.get(GUILD, forms.MODE_KEY) == "shadow" and value == "shadow"
+    assert said == MODE_SAID["shadow"]
+    assert (await action_kinds(db)).count("application.mode") == 1
+
+
+async def test_making_a_form_names_the_next_step_and_the_question_cap(bot, db, lead):
+    said, form = await make_form(bot, bot.guild, lead, "twitch-team", "Twitch Team", role_id=ROLE)
+
+    assert form is not None and await forms.get_form(db, GUILD, "twitch-team") is not None
+    assert "Questions…" in said and str(forms.QUESTIONS_MAX) in said
+    assert (await action_kinds(db)).count("application.form_created") == 1
+
+
+async def test_a_form_name_that_is_not_a_slug_is_refused_before_anything_is_written(bot, db, lead):
+    said, form = await make_form(bot, bot.guild, lead, "Twitch Team!", "Twitch Team")
+
+    assert form is None and "lower-case letters" in said
+    assert await forms.list_forms(db, GUILD) == []
+
+
+async def test_a_form_can_be_made_with_no_role_at_all(bot, db, lead):
+    _, form = await make_form(bot, bot.guild, lead, "stream-team", "Stream Team")
+
     assert form is not None and forms.role_of(form) is None
     assert (await action_details(db, "application.form_created"))["role_id"] is None
 
 
-async def test_edit_sets_a_role_clears_one_and_refuses_both_at_once(bot, db, lead):
-    await a_list_form(db)
-    cog = Applications(bot)
+async def test_a_form_with_people_waiting_on_it_refuses_to_be_deleted(bot, db, lead):
+    form = await a_form(db)
+    await pending_row(bot, db, form, FakeMember(bot.guild))
 
-    setting = FakeInteraction(bot, lead)
-    await Applications.applications_edit.callback(
-        cog, setting, "stream-team", role=FakeRole(ROLE)
+    said, gone = await drop_form(bot, bot.guild, lead, form)
+
+    assert gone is None and "still has 1 application(s) waiting" in said
+    assert await forms.get_form(db, GUILD, "twitch-team") is not None
+
+
+async def test_the_form_card_hides_delete_while_somebody_is_waiting_and_says_why(bot, db, lead):
+    form = await a_form(db)
+    await pending_row(bot, db, form, FakeMember(bot.guild))
+
+    embed, view = await build_form_card(bot, bot.guild, form, lead)
+
+    assert "Delete" not in [getattr(one, "label", None) for one in view.children]
+    assert "waiting on staff" in embed.description
+
+
+async def test_the_form_card_offers_a_roster_only_where_the_form_keeps_a_list(bot, db, lead):
+    role_form = await a_form(db)
+    list_form = await a_list_form(db)
+
+    _, with_role = await build_form_card(bot, bot.guild, role_form, lead)
+    _, with_list = await build_form_card(bot, bot.guild, list_form, lead)
+
+    assert "Roster" not in [getattr(one, "label", None) for one in with_role.children]
+    assert "Roster" in [getattr(one, "label", None) for one in with_list.children]
+
+
+async def test_clearing_the_role_select_leaves_the_form_keeping_a_list(bot, db, lead):
+    form = await a_form(db)
+
+    said, fresh = await save_form(bot, bot.guild, lead, form, {"role_id": forms.NO_ROLE})
+
+    assert forms.role_of(fresh) is None and "Saved" in said
+    assert (await action_kinds(db)).count("application.form_updated") == 1
+    lines = forms.form_lines([fresh])
+    assert lines == ["**twitch-team** — open, list"]
+
+
+async def test_clearing_the_approver_select_clears_the_column_too(bot, db, lead):
+    form = await a_form(db, approver_role_id=APPROVER_ROLE)
+
+    _, fresh = await save_form(bot, bot.guild, lead, form, {"approver_role_id": forms.NO_ROLE})
+
+    assert fresh["approver_role_id"] is None
+
+
+async def test_the_form_card_names_the_role_a_role_form_hands_over(bot, db, lead):
+    form = await a_form(db)
+
+    embed, _ = await build_form_card(bot, bot.guild, form, lead)
+
+    assert f"<@&{ROLE}>" in embed.description
+    assert "<@&None>" not in embed.description
+
+
+async def test_posting_the_apply_button_remembers_where_it_went(bot, db, lead):
+    form = await a_form(db)
+
+    said, message = await put_panel_up(
+        bot, bot.guild, lead, form, bot.guild.get_channel(TEST_CHANNEL)
     )
-    assert forms.role_of(await forms.get_form(db, GUILD, "stream-team")) == ROLE
 
-    clearing = FakeInteraction(bot, lead)
-    await Applications.applications_edit.callback(cog, clearing, "stream-team", no_role=True)
-    assert forms.role_of(await forms.get_form(db, GUILD, "stream-team")) is None
+    fresh = await forms.get_form(db, GUILD, "twitch-team")
+    assert message is not None and fresh["panel_channel_id"] == TEST_CHANNEL
+    assert (await action_kinds(db)).count("application.panel_posted") == 1
+    assert f"<#{TEST_CHANNEL}>" in said
 
-    both = FakeInteraction(bot, lead)
-    await Applications.applications_edit.callback(
-        cog, both, "stream-team", role=FakeRole(ROLE), no_role=True
+
+async def test_posting_refuses_a_channel_test_mode_will_not_let_it_speak_in(bot, db, lead):
+    bot.guard = FakeGuard(allowed=TEST_CHANNEL)
+    form = await a_form(db)
+
+    said, message = await put_panel_up(
+        bot, bot.guild, lead, form, bot.guild.get_channel(LOG_CHANNEL)
     )
-    assert both.sent == ROLE_OR_NO_ROLE
-    assert forms.role_of(await forms.get_form(db, GUILD, "stream-team")) is None
+
+    assert message is None and said == "test mode"
+    assert (await forms.get_form(db, GUILD, "twitch-team"))["panel_message_id"] is None
 
 
-async def test_edit_leaves_the_role_alone_when_neither_option_is_given(bot, db, lead):
-    await a_form(db)
+async def test_questions_are_added_edited_and_removed_one_at_a_time(bot, db, lead):
+    _, form = await make_form(bot, bot.guild, lead, "twitch-team", "Twitch Team")
+
+    added, rows = await change_question(
+        bot, bot.guild, lead, form, "added", label="Twitch handle"
+    )
+    assert "Added" in added and [one["label"] for one in rows] == ["Twitch handle"]
+
+    edited, rows = await change_question(
+        bot, bot.guild, lead, form, "edited", position=1, label="Your Twitch", style=forms.LONG
+    )
+    assert "Saved question 1" in edited
+    assert rows[0]["label"] == "Your Twitch" and rows[0]["style"] == forms.LONG
+
+    removed, rows = await change_question(bot, bot.guild, lead, form, "removed", position=1)
+    assert "Removed question 1" in removed and rows == []
+    assert (await action_kinds(db)).count("application.question_changed") == 3
+
+
+async def test_a_slot_nobody_filled_is_refused_in_words(bot, db, lead):
+    form = await a_form(db)
+
+    said, rows = await change_question(bot, bot.guild, lead, form, "removed", position=4)
+
+    assert rows is None and "nothing in slot 4" in said
+
+
+async def test_the_questions_sub_panel_lists_them_and_points_reorder_at_the_site(bot, db, lead):
+    form = await a_form(db, questions=("Twitch handle", "Why the Team"))
     interaction = FakeInteraction(bot, lead)
 
-    await Applications.applications_edit.callback(
-        Applications(bot), interaction, "twitch-team", title="The Team"
-    )
+    await render_questions(interaction, form["id"])
 
-    form = await forms.get_form(db, GUILD, "twitch-team")
-    assert forms.role_of(form) == ROLE and form["title"] == "The Team"
+    assert "**1.** Twitch handle" in interaction.words
+    assert "Role menus page" in interaction.words
+    assert "Add…" in interaction.labels()
 
 
-async def test_list_says_list_for_a_no_role_form_and_names_the_twitch_login(bot, db, lead):
+async def test_the_roster_lists_the_approved_with_their_twitch_logins(bot, db, lead):
     form = await a_list_form(db)
     member = FakeMember(bot.guild)
     await db.conn.execute(
@@ -1017,82 +1357,80 @@ async def test_list_says_list_for_a_no_role_form_and_names_the_twitch_login(bot,
     await apply_decision(bot, bot.guild, row["id"], grants.APPROVED, lead)
     interaction = FakeInteraction(bot, lead)
 
-    await Applications.applications_list.callback(Applications(bot), interaction, None, None)
+    await render_roster(interaction, form["id"])
 
-    assert "**stream-team** — open, list" in interaction.sent
-    assert "<@&None>" not in interaction.sent
-    assert "· twitch.tv/ada" in interaction.sent
+    assert "twitch.tv/ada" in interaction.words
+    assert "Take somebody off…" in interaction.placeholders()
 
 
-async def test_list_still_names_the_role_a_role_form_hands_over(bot, db, lead):
-    await a_form(db)
+async def test_the_settings_sub_panel_writes_every_value_it_shows(bot, db, lead):
     interaction = FakeInteraction(bot, lead)
 
-    await Applications.applications_list.callback(Applications(bot), interaction, None, None)
+    await render_settings(interaction)
 
-    assert f"<@&{ROLE}>" in interaction.sent
+    assert "**Mode:** on" in interaction.words
+    assert "**Members see their own list:** on" in interaction.words
+    assert "Mode…" in interaction.placeholders()
 
 
-async def test_show_offers_take_off_the_list_only_on_an_approved_list_application(
+async def test_the_logs_button_answers_a_new_message_and_still_refuses_a_stranger(bot, db):
+    stranger = FakeMember(bot.guild, user_id=907, display_name="Nobody")
+    interaction = FakeInteraction(bot, stranger)
+
+    await LogsButton().callback(interaction)
+
+    assert "staff only" in interaction.sent
+
+
+async def test_a_re_render_retires_the_view_it_replaced(bot, db, lead):
+    await a_form(db)
+    opening = await open_panel(bot, lead)
+    first = opening.view
+    interaction = FakeInteraction(bot, lead)
+
+    await render_panel(interaction, first)
+
+    assert first.replaced is True and first.is_finished() is True
+
+
+async def test_the_panel_disables_every_item_and_says_so_on_timeout(bot, db, lead):
+    await a_form(db)
+    interaction = await open_panel(bot, lead)
+    view = interaction.view
+    view.message = FakeMessage(1, bot.guild.get_channel(TEST_CHANNEL), embeds=[interaction.embed])
+
+    await view.on_timeout()
+
+    assert all(one.disabled for one in view.children)
+    assert view.message.kwargs["embeds"][0].footer.text == forms.PANEL_TIMEOUT_FOOTER
+
+
+async def test_every_click_re_asks_whether_the_database_is_there(bot, db, lead):
+    await a_form(db)
+    interaction = await open_panel(bot, lead)
+    view = interaction.view
+    refresh = next(one for one in view.children if getattr(one, "label", "") == "Refresh")
+    bot.db = SimpleNamespace(is_connected=False, conn=db.conn)
+    clicking = FakeInteraction(bot, lead)
+
+    await refresh.callback(clicking)
+
+    assert clicking.sent == DB_UNAVAILABLE
+
+
+async def test_a_modal_that_reads_the_database_first_refuses_in_words_when_it_is_down(
     bot, db, lead
 ):
-    form = await a_list_form(db)
-    member = FakeMember(bot.guild)
-    row = await pending_row(bot, db, form, member)
-
-    waiting = FakeInteraction(bot, lead)
-    await Applications.applications_show.callback(Applications(bot), waiting, row["id"])
-    assert waiting.view is None
-
-    await apply_decision(bot, bot.guild, row["id"], grants.APPROVED, lead)
-    approved = FakeInteraction(bot, lead)
-    await Applications.applications_show.callback(Applications(bot), approved, row["id"])
-
-    assert approved.view is not None
-    buttons = [item for item in approved.view.children if isinstance(item, TakeOffButton)]
-    assert [one.label for one in buttons] == [TAKE_OFF_LABEL]
-    assert buttons[0].style is discord.ButtonStyle.danger
-
-
-async def test_show_offers_no_button_on_a_role_form_or_to_somebody_who_may_not_decide(
-    bot, db, lead
-):
+    """`db_ready` only works after a defer; a button that opens a MODAL cannot defer first,
+    so the read it does beforehand needs its own gate or the click ends in a raw traceback."""
     form = await a_form(db)
     member = FakeMember(bot.guild)
     row = await pending_row(bot, db, form, member)
-    await apply_decision(bot, bot.guild, row["id"], grants.APPROVED, lead)
+    button = CardMoveButton(row["id"], form["id"], forms.DENY)
+    bot.db = SimpleNamespace(is_connected=False, conn=db.conn)
+    interaction = FakeInteraction(bot, lead)
 
-    role_form = FakeInteraction(bot, lead)
-    await Applications.applications_show.callback(Applications(bot), role_form, row["id"])
-    assert role_form.view is None
+    await button.callback(interaction)
 
-    listed = await a_list_form(db)
-    other = FakeMember(bot.guild, user_id=902, display_name="Bo")
-    listed_row = await pending_row(bot, db, listed, other)
-    await apply_decision(bot, bot.guild, listed_row["id"], grants.APPROVED, lead)
-    outsider = FakeInteraction(bot, other)
-
-    await Applications.applications_show.callback(
-        Applications(bot), outsider, listed_row["id"]
-    )
-
-    assert "staff only" in outsider.sent
-
-
-async def test_the_take_off_button_opens_a_reason_modal_that_removes_them(bot, db, lead):
-    form = await a_list_form(db)
-    member = FakeMember(bot.guild)
-    row = await pending_row(bot, db, form, member)
-    await apply_decision(bot, bot.guild, row["id"], grants.APPROVED, lead)
-    button = TakeOffButton(row["id"])
-    opening = FakeInteraction(bot, lead)
-
-    await button.callback(opening)
-
-    modal = opening.response.modals[0]
-    assert modal.note.max_length == forms.REASON_MAX
-    submitting = FakeInteraction(bot, lead)
-    await button.take_off(submitting, "stopped streaming")
-
-    assert (await forms.get_application(db, row["id"]))["status"] == forms.REMOVED
-    assert submitting.sent == forms.REMOVED_SAID
+    assert interaction.sent == DB_UNAVAILABLE
+    assert interaction.response.modals == []
