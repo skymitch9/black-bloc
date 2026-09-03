@@ -1001,6 +1001,19 @@ KEY_HELP.update(
 )
 
 
+# Operator read token — the token itself is the on/off switch; this is the one decision left.
+KEY_TYPES.update({"operator_read_log": "bool"})
+KEY_HELP.update(
+    {
+        "operator_read_log": (
+            "true to write one Core log line for every read a Claude session makes with the "
+            "operator token, saying which path it read; false reads the same data and leaves no "
+            "row. The token itself is the on/off switch — unset it and there are no reads at all"
+        )
+    }
+)
+
+
 GUILD_ONLY = (
     "That command changes settings for a server, so it has to be run in the server itself "
     "rather than in a DM. Run it again from a channel Black Bloc can answer in."
@@ -1400,6 +1413,8 @@ class SettingsStore:
             return BOT_BIO_TEMPLATE.format(site=self.settings.origin)
         if key == "status_prefix":
             return STATUS_PREFIX
+        if key == "operator_read_log":
+            return True
         if key == "rolemenu_mode":
             return "off"
         if key == "request_mode":

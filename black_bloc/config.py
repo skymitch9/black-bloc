@@ -20,6 +20,10 @@ SHORT_SECRET = (
     "SESSION_SECRET is %d characters, so signing in stays switched off — it needs at least %d. "
     "Make one with: python -c \"import secrets; print(secrets.token_urlsafe(48))\""
 )
+SHORT_OPERATOR_TOKEN = (
+    "OPERATOR_READ_TOKEN is %d characters, so operator reads stay switched off — it needs at "
+    "least %d. Make one with: python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+)
 
 
 class ConfigError(RuntimeError):
@@ -68,6 +72,9 @@ class Settings(BaseSettings):
     discord_client_id: str | None = None
     discord_client_secret: str | None = None
     session_secret: str | None = None
+    operator_read_token: str | None = Field(
+        default=None, description="Bearer for read-only operator API reads; unset = no such door"
+    )
 
     poll_vote_secret: str | None = Field(
         default=None, description="Key for the anonymous poll-vote MAC; unset falls back to a hash"
@@ -83,7 +90,7 @@ class Settings(BaseSettings):
     @field_validator(
         "dev_guild_id", "test_channel_id", "twitch_client_id", "twitch_client_secret",
         "discord_client_id", "discord_client_secret", "session_secret", "poll_vote_secret",
-        "anthropic_api_key", "groq_api_key", "youtube_api_key",
+        "anthropic_api_key", "groq_api_key", "youtube_api_key", "operator_read_token",
         mode="before",
     )
     @classmethod
@@ -107,6 +114,13 @@ class Settings(BaseSettings):
             log.warning(SHORT_SECRET, len(v), SESSION_SECRET_MIN)
         return v
 
+    @field_validator("operator_read_token")
+    @classmethod
+    def _operator_token_long_enough(cls, v):
+        if v is not None and len(v) < SESSION_SECRET_MIN:
+            log.warning(SHORT_OPERATOR_TOKEN, len(v), SESSION_SECRET_MIN)
+        return v
+
     @property
     def twitch_configured(self) -> bool:
         return bool(self.twitch_client_id and self.twitch_client_secret)
@@ -122,6 +136,12 @@ class Settings(BaseSettings):
             and self.discord_client_secret
             and self.session_secret
             and len(self.session_secret) >= SESSION_SECRET_MIN
+        )
+
+    @property
+    def operator_read_enabled(self) -> bool:
+        return bool(
+            self.operator_read_token and len(self.operator_read_token) >= SESSION_SECRET_MIN
         )
 
     @property

@@ -13,6 +13,8 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
+from ..actionlog import log_action
+from ..logkinds import VIA_OPERATOR
 from . import sessions
 
 log = logging.getLogger(__name__)
@@ -30,6 +32,24 @@ SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 LOGIN_RATE = 10
 LOGIN_WINDOW_SECONDS = 60
 BUCKET_MAX_KEYS = 4096
+
+BEARER_SCHEME = "bearer"
+READ_METHODS = frozenset({"GET", "HEAD"})
+OPERATOR_RATE = 30
+OPERATOR_WINDOW_SECONDS = 60
+OPERATOR_BUCKET_ATTR = "_api_operator_bucket"
+OPERATOR_READ_KIND = "web.operator.read"
+OPERATOR_READ_LOG_KEY = "operator_read_log"
+OPERATOR_WHO: dict[str, Any] = {
+    "id": "0",
+    "name": "operator",
+    "avatar": None,
+    "staff": True,
+    "staff_known": True,
+    "member": False,
+    "member_known": True,
+    "operator": True,
+}
 
 NOT_SIGNED_IN = (
     "You are not signed in, so there is nothing to show yet. Sign in with the Discord account "
@@ -77,6 +97,17 @@ SLOW_DOWN = (
 BAD_REQUEST = (
     "That request did not make sense to Black Bloc, so nothing was done. It is a fault in the "
     "link or the page rather than a problem with your access — start again from this page."
+)
+BAD_OPERATOR_TOKEN = (
+    "That operator token is not the one this server holds, so nothing was read. It is the "
+    "OPERATOR_READ_TOKEN secret rather than a sign-in, so no account is locked out — check the "
+    "copy in BLACK_BLOC_OPERATOR_TOKEN, and ask the owner to set a fresh one if it has been "
+    "rotated (docs/access/operator-read.md)."
+)
+OPERATOR_READ_ONLY = (
+    "The operator token can only look, never change, so nothing was done and nothing was "
+    "logged as a change. Make this change on the dashboard or in Discord, where a person signs "
+    "for it."
 )
 
 
@@ -210,7 +241,71 @@ def live_member(bot: Any, user_id: int) -> tuple[bool, bool]:
     return (guild.get_member(user_id) is not None, True)
 
 
+def bearer_token(request: Any) -> str | None:
+    """The `Authorization: Bearer <token>` value, or None when no bearer was offered."""
+    headers = getattr(request, "headers", None)
+    given = headers.get("authorization") if headers is not None else None
+    scheme, _, rest = str(given or "").partition(" ")
+    return rest.strip() if scheme.lower() == BEARER_SCHEME and rest.strip() else None
+
+
+def operator_bucket_for(bot: Any) -> TokenBucket:
+    """One bucket per bot, so a guess costs the same whichever route it was aimed at."""
+    bucket = getattr(bot, OPERATOR_BUCKET_ATTR, None)
+    if bucket is None:
+        bucket = TokenBucket(OPERATOR_RATE, OPERATOR_WINDOW_SECONDS)
+        setattr(bot, OPERATOR_BUCKET_ATTR, bucket)
+    return bucket
+
+
+async def note_operator_read(bot: Any, request: Any) -> None:
+    """One `web.operator.read` row per request, and never one for a refused token."""
+    state = getattr(request, "state", None)
+    if getattr(state, "operator_noted", False):
+        return
+    if state is not None:
+        state.operator_noted = True
+    guild = guild_of(bot)
+    db = getattr(bot, "db", None)
+    if guild is None or db is None or not getattr(db, "is_connected", False):
+        return
+    store = getattr(bot, "store", None)
+    if store is not None and not store.get(guild.id, OPERATOR_READ_LOG_KEY):
+        return
+    try:
+        await log_action(
+            bot,
+            guild,
+            OPERATOR_READ_KIND,
+            details={"path": request.url.path, "via": VIA_OPERATOR},
+        )
+    except Exception as exc:
+        log.warning("auth: an operator read went unlogged — %s: %s", type(exc).__name__, exc)
+
+
+async def operator_session(request: Any, bot: Any) -> dict[str, Any] | None:
+    """The read-only bearer identity; None when no bearer is offered or none is configured."""
+    given = bearer_token(request)
+    if given is None or not getattr(bot.settings, "operator_read_enabled", False):
+        return None
+    who = client_ip(request)
+    if not operator_bucket_for(bot).take(who):
+        log.warning("auth: rate-limited operator reads from %s", who)
+        raise Refused(429, "slow_down", SLOW_DOWN)
+    wanted = str(bot.settings.operator_read_token or "")
+    if not hmac.compare_digest(given.encode("utf-8"), wanted.encode("utf-8")):
+        log.warning("auth: an operator token did not match, from %s", who)
+        raise Refused(401, "bad_operator_token", BAD_OPERATOR_TOKEN)
+    if str(getattr(request, "method", "")).upper() not in READ_METHODS:
+        raise Refused(403, "operator_read_only", OPERATOR_READ_ONLY)
+    await note_operator_read(bot, request)
+    return dict(OPERATOR_WHO)
+
+
 async def current_session(request: Request, bot: Any) -> dict[str, Any]:
+    operator = await operator_session(request, bot)
+    if operator is not None:
+        return operator
     secret = bot.settings.session_secret
     if not secret:
         raise Refused(503, "login_unavailable", LOGIN_UNAVAILABLE)
@@ -520,6 +615,7 @@ def build_router(bot: Any, *, oauth_request: Any = None) -> APIRouter:
             "user": {"id": who["id"], "name": who["name"], "avatar": who["avatar"]},
             "staff": state == "staff",
             "member": member,
+            "operator": bool(who.get("operator")),
             "state": state,
             "guild": {"id": str(guild.id), "name": guild.name} if guild is not None else None,
             "message": MEMBER_NOT_STAFF if state == "not_staff" and member else said,
@@ -529,10 +625,16 @@ def build_router(bot: Any, *, oauth_request: Any = None) -> APIRouter:
 
 
 __all__ = [
+    "BAD_OPERATOR_TOKEN",
     "MEMBER_NOT_STAFF",
     "MEMBER_UNKNOWN",
     "NOT_A_MEMBER",
     "NOT_STAFF",
+    "OPERATOR_RATE",
+    "OPERATOR_READ_KIND",
+    "OPERATOR_READ_LOG_KEY",
+    "OPERATOR_READ_ONLY",
+    "OPERATOR_WHO",
     "SESSION_COOKIE",
     "SLOW_DOWN",
     "STAFF_UNKNOWN",
@@ -541,9 +643,13 @@ __all__ = [
     "OAuthError",
     "Refused",
     "TokenBucket",
+    "bearer_token",
     "build_router",
     "client_ip",
     "current_session",
+    "note_operator_read",
+    "operator_bucket_for",
+    "operator_session",
     "guild_of",
     "is_admitted",
     "live_member",
