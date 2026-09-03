@@ -24,6 +24,10 @@ SECRET_NOTES: dict[str, str] = {
     "session_secret": "signs the sign-in cookie. Changing it signs everybody out.",
     "twitch_client_id": "reads Twitch for go-live posts. Free; unset means presence only.",
     "twitch_client_secret": "the other half of the Twitch app.",
+    "youtube_api_key": (
+        "sorts a new upload into video, Short or live stream, and turns an @handle into a "
+        "channel id. Free within a daily quota; unset leaves uploads on the public feed alone."
+    ),
     "poll_vote_secret": "keys anonymous poll votes. Unset falls back to a plain hash.",
     "anthropic_api_key": "pays for the careful chat tier. Unset means that tier does not exist.",
     "groq_api_key": "the free chat tier. Unset means that tier does not exist.",

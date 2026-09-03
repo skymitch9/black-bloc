@@ -1,6 +1,5 @@
 import json
 
-import discord
 import pytest
 from discord import app_commands
 
@@ -183,8 +182,33 @@ def test_the_choices_cover_every_key_and_fit_discords_limit():
     assert "birthday_color" in VALUE_KEYS
     assert "bot_bio" in VALUE_KEYS and "status_prefix" in VALUE_KEYS
     assert "golive_embed" in VALUE_KEYS
-    assert len(CLEARABLE_KEYS) <= 25
+    assert "youtube_channel_id" in CLEARABLE_KEYS and "youtube_ping_role_id" in CLEARABLE_KEYS
+    assert "youtube_mode" in VALUE_KEYS and "youtube_poll_minutes" in VALUE_KEYS
     assert len(CHANNEL_KEYS) <= 25 and len(ROLE_KEYS) <= 25
+
+
+async def test_the_clearable_keys_are_suggested_too_once_they_pass_the_ceiling(bot, cog):
+    """Phase 16's channel and role keys took CLEARABLE_KEYS past 25, so `clear` autocompletes."""
+    assert len(CLEARABLE_KEYS) > 25
+    interaction = FakeInteraction(bot, FakeMember(bot.guild, user_id=1, manage_guild=True))
+
+    everything = await cog.clearable_keys(interaction, "")
+    youtube = await cog.clearable_keys(interaction, "youtube")
+
+    assert len(everything) == 25
+    assert [choice.value for choice in youtube] == [k for k in CLEARABLE_KEYS if "youtube" in k]
+    assert all(len(choice.name) <= 100 for choice in everything + youtube)
+
+
+async def test_clearing_a_key_that_is_not_a_setting_says_how_to_find_one(bot, cog, member):
+    give_staff(bot, member)
+    interaction = FakeInteraction(bot, member)
+
+    await cog.settings_clear.callback(cog, interaction, "not_a_setting")
+
+    assert "not a Black Bloc setting" in interaction.sent
+    assert "offers the ones it knows" in interaction.sent
+    assert await kinds(bot.db) == []
 
 
 async def test_the_value_keys_are_suggested_because_there_are_too_many_to_list(bot, cog):
@@ -243,9 +267,8 @@ async def test_settings_show_is_staff_only(bot, cog, member):
 async def test_clearing_a_setting_is_staff_only(bot, cog, member):
     await bot.store.set(GUILD, "birthday_role_id", CAKE_ROLE)
     interaction = FakeInteraction(bot, member)
-    choice = discord.app_commands.Choice(name="birthday_role_id", value="birthday_role_id")
 
-    await cog.settings_clear.callback(cog, interaction, choice)
+    await cog.settings_clear.callback(cog, interaction, "birthday_role_id")
 
     assert "staff only" in interaction.sent
     assert bot.store.get(GUILD, "birthday_role_id") == CAKE_ROLE
@@ -254,10 +277,9 @@ async def test_clearing_a_setting_is_staff_only(bot, cog, member):
 async def test_clearing_a_setting_puts_the_default_back_and_is_recorded(bot, cog, member):
     give_staff(bot, member)
     await bot.store.set(GUILD, "birthday_role_id", CAKE_ROLE)
-    choice = discord.app_commands.Choice(name="birthday_role_id", value="birthday_role_id")
     interaction = FakeInteraction(bot, member)
 
-    await cog.settings_clear.callback(cog, interaction, choice)
+    await cog.settings_clear.callback(cog, interaction, "birthday_role_id")
 
     assert bot.store.get(GUILD, "birthday_role_id") is None
     assert "no longer set" in interaction.sent
@@ -267,10 +289,9 @@ async def test_clearing_a_setting_puts_the_default_back_and_is_recorded(bot, cog
 
 async def test_clearing_something_that_was_never_set_says_so_and_logs_nothing(bot, cog, member):
     give_staff(bot, member)
-    choice = discord.app_commands.Choice(name="birthday_role_id", value="birthday_role_id")
     interaction = FakeInteraction(bot, member)
 
-    await cog.settings_clear.callback(cog, interaction, choice)
+    await cog.settings_clear.callback(cog, interaction, "birthday_role_id")
 
     assert "was not set" in interaction.sent
     assert await kinds(bot.db) == []
@@ -289,9 +310,10 @@ async def test_a_slash_change_records_that_it_came_from_discord(bot, cog, db):
 async def test_a_slash_clear_records_discord_too(bot, cog, member):
     give_staff(bot, member)
     await bot.store.set(GUILD, "birthday_role_id", CAKE_ROLE)
-    choice = discord.app_commands.Choice(name="birthday_role_id", value="birthday_role_id")
 
-    await cog.settings_clear.callback(cog, FakeInteraction(bot, member), choice)
+    await cog.settings_clear.callback(
+        cog, FakeInteraction(bot, member), "birthday_role_id"
+    )
 
     assert (await details(bot.db))[0] == {"key": "birthday_role_id", "via": "discord"}
 

@@ -37,6 +37,8 @@ from black_bloc.settings_store import (
     POLL_REMINDER_MINUTES,
     TEMPVOICE_NAME_TEMPLATE,
     THREAD_MODE,
+    YOUTUBE_MODES,
+    YOUTUBE_TEMPLATE,
     SettingError,
     SettingsStore,
     coerce_value,
@@ -605,6 +607,57 @@ def test_the_modmail_keys_are_typed_and_the_mode_is_an_enum():
     } <= set(KEY_TYPES)
 
 
+async def test_youtube_uploads_ship_off_with_fan_pings_on_and_shorts_quiet(store):
+    """D5, D8 and the D4 default, all of them registry keys rather than constants."""
+    assert store.get(1, "youtube_mode") == "off"
+    assert store.get(1, "youtube_announce_shorts") is False
+    assert store.get(1, "youtube_ping_fan_roles") is True
+    assert store.get(1, "youtube_poll_minutes") == 10
+    assert store.get(1, "youtube_template") == YOUTUBE_TEMPLATE
+    assert store.get(1, "youtube_log_level") == "important"
+
+
+async def test_a_blank_youtube_channel_means_the_go_live_one(store):
+    """D3: the key has no default of its own, so the cog falls back to golive_channel_id."""
+    assert store.get(1, "youtube_channel_id") is None
+    assert store.get(1, "youtube_ping_role_id") is None
+
+
+async def test_the_youtube_keys_are_typed_and_the_mode_is_an_enum(store):
+    assert KEY_TYPES["youtube_mode"] == "enum"
+    for name in YOUTUBE_MODES:
+        assert await store.set(1, "youtube_mode", name) == name
+    with pytest.raises(SettingError, match="off, shadow, on"):
+        await store.set(1, "youtube_mode", "sometimes")
+    assert await store.set(1, "youtube_channel_id", _Role(5)) == 5
+    assert await store.set(1, "youtube_ping_role_id", 42) == 42
+    assert await store.set(1, "youtube_announce_shorts", True) is True
+    with pytest.raises(SettingError, match="true or false"):
+        await store.set(1, "youtube_ping_fan_roles", "yes")
+    with pytest.raises(SettingError, match="some text"):
+        await store.set(1, "youtube_template", "  ")
+    assert {
+        "youtube_mode",
+        "youtube_channel_id",
+        "youtube_ping_role_id",
+        "youtube_ping_fan_roles",
+        "youtube_announce_shorts",
+        "youtube_template",
+        "youtube_poll_minutes",
+        "youtube_log_level",
+    } <= set(KEY_TYPES)
+
+
+async def test_the_poll_gap_has_a_floor_that_says_why_the_feeds_cache_sets_it(store):
+    assert await store.set(1, "youtube_poll_minutes", 5) == 5
+    with pytest.raises(SettingError) as caught:
+        await store.set(1, "youtube_poll_minutes", 4)
+
+    said = str(caught.value)
+    assert "cannot be less than 5" in said
+    assert "fifteen minutes" in said
+
+
 def test_staff_refusal_names_the_channel(tmp_path, monkeypatch):
     monkeypatch.delenv("DISCORD_TOKEN", raising=False)
     settings = load_settings(_env_file=None, test_mode=True, test_channel_id=TEST_CH)
@@ -832,7 +885,7 @@ def test_the_ping_role_mode_is_read_as_a_feature_switch_on_the_health_page():
 
 async def test_every_feature_has_a_log_level_key_defaulting_to_important(store):
     keys = [f"{feature}_log_level" for feature in FEATURES]
-    assert len(keys) == 14
+    assert len(keys) == 15
     assert "request_log_level" in keys
     assert "pings_log_level" in keys
     for key in keys:

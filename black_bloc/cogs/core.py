@@ -30,6 +30,10 @@ VALUE_KEYS = [
 CLEARABLE_KEYS = [key for key, kind in KEY_TYPES.items() if kind in ("channel", "role")]
 CLEARED = "**{key}** is no longer set, so Black Bloc is back to its own default for it."
 NOT_SET = "**{key}** was not set for this server, so nothing changed."
+PICK_FROM_LIST = (
+    "Start typing in the key box and Black Bloc offers the ones it knows — there are more of "
+    "them than a Discord menu can hold, so it suggests as you type instead of listing them all."
+)
 STAFF_SUFFIX = " (staff)"
 HELP_HEADER = (
     "Every command Black Bloc can run here. The ones marked (staff) need the Manage Server "
@@ -255,23 +259,18 @@ class Core(commands.Cog):
 
     @settings.command(name="clear", description="Unset one channel or role setting")
     @app_commands.describe(key="Which setting to unset")
-    @app_commands.choices(
-        key=[app_commands.Choice(name=name, value=name) for name in CLEARABLE_KEYS]
-    )
-    async def settings_clear(
-        self, interaction: discord.Interaction, key: app_commands.Choice[str]
-    ) -> None:
+    async def settings_clear(self, interaction: discord.Interaction, key: str) -> None:
         if not await require_staff(interaction):
             return
         try:
             cleared = await self.bot.store.clear(
-                interaction.guild.id, key.value, by=interaction.user.id
+                interaction.guild.id, key, by=interaction.user.id
             )
         except SettingError as exc:
-            await interaction.response.send_message(str(exc), ephemeral=True)
+            await interaction.response.send_message(f"{exc} {PICK_FROM_LIST}", ephemeral=True)
             return
         await interaction.response.send_message(
-            (CLEARED if cleared else NOT_SET).format(key=key.value), ephemeral=True
+            (CLEARED if cleared else NOT_SET).format(key=key), ephemeral=True
         )
         if not cleared:
             return
@@ -280,8 +279,19 @@ class Core(commands.Cog):
             interaction.guild,
             "settings.clear",
             actor=interaction.user,
-            details={"key": key.value, "via": VIA_DISCORD},
+            details={"key": key, "via": VIA_DISCORD},
         )
+
+    @settings_clear.autocomplete("key")
+    async def clearable_keys(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        lowered = (current or "").lower()
+        return [
+            app_commands.Choice(name=f"{key} — {KEY_HELP.get(key, '')}"[:100], value=key)
+            for key in CLEARABLE_KEYS
+            if lowered in key
+        ][:CHOICE_LIMIT]
 
 
 async def setup(bot: commands.Bot) -> None:

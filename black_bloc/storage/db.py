@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 21
+SCHEMA_VERSION = 22
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -134,6 +134,31 @@ CREATE TABLE IF NOT EXISTS golive_fan_roles (
     created_by INTEGER,
     PRIMARY KEY (guild_id, user_id)
 );
+
+CREATE TABLE IF NOT EXISTS youtube_links (
+    user_id     INTEGER PRIMARY KEY,
+    channel_id  TEXT    NOT NULL,
+    handle      TEXT,
+    title       TEXT,
+    linked_at   TEXT    NOT NULL,
+    etag        TEXT,
+    seeded      INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS youtube_videos (
+    video_id             TEXT PRIMARY KEY,
+    user_id              INTEGER NOT NULL,
+    channel_id           TEXT    NOT NULL,
+    title                TEXT,
+    published_at         TEXT    NOT NULL,
+    seen_at              TEXT    NOT NULL,
+    kind                 TEXT    NOT NULL DEFAULT 'video',
+    announced_at         TEXT,
+    announced_message_id INTEGER,
+    mode                 TEXT
+);
+
+CREATE INDEX IF NOT EXISTS youtube_videos_user ON youtube_videos(user_id, published_at);
 
 CREATE TABLE IF NOT EXISTS tempvoice_channels (
     channel_id       INTEGER PRIMARY KEY,
