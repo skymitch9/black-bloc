@@ -213,9 +213,10 @@ docs bookkeeping lands with the work, not after.
   rebuild must run BEFORE `PRAGMA foreign_keys=ON` or `DROP TABLE application_forms`
   cascade-deletes every question (§C1). Different cog from the "ask them to check" item, so
   the two builds can run beside each other; both bump `SCHEMA_VERSION` — second to merge
-  re-keys. Waiting on the owner for nothing; ONE question put to him (2026-09-03): whether
-  staff may take somebody off a no-role list with a reason (design says yes, default).
-  Next: Opus build on `feat/applications-no-role` (usage read first).
+  re-keys. Owner answered the one question 2026-09-03 ~12:30: **"Always give staff final say
+  and permission"** — staff removal stays in, and the sentence is now a `CLAUDE.md` rule.
+  Then "Build all, keep going" → Opus build dispatched on `feat/applications-no-role`
+  (2026-09-03 ~12:35), beside `feat/requests-check`.
 
 - 🆕 **"We also need a way to ping the requester from the request app. I want to have it
   message the requesters to check the work." (owner, 2026-09-03 11:15).** A staff move on the
@@ -229,7 +230,8 @@ docs bookkeeping lands with the work, not after.
   written: an ACTION on the review card, not a state (§B); `check_asked` look + DM, channel
   ping fallback (`request_check_fallback_channel`, default on), `request_check_on_ready`
   (default off), schema 27, `POST /api/requests/{id}/check`; six owner-flippable calls in §D.
-  Next: Opus build on `feat/requests-check` from `main` ≥ `46e3ba4` (usage read first).
+  Owner 2026-09-03 ~12:30: "Build all, keep going" → Opus build dispatched on
+  `feat/requests-check` from `main` ≥ `fbb1191` (~12:35), beside `feat/applications-no-role`.
 
 - 🆕 **Panels over slash commands — the rest of the app (owner, 2026-09-03: "then carry it
   through the rest of the app"; confirmed ~11:25: "do the change to all / commands. I like

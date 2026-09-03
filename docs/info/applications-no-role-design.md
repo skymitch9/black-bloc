@@ -39,7 +39,8 @@ nullable role and a place to read it.
 2. **The roster is the set of approved applications on that form** — one fact, one home.
    No new table, no `team_members` copy. Members who left the server are shown, flagged, not
    hidden (the team page may still list them; staff decide).
-3. **Staff can take somebody off a no-role roster** with a new terminal status `removed`
+3. **Staff can take somebody off a no-role roster** — CONFIRMED by the owner 2026-09-03 ("Always
+   give staff final say and permission", now a `CLAUDE.md` rule) — with a new terminal status `removed`
    (`APPROVED → REMOVED`), a one-line reason the person is DM'd, `retry_days` applying as it
    does after a denial. Without this a roster has no way off it, which the first team change
    would find. For a role form the role's own end (revoke / expiry) stays the way off; the
