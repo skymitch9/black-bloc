@@ -1484,6 +1484,12 @@ no cog behaviour changed, and the 800 pre-existing tests still pass.
 | `site/mock/contract.json:2186` | The thirteen page paths, checked only for `#dash` and `#tabnav`. A page that renders is not a page that works, and this deliberately does not pretend otherwise — it catches a tab whose HTML was never wired to the shared shell, which is the failure a route check cannot see. |
 | `site/mock/contract.json:2211` | Every `web.*` action kind the routers can write. The audit tab filters on the `web.` prefix alone, so a misspelt suffix breaks nothing visible — which is why it needs a list rather than a page to catch it. The mock spelled them `web.settings_set` for a week without anybody noticing. |
 
+## `tests/api/test_settings_api.py`
+
+| Key | Note |
+|---|---|
+| `tests/api/test_settings_api.py:221` | ⚠️ **The clock is frozen for this test on purpose.** `TokenBucket` (`api/auth.py:373`) refills continuously — 60 writes a minute is one token a second — so sixty PUTs that take more than a second to run (which they do under `-n auto` contention) refill a token and the sixty-first is allowed. Fixed 2026-09-03 after it refused a deploy at the gate: `auth.time` is swapped for a stub returning one instant, so the assertion measures the bucket and not the machine's load. Failed ~1 in 3 whole-suite runs before; three consecutive `-n auto` runs green after. |
+
 ## `tests/api/test_contract.py`
 
 | Key | Note |

@@ -340,7 +340,11 @@ The three that are genuinely his:
   actually type, and it is the half that gets used a hundred times to the staff half's one.
   **Recommended: `/applications`**, with the description reading "Apply for something, or manage the
   forms" so the search box finds it either way. Whichever he picks, it is member-visible (§B).
-- **I-A2 — does the command still DISAPPEAR when applications are off?** Today
+- ✅ **I-A2 — DECIDED by the owner 2026-09-03 13:47: "Visible".** `/apply` stays in Discord when
+  `applications_mode` is off: the `HIDDEN_WHEN_OFF["applications_mode"]` entry goes, the panel says
+  the feature is off in words and renders no Apply control, staff keep their door. Sweeps row 53
+  (the vanishing act) is rewritten to test the off-panel wording instead.
+  Original question: does the command still DISAPPEAR when applications are off? Today
   `HIDDEN_WHEN_OFF["applications_mode"] = ("apply",)` (`command_visibility.py:19`) hides the member
   group within about five seconds and leaves `/applications` for staff (sweeps row 53 tests exactly
   that). With one command, hiding it hides staff's only Discord door to form management, and the mode

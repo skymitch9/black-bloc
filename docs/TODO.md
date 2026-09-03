@@ -186,6 +186,20 @@ docs bookkeeping lands with the work, not after.
   log says `twitch: app token obtained` (20:13:48Z). Nothing to do.
 - **Cleanup (later, owner):** kick the dormant bots `Verification Bot`, `baf`,
   `Black Block` once Black Bloc is stable.
+- 🆕 **Spotify for the music bot (owner, 2026-09-03 ~13:55: "Check if we can do
+  Spotify for the music bot")** — request #3 (PT, on hold). Checked the same
+  afternoon: **not as a source.** Spotify's Web API exposes no audio stream (it
+  only controls a signed-in user's own Spotify client), its developer terms name
+  Discord bots as not permitted, the 30-second `preview_url` was pulled for new
+  apps 2024-11-27, and since 2025-05 an app needs 250k monthly users before it
+  leaves development mode. What every surviving music bot does instead:
+  **accept Spotify links** (track / album / playlist), resolve them to titles via
+  the metadata endpoints (client-credentials, still open in dev mode), and play
+  the matching audio from YouTube / SoundCloud (Lavalink + the LavaSrc plugin is
+  the standard stack; needs a Java sidecar — a second Fly app — and YouTube
+  increasingly blocks datacenter IPs, so that source needs its own care). Owner
+  decision pending: "Spotify links in, audio from elsewhere" is buildable; native
+  Spotify playback is not.
 
 ## 🔧 Open engineering items
 
@@ -219,11 +233,15 @@ docs bookkeeping lands with the work, not after.
   (2026-09-03, written against `9891f71` after the no-role merge — 17 subcommands over two groups
   collapse into one member-visible command; sweep rows 94–102; `denied`/`removed` → `approved`
   and the member's own list settled by the standing rules). Forks: **I-A1 DECIDED 13:35 — the
-  command is `/apply`** ("it's gamer lingo"; the `applications` Group goes); I-A2 (does it still
-  vanish when the mode is off) and I-A3 (does question editing stay in Discord) still open, asked
-  one at a time. Events I2 DECIDED 12:40 (`/timezone` retired). **Wave-1 builds dispatched 12:50**
-  (events / polls / birthdays, Opus, own worktrees); the applications build follows once I-A2/I-A3
-  are answered. Merge in wave order, re-key `code-notes.md` per merge, deploy per landing.
+  command is `/apply`** ("it's gamer lingo"; the `applications` Group goes); **I-A2 DECIDED 13:47 —
+  "Visible"** (`/apply` stays when the mode is off; the `HIDDEN_WHEN_OFF` entry goes); I-A3 (does
+  question editing stay in Discord) still open. Events I2 DECIDED 12:40 (`/timezone` retired).
+  **Wave-1 builds all landed 13:40–13:50** (birthdays merged `58974e1`; events on
+  `worktree-agent-a448c7ab780ed3c2b`, polls on `worktree-agent-aa735ab092d13477d`, both under Fable
+  review); the applications build follows once I-A3 is answered. Merge in wave order, re-key
+  `code-notes.md` per merge, deploy per landing. ⚠️ The v63 deploy REFUSED at the gate 13:52 on the
+  rate-limit flake — fixed by freezing the clock in the test (`code-notes.md` →
+  `tests/api/test_settings_api.py:221`), three `-n auto` runs green, redeploying.
 
 - **Via-labelling gap: `raidtrain.cancel_train` logs one row but calls a website cancel
   Via = Discord** (found by the double-logging build, 2026-09-03 — see `DONE.md` that

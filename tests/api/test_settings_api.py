@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import time
+import types
 
+from black_bloc.api import auth
 from black_bloc.api.settings_api import CORE_KEYS, namespace_of
 from black_bloc.api.writes import WRITE_RATE
 from black_bloc.settings_store import KEY_TYPES
@@ -215,8 +218,10 @@ def test_the_audit_limit_is_clamped(client, sign_in):
     assert client.get("/api/settings/audit", params={"limit": 0}).json()["limit"] == 1
 
 
-def test_writes_are_rate_limited_per_session(client, sign_in):
+def test_writes_are_rate_limited_per_session(client, sign_in, monkeypatch):
     sign_in(client)
+    frozen = time.time()
+    monkeypatch.setattr(auth, "time", types.SimpleNamespace(time=lambda: frozen))
     for _ in range(WRITE_RATE):
         assert client.put("/api/settings/golive_mode", json={"value": "on"}).status_code == 200
 
