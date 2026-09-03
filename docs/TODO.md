@@ -141,12 +141,14 @@ already said go.** Order recommended by the 5.0 session, owner did not reorder:
    Request #1 set to `in_progress`, priority 2, with the decision note, on the
    Requests page; flips to `done` at landing (DM to Pawpette).
 7. **Twitch Team application form (member request #2, Pawpette)** — owner
-   2026-09-02 20:14: "build next" → **Phase 19**, after raid trains. An
-   application form (≤5 questions, Discord modal cap; staff configure the
-   questions — both ways) on the existing role-request flow
-   (`rolegrants` + `role_menus.py` cards); approve grants the Team role + DMs
-   the applicant; the twitch.tv Team invite has no public API, so it stays a
-   named team-owner click on the card. Request #2 set to `in_progress`.
+   2026-09-02 20:14: "build next" → **Phase 19**. **DESIGNED 2026-09-02 22:40
+   → [`info/phase19-design.md`](info/phase19-design.md)** as general
+   *applications* (staff-defined forms, ≤5 questions, grant a role on
+   approve; the Team form is the first one the owner creates — nothing
+   Team-specific hard-coded); schema 25; the twitch.tv invite stays a named
+   team-owner click (`owner_user_id` + `next_step` per form). Builds **in
+   parallel** with 17/18 (§K; merge order 17 → 18 → 19). Request #2 set to
+   `in_progress`; flips to `done` at landing (DM to Pawpette).
    **Ride-along (owner 2026-09-02 20:19: "when a request finishes can we
    message the channel and dm the person who made the request saying its
    done"):** the DM half EXISTS (`DM_DONE`, gated by `request_dms_on_decision`);
