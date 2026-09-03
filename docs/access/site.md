@@ -231,7 +231,7 @@ guard's 409 carrying the **cog's own** refusal sentence, and one
 | Events | `GET /api/events[?status=]` · `POST /api/events/{id}/{approve,deny,cancel}` | same lock and same allowed-transition check as the buttons in Discord |
 | Go-live | `GET /api/golive/{links,optouts,sessions}` · `DELETE /api/golive/links/{user_id}` | |
 | Role menus | `GET/POST /api/rolemenus` · `PUT/DELETE /api/rolemenus/{name}` · `POST /api/rolemenus/{name}/post` | `PUT` takes the **whole** option list and syncs to it |
-| Birthdays | `GET /api/birthdays` · `PUT/DELETE /api/birthdays/{user_id}` · `POST /api/birthdays/import` | `import` runs the same import `/birthday import` does and returns the same report |
+| Birthdays | `GET /api/birthdays` · `PUT/DELETE /api/birthdays/{user_id}` · `POST /api/birthdays/import` | `import` runs the same `import_rows` the daily loop does and returns the same report (there has been no `/birthday import` since 2026-08-27) |
 | Temp voice | `GET /api/tempvoice/channels` · `POST /api/tempvoice/setup` | setup **repairs or adopts** the lobby the server already has; `repaired` and `adopted` are successes, not refusals |
 | Honeypot | `GET /api/honeypot/hits[?limit=]` · `POST /api/honeypot/hits/{id}/ban` · `POST /api/honeypot/setup` | Ban-now is the trap's own ban path, test-mode refusal included |
 | Status | `GET /api/status` · `GET /api/actions[?limit=&kind=&user_id=]` | as 8a, plus `actor_name`/`target_name` resolved. `kind=` matches a whole kind **or** a prefix, so `kind=web` is "everything done from the dashboard" |

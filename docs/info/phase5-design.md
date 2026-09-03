@@ -98,6 +98,11 @@ Re-running never overwrites a `source='self'` row. Member lookup uses
 
 ## Commands
 
+> ⚠️ **Superseded 2026-09-03 by [`birthdays-panel-design.md`](birthdays-panel-design.md):
+> `/birthday` is now ONE command that opens a panel, and every subcommand listed below is
+> retired.** Nothing else in this document changes — the sweep, the role, the daily import
+> and the settings are untouched; only the front door moved.
+
 - `/birthday set <month> <day> [year]` — self; `/birthday remove`; `/birthday
   optout` / `optin`; `/birthday show [@user]`; `/birthday next` — next 5
   upcoming (opted-in only), rendered with `<t:…:D>`.

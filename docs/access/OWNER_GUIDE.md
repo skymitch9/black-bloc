@@ -2,7 +2,10 @@
 
 > **Audience:** you (the owner), on your phone or the laptop. **Status:** TRACKED (owner, 2026-08-31 —
 > permanently, not temporarily; secret NAMES only).
-> Last verified: **2026-09-03** for the applications row (a form may keep a LIST instead of handing a
+> Last verified: **2026-09-03** for the birthdays row (`/birthday` is ONE command that opens a panel —
+> BUILT on `feat/birthdays-panel`, not merged, not deployed, not run against live Discord) and the sweeps
+> count on that branch (**79** rows, numbered to 93; 73–86 belong to the sibling events and polls builds).
+> Before that the same day, for the applications row (a form may keep a LIST instead of handing a
 > role over — BUILT on `feat/applications-no-role`, not merged, not deployed) and the sweeps count
 > (69 rows, numbered to 72; 66–68 belong to the sibling requests-check build). Before that the same
 > day, for the requests row only — the `/request` panel no longer writes a
@@ -59,7 +62,8 @@
 | See if the bot is up | https://blackbloc.heygabi.ai/health (should say `"ok":true,"ready":true`) |
 | See what it has been doing | https://blackbloc.heygabi.ai → **Logs** (every feature page has its own Logs section too; `/golive logs` etc. in Discord) |
 | See the team's requests | https://blackbloc.heygabi.ai/requests.html — members file with `/request` in Discord (opens a panel — **File a request**) or sign in and file on that page (they see only Requests). ⚠️ The panel's **list** of requests is staff-only: a member sees File a request, Refresh, the site link and a **Take one back…** select, but not their own requests written out. Set `request_panel_own_list` to `true` (Settings page or `/settings set-value`) to give members their list back |
-| Test something | [`sweeps.md`](sweeps.md) — 72 rows in priority order, each with what to expect (+ the detailed phase 1–8a scripts) |
+| Store a birthday, or see whose is coming up | `/birthday` in Discord — ONE command that opens a panel. **Set my birthday** is a modal (`MM-DD`, or `MM-DD-YYYY` if you want the year); **Remove**, **Opt out** / **Opt in** and **Refresh** are buttons, and **Look someone up…** shows anybody's stored date. Staff get three more rows on the same panel: a month list, a **Wishes are…** off/shadow/on picker, **Status**, **Clear the birthday role** and **Logs** — and, on somebody's card, **Set their birthday** and **Forget their birthday** (they are DMed when staff forget it). Two switches decide what members see: `birthday_panel_next_for_members` and `birthday_panel_lookup`, both **on** — Settings page or `/settings set-value`. The old `/birthday set` / `show` / `next` / `list` / `mode` / `status` subcommands are gone |
+| Test something | [`sweeps.md`](sweeps.md) — 79 rows in priority order, each with what to expect (+ the detailed phase 1–8a scripts) |
 | Keep a list of people instead of handing a role out | https://blackbloc.heygabi.ai/rolemenus.html#applications → **Applications**. A form's role is now optional: leave **Role it hands over** on **No role — keep a list** and an approval stores the record, DMs the person and gives nothing. Each form gets an **Approved for …** foldout — everyone who was said yes to, their Twitch login where they have linked one, and **Copy as text** for pasting into the official team page. Staff take somebody off with the roster's **Take off the list** (or `/applications show <id>` in Discord); they are DMed the reason. A form that DOES hand a role over keeps `/role revoke` as the way off |
 | Turn a feature on/off | Dashboard → that feature's page → the ON / SHADOW / OFF switch (or **Settings**) |
 | Quiet the Discord log channel | Settings → `<feature>_log_level` (off / important / all) |

@@ -73,8 +73,9 @@ Discord line for the handful of kinds the owner wants regardless (none today; th
 
 ### 4. Slash
 `/<feature> logs [count: 1–50, default 10] [important_only: bool]` added to every command group (`/golive`,
-`/event`, `/birthday`, `/voice`, `/rolemenu`, `/role`, `/automod`, `/honeypot`, `/modmail`, `/poll`, `/chat`,
-plus `/mod logs` for cases/warns) — ephemeral embed, newest first, `<t:…:R>` stamps, one line per action,
+`/event`, `/voice`, `/rolemenu`, `/role`, `/automod`, `/honeypot`, `/modmail`, `/poll`, `/chat`,
+plus `/mod logs` for cases/warns; `/request` and `/birthday` moved theirs onto a **Logs button** when they
+became panels — the button loses the two options and calls the same `send_logs`) — ephemeral embed, newest first, `<t:…:R>` stamps, one line per action,
 a footer pointing at the dashboard page. Staff only where the feature is staff-only.
 
 ### 5. Test mode

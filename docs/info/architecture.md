@@ -164,7 +164,7 @@ black_bloc/
 ├── emoji.py          ← skin-tone application for the bot's own emoji (emoji_skin_tone)
 ├── prefix.py         ← no_prefix_commands: the bot answers no text prefix (slash only)
 ├── data/             ← shipped package data (`pyproject.toml` → package-data)
-│   └── birthday_import_2026-08-05.json  ← the 39-row Birthday Bot export, seed for /birthday import
+│   └── birthday_import_2026-08-05.json  ← the 39-row Birthday Bot export, seed for the daily import loop
 ├── logging_setup.py
 ├── cogs/
 │   ├── core.py       ← /ping, /about, /help, /settings — always loaded
@@ -174,7 +174,7 @@ black_bloc/
 │   │   ├── role_menus.py  ← F16: /rolemenu + persistent select panels + staff assign + approvals
 │   │   ├── tempvoice.py   ← F8: join-to-create voice channels, the owner control panel, /voice
 │   │   ├── events.py      ← F4/F5: /event + /timezone, review channels, Approve/Deny, go-live
-│   │   ├── birthdays.py   ← F6: the five-minute sweep, /birthday, the day role, the daily import
+│   │   ├── birthdays.py   ← F6: the five-minute sweep, the /birthday panel, the day role, the daily import
 │   │   ├── polls.py       ← F15: /poll on native Discord polls + Black Bloc's own panel, /poll recur
 │   │   └── requests.py    ← F18: /request, the member intake, the pending-features board
 │   ├── moderation/   ← one cog per moderation feature
