@@ -150,6 +150,26 @@ docs bookkeeping lands with the work, not after.
 
 ## 🔧 Open engineering items
 
+- 🔴 **Every web write through a shared path logs TWICE — owner, 2026-09-03 ~00:40,
+  verbatim: "The app double posted all messages with a web.request and a request".**
+  Seen on the three request flips at the 17/18/19 landing: each produced a
+  `request.done` embed (from `apply_decision`, `cogs/community/requests.py:220`) AND a
+  `web.request.done` embed (from the route's own `note()`, `api/tools/requests.py:273`).
+  `logkinds.bare()` already calls the two "the same event, logged from two places"
+  but only for classification — nothing dedups the post or the row. Surveyed
+  2026-09-03 (scratchpad `survey_double_log.py`, AST walk): the same shape is in
+  **8 route files** — events (`apply_decision`/`cancel_event`/`rename_channel`),
+  honeypot, mod (`_punish` ×6, case apply, rule), modmail (reply/close), polls
+  (create/decide/end/cancel), requests (decide/resume/status), rolemenus
+  (`staff_assign`), tempvoice — plus roles per the `bare()` docstring. Pre-dates
+  Phase 17 (`f7199a5` already had it); it surfaced now because `request.done/hold/
+  declined` are IMPORTANT and post at the default level. Fix = the convention the
+  newer code already uses (`pings.py:head(via)`, `rolemenu_panels.note(via=)`,
+  applications): the shared path takes `via`, logs ONE row with the `web.` head
+  when `via == VIA_WEBSITE`, and the route drops its second `note()`. Status:
+  **waiting on the owner's go-ahead for the 8-file sweep** (recommended) vs
+  requests-only.
+
 - **Review the incoming member requests (owner, 2026-09-02 ~19:55: "we got some
   request in our /request features lets review them").** Read what has landed
   via `/request` (Requests page, `/api/requests`), present them to the owner one
