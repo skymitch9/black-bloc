@@ -627,3 +627,165 @@ def test_a_second_pair_of_eyes_is_asked_for_only_when_the_server_says_so():
     assert pure.may_accept(Store(request_review_by_other=True), GUILD, row, same) is False
     assert pure.may_accept(Store(request_review_by_other=True), GUILD, row, them) is True
     assert pure.may_accept(Store(request_review_by_other=True), GUILD, {}, same) is True
+
+
+@pytest.mark.parametrize("status", pure.STATUSES)
+def test_every_status_maps_to_the_move_buttons_the_panel_design_names(status):
+    """The fourth pass — one table, and the parametrised cog test checks the SAME table."""
+    found = pure.card_buttons(status)
+    actions = [one.action for one in found]
+
+    expected = {
+        pure.OPEN: ["pickup", "hold", "decline"],
+        pure.IN_PROGRESS: ["ready", "hold", "decline"],
+        pure.REVIEW: ["accept", "sendback", "hold", "decline"],
+        pure.HOLD: ["resume", "decline"],
+        pure.DONE: [],
+        pure.DECLINED: [],
+        pure.WITHDRAWN: [],
+    }[status]
+    assert actions == expected
+    for spec in found:
+        assert spec.style in ("primary", "secondary", "success", "danger")
+    if status == pure.REVIEW:
+        assert [one.style for one in found] == ["success", "secondary", "secondary", "danger"]
+
+
+def test_accept_drops_out_when_the_card_says_somebody_else_must_check():
+    with_accept = [one.action for one in pure.card_buttons(pure.REVIEW, may_accept_here=True)]
+    without = [one.action for one in pure.card_buttons(pure.REVIEW, may_accept_here=False)]
+
+    assert "accept" in with_accept and "accept" not in without
+    assert [one for one in without] == ["sendback", "hold", "decline"]
+
+
+def test_the_card_footer_says_who_may_accept_when_this_staffer_may_not():
+    said = pure.card_footer_override(pure.REVIEW, STAFFER, False)
+
+    assert said is not None and f"<@{STAFFER}>" in said
+    assert pure.card_footer_override(pure.REVIEW, STAFFER, True) is None
+
+
+@pytest.mark.parametrize("status", (pure.DONE, pure.DECLINED, pure.WITHDRAWN))
+def test_the_card_footer_says_a_finished_request_is_finished(status):
+    said = pure.card_footer_override(status, None, True)
+
+    assert said is not None and "finishes" in said
+
+
+def test_the_card_footer_is_the_default_when_there_is_nothing_extra_to_say():
+    assert pure.card_footer_override(pure.OPEN, None, True) is None
+    assert pure.card_footer_override(pure.IN_PROGRESS, None, True) is None
+
+
+def test_open_reads_as_filed_on_a_card_and_every_other_status_reads_as_itself():
+    assert pure.look_for_status(pure.OPEN) == pure.FILED_LOOK
+    for status in (pure.IN_PROGRESS, pure.REVIEW, pure.HOLD, pure.DONE, pure.DECLINED):
+        assert pure.look_for_status(status) == status
+
+
+def test_a_select_option_label_carries_the_id_the_status_and_the_what_clamped_to_the_cap():
+    row = {"id": 7, "status": pure.REVIEW, "what": "a" * 200}
+
+    with_status = pure.option_label(row)
+    without_status = pure.option_label(row, with_status=False)
+
+    assert with_status.startswith("#7 · ready to check · ")
+    assert without_status.startswith("#7 · ") and "ready to check" not in without_status
+    assert len(with_status) <= pure.SELECT_OPTION_LIMIT
+    assert len(without_status) <= pure.SELECT_OPTION_LIMIT
+
+
+def test_the_pick_placeholder_says_how_many_are_left_off_only_when_some_are():
+    assert pure.pick_placeholder(10, 10) == pure.PICK_A_REQUEST
+    assert pure.pick_placeholder(25, 40) == "25 of 40 — the rest are on the site"
+
+
+def test_the_counts_line_names_all_four_open_statuses_in_order():
+    line = pure.counts_line({pure.OPEN: 3, pure.IN_PROGRESS: 1, pure.REVIEW: 0, pure.HOLD: 2})
+
+    assert line == "**3** open · **1** being worked on · **0** ready to check · **2** on hold"
+    empty = "**0** open · **0** being worked on · **0** ready to check · **0** on hold"
+    assert pure.counts_line({}) == empty
+
+
+def test_the_site_page_url_is_the_requests_page_with_no_anchor():
+    assert pure.site_page_url("https://blackbloc.test/") == "https://blackbloc.test/requests.html"
+    assert pure.site_page_url("https://blackbloc.test") == "https://blackbloc.test/requests.html"
+    assert pure.site_page_url("") is None
+    assert pure.site_page_url(None) is None
+
+
+def test_panel_minutes_reads_the_settings_key():
+    assert pure.panel_minutes(Store(request_panel_minutes=15), GUILD) == 15
+    assert pure.panel_minutes(Store(request_panel_minutes=30), GUILD) == 30
+
+
+class FakeBot:
+    def __init__(self, db):
+        self.db = db
+        self.store = Store()
+
+    def get_channel(self, channel_id):
+        return None
+
+
+class FakeGuild:
+    def __init__(self, guild_id=GUILD):
+        self.id = guild_id
+
+    def get_channel(self, channel_id):
+        return None
+
+
+async def test_withdraw_request_takes_back_an_open_row_and_logs_one_row(db):
+    request_id = await file_one(db)
+    bot, guild = FakeBot(db), FakeGuild()
+    row = await pure.get_request(db, request_id)
+
+    said, fresh = await pure.withdraw_request(bot, guild, row, actor=None)
+
+    assert fresh is not None and fresh["status"] == pure.WITHDRAWN
+    assert f"#{request_id}" in said and "withdrawn" in said
+    cur = await db.conn.execute("SELECT kind FROM action_log")
+    assert [r["kind"] for r in await cur.fetchall()] == ["request.withdrawn"]
+
+
+async def test_withdraw_request_takes_back_a_held_row_too(db):
+    request_id = await file_one(db)
+    await pure.set_status(
+        db, request_id, pure.HOLD, decided_by=STAFFER, decline_reason="waiting", was=pure.OPEN
+    )
+    bot, guild = FakeBot(db), FakeGuild()
+    row = await pure.get_request(db, request_id)
+
+    said, fresh = await pure.withdraw_request(bot, guild, row, actor=None)
+
+    assert fresh["status"] == pure.WITHDRAWN
+
+
+async def test_withdraw_request_refuses_a_row_that_is_not_open_or_held(db):
+    request_id = await file_one(db)
+    await pure.set_status(db, request_id, pure.IN_PROGRESS, decided_by=STAFFER)
+    bot, guild = FakeBot(db), FakeGuild()
+    row = await pure.get_request(db, request_id)
+
+    said, fresh = await pure.withdraw_request(bot, guild, row, actor=None)
+
+    assert fresh is None
+    assert "nothing to withdraw" in said
+    assert (await pure.get_request(db, request_id))["status"] == pure.IN_PROGRESS
+    assert await db.conn.execute("SELECT kind FROM action_log")
+
+
+async def test_withdraw_request_via_website_writes_the_web_headed_kind(db):
+    from black_bloc.logkinds import VIA_WEBSITE
+
+    request_id = await file_one(db)
+    bot, guild = FakeBot(db), FakeGuild()
+    row = await pure.get_request(db, request_id)
+
+    await pure.withdraw_request(bot, guild, row, actor=None, via=VIA_WEBSITE)
+
+    cur = await db.conn.execute("SELECT kind FROM action_log")
+    assert [r["kind"] for r in await cur.fetchall()] == ["web.request.withdrawn"]

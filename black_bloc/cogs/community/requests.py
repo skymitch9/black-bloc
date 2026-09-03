@@ -7,14 +7,16 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from ...actionlog import LOGS_DEFAULT, LOGS_MAX, LOGS_MIN, log_action, send_logs
+from ...actionlog import log_action, send_logs
 from ...command_errors import NETWORK_ERRORS, AnswersErrors
 from ...logkinds import VIA_DISCORD, kind_via
 from ...requests import (
     BUILT_LIMIT,
+    COUNT_STATUSES,
     DECLINED,
     DM_LOOKS,
     DONE,
+    EMBED_COLOURS,
     FILED,
     FILED_LOOK,
     HOLD,
@@ -25,43 +27,51 @@ from ...requests import (
     NO_SUCH_REQUEST,
     NOT_ON_HOLD,
     NOT_READY_TO_CHECK,
-    NOT_YOURS,
-    NOTHING_FILED_YET,
-    NOTHING_OF_YOURS,
     NOTHING_OPEN,
     NOTIFY_CHANNEL_KEY,
     NOTIFY_FAILED_KIND,
     NOTIFY_SKIPPED_KIND,
     OPEN,
     OPEN_STATUSES,
+    PANEL_EMPTY,
+    PANEL_INTRO,
+    PANEL_TIMEOUT_FOOTER,
+    PANEL_TITLE,
     REASON_LIMIT,
     REQUESTS_OFF,
     REVIEW,
     REVIEW_BY_SOMEBODY_ELSE,
+    SELECT_CAP,
     SENT_BACK,
     SENT_BACK_LIMIT,
+    SITE_BUTTON,
     STAFF_ONLY_FILES,
-    STAFF_STATUSES,
     STATUS_WORDS,
+    TAKE_ONE_BACK,
     TOO_LATE_TO_WITHDRAW,
     WHAT_LIMIT,
     WHY_LIMIT,
     WITHDRAWABLE,
-    WITHDRAWN,
-    WITHDRAWN_SAID,
     RequestError,
+    card_buttons,
+    card_footer_override,
     checked_fields,
     checked_move,
     clamp,
+    count_requests,
+    counts_line,
     create_request,
     dms_on_decision,
     everyone_may_file,
     get_request,
     list_requests,
+    look_for_status,
     look_of,
     may_accept,
     move_line,
-    page_of,
+    option_label,
+    panel_minutes,
+    pick_placeholder,
     posts_a_card,
     request_embed,
     requests_are_on,
@@ -70,27 +80,19 @@ from ...requests import (
     set_fields,
     set_message,
     set_status,
+    site_page_url,
     site_view,
     status_channel_id,
     summary_line,
+    withdraw_request,
 )
-from ...settings_store import DB_UNAVAILABLE, GUILD_ONLY, require_staff
+from ...settings_store import DB_UNAVAILABLE, GUILD_ONLY
 
 log = logging.getLogger(__name__)
 
 DUE_PLACEHOLDER = "2026-09-15"
 DUE_INPUT_LIMIT = 10
 SET_SAID = "Request **#{request_id}** is now **{status}**."
-NOT_AN_ID = (
-    "**{given}** is not a request number, so nothing was done. `/request list` shows the numbers."
-)
-LIST_HEADING = {
-    "mine": "**Your requests**",
-    "open": "**Still open**",
-    "all": "**Every request**",
-}
-PAGE_FOOT = "Page {page} of {pages} — `/request list page:{next}` for the next one."
-SCOPES = ("mine", "open", "all")
 RESUMED_SAID = "Request **#{request_id}** is off hold and back to **{status}**."
 MOVE_LOOKS = tuple(one for one in LOOKS if one != FILED_LOOK)
 READY_SAID = "Request **#{request_id}** is ready to check — staff will look at it."
@@ -105,10 +107,30 @@ MOVE_SAID: dict[str, str] = {
     DECLINED: SET_SAID,
 }
 READY_MODAL_TITLE = "Ready to check"
-READY_HINT = (
-    "What was built, and how somebody tries it. Both show on the card and on the site; the "
-    "site is where either can be edited afterwards."
-)
+
+NOTE_TITLES: dict[str, str] = {
+    "hold": "Put this on hold",
+    "decline": "Decline this request",
+    "sendback": "Send this back",
+}
+NOTE_LABELS: dict[str, str] = {
+    "hold": "Why is it on hold? (sent to the asker)",
+    "decline": "Why? (sent to the asker)",
+    "sendback": "What's left? (sent to who marked it ready)",
+}
+NOTE_LIMITS: dict[str, int] = {
+    "hold": REASON_LIMIT,
+    "decline": REASON_LIMIT,
+    "sendback": SENT_BACK_LIMIT,
+}
+NOTE_STATUS: dict[str, str] = {"hold": HOLD, "decline": DECLINED}
+BUTTON_STYLES: dict[str, discord.ButtonStyle] = {
+    "primary": discord.ButtonStyle.primary,
+    "secondary": discord.ButtonStyle.secondary,
+    "success": discord.ButtonStyle.success,
+    "danger": discord.ButtonStyle.danger,
+}
+COG_NAME = "Requests"
 
 
 def guard_allows(bot: Any, channel: Any) -> bool:
@@ -336,7 +358,7 @@ async def mark_ready(
     *,
     via: str = VIA_DISCORD,
 ) -> tuple[str, Any]:
-    """`/request ready` and the site's Ready-to-check button — in progress into review."""
+    """The panel's Ready-to-check button and the site's — in progress into review."""
     return await apply_decision(
         bot,
         guild,
@@ -352,14 +374,14 @@ async def mark_ready(
 async def accept(
     bot: Any, guild: Any, request_id: int, actor: Any, *, via: str = VIA_DISCORD
 ) -> tuple[str, Any]:
-    """`/request accept` and the site's Accept button — review into done."""
+    """The panel's Accept button and the site's — review into done."""
     return await apply_decision(bot, guild, request_id, DONE, actor, via=via)
 
 
 async def send_back(
     bot: Any, guild: Any, request_id: int, actor: Any, note: Any, *, via: str = VIA_DISCORD
 ) -> tuple[str, Any]:
-    """`/request sendback` and the site's Send back button — review into progress, with a note."""
+    """The panel's Send back button and the site's — review into progress, with a note."""
     row = await get_request(bot.db, request_id)
     if row is None or row["guild_id"] != guild.id:
         return (NO_SUCH_REQUEST.format(request_id=request_id), None)
@@ -378,7 +400,7 @@ async def send_back(
 async def resume_request(
     bot: Any, guild: Any, request_id: int, actor: Any, *, via: str = VIA_DISCORD
 ) -> tuple[str, Any]:
-    """Off hold and back where it was held from — the Resume button and `/request resume`."""
+    """Off hold and back where it was held from — the panel's Resume button and the site's."""
     row = await get_request(bot.db, request_id)
     if row is None or row["guild_id"] != guild.id:
         return (NO_SUCH_REQUEST.format(request_id=request_id), None)
@@ -413,6 +435,339 @@ async def resume_request(
         RESUMED_SAID.format(request_id=request_id, status=STATUS_WORDS.get(wanted, wanted)),
         fresh,
     )
+
+
+MOVE_FUNCS: dict[str, Any] = {
+    "pickup": lambda bot, guild, rid, actor: apply_decision(bot, guild, rid, IN_PROGRESS, actor),
+    "accept": lambda bot, guild, rid, actor: accept(bot, guild, rid, actor),
+    "resume": lambda bot, guild, rid, actor: resume_request(bot, guild, rid, actor),
+}
+
+
+async def db_ready(interaction: discord.Interaction) -> bool:
+    """Called after a component/modal has already deferred; answers a followup, never a crash."""
+    if interaction.client.db.is_connected:
+        return True
+    await interaction.followup.send(
+        DB_UNAVAILABLE, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+    )
+    return False
+
+
+def build_card(bot: Any, guild: Any, row: Any, actor: Any) -> tuple[discord.Embed, RequestView]:
+    status = row_value(row, "status")
+    origin = str(getattr(bot.settings, "origin", "") or "")
+    embed = request_embed(row, move=look_for_status(status), origin=origin, guild=guild)
+    may_accept_here = may_accept(bot.store, guild.id, row, actor)
+    override = card_footer_override(status, row_value(row, "ready_by"), may_accept_here)
+    if override:
+        embed.set_footer(text=override)
+    view = RequestView(panel_minutes(bot.store, guild.id))
+    for spec in card_buttons(status, may_accept_here=may_accept_here):
+        view.add_item(CardMoveButton(row_value(row, "id"), spec))
+    view.add_item(BackButton())
+    return embed, view
+
+
+async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, RequestView]:
+    store = bot.store
+    db = bot.db
+    staff = store.is_staff(actor)
+    own_rows = await list_requests(db, guild.id, user_id=actor.id)
+    on = requests_are_on(store, guild.id)
+    can_file = on and (everyone_may_file(store, guild.id) or staff)
+    staff_rows: list[Any] = []
+    total_open = 0
+    counts: dict[str, int] | None = None
+    if staff:
+        counts = {
+            status: await count_requests(db, guild.id, statuses=(status,))
+            for status in COUNT_STATUSES
+        }
+        staff_rows = await list_requests(db, guild.id, statuses=OPEN_STATUSES, limit=SELECT_CAP)
+        total_open = await count_requests(db, guild.id, statuses=OPEN_STATUSES)
+
+    lines = [PANEL_INTRO]
+    if counts is not None:
+        lines.append(counts_line(counts))
+    if own_rows:
+        lines.extend(summary_line(row) for row in own_rows[:LIST_PAGE])
+    else:
+        lines.append(PANEL_EMPTY)
+    if not on:
+        lines.append(REQUESTS_OFF)
+    elif not can_file:
+        lines.append(STAFF_ONLY_FILES)
+    if staff and not staff_rows:
+        lines.append(NOTHING_OPEN)
+
+    embed = discord.Embed(
+        title=PANEL_TITLE,
+        description="\n".join(lines),
+        colour=discord.Colour(EMBED_COLOURS[FILED_LOOK]),
+    )
+    view = RequestView(panel_minutes(store, guild.id))
+    if can_file:
+        view.add_item(FileButton())
+    view.add_item(RefreshButton())
+    page_url = site_page_url(str(getattr(bot.settings, "origin", "") or ""))
+    if page_url:
+        view.add_item(
+            discord.ui.Button(
+                style=discord.ButtonStyle.link, label=SITE_BUTTON, url=page_url, row=0
+            )
+        )
+    withdrawable = [row for row in own_rows if row["status"] in WITHDRAWABLE]
+    if withdrawable:
+        view.add_item(WithdrawPick(withdrawable))
+    if staff and staff_rows:
+        view.add_item(RequestPick(staff_rows, total_open))
+    if staff:
+        view.add_item(LogsButton())
+    return embed, view
+
+
+async def render_panel(interaction: discord.Interaction) -> None:
+    bot = interaction.client
+    embed, view = await build_panel(bot, interaction.guild, interaction.user)
+    msg = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = msg
+
+
+async def back_to_panel(interaction: discord.Interaction) -> None:
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    await render_panel(interaction)
+
+
+async def finish_card(
+    interaction: discord.Interaction, request_id: int, said: str, fresh: Any
+) -> None:
+    bot = interaction.client
+    row = fresh if fresh is not None else await get_request(bot.db, request_id)
+    if row is None:
+        await render_panel(interaction)
+    else:
+        embed, view = build_card(bot, interaction.guild, row, interaction.user)
+        msg = await interaction.edit_original_response(embed=embed, view=view)
+        view.message = msg
+    await interaction.followup.send(
+        said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+async def open_card(interaction: discord.Interaction, request_id: int) -> None:
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    bot = interaction.client
+    row = await get_request(bot.db, request_id)
+    if row is None or row["guild_id"] != interaction.guild.id:
+        await interaction.followup.send(
+            NO_SUCH_REQUEST.format(request_id=request_id),
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        return
+    embed, view = build_card(bot, interaction.guild, row, interaction.user)
+    msg = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = msg
+
+
+async def open_withdraw_confirm(interaction: discord.Interaction, request_id: int) -> None:
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    bot = interaction.client
+    row = await get_request(bot.db, request_id)
+    theirs = row is not None and row["user_id"] == interaction.user.id
+    if row is None or row["guild_id"] != interaction.guild.id or not theirs:
+        await render_panel(interaction)
+        await interaction.followup.send(
+            NO_SUCH_REQUEST.format(request_id=request_id),
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        return
+    if row["status"] not in WITHDRAWABLE:
+        await render_panel(interaction)
+        await interaction.followup.send(
+            TOO_LATE_TO_WITHDRAW.format(
+                request_id=request_id, status=STATUS_WORDS.get(row["status"], row["status"])
+            ),
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        return
+    origin = str(getattr(bot.settings, "origin", "") or "")
+    embed = request_embed(
+        row, move=look_for_status(row["status"]), origin=origin, guild=interaction.guild
+    )
+    view = RequestView(panel_minutes(bot.store, interaction.guild.id))
+    view.add_item(WithdrawYesButton(request_id))
+    view.add_item(WithdrawKeepButton())
+    msg = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = msg
+
+
+async def confirm_withdraw(interaction: discord.Interaction, request_id: int) -> None:
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    bot = interaction.client
+    row = await get_request(bot.db, request_id)
+    if row is None:
+        await render_panel(interaction)
+        return
+    said, _ = await withdraw_request(bot, interaction.guild, row, interaction.user)
+    await render_panel(interaction)
+    await interaction.followup.send(
+        said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+async def run_move(interaction: discord.Interaction, request_id: int, action: str) -> None:
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    bot = interaction.client
+    said, fresh = await MOVE_FUNCS[action](bot, interaction.guild, request_id, interaction.user)
+    await finish_card(interaction, request_id, said, fresh)
+
+
+class RequestView(AnswersErrors, discord.ui.View):
+    def __init__(self, minutes: int) -> None:
+        super().__init__(timeout=max(1, int(minutes or 1)) * 60)
+        self.message: Any = None
+
+    async def on_timeout(self) -> None:
+        if self.message is None:
+            return
+        for item in self.children:
+            item.disabled = True
+        embeds = list(self.message.embeds)
+        if embeds:
+            embeds[0] = embeds[0].copy()
+            embeds[0].set_footer(text=PANEL_TIMEOUT_FOOTER)
+        try:
+            await self.message.edit(embeds=embeds, view=self)
+        except discord.HTTPException as exc:
+            log.info("requests: could not disable a timed-out panel: %s", exc)
+
+
+class FileButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label="File a request", style=discord.ButtonStyle.primary, row=0)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        bot = interaction.client
+        guild = interaction.guild
+        if not requests_are_on(bot.store, guild.id):
+            await answer(interaction, REQUESTS_OFF)
+            return
+        if not everyone_may_file(bot.store, guild.id) and not bot.store.is_staff(
+            interaction.user
+        ):
+            await answer(interaction, STAFF_ONLY_FILES)
+            return
+        cog = bot.get_cog(COG_NAME)
+        await interaction.response.send_modal(RequestModal(cog))
+
+
+class RefreshButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label="Refresh", style=discord.ButtonStyle.secondary, row=0)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await back_to_panel(interaction)
+
+
+class WithdrawPick(discord.ui.Select):
+    def __init__(self, rows: list[Any]) -> None:
+        options = [
+            discord.SelectOption(
+                label=option_label(row, with_status=False), value=str(row_value(row, "id"))
+            )
+            for row in rows[:SELECT_CAP]
+        ]
+        super().__init__(
+            placeholder=TAKE_ONE_BACK, options=options, min_values=1, max_values=1, row=1
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_withdraw_confirm(interaction, int(self.values[0]))
+
+
+class RequestPick(discord.ui.Select):
+    def __init__(self, rows: list[Any], total: int) -> None:
+        options = [
+            discord.SelectOption(label=option_label(row), value=str(row_value(row, "id")))
+            for row in rows
+        ]
+        super().__init__(
+            placeholder=pick_placeholder(len(rows), total),
+            options=options,
+            min_values=1,
+            max_values=1,
+            row=2,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_card(interaction, int(self.values[0]))
+
+
+class LogsButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label="Logs", style=discord.ButtonStyle.secondary, row=3)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await send_logs(interaction, "request")
+
+
+class BackButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label="Back", style=discord.ButtonStyle.secondary, row=0)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await back_to_panel(interaction)
+
+
+class CardMoveButton(discord.ui.Button):
+    def __init__(self, request_id: int, spec: Any) -> None:
+        super().__init__(label=spec.label, style=BUTTON_STYLES[spec.style], row=0)
+        self.request_id = request_id
+        self.spec = spec
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        cog = interaction.client.get_cog(COG_NAME)
+        if self.spec.action == "ready":
+            row = await get_request(interaction.client.db, self.request_id)
+            await interaction.response.send_modal(ReadyModal(cog, self.request_id, row))
+            return
+        if self.spec.needs_modal:
+            await interaction.response.send_modal(
+                NoteModal(cog, self.request_id, self.spec.action)
+            )
+            return
+        await run_move(interaction, self.request_id, self.spec.action)
+
+
+class WithdrawYesButton(discord.ui.Button):
+    def __init__(self, request_id: int) -> None:
+        super().__init__(label="Yes, take it back", style=discord.ButtonStyle.danger, row=0)
+        self.request_id = request_id
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await confirm_withdraw(interaction, self.request_id)
+
+
+class WithdrawKeepButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label="Keep it", style=discord.ButtonStyle.secondary, row=0)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await back_to_panel(interaction)
 
 
 class RequestModal(AnswersErrors, discord.ui.Modal, title="Ask for something"):
@@ -475,11 +830,24 @@ class ReadyModal(AnswersErrors, discord.ui.Modal, title=READY_MODAL_TITLE):
         )
 
 
+class NoteModal(AnswersErrors, discord.ui.Modal):
+    note = discord.ui.TextInput(style=discord.TextStyle.paragraph)
+
+    def __init__(self, cog: Requests, request_id: int, kind: str) -> None:
+        super().__init__(title=NOTE_TITLES[kind])
+        self.cog = cog
+        self.request_id = request_id
+        self.kind = kind
+        self.note.label = NOTE_LABELS[kind]
+        self.note.max_length = NOTE_LIMITS[kind]
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await self.cog.note_submit(interaction, self.request_id, self.kind, str(self.note))
+
+
 class Requests(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-
-    request = app_commands.Group(name="request", description="Ask the server for something")
 
     async def _database_ready(self, interaction: discord.Interaction) -> bool:
         if self.bot.db.is_connected:
@@ -494,20 +862,20 @@ class Requests(commands.Cog):
             return False
         return await self._database_ready(interaction)
 
-    @request.command(name="create", description="Ask for something; staff decide on the site")
-    async def request_create(self, interaction: discord.Interaction) -> None:
+    @app_commands.command(
+        name="request", description="Ask the server for something, or manage requests"
+    )
+    async def request(self, interaction: discord.Interaction) -> None:
         if not await self._ready(interaction):
             return
-        guild = interaction.guild
-        if not requests_are_on(self.bot.store, guild.id):
-            await answer(interaction, REQUESTS_OFF)
-            return
-        if not everyone_may_file(self.bot.store, guild.id) and not self.bot.store.is_staff(
-            interaction.user
-        ):
-            await answer(interaction, STAFF_ONLY_FILES)
-            return
-        await interaction.response.send_modal(RequestModal(self))
+        embed, view = await build_panel(self.bot, interaction.guild, interaction.user)
+        await interaction.response.send_message(
+            embed=embed,
+            view=view,
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        view.message = await interaction.original_response()
 
     async def submit(
         self, interaction: discord.Interaction, *, what: str, why: str, due: str
@@ -553,143 +921,6 @@ class Requests(commands.Cog):
         await notify(self.bot, guild, row, interaction.user)
         await answer(interaction, FILED.format(request_id=request_id))
 
-    @request.command(name="list", description="Show the requests that have been filed")
-    @app_commands.describe(
-        scope="yours, the ones still open, or every one of them",
-        page="which page of ten to show",
-    )
-    @app_commands.choices(
-        scope=[app_commands.Choice(name=name, value=name) for name in SCOPES]
-    )
-    async def request_list(
-        self,
-        interaction: discord.Interaction,
-        scope: app_commands.Choice[str] | None = None,
-        page: int = 1,
-    ) -> None:
-        if not await self._ready(interaction):
-            return
-        guild = interaction.guild
-        wanted = scope.value if scope is not None else "mine"
-        rows = await list_requests(
-            self.bot.db,
-            guild.id,
-            statuses=OPEN_STATUSES if wanted == "open" else None,
-            user_id=interaction.user.id if wanted == "mine" else None,
-        )
-        if not rows:
-            empty = {
-                "mine": NOTHING_OF_YOURS,
-                "open": NOTHING_OPEN,
-                "all": NOTHING_FILED_YET,
-            }[wanted]
-            await answer(interaction, empty)
-            return
-        shown, at, pages = page_of(rows, page, LIST_PAGE)
-        lines = [LIST_HEADING[wanted], *[summary_line(row) for row in shown]]
-        if pages > 1:
-            lines.append(PAGE_FOOT.format(page=at, pages=pages, next=min(at + 1, pages)))
-        await answer(interaction, "\n".join(lines))
-
-    @request.command(name="withdraw", description="Take back a request you filed")
-    @app_commands.describe(request_id="The number `/request list` shows")
-    async def request_withdraw(self, interaction: discord.Interaction, request_id: str) -> None:
-        if not await self._ready(interaction):
-            return
-        digits = str(request_id).strip().lstrip("#")
-        if not digits.isdigit():
-            await answer(interaction, NOT_AN_ID.format(given=clamp(request_id, 40)))
-            return
-        guild = interaction.guild
-        row = await get_request(self.bot.db, int(digits))
-        if row is None or row["guild_id"] != guild.id:
-            await answer(interaction, NO_SUCH_REQUEST.format(request_id=digits))
-            return
-        if row["user_id"] != interaction.user.id:
-            await answer(interaction, NOT_YOURS.format(request_id=row["id"]))
-            return
-        if row["status"] not in WITHDRAWABLE:
-            await answer(
-                interaction,
-                TOO_LATE_TO_WITHDRAW.format(
-                    request_id=row["id"], status=STATUS_WORDS.get(row["status"], row["status"])
-                ),
-            )
-            return
-        await interaction.response.defer(ephemeral=True)
-        await set_status(self.bot.db, row["id"], WITHDRAWN)
-        await log_action(
-            self.bot,
-            guild,
-            "request.withdrawn",
-            actor=interaction.user,
-            target=interaction.user,
-            details={"request_id": row["id"]},
-        )
-        await answer(interaction, WITHDRAWN_SAID.format(request_id=row["id"]))
-
-    @request.command(name="set", description="Move a request along; staff only")
-    @app_commands.describe(
-        request_id="The number `/request list` shows",
-        status="Where the request has got to",
-        reason="Required for hold and declined; the person who asked is sent it",
-    )
-    @app_commands.choices(
-        status=[app_commands.Choice(name=name, value=name) for name in STAFF_STATUSES]
-    )
-    async def request_set(
-        self,
-        interaction: discord.Interaction,
-        request_id: str,
-        status: app_commands.Choice[str],
-        reason: str | None = None,
-    ) -> None:
-        if not await require_staff(interaction):
-            return
-        if not await self._database_ready(interaction):
-            return
-        digits = str(request_id).strip().lstrip("#")
-        if not digits.isdigit():
-            await answer(interaction, NOT_AN_ID.format(given=clamp(request_id, 40)))
-            return
-        await interaction.response.defer(ephemeral=True)
-        said, _ = await apply_decision(
-            self.bot,
-            interaction.guild,
-            int(digits),
-            status.value,
-            interaction.user,
-            reason=reason,
-        )
-        await answer(interaction, said)
-
-    async def _wanted_id(self, interaction: discord.Interaction, request_id: str) -> int | None:
-        """Staff, a database and a number, or the sentence that says which one is missing."""
-        if not await require_staff(interaction):
-            return None
-        if not await self._database_ready(interaction):
-            return None
-        digits = str(request_id).strip().lstrip("#")
-        if not digits.isdigit():
-            await answer(interaction, NOT_AN_ID.format(given=clamp(request_id, 40)))
-            return None
-        return int(digits)
-
-    @request.command(
-        name="ready",
-        description="Say a request is built and ready to check; staff only",
-    )
-    @app_commands.describe(request_id="The number `/request list` shows")
-    async def request_ready(self, interaction: discord.Interaction, request_id: str) -> None:
-        wanted = await self._wanted_id(interaction, request_id)
-        if wanted is None:
-            return
-        row = await get_request(self.bot.db, wanted)
-        if row is None or row["guild_id"] != interaction.guild.id:
-            await answer(interaction, NO_SUCH_REQUEST.format(request_id=wanted))
-            return
-        await interaction.response.send_modal(ReadyModal(self, wanted, row))
-
     async def ready_submit(
         self,
         interaction: discord.Interaction,
@@ -699,8 +930,10 @@ class Requests(commands.Cog):
         how_to_test: str,
     ) -> None:
         """What the ready modal does once it is filled in — the one shared path, nothing else."""
-        await interaction.response.defer(ephemeral=True)
-        said, _ = await mark_ready(
+        await interaction.response.defer()
+        if not await db_ready(interaction):
+            return
+        said, fresh = await mark_ready(
             self.bot,
             interaction.guild,
             request_id,
@@ -708,87 +941,29 @@ class Requests(commands.Cog):
             built,
             how_to_test,
         )
-        await answer(interaction, said)
+        await finish_card(interaction, request_id, said, fresh)
 
-    @request.command(name="accept", description="Finish a request you have checked; staff only")
-    @app_commands.describe(request_id="The number `/request list` shows")
-    async def request_accept(self, interaction: discord.Interaction, request_id: str) -> None:
-        wanted = await self._wanted_id(interaction, request_id)
-        if wanted is None:
-            return
-        await interaction.response.defer(ephemeral=True)
-        said, _ = await accept(self.bot, interaction.guild, wanted, interaction.user)
-        await answer(interaction, said)
-
-    @request.command(
-        name="sendback",
-        description="Send a request back with what is still to do; staff only",
-    )
-    @app_commands.describe(
-        request_id="The number `/request list` shows",
-        note="What is still to do; whoever marked it ready is sent this",
-    )
-    async def request_sendback(
-        self, interaction: discord.Interaction, request_id: str, note: str
+    async def note_submit(
+        self, interaction: discord.Interaction, request_id: int, kind: str, text: str
     ) -> None:
-        wanted = await self._wanted_id(interaction, request_id)
-        if wanted is None:
+        """What hold, decline and send-back all do once their one-line note is submitted."""
+        await interaction.response.defer()
+        if not await db_ready(interaction):
             return
-        await interaction.response.defer(ephemeral=True)
-        said, _ = await send_back(self.bot, interaction.guild, wanted, interaction.user, note)
-        await answer(interaction, said)
-
-    @request.command(name="hold", description="Park a request with a reason; staff only")
-    @app_commands.describe(
-        request_id="The number `/request list` shows",
-        reason="Why it is waiting; the person who asked is sent this",
-    )
-    async def request_hold(
-        self, interaction: discord.Interaction, request_id: str, reason: str
-    ) -> None:
-        if not await require_staff(interaction):
-            return
-        if not await self._database_ready(interaction):
-            return
-        digits = str(request_id).strip().lstrip("#")
-        if not digits.isdigit():
-            await answer(interaction, NOT_AN_ID.format(given=clamp(request_id, 40)))
-            return
-        await interaction.response.defer(ephemeral=True)
-        said, _ = await apply_decision(
-            self.bot, interaction.guild, int(digits), HOLD, interaction.user, reason=reason
-        )
-        await answer(interaction, said)
-
-    @request.command(name="resume", description="Take a request off hold; staff only")
-    @app_commands.describe(request_id="The number `/request list` shows")
-    async def request_resume(self, interaction: discord.Interaction, request_id: str) -> None:
-        if not await require_staff(interaction):
-            return
-        if not await self._database_ready(interaction):
-            return
-        digits = str(request_id).strip().lstrip("#")
-        if not digits.isdigit():
-            await answer(interaction, NOT_AN_ID.format(given=clamp(request_id, 40)))
-            return
-        await interaction.response.defer(ephemeral=True)
-        said, _ = await resume_request(
-            self.bot, interaction.guild, int(digits), interaction.user
-        )
-        await answer(interaction, said)
-
-    @request.command(name="logs", description="The last few request log lines")
-    @app_commands.describe(
-        count="How many lines, 1 to 50 (10 by default)",
-        important_only="True to leave out the dry runs and the housekeeping",
-    )
-    async def request_logs(
-        self,
-        interaction: discord.Interaction,
-        count: app_commands.Range[int, LOGS_MIN, LOGS_MAX] = LOGS_DEFAULT,
-        important_only: bool = False,
-    ) -> None:
-        await send_logs(interaction, "request", count=count, important_only=important_only)
+        if kind == "sendback":
+            said, fresh = await send_back(
+                self.bot, interaction.guild, request_id, interaction.user, text
+            )
+        else:
+            said, fresh = await apply_decision(
+                self.bot,
+                interaction.guild,
+                request_id,
+                NOTE_STATUS[kind],
+                interaction.user,
+                reason=text,
+            )
+        await finish_card(interaction, request_id, said, fresh)
 
 
 async def setup(bot: commands.Bot) -> None:
@@ -796,19 +971,40 @@ async def setup(bot: commands.Bot) -> None:
 
 
 __all__ = [
+    "BackButton",
+    "CardMoveButton",
+    "FileButton",
+    "LogsButton",
+    "NoteModal",
     "ReadyModal",
+    "RefreshButton",
     "RequestModal",
+    "RequestPick",
+    "RequestView",
     "Requests",
+    "WithdrawKeepButton",
+    "WithdrawPick",
+    "WithdrawYesButton",
     "accept",
     "apply_decision",
+    "back_to_panel",
+    "build_card",
+    "build_panel",
     "card",
+    "confirm_withdraw",
+    "db_ready",
+    "finish_card",
     "guard_allows",
     "mark_ready",
     "notify",
     "notify_move",
+    "open_card",
+    "open_withdraw_confirm",
     "person_told",
     "post_line",
+    "render_panel",
     "resume_request",
+    "run_move",
     "send_back",
     "tell_person",
 ]
