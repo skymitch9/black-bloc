@@ -40,11 +40,7 @@ from ...requests import (
     STAFF_ONLY_FILES,
     STATUS_WORDS,
     TEXT_NEEDED,
-    TOO_LATE_TO_WITHDRAW,
     UNASSIGNED,
-    WITHDRAWABLE,
-    WITHDRAWN,
-    WITHDRAWN_SAID,
     RequestError,
     add_comment,
     checked_fields,
@@ -63,10 +59,10 @@ from ...requests import (
     resume_target,
     row_value,
     set_fields,
-    set_status,
     wanted_priority,
     wanted_status,
     wanted_statuses,
+    withdraw_request,
 )
 from ..auth import Refused
 from ..names import as_id, avatar_url, resolve_one
@@ -627,29 +623,12 @@ def build_router(bot: Any) -> APIRouter:
         row = await _wanted(guild, request_id)
         if row["user_id"] != int(who["id"]):
             raise Refused(403, "not_yours", NOT_YOURS.format(request_id=request_id))
-        if row["status"] not in WITHDRAWABLE:
-            raise Refused(
-                409,
-                "too_late_to_withdraw",
-                TOO_LATE_TO_WITHDRAW.format(
-                    request_id=request_id,
-                    status=STATUS_WORDS.get(row["status"], row["status"]),
-                ),
-            )
-        await set_status(bot.db, request_id, WITHDRAWN)
-        await note(
-            bot,
-            guild,
-            "web.request.withdrawn",
-            who,
-            target=row["user_id"],
-            details={"request_id": request_id},
+        said, fresh = await withdraw_request(
+            bot, guild, row, actor_for(bot, who, guild), via=VIA_WEBSITE
         )
-        fresh = await _wanted(guild, request_id)
-        return {
-            "request": await _shown(guild, fresh),
-            "message": WITHDRAWN_SAID.format(request_id=request_id),
-        }
+        if fresh is None:
+            raise Refused(409, "too_late_to_withdraw", said)
+        return {"request": await _shown(guild, fresh), "message": said}
 
     @router.post("/{request_id}/comments")
     async def request_comment(

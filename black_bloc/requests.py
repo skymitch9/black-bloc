@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, date, datetime
-from typing import Any
+from typing import Any, NamedTuple
 
 import discord
 
-from .logkinds import FEATURE_PAGES
+from .actionlog import log_action
+from .logkinds import FEATURE_PAGES, VIA_DISCORD, kind_via
 from .timezones import DEFAULT_TZ, zone
 
 log = logging.getLogger(__name__)
@@ -44,6 +45,10 @@ LOOKS = (FILED_LOOK, IN_PROGRESS, REVIEW, SENT_BACK, DONE, HOLD, DECLINED)
 DM_LOOKS = (IN_PROGRESS, HOLD, DONE, DECLINED)
 CHANNEL_MOVES_KEY = "request_channel_moves"
 REVIEW_BY_OTHER_KEY = "request_review_by_other"
+PANEL_MINUTES_KEY = "request_panel_minutes"
+
+SELECT_CAP = 25
+SELECT_OPTION_LIMIT = 100
 
 WHAT_LIMIT = 1000
 WHY_LIMIT = 1000
@@ -175,6 +180,14 @@ FILED = (
 NOTHING_FILED_YET = "Nothing has been filed yet — `/request` puts the first one in."
 NOTHING_OPEN = "Nothing is open — every request has been finished, declined or withdrawn."
 NOTHING_OF_YOURS = "You have not filed a request yet — `/request` puts one in."
+PANEL_TITLE = "Requests"
+PANEL_INTRO = "Ask the server for something, or see where what you already asked for has got to."
+PANEL_EMPTY = "You have not asked for anything yet."
+PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run /request again"
+ACCEPT_NEEDS_SOMEBODY_ELSE = "Only somebody other than {who} may accept this one."
+PICK_A_REQUEST = "Pick a request…"
+PICK_CAPPED = "{shown} of {total} — the rest are on the site"
+TAKE_ONE_BACK = "Take one back…"
 
 MOVE_LINE: dict[str, str] = {
     FILED_LOOK: "New request **#{request_id}** from {who}: {what}",
@@ -364,6 +377,100 @@ def checked_move(
     if look in TEXT_NEEDED and not str(owed or "").strip():
         raise RequestError(TEXT_NEEDED[look].format(request_id=request_id))
     return to
+
+
+class MoveButton(NamedTuple):
+    action: str
+    label: str
+    style: str
+    needs_modal: bool = False
+
+
+CARD_BUTTONS: dict[str, tuple[MoveButton, ...]] = {
+    OPEN: (
+        MoveButton("pickup", "Pick up", "primary"),
+        MoveButton("hold", "Hold", "secondary", needs_modal=True),
+        MoveButton("decline", "Decline", "danger", needs_modal=True),
+    ),
+    IN_PROGRESS: (
+        MoveButton("ready", "Ready to check", "primary", needs_modal=True),
+        MoveButton("hold", "Hold", "secondary", needs_modal=True),
+        MoveButton("decline", "Decline", "danger", needs_modal=True),
+    ),
+    REVIEW: (
+        MoveButton("accept", "Accept", "success"),
+        MoveButton("sendback", "Send back", "secondary", needs_modal=True),
+        MoveButton("hold", "Hold", "secondary", needs_modal=True),
+        MoveButton("decline", "Decline", "danger", needs_modal=True),
+    ),
+    HOLD: (
+        MoveButton("resume", "Resume", "primary"),
+        MoveButton("decline", "Decline", "danger", needs_modal=True),
+    ),
+    DONE: (),
+    DECLINED: (),
+    WITHDRAWN: (),
+}
+
+
+def card_buttons(status: Any, *, may_accept_here: bool = True) -> tuple[MoveButton, ...]:
+    found = CARD_BUTTONS.get(str(status or ""), ())
+    if may_accept_here:
+        return found
+    return tuple(one for one in found if one.action != "accept")
+
+
+def card_footer_override(status: Any, ready_by: Any, may_accept_here: bool) -> str | None:
+    """When the default `EMBED_FOOTER` is not the whole story: why Accept is missing, or why
+    nothing moves any more."""
+    text = str(status or "")
+    if text == REVIEW and not may_accept_here:
+        return ACCEPT_NEEDS_SOMEBODY_ELSE.format(who=mention(ready_by))
+    if not CARD_BUTTONS.get(text):
+        return NO_MOVES_LEFT.format(status=STATUS_WORDS.get(text, text))
+    return None
+
+
+def look_for_status(status: Any) -> str:
+    """The card look for a row's own status: itself, except `open`, which reads as `filed`."""
+    text = str(status or "")
+    return FILED_LOOK if text == OPEN else text
+
+
+def option_label(row: Any, *, with_status: bool = True) -> str:
+    """A select option's label, clamped to Discord's 100-character cap."""
+    parts = [f"#{row_value(row, 'id', '?')}"]
+    if with_status:
+        found = str(row_value(row, "status") or "")
+        parts.append(STATUS_WORDS.get(found, found))
+    prefix = " · ".join(parts) + " · "
+    return prefix + clamp(row_value(row, "what"), max(0, SELECT_OPTION_LIMIT - len(prefix)))
+
+
+def pick_placeholder(shown: int, total: int) -> str:
+    if total > shown:
+        return PICK_CAPPED.format(shown=shown, total=total)
+    return PICK_A_REQUEST
+
+
+COUNT_STATUSES = (OPEN, IN_PROGRESS, REVIEW, HOLD)
+
+
+def counts_line(counts: dict[str, int]) -> str:
+    return " · ".join(
+        f"**{counts.get(status, 0)}** {STATUS_WORDS[status]}" for status in COUNT_STATUSES
+    )
+
+
+def site_page_url(origin: Any) -> str | None:
+    text = str(origin or "").strip()
+    if not text:
+        return None
+    return f"{text.rstrip('/')}/{FEATURE_PAGES['request']}"
+
+
+def panel_minutes(store: Any, guild_id: int) -> int:
+    return int(store.get(guild_id, PANEL_MINUTES_KEY))
 
 
 def wanted_statuses(given: Any) -> tuple[str, ...]:
@@ -785,7 +892,35 @@ def resume_target(row: Any) -> str:
     return found if found in TRANSITIONS.get(HOLD, frozenset()) else IN_PROGRESS
 
 
+async def withdraw_request(
+    bot: Any, guild: Any, row: Any, actor: Any, *, via: str = VIA_DISCORD
+) -> tuple[str, Any]:
+    """The one path that takes a request back — the panel's confirm and the site's route."""
+    status = row_value(row, "status")
+    request_id = row_value(row, "id")
+    if status not in WITHDRAWABLE:
+        return (
+            TOO_LATE_TO_WITHDRAW.format(
+                request_id=request_id, status=STATUS_WORDS.get(status, status)
+            ),
+            None,
+        )
+    await set_status(bot.db, request_id, WITHDRAWN)
+    await log_action(
+        bot,
+        guild,
+        kind_via("request.withdrawn", via),
+        actor=actor,
+        target=row_value(row, "user_id"),
+        details={"request_id": request_id, "via": via},
+    )
+    fresh = await get_request(bot.db, request_id)
+    return (WITHDRAWN_SAID.format(request_id=request_id), fresh)
+
+
 __all__ = [
+    "CARD_BUTTONS",
+    "COUNT_STATUSES",
     "DECLINED",
     "DM_LOOKS",
     "DONE",
@@ -796,10 +931,21 @@ __all__ = [
     "IN_PROGRESS",
     "LOOKS",
     "MOVE_LINE",
+    "MoveButton",
     "NEEDS_A_REASON",
+    "NOTHING_FILED_YET",
+    "NOTHING_OF_YOURS",
+    "NOTHING_OPEN",
     "OPEN",
     "OPEN_STATUSES",
+    "PANEL_EMPTY",
+    "PANEL_INTRO",
+    "PANEL_MINUTES_KEY",
+    "PANEL_TIMEOUT_FOOTER",
+    "PANEL_TITLE",
     "REVIEW",
+    "SELECT_CAP",
+    "SELECT_OPTION_LIMIT",
     "SENT_BACK",
     "STAFF_STATUSES",
     "STATUSES",
@@ -810,6 +956,8 @@ __all__ = [
     "RequestError",
     "add_comment",
     "can_move",
+    "card_buttons",
+    "card_footer_override",
     "channel_moves",
     "checked_fields",
     "checked_move",
@@ -817,6 +965,7 @@ __all__ = [
     "comment_counts",
     "comments_for",
     "count_requests",
+    "counts_line",
     "create_request",
     "due_stamp",
     "field_value",
@@ -824,6 +973,7 @@ __all__ = [
     "get_request",
     "held_words",
     "list_requests",
+    "look_for_status",
     "look_of",
     "may_accept",
     "mention",
@@ -831,8 +981,11 @@ __all__ = [
     "moves_from",
     "moves_sentence",
     "open_count",
+    "option_label",
     "page_of",
+    "panel_minutes",
     "parse_due",
+    "pick_placeholder",
     "posts_a_card",
     "request_embed",
     "request_url",
@@ -842,9 +995,11 @@ __all__ = [
     "set_fields",
     "set_message",
     "set_status",
+    "site_page_url",
     "site_view",
     "status_channel_id",
     "wanted_priority",
     "wanted_status",
     "wanted_statuses",
+    "withdraw_request",
 ]

@@ -924,6 +924,7 @@ async def test_requests_ship_on_and_open_to_everyone_with_nothing_auto_approved(
         "request_dm_on_decision",
         "request_channel_moves",
         "request_review_by_other",
+        "request_panel_minutes",
     ):
         assert key in KEY_TYPES and KEY_HELP.get(key)
 
@@ -970,6 +971,22 @@ def test_the_card_moves_key_is_reachable_from_slash_settings_as_well_as_the_dash
 
     assert "request_channel_moves" in VALUE_KEYS
     assert "request_review_by_other" in VALUE_KEYS
+
+
+async def test_the_request_panel_stays_up_fifteen_minutes_by_default(store):
+    """The fourth pass: how long `/request`'s panel lives before its buttons disable."""
+    from black_bloc.cogs.core import VALUE_KEYS
+
+    assert store.get(7, "request_panel_minutes") == 15
+    assert KEY_TYPES["request_panel_minutes"] == "int"
+    assert "request_panel_minutes" in VALUE_KEYS
+    await store.set(7, "request_panel_minutes", 30)
+    assert store.get(7, "request_panel_minutes") == 30
+    with pytest.raises(SettingError):
+        coerce_value("request_panel_minutes", -1)
+    with pytest.raises(SettingError):
+        coerce_value("request_panel_minutes", "15")
+    assert parse_value("request_panel_minutes", "45") == 45
 
 
 async def test_the_status_channel_is_blank_so_one_channel_carries_both_kinds_of_line(store):
