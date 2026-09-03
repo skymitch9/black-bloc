@@ -38,6 +38,11 @@ Thin on purpose. The living state is in `docs/` — **read `docs/README.md`,
 - Owner rule: on a Fable session, builds go to `model: 'opus'` subagents; Fable plans,
   briefs and reviews. Every build/review brief points at `docs/info/review-checklist.md`
   (33 items traced to real findings here) and the phase's `docs/info/phaseN-design.md`.
+- ⚠️ **Minimise slash commands, maximise interactive windows (owner, 2026-09-03: "Let's try and
+  minimize slash commands and maximize interactive windows").** One command per feature opens an
+  ephemeral panel (embed + buttons + selects + modals); moves are buttons that render only when
+  valid, never a status menu with two spellings of the same move. Requests is the pattern
+  (`docs/info/requests-panel-design.md`); the rest of the app follows, feature by feature.
 - ⚠️ **Every decision is configurable BOTH ways (owner, 2026-08-27).** A default decided in chat lives in the
   settings registry (`settings_store.py`) so the Settings page and `/settings set-value` both reach it; per-item
   choices have a slash path AND a dashboard editor. Never hard-code a decided default. Checklist item 33.

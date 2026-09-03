@@ -150,6 +150,32 @@ docs bookkeeping lands with the work, not after.
 
 ## 🔧 Open engineering items
 
+- 🆕 **Simplify the request slash flow — owner, 2026-09-03 ~06:50, verbatim: "The flow
+  seems tough, and request set and request ready seem overlapping."** Measured: after the
+  third pass `/request` has TEN subcommands and two ways to make most moves —
+  `set status:review` vs `ready`, `set status:done` vs `accept`, `set status:hold` vs
+  `hold`, `set status:in_progress` (from review) vs `sendback` (`cogs/community/requests.py:631–778`,
+  `STAFF_STATUSES` is every reachable status). Proposal put to the owner: ONE mover,
+  `/request set`, with `review` opening the built/how-to-test modal, `done` from review =
+  accept, `in_progress` from review requiring the note (= send back); delete `ready`,
+  `accept`, `sendback`, `hold`, `resume`. Site buttons unchanged. **Owner ~06:55, going
+  further:** *"Let's also have /request open a menu maybe. Let's try and minimize slash
+  commands and maximize interactive windows"* → *"Let's start this process with request
+  then carry it through the rest of the app. Request first."* Decided: `/request` becomes
+  ONE command that opens an ephemeral panel (embed + buttons + selects + modals); the nine
+  subcommands go. Design → [`info/requests-panel-design.md`](info/requests-panel-design.md);
+  rule added to `CLAUDE.md`. Status: **BUILDING** (Opus, `feat/requests-panel`, cut from
+  `3e18e4a`), 2026-09-03 ~07:05.
+
+- 🆕 **Panels over slash commands — the rest of the app (owner, 2026-09-03: "then carry it
+  through the rest of the app").** After the requests panel lands, audit every command
+  group (44 commands synced at `70a6720`; `cogs/core.py:88` lists them) and convert each
+  feature to one command + panel the same way: `/event`, `/poll`, `/raidtrain(s)`,
+  `/applications`, `/voice`, `/twitch`, `/birthday`, `/memory`, `/settings`, the moderation
+  set. One feature per build, requests as the template; each gets its own design doc with
+  the button table per state. NOT started; sequence to be agreed with the owner one at a
+  time.
+
 - 🆕 **A defect this build found and fixed on the way, worth knowing about
   separately: `site/public/assets/labels.js` had not parsed since `7b1c592`**, so
   `LABELS` never loaded and **every dashboard page rendered blank**. The Phase 19 merge
