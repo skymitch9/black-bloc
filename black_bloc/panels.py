@@ -53,6 +53,14 @@ async def db_ready(interaction: discord.Interaction) -> bool:
     return False
 
 
+async def db_up(interaction: discord.Interaction) -> bool:
+    """`db_ready` answers a followup; this one is for the reads that happen BEFORE a defer."""
+    if interaction.client.db.is_connected:
+        return True
+    await answer(interaction, DB_UNAVAILABLE)
+    return False
+
+
 def capped_placeholder(
     shown: int, total: int, *, pick: str, capped: str = CAPPED_PLACEHOLDER
 ) -> str:
@@ -154,6 +162,7 @@ __all__ = [
     "answer",
     "capped_placeholder",
     "db_ready",
+    "db_up",
     "option_label",
     "panel_minutes",
     "retire",

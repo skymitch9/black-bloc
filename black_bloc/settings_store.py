@@ -685,8 +685,8 @@ KEY_HELP: dict[str, str] = {
         "reads nothing; the profiles already stored stay until somebody clears them"
     ),
     "chat_memory_consent": (
-        "optout means memory is on for everybody until they run `/chat memory off`; optin means "
-        "nobody is remembered until they run `/chat memory on`"
+        "optout means memory is on for everybody until they stop it themselves on the `/memory` "
+        "panel; optin means nobody is remembered until they start it there"
     ),
     "chat_memory_retention_days": (
         f"days a profile nobody has added to is kept before it is deleted, up to "
@@ -698,8 +698,7 @@ KEY_HELP: dict[str, str] = {
     ),
     "chat_memory_staff_view": (
         "counts shows staff only how many profiles there are and when each changed; full lets "
-        "staff read the notes themselves. The person can always read their own with "
-        "`/chat memory show`"
+        "staff read the notes themselves. The person can always read their own with `/memory`"
     ),
     "chat_memory_notes_max": (
         f"how many preferences one profile holds, up to {NOTES_CEILING}; the oldest drops off "
@@ -997,6 +996,21 @@ KEY_HELP.update(
             "true to let whoever started a poll close it early from the /poll panel; staff can "
             "always close one either way"
         ),
+    }
+)
+
+
+# Memory panel (wave 2) — the one decision `/memory`'s panel introduces, in its own block so the
+# parallel wave-2 branches merge textually.
+KEY_TYPES.update({"memory_panel_minutes": "int"})
+KEY_HELP.update(
+    {
+        "memory_panel_minutes": (
+            "minutes the /memory panel stays live before its buttons disable themselves; 10 by "
+            "default. The 'this panel has gone quiet' footer can only be written while "
+            "Discord's 15-minute interaction window is still open, so 15 or more means the "
+            "buttons simply stop working with no footer to explain it"
+        )
     }
 )
 
@@ -1515,6 +1529,8 @@ class SettingsStore:
             return 10
         if key == "applications_panel_own_list":
             return True
+        if key == "memory_panel_minutes":
+            return 10
         if key.endswith("_log_level"):
             return LEVEL_DEFAULT
         if KEY_TYPES.get(key) in ("channels", "roles"):

@@ -207,6 +207,25 @@ async def test_db_ready_answers_a_followup_in_words_when_the_database_is_down():
     assert interaction.followup.sent[0][1]["ephemeral"] is True
 
 
+# --- db_up ----------------------------------------------------------------------------------
+
+
+async def test_db_up_is_true_and_silent_when_the_database_is_connected():
+    interaction = FakeInteraction(FakeBot(connected=True))
+
+    assert await panels.db_up(interaction) is True
+    assert interaction.response.sent == [] and interaction.followup.sent == []
+
+
+async def test_db_up_answers_through_the_response_because_nothing_has_deferred():
+    """A button that opens a MODAL cannot defer first, so `db_ready`'s followup is no use."""
+    interaction = FakeInteraction(FakeBot(connected=False))
+
+    assert await panels.db_up(interaction) is False
+    assert interaction.response.sent[0][0] == DB_UNAVAILABLE
+    assert interaction.response.sent[0][1]["ephemeral"] is True
+
+
 # --- capped_placeholder ---------------------------------------------------------------------
 
 
@@ -426,6 +445,7 @@ def test_the_library_says_what_it_offers_and_knows_nothing_about_requests():
         "still_staff",
         "retire",
         "db_ready",
+        "db_up",
         "option_label",
     ):
         assert name in panels.__all__

@@ -9,19 +9,25 @@ from ...chat_memory import (
     BY_STAFF,
     COUNTS,
     DM,
-    FORGOT_KIND,
     FULL,
     MODE_KEY,
     ON,
     STAFF_VIEW_KEY,
-    forget,
     optout_count,
     profile_from_row,
     profile_rows,
 )
+from ...cogs.content.chat_memory import forget_profile
+from ...logkinds import VIA_WEBSITE
 from ..auth import Refused, staff_dependency
 from ..names import as_id, resolve_one
-from ..writes import note, reader_dependency, require_db, require_guild, writer_dependency
+from ..writes import (
+    actor_for,
+    reader_dependency,
+    require_db,
+    require_guild,
+    writer_dependency,
+)
 
 log = logging.getLogger(__name__)
 
@@ -34,7 +40,7 @@ CONTENTS_ARE_PRIVATE = (
     "notes were not shown — only the counts on this page. It needs `chat_memory_staff_view` set "
     "to `full`, which a Lead can change on the Settings page or with "
     "`/settings set chat_memory_staff_view full`. The member can always read their own with "
-    "`/memory show`."
+    "`/memory`."
 )
 NO_SUCH_PROFILE = (
     "Black Bloc remembers nothing about that member on this server, so there was nothing to "
@@ -127,15 +133,14 @@ def build_router(bot: Any) -> APIRouter:
         guild = require_guild(bot)
         require_db(bot)
         row = await _row(guild, member_id)
-        await forget(bot.db, member_id, guild.id)
         shown = summary(guild, row, full=False)
-        await note(
+        await forget_profile(
             bot,
             guild,
-            f"web.{FORGOT_KIND}",
-            who,
-            target=member_id,
-            details={"who_asked": BY_STAFF},
+            member_id,
+            actor_for(bot, who, guild),
+            who_asked=BY_STAFF,
+            via=VIA_WEBSITE,
         )
         return {
             "member": shown["member"],

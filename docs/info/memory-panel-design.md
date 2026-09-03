@@ -1,7 +1,17 @@
 # Chat memory — `/memory` is ONE command that opens a panel (wave 2)
 
 > **Audience:** the build agent and the reviewer, then the owner for §I. **Status:** TRACKED ·
-> **PLANNING — not built.**
+> ✅ **BUILT 2026-09-03 on branch `worktree-agent-aaaa13e778f0ba65a`** (base `main` `8cbe453`,
+> v67), four commits: the panel, the string sweep, the tests, the docs. **NOT merged, NOT
+> deployed.** Fork **I-M1 = OPEN IT** (owner, 2026-09-03 16:12), built as decided. The
+> `## Deviations` foot names every place the build departed from this document.
+> **Measured on the branch:** ruff clean · **3744 tests pass** (3710 at the base, +34, none
+> lost) · `commands synced` **42, UNCHANGED** (measured through the real tree, not booted —
+> no bot token here) · the five-module import check passes · `node site/mock/check.mjs` still
+> reports **17 pages / 142 routes** · `labels.js` parses.
+> ⚠️ **NOT verified: anything a person sees.** No panel has been opened in Discord and no
+> sweep row (104–108) has been run.
+>
 > **Last verified: 2026-09-03** — every `path:line` below was READ against `main` as it stands
 > after the applications panel merged (`1735ff8`, v66, `commands synced` **42**), in
 > `black_bloc/{chat_memory,panels,settings_store,command_visibility,personas,actionlog,logkinds}.py`,
@@ -333,5 +343,103 @@ something has been misread: stop and say so.
 
 ## Deviations
 
-*(Written by the build agent at landing. Everything not listed here was built as this document
-says.)*
+Written by the build agent, 2026-09-03. Everything not listed here was built as this document
+says, including the decided fork **I-M1** (open it: `HIDDEN_WHEN_OFF["chat_memory_mode"]` is
+gone and `MEMORY_IS_OFF` is a LINE).
+
+1. ⚠️ **`Forget by words…` renders above the cap for an OPTED-OUT member too, which §C's table
+   does not.** The table's last row lumps `no · ≥1` into one case with no `Forget by words…`;
+   its PROSE says the modal "renders only when the select is capped". Built to the prose, because
+   the table's reading locks an opted-out member with more than 25 stored facts out of the ones
+   past #25 — the exact "no door to their own data" defect I-M1 exists to close, and reachable by
+   the same `chat_memory_consent` flip that makes that row reachable at all. `moves_for` is
+   therefore two independent questions (`facts` for the forget controls, `remembered` for the
+   stop/start one) rather than six hard-coded rows, and the parametrised test asserts all six of
+   §C's rows plus the missing seventh.
+2. **`forget_profile` takes a keyword-only `home`; §F's signature has none.** Every other move
+   function in §F's table carries `home` beside `guild`, and this one derives it from `guild.id`
+   — which a DM does not have. The cog passes the `home` it already resolved and the route passes
+   nothing, so the website's call is exactly the shape §F asks for. With `guild` `None` the write
+   still happens and the log row is skipped, which is what the old `noted()` did.
+3. **The move functions return `(sentence, fresh_profile)` as §F says, and every caller throws
+   the profile away.** §C requires that every click re-reads and re-renders from what it finds,
+   so `run_move` and `drop_picked` re-read rather than trusting the returned copy. The second
+   element is kept because it is what a future non-Discord caller would want and because
+   dropping it would have made the five signatures disagree.
+4. ⚠️ **`db_up` was moved INTO `black_bloc/panels.py` and the applications cog now imports it,
+   rather than a second copy being written here.** Applications deviation 15 added it as a
+   private helper; this panel needs the same gate before its `Forget by words…` modal, and a
+   second copy is checklist item 17's exact defect. `applications.db_up` is still importable by
+   name, `__all__` still lists it, and every applications test passed unchanged. It has its own
+   two tests in `tests/test_panels.py`. **This is the one file outside the feature that the
+   build touched.**
+5. **`PANEL_MINUTES_KEY`, `PANEL_TIMEOUT_FOOTER` and the panel's strings stayed in the COG**,
+   where `requests.py`, `events.py`, `polls.py`, `birthdays.py` and `applications.py` all keep
+   theirs in the PURE module instead. §F's cycle rule forbids it: `black_bloc/chat_memory.py`
+   is imported by `settings_store.py`, so the minutes helper (which reads `panels.panel_minutes`)
+   cannot live there. Only the four pure fact helpers moved into the module.
+6. **The select's option labels are `option_label(number, kind_words, text)`**, giving
+   `#1 · what it calls you · Sky`, `#2 · likes short answers`, `#3 · still open · was asking
+   about it`. §C says to use `option_label`; it does not say what the `status` slot holds. A
+   bare `#1 · Sky` would not have told anybody what `#1` was.
+7. **The staleness check compares the fact's TEXT, and the rendered facts are held on the
+   SELECT, not encoded in its value.** §C asks the handler to compare what it re-reads against
+   what the view rendered; a select value caps at 100 characters and a note runs to 120, so the
+   comparison could not travel in the value. `ForgetOnePick.shown` is a `{key: Fact}` map built
+   at render time. Two tests cover it: a line whose text changed under the click, and a line
+   that vanished.
+8. **`HEADER` is now the bare sentence "Nobody else can read this." and the rest of it is the
+   embed TITLE.** §B asks for the title *What Black Bloc remembers about you* and for `HEADER`
+   under it; the old constant carried both, so keeping it whole would have printed the title
+   twice.
+9. **`SHOW_FOOT` is deleted as §E says, and eight further strings were rewritten** because each
+   told somebody to type a command that no longer exists — a dead end inside the product is
+   worse than a stale doc (P9, the same call events deviation 8 made): `YOU_ARE_OPTED_OUT`,
+   `DROPPED`, `NO_MATCH`, `TURNED_OFF`, `TURNED_ON`, `FORGET_THIS_NEEDS_WORDS`, `MEMORY_IS_OFF`
+   (rewritten as a panel LINE) and the `describe` that went with the deleted parameter.
+   `PROFILE_MOVED` is new — deviation 7 needed a sentence.
+10. ⚠️ **`MEMORY_IS_OFF` now says `/settings set-value key:chat_memory_mode value:on`, not
+    `/settings set chat_memory_mode on`.** The old wording named `/settings set`, which takes a
+    CHANNEL; a Lead following it would have been refused. **Finding, NOT fixed here:** the same
+    wrong shape survives in `api/tools/chat_memory.py`'s `CONTENTS_ARE_PRIVATE` and its mock
+    byte-copy (`/settings set chat_memory_staff_view full`), left alone to keep this build's
+    diff to its own feature.
+11. **`tests/test_logkinds.py`'s AST guard needed one edit.** Its
+    `test_a_route_never_notes_an_event_its_shared_path_already_logged` asserted that exactly one
+    computed `note()` kind was *unchecked* — `chat_memory.py::memory_forget::f'web.{FORGOT_KIND}'`
+    — and §F's dedup deletes it. The list is now asserted EMPTY, which is strictly stronger: no
+    route anywhere hand-builds a kind the walker cannot read.
+12. **§H item 1 (a real boot reading `commands synced`) was NOT run** — no bot token here, the
+    same as every wave-1 build. Measured the only other way:
+    `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits` counts
+    `bot.tree.get_commands()` after loading every cog, which is what `command_sync.py` syncs —
+    **42 before, 42 after**, and `/memory` is in the tree as a plain command rather than a
+    `Group`. §H items 2, 3 and 4 were all run and pass, including `check.mjs` (17 pages / 142
+    routes, unchanged — this build adds no route) and the `labels.js` parse.
+13. **Sweep rows 104–108 were written to match what was built**, with row 108 saying the panel
+    still opens with the mode off (I-M1). ⚠️ The `sweeps.md` header warns that a sibling wave-2
+    branch may have claimed 104+ too; nothing outside that file points at these numbers, so the
+    conductor can renumber the block freely.
+14. **Every `edit_original_response` carries `allowed_mentions=none()`, which the wave-1 panels'
+    edits do not.** The build brief asks for it on every send AND edit; a `call_me` is text the
+    member chose and it is rendered into an embed on every re-render. Discord does not ping from
+    an embed, so this is belt-and-braces rather than a fix — but the cost is one keyword and
+    `test_every_send_and_every_edit_carries_allowed_mentions` now pins it, `call_me` set to
+    `@everyone`. ⚠️ **Finding, not fixed here:** `requests.py`, `events.py`, `polls.py`,
+    `birthdays.py` and `applications.py` all edit their panels without it.
+15. ⚠️ **`docs/TODO.md`, `docs/DONE.md` and `docs/deploys.log` were NOT touched** — the build
+    brief reserves those for the conductor. `docs/TODO.md:215` still lists `/memory` among the
+    commands waiting for a panel and `:257` records the I-M1 decision; both want a dated line
+    saying it shipped.
+
+### What §H could and could not prove
+
+| # | §H item | Proven? |
+|---|---|---|
+| 1 | boot reports `commands synced` **42, unchanged** | **Measured, not booted** — the real tree counts 42 with every cog loaded, and `/memory` is no longer a `Group`. A live boot is deviation 12 |
+| 2 | the parametrised state test | **Proven** — `test_every_state_renders_exactly_its_row_of_the_button_table` over all six of §C's rows, plus `test_no_state_offers_both_spellings_of_one_move` sweeping eleven states for duplicate labels and for the two mutually exclusive ones |
+| 3 | the five-module import check | **Proven** — run, passes; it is what a boot would catch and this build creates a real new edge (`api/tools/chat_memory` → the cog) |
+| 4 | ruff, full pytest, `check.mjs`, `labels.js` | **Proven** — ruff clean, 3744 pass, 17 pages / 142 routes, `labels.js` parses |
+| 5 | the checklist sweep | **Proven on paper**: 8 (`AnswersErrors` reaches the view through `Panel` and the modal through `NoteModal`), 11 (`allowed_mentions` on the one `send_message`; every other write is an `edit_original_response` on an ephemeral message), 15/17 (`say` is gone, `db_up` de-duplicated), 30 (the mixin), 33 (§D), 34 (the route dedup, asserted by COUNT), and the feature-specific one — **no fact text in a log row**, asserted on the details DICT in four tests |
+| — | anything a person sees | **NOT proven** — no panel has been opened in Discord, no sweep row run, and `chat_memory_mode` is still `off` in production |
+| — | the 25-option Discord cap | **NOT measured** — it is Discord's documented limit; the code caps at 25 and the test asserts the cap, but no client has rendered a 25-option select here |

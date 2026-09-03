@@ -16,8 +16,12 @@ from black_bloc.chat_memory import (
     Profile,
     clear_override,
     distil_prompt,
+    drop_fact,
     drop_matching,
     expire,
+    fact_at,
+    fact_key,
+    facts_of,
     forget,
     forget_everywhere,
     memory_note,
@@ -256,6 +260,79 @@ def test_a_person_can_drop_one_note_by_a_few_of_its_words():
 def test_dropping_the_name_by_name_works_too():
     found, gone = drop_matching(a_profile(), "sky")
     assert gone == 1 and found.call_me == ""
+
+
+def a_numbered_profile():
+    return a_profile(
+        notes=(Note("likes short answers", SERVER, AT), Note("prefers she/her", DM, AT)),
+        threads=(Note("was asking about the cookout", SERVER, AT),),
+    )
+
+
+def test_the_facts_read_back_in_the_order_the_panel_numbers_them():
+    facts = facts_of(a_numbered_profile())
+
+    assert [one.kind for one in facts] == ["name", "note", "note", "thread"]
+    assert [one.text for one in facts] == [
+        "Sky",
+        "likes short answers",
+        "prefers she/her",
+        "was asking about the cookout",
+    ]
+    assert [one.index for one in facts] == [0, 0, 1, 0]
+    assert [one.where for one in facts] == [SERVER, SERVER, DM, SERVER]
+    assert facts_of(None) == () and facts_of(Profile()) == ()
+
+
+def test_a_fact_key_round_trips_and_a_stale_one_finds_nothing():
+    profile = a_numbered_profile()
+    keys = [fact_key(one) for one in facts_of(profile)]
+
+    assert keys == ["name:0", "note:0", "note:1", "thread:0"]
+    assert fact_at(profile, "note:1").text == "prefers she/her"
+    assert fact_at(profile, "note:9") is None
+    assert fact_at(profile, "bogus") is None and fact_at(profile, None) is None
+    assert fact_at(Profile(), "name:0") is None
+
+
+def test_dropping_one_fact_by_identity_leaves_every_other_one_alone():
+    profile = a_numbered_profile()
+
+    found, gone = drop_fact(profile, "note:0")
+
+    assert gone == 1
+    assert [one.text for one in found.notes] == ["prefers she/her"]
+    assert found.call_me == "Sky" and len(found.threads) == 1
+    assert found.turns_seen == profile.turns_seen
+
+
+def test_dropping_the_name_and_a_thread_by_identity():
+    profile = a_numbered_profile()
+
+    without_name, gone = drop_fact(profile, "name:0")
+    without_thread, also = drop_fact(profile, "thread:0")
+
+    assert gone == 1 and without_name.call_me == "" and len(without_name.notes) == 2
+    assert also == 1 and without_thread.threads == () and without_thread.call_me == "Sky"
+
+
+def test_a_key_that_points_at_nothing_changes_nothing():
+    profile = a_numbered_profile()
+
+    found, gone = drop_fact(profile, "note:7")
+
+    assert gone == 0 and found is profile
+
+
+def test_drop_fact_takes_one_line_where_drop_matching_would_take_two():
+    """Both exist on purpose: words match every line that contains them, a pick matches one."""
+    profile = a_profile(
+        notes=(Note("likes short answers", SERVER, AT), Note("likes short names", SERVER, AT)),
+        threads=(),
+    )
+
+    assert drop_matching(profile, "likes short")[1] == 2
+    assert drop_fact(profile, "note:0")[1] == 1
 
 
 async def test_a_profile_is_written_read_back_and_forgotten(tmp_path):

@@ -1,7 +1,13 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-03** — row **103** added by the OPERATOR READ TOKEN build (a Claude session can read
+> **2026-09-03** — rows **104–108** added by the MEMORY PANEL build (`/memory` becomes ONE
+> command that opens a panel; the five subcommands go, and `commands synced` does NOT move
+> because a group already counted as one slot — **42, measured**). ⚠️ Rows 104–108 have **not**
+> been run against Discord at all, and 104–107 need `chat_memory_mode` turned on first, which it
+> is not. ⚠️ **If a sibling wave-2 branch also claimed 104+, the conductor renumbers this block
+> at merge** — nothing outside this file points at these numbers. Same day — row **103** added by
+> the OPERATOR READ TOKEN build (a Claude session can read
 > `/api/*` with a bearer and change nothing). ⚠️ It is the first row here that cannot be run at
 > all until the owner mints a secret, and nothing in it has met the live app. Same day —
 > rows **80–86** added by the POLLS PANEL build (`/poll` becomes ONE command that
@@ -275,6 +281,23 @@ nothing below can happen at all.
 | # | What | Do this | Expect |
 |---|---|---|---|
 | 103 | A session's read shows up in your log | mint `OPERATOR_READ_TOKEN` (one command, `access/operator-read.md`) and deploy; ask the session to run `.\scripts\read.ps1 -Path /api/requests`; then open the **Logs** page (or `/settings logs`) | one new line, `web.operator.read`, whose **Via** column reads **Operator token** rather than Discord or Website, with `path=/api/requests` in its details. One line per read, not one per route. Nothing is posted to Discord (it is a routine Core kind, so `core_log_level` at its default stays quiet). If you would rather see nothing at all, turn **Whether an operator-token read leaves a log line** (`operator_read_log`) off on the Settings page and read again — same data, no line. Ask the session to try a CHANGE and it is refused in words: *the operator token can only look, never change* |
+
+## Chat memory — `/memory` is ONE command that opens a panel
+
+Built 2026-09-03 (`info/memory-panel-design.md`, wave 2). ⚠️ **`chat_memory_mode` ships
+`off` and nothing is written down until a Lead turns it on**, so rows 104–107 need
+`/settings set-value key:chat_memory_mode value:on` first AND a conversation or two with
+Black Bloc, because the profile is only written on the hourly sweep. Everything here is
+ephemeral and visible to nobody but you — there is no staff row on this panel by design
+(`chat_memory_staff_view` and the Chat page are the staff surface).
+
+| # | What | Do this | Expect |
+|---|---|---|---|
+| 104 | The panel | `/memory` in `#mute-me-bot-test-spam` after a conversation or two | ONE ephemeral panel titled *What Black Bloc remembers about you*, the line "Nobody else can read this.", your lines NUMBERED `#1 #2 #3` (one learned in a DM marked *(learned in a DM — never used in a channel)*), a **Forget one of these…** picker whose options carry the same numbers, and the row **Forget everything · Stop remembering me · Refresh**. **No** Logs, **no** Open on the site, nothing staff-shaped — a member following a site link would meet a 403, so there is no link |
+| 105 | Dropping one line | **Forget one of these…** → pick `#2` | the panel re-renders in place with that line gone and the rest renumbered; the reply says *Dropped **1** line(s)*. Open the **Chat** log (dashboard Logs page, or `/chat logs`): ONE `chat.memory_forgot` row, details `who_asked: self · lines: 1 · via: discord`, and **no trace of what the line said** — the text of a note never reaches the action log |
+| 106 | Forgetting the lot, and changing your mind | **Forget everything** → **Keep it**; then **Forget everything** → **Yes, forget it all** | Keep it changes nothing and puts you back on the panel with every line still there and no new log row. Yes clears it: the panel re-renders saying Black Bloc has not written anything down about you yet, the picker is gone, and only **Stop remembering me · Refresh** are left. One `chat.memory_forgot` row |
+| 107 | Stopping it, and starting again | **Stop remembering me** → **Yes, stop**; then **Remember me again** | the first wipes AND opts you out in that order — one `chat.memory_optout` row — and the panel then offers **Remember me again · Refresh** only. The second brings the writing back with one `chat.memory_optin` row. ⚠️ Neither one asks staff for anything: this is your own data and the panel never refuses you |
+| 108 | Memory switched off, and the quiet footer | leave the panel alone for `memory_panel_minutes` (10) minutes; then `/settings set-value key:chat_memory_mode value:off` and run `/memory` again | after ten minutes every control on the old panel is greyed out and the embed footer reads *This panel has gone quiet — run /memory again*. With the mode off `/memory` **still opens** (owner, 2026-09-03 16:12 — fork I-M1): the panel says Black Bloc is not remembering anybody here as a LINE, whatever it already stored is still listed, and **Forget everything** and the picker still work. Turning memory off does not delete profiles, so this is the only door left to them |
 
 ## The owner's Twitch Team form — the walk-through
 
