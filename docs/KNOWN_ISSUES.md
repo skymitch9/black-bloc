@@ -6,8 +6,8 @@
 > build; KI-15 and KI-16 by the Phase 18 (F19, raid trains) build, from reading its own
 > code rather than from an incident; KI-14 by the Phase 17 build from its own §J
 > measurement (two leaked third-person threads in run 1, none in run 2 after the fix).
-> All five describe branches that had never met live Discord, built in parallel and
-> merged 17 → 18 → 19 on 2026-09-03. Before that,
+> All five describe code that has never met live Discord, built in parallel, merged
+> 17 → 18 → 19 and deployed `7b1c592` on 2026-09-03 with all three modes **off**. Before that,
 > KI-11, KI-12 and KI-13 added from the Phase 16
 > section-J measurements against the LIVE YouTube feed (30 timed requests, the
 > response headers, and a real captured feed now kept as

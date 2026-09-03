@@ -113,3 +113,19 @@ did not contain. It recovered by reading the shared checkout read-only, but the
 rule for the conductor is: **commit the design doc to main FIRST, then dispatch
 the worktree builders.** A dispatch that references any repo file must be cut
 from a commit that contains it.
+
+## A doc suddenly reads `â€”` and `âš ï¸` everywhere = it was written back double-encoded (incident, 2026-09-03)
+
+`docs/DONE.md` at `31b1689` (the Phase 16 landing) carried **333** mojibake
+sequences — every em dash, arrow and ⚠️ in the whole file, not just the new
+entry — and nobody noticed for a day because `git diff` showed only the
+appended lines. Cause, by shape: the file was read as cp1252 and written back
+as UTF-8 (a PowerShell `Get-Content`/`Set-Content` round-trip without
+`-Encoding utf8` does exactly this on Windows PowerShell 5.1). Detect with
+`grep -rc 'â€' docs --include=*.md | grep -v ':0'` — the only hits allowed
+are this entry's own examples. Repair: take
+the last clean commit's body verbatim and re-apply only the new entry (done
+2026-09-03; proven lossless with `git diff <clean> -- docs/DONE.md` showing
+additions only). When editing docs from Python on Windows, pass
+`encoding="utf-8"` on BOTH the read and the write; from PowerShell, prefer
+not to — use the Edit tool or Python.

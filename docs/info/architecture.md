@@ -2,7 +2,21 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-02** — the fast-moving figures re-measured on the
+> Last verified: **2026-09-03** — the fast-moving figures re-measured on `main` after the
+> **17 → 18 → 19 merge** (`6d61994` chat memory + requests state machine, `0bb3835` raid trains,
+> `7b1c592` applications), deployed `7b1c592`: `SCHEMA_VERSION` is **25** (23 `chat_profiles` +
+> `chat_memory_optout` + `requests.held_from` and the pending/approved/planned → open migration,
+> 24 `raid_trains` + `raid_slots`, 25 `application_forms` + `application_questions` +
+> `applications`). `bot.py:COGS` is **19** cogs and the tree has **44** top-level slash
+> commands; `node site/mock/check.mjs` reports **17 pages / 136 routes**; `ruff check .` clean;
+> **3238** tests pass. `settings_store.FEATURES` / the log-level keys count **17**. New files since
+> Phase 16: `chat_memory.py`, `cogs/content/chat_memory.py`, `raidtrain.py`,
+> `cogs/content/raidtrain.py`, `api/tools/raidtrain.py`, `applications.py`,
+> `cogs/community/applications.py`, `api/tools/applications.py` and their mirrored tests. ⚠️ None
+> of the three features has run against live Discord; all three modes ship **off**. The paragraphs
+> below are the per-branch readings this one supersedes, left as written.
+>
+> *(Superseded 2026-09-03:)* the fast-moving figures re-measured on the
 > **Phase 19** branch (applications, built in parallel with 17 and 18 and merged LAST):
 > `SCHEMA_VERSION` is **25** — 23 and 24 are Phase 17's and Phase 18's and are empty on this
 > branch; 25 adds `application_forms`, `application_questions` and `applications`.

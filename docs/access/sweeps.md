@@ -3,10 +3,11 @@
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
 > **2026-09-02** — rows **53–57** added by the Phase 19 (applications) build and rows
 > **48–52** by the Phase 18 (F19, raid trains) build, both built in parallel; the file now
-> holds **57** un-exercised rows. ⚠️ Rows 48–57 land with the 17 → 18 → 19 merge — not
-> deployed; do not attempt them until the conductor says the branch is live. Before that, rows
-> **43–47** were added by the Phase 16 (F3, YouTube uploads) build. ⚠️ Rows 43–47 are on the
-> Phase 16 BRANCH too. Before that, rows
+> holds **57** un-exercised rows. ✅ Rows 43–57 are LIVE: 43–47 shipped with Phase 16
+> (`049881b`, 2026-09-02 22:18) and 48–57 with the 17 → 18 → 19 merge deployed `7b1c592`
+> on 2026-09-03; every one of them may be attempted now (all three modes ship **off** — flip
+> `chat_memory_mode` / `raidtrain_mode` / `applications_mode` first). Before that, rows
+> **43–47** were added by the Phase 16 (F3, YouTube uploads) build. Before that, rows
 > **38–42** were added by the Phase 15 (F14) build. Before that, 2026-08-31 — rows 18–20 and the phase-script appendix moved in
 > whole from `TODO.md`; this file is the ONE home for un-exercised items. "Verified" below means a human did it in the real server;
 > everything else is test-suite evidence only. Tick a row by moving it to the verified table with the date.

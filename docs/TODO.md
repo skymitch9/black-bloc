@@ -111,103 +111,25 @@ already said go.** Order recommended by the 5.0 session, owner did not reorder:
    2026-09-02 22:18 (`049881b`)** — moved whole to [`DONE.md`](DONE.md) ("Phase 16").
    `youtube_mode` ships **off**; owner's optional `YOUTUBE_API_KEY` still open
    (Waiting on the owner). Never yet run against a live channel.
-3. **Chat long-term memory** — GABI-style distilled member profiles (her design:
-   cheap-model distillation when a conversation goes quiet, ≤2KB per person,
-   injected as a memory block; see `catalog-platform` gabi-memory-design.md).
-   Privacy decisions needed from the owner BEFORE building (what is remembered,
-   member opt-out, retention). **DRAFT DESIGN 2026-09-02 17:10 →
-   [`info/phase17-design.md`](info/phase17-design.md)**: tier 1 already
-   exists (`chat_window`); adds schema 23 profiles distilled on the hourly
-   sweep, `/chat memory`, a Memory section on the Chat page. ✅ **ALL FIVE
-   DECIDED 2026-09-02 17:20–18:38, one at a time** (D1 opt-out · D2
-   preferences with a written definition · D3 180 d, no raw archive · D4
-   separate DM/server scopes · D5 counts only) — **BUILDABLE**; builder
-   dispatches after Phase 16 (schema 23 follows 22).
+3. ~~Chat long-term memory~~ **SHIPPED merge `6d61994`, deployed `7b1c592`
+   2026-09-03** — moved whole to [`DONE.md`](DONE.md) ("Phases 17/18/19").
+   `chat_memory_mode` ships **off**; residual KI-14; never run against live Discord.
+   Ride-along: the requests state machine (open → in_progress → done; hold/declined).
 4. **Global personality pool** — one trope store shared across estate bots
    (Black Bloc's `personality_tropes` + GABI's `personality.ts` unify). This is
    an ESTATE design spanning two repos: design doc first, likely a small shared
    store + sync convention; coordinate with catalog-platform docs.
 5. **Restyle overrides** — the three cheap look-and-feel flips below stay
    available; fold into any site-touching build.
-6. **Raid trains (member request #1, Pawpette)** — owner 2026-09-02 20:10:
-   "build, also start wave 6" then "i want memory starting first". So: Phase 17
-   memory dispatches first (schema 23), raid trains = **Phase 18, schema 24**.
-   **DESIGNED 2026-09-02 22:30 → [`info/phase18-design.md`](info/phase18-design.md)**
-   (from [`info/raid-train-capture.md`](info/raid-train-capture.md): ASKED +
-   FIT buckets; LATER stays later; 15 decisions as 13 `raidtrain_*` keys).
-   **Owner 2026-09-02 22:25: "Can we start doing some of this in parallel?"
-   → Phase 18 builds BESIDE Phase 17** (Phases 5/6/7 precedent: shared files
-   append-only, §K of the design; merge order 17 → 18, reviewer resolves).
-   Request #1 set to `in_progress`, priority 2, with the decision note, on the
-   Requests page; flips to `done` at landing (DM to Pawpette).
-7. **Twitch Team application form (member request #2, Pawpette)** — owner
-   2026-09-02 20:14: "build next" → **Phase 19**. **DESIGNED 2026-09-02 22:40
-   → [`info/phase19-design.md`](info/phase19-design.md)** as general
-   *applications* (staff-defined forms, ≤5 questions, grant a role on
-   approve; the Team form is the first one the owner creates — nothing
-   Team-specific hard-coded); schema 25; the twitch.tv invite stays a named
-   team-owner click (`owner_user_id` + `next_step` per form). Builds **in
-   parallel** with 17/18 (§K; merge order 17 → 18 → 19). Request #2 set to
-   `in_progress`; flips to `done` at landing (DM to Pawpette).
-   ✅ **BUILT 2026-09-02 23:27** on branch `worktree-agent-aecc5822942fd3a56`
-   (8 commits `f0fa493`…`dcba425`, builder ~575k tokens; 2989 green at
-   `3ff5bb2`, +2 single-test commits after; check.mjs 17 pages / 126 routes;
-   9 deviations listed at the foot of the design). **Reviewed by Fable 23:35:
-   mergeable** — waits its turn behind 17 and 18. Merge conflicts expected
-   only on `SCHEMA_VERSION` + the foot of `SCHEMA` in `storage/db.py`.
-   **Ride-along (owner 2026-09-02 20:19: "when a request finishes can we
-   message the channel and dm the person who made the request saying its
-   done"):** the DM half EXISTS (`DM_DONE`, gated by `request_dms_on_decision`);
-   the channel half does not — `notify()` only posts `NOTIFY_LINE` at filing.
-   Add a done line ("Request **#N** from @who is done: what", no pings) posted
-   to `request_done_channel_id` (new key, blank = falls back to
-   `request_notify_channel_id`), a `request_done_template` key, guard-checked,
-   `request.done_notify_failed` logged on failure. Registry sync points
-   (labels.js, mock server, exact-key-set test).
-   **Plus (owner 2026-09-02 20:27, request #3 music bot: "put this one in
-   pending/hold … make sure we dm the person and post it chat that we marked
-   something as hold and why"):** there is NO hold state — staff moves are
-   forward-only (approved/planned/in_progress/done/declined; the API refused
-   `pending` in words). **Owner redesigned the state machine 2026-09-02
-   20:33 (verbatim): "add a new status for open and then change pending to
-   hold. so it goes from open -> planned -> in prog -> done with hold and
-   declined as side states. Declined is a final state like done and hold can
-   be anywhere in the process. we should also mark what state it was
-   previously for my own sake."** Then 20:36: **"lets also get rid of planned
-   since we'll hold or decline anything no need for planned."** So:
-   - **Main line:** `open` (a request arrives here; replaces `pending`) →
-     `in_progress` → `done` (final). Nothing else on the line.
-   - **Side states:** `hold` — from `open` or `in_progress`, reason
-     REQUIRED, stores **`held_from`** (shown on the page and in the DM;
-     "resume" returns it there by default, staff may pick the other);
-     `declined` — final, reason required, from `open`, `in_progress` or
-     `hold`. `withdrawn` stays (requester's own final state, from `open` or
-     `hold`).
-   - **`approved` AND `planned` are RETIRED.** Starting work = the
-     `open → in_progress` move. `requests_auto_approve` loses its meaning
-     (there is no approve step) — Claude's reading: retire the key too;
-     every filing, staff or not, arrives `open`. Data migration in schema
-     23: `pending → open`, `approved → open`, `planned → open`
-     (`in_progress`/`done`/`declined`/`withdrawn` unchanged).
-   - **Notifications on EVERY staff move** (in_progress, hold, done,
-     declined): requester DM + channel post, reason/note in the text, no
-     pings; guard-checked; failures logged. Today only
-     approve/decline/done DM and nothing posts to a channel after filing.
-   - Touch list: `requests.py` (`STATUSES`, `STATUS_WORDS`, `DM_TEXT`,
-     transitions table — encode the machine as data, one place), the cog,
-     `api/tools/requests.py`, Requests page (filter, status control, held_from
-     badge, resume button), `/request set` choices, mock contract,
-     settings registry (drop `requests_auto_approve`;
-     `request_status_channel_id` + `request_status_template`), tests.
-   **Must ship BEFORE the first request lands (Phase 18) — folded into the
-   Phase 17 builder brief** as a bounded add-on. At landing: flip #3 to
-   `hold` with the owner's note so PT gets the DM (the channel post stays
-   TEST_MODE-blocked until the lift).
-   Meanwhile #3 sits `approved` with the note "ON HOLD (owner, 2026-09-02):
-   youtube player is currently unreliable. Will do further research on this."
-   ⚠️ **Owner rule 2026-09-02 20:14: every accepted request stays
-   `in_progress` on the Requests page until it ships; flipping it to `done`
-   is part of that phase's landing ritual.**
+6. ~~Raid trains (member request #1, Pawpette)~~ **SHIPPED merge `0bb3835`, deployed
+   `7b1c592` 2026-09-03** — moved whole to [`DONE.md`](DONE.md) ("Phases 17/18/19").
+   `raidtrain_mode` ships **off**; residuals KI-15/KI-16; request #1 flipped to `done`
+   at landing. Owner's sweep rows 48–52 open.
+7. ~~Twitch Team application form (member request #2, Pawpette)~~ **SHIPPED merge
+   `7b1c592`, deployed `7b1c592` 2026-09-03** — moved whole to [`DONE.md`](DONE.md).
+   `applications_mode` ships **off**; residuals KI-17/KI-18; request #2 flipped to `done`
+   and #3 to `hold` at landing. Owner's sweep rows 53–57 open (the Twitch Team form
+   walk-through is there).
 
 **Standing context for the new session:** every build = Opus worktree builder
 (Fable plans/reviews/never bulk-codes), brief points at `info/review-checklist.md`
