@@ -856,6 +856,39 @@ KEY_HELP.update(
     }
 )
 
+# Requests, third pass — the two decisions the review state introduces. Appended as its own
+# block so the parallel branches merge cleanly.
+REQUEST_CARD_MOVES = (
+    "filed",
+    "in_progress",
+    "review",
+    "sent_back",
+    "done",
+    "hold",
+    "declined",
+)
+
+KEY_TYPES.update(
+    {
+        "request_channel_moves": "enums",
+        "request_review_by_other": "bool",
+    }
+)
+KEY_CHOICES["request_channel_moves"] = REQUEST_CARD_MOVES
+KEY_HELP.update(
+    {
+        "request_channel_moves": (
+            "which moves put a card in the request channel: filed, in_progress, review, "
+            "sent_back, done, hold, declined; all seven by default, and an empty list posts "
+            "nothing at all"
+        ),
+        "request_review_by_other": (
+            "true to make somebody other than the staffer who marked a request ready to check "
+            "be the one who accepts it"
+        ),
+    }
+)
+
 
 GUILD_ONLY = (
     "That command changes settings for a server, so it has to be run in the server itself "
@@ -907,6 +940,21 @@ def coerce_value(key: str, value: Any) -> Any:
                 f"{key!r} takes one of {', '.join(allowed)}, not {value!r}."
             )
         return value
+    if kind == "enums":
+        allowed = KEY_CHOICES.get(key, ())
+        if isinstance(value, str | bytes) or not isinstance(value, list | tuple | set):
+            raise SettingError(
+                f"{key!r} takes a list of {', '.join(allowed)}, not {value!r}."
+            )
+        picked: list[str] = []
+        for item in value:
+            if item not in allowed:
+                raise SettingError(
+                    f"{key!r} takes any of {', '.join(allowed)}, and {item!r} is not one of them."
+                )
+            if item not in picked:
+                picked.append(item)
+        return [one for one in allowed if one in picked]
     if kind == "int":
         if isinstance(value, bool) or not isinstance(value, int):
             raise SettingError(f"{key!r} takes a whole number, not {value!r}.")
@@ -963,6 +1011,8 @@ def parse_value(key: str, raw: str) -> Any:
         if not all(p.isdigit() for p in parts):
             raise SettingError(f"{key!r} takes ids separated by commas, not {raw!r}.")
         return [int(p) for p in parts]
+    if kind == "enums":
+        return [part.strip().lower() for part in text.split(",") if part.strip()]
     if kind == "bool":
         if text.lower() in ("true", "yes", "on"):
             return True
@@ -979,6 +1029,8 @@ def display_value(key: str, value: Any) -> str:
     if kind in ("channels", "roles"):
         mark = "#" if kind == "channels" else "@&"
         return ", ".join(f"<{mark}{v}>" for v in value) if value else "not set"
+    if kind == "enums":
+        return ", ".join(str(one) for one in value) if value else "none of them"
     if value is None or value == "":
         return "not set"
     if kind == "channel":
@@ -1233,6 +1285,10 @@ class SettingsStore:
             return self.settings.test_channel_id if self.settings.test_mode else None
         if key == "request_dm_on_decision":
             return True
+        if key == "request_channel_moves":
+            return list(REQUEST_CARD_MOVES)
+        if key == "request_review_by_other":
+            return False
         if key == "chat_mode":
             return "on"
         if key == "chat_cooldown_seconds":

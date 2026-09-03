@@ -114,8 +114,9 @@ def test_only_the_states_staff_can_set_are_settable():
 def test_one_table_says_where_a_request_may_go_and_every_path_asks_it():
     """`TRANSITIONS` is the whole machine; the helpers only read it."""
     assert pure.moves_from(pure.OPEN) == ("declined", "hold", "in_progress")
-    assert pure.moves_from(pure.IN_PROGRESS) == ("declined", "done", "hold")
-    assert pure.moves_from(pure.HOLD) == ("declined", "in_progress")
+    assert pure.moves_from(pure.IN_PROGRESS) == ("declined", "hold", "review")
+    assert pure.moves_from(pure.REVIEW) == ("declined", "done", "hold", "in_progress")
+    assert pure.moves_from(pure.HOLD) == ("declined", "in_progress", "review")
     assert pure.moves_from(pure.DONE) == ()
     assert pure.moves_from(pure.DECLINED) == ()
     assert pure.moves_from(pure.WITHDRAWN) == ()
@@ -124,18 +125,70 @@ def test_one_table_says_where_a_request_may_go_and_every_path_asks_it():
     assert pure.FINAL_STATUSES == (pure.DONE, pure.DECLINED, pure.WITHDRAWN)
 
 
+def test_done_is_reachable_only_from_review_and_nothing_else_reaches_it():
+    """Owner, 2026-09-03: an acceptance step, so every done card has substance behind it."""
+    for where in (pure.OPEN, pure.IN_PROGRESS, pure.HOLD):
+        assert pure.can_move(where, pure.DONE) is False
+    assert pure.can_move(pure.REVIEW, pure.DONE) is True
+    assert [one for one in pure.TRANSITIONS if pure.DONE in pure.TRANSITIONS[one]] == [pure.REVIEW]
+
+
+def test_a_request_being_checked_cannot_be_taken_back_by_the_person_who_asked():
+    assert pure.WITHDRAWABLE == (pure.OPEN, pure.HOLD)
+    assert pure.REVIEW not in pure.WITHDRAWABLE
+
+
 def test_a_refused_move_says_which_moves_are_allowed_from_where_it_is():
     with pytest.raises(pure.RequestError) as caught:
-        pure.checked_move(4, pure.OPEN, pure.DONE)
+        pure.checked_move(4, pure.OPEN, pure.REVIEW, built="a thing")
 
     said = str(caught.value)
-    assert "**open**" in said and "**done**" in said
+    assert "**open**" in said and "**review**" in said
     assert "in_progress" in said and "hold" in said
 
     with pytest.raises(pure.RequestError) as final:
         pure.checked_move(4, pure.DONE, pure.HOLD, "a reason")
 
     assert "finishes" in str(final.value)
+
+
+def test_asking_for_done_from_a_live_state_names_the_ready_step_rather_than_the_table():
+    for where in (pure.OPEN, pure.IN_PROGRESS, pure.HOLD):
+        with pytest.raises(pure.RequestError) as caught:
+            pure.checked_move(4, where, pure.DONE)
+        said = str(caught.value)
+        assert "checked it" in said
+        assert "/request ready 4" in said and "Ready to check" in said
+
+
+def test_a_finished_request_still_says_it_is_finished_rather_than_offering_the_ready_step():
+    with pytest.raises(pure.RequestError) as caught:
+        pure.checked_move(4, pure.DECLINED, pure.DONE)
+
+    assert "finishes" in str(caught.value)
+
+
+def test_entering_review_needs_the_line_saying_what_was_built():
+    for blank in ("", "   ", None):
+        with pytest.raises(pure.RequestError) as caught:
+            pure.checked_move(4, pure.IN_PROGRESS, pure.REVIEW, built=blank)
+        assert "what was actually built" in str(caught.value)
+    assert pure.checked_move(4, pure.IN_PROGRESS, pure.REVIEW, built="the board") == pure.REVIEW
+
+
+def test_sending_one_back_needs_the_line_saying_what_is_still_to_do():
+    for blank in ("", "   ", None):
+        with pytest.raises(pure.RequestError) as caught:
+            pure.checked_move(4, pure.REVIEW, pure.IN_PROGRESS, note=blank)
+        assert "what is still to do" in str(caught.value)
+    assert pure.checked_move(4, pure.REVIEW, pure.IN_PROGRESS, note="the CSV") == pure.IN_PROGRESS
+
+
+def test_picking_a_fresh_request_up_needs_no_note_because_it_is_not_a_send_back():
+    assert pure.checked_move(4, pure.OPEN, pure.IN_PROGRESS) == pure.IN_PROGRESS
+    assert pure.look_of(pure.OPEN, pure.IN_PROGRESS) == pure.IN_PROGRESS
+    assert pure.look_of(pure.REVIEW, pure.IN_PROGRESS) == pure.SENT_BACK
+    assert pure.look_of(pure.IN_PROGRESS, pure.REVIEW) == pure.REVIEW
 
 
 def test_a_move_into_hold_or_declined_needs_the_sentence_the_person_is_sent():
@@ -374,3 +427,203 @@ async def test_a_summary_line_names_the_number_the_state_and_the_deadline(db):
     assert f"#{request_id}" in line
     assert "open" in line
     assert "<t:" in line
+
+
+async def test_the_ready_move_stamps_who_marked_it_and_forgets_the_last_send_back(db):
+    request_id = await file_one(db)
+    await pure.set_fields(db, request_id, built="a board", how_to_test="press it")
+    await pure.set_status(
+        db, request_id, pure.REVIEW, decided_by=STAFFER, was=pure.IN_PROGRESS, ready_by=STAFFER
+    )
+    row = await pure.get_request(db, request_id)
+
+    assert row["status"] == pure.REVIEW and row["ready_by"] == STAFFER
+    assert row["built"] == "a board" and row["how_to_test"] == "press it"
+    assert row["sent_back_reason"] is None
+
+
+async def test_a_send_back_writes_its_note_and_keeps_who_marked_it_ready(db):
+    request_id = await file_one(db)
+    await pure.set_status(
+        db, request_id, pure.REVIEW, decided_by=STAFFER, was=pure.IN_PROGRESS, ready_by=STAFFER
+    )
+    await pure.set_status(
+        db,
+        request_id,
+        pure.IN_PROGRESS,
+        decided_by=ASKER,
+        was=pure.REVIEW,
+        sent_back_reason="the CSV is missing",
+    )
+    row = await pure.get_request(db, request_id)
+
+    assert row["status"] == pure.IN_PROGRESS
+    assert row["sent_back_reason"] == "the CSV is missing"
+    assert row["ready_by"] == STAFFER
+
+
+async def test_a_hold_taken_from_review_resumes_back_into_review(db):
+    request_id = await file_one(db)
+    await pure.set_status(
+        db, request_id, pure.REVIEW, decided_by=STAFFER, was=pure.IN_PROGRESS, ready_by=STAFFER
+    )
+    await pure.set_status(
+        db, request_id, pure.HOLD, decided_by=STAFFER, decline_reason="waiting", was=pure.REVIEW
+    )
+    row = await pure.get_request(db, request_id)
+
+    assert row["held_from"] == pure.REVIEW
+    assert pure.resume_target(row) == pure.REVIEW
+
+
+async def test_built_and_how_to_test_are_editable_afterwards_without_a_state_change(db):
+    request_id = await file_one(db)
+    await pure.set_fields(db, request_id, built="a board", how_to_test="press it")
+    changed = await pure.set_fields(db, request_id, how_to_test="press it twice")
+    row = await pure.get_request(db, request_id)
+
+    assert changed == ["how_to_test"]
+    assert row["built"] == "a board" and row["how_to_test"] == "press it twice"
+    assert row["status"] == pure.OPEN
+
+
+CARD_ROW = {
+    "id": 7,
+    "what": "a request board",
+    "why": "the google doc is a mess",
+    "due_on": "2026-09-15",
+    "user_id": ASKER,
+    "assignee_id": STAFFER,
+    "built": "the board, with a CSV export",
+    "how_to_test": "open /requests and press Export",
+    "ready_by": STAFFER,
+    "decided_by": 902,
+    "sent_back_reason": "the CSV has no header row",
+    "decline_reason": "we already have one",
+    "held_from": pure.IN_PROGRESS,
+    "created_at": "2026-09-03T01:00:00+00:00",
+    "decided_at": "2026-09-03T02:00:00+00:00",
+}
+
+CARD_FIELDS = {
+    pure.FILED_LOOK: ["Asked for", "Why", "Requested by", "Due"],
+    pure.IN_PROGRESS: ["Asked for", "Requested by", "Assignee"],
+    pure.REVIEW: ["Asked for", "What was built", "How to test", "Marked ready by", "Requested by"],
+    pure.SENT_BACK: ["Asked for", "What needs doing", "Sent back by", "Marked ready by"],
+    pure.DONE: ["Asked for", "What was built", "How to test", "Accepted by", "Requested by"],
+    pure.HOLD: ["Asked for", "Why it is waiting", "Was", "Requested by"],
+    pure.DECLINED: ["Asked for", "Why", "Requested by"],
+}
+
+
+@pytest.mark.parametrize("look", pure.LOOKS)
+def test_one_builder_draws_each_of_the_seven_looks_with_its_own_title_colour_and_fields(look):
+    card = pure.request_embed(
+        CARD_ROW, move=look, origin="https://blackbloc.test", guild=None
+    ).to_dict()
+
+    assert card["title"] == pure.EMBED_TITLES[look].format(request_id=7)
+    assert card["color"] == pure.EMBED_COLOURS[look]
+    assert [field["name"] for field in card["fields"]] == CARD_FIELDS[look]
+    assert card["footer"]["text"] == "Black Bloc · requests"
+    assert card["timestamp"]
+
+
+def test_the_card_is_stamped_when_the_move_happened_not_when_it_rendered():
+    filed = pure.request_embed(CARD_ROW, move=pure.FILED_LOOK).to_dict()
+    done = pure.request_embed(CARD_ROW, move=pure.DONE).to_dict()
+
+    assert filed["timestamp"].startswith("2026-09-03T01:00:00")
+    assert done["timestamp"].startswith("2026-09-03T02:00:00")
+
+
+def test_a_card_leaves_off_a_field_that_has_nothing_in_it_rather_than_printing_nothing():
+    bare = dict(CARD_ROW) | {"how_to_test": None, "assignee_id": None, "due_on": None}
+
+    review = pure.request_embed(bare, move=pure.REVIEW).to_dict()
+    working = pure.request_embed(bare, move=pure.IN_PROGRESS).to_dict()
+    filed = pure.request_embed(bare, move=pure.FILED_LOOK).to_dict()
+
+    assert "How to test" not in [field["name"] for field in review["fields"]]
+    assert "Assignee" not in [field["name"] for field in working["fields"]]
+    assert "Due" not in [field["name"] for field in filed["fields"]]
+
+
+@pytest.mark.parametrize("look", pure.LOOKS)
+def test_no_card_field_or_title_can_outgrow_what_discord_will_take(look):
+    """A long `why` is the one that would silently 400 the whole post (§J)."""
+    huge = dict(CARD_ROW) | {
+        "what": "a board " * 400,
+        "why": "because " * 400,
+        "built": "built " * 400,
+        "how_to_test": "test " * 400,
+        "sent_back_reason": "note " * 400,
+        "decline_reason": "reason " * 400,
+    }
+    card = pure.request_embed(huge, move=look, origin="https://blackbloc.test").to_dict()
+
+    assert len(card["title"]) <= 256
+    for field in card["fields"]:
+        assert len(field["value"]) <= 1024, field["name"]
+        assert len(field["name"]) <= 256
+
+
+def test_the_card_carries_the_server_name_so_a_dm_says_which_server_it_came_from():
+    class Server:
+        name = "Black in a Flash!"
+
+    card = pure.request_embed(CARD_ROW, move=pure.DONE, guild=Server()).to_dict()
+
+    assert card["author"]["name"] == "Black in a Flash!"
+    assert "author" not in pure.request_embed(CARD_ROW, move=pure.DONE, guild=None).to_dict()
+
+
+def test_every_card_carries_one_link_button_to_the_request_on_the_site():
+    view = pure.site_view("https://blackbloc.test/", 7)
+
+    assert len(view.children) == 1
+    assert view.children[0].url == "https://blackbloc.test/requests#r-7"
+    assert view.children[0].label == "Open on the site"
+    assert pure.request_url("https://blackbloc.test", 7) == "https://blackbloc.test/requests#r-7"
+
+
+def test_no_origin_means_no_button_rather_than_a_link_that_goes_nowhere():
+    assert pure.site_view("", 7) is None
+    assert pure.site_view(None, 7) is None
+
+
+def test_the_plain_line_survives_for_the_log_when_a_card_is_never_posted():
+    for look in pure.LOOKS:
+        line = pure.move_line(CARD_ROW, look)
+        assert "#7" in line and f"<@{ASKER}>" in line
+    assert pure.move_line(CARD_ROW, "not a look") == ""
+
+
+class Store:
+    def __init__(self, **values):
+        self.values = values
+
+    def get(self, guild_id, key):
+        return self.values.get(key)
+
+
+def test_every_move_posts_a_card_until_the_server_says_otherwise():
+    assert pure.channel_moves(Store(), GUILD) == pure.LOOKS
+    assert pure.posts_a_card(Store(), GUILD, pure.REVIEW) is True
+
+    picked = Store(request_channel_moves=["done", "declined", "not a look"])
+
+    assert pure.channel_moves(picked, GUILD) == ("done", "declined")
+    assert pure.posts_a_card(picked, GUILD, pure.REVIEW) is False
+    assert pure.posts_a_card(Store(request_channel_moves=[]), GUILD, pure.DONE) is False
+
+
+def test_a_second_pair_of_eyes_is_asked_for_only_when_the_server_says_so():
+    row = {"ready_by": STAFFER}
+    them = type("Who", (), {"id": ASKER})()
+    same = type("Who", (), {"id": STAFFER})()
+
+    assert pure.may_accept(Store(), GUILD, row, same) is True
+    assert pure.may_accept(Store(request_review_by_other=True), GUILD, row, same) is False
+    assert pure.may_accept(Store(request_review_by_other=True), GUILD, row, them) is True
+    assert pure.may_accept(Store(request_review_by_other=True), GUILD, {}, same) is True

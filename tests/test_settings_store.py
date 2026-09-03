@@ -35,6 +35,7 @@ from black_bloc.settings_store import (
     POLL_MIN_HOURS,
     POLL_REMINDER_MAX_MINUTES,
     POLL_REMINDER_MINUTES,
+    REQUEST_CARD_MOVES,
     TEMPVOICE_NAME_TEMPLATE,
     THREAD_MODE,
     YOUTUBE_MODES,
@@ -921,8 +922,54 @@ async def test_requests_ship_on_and_open_to_everyone_with_nothing_auto_approved(
         "request_notify_channel_id",
         "request_status_channel_id",
         "request_dm_on_decision",
+        "request_channel_moves",
+        "request_review_by_other",
     ):
         assert key in KEY_TYPES and KEY_HELP.get(key)
+
+
+async def test_every_card_posts_and_one_pair_of_eyes_is_enough_until_a_lead_says_otherwise(store):
+    """Owner, 2026-09-03: the accepter being somebody else is a setting, and it is off."""
+    assert store.get(7, "request_channel_moves") == [
+        "filed",
+        "in_progress",
+        "review",
+        "sent_back",
+        "done",
+        "hold",
+        "declined",
+    ]
+    assert store.get(7, "request_review_by_other") is False
+    assert KEY_TYPES["request_channel_moves"] == "enums"
+    assert KEY_CHOICES["request_channel_moves"] == REQUEST_CARD_MOVES
+
+
+def test_the_card_moves_key_takes_any_of_the_seven_and_nothing_else():
+    assert coerce_value("request_channel_moves", []) == []
+    assert coerce_value("request_channel_moves", ["done"]) == ["done"]
+    assert coerce_value("request_channel_moves", ["done", "done"]) == ["done"]
+    assert coerce_value("request_channel_moves", ["done", "filed"]) == ["filed", "done"]
+    assert coerce_value("request_review_by_other", True) is True
+    for bad in ("done", ["shipped"], ["done", "shipped"], 1, None):
+        with pytest.raises(SettingError):
+            coerce_value("request_channel_moves", bad)
+    with pytest.raises(SettingError):
+        coerce_value("request_review_by_other", "true")
+
+
+def test_the_card_moves_key_is_typed_in_as_a_comma_list_and_read_back_as_words():
+    assert parse_value("request_channel_moves", " done , hold ") == ["done", "hold"]
+    assert parse_value("request_channel_moves", "") == []
+    assert display_value("request_channel_moves", ["done", "hold"]) == "done, hold"
+    assert display_value("request_channel_moves", []) == "none of them"
+
+
+def test_the_card_moves_key_is_reachable_from_slash_settings_as_well_as_the_dashboard():
+    """Checklist 33 — a key `/settings set-value` cannot autocomplete is a dashboard-only key."""
+    from black_bloc.cogs.core import VALUE_KEYS
+
+    assert "request_channel_moves" in VALUE_KEYS
+    assert "request_review_by_other" in VALUE_KEYS
 
 
 async def test_the_status_channel_is_blank_so_one_channel_carries_both_kinds_of_line(store):

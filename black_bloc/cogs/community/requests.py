@@ -11,26 +11,35 @@ from ...actionlog import LOGS_DEFAULT, LOGS_MAX, LOGS_MIN, log_action, send_logs
 from ...command_errors import NETWORK_ERRORS, AnswersErrors
 from ...logkinds import VIA_DISCORD, kind_via
 from ...requests import (
-    DM_STATUSES,
-    DM_TEXT,
+    BUILT_LIMIT,
+    DECLINED,
+    DM_LOOKS,
+    DONE,
     FILED,
+    FILED_LOOK,
     HOLD,
+    HOW_TO_TEST_LIMIT,
+    IN_PROGRESS,
     LIST_PAGE,
+    LOOKS,
     NO_SUCH_REQUEST,
     NOT_ON_HOLD,
+    NOT_READY_TO_CHECK,
     NOT_YOURS,
     NOTHING_FILED_YET,
     NOTHING_OF_YOURS,
     NOTHING_OPEN,
     NOTIFY_CHANNEL_KEY,
     NOTIFY_FAILED_KIND,
-    NOTIFY_LINE,
-    NOTIFY_MOVE,
     NOTIFY_SKIPPED_KIND,
     OPEN,
     OPEN_STATUSES,
     REASON_LIMIT,
     REQUESTS_OFF,
+    REVIEW,
+    REVIEW_BY_SOMEBODY_ELSE,
+    SENT_BACK,
+    SENT_BACK_LIMIT,
     STAFF_ONLY_FILES,
     STAFF_STATUSES,
     STATUS_WORDS,
@@ -48,13 +57,20 @@ from ...requests import (
     dms_on_decision,
     everyone_may_file,
     get_request,
-    held_words,
     list_requests,
+    look_of,
+    may_accept,
+    move_line,
     page_of,
+    posts_a_card,
+    request_embed,
     requests_are_on,
     resume_target,
+    row_value,
+    set_fields,
     set_message,
     set_status,
+    site_view,
     status_channel_id,
     summary_line,
 )
@@ -76,6 +92,23 @@ LIST_HEADING = {
 PAGE_FOOT = "Page {page} of {pages} — `/request list page:{next}` for the next one."
 SCOPES = ("mine", "open", "all")
 RESUMED_SAID = "Request **#{request_id}** is off hold and back to **{status}**."
+MOVE_LOOKS = tuple(one for one in LOOKS if one != FILED_LOOK)
+READY_SAID = "Request **#{request_id}** is ready to check — staff will look at it."
+ACCEPTED_SAID = "Request **#{request_id}** is done. The person who asked has been told."
+SENT_BACK_SAID = "Request **#{request_id}** is back with whoever is working on it."
+MOVE_SAID: dict[str, str] = {
+    IN_PROGRESS: SET_SAID,
+    REVIEW: READY_SAID,
+    SENT_BACK: SENT_BACK_SAID,
+    DONE: ACCEPTED_SAID,
+    HOLD: SET_SAID,
+    DECLINED: SET_SAID,
+}
+READY_MODAL_TITLE = "Ready to check"
+READY_HINT = (
+    "What was built, and how somebody tries it. Both show on the card and on the site; the "
+    "site is where either can be edited afterwards."
+)
 
 
 def guard_allows(bot: Any, channel: Any) -> bool:
@@ -100,44 +133,67 @@ async def answer(interaction: discord.Interaction, text: str) -> None:
     )
 
 
-async def dm(user: Any, text: str) -> bool:
+async def dm(user: Any, **payload: Any) -> bool:
     """Whether the person actually got told."""
     send = getattr(user, "send", None)
     if send is None:
         return False
     try:
-        await send(text, allowed_mentions=discord.AllowedMentions.none())
+        await send(allowed_mentions=discord.AllowedMentions.none(), **payload)
     except Exception as exc:
         log.info("requests: could not DM %s: %s", getattr(user, "id", "?"), exc)
         return False
     return True
 
 
-async def tell_requester(bot: Any, guild: Any, row: Any, status: str) -> None:
-    """A DM the requester is owed on every staff move; a failure is logged, never silent."""
-    if status not in DM_STATUSES or not dms_on_decision(bot.store, guild.id):
-        return
-    text = DM_TEXT[status].format(
-        request_id=row["id"],
-        guild=getattr(guild, "name", "the server"),
-        what=clamp(row["what"], 300),
-        reason=row["decline_reason"] or "no reason was given",
-        held_from=held_words(row) or "open",
+def person_told(bot: Any, guild: Any, row: Any, look: str) -> Any:
+    """The requester on their own moves; the staffer who marked it ready when it comes back."""
+    if look == SENT_BACK:
+        return row_value(row, "ready_by")
+    return row_value(row, "user_id") if look in DM_LOOKS else None
+
+
+def card(bot: Any, guild: Any, row: Any, look: str) -> tuple[Any, Any]:
+    """The one rendering both the channel and the DM send — embed plus its link button."""
+    origin = getattr(getattr(bot, "settings", None), "origin", "")
+    return (
+        request_embed(row, move=look, origin=origin, guild=guild),
+        site_view(origin, row_value(row, "id", "")),
     )
-    member = guild.get_member(row["user_id"]) or bot.get_user(row["user_id"])
-    if await dm(member, text):
+
+
+async def tell_person(bot: Any, guild: Any, row: Any, look: str) -> None:
+    """The DM somebody is owed on a move; a failure is logged, never silent."""
+    wanted = person_told(bot, guild, row, look)
+    if wanted is None:
+        return
+    if look in DM_LOOKS and not dms_on_decision(bot.store, guild.id):
+        return
+    member = guild.get_member(wanted) or bot.get_user(wanted)
+    embed, view = card(bot, guild, row, look)
+    if await dm(member, embed=embed, view=view):
         return
     await log_action(
         bot,
         guild,
         "request.dm_failed",
-        target=row["user_id"],
-        details={"request_id": row["id"], "status": status},
+        target=wanted,
+        details={"request_id": row["id"], "status": look},
     )
 
 
-async def post_line(bot: Any, guild: Any, channel_id: Any, row: Any, line: str, move: str) -> Any:
-    """One guarded line where staff watch; a channel the guard refuses is skipped, not raised."""
+async def post_line(
+    bot: Any,
+    guild: Any,
+    channel_id: Any,
+    row: Any,
+    line: str,
+    move: str,
+    *,
+    embed: Any = None,
+    view: Any = None,
+) -> Any:
+    """One guarded card where staff watch; a channel the guard refuses is skipped, not raised."""
     if not channel_id:
         return None
     channel = bot.get_channel(channel_id) or guild.get_channel(channel_id)
@@ -145,7 +201,7 @@ async def post_line(bot: Any, guild: Any, channel_id: Any, row: Any, line: str, 
         log.warning("requests: %s is not a channel Black Bloc can see", channel_id)
         return None
     if not guard_allows(bot, channel):
-        log.warning("requests: test mode, so #%s was not told about %s", channel_id, row["id"])
+        log.warning("requests: test mode, so #%s never heard %r", channel_id, line)
         await log_action(
             bot,
             guild,
@@ -154,9 +210,11 @@ async def post_line(bot: Any, guild: Any, channel_id: Any, row: Any, line: str, 
         )
         return None
     try:
-        return await channel.send(line, allowed_mentions=discord.AllowedMentions.none())
+        return await channel.send(
+            embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+        )
     except NETWORK_ERRORS as exc:
-        log.warning("requests: could not post the %s line for %s: %s", move, row["id"], exc)
+        log.warning("requests: could not post %r for %s: %s", line, row["id"], exc)
         await log_action(
             bot,
             guild,
@@ -171,30 +229,38 @@ async def post_line(bot: Any, guild: Any, channel_id: Any, row: Any, line: str, 
 
 
 async def notify(bot: Any, guild: Any, row: Any, who: Any) -> None:
-    line = NOTIFY_LINE.format(
-        request_id=row["id"],
-        who=getattr(who, "mention", f"<@{row['user_id']}>"),
-        what=clamp(row["what"], 200),
-    )
+    if not posts_a_card(bot.store, guild.id, FILED_LOOK):
+        return
+    embed, view = card(bot, guild, row, FILED_LOOK)
     message = await post_line(
-        bot, guild, bot.store.get(guild.id, NOTIFY_CHANNEL_KEY), row, line, "filed"
+        bot,
+        guild,
+        bot.store.get(guild.id, NOTIFY_CHANNEL_KEY),
+        row,
+        move_line(row, FILED_LOOK),
+        FILED_LOOK,
+        embed=embed,
+        view=view,
     )
     if message is not None:
         await set_message(bot.db, row["id"], message.id)
 
 
-async def notify_move(bot: Any, guild: Any, row: Any, status: str) -> None:
+async def notify_move(bot: Any, guild: Any, row: Any, look: str) -> None:
     """The channel hears every staff move, not only the filing (owner, 2026-09-02)."""
-    template = NOTIFY_MOVE.get(status)
-    if template is None:
+    if look not in MOVE_LOOKS or not posts_a_card(bot.store, guild.id, look):
         return
-    line = template.format(
-        request_id=row["id"],
-        who=f"<@{row['user_id']}>",
-        what=clamp(row["what"], 200),
-        reason=clamp(row["decline_reason"], 200) or "no reason was given",
+    embed, view = card(bot, guild, row, look)
+    await post_line(
+        bot,
+        guild,
+        status_channel_id(bot.store, guild.id),
+        row,
+        move_line(row, look),
+        look,
+        embed=embed,
+        view=view,
     )
-    await post_line(bot, guild, status_channel_id(bot.store, guild.id), row, line, status)
 
 
 async def apply_decision(
@@ -205,6 +271,9 @@ async def apply_decision(
     actor: Any,
     reason: Any = None,
     *,
+    built: Any = None,
+    how_to_test: Any = None,
+    note: Any = None,
     via: str = VIA_DISCORD,
 ) -> tuple[str, Any]:
     """(what to say, the row as it now is or None) — the one path a status moves by."""
@@ -212,10 +281,24 @@ async def apply_decision(
     if row is None or row["guild_id"] != guild.id:
         return (NO_SUCH_REQUEST.format(request_id=request_id), None)
     kept = clamp(reason, REASON_LIMIT)
+    kept_built = clamp(built, BUILT_LIMIT)
+    kept_note = clamp(note, SENT_BACK_LIMIT)
     try:
-        wanted = checked_move(request_id, row["status"], status, kept)
+        wanted = checked_move(
+            request_id, row["status"], status, kept, built=kept_built, note=kept_note
+        )
     except RequestError as exc:
         return (str(exc), None)
+    if wanted == DONE and not may_accept(bot.store, guild.id, row, actor):
+        return (REVIEW_BY_SOMEBODY_ELSE.format(request_id=request_id), None)
+    look = look_of(row["status"], wanted)
+    if wanted == REVIEW:
+        await set_fields(
+            bot.db,
+            request_id,
+            built=kept_built,
+            how_to_test=clamp(how_to_test, HOW_TO_TEST_LIMIT) or None,
+        )
     await set_status(
         bot.db,
         request_id,
@@ -223,20 +306,73 @@ async def apply_decision(
         decided_by=getattr(actor, "id", None),
         decline_reason=kept or None,
         was=row["status"],
+        ready_by=getattr(actor, "id", None),
+        sent_back_reason=kept_note or None,
     )
     fresh = await get_request(bot.db, request_id)
     await log_action(
         bot,
         guild,
-        kind_via(f"request.{wanted}", via),
+        kind_via(f"request.{look}", via),
         actor=actor,
         target=row["user_id"],
-        reason=kept or None,
+        reason=kept or kept_note or None,
         details={"request_id": request_id, "was": row["status"], "via": via},
     )
-    await tell_requester(bot, guild, fresh, wanted)
-    await notify_move(bot, guild, fresh, wanted)
-    return (SET_SAID.format(request_id=request_id, status=STATUS_WORDS.get(wanted, wanted)), fresh)
+    await tell_person(bot, guild, fresh, look)
+    await notify_move(bot, guild, fresh, look)
+    return (MOVE_SAID[look].format(
+        request_id=request_id, status=STATUS_WORDS.get(wanted, wanted)
+    ), fresh)
+
+
+async def mark_ready(
+    bot: Any,
+    guild: Any,
+    request_id: int,
+    actor: Any,
+    built: Any,
+    how_to_test: Any = None,
+    *,
+    via: str = VIA_DISCORD,
+) -> tuple[str, Any]:
+    """`/request ready` and the site's Ready-to-check button — in progress into review."""
+    return await apply_decision(
+        bot,
+        guild,
+        request_id,
+        REVIEW,
+        actor,
+        built=built,
+        how_to_test=how_to_test,
+        via=via,
+    )
+
+
+async def accept(
+    bot: Any, guild: Any, request_id: int, actor: Any, *, via: str = VIA_DISCORD
+) -> tuple[str, Any]:
+    """`/request accept` and the site's Accept button — review into done."""
+    return await apply_decision(bot, guild, request_id, DONE, actor, via=via)
+
+
+async def send_back(
+    bot: Any, guild: Any, request_id: int, actor: Any, note: Any, *, via: str = VIA_DISCORD
+) -> tuple[str, Any]:
+    """`/request sendback` and the site's Send back button — review into progress, with a note."""
+    row = await get_request(bot.db, request_id)
+    if row is None or row["guild_id"] != guild.id:
+        return (NO_SUCH_REQUEST.format(request_id=request_id), None)
+    if row["status"] != REVIEW:
+        return (
+            NOT_READY_TO_CHECK.format(
+                request_id=request_id,
+                status=STATUS_WORDS.get(row["status"], row["status"]),
+                doing="send back",
+            ),
+            None,
+        )
+    return await apply_decision(bot, guild, request_id, IN_PROGRESS, actor, note=note, via=via)
 
 
 async def resume_request(
@@ -255,7 +391,13 @@ async def resume_request(
             None,
         )
     wanted = resume_target(row)
-    await set_status(bot.db, request_id, wanted, decided_by=getattr(actor, "id", None))
+    await set_status(
+        bot.db,
+        request_id,
+        wanted,
+        decided_by=getattr(actor, "id", None),
+        ready_by=row_value(row, "ready_by"),
+    )
     fresh = await get_request(bot.db, request_id)
     await log_action(
         bot,
@@ -265,7 +407,7 @@ async def resume_request(
         target=row["user_id"],
         details={"request_id": request_id, "was": HOLD, "held_from": wanted, "via": via},
     )
-    await tell_requester(bot, guild, fresh, wanted)
+    await tell_person(bot, guild, fresh, wanted)
     await notify_move(bot, guild, fresh, wanted)
     return (
         RESUMED_SAID.format(request_id=request_id, status=STATUS_WORDS.get(wanted, wanted)),
@@ -301,6 +443,35 @@ class RequestModal(AnswersErrors, discord.ui.Modal, title="Ask for something"):
             what=str(self.what),
             why=str(self.why),
             due=str(self.due),
+        )
+
+
+class ReadyModal(AnswersErrors, discord.ui.Modal, title=READY_MODAL_TITLE):
+    built = discord.ui.TextInput(
+        label="What was built?",
+        style=discord.TextStyle.paragraph,
+        max_length=BUILT_LIMIT,
+    )
+    how_to_test = discord.ui.TextInput(
+        label="How does somebody test it?",
+        style=discord.TextStyle.paragraph,
+        max_length=HOW_TO_TEST_LIMIT,
+        required=False,
+    )
+
+    def __init__(self, cog: Requests, request_id: int, row: Any = None) -> None:
+        super().__init__()
+        self.cog = cog
+        self.request_id = request_id
+        self.built.default = clamp(row_value(row, "built"), BUILT_LIMIT) or None
+        self.how_to_test.default = clamp(row_value(row, "how_to_test"), HOW_TO_TEST_LIMIT) or None
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await self.cog.ready_submit(
+            interaction,
+            self.request_id,
+            built=str(self.built),
+            how_to_test=str(self.how_to_test),
         )
 
 
@@ -492,6 +663,81 @@ class Requests(commands.Cog):
         )
         await answer(interaction, said)
 
+    async def _wanted_id(self, interaction: discord.Interaction, request_id: str) -> int | None:
+        """Staff, a database and a number, or the sentence that says which one is missing."""
+        if not await require_staff(interaction):
+            return None
+        if not await self._database_ready(interaction):
+            return None
+        digits = str(request_id).strip().lstrip("#")
+        if not digits.isdigit():
+            await answer(interaction, NOT_AN_ID.format(given=clamp(request_id, 40)))
+            return None
+        return int(digits)
+
+    @request.command(
+        name="ready",
+        description="Say a request is built and ready to check; staff only",
+    )
+    @app_commands.describe(request_id="The number `/request list` shows")
+    async def request_ready(self, interaction: discord.Interaction, request_id: str) -> None:
+        wanted = await self._wanted_id(interaction, request_id)
+        if wanted is None:
+            return
+        row = await get_request(self.bot.db, wanted)
+        if row is None or row["guild_id"] != interaction.guild.id:
+            await answer(interaction, NO_SUCH_REQUEST.format(request_id=wanted))
+            return
+        await interaction.response.send_modal(ReadyModal(self, wanted, row))
+
+    async def ready_submit(
+        self,
+        interaction: discord.Interaction,
+        request_id: int,
+        *,
+        built: str,
+        how_to_test: str,
+    ) -> None:
+        """What the ready modal does once it is filled in — the one shared path, nothing else."""
+        await interaction.response.defer(ephemeral=True)
+        said, _ = await mark_ready(
+            self.bot,
+            interaction.guild,
+            request_id,
+            interaction.user,
+            built,
+            how_to_test,
+        )
+        await answer(interaction, said)
+
+    @request.command(name="accept", description="Finish a request you have checked; staff only")
+    @app_commands.describe(request_id="The number `/request list` shows")
+    async def request_accept(self, interaction: discord.Interaction, request_id: str) -> None:
+        wanted = await self._wanted_id(interaction, request_id)
+        if wanted is None:
+            return
+        await interaction.response.defer(ephemeral=True)
+        said, _ = await accept(self.bot, interaction.guild, wanted, interaction.user)
+        await answer(interaction, said)
+
+    @request.command(
+        name="sendback",
+        description="Send a request back with what is still to do; staff only",
+    )
+    @app_commands.describe(
+        request_id="The number `/request list` shows",
+        note="What is still to do; whoever marked it ready is sent this",
+    )
+    async def request_sendback(
+        self, interaction: discord.Interaction, request_id: str, note: str
+    ) -> None:
+        wanted = await self._wanted_id(interaction, request_id)
+        if wanted is None:
+            return
+        await interaction.response.defer(ephemeral=True)
+        said, _ = await send_back(self.bot, interaction.guild, wanted, interaction.user, note)
+        await answer(interaction, said)
+
     @request.command(name="hold", description="Park a request with a reason; staff only")
     @app_commands.describe(
         request_id="The number `/request list` shows",
@@ -550,13 +796,19 @@ async def setup(bot: commands.Bot) -> None:
 
 
 __all__ = [
-    "Requests",
+    "ReadyModal",
     "RequestModal",
+    "Requests",
+    "accept",
     "apply_decision",
+    "card",
     "guard_allows",
+    "mark_ready",
     "notify",
     "notify_move",
+    "person_told",
     "post_line",
     "resume_request",
-    "tell_requester",
+    "send_back",
+    "tell_person",
 ]
