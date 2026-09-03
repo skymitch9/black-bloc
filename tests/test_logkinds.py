@@ -78,13 +78,14 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.poll.recur_deleted",
         "web.poll.recur_paused",
         "web.poll.recur_resumed",
-        "web.request.approved",
+        "web.chat.memory_forgot",
         "web.request.comment",
         "web.request.declined",
         "web.request.done",
         "web.request.filed",
+        "web.request.hold",
         "web.request.in_progress",
-        "web.request.planned",
+        "web.request.resumed",
         "web.request.updated",
         "web.request.withdrawn",
         "web.role.ended",
@@ -165,13 +166,27 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.tempvoice.show",
         "web.tempvoice.unlock",
     ),
-    "black_bloc/cogs/community/requests.py::f'request.{status}'": (
-        "request.approved",
+    "black_bloc/cogs/community/requests.py::f'request.{wanted}'": (
         "request.declined",
-        "request.planned",
-        "request.in_progress",
         "request.done",
+        "request.hold",
+        "request.in_progress",
     ),
+    "black_bloc/cogs/community/requests.py::NOTIFY_SKIPPED_KIND": (
+        "request.notify_skipped_test_mode",
+    ),
+    "black_bloc/cogs/community/requests.py::NOTIFY_FAILED_KIND": ("request.notify_failed",),
+    "black_bloc/chat_distil.py::DISTILLED_KIND": ("chat.memory_distilled",),
+    "black_bloc/chat_distil.py::kind": (
+        "chat.memory_distil_failed",
+        "chat.memory_expired",
+    ),
+    "black_bloc/cogs/content/chat_memory.py::kind": (
+        "chat.memory_forgot",
+        "chat.memory_optin",
+        "chat.memory_optout",
+    ),
+    "black_bloc/cogs/content/chat_memory.py::FORGOT_KIND": ("chat.memory_forgot",),
     "black_bloc/cogs/content/chat.py::LOG_KIND": ("chat.insult",),
     "black_bloc/cogs/content/chat.py::ROUTE_KIND": ("chat.route",),
     "black_bloc/cogs/content/chat.py::KNOWLEDGE_ADDED": ("chat.knowledge_added",),
@@ -410,22 +425,33 @@ def test_a_request_is_loud_only_when_it_is_answered_or_fails():
     """Filing, triage and a withdrawal are the member's own housekeeping; a decision is not."""
     for kind in (
         "request.filed",
-        "request.auto_approved",
         "request.withdrawn",
-        "request.planned",
+        "request.resumed",
         "request.in_progress",
         "request.updated",
         "request.comment",
+        "request.notify_skipped_test_mode",
     ):
         assert is_important(kind) is False, kind
         assert is_important(f"web.{kind}") is False, kind
-    for kind in ("request.approved", "request.declined", "request.done"):
+    for kind in ("request.hold", "request.declined", "request.done"):
         assert is_important(kind) is True, kind
         assert is_important(f"web.{kind}") is True, kind
     assert is_important("request.dm_failed") is True
     assert is_important("request.notify_failed") is True
     assert feature_of("request.filed") == "request"
-    assert feature_of("web.request.approved") == "request"
+    assert feature_of("web.request.hold") == "request"
+
+
+def test_memory_is_loud_when_something_is_forgotten_and_quiet_the_rest_of_the_time():
+    """Writing a profile is housekeeping; losing one, and somebody opting out, are not."""
+    for kind in ("chat.memory_distilled", "chat.memory_expired", "chat.memory_optin"):
+        assert is_important(kind) is False, kind
+    for kind in ("chat.memory_forgot", "chat.memory_optout"):
+        assert is_important(kind) is True, kind
+    assert is_important("chat.memory_distil_failed") is True
+    assert feature_of("chat.memory_distilled") == "chat"
+    assert feature_of("web.chat.memory_forgot") == "chat"
 
 
 def test_via_reads_what_the_writer_recorded_and_falls_back_to_the_web_head():

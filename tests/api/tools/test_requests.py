@@ -40,7 +40,7 @@ async def test_a_member_may_file_from_the_site_and_it_waits_for_staff(as_member,
 
     assert made.status_code == 200
     row = made.json()["request"]
-    assert row["status"] == "pending" and row["id"] == "1"
+    assert row["status"] == "open" and row["id"] == "1"
     assert row["requester"] == {
         "id": str(ASKER),
         "name": "Ada",
@@ -69,27 +69,26 @@ async def test_a_filed_row_carries_every_field_the_requests_page_reads(as_member
         "decided_by",
         "decided_at",
         "decline_reason",
+        "held_from",
+        "held_word",
+        "moves",
+        "resume_to",
         "done_at",
     ):
         assert key in row
     assert row["due_on"] == "2026-09-15"
+    assert row["moves"] == ["declined", "hold", "in_progress"]
+    assert row["held_from"] is None and row["resume_to"] is None
 
 
-async def test_a_staffer_filing_from_the_site_is_approved_on_the_spot(as_staff, web, wf):
-    row = (await file_one(as_staff)).json()["request"]
-
-    assert row["status"] == "approved" and row["decided_by"] == str(LEAD)
-    assert row["decided_by_name"] == "Lead"
-
-
-async def test_the_same_staff_derivation_decides_it_and_the_switch_turns_it_off(
-    as_staff, web, wf
-):
-    await web.store.set(wf.GUILD_ID, "request_auto_approve_staff", False, by=LEAD)
+async def test_a_staffers_own_filing_waits_like_anybody_elses(as_staff, web, wf):
+    """Owner, 2026-09-02: nothing approves itself, and the key that did is gone."""
+    from black_bloc.settings_store import KEY_TYPES
 
     row = (await file_one(as_staff)).json()["request"]
 
-    assert row["status"] == "pending"
+    assert row["status"] == "open" and row["decided_by"] is None
+    assert "request_auto_approve_staff" not in KEY_TYPES
 
 
 async def test_a_signed_in_stranger_is_told_they_are_not_in_the_server(client, sign_in, people):
@@ -167,14 +166,15 @@ async def test_the_member_routes_are_the_only_three_that_are_not_staff_only(as_m
 
     assert as_member.get("/api/requests").status_code == 403
     assert as_member.get("/api/requests/1").status_code == 403
-    assert as_member.post("/api/requests/1/approve", json={}).status_code == 403
+    assert as_member.post("/api/requests/1/hold", json={"reason": "no"}).status_code == 403
+    assert as_member.post("/api/requests/1/resume", json={}).status_code == 403
     assert as_member.post("/api/requests/1/decline", json={"reason": "no"}).status_code == 403
     assert as_member.post("/api/requests/1/status", json={"status": "done"}).status_code == 403
     assert as_member.post("/api/requests/1/comments", json={"text": "hi"}).status_code == 403
     assert as_member.get("/api/requests/export.csv").status_code == 403
 
 
-async def test_a_member_withdraws_their_own_pending_row(as_member, web, wf):
+async def test_a_member_withdraws_their_own_open_row(as_member, web, wf):
     await file_one(as_member)
 
     gone = as_member.post("/api/requests/1/withdraw", json={})
@@ -194,39 +194,51 @@ async def test_a_member_cannot_withdraw_somebody_elses(as_staff, client, sign_in
     assert gone.status_code == 403 and "not yours" in gone.json()["message"]
 
 
-async def test_a_decided_row_cannot_be_withdrawn_any_more(as_member, client, sign_in, web):
+async def test_a_row_being_worked_on_cannot_be_withdrawn_any_more(as_member, client, sign_in, web):
     await file_one(client)
-    await pure.set_status(web.db, 1, pure.APPROVED, decided_by=LEAD)
+    await pure.set_status(web.db, 1, pure.IN_PROGRESS, decided_by=LEAD)
 
     gone = client.post("/api/requests/1/withdraw", json={})
 
-    assert gone.status_code == 409 and "already" in gone.json()["message"]
+    assert gone.status_code == 409 and "nothing to withdraw" in gone.json()["message"]
 
 
-async def test_the_staff_list_is_pending_first_and_counts_what_is_waiting(
+async def test_a_row_on_hold_may_still_be_taken_back(as_member, client, sign_in, web):
+    await file_one(client)
+    await pure.set_status(
+        web.db, 1, pure.HOLD, decided_by=LEAD, decline_reason="waiting", was=pure.OPEN
+    )
+
+    gone = client.post("/api/requests/1/withdraw", json={})
+
+    assert gone.status_code == 200 and gone.json()["request"]["status"] == "withdrawn"
+
+
+async def test_the_staff_list_is_open_first_and_counts_what_is_waiting(
     as_staff, client, sign_in, web
 ):
     await file_one(client, what="one")
     await file_one(client, what="two")
-    await pure.set_status(web.db, 1, pure.PLANNED, decided_by=LEAD)
+    await pure.set_status(web.db, 1, pure.IN_PROGRESS, decided_by=LEAD)
+    await pure.set_status(web.db, 2, pure.IN_PROGRESS, decided_by=LEAD)
     sign_in(client, uid=ASKER, staff=False)
     await file_one(client, what="three")
     sign_in(client, uid=LEAD, staff=True)
 
     payload = client.get("/api/requests").json()
 
-    assert payload["requests"][0]["status"] == "pending"
+    assert payload["requests"][0]["status"] == "open"
     assert payload["total"] == 3 and payload["per_page"] == pure.API_PAGE
-    assert payload["pending"] == 1
+    assert payload["open"] == 1
 
 
 async def test_the_staff_list_filters_by_status_by_assignee_and_by_words(as_staff, client, web):
     await file_one(client, what="a request board")
     await file_one(client, what="a karaoke night")
     await pure.set_fields(web.db, 2, assignee_id=LEAD)
-    await pure.set_status(web.db, 2, pure.PLANNED, decided_by=LEAD)
+    await pure.set_status(web.db, 2, pure.IN_PROGRESS, decided_by=LEAD)
 
-    by_status = client.get("/api/requests?status=planned").json()
+    by_status = client.get("/api/requests?status=in_progress").json()
     by_word = client.get("/api/requests?q=karaoke").json()
     by_assignee = client.get(f"/api/requests?assignee={LEAD}").json()
 
@@ -262,14 +274,53 @@ async def test_a_search_matches_the_requesters_name_as_well_as_the_text(
     assert client.get("/api/requests?q=nobodyhere").json()["requests"] == []
 
 
-async def test_the_board_segment_may_set_approved_as_well_as_the_later_states(as_staff, client):
+async def test_the_status_route_walks_the_table_and_refuses_a_move_that_skips_it(as_staff, client):
     await file_one(client)
-    client.post("/api/requests/1/status", json={"status": "planned"})
 
-    back = client.post("/api/requests/1/status", json={"status": "approved"})
+    skipped = client.post("/api/requests/1/status", json={"status": "done"})
+
+    assert skipped.status_code == 409 and "cannot move it" in skipped.json()["message"]
+
+    picked = client.post("/api/requests/1/status", json={"status": "in_progress"})
+    finished = client.post("/api/requests/1/status", json={"status": "done"})
+
+    assert picked.status_code == 200 and picked.json()["request"]["status"] == "in_progress"
+    assert finished.status_code == 200 and finished.json()["request"]["status"] == "done"
+    assert finished.json()["request"]["moves"] == []
+
+
+async def test_hold_needs_a_reason_remembers_where_it_came_from_and_resume_puts_it_back(
+    as_staff, client, web, wf
+):
+    await file_one(client)
+    client.post("/api/requests/1/status", json={"status": "in_progress"})
+
+    bare = client.post("/api/requests/1/hold", json={})
+
+    assert bare.status_code == 400 and "needs one line" in bare.json()["message"]
+
+    parked = client.post("/api/requests/1/hold", json={"reason": "waiting on the bill"})
+    row = parked.json()["request"]
+
+    assert row["status"] == "hold" and row["held_from"] == "in_progress"
+    assert row["held_word"] == "being worked on" and row["resume_to"] == "in_progress"
+    assert row["decline_reason"] == "waiting on the bill"
+
+    back = client.post("/api/requests/1/resume", json={})
 
     assert back.status_code == 200
-    assert back.json()["request"]["status"] == "approved"
+    assert back.json()["request"]["status"] == "in_progress"
+    assert back.json()["request"]["held_from"] is None
+    left = await kinds(web, wf)
+    assert "web.request.hold" in left and "web.request.resumed" in left
+
+
+async def test_resuming_something_that_is_not_on_hold_is_refused_in_words(as_staff, client):
+    await file_one(client)
+
+    refused = client.post("/api/requests/1/resume", json={})
+
+    assert refused.status_code == 409 and "not on hold" in refused.json()["message"]
 
 
 async def test_filing_from_the_site_is_not_guard_refused_while_test_mode_is_on(
@@ -281,7 +332,7 @@ async def test_filing_from_the_site_is_not_guard_refused_while_test_mode_is_on(
     made = await file_one(as_member)
 
     assert made.status_code == 200
-    assert made.json()["request"]["status"] == "pending"
+    assert made.json()["request"]["status"] == "open"
 
 
 async def test_a_due_date_stays_a_plain_date_on_the_way_out(as_member):
@@ -314,19 +365,19 @@ async def test_a_number_nobody_filed_is_a_sentence_and_a_404(as_staff, client):
     assert missing.status_code == 404 and "no request" in missing.json()["message"]
 
 
-async def test_staff_approve_from_the_site_and_the_asker_is_dmed(
+async def test_staff_pick_it_up_from_the_site_and_the_asker_is_dmed(
     as_staff, client, sign_in, web, wf
 ):
     sign_in(client, uid=ASKER, staff=False)
     await file_one(client)
     sign_in(client, uid=LEAD, staff=True)
 
-    done = client.post("/api/requests/1/approve", json={})
+    done = client.post("/api/requests/1/status", json={"status": "in_progress"})
 
     assert done.status_code == 200
-    assert done.json()["request"]["status"] == "approved"
+    assert done.json()["request"]["status"] == "in_progress"
     assert web.guild.get_member(ASKER).dms
-    assert "web.request.approved" in await kinds(web, wf)
+    assert "web.request.in_progress" in await kinds(web, wf)
 
 
 async def test_a_decline_without_a_line_is_refused(as_staff, client):
@@ -358,7 +409,7 @@ async def test_the_status_route_saves_assignee_priority_and_notes_in_one_go(
     row = saved.json()["request"]
 
     assert row["assignee"]["id"] == str(LEAD) and row["priority"] == 2
-    assert row["notes"] == "after the hosting bill" and row["status"] == "approved"
+    assert row["notes"] == "after the hosting bill" and row["status"] == "open"
     assert "web.request.updated" in await kinds(web, wf)
 
 
@@ -366,13 +417,13 @@ async def test_the_status_route_moves_the_state_last_so_a_bad_field_stops_it(as_
     await file_one(client)
 
     refused = client.post(
-        "/api/requests/1/status", json={"status": "done", "assignee_id": "404404404"}
+        "/api/requests/1/status", json={"status": "in_progress", "assignee_id": "404404404"}
     )
 
     assert refused.status_code == 400 and "not somebody Black Bloc can see" in (
         refused.json()["message"]
     )
-    assert client.get("/api/requests/1").json()["request"]["status"] == "approved"
+    assert client.get("/api/requests/1").json()["request"]["status"] == "open"
 
 
 async def test_a_field_can_be_cleared_again_from_the_page(as_staff, client):
@@ -405,16 +456,16 @@ async def test_a_priority_the_page_should_not_have_sent_is_refused(as_staff, cli
 async def test_a_state_only_the_bot_owns_cannot_be_set_from_the_page(as_staff, client):
     await file_one(client)
 
-    for bad in ("withdrawn", "pending", "shipped"):
+    for bad in ("withdrawn", "open", "approved", "planned", "pending", "shipped"):
         refused = client.post("/api/requests/1/status", json={"status": bad})
         assert refused.status_code == 400, bad
 
 
 async def test_moving_a_row_to_where_it_already_is_says_so_and_changes_nothing(as_staff, client):
     await file_one(client)
-    client.post("/api/requests/1/approve", json={})
+    client.post("/api/requests/1/status", json={"status": "in_progress"})
 
-    again = client.post("/api/requests/1/approve", json={})
+    again = client.post("/api/requests/1/status", json={"status": "in_progress"})
 
     assert again.status_code == 409 and "already" in again.json()["message"]
 

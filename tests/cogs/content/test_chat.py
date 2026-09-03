@@ -1167,6 +1167,69 @@ async def test_an_unavailable_server_is_skipped_rather_than_emptied(cog, bot, db
     assert (await cur.fetchone())["n"] > 0
 
 
+async def test_the_expiring_turns_are_distilled_before_the_sweep_deletes_them(
+    cog, bot, db, monkeypatch
+):
+    """The hook is on the sweep and never on the reply path, so the order is the whole point."""
+    from datetime import UTC, datetime, timedelta
+
+    from black_bloc.chat_llm import remember
+
+    order = []
+    at = datetime.now(UTC) - timedelta(hours=3)
+    for number in range(2):
+        await remember(
+            db,
+            guild_id=GUILD,
+            channel_id=CHANNEL,
+            user_id=900,
+            speaker="member",
+            content=f"turn {number}",
+            at=at,
+        )
+
+    async def distil(_bot, **kwargs):
+        cur = await db.conn.execute("SELECT COUNT(*) AS n FROM chat_window")
+        order.append(("distil", (await cur.fetchone())["n"]))
+        return {"looked": 1, "distilled": 1, "failed": 0, "expired": 0}
+
+    async def sweep(_db, **kwargs):
+        cur = await _db.conn.execute("SELECT COUNT(*) AS n FROM chat_window")
+        order.append(("sweep", (await cur.fetchone())["n"]))
+        return 0
+
+    monkeypatch.setattr(cog_module, "distil_run", distil)
+    monkeypatch.setattr(cog_module, "sweep_window", sweep)
+    bot.guild.text_channels = []
+    bot.guild.roles = []
+
+    await cog.ingest_once()
+
+    assert [name for name, _ in order] == ["distil", "sweep"]
+    assert order[0][1] == 2
+    assert cog.last_distil == {"looked": 1, "distilled": 1, "failed": 0, "expired": 0}
+
+
+async def test_a_distillation_that_blows_up_never_stops_the_sweep(cog, bot, db, monkeypatch):
+    swept = []
+
+    async def boom(_bot, **kwargs):
+        raise RuntimeError("no")
+
+    async def sweep(_db, **kwargs):
+        swept.append(True)
+        return 0
+
+    monkeypatch.setattr(cog_module, "distil_run", boom)
+    monkeypatch.setattr(cog_module, "sweep_window", sweep)
+    bot.guild.text_channels = []
+    bot.guild.roles = []
+
+    await cog.ingest_once()
+
+    assert swept == [True]
+
+
 async def test_the_ingest_loop_records_its_health_and_restarts_when_it_stops(cog, monkeypatch):
     async def boom():
         raise RuntimeError("no")

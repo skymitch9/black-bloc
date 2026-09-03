@@ -13,6 +13,9 @@ from black_bloc.api.settings_api import grouped
 from black_bloc.chat import add_line as add_chat_line
 from black_bloc.chat import create_intent
 from black_bloc.chat import seed_defaults as seed_chat
+from black_bloc.chat_memory import Note as MemoryNote
+from black_bloc.chat_memory import Profile as MemoryProfile
+from black_bloc.chat_memory import save_profile
 from black_bloc.cogs.community.birthdays import save_birthday
 from black_bloc.cogs.community.events import create_event
 from black_bloc.cogs.community.polls import add_options as add_poll_options
@@ -37,8 +40,9 @@ from black_bloc.llm import record as llm_record
 from black_bloc.modcases import add_case
 from black_bloc.modmail import IN
 from black_bloc.polls import next_occurrence
-from black_bloc.requests import PENDING, PLANNED, create_request
+from black_bloc.requests import HOLD, OPEN, create_request
 from black_bloc.requests import add_comment as add_request_comment
+from black_bloc.requests import set_status as set_request_status
 from black_bloc.youtube import Video
 
 CONTRACT = Path(__file__).resolve().parents[2] / "site" / "mock" / "contract.json"
@@ -318,15 +322,48 @@ async def seeded(client, sign_in, web, guild, wf):
         tier="simple",
         usage=Usage(input_tokens=400, output_tokens=90),
     )
-    # {feature_request_id} is the signed-in staffer's own pending row, so /api/requests/mine
-    # is never empty and the decide routes have something to move; {member_request_id} is
-    # somebody else's, already planned. The mock seeds the same pair as 25 and 30.
+    # {feature_request_id} is the signed-in staffer's own OPEN row, so /api/requests/mine
+    # is never empty and the staff moves have something to move; {member_request_id} is
+    # somebody else's, also open. {held_request_id} is already on hold, because /resume is
+    # only legal from there and every route runs against a fresh seed. The mock seeds the
+    # same three as 25, 30 and 20.
     feature_request_id = await make_request(
-        db, guild_id, 7, "A requests board on the site", PENDING
+        db, guild_id, 7, "A requests board on the site", OPEN
     )
     await add_request_comment(db, feature_request_id, 7, "Looking at this one this week.")
     member_request_id = await make_request(
-        db, guild_id, MEMBER_ID, "Karaoke night", PLANNED, decided_by=7
+        db, guild_id, MEMBER_ID, "Karaoke night", OPEN
+    )
+    held_request_id = await make_request(
+        db, guild_id, MEMBER_ID, "Role menu descriptions", OPEN
+    )
+    await set_request_status(
+        db,
+        held_request_id,
+        HOLD,
+        decided_by=7,
+        decline_reason="waiting on the role menu rewrite",
+        was=OPEN,
+    )
+    # Phase 17: one profile, so GET /api/chat/memory has a row shape to read and DELETE has
+    # something to clear. Preferences only, and one of them scoped to a DM.
+    await save_profile(
+        db,
+        MEMBER_ID,
+        guild_id,
+        MemoryProfile(
+            call_me="Sky",
+            notes=(
+                MemoryNote("likes short answers", "server", "2026-09-02T00:00:00+00:00"),
+                MemoryNote("keep it simple", "dm", "2026-09-02T00:00:00+00:00"),
+            ),
+            threads=(
+                MemoryNote("was asking about the cookout", "server", "2026-09-02T00:00:00+00:00"),
+            ),
+            turns_seen=6,
+            created_at="2026-09-01T00:00:00+00:00",
+            updated_at="2026-09-02T00:00:00+00:00",
+        ),
     )
     grant_id = await grants.add_grant(
         db,
@@ -357,6 +394,7 @@ async def seeded(client, sign_in, web, guild, wf):
         "chat_section_id": str(chat_section_id),
         "feature_request_id": str(feature_request_id),
         "member_request_id": str(member_request_id),
+        "held_request_id": str(held_request_id),
         "ping_member_id": str(PING_MEMBER_ID),
     }
 

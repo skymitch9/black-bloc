@@ -67,6 +67,17 @@ async def test_a_blank_model_setting_falls_back_to_the_pinned_default():
     assert seen["json"]["model"] == DEFAULT_MODEL
 
 
+async def test_json_mode_is_asked_for_only_when_the_caller_wants_json():
+    """Phase 17 measured 29/29 parseable objects with it on; a reply never asks for it."""
+    request, seen = answering(payload=said('{"call_me": null}'))
+    await GroqClient("k", request=request).reply(system="s", messages=[], json_only=True)
+    assert seen["json"]["response_format"] == {"type": "json_object"}
+
+    request, seen = answering(payload=said())
+    await GroqClient("k", request=request).reply(system="s", messages=[])
+    assert "response_format" not in seen["json"]
+
+
 async def test_the_key_rides_the_authorization_header_and_nothing_else():
     request, seen = answering(payload=said())
     await GroqClient("secret-groq-key", request=request).reply(system="s", messages=[])

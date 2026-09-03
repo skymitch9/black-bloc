@@ -14,7 +14,7 @@ from black_bloc.chat_memory import (
     Distilled,
     Note,
     Profile,
-    clear_optout,
+    clear_override,
     distil_prompt,
     drop_matching,
     expire,
@@ -22,14 +22,17 @@ from black_bloc.chat_memory import (
     forget_everywhere,
     memory_note,
     merge,
-    opted_out,
     optout_count,
     other_names,
+    overridden,
     parse_distilled,
     profile_for,
     profile_rows,
+    remembered,
+    remembers,
     save_profile,
-    set_optout,
+    set_override,
+    set_remembered,
     why_dropped,
 )
 from black_bloc.storage.db import Database
@@ -290,26 +293,53 @@ async def test_a_leaver_is_forgotten_in_every_server_at_once(tmp_path):
         await db.close()
 
 
-async def test_opting_out_is_remembered_and_can_be_lifted(tmp_path):
+def test_a_row_means_the_person_is_off_the_servers_default_whichever_way_round_it_is():
+    """One table, one meaning: they overrode the default. D1 decides what the default is."""
+    assert remembered("optout", False) is True
+    assert remembered("optout", True) is False
+    assert remembered("optin", False) is False
+    assert remembered("optin", True) is True
+    assert remembered("optout", None) is False
+    assert remembered("optin", None) is False
+
+
+async def test_a_choice_is_remembered_and_can_be_lifted(tmp_path):
     db = await a_db(tmp_path, "opt.sqlite3")
     try:
-        assert await opted_out(db, 9, 7) is False
-        assert await set_optout(db, 9, 7, at=AT)
-        assert await opted_out(db, 9, 7) is True
+        assert await overridden(db, 9, 7) is False
+        assert await remembers(db, 9, 7, consent="optout") is True
+        assert await set_override(db, 9, 7, at=AT)
+        assert await overridden(db, 9, 7) is True
+        assert await remembers(db, 9, 7, consent="optout") is False
+        assert await remembers(db, 9, 7, consent="optin") is True
         assert await optout_count(db, 7) == 1
-        assert await clear_optout(db, 9, 7) is True
-        assert await clear_optout(db, 9, 7) is False
-        assert await opted_out(db, 9, 7) is False
+        assert await clear_override(db, 9, 7) is True
+        assert await clear_override(db, 9, 7) is False
+        assert await overridden(db, 9, 7) is False
     finally:
         await db.close()
 
 
-async def test_an_unreadable_optout_table_is_read_as_opted_out(tmp_path):
+async def test_saying_off_and_on_lands_the_same_way_under_either_consent_model(tmp_path):
+    db = await a_db(tmp_path, "consent.sqlite3")
+    try:
+        for consent in ("optout", "optin"):
+            await set_remembered(db, 9, 7, consent=consent, wanted=False)
+            assert await remembers(db, 9, 7, consent=consent) is False, consent
+            await set_remembered(db, 9, 7, consent=consent, wanted=True)
+            assert await remembers(db, 9, 7, consent=consent) is True, consent
+    finally:
+        await db.close()
+
+
+async def test_an_unreadable_choice_table_means_nobody_is_remembered(tmp_path):
     db = await a_db(tmp_path, "broken.sqlite3")
     try:
         await db.conn.execute("DROP TABLE chat_memory_optout")
         await db.conn.commit()
-        assert await opted_out(db, 9, 7) is True
+        assert await overridden(db, 9, 7) is None
+        assert await remembers(db, 9, 7, consent="optout") is False
+        assert await remembers(db, 9, 7, consent="optin") is False
     finally:
         await db.close()
 
