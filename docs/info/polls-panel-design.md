@@ -211,9 +211,12 @@ The two `Group`s (`:1588`, `:1589`) and all eleven subcommands. `/help` reads th
 | `tests/test_bot.py:204` | `assert len(top) == 44` — **unchanged** (requests deviation 7) |
 | `tests/test_bot.py:71` | `MEMBER_COMMANDS` keeps `"poll"` — the panel stays member-visible (§B) |
 
-✅ **`docs/access/OWNER_GUIDE.md` needs no edit** — measured: 80 lines, the word "poll" does
-not appear. `docs/KNOWN_ISSUES.md` needs none either; KI-19 (`:110`) and KI-20 (`:134`) both
-already cover this panel's shape.
+✅ **`docs/access/OWNER_GUIDE.md` needs no edit** — re-measured at build time: 86 lines, and
+the word "poll" still does not appear anywhere in it. ⚠️ **`docs/KNOWN_ISSUES.md` DID need one:**
+KI-19 stands as written, but KI-20's symptom named `/request` specifically and its help-text
+sentence named `request_panel_minutes` specifically. It was widened to "an ephemeral panel"
+built on `panels.py`, naming both `/request` and `/poll` and both keys — one fact, one home,
+rather than a second near-identical entry per feature wave.
 
 ## F. Extractions (P4)
 
@@ -359,6 +362,13 @@ document says.
    told people to run `/poll settings mode:on`, `/poll list`, `/poll recur create` and so on.
    §E lists the docs; a refusal that names a command nobody can type is a worse bug than a stale
    doc, so they were rewritten in the same commit and their tests moved with them.
+10. **A member who types a REPEATING poll's number into `Find #…` is refused in words rather
+   than shown the recurrence card.** §B says `Find #…` opens "the card for **any** poll id in
+   this guild"; §B's row 2 also makes the "Repeating polls…" select staff-only, so a member
+   reaching a template by number would have been a way around that. `open_card` answers
+   `store.staff_refusal(...)` for a `RECURRING` row and a member; every other status is open to
+   anybody exactly as the design says, because the card IS the results and `/poll results` had
+   no staff gate either.
 
 ### What §H asked for, and what it got
 
