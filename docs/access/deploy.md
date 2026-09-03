@@ -64,8 +64,10 @@ idle machines and the gateway connection dies with them. Keep `[mounts]`.
 
 ```powershell
 # From the repo root, tree committed-clean (the script REFUSES a dirty tree, and a
-# Dockerfile build ships what is on disk). It runs ruff -> the full test suite ->
-# node site/mock/check.mjs -> git push origin main -> flyctl deploy, then appends a
+# Dockerfile build ships what is on disk). It runs ruff -> the full test suite (-n auto)
+# -> an ES-module parse of every site/public/assets/*.js (the labels.js incident: plain
+# `node --check` parses a .js file as CommonJS and PASSED the file that blanked every
+# dashboard page) -> node site/mock/check.mjs -> git push origin main -> flyctl deploy, then appends a
 # SKELETON line to docs/deploys.log that you must EDIT (what shipped; verified: what
 # was checked) and commit. Escape hatch BLACKBLOC_SKIP_GATE=1 - emergencies only.
 .\scripts\deploy.ps1
@@ -75,8 +77,12 @@ flyctl releases --app black-bloc              # a NEW version number = it landed
 
 ### ⚠️ "The deploy printed nothing after *Waiting for depot builder*" — run it DETACHED
 
-The script takes **~10 minutes** end to end (measured 2026-09-03: pytest alone 8:27 for
-3345 tests, single process). A Claude tool call has a **10-minute ceiling**: when it kills
+The script USED to take **~10 minutes** end to end (measured 2026-09-03 morning: pytest
+alone 8:27 for 3345 tests, single process). Since the same afternoon it runs pytest under
+`pytest-xdist` (`-n auto`): **3371 tests in 54 s wall on the 32-logical-core machine**, same
+count, so the whole script is now ~3–4 minutes and most of that is the Fly build. The
+ceiling gotcha still stands — a slow builder can push it past ten. A Claude tool call has a
+**10-minute ceiling**: when it kills
 the wrapper mid-`flyctl deploy`, the orphaned flyctl keeps running with a dead stdout pipe,
 sits at "Waiting for depot builder" indefinitely and **makes no release** — the push has
 already happened, so `main` is ahead of the machine and nothing says so. Seen 2026-09-03

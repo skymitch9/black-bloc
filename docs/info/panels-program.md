@@ -1,8 +1,9 @@
 # Panels over slash commands — the program for the rest of the app
 
 > **Audience:** the conductor (Fable), every design and build agent, the reviewer, the owner.
-> **Status:** TRACKED · **PLANNING**, except **§4 wave 0, which is BUILT** (`black_bloc/panels.py`,
-> branch `feat/panels-library`, 2026-09-03). Waves 1–4 are unbuilt; the template is
+> **Status:** TRACKED · **PLANNING**, except **§4 wave 0, which is MERGED** (`black_bloc/panels.py`,
+> `feat/panels-library` → `main` `1861923`, 2026-09-03 ~11:50, Fable-reviewed: no defect, five
+> deviations all accepted). Waves 1–4 are unbuilt; the template is
 > `/request` ([`requests-panel-design.md`](requests-panel-design.md)).
 > **Last verified: 2026-09-03** — §4's BUILT line was measured on `feat/panels-library`
 > (3371 tests, ruff clean, import check); the command inventory in §3 was measured by grep

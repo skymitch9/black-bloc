@@ -14,8 +14,12 @@ if ($env:BLACKBLOC_SKIP_GATE -eq "1") {
 } else {
     & .venv/Scripts/python -m ruff check .
     if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: ruff is not clean." }
-    & .venv/Scripts/python -m pytest -q
+    & .venv/Scripts/python -m pytest -q -n auto
     if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: the test suite is red." }
+    foreach ($js in Get-ChildItem site/public/assets/*.js) {
+        cmd /c "node --input-type=module --check < `"$($js.FullName)`""
+        if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: $($js.Name) does not parse as an ES module." }
+    }
     Get-NetTCPConnection -LocalPort 8788 -ErrorAction SilentlyContinue |
         Select-Object -ExpandProperty OwningProcess -Unique |
         ForEach-Object { try { Stop-Process -Id $_ -Force -Confirm:$false } catch {} }

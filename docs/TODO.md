@@ -12,22 +12,22 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 10:55, fifth pass landing)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 ~11:55, wave 0 merged)
 
-**Nothing is in flight except a deploy.** `main` carries the requests fifth pass — merge
-`c4420cc` (the panel's own list is staff-only behind `request_panel_own_list`) plus the
-commit after it (the `done` card no longer posts by default — `request_channel_moves`
-default drops `done`). If `deploys.log`'s last line is still `ba5cb99`, the deploy did not
-land: run `scripts/deploy.ps1` from a clean tree, then EDIT the skeleton line it appends
-and verify the boot log. The `DONE.md` entry dated 2026-09-03 "Requests, fifth pass" has
-the whole story. Worktrees `.claude/worktrees/agent-requests-panel` and
-`.claude/worktrees/agent-own-list` and their branches are merged and can be pruned.
+**`main` is ahead of the machine.** v59 (`a392a3f`) is live; `main` carries the wave-0 merge
+`1861923` (`black_bloc/panels.py`, behaviour-neutral) plus the commit after it (pytest-xdist
+`-n auto` and the ES-module parse in `scripts/deploy.ps1`, `code-notes.md` re-keyed). If
+`deploys.log`'s last line is still v59/`a392a3f`, the deploy did not land: run
+`scripts/deploy.ps1` DETACHED from a clean tree (`access/deploy.md`), EDIT the skeleton line,
+verify the boot log, then move the "Let's fix that" and `labels.js` 🔧 items WHOLE to
+`DONE.md`. Worktrees `agent-requests-panel`, `agent-own-list`, `agent-a056909c738b178df`
+and branches `feat/requests-panel*`, `feat/panels-library` are merged and can be pruned.
 
-**Next, the standing direction (owner 2026-09-03):** "carry it through the rest of the
-app" — the "Panels over slash commands — the rest of the app" item under 🔧. Agree the
-sequence with the owner ONE feature at a time; each gets a design doc with a button table
-per state, `info/requests-panel-design.md` as the template. Owner's by-eye sweep of the
-panel is still owed (`access/sweeps.md` rows 14–15, 58–65).
+**Next, the standing direction (owner 2026-09-03: "Keep building"):** the "ping the
+requester" 🔧 item (design doc `info/requests-check-design.md`, then an Opus build on a
+branch cut from `main` AFTER the merge), then wave 1 of `info/panels-program.md` (events ·
+polls · birthdays · applications, design docs first). Owner's by-eye sweep of the panel is
+still owed (`access/sweeps.md` rows 14–15, 58–65; he is doing 15 and 65 himself).
 
 **Landing ritual (unchanged):** branch → `git merge --no-ff` on `main` → `scripts/deploy.ps1`
 (refuses a dirty tree; ~10 min: ruff → pytest → check.mjs → push → `flyctl deploy --app
@@ -186,6 +186,17 @@ docs bookkeeping lands with the work, not after.
 
 ## 🔧 Open engineering items
 
+- 🆕 **"We also need a way to ping the requester from the request app. I want to have it
+  message the requesters to check the work." (owner, 2026-09-03 11:15).** A staff move on the
+  request card (panel AND the site's request card — one shared function, one log row) that
+  tells the person who asked that the work is ready for THEM to try: a DM built from the same
+  `request_embed` (built + how-to-test filled in) with a sentence asking them to check it and
+  say so, falling back to a mention in the request channel when their DMs are closed. Which
+  states offer it, whether it is its own state or a flag on `review`, and the fallback are
+  design calls — `info/requests-check-design.md` to write; the owner said "Keep building", so
+  no fork goes to him unless it is genuine. Status: **DESIGNING** — after wave 0 merges (it
+  touches the same cog).
+
 - 🆕 **"Let's fix that" (owner, 2026-09-03 ~11:25) — `scripts/deploy.ps1` outruns the
   10-minute tool ceiling.** Measured the same morning: pytest alone took **8:27** for 3345
   tests (single process on a 32-core machine), so the wrapper was killed during the image
@@ -195,8 +206,11 @@ docs bookkeeping lands with the work, not after.
   parallelise; measure the wall time and that the count is still 3345; (2) a
   `docs/access/deploy.md` gotcha titled for the symptom ("the deploy printed nothing after
   Waiting for depot builder") saying to run the script detached (`Start-Process … -PassThru`)
-  and watch the pid, never inside a tool call with a ceiling. Status: **NEXT**, after the
-  fifth-pass deploy lands.
+  and watch the pid, never inside a tool call with a ceiling. Status: **BUILT, awaiting the
+  deploy that proves it** (2026-09-03 ~11:55) — (2) landed in `06ace58`'s neighbour that
+  morning; (1) measured: `-n auto` on the 32-logical-core machine runs **3371 tests in 54 s**
+  (was 8:27 for 3345), count holds; `pytest-xdist>=3.6` in the dev extras, `-n auto` in
+  `deploy.ps1`. Moves to DONE when a deploy has run through the new gate.
 
 - 🆕 **Panels over slash commands — the rest of the app (owner, 2026-09-03: "then carry it
   through the rest of the app"; confirmed ~11:25: "do the change to all / commands. I like
@@ -212,7 +226,10 @@ docs bookkeeping lands with the work, not after.
   subcommands over 44 top-level commands → ~21 commands, §4 **wave 0 = extract
   `black_bloc/panels.py` from the requests cog** so the three review defects cannot recur
   seventeen times, §5 four waves, §6 the three owner forks: F1 mod commands, F2 modmail's
-  in-thread `/reply` set, F3 `/settings`). Next: dispatch wave 0 (Opus, alone), then wave 1
+  in-thread `/reply` set, F3 `/settings`). **Wave 0 is MERGED** (`1861923`, 2026-09-03 ~11:50:
+  `black_bloc/panels.py` + `tests/test_panels.py`, 26 tests, the requests cog now inherits
+  `Panel`; 160k Opus / 20 min; `code-notes.md` re-keyed at the merge) — rides the next
+  deploy. Next: the "ping the requester" item above (same cog, small), then wave 1
   events · polls · birthdays · applications as design docs first.
 
 - 🆕 **A defect this build found and fixed on the way, worth knowing about
@@ -229,6 +246,10 @@ docs bookkeeping lands with the work, not after.
   labels.js`. Add it to `deploy.ps1` beside ruff, pytest and `check.mjs` — for EVERY
   `site/public/assets/*.js` (they are all modules). Small, own commit; not done in the
   build because it is a deploy-pipeline change and the build had no brief for one.
+  **BUILT 2026-09-03 ~11:50**: `deploy.ps1` now runs `node --input-type=module --check <
+  file` over every asset after pytest; proved on a scratch file with the Phase 19 shape
+  (module parse exit 1, plain `--check` exit 0) and clean on all 29 current assets. Moves
+  to DONE with the "Let's fix that" item once a deploy has run through the gate.
 
 - **Via-labelling gap: `raidtrain.cancel_train` logs one row but calls a website cancel
   Via = Discord** (found by the double-logging build, 2026-09-03 — see `DONE.md` that
