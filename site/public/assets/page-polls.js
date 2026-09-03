@@ -48,7 +48,7 @@ const KINDS = [
 ];
 const GENERATED = { yesno: ['Yes', 'No'], rating: ['1', '2', '3', '4', '5'] };
 
-const SWITCH_HELP = 'Off hides the /poll commands and refuses new polls. Nothing already ' +
+const SWITCH_HELP = 'Off hides Create on the /poll panel and refuses new polls. Nothing already ' +
   'running is closed, and every result Black Bloc has kept stays on this page.';
 const NO_MODE_KEY = 'The bot did not report a poll_mode key, so this switch is not shown ' +
   'rather than guessed at.';
@@ -63,7 +63,7 @@ const CLOSED_NOTE = 'How every finished poll went. The export is a CSV of the to
   'one row per voter when the poll kept them.';
 const ARCHIVE_NOTE = 'Polls older than poll_archive_days. The totals are kept forever; the ' +
   'per-voter rows may have been dropped, and the export says so when they were.';
-const CREATE_NOTE = 'The same rules as /poll create in Discord — Black Bloc picks the surface ' +
+const CREATE_NOTE = 'The same rules as the /poll panel in Discord — Black Bloc picks the surface ' +
   'from what you ask for and tells you which one it picked.';
 const SETTINGS_NOTE = 'Who may start a poll, how long one runs, where a poll made here goes, ' +
   'and when a finished one moves to the archive.';
@@ -72,7 +72,7 @@ const makeOne = () => textAction('Create a poll', () => goToSection('create-a-po
 
 const NO_OPEN = 'Nothing is taking votes right now. Start one below.';
 const NO_REVIEW = 'Nobody is waiting on a Lead. A poll only waits when poll_review_mode is on.';
-const NO_RECUR = 'No poll repeats on its own yet. `/poll recur create` in Discord starts one.';
+const NO_RECUR = 'No poll repeats on its own yet. Repeat… while writing one on the /poll panel in Discord starts one.';
 const NO_CLOSED = 'No poll has finished yet.';
 const NO_ARCHIVE = 'Nothing has been archived yet.';
 const NEED_A_QUESTION = 'Write the question first — it is the heading everybody votes under.';
