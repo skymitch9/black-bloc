@@ -12,27 +12,16 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 14:10, v64 live)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 15:05, v66 live, wave 1 complete)
 
-**`main` = `e670542`** (events panel merge; v64 live 14:05, 3560 tests, 43 commands). v62 and v63
-both landed and are recorded in `DONE.md`. **Next: merge polls** — branch
-`worktree-agent-aa735ab092d13477d` (worktree `.claude/worktrees/agent-aa735ab092d13477d`, reviewed,
-no blocking defect) with `git merge --no-ff --no-commit`; expect conflicts in `panels.py`,
-`settings_store.py`, `tests/test_bot.py` (43 stays 43 — `/poll` was already one slot),
-`tests/test_panels.py`, `tests/test_settings_store.py`, `sweeps.md`, `code-notes.md`,
-`feature-list.md`, `info/README.md`, `KNOWN_ISSUES.md` (KI-20) — keep both sides; ruff + pytest
-`-n auto`; commit via `git commit -F <msgfile>`; deploy DETACHED as v65. Then the applications
-panel build waits on fork I-A3 (asked 14:03, unanswered).
-
-**Dispatched 12:50 (owner 2026-09-03: "Good start building") — three Opus builds in their own
-worktrees, one per reviewed wave-1 design:** `feat/events-panel` (`events-panel-design.md`,
-fork I2 decided: `/timezone` retired, 44 → 43 commands), `feat/polls-panel`
-(`polls-panel-design.md`), `feat/birthdays-panel` (`birthdays-panel-design.md`). Each lands
-alone: Fable review → `merge --no-ff` → deploy → sweeps → DONE. Expect conflicts in
-`settings_store.py`, `logkinds.py`, `panels.py`, `tests/test_bot.py` (the command count) and
-every docs index — resolve, never drop either side. Still to dispatch: the applications panel
-design (wave 1's fourth doc). Owner's by-eye sweeps still owed: `access/sweeps.md` rows 14–15,
-58–72.
+**`main` = `853776c`** (applications panel merge; v66 live 15:00, 3697 tests, 42 commands). Panels
+wave 1 is COMPLETE — all four landings are in `DONE.md` 2026-09-03. Nothing is in flight. **Next:**
+(1) the owner's yes/no on the operator read token (🔧 below); (2) the small review findings (🔧
+below) folded into whatever touches those files; (3) wave 2 of the panels program
+(`info/panels-program.md` §5 — the next feature gets a design doc first, forks to the owner one at
+a time, then an Opus build in its own worktree); (4) owner by-eye sweeps 14–15, 58–102. Merged
+worktrees/branches (`agent-a19bdce15408f8243` birthdays, `agent-a448c7ab780ed3c2b` events,
+`agent-aa735ab092d13477d` polls, `agent-abf063b9177e02f17` applications) can be pruned.
 
 **Landing ritual (unchanged):** branch → `git merge --no-ff` on `main` → `scripts/deploy.ps1`
 DETACHED (refuses a dirty tree; ~3 min now: ruff → pytest `-n auto` → ES-module parse of every
@@ -251,7 +240,8 @@ docs bookkeeping lands with the work, not after.
   command is `/apply`** ("it's gamer lingo"; the `applications` Group goes); **I-A2 DECIDED 13:47 —
   "Visible"** (`/apply` stays when the mode is off; the `HIDDEN_WHEN_OFF` entry goes); **I-A3 DECIDED
   14:12 — "Build the question sub panel"** (§C's Questions sub-panel as designed). Applications
-  build DISPATCHED 14:15 (Opus, own worktree, sweep rows 94–102). Events I2 DECIDED 12:40 (`/timezone` retired).
+  build landed 14:55 (401k), merged `853776c`, **live in v66 15:00** (43 → 42 commands). **WAVE 1
+  COMPLETE** — four landings in `DONE.md` 2026-09-03. Waves 2–4 remain (§5 of the program). Events I2 DECIDED 12:40 (`/timezone` retired).
   **Wave-1 builds all landed 13:40–13:50** (birthdays merged `58974e1`; events on
   `worktree-agent-a448c7ab780ed3c2b`, polls on `worktree-agent-aa735ab092d13477d`, both under Fable
   review); the applications build follows once I-A3 is answered. Merge in wave order, re-key
@@ -269,7 +259,14 @@ docs bookkeeping lands with the work, not after.
   (`tests/test_chat.py:158` pins it) and `code-notes.md:3451` has the same stale name;
   `NO_ANNOUNCE_CHANNEL` is dead in `events.py`; events `confirm_cancel` Yes button does not
   re-run `may_cancel` (trusts the panel's opener pin); polls: `draft` status never written, no
-  create-recurrence web route, (`OWNER_GUIDE.md` polls row added at the v65 landing).
+  create-recurrence web route, (`OWNER_GUIDE.md` polls row added at the v65 landing). From the
+  applications build (2026-09-03 14:55): `tests/test_bot.py::test_every_feature_group_has_a_logs_command`
+  shrinks with every panel wave (each deletes a `LOGS_GROUPS` entry) — re-express the guarantee
+  against the panels' **Logs** button before it covers nothing; `role_menus.py:answer()` is still a
+  byte-for-byte copy of `panels.answer`; `architecture.md`'s "current" command counts are stale
+  (a ⚠️ line names the real figures); `applications.py:NOT_YOUR_APPLICATION` / `NO_REVIEW_CHANNEL`
+  look dead; `OWNER_GUIDE.md` restates the sweeps count (95) instead of linking — two homes for one
+  number.
 
 - **Via-labelling gap: `raidtrain.cancel_train` logs one row but calls a website cancel
   Via = Discord** (found by the double-logging build, 2026-09-03 — see `DONE.md` that

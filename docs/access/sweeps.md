@@ -14,8 +14,8 @@
 > the program's second `commands synced` drop, 43 → 42, measured). Rows **53–57**, **69–72** and
 > the whole Twitch Team walk-through below were rewritten in place for it rather than added; row
 > 53 now tests the OPPOSITE of what it used to (owner, 2026-09-03 13:47: "Visible" — the command
-> no longer disappears when applications are off). Rows 94–102 are on the branch
-> `worktree-agent-abf063b9177e02f17`, not merged, and none was run against Discord.
+> no longer disappears when applications are off). Rows 94–102 are **live in v66**
+> (`853776c`, 15:00) and none was run against Discord by eye.
 > Earlier — rows **87–93** added by the birthdays panel build (`/birthday` is ONE command that
 > opens a panel; the twelve subcommands are retired; the Phase 5 prose block was replaced by
 > those rows — it named six subcommands that no longer exist plus `/birthday import`, deleted
@@ -187,7 +187,7 @@ form for a full pass.
   dropdown: 5 themes. Try a second, non-staff account: expect the amber "not staff"
   sentence. Sign out → signed-out state again.
 
-### Phase 19 — applications (the Twitch Team form). ⚠️ On the branch; not merged, not deployed.
+### Phase 19 — applications (the Twitch Team form). Live since v56; rows 53–57 rewritten for the `/apply` panel (v66).
 
 | # | Feature | Do this | Expect |
 |---|---|---|---|
@@ -208,7 +208,7 @@ form for a full pass.
 | 67 | Requests — the ping when their DMs are closed | turn Discord DMs off for the account that filed the request (Privacy Settings → allow DMs from server members: off), then press **Ask them to check** again | the DM fails, so the card is posted in the request channel with a **real @mention** of the person who asked — the only place the requests bot ever pings anybody; the reply says their DMs are closed and they were pinged instead; the log carries a `request.dm_failed` line as well as `request.check_asked`. Then `/settings set-value key:request_check_fallback_channel value:false` and press it again: nothing is posted, and the reply names the key a Lead turns back on |
 | 68 | Requests — asking automatically at ready | `/settings set-value key:request_check_on_ready value:true`, then take a request that is **being worked on** and press **Ready to check** | the DM from row 66 arrives with no second button press, and the log shows `request.review` followed by `request.check_asked`; set it back to `false` and the next Ready-to-check tells nobody. Both switches are on the Settings page too |
 
-### Applications, no-role pass — a form that keeps a LIST. ⚠️ On the branch `feat/applications-no-role`; not merged, not deployed.
+### Applications, no-role pass — a form that keeps a LIST. Live in v62; rows 69–72 rewritten for the `/apply` panel (v66).
 
 | # | What | Do this | Expect |
 |---|---|---|---|
@@ -244,7 +244,7 @@ form for a full pass.
 | 92 | Staff: the month list and the mode picker | as staff: **List a month…** → **Every month**, then **August**, then a month nobody is in; then **Wishes are…** → **on** | the list arrives as one or more NEW ephemeral messages grouped by month (`· 10 — @PT (self)`), and the panel itself stays open behind them; an empty month answers "Nobody has a birthday stored in **March**." The mode picker re-renders the panel with the shadow warning gone, and the log carries `birthday.mode` |
 | 93 | Staff: status, the role and the logs, then the quiet footer | as staff: **Status**; **Clear the birthday role** → confirm; **Logs**; then leave the panel alone for `birthday_panel_minutes` (10) minutes | Status is a new ephemeral message with mode, channel, template, colour, role, ages, the stored counts and both loops' last run/last error — the panel stays. Clear asks first, then answers "No birthday role will be given any more…" (or "There was no birthday role set" when none was). Logs opens the Birthdays log as its own ephemeral message. After ten minutes every button on the panel is greyed out and the embed footer reads *This panel has gone quiet — run /birthday again* |
 
-### Applications — `/apply` is ONE panel (wave 1). On `worktree-agent-abf063b9177e02f17`; not merged, not deployed.
+### Applications — `/apply` is ONE panel (wave 1). Live in v66 (`853776c`, 2026-09-03).
 
 Two commands became one: `/apply` (three subcommands) and `/applications` (fourteen) are both
 gone, and every one of the seventeen is a button, a picker or a modal on the panel `/apply`

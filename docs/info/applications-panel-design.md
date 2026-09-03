@@ -1,8 +1,8 @@
 # Applications — `/applications` is ONE command that opens a panel
 
-> **Audience:** the build agent and the reviewer. **Status:** TRACKED · ✅ **BUILT on
+> **Audience:** the build agent and the reviewer. **Status:** TRACKED · ✅ **SHIPPED — live in v66** (`853776c`, 15:00, `deploys.log` line 65; synced 42 app commands measured on the boot log). Built on
 > `worktree-agent-abf063b9177e02f17`** (base `main` `27452ac`, after the birthdays/events/polls
-> panels merged). Merged `--no-ff` after Fable review 2026-09-03, deploying as v66.
+> panels merged). Merged `--no-ff` `853776c` after Fable review 2026-09-03 (3697 tests).
 > **Last verified: 2026-09-03** — the build measured `len(bot.tree.get_commands())` at **42**
 > (43 at the base: exactly the one-slot drop §B predicts), **3697 tests pass** (3644 at the base),
 > `ruff check .` clean, `node site/mock/check.mjs` **17 pages / 142 routes** (unchanged by this

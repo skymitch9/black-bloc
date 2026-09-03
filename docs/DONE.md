@@ -9,6 +9,33 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-03 — Panels wave 1 COMPLETE, fourth landing: `/apply` is one command (v66, `853776c`)
+
+Release **v66** (`853776c`, 15:00; `deploys.log` line 65). Merge `--no-ff` of
+`worktree-agent-abf063b9177e02f17` (Opus build, 401k, nine commits) after Fable review — no blocking
+defect: every staff move `still_staff` → defer → `db_ready`, member moves and Back buttons re-render
+against the actor, the persistent card buttons still pass `may_decide`, one log row per write
+asserted by count. Two doc conflicts (`OWNER_GUIDE.md`, the design header), both sides kept;
+**3697 tests** green under `-n auto`; `commands synced` **43 → 42** on the boot log — the Group
+drop §B predicted. All three owner forks built as decided: **I-A1 `/apply`** ("gamer lingo",
+13:35), **I-A2 Visible** (`HIDDEN_WHEN_OFF["applications_mode"]` gone, the off-panel says so in
+words, 13:47), **I-A3 the Questions sub-panel** (select → Edit / Remove, plus Add; reorder stays
+on the site, 14:12). Both the `apply` and `applications` groups and their seventeen subcommands
+are gone; `denied` / `removed` gained the `Approve after all` / `Put them back on the list` exit
+(staff final say). Design: [`info/applications-panel-design.md`](info/applications-panel-design.md)
+(15 deviations at its foot — headline: `update_form` clears four id columns from the `NO_ROLE`
+sentinel, a `db_up` gate for reads before a defer). Sweep rows 94–102; rows 53–57 and 69–72
+rewritten. Keys `applications_panel_minutes` / `applications_panel_own_list`. Site: two label
+strings on https://blackbloc.heygabi.ai/rolemenus.html#applications. Verified: boot log 22:00:05Z
+database ready + synced 42, 22:00:08Z logged in, no Traceback. NOT verified: nothing by eye in
+Discord; the empty-select submit edge (§C) is still unverified on every panel that has one.
+
+**Wave 1 is complete** — `/birthday` v63, `/event` v64, `/poll` v65, `/apply` v66, all in one
+afternoon (13:58–15:00), 44 → 42 commands, 3442 → 3697 tests. The panels program item stays on
+`TODO.md` for waves 2–4 (`info/panels-program.md` §5). Filed request #2 (Twitch Team form via the
+bot) is what this landing delivers; it sits in *review* on the Requests page for the owner to mark
+done.
+
 ## 2026-09-03 — Panels wave 1, third landing: `/poll` is one command (v65, `d13e1a4`)
 
 Release **v65** (`d13e1a4`, 14:14; `deploys.log` line 64). LANDING entry — the panels item stays

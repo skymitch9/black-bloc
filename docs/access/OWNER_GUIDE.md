@@ -4,13 +4,13 @@
 > permanently, not temporarily; secret NAMES only).
 > Last verified: **2026-09-03** for the APPLICATIONS row (`/apply` is ONE command that opens a
 > panel; both the `apply` and `applications` groups and their seventeen subcommands are gone;
-> merged after Fable review, deploying as v66; not run against Discord by eye) and the sweeps
+> live in v66 since 15:00; not run against Discord by eye) and the sweeps
 > count (**95** rows, numbered to 102). Same day, the POLLS row (`/poll` is one command that opens
 > a panel — live in v65 14:14; not run by eye), the EVENTS row (`/event` is one command that opens a panel and
 > `/timezone` is gone — live in v64 since 14:05; not run against Discord by eye) and
 > the birthdays row (`/birthday` is ONE command that opens a panel — live in v63). Before that the same day, for the applications row
 > (a form may keep a LIST instead of handing a
-> role over — BUILT on `feat/applications-no-role`, not merged, not deployed) and the sweeps count
+> role over — live in v62 since 12:48) and the sweeps count
 > (69 rows, numbered to 72; 66–68 belong to the sibling requests-check build). Before that the same
 > day, for the requests row only — the `/request` panel no longer writes a
 > member's own requests out (`request_panel_own_list`, off by default), and the sweeps count was
