@@ -20,6 +20,7 @@ from black_bloc.golive import (
     is_streaming,
     parse_ts,
     passes_role_filters,
+    ping_prefix,
     platform_of,
     presence_image,
     render,
@@ -183,6 +184,24 @@ def test_render_prefixes_the_ping_role_when_one_is_set():
     info = StreamInfo(url="u", game="g")
     assert render("hi", info, ping_role_id=99) == "<@&99> hi"
     assert render("hi", info, ping_role_id=None) == "hi"
+
+
+def test_render_puts_the_streamers_own_role_after_the_one_everybody_shares():
+    info = StreamInfo(url="u", game="g")
+    assert render("hi", info, ping_role_id=99, fan_role_id=7) == "<@&99> <@&7> hi"
+    assert render("hi", info, fan_role_id=7) == "<@&7> hi"
+    assert render("hi", info, ping_role_id=99, fan_role_id=None) == "<@&99> hi"
+
+
+def test_one_role_serving_as_both_is_mentioned_once():
+    info = StreamInfo(url="u", game="g")
+    assert render("hi", info, ping_role_id=99, fan_role_id=99) == "<@&99> hi"
+
+
+def test_the_ping_prefix_keeps_the_order_it_was_given_and_drops_the_blanks():
+    assert ping_prefix() == ""
+    assert ping_prefix(None, 0, "") == ""
+    assert ping_prefix(5, None, 6, 5) == "<@&5> <@&6> "
 
 
 def test_render_survives_an_unknown_placeholder():

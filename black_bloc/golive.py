@@ -244,8 +244,22 @@ def embed_summary(embed: Any) -> dict[str, Any]:
     }
 
 
+def ping_prefix(*role_ids: Any) -> str:
+    """The role mentions in front of an announcement: given order, no repeats, none is empty."""
+    seen: list[int] = []
+    for role_id in role_ids:
+        if role_id and int(role_id) not in seen:
+            seen.append(int(role_id))
+    return "".join(f"<@&{role_id}> " for role_id in seen)
+
+
 def render(
-    template: str, info: StreamInfo, member: Any = None, *, ping_role_id: int | None = None
+    template: str,
+    info: StreamInfo,
+    member: Any = None,
+    *,
+    ping_role_id: int | None = None,
+    fan_role_id: int | None = None,
 ) -> str:
     """The announcement sentence; an empty game reads 'something', never '****'."""
     name = display_name(member)
@@ -263,9 +277,7 @@ def render(
             "go-live: template %r could not be rendered (%s); using the default", template, exc
         )
         text = GOLIVE_TEMPLATE.format_map(fields)
-    if ping_role_id:
-        return f"<@&{ping_role_id}> {text}"
-    return text
+    return ping_prefix(ping_role_id, fan_role_id) + text
 
 
 def parse_ts(value: Any) -> datetime | None:

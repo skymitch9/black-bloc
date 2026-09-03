@@ -22,6 +22,7 @@ LOGS_GROUPS = {
     "chat": "chat",
     "mod": "mod",
     "request": "request",
+    "pingroles": "pings",
 }
 
 
@@ -38,6 +39,7 @@ STAFF_COMMANDS = {
     "mod",
     "modmail",
     "note",
+    "pingroles",
     "presence",
     "purge",
     "reply",
@@ -58,6 +60,7 @@ MEMBER_COMMANDS = {
     "golive",
     "help",
     "ping",
+    "pings",
     "poll",
     "request",
     "timezone",
@@ -189,7 +192,7 @@ async def test_the_command_tree_stays_inside_discords_limits(settings):
 
     top = bot.tree.get_commands()
     assert len(top) <= TOP_LEVEL_MAX
-    assert len(top) == 35
+    assert len(top) == 37
     for command in top:
         if isinstance(command, app_commands.Group):
             assert len(command.commands) <= CHILDREN_MAX, command.name
