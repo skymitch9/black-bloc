@@ -6,8 +6,13 @@ engineering items"). **Last verified: 2026-09-03** against `black_bloc/requests.
 `cogs/community/requests.py`, `api/tools/requests.py`, `site/public/assets/page-requests.js`
 at `40fbfc4`. Extends [`requests-states-design.md`](requests-states-design.md); the
 state machine grows ONE state (`review`, owner decision 2026-09-03 ~01:00, below).
-⚠️ **Build order:** AFTER the double-logging fix on `../TODO.md` lands — both touch
-`cogs/community/requests.py` and `api/tools/requests.py`.
+**Build order:** the double-logging fix landed as `df393ab` (2026-09-03) — cut the build
+from that or later. ⚠️ Both of the files above now take `via`: `apply_decision` and
+`resume_request` log ONE row through `logkinds.kind_via`, routes pass `via=VIA_WEBSITE`
+and never `note()` a second line (checklist item **34**; the AST guard in
+`tests/test_logkinds.py` fails the build if a route does). The new moves (`ready`,
+`accept`, `sendback`) follow the same shape — one shared function, `via` keyword-only,
+`request.review` / `request.sent_back` through `kind_via`.
 
 ## The owner's two decisions (2026-09-03, one at a time)
 

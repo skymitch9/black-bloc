@@ -9,6 +9,83 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-03 — One web write leaves one log row (owner bug report, the same night as the 17/18/19 landing)
+
+Moved whole from `TODO.md`. Owner ~00:40, on seeing the three request flips in the
+test channel: *"The app double posted all messages with a web.request and a request"*.
+Root-caused in the main loop (AST survey, 8 route files), owner chose "All 8
+features" over requests-only at ~00:43, Opus build in a worktree, merge **`df393ab`**
+(branch `fix/web-write-double-log`: `5f7cc1e` code, `19d2f7d` docs), deployed the
+same morning — see `deploys.log`.
+
+**What was wrong.** A dashboard write went through a shared bot function that
+already logged the event, and the route then `note()`d a `web.<kind>` line on top
+of it. One click left TWO `action_log` rows and posted TWO embeds. `logkinds.bare()`
+collapsed the pair for *classification*, so nothing ever noticed; it surfaced now
+because `request.done/hold/declined` are IMPORTANT and post at the default level,
+and tonight was the first real traffic through the site. Present in 8 route files —
+requests, events, honeypot, mod, modmail, polls, rolemenus, tempvoice — across 20
+shared functions; it pre-dated Phase 17 (`f7199a5` already had it).
+
+**The fix.** One canonical `logkinds.kind_via(kind, via)` (`bare()` read backwards)
+replaced SIX hand-built `f"{WEB}."` heads (`pings.head` deleted; `rolemenu_panels`,
+`applications` ×2, `role_menus`, `tempvoice.panel_log`). Every shared function a
+route calls takes keyword-only `via: str = VIA_DISCORD`, logs one row through
+`kind_via`, and records `details["via"]`. Each route passes `via=VIA_WEBSITE` and
+its redundant `note()` is gone. Slash commands take the default and are unaffected.
+`note()` survives only where the route is the sole logger (`web.request.filed` /
+`updated`, comments, withdraw, raid-train and role-menu CRUD); bot-emitted
+consequences (`request.dm_failed`, `modmail.place_kept`) keep their bare kinds.
+**Three survey hits were false positives and kept deliberately:** `rename_channel`
+and `send_reply` log only failures, so `web.event.edited` and `web.modmail.reply`
+are the route's own lines; `staff_assign` already took `via`.
+
+**Consequences.** Where the shared kind differed from the note kind the web row now
+carries the shared one (`web.event.cancelled`, `web.honeypot.banned`,
+`web.mod.warned/timed_out/…`, `web.automod.rule`, `web.poll.closed`, …). Eight
+now-unemitted `ROUTINE` entries were removed — the repo's own
+`test_no_classification_entry_is_dead` required it; historical rows keep their
+kinds and `honeypot.ban` old rows now read *important* — **KI-19**. Two rows move
+page: automod rule changes and Apply-now now land on the Automod log, matching what
+the Discord button already produced.
+
+**Guarded so it cannot come back:** checklist item **34**, plus an AST walk in
+`tests/test_logkinds.py` (`test_a_route_never_notes_an_event_its_shared_path_already_logged`)
+that fails if a route both calls a shared logger and notes the same bare kind —
+proven by re-introducing the defect, which failed by name — a "no second
+head-builder" test, and a `via`-default test. `tests/api/conftest.py:one_web_row`
+asserts exactly one `web.*` row per route write; the old tests asserted both kinds
+were *present*, which is precisely what a double post looks like.
+
+**Measured:** 3244 tests (was 3238), `ruff` clean, mock 17 pages / 136 routes; the
+mock and `contract.json` emitted the old kind strings and were updated in the same
+commit (`check.mjs` only tests emitted ⊆ listed, so a stale mock passes silently).
+**NOT verified** by the build: anything against live Discord or the live dashboard.
+**Still open:** `raidtrain.cancel_train` logs one row but labels a web cancel
+Via = Discord — a Via-labelling gap, not a double post (on `TODO.md`).
+
+The item as it stood on `TODO.md`:
+
+- 🔴 **Every web write through a shared path logs TWICE — owner, 2026-09-03 ~00:40,
+  verbatim: "The app double posted all messages with a web.request and a request".**
+  Seen on the three request flips at the 17/18/19 landing: each produced a
+  `request.done` embed (from `apply_decision`, `cogs/community/requests.py:220`) AND a
+  `web.request.done` embed (from the route's own `note()`, `api/tools/requests.py:273`).
+  `logkinds.bare()` already calls the two "the same event, logged from two places"
+  but only for classification — nothing dedups the post or the row. Surveyed
+  2026-09-03 (scratchpad `survey_double_log.py`, AST walk): the same shape is in
+  **8 route files** — events (`apply_decision`/`cancel_event`/`rename_channel`),
+  honeypot, mod (`_punish` ×6, case apply, rule), modmail (reply/close), polls
+  (create/decide/end/cancel), requests (decide/resume/status), rolemenus
+  (`staff_assign`), tempvoice — plus roles per the `bare()` docstring. Pre-dates
+  Phase 17 (`f7199a5` already had it); it surfaced now because `request.done/hold/
+  declined` are IMPORTANT and post at the default level. Fix = the convention the
+  newer code already uses (`pings.py:head(via)`, `rolemenu_panels.note(via=)`,
+  applications): the shared path takes `via`, logs ONE row with the `web.` head
+  when `via == VIA_WEBSITE`, and the route drops its second `note()`. Status:
+  **waiting on the owner's go-ahead for the 8-file sweep** (recommended) vs
+  requests-only.
+
 ## 2026-09-03 — Phases 17/18/19: chat memory + requests state machine, raid trains, applications — NEXT WAVE items 3, 6, 7
 
 Moved whole from `TODO.md`. The three phases were **built in parallel** by three Opus

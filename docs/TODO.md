@@ -160,9 +160,10 @@ docs bookkeeping lands with the work, not after.
   one for the in hold or declined states."** Today every request line is plain text
   (`black_bloc/requests.py:149–159` `NOTIFY_*`, `:132–147` `DM_*`) and no per-request URL
   exists (`page-requests.js` renders cards with no anchor). Design →
-  [`info/requests-embeds-design.md`](info/requests-embeds-design.md). ⚠️ Touches the same
-  files as the double-logging fix above — build AFTER that lands (merge order: fix, then
-  this). Owner decisions 2026-09-03 ~01:00: asked whether "what was built" is required
+  [`info/requests-embeds-design.md`](info/requests-embeds-design.md). Touches the same
+  files as the double-logging fix, which merged as `df393ab` (`DONE.md` 2026-09-03) —
+  the build cuts from that or later and follows checklist item 34 (pass `via`, never
+  a second `note()`). Owner decisions 2026-09-03 ~01:00: asked whether "what was built" is required
   on Done, he answered *"Do we need an acceptance pending so a staffer can check if
   something is done?"* → a **`review` ("ready to check") state**, `in_progress → review →
   done`, built + how-to-test required to enter review, Accept / Send back,
@@ -170,27 +171,15 @@ docs bookkeeping lands with the work, not after.
   *"Move the 2 done ones to ready to check, leave the other as hold"* → not possible
   until `review` exists (`done` is final today); recorded as the build's LANDING DATA
   STEP in the design (#1 and #2 `done → review` by a one-off on the live DB, #3 stays
-  `hold`). Status: **design complete, BUILDABLE once the double-logging fix merges.**
+  `hold`). Status: **BUILDABLE now — the double-logging fix merged `df393ab`.**
 
-- 🔴 **Every web write through a shared path logs TWICE — owner, 2026-09-03 ~00:40,
-  verbatim: "The app double posted all messages with a web.request and a request".**
-  Seen on the three request flips at the 17/18/19 landing: each produced a
-  `request.done` embed (from `apply_decision`, `cogs/community/requests.py:220`) AND a
-  `web.request.done` embed (from the route's own `note()`, `api/tools/requests.py:273`).
-  `logkinds.bare()` already calls the two "the same event, logged from two places"
-  but only for classification — nothing dedups the post or the row. Surveyed
-  2026-09-03 (scratchpad `survey_double_log.py`, AST walk): the same shape is in
-  **8 route files** — events (`apply_decision`/`cancel_event`/`rename_channel`),
-  honeypot, mod (`_punish` ×6, case apply, rule), modmail (reply/close), polls
-  (create/decide/end/cancel), requests (decide/resume/status), rolemenus
-  (`staff_assign`), tempvoice — plus roles per the `bare()` docstring. Pre-dates
-  Phase 17 (`f7199a5` already had it); it surfaced now because `request.done/hold/
-  declined` are IMPORTANT and post at the default level. Fix = the convention the
-  newer code already uses (`pings.py:head(via)`, `rolemenu_panels.note(via=)`,
-  applications): the shared path takes `via`, logs ONE row with the `web.` head
-  when `via == VIA_WEBSITE`, and the route drops its second `note()`. Status:
-  **waiting on the owner's go-ahead for the 8-file sweep** (recommended) vs
-  requests-only.
+- **Via-labelling gap: `raidtrain.cancel_train` logs one row but calls a website cancel
+  Via = Discord** (found by the double-logging build, 2026-09-03 — see `DONE.md` that
+  date). Not a double post, so out of that fix's scope. Audit every shared function a
+  route calls that does NOT yet take `via` (start from the `kind_via` call sites and the
+  `tests/test_logkinds.py` AST walk's `SHARED` map), thread `via=` through, and add each
+  to `tests/api/conftest.py:one_web_row`. Small; fold into the next requests/raid-train
+  build rather than dispatching on its own.
 
 - **Review the incoming member requests (owner, 2026-09-02 ~19:55: "we got some
   request in our /request features lets review them").** Read what has landed
