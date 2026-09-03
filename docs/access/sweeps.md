@@ -1,7 +1,10 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-03** — rows **80–86** added by the POLLS PANEL build (`/poll` becomes ONE command that
+> **2026-09-03** — row **103** added by the OPERATOR READ TOKEN build (a Claude session can read
+> `/api/*` with a bearer and change nothing). ⚠️ It is the first row here that cannot be run at
+> all until the owner mints a secret, and nothing in it has met the live app. Same day —
+> rows **80–86** added by the POLLS PANEL build (`/poll` becomes ONE command that
 > opens a panel; the eleven subcommands go), and rows **6, 8, 9 and 27** were rewritten in place
 > for it rather than added. Rows 80–86 are **live in v65** (`d13e1a4`, 14:14) and were not run against
 > Discord by eye. Same day, before that — rows **73–79** added by the EVENTS PANEL build (`/event`
@@ -23,8 +26,8 @@
 > applications no-role build (a form may keep a LIST instead of handing a role over; merged
 > `main` at 12:40, LIVE in v62 12:48); rows **66–68** added by the requests SIXTH pass ("Ask them
 > to check": the DM, the channel ping when their DMs are closed, and the auto-ask at ready) —
-> LIVE in v61 (`44170f4`, 12:29). The file now holds **95** un-exercised rows, numbered to 102;
-> none of 66–102 has been run against Discord or the live site.
+> LIVE in v61 (`44170f4`, 12:29). The file now holds **96** un-exercised rows, numbered to 103;
+> none of 66–103 has been run against Discord or the live site.
 > Same day — row **62** now says the done card does NOT post (owner: "suppress the
 > request.done box in discord" — `request_channel_moves` default drops `done`). Same
 > morning, row **65** added, and rows **14–15** corrected again, by the owner's
@@ -262,6 +265,16 @@ row changed — only the door.
 | 100 | The form card, its questions and clearing a picker | **A form…** → a form → **Questions…** → **Add…**, then pick one → **Edit**, then **Remove** → confirm; **Back** → **Edit…** → submit the **Role it hands over…** picker with nothing chosen | the questions change one at a time, each leaving one `application.question_changed` row; the questions sub-panel says reordering is on the Role menus page and links there. Clearing the role picker leaves the form keeping a list — exactly what `no_role:true` did — and the card's role line reads **nothing — it keeps a list**. ⚠️ **The empty-select submit is the one thing this build could not check without Discord**; if your client will not send one, the site's editor does the same write |
 | 101 | Roster, opening and closing, and the Apply button | **A form…** → a no-role form → **Roster** → **Take somebody off…** → a reason; **Back** → **Close it**, then **Open it**; then **Post the Apply button** → pick a channel | the roster is one shorter and they are DMed the reason; the card's "Taking applications" line flips no → yes; the Apply button appears in the channel you picked (test mode refuses any channel but `#mute-me-bot-test-spam`, in words). ⚠️ **Delete** is only drawn when nobody is waiting on the form — with somebody waiting it is absent and the card says how many |
 | 102 | Settings, and the quiet footer | **Settings** → the **Mode…** picker → **shadow**; a channel picker; submit the **Who decides…** picker EMPTY; **Numbers…**; then leave the panel alone for `applications_panel_minutes` (10) minutes | the lines above update after every write, the mode write leaves one `application.mode` row, and an empty picker CLEARS its key rather than doing nothing. **Numbers…** takes the retry days and the panel minutes and refuses a value outside their bounds in words. After ten minutes every control is greyed out and the embed footer reads *This panel has gone quiet — run /apply again* |
+
+## Operator read token — what YOU see when a session reads
+
+Built 2026-09-03 (`info/operator-read-design.md`). ⚠️ **Inert until you mint the
+secret** — `access/operator-read.md` has the one command, and until you run it
+nothing below can happen at all.
+
+| # | What | Do this | Expect |
+|---|---|---|---|
+| 103 | A session's read shows up in your log | mint `OPERATOR_READ_TOKEN` (one command, `access/operator-read.md`) and deploy; ask the session to run `.\scripts\read.ps1 -Path /api/requests`; then open the **Logs** page (or `/settings logs`) | one new line, `web.operator.read`, whose **Via** column reads **Operator token** rather than Discord or Website, with `path=/api/requests` in its details. One line per read, not one per route. Nothing is posted to Discord (it is a routine Core kind, so `core_log_level` at its default stays quiet). If you would rather see nothing at all, turn **Whether an operator-token read leaves a log line** (`operator_read_log`) off on the Settings page and read again — same data, no line. Ask the session to try a CHANGE and it is refused in words: *the operator token can only look, never change* |
 
 ## The owner's Twitch Team form — the walk-through
 

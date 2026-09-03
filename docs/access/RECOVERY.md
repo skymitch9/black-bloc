@@ -3,7 +3,10 @@
 > **Audience:** whoever has to rebuild this with no memory of it — a weaker
 > executor must be able to follow it cold. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then), secret NAMES
-> only. Last verified: **2026-08-31** — only the `docs/` gap row and the
+> only. Last verified: **2026-09-03** — one row was ADDED to the secrets table,
+> `OPERATOR_READ_TOKEN`, by the build that introduced it; it is a NAME with no
+> value anywhere yet (the owner has not minted it) and nothing else in this file
+> was re-measured today. Before that, **2026-08-31** — only the `docs/` gap row and the
 > tracking status were re-measured today (`git ls-files docs` = 48 files,
 > `.gitignore` no longer lists `docs/`). The Fly/GitHub/secret inventory below
 > is still the **2026-08-26 (evening)** reading and was NOT re-checked against
@@ -72,6 +75,7 @@ data and `docs/` is tracked).
 | `DEV_GUILD_ID` | Not secret; readable in Discord with Developer Mode | `fly secrets` or `[env]` |
 | `SESSION_SECRET` | Re-mintable at will (any long random string) — rotating signs everyone out, nothing else | `fly secrets` + local `.env` |
 | `POLL_VOTE_SECRET` | ⚠️ **NOT freely re-mintable** (set 2026-08-31): anonymous polls created while it is set key their vote hashes to it — without it those polls refuse votes in words. Custody = local `.env` + `fly secrets` (write-only). If both copies die, close the affected polls and mint a new one. | `fly secrets` + local `.env` |
+| `OPERATOR_READ_TOKEN` | **Freely re-mintable — nothing depends on the old value.** The OWNER mints it (never a session) with the one command in [`operator-read.md`](operator-read.md), which sets the Fly secret and the operator PC's `BLACK_BLOC_OPERATOR_TOKEN` in one motion without printing it. Custody = Fly (write-only) + the HKCU environment on the operator PC; there is deliberately no third copy. Losing both costs one re-mint. It only ever grants **read** access to `/api/*` — a leaked one is revoked with `flyctl secrets unset OPERATOR_READ_TOKEN`, which is immediate and total. | `fly secrets` (unset until the owner mints it) — **never** in `.env` on the host |
 | `ANTHROPIC_API_KEY` | Re-mintable at console.anthropic.com (owner's Anthropic account; rotating just swaps the key). Powers the chat "important" tier (Phase 14). ⚠️ The image must contain the `anthropic` dependency (any deploy ≥ Phase 14) or the tier silently never exists. | `fly secrets` + local `.env` (unset until the owner mints it) |
 | `GROQ_API_KEY` | Re-mintable at console.groq.com (owner's Groq account, free tier). Powers the chat "simple" tier (Phase 14). | `fly secrets` + local `.env` (unset until the owner mints it) |
 | `YOUTUBE_API_KEY` | **Not yet minted — OPTIONAL.** Would be re-minted at console.cloud.google.com → APIs & Services → Credentials, on a project with *YouTube Data API v3* enabled (owner's Google account), and would take the bare-titled vault item `YOUTUBE_API_KEY` in the `Black Bloc` vault. Powers two extras for F3 upload posts (Phase 16): turning an `@handle` into a channel id, and telling a live broadcast apart from an upload (**KI-11**). Losing it costs nothing that a re-mint does not restore, and the feature keeps working without it. | nowhere yet — unset in `fly secrets` and absent from `.env` |
@@ -83,6 +87,12 @@ re-minted from the portal (invalidating any leaked copy in the same motion);
 minted, so there is nothing to lose and nothing to restore. It is listed so a
 rebuild does not treat its absence as a missing backup: the vault still holds
 **nine** items, and this is the tenth name.
+⚠️ **`OPERATOR_READ_TOKEN` is a NAME with no value anywhere either** (added
+2026-09-03) — never minted, and deliberately **not a vault item**: its custody
+is Fly plus the operator PC's own environment, because a re-mint costs nothing
+and nothing depends on the old value. A rebuild simply runs the mint command in
+[`operator-read.md`](operator-read.md) again, or leaves it unset and loses only
+a convenience.
 
 ## Full rebuild, in order
 
