@@ -131,11 +131,15 @@ already said go.** Order recommended by the 5.0 session, owner did not reorder:
    available; fold into any site-touching build.
 6. **Raid trains (member request #1, Pawpette)** — owner 2026-09-02 20:10:
    "build, also start wave 6" then "i want memory starting first". So: Phase 17
-   memory dispatches first (schema 23), raid trains = **Phase 18, schema 24**,
-   design doc next (`info/phase18-design.md`, from the capture in
-   [`info/raid-train-capture.md`](info/raid-train-capture.md): ASKED + FIT
-   buckets; LATER stays later). Request #1 set to `in_progress`, priority 2,
-   with the decision note, on the Requests page.
+   memory dispatches first (schema 23), raid trains = **Phase 18, schema 24**.
+   **DESIGNED 2026-09-02 22:30 → [`info/phase18-design.md`](info/phase18-design.md)**
+   (from [`info/raid-train-capture.md`](info/raid-train-capture.md): ASKED +
+   FIT buckets; LATER stays later; 15 decisions as 13 `raidtrain_*` keys).
+   **Owner 2026-09-02 22:25: "Can we start doing some of this in parallel?"
+   → Phase 18 builds BESIDE Phase 17** (Phases 5/6/7 precedent: shared files
+   append-only, §K of the design; merge order 17 → 18, reviewer resolves).
+   Request #1 set to `in_progress`, priority 2, with the decision note, on the
+   Requests page; flips to `done` at landing (DM to Pawpette).
 7. **Twitch Team application form (member request #2, Pawpette)** — owner
    2026-09-02 20:14: "build next" → **Phase 19**, after raid trains. An
    application form (≤5 questions, Discord modal cap; staff configure the
