@@ -1,8 +1,9 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-08-31** — rows 18–20 and the phase-script appendix moved in whole from `TODO.md`; this file
-> is the ONE home for un-exercised items. "Verified" below means a human did it in the real server;
+> **2026-09-02** — rows **38–42** added by the Phase 15 (F14) build; the file now holds **42**
+> un-exercised rows. Before that, 2026-08-31 — rows 18–20 and the phase-script appendix moved in
+> whole from `TODO.md`; this file is the ONE home for un-exercised items. "Verified" below means a human did it in the real server;
 > everything else is test-suite evidence only. Tick a row by moving it to the verified table with the date.
 
 All of this happens in **`#mute-me-bot-test-spam`** (test mode) or on **https://blackbloc.heygabi.ai**.
@@ -54,6 +55,11 @@ All of this happens in **`#mute-me-bot-test-spam`** (test mode) or on **https://
 | 34 | Knowledge grounding (Phase 14) | `/chat knowledge add title:Cookout hours body:The cookout runs Friday evenings.` → `@Black Bloc when is the cookout?`; `/chat knowledge list`; try `remove` on a server-written note | the answer quotes your note; the list shows yours + the server-written ones once the daily loop runs; removing a server note refuses in words |
 | 36 | The chat-hardening wave (live 2026-09-01 19:01) | the 6-line list Claude posted in chat (role lookups, member-trust, hidden commands from a non-staff account, DBZ retest, Groq routing via `/chat status`, event-hosting answer) | each line names its expected answer; `/chat logs` shows `chat.reply_reference_fixed` when the guard catches an invention |
 | 37 | Costs card (live 2026-09-01 19:01) | https://blackbloc.heygabi.ai/health.html#sect-costs then Settings → Costs → `cost_hosting_usd` = your Fly invoice figure | per-model spend matches `/chat status`; the hosting row stops saying "fill it in"; the Chat page's dollar figure links here |
+| 38 | Ping roles — set-up (F14, `pings_mode` ships **off**) | `/pingroles setup` in the test channel, then Dashboard → Go-live → Pings → switch on; `/rolemenu post notifications` | the reply names the role it made or reused and says both feeds now point at it, plus "still off" until you flip it; a **Notifications** panel with one 🔔 option; `/pings events on` as a member puts the role on |
+| 39 | Ping roles — a streamer's own role | as a linked streamer: `/pings fans on`; as staff for somebody else: `/pingroles streamer add @member`; then `/pings follow` from a second account | the role is made (named from `pings_fan_role_template`), a **Streamer pings** menu appears, `/pings follow` puts it on and `/pings list` names both halves. ⚠️ If Discord refuses, the reply says the Bots role has to sit ABOVE the new role and `/pingroles logs` has `pings.forbidden` |
+| 40 | Ping roles — the announcement prefix | with `golive_mode` on (or shadow, and read the `would_announce` line) and a fan role on the streamer: go live | the line starts `<@&Events> <@&… pings>` — both roles, never twice, the shared one first; end the stream with `golive_end_mode edit` and the edit adds the suffix without adding a mention |
+| 41 | Ping roles — 26 streamers (paging) | only if you ever have more than 25: `/pingroles streamer list` | there are TWO panels, `streamers` and `streamers-2`; post the second one too. ⚠️ Never exercised — the 25-per-select cap is Discord's documented limit, tested with 26 rows in the suite but not in the server |
+| 42 | Ping roles — the dashboard | Dashboard → Go-live → Pings | the table shows every streamer, their role, a follower count (or a dash when the role was deleted by hand), who started it; Remove asks first; "Create for a streamer" makes one; the Logs section under it is `pings.*` only |
 | 35 | Personality + the cap drill (Phase 14) | `/chat personality set voice:noir` → @-mention again; then `/settings set-value key:chat_monthly_cap_usd value:0` → @-mention → set it back to 20; dashboard: /chat.html Knowledge/Personality/Spend sections | the noir answer is clipped but complete; at cap 0 you get an ordinary line with **no mention of money or limits** and one `chat.llm_capped` in `/chat logs`; the Spend meter names why each quiet tier is quiet |
 
 ## Detailed phase scripts (1–8a) — moved whole from `TODO.md` 2026-08-31

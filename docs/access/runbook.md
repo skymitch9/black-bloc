@@ -2,10 +2,11 @@
 
 > **Audience:** the owner (also away from the machine) and Claude sessions. **Status:** TRACKED
 > (owner, 2026-08-31 — permanently; the purge-vs-keep question is settled, `docs/` stays in git).
-> Secret NAMES only. Last verified: **2026-08-31** — the schema version, the mock page/route counts and the
-> synced-command count in the boot sequence were re-measured today (`SCHEMA_VERSION` = 16;
-> `node site/mock/check.mjs` = 17 pages / 89 routes; `deploys.log` last line = 35 commands at
-> 2026-08-27 20:15). ⚠️ **NOT re-measured today:** the flyctl commands, the machine/volume ids, the
+> Secret NAMES only. Last verified: **2026-09-02** — the schema version, the mock page/route counts and the
+> boot-line cog/command counts were re-measured on the Phase 15 branch (`SCHEMA_VERSION` = 21;
+> `node site/mock/check.mjs` = 17 pages / 111 routes; 15 cogs and 37 top-level commands, counted
+> from the loaded tree, ⚠️ NOT from a `deploys.log` line — nothing has been deployed from this
+> branch). ⚠️ **NOT re-measured today:** the flyctl commands, the machine/volume ids, the
 > failure table and the laptop steps — those are the 2026-08-27 reading, and the phone-side steps
 > (Discord app) are what the owner did, not measured by Claude.
 
@@ -61,7 +62,7 @@ push, deploy. Schema migrations are additive-only, so an older build runs agains
 <flyctl> logs --app black-bloc --no-tail | grep -i "error\|traceback"
 <flyctl> logs --app black-bloc --no-tail | grep "database:"      # migrations on boot
 ```
-Boot sequence to expect: `database ready` → `loaded cog …` ×14 → `synced 35 app commands` → `logged in as
+Boot sequence to expect: `database ready` → `loaded cog …` ×15 → `synced 37 app commands` → `logged in as
 Black_Bloc#6132` → `birthdays: the daily import …` → `chat: seeded N intent(s)` (first boot per guild only).
 
 ## Secrets (names; custody in [`RECOVERY.md`](RECOVERY.md))

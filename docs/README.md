@@ -6,11 +6,15 @@
 > This retires the 2026-08-26 local-only rule, under which the tree was
 > gitignored and purged from GitHub history. ⚠️ A clone now carries this tree,
 > so: **secret NAMES only, never values.** See `access/RECOVERY.md`.
-> Last verified: **2026-08-31** — a docs-wide staleness audit measured against
+> Last verified: **2026-09-02** — re-measured on the Phase 15 (F14) branch,
+> which is NOT merged and NOT deployed: `pytest` (**2714 tests**),
+> `node site/mock/check.mjs` (**17 pages / 111 routes**),
+> `ruff check black_bloc tests site` (clean), `SCHEMA_VERSION` (**21**),
+> `bot.py:COGS` (**15 cogs**, **37** top-level slash commands). Before that,
+> 2026-08-31 — a docs-wide staleness audit measured against
 > the repo: `git log` / `deploys.log` (37 deploys, last `8036918` at 2026-08-27
 > 20:15), `pytest --co` (**2158 tests**), `node site/mock/check.mjs` (**17
-> pages / 89 routes**), `ruff check black_bloc tests site` (clean),
-> `SCHEMA_VERSION` (**16**), `bot.py:COGS` (**14 cogs**).
+> pages / 89 routes**), `SCHEMA_VERSION` (**16**), `bot.py:COGS` (**14 cogs**).
 > ⚠️ **NOT checked:** anything against the live bot or the live dashboard in a
 > browser; `info/code-notes.md`'s `path:line` keys (spot-checked and found
 > STALE — see the red block at the top of that file); the `archive/` dumps'
