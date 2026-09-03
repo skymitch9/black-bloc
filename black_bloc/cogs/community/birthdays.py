@@ -546,7 +546,9 @@ async def render_panel(interaction: discord.Interaction, previous: Any = None) -
     bot = interaction.client
     embed, view = await build_panel(bot, interaction.guild, interaction.user)
     retire(previous)
-    view.message = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    )
 
 
 async def render_card(
@@ -555,7 +557,9 @@ async def render_card(
     bot = interaction.client
     embed, view = await build_card(bot, interaction.guild, interaction.user, member)
     retire(previous)
-    view.message = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    )
 
 
 async def said_after(interaction: discord.Interaction, said: str) -> None:
@@ -593,7 +597,9 @@ async def open_confirm(
     for item in items:
         view.add_item(item)
     retire(previous)
-    view.message = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    )
 
 
 async def open_remove_confirm(interaction: discord.Interaction, previous: Any = None) -> None:

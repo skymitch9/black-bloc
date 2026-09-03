@@ -1037,6 +1037,20 @@ async def test_remove_asks_first_and_keep_it_changes_nothing(cog, bot, birthday_
     assert await action_kinds(bot.db) == ["birthday.remove"]
 
 
+async def test_no_render_of_the_panel_can_ping_anybody(cog, bot, birthday_person):
+    """Checklist 11 — the coming-up list interpolates `<@id>` and display names."""
+    await stored(bot)
+    interaction = await open_panel(cog, bot, birthday_person)
+    assert interaction.response.messages[-1]["allowed_mentions"].users is False
+
+    refreshed = await click(
+        bot, birthday_person, find_item(panel_view(interaction), "Refresh")
+    )
+
+    assert refreshed.message.kwargs["allowed_mentions"].users is False
+    assert refreshed.message.kwargs["allowed_mentions"].everyone is False
+
+
 async def test_a_re_render_retires_the_view_it_replaced(cog, bot, birthday_person):
     view = panel_view(await open_panel(cog, bot, birthday_person))
 

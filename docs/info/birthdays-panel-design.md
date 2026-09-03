@@ -3,7 +3,7 @@
 > **Audience:** the build agent and the reviewer. **Status:** TRACKED · **BUILT on
 > `worktree-agent-a19bdce15408f8243`** (2026-09-03; branched from `main` at `d3da02c`, v62 live, schema 28).
 > Not merged, not deployed. See the `## Deviations` foot for every departure.
-> **Last verified: 2026-09-03** — `ruff check .` clean and **3499 tests pass** on the branch
+> **Last verified: 2026-09-03** — `ruff check .` clean and **3500 tests pass** on the branch
 > (3442 at `d3da02c`: +76 new, −19 command tests replaced by panel tests). `commands synced`
 > was measured at **44, unchanged**, by
 > `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`, which loads every cog
@@ -359,4 +359,13 @@ was built as this document specifies.
     `cog.show.callback` and nine other retired subcommands, so there was nothing to keep. Every
     behaviour they asserted has a panel-shaped replacement, and the two role-handback tests
     (Phase 5 review finding 3) now call `forget_birthday` / `change_opt` directly, which is
-    what the buttons call. 3499 tests pass on the branch.
+    what the buttons call. 3500 tests pass on the branch.
+14. **Every re-render passes `allowed_mentions=none()`, which the shipped requests panel does
+    NOT.** The panel embed interpolates `<@id>` (the coming-up list) and arbitrary display
+    names, which is checklist item 11. Embeds do not raise notifications and the message is
+    ephemeral, so this is belt-and-braces rather than a repaired defect — but the retired
+    `/birthday next` passed it explicitly on its content, and dropping it silently would have
+    been a regression in intent. A test pins it on the first send and on a re-render.
+    ⚠️ **The same three edits in `cogs/community/requests.py` (`render_panel`, `open_card`,
+    `finish_card`) pass no `allowed_mentions`** — recorded as a finding for the conductor, not
+    repaired in a birthdays branch.
