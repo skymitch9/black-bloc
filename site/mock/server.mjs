@@ -707,6 +707,43 @@ function seedState() {
   llmKeys: { ANTHROPIC_API_KEY: true, GROQ_API_KEY: false },
   asks: seedRequests(),
   askComments: seedRequestComments(),
+  // Phase 17. Preferences only, never a quote — the third row carries a DM-scope note so the
+  // page has something to draw the "learned in a DM" mark against.
+  profiles: [
+    {
+      user_id: MEMBERS[1].id,
+      call_me: 'Sky',
+      notes: [
+        { text: 'likes short answers', where: 'server', at: minutesAgo(200) },
+        { text: 'reads on a phone, so keep paragraphs small', where: 'server', at: minutesAgo(200) },
+      ],
+      threads: [{ text: 'was asking about the Thursday cookout', where: 'server', at: minutesAgo(200) }],
+      turns_seen: 14,
+      created_at: minutesAgo(9000),
+      updated_at: minutesAgo(200),
+    },
+    {
+      user_id: MEMBERS[3].id,
+      call_me: '',
+      notes: [{ text: 'hates emoji', where: 'server', at: minutesAgo(1400) }],
+      threads: [],
+      turns_seen: 4,
+      created_at: minutesAgo(5000),
+      updated_at: minutesAgo(1400),
+    },
+    {
+      user_id: MEMBERS[6].id,
+      call_me: '',
+      notes: [
+        { text: 'English is their second language — keep it simple', where: 'dm', at: minutesAgo(4000) },
+      ],
+      threads: [],
+      turns_seen: 6,
+      created_at: minutesAgo(12000),
+      updated_at: minutesAgo(4000),
+    },
+  ],
+  memoryOptOut: [{ user_id: MEMBERS[5].id, at: minutesAgo(3000) }],
   nextKnowledge: 4,
   nextAction: 47,
   nextCase: 10,
@@ -776,7 +813,7 @@ function seedLedger() {
 function seedActions() {
   return [
   { id: 46, at: minutesAgo(1), kind: 'web.request.declined', actor_id: STAFF.id, target_id: MEMBERS[7].id, reason: 'Opt-in is the whole point of that role.', details: { request_id: 5, via: 'website' } },
-  { id: 45, at: minutesAgo(2), kind: 'web.request.approved', actor_id: STAFF.id, target_id: MEMBERS[1].id, reason: null, details: { request_id: 24, via: 'website' } },
+  { id: 45, at: minutesAgo(2), kind: 'web.request.in_progress', actor_id: STAFF.id, target_id: MEMBERS[1].id, reason: null, details: { request_id: 24, was: 'open', via: 'website' } },
   { id: 44, at: minutesAgo(2), kind: 'request.filed', actor_id: MEMBERS[3].id, target_id: MEMBERS[3].id, reason: null, details: { request_id: 30, via: 'discord' } },
   { id: 43, at: minutesAgo(3), kind: 'web.request.updated', actor_id: STAFF.id, target_id: null, reason: null, details: { request_id: 20, changed: ['assignee_id', 'priority'], via: 'website' } },
   { id: 42, at: minutesAgo(3), kind: 'request.done', actor_id: STAFF.id, target_id: MEMBERS[6].id, reason: null, details: { request_id: 11, via: 'discord' } },
@@ -3753,6 +3790,73 @@ function personalityPayload() {
     notes: [],
   };
 }
+
+// Phase 17. Counts always; the notes themselves only where chat_memory_staff_view is `full`.
+const MEMORY_IS_OFF = 'Black Bloc is not remembering anybody on this server, so there is nothing here yet. The Memory switch above turns it on, and profiles start appearing after the next sweep.';
+const MEMORY_IS_PRIVATE = 'This server keeps what Black Bloc remembers about a member private to that member, so the notes were not shown — only the counts on this page. It needs `chat_memory_staff_view` set to `full`, which a Lead can change on the Settings page or with `/settings set chat_memory_staff_view full`. The member can always read their own with `/memory show`.';
+const MEMORY_NO_SUCH = 'Black Bloc remembers nothing about that member on this server, so there was nothing to show or clear.';
+
+function memoryFull() {
+  return state.settings.get('chat_memory_staff_view') === 'full';
+}
+
+function memoryRow(row, full) {
+  return {
+    member: { id: String(row.user_id), name: memberName(row.user_id) || String(row.user_id) },
+    notes: row.notes.length,
+    threads: row.threads.length,
+    turns_seen: row.turns_seen,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    call_me: full ? row.call_me : null,
+    lines: full
+      ? [
+        ...row.notes.map((one) => ({ text: one.text, where: one.where, kind: 'note' })),
+        ...row.threads.map((one) => ({ text: one.text, where: one.where, kind: 'thread' })),
+      ]
+      : [],
+  };
+}
+
+function wantedProfile(id) {
+  const found = state.profiles.find((row) => String(row.user_id) === String(id));
+  if (!found) throw new Refused(404, 'no_such_profile', MEMORY_NO_SUCH);
+  return found;
+}
+
+route('GET', '/api/chat/memory', (context) => {
+  requireStaff(context.session);
+  const full = memoryFull();
+  const on = state.settings.get('chat_memory_mode') === 'on';
+  return {
+    mode: state.settings.get('chat_memory_mode'),
+    on,
+    staff_view: full ? 'full' : 'counts',
+    profiles: state.profiles.map((row) => memoryRow(row, full)),
+    total: state.profiles.length,
+    opted_out: state.memoryOptOut.length,
+    dm_notes: state.profiles.reduce((sum, row) => sum + row.notes.filter((one) => one.where === 'dm').length, 0),
+    message: on ? '' : MEMORY_IS_OFF,
+  };
+});
+
+route('GET', '/api/chat/memory/:id', (context) => {
+  requireStaff(context.session);
+  if (!memoryFull()) throw new Refused(403, 'memory_is_private', MEMORY_IS_PRIVATE);
+  return { profile: memoryRow(wantedProfile(context.params.id), true) };
+});
+
+route('DELETE', '/api/chat/memory/:id', (context) => {
+  requireStaff(context.session);
+  const row = wantedProfile(context.params.id);
+  state.profiles = state.profiles.filter((one) => one !== row);
+  const who = memberName(row.user_id) || String(row.user_id);
+  logAction('web.chat.memory_forgot', { target_id: row.user_id, details: { who_asked: 'staff', via: 'website' } });
+  return {
+    member: { id: String(row.user_id), name: who },
+    message: `Cleared. Black Bloc remembers nothing about ${who} here.`,
+  };
+});
 
 route('GET', '/api/chat/personality', (context) => {
   requireStaff(context.session);

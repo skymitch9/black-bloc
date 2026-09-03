@@ -2405,6 +2405,55 @@
       }
     },
     {
+      "_": "Phase 17 memory. GET /api/chat/memory/{member_id} is NOT here: chat_memory_staff_view ships as `counts`, so on a fresh seed it answers 403 in words on purpose — the D5 gate — and this table only checks routes that answer 200.",
+      "method": "GET",
+      "path": "/api/chat/memory",
+      "read_by": [
+        "17 page-chat.js Memory section"
+      ],
+      "shape": "object",
+      "keys": [
+        "mode",
+        "on",
+        "staff_view",
+        "profiles",
+        "total",
+        "opted_out",
+        "dm_notes",
+        "message"
+      ],
+      "rows": {
+        "profiles": [
+          "member",
+          "notes",
+          "threads",
+          "turns_seen",
+          "created_at",
+          "updated_at",
+          "call_me",
+          "lines"
+        ]
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/chat/memory/{member_id}",
+      "read_by": [
+        "17 page-chat.js Memory section Forget"
+      ],
+      "shape": "object",
+      "keys": [
+        "member",
+        "message"
+      ],
+      "nested": {
+        "member": [
+          "id",
+          "name"
+        ]
+      }
+    },
+    {
       "_": "Requests. {feature_request_id} is the signed-in staffer's own OPEN row (the mock seeds it as 25) and {member_request_id} is the member session's own open row (30), the only kind Withdraw takes — both halves seed the pair so /api/requests/mine is never empty and the decide routes always have something to move. The four staff moves below run in the order the state machine allows: hold, then resume, then decline. GET /api/requests/export.csv is NOT here: it answers CSV, not JSON, and this table only checks JSON keys. POST /api/requests/{feature_request_id}/withdraw is NOT here either: it only ever answers 200 for the person who filed the row, which one fixture session cannot exercise both ways.",
       "method": "GET",
       "path": "/api/requests",
@@ -2578,7 +2627,7 @@
     },
     {
       "method": "POST",
-      "path": "/api/requests/{feature_request_id}/resume",
+      "path": "/api/requests/{held_request_id}/resume",
       "body": {},
       "read_by": [
         "13b page-requests.js Resume"
@@ -2781,6 +2830,7 @@
     "web.request.done",
     "web.request.withdrawn",
     "web.request.updated",
-    "web.request.comment"
+    "web.request.comment",
+    "web.chat.memory_forgot"
   ]
 }
