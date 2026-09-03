@@ -1,6 +1,6 @@
 # Applications — `/applications` is ONE command that opens a panel
 
-> **Audience:** the build agent and the reviewer. **Status:** TRACKED · **PLANNING — not built.**
+> **Audience:** the build agent and the reviewer. **Status:** TRACKED · **DECIDED, building** (all three forks answered; Opus build dispatched 2026-09-03 14:15).
 > **Last verified: 2026-09-03** against **`9891f71`** (`main`, the merge of `feat/applications-no-role`,
 > schema 28). Every `path:line` below was read at that commit, in `black_bloc/applications.py`,
 > `cogs/community/applications.py`, `api/tools/applications.py`, `panels.py`, `settings_store.py`,
@@ -352,7 +352,9 @@ The three that are genuinely his:
   **Recommended: drop the entry** — the command stays, and with the mode off the panel says so in
   words and renders no Apply control (P9). The alternative is `("applications",)`, which keeps the
   vanishing act he asked for and costs staff the Discord door.
-- **I-A3 — does question EDITING stay in Discord at all?** §C designs a Questions sub-panel (select →
+- ✅ **I-A3 — DECIDED by the owner 2026-09-03 14:12: "Build the question sub panel".** §C's
+  Questions sub-panel is built as designed (select → Edit / Remove, plus Add); reorder stays site-only.
+  Original question: does question EDITING stay in Discord at all? §C designs a Questions sub-panel (select →
   Edit / Remove, plus Add), so nothing is retired; but the site already owns a better editor with
   drag-reorder (`page-rolemenus.js`, `PUT /forms/{id}/questions`), and reorder will stay site-only
   either way. **Recommended: build the sub-panel** — a form with no questions cannot be applied for

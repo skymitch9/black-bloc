@@ -237,16 +237,17 @@ docs bookkeeping lands with the work, not after.
   collapse into one member-visible command; sweep rows 94–102; `denied`/`removed` → `approved`
   and the member's own list settled by the standing rules). Forks: **I-A1 DECIDED 13:35 — the
   command is `/apply`** ("it's gamer lingo"; the `applications` Group goes); **I-A2 DECIDED 13:47 —
-  "Visible"** (`/apply` stays when the mode is off; the `HIDDEN_WHEN_OFF` entry goes); I-A3 (does
-  question editing stay in Discord) still open. Events I2 DECIDED 12:40 (`/timezone` retired).
+  "Visible"** (`/apply` stays when the mode is off; the `HIDDEN_WHEN_OFF` entry goes); **I-A3 DECIDED
+  14:12 — "Build the question sub panel"** (§C's Questions sub-panel as designed). Applications
+  build DISPATCHED 14:15 (Opus, own worktree, sweep rows 94–102). Events I2 DECIDED 12:40 (`/timezone` retired).
   **Wave-1 builds all landed 13:40–13:50** (birthdays merged `58974e1`; events on
   `worktree-agent-a448c7ab780ed3c2b`, polls on `worktree-agent-aa735ab092d13477d`, both under Fable
   review); the applications build follows once I-A3 is answered. Merge in wave order, re-key
   `code-notes.md` per merge, deploy per landing. ⚠️ The v63 deploy REFUSED at the gate 13:52 on the
   rate-limit flake — fixed by freezing the clock in the test (`code-notes.md` →
   `tests/api/test_settings_api.py:221`), three `-n auto` runs green; **v63 live 13:58, v64
-  (events, `e670542`) live 14:05** — both landings recorded in `DONE.md` 2026-09-03. Polls
-  merges next (v65).
+  (events, `e670542`) live 14:05** — both landings recorded in `DONE.md` 2026-09-03. Polls merged
+  `27452ac` (3644 tests), deploying as v65.
 
 - **Wave-1 review findings, small, fold into the next build that touches each file (Fable
   review 2026-09-03 13:50–14:05):** `requests.py` re-renders lack `allowed_mentions`;
