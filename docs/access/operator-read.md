@@ -30,6 +30,16 @@ memory and sets **both** halves — the Fly secret and the operator machine's ow
 environment — without ever printing it:
 
 ```powershell
+.\scripts\mint-operator-token.ps1
+```
+
+That script is exactly the four lines below, wrapped so a session can run it
+under a permission rule (`PowerShell(.\scripts\mint-operator-token.ps1:*)` in
+`~/.claude/settings.json` → `permissions.allow`; the auto-mode classifier refuses
+both the raw `flyctl secrets set` and editing that rule in, by design — the
+owner adds the rule, 2026-09-03). By hand it is:
+
+```powershell
 $fly = "$env:LOCALAPPDATA/Microsoft/WinGet/Packages/Fly-io.flyctl_Microsoft.Winget.Source_8wekyb3d8bbwe/flyctl.exe"
 $t = & .\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(48))"
 & $fly secrets set --stage --app black-bloc "OPERATOR_READ_TOKEN=$t"

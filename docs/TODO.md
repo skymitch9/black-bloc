@@ -202,10 +202,14 @@ docs bookkeeping lands with the work, not after.
 - **Operator read token — MINT STILL OWED (code live v67 `285b5e3` 16:04; the build record is in
   `DONE.md` 2026-09-03).** The blind mint (`docs/access/operator-read.md`, one command: python mints,
   `flyctl secrets set --stage`, HKCU `BLACK_BLOC_OPERATOR_TOKEN`, value never printed) was approved by
-  the owner 16:00 ("Yes") but the permission classifier BLOCKED the command at 16:15. Options: the
-  owner runs the one command himself at the PC, or allows it in chat and it is retried, or adds a
-  Bash permission rule. Until the secret is set the door does not exist (`/health` + a bearer answer
-  `not_signed_in`, verified live by the builder). `--stage` means it applies at the NEXT deploy — v68.
+  the owner 16:00 ("Yes") but the permission classifier BLOCKED the command at 16:15. Owner chose the
+  permission-rule route (16:30: "Add a permission rule for flyctl secrets set … and tell me to retry");
+  the classifier ALSO blocked the session editing `~/.claude/settings.json`, so the owner adds the rule
+  himself — `PowerShell(.\scripts\mint-operator-token.ps1:*)` under `permissions.allow` — then the
+  session retries `.\scripts\mint-operator-token.ps1` (the mint wrapped as a script so a rule has a
+  stable prefix to match; `access/operator-read.md`). Until the secret is set the door does not exist
+  (`/health` + a bearer answer `not_signed_in`, verified live by the builder). `--stage` means it
+  applies at the NEXT deploy — v68.
 
 
 - 🆕 **Panels over slash commands — the rest of the app (owner, 2026-09-03: "then carry it
