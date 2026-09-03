@@ -40,7 +40,7 @@ CONTENTS_ARE_PRIVATE = (
     "notes were not shown — only the counts on this page. It needs `chat_memory_staff_view` set "
     "to `full`, which a Lead can change on the Settings page or with "
     "`/settings set chat_memory_staff_view full`. The member can always read their own with "
-    "`/memory show`."
+    "`/memory`."
 )
 NO_SUCH_PROFILE = (
     "Black Bloc remembers nothing about that member on this server, so there was nothing to "

@@ -685,8 +685,8 @@ KEY_HELP: dict[str, str] = {
         "reads nothing; the profiles already stored stay until somebody clears them"
     ),
     "chat_memory_consent": (
-        "optout means memory is on for everybody until they run `/chat memory off`; optin means "
-        "nobody is remembered until they run `/chat memory on`"
+        "optout means memory is on for everybody until they stop it themselves on the `/memory` "
+        "panel; optin means nobody is remembered until they start it there"
     ),
     "chat_memory_retention_days": (
         f"days a profile nobody has added to is kept before it is deleted, up to "
@@ -698,8 +698,7 @@ KEY_HELP: dict[str, str] = {
     ),
     "chat_memory_staff_view": (
         "counts shows staff only how many profiles there are and when each changed; full lets "
-        "staff read the notes themselves. The person can always read their own with "
-        "`/chat memory show`"
+        "staff read the notes themselves. The person can always read their own with `/memory`"
     ),
     "chat_memory_notes_max": (
         f"how many preferences one profile holds, up to {NOTES_CEILING}; the oldest drops off "

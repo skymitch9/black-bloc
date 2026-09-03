@@ -169,6 +169,8 @@ export const LABELS = {
   applications_panel_minutes: 'How long the /apply panel stays live',
   applications_panel_own_list: 'Whether a member sees their own applications on /apply',
   applications_log_level: 'How much of applications is repeated into Discord',
+
+  memory_panel_minutes: 'How long the /memory panel stays live',
 };
 
 const NAMESPACES = ['golive', 'youtube', 'pings', 'tempvoice', 'honeypot', 'events', 'birthday', 'modmail', 'automod', 'rolemenu', 'raidtrain', 'applications'];

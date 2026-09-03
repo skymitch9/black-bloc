@@ -50,9 +50,10 @@ typed that no member wears would pass.
 **Status.** `ACCEPTED` for the dark launch (`chat_memory_mode` ships **off**).
 
 **Why tolerated.** The blast radius is one sentence, visible to one person, and
-that person can read every note the bot holds about them (`/memory show`) and
-drop any of them (`/memory forget-this`) — §D2-definition rule 7 makes the show
-command the enforcement of last resort. A note is also never a quote: the
+that person can read every note the bot holds about them and drop any of them —
+`/memory` opens one panel with the lines numbered, a **Forget one of these…**
+picker and **Forget everything**; §D2-definition rule 7 makes that panel the
+enforcement of last resort. A note is also never a quote: the
 six-word shingle check against the window text (`shingles`) means whatever leaks
 is the model's paraphrase, not somebody's words. **Measured 2026-09-02, §J:** in
 run 1 the model produced third-person threads twice in six attempts on a window

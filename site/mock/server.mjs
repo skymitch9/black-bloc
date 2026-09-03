@@ -376,10 +376,10 @@ const SETTING_SPECS = [
     ['off', 'important', 'all'],
   ]),
   ['chat_memory_mode', 'enum', 'off', 'off', 'off, or on (Black Bloc keeps a few preferences about each person — what to call them, how they like to be answered — and reads them back next time). Off writes nothing and reads nothing; the profiles already stored stay until somebody clears them', ['off', 'on']],
-  ['chat_memory_consent', 'enum', 'optout', 'optout', 'optout means memory is on for everybody until they run `/memory off`; optin means nobody is remembered until they run `/memory on`', ['optout', 'optin']],
+  ['chat_memory_consent', 'enum', 'optout', 'optout', 'optout means memory is on for everybody until they stop it themselves on the `/memory` panel; optin means nobody is remembered until they start it there', ['optout', 'optin']],
   ['chat_memory_retention_days', 'int', 180, 180, 'days a profile nobody has added to is kept before it is deleted, up to 3650; 0 keeps them forever. Leaving the server clears one straight away', null, 3650],
   ['chat_memory_dm_scope', 'enum', 'separate', 'separate', 'separate keeps what Black Bloc learns in a DM out of public channels — a name or pronouns set by DM never reach the server; shared lets every note be used anywhere', ['separate', 'shared']],
-  ['chat_memory_staff_view', 'enum', 'counts', 'counts', 'counts shows staff only how many profiles there are and when each changed; full lets staff read the notes themselves. The person can always read their own with `/memory show`', ['counts', 'full']],
+  ['chat_memory_staff_view', 'enum', 'counts', 'counts', 'counts shows staff only how many profiles there are and when each changed; full lets staff read the notes themselves. The person can always read their own with `/memory`', ['counts', 'full']],
   ['chat_memory_notes_max', 'int', 6, 6, 'how many preferences one profile holds, up to 20; the oldest drops off when a newer one arrives', null, 20],
   ['chat_memory_threads_max', 'int', 5, 5, 'how many open topics (“was asking about the Thursday event”) one profile holds, up to 20', null, 20],
   ['chat_memory_model', 'text', '', '', 'which Groq model writes the profile up after a conversation ends; blank uses chat_simple_model, the same quick tier that answers'],
@@ -413,6 +413,7 @@ const SETTING_SPECS = [
   ['applications_dm_on_decision', 'bool', true, true, 'true to DM the applicant when their application is approved or denied'],
   ['applications_roster_shows_left', 'bool', true, true, 'whether the approved list still shows people who have left the server, marked as gone; false hides them'],
   ['applications_panel_minutes', 'int', 10, 10, "minutes the /applications show panel stays live before its buttons disable themselves; 10 by default. The 'this panel went quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
+  ['memory_panel_minutes', 'int', 10, 10, "minutes the /memory panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
 ];
 
 const RULES = {
@@ -4222,7 +4223,7 @@ function personalityPayload() {
 
 // Phase 17. Counts always; the notes themselves only where chat_memory_staff_view is `full`.
 const MEMORY_IS_OFF = 'Black Bloc is not remembering anybody on this server, so there is nothing here yet. The Memory switch above turns it on, and profiles start appearing after the next sweep.';
-const MEMORY_IS_PRIVATE = 'This server keeps what Black Bloc remembers about a member private to that member, so the notes were not shown — only the counts on this page. It needs `chat_memory_staff_view` set to `full`, which a Lead can change on the Settings page or with `/settings set chat_memory_staff_view full`. The member can always read their own with `/memory show`.';
+const MEMORY_IS_PRIVATE = 'This server keeps what Black Bloc remembers about a member private to that member, so the notes were not shown — only the counts on this page. It needs `chat_memory_staff_view` set to `full`, which a Lead can change on the Settings page or with `/settings set chat_memory_staff_view full`. The member can always read their own with `/memory`.';
 const MEMORY_NO_SUCH = 'Black Bloc remembers nothing about that member on this server, so there was nothing to show or clear.';
 
 function memoryFull() {

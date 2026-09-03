@@ -87,8 +87,8 @@ free, `/raidtrain claim` takes one (link Twitch first), `/raidtrain release` giv
 `/raidtrain mine` says what you hold. Black Bloc DMs you before your slot with who raids into
 you and who you raid next.
 `/voice` — rename, lock, hide and hand over a temporary voice channel somebody made.
-`/memory` — does the bot remember me? `/memory show` reads it back, `/memory forget-this` drops
-one line, `/memory forget` clears it and `/memory off` stops it writing anything down at all.
+`/memory` — does the bot remember me? It opens one window with everything Black Bloc has written
+down about you, numbered: drop one line, forget the lot, or stop it remembering you at all.
 `/help` — every command, in a list.
 `/ping` — checks Black Bloc is awake.
 `/about` — what Black Bloc is.
