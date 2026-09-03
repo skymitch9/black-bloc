@@ -184,6 +184,39 @@ docs bookkeeping lands with the work, not after.
 
 ## 🔧 Open engineering items
 
+- 🆕 **Applications without a role — "let's have the bot store the info!" (owner, 2026-09-03
+  ~12:10, relaying a member's Discord question verbatim: "is there a way for the twitch team
+  app to be done without a role? if not we may wanna think of adding a stream team role (which
+  might just be a good reference point to see who's applied and who would need to show up on
+  the team page)" → owner: "we can do no role and have the bot store the information or … a
+  temporary role … let's have the bot store the info! that way we can check the site and the
+  official team page").** Measured at `46e3ba4`: **not possible today** —
+  `application_forms.role_id` is `NOT NULL` (`storage/db.py:576`), `/applications create`
+  takes `role: discord.Role` as a required option (`cogs/community/applications.py:877`), and
+  `_hand_over` (`:461`) always grants. The applications themselves ARE already stored
+  (`applications` table: answers, status, who decided, when), so the roster exists in the DB
+  today — what is missing is (1) a form that grants nothing, (2) a roster on the site to
+  compare with the official Twitch team page. Design: `info/applications-no-role-design.md`
+  — role optional on create/edit (slash AND dashboard editor, checklist 33), schema **28**
+  makes `role_id` nullable (SQLite table rebuild, the `mod_cases` precedent at
+  `db.py:660–664`), approve on a role-less form skips `_hand_over` and the "hand it over with
+  `/role grant`" fallbacks and DMs `approved_text` + `next_step` as today, an **Approved
+  roster** per form in the Applications section of the Role menus page (name · approved when
+  · Twitch login from `golive_links` when linked, so it reads against twitch.tv/team/…) with
+  a plain-text copy. Status: **BUILDABLE** (2026-09-03 ~12:20) —
+  [`info/applications-no-role-design.md`](info/applications-no-role-design.md) written: role
+  optional per form (slash `role`/`no_role` on edit + the dashboard editor's "No role — keep a
+  list"); roster = approved applications, one home; new terminal status `removed` with a DM'd
+  reason (the only way off a no-role list — D2); `GET /api/applications/roster`, `POST
+  /{id}/remove`, roster foldout per form with Twitch login + Copy as text; one setting
+  `applications_roster_shows_left` (default true). ⚠️ Gotcha caught in design: the table
+  rebuild must run BEFORE `PRAGMA foreign_keys=ON` or `DROP TABLE application_forms`
+  cascade-deletes every question (§C1). Different cog from the "ask them to check" item, so
+  the two builds can run beside each other; both bump `SCHEMA_VERSION` — second to merge
+  re-keys. Waiting on the owner for nothing; ONE question put to him (2026-09-03): whether
+  staff may take somebody off a no-role list with a reason (design says yes, default).
+  Next: Opus build on `feat/applications-no-role` (usage read first).
+
 - 🆕 **"We also need a way to ping the requester from the request app. I want to have it
   message the requesters to check the work." (owner, 2026-09-03 11:15).** A staff move on the
   request card (panel AND the site's request card — one shared function, one log row) that
