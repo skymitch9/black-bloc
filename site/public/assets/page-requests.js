@@ -1119,9 +1119,16 @@ function pinnedSaid(text) {
 }
 
 /**
- * The card is on the page: scroll to it and flash it for two seconds. Measured
- * rather than assumed — a card inside a shut foldout has no box to scroll to,
- * so the foldout is opened first.
+ * The card is on the page: open whatever it is shut inside, scroll to it and
+ * flash it for two seconds.
+ *
+ * ⚠️ Measured against the mock, not assumed. TWO things bite here. The section
+ * and the foldout are both `<details>`, and a card inside a shut one sits in a
+ * `.card` with `overflow: hidden` and a clientHeight of 32 — `scrollIntoView`
+ * silently does nothing. AND opening them is not enough on its own: the scroll
+ * has to wait a frame for the layout to settle, or it measures the collapsed
+ * height and stays put. Opening and scrolling in the same tick left the reader
+ * at the top of the page with no error anywhere.
  */
 function flashLinked(wanted) {
   const node = document.getElementById(`r-${wanted}`);
@@ -1129,13 +1136,28 @@ function flashLinked(wanted) {
   for (let up = node.parentElement; up; up = up.parentElement) {
     if (up.tagName === 'DETAILS') up.open = true;
   }
-  node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }));
   node.classList.add('is-linked');
   setTimeout(() => node.classList.remove('is-linked'), LINKED_MS);
   return true;
 }
 
 /** Staff read any row; a member reads only their own, so each asks its own route. */
+/**
+ * The pinned card is drawn as whatever the row actually IS. Drawing every one as
+ * a review card would put Accept and Send back on an open request, and the API
+ * would then refuse the click — a control that would be refused is never drawn.
+ */
+function cardFor(row) {
+  if (row.status === 'review') return reviewCard(row);
+  if (row.status === 'in_progress') return boardCard(row);
+  if (row.status === 'hold') return heldCard(row);
+  if (row.status === 'open') return openCard(row);
+  return shutCard(row);
+}
+
 async function fetchOne(wanted, staff) {
   if (staff) return (await api(`/api/requests/${encodeURIComponent(wanted)}`)).request;
   const mine = await api('/api/requests/mine?per_page=200');
@@ -1219,7 +1241,7 @@ async function loadStaff() {
   );
   keepTyping(typed);
   remeasure();
-  await honourTheLink(true, reviewCard);
+  await honourTheLink(true, cardFor);
 }
 
 async function load(me) {
