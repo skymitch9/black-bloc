@@ -10,45 +10,51 @@ from discord.ext import commands
 from ...actionlog import LOGS_DEFAULT, LOGS_MAX, LOGS_MIN, log_action, send_logs
 from ...command_errors import NETWORK_ERRORS, AnswersErrors
 from ...requests import (
-    ALREADY_THAT,
-    APPROVED,
-    DECLINE_NEEDS_A_REASON,
-    DECLINED,
     DM_STATUSES,
     DM_TEXT,
     FILED,
-    FILED_APPROVED,
+    HOLD,
     LIST_PAGE,
     NO_SUCH_REQUEST,
-    NOT_PENDING,
+    NOT_ON_HOLD,
     NOT_YOURS,
     NOTHING_FILED_YET,
     NOTHING_OF_YOURS,
-    NOTHING_PENDING,
+    NOTHING_OPEN,
+    NOTIFY_CHANNEL_KEY,
+    NOTIFY_FAILED_KIND,
     NOTIFY_LINE,
-    PENDING,
+    NOTIFY_MOVE,
+    NOTIFY_SKIPPED_KIND,
+    OPEN,
+    OPEN_STATUSES,
     REASON_LIMIT,
     REQUESTS_OFF,
     STAFF_ONLY_FILES,
     STAFF_STATUSES,
     STATUS_WORDS,
+    TOO_LATE_TO_WITHDRAW,
     WHAT_LIMIT,
     WHY_LIMIT,
+    WITHDRAWABLE,
     WITHDRAWN,
     WITHDRAWN_SAID,
     RequestError,
-    auto_approves,
     checked_fields,
+    checked_move,
     clamp,
     create_request,
     dms_on_decision,
     everyone_may_file,
     get_request,
+    held_words,
     list_requests,
     page_of,
     requests_are_on,
+    resume_target,
     set_message,
     set_status,
+    status_channel_id,
     summary_line,
 )
 from ...settings_store import DB_UNAVAILABLE, GUILD_ONLY, require_staff
@@ -63,11 +69,12 @@ NOT_AN_ID = (
 )
 LIST_HEADING = {
     "mine": "**Your requests**",
-    "pending": "**Waiting on a decision**",
+    "open": "**Still open**",
     "all": "**Every request**",
 }
 PAGE_FOOT = "Page {page} of {pages} — `/request list page:{next}` for the next one."
-SCOPES = ("mine", "pending", "all")
+SCOPES = ("mine", "open", "all")
+RESUMED_SAID = "Request **#{request_id}** is off hold and back to **{status}**."
 
 
 def guard_allows(bot: Any, channel: Any) -> bool:
@@ -106,7 +113,7 @@ async def dm(user: Any, text: str) -> bool:
 
 
 async def tell_requester(bot: Any, guild: Any, row: Any, status: str) -> None:
-    """A DM the requester is owed; a failure is a logged fact, never a silent one."""
+    """A DM the requester is owed on every staff move; a failure is logged, never silent."""
     if status not in DM_STATUSES or not dms_on_decision(bot.store, guild.id):
         return
     text = DM_TEXT[status].format(
@@ -114,6 +121,7 @@ async def tell_requester(bot: Any, guild: Any, row: Any, status: str) -> None:
         guild=getattr(guild, "name", "the server"),
         what=clamp(row["what"], 300),
         reason=row["decline_reason"] or "no reason was given",
+        held_from=held_words(row) or "open",
     )
     member = guild.get_member(row["user_id"]) or bot.get_user(row["user_id"])
     if await dm(member, text):
@@ -127,35 +135,65 @@ async def tell_requester(bot: Any, guild: Any, row: Any, status: str) -> None:
     )
 
 
-async def notify(bot: Any, guild: Any, row: Any, who: Any) -> None:
+async def post_line(bot: Any, guild: Any, channel_id: Any, row: Any, line: str, move: str) -> Any:
     """One guarded line where staff watch; a channel the guard refuses is skipped, not raised."""
-    channel_id = bot.store.get(guild.id, "request_notify_channel_id")
     if not channel_id:
-        return
+        return None
     channel = bot.get_channel(channel_id) or guild.get_channel(channel_id)
     if channel is None:
         log.warning("requests: %s is not a channel Black Bloc can see", channel_id)
-        return
+        return None
     if not guard_allows(bot, channel):
         log.warning("requests: test mode, so #%s was not told about %s", channel_id, row["id"])
-        return
+        await log_action(
+            bot,
+            guild,
+            NOTIFY_SKIPPED_KIND,
+            details={"request_id": row["id"], "move": move, "channel_id": int(channel_id)},
+        )
+        return None
+    try:
+        return await channel.send(line, allowed_mentions=discord.AllowedMentions.none())
+    except NETWORK_ERRORS as exc:
+        log.warning("requests: could not post the %s line for %s: %s", move, row["id"], exc)
+        await log_action(
+            bot,
+            guild,
+            NOTIFY_FAILED_KIND,
+            details={
+                "request_id": row["id"],
+                "move": move,
+                "reason": f"{type(exc).__name__}: {exc}",
+            },
+        )
+        return None
+
+
+async def notify(bot: Any, guild: Any, row: Any, who: Any) -> None:
     line = NOTIFY_LINE.format(
         request_id=row["id"],
         who=getattr(who, "mention", f"<@{row['user_id']}>"),
         what=clamp(row["what"], 200),
     )
-    try:
-        message = await channel.send(line, allowed_mentions=discord.AllowedMentions.none())
-    except NETWORK_ERRORS as exc:
-        log.warning("requests: could not post the notice for %s: %s", row["id"], exc)
-        await log_action(
-            bot,
-            guild,
-            "request.notify_failed",
-            details={"request_id": row["id"], "reason": f"{type(exc).__name__}: {exc}"},
-        )
+    message = await post_line(
+        bot, guild, bot.store.get(guild.id, NOTIFY_CHANNEL_KEY), row, line, "filed"
+    )
+    if message is not None:
+        await set_message(bot.db, row["id"], message.id)
+
+
+async def notify_move(bot: Any, guild: Any, row: Any, status: str) -> None:
+    """The channel hears every staff move, not only the filing (owner, 2026-09-02)."""
+    template = NOTIFY_MOVE.get(status)
+    if template is None:
         return
-    await set_message(bot.db, row["id"], message.id)
+    line = template.format(
+        request_id=row["id"],
+        who=f"<@{row['user_id']}>",
+        what=clamp(row["what"], 200),
+        reason=clamp(row["decline_reason"], 200) or "no reason was given",
+    )
+    await post_line(bot, guild, status_channel_id(bot.store, guild.id), row, line, status)
 
 
 async def apply_decision(
@@ -165,30 +203,64 @@ async def apply_decision(
     row = await get_request(bot.db, request_id)
     if row is None or row["guild_id"] != guild.id:
         return (NO_SUCH_REQUEST.format(request_id=request_id), None)
-    if row["status"] == status:
-        return (ALREADY_THAT.format(request_id=request_id, status=status), None)
     kept = clamp(reason, REASON_LIMIT)
-    if status == DECLINED and not kept:
-        return (DECLINE_NEEDS_A_REASON, None)
+    try:
+        wanted = checked_move(request_id, row["status"], status, kept)
+    except RequestError as exc:
+        return (str(exc), None)
     await set_status(
         bot.db,
         request_id,
-        status,
+        wanted,
         decided_by=getattr(actor, "id", None),
         decline_reason=kept or None,
+        was=row["status"],
     )
     fresh = await get_request(bot.db, request_id)
     await log_action(
         bot,
         guild,
-        f"request.{status}",
+        f"request.{wanted}",
         actor=actor,
         target=row["user_id"],
         reason=kept or None,
         details={"request_id": request_id, "was": row["status"]},
     )
-    await tell_requester(bot, guild, fresh, status)
-    return (SET_SAID.format(request_id=request_id, status=STATUS_WORDS.get(status, status)), fresh)
+    await tell_requester(bot, guild, fresh, wanted)
+    await notify_move(bot, guild, fresh, wanted)
+    return (SET_SAID.format(request_id=request_id, status=STATUS_WORDS.get(wanted, wanted)), fresh)
+
+
+async def resume_request(bot: Any, guild: Any, request_id: int, actor: Any) -> tuple[str, Any]:
+    """Off hold and back where it was held from — the Resume button and `/request resume`."""
+    row = await get_request(bot.db, request_id)
+    if row is None or row["guild_id"] != guild.id:
+        return (NO_SUCH_REQUEST.format(request_id=request_id), None)
+    if row["status"] != HOLD:
+        return (
+            NOT_ON_HOLD.format(
+                request_id=request_id,
+                status=STATUS_WORDS.get(row["status"], row["status"]),
+            ),
+            None,
+        )
+    wanted = resume_target(row)
+    await set_status(bot.db, request_id, wanted, decided_by=getattr(actor, "id", None))
+    fresh = await get_request(bot.db, request_id)
+    await log_action(
+        bot,
+        guild,
+        "request.resumed",
+        actor=actor,
+        target=row["user_id"],
+        details={"request_id": request_id, "was": HOLD, "held_from": wanted},
+    )
+    await tell_requester(bot, guild, fresh, wanted)
+    await notify_move(bot, guild, fresh, wanted)
+    return (
+        RESUMED_SAID.format(request_id=request_id, status=STATUS_WORDS.get(wanted, wanted)),
+        fresh,
+    )
 
 
 class RequestModal(AnswersErrors, discord.ui.Modal, title="Ask for something"):
@@ -278,7 +350,6 @@ class Requests(commands.Cog):
         except RequestError as exc:
             await answer(interaction, str(exc))
             return
-        approved = staff and auto_approves(self.bot.store, guild.id)
         await interaction.response.defer(ephemeral=True)
         request_id = await create_request(
             self.bot.db,
@@ -287,8 +358,7 @@ class Requests(commands.Cog):
             what=kept_what,
             why=kept_why,
             due_on=due_on,
-            status=APPROVED if approved else PENDING,
-            decided_by=interaction.user.id if approved else None,
+            status=OPEN,
         )
         await log_action(
             self.bot,
@@ -298,23 +368,13 @@ class Requests(commands.Cog):
             target=interaction.user,
             details={"request_id": request_id, "what": clamp(kept_what, 120), "due_on": due_on},
         )
-        if approved:
-            await log_action(
-                self.bot,
-                guild,
-                "request.auto_approved",
-                actor=interaction.user,
-                target=interaction.user,
-                details={"request_id": request_id},
-            )
         row = await get_request(self.bot.db, request_id)
         await notify(self.bot, guild, row, interaction.user)
-        said = FILED_APPROVED if approved else FILED
-        await answer(interaction, said.format(request_id=request_id))
+        await answer(interaction, FILED.format(request_id=request_id))
 
     @request.command(name="list", description="Show the requests that have been filed")
     @app_commands.describe(
-        scope="yours, the ones waiting on a decision, or every one of them",
+        scope="yours, the ones still open, or every one of them",
         page="which page of ten to show",
     )
     @app_commands.choices(
@@ -333,13 +393,13 @@ class Requests(commands.Cog):
         rows = await list_requests(
             self.bot.db,
             guild.id,
-            statuses=(PENDING,) if wanted == "pending" else None,
+            statuses=OPEN_STATUSES if wanted == "open" else None,
             user_id=interaction.user.id if wanted == "mine" else None,
         )
         if not rows:
             empty = {
                 "mine": NOTHING_OF_YOURS,
-                "pending": NOTHING_PENDING,
+                "open": NOTHING_OPEN,
                 "all": NOTHING_FILED_YET,
             }[wanted]
             await answer(interaction, empty)
@@ -367,10 +427,10 @@ class Requests(commands.Cog):
         if row["user_id"] != interaction.user.id:
             await answer(interaction, NOT_YOURS.format(request_id=row["id"]))
             return
-        if row["status"] != PENDING:
+        if row["status"] not in WITHDRAWABLE:
             await answer(
                 interaction,
-                NOT_PENDING.format(
+                TOO_LATE_TO_WITHDRAW.format(
                     request_id=row["id"], status=STATUS_WORDS.get(row["status"], row["status"])
                 ),
             )
@@ -391,7 +451,7 @@ class Requests(commands.Cog):
     @app_commands.describe(
         request_id="The number `/request list` shows",
         status="Where the request has got to",
-        reason="Required when you decline one; the person who asked is sent it",
+        reason="Required for hold and declined; the person who asked is sent it",
     )
     @app_commands.choices(
         status=[app_commands.Choice(name=name, value=name) for name in STAFF_STATUSES]
@@ -422,6 +482,45 @@ class Requests(commands.Cog):
         )
         await answer(interaction, said)
 
+    @request.command(name="hold", description="Park a request with a reason; staff only")
+    @app_commands.describe(
+        request_id="The number `/request list` shows",
+        reason="Why it is waiting; the person who asked is sent this",
+    )
+    async def request_hold(
+        self, interaction: discord.Interaction, request_id: str, reason: str
+    ) -> None:
+        if not await require_staff(interaction):
+            return
+        if not await self._database_ready(interaction):
+            return
+        digits = str(request_id).strip().lstrip("#")
+        if not digits.isdigit():
+            await answer(interaction, NOT_AN_ID.format(given=clamp(request_id, 40)))
+            return
+        await interaction.response.defer(ephemeral=True)
+        said, _ = await apply_decision(
+            self.bot, interaction.guild, int(digits), HOLD, interaction.user, reason=reason
+        )
+        await answer(interaction, said)
+
+    @request.command(name="resume", description="Take a request off hold; staff only")
+    @app_commands.describe(request_id="The number `/request list` shows")
+    async def request_resume(self, interaction: discord.Interaction, request_id: str) -> None:
+        if not await require_staff(interaction):
+            return
+        if not await self._database_ready(interaction):
+            return
+        digits = str(request_id).strip().lstrip("#")
+        if not digits.isdigit():
+            await answer(interaction, NOT_AN_ID.format(given=clamp(request_id, 40)))
+            return
+        await interaction.response.defer(ephemeral=True)
+        said, _ = await resume_request(
+            self.bot, interaction.guild, int(digits), interaction.user
+        )
+        await answer(interaction, said)
+
     @request.command(name="logs", description="The last few request log lines")
     @app_commands.describe(
         count="How many lines, 1 to 50 (10 by default)",
@@ -446,5 +545,8 @@ __all__ = [
     "apply_decision",
     "guard_allows",
     "notify",
+    "notify_move",
+    "post_line",
+    "resume_request",
     "tell_requester",
 ]

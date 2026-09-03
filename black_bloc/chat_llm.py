@@ -421,16 +421,16 @@ def haiku(bot: Any) -> Any:
     return made[IMPORTANT]
 
 
-def groq(bot: Any, model: str) -> Any:
-    """Rebuilt when the model setting changes, so a Groq retirement is a settings edit."""
+def groq(bot: Any, model: str, slot: str = SIMPLE) -> Any:
+    """Rebuilt when the model setting changes; one slot per caller, so two models never thrash."""
     settings = bot.settings
     if not settings.simple_tier_configured:
         return None
     made = clients_for(bot)
-    found = made.get(SIMPLE)
+    found = made.get(slot)
     if found is None or found.model != model:
         found = GroqClient(settings.groq_api_key, model=model)
-        made[SIMPLE] = found
+        made[slot] = found
     return found
 
 
@@ -485,10 +485,27 @@ def who_they_named(bot: Any, guild: Any, text: Any) -> list[tuple[str, str]]:
         return []
 
 
-def user_turn(text: Any, hits: Any, notes: Any = ()) -> str:
+def user_turn(text: Any, hits: Any, notes: Any = (), memory: Any = "") -> str:
     said = spoken(text)
-    parts = [said, grounding(hits), people_note(notes)]
+    parts = [said, grounding(hits), people_note(notes), str(memory or "")]
     return "\n\n".join(one for one in parts if one)
+
+
+async def memory_for(bot: Any, db: Any, guild_id: Any, user_id: int, *, in_dm: bool) -> str:
+    """One indexed SELECT on the reply path, and nothing at all when memory is off."""
+    from .chat_memory import (
+        DM_SCOPE_KEY,
+        MODE_KEY,
+        SHARED,
+        memory_note,
+        profile_for,
+    )
+
+    home = guild_id if guild_id is not None else getattr(bot.settings, "dev_guild_id", None)
+    if home is None or read_setting(bot.store, home, MODE_KEY, "off") != ON:
+        return ""
+    shared = read_setting(bot.store, home, DM_SCOPE_KEY, "") == SHARED
+    return memory_note(await profile_for(db, user_id, home), in_dm=in_dm, shared=shared)
 
 
 async def say_capped(bot: Any, guild: Any, at: datetime) -> None:
@@ -598,7 +615,8 @@ async def conversational_reply(
     )
     model_setting = str(read_setting(bot.store, guild_id, SIMPLE_MODEL_KEY, "") or "")
     named = who_they_named(bot, guild, text)
-    asked = user_turn(text, hits, [note for _, note in named])
+    remembered = await memory_for(bot, db, guild_id, user_id, in_dm=guild_id is None)
+    asked = user_turn(text, hits, [note for _, note in named], remembered)
     messages = [*as_messages(window), {"role": "user", "content": asked}]
     directory = channels_block(bot, guild)
     turn = uuid.uuid4().hex

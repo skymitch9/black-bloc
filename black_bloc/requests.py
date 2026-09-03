@@ -8,18 +8,31 @@ from .timezones import DEFAULT_TZ, zone
 
 log = logging.getLogger(__name__)
 
-PENDING = "pending"
-APPROVED = "approved"
-PLANNED = "planned"
+OPEN = "open"
 IN_PROGRESS = "in_progress"
+HOLD = "hold"
 DONE = "done"
 DECLINED = "declined"
 WITHDRAWN = "withdrawn"
 
-STATUSES = (PENDING, APPROVED, PLANNED, IN_PROGRESS, DONE, DECLINED, WITHDRAWN)
-STAFF_STATUSES = (APPROVED, PLANNED, IN_PROGRESS, DONE, DECLINED)
-OPEN_STATUSES = (PENDING, APPROVED, PLANNED, IN_PROGRESS)
-DM_STATUSES = (APPROVED, DECLINED, DONE)
+STATUSES = (OPEN, IN_PROGRESS, HOLD, DONE, DECLINED, WITHDRAWN)
+
+TRANSITIONS: dict[str, frozenset[str]] = {
+    OPEN: frozenset({IN_PROGRESS, HOLD, DECLINED}),
+    IN_PROGRESS: frozenset({DONE, HOLD, DECLINED}),
+    HOLD: frozenset({IN_PROGRESS, DECLINED}),
+    DONE: frozenset(),
+    DECLINED: frozenset(),
+    WITHDRAWN: frozenset(),
+}
+WITHDRAWABLE = (OPEN, HOLD)
+STAFF_STATUSES = tuple(
+    sorted({one for moves in TRANSITIONS.values() for one in moves})
+)
+OPEN_STATUSES = (OPEN, IN_PROGRESS, HOLD)
+FINAL_STATUSES = tuple(one for one in STATUSES if not TRANSITIONS[one])
+NEEDS_A_REASON = (HOLD, DECLINED)
+DM_STATUSES = (IN_PROGRESS, HOLD, DONE, DECLINED)
 
 WHAT_LIMIT = 1000
 WHY_LIMIT = 1000
@@ -33,10 +46,9 @@ API_PAGE = 20
 SEARCH_LIMIT = 80
 
 STATUS_WORDS: dict[str, str] = {
-    PENDING: "waiting on staff",
-    APPROVED: "approved",
-    PLANNED: "planned",
+    OPEN: "open",
     IN_PROGRESS: "being worked on",
+    HOLD: "on hold",
     DONE: "done",
     DECLINED: "declined",
     WITHDRAWN: "withdrawn",
@@ -70,17 +82,35 @@ NOT_YOURS = (
     "Request **#{request_id}** is not yours, so nothing was withdrawn. Only the person who filed "
     "it can take it back; staff decline one instead."
 )
-NOT_PENDING = (
-    "Request **#{request_id}** is already **{status}**, so there was nothing to withdraw. Ask "
-    "staff if you want it stopped."
+TOO_LATE_TO_WITHDRAW = (
+    "Request **#{request_id}** is **{status}**, so there was nothing to withdraw. You can take "
+    "back one that is still open or on hold; ask staff if you want this one stopped."
 )
 ALREADY_THAT = "Request **#{request_id}** is already **{status}**, so nothing was changed."
 UNKNOWN_STATUS = (
     "**{given}** is not a state a request can be in, so nothing was changed. They are {known}."
 )
+NO_SUCH_MOVE = (
+    "Request **#{request_id}** is **{status}**, and staff cannot move it to **{wanted}** from "
+    "there, so nothing was changed. {allowed}"
+)
+MOVES_ARE = "From **{status}** it can go to {moves}."
+NO_MOVES_LEFT = "**{status}** is where a request finishes — nothing moves it now."
 DECLINE_NEEDS_A_REASON = (
     "A declined request needs one line the person who asked is sent, so nothing was changed. Say "
     "why and send it again."
+)
+HOLD_NEEDS_A_REASON = (
+    "A request put on hold needs one line the person who asked is sent, so nothing was changed. "
+    "Say why it is waiting and send it again."
+)
+REASON_NEEDED: dict[str, str] = {
+    DECLINED: DECLINE_NEEDS_A_REASON,
+    HOLD: HOLD_NEEDS_A_REASON,
+}
+NOT_ON_HOLD = (
+    "Request **#{request_id}** is **{status}**, not on hold, so there was nothing to resume. "
+    "`/request set` moves it from where it is."
 )
 BAD_PRIORITY = (
     "**{given}** is not a priority Black Bloc can read, so nothing was changed. Send a whole "
@@ -92,29 +122,45 @@ COMMENT_NEEDS_TEXT = (
 )
 WITHDRAWN_SAID = "Request **#{request_id}** is withdrawn. Nobody will pick it up now."
 FILED = (
-    "Filed as **#{request_id}** — staff will see it on the site. You will get a DM when somebody "
-    "decides on it."
-)
-FILED_APPROVED = (
-    "Filed as **#{request_id}**, and approved straight away because you are staff. It is on the "
-    "pending features list now."
+    "Filed as **#{request_id}** — staff will see it on the site. You will get a DM every time it "
+    "moves."
 )
 NOTHING_FILED_YET = "Nothing has been filed yet — `/request` puts the first one in."
-NOTHING_PENDING = "Nothing is waiting on a decision."
+NOTHING_OPEN = "Nothing is open — every request has been finished, declined or withdrawn."
 NOTHING_OF_YOURS = "You have not filed a request yet — `/request` puts one in."
 
-DM_APPROVED = (
-    "Your request **#{request_id}** on **{guild}** was approved. It is on the pending features "
-    "list now: {what}"
+DM_IN_PROGRESS = "Your request **#{request_id}** on **{guild}** is being worked on: {what}"
+DM_HOLD = (
+    "Your request **#{request_id}** on **{guild}** is on hold — {reason}\n\nIt was: {held_from}"
+    "\n\nWhat you asked for: {what}"
 )
 DM_DECLINED = (
     "Your request **#{request_id}** on **{guild}** was declined — {reason}\n\nWhat you asked for: "
     "{what}"
 )
 DM_DONE = "Your request **#{request_id}** on **{guild}** is done: {what}"
-DM_TEXT: dict[str, str] = {APPROVED: DM_APPROVED, DECLINED: DM_DECLINED, DONE: DM_DONE}
+DM_TEXT: dict[str, str] = {
+    IN_PROGRESS: DM_IN_PROGRESS,
+    HOLD: DM_HOLD,
+    DECLINED: DM_DECLINED,
+    DONE: DM_DONE,
+}
 
 NOTIFY_LINE = "New request **#{request_id}** from {who}: {what}"
+NOTIFY_IN_PROGRESS = "Request **#{request_id}** from {who} is being worked on: {what}"
+NOTIFY_HOLD = "Request **#{request_id}** from {who} is on hold — {reason}"
+NOTIFY_DONE = "Request **#{request_id}** from {who} is done: {what}"
+NOTIFY_DECLINED = "Request **#{request_id}** from {who} was declined — {reason}"
+NOTIFY_MOVE: dict[str, str] = {
+    IN_PROGRESS: NOTIFY_IN_PROGRESS,
+    HOLD: NOTIFY_HOLD,
+    DONE: NOTIFY_DONE,
+    DECLINED: NOTIFY_DECLINED,
+}
+NOTIFY_SKIPPED_KIND = "request.notify_skipped_test_mode"
+NOTIFY_FAILED_KIND = "request.notify_failed"
+STATUS_CHANNEL_KEY = "request_status_channel_id"
+NOTIFY_CHANNEL_KEY = "request_notify_channel_id"
 
 
 class RequestError(ValueError):
@@ -165,6 +211,26 @@ def wanted_priority(given: Any) -> int | None:
     return number
 
 
+def moves_from(status: Any) -> tuple[str, ...]:
+    """The one table every path asks — slash, web and tests alike."""
+    return tuple(sorted(TRANSITIONS.get(str(status or ""), frozenset())))
+
+
+def can_move(status: Any, wanted: Any) -> bool:
+    return str(wanted or "") in TRANSITIONS.get(str(status or ""), frozenset())
+
+
+def moves_sentence(status: Any) -> str:
+    """A refusal always says where a request CAN go from where it is."""
+    found = moves_from(status)
+    if not found:
+        return NO_MOVES_LEFT.format(status=STATUS_WORDS.get(str(status), str(status)))
+    return MOVES_ARE.format(
+        status=STATUS_WORDS.get(str(status), str(status)),
+        moves=", ".join(f"**{one}**" for one in found),
+    )
+
+
 def wanted_status(given: Any) -> str:
     text = str(given or "").strip().lower()
     if text not in STAFF_STATUSES:
@@ -172,6 +238,30 @@ def wanted_status(given: Any) -> str:
             UNKNOWN_STATUS.format(given=clamp(given, 40), known=", ".join(STAFF_STATUSES))
         )
     return text
+
+
+def checked_move(request_id: Any, status: Any, wanted: Any, reason: Any = "") -> str:
+    """The whole gate in one place: known state, a legal move, and a reason where one is owed."""
+    where = str(status or "")
+    to = wanted_status(wanted)
+    if where == to:
+        raise RequestError(
+            ALREADY_THAT.format(
+                request_id=request_id, status=STATUS_WORDS.get(where, where)
+            )
+        )
+    if not can_move(where, to):
+        raise RequestError(
+            NO_SUCH_MOVE.format(
+                request_id=request_id,
+                status=STATUS_WORDS.get(where, where),
+                wanted=to,
+                allowed=moves_sentence(where),
+            )
+        )
+    if to in NEEDS_A_REASON and not str(reason or "").strip():
+        raise RequestError(REASON_NEEDED[to])
+    return to
 
 
 def wanted_statuses(given: Any) -> tuple[str, ...]:
@@ -203,19 +293,35 @@ def everyone_may_file(store: Any, guild_id: int) -> bool:
     return store.get(guild_id, "request_who_can_file") != "staff"
 
 
-def auto_approves(store: Any, guild_id: int) -> bool:
-    return bool(store.get(guild_id, "request_auto_approve_staff"))
-
-
 def dms_on_decision(store: Any, guild_id: int) -> bool:
     return bool(store.get(guild_id, "request_dm_on_decision"))
+
+
+def status_channel_id(store: Any, guild_id: int) -> Any:
+    """Its own channel if the server set one, otherwise the one filings already go to."""
+    return store.get(guild_id, STATUS_CHANNEL_KEY) or store.get(guild_id, NOTIFY_CHANNEL_KEY)
+
+
+def held_words(row: Any) -> str:
+    found = row_value(row, "held_from")
+    return STATUS_WORDS.get(str(found or ""), str(found or "")) if found else ""
+
+
+def row_value(row: Any, name: str, fallback: Any = None) -> Any:
+    """A column a schema-22 file has not grown yet reads as nothing, never as a crash."""
+    try:
+        return row[name]
+    except (KeyError, IndexError, TypeError):
+        return fallback
 
 
 def summary_line(row: Any) -> str:
     due = due_stamp(row["due_on"])
     when = f" · due {due}" if due else ""
     where = STATUS_WORDS.get(row["status"], row["status"])
-    return f"**#{row['id']}** {clamp(row['what'], 70)} — {where}{when}"
+    was = held_words(row)
+    held = f" (was: {was})" if row["status"] == HOLD and was else ""
+    return f"**#{row['id']}** {clamp(row['what'], 70)} — {where}{held}{when}"
 
 
 def page_of(rows: list[Any], page: int, per_page: int = LIST_PAGE) -> tuple[list[Any], int, int]:
@@ -234,7 +340,7 @@ async def create_request(
     what: str,
     why: str,
     due_on: str | None,
-    status: str = PENDING,
+    status: str = OPEN,
     decided_by: int | None = None,
 ) -> int | None:
     decided_at = now_iso() if decided_by is not None else None
@@ -314,7 +420,7 @@ async def list_requests(
         params = [*params, int(limit), int(offset)]
     cur = await db.conn.execute(
         f"SELECT * FROM requests WHERE {where} "
-        f"ORDER BY (status <> '{PENDING}'), id DESC{tail}",
+        f"ORDER BY (status <> '{OPEN}'), id DESC{tail}",
         tuple(params),
     )
     return list(await cur.fetchall())
@@ -352,17 +458,21 @@ async def set_status(
     *,
     decided_by: int | None = None,
     decline_reason: str | None = None,
+    was: str | None = None,
 ) -> None:
+    """`held_from` is written on the way into hold and cleared on the way out — one home."""
     at = now_iso()
+    held_from = str(was or "") if status == HOLD else None
     await db.conn.execute(
         "UPDATE requests SET status = ?, decided_by = COALESCE(?, decided_by), "
-        "decided_at = COALESCE(?, decided_at), decline_reason = ?, "
+        "decided_at = COALESCE(?, decided_at), decline_reason = ?, held_from = ?, "
         "done_at = CASE WHEN ? = ? THEN ? ELSE done_at END WHERE id = ?",
         (
             status,
             decided_by,
             at if decided_by is not None else None,
-            decline_reason if status == DECLINED else None,
+            decline_reason if status in NEEDS_A_REASON else None,
+            held_from or None,
             status,
             DONE,
             at,
@@ -439,25 +549,39 @@ async def comment_counts(db: Any, request_ids: Any) -> dict[int, int]:
     return {int(row["request_id"]): int(row["found"]) for row in await cur.fetchall()}
 
 
-async def pending_count(db: Any, guild_id: int) -> int:
-    return await count_requests(db, guild_id, statuses=(PENDING,))
+async def open_count(db: Any, guild_id: int) -> int:
+    return await count_requests(db, guild_id, statuses=(OPEN,))
+
+
+def resume_target(row: Any) -> str:
+    """Where Resume puts it: back where it was held from, or straight into progress."""
+    found = str(row_value(row, "held_from") or "")
+    return found if found in TRANSITIONS.get(HOLD, frozenset()) else IN_PROGRESS
 
 
 __all__ = [
-    "APPROVED",
     "DECLINED",
     "DM_STATUSES",
+    "DM_TEXT",
     "DONE",
+    "FINAL_STATUSES",
+    "HOLD",
     "IN_PROGRESS",
+    "NEEDS_A_REASON",
+    "NOTIFY_MOVE",
+    "OPEN",
     "OPEN_STATUSES",
-    "PENDING",
-    "PLANNED",
     "STAFF_STATUSES",
     "STATUSES",
+    "STATUS_WORDS",
+    "TRANSITIONS",
+    "WITHDRAWABLE",
     "WITHDRAWN",
     "RequestError",
     "add_comment",
+    "can_move",
     "checked_fields",
+    "checked_move",
     "clamp",
     "comment_counts",
     "comments_for",
@@ -466,13 +590,19 @@ __all__ = [
     "due_stamp",
     "get_comment",
     "get_request",
+    "held_words",
     "list_requests",
+    "moves_from",
+    "moves_sentence",
+    "open_count",
     "page_of",
     "parse_due",
-    "pending_count",
+    "resume_target",
+    "row_value",
     "set_fields",
     "set_message",
     "set_status",
+    "status_channel_id",
     "wanted_priority",
     "wanted_status",
     "wanted_statuses",

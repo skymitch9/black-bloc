@@ -8,30 +8,31 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import PlainTextResponse
 
-from ...cogs.community.requests import apply_decision, notify
+from ...cogs.community.requests import apply_decision, notify, resume_request
 from ...requests import (
     API_PAGE,
-    APPROVED,
     COMMENT_LIMIT,
     COMMENT_NEEDS_TEXT,
-    DECLINE_NEEDS_A_REASON,
     DECLINED,
+    HOLD,
+    NEEDS_A_REASON,
     NO_SUCH_REQUEST,
-    NOT_PENDING,
     NOT_YOURS,
     NOTES_LIMIT,
-    PENDING,
+    OPEN,
     REASON_LIMIT,
+    REASON_NEEDED,
     REQUESTS_OFF,
     SEARCH_LIMIT,
     STAFF_ONLY_FILES,
     STATUS_WORDS,
+    TOO_LATE_TO_WITHDRAW,
     UNASSIGNED,
+    WITHDRAWABLE,
     WITHDRAWN,
     WITHDRAWN_SAID,
     RequestError,
     add_comment,
-    auto_approves,
     checked_fields,
     clamp,
     comment_counts,
@@ -41,8 +42,12 @@ from ...requests import (
     everyone_may_file,
     get_comment,
     get_request,
+    held_words,
     list_requests,
+    moves_from,
     requests_are_on,
+    resume_target,
+    row_value,
     set_fields,
     set_status,
     wanted_priority,
@@ -80,14 +85,12 @@ CSV_COLUMNS = (
     "decided_by",
     "decided_at",
     "decline_reason",
+    "held_from",
     "done_at",
     "comments",
 )
 
 FILED_SAID = "Filed as **#{request_id}** — staff will see it on this page."
-FILED_APPROVED_SAID = (
-    "Filed as **#{request_id}**, and approved straight away because you are staff."
-)
 SET_SAID = "Request **#{request_id}** is now **{status}**."
 SAVED_SAID = "Request **#{request_id}** is saved."
 COMMENT_SAID = "Your comment is on request **#{request_id}**."
@@ -133,6 +136,10 @@ def request_row(guild: Any, row: Any, comments: int = 0) -> dict[str, Any]:
         ),
         "decided_at": row["decided_at"],
         "decline_reason": row["decline_reason"],
+        "held_from": row_value(row, "held_from"),
+        "held_word": held_words(row),
+        "moves": list(moves_from(row["status"])),
+        "resume_to": resume_target(row) if row["status"] == HOLD else None,
         "done_at": row["done_at"],
     }
 
@@ -174,6 +181,7 @@ def export_csv(guild: Any, rows: Any, counts: dict[int, int]) -> str:
                 shown["decided_by"] or "",
                 shown["decided_at"] or "",
                 shown["decline_reason"] or "",
+                shown["held_from"] or "",
                 shown["done_at"] or "",
                 shown["comment_count"],
             ]
@@ -243,12 +251,12 @@ def build_router(bot: Any) -> APIRouter:
             raise Refused(404, "no_such_request", NO_SUCH_REQUEST.format(request_id=request_id))
         return row
 
-    def _may_file(guild: Any, who: dict[str, Any]) -> bool:
+    def _may_file(guild: Any, who: dict[str, Any]) -> None:
+        """Nothing approves itself any more — a staff filing arrives open like anybody's."""
         if not requests_are_on(bot.store, guild.id):
             raise Refused(409, "requests_off", REQUESTS_OFF)
         if not everyone_may_file(bot.store, guild.id) and not who["staff"]:
             raise Refused(403, "staff_only", STAFF_ONLY_FILES)
-        return bool(who["staff"]) and auto_approves(bot.store, guild.id)
 
     async def _decide(
         request: Request, request_id: int, status: str, reason: Any
@@ -312,7 +320,7 @@ def build_router(bot: Any) -> APIRouter:
             "page": at,
             "pages": pages,
             "per_page": API_PAGE,
-            "pending": await count_requests(bot.db, guild.id, statuses=(PENDING,)),
+            "open": await count_requests(bot.db, guild.id, statuses=(OPEN,)),
         }
 
     @router.post("")
@@ -321,7 +329,7 @@ def build_router(bot: Any) -> APIRouter:
         who = await signed_in_member(request)
         guild = require_guild(bot)
         require_db(bot)
-        approved = _may_file(guild, who)
+        _may_file(guild, who)
         try:
             what, why, due_on = checked_fields(
                 payload.get("what"), payload.get("why"), payload.get("due_on")
@@ -336,8 +344,7 @@ def build_router(bot: Any) -> APIRouter:
             what=what,
             why=why,
             due_on=due_on,
-            status=APPROVED if approved else PENDING,
-            decided_by=user_id if approved else None,
+            status=OPEN,
         )
         await note(
             bot,
@@ -345,15 +352,14 @@ def build_router(bot: Any) -> APIRouter:
             "web.request.filed",
             who,
             target=user_id,
-            details={"request_id": request_id, "auto_approved": approved},
+            details={"request_id": request_id},
         )
         row = await get_request(bot.db, request_id)
         await notify(bot, guild, row, actor_for(bot, who, guild))
-        said = FILED_APPROVED_SAID if approved else FILED_SAID
         fresh = await get_request(bot.db, request_id)
         return {
             "request": await _shown(guild, fresh),
-            "message": said.format(request_id=request_id),
+            "message": FILED_SAID.format(request_id=request_id),
         }
 
     @router.get("/mine")
@@ -417,20 +423,47 @@ def build_router(bot: Any) -> APIRouter:
             "comments": [comment_row(guild, one) for one in comments],
         }
 
-    @router.post("/{request_id}/approve")
-    async def request_approve(
-        request: Request, request_id: int, payload: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
-        return await _decide(request, request_id, APPROVED, None)
-
     @router.post("/{request_id}/decline")
     async def request_decline(
         request: Request, request_id: int, payload: dict[str, Any]
     ) -> dict[str, Any]:
         reason = clamp(payload.get("reason"), REASON_LIMIT)
         if not reason:
-            raise Refused(400, "no_reason", DECLINE_NEEDS_A_REASON)
+            raise Refused(400, "no_reason", REASON_NEEDED[DECLINED])
         return await _decide(request, request_id, DECLINED, reason)
+
+    @router.post("/{request_id}/hold")
+    async def request_hold(
+        request: Request, request_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        reason = clamp(payload.get("reason"), REASON_LIMIT)
+        if not reason:
+            raise Refused(400, "no_reason", REASON_NEEDED[HOLD])
+        return await _decide(request, request_id, HOLD, reason)
+
+    @router.post("/{request_id}/resume")
+    async def request_resume(
+        request: Request, request_id: int, payload: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Back where it was held from; the button on a hold card and `/request resume`."""
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        await _wanted(guild, request_id)
+        said, fresh = await resume_request(
+            bot, guild, request_id, actor_for(bot, who, guild)
+        )
+        if fresh is None:
+            raise Refused(409, "not_on_hold", said)
+        await note(
+            bot,
+            guild,
+            "web.request.resumed",
+            who,
+            target=fresh["user_id"],
+            details={"request_id": request_id, "held_from": fresh["status"]},
+        )
+        return {"request": await _shown(guild, fresh), "message": said}
 
     @router.post("/{request_id}/status")
     async def request_status(
@@ -455,8 +488,8 @@ def build_router(bot: Any) -> APIRouter:
         )
         notes = clamp(payload["notes"], NOTES_LIMIT) or None if "notes" in payload else ...
         reason = clamp(payload.get("reason"), REASON_LIMIT)
-        if status == DECLINED and not reason:
-            raise Refused(400, "no_reason", DECLINE_NEEDS_A_REASON)
+        if status in NEEDS_A_REASON and not reason:
+            raise Refused(400, "no_reason", REASON_NEEDED[status])
         changed = await set_fields(
             bot.db, request_id, assignee_id=assignee, priority=priority, notes=notes
         )
@@ -499,11 +532,11 @@ def build_router(bot: Any) -> APIRouter:
         row = await _wanted(guild, request_id)
         if row["user_id"] != int(who["id"]):
             raise Refused(403, "not_yours", NOT_YOURS.format(request_id=request_id))
-        if row["status"] != PENDING:
+        if row["status"] not in WITHDRAWABLE:
             raise Refused(
                 409,
-                "not_pending",
-                NOT_PENDING.format(
+                "too_late_to_withdraw",
+                TOO_LATE_TO_WITHDRAW.format(
                     request_id=request_id,
                     status=STATUS_WORDS.get(row["status"], row["status"]),
                 ),

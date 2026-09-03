@@ -15,6 +15,18 @@ from .automod import (
     rules_summary,
     validate_rules,
 )
+from .chat_memory import (
+    CONSENT_CHOICES,
+    DM_SCOPES,
+    MEMORY_MODES,
+    NOTES_CEILING,
+    NOTES_MAX,
+    RETENTION_DAYS,
+    RETENTION_MAX_DAYS,
+    STAFF_VIEWS,
+    THREADS_CEILING,
+    THREADS_MAX,
+)
 from .config import Settings
 from .emoji import SKIN_TONE_DEFAULT, SKIN_TONE_NAMES
 from .groq import DEFAULT_MODEL as GROQ_DEFAULT_MODEL
@@ -194,8 +206,8 @@ KEY_TYPES: dict[str, str] = {
     "rolemenu_mode": "enum",
     "request_mode": "enum",
     "request_who_can_file": "enum",
-    "request_auto_approve_staff": "bool",
     "request_notify_channel_id": "channel",
+    "request_status_channel_id": "channel",
     "request_dm_on_decision": "bool",
     "chat_mode": "enum",
     "chat_cooldown_seconds": "int",
@@ -215,6 +227,14 @@ KEY_TYPES: dict[str, str] = {
     "chat_daily_turns": "int",
     "chat_monthly_cap_usd": "int",
     "chat_status_admin_only": "bool",
+    "chat_memory_mode": "enum",
+    "chat_memory_consent": "enum",
+    "chat_memory_retention_days": "int",
+    "chat_memory_dm_scope": "enum",
+    "chat_memory_staff_view": "enum",
+    "chat_memory_notes_max": "int",
+    "chat_memory_threads_max": "int",
+    "chat_memory_model": "text",
     "rolemenu_approval_channel_id": "channel",
     "rolemenu_approver_role_id": "role",
     "emoji_skin_tone": "enum",
@@ -245,6 +265,10 @@ KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "chat_mode": CHAT_MODES,
     "chat_llm_mode": CHAT_LLM_MODES,
     "chat_personality": PERSONALITY_CHOICES,
+    "chat_memory_mode": MEMORY_MODES,
+    "chat_memory_consent": CONSENT_CHOICES,
+    "chat_memory_dm_scope": DM_SCOPES,
+    "chat_memory_staff_view": STAFF_VIEWS,
     "emoji_skin_tone": SKIN_TONE_NAMES,
 }
 
@@ -258,6 +282,9 @@ KEY_MAX: dict[str, int] = {
     "chat_person_hourly_turns": CHAT_TURNS_MAX,
     "chat_daily_turns": CHAT_TURNS_MAX,
     "chat_monthly_cap_usd": CHAT_MONTHLY_CAP_MAX,
+    "chat_memory_retention_days": RETENTION_MAX_DAYS,
+    "chat_memory_notes_max": NOTES_CEILING,
+    "chat_memory_threads_max": THREADS_CEILING,
     "poll_default_hours": POLL_MAX_HOURS,
     "poll_reminder_minutes": POLL_REMINDER_MAX_MINUTES,
     "poll_archive_days": POLL_ARCHIVE_MAX_DAYS,
@@ -500,16 +527,17 @@ KEY_HELP: dict[str, str] = {
         "off, or on (members can ask for things with /request and staff decide on the site)"
     ),
     "request_who_can_file": "who may file a request: everyone, or staff only",
-    "request_auto_approve_staff": (
-        "true to approve a request the moment a mod or admin files it, instead of holding it for "
-        "a decision"
+    "request_status_channel_id": (
+        "where a line goes each time staff move a request — picked up, on hold, done, declined; "
+        "blank uses request_notify_channel_id, so one channel carries both"
     ),
     "request_notify_channel_id": (
         "where one line goes when a request is filed; blank tells nobody and the site is the only "
         "place they show up"
     ),
     "request_dm_on_decision": (
-        "true to DM the person who asked when their request is approved, declined or done"
+        "true to DM the person who asked every time staff move their request — picked up, on "
+        "hold, done or declined"
     ),
     "chat_mode": "off, or on (Black Bloc answers when somebody @-mentions it)",
     "chat_cooldown_seconds": (
@@ -588,6 +616,40 @@ KEY_HELP: dict[str, str] = {
         "on keeps `/chat status` (what the conversation models are spending) to server "
         "administrators; off lets any staff member read it. The dashboard's Spend section "
         "stays staff-visible either way"
+    ),
+    "chat_memory_mode": (
+        "off, or on (Black Bloc keeps a few preferences about each person — what to call them, "
+        "how they like to be answered — and reads them back next time). Off writes nothing and "
+        "reads nothing; the profiles already stored stay until somebody clears them"
+    ),
+    "chat_memory_consent": (
+        "optout means memory is on for everybody until they run `/chat memory off`; optin means "
+        "nobody is remembered until they run `/chat memory on`"
+    ),
+    "chat_memory_retention_days": (
+        f"days a profile nobody has added to is kept before it is deleted, up to "
+        f"{RETENTION_MAX_DAYS}; 0 keeps them forever. Leaving the server clears one straight away"
+    ),
+    "chat_memory_dm_scope": (
+        "separate keeps what Black Bloc learns in a DM out of public channels — a name or "
+        "pronouns set by DM never reach the server; shared lets every note be used anywhere"
+    ),
+    "chat_memory_staff_view": (
+        "counts shows staff only how many profiles there are and when each changed; full lets "
+        "staff read the notes themselves. The person can always read their own with "
+        "`/chat memory show`"
+    ),
+    "chat_memory_notes_max": (
+        f"how many preferences one profile holds, up to {NOTES_CEILING}; the oldest drops off "
+        f"when a newer one arrives"
+    ),
+    "chat_memory_threads_max": (
+        f"how many open topics (“was asking about the Thursday event”) one profile "
+        f"holds, up to {THREADS_CEILING}"
+    ),
+    "chat_memory_model": (
+        "which Groq model writes the profile up after a conversation ends; blank uses "
+        "chat_simple_model, the same quick tier that answers"
     ),
     "rolemenu_approval_channel_id": (
         "where a role request waits for Approve or Deny; blank uses staff_channel_id"
@@ -1012,8 +1074,6 @@ class SettingsStore:
             return "on"
         if key == "request_who_can_file":
             return "everyone"
-        if key == "request_auto_approve_staff":
-            return True
         if key == "request_notify_channel_id":
             return self.settings.test_channel_id if self.settings.test_mode else None
         if key == "request_dm_on_decision":
@@ -1046,6 +1106,22 @@ class SettingsStore:
             return CHAT_DAILY_TURNS
         if key == "chat_monthly_cap_usd":
             return CHAT_MONTHLY_CAP_USD
+        if key == "chat_memory_mode":
+            return "off"
+        if key == "chat_memory_consent":
+            return CONSENT_CHOICES[0]
+        if key == "chat_memory_retention_days":
+            return RETENTION_DAYS
+        if key == "chat_memory_dm_scope":
+            return DM_SCOPES[0]
+        if key == "chat_memory_staff_view":
+            return STAFF_VIEWS[0]
+        if key == "chat_memory_notes_max":
+            return NOTES_MAX
+        if key == "chat_memory_threads_max":
+            return THREADS_MAX
+        if key == "chat_memory_model":
+            return ""
         if key == "emoji_skin_tone":
             return SKIN_TONE_DEFAULT
         if key == "cost_hosting_usd":

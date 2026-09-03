@@ -27,6 +27,7 @@ from ...chat import (
     invalidate,
     seed_defaults,
 )
+from ...chat_distil import run as distil_run
 from ...chat_llm import (
     LLM_MODE_KEY,
     REPLY_KIND,
@@ -196,6 +197,7 @@ class Chat(commands.Cog):
         self._seeded: set[int] = set()
         self.last_ingest_at: str | None = None
         self.last_ingest_error: str | None = None
+        self.last_distil: dict[str, int] | None = None
 
     def loop_health(self, name: str) -> tuple[str | None, str | None]:
         if name == "_ingest":
@@ -537,6 +539,10 @@ class Chat(commands.Cog):
         db = self.usable_db()
         if db is None:
             return 0
+        try:
+            self.last_distil = await distil_run(self.bot)
+        except Exception as exc:
+            log.warning("chat: nothing was remembered — %s: %s", type(exc).__name__, exc)
         try:
             await sweep_window(db)
         except Exception as exc:

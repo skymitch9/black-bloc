@@ -6,8 +6,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from .chat import has_phrase, normalise
-
 log = logging.getLogger(__name__)
 
 DM = "dm"
@@ -275,6 +273,19 @@ DISTIL_SYSTEM = (
 
 DISTIL_USER = "The profile so far:\n{profile}\n\nThe conversation that just ended:\n{turns}"
 NOTHING_SAID = "(nothing)"
+
+
+def normalise(text: Any) -> str:
+    """`chat.normalise`, reached late so the settings registry can import this module."""
+    from .chat import normalise as words
+
+    return words(text)
+
+
+def has_phrase(words: str, phrase: str) -> bool:
+    from .chat import has_phrase as found
+
+    return found(words, phrase)
 
 
 def shingles(turns: Any, run: int = QUOTE_RUN_WORDS) -> set[str]:
@@ -701,7 +712,15 @@ async def forget_everywhere(db: Any, user_id: Any) -> int:
     return int(cur.rowcount or 0)
 
 
-async def opted_out(db: Any, user_id: Any, guild_id: Any) -> bool:
+def remembered(consent: Any, override: Any) -> bool:
+    """A row in `chat_memory_optout` means ONE thing: this person is not on the server default."""
+    if override is None:
+        return False
+    return (not override) if str(consent or OPTOUT) == OPTOUT else bool(override)
+
+
+async def overridden(db: Any, user_id: Any, guild_id: Any) -> bool | None:
+    """True, False, or None when the table could not be read — None never means remembered."""
     try:
         cur = await db.conn.execute(
             "SELECT 1 FROM chat_memory_optout WHERE user_id = ? AND guild_id = ?",
@@ -709,12 +728,16 @@ async def opted_out(db: Any, user_id: Any, guild_id: Any) -> bool:
         )
         row = await cur.fetchone()
     except Exception as exc:
-        log.warning("chat memory: the opt-outs were not read — %s: %s", type(exc).__name__, exc)
-        return True
+        log.warning("chat memory: the choices were not read — %s: %s", type(exc).__name__, exc)
+        return None
     return row is not None
 
 
-async def set_optout(db: Any, user_id: Any, guild_id: Any, *, at: str | None = None) -> bool:
+async def remembers(db: Any, user_id: Any, guild_id: Any, *, consent: Any = OPTOUT) -> bool:
+    return remembered(consent, await overridden(db, user_id, guild_id))
+
+
+async def set_override(db: Any, user_id: Any, guild_id: Any, *, at: str | None = None) -> bool:
     try:
         await db.conn.execute(
             "INSERT OR REPLACE INTO chat_memory_optout(user_id, guild_id, at) VALUES (?, ?, ?)",
@@ -722,12 +745,12 @@ async def set_optout(db: Any, user_id: Any, guild_id: Any, *, at: str | None = N
         )
         await db.conn.commit()
     except Exception as exc:
-        log.warning("chat memory: the opt-out was not saved — %s: %s", type(exc).__name__, exc)
+        log.warning("chat memory: the choice was not saved — %s: %s", type(exc).__name__, exc)
         return False
     return True
 
 
-async def clear_optout(db: Any, user_id: Any, guild_id: Any) -> bool:
+async def clear_override(db: Any, user_id: Any, guild_id: Any) -> bool:
     try:
         cur = await db.conn.execute(
             "DELETE FROM chat_memory_optout WHERE user_id = ? AND guild_id = ?",
@@ -735,9 +758,20 @@ async def clear_optout(db: Any, user_id: Any, guild_id: Any) -> bool:
         )
         await db.conn.commit()
     except Exception as exc:
-        log.warning("chat memory: the opt-out was not lifted — %s: %s", type(exc).__name__, exc)
+        log.warning("chat memory: the choice was not lifted — %s: %s", type(exc).__name__, exc)
         return False
     return bool(cur.rowcount)
+
+
+async def set_remembered(
+    db: Any, user_id: Any, guild_id: Any, *, consent: Any, wanted: bool
+) -> bool:
+    """Says what the person wants, whichever way round the server's consent model is."""
+    keeps_row = wanted if str(consent or OPTOUT) != OPTOUT else not wanted
+    if keeps_row:
+        return await set_override(db, user_id, guild_id)
+    await clear_override(db, user_id, guild_id)
+    return True
 
 
 async def expire(db: Any, *, days: int = RETENTION_DAYS, now: datetime | None = None) -> int:

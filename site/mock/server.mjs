@@ -193,12 +193,15 @@ const IMPORTANT_SUFFIXES = [
 ];
 const IMPORTANT_KINDS = [
   'automod.deleted', 'mod.warn', 'mod.unbanned', 'mod.untimed_out',
-  'request.declined', 'request.done',
+  'request.declined', 'request.done', 'request.hold',
+  'chat.memory_forgot', 'chat.memory_optout',
 ];
 const ROUTINE_KINDS = [
   'poll.closed', 'tempvoice.ban', 'tempvoice.kick', 'honeypot.ban',
-  'request.filed', 'request.auto_approved', 'request.withdrawn', 'request.planned',
+  'request.filed', 'request.withdrawn', 'request.resumed',
+  'request.notify_skipped_test_mode',
   'request.in_progress', 'request.updated', 'request.comment',
+  'chat.memory_distilled', 'chat.memory_expired', 'chat.memory_optin',
 ];
 
 function bareKind(kind) {
@@ -366,11 +369,19 @@ const SETTING_SPECS = [
     `which ${label} log lines reach the Discord log channel: off, important (anything that acted on a member, or failed) or all. Every line is kept on the dashboard${command ? ` and in \`/${command} logs\`` : ''} either way`,
     ['off', 'important', 'all'],
   ]),
+  ['chat_memory_mode', 'enum', 'off', 'off', 'off, or on (Black Bloc keeps a few preferences about each person — what to call them, how they like to be answered — and reads them back next time). Off writes nothing and reads nothing; the profiles already stored stay until somebody clears them', ['off', 'on']],
+  ['chat_memory_consent', 'enum', 'optout', 'optout', 'optout means memory is on for everybody until they run `/memory off`; optin means nobody is remembered until they run `/memory on`', ['optout', 'optin']],
+  ['chat_memory_retention_days', 'int', 180, 180, 'days a profile nobody has added to is kept before it is deleted, up to 3650; 0 keeps them forever. Leaving the server clears one straight away', null, 3650],
+  ['chat_memory_dm_scope', 'enum', 'separate', 'separate', 'separate keeps what Black Bloc learns in a DM out of public channels — a name or pronouns set by DM never reach the server; shared lets every note be used anywhere', ['separate', 'shared']],
+  ['chat_memory_staff_view', 'enum', 'counts', 'counts', 'counts shows staff only how many profiles there are and when each changed; full lets staff read the notes themselves. The person can always read their own with `/memory show`', ['counts', 'full']],
+  ['chat_memory_notes_max', 'int', 6, 6, 'how many preferences one profile holds, up to 20; the oldest drops off when a newer one arrives', null, 20],
+  ['chat_memory_threads_max', 'int', 5, 5, 'how many open topics (“was asking about the Thursday event”) one profile holds, up to 20', null, 20],
+  ['chat_memory_model', 'text', '', '', 'which Groq model writes the profile up after a conversation ends; blank uses chat_simple_model, the same quick tier that answers'],
   ['request_mode', 'enum', 'on', 'on', 'off, or on (members can ask for things with /request and staff decide on the site)', ['off', 'on']],
   ['request_who_can_file', 'enum', 'everyone', 'everyone', 'who may file a request: everyone, or staff only', ['everyone', 'staff']],
-  ['request_auto_approve_staff', 'bool', true, true, 'true to approve a request the moment a mod or admin files it, instead of holding it for a decision'],
   ['request_notify_channel_id', 'channel', '800000000000000003', null, 'where one line goes when a request is filed; blank tells nobody and the site is the only place they show up'],
-  ['request_dm_on_decision', 'bool', true, true, 'true to DM the person who asked when their request is approved, declined or done'],
+  ['request_status_channel_id', 'channel', null, null, 'where a line goes each time staff move a request — picked up, on hold, done, declined; blank uses request_notify_channel_id, so one channel carries both'],
+  ['request_dm_on_decision', 'bool', true, true, 'true to DM the person who asked every time staff move their request — picked up, on hold, done or declined'],
   ['cost_hosting_usd', 'int', 0, 0, 'what the always-on container costs a month in whole dollars — read it off your Fly invoice; 0 = not filled in yet, and the Costs card on the Health page says so rather than claiming hosting is free', null, 10000],
 ];
 
@@ -395,24 +406,25 @@ const RULE_HELP = {
 };
 
 // Requests (13b). [id, member, what, why, dueInDays|null, status, priority|null,
-// assignee|null, notes|null, filedMinutesAgo, declineReason|null] — the wide rows are
-// derived from these so thirty of them stay readable.
+// assignee|null, notes|null, filedMinutesAgo, reason|null, heldFrom|null] — the wide rows
+// are derived from these so thirty of them stay readable. `reason` is the one sentence the
+// requester is sent, on a decline AND on a hold; `heldFrom` is where a hold came back from.
 const REQUEST_SEED = [
-  [30, 3, 'A #suggestions channel with a poll under every idea', 'The ideas doc is where suggestions go to die. If each one opened a poll we would know in a day whether anybody else wants it.', null, 'pending', null, null, null, 40, null],
-  [29, 0, 'Let /request take screenshots', 'Half of what I want to describe is a picture of the thing being wrong. Typing it out loses the detail.', 21, 'pending', null, null, null, 120, null],
-  [28, 6, 'A weekly digest of what the bot did', 'Nobody reads the log channel. One Monday post with the week in five lines would actually get read.', 7, 'pending', null, null, null, 300, null],
-  [27, 2, 'Birthday shout-outs should skip people who are not in the server any more', 'We wished a happy birthday to somebody who left in March and it was awkward for everyone.', null, 'pending', null, null, null, 900, null],
-  [26, 5, 'Let members mute the go-live pings without leaving the role', 'I want the colour, not the notification. Right now it is both or neither.', 30, 'pending', null, null, null, 1500, null],
-  [25, 0, 'A queue for the karaoke nights', 'We keep losing the running order in chat. A /queue with a list everybody can see would fix it.', 14, 'pending', null, null, null, 2600, null],
-  [24, 1, 'Temp voice channels should remember the name I gave them', 'I rename mine every single time. It should come back the way I left it.', null, 'approved', 3, null, null, 4200, null],
-  [23, 6, 'Show who is in a temp voice room from the text channel', 'You cannot tell whether it is worth joining without joining.', 45, 'approved', 2, 0, null, 5000, null],
-  [22, 2, 'An /events ical export', 'Half the group lives in a different time zone and reads the calendar app, not Discord.', 60, 'approved', 4, null, 'Casey has the feed format from last year.', 6400, null],
-  [21, 4, 'Automod should let me appeal a timeout', 'I got a ten minute timeout for a link nobody minded and there was nowhere to say so.', null, 'approved', 5, null, null, 7000, null],
-  [20, 3, 'Role menus with a description under each role', 'The emoji is not enough. New people pick the wrong one every week.', 25, 'planned', 2, 0, 'Fits under the existing menu editor — no new storage.', 8200, null],
-  [19, 1, 'A #welcome message that names the three channels worth reading', 'We say the same three things to every new person by hand.', null, 'planned', 3, 1, null, 9000, null],
-  [18, 6, 'Let staff pin a poll result to the top of the channel', 'The result scrolls away and then we argue about it again a month later.', 40, 'planned', 3, null, null, 9800, null],
-  [17, 2, 'Modmail should show the member\'s last five messages', 'You open a ticket with no idea what happened just before it.', null, 'planned', 1, 0, 'Needs a message cache the bot does not keep yet — ask before starting.', 11000, null],
-  [16, 5, 'A quiet hours mode for the announcement pings', 'Three in the morning go-live pings are why I turned notifications off entirely.', 90, 'planned', 4, null, null, 12000, null],
+  [30, 3, 'A #suggestions channel with a poll under every idea', 'The ideas doc is where suggestions go to die. If each one opened a poll we would know in a day whether anybody else wants it.', null, 'open', null, null, null, 40, null],
+  [29, 0, 'Let /request take screenshots', 'Half of what I want to describe is a picture of the thing being wrong. Typing it out loses the detail.', 21, 'open', null, null, null, 120, null],
+  [28, 6, 'A weekly digest of what the bot did', 'Nobody reads the log channel. One Monday post with the week in five lines would actually get read.', 7, 'open', null, null, null, 300, null],
+  [27, 2, 'Birthday shout-outs should skip people who are not in the server any more', 'We wished a happy birthday to somebody who left in March and it was awkward for everyone.', null, 'open', null, null, null, 900, null],
+  [26, 5, 'Let members mute the go-live pings without leaving the role', 'I want the colour, not the notification. Right now it is both or neither.', 30, 'open', null, null, null, 1500, null],
+  [25, 0, 'A queue for the karaoke nights', 'We keep losing the running order in chat. A /queue with a list everybody can see would fix it.', 14, 'open', null, null, null, 2600, null],
+  [24, 1, 'Temp voice channels should remember the name I gave them', 'I rename mine every single time. It should come back the way I left it.', null, 'open', 3, null, null, 4200, null],
+  [23, 6, 'Show who is in a temp voice room from the text channel', 'You cannot tell whether it is worth joining without joining.', 45, 'open', 2, 0, null, 5000, null],
+  [22, 2, 'An /events ical export', 'Half the group lives in a different time zone and reads the calendar app, not Discord.', 60, 'open', 4, null, 'Casey has the feed format from last year.', 6400, null],
+  [21, 4, 'Automod should let me appeal a timeout', 'I got a ten minute timeout for a link nobody minded and there was nowhere to say so.', null, 'open', 5, null, null, 7000, null],
+  [20, 3, 'Role menus with a description under each role', 'The emoji is not enough. New people pick the wrong one every week.', 25, 'hold', 2, 0, 'Fits under the existing menu editor — no new storage.', 8200, 'Waiting on the role menu rewrite so this is not built twice.', 'in_progress'],
+  [19, 1, 'A #welcome message that names the three channels worth reading', 'We say the same three things to every new person by hand.', null, 'open', 3, 1, null, 9000, null],
+  [18, 6, 'Let staff pin a poll result to the top of the channel', 'The result scrolls away and then we argue about it again a month later.', 40, 'open', 3, null, null, 9800, null],
+  [17, 2, 'Modmail should show the member\'s last five messages', 'You open a ticket with no idea what happened just before it.', null, 'hold', 1, 0, 'Needs a message cache the bot does not keep yet — ask before starting.', 11000, 'Nothing keeps old messages yet, so there is nothing to show. Waiting on that.', 'open'],
+  [16, 5, 'A quiet hours mode for the announcement pings', 'Three in the morning go-live pings are why I turned notifications off entirely.', 90, 'open', 4, null, null, 12000, null],
   [15, 3, 'The cookout countdown on the dashboard', 'Everybody asks how long is left and somebody has to do the arithmetic in their head.', 10, 'in_progress', 2, 0, 'Half built; the timer is drawn, the setting is not wired.', 13000, null],
   [14, 1, 'Search the audit log by member', 'Scrolling to find one person\'s three lines takes minutes.', null, 'in_progress', 1, 1, null, 14000, null],
   [13, 6, 'Let me file a request from a message with a right-click', 'Half of the requests start as somebody complaining in chat.', 35, 'in_progress', 3, 0, null, 15000, null],
@@ -430,10 +442,10 @@ const REQUEST_SEED = [
   [1, 3, 'A second bot for music', 'Nobody has bothered since the last one broke.', null, 'withdrawn', null, null, null, 44000, null],
 ];
 
-const REQUEST_DECIDED = ['approved', 'planned', 'in_progress', 'done', 'declined'];
+const REQUEST_DECIDED = ['in_progress', 'hold', 'done', 'declined'];
 
 function seedRequests() {
-  return REQUEST_SEED.map(([id, who, what, why, due, status, priority, assignee, notes, aged, reason]) => ({
+  return REQUEST_SEED.map(([id, who, what, why, due, status, priority, assignee, notes, aged, reason, heldFrom]) => ({
     id,
     user_id: MEMBERS[who].id,
     what,
@@ -447,6 +459,7 @@ function seedRequests() {
     decided_by: REQUEST_DECIDED.includes(status) ? STAFF.id : null,
     decided_at: REQUEST_DECIDED.includes(status) ? minutesAgo(Math.round(aged * 0.7)) : null,
     decline_reason: reason,
+    held_from: status === 'hold' ? heldFrom || 'open' : null,
     done_at: status === 'done' ? minutesAgo(Math.round(aged * 0.2)) : null,
     message_id: null,
   }));
@@ -3253,6 +3266,10 @@ const CHAT_SETTING_KEYS = ['chat_mode', 'chat_cooldown_seconds', 'chat_ignore_ch
   'chat_greeting_reaction', 'chat_reply_in_threads',
   'chat_route_ping_staff', 'chat_llm_mode', 'chat_simple_model', 'chat_personality',
   'chat_person_hourly_turns', 'chat_daily_turns', 'chat_monthly_cap_usd', 'chat_log_level'];
+// Phase 17. Their own list because the Memory section reads them as one block.
+const CHAT_MEMORY_SETTING_KEYS = ['chat_memory_mode', 'chat_memory_consent',
+  'chat_memory_retention_days', 'chat_memory_dm_scope', 'chat_memory_staff_view',
+  'chat_memory_notes_max', 'chat_memory_threads_max', 'chat_memory_model'];
 const CHAT_UNKNOWN_LINE = 'Not sure I follow, {name} — try `/help` for what I can do.';
 const CHAT_NO_SUCH_INTENT = 'Black Bloc has no chat intent **#%s** any more, so nothing was done. The Chat page lists the ones it has.';
 const CHAT_NO_SUCH_LINE = 'Black Bloc has no chat line **#%s** any more, so nothing was done. Somebody may have removed it while this page was open.';
@@ -3846,13 +3863,24 @@ route('GET', '/api/chat/spend', (context) => {
 // already the role-request row. Mirrors black_bloc/api/tools/requests.py: ids as strings, refusals in
 // words, pending first. POST /api/requests, GET /api/requests/mine and the withdraw route
 // are the only three the real API lets a non-staff member call.
-const REQUEST_STATUSES = ['pending', 'approved', 'planned', 'in_progress', 'done', 'declined', 'withdrawn'];
-const REQUEST_STAFF_STATUSES = ['approved', 'planned', 'in_progress', 'done', 'declined'];
+const REQUEST_STATUSES = ['open', 'in_progress', 'hold', 'done', 'declined', 'withdrawn'];
+// One table, the same one black_bloc/requests.py:TRANSITIONS holds.
+const REQUEST_TRANSITIONS = {
+  open: ['declined', 'hold', 'in_progress'],
+  in_progress: ['declined', 'done', 'hold'],
+  hold: ['declined', 'in_progress'],
+  done: [],
+  declined: [],
+  withdrawn: [],
+};
+const REQUEST_STAFF_STATUSES = ['declined', 'done', 'hold', 'in_progress'];
+const REQUEST_OPEN_STATUSES = ['open', 'in_progress', 'hold'];
+const REQUEST_WITHDRAWABLE = ['open', 'hold'];
+const REQUEST_NEEDS_A_REASON = ['hold', 'declined'];
 const REQUEST_STATUS_WORDS = {
-  pending: 'waiting on staff',
-  approved: 'approved',
-  planned: 'planned',
+  open: 'open',
   in_progress: 'being worked on',
+  hold: 'on hold',
   done: 'done',
   declined: 'declined',
   withdrawn: 'withdrawn',
@@ -3864,6 +3892,8 @@ const REQUEST_STAFF_ONLY = 'Only staff may file a request on this server at the 
 const REQUEST_NEEDS_WHAT = 'A request needs a line saying what you are asking for, so nothing was filed. Fill the What box in and send it again.';
 const REQUEST_NEEDS_WHY = 'A request needs a line saying why it is worth doing, so nothing was filed. That is the part staff read first — fill the Why box in and send it again.';
 const REQUEST_DECLINE_NEEDS_A_REASON = 'A declined request needs one line the person who asked is sent, so nothing was changed. Say why and send it again.';
+const REQUEST_HOLD_NEEDS_A_REASON = 'A request put on hold needs one line the person who asked is sent, so nothing was changed. Say why it is waiting and send it again.';
+const REQUEST_REASON_NEEDED = { declined: REQUEST_DECLINE_NEEDS_A_REASON, hold: REQUEST_HOLD_NEEDS_A_REASON };
 const REQUEST_COMMENT_NEEDS_TEXT = 'There is nothing to add, so no comment was left. Type what you want on the request and send it again.';
 const REQUEST_NOTHING_TO_SAVE = 'That change arrived with nothing in it, so nothing was saved. It is a fault in the page rather than in what you typed — reload the requests page and try again.';
 
@@ -3890,8 +3920,17 @@ function askRow(row) {
     decided_by_name: row.decided_by ? memberName(row.decided_by) : null,
     decided_at: row.decided_at,
     decline_reason: row.decline_reason,
+    held_from: row.held_from || null,
+    held_word: row.held_from ? REQUEST_STATUS_WORDS[row.held_from] || row.held_from : '',
+    moves: REQUEST_TRANSITIONS[row.status] || [],
+    resume_to: row.status === 'hold' ? askResumeTarget(row) : null,
     done_at: row.done_at,
   };
+}
+
+function askResumeTarget(row) {
+  const found = String(row.held_from || '');
+  return (REQUEST_TRANSITIONS.hold || []).includes(found) ? found : 'in_progress';
 }
 
 function askCommentRow(row) {
@@ -3944,20 +3983,45 @@ function askFields(body) {
   return { what, why, due_on: given || null };
 }
 
+function askMovesSentence(status) {
+  const found = REQUEST_TRANSITIONS[status] || [];
+  const where = REQUEST_STATUS_WORDS[status] || status;
+  if (!found.length) return `**${where}** is where a request finishes — nothing moves it now.`;
+  return `From **${where}** it can go to ${found.map((one) => `**${one}**`).join(', ')}.`;
+}
+
 function askDecide(row, status, reason) {
-  if (row.status === status) {
-    throw new Refused(409, 'not_decided', `Request **#${row.id}** is already **${status}**, so nothing was changed.`);
+  const where = row.status;
+  if (where === status) {
+    throw new Refused(409, 'not_decided', `Request **#${row.id}** is already **${REQUEST_STATUS_WORDS[where] || where}**, so nothing was changed.`);
   }
-  if (status === 'declined' && !reason) {
-    throw new Refused(400, 'no_reason', REQUEST_DECLINE_NEEDS_A_REASON);
+  if (!(REQUEST_TRANSITIONS[where] || []).includes(status)) {
+    throw new Refused(409, 'not_decided', `Request **#${row.id}** is **${REQUEST_STATUS_WORDS[where] || where}**, and staff cannot move it to **${status}** from there, so nothing was changed. ${askMovesSentence(where)}`);
+  }
+  if (REQUEST_NEEDS_A_REASON.includes(status) && !reason) {
+    throw new Refused(400, 'no_reason', REQUEST_REASON_NEEDED[status]);
   }
   row.status = status;
   row.decided_by = STAFF.id;
   row.decided_at = now();
-  row.decline_reason = status === 'declined' ? reason : null;
+  row.decline_reason = REQUEST_NEEDS_A_REASON.includes(status) ? reason : null;
+  row.held_from = status === 'hold' ? where : null;
   if (status === 'done') row.done_at = now();
-  logAction(`web.request.${status}`, { target_id: row.user_id, reason: reason || null, details: { request_id: row.id } });
+  logAction(`web.request.${status}`, { target_id: row.user_id, reason: reason || null, details: { request_id: row.id, was: where } });
   return `Request **#${row.id}** is now **${REQUEST_STATUS_WORDS[status]}**.`;
+}
+
+function askResume(row) {
+  if (row.status !== 'hold') {
+    throw new Refused(409, 'not_on_hold', `Request **#${row.id}** is **${REQUEST_STATUS_WORDS[row.status] || row.status}**, not on hold, so there was nothing to resume. \`/request set\` moves it from where it is.`);
+  }
+  const wanted = askResumeTarget(row);
+  row.status = wanted;
+  row.held_from = null;
+  row.decided_by = STAFF.id;
+  row.decided_at = now();
+  logAction('web.request.resumed', { target_id: row.user_id, details: { request_id: row.id, was: 'hold', held_from: wanted } });
+  return `Request **#${row.id}** is off hold and back to **${REQUEST_STATUS_WORDS[wanted]}**.`;
 }
 
 route('GET', '/api/requests', (context) => {
@@ -3983,7 +4047,7 @@ route('GET', '/api/requests', (context) => {
   });
   return {
     ...askPage(rows, url.searchParams.get('page')),
-    pending: state.asks.filter((row) => row.status === 'pending').length,
+    open: state.asks.filter((row) => row.status === 'open').length,
   };
 });
 
@@ -3997,28 +4061,25 @@ route('POST', '/api/requests', async (context) => {
   const mine = actorOf(context.session);
   const body = await context.body();
   const fields = askFields(body);
-  const approved = staff && state.settings.get('request_auto_approve_staff') !== false;
   const made = {
     id: state.nextAsk++,
     user_id: mine,
     ...fields,
-    status: approved ? 'approved' : 'pending',
+    status: 'open',
     priority: null,
     assignee_id: null,
     notes: null,
     created_at: now(),
-    decided_by: approved ? mine : null,
-    decided_at: approved ? now() : null,
+    decided_by: null,
+    decided_at: null,
     decline_reason: null,
+    held_from: null,
     done_at: null,
     message_id: null,
   };
   state.asks.push(made);
-  logAction('web.request.filed', { actor_id: mine, target_id: mine, details: { request_id: made.id, auto_approved: approved } });
-  const said = approved
-    ? `Filed as **#${made.id}**, and approved straight away because you are staff.`
-    : `Filed as **#${made.id}** — staff will see it on this page.`;
-  return { request: askRow(made), message: said };
+  logAction('web.request.filed', { actor_id: mine, target_id: mine, details: { request_id: made.id } });
+  return { request: askRow(made), message: `Filed as **#${made.id}** — staff will see it on this page.` };
 });
 
 route('GET', '/api/requests/mine', (context) => {
@@ -4030,7 +4091,7 @@ route('GET', '/api/requests/mine', (context) => {
 
 route('GET', '/api/requests/export.csv', (context) => {
   requireStaff(context.session);
-  const header = 'id,status,what,why,due_on,priority,requester_id,requester_name,assignee_id,assignee_name,created_at,decided_by,decided_at,decline_reason,done_at,comments';
+  const header = 'id,status,what,why,due_on,priority,requester_id,requester_name,assignee_id,assignee_name,created_at,decided_by,decided_at,decline_reason,held_from,done_at,comments';
   const lines = asksSorted(state.asks).map((row) => {
     const shown = askRow(row);
     return [
@@ -4048,6 +4109,7 @@ route('GET', '/api/requests/export.csv', (context) => {
       shown.decided_by || '',
       shown.decided_at || '',
       shown.decline_reason || '',
+      shown.held_from || '',
       shown.done_at || '',
       shown.comment_count,
     ].join(',');
@@ -4068,12 +4130,6 @@ route('GET', '/api/requests/:id', (context) => {
   };
 });
 
-route('POST', '/api/requests/:id/approve', (context) => {
-  requireStaff(context.session);
-  const row = wantedAsk(context.params.id);
-  return { request: askRow(row), message: askDecide(row, 'approved', null) };
-});
-
 route('POST', '/api/requests/:id/decline', async (context) => {
   requireStaff(context.session);
   const row = wantedAsk(context.params.id);
@@ -4081,6 +4137,21 @@ route('POST', '/api/requests/:id/decline', async (context) => {
   const reason = String(body.reason || '').trim().slice(0, 400);
   if (!reason) throw new Refused(400, 'no_reason', REQUEST_DECLINE_NEEDS_A_REASON);
   return { request: askRow(row), message: askDecide(row, 'declined', reason) };
+});
+
+route('POST', '/api/requests/:id/hold', async (context) => {
+  requireStaff(context.session);
+  const row = wantedAsk(context.params.id);
+  const body = await context.body();
+  const reason = String(body.reason || '').trim().slice(0, 400);
+  if (!reason) throw new Refused(400, 'no_reason', REQUEST_HOLD_NEEDS_A_REASON);
+  return { request: askRow(row), message: askDecide(row, 'hold', reason) };
+});
+
+route('POST', '/api/requests/:id/resume', (context) => {
+  requireStaff(context.session);
+  const row = wantedAsk(context.params.id);
+  return { request: askRow(row), message: askResume(row) };
 });
 
 route('POST', '/api/requests/:id/status', async (context) => {
@@ -4130,8 +4201,8 @@ route('POST', '/api/requests/:id/withdraw', (context) => {
   if (String(row.user_id) !== String(mine)) {
     throw new Refused(403, 'not_yours', `Request **#${row.id}** is not yours, so nothing was withdrawn. Only the person who filed it can take it back; staff decline one instead.`);
   }
-  if (row.status !== 'pending') {
-    throw new Refused(409, 'not_pending', `Request **#${row.id}** is already **${REQUEST_STATUS_WORDS[row.status]}**, so there was nothing to withdraw. Ask staff if you want it stopped.`);
+  if (!REQUEST_WITHDRAWABLE.includes(row.status)) {
+    throw new Refused(409, 'too_late_to_withdraw', `Request **#${row.id}** is **${REQUEST_STATUS_WORDS[row.status]}**, so there was nothing to withdraw. You can take back one that is still open or on hold; ask staff if you want this one stopped.`);
   }
   row.status = 'withdrawn';
   logAction('web.request.withdrawn', { actor_id: mine, target_id: row.user_id, details: { request_id: row.id } });
