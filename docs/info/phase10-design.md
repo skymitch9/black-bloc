@@ -1,5 +1,13 @@
 ﻿# Phase 10 — Polls (F15): native Discord polls, wrapped
 
+> ⚠️ **SUPERSEDED IN PART, 2026-09-03: every `/poll …` subcommand this document names is
+> gone.** `/poll` is now ONE command that opens an interactive panel — see
+> [`polls-panel-design.md`](polls-panel-design.md) (wave 1 of
+> [`panels-program.md`](panels-program.md)). Nothing else here changed: the surfaces, the
+> kinds, the review flow, the loop, the settings keys and the dashboard page are all as
+> written. Read the subcommand names below as the history of how a move used to be
+> reached, not as something you can type today.
+
 > 🟢 **10b IS BUILT (2026-08-27)** — branch `worktree-agent-a9f9dbcabf9636130`
 > off `main` @ `3eb7e4f` (10a's own tip), **five commits**: `16c1db4` the date
 > kind · `8906032` the panel surface · `a7d8216` recurring polls · `85d05da`

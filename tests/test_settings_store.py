@@ -1013,6 +1013,38 @@ async def test_the_request_panel_stays_up_ten_minutes_by_default(store):
     assert parse_value("request_panel_minutes", "45") == 45
 
 
+async def test_the_poll_panel_stays_up_ten_minutes_by_default(store):
+    """Same reason as the request panel: 15 loses Discord's interaction window and the footer."""
+    from black_bloc.cogs.core import VALUE_KEYS
+
+    assert store.get(7, "poll_panel_minutes") == 10
+    assert "15" in KEY_HELP["poll_panel_minutes"]
+    assert KEY_TYPES["poll_panel_minutes"] == "int"
+    assert "poll_panel_minutes" in VALUE_KEYS
+    await store.set(7, "poll_panel_minutes", 20)
+    assert store.get(7, "poll_panel_minutes") == 20
+    with pytest.raises(SettingError):
+        coerce_value("poll_panel_minutes", -1)
+    with pytest.raises(SettingError):
+        coerce_value("poll_panel_minutes", "15")
+    assert parse_value("poll_panel_minutes", "45") == 45
+
+
+async def test_whoever_started_a_poll_may_close_it_until_a_lead_says_otherwise(store):
+    """Owner, 2026-09-03 (design fork I-2): keep today's behaviour, and make it a key."""
+    from black_bloc.cogs.core import VALUE_KEYS
+
+    assert store.get(7, "poll_creator_may_end") is True
+    assert KEY_TYPES["poll_creator_may_end"] == "bool"
+    assert "staff can" in KEY_HELP["poll_creator_may_end"]
+    assert "poll_creator_may_end" in VALUE_KEYS
+    await store.set(7, "poll_creator_may_end", False)
+    assert store.get(7, "poll_creator_may_end") is False
+    with pytest.raises(SettingError):
+        coerce_value("poll_creator_may_end", "false")
+    assert parse_value("poll_creator_may_end", "false") is False
+
+
 async def test_the_panel_keeps_a_members_own_requests_to_themselves_until_a_lead_says_otherwise(
     store,
 ):

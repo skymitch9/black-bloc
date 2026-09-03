@@ -398,8 +398,36 @@ async def test_two_note_modals_do_not_share_one_field():
     assert one.note.max_length == 10 and two.note.max_length == 20
 
 
+def test_an_option_label_names_the_id_the_state_and_as_much_text_as_fits():
+    assert panels.option_label(12, "open", "Pizza or tacos?") == "#12 · open · Pizza or tacos?"
+    assert panels.option_label(12, None, "Pizza or tacos?") == "#12 · Pizza or tacos?"
+    assert panels.option_label(12, "", "Pizza or tacos?") == "#12 · Pizza or tacos?"
+
+
+def test_an_option_label_never_goes_past_discords_hundred_characters():
+    long = panels.option_label(12, "pending_review", "x" * 200)
+    assert len(long) == panels.SELECT_OPTION_LIMIT
+    assert long.startswith("#12 · pending_review · ")
+
+    tight = panels.option_label(12, "open", "anything", limit=10)
+    assert len(tight) == 10
+
+
+def test_an_option_label_copes_with_a_row_that_has_no_text_at_all():
+    assert panels.option_label("?", "open", None) == "#? · open · "
+    assert panels.option_label(12, "open", "  padded  ") == "#12 · open · padded"
+
+
 def test_the_library_says_what_it_offers_and_knows_nothing_about_requests():
-    for name in ("Panel", "NoteModal", "answer", "still_staff", "retire", "db_ready"):
+    for name in (
+        "Panel",
+        "NoteModal",
+        "answer",
+        "still_staff",
+        "retire",
+        "db_ready",
+        "option_label",
+    ):
         assert name in panels.__all__
     for name in ("RequestView", "PANEL_TIMEOUT_FOOTER", "PICK_A_REQUEST"):
         assert not hasattr(panels, name)

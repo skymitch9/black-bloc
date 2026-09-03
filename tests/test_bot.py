@@ -16,7 +16,6 @@ LOGS_GROUPS = {
     "automod": "automod",
     "honeypot": "honeypot",
     "modmail": "modmail",
-    "poll": "poll",
     "chat": "chat",
     "mod": "mod",
     "pingroles": "pings",

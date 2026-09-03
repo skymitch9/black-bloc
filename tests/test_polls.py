@@ -23,13 +23,18 @@ def test_a_reviewed_poll_walks_from_pending_to_open_and_never_backwards():
     assert polls.can_transition(polls.OPEN, polls.CLOSED)
     assert polls.can_transition(polls.CLOSED, polls.ARCHIVED)
     assert not polls.can_transition(polls.CLOSED, polls.OPEN)
-    assert not polls.can_transition(polls.DENIED, polls.OPEN)
     assert not polls.can_transition(polls.ARCHIVED, polls.CLOSED)
 
 
-def test_a_denied_or_archived_poll_is_the_end_of_the_line():
-    assert polls.DENIED in polls.TERMINAL_STATUSES
-    assert polls.ARCHIVED in polls.TERMINAL_STATUSES
+def test_staff_can_still_post_a_poll_they_denied():
+    """Owner rule: never a terminal state staff cannot leave (design fork I-1)."""
+    assert polls.can_transition(polls.DENIED, polls.OPEN)
+    assert polls.DENIED not in polls.TERMINAL_STATUSES
+    assert polls.CARD_BUTTONS[polls.DENIED][0].action == "post_anyway"
+
+
+def test_only_an_archived_poll_is_the_end_of_the_line():
+    assert polls.TERMINAL_STATUSES == (polls.ARCHIVED,)
     assert polls.OPEN not in polls.TERMINAL_STATUSES
 
 
@@ -431,3 +436,141 @@ def test_a_recurring_template_is_only_ever_cancelled_never_opened():
     assert polls.can_transition(polls.RECURRING, polls.CANCELLED)
     assert not polls.can_transition(polls.RECURRING, polls.OPEN)
     assert polls.RECURRING not in polls.OPEN_STATUSES
+
+
+class Row(dict):
+    """A sqlite row is a mapping; these builders carry only the keys each line reads."""
+
+
+def poll_row(**fields):
+    return Row(
+        {
+            "id": 12,
+            "question": "Pizza or tacos?",
+            "status": polls.OPEN,
+            "hours": 24,
+            "channel_id": 555,
+            **fields,
+        }
+    )
+
+
+def recur_row(**fields):
+    return Row(
+        {
+            "id": 12,
+            "question": "Are we running tonight?",
+            "recurrence": "weekly:sat",
+            "recur_at": "19:00",
+            "recur_tz": "America/Phoenix",
+            "channel_id": 555,
+            **fields,
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    ("status", "labels"),
+    [
+        (polls.DRAFT, ["Post it", "Cancel"]),
+        (polls.PENDING_REVIEW, ["Approve", "Deny", "Cancel"]),
+        (polls.OPEN, ["End", "Cancel"]),
+        (polls.CLOSED, []),
+        (polls.CANCELLED, []),
+        (polls.DENIED, ["Post it anyway"]),
+        (polls.ARCHIVED, []),
+        (polls.RECURRING, []),
+    ],
+)
+def test_staff_get_exactly_the_row_the_table_names_for_every_status(status, labels):
+    assert [one.label for one in polls.card_buttons(status, staff=True)] == labels
+
+
+@pytest.mark.parametrize("status", polls.STATUSES)
+def test_a_bystander_is_offered_nothing_at_all(status):
+    assert polls.card_buttons(status, staff=False, is_creator=False) == ()
+
+
+def test_the_author_gets_end_and_nothing_else_while_the_key_allows_it():
+    found = polls.card_buttons(polls.OPEN, staff=False, is_creator=True)
+    assert [one.label for one in found] == ["End"]
+
+    shut = polls.card_buttons(polls.OPEN, staff=False, is_creator=True, creator_may_end=False)
+    assert shut == ()
+    staff = polls.card_buttons(polls.OPEN, staff=True, is_creator=False, creator_may_end=False)
+    assert [one.label for one in staff] == ["End", "Cancel"]
+
+
+def test_deny_is_the_only_move_that_stops_for_a_modal():
+    wanted = [one.action for row in polls.CARD_BUTTONS.values() for one in row if one.needs_modal]
+    assert wanted == ["deny"]
+
+
+def test_every_status_the_machine_names_has_a_button_row():
+    assert set(polls.CARD_BUTTONS) == set(polls.STATUSES)
+    assert polls.card_buttons("nonsense", staff=True) == ()
+
+
+def test_a_poll_number_is_read_with_or_without_its_hash():
+    assert polls.poll_id_from("12") == 12
+    assert polls.poll_id_from("#12") == 12
+    assert polls.poll_id_from("  #12  ") == 12
+    assert polls.poll_id_from("wibble") is None
+    assert polls.poll_id_from("") is None
+    assert polls.poll_id_from(None) is None
+    assert polls.poll_id_from("-3") is None
+
+
+def test_a_summary_line_says_the_state_the_clock_and_the_channel():
+    when = datetime(2026, 9, 5, tzinfo=UTC)
+    line = polls.summary_line(poll_row(), when)
+
+    assert "**#12**" in line and "Pizza or tacos?" in line
+    assert f"closes <t:{int(when.timestamp())}:R>" in line
+    assert "1d" in line and "<#555>" in line
+
+
+def test_a_poll_that_is_not_up_yet_says_so_rather_than_showing_a_clock():
+    line = polls.summary_line(poll_row(status=polls.PENDING_REVIEW))
+
+    assert "not posted yet" in line and polls.PENDING_REVIEW in line
+
+
+def test_a_recurrence_line_names_the_cadence_and_marks_a_paused_one():
+    when = datetime(2026, 9, 5, tzinfo=UTC)
+
+    assert "every Saturday at 19:00" in polls.recur_line(recur_row(), when)
+    assert f"next <t:{int(when.timestamp())}:R>" in polls.recur_line(recur_row(), when)
+    assert "**paused**" in polls.recur_line(recur_row())
+
+
+def test_the_recurrence_card_carries_the_cadence_the_clock_and_the_options():
+    when = datetime(2026, 9, 5, tzinfo=UTC)
+    card = polls.recurrence_card(
+        poll_id=12,
+        question="Are we running tonight?",
+        cadence="every day at 09:00 America/Phoenix",
+        following=when,
+        channel_id=555,
+        kind=polls.CHECKBOX,
+        labels=["Yes", "No"],
+        hours=48,
+    ).to_dict()
+    said = " ".join(one["value"] for one in card["fields"])
+
+    assert "Are we running tonight?" in card["title"]
+    assert "every day at 09:00" in said
+    assert f"<t:{int(when.timestamp())}:R>" in said
+    assert "<#555>" in said and "checkbox" in said and "2d" in said
+    assert "1. Yes" in said and "2. No" in said
+    assert card["footer"]["text"] == "Poll #12"
+
+
+def test_a_paused_recurrence_card_says_paused_where_the_clock_would_be():
+    card = polls.recurrence_card(
+        poll_id=12, question="Q", cadence="every day at 09:00 America/Phoenix"
+    ).to_dict()
+    said = " ".join(one["value"] for one in card["fields"])
+
+    assert polls.RECURRENCE_PAUSED in said
+    assert "none" in said

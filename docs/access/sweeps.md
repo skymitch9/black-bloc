@@ -1,24 +1,23 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-03** — rows **73–79** added by the EVENTS PANEL build (`/event` becomes one command
-> that opens a panel and the whole `/timezone` group is retired — the program's first real
-> `commands synced` drop, 44 → 43). Rows 73–79 are **live in v64** (`e670542`, 14:05), and not one of them has been run against
-> Discord by eye yet;
-> row 79's empty-select half is the one item the build could not check at all. Rows 32 and 48 and
-> the Phase 4 appendix script below were rewritten in place for the same build. The file now holds
-> **79** un-exercised rows. 
-> Same day, earlier — rows **87–93** added by the birthdays panel build (`/birthday` is ONE
-> command that opens a panel; the twelve subcommands are retired). On that branch the file
-> holds **79** un-exercised rows, numbered to 93; rows **73–86** are reserved by the events
-> (73–79) and polls (80–86) builds running in parallel and are not in this branch. The
-> Phase 5 prose block above was replaced by rows 87–93 — it named six subcommands that no
-> longer exist plus `/birthday import`, deleted 2026-08-27. Rows 87–93 are **live in v63** and none has been run by eye yet.
-> Before that — rows **69–72** added by the applications no-role build (a form may keep a
-> LIST instead of handing a role over; merged `main` at 12:40, LIVE in v62 12:48); rows **66–68**
-> added by the requests SIXTH pass ("Ask them to check": the DM, the channel ping when their
-> DMs are closed, and the auto-ask at ready) — LIVE in v61 (`44170f4`, 12:29). The file now holds
-> **79** un-exercised rows; none of 66–79 has been run against Discord or the live site.
+> **2026-09-03** — rows **80–86** added by the POLLS PANEL build (`/poll` becomes ONE command that
+> opens a panel; the eleven subcommands go), and rows **6, 8, 9 and 27** were rewritten in place
+> for it rather than added. Rows 80–86 are **merged, deploying as v65** and were not run against
+> Discord by eye. Same day, before that — rows **73–79** added by the EVENTS PANEL build (`/event`
+> becomes one command that opens a panel and the whole `/timezone` group is retired — the
+> program's first real `commands synced` drop, 44 → 43); **live in v64** (`e670542`, 14:05),
+> none run by eye yet; row 79's empty-select half is the one item the build could not check at
+> all; rows 32 and 48 and the Phase 4 appendix script below were rewritten in place for it.
+> Earlier — rows **87–93** added by the birthdays panel build (`/birthday` is ONE command that
+> opens a panel; the twelve subcommands are retired; the Phase 5 prose block was replaced by
+> those rows — it named six subcommands that no longer exist plus `/birthday import`, deleted
+> 2026-08-27) — **live in v63**, none run by eye yet. Before that — rows **69–72** added by the
+> applications no-role build (a form may keep a LIST instead of handing a role over; merged
+> `main` at 12:40, LIVE in v62 12:48); rows **66–68** added by the requests SIXTH pass ("Ask them
+> to check": the DM, the channel ping when their DMs are closed, and the auto-ask at ready) —
+> LIVE in v61 (`44170f4`, 12:29). The file now holds **86** un-exercised rows, numbered to 93;
+> none of 66–93 has been run against Discord or the live site.
 > Same day — row **62** now says the done card does NOT post (owner: "suppress the
 > request.done box in discord" — `request_channel_moves` default drops `done`). Same
 > morning, row **65** added, and rows **14–15** corrected again, by the owner's
@@ -56,10 +55,10 @@ All of this happens in **`#mute-me-bot-test-spam`** (test mode) or on **https://
 | 3 | Temp voice panel | join **join** | your channel's own text chat holds the control panel; buttons work; the log has no `panel_failed` (if it does: Bots role needs Send Messages in voice channels) |
 | 4 | YouTube go-live | go live on YouTube with the Discord connection showing "Streaming on YouTube" (`golive_mode` shadow or on) | a card "… is now live on YouTube!" (or a `would_announce` line in shadow) |
 | 5 | Stream end | end a stream | with `golive_end_mode` off the announcement is untouched; set it to `edit` and end another: suffix + "was live" card |
-| 6 | Polls — native | `/poll create` kind single/checkbox/yesno/rating; vote; `/poll end` | a real Discord poll under a Black Bloc line; results embed on end; dashboard Polls row |
+| 6 | Polls — native | `/poll` → **Create** → pick single/checkbox/yesno/rating in the modal → **Post it**; vote; `/poll` → pick it → **End** | a real Discord poll under a Black Bloc line; results embed on end; dashboard Polls row |
 | 7 | Polls — the label question | look at test poll message `1542651824950218792` | does its first answer show as a DATE or as literal `<t:1788400000:d>`? Tell Claude — it decides `poll_date_labels` |
-| 8 | Polls — panel | `/poll create … anonymous:true` and one `kind:date slots:12` | Black Bloc's own button panel; anonymous never shows names |
-| 9 | Polls — recurring, reminder | `/poll recur create` weekly; a 1-hour poll | the next occurrence opens on schedule; a reminder 60 min before close |
+| 8 | Polls — panel | `/poll` → **Create**, tick **Nobody is told who voted**; then another with kind **date** → **Date slots…** 12 slots | Black Bloc's own button panel; anonymous never shows names |
+| 9 | Polls — recurring, reminder | `/poll` → **Create** → **Repeat…** weekly; and a 1-hour poll | the next occurrence opens on schedule; a reminder 60 min before close |
 | 10 | Chat 2 | `@Black Bloc how many of us` / `who's live` / `what's next` / `birthdays` / `my roles` / `I need a mod`; edit a greeting line on /chat.html then `hi` | live answers; the edited line is used; 👋🏿 tone visible |
 | 11 | Birthday daily import | nothing to do — read the log after a restart | `birthdays: the daily import took nothing new — {… 'already': 38 …}` |
 | 12 | Logs (Phase 12, live 18:38) | flip `golive_log_level` to `all`, `/golive test`, then back to `important`, `/golive test` again; `/golive logs` | Discord line only in `all`; dashboard shows both; a role request still posts its card with `rolemenu_log_level = off` |
@@ -77,7 +76,7 @@ All of this happens in **`#mute-me-bot-test-spam`** (test mode) or on **https://
 | 24 | Event detail + edit (B8, live 2026-08-31) | /events.html → Queue → Open on a pending event → change the title or start in "Change it" | detail card shows every field; the review channel renames to match the new title; an already-posted announcement keeps its old text and the reply says so |
 | 25 | One-time sign-out (sessions, live 2026-08-31 ~12:20) | open https://blackbloc.heygabi.ai | you are signed OUT once (old cookies have no session id) — sign in and everything is back; sign out and reload: signed out for real now (revoked server-side, not just cleared) |
 | 26 | R1 shell (live 2026-08-31 ~12:20) | https://blackbloc.heygabi.ai/automod.html then /settings.html then any page | automod: two columns, no dead right half; type in a setting → a docked "N changes pending · Save Changes" bar (per-field Save/Clear gone); Settings: human labels with small mono keys, hover a row for ⌫ reset; rail has an icon per item; ⚙ walks all 6 themes × light/dark and the docked bar stays on-screen in every one |
-| 27 | Keyed anonymous poll (live 2026-08-31) | `/poll create` with `anonymous:true`, vote | works exactly as before from your side; tell Claude when the first one exists and it verifies the vote row is HMAC-keyed |
+| 27 | Keyed anonymous poll (live 2026-08-31) | `/poll` → **Create** with **Nobody is told who voted** ticked, vote | works exactly as before from your side; tell Claude when the first one exists and it verifies the vote row is HMAC-keyed |
 | 28 | The Black Bloc look (R2, live 2026-08-31 ~13:14) | https://blackbloc.heygabi.ai — you'll land in the new default theme | warm charcoal + ember, the BLACK BLOC wordmark and page titles in Bangers, the Overview opens with a TODAY sentence ("Nothing's on fire. …") whose clauses link to their pages; ⚙ → flip Appearance to Light and back; your previously chosen theme (if you ever picked one) still wins over the default |
 | 29 | Ctrl+K palette (R2) | press **Ctrl K** on any page, type `birthday_role`, Enter; then Ctrl K → type `theme: cyber` | lands on Settings with the row flashed ember; the theme switches instantly; the palette also finds pages and actions (sign out, show keys) |
 | 30 | Show keys + Cases drawer (R2) | Settings → **Show keys** top-right, toggle + reload; Moderation → click a case row | keys hidden by default, toggle remembered per browser; the case opens in a right-hand drawer, Esc closes; note the table toolbars and "Showing 1–N of M" feet on Logs/Members/Cases/Polls/Requests |
@@ -210,6 +209,13 @@ form for a full pass.
 | 70 | Applying and being approved with nothing to hand over | put the Apply button up, apply as a member, press **Approve** on the card | the card and the ephemeral reply say "Approved — **<name>** is on the **<heading>** list now." — no role is mentioned and none is given. The DM is the form's approved text with no "the role runs out" line. `/applications logs` shows `application.approved` with `granted: null` and NO `application.granted` line |
 | 71 | The roster, and Copy as text | on the Role menus page open **Approved for <form>** under that form | one row per approved member: their name, **twitch.tv/<login>** as a link (or a quiet "not linked"), how long since staff said yes, and who decided. Somebody who has left the server is still listed with "left the server" beside them — `/settings set-value key:applications_roster_shows_left value:false` hides them instead. **Copy as text** puts one line per member on the clipboard, ready to paste into the official team page |
 | 72 | Taking somebody off the list | on the roster press **Take off the list**, type a reason, confirm. (In Discord: `/applications show <id>` on an approved application — the same **Take off the list** button is on the panel) | they are DMed the reason and when they may apply again; the Decided table shows the row as **removed**; the roster is one shorter; `/applications list form:<name> status:approved` no longer names them. On a form that DOES hand a role over the button is not offered at all, and the route refuses in words pointing at `/role revoke` |
+| 80 | Polls — the panel opens | `/poll` in #mute-me-bot-test-spam, first as a Lead and then as a plain member | ONE ephemeral panel, not a list of subcommands: **Create · Find #… · Refresh** on the top row for everybody, **Settings · Logs** added for a Lead only; a "Pick a poll…" select under it once something is running; a Lead also sees the counts line (**N** running · **N** waiting on a decision · **N** repeating) and, with a repeating poll saved, a second "Repeating polls…" select; **Open on the site** links to https://blackbloc.heygabi.ai/polls.html. A member sees no Settings and no Logs at all rather than buttons that refuse |
+| 81 | Polls — Create through the two-step modal | on the panel press **Create**: type the question, `Pizza \| Tacos \| Neither`, leave hours blank, pick a kind on the radio, tick nothing; submit; on the preview pick a channel, a ping role, flip **Thread: off**; press **Post it** | the modal carries exactly five things (question, options, hours, the kind radio, the two switches) — Discord's cap; the preview is a card of what you typed with **Post it · Repeat… · Start over · Cancel**, and NOTHING is written until Post it (press **Cancel** on a preview and `/poll` shows no new poll). After Post it: the poll is up in the channel you picked, and `/poll` → **Logs** shows one `poll.created` and one `poll.opened` — never two of either |
+| 82 | Polls — a date poll through the extra step | **Create** with kind **date**, no options; on the preview press **Date slots…**, start `2026-09-05`, 4 slots, step 1, unit **days**; **Post it** | before the slots are given there is no **Post it** button at all and the preview says the poll needs its slots; after them, four dated answers in the order you asked for. `poll_date_labels` still decides whether they read as `Sat 05 Sep` or as each reader's own clock |
+| 83 | Polls — pick one and End it | with a poll running, `/poll` → pick it on the select → **End** | picking IS the results: the card is the same results embed `/poll results` used to print. **End** shows for the person who started it and for staff; the poll closes, the result posts in the channel, and the card re-renders with no moves left ("nothing moves a closed poll now"). As a bystander the card has only **Back** — the move is not drawn rather than refused. `/settings set-value key:poll_creator_may_end value:false` and the author loses End too; staff keep it |
+| 84 | Polls — Cancel from the card | `/poll` → pick a running poll → **Cancel** (Lead only) | the vote is ended at Discord, no result is published, and the card re-renders **cancelled** with nothing left to press. **Find #…** takes any poll number (with or without the `#`) so a closed, cancelled or archived one is still reachable once it has dropped off the select |
+| 85 | Polls — review on, Approve and Deny from the panel | `/poll` → **Settings** → press **Review: off** so it reads **Review: on**; as a member (with Create open to everyone) start a poll; then as a Lead `/poll` → pick the waiting poll → **Approve** on one, **Deny** + a reason on another | the panel decides it, not just the staff-channel card: Approve posts the poll and DMs the author; Deny DMs them the reason. ⚠️ A denied poll is NOT the end of the line — open it again and there is a **Post it anyway** button (owner's standing rule: staff can always leave a state), which posts it and tells the author it was approved after all |
+| 86 | Polls — a recurrence paused, started and deleted | on a preview press **Repeat…** (weekly, `19:00`, `sat`, your zone) → **Post it**; then `/poll` → "Repeating polls…" → pick it → **Pause** → **Resume** → **Delete** → **Yes, stop it repeating** | the card names the cadence in words, when it next runs (or **paused**), the channel, the kind and the options. Pause/Resume/Delete are the SAME code the dashboard's Polls page runs, so https://blackbloc.heygabi.ai/polls.html and the Logs page agree — one `poll.recur_paused` / `_resumed` / `_deleted` line each, marked Via: Discord here and Via: Website there. Deleting leaves every poll it already opened alone |
 
 | 73 | Events — the panel, member (`/timezone` is GONE) | `/event` as a non-staff member | ONE ephemeral panel: the intro, **your time zone line** (the old `/timezone show`, word for word), and the row **Propose an event · My time zone · Refresh · Open on the site**. **NO list of events** — `event_panel_own_list` ships off, exactly like requests. `/timezone` no longer exists in the command list at all |
 | 74 | Events — setting your zone from the panel | **My time zone** → type `America/Phoenix`; open it again and type `Phoenix`; then type `nonsense` | the first saves and the panel re-renders with the local time; `Phoenix` on its own is refused in words and **suggests `America/Phoenix`** ("Did you mean…"), which is more help than the old autocomplete gave; `nonsense` is refused with no guess. Nothing is saved by either refusal. ⚠️ The box is a plain modal, not a picker — Discord caps a select at 25 options and this machine knows 598 zones |

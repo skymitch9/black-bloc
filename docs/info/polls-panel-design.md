@@ -1,18 +1,29 @@
 # Polls — `/poll` is ONE command that opens a panel
 
-> **Audience:** the builder and the reviewer. **Status:** TRACKED · **PLANNING** (wave 1 of
-> [`panels-program.md`](panels-program.md)). This doc adds only what is specific to polls;
-> the seventeen invariants **P1–P17** live in that file's §2 and are **not restated here** —
-> a reviewer checks the build against §2 first, then this.
-> **Last verified: 2026-09-03 12:02 Phoenix** — every `path:line` below was read at
-> **`9a326ac`** (code identical to `59ac96f`; the only diff is `docs/TODO.md`), in
-> `black_bloc/polls.py`, `cogs/community/polls.py`, `panels.py`, `cogs/community/requests.py`,
-> `settings_store.py`, `command_visibility.py`, `logkinds.py`, `tests/test_bot.py`.
-> ⚠️ **NOT verified:** nothing was run — no boot, no pytest, no Discord. §C's modal components
-> (`RadioGroup` / `CheckboxGroup` in a `discord.ui.Label`) are read off this repo's working use
-> at `cogs/community/polls.py:971–1005`, not re-checked against installed library source; the
-> 5-component modal cap is Discord's documented limit, not measured here. Whether
-> `poll_who_can_create: everyone` was ever switched on live is unknown.
+> **Audience:** the builder and the reviewer. **Status:** TRACKED · ✅ **BUILT on
+> `worktree-agent-aa735ab092d13477d`** (wave 1 of [`panels-program.md`](panels-program.md)) —
+> commits `83640cf` (the panel + the extractions + the routes), `fd73cfa` (the cog tests moved
+> onto the panel), `7826e94` (the panel's own tests) and the docs commit that follows them.
+> **Not merged, not deployed.** This doc adds only what is specific to polls; the seventeen
+> invariants **P1–P17** live in that file's §2 and are **not restated here** — a reviewer checks
+> the build against §2 first, then this, then the `## Deviations` foot.
+> **Last verified: 2026-09-03 (build)** — MEASURED on the branch: `ruff check .` clean;
+> `pytest -q -n auto` **3526 tests, all green** (3442 at the base `d3da02c`, +84); the command tree
+> loaded from every cog in `COGS` reports **44** top-level commands with `/poll` no longer a
+> `Group` and no children; `black_bloc/polls.py` imports only `logging`, `datetime`, `typing`,
+> `discord` and `.timezones` (no database, no gateway); `node site/mock/check.mjs` = 17 pages /
+> 142 routes; `page-polls.js` and `labels.js` both parse as ES modules. §C's modal components
+> were re-checked against the installed **discord.py 2.7.1**: `Label`, `RadioGroup` and
+> `CheckboxGroup` all exist with the signatures §C assumes, `RadioGroup` exposes `.value` and
+> `CheckboxGroup` `.values` (so `picked_values` reads both), and **the 5-component modal cap is
+> enforced by the library** — a sixth `add_item` raises `ValueError: maximum number of children
+> exceeded (5)`, measured, not taken from the docs.
+> ⚠️ **NOT verified:** nothing has run against Discord — no boot with a token, no panel opened,
+> no poll posted, no modal rendered by a real client. In particular the mixed-component modal
+> payload, the `ChannelSelect`/`RoleSelect` rows on the preview, and whether a `RadioGroup`
+> inside a `Label` returns its value on submit are all test-double evidence only. Whether
+> `poll_who_can_create: everyone` was ever switched on live is still unknown. Sweep rows 80–86
+> are the owner's path through all of it.
 
 ## A. Measured today — every subcommand, who may run it, what it calls
 
@@ -200,9 +211,12 @@ The two `Group`s (`:1588`, `:1589`) and all eleven subcommands. `/help` reads th
 | `tests/test_bot.py:204` | `assert len(top) == 44` — **unchanged** (requests deviation 7) |
 | `tests/test_bot.py:71` | `MEMBER_COMMANDS` keeps `"poll"` — the panel stays member-visible (§B) |
 
-✅ **`docs/access/OWNER_GUIDE.md` needs no edit** — measured: 80 lines, the word "poll" does
-not appear. `docs/KNOWN_ISSUES.md` needs none either; KI-19 (`:110`) and KI-20 (`:134`) both
-already cover this panel's shape.
+✅ **`docs/access/OWNER_GUIDE.md` needs no edit** — re-measured at build time: 86 lines, and
+the word "poll" still does not appear anywhere in it. ⚠️ **`docs/KNOWN_ISSUES.md` DID need one:**
+KI-19 stands as written, but KI-20's symptom named `/request` specifically and its help-text
+sentence named `request_panel_minutes` specifically. It was widened to "an ephemeral panel"
+built on `panels.py`, naming both `/request` and `/poll` and both keys — one fact, one home,
+rather than a second near-identical entry per feature wave.
 
 ## F. Extractions (P4)
 
@@ -292,6 +306,76 @@ Rows 6, 8, 9 and 27 are rewritten in place, not added.
 
 ## Deviations
 
-Written by the build agent. Everything not listed here was built as this document says.
+Written by the build agent, 2026-09-03. Everything not listed here was built as this
+document says.
 
-_(none yet — this document has not been built)_
+1. **`card_buttons` takes a third keyword, `creator_may_end`.** §F's signature is
+   `card_buttons(status, *, staff, is_creator)`. The `poll_creator_may_end` key (§D) has to be
+   answered somewhere, and the alternative was for every caller to pass
+   `is_creator=(theirs and the_key)` — a parameter whose name would then be a lie. The keyword
+   defaults to `True`, so `card_buttons(status, staff=…, is_creator=…)` still reads exactly as
+   the design wrote it.
+2. **`MoveButton` gained a `staff_only` field rather than the table being split.** §C's table
+   marks `End` as "rendered for the creator **or** staff" and everything else as staff. One
+   boolean on the row keeps the table the single source of that fact; a second member-only
+   table would have been the "two spellings of one move" P3 forbids.
+3. **`summary_line(row, closes)` and `recur_line(row, following)` take the parsed datetime;
+   they do not parse it.** §F writes `summary_line(row, now)`. ⚠️ **`black_bloc/polls.py`
+   cannot import `golive.parse_ts`**: `golive` → `settings_store` → `polls` is an import cycle
+   (`settings_store.py:35` imports `polls`), and `panels` → `settings_store` → `polls` is the
+   same cycle, which is also why the pure module cannot use `capped_placeholder`. Passing the
+   parsed value in from the cog is what keeps §H item 4 true — measured: `polls.py` imports
+   `logging`, `datetime`, `typing`, `discord` and `.timezones`, and nothing else.
+4. **The `Kind` radio offers `KNOWN_KINDS` (single / checkbox / yesno / rating / date), not
+   `KINDS`.** §C's step-1 table names exactly those five, but the retired `/poll create` offered
+   all eight, so `text` / `number` / `ranked` used to be typeable and were refused by name with
+   `KIND_NOT_YET`. Those three are now unreachable from Discord (the web route still accepts
+   them and still gets the refusal). The sentence is kept, not deleted — the v2 kinds are still
+   on the roadmap and `surface_for` is still their gate.
+5. **`Find #…` is its own `AnswersErrors` + `discord.ui.Modal` with one SHORT field, not the
+   library's `NoteModal`.** §B calls it "a one-field modal"; `panels.NoteModal` is a paragraph
+   box, and a paragraph box for `12` reads wrong. It follows P12's shape (the shared mixin, one
+   labelled field) without pretending a poll number is a note. `poll_id_from` does the parsing,
+   so `#12`, `12` and `  12  ` all work and `wibble` is refused in words.
+6. **`apply_poll_settings` does NOT take `via`.** §F's table says each extracted function takes
+   `via: str = VIA_DISCORD`; the other four do. This one is the exception because **no web route
+   calls it** — the dashboard writes poll settings through the generic settings API, which logs
+   `web.settings.set` itself. Adding a parameter no caller can pass, whose kind
+   (`web.poll.settings`) nothing emits, would be dead weight. The other four routes WERE
+   rewired: `api/tools/polls.py`'s pause / resume / delete now call the shared functions with
+   `via=VIA_WEBSITE` and their own `note()` calls are deleted, which is checklist 34 and is
+   pinned by the existing AST test in `tests/test_logkinds.py`.
+7. **`RECUR_FUNCS` holds lambdas, not direct references**, so the shared function behind each
+   recurrence button is late-bound and a test can prove the button goes through it rather than
+   through a private path. `MOVE_FUNCS` was already this shape in `requests.py`.
+8. **All five components of the create modal are wrapped in `discord.ui.Label`, including the
+   three text fields.** §C's table implies `Label` only for the `RadioGroup` and the
+   `CheckboxGroup`. Measured against the installed 2.7.1: a bare `TextInput` still works, but a
+   modal mixing bare inputs with labels serialises to a payload carrying BOTH an action row and
+   label components, and `TextInput(label=…)` raises a `DeprecationWarning` pointing at exactly
+   this shape. Wrapping all five is one consistent modal and no warnings. ⚠️ It has NOT been
+   rendered by a real Discord client — see the header.
+9. **Strings that named a retired subcommand were rewritten, not just the docs.** `POLLS_OFF`,
+   `NOT_A_CREATOR`, `NOT_AN_ID`, `NO_SUCH_POLL`, `NO_OPEN_POLLS`, `RECUR_NONE`,
+   `RECUR_NOT_A_DATE`, `NOT_A_RECURRENCE`, three `KEY_HELP` entries (`poll_mode`,
+   `poll_who_can_create`, `poll_channel_id`) and three lines of `site/public/assets/page-polls.js`
+   told people to run `/poll settings mode:on`, `/poll list`, `/poll recur create` and so on.
+   §E lists the docs; a refusal that names a command nobody can type is a worse bug than a stale
+   doc, so they were rewritten in the same commit and their tests moved with them.
+10. **A member who types a REPEATING poll's number into `Find #…` is refused in words rather
+   than shown the recurrence card.** §B says `Find #…` opens "the card for **any** poll id in
+   this guild"; §B's row 2 also makes the "Repeating polls…" select staff-only, so a member
+   reaching a template by number would have been a way around that. `open_card` answers
+   `store.staff_refusal(...)` for a `RECURRING` row and a member; every other status is open to
+   anybody exactly as the design says, because the card IS the results and `/poll results` had
+   no staff gate either.
+
+### What §H asked for, and what it got
+
+| # | Asked | Result |
+|---|---|---|
+| 1 | boot, read `commands synced` | ⚠️ **substituted.** No bot token in the build environment (same as wave 0 deviation 5). Instead every cog in `bot.COGS` was loaded into a real `BlackBlocBot` tree and its length read: **44**, unchanged, with `/poll` no longer an `app_commands.Group` and carrying no children. `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits` asserts the same number. |
+| 2 | every status renders its row and no other | ✅ `tests/test_polls.py` parametrises `card_buttons` over `polls.STATUSES` for staff, for a bystander and for the author; `tests/cogs/community/test_polls.py::test_the_card_renders_exactly_the_buttons_the_table_says` does the same against the rendered view, and checks Discord's 5-per-row cap and the "nothing moves it now" footer. |
+| 3 | ruff · full pytest · `check.mjs` · `labels.js` parse | ✅ all four. `ruff check .` clean; **3526 pass** (3442 collected at the base, of which 3441 passed — see the flake below); `check.mjs` 17 pages / 142 routes; `labels.js` AND `page-polls.js` parse as ES modules. ⚠️ One pre-existing flake, `tests/api/test_settings_api.py::test_writes_are_rate_limited_per_session`, fails under whole-suite `-n auto` — **measured on a throwaway worktree of the base commit `d3da02c` and it fails there too**, so it is not this build's. |
+| 4 | `polls.py` still imports no database | ✅ measured by walking its AST: `logging`, `datetime`, `typing`, `discord`, `.timezones`. See deviation 3 for what that cost. |
+| — | sweep rows | ✅ 80–86 appended to `docs/access/sweeps.md`, rows 6, 8, 9 and 27 rewritten in place, header count 72 → 79. Rows 73–79 left untouched for the events build. |
