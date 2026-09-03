@@ -3,7 +3,7 @@
 > **Audience:** you (the owner), on your phone or the laptop. **Status:** TRACKED (owner, 2026-08-31 —
 > permanently, not temporarily; secret NAMES only).
 > Last verified: **2026-09-03** for the birthdays row (`/birthday` is ONE command that opens a panel —
-> BUILT on `feat/birthdays-panel`, not merged, not deployed, not run against live Discord) and the sweeps
+> BUILT on `worktree-agent-a19bdce15408f8243`, not merged, not deployed, not run against live Discord) and the sweeps
 > count on that branch (**79** rows, numbered to 93; 73–86 belong to the sibling events and polls builds).
 > Before that the same day, for the applications row (a form may keep a LIST instead of handing a
 > role over — BUILT on `feat/applications-no-role`, not merged, not deployed) and the sweeps count

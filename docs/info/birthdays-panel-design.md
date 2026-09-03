@@ -1,13 +1,20 @@
 # Birthdays — `/birthday` is ONE command that opens a panel
 
-> **Audience:** the build agent and the reviewer. **Status:** TRACKED · **PLANNING** (wave 1).
-> **Last verified: 2026-09-03** against `59ac96f` — every `path:line` below was read at that
-> commit (the two birthdays modules, `panels.py`, `settings_store.py`, `api/tools/birthdays.py`,
-> `tests/test_bot.py`, `docs/access/sweeps.md`).
-> ⚠️ **NOT verified:** anything against live Discord (no boot, no token); no test was run and no
-> code written — design only. The `code-notes.md` rows for the birthdays **cog** drift after
-> `:300` (its `:308` says `loop_health`, which is at `:300`; its `:624` lock note is at `:673`) —
-> the build re-keys that section, per the standing merge-order rule.
+> **Audience:** the build agent and the reviewer. **Status:** TRACKED · **BUILT on
+> `worktree-agent-a19bdce15408f8243`** (2026-09-03; branched from `main` at `d3da02c`, v62 live, schema 28).
+> Not merged, not deployed. See the `## Deviations` foot for every departure.
+> **Last verified: 2026-09-03** — `ruff check .` clean and **3499 tests pass** on the branch
+> (3442 at `d3da02c`: +76 new, −19 command tests replaced by panel tests). `commands synced`
+> was measured at **44, unchanged**, by
+> `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`, which loads every cog
+> and counts the real tree. Every `path:line` in §A–§F was read at `59ac96f` and is history now;
+> the live keys are in `code-notes.md`'s `# Birthdays panel (wave 1)` section.
+> ⚠️ **NOT verified:** anything against live Discord — no boot (this build has no bot token), no
+> panel opened by a person, no modal submitted, no DM sent, no timeout footer seen. The sweep,
+> the daily import and the birthday role were not exercised beyond the existing tests.
+> ✅ The `code-notes.md` rows for the birthdays **cog** drifted after `:300` (its `:308` said
+> `loop_health`, which was at `:300`; its `:624` lock note was at `:673`) — **that whole section
+> was re-keyed by anchor in this build**, 30 keys, per the standing merge-order rule.
 >
 > **Inherits every invariant in [`panels-program.md`](panels-program.md) §2 (P1–P17) and the §4
 > library — none restated here.** Template: [`requests-panel-design.md`](requests-panel-design.md),
@@ -280,5 +287,76 @@ what the commands already do.
 
 ## Deviations
 
-_Written by the build agent when the build lands. Everything not listed here was built as
-specified._
+Written by the build agent, 2026-09-03, on `worktree-agent-a19bdce15408f8243`. Everything not listed here
+was built as this document specifies.
+
+1. **`forget_birthday` takes an optional `member`; §F's signature was `(cog, guild, actor)`.**
+   §B requires the person card's **Forget their birthday** to call `forget_birthday` "for the
+   target", which that signature cannot express. It is
+   `forget_birthday(cog, guild, actor, member=None, *, source="self")`, defaulting to the
+   actor, and `source` rides into the log row's details so a staff removal is distinguishable
+   from a member's own. The log row also carries `target=` — the retired `/birthday remove`
+   logged an actor and no target, which was fine when only you could remove your own.
+2. **`Forget their birthday` asks first, like `Remove` does.** §B calls it "(danger, confirm)"
+   and then lists only three screens, none of them a forget-confirm. There are **four**: panel,
+   person card, remove-confirm, forget-confirm, role-clear-confirm — five counting the last.
+   All three confirms share one builder (`open_confirm`), because they differ only in a
+   sentence and two buttons.
+3. **`Status` answers a NEW ephemeral message rather than re-rendering the panel.** The §C
+   followup/re-render table does not list `Status` at all. It is a report, not a move, and the
+   panel is more useful still on screen behind it — the same shape `Logs` and `List a month…`
+   already have.
+4. **`stored_line` was extracted, and §F does not list it.** The stored/opted-in/imported/self
+   sentence is shown by BOTH the staff panel's counts block (§B) and `status_lines` (§F); one
+   home rather than two literals is checklist 15. It is four lines of pure code with its own
+   assertion inside the `status_lines` test.
+5. **`card_lines` shows the stored YEAR only on your own block.** §B asks for "the year in
+   brackets when stored" in **Your birthday**, and §F gives `card_lines` one signature for both
+   that block and somebody else's card. `mine` decides: your own block gains ` (1987)`, their
+   card renders exactly what `/birthday show` rendered before. `birthday_show_age` already
+   governs whether an *age* is public and is untouched; the year is the raw fact behind it.
+   `mine` also switches the opted-out sentence between "You are" and "They are".
+6. **The panel strings live in `black_bloc/birthdays.py`, not the cog.** §B and §C name them
+   without saying where. The precedent is `requests.py` (pure) holding `PANEL_TITLE`,
+   `PANEL_INTRO`, `PANEL_TIMEOUT_FOOTER`, so the new panel strings went there;
+   `NOT_STORED`/`OPTED_OUT`/`NOBODY_YET`/`REMOVED`/`ALREADY_OPTED` and the two role sentences
+   stayed in the cog, where they already were, so the rewrite of the five command-naming
+   strings is a one-line diff each rather than a move plus a rewrite.
+7. **`black_bloc/birthdays.py` now imports `black_bloc/panels.py`** (for `panel_minutes`
+   alone), which pulls `discord` into a module `code-notes.md` calls "the decisions, with no
+   Discord in them". It is the same edge `black_bloc/requests.py:508` already has, it is not a
+   cycle, and the module still handles no Discord object. Noted because the section heading now
+   overstates its purity.
+8. **`commands synced` is 44 and was NOT read off a boot.** §H item 1 asks for
+   `python -m black_bloc`; this build has no bot token, so the number comes from
+   `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`, which builds the
+   real bot, loads every cog and asserts `len(tree.get_commands()) == 44`. That is a
+   measurement of the same object the boot would print, taken offline. The same substitution
+   was accepted for wave 0 (its deviation 5). ⚠️ **Two sibling wave-1 builds are changing this
+   number in parallel** — events retires `/timezone`, so 44 → 43 there; on THIS branch it is
+   44, and the assertion will need re-measuring at the merge.
+9. **`LOG_LEVEL_COMMANDS["birthday"]` was left alone, and it now renders a sentence naming a
+   retired subcommand.** `settings_store.py:787` maps the feature to `/birthday`, and
+   `log_level_help` renders "and in `/birthday logs`" into `birthday_log_level`'s help text.
+   §E says the entry "still names a real command", which is true — but the help *sentence* now
+   points at a Logs button. ⚠️ **`/request` has exactly the same defect since its own panel
+   shipped**, so fixing one and not the other would be worse than fixing neither; it is
+   recorded here as a finding for the conductor rather than repaired in a birthdays branch.
+10. **§H item 3's `node site/mock/check.mjs` and the `labels.js` parse were NOT run.** No site
+    file is touched by this build (grep: no `site/` change in the diff), and the design's own
+    §E lists no site edit. The full `pytest -q -n auto` and `ruff check .` WERE run and are
+    green.
+11. **§H item 2 is proved, and so is more than it asks.** The parametrised test walks all three
+    reachable `(has_date, opted_out)` states through the real command and asserts the row's
+    labels **and nothing else**; the pure test adds the unreachable `(False, True)` and asserts
+    it falls back rather than raising. `is_staff` is covered by separate tests rather than a
+    third parametrise axis, because a staff panel differs by seven controls and asserting that
+    as a parametrise case reads worse than as its own test.
+12. **The `Refresh` button is on row 0 with the moves, as §B's table says — which means a
+    member with nothing stored sees a two-button row.** Worth stating because it looks sparse
+    beside the four-button rows; it is the table, not an omission.
+13. **19 command tests were rewritten rather than kept.** They drove `cog.set_mine.callback`,
+    `cog.show.callback` and nine other retired subcommands, so there was nothing to keep. Every
+    behaviour they asserted has a panel-shaped replacement, and the two role-handback tests
+    (Phase 5 review finding 3) now call `forget_birthday` / `change_opt` directly, which is
+    what the buttons call. 3499 tests pass on the branch.

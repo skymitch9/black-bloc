@@ -203,7 +203,7 @@ form for a full pass.
 | 71 | The roster, and Copy as text | on the Role menus page open **Approved for <form>** under that form | one row per approved member: their name, **twitch.tv/<login>** as a link (or a quiet "not linked"), how long since staff said yes, and who decided. Somebody who has left the server is still listed with "left the server" beside them — `/settings set-value key:applications_roster_shows_left value:false` hides them instead. **Copy as text** puts one line per member on the clipboard, ready to paste into the official team page |
 | 72 | Taking somebody off the list | on the roster press **Take off the list**, type a reason, confirm. (In Discord: `/applications show <id>` on an approved application — the same **Take off the list** button is on the panel) | they are DMed the reason and when they may apply again; the Decided table shows the row as **removed**; the roster is one shorter; `/applications list form:<name> status:approved` no longer names them. On a form that DOES hand a role over the button is not offered at all, and the route refuses in words pointing at `/role revoke` |
 
-### Birthdays — `/birthday` is ONE panel (wave 1). ⚠️ On the branch `feat/birthdays-panel`; not merged, not deployed.
+### Birthdays — `/birthday` is ONE panel (wave 1). ⚠️ On the branch `worktree-agent-a19bdce15408f8243`; not merged, not deployed.
 
 | # | What | Do this | Expect |
 |---|---|---|---|
