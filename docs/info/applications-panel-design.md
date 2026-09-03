@@ -329,7 +329,12 @@ Settled first, by the two standing rules, so they are NOT put to him:
 
 The three that are genuinely his:
 
-- **I-A1 — what is the command CALLED, `/applications` or `/apply`?** One command has to carry both
+- ✅ **I-A1 — DECIDED by the owner 2026-09-03 13:35: `/apply` ("it's gamer lingo").** The one
+  command is `/apply`; the `applications` Group goes entirely. Everywhere this document says
+  `/applications` for the COMMAND, read `/apply`; the feature, the log kinds, the settings keys and
+  the site section keep the word "applications". Description: "Apply for something — staff manage
+  the forms here too". `"apply"` stays in `MEMBER_COMMANDS`; `"applications"` leaves `STAFF_COMMANDS`.
+  Original question: what is the command CALLED, `/applications` or `/apply`? One command has to carry both
   halves. `/applications` is what the feature, the logs, the settings keys and the site section are
   called, and it is what this document assumes; `/apply` is the word a member reaching for it would
   actually type, and it is the half that gets used a hundred times to the staff half's one.

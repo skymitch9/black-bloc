@@ -217,12 +217,13 @@ docs bookkeeping lands with the work, not after.
   `denied → approved` + a DM'd cancel note, no draft rows). F-B1 DECIDED 12:20 (keep today's behaviour: member lookup on, creator may end own poll).
   **The fourth wave-1 design exists:** [`info/applications-panel-design.md`](info/applications-panel-design.md)
   (2026-09-03, written against `9891f71` after the no-role merge — 17 subcommands over two groups
-  collapse into one member-visible `/applications`; sweep rows 94–102; `denied`/`removed` → `approved`
-  and the member's own list settled by the standing rules; three owner forks open — I-A1 the command's
-  name, I-A2 whether it still vanishes when the mode is off, I-A3 whether question editing stays in
-  Discord).
-  **Waiting on the owner:** events I2 (does `/timezone` go). Then Opus builds
-  in worktrees, merge in wave order, re-key `code-notes.md` per merge, deploy per wave.
+  collapse into one member-visible command; sweep rows 94–102; `denied`/`removed` → `approved`
+  and the member's own list settled by the standing rules). Forks: **I-A1 DECIDED 13:35 — the
+  command is `/apply`** ("it's gamer lingo"; the `applications` Group goes); I-A2 (does it still
+  vanish when the mode is off) and I-A3 (does question editing stay in Discord) still open, asked
+  one at a time. Events I2 DECIDED 12:40 (`/timezone` retired). **Wave-1 builds dispatched 12:50**
+  (events / polls / birthdays, Opus, own worktrees); the applications build follows once I-A2/I-A3
+  are answered. Merge in wave order, re-key `code-notes.md` per merge, deploy per landing.
 
 - **Via-labelling gap: `raidtrain.cancel_train` logs one row but calls a website cancel
   Via = Discord** (found by the double-logging build, 2026-09-03 — see `DONE.md` that
