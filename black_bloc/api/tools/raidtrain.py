@@ -31,6 +31,7 @@ from ...raidtrain import (
     SLOT_TAKEN,
     SLOT_UNKNOWN,
     STATUS_WORDS,
+    STATUSES,
     TITLE_LIMIT,
     filled,
     may_move,
@@ -354,7 +355,7 @@ def build_router(bot: Any) -> APIRouter:
         cog = require_cog(bot, COG, FEATURE)
         train = await wanted_train(guild, db, train_id)
         wanted = str(payload.get("status") or "").strip().lower()
-        if wanted not in STATUS_WORDS:
+        if wanted not in STATUSES:
             raise Refused(400, "bad_status", BAD_STATUS.format(status=wanted or "(nothing)"))
         if not may_move(train["status"], wanted):
             raise Refused(409, "bad_move", move_refusal(train["status"], wanted))

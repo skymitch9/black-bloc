@@ -8,6 +8,8 @@ from black_bloc.raidtrain import (
     LIVE,
     LOCKED,
     OPEN,
+    STATUS_WORDS,
+    STATUSES,
     TERMINAL_STATUSES,
     TRANSITIONS,
     allowed_moves,
@@ -112,7 +114,10 @@ def test_only_the_named_moves_are_allowed():
     assert may_move(CANCELLED, OPEN) is False
     assert may_move("nonsense", OPEN) is False
     assert set(TERMINAL_STATUSES) == {DONE, CANCELLED}
-    assert set(TRANSITIONS) == {OPEN, LOCKED, LIVE, DONE, CANCELLED}
+    assert set(TRANSITIONS) == set(STATUSES)
+    assert set(STATUS_WORDS) == set(STATUSES)
+    for allowed in TRANSITIONS.values():
+        assert set(allowed) <= set(STATUSES)
 
 
 def test_a_refusal_says_what_is_allowed_instead_of_printing_a_status_list():

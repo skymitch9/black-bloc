@@ -26,7 +26,6 @@ LIVE = "live"
 DONE = "done"
 CANCELLED = "cancelled"
 STATUSES = (OPEN, LOCKED, LIVE, DONE, CANCELLED)
-CLAIMABLE_STATUSES = (OPEN,)
 OPEN_STATUSES = (OPEN, LOCKED, LIVE)
 
 TRANSITIONS: dict[str, tuple[str, ...]] = {
@@ -360,7 +359,6 @@ def positions_word(slots: Any) -> str:
 __all__ = [
     "CANCELLED",
     "CAP_REACHED",
-    "CLAIMABLE_STATUSES",
     "DESCRIPTION_LIMIT",
     "DONE",
     "LIVE",
