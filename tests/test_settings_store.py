@@ -788,10 +788,53 @@ def test_the_chat_manners_keys_refuse_the_wrong_shape():
             coerce_value(key, bad)
 
 
+async def test_every_ping_role_decision_is_a_key_the_dashboard_and_the_bot_both_reach(store):
+    """F14 D1-D6: none of these is a constant, so every one of them is editable both ways."""
+    for key in (
+        "pings_mode",
+        "pings_events_role_name",
+        "pings_fan_role_creation",
+        "pings_fan_role_template",
+        "pings_fan_role_on_unlink",
+        "pings_fan_role_delete",
+        "pings_log_level",
+    ):
+        assert key in KEY_TYPES and KEY_HELP.get(key)
+    assert store.get(7, "pings_mode") == "off"
+    assert store.get(7, "pings_events_role_name") == "Events"
+    assert store.get(7, "pings_fan_role_creation") == "self"
+    assert store.get(7, "pings_fan_role_template") == "{name} pings"
+    assert store.get(7, "pings_fan_role_on_unlink") == "keep"
+    assert store.get(7, "pings_fan_role_delete") is True
+
+
+def test_the_ping_role_choices_refuse_anything_else():
+    assert coerce_value("pings_mode", "on") == "on"
+    assert coerce_value("pings_fan_role_creation", "auto") == "auto"
+    assert coerce_value("pings_fan_role_on_unlink", "delete") == "delete"
+    assert coerce_value("pings_fan_role_delete", False) is False
+    assert coerce_value("pings_fan_role_template", "fans of {name}") == "fans of {name}"
+    for key, bad in (
+        ("pings_mode", "shadow"),
+        ("pings_fan_role_creation", "anybody"),
+        ("pings_fan_role_on_unlink", "forget"),
+        ("pings_fan_role_delete", "yes"),
+        ("pings_fan_role_template", ""),
+        ("pings_events_role_name", 5),
+    ):
+        with pytest.raises(SettingError):
+            coerce_value(key, bad)
+
+
+def test_the_ping_role_mode_is_read_as_a_feature_switch_on_the_health_page():
+    assert "pings_mode" in mode_keys()
+
+
 async def test_every_feature_has_a_log_level_key_defaulting_to_important(store):
     keys = [f"{feature}_log_level" for feature in FEATURES]
-    assert len(keys) == 13
+    assert len(keys) == 14
     assert "request_log_level" in keys
+    assert "pings_log_level" in keys
     for key in keys:
         assert KEY_TYPES[key] == "enum"
         assert KEY_CHOICES[key] == LEVELS

@@ -11,6 +11,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
+from ... import pings
 from ...actionlog import (
     LOGS_DEFAULT,
     LOGS_MAX,
@@ -412,6 +413,7 @@ class GoLive(commands.Cog):
         cooldown = store.get(guild.id, "golive_cooldown_minutes")
         if not should_announce(datetime.now(UTC), last, cooldown):
             return
+        fan_role_id = await pings.announced_fan_role(self.bot, guild, member.id)
         if source == "presence":
             info = await self._enrich(member, info)
         info = await self._box_art(guild, info)
@@ -423,10 +425,13 @@ class GoLive(commands.Cog):
             info,
             member,
             ping_role_id=store.get(guild.id, "golive_ping_role_id"),
+            fan_role_id=fan_role_id,
         )
         embed = self._embed(guild, info, member, source)
         result = (
-            await self._post(guild, text, embed) if mode == "on" else PostResult(reason="shadow")
+            await self._post(guild, text, embed, fan_role_id=fan_role_id)
+            if mode == "on"
+            else PostResult(reason="shadow")
         )
         if result.ok:
             await set_announced(self.bot.db, session_id, result.message.id)
@@ -438,6 +443,7 @@ class GoLive(commands.Cog):
             "game": info.game,
             "platform": info.platform,
             "text": text,
+            "fan_role_id": fan_role_id,
         }
         if embed is not None:
             details["embed"] = embed_summary(embed)
@@ -488,11 +494,14 @@ class GoLive(commands.Cog):
         if channel is None:
             return
         suffix = self.bot.store.get(guild.id, "golive_end_suffix")
+        fan_role_id = await pings.announced_fan_role(
+            self.bot, guild, row["user_id"], notice=False
+        )
         try:
             message = await channel.fetch_message(message_id)
             await message.edit(
                 content=ended_text(message.content, suffix),
-                allowed_mentions=self._mentions(guild.id),
+                allowed_mentions=self._mentions(guild.id, fan_role_id),
                 **self._ended_embed(guild, row, message, suffix),
             )
         except Exception as exc:
@@ -546,7 +555,9 @@ class GoLive(commands.Cog):
             return info
         return enriched(info, streams[0] if streams else None)
 
-    async def _post(self, guild: Any, text: str, embed: Any = None) -> PostResult:
+    async def _post(
+        self, guild: Any, text: str, embed: Any = None, *, fan_role_id: int | None = None
+    ) -> PostResult:
         channel_id = self.bot.store.get(guild.id, "golive_channel_id")
         if not channel_id:
             log.warning("go-live: not posted — golive_channel_id is not set")
@@ -562,7 +573,7 @@ class GoLive(commands.Cog):
         try:
             message = await channel.send(
                 text,
-                allowed_mentions=self._mentions(guild.id),
+                allowed_mentions=self._mentions(guild.id, fan_role_id),
                 **({"embed": embed} if embed is not None else {}),
             )
         except Exception as exc:
@@ -655,12 +666,18 @@ class GoLive(commands.Cog):
             return POLLING_NO_CREDS
         return "running" if self.poller.is_running() else "stopped"
 
-    def _mentions(self, guild_id: int) -> discord.AllowedMentions:
-        ping_role_id = self.bot.store.get(guild_id, "golive_ping_role_id")
+    def _mentions(
+        self, guild_id: int, fan_role_id: int | None = None
+    ) -> discord.AllowedMentions:
+        wanted = [
+            role_id
+            for role_id in (self.bot.store.get(guild_id, "golive_ping_role_id"), fan_role_id)
+            if role_id
+        ]
         return discord.AllowedMentions(
             everyone=False,
             users=False,
-            roles=[discord.Object(ping_role_id)] if ping_role_id else False,
+            roles=[discord.Object(role_id) for role_id in dict.fromkeys(wanted)] or False,
         )
 
     def _lock(self, user_id: int) -> asyncio.Lock:
@@ -841,7 +858,11 @@ class GoLive(commands.Cog):
         if not await self._database_ready(interaction):
             return
         await set_optout(self.bot.db, interaction.user.id)
-        await interaction.response.send_message(OPTED_OUT, ephemeral=True)
+        await interaction.response.send_message(
+            OPTED_OUT + await self._fan_role_after_leaving(interaction),
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
         await self._log_command(interaction, "golive.optout")
 
     @golive.command(name="optin", description="Let Black Bloc announce your streams again")
@@ -984,15 +1005,20 @@ class GoLive(commands.Cog):
                 checked = True
                 twitch_user_id = users[0].id
         await set_link(self.bot.db, interaction.user.id, cleaned, twitch_user_id)
+        made = await self._auto_fan_role(interaction)
         await interaction.response.send_message(
             (
-                f"Linked **{cleaned}** to you. Black Bloc will use it to fill in the game and "
-                "title when you go live, and to spot streams Discord does not show. "
-                "`/twitch unlink` undoes it."
+                (
+                    f"Linked **{cleaned}** to you. Black Bloc will use it to fill in the game and "
+                    "title when you go live, and to spot streams Discord does not show. "
+                    "`/twitch unlink` undoes it."
+                )
+                if checked
+                else LINK_NOT_CHECKED.format(channel=cleaned)
             )
-            if checked
-            else LINK_NOT_CHECKED.format(channel=cleaned),
+            + made,
             ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
         )
         await self._log_command(
             interaction, "golive.link", details={"login": cleaned, "checked": checked}
@@ -1008,10 +1034,30 @@ class GoLive(commands.Cog):
             return
         await interaction.response.send_message(
             "Done — Black Bloc has forgotten your Twitch channel. Discord presence still "
-            "announces your streams; `/golive optout` stops that too.",
+            "announces your streams; `/golive optout` stops that too."
+            + await self._fan_role_after_leaving(interaction),
             ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
         )
         await self._log_command(interaction, "golive.unlink")
+
+    async def _auto_fan_role(self, interaction: discord.Interaction) -> str:
+        """`pings_fan_role_creation auto` is the only setting that makes a role from a link."""
+        if interaction.guild is None:
+            return ""
+        outcome = await pings.maybe_auto_create(
+            self.bot, interaction.guild, interaction.user, by=interaction.user.id
+        )
+        return f" {outcome.message}" if outcome is not None and outcome.ok else ""
+
+    async def _fan_role_after_leaving(self, interaction: discord.Interaction) -> str:
+        """`pings_fan_role_on_unlink` decides; `keep` — the default — says nothing at all."""
+        if interaction.guild is None:
+            return ""
+        outcome = await pings.on_streamer_left(
+            self.bot, interaction.guild, interaction.user.id, by=interaction.user.id
+        )
+        return f" {outcome.message}" if outcome is not None and outcome.ok else ""
 
     async def _log_command(
         self, interaction: discord.Interaction, kind: str, details: dict[str, Any] | None = None

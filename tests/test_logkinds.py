@@ -95,6 +95,9 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.rolemenu.edit",
         "web.rolemenu.post",
         "web.role_menu.seeded",
+        "web.pings.fan_role_created",
+        "web.pings.fan_role_removed",
+        "web.pings.setup",
         "web.settings.clear",
         "web.settings.set",
         "web.tempvoice.forget",
@@ -214,6 +217,20 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "role_menu.unassign",
         "web.role_menu.assign",
         "web.role_menu.unassign",
+    ),
+    # F14: one helper serves the slash command and the dashboard, so the `web.` head is built
+    # at call time from the `via` the caller passed rather than being a second literal.
+    "black_bloc/pings.py::f'{head(via)}pings.setup'": (
+        "pings.setup",
+        "web.pings.setup",
+    ),
+    "black_bloc/pings.py::f'{head(via)}pings.fan_role_created'": (
+        "pings.fan_role_created",
+        "web.pings.fan_role_created",
+    ),
+    "black_bloc/pings.py::f'{head(via)}pings.fan_role_removed'": (
+        "pings.fan_role_removed",
+        "web.pings.fan_role_removed",
     ),
     "black_bloc/rolemenu_panels.py::f'{head}{kind}'": (
         "role_menu.unposted",
@@ -440,8 +457,8 @@ def test_an_unknown_level_is_todays_behaviour():
 
 
 def test_every_feature_has_one_settings_key():
-    assert len(FEATURES) == 13
-    assert len(set(FEATURES)) == 13
+    assert len(FEATURES) == 14
+    assert len(set(FEATURES)) == 14
     assert log_level_key("golive") == "golive_log_level"
     assert LEVELS == (OFF, IMPORTANT_ONLY, ALL)
 

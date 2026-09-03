@@ -30,6 +30,7 @@ FEATURES = (
     "poll",
     "chat",
     "request",
+    "pings",
 )
 
 HEADS: dict[str, str] = {
@@ -53,6 +54,7 @@ HEADS: dict[str, str] = {
     "chat": "chat",
     "request": "request",
     "requests": "request",
+    "pings": "pings",
 }
 
 FEATURE_LABELS: dict[str, str] = {
@@ -69,6 +71,7 @@ FEATURE_LABELS: dict[str, str] = {
     "poll": "Polls",
     "chat": "Chat",
     "request": "Requests",
+    "pings": "Ping roles",
 }
 
 FEATURE_PAGES: dict[str, str] = {
@@ -85,6 +88,7 @@ FEATURE_PAGES: dict[str, str] = {
     "poll": "polls.html",
     "chat": "chat.html",
     "request": "requests.html",
+    "pings": "golive.html",
 }
 
 IMPORTANT_SUFFIXES = (
@@ -118,6 +122,9 @@ IMPORTANT: frozenset[str] = frozenset(
         "mod.unbanned",
         "mod.warn_threshold",
         "modmail.unblocked",
+        "pings.fan_role_created",
+        "pings.fan_role_removed",
+        "pings.forbidden",
         "poll.cancelled",
         "request.declined",
         "request.done",
@@ -213,6 +220,12 @@ ROUTINE: frozenset[str] = frozenset(
         "modmail.staff_channel_forgotten",
         "modmail.transcript",
         "modmail.unblock",
+        "pings.events_off",
+        "pings.events_on",
+        "pings.fan_role_missing",
+        "pings.follow",
+        "pings.setup",
+        "pings.unfollow",
         "poll.archived",
         "poll.cancel",
         "poll.channel_forgotten",

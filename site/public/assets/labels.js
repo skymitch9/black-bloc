@@ -27,6 +27,14 @@ export const LABELS = {
   golive_max_session_hours: 'How long a stream may run before it is closed',
   golive_log_level: 'How much of go-live is repeated into Discord',
 
+  pings_mode: 'Whether people can opt in to pings',
+  pings_events_role_name: 'What the shared Events role is called',
+  pings_fan_role_creation: 'Who may start a streamer’s own ping role',
+  pings_fan_role_template: 'What a streamer’s ping role is called',
+  pings_fan_role_on_unlink: 'What happens to it when they unlink or opt out',
+  pings_fan_role_delete: 'Whether removing one deletes the Discord role too',
+  pings_log_level: 'How much of ping roles is repeated into Discord',
+
   tempvoice_mode: 'Whether people can make their own voice rooms',
   tempvoice_creator_ids: 'Which channels people join to get a room',
   tempvoice_name_template: 'What a new room is called',
@@ -116,7 +124,7 @@ export const LABELS = {
   cost_hosting_usd: 'What hosting costs a month, off the invoice',
 };
 
-const NAMESPACES = ['golive', 'tempvoice', 'honeypot', 'events', 'birthday', 'modmail', 'automod', 'rolemenu'];
+const NAMESPACES = ['golive', 'pings', 'tempvoice', 'honeypot', 'events', 'birthday', 'modmail', 'automod', 'rolemenu'];
 
 function derived(key) {
   let name = String(key || '');

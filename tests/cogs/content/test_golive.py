@@ -27,7 +27,7 @@ from black_bloc.cogs.content.golive import (
     start_session,
 )
 from black_bloc.config import load_settings
-from black_bloc.golive import StreamInfo, from_twitch
+from black_bloc.golive import StreamInfo, from_twitch, now_iso
 from black_bloc.settings_store import SettingsStore
 from black_bloc.storage.db import Database
 from black_bloc.twitch import TwitchError, TwitchGame, TwitchStream
@@ -759,6 +759,57 @@ async def test_link_and_unlink_commands(cog, bot, member, db):
     assert "had no Twitch channel linked" in interaction.sent
 
 
+async def test_a_link_makes_a_ping_role_only_when_the_setting_says_auto(
+    cog, bot, member, db, monkeypatch
+):
+    """F14: `pings_fan_role_creation` is the whole gate, and its default is `self`."""
+    asked = []
+
+    async def fake(bot_, guild, who, *, by, via="discord"):
+        asked.append((guild.id, who.id, by))
+        return cog_module.pings.Outcome(True, "Made **Alice pings**.")
+
+    monkeypatch.setattr(cog_module.pings, "maybe_auto_create", fake)
+    interaction = FakeInteraction(bot, member, bot.guild)
+
+    await GoLive.link.callback(cog, interaction, "alice")
+
+    assert asked == [(GUILD, member.id, member.id)]
+    assert interaction.sent.endswith("Made **Alice pings**.")
+    assert interaction.response.messages[-1]["kwargs"]["allowed_mentions"].roles is False
+
+
+async def test_unlink_and_optout_ask_what_should_happen_to_the_streamers_own_role(
+    cog, bot, member, db, monkeypatch
+):
+    asked = []
+
+    async def fake(bot_, guild, user_id, *, by, via="discord"):
+        asked.append(user_id)
+        return cog_module.pings.Outcome(True, "The role is gone.")
+
+    monkeypatch.setattr(cog_module.pings, "on_streamer_left", fake)
+    await set_link(db, member.id, "alice", None)
+
+    interaction = FakeInteraction(bot, member, bot.guild)
+    await GoLive.unlink.callback(cog, interaction)
+    assert interaction.sent.endswith("The role is gone.")
+
+    interaction = FakeInteraction(bot, member, bot.guild)
+    await GoLive.optout.callback(cog, interaction)
+    assert interaction.sent.endswith("The role is gone.")
+    assert asked == [member.id, member.id]
+
+
+async def test_the_default_keep_setting_says_nothing_extra_at_all(cog, bot, member, db):
+    await set_link(db, member.id, "alice", None)
+    interaction = FakeInteraction(bot, member, bot.guild)
+
+    await GoLive.unlink.callback(cog, interaction)
+
+    assert interaction.sent.endswith("stops that too.")
+
+
 async def test_link_refuses_a_login_twitch_does_not_know(cog, bot, member, db):
     cog.helix = FakeHelix(users=[])
     interaction = FakeInteraction(bot, member, bot.guild)
@@ -1055,6 +1106,93 @@ async def test_the_announcement_only_allows_the_ping_role_to_be_mentioned(cog, b
     mentions = bot.guild.channel.messages[0].kwargs["allowed_mentions"]
     assert mentions.everyone is False and mentions.users is False
     assert [role.id for role in mentions.roles] == [77]
+
+
+def fan_role_spy(monkeypatch, role_id):
+    """Count every read of the streamer's own role, so a suppressed announcement can be
+    shown never to have asked for one (F14: the query sits after the cooldown gate)."""
+    asked = []
+
+    async def fake(bot, guild, user_id, *, notice=True):
+        asked.append(user_id)
+        return role_id
+
+    monkeypatch.setattr(cog_module.pings, "announced_fan_role", fake)
+    return asked
+
+
+async def test_the_announcement_mentions_the_streamers_own_role_after_the_shared_one(
+    cog, bot, member, db, monkeypatch
+):
+    fan_role_spy(monkeypatch, 4242)
+    await bot.store.set(GUILD, "golive_mode", "on")
+    await bot.store.set(GUILD, "golive_ping_role_id", 77)
+
+    await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
+
+    message = bot.guild.channel.messages[0]
+    assert message.content.startswith("<@&77> <@&4242> ")
+    mentions = message.kwargs["allowed_mentions"]
+    assert [role.id for role in mentions.roles] == [77, 4242]
+    assert json.loads(await action_details(db, "golive.announce"))["fan_role_id"] == 4242
+
+
+async def test_a_streamer_with_no_role_of_their_own_announces_exactly_as_before(
+    cog, bot, member, db, monkeypatch
+):
+    fan_role_spy(monkeypatch, None)
+    await bot.store.set(GUILD, "golive_mode", "on")
+    await bot.store.set(GUILD, "golive_ping_role_id", 77)
+
+    await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
+
+    message = bot.guild.channel.messages[0]
+    assert message.content.startswith("<@&77> ") and "<@&None>" not in message.content
+    assert [role.id for role in message.kwargs["allowed_mentions"].roles] == [77]
+    assert json.loads(await action_details(db, "golive.announce"))["fan_role_id"] is None
+
+
+async def test_a_suppressed_announcement_never_asks_for_a_fan_role(
+    cog, bot, member, db, monkeypatch
+):
+    asked = fan_role_spy(monkeypatch, 4242)
+    await bot.store.set(GUILD, "golive_mode", "on")
+    await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
+    assert asked == [member.id]
+
+    await end_session(db, (await latest_session(db, GUILD, member.id))["id"], now_iso())
+    await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
+
+    assert asked == [member.id], "the cooldown suppressed the post but the role was still read"
+    assert len(bot.guild.channel.messages) == 1
+
+
+async def test_an_opted_out_streamer_is_never_asked_about_either(
+    cog, bot, member, db, monkeypatch
+):
+    asked = fan_role_spy(monkeypatch, 4242)
+    await bot.store.set(GUILD, "golive_mode", "on")
+    await set_optout(db, member.id)
+
+    await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
+
+    assert asked == [] and bot.guild.channel.messages == []
+
+
+async def test_the_end_edit_carries_the_fan_role_without_adding_a_mention(
+    cog, bot, member, monkeypatch
+):
+    fan_role_spy(monkeypatch, 4242)
+    await bot.store.set(GUILD, "golive_mode", "on")
+    await bot.store.set(GUILD, "golive_end_mode", "edit")
+    await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
+    posted = bot.guild.channel.messages[0].content
+
+    await cog._end_live(bot.guild, member, "presence")
+
+    message = bot.guild.channel.messages[0]
+    assert message.content == posted + " — stream ended"
+    assert [role.id for role in message.edits[0]["allowed_mentions"].roles] == [4242]
 
 
 async def test_the_end_edit_also_carries_allowed_mentions(cog, bot, member):

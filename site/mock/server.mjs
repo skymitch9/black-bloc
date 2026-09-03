@@ -81,6 +81,8 @@ const ROLES = [
   { id: '900000000000000004', name: 'Birthday', color: '#ffd166', position: 4, managed: false },
   { id: '900000000000000005', name: 'Members', color: '#8a8f98', position: 1, managed: false },
   { id: '900000000000000006', name: 'Server Booster', color: '#f47fff', position: 9, managed: true },
+  { id: '900000000000000007', name: 'Events', color: '#8a8f98', position: 2, managed: false },
+  { id: '900000000000000008', name: 'Casey pings', color: '#8a8f98', position: 3, managed: false },
 ];
 
 const CHANNELS = [
@@ -117,6 +119,10 @@ const STAFF_ROLE_IDS = ['900000000000000002', '900000000000000001'];
 const MEMBER_ROLE_ID = '900000000000000005';
 const BOOSTER_ROLE_ID = '900000000000000006';
 const LIVE_ROLE_ID = '900000000000000003';
+const EVENTS_ROLE_ID = '900000000000000007';
+// The second is deliberately NOT in ROLES: a fan role somebody deleted by hand, so the Pings
+// table has a row whose follower count is null rather than 0.
+const FAN_ROLE_IDS = ['900000000000000008', '900000000000000009'];
 
 const FILLER_NAMES = [
   'ash', 'bex', 'cato', 'dee', 'echo', 'fen', 'gus', 'hana', 'ines', 'jory',
@@ -149,8 +155,10 @@ const ROSTER = [
       : at === 1
         ? [STAFF_ROLE_IDS[1], MEMBER_ROLE_ID]
         : at === 2
-          ? [STAFF_ROLE_IDS[1], LIVE_ROLE_ID, MEMBER_ROLE_ID]
-          : [MEMBER_ROLE_ID],
+          ? [STAFF_ROLE_IDS[1], LIVE_ROLE_ID, MEMBER_ROLE_ID, FAN_ROLE_IDS[0]]
+          : at === 3
+            ? [MEMBER_ROLE_ID, FAN_ROLE_IDS[0], EVENTS_ROLE_ID]
+            : [MEMBER_ROLE_ID],
   })),
   ...BOT_NAMES.map((name, at) => rosterRow(100 + at, name.toLowerCase(), name, {
     bot: true,
@@ -175,6 +183,7 @@ const KIND_HEADS = {
   birthday: 'birthday', tempvoice: 'tempvoice',
   role: 'rolemenu', role_menu: 'rolemenu', rolemenu: 'rolemenu',
   poll: 'poll', chat: 'chat', request: 'request', requests: 'request',
+  pings: 'pings',
 };
 const IMPORTANT_SUFFIXES = [
   '_failed', '.approved', '.denied', '.expired', '.warned', '.timed_out', '.timeout',
@@ -250,6 +259,7 @@ const LOG_LEVEL_FEATURES = [
   ['poll', 'polls', 'poll'],
   ['chat', 'chat', 'chat'],
   ['request', 'requests', 'request'],
+  ['pings', 'ping roles', 'pingroles'],
 ];
 
 const SETTING_SPECS = [
@@ -267,6 +277,12 @@ const SETTING_SPECS = [
   ['golive_cooldown_minutes', 'int', 60, 60, 'minutes before the same person is announced again'],
   ['golive_ping_role_id', 'role', null, null, 'role mentioned in front of every go-live announcement'],
   ['golive_max_session_hours', 'int', 12, 12, 'hours before a stream still marked live is closed anyway'],
+  ['pings_mode', 'enum', 'off', 'off', 'off, or on (members can opt in to go-live and event pings, and a streamer can have a role of their own that only their followers wear)', ['off', 'on']],
+  ['pings_events_role_name', 'text', 'Events', 'Events', 'what `/pingroles setup` calls the one opt-in role for go-live and event pings when it has to make it; an existing role of that name is reused rather than duplicated'],
+  ['pings_fan_role_creation', 'enum', 'self', 'self', 'who may start a streamer’s own ping role: self (the streamer, with `/pings fans on`), staff (only an Auntie/Uncle, with `/pingroles streamer add`), or auto (one is made the moment a Twitch channel is linked). Staff can always do it for anybody, whichever this says', ['self', 'staff', 'auto']],
+  ['pings_fan_role_template', 'text', '{name} pings', '{name} pings', 'what a streamer’s own ping role is called; {name} is their display name at the moment the role is made and is the only field there is'],
+  ['pings_fan_role_on_unlink', 'enum', 'keep', 'keep', 'what happens to a streamer’s ping role when they unlink Twitch or opt out of announcements: keep leaves it alone (nothing is announced, so nobody is pinged), delete takes the role off the server', ['keep', 'delete']],
+  ['pings_fan_role_delete', 'bool', true, true, 'true to delete the Discord role itself when a streamer’s ping role is removed; false forgets the role here and leaves it on the server for somebody to tidy by hand'],
   ['tempvoice_mode', 'enum', 'on', 'off', 'off, or on (join-to-create makes a temporary voice channel)', ['off', 'on']],
   ['tempvoice_creator_ids', 'channels', ['800000000000000009'], [], 'the join-to-create channels; /tempvoice setup fills this in'],
   ['tempvoice_name_template', 'text', "{user}'s room", "{user}'s room", 'what a spawned channel is called; {user} is the member'],
@@ -535,6 +551,10 @@ function seedState() {
       { user_id: MEMBERS[2].id, twitch_login: 'rivetplays', twitch_user_id: '445566', linked_at: minutesAgo(9000) },
     ],
     optouts: [{ user_id: MEMBERS[5].id, at: minutesAgo(2000) }],
+    fanRoles: [
+      { user_id: MEMBERS[1].id, role_id: FAN_ROLE_IDS[0], created_at: minutesAgo(3000), created_by: STAFF.id },
+      { user_id: MEMBERS[2].id, role_id: FAN_ROLE_IDS[1], created_at: minutesAgo(2000), created_by: MEMBERS[2].id },
+    ],
     sessions: [
       { id: 12, user_id: MEMBERS[1].id, source: 'twitch', url: 'https://twitch.tv/caseyfast', game: 'Lethal Company', title: 'late night runs', started_at: minutesAgo(120), ended_at: null, mode: 'shadow', announced_message_id: null },
       { id: 11, user_id: MEMBERS[2].id, source: 'presence', url: 'https://twitch.tv/rivetplays', game: 'Balatro', title: 'one more run', started_at: minutesAgo(1500), ended_at: minutesAgo(1300), mode: 'shadow', announced_message_id: null },
@@ -1942,6 +1962,122 @@ route('GET', '/api/golive/sessions', (context) => {
     mode: row.mode,
     announced_message_id: row.announced_message_id === null ? null : String(row.announced_message_id),
   }));
+});
+
+// F14. The mock keeps the fan roles beside the go-live state because that is where the real
+// bot keeps them (`golive_fan_roles`), and the Pings section that reads them is on the same page.
+// A role the mock "makes" is remembered on the ROW, never pushed into ROLES: check.mjs re-seeds
+// `state` between routes and ROLES is module-level, so a mutation there would outlive the reset.
+function roleOf(roleId) {
+  return ROLES.find((role) => role.id === String(roleId)) || null;
+}
+
+function followersOf(roleId) {
+  return ROSTER.filter((row) => (row.role_ids || []).includes(String(roleId))).length;
+}
+
+function fanRoleRow(row) {
+  const role = roleOf(row.role_id);
+  const name = role ? role.name : (row.role_name || null);
+  return {
+    member_id: String(row.user_id),
+    member: memberName(row.user_id),
+    role_id: String(row.role_id),
+    role: name,
+    followers: name === null ? null : (role ? followersOf(row.role_id) : 0),
+    created_at: row.created_at,
+    created_by: row.created_by === null ? null : String(row.created_by),
+    created_by_name: row.created_by === null ? null : memberName(row.created_by),
+  };
+}
+
+route('GET', '/api/pings/streamers', (context) => {
+  requireStaff(context.session);
+  return state.golive.fanRoles.map(fanRoleRow);
+});
+
+route('POST', '/api/pings/streamers', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const memberId = String(body.member_id || '');
+  if (!memberId || !/^[0-9]+$/.test(memberId)) {
+    throw new Refused(400, 'bad_request', `**${memberId || 'nothing'}** is not an id Black Bloc can read, so nothing was done. Ids are the long numbers Discord shows under Copy ID.`);
+  }
+  if (!ROSTER.some((row) => row.id === memberId)) {
+    throw new Refused(404, 'no_such_member', `**${memberId}** is not somebody Black Bloc can see in this server, so nothing was changed. Pick them from the list rather than typing an id.`);
+  }
+  if (state.golive.fanRoles.some((row) => String(row.user_id) === memberId)) {
+    throw new Refused(409, 'not_created', `**${memberName(memberId)}** already has a ping role. Nothing was changed; people follow it with \`/pings follow\`.`);
+  }
+  const given = body.role_id ? String(body.role_id) : null;
+  if (given && !roleOf(given)) {
+    throw new Refused(400, 'no_such_role', `**${given}** is not a role in this server any more, so nothing was changed. Reload the page and pick the role again.`);
+  }
+  const name = given ? roleOf(given).name : `${memberName(memberId)} pings`;
+  const roleId = given || String(910000000000000000n + BigInt(state.golive.fanRoles.length + 1));
+  const row = {
+    user_id: memberId,
+    role_id: roleId,
+    role_name: name,
+    created_at: now(),
+    created_by: STAFF.id,
+  };
+  state.golive.fanRoles.push(row);
+  logAction('web.pings.fan_role_created', { target_id: memberId, details: { role_id: roleId, role: name, reused: Boolean(given) } });
+  return {
+    ...fanRoleRow(row),
+    message: given
+      ? `Used the role **${name}** for **${memberName(memberId)}** and put it on the *streamers* panel. People pick it there, or with \`/pings follow\`.`
+      : `Made **${name}** and put it on the *streamers* panel. People pick it there, or with \`/pings follow\`, and Black Bloc mentions it in front of their go-live announcement.`,
+  };
+});
+
+route('DELETE', '/api/pings/streamers/:member_id', (context) => {
+  requireStaff(context.session);
+  const memberId = String(context.params.member_id);
+  const at = state.golive.fanRoles.findIndex((row) => String(row.user_id) === memberId);
+  if (at < 0) {
+    throw new Refused(404, 'no_fan_role', `**${memberName(memberId) || memberId}** has no ping role, so there was nothing to take away. \`/pingroles streamer list\` shows who has one.`);
+  }
+  const [row] = state.golive.fanRoles.splice(at, 1);
+  const role = roleOf(row.role_id) || (row.role_name ? { name: row.role_name } : null);
+  const deleting = state.settings.get('pings_fan_role_delete') !== false && role !== null;
+  logAction('web.pings.fan_role_removed', { target_id: memberId, details: { role_id: row.role_id, deleted: deleting } });
+  return {
+    removed: true,
+    member_id: memberId,
+    role_id: String(row.role_id),
+    message: deleting
+      ? `**${memberName(memberId)}** no longer has a ping role, and the Discord role **${role.name}** is gone from the server. Everybody who followed them simply stops being pinged.`
+      : `**${memberName(memberId)}** no longer has a ping role here. The Discord role had already been deleted by hand, so there was nothing to take off the server.`,
+  };
+});
+
+route('POST', '/api/pings/setup', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const given = body && body.role_id ? String(body.role_id) : null;
+  if (given && !roleOf(given)) {
+    throw new Refused(400, 'no_such_role', `**${given}** is not a role in this server any more, so nothing was changed. Reload the page and pick the role again.`);
+  }
+  const wanted = String(state.settings.get('pings_events_role_name') ?? 'Events');
+  const found = given ? roleOf(given) : ROLES.find((one) => one.name.toLowerCase() === wanted.toLowerCase());
+  const created = !found;
+  const role = found || { id: String(920000000000000000n + BigInt(ROLES.length)), name: wanted };
+  const before = state.settings.get('golive_ping_role_id');
+  state.settings.set('golive_ping_role_id', role.id);
+  state.settings.set('events_ping_role_id', role.id);
+  logAction('web.pings.setup', { details: { role_id: role.id, role: role.name, created } });
+  let message = created
+    ? `Made the role **${role.name}** and pointed go-live and event pings at it.`
+    : (before === role.id
+      ? `Both feeds already pointed at **${role.name}**, so nothing was changed.`
+      : `Used the role **${role.name}** that was already here and pointed both feeds at it.`);
+  message += ' Put it on the *notifications* panel — post that with `/rolemenu post notifications`.';
+  if (state.settings.get('pings_mode') !== 'on') {
+    message += ' Ping roles are still off, so nobody can opt in yet — turn them on with `/settings set-value pings_mode on` or from the dashboard\u2019s Go-live tab.';
+  }
+  return { role_id: role.id, created, menu: 'notifications', message };
 });
 
 // The two words black_bloc/api/tools/events.py:EDITABLE names; every other state is settled.

@@ -74,6 +74,9 @@ Everything a member can run. Half a line each; `/help` prints the whole thing in
 `/request` — ask the server for something. `/request create` files it for staff to decide on.
 `/twitch` — `/twitch link` connects a Twitch channel so going live gets announced.
 `/golive` — `/golive optout` and `/golive optin` decide whether streams are announced at all.
+`/pings` — `/pings follow` gets one streamer's go-live pings, `/pings events on` gets the
+go-live and event pings for everybody, `/pings fans on` gives your own followers a role, and
+`/pings list` says what you get. The *Streamer pings* and *Notifications* panels do the same.
 `/birthday` — `/birthday set` stores a birthday, `/birthday optout` takes it back off.
 `/poll` — `/poll create` puts a question to the room.
 `/voice` — rename, lock, hide and hand over a temporary voice channel somebody made.

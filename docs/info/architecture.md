@@ -2,14 +2,16 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-02** — the fast-moving figures re-measured:
-> `SCHEMA_VERSION` is **20** (17 sessions, 18 `polls.vote_scheme`, 19
-> `golive_sessions.live_role_id`, 20 the chat tables), `check.mjs` reports
-> **17 pages / 107 routes**, `pytest` runs **2610** tests (also green on
-> ubuntu CI), `ruff check .` clean; `bot.py:COGS` still **14** cogs. New since
+> Last verified: **2026-09-02** — the fast-moving figures re-measured on the
+> Phase 15 branch: `SCHEMA_VERSION` is **21** (17 sessions, 18
+> `polls.vote_scheme`, 19 `golive_sessions.live_role_id`, 20 the chat tables,
+> 21 `golive_fan_roles`), `check.mjs` reports **17 pages / 111 routes**,
+> `pytest` runs **2714** tests (⚠️ ubuntu CI NOT re-run on this branch),
+> `ruff check .` clean; `bot.py:COGS` is now **15** cogs and the tree has
+> **37** top-level slash commands. New since
 > the tree below was drawn: `chat_llm.py`, `llm.py`, `groq.py`, `knowledge.py`,
 > `personas.py`, `directory.py`, `chat_check.py`, `dbsnapshot.py`,
-> `api/costs.py`. ⚠️ NOT re-checked: the Shape tree's per-file annotations
+> `api/costs.py`, `pings.py`, `cogs/content/pings.py`, `api/tools/pings.py`. ⚠️ NOT re-checked: the Shape tree's per-file annotations
 > (verified 2026-08-31). Three cogs (polls, requests, chat) and eleven modules the tree did not
 > list have been added, and the **Carl parity** entries removed — parity was
 > deleted in `47634b8` and `grep -ri carl black_bloc site` is empty.
@@ -121,6 +123,8 @@ black_bloc/
 ├── requests.py       ← F18: pure request logic — the status machine, auto-approval, the card
 ├── chat.py           ← F10: @-mention intent classification and the reply, one seam: reply_for()
 ├── chat_data.py      ← the data intents behind chat (live / next / birthdays / count / roles / tz)
+├── pings.py          ← F14: the opt-in ping roles — the fan-role store, the Events-role set-up,
+│                       the 25-per-menu Streamer pings panels, and the one role add/remove wrapper
 ├── rolegrants.py     ← F16/Phase 9: time-limited role grants and the expiry/reconcile logic
 ├── rolemenu_panels.py ← posting and un-posting role-menu panels when rolemenu_mode flips
 ├── command_visibility.py ← hides a feature's slash commands while the feature is off (re-syncs)
@@ -149,8 +153,10 @@ black_bloc/
 │   │   └── modcmds.py     ← F7: /warn /timeout /untimeout /kick /ban /unban /purge /case /cases
 │   └── content/      ← one cog per content feature
 │       ├── golive.py ← F1/F2: presence listener, Twitch poller, /golive + /twitch
-│       └── chat.py   ← F10: the @-mention listener, cooldown, modmail routing, /chat
-├── storage/db.py     ← aiosqlite connection + schema bootstrap (SCHEMA_VERSION 19)
+│       ├── chat.py   ← F10: the @-mention listener, cooldown, modmail routing, /chat
+│       └── pings.py  ← F14: /pingroles (staff) and /pings (everybody) — opt-in go-live and event
+│                        pings, and a role per streamer their followers wear
+├── storage/db.py     ← aiosqlite connection + schema bootstrap (SCHEMA_VERSION 21)
 └── api/             ← the dashboard API, one router per surface (API_ENABLED)
     ├── server.py    ← create_app: /health (public), security headers, routers, then site/ at /
     ├── auth.py      ← Discord OAuth2 + the signed session cookie. The site's ONLY gate
@@ -167,6 +173,7 @@ black_bloc/
         ├── modmail.py    ← tickets, replies, closes, snippets, blocks
         ├── events.py     ← the approval queue: approve / deny / cancel
         ├── golive.py     ← links, opt-outs, recent sessions
+        ├── pings.py      ← F14: the streamer table, staff create/remove, the Events-role set-up
         ├── rolemenus.py  ← menus, options, post
         ├── birthdays.py  ← the list, set / remove, and the Birthday Bot import
         ├── honeypot.py   ← hits, Ban-now, setup

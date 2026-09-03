@@ -42,6 +42,9 @@ const IDS = {
   // own pair: 25 is the staff session's own pending row, 30 is somebody else's.
   feature_request_id: '25',
   member_request_id: '30',
+  // F14: {member_id} already HAS a ping role in the seed, so the GET and the DELETE act on it
+  // and the POST needs somebody who does not — otherwise it answers the 409 it should.
+  ping_member_id: '700000000000000004',
 };
 
 const failures = [];
@@ -282,6 +285,10 @@ async function checkActionKinds() {
   await post('/api/rolemenus/contract/assign', { user_id: IDS.member_id, role_ids: [IDS.plain_role_id] });
   await post('/api/rolemenus/contract/assign', { user_id: IDS.member_id, role_ids: [IDS.plain_role_id], remove: true });
   await send('PUT', `/api/events/${IDS.event_id}`, { title: 'Contract night', start: '2099-09-14 19:30', duration: '2h' });
+  // The three web.pings.* kinds, each left by the write that spells it.
+  await post('/api/pings/setup', {});
+  await post('/api/pings/streamers', { member_id: IDS.ping_member_id });
+  await send('DELETE', `/api/pings/streamers/${IDS.ping_member_id}`, undefined);
   // The six web.chat.* kinds, each left by the write that spells it rather than merely listed.
   await post('/api/chat/intents', { name: 'contract_check', triggers: ['contract check'], lines: ['Hello {name}.'] });
   await send('PUT', `/api/chat/intents/${IDS.chat_intent_id}`, { enabled: true });

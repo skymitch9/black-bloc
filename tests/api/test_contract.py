@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from discord.ext import tasks
 
-from black_bloc import knowledge
+from black_bloc import knowledge, pings
 from black_bloc import rolegrants as grants
 from black_bloc.api.settings_api import grouped
 from black_bloc.chat import add_line as add_chat_line
@@ -40,6 +40,7 @@ from black_bloc.requests import add_comment as add_request_comment
 
 CONTRACT = Path(__file__).resolve().parents[2] / "site" / "mock" / "contract.json"
 MEMBER_ID = 21
+PING_MEMBER_ID = 22
 
 
 class FakeCog:
@@ -149,12 +150,17 @@ async def seeded(client, sign_in, web, guild, wf):
     """One of everything the contract's routes read, so no route answers empty."""
     wf.member(guild, MEMBER_ID, name="ada")
     wf.member(guild, 7, name="lead", staff=True)
+    # F14: {member_id} is given a ping role below, so the POST needs somebody who has none —
+    # otherwise it answers the 409 that says they already have one.
+    wf.member(guild, PING_MEMBER_ID, name="namu")
     sign_in(client)
     db, guild_id = web.db, wf.GUILD_ID
 
     web.cogs["Contract"] = FakeCog()
     await web.store.set(guild_id, "events_create_scheduled", False, by=7)
     await web.store.set(guild_id, "rolemenu_mode", "on", by=7)
+    await web.store.set(guild_id, "pings_mode", "on", by=7)
+    await pings.set_fan_role(db, guild_id, MEMBER_ID, wf.PLAIN_ROLE_ID, 7)
 
     case_id = await add_case(
         db,
@@ -316,6 +322,7 @@ async def seeded(client, sign_in, web, guild, wf):
         "chat_section_id": str(chat_section_id),
         "feature_request_id": str(feature_request_id),
         "member_request_id": str(member_request_id),
+        "ping_member_id": str(PING_MEMBER_ID),
     }
 
 
