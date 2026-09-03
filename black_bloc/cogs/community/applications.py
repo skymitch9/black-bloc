@@ -251,6 +251,16 @@ async def post_card(bot: Any, guild: Any, form: Any, row: Any, member: Any) -> t
     return message, where
 
 
+def nudge_mentions(form: Any) -> discord.AllowedMentions:
+    """The one person a decided card may ping: the owner the form names for the next step."""
+    owner = forms.owner_of(form)
+    if owner is None:
+        return discord.AllowedMentions.none()
+    return discord.AllowedMentions(
+        everyone=False, roles=False, users=[discord.Object(id=owner)]
+    )
+
+
 async def edit_card(bot: Any, guild: Any, form: Any, row: Any, said: str) -> None:
     """Cosmetic, and last: a failure here never undoes the decision above it."""
     channel_id = forms.form_value(row, "card_channel_id")
@@ -273,7 +283,7 @@ async def edit_card(bot: Any, guild: Any, form: Any, row: Any, said: str) -> Non
             content=said or None,
             embed=forms.render_card(form, row, member),
             view=None,
-            allowed_mentions=discord.AllowedMentions.none(),
+            allowed_mentions=nudge_mentions(form),
         )
     except Exception as exc:
         log.warning("applications: could not close the card for %s: %s", row["id"], exc)
@@ -281,7 +291,11 @@ async def edit_card(bot: Any, guild: Any, form: Any, row: Any, said: str) -> Non
 
 async def post_panel(bot: Any, guild: Any, form: Any, target: Any) -> Any:
     """The Apply button for one form; posting again moves it and takes the old one down."""
-    message = await target.send(embed=panel_embed(form), view=panel_view(form["id"]))
+    message = await target.send(
+        embed=panel_embed(form),
+        view=panel_view(form["id"]),
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
     await forms.set_panel(bot.db, form["id"], target.id, message.id)
     bot.add_view(panel_view(form["id"]), message_id=message.id)
     return message

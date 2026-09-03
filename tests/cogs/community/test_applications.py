@@ -5,6 +5,7 @@ from black_bloc import applications as forms
 from black_bloc import rolegrants as grants
 from black_bloc.cogs.community.applications import (
     DECIDE_TEMPLATE,
+    nudge_mentions,
     MODE_SAID,
     NOT_AN_APPROVER,
     Applications,
@@ -485,6 +486,15 @@ async def test_an_approval_carries_the_owner_nudge_onto_the_card_and_the_dm(bot,
     assert "<@55> — next step:" in card.kwargs["content"]
     assert card.kwargs["view"] is None
     assert any("twitch.tv invite" in said for said in member.dms)
+    # The named nudge is the ONE mention a decided card may actually ping.
+    allowed = card.kwargs["allowed_mentions"]
+    assert [one.id for one in allowed.users] == [55]
+    assert allowed.roles is False and allowed.everyone is False
+
+
+async def test_a_form_with_no_owner_pings_nobody_at_all(bot, db):
+    form = await a_form(db)
+    assert nudge_mentions(form).users is False
 
 
 async def test_a_refused_role_leaves_the_application_approved_and_says_so(bot, db, lead):
