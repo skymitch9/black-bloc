@@ -42,7 +42,15 @@ ONLY from `review`, so every done card has substance. `request_review_by_other`
 (bool, default off): when on, `accept` by the staffer recorded in `ready_by`
 refuses in words ("someone else on staff has to check this one").
 
-Rows already `done` (#1, #2 tonight) stay `done`; nothing migrates.
+**Landing data step (owner, 2026-09-03 ~03:55: "Move the 2 done ones to ready to
+check, leave the other as hold"):** the migration itself moves nothing, but at
+landing the conductor moves **#1 (raid trains) and #2 (applications)** from `done`
+to `review` by a one-off on the live database (`done → review` is not a staff move
+and must not become one): `status='review'`, `ready_by` = the owner, `done_at`
+cleared, `built` = the one-line shipped note already in each row's `notes`,
+`how_to_test` = a pointer to the owner's sweep rows (`docs/access/sweeps.md` 48–52
+for #1, 53–57 for #2 — those rows ARE the how-to-test). Then the review card posts
+for each. **#3 stays `hold`.** Verify afterwards on `/api/requests`.
 
 ## Why
 

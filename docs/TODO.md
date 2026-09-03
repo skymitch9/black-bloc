@@ -166,8 +166,11 @@ docs bookkeeping lands with the work, not after.
   on Done, he answered *"Do we need an acceptance pending so a staffer can check if
   something is done?"* → a **`review` ("ready to check") state**, `in_progress → review →
   done`, built + how-to-test required to enter review, Accept / Send back,
-  `request_review_by_other` default off ("Yes, build it that way"). Status: **design
-  complete, BUILDABLE once the double-logging fix merges.**
+  `request_review_by_other` default off ("Yes, build it that way"). Owner ~03:55:
+  *"Move the 2 done ones to ready to check, leave the other as hold"* → not possible
+  until `review` exists (`done` is final today); recorded as the build's LANDING DATA
+  STEP in the design (#1 and #2 `done → review` by a one-off on the live DB, #3 stays
+  `hold`). Status: **design complete, BUILDABLE once the double-logging fix merges.**
 
 - 🔴 **Every web write through a shared path logs TWICE — owner, 2026-09-03 ~00:40,
   verbatim: "The app double posted all messages with a web.request and a request".**
