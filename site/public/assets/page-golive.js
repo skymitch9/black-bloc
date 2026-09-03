@@ -15,6 +15,8 @@ import {
   nameNode,
   namespaceSettings,
   notice,
+  readSelect,
+  roleSelect,
   run,
   keepSaying,
   sayAgain,
@@ -176,17 +178,142 @@ async function wordingSection(specs) {
   return wording.node;
 }
 
+const PINGS_MODE_KEY = 'pings_mode';
+const PINGS_NOTE = 'One opt-in role for go-live and event pings, and a role per streamer that '
+  + 'only their followers wear. Members pick them from the Notifications and Streamer pings '
+  + 'panels, or with /pings.';
+const PINGS_NO_MODE = 'The bot did not report a pings_mode key, so the switch is not shown '
+  + 'rather than guessed at.';
+const NO_STREAMERS = 'Nobody has a ping role yet. Start one below, or a streamer starts their '
+  + 'own with /pings fans on.';
+const ROLE_GONE = 'deleted by hand';
+const SETUP_HELP = 'Makes (or reuses) the Events role, points both feeds at it and puts it on '
+  + 'the Notifications panel. Post that panel from the Role menus tab.';
+const MODE_HELP = 'off stops every opt-in and every fan-role ping; nobody loses a role.';
+
+/** D3: one button for the whole Events-role set-up, beside the role field it fills in. */
+function setupCard(say) {
+  const go = button('Set up the Events role', async () => {
+    const done = await run(
+      say,
+      () => send('/api/pings/setup', 'POST', {}),
+      (found) => found?.message || 'The Events role is set up.',
+    );
+    if (done.ok) {
+      keepSaying('pings.setup', say);
+      refresh();
+    }
+  }, { tone: 'warn' });
+  return card('The Events role', [
+    el('p', { class: 'field-help', text: SETUP_HELP }),
+    bar([go]),
+  ]);
+}
+
+/** D1: staff may start a streamer's role whatever pings_fan_role_creation says. */
+async function streamerCard(say) {
+  const picker = memberPicker({ label: 'Streamer' });
+  const roles = await roleSelect(null);
+  const go = button('Give them a ping role', async () => {
+    if (!picker.id) {
+      say.say('Pick the streamer this is about first.', 'warn');
+      return;
+    }
+    const done = await run(
+      say,
+      () => send('/api/pings/streamers', 'POST', {
+        member_id: picker.id,
+        role_id: readSelect(roles, false),
+      }),
+      (found) => found?.message || 'Made the role.',
+    );
+    if (done.ok) {
+      keepSaying('pings.streamers', say);
+      refresh();
+    }
+  }, { tone: 'warn' });
+  return card('Create for a streamer', [
+    picker.node,
+    el('div', { class: 'formrow' }, [
+      field('Use this role instead', roles, 'Leave it unset and Black Bloc makes one from '
+        + 'pings_fan_role_template.'),
+    ]),
+    bar([go]),
+  ]);
+}
+
+async function pingsSection(specs, streamers) {
+  const say = notice();
+  const group = section('Pings', PINGS_NOTE, { count: streamers.length });
+  const spec = specs.find((one) => one.key === PINGS_MODE_KEY);
+  const mode = spec ? modeSwitch(spec, { say, onSaved: () => refresh() }) : null;
+
+  const rows = table([
+    { label: 'Streamer', cell: (row) => nameNode(row.member_id, row.member) },
+    {
+      label: 'Role',
+      cell: (row) => (row.role ? row.role : badge(ROLE_GONE, 'warn')),
+    },
+    {
+      label: 'Followers',
+      cell: (row) => (row.followers === null ? '—' : String(row.followers)),
+      className: 'mono',
+    },
+    { label: 'Started', cell: (row) => when(row.created_at), className: 'mono' },
+    { label: 'By', cell: (row) => nameNode(row.created_by, row.created_by_name) },
+    {
+      label: '',
+      cell: (row) => button('Remove', async () => {
+        const sure = await ask({
+          title: `Take ${row.member || row.member_id}'s ping role away?`,
+          body: [
+            'Everybody who followed them stops being pinged.',
+            'Whether the Discord role itself is deleted is pings_fan_role_delete, below.',
+          ],
+          confirmLabel: 'Remove',
+        });
+        if (!sure) return;
+        const done = await run(
+          say,
+          () => api(`/api/pings/streamers/${encodeURIComponent(row.member_id)}`, { method: 'DELETE' }),
+          (found) => found?.message || 'Removed.',
+        );
+        if (done.ok) {
+          keepSaying('pings.streamers', say);
+          refresh();
+        }
+      }, { tone: 'danger' }),
+    },
+  ], streamers, { empty: NO_STREAMERS });
+
+  group.body.append(...[
+    mode
+      ? el('div', { class: 'formrow' }, [field('Ping roles', mode.node, MODE_HELP)])
+      : el('p', { class: 'say-nothing', text: PINGS_NO_MODE }),
+    rows,
+    setupCard(say),
+    await streamerCard(say),
+    sayAgain('pings.streamers', sayAgain('pings.setup', say)),
+  ].filter(Boolean));
+  return group.node;
+}
+
 async function load() {
-  const [linkPayload, optoutPayload, sessionPayload, allSettings] = await Promise.all([
+  const [linkPayload, optoutPayload, sessionPayload, streamerPayload, allSettings] = await Promise.all([
     api('/api/golive/links'),
     api('/api/golive/optouts'),
     api('/api/golive/sessions?limit=50'),
+    api('/api/pings/streamers'),
     settings(true),
   ]);
   const links = listOf(linkPayload, 'links');
   const optouts = listOf(optoutPayload, 'optouts');
   const sessions = listOf(sessionPayload, 'sessions');
-  await names(idsIn(links, ['user_id']).concat(idsIn(optouts, ['user_id'])).concat(idsIn(sessions, ['user_id'])));
+  const streamers = listOf(streamerPayload, 'streamers');
+  await names(idsIn(links, ['user_id'])
+    .concat(idsIn(optouts, ['user_id']))
+    .concat(idsIn(sessions, ['user_id']))
+    .concat(idsIn(streamers, ['member_id', 'created_by'])));
 
   const say = notice();
 
@@ -252,6 +379,7 @@ async function load() {
   three.body.append(sessionTable);
 
   const golive = settingsNamespace(allSettings, 'golive');
+  const pings = settingsNamespace(allSettings, 'pings');
 
   document.getElementById('dash').replaceChildren(
     one.node,
@@ -260,6 +388,13 @@ async function load() {
     await wordingSection(golive),
     await namespaceSettings('golive', { onSaved: () => refresh(), omit: [TEMPLATE_KEY, END_MODE_KEY] }),
     await logsSection('golive'),
+    await pingsSection(pings, streamers),
+    await namespaceSettings('pings', {
+      title: 'Ping role settings',
+      onSaved: () => refresh(),
+      omit: [PINGS_MODE_KEY],
+    }),
+    await logsSection('pings', { title: 'Ping role logs' }),
   );
 }
 

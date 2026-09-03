@@ -26,6 +26,7 @@ export const TABS = [
 
 export const FEATURE_TABS = {
   golive: 'golive',
+  pings: 'golive',
   tempvoice: 'tempvoice',
   honeypot: 'honeypot',
   events: 'events',

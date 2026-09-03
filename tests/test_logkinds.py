@@ -232,10 +232,6 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "pings.fan_role_removed",
         "web.pings.fan_role_removed",
     ),
-    "black_bloc/pings.py::f'{head(via)}pings.forbidden'": (
-        "pings.forbidden",
-        "web.pings.forbidden",
-    ),
     "black_bloc/rolemenu_panels.py::f'{head}{kind}'": (
         "role_menu.unposted",
         "role_menu.unpost_failed",

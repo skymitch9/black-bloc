@@ -261,9 +261,7 @@ async def make_role(guild: Any, name: str) -> tuple[Any, str | None]:
     return role, None
 
 
-async def wear(
-    bot: Any, guild: Any, member: Any, role: Any, *, add: bool, via: str = VIA_DISCORD
-) -> str | None:
+async def wear(bot: Any, guild: Any, member: Any, role: Any, *, add: bool) -> str | None:
     """Put a ping role on somebody or take it off; the sentence to say when Discord refuses."""
     try:
         if add:
@@ -282,13 +280,12 @@ async def wear(
         await log_action(
             bot,
             guild,
-            f"{head(via)}pings.forbidden",
+            "pings.forbidden",
             target=member,
             details={
                 "role_id": getattr(role, "id", None),
                 "action": "add" if add else "remove",
                 "reason": f"{type(exc).__name__}: {exc}",
-                "via": via,
             },
         )
         return FORBIDDEN.format(role=getattr(role, "name", getattr(role, "id", "that role")))

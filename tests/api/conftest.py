@@ -48,6 +48,14 @@ class WebRole:
         self.managed = managed
         self.color = color
         self.permissions = Permissions(manage_guild=manage_guild)
+        self.members: list = []
+        self.deleted = False
+
+    def is_assignable(self) -> bool:
+        return not self.managed
+
+    async def delete(self, reason: str | None = None) -> None:
+        self.deleted = True
 
 
 class WebMember:
@@ -77,6 +85,16 @@ class WebMember:
 
     async def timeout(self, until, reason=None) -> None:
         self.timeouts.append((until, reason))
+
+    async def add_roles(self, *roles, reason=None) -> None:
+        self.roles += [role for role in roles if role not in self.roles]
+        for role in roles:
+            role.members.append(self)
+
+    async def remove_roles(self, *roles, reason=None) -> None:
+        self.roles = [role for role in self.roles if role not in roles]
+        for role in roles:
+            role.members = [one for one in role.members if one is not self]
 
 
 class WebMessage:
@@ -203,7 +221,14 @@ class WebGuild:
         self.kicks: list[Any] = []
         self.unbans: list[Any] = []
         self.created: list[Any] = []
+        self.made_roles: list[Any] = []
         self.default_role = WebRole(GUILD_ID, "@everyone")
+
+    async def create_role(self, name=None, mentionable=False, reason=None):
+        role = WebRole(950 + len(self.made_roles), name, position=1)
+        self.roles.append(role)
+        self.made_roles.append(role)
+        return role
 
     def add_member(self, member: WebMember) -> WebMember:
         member.guild = self

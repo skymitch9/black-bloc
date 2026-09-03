@@ -272,6 +272,7 @@
         "golive",
         "honeypot",
         "modmail",
+        "pings",
         "rolemenu",
         "tempvoice"
       ],
@@ -798,6 +799,75 @@
       "keys": [
         "unlinked",
         "user_id"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/pings/streamers",
+      "read_by": [
+        "page-golive.js pingsSection"
+      ],
+      "shape": "list",
+      "keys": [
+        "member_id",
+        "member",
+        "role_id",
+        "role",
+        "followers",
+        "created_at",
+        "created_by",
+        "created_by_name"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/pings/streamers",
+      "body": {
+        "member_id": "{ping_member_id}"
+      },
+      "read_by": [
+        "page-golive.js streamerCard"
+      ],
+      "shape": "object",
+      "keys": [
+        "member_id",
+        "member",
+        "role_id",
+        "role",
+        "followers",
+        "created_at",
+        "created_by",
+        "created_by_name",
+        "message"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/pings/streamers/{member_id}",
+      "read_by": [
+        "page-golive.js pingsSection"
+      ],
+      "shape": "object",
+      "keys": [
+        "removed",
+        "member_id",
+        "role_id",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/pings/setup",
+      "body": {},
+      "read_by": [
+        "page-golive.js setupCard"
+      ],
+      "shape": "object",
+      "keys": [
+        "role_id",
+        "created",
+        "menu",
+        "message"
       ]
     },
     {
@@ -2504,6 +2574,9 @@
     "web.golive.unlink",
     "web.golive.optout",
     "web.golive.optin",
+    "web.pings.setup",
+    "web.pings.fan_role_created",
+    "web.pings.fan_role_removed",
     "web.event.approved",
     "web.event.denied",
     "web.event.cancel",
