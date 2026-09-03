@@ -295,7 +295,13 @@ built as specified.
    subcommand names are exactly the design's: `show`, `forget`, `forget-this`,
    `off`, `on`. `/memory` is in `personas.py`'s member command block, which is
    the FEATURES line §D asks for.
-2. **There is NO `chat_memory_log_level` key** (§E's table lists one). Log levels
+2. **`/memory` follows the mode, which the design does not ask for.**
+   `command_visibility.HIDDEN_WHEN_OFF` gained `chat_memory_mode: ("memory",)`,
+   so while the feature is off the command is not in the tree at all — the same
+   treatment `/rolemenu` and `/request` already get, and the house rule about not
+   rendering a control somebody cannot use. It ships off, so nobody sees
+   `/memory` until the owner flips the switch on the dashboard.
+3. **There is NO `chat_memory_log_level` key** (§E's table lists one). Log levels
    in this repo are per FEATURE and derived from a kind's dotted head
    (`logkinds.HEADS`), and §F specifies the kinds as `chat.memory_*` — whose head
    is `chat`. A `chat_memory_log_level` key would therefore govern nothing;
@@ -304,14 +310,14 @@ built as specified.
    nine. Changing this would mean renaming the kinds to `chat_memory.*`, which
    would break §D's "Logs filtered to `chat.memory*`" and split the Chat page's
    log feed into two features.
-3. **The opt-out table carries the person's OVERRIDE, not a fixed opt-out**
+4. **The opt-out table carries the person's OVERRIDE, not a fixed opt-out**
    (§A). The schema is exactly as specified — two tables, the same columns — but
    a row means "this person is not on the server's default". Under
    `chat_memory_consent = optout` a row means do-not-remember; under `optin` it
    means remember-me. Without this, `chat_memory_consent` would be a key that
    could be set but could not work, because the schema has no place to record an
    opt-IN. `remembered()` / `set_remembered()` are the only readers and writers.
-4. **`parse_distilled` drops an over-long NOTE rather than rejecting the whole
+5. **`parse_distilled` drops an over-long NOTE rather than rejecting the whole
    profile** (§B says "over-length fields → `None`"). Read as the TOP-LEVEL
    fields: bad JSON, an unknown key, a non-list `notes`, a non-string item, or a
    `call_me` over 40 characters are all a no-op; a single note over 120
@@ -319,23 +325,23 @@ built as specified.
    saves. Rejecting a whole distillation because one note ran long would lose
    preferences the model got right, and §D2-definition rule 2 already
    establishes drop-the-item as the shape.
-5. **`parse_distilled` gained an `others=` gate that §B does not describe**,
+6. **`parse_distilled` gained an `others=` gate that §B does not describe**,
    and `other_names(guild, user_id)` with it. §J run 1 measured the model
    emitting third-person threads that no phrase list could have caught; the only
    mechanical guard against an arbitrary NAME is the guild's own member list.
    This is additive — a stricter reading of rule 1, not a looser one.
-6. **The Memory section does not add a second, filtered log feed** (§D says
+7. **The Memory section does not add a second, filtered log feed** (§D says
    "Logs filtered to `chat.memory*`"). The Chat page already carries
    `logsSection('chat')`, which includes every `chat.memory_*` line. A second
    feed on the same page showing a subset of the first is the duplicate-surface
    trap the docs standard names; the memory kinds are readable there and in
    `/chat logs`.
-7. **`chat_memory_model` defaults to `""`, which the `text` validator will not
+8. **`chat_memory_model` defaults to `""`, which the `text` validator will not
    accept as a SET value.** The default is blank, so the Groq tier's own model is
    used; a server that has set one clears it with `/settings clear
    chat_memory_model` rather than setting it to empty. This matches how every
    other blank-defaulting text key in the registry behaves.
-8. **Not built, and not in §I either: the design's §H doc list.** `code-notes.md`
+9. **Not built, and not in §I either: the design's §H doc list.** `code-notes.md`
    and this `info/README.md` row were written; `access/sweeps.md`,
    `cutover-plan.md`, `feature-list.md`, `architecture.md` counts and
    `OWNER_GUIDE.md` were **not** touched, on the standing rule that the reviewer
