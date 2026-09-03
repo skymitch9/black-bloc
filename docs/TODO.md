@@ -149,6 +149,12 @@ already said go.** Order recommended by the 5.0 session, owner did not reorder:
    team-owner click (`owner_user_id` + `next_step` per form). Builds **in
    parallel** with 17/18 (§K; merge order 17 → 18 → 19). Request #2 set to
    `in_progress`; flips to `done` at landing (DM to Pawpette).
+   ✅ **BUILT 2026-09-02 23:27** on branch `worktree-agent-aecc5822942fd3a56`
+   (8 commits `f0fa493`…`dcba425`, builder ~575k tokens; 2989 green at
+   `3ff5bb2`, +2 single-test commits after; check.mjs 17 pages / 126 routes;
+   9 deviations listed at the foot of the design). **Reviewed by Fable 23:35:
+   mergeable** — waits its turn behind 17 and 18. Merge conflicts expected
+   only on `SCHEMA_VERSION` + the foot of `SCHEMA` in `storage/db.py`.
    **Ride-along (owner 2026-09-02 20:19: "when a request finishes can we
    message the channel and dm the person who made the request saying its
    done"):** the DM half EXISTS (`DM_DONE`, gated by `request_dms_on_decision`);
