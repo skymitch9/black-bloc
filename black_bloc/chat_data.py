@@ -7,10 +7,9 @@ from typing import Any
 
 from .birthdays import member_zone_name, stamp, upcoming
 from .cogs.community.birthdays import rows_for_guild
-from .cogs.community.events import events_by_status
 from .cogs.community.role_menus import get_options, list_menus, picking_is_on
 from .cogs.content.golive import open_sessions
-from .events import APPROVED
+from .events import APPROVED, events_by_status
 from .presence import human_count
 from .settings_store import resolved_staff_roles
 from .timezones import DEFAULT_TZ, stored_timezone, zone

@@ -154,8 +154,8 @@ def test_normalise_leaves_words_only():
 
 SELF_SERVICE = [
     # The owner's own sentence, 2026-09-01: it was answered "hit up @Admin".
-    ("i want to host an event, can you show me how to do that", "host_an_event", "/event create"),
-    ("how do i make an event", "host_an_event", "/event create"),
+    ("i want to host an event, can you show me how to do that", "host_an_event", "/event"),
+    ("how do i make an event", "host_an_event", "/event"),
     ("can i file a request", "file_a_request", "/request create"),
     ("i want to make a suggestion", "file_a_request", "/request create"),
     ("how do i link my twitch", "link_twitch", "/twitch link"),

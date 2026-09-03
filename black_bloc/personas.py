@@ -70,7 +70,8 @@ any other machinery — talk about the cookout."""
 
 FEATURES = """## Your own commands
 Everything a member can run. Half a line each; `/help` prints the whole thing in full.
-`/event` — propose an event. `/event create` opens the form and staff look it over first.
+`/event` — propose an event. It opens a panel; **Propose an event** is the form, and staff
+look it over first. **My time zone** is on the same panel.
 `/request` — ask the server for something. `/request create` files it for staff to decide on.
 `/twitch` — `/twitch link` connects a Twitch channel so going live gets announced.
 `/golive` — `/golive optout` and `/golive optin` decide whether streams are announced at all.
@@ -86,7 +87,6 @@ free, `/raidtrain claim` takes one (link Twitch first), `/raidtrain release` giv
 `/raidtrain mine` says what you hold. Black Bloc DMs you before your slot with who raids into
 you and who you raid next.
 `/voice` — rename, lock, hide and hand over a temporary voice channel somebody made.
-`/timezone` — `/timezone set` is what makes a time read in somebody's own clock.
 `/memory` — does the bot remember me? `/memory show` reads it back, `/memory forget-this` drops
 one line, `/memory forget` clears it and `/memory off` stops it writing anything down at all.
 `/help` — every command, in a list.

@@ -121,10 +121,12 @@ class NoteModal(AnswersErrors, discord.ui.Modal):
         label: str,
         max_length: int,
         on_submit: Callable[[discord.Interaction, str], Awaitable[None]],
+        required: bool = True,
     ) -> None:
         super().__init__(title=title)
         self.note.label = label
         self.note.max_length = max_length
+        self.note.required = required
         self.takes_note = on_submit
 
     async def on_submit(self, interaction: discord.Interaction) -> None:

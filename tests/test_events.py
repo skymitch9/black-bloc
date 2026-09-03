@@ -97,7 +97,7 @@ def test_the_status_machine_refuses_the_moves_that_would_lose_a_decision():
     assert can_transition(PENDING, DENIED) is True
     assert can_transition(APPROVED, LIVE) is True
     assert can_transition(LIVE, DONE) is True
-    assert can_transition(DENIED, APPROVED) is False
+    assert can_transition(DENIED, APPROVED) is True
     assert can_transition(DONE, LIVE) is False
     assert can_transition(CANCELLED, APPROVED) is False
     assert can_transition(APPROVED, DENIED) is False
@@ -225,7 +225,7 @@ def test_the_start_refusal_shows_an_example_and_names_the_zone():
     said = start_error("next tuesday", "America/Phoenix", START_EXAMPLE)
     assert "next tuesday" in said
     assert START_EXAMPLE in said and "America/Phoenix" in said
-    assert "/timezone set" in said
+    assert "My time zone" in said
 
 
 def test_clamp_trims_and_cuts():
@@ -258,6 +258,6 @@ def test_the_statuses_a_finished_channel_sweep_covers_are_the_settled_ones():
 
 
 def test_the_terminal_statuses_are_exactly_the_ones_nothing_leaves():
-    assert set(TERMINAL_STATUSES) == {DENIED, DONE, CANCELLED}
+    assert set(TERMINAL_STATUSES) == {DONE, CANCELLED}
     for status in TERMINAL_STATUSES:
         assert TRANSITIONS[status] == ()

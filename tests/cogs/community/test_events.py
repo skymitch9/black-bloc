@@ -4,25 +4,43 @@ from datetime import UTC, datetime, timedelta
 import discord
 import pytest
 
+from black_bloc import events as events_pure
+from black_bloc.cogs.community import events as events_cog
 from black_bloc.cogs.community.events import (
     GOLIVE_MINUTES,
     RECONCILE_MINUTES,
+    CallOffPick,
     DecisionButton,
     DenyModal,
     EventModal,
+    EventPick,
     Events,
-    create_event,
+    ForgetPick,
+    LogsButton,
+    NoteModal,
+    NumbersModal,
+    ProposeButton,
+    SettingsButton,
+    ZoneModal,
     decision_id,
+    review_view,
+)
+from black_bloc.config import load_settings
+from black_bloc.events import (
+    APPROVED,
+    CANCELLED,
+    DENIED,
+    DONE,
+    LIVE,
+    PENDING,
+    create_event,
     event_for_channel,
     events_by_status,
     get_event,
     rename_channel,
-    review_view,
     set_review,
     set_status,
 )
-from black_bloc.config import load_settings
-from black_bloc.events import APPROVED, CANCELLED, DENIED, DONE, LIVE, PENDING
 from black_bloc.settings_store import SettingsStore
 from black_bloc.storage.db import Database
 from black_bloc.timezones import DEFAULT_TZ, get_timezone, local_time, set_timezone
@@ -249,6 +267,10 @@ class FakeBot:
         self.guild = guild
         self.views = []
         self.dynamic = []
+        self._cog = None
+
+    def get_cog(self, name):
+        return self._cog
 
     def get_channel(self, channel_id):
         return self.guild.get_channel(channel_id)
@@ -305,8 +327,19 @@ class FakeInteraction:
         self.channel = channel
         self.channel_id = channel.id if channel is not None else TEST_CHANNEL
         self.message = message
+        self._edited = None
         self.response = FakeResponse()
         self.followup = FakeFollowup(self.response)
+
+    async def edit_original_response(self, **kwargs):
+        self._edited = FakeMessage(9500, kwargs.get("content") or "", **kwargs)
+        return self._edited
+
+    async def original_response(self):
+        last = self.response.messages[-1]
+        kept = {k: v for k, v in last.items() if k not in ("ephemeral", "content", "deferred")}
+        self._edited = FakeMessage(9500, last.get("content") or "", **kept)
+        return self._edited
 
     @property
     def sent(self):
@@ -358,7 +391,9 @@ async def bot(db, monkeypatch):
 
 @pytest.fixture
 def cog(bot):
-    return Events(bot)
+    found = Events(bot)
+    bot._cog = found
+    return found
 
 
 @pytest.fixture
@@ -371,42 +406,116 @@ def lead(bot):
     return FakeMember(bot.guild, user_id=1, display_name="Lead", manage_guild=True)
 
 
-async def test_setting_a_timezone_confirms_it_with_the_local_time(cog, bot, member, db):
-    interaction = FakeInteraction(bot, member)
+async def open_panel(cog, bot, who):
+    interaction = FakeInteraction(bot, who)
+    await cog.event.callback(cog, interaction)
+    return interaction
 
-    await cog.timezone_set.callback(cog, interaction, "Europe/London")
+
+def panel_view(interaction):
+    return interaction.response.messages[-1]["view"]
+
+
+def panel_embed(interaction):
+    return interaction.response.messages[-1]["embed"]
+
+
+def find_item(view, label):
+    return next(item for item in view.children if getattr(item, "label", None) == label)
+
+
+def has_item(view, label):
+    return any(getattr(item, "label", None) == label for item in view.children)
+
+
+async def click(bot, who, item):
+    interaction = FakeInteraction(bot, who)
+    await item.callback(interaction)
+    return interaction
+
+
+def card_embed(interaction):
+    return interaction._edited.kwargs.get("embed")
+
+
+def card_view(interaction):
+    return interaction._edited.kwargs.get("view")
+
+
+class FakePicked:
+    """What a ChannelSelect/RoleSelect hands its callback: something with an id."""
+
+    def __init__(self, picked_id):
+        self.id = picked_id
+
+
+def pick(select, values):
+    select._values = list(values)
+    return select
+
+
+async def zone_modal(cog, bot, who, typed):
+    modal = ZoneModal(cog)
+    modal.zone._value = typed
+    interaction = FakeInteraction(bot, who)
+    await modal.on_submit(interaction)
+    return interaction
+
+
+async def test_setting_a_timezone_confirms_it_with_the_local_time(cog, bot, member, db):
+    interaction = await zone_modal(cog, bot, member, "Europe/London")
 
     assert await get_timezone(db, member.id) == "Europe/London"
     assert "Europe/London" in interaction.sent
     assert interaction.response.messages[-1]["ephemeral"] is True
 
 
-async def test_a_timezone_black_bloc_does_not_know_is_refused_with_an_example(cog, bot, member, db):
-    interaction = FakeInteraction(bot, member)
-
-    await cog.timezone_set.callback(cog, interaction, "Middle/Earth")
+async def test_a_timezone_black_bloc_does_not_know_is_refused_with_a_suggestion(
+    cog, bot, member, db
+):
+    interaction = await zone_modal(cog, bot, member, "Phoenix")
 
     assert await get_timezone(db, member.id) == DEFAULT_TZ
-    assert "Middle/Earth" in interaction.sent and "Phoenix" in interaction.sent
+    assert "Phoenix" in interaction.sent and "Did you mean" in interaction.sent
+    assert "America/Phoenix" in interaction.sent
     assert interaction.response.messages[-1]["allowed_mentions"].everyone is False
 
 
-async def test_timezone_show_names_the_default_until_someone_chooses(cog, bot, member, db):
-    first = FakeInteraction(bot, member)
-    await cog.timezone_show.callback(cog, first)
-    assert DEFAULT_TZ in first.sent and "not set a time zone" in first.sent
+async def test_a_zone_nothing_resembles_is_refused_without_a_guess(cog, bot, member, db):
+    interaction = await zone_modal(cog, bot, member, "Middle/Earth")
+
+    assert await get_timezone(db, member.id) == DEFAULT_TZ
+    assert "Middle/Earth" in interaction.sent and "Did you mean" not in interaction.sent
+
+
+async def test_the_panel_names_the_default_zone_until_someone_chooses(cog, bot, member, db):
+    first = await open_panel(cog, bot, member)
+    assert DEFAULT_TZ in panel_embed(first).description
+    assert "not set a time zone" in panel_embed(first).description
 
     await set_timezone(db, member.id, "Asia/Tokyo")
-    second = FakeInteraction(bot, member)
-    await cog.timezone_show.callback(cog, second)
-    assert "Asia/Tokyo" in second.sent and "not set a time zone" not in second.sent
+    second = await open_panel(cog, bot, member)
+    assert "Asia/Tokyo" in panel_embed(second).description
+    assert "not set a time zone" not in panel_embed(second).description
 
 
-async def test_the_autocomplete_offers_at_most_twenty_five_zones(cog, bot, member):
-    choices = await cog._suggest_timezones(FakeInteraction(bot, member), "a")
+async def test_the_zone_modal_is_prefilled_with_the_zone_already_stored(cog, bot, member, db):
+    await set_timezone(db, member.id, "Asia/Tokyo")
+    panel = await open_panel(cog, bot, member)
 
-    assert len(choices) == 25
-    assert all(choice.name == choice.value for choice in choices)
+    interaction = await click(bot, member, find_item(panel_view(panel), "My time zone"))
+
+    assert interaction.response.modals[0].zone.default == "Asia/Tokyo"
+
+
+async def test_the_zone_button_only_shows_where_a_member_types_a_time(cog, bot, member):
+    on = await open_panel(cog, bot, member)
+    assert has_item(panel_view(on), "My time zone")
+
+    await bot.store.set(GUILD, "events_mode", "off")
+    off = await open_panel(cog, bot, member)
+    assert not has_item(panel_view(off), "My time zone")
+    assert not has_item(panel_view(off), "Propose an event")
 
 
 def future_start(tz_name=DEFAULT_TZ, days=3):
@@ -547,9 +656,11 @@ async def test_the_start_is_read_in_the_requester_s_own_zone(cog, bot, member, d
 
 async def test_create_is_refused_while_events_are_turned_off(cog, bot, member, db):
     await bot.store.set(GUILD, "events_mode", "off")
-    interaction = FakeInteraction(bot, member)
+    panel = await open_panel(cog, bot, member)
+    assert "turned off" in panel_embed(panel).description
 
-    await cog.event_create.callback(cog, interaction)
+    button = ProposeButton()
+    interaction = await click(bot, member, button)
 
     assert interaction.response.modals == []
     assert "turned off" in interaction.sent
@@ -561,7 +672,7 @@ async def test_create_refuses_when_there_is_no_category_to_put_it_in(cog, bot, m
     interaction = await submit(cog, bot, member)
 
     assert bot.guild.created == []
-    assert "/event settings category" in interaction.sent
+    assert "Settings" in interaction.sent and "category" in interaction.sent
 
 
 async def test_a_channel_discord_refuses_cancels_the_row_rather_than_stranding_it(
@@ -926,114 +1037,207 @@ async def test_deleting_a_review_channel_cancels_its_event_without_waiting_for_t
     assert await event_for_channel(db, made.id) is not None
 
 
-async def test_the_requester_may_cancel_their_own_event_and_a_stranger_may_not(
+async def call_off_from_panel(cog, bot, who, event_id):
+    """The member's own `Call one off…` select, then `Yes, call it off`."""
+    panel = await open_panel(cog, bot, who)
+    select = next(
+        item for item in panel_view(panel).children if isinstance(item, CallOffPick)
+    )
+    select._values = [str(event_id)]
+    picked = await click(bot, who, select)
+    return await click(bot, who, find_item(card_view(picked), "Yes, call it off"))
+
+
+async def test_the_requester_may_call_their_own_event_off_and_a_stranger_never_sees_it(
     cog, bot, member, db
 ):
     await submit(cog, bot, member)
     row = (await events_by_status(db, GUILD, (PENDING,)))[0]
     stranger = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
 
-    refusal = FakeInteraction(bot, stranger)
-    await cog.event_cancel.callback(cog, refusal, str(row["id"]))
-    assert (await get_event(db, row["id"]))["status"] == PENDING
-    assert "not yours" in refusal.sent.lower()
+    theirs = await open_panel(cog, bot, stranger)
+    assert not any(isinstance(one, CallOffPick) for one in panel_view(theirs).children)
 
-    mine = FakeInteraction(bot, member)
-    await cog.event_cancel.callback(cog, mine, str(row["id"]))
+    interaction = await call_off_from_panel(cog, bot, member, row["id"])
+
     assert (await get_event(db, row["id"]))["status"] == CANCELLED
     assert bot.guild.created[0].name == "cancelled-alice-block-party"
+    assert str(row["id"]) in interaction.sent
 
 
-async def test_staff_may_cancel_anybody_s_event_and_the_requester_is_told(
+async def test_staff_may_call_anybody_s_event_off_with_a_line_the_requester_is_sent(
     cog, bot, member, lead, db
 ):
     await submit(cog, bot, member)
     row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    _, view = events_cog.build_card(bot, bot.guild, await get_event(db, row["id"]), lead)
 
+    opened = await click(bot, lead, find_item(view, "Call it off"))
+    modal = opened.response.modals[0]
+    modal.note._value = "the park is shut"
     interaction = FakeInteraction(bot, lead)
-    await cog.event_cancel.callback(cog, interaction, f"#{row['id']}")
+    await modal.on_submit(interaction)
 
     assert (await get_event(db, row["id"]))["status"] == CANCELLED
     assert "cancelled" in member.dms[-1]["content"]
+    assert "the park is shut" in member.dms[-1]["content"]
     assert str(row["id"]) in interaction.sent
 
 
-async def test_cancelling_something_already_settled_says_so(cog, bot, member, lead, db):
+async def test_the_staff_note_is_optional_and_an_empty_one_still_calls_it_off(
+    cog, bot, member, lead, db
+):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    modal = NoteModal(cog, row["id"], "cancel")
+    modal.note._value = ""
+
+    interaction = FakeInteraction(bot, lead)
+    await modal.on_submit(interaction)
+
+    assert modal.note.required is False
+    assert (await get_event(db, row["id"]))["status"] == CANCELLED
+    assert "The reason given was" not in member.dms[-1]["content"]
+
+
+async def test_calling_off_something_already_settled_says_so(cog, bot, member, lead, db):
     await submit(cog, bot, member)
     row = (await events_by_status(db, GUILD, (PENDING,)))[0]
     await deny(bot, lead, row["id"])
+    modal = NoteModal(cog, row["id"], "cancel")
+    modal.note._value = ""
 
     interaction = FakeInteraction(bot, lead)
-    await cog.event_cancel.callback(cog, interaction, str(row["id"]))
+    await modal.on_submit(interaction)
 
     assert "already **denied**" in interaction.sent
 
 
-async def test_cancel_refuses_something_that_is_not_a_number(cog, bot, member):
-    interaction = FakeInteraction(bot, member)
-
-    await cog.event_cancel.callback(cog, interaction, "the block party")
-
-    assert "not an event number" in interaction.sent
+async def test_a_number_nobody_proposed_is_read_as_nothing(cog, bot):
+    assert events_pure.wanted_event_id("the block party") is None
+    assert events_pure.wanted_event_id("#12") == 12
+    assert events_pure.wanted_event_id(" 12 ") == 12
 
 
-async def test_the_list_names_the_staff_who_may_approve_and_what_is_waiting(
+async def test_the_staff_panel_names_the_staff_who_may_approve_and_what_is_waiting(
     cog, bot, member, lead, db
 ):
     await submit(cog, bot, member)
 
-    interaction = FakeInteraction(bot, lead)
-    await cog.event_list.callback(cog, interaction)
+    interaction = await open_panel(cog, bot, lead)
 
-    assert "Lead" in interaction.sent and "Block Party" in interaction.sent
+    assert "Block Party" in panel_embed(interaction).description
+    assert "1 pending" in panel_embed(interaction).description.replace("**", "")
     assert interaction.response.messages[-1]["allowed_mentions"].everyone is False
 
 
-async def test_the_list_warns_loudly_when_no_staff_role_resolves(cog, bot, lead, db):
+async def test_the_staff_panel_warns_loudly_when_no_staff_role_resolves(cog, bot, lead, db):
     bot.guild.get_channel(TEST_CHANNEL).visible_to = set()
 
+    interaction = await open_panel(cog, bot, lead)
+
+    assert "No staff roles resolve" in panel_embed(interaction).description
+
+
+async def test_a_member_never_sees_the_staff_half_of_the_panel(cog, bot, member, db):
+    await submit(cog, bot, member)
+
+    interaction = await open_panel(cog, bot, member)
+    view = panel_view(interaction)
+
+    assert not any(isinstance(one, EventPick) for one in view.children)
+    assert not any(isinstance(one, LogsButton) for one in view.children)
+    assert not has_item(view, "Settings")
+    assert "Block Party" not in panel_embed(interaction).description
+
+
+async def test_a_member_sees_their_own_events_only_when_the_key_is_on(cog, bot, member, db):
+    await submit(cog, bot, member)
+
+    off = await open_panel(cog, bot, member)
+    assert "Block Party" not in panel_embed(off).description
+
+    await bot.store.set(GUILD, "event_panel_own_list", True)
+    on = await open_panel(cog, bot, member)
+    assert "Block Party" in panel_embed(on).description
+
+
+async def settings_panel(cog, bot, lead):
+    panel = await open_panel(cog, bot, lead)
+    return await click(bot, lead, find_item(panel_view(panel), "Settings"))
+
+
+async def test_the_settings_sub_panel_shows_everything_and_writes_one_key_at_a_time(
+    cog, bot, lead, db
+):
+    opened = await settings_panel(cog, bot, lead)
+    modal = NumbersModal(cog, 1, 30)
+    modal.retention._value = "3"
+    modal.late._value = "30"
+
     interaction = FakeInteraction(bot, lead)
-    await cog.event_list.callback(cog, interaction)
+    await modal.on_submit(interaction)
 
-    assert "No staff roles resolve" in interaction.sent
-
-
-async def test_the_list_is_staff_only(cog, bot, member):
-    interaction = FakeInteraction(bot, member)
-
-    await cog.event_list.callback(cog, interaction)
-
-    assert "staff only" in interaction.sent
-
-
-async def test_settings_shows_everything_and_changes_only_what_was_given(cog, bot, lead, db):
-    interaction = FakeInteraction(bot, lead)
-
-    await cog.event_settings.callback(cog, interaction, retention_days=3)
-
+    assert "Events — settings" in card_embed(opened).title
     assert bot.store.get(GUILD, "events_channel_retention_days") == 3
     assert bot.store.get(GUILD, "events_category_id") == CATEGORY
-    assert "3 day(s)" in interaction.sent
+    assert "3 day(s)" in card_embed(interaction).description
     assert "event.settings" in await action_kinds(db)
 
 
-async def test_settings_can_stop_pinging_anybody(cog, bot, lead):
-    await bot.store.set(GUILD, "events_ping_role_id", 4242)
+async def test_a_number_outside_its_bounds_is_refused_in_words_and_changes_nothing(
+    cog, bot, lead, db
+):
+    modal = NumbersModal(cog, 1, 30)
+    modal.retention._value = "9999"
+    modal.late._value = "30"
 
     interaction = FakeInteraction(bot, lead)
-    await cog.event_settings.callback(cog, interaction, clear_ping_role=True)
+    await modal.on_submit(interaction)
+
+    assert bot.store.get(GUILD, "events_channel_retention_days") != 9999
+    assert "9999" in interaction.sent and "between" in interaction.sent
+
+
+async def test_an_empty_channel_select_clears_the_key_it_owns(cog, bot, lead, db):
+    await bot.store.set(GUILD, "events_announce_channel_id", 900)
+    select = events_cog.AnnounceSelect()
+    select._values = []
+
+    interaction = await click(bot, lead, select)
+
+    assert bot.store.get(GUILD, "events_announce_channel_id") == TEST_CHANNEL
+    assert "<#900>" not in card_embed(interaction).description
+
+
+async def test_a_channel_select_with_a_pick_stores_it(cog, bot, lead, db):
+    select = events_cog.AnnounceSelect()
+    select._values = [FakePicked(900)]
+
+    interaction = await click(bot, lead, select)
+
+    assert bot.store.get(GUILD, "events_announce_channel_id") == 900
+    assert "<#900>" in card_embed(interaction).description
+
+
+async def test_the_forget_select_clears_the_key_a_client_that_will_not_send_an_empty_one_left(
+    cog, bot, lead, db
+):
+    await bot.store.set(GUILD, "events_ping_role_id", 4242)
+    select = ForgetPick()
+    select._values = ["events_ping_role_id"]
+
+    interaction = await click(bot, lead, select)
 
     assert bot.store.get(GUILD, "events_ping_role_id") is None
-    assert "nobody" in interaction.sent
+    assert "nobody" in card_embed(interaction).description
 
 
-async def test_settings_is_staff_only(cog, bot, member):
-    interaction = FakeInteraction(bot, member)
+async def test_the_settings_sub_panel_is_staff_only(cog, bot, member, db):
+    interaction = await click(bot, member, SettingsButton())
 
-    await cog.event_settings.callback(cog, interaction, retention_days=3)
-
-    assert bot.store.get(GUILD, "events_channel_retention_days") != 3
-    assert "staff only" in interaction.sent
+    assert "staff" in interaction.sent.lower()
+    assert interaction._edited is None
 
 
 async def test_the_review_view_is_persistent_and_registered_for_restarts(cog, bot):
@@ -1222,15 +1426,15 @@ async def test_settings_shows_when_each_loop_last_finished_and_its_last_error(co
     cog.last_ok_at["golive"] = "2026-08-26T12:00:00+00:00"
     cog.last_error["reconcile"] = "2026-08-26T11:00:00+00:00 - RuntimeError: boom"
 
-    interaction = FakeInteraction(bot, lead)
-    await cog.event_settings.callback(cog, interaction)
+    interaction = await settings_panel(cog, bot, lead)
+    said = card_embed(interaction).description
 
-    assert "**golive loop**" in interaction.sent
-    assert "2026-08-26T12:00:00+00:00" in interaction.sent
-    assert "no errors" in interaction.sent
-    assert "**reconcile loop**" in interaction.sent
-    assert "never yet" in interaction.sent
-    assert "RuntimeError: boom" in interaction.sent
+    assert "**golive loop**" in said
+    assert "2026-08-26T12:00:00+00:00" in said
+    assert "no errors" in said
+    assert "**reconcile loop**" in said
+    assert "never yet" in said
+    assert "RuntimeError: boom" in said
 
 
 async def test_the_golive_loop_records_when_it_last_finished(cog, bot, db):
@@ -1395,8 +1599,7 @@ async def test_cancelling_your_own_event_does_not_dm_you_about_it(cog, bot, memb
     row = (await events_by_status(db, GUILD, (PENDING,)))[0]
     before = len(member.dms)
 
-    interaction = FakeInteraction(bot, member)
-    await cog.event_cancel.callback(cog, interaction, str(row["id"]))
+    await call_off_from_panel(cog, bot, member, row["id"])
 
     assert len(member.dms) == before
     assert (await get_event(db, row["id"]))["status"] == CANCELLED
@@ -1428,12 +1631,15 @@ async def test_the_deny_modal_answers_a_failure_rather_than_leaving_it_hanging(c
 
 
 async def test_settings_can_change_how_late_an_announcement_may_be(cog, bot, lead, db):
-    interaction = FakeInteraction(bot, lead)
+    modal = NumbersModal(cog, 1, 30)
+    modal.retention._value = "1"
+    modal.late._value = "45"
 
-    await cog.event_settings.callback(cog, interaction, max_late_minutes=45)
+    interaction = FakeInteraction(bot, lead)
+    await modal.on_submit(interaction)
 
     assert bot.store.get(GUILD, "events_max_late_minutes") == 45
-    assert "45 minute(s)" in interaction.sent
+    assert "45 minute(s)" in card_embed(interaction).description
 
 
 async def test_an_unavailable_guild_is_left_entirely_alone(cog, bot, db):
@@ -1555,22 +1761,27 @@ async def test_a_local_time_that_happens_twice_is_refused_by_name(cog, bot, memb
 
 
 async def test_the_modal_says_which_zone_the_time_is_read_in(cog, bot, member):
-    interaction = FakeInteraction(bot, member)
+    panel = await open_panel(cog, bot, member)
 
-    await cog.event_create.callback(cog, interaction)
+    interaction = await click(bot, member, find_item(panel_view(panel), "Propose an event"))
 
     modal = interaction.response.modals[0]
+    assert isinstance(modal, EventModal)
     assert DEFAULT_TZ in modal.start.placeholder
-    assert "/timezone set" in modal.start.placeholder
 
 
 async def test_a_settled_event_stops_being_kept_a_lock(cog, bot, member, lead, db):
+    """`denied` keeps its lock now that staff can approve after all; `cancelled` never moves."""
     await submit(cog, bot, member)
     row = (await events_by_status(db, GUILD, (PENDING,)))[0]
 
     await deny(bot, lead, row["id"], message=bot.guild.created[0].messages[0])
+    assert row["id"] in getattr(bot, "_event_locks", {})
 
-    assert row["id"] not in getattr(bot, "_event_locks", {})
+    await submit(cog, bot, member, title="Second Party")
+    second = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    await call_off_from_panel(cog, bot, member, second["id"])
+    assert second["id"] not in getattr(bot, "_event_locks", {})
 
 
 async def test_an_approved_event_keeps_its_lock_until_it_is_over(cog, bot, member, lead, db):
@@ -1594,11 +1805,13 @@ async def test_deleting_the_announce_channel_makes_black_bloc_forget_it(cog, bot
 
 async def test_settings_can_forget_the_category_and_the_announce_channel(cog, bot, lead, db):
     await bot.store.set(GUILD, "events_announce_channel_id", 900)
+    category = events_cog.CategorySelect()
+    category._values = []
+    announce = events_cog.AnnounceSelect()
+    announce._values = []
 
-    interaction = FakeInteraction(bot, lead)
-    await cog.event_settings.callback(
-        cog, interaction, clear_category=True, clear_announce_channel=True
-    )
+    await click(bot, lead, category)
+    await click(bot, lead, announce)
 
     assert bot.store.get(GUILD, "events_category_id") is None
     assert bot.store.get(GUILD, "events_announce_channel_id") == TEST_CHANNEL

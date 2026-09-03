@@ -332,7 +332,7 @@ DATA_LINES: dict[str, dict[str, tuple[str, ...]]] = {
     },
     "whats_next": {
         FILLED: ("Next up, {name}: **{title}** {when} in {channel}.",),
-        EMPTY: ("Nothing on the calendar yet, {name}. `/event request` gets one started.",),
+        EMPTY: ("Nothing on the calendar yet, {name}. `/event` gets one started.",),
     },
     "who_is_live": {
         FILLED: ("Live right now, {name}: {names} — {links}",),
@@ -357,8 +357,8 @@ DATA_LINES: dict[str, dict[str, tuple[str, ...]]] = {
     "time_for_me": {
         FILLED: ("That is {time} for you, {name}.",),
         EMPTY: (
-            "I need to know your zone before I can work that out, {name}. Run `/timezone set` "
-            "and ask me again.",
+            "I need to know your zone before I can work that out, {name}. Run `/event` and press "
+            "**My time zone**, then ask me again.",
         ),
     },
 }
@@ -468,15 +468,15 @@ LINES: dict[str, tuple[str, ...]] = {
         "Happy to point you somewhere, {name}: `/help` first, staff second.",
     ),
     "host_an_event": (
-        "You can start that yourself, {name} — `/event create` opens the form. An Auntie or "
+        "You can start that yourself, {name} — `/event` opens the form. An Auntie or "
         "Uncle looks it over before it goes on the calendar, and you hear back either way.",
-        "`/event create`, {name}. It asks you for the when and the where, then staff give it a "
+        "`/event`, {name}. It asks you for the when and the where, then staff give it a "
         "look and it goes up.",
-        "That one is yours to run, {name}: `/event create` fills in the details and staff say "
+        "That one is yours to run, {name}: `/event` fills in the details and staff say "
         "yes before anybody is invited.",
-        "No need to ask anybody, {name} — `/event create` is the form, and it goes to staff for "
+        "No need to ask anybody, {name} — `/event` is the form, and it goes to staff for "
         "a look on its own.",
-        "Run `/event create`, {name}. Put the when, the where and what it is, and the rest is "
+        "Run `/event`, {name}. Put the when, the where and what it is, and the rest is "
         "staff waving it through.",
     ),
     "file_a_request": (
