@@ -388,6 +388,8 @@ const SETTING_SPECS = [
   ['request_notify_channel_id', 'channel', '800000000000000003', null, 'where one line goes when a request is filed; blank tells nobody and the site is the only place they show up'],
   ['request_status_channel_id', 'channel', null, null, 'where a line goes each time staff move a request — picked up, on hold, done, declined; blank uses request_notify_channel_id, so one channel carries both'],
   ['request_dm_on_decision', 'bool', true, true, 'true to DM the person who asked every time staff move their request — picked up, on hold, done or declined'],
+  ['request_channel_moves', 'enums', ['filed', 'in_progress', 'review', 'sent_back', 'done', 'hold', 'declined'], ['filed', 'in_progress', 'review', 'sent_back', 'done', 'hold', 'declined'], 'which moves put a card in the request channel: filed, in_progress, review, sent_back, done, hold, declined; all seven by default, and an empty list posts nothing at all', ['filed', 'in_progress', 'review', 'sent_back', 'done', 'hold', 'declined']],
+  ['request_review_by_other', 'bool', false, false, 'true to make somebody other than the staffer who marked a request ready to check be the one who accepts it'],
   ['cost_hosting_usd', 'int', 0, 0, 'what the always-on container costs a month in whole dollars — read it off your Fly invoice; 0 = not filled in yet, and the Costs card on the Health page says so rather than claiming hosting is free', null, 10000],
   ['raidtrain_mode', 'enum', 'off', 'off', 'off, shadow (log what would be sent and send nothing) or on (post the lineup and DM slot holders before their hour)', ['off', 'shadow', 'on']],
   ['raidtrain_organizer_role_id', 'role', null, null, 'role that may build and change a raid train’s lineup as well as staff; blank leaves it to staff alone'],
@@ -453,9 +455,9 @@ const REQUEST_SEED = [
   [14, 1, 'Search the audit log by member', 'Scrolling to find one person\'s three lines takes minutes.', null, 'in_progress', 1, 1, null, 14000, null],
   [13, 6, 'Let me file a request from a message with a right-click', 'Half of the requests start as somebody complaining in chat.', 35, 'in_progress', 3, 0, null, 15000, null],
   [12, 2, 'Honeypot should tell staff what the trap caught', 'The ban lands and nobody knows what was posted.', null, 'in_progress', 2, 3, 'Rivet is on this one while Moth is away.', 16000, null],
-  [11, 3, 'Stop the bot answering @-mentions inside threads', 'It talks over serious threads and it is hard to take seriously afterwards.', null, 'done', 2, 0, null, 20000, null],
-  [10, 0, 'A /help that lists only the commands I can actually run', 'The full list is intimidating and most of it refuses me anyway.', null, 'done', 3, 0, null, 22000, null],
-  [9, 6, 'Timed roles for the event crew', 'We hand the role out and then forget to take it back for months.', null, 'done', 1, 1, 'Shipped as part of the role menus work.', 24000, null],
+  [11, 3, 'Stop the bot answering @-mentions inside threads', 'It talks over serious threads and it is hard to take seriously afterwards.', null, 'review', 2, 0, null, 20000, null, null, 'A chat_reply_in_threads setting, on by default, that stops the bot answering an @-mention inside a thread.', 'Turn chat_reply_in_threads off on the Chat page, @-mention the bot inside any thread, and watch it stay quiet. Turn it back on and it answers again.'],
+  [10, 0, 'A /help that lists only the commands I can actually run', 'The full list is intimidating and most of it refuses me anyway.', null, 'done', 3, 0, null, 22000, null, null, '/help now filters the list against what the caller may actually run, and marks the staff ones.', 'Run /help as a member and again as a Lead — the second list is longer and the staff lines carry the (staff) mark.'],
+  [9, 6, 'Timed roles for the event crew', 'We hand the role out and then forget to take it back for months.', null, 'done', 1, 1, 'Shipped as part of the role menus work.', 24000, null, null, 'Role menus grew an expires_days field, and the sweep takes the role back when it runs out.', 'Set a role menu option to expire after a day, take the role, and check the Role menus page shows when it lapses.'],
   [8, 2, 'Birthday wishes with the member\'s own colour', 'A grey embed for a birthday is a bit sad.', null, 'done', 5, 0, null, 26000, null],
   [7, 4, 'Let people opt out of go-live announcements', 'Some of us stream for four people on purpose.', null, 'done', 2, 1, null, 28000, null],
   [6, 5, 'A dashboard I can read on my phone', 'I am never at a desk when something needs answering.', null, 'done', 1, 0, 'The whole site got this, not just one page.', 30000, null],
@@ -466,10 +468,10 @@ const REQUEST_SEED = [
   [1, 3, 'A second bot for music', 'Nobody has bothered since the last one broke.', null, 'withdrawn', null, null, null, 44000, null],
 ];
 
-const REQUEST_DECIDED = ['in_progress', 'hold', 'done', 'declined'];
+const REQUEST_DECIDED = ['in_progress', 'review', 'hold', 'done', 'declined'];
 
 function seedRequests() {
-  return REQUEST_SEED.map(([id, who, what, why, due, status, priority, assignee, notes, aged, reason, heldFrom]) => ({
+  return REQUEST_SEED.map(([id, who, what, why, due, status, priority, assignee, notes, aged, reason, heldFrom, built, howToTest]) => ({
     id,
     user_id: MEMBERS[who].id,
     what,
@@ -484,6 +486,10 @@ function seedRequests() {
     decided_at: REQUEST_DECIDED.includes(status) ? minutesAgo(Math.round(aged * 0.7)) : null,
     decline_reason: reason,
     held_from: status === 'hold' ? heldFrom || 'open' : null,
+    built: built || null,
+    how_to_test: howToTest || null,
+    ready_by: built ? STAFF.id : null,
+    sent_back_reason: null,
     done_at: status === 'done' ? minutesAgo(Math.round(aged * 0.2)) : null,
     message_id: null,
   }));
@@ -4384,23 +4390,26 @@ route('GET', '/api/chat/spend', (context) => {
 // already the role-request row. Mirrors black_bloc/api/tools/requests.py: ids as strings, refusals in
 // words, pending first. POST /api/requests, GET /api/requests/mine and the withdraw route
 // are the only three the real API lets a non-staff member call.
-const REQUEST_STATUSES = ['open', 'in_progress', 'hold', 'done', 'declined', 'withdrawn'];
-// One table, the same one black_bloc/requests.py:TRANSITIONS holds.
+const REQUEST_STATUSES = ['open', 'in_progress', 'review', 'hold', 'done', 'declined', 'withdrawn'];
+// One table, the same one black_bloc/requests.py:TRANSITIONS holds. `done` is reachable only
+// from `review`, so every done card has a line saying what was actually built.
 const REQUEST_TRANSITIONS = {
   open: ['declined', 'hold', 'in_progress'],
-  in_progress: ['declined', 'done', 'hold'],
-  hold: ['declined', 'in_progress'],
+  in_progress: ['declined', 'hold', 'review'],
+  review: ['declined', 'done', 'hold', 'in_progress'],
+  hold: ['declined', 'in_progress', 'review'],
   done: [],
   declined: [],
   withdrawn: [],
 };
-const REQUEST_STAFF_STATUSES = ['declined', 'done', 'hold', 'in_progress'];
-const REQUEST_OPEN_STATUSES = ['open', 'in_progress', 'hold'];
+const REQUEST_STAFF_STATUSES = ['declined', 'done', 'hold', 'in_progress', 'review'];
+const REQUEST_OPEN_STATUSES = ['open', 'in_progress', 'review', 'hold'];
 const REQUEST_WITHDRAWABLE = ['open', 'hold'];
 const REQUEST_NEEDS_A_REASON = ['hold', 'declined'];
 const REQUEST_STATUS_WORDS = {
   open: 'open',
   in_progress: 'being worked on',
+  review: 'ready to check',
   hold: 'on hold',
   done: 'done',
   declined: 'declined',
@@ -4415,6 +4424,10 @@ const REQUEST_NEEDS_WHY = 'A request needs a line saying why it is worth doing, 
 const REQUEST_DECLINE_NEEDS_A_REASON = 'A declined request needs one line the person who asked is sent, so nothing was changed. Say why and send it again.';
 const REQUEST_HOLD_NEEDS_A_REASON = 'A request put on hold needs one line the person who asked is sent, so nothing was changed. Say why it is waiting and send it again.';
 const REQUEST_REASON_NEEDED = { declined: REQUEST_DECLINE_NEEDS_A_REASON, hold: REQUEST_HOLD_NEEDS_A_REASON };
+const REQUEST_READY_NEEDS_BUILT = 'Marking a request ready to check needs a line saying what was actually built, so nothing was changed. That sentence is what the person who asked reads on the card — write it and send it again.';
+const REQUEST_SENDBACK_NEEDS_A_NOTE = 'Sending a request back needs one line saying what is still to do, so nothing was changed. The staffer who marked it ready is sent exactly what you type — say what is missing and send it again.';
+const REQUEST_NOT_READY = 'Request **#{id}** is **{status}**, not ready to check, so there was nothing to send back. `/request ready {id}` is what puts one there.';
+const REQUEST_REVIEW_BY_OTHER = 'You are the one who marked request **#{id}** ready to check, and this server asks somebody else on staff to check it, so nothing was changed. Ask another staffer to press Accept, or a Lead can turn `request_review_by_other` off if one pair of eyes is enough.';
 const REQUEST_COMMENT_NEEDS_TEXT = 'There is nothing to add, so no comment was left. Type what you want on the request and send it again.';
 const REQUEST_NOTHING_TO_SAVE = 'That change arrived with nothing in it, so nothing was saved. It is a fault in the page rather than in what you typed — reload the requests page and try again.';
 
@@ -4443,6 +4456,11 @@ function askRow(row) {
     decline_reason: row.decline_reason,
     held_from: row.held_from || null,
     held_word: row.held_from ? REQUEST_STATUS_WORDS[row.held_from] || row.held_from : '',
+    built: row.built || null,
+    how_to_test: row.how_to_test || null,
+    ready_by: row.ready_by ? String(row.ready_by) : null,
+    ready_by_name: row.ready_by ? memberName(row.ready_by) : null,
+    sent_back_reason: row.sent_back_reason || null,
     moves: REQUEST_TRANSITIONS[row.status] || [],
     resume_to: row.status === 'hold' ? askResumeTarget(row) : null,
     done_at: row.done_at,
@@ -4511,7 +4529,11 @@ function askMovesSentence(status) {
   return `From **${where}** it can go to ${found.map((one) => `**${one}**`).join(', ')}.`;
 }
 
-function askDecide(row, status, reason) {
+function askLook(was, status) {
+  return status === 'in_progress' && was === 'review' ? 'sent_back' : status;
+}
+
+function askDecide(row, status, reason, extra = {}) {
   const where = row.status;
   if (where === status) {
     throw new Refused(409, 'not_decided', `Request **#${row.id}** is already **${REQUEST_STATUS_WORDS[where] || where}**, so nothing was changed.`);
@@ -4522,13 +4544,33 @@ function askDecide(row, status, reason) {
   if (REQUEST_NEEDS_A_REASON.includes(status) && !reason) {
     throw new Refused(400, 'no_reason', REQUEST_REASON_NEEDED[status]);
   }
+  const look = askLook(where, status);
+  if (look === 'review' && !String(extra.built || row.built || '').trim()) {
+    throw new Refused(400, 'no_built', REQUEST_READY_NEEDS_BUILT);
+  }
+  if (look === 'sent_back' && !String(extra.sent_back_reason || '').trim()) {
+    throw new Refused(400, 'no_reason', REQUEST_SENDBACK_NEEDS_A_NOTE);
+  }
+  if (status === 'done' && state.settings.get('request_review_by_other') && String(row.ready_by || '') === String(STAFF.id)) {
+    throw new Refused(409, 'not_decided', REQUEST_REVIEW_BY_OTHER.split('{id}').join(row.id));
+  }
   row.status = status;
   row.decided_by = STAFF.id;
   row.decided_at = now();
   row.decline_reason = REQUEST_NEEDS_A_REASON.includes(status) ? reason : null;
   row.held_from = status === 'hold' ? where : null;
+  if (status === 'review') {
+    if (extra.built !== undefined) row.built = extra.built || null;
+    if (extra.how_to_test !== undefined) row.how_to_test = extra.how_to_test || null;
+    row.ready_by = STAFF.id;
+    row.sent_back_reason = null;
+  }
+  if (look === 'sent_back') row.sent_back_reason = extra.sent_back_reason || null;
   if (status === 'done') row.done_at = now();
-  logAction(`web.request.${status}`, { target_id: row.user_id, reason: reason || null, details: { request_id: row.id, was: where } });
+  logAction(`web.request.${look}`, { target_id: row.user_id, reason: reason || extra.sent_back_reason || null, details: { request_id: row.id, was: where } });
+  if (look === 'review') return `Request **#${row.id}** is ready to check — staff will look at it.`;
+  if (look === 'sent_back') return `Request **#${row.id}** is back with whoever is working on it.`;
+  if (status === 'done') return `Request **#${row.id}** is done. The person who asked has been told.`;
   return `Request **#${row.id}** is now **${REQUEST_STATUS_WORDS[status]}**.`;
 }
 
@@ -4595,6 +4637,10 @@ route('POST', '/api/requests', async (context) => {
     decided_at: null,
     decline_reason: null,
     held_from: null,
+    built: null,
+    how_to_test: null,
+    ready_by: null,
+    sent_back_reason: null,
     done_at: null,
     message_id: null,
   };
@@ -4612,7 +4658,7 @@ route('GET', '/api/requests/mine', (context) => {
 
 route('GET', '/api/requests/export.csv', (context) => {
   requireStaff(context.session);
-  const header = 'id,status,what,why,due_on,priority,requester_id,requester_name,assignee_id,assignee_name,created_at,decided_by,decided_at,decline_reason,held_from,done_at,comments';
+  const header = 'id,status,what,why,due_on,priority,requester_id,requester_name,assignee_id,assignee_name,created_at,decided_by,decided_at,decline_reason,held_from,built,how_to_test,ready_by,sent_back_reason,done_at,comments';
   const lines = asksSorted(state.asks).map((row) => {
     const shown = askRow(row);
     return [
@@ -4631,6 +4677,10 @@ route('GET', '/api/requests/export.csv', (context) => {
       shown.decided_at || '',
       shown.decline_reason || '',
       shown.held_from || '',
+      `"${String(shown.built || '').split('"').join('""')}"`,
+      `"${String(shown.how_to_test || '').split('"').join('""')}"`,
+      shown.ready_by || '',
+      `"${String(shown.sent_back_reason || '').split('"').join('""')}"`,
       shown.done_at || '',
       shown.comment_count,
     ].join(',');
@@ -4675,6 +4725,40 @@ route('POST', '/api/requests/:id/resume', (context) => {
   return { request: askRow(row), message: askResume(row) };
 });
 
+route('POST', '/api/requests/:id/ready', async (context) => {
+  requireStaff(context.session);
+  const row = wantedAsk(context.params.id);
+  const body = await context.body();
+  const built = String(body.built || '').trim().slice(0, 1000);
+  if (!built) throw new Refused(400, 'no_built', REQUEST_READY_NEEDS_BUILT);
+  const howToTest = String(body.how_to_test || '').trim().slice(0, 1000);
+  const said = askDecide(row, 'review', null, { built, how_to_test: howToTest });
+  return { request: askRow(row), message: said };
+});
+
+route('POST', '/api/requests/:id/accept', async (context) => {
+  requireStaff(context.session);
+  const row = wantedAsk(context.params.id);
+  await context.body();
+  // The row is read AFTER the move, not as an argument beside it: JavaScript evaluates the
+  // object's properties in order and `askRow` would otherwise answer the state it was in.
+  const said = askDecide(row, 'done', null);
+  return { request: askRow(row), message: said };
+});
+
+route('POST', '/api/requests/:id/sendback', async (context) => {
+  requireStaff(context.session);
+  const row = wantedAsk(context.params.id);
+  const body = await context.body();
+  const reason = String(body.reason || '').trim().slice(0, 500);
+  if (!reason) throw new Refused(400, 'no_reason', REQUEST_SENDBACK_NEEDS_A_NOTE);
+  if (row.status !== 'review') {
+    throw new Refused(409, 'not_decided', REQUEST_NOT_READY.split('{id}').join(row.id).split('{status}').join(REQUEST_STATUS_WORDS[row.status] || row.status));
+  }
+  const said = askDecide(row, 'in_progress', null, { sent_back_reason: reason });
+  return { request: askRow(row), message: said };
+});
+
 route('POST', '/api/requests/:id/status', async (context) => {
   requireStaff(context.session);
   const row = wantedAsk(context.params.id);
@@ -4704,6 +4788,15 @@ route('POST', '/api/requests/:id/status', async (context) => {
     row.notes = String(body.notes || '').trim().slice(0, 1000) || null;
     changed.push('notes');
   }
+  // A typo in "how to test" must not need a state change to fix (owner, 2026-09-03).
+  if ('built' in body) {
+    row.built = String(body.built || '').trim().slice(0, 1000) || null;
+    changed.push('built');
+  }
+  if ('how_to_test' in body) {
+    row.how_to_test = String(body.how_to_test || '').trim().slice(0, 1000) || null;
+    changed.push('how_to_test');
+  }
   const status = body.status ? String(body.status).trim().toLowerCase() : null;
   if (status && !REQUEST_STAFF_STATUSES.includes(status)) {
     throw new Refused(400, 'request_refused', `**${body.status}** is not a state a request can be in, so nothing was changed. They are ${REQUEST_STAFF_STATUSES.join(', ')}.`);
@@ -4711,7 +4804,13 @@ route('POST', '/api/requests/:id/status', async (context) => {
   if (!status && !changed.length) throw new Refused(400, 'nothing_to_save', REQUEST_NOTHING_TO_SAVE);
   let said = `Request **#${row.id}** is saved.`;
   if (changed.length) logAction('web.request.updated', { details: { request_id: row.id, changed: changed.sort() } });
-  if (status) said = askDecide(row, status, String(body.reason || '').trim() || null);
+  if (status) {
+    said = askDecide(row, status, String(body.reason || '').trim() || null, {
+      built: body.built,
+      how_to_test: body.how_to_test,
+      sent_back_reason: String(body.sent_back_reason || body.reason || '').trim() || null,
+    });
+  }
   return { request: askRow(row), message: said };
 });
 

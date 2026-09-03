@@ -2490,6 +2490,11 @@
           "decline_reason",
           "held_from",
           "held_word",
+          "built",
+          "how_to_test",
+          "ready_by",
+          "ready_by_name",
+          "sent_back_reason",
           "moves",
           "resume_to",
           "done_at"
@@ -2583,6 +2588,11 @@
           "decline_reason",
           "held_from",
           "held_word",
+          "built",
+          "how_to_test",
+          "ready_by",
+          "ready_by_name",
+          "sent_back_reason",
           "moves",
           "resume_to",
           "done_at"
@@ -2673,6 +2683,90 @@
           "decline_reason",
           "decided_by",
           "decided_at"
+        ]
+      }
+    },
+    {
+      "_": "The review pass. {review_request_id} is the row the seed already has ready to check, so Accept and Send back both have something to act on without walking the machine first; {progress_request_id} is a row being worked on, which is where /ready is legal from.",
+      "method": "POST",
+      "path": "/api/requests/{progress_request_id}/ready",
+      "body": {
+        "built": "the board, with a CSV export",
+        "how_to_test": "open /requests and press Export"
+      },
+      "read_by": [
+        "13c page-requests.js Ready to check"
+      ],
+      "shape": "object",
+      "keys": [
+        "request",
+        "message"
+      ],
+      "nested": {
+        "request": [
+          "id",
+          "status",
+          "status_word",
+          "built",
+          "how_to_test",
+          "ready_by",
+          "ready_by_name",
+          "moves",
+          "decided_by",
+          "decided_at"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/requests/{review_request_id}/sendback",
+      "body": {
+        "reason": "the CSV has no header row"
+      },
+      "read_by": [
+        "13c page-requests.js Send back"
+      ],
+      "shape": "object",
+      "keys": [
+        "request",
+        "message"
+      ],
+      "nested": {
+        "request": [
+          "id",
+          "status",
+          "status_word",
+          "sent_back_reason",
+          "ready_by",
+          "moves",
+          "decided_by",
+          "decided_at"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/requests/{review_request_id}/accept",
+      "body": {},
+      "read_by": [
+        "13c page-requests.js Accept"
+      ],
+      "shape": "object",
+      "keys": [
+        "request",
+        "message"
+      ],
+      "nested": {
+        "request": [
+          "id",
+          "status",
+          "status_word",
+          "built",
+          "how_to_test",
+          "moves",
+          "decided_by",
+          "decided_at",
+          "done_at"
         ]
       }
     },
@@ -3295,6 +3389,8 @@
     "web.request.hold",
     "web.request.resumed",
     "web.request.in_progress",
+    "web.request.review",
+    "web.request.sent_back",
     "web.request.done",
     "web.request.withdrawn",
     "web.request.updated",

@@ -45,6 +45,10 @@ const IDS = {
   // A row the seed already has ON HOLD, because /resume is only legal from there and every
   // contract entry runs against a fresh seed.
   held_request_id: '20',
+  // 13c: a row the seed already has READY TO CHECK, so /accept and /sendback reach it without
+  // walking the machine first, and one already being worked on, which is where /ready is legal.
+  review_request_id: '11',
+  progress_request_id: '12',
   // F14: {member_id} already HAS a ping role in the seed, so the GET and the DELETE act on it
   // and the POST needs somebody who does not — otherwise it answers the 409 it should.
   ping_member_id: '700000000000000004',
@@ -325,14 +329,18 @@ async function checkActionKinds() {
   await send('PUT', '/api/chat/personality/tsundere', { enabled: true });
   // Phase 17: the one web.chat.memory_* kind the website can leave.
   await send('DELETE', `/api/chat/memory/${IDS.member_id}`, undefined);
-  // The seven web.request.* kinds. Hold then resume walks the state machine both ways off one
-  // row. Withdraw is the member's own, so it is the one call here that goes in as somebody who
-  // is not staff.
+  // The nine web.request.* kinds. Hold then resume walks the state machine both ways off one
+  // row, and ready → sendback → ready → accept walks the review pass off another. Withdraw is
+  // the member's own, so it is the one call here that goes in as somebody who is not staff.
   await post('/api/requests', { what: 'contract check', why: 'so web.request.filed is left' });
   await post(`/api/requests/${IDS.feature_request_id}/comments`, { text: 'contract check' });
   await post(`/api/requests/${IDS.feature_request_id}/status`, { priority: 2 });
   await post(`/api/requests/${IDS.feature_request_id}/hold`, { reason: 'contract check' });
   await post(`/api/requests/${IDS.feature_request_id}/resume`, {});
+  await post(`/api/requests/${IDS.progress_request_id}/ready`, { built: 'contract check', how_to_test: 'press it' });
+  await post(`/api/requests/${IDS.review_request_id}/sendback`, { reason: 'contract check' });
+  await post(`/api/requests/${IDS.review_request_id}/ready`, { built: 'contract check' });
+  await post(`/api/requests/${IDS.review_request_id}/accept`, {});
   await post('/api/requests/26/decline', { reason: 'contract check' });
   await fetch(`${BASE}/api/requests/${IDS.member_request_id}/withdraw`, {
     method: 'POST',
