@@ -134,6 +134,73 @@ already said go.** Order recommended by the 5.0 session, owner did not reorder:
    store + sync convention; coordinate with catalog-platform docs.
 5. **Restyle overrides** — the three cheap look-and-feel flips below stay
    available; fold into any site-touching build.
+6. **Raid trains (member request #1, Pawpette)** — owner 2026-09-02 20:10:
+   "build, also start wave 6" then "i want memory starting first". So: Phase 17
+   memory dispatches first (schema 23), raid trains = **Phase 18, schema 24**,
+   design doc next (`info/phase18-design.md`, from the capture in
+   [`info/raid-train-capture.md`](info/raid-train-capture.md): ASKED + FIT
+   buckets; LATER stays later). Request #1 set to `in_progress`, priority 2,
+   with the decision note, on the Requests page.
+7. **Twitch Team application form (member request #2, Pawpette)** — owner
+   2026-09-02 20:14: "build next" → **Phase 19**, after raid trains. An
+   application form (≤5 questions, Discord modal cap; staff configure the
+   questions — both ways) on the existing role-request flow
+   (`rolegrants` + `role_menus.py` cards); approve grants the Team role + DMs
+   the applicant; the twitch.tv Team invite has no public API, so it stays a
+   named team-owner click on the card. Request #2 set to `in_progress`.
+   **Ride-along (owner 2026-09-02 20:19: "when a request finishes can we
+   message the channel and dm the person who made the request saying its
+   done"):** the DM half EXISTS (`DM_DONE`, gated by `request_dms_on_decision`);
+   the channel half does not — `notify()` only posts `NOTIFY_LINE` at filing.
+   Add a done line ("Request **#N** from @who is done: what", no pings) posted
+   to `request_done_channel_id` (new key, blank = falls back to
+   `request_notify_channel_id`), a `request_done_template` key, guard-checked,
+   `request.done_notify_failed` logged on failure. Registry sync points
+   (labels.js, mock server, exact-key-set test).
+   **Plus (owner 2026-09-02 20:27, request #3 music bot: "put this one in
+   pending/hold … make sure we dm the person and post it chat that we marked
+   something as hold and why"):** there is NO hold state — staff moves are
+   forward-only (approved/planned/in_progress/done/declined; the API refused
+   `pending` in words). **Owner redesigned the state machine 2026-09-02
+   20:33 (verbatim): "add a new status for open and then change pending to
+   hold. so it goes from open -> planned -> in prog -> done with hold and
+   declined as side states. Declined is a final state like done and hold can
+   be anywhere in the process. we should also mark what state it was
+   previously for my own sake."** Then 20:36: **"lets also get rid of planned
+   since we'll hold or decline anything no need for planned."** So:
+   - **Main line:** `open` (a request arrives here; replaces `pending`) →
+     `in_progress` → `done` (final). Nothing else on the line.
+   - **Side states:** `hold` — from `open` or `in_progress`, reason
+     REQUIRED, stores **`held_from`** (shown on the page and in the DM;
+     "resume" returns it there by default, staff may pick the other);
+     `declined` — final, reason required, from `open`, `in_progress` or
+     `hold`. `withdrawn` stays (requester's own final state, from `open` or
+     `hold`).
+   - **`approved` AND `planned` are RETIRED.** Starting work = the
+     `open → in_progress` move. `requests_auto_approve` loses its meaning
+     (there is no approve step) — Claude's reading: retire the key too;
+     every filing, staff or not, arrives `open`. Data migration in schema
+     23: `pending → open`, `approved → open`, `planned → open`
+     (`in_progress`/`done`/`declined`/`withdrawn` unchanged).
+   - **Notifications on EVERY staff move** (in_progress, hold, done,
+     declined): requester DM + channel post, reason/note in the text, no
+     pings; guard-checked; failures logged. Today only
+     approve/decline/done DM and nothing posts to a channel after filing.
+   - Touch list: `requests.py` (`STATUSES`, `STATUS_WORDS`, `DM_TEXT`,
+     transitions table — encode the machine as data, one place), the cog,
+     `api/tools/requests.py`, Requests page (filter, status control, held_from
+     badge, resume button), `/request set` choices, mock contract,
+     settings registry (drop `requests_auto_approve`;
+     `request_status_channel_id` + `request_status_template`), tests.
+   **Must ship BEFORE the first request lands (Phase 18) — folded into the
+   Phase 17 builder brief** as a bounded add-on. At landing: flip #3 to
+   `hold` with the owner's note so PT gets the DM (the channel post stays
+   TEST_MODE-blocked until the lift).
+   Meanwhile #3 sits `approved` with the note "ON HOLD (owner, 2026-09-02):
+   youtube player is currently unreliable. Will do further research on this."
+   ⚠️ **Owner rule 2026-09-02 20:14: every accepted request stays
+   `in_progress` on the Requests page until it ships; flipping it to `done`
+   is part of that phase's landing ritual.**
 
 **Standing context for the new session:** every build = Opus worktree builder
 (Fable plans/reviews/never bulk-codes), brief points at `info/review-checklist.md`
@@ -154,6 +221,16 @@ docs bookkeeping lands with the work, not after.
 
 ## 🔧 Open engineering items
 
+- **Review the incoming member requests (owner, 2026-09-02 ~19:55: "we got some
+  request in our /request features lets review them").** Read what has landed
+  via `/request` (Requests page, `/api/requests`), present them to the owner one
+  at a time, record each decision (accept → a TODO item; decline → the reason)
+  and close them out on the Requests page. Three in (all staff-filed →
+  auto-approved, unassigned): #1 Pawpette — raid-train scheduler replacing
+  r3dlabs.com (owner: "can we capture all the features of this tool" →
+  [`info/raid-train-capture.md`](info/raid-train-capture.md), full inventory
+  bucketed); #2 Pawpette — Twitch Team application form via the bot, staff
+  approval; #3 PT — built-in music bot for the lounge/cowork voice channels.
 
 
 - **Curated docs for peers — DECIDED + DONE 2026-09-01** (owner picked "Rewrite
