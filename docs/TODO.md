@@ -232,6 +232,13 @@ docs bookkeeping lands with the work, not after.
   (default off), schema 27, `POST /api/requests/{id}/check`; six owner-flippable calls in §D.
   Owner 2026-09-03 ~12:30: "Build all, keep going" → Opus build dispatched on
   `feat/requests-check` from `main` ≥ `fbb1191` (~12:35), beside `feat/applications-no-role`.
+  Status: **BUILT, not merged, not deployed** (2026-09-03, branch `feat/requests-check`, four
+  commits) — `ask_check` shared by the panel button and `POST /api/requests/{id}/check`, the
+  `check_asked` card, the channel-ping fallback, both settings, schema 27, 28 new tests
+  (3399 pass, ruff clean, mock 17 pages / **140** routes). Owner checks are sweeps
+  [66–68](access/sweeps.md). ⚠️ Both this branch and `feat/applications-no-role` bump
+  `SCHEMA_VERSION` to 27 — whichever merges second re-keys to 28. Nothing here has been seen
+  in live Discord or on the deployed site.
 
 - 🆕 **Panels over slash commands — the rest of the app (owner, 2026-09-03: "then carry it
   through the rest of the app"; confirmed ~11:25: "do the change to all / commands. I like

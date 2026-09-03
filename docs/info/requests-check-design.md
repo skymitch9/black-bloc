@@ -1,7 +1,8 @@
 # Requests, sixth pass — "Ask them to check": ping the requester from the card
 
-**Audience:** the builder and the reviewer. **Status:** TRACKED · **BUILDABLE** (design
-2026-09-03 ~12:00, Fable; not yet built). Owner's ask, 2026-09-03 11:15, verbatim in
+**Audience:** the builder and the reviewer. **Status:** TRACKED · **BUILT** (design
+2026-09-03 ~12:00, Fable; built the same afternoon on `feat/requests-check`, not merged and
+not deployed — see `## Deviations` at the foot, 11 of them). Owner's ask, 2026-09-03 11:15, verbatim in
 `../TODO.md` ("🔧 Open engineering items"): *"We also need a way to ping the requester from the
 request app. I want to have it message the requesters to check the work."* — then *"Keep
 building"*, so the design calls below were made by the conductor and are listed under §D for
@@ -237,3 +238,65 @@ Report: what deviated from this doc and why, what was NOT verified, and the revi
 ## Deviations
 
 *(the build appends here — number them, say what the doc said, what was done, and why)*
+
+Built 2026-09-03 on `feat/requests-check` (four commits off `59ac96f`). 3399 tests pass (was
+3371), ruff clean, mock 17 pages / 140 routes. Everything below was found by running the code.
+
+1. ⚠️ **`BackButton` moved from action row 0 to row 1 — the doc's §C1 button insert made the
+   review card SIX items wide and discord.py refuses to build it.** `build_card`
+   (`cogs/community/requests.py`) put every `CardMoveButton` and `Back` on `row=0`; a review
+   card already carried four moves, and the fifth plus Back is `ValueError: item would not
+   fit at row 0 (6 > 5 width)` out of `discord/ui/view.py:193`. Every review card in the panel
+   would have crashed on render. Back now sits on its own row below the moves, and
+   `test_the_card_renders_exactly_the_buttons_the_table_says` asserts both the ≤5 cap and
+   Back's row so the next move added fails loudly in a test rather than in production.
+2. **`CARD_BUTTONS[REVIEW]` shipped in commit 2 with `MOVE_FUNCS`, not in commit 1 with the
+   rest of the pure module.** §F's boundaries put the table in the first commit, but a table
+   naming `"check"` with no `MOVE_FUNCS["check"]` behind it is a `KeyError` in `run_move` —
+   the intermediate commit would have been broken. Same reason moved `logkinds.py`'s
+   classification into commit 2: `test_every_emitted_kind_is_classified` fails the moment the
+   cog emits a kind the module has not classified.
+3. **The two settings keys shipped in commit 2 as well, not commit 3.** `SettingsStore.set`
+   validates against `KEY_TYPES`, so the cog tests for the fallback and the auto-ask cannot
+   set a key that is not registered yet. The registry entry belongs with the code that reads
+   it; commit 3 stayed the API + site half.
+4. **§C6's third bullet — "`labels.js` kind label: *Requester asked to check*" — was not
+   done, because there is no such table.** Verified: `site/public/assets/labels.js` holds
+   SETTINGS-key labels only (`LABELS` + `humanLabel`), and the Logs page renders a kind as its
+   raw string (`logs.js:57` `kindPill`, `text: String(row.kind)`), with the filter chips built
+   from the kinds a feature has actually logged. There is nowhere to put a per-kind label
+   without inventing a table, which is a change to every feature's logs, not to this one. The
+   two SETTINGS labels §C4 asks for were added there as specified.
+5. **`ask_check` step 8 is `if told != "channel": await notify_move(...)`, without repeating
+   the `posts_a_card` test the doc spells out.** `notify_move` already asks `posts_a_card`
+   itself as its first line; asking twice is the same gate in two places (checklist 15). The
+   behaviour is identical — the channel copy is opt-in and never doubles the ping.
+6. **`mark_ready` returns the row the auto-ask left, not the row `apply_decision` returned.**
+   §C3 says only that the reply text stays `READY_SAID`. It does — but `finish_card` re-renders
+   the card from the returned row, and the row from before the ask has no `check_asked_at`, so
+   the new "Asked to check" field would have been missing until the next refresh. It now uses
+   `ask_check`'s own fresh row when the ask happened.
+7. **The site chip reads "asked by X · 3 minutes ago", not §C5's "asked {check_asked_by_name}".**
+   `check_asked_by_name` is the STAFFER who asked, so "asked Lead" reads as though Lead were
+   the person being asked. Two extra characters remove the ambiguity.
+8. **`askedChip` was added to the shared `headBlock`, not mirrored separately onto the done
+   card.** §C5 says to find where `readyChip` is used in the finished list and copy it —
+   `readyChip` is not used there at all; done/declined/withdrawn cards all render through
+   `headBlock`, which `boardCard`, `openCard` and `heldCard` share. One call there covers the
+   finished list, and rows that were never asked have no chip anyway.
+9. **The mock's `REQUEST_NOT_READY` gained a `{doing}` placeholder** (via a new `notReadyToCheck`
+   helper) rather than a second near-identical constant, matching `NOT_READY_TO_CHECK`'s own
+   shape now that two routes refuse with it. Its stale `/request ready` sentence was fixed at
+   the same time as the Python one.
+10. **The `check_asked_*` fields were also added to `contract.json`'s list and single-request
+    row shapes**, not only to the new route's. The page's chip reads them off list rows, so the
+    contract that guards "every key the page reads" has to cover them there too.
+11. **`SCHEMA_VERSION` is 27 as the doc says, and `feat/applications-no-role` claims 27 too.**
+    Whichever merges second re-keys to 28 — recorded here so the merge does not have to
+    rediscover it.
+
+**Not verified** (no live Discord and no deploy from this build): the `check_asked` embed by
+eye; whether a closed-DM member's `user.send` raises what `dm()` expects (it treats any
+exception as "not told", so the fallback does not depend on which); the real channel ping
+reaching the right person; the site button and chip on the deployed page. Those are sweeps
+[66–68](../access/sweeps.md).
