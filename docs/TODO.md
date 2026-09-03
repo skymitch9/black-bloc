@@ -150,6 +150,25 @@ docs bookkeeping lands with the work, not after.
 
 ## 🔧 Open engineering items
 
+- 🆕 **Request notifications as embeds, with "what was built" + "how to test" + a site
+  link — owner, 2026-09-03 ~00:50, verbatim: "We probably should also add how to test the
+  feature and a short explanation of what was built too. Also let's get a standard
+  appealing template for the output. Maybe use one of the discord info boxes with a
+  description, how to test if applicable, and a link to the request on the website. When
+  someone makes a request we should also post that same request link in discord too. So a
+  message at the start to confirm task is made and then once at the end when done. Also
+  one for the in hold or declined states."** Today every request line is plain text
+  (`black_bloc/requests.py:149–159` `NOTIFY_*`, `:132–147` `DM_*`) and no per-request URL
+  exists (`page-requests.js` renders cards with no anchor). Design →
+  [`info/requests-embeds-design.md`](info/requests-embeds-design.md). ⚠️ Touches the same
+  files as the double-logging fix above — build AFTER that lands (merge order: fix, then
+  this). Owner decisions 2026-09-03 ~01:00: asked whether "what was built" is required
+  on Done, he answered *"Do we need an acceptance pending so a staffer can check if
+  something is done?"* → a **`review` ("ready to check") state**, `in_progress → review →
+  done`, built + how-to-test required to enter review, Accept / Send back,
+  `request_review_by_other` default off ("Yes, build it that way"). Status: **design
+  complete, BUILDABLE once the double-logging fix merges.**
+
 - 🔴 **Every web write through a shared path logs TWICE — owner, 2026-09-03 ~00:40,
   verbatim: "The app double posted all messages with a web.request and a request".**
   Seen on the three request flips at the 17/18/19 landing: each produced a
