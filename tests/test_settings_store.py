@@ -885,9 +885,10 @@ def test_the_ping_role_mode_is_read_as_a_feature_switch_on_the_health_page():
 
 async def test_every_feature_has_a_log_level_key_defaulting_to_important(store):
     keys = [f"{feature}_log_level" for feature in FEATURES]
-    assert len(keys) == 15
+    assert len(keys) == 16
     assert "request_log_level" in keys
     assert "pings_log_level" in keys
+    assert "raidtrain_log_level" in keys
     for key in keys:
         assert KEY_TYPES[key] == "enum"
         assert KEY_CHOICES[key] == LEVELS
@@ -951,6 +952,73 @@ def test_the_request_switches_only_take_the_words_they_document():
         ("request_auto_approve_staff", "yes"),
         ("request_notify_channel_id", "12"),
         ("request_dm_on_decision", 1),
+    ):
+        with pytest.raises(SettingError):
+            coerce_value(key, bad)
+
+
+async def test_every_raid_train_decision_is_a_key_both_the_dashboard_and_the_bot_reach(store):
+    """Phase 18 D1-D14: not one of them is a constant in the cog."""
+    for key in (
+        "raidtrain_mode",
+        "raidtrain_organizer_role_id",
+        "raidtrain_channel_id",
+        "raidtrain_ping_role_id",
+        "raidtrain_slot_minutes",
+        "raidtrain_reminder_minutes",
+        "raidtrain_poll_minutes",
+        "raidtrain_require_link",
+        "raidtrain_thread",
+        "raidtrain_live_posts",
+        "raidtrain_max_slots_per_member",
+        "raidtrain_scheduled_event",
+        "raidtrain_log_level",
+    ):
+        assert key in KEY_TYPES and KEY_HELP.get(key)
+    assert store.get(7, "raidtrain_mode") == "off"
+    assert store.get(7, "raidtrain_slot_minutes") == 60
+    assert store.get(7, "raidtrain_reminder_minutes") == 30
+    assert store.get(7, "raidtrain_poll_minutes") == 5
+    assert store.get(7, "raidtrain_require_link") is True
+    assert store.get(7, "raidtrain_thread") is True
+    assert store.get(7, "raidtrain_live_posts") is True
+    assert store.get(7, "raidtrain_max_slots_per_member") == 1
+    assert store.get(7, "raidtrain_scheduled_event") is False
+    assert store.get(7, "raidtrain_channel_id") is None
+    assert store.get(7, "raidtrain_organizer_role_id") is None
+
+
+def test_the_raid_train_mode_is_read_as_a_feature_switch_on_the_health_page():
+    assert "raidtrain_mode" in mode_keys()
+
+
+def test_the_raid_train_numbers_refuse_a_figure_that_would_break_the_sweep():
+    assert coerce_value("raidtrain_slot_minutes", 15) == 15
+    assert coerce_value("raidtrain_max_slots_per_member", 0) == 0
+    for key, bad, said in (
+        ("raidtrain_slot_minutes", 14, "start a stream"),
+        ("raidtrain_slot_minutes", 721, "half a day"),
+        ("raidtrain_reminder_minutes", 4, "enough notice"),
+        ("raidtrain_reminder_minutes", 1441, "day before"),
+        ("raidtrain_poll_minutes", 0, "once every"),
+        ("raidtrain_poll_minutes", 61, "miss its own reminder"),
+        ("raidtrain_max_slots_per_member", 25, "set it to 0"),
+    ):
+        with pytest.raises(SettingError) as caught:
+            coerce_value(key, bad)
+        assert said in str(caught.value)
+
+
+def test_the_raid_train_switches_only_take_the_words_they_document():
+    assert coerce_value("raidtrain_mode", "shadow") == "shadow"
+    assert coerce_value("raidtrain_require_link", False) is False
+    for key, bad in (
+        ("raidtrain_mode", "sometimes"),
+        ("raidtrain_thread", "yes"),
+        ("raidtrain_live_posts", 1),
+        ("raidtrain_scheduled_event", "on"),
+        ("raidtrain_channel_id", "12"),
+        ("raidtrain_organizer_role_id", "12"),
     ):
         with pytest.raises(SettingError):
             coerce_value(key, bad)

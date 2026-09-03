@@ -184,7 +184,7 @@ const KIND_HEADS = {
   birthday: 'birthday', tempvoice: 'tempvoice',
   role: 'rolemenu', role_menu: 'rolemenu', rolemenu: 'rolemenu',
   poll: 'poll', chat: 'chat', request: 'request', requests: 'request',
-  pings: 'pings',
+  pings: 'pings', raidtrain: 'raidtrain',
 };
 const IMPORTANT_SUFFIXES = [
   '_failed', '.approved', '.denied', '.expired', '.warned', '.timed_out', '.timeout',
@@ -262,6 +262,7 @@ const LOG_LEVEL_FEATURES = [
   ['chat', 'chat', 'chat'],
   ['request', 'requests', 'request'],
   ['pings', 'ping roles', 'pingroles'],
+  ['raidtrain', 'raid trains', 'raidtrains'],
 ];
 
 const SETTING_SPECS = [
@@ -372,6 +373,18 @@ const SETTING_SPECS = [
   ['request_notify_channel_id', 'channel', '800000000000000003', null, 'where one line goes when a request is filed; blank tells nobody and the site is the only place they show up'],
   ['request_dm_on_decision', 'bool', true, true, 'true to DM the person who asked when their request is approved, declined or done'],
   ['cost_hosting_usd', 'int', 0, 0, 'what the always-on container costs a month in whole dollars — read it off your Fly invoice; 0 = not filled in yet, and the Costs card on the Health page says so rather than claiming hosting is free', null, 10000],
+  ['raidtrain_mode', 'enum', 'off', 'off', 'off, shadow (log what would be sent and send nothing) or on (post the lineup and DM slot holders before their hour)', ['off', 'shadow', 'on']],
+  ['raidtrain_organizer_role_id', 'role', null, null, 'role that may build and change a raid train’s lineup as well as staff; blank leaves it to staff alone'],
+  ['raidtrain_channel_id', 'channel', '800000000000000003', null, 'where a train’s lineup post lives; blank uses events_announce_channel_id'],
+  ['raidtrain_ping_role_id', 'role', null, null, 'role mentioned in front of a lineup post; blank pings nobody, and members on the lineup are never pinged by an edit'],
+  ['raidtrain_slot_minutes', 'int', 60, 60, 'how long one slot is by default, 15-720 minutes; each train may be created with its own length', null, 720, 15],
+  ['raidtrain_reminder_minutes', 'int', 30, 30, 'how long before their slot a holder is DMed, with who raids into them and who they raid next; the DM is sent once', null, 1440, 5],
+  ['raidtrain_poll_minutes', 'int', 5, 5, 'minutes between sweeps that send those reminders, start and finish a train, and notice who is live', null, 60, 1],
+  ['raidtrain_require_link', 'bool', true, true, 'on makes `/twitch link` a condition of claiming a slot, so the lineup carries the name the streamer before raids; off lets anybody claim and leaves the name off'],
+  ['raidtrain_thread', 'bool', true, true, 'on opens a thread under the lineup post for the people on the train'],
+  ['raidtrain_live_posts', 'bool', true, true, 'on says `X is live — next up Y` in that thread when a slot holder starts streaming inside their own hour, and marks the slot checked in'],
+  ['raidtrain_max_slots_per_member', 'int', 1, 1, 'how many slots one member may claim on one train; 0 means as many as they like. An organizer assigning a slot is never held to it', null, 24],
+  ['raidtrain_scheduled_event', 'bool', false, false, 'on puts the train on Discord’s own event calendar as well. Off by default: Phase 4’s calendar helper writes to the events table, so raid trains keep their own'],
 ];
 
 const RULES = {

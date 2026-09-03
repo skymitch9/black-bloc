@@ -462,8 +462,8 @@ def test_an_unknown_level_is_todays_behaviour():
 
 
 def test_every_feature_has_one_settings_key():
-    assert len(FEATURES) == 15
-    assert len(set(FEATURES)) == 15
+    assert len(FEATURES) == 16
+    assert len(set(FEATURES)) == 16
     assert log_level_key("golive") == "golive_log_level"
     assert LEVELS == (OFF, IMPORTANT_ONLY, ALL)
 
