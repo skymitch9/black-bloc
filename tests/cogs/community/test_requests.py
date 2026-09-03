@@ -909,6 +909,225 @@ async def test_a_view_with_no_message_yet_does_nothing_on_timeout():
     await view.on_timeout()
 
 
+# --- a replaced view stops; the survivor writes its footer through the freshest token ----------
+
+
+class FakeToken:
+    """Only what `on_timeout` reaches for — the interaction token's own original response."""
+
+    def __init__(self, raises=None):
+        self.edits = []
+        self.raises = raises
+
+    async def edit_original_response(self, **kwargs):
+        if self.raises is not None:
+            raise self.raises
+        self.edits.append(kwargs)
+
+
+class DeafMessage(FakeMessage):
+    async def edit(self, **kwargs):
+        raise refused()
+
+
+async def test_a_re_render_stops_the_view_it_replaced(cog, bot, member, lead):
+    request_id = await request_at(bot, member, lead, pure.OPEN)
+    panel = await open_panel(cog, bot, lead)
+    replaced = panel_view(panel)
+    select = next(item for item in replaced.children if isinstance(item, RequestPick))
+    select._values = [str(request_id)]
+
+    interaction = await click(bot, lead, select)
+
+    assert replaced.is_finished() and replaced.replaced is True
+    assert card_view(interaction) is not replaced
+    assert card_view(interaction).replaced is False
+
+
+async def test_the_view_a_re_render_replaced_never_edits_the_message_again(cog, bot, member):
+    await file_one(cog, bot, member)
+    panel = await open_panel(cog, bot, member)
+    replaced = panel_view(panel)
+    message = FakeMessage(1, embed=discord.Embed(title=pure.PANEL_TITLE))
+    replaced.message = message
+    select = next(item for item in replaced.children if isinstance(item, WithdrawPick))
+    select._values = ["1"]
+
+    await click(bot, member, select)
+    await replaced.on_timeout()
+
+    assert message.embeds[0].footer.text is None
+    assert message.view is None
+    assert not any(item.disabled for item in replaced.children)
+
+
+async def test_a_view_that_was_replaced_does_nothing_on_timeout():
+    view = RequestView(10)
+    view.add_item(requests_cog.RefreshButton())
+    message = FakeMessage(1, embed=discord.Embed(title=pure.PANEL_TITLE))
+    view.message = message
+    requests_cog.retire(view)
+
+    await view.on_timeout()
+
+    assert view.is_finished()
+    assert message.embeds[0].footer.text is None
+
+
+async def test_the_check_records_the_freshest_interaction_and_lets_the_click_through():
+    view = RequestView(10)
+    token = FakeToken()
+
+    assert await view.interaction_check(token) is True
+    assert view.last_interaction is token
+
+
+async def test_the_timeout_footer_goes_through_the_freshest_interaction_token():
+    view = RequestView(10)
+    view.add_item(requests_cog.RefreshButton())
+    message = FakeMessage(1, embed=discord.Embed(title=pure.PANEL_TITLE))
+    view.message = message
+    token = FakeToken()
+    await view.interaction_check(token)
+
+    await view.on_timeout()
+
+    assert token.edits[0]["embeds"][0].footer.text == pure.PANEL_TIMEOUT_FOOTER
+    assert all(item.disabled for item in token.edits[0]["view"].children)
+    assert message.view is None
+
+
+async def test_the_timeout_footer_falls_back_to_the_message_when_no_token_was_recorded():
+    view = RequestView(10)
+    view.add_item(requests_cog.RefreshButton())
+    message = FakeMessage(1, embed=discord.Embed(title=pure.PANEL_TITLE))
+    view.message = message
+
+    await view.on_timeout()
+
+    assert view.last_interaction is None
+    assert message.embeds[0].footer.text == pure.PANEL_TIMEOUT_FOOTER
+
+
+async def test_the_timeout_footer_falls_back_to_the_message_when_the_token_has_expired():
+    view = RequestView(10)
+    view.add_item(requests_cog.RefreshButton())
+    message = FakeMessage(1, embed=discord.Embed(title=pure.PANEL_TITLE))
+    view.message = message
+    await view.interaction_check(FakeToken(raises=refused()))
+
+    await view.on_timeout()
+
+    assert message.embeds[0].footer.text == pure.PANEL_TIMEOUT_FOOTER
+
+
+async def test_a_timeout_discord_refuses_outright_is_logged_not_raised():
+    view = RequestView(10)
+    view.add_item(requests_cog.RefreshButton())
+    view.message = DeafMessage(1, embed=discord.Embed(title=pure.PANEL_TITLE))
+    await view.interaction_check(FakeToken(raises=refused()))
+
+    await view.on_timeout()
+
+    assert all(item.disabled for item in view.children)
+
+
+# --- staff demoted while a card is open ---------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("status", "label"),
+    [
+        (pure.OPEN, "Pick up"),
+        (pure.OPEN, "Hold"),
+        (pure.IN_PROGRESS, "Ready to check"),
+        (pure.HOLD, "Resume"),
+    ],
+)
+async def test_a_staffer_demoted_while_the_card_is_open_moves_nothing(
+    cog, bot, member, lead, monkeypatch, db, status, label
+):
+    request_id = await request_at(bot, member, lead, status)
+    row = await pure.get_request(bot.db, request_id)
+    _, view = requests_cog.build_card(bot, bot.guild, row, lead)
+    button = find_item(view, label)
+    calls = []
+
+    async def fake(*args, **kwargs):
+        calls.append((args, kwargs))
+        return ("moved along", row)
+
+    for name in ("apply_decision", "mark_ready", "resume_request", "accept", "send_back"):
+        monkeypatch.setattr(requests_cog, name, fake)
+    stranger = FakeMember(bot.guild, user_id=950, display_name="Ex")
+
+    interaction = await click(bot, stranger, button)
+
+    assert not calls
+    assert not interaction.response.modals
+    assert "staff only" in interaction.sent
+    assert (await pure.get_request(db, request_id))["status"] == status
+
+
+async def test_a_demoted_staffer_submitting_the_ready_modal_is_refused_in_words(
+    cog, bot, member, lead, monkeypatch, db
+):
+    request_id = await request_at(bot, member, lead, pure.IN_PROGRESS)
+    row = await pure.get_request(bot.db, request_id)
+    calls = []
+
+    async def fake(*args, **kwargs):
+        calls.append((args, kwargs))
+        return ("ready to check", row)
+
+    monkeypatch.setattr(requests_cog, "mark_ready", fake)
+    modal = ReadyModal(cog, request_id, row)
+    modal.built._value = "a board"
+    stranger = FakeMember(bot.guild, user_id=951, display_name="Ex")
+
+    interaction = FakeInteraction(bot, stranger)
+    await modal.on_submit(interaction)
+
+    assert not calls
+    assert "staff only" in interaction.sent
+    assert (await pure.get_request(db, request_id))["status"] == pure.IN_PROGRESS
+
+
+@pytest.mark.parametrize("kind", ["hold", "decline", "sendback"])
+async def test_a_demoted_staffer_submitting_a_note_modal_is_refused_in_words(
+    cog, bot, member, lead, monkeypatch, db, kind
+):
+    status = pure.REVIEW if kind == "sendback" else pure.OPEN
+    request_id = await request_at(bot, member, lead, status)
+    calls = []
+
+    async def fake(*args, **kwargs):
+        calls.append((args, kwargs))
+        return ("noted", None)
+
+    monkeypatch.setattr(requests_cog, "apply_decision", fake)
+    monkeypatch.setattr(requests_cog, "send_back", fake)
+    modal = NoteModal(cog, request_id, kind)
+    modal.note._value = "the reason"
+    stranger = FakeMember(bot.guild, user_id=952, display_name="Ex")
+
+    interaction = FakeInteraction(bot, stranger)
+    await modal.on_submit(interaction)
+
+    assert not calls
+    assert "staff only" in interaction.sent
+    assert (await pure.get_request(db, request_id))["status"] == status
+
+
+async def test_the_logs_button_still_refuses_a_demoted_staffer_in_words(cog, bot, member):
+    button = LogsButton()
+
+    interaction = await click(bot, member, button)
+
+    assert "staff only" in interaction.sent
+    assert not any(m.get("embed") for m in interaction.response.messages)
+
+
 # --- the last ten log lines ------------------------------------------------------------------
 
 

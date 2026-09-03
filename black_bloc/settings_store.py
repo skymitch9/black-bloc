@@ -888,8 +888,10 @@ KEY_HELP.update(
             "be the one who accepts it"
         ),
         "request_panel_minutes": (
-            "minutes the /request panel stays live before its buttons disable themselves; 15 "
-            "by default"
+            "minutes the /request panel stays live before its buttons disable themselves; 10 "
+            "by default. The 'this panel has gone quiet' footer can only be written while "
+            "Discord's 15-minute interaction window is still open, so 15 or more means the "
+            "buttons simply stop working with no footer to explain it"
         ),
     }
 )
@@ -1295,7 +1297,7 @@ class SettingsStore:
         if key == "request_review_by_other":
             return False
         if key == "request_panel_minutes":
-            return 15
+            return 10
         if key == "chat_mode":
             return "on"
         if key == "chat_cooldown_seconds":

@@ -973,11 +973,12 @@ def test_the_card_moves_key_is_reachable_from_slash_settings_as_well_as_the_dash
     assert "request_review_by_other" in VALUE_KEYS
 
 
-async def test_the_request_panel_stays_up_fifteen_minutes_by_default(store):
-    """The fourth pass: how long `/request`'s panel lives before its buttons disable."""
+async def test_the_request_panel_stays_up_ten_minutes_by_default(store):
+    """Ten, not fifteen: the footer needs Discord's 15-minute interaction window still open."""
     from black_bloc.cogs.core import VALUE_KEYS
 
-    assert store.get(7, "request_panel_minutes") == 15
+    assert store.get(7, "request_panel_minutes") == 10
+    assert "15" in KEY_HELP["request_panel_minutes"]
     assert KEY_TYPES["request_panel_minutes"] == "int"
     assert "request_panel_minutes" in VALUE_KEYS
     await store.set(7, "request_panel_minutes", 30)
