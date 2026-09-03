@@ -12,11 +12,11 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 16:20, v67 live, wave 2 forks all decided)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 16:48, v68 live, memory panel shipped, golive in flight)
 
-**`main` = `285b5e3`** (operator token merge; v67 live 16:04, 3710 tests, 42 commands). Panels
-wave 1 is COMPLETE and all five wave-2 design docs are committed with every fork decided (🔧 panels
-item below). Nothing is in flight. **Next:** (1) the operator token MINT is owed — classifier-blocked,
+**`main` = `cb941d9`** (memory panel docs; v68 live 16:48, 3744 tests, 42 commands). Panels wave 1
+is COMPLETE, wave 2 has ONE of five shipped (memory, v68) with every fork decided (🔧 panels item
+below). In flight: the golive build (Opus, own worktree, since 16:16). **Next:** (1) the operator token MINT is owed — classifier-blocked,
 see the 🔧 item; (2) wave-2 builds in cost order, memory first (Opus, own worktree, brief carries the
 decided forks + `info/review-checklist.md` + the design doc), merge/deploy each as it lands; (3) the
 small review findings (🔧 below) folded into whatever touches those files; (4) owner by-eye sweeps
@@ -260,8 +260,12 @@ docs bookkeeping lands with the work, not after.
   `/youtube` and `/golive` separate**; youtube F-Y2 = **flip `youtube_mode` to shadow at the panel's
   landing** (operational, the conductor does it via the site); memory I-M1 = **open it — `/memory`
   stays visible with the mode off, the Forget controls keep working**. Builds in worktrees in cost
-  order: memory (120–180k) → golive (200–280k) → youtube (230–300k) → pings (300–360k) → voice
-  (420–480k); each brief carries its decided forks. Events I2 DECIDED 12:40 (`/timezone` retired).
+  order: memory → golive → youtube (230–300k) → pings (300–360k) → voice (420–480k); each brief
+  carries its decided forks. **Memory LANDED 16:42 (329k — the 120–180k estimate was 2× off; a
+  wave-2 build is ~2× its estimate, calibrate the rest up), merged `cb941d9`, live in v68 `cb941d9`
+  16:48** (3710 → 3744 tests, 42 commands) — landing entry in `DONE.md` 2026-09-03; sweeps
+  104–108 are the owner's to run (`chat_memory_mode` is still off live, so 104–107 need it on plus
+  a conversation first). Golive build in flight since 16:16. Events I2 DECIDED 12:40 (`/timezone` retired).
   **Wave-1 builds all landed 13:40–13:50** (birthdays merged `58974e1`; events on
   `worktree-agent-a448c7ab780ed3c2b`, polls on `worktree-agent-aa735ab092d13477d`, both under Fable
   review); the applications build follows once I-A3 is answered. Merge in wave order, re-key

@@ -1,9 +1,8 @@
 # Chat memory — `/memory` is ONE command that opens a panel (wave 2)
 
 > **Audience:** the build agent and the reviewer, then the owner for §I. **Status:** TRACKED ·
-> ✅ **BUILT 2026-09-03 on branch `worktree-agent-aaaa13e778f0ba65a`** (base `main` `8cbe453`,
-> v67), four commits: the panel, the string sweep, the tests, the docs. **NOT merged, NOT
-> deployed.** Fork **I-M1 = OPEN IT** (owner, 2026-09-03 16:12), built as decided. The
+> ✅ **SHIPPED 2026-09-03 — v68 `cb941d9` 16:48** (built on `worktree-agent-aaaa13e778f0ba65a`, base
+> `main` `8cbe453`, merged `cb941d9`; landing entry in `DONE.md`). Fork **I-M1 = OPEN IT** (owner, 2026-09-03 16:12), built as decided. The
 > `## Deviations` foot names every place the build departed from this document.
 > **Measured on the branch:** ruff clean · **3744 tests pass** (3710 at the base, +34, none
 > lost) · `commands synced` **42, UNCHANGED** (measured through the real tree, not booted —

@@ -9,6 +9,33 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-03 — Memory panel: `/memory` is one window (wave 2, v68, `cb941d9`)
+
+Release **v68** (`cb941d9`, 16:48; `deploys.log` line 67). Merge `--no-ff` of
+`worktree-agent-aaaa13e778f0ba65a` (Opus build, **329k** against a 120–180k estimate — wave-2 builds
+run ~2× their estimate; five commits off `8cbe453`) as `cb941d9` after Fable review — no blocking
+defect. `/memory` is a single command opening an ephemeral panel: every fact numbered (`Fact` layer in
+`chat_memory.py`: name, notes, threads, DM-learned lines marked), a `Forget one of these…` select
+capped at 25 that re-reads the line by text before dropping it (a distillation can land between render
+and click → `PROFILE_MOVED`, nothing wrong is ever dropped), `Forget by words…` modal only above the
+cap, `Forget everything` and `Stop remembering me` behind an Are-you-sure, `Remember me again`,
+`Refresh`. Moves come from the fact count, never the consent, so the forget controls work with
+`chat_memory_mode` off — **fork I-M1 = OPEN IT** (owner 16:12), the `HIDDEN_WHEN_OFF` entry for
+`memory` removed. The web Forget now routes through the cog's `forget_profile(via=)` so both doors are
+one write + one log row (checklist 34; the route's hand-built `web.` kind is gone and the logkinds AST
+guard now asserts zero unchecked computed kinds). `db_up` moved from `applications.py` into
+`panels.py` (checklist 17). One key `memory_panel_minutes` (default 10, checklist 33; labels.js
+entry). Every re-render carries `allowed_mentions=none()`. 3710 → **3744 tests**, ruff clean, `commands
+synced` 42 (the group was already one slot). Design
+[`info/memory-panel-design.md`](info/memory-panel-design.md) (fifteen deviations at its foot); sweep
+rows 104–108 (`access/sweeps.md`); `OWNER_GUIDE.md` sweeps count corrected 95 → 108 (two builds
+stale). Verified: boot log 23:47:54Z database ready, 23:47:55Z synced 42 app commands, 23:47:58Z logged in, no Traceback. **NOT verified:** nothing opened in Discord — the five sweep rows
+are the owner's; `chat_memory_mode` is off live so 104–107 need it on plus a conversation first.
+Findings left for the next touch of each file: `api/tools/chat_memory.py` `CONTENTS_ARE_PRIVATE` and
+its mock copy still name `/settings set chat_memory_staff_view full` (a subcommand that takes a
+channel); four wave-1 `_panel_minutes` keys still lack a `labels.js` entry; five wave-1 panels edit
+without `allowed_mentions`.
+
 ## 2026-09-03 — Operator read token: the session's read-only door (v67, `285b5e3`)
 
 Release **v67** (`285b5e3`, 16:04; `deploys.log` line 66). Merge `--no-ff` of
