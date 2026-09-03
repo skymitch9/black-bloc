@@ -1,14 +1,17 @@
 # Requests, third pass — embeds, "what was built", "how to test", the site link
 
-**Audience:** the builder and the reviewer. **Status:** TRACKED · **BUILT on branch
-`feat/requests-third-pass`, 2026-09-03, NOT merged and NOT deployed** — see the
-`## Deviations` list and the landing one-off at the foot. Owner's ask 2026-09-03
+**Audience:** the builder and the reviewer. **Status:** TRACKED · ✅ **SHIPPED — merge
+`355d6e9` + anchor fix `70a6720`, deployed `70a6720` 2026-09-03 06:34; the landing one-off
+at the foot was RUN at 06:41 (#1, #2 `done → review`; #3 `hold`)** — see the
+`## Deviations` list (14). Owner's ask 2026-09-03
 ~00:50 (verbatim in `../TODO.md`, "🔧 Open engineering items"). **Last verified:
 2026-09-03** against `black_bloc/requests.py`, `cogs/community/requests.py`,
 `api/tools/requests.py`, `site/public/assets/page-requests.js` as built (3260 tests,
 ruff clean, `check.mjs` 17 pages / 139 routes; the page rendered against the mock).
-⚠️ **NOT verified against live Discord or the live dashboard** — no card has been
-posted and no live row has been moved. Extends
+Live: boot log clean (schema 26 added four columns), `/requests.html` renders with
+Ready to check 2 / On hold 1 / Done 0 and no console errors. ⚠️ **NOT verified:** any
+card by eye in Discord — the one-off posts nothing; the first real staff move posts the
+first card. Slash paths and the DM look are on the sweep list. Extends
 [`requests-states-design.md`](requests-states-design.md); the
 state machine grows ONE state (`review`, owner decision 2026-09-03 ~01:00, below).
 **Build order:** the double-logging fix landed as `df393ab` (2026-09-03) — cut the build

@@ -9,6 +9,81 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-03 — Requests, third pass: the review state, the embeds and the site link
+
+Moved whole from `TODO.md` (the item is reproduced below the summary). Owner's ask
+~00:50, two decisions ~01:00 (the `review` state; "Yes, build it that way"), the data
+order ~03:55 ("Move the 2 done ones to ready to check, leave the other as hold"). Opus
+build on `feat/requests-third-pass` (12 commits, `2fac43b` … `c6064f9`), merge
+**`355d6e9`**, conductor's post-merge anchor fix **`70a6720`**, deployed **`70a6720`**
+2026-09-03 06:34 — see `deploys.log`. Design and its 14 deviations:
+[`info/requests-embeds-design.md`](info/requests-embeds-design.md).
+
+**What shipped.** The state machine grows `review` ("ready to check"):
+`open → in_progress → review → done`, `done` reachable ONLY from `review`, `built`
+required to enter it, Accept moves it to `done`, Send back (note required) returns it to
+`in_progress` — a LOOK, not a state, remembered in `sent_back_reason`. `hold` / `declined`
+stay side states. Every request notification is ONE embed builder (`request_embed`, seven
+looks) used by the channel line and the requester DM, with a link button to
+`{origin}/requests.html#r-N`. Schema 26: `requests.built` / `how_to_test` / `ready_by` /
+`sent_back_reason`, nullable, no backfill. Settings: `request_channel_moves` (a new
+`enums` registry type — which moves post to the channel) and `request_review_by_other`
+(default off — the accepter need not differ from the person who marked it ready).
+Routes `POST /api/requests/{id}/ready|accept|sendback`, slash `/request
+ready|accept|sendback`, log kinds `request.review` / `request.sent_back` (IMPORTANT),
+one row per web write through `kind_via` (checklist 34). Requests page: a Ready-to-check
+section with editors for built / how-to-test, per-card `#r-N` anchors that open the
+section they land in. 3310 tests, ruff clean, `check.mjs` 17 pages / 139 routes.
+
+**Found on the way.** `site/public/assets/labels.js` had not parsed since the Phase 19
+merge `7b1c592` — every dashboard page rendered BLANK from 00:31 to 06:34. Fixed in
+`1d7d84d`; the guard that would have caught it is an open TODO item (the module parse,
+not `node --check`). And the design's own link, `/requests#r-N`, 404s on the static
+mount — deviation 14, `REQUEST_ANCHOR` now takes the page from `logkinds.FEATURE_PAGES`.
+
+**Landing data step, run 06:41 against the live volume:** #1 and #2 `done → review`
+(`ready_by` = the staffer who had marked them done, `done_at` null, `built` = the old
+decision note, `how_to_test` = the sweep rows 48–52 / 53–57); #3 untouched, `hold`.
+Verified on https://blackbloc.heygabi.ai/requests.html: Ready to check 2, On hold 1,
+Done 0, no console errors. ⚠️ **NOT verified:** any card by eye in Discord — the one-off
+posts nothing; the first real staff move (an Accept on #1, say) posts the first card to
+`#mute-me-bot-test-spam`. The slash paths and the DM look are on the sweep list.
+
+**The TODO item, whole:**
+
+- 🆕 **Request notifications as embeds, with "what was built" + "how to test" + a site
+  link — owner, 2026-09-03 ~00:50, verbatim: "We probably should also add how to test the
+  feature and a short explanation of what was built too. Also let's get a standard
+  appealing template for the output. Maybe use one of the discord info boxes with a
+  description, how to test if applicable, and a link to the request on the website. When
+  someone makes a request we should also post that same request link in discord too. So a
+  message at the start to confirm task is made and then once at the end when done. Also
+  one for the in hold or declined states."** Today every request line is plain text
+  (`black_bloc/requests.py:149–159` `NOTIFY_*`, `:132–147` `DM_*`) and no per-request URL
+  exists (`page-requests.js` renders cards with no anchor). Design →
+  [`info/requests-embeds-design.md`](info/requests-embeds-design.md). Touches the same
+  files as the double-logging fix, which merged as `df393ab` (`DONE.md` 2026-09-03) —
+  the build cuts from that or later and follows checklist item 34 (pass `via`, never
+  a second `note()`). Owner decisions 2026-09-03 ~01:00: asked whether "what was built" is required
+  on Done, he answered *"Do we need an acceptance pending so a staffer can check if
+  something is done?"* → a **`review` ("ready to check") state**, `in_progress → review →
+  done`, built + how-to-test required to enter review, Accept / Send back,
+  `request_review_by_other` default off ("Yes, build it that way"). Owner ~03:55:
+  *"Move the 2 done ones to ready to check, leave the other as hold"* → not possible
+  until `review` exists (`done` is final today); recorded as the build's LANDING DATA
+  STEP in the design (#1 and #2 `done → review` by a one-off on the live DB, #3 stays
+  `hold`). Status: ⚠️ **BUILT on `feat/requests-third-pass`, 2026-09-03 — NOT merged,
+  NOT deployed, and the landing data step NOT run.** 3260 tests pass, ruff clean,
+  `check.mjs` 17 pages / 139 routes, and the page was rendered against the mock; nothing
+  has been verified against live Discord or the live dashboard. What is left for the
+  conductor, in order: **(1)** merge and deploy (schema 26 migrates on boot — four
+  nullable columns, no backfill); **(2)** run the landing one-off in the design doc's
+  `## Deviations` foot (#1 and #2 `done → review`, #3 untouched) — it is idempotent and
+  was dry-run against a throwaway schema-26 file, but it must run AFTER the deploy;
+  **(3)** post one card of each of the seven looks to `#mute-me-bot-test-spam` and judge
+  "appealing" by eye — §J measured the shapes (worst look 2004 of Discord's 6000) but
+  nobody has seen one rendered. Move this item WHOLE to `DONE.md` at landing.
+
 ## 2026-09-03 — One web write leaves one log row (owner bug report, the same night as the 17/18/19 landing)
 
 Moved whole from `TODO.md`. Owner ~00:40, on seeing the three request flips in the

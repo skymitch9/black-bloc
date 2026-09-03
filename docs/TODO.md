@@ -150,48 +150,20 @@ docs bookkeeping lands with the work, not after.
 
 ## 🔧 Open engineering items
 
-- 🆕 **Request notifications as embeds, with "what was built" + "how to test" + a site
-  link — owner, 2026-09-03 ~00:50, verbatim: "We probably should also add how to test the
-  feature and a short explanation of what was built too. Also let's get a standard
-  appealing template for the output. Maybe use one of the discord info boxes with a
-  description, how to test if applicable, and a link to the request on the website. When
-  someone makes a request we should also post that same request link in discord too. So a
-  message at the start to confirm task is made and then once at the end when done. Also
-  one for the in hold or declined states."** Today every request line is plain text
-  (`black_bloc/requests.py:149–159` `NOTIFY_*`, `:132–147` `DM_*`) and no per-request URL
-  exists (`page-requests.js` renders cards with no anchor). Design →
-  [`info/requests-embeds-design.md`](info/requests-embeds-design.md). Touches the same
-  files as the double-logging fix, which merged as `df393ab` (`DONE.md` 2026-09-03) —
-  the build cuts from that or later and follows checklist item 34 (pass `via`, never
-  a second `note()`). Owner decisions 2026-09-03 ~01:00: asked whether "what was built" is required
-  on Done, he answered *"Do we need an acceptance pending so a staffer can check if
-  something is done?"* → a **`review` ("ready to check") state**, `in_progress → review →
-  done`, built + how-to-test required to enter review, Accept / Send back,
-  `request_review_by_other` default off ("Yes, build it that way"). Owner ~03:55:
-  *"Move the 2 done ones to ready to check, leave the other as hold"* → not possible
-  until `review` exists (`done` is final today); recorded as the build's LANDING DATA
-  STEP in the design (#1 and #2 `done → review` by a one-off on the live DB, #3 stays
-  `hold`). Status: ⚠️ **BUILT on `feat/requests-third-pass`, 2026-09-03 — NOT merged,
-  NOT deployed, and the landing data step NOT run.** 3260 tests pass, ruff clean,
-  `check.mjs` 17 pages / 139 routes, and the page was rendered against the mock; nothing
-  has been verified against live Discord or the live dashboard. What is left for the
-  conductor, in order: **(1)** merge and deploy (schema 26 migrates on boot — four
-  nullable columns, no backfill); **(2)** run the landing one-off in the design doc's
-  `## Deviations` foot (#1 and #2 `done → review`, #3 untouched) — it is idempotent and
-  was dry-run against a throwaway schema-26 file, but it must run AFTER the deploy;
-  **(3)** post one card of each of the seven looks to `#mute-me-bot-test-spam` and judge
-  "appealing" by eye — §J measured the shapes (worst look 2004 of Discord's 6000) but
-  nobody has seen one rendered. Move this item WHOLE to `DONE.md` at landing.
-
 - 🆕 **A defect this build found and fixed on the way, worth knowing about
   separately: `site/public/assets/labels.js` had not parsed since `7b1c592`**, so
   `LABELS` never loaded and **every dashboard page rendered blank**. The Phase 19 merge
   pasted the applications labels after the `LABELS` object's closing brace. Fixed on
-  `feat/requests-third-pass` as its own commit (`1d7d84d`). ⚠️ **Nothing in the test
-  suite reads `labels.js`** — `node --check site/public/assets/labels.js` is the whole
-  test, and it caught this in one second. Worth adding to `deploy.ps1` beside ruff,
-  pytest and `check.mjs`; not done here, because it is a deploy-pipeline change and this
-  build had no brief for one.
+  `feat/requests-third-pass` as its own commit (`1d7d84d`), shipped in the third-pass
+  deploy 2026-09-03. ⚠️ **Nothing in the test suite reads `labels.js`.** Measured
+  2026-09-03 06:40: `node --check site/public/assets/labels.js` **PASSES the broken
+  file** — a `.js` path is parsed as CommonJS, where the stray `key: 'value'` lines are
+  legal labels; the browser loads it as an ES module and dies at `labels.js:160
+  SyntaxError: Unexpected token ':'`. The guard that catches it is the module parse:
+  copy to `.mjs` and `node --check` that, or `node --input-type=module --check <
+  labels.js`. Add it to `deploy.ps1` beside ruff, pytest and `check.mjs` — for EVERY
+  `site/public/assets/*.js` (they are all modules). Small, own commit; not done in the
+  build because it is a deploy-pipeline change and the build had no brief for one.
 
 - **Via-labelling gap: `raidtrain.cancel_train` logs one row but calls a website cancel
   Via = Discord** (found by the double-logging build, 2026-09-03 — see `DONE.md` that
