@@ -32,6 +32,7 @@ FEATURES = (
     "chat",
     "request",
     "pings",
+    "applications",
 )
 
 HEADS: dict[str, str] = {
@@ -57,6 +58,8 @@ HEADS: dict[str, str] = {
     "request": "request",
     "requests": "request",
     "pings": "pings",
+    "application": "applications",
+    "applications": "applications",
 }
 
 FEATURE_LABELS: dict[str, str] = {
@@ -75,6 +78,7 @@ FEATURE_LABELS: dict[str, str] = {
     "chat": "Chat",
     "request": "Requests",
     "pings": "Ping roles",
+    "applications": "Applications",
 }
 
 FEATURE_PAGES: dict[str, str] = {
@@ -93,6 +97,7 @@ FEATURE_PAGES: dict[str, str] = {
     "chat": "chat.html",
     "request": "requests.html",
     "pings": "golive.html",
+    "applications": "rolemenus.html",
 }
 
 IMPORTANT_SUFFIXES = (
@@ -306,6 +311,15 @@ ROUTINE: frozenset[str] = frozenset(
         "tempvoice.unban",
         "tempvoice.unlock",
         "tempvoice.unpermit",
+        "application.mode",
+        "application.form_created",
+        "application.form_updated",
+        "application.form_deleted",
+        "application.question_changed",
+        "application.panel_posted",
+        "application.post_skipped_test_mode",
+        "application.submitted",
+        "application.withdrawn",
     }
 )
 

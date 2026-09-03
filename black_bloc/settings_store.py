@@ -624,6 +624,7 @@ LOG_LEVEL_COMMANDS: dict[str, str] = {
     "chat": "chat",
     "request": "request",
     "pings": "pingroles",
+    "applications": "applications",
 }
 
 
@@ -638,6 +639,55 @@ def log_level_help(feature: str) -> str:
 KEY_TYPES.update({log_level_key(feature): "enum" for feature in FEATURES})
 KEY_CHOICES.update({log_level_key(feature): LEVELS for feature in FEATURES})
 KEY_HELP.update({log_level_key(feature): log_level_help(feature) for feature in FEATURES})
+
+# Phase 19 — applications. Appended as its own block so the parallel branches merge cleanly.
+APPLICATIONS_MODES = ("off", "shadow", "on")
+APPLICATIONS_RETRY_DAYS = 30
+APPLICATIONS_RETRY_MAX_DAYS = 3650
+
+KEY_TYPES.update(
+    {
+        "applications_mode": "enum",
+        "applications_channel_id": "channel",
+        "applications_approver_role_id": "role",
+        "applications_ping_role_id": "role",
+        "applications_retry_days": "int",
+        "applications_dm_on_decision": "bool",
+    }
+)
+KEY_CHOICES["applications_mode"] = APPLICATIONS_MODES
+KEY_MAX["applications_retry_days"] = APPLICATIONS_RETRY_MAX_DAYS
+KEY_MAX_REASON["applications_retry_days"] = (
+    "A wait of more than {limit} days after a no is a permanent no with extra steps. Set it to "
+    "0 if somebody may apply again the same day."
+)
+KEY_HELP.update(
+    {
+        "applications_mode": (
+            "off, shadow (log only, nothing posted or DMed) or on (members can apply and staff "
+            "decide on the card)"
+        ),
+        "applications_channel_id": (
+            "where an application card waits for Approve or Deny when the form does not name a "
+            "channel of its own; blank falls back to rolemenu_approval_channel_id, then to "
+            "staff_channel_id"
+        ),
+        "applications_approver_role_id": (
+            "who may approve or deny an application when the form does not name a role of its "
+            "own; blank falls back to rolemenu_approver_role_id, then to staff"
+        ),
+        "applications_ping_role_id": (
+            "role mentioned when a new application arrives; blank pings nobody"
+        ),
+        "applications_retry_days": (
+            "days somebody waits after a decision before they may apply for the same form again; "
+            "a form can set its own, and 0 lets them apply again straight away"
+        ),
+        "applications_dm_on_decision": (
+            "true to DM the applicant when their application is approved or denied"
+        ),
+    }
+)
 
 
 GUILD_ONLY = (
@@ -1050,6 +1100,12 @@ class SettingsStore:
             return SKIN_TONE_DEFAULT
         if key == "cost_hosting_usd":
             return COST_HOSTING_USD
+        if key == "applications_mode":
+            return "off"
+        if key == "applications_retry_days":
+            return APPLICATIONS_RETRY_DAYS
+        if key == "applications_dm_on_decision":
+            return True
         if key.endswith("_log_level"):
             return LEVEL_DEFAULT
         if KEY_TYPES.get(key) in ("channels", "roles"):
