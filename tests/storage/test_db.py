@@ -12,12 +12,16 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 20
+        assert SCHEMA_VERSION == 21
         cur = await db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = {r["name"] for r in await cur.fetchall()}
         assert {"settings", "action_log", "role_menus", "role_menu_options"} <= tables
         assert {"role_requests", "role_grants"} <= tables
         assert {"golive_links", "golive_optout", "golive_sessions"} <= tables
+        assert "golive_fan_roles" in tables
+        cur = await db.conn.execute("PRAGMA table_info(golive_fan_roles)")
+        columns = {r["name"] for r in await cur.fetchall()}
+        assert {"guild_id", "user_id", "role_id", "created_at", "created_by"} == columns
         assert {"tempvoice_channels", "tempvoice_prefs", "honeypot_hits"} <= tables
         assert {"user_timezones", "events", "mod_cases"} <= tables
         cur = await db.conn.execute("PRAGMA table_info(mod_cases)")
@@ -406,6 +410,44 @@ async def test_a_session_row_gains_a_platform_column_on_an_older_file(tmp_path):
         assert "platform" in {row["name"] for row in await cur.fetchall()}
         cur = await again.conn.execute("SELECT platform FROM golive_sessions WHERE user_id = 5")
         assert (await cur.fetchone())["platform"] is None
+    finally:
+        await again.close()
+
+
+async def test_a_schema_20_file_gains_the_fan_role_table_and_keeps_its_rows(tmp_path):
+    """Schema 21 is additive: the file that ships without ping roles gets the table on the
+    next boot and nothing already in it is rewritten."""
+    path = tmp_path / "old.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await open_session(db, 5)
+    await db.conn.execute("DROP TABLE golive_fan_roles")
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '20')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        assert "golive_fan_roles" in {row["name"] for row in await cur.fetchall()}
+        cur = await again.conn.execute(
+            "SELECT value FROM schema_meta WHERE key='schema_version'"
+        )
+        assert (await cur.fetchone())["value"] == "21"
+        cur = await again.conn.execute("SELECT user_id FROM golive_sessions")
+        assert [row["user_id"] for row in await cur.fetchall()] == [5]
+        await again.conn.execute(
+            "INSERT INTO golive_fan_roles(guild_id, user_id, role_id, created_at, created_by) "
+            "VALUES (7, 5, 99, '2026-09-02T00:00:00+00:00', 3)"
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            await again.conn.execute(
+                "INSERT INTO golive_fan_roles(guild_id, user_id, role_id, created_at) "
+                "VALUES (7, 5, 100, '2026-09-02T00:00:00+00:00')"
+            )
     finally:
         await again.close()
 

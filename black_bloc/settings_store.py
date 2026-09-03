@@ -40,6 +40,12 @@ GOLIVE_END_SUFFIX = " — stream ended"
 
 ROLEMENU_MODES = ("off", "on")
 
+PINGS_MODES = ("off", "on")
+PINGS_EVENTS_ROLE_NAME = "Events"
+PINGS_FAN_ROLE_TEMPLATE = "{name} pings"
+PINGS_CREATORS = ("self", "staff", "auto")
+PINGS_ON_UNLINK = ("keep", "delete")
+
 MEMBER_ROLE_ID = 1073741054563602532
 TEMPVOICE_NAME_TEMPLATE = "{user}'s bloc"
 TEMPVOICE_CREATOR_NAME = "join to create a channel"
@@ -120,6 +126,12 @@ KEY_TYPES: dict[str, str] = {
     "golive_ping_role_id": "role",
     "golive_max_session_hours": "int",
     "golive_embed": "bool",
+    "pings_mode": "enum",
+    "pings_events_role_name": "text",
+    "pings_fan_role_creation": "enum",
+    "pings_fan_role_template": "text",
+    "pings_fan_role_on_unlink": "enum",
+    "pings_fan_role_delete": "bool",
     "tempvoice_mode": "enum",
     "tempvoice_creator_ids": "channels",
     "tempvoice_name_template": "text",
@@ -200,6 +212,9 @@ KEY_TYPES: dict[str, str] = {
 KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "golive_mode": GOLIVE_MODES,
     "golive_end_mode": GOLIVE_END_MODES,
+    "pings_mode": PINGS_MODES,
+    "pings_fan_role_creation": PINGS_CREATORS,
+    "pings_fan_role_on_unlink": PINGS_ON_UNLINK,
     "tempvoice_mode": TEMPVOICE_MODES,
     "honeypot_mode": HONEYPOT_MODES,
     "events_mode": EVENTS_MODES,
@@ -341,6 +356,33 @@ KEY_HELP: dict[str, str] = {
     "golive_max_session_hours": "hours before a stream still marked live is closed anyway",
     "golive_embed": (
         "post the announcement as an embed with the game's art; off = the sentence only"
+    ),
+    "pings_mode": (
+        "off, or on (members can opt in to go-live and event pings, and a streamer can have a "
+        "role of their own that only their followers wear)"
+    ),
+    "pings_events_role_name": (
+        "what `/pingroles setup` calls the one opt-in role for go-live and event pings when it "
+        "has to make it; an existing role of that name is reused rather than duplicated"
+    ),
+    "pings_fan_role_creation": (
+        "who may start a streamer's own ping role: self (the streamer, with `/pings fans on`), "
+        "staff (only an Auntie/Uncle, with `/pingroles streamer add`), or auto (one is made the "
+        "moment a Twitch channel is linked). Staff can always do it for anybody, whichever this "
+        "says"
+    ),
+    "pings_fan_role_template": (
+        "what a streamer's own ping role is called; {name} is their display name at the moment "
+        "the role is made and is the only field there is"
+    ),
+    "pings_fan_role_on_unlink": (
+        "what happens to a streamer's ping role when they unlink Twitch or opt out of "
+        "announcements: keep leaves it alone (nothing is announced, so nobody is pinged), delete "
+        "takes the role off the server"
+    ),
+    "pings_fan_role_delete": (
+        "true to delete the Discord role itself when a streamer's ping role is removed; false "
+        "forgets the role here and leaves it on the server for somebody to tidy by hand"
     ),
     "tempvoice_mode": "off, or on (join-to-create makes a temporary voice channel)",
     "tempvoice_creator_ids": "the join-to-create channels; /tempvoice setup fills this in",
@@ -547,6 +589,7 @@ LOG_LEVEL_COMMANDS: dict[str, str] = {
     "poll": "poll",
     "chat": "chat",
     "request": "request",
+    "pings": "pingroles",
 }
 
 
@@ -824,6 +867,18 @@ class SettingsStore:
         if key == "golive_max_session_hours":
             return 12
         if key == "golive_embed":
+            return True
+        if key == "pings_mode":
+            return "off"
+        if key == "pings_events_role_name":
+            return PINGS_EVENTS_ROLE_NAME
+        if key == "pings_fan_role_creation":
+            return PINGS_CREATORS[0]
+        if key == "pings_fan_role_template":
+            return PINGS_FAN_ROLE_TEMPLATE
+        if key == "pings_fan_role_on_unlink":
+            return PINGS_ON_UNLINK[0]
+        if key == "pings_fan_role_delete":
             return True
         if key == "tempvoice_mode":
             return "on"
