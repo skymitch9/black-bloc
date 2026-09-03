@@ -2,7 +2,8 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-03** — the `requests-panel-design.md` row flipped to SHIPPED (merge
+> Last verified: **2026-09-03** — the `panels-program.md` row added (11:10). Earlier the same day
+> the `requests-panel-design.md` row flipped to SHIPPED (merge
 > `ba5cb99`, 11 deviations). Earlier the same day the `requests-embeds-design.md` row flipped to SHIPPED (merge
 > `355d6e9`, deployed `70a6720`, landing one-off run; 14 deviations). Earlier the same day it flipped to
 > BUILT-not-merged and was rewritten to name its Deviations foot and the landing one-off.
@@ -18,6 +19,7 @@
 
 | File | Answers |
 |---|---|
+| [`panels-program.md`](panels-program.md) | **Panels over slash commands — the program for the rest of the app** (2026-09-03, PLANNING): the 17 invariants every panel inherits from `/request` (P1–P17, each traced to a deviation or a review finding), the measured command inventory (~177 subcommands over 44 top-level commands → ~21 commands), wave 0 = extract `black_bloc/panels.py` from the requests cog, four waves, the three owner forks (mod commands, modmail's in-thread replies, `/settings`). Every `<feature>-panel-design.md` links here instead of restating the pattern |
 | [`phase1-design.md`](phase1-design.md) · [`phase2-design.md`](phase2-design.md) · [`phase3-design.md`](phase3-design.md) · [`phase4-design.md`](phase4-design.md) · [`phase5-design.md`](phase5-design.md) · [`phase6-design.md`](phase6-design.md) · [`phase7-design.md`](phase7-design.md) · [`phase8-design.md`](phase8-design.md) | Per-phase build specs (the builder's brief source): 1 settings/log/role menus · 2 go-live · 3 temp voice + honeypot · 4 events · 5 birthdays · 6 moderation (shadow) · 7 modmail · **8 the config website** |
 | [`phase19-design.md`](phase19-design.md) | **Applications — the Twitch Team form** (2026-09-02, BUILDABLE, member request #2): staff-defined forms (≤5 questions, Discord modal cap) that grant a role on approve, schema 25 `application_forms`/`application_questions`/`applications`, `/apply` + `/applications`, Approve/Deny cards, DMs, the named "send the twitch.tv invite" nudge (no Twitch Teams API exists), an Applications section on the Role menus page; 7 `applications_*` keys. §J = prove the role add is not read as by-hand by the Phase 9 reconciler. §K = parallel-build rules (merge order 17 → 18 → 19). ✅ **SHIPPED** merge `7b1c592`, deployed `7b1c592` 2026-09-03 (`applications_mode` off) — 9 deviations at the foot of the file; residuals KI-17/KI-18 |
 | [`phase18-design.md`](phase18-design.md) | **Raid trains** (2026-09-02, BUILDABLE, member request #1): schema 24 `raid_trains`/`raid_slots`, `/raidtrain` (claim/release/status, organizer create/assign/swap/lock) + `/raidtrains` staff group, lineup post edited in place + thread, 30-min reminder DM, live check-in from go-live sessions, a Raid trains section on the Events page; 13 `raidtrain_*` keys. §K = the parallel-build rules (built beside Phase 17, merge order 17 → 18). ✅ **SHIPPED** merge `0bb3835`, deployed `7b1c592` 2026-09-03 (`raidtrain_mode` off) — §J found Phase 4's calendar helper NOT reusable (it writes to the `events` table), so `raidtrain_scheduled_event` ships **`false`** with a creator of its own; see the `## Deviations` list at the foot of that file and the `# Phase 18` section of `code-notes.md` |

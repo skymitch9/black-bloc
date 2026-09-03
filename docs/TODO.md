@@ -186,14 +186,34 @@ docs bookkeeping lands with the work, not after.
 
 ## 🔧 Open engineering items
 
+- 🆕 **"Let's fix that" (owner, 2026-09-03 ~11:25) — `scripts/deploy.ps1` outruns the
+  10-minute tool ceiling.** Measured the same morning: pytest alone took **8:27** for 3345
+  tests (single process on a 32-core machine), so the wrapper was killed during the image
+  build and the orphaned `flyctl deploy` hung at "Waiting for depot builder" with a dead
+  stdout pipe; no release was made. Fix in two halves: (1) **`pytest-xdist`** in the dev
+  extras and `-n auto` in `deploy.ps1` — the tests are SQLite-per-`tmp_path`, so they should
+  parallelise; measure the wall time and that the count is still 3345; (2) a
+  `docs/access/deploy.md` gotcha titled for the symptom ("the deploy printed nothing after
+  Waiting for depot builder") saying to run the script detached (`Start-Process … -PassThru`)
+  and watch the pid, never inside a tool call with a ceiling. Status: **NEXT**, after the
+  fifth-pass deploy lands.
+
 - 🆕 **Panels over slash commands — the rest of the app (owner, 2026-09-03: "then carry it
-  through the rest of the app").** After the requests panel lands, audit every command
-  group (44 commands synced at `70a6720`; `cogs/core.py:88` lists them) and convert each
-  feature to one command + panel the same way: `/event`, `/poll`, `/raidtrain(s)`,
-  `/applications`, `/voice`, `/twitch`, `/birthday`, `/memory`, `/settings`, the moderation
-  set. One feature per build, requests as the template; each gets its own design doc with
-  the button table per state. NOT started; sequence to be agreed with the owner one at a
-  time.
+  through the rest of the app"; confirmed ~11:25: "do the change to all / commands. I like
+  how request works").** Audit every command group (44 commands synced; `cogs/core.py:88`
+  lists them) and convert each feature to one command + panel the same way: `/event`,
+  `/poll`, `/raidtrain(s)`, `/applications`, `/voice`, `/twitch`, `/birthday`, `/memory`,
+  `/settings`, the moderation set. One feature per build, requests as the template
+  (`info/requests-panel-design.md`); each gets its own design doc with the button table per
+  state. Scope is now ALL commands — the sequence is the conductor's to plan, the design
+  calls still go to the owner one at a time. Status: **PLANNED** (2026-09-03 11:10) — the
+  program is written: [`info/panels-program.md`](info/panels-program.md) (§2 the 17
+  invariants every panel inherits from `/request`, §3 the measured inventory — ~177
+  subcommands over 44 top-level commands → ~21 commands, §4 **wave 0 = extract
+  `black_bloc/panels.py` from the requests cog** so the three review defects cannot recur
+  seventeen times, §5 four waves, §6 the three owner forks: F1 mod commands, F2 modmail's
+  in-thread `/reply` set, F3 `/settings`). Next: dispatch wave 0 (Opus, alone), then wave 1
+  events · polls · birthdays · applications as design docs first.
 
 - 🆕 **A defect this build found and fixed on the way, worth knowing about
   separately: `site/public/assets/labels.js` had not parsed since `7b1c592`**, so

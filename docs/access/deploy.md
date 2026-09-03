@@ -2,7 +2,9 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then; secret NAMES only).
-> Last verified: **2026-08-31** — the first-launch sequence below was RUN on
+> Last verified: **2026-09-03** — "Every later deploy" rewritten around `scripts/deploy.ps1`
+> (the only path since 2026-09-01) and the detached-run gotcha added from that morning's
+> killed deploy; the first-launch sequence below was RUN on
 > 2026-08-26, in this order, and the bot logged in from Fly (machine
 > `85e744c4d959d8`, region `lax`). The **redeploy** path is now well exercised:
 > [`../deploys.log`](../deploys.log) records **37 deploys** (counted 2026-08-31), the last
@@ -58,14 +60,42 @@ flyctl logs --app black-bloc --no-tail      # expect "logged in as Black_Bloc#..
 `fly.toml` has **no `[http_service]`** on purpose - with one, Fly auto-stops
 idle machines and the gateway connection dies with them. Keep `[mounts]`.
 
-## Every later deploy
+## Every later deploy — `scripts/deploy.ps1`, nothing else
 
 ```powershell
-git status          # clean tree only - a Dockerfile build ships what is on disk
-flyctl deploy --app black-bloc --ha=false --remote-only --yes
-flyctl logs --app black-bloc --no-tail
-# then append one line to docs/deploys.log: <UTC> black-bloc <commit> machine=<id> region=lax by=<who> <note>
+# From the repo root, tree committed-clean (the script REFUSES a dirty tree, and a
+# Dockerfile build ships what is on disk). It runs ruff -> the full test suite ->
+# node site/mock/check.mjs -> git push origin main -> flyctl deploy, then appends a
+# SKELETON line to docs/deploys.log that you must EDIT (what shipped; verified: what
+# was checked) and commit. Escape hatch BLACKBLOC_SKIP_GATE=1 - emergencies only.
+.\scripts\deploy.ps1
+flyctl logs --app black-bloc --no-tail        # boot log: cogs loaded, "commands synced"
+flyctl releases --app black-bloc              # a NEW version number = it landed
 ```
+
+### ⚠️ "The deploy printed nothing after *Waiting for depot builder*" — run it DETACHED
+
+The script takes **~10 minutes** end to end (measured 2026-09-03: pytest alone 8:27 for
+3345 tests, single process). A Claude tool call has a **10-minute ceiling**: when it kills
+the wrapper mid-`flyctl deploy`, the orphaned flyctl keeps running with a dead stdout pipe,
+sits at "Waiting for depot builder" indefinitely and **makes no release** — the push has
+already happened, so `main` is ahead of the machine and nothing says so. Seen 2026-09-03
+(pid 34312, ten minutes of silence, `flyctl releases` still on the old version).
+
+From a Claude session, never run the script inside a tool call. Detach it and watch the pid:
+
+```powershell
+$log = "<scratchpad>\deploy.log"
+$p = Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File .\scripts\deploy.ps1" `
+       -WorkingDirectory (Get-Location) -RedirectStandardOutput $log -RedirectStandardError "$log.err" `
+       -PassThru -WindowStyle Hidden
+$p.Id                     # watch this with the Monitor tool; peek with Get-Content $log -Tail 5
+```
+
+If a run was already killed: `Stop-Process` the orphaned `flyctl` (`Get-Process flyctl`),
+confirm `flyctl releases` shows no new version, and relaunch detached — the tree is still
+clean and the push is idempotent. A bare `flyctl deploy` by hand is NOT the fallback; it
+skips the gate.
 
 **Never run the bot locally while the Fly machine is up** - two instances
 answer every command twice. Pause Fly first: `flyctl machine stop 85e744c4d959d8
