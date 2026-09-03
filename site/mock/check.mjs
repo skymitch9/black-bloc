@@ -285,6 +285,10 @@ async function checkActionKinds() {
   await post('/api/rolemenus/contract/assign', { user_id: IDS.member_id, role_ids: [IDS.plain_role_id] });
   await post('/api/rolemenus/contract/assign', { user_id: IDS.member_id, role_ids: [IDS.plain_role_id], remove: true });
   await send('PUT', `/api/events/${IDS.event_id}`, { title: 'Contract night', start: '2099-09-14 19:30', duration: '2h' });
+  // F3's two web.youtube.* kinds. The member already holds that channel in the seed, so the
+  // POST re-links rather than tripping the 409 a second owner would get.
+  await post('/api/youtube/links', { member_id: IDS.member_id, channel: 'UCsXVk37bltHxD1rDPwtNM8Q' });
+  await send('DELETE', `/api/youtube/links/${IDS.member_id}`, undefined);
   // The three web.pings.* kinds, each left by the write that spells it.
   await post('/api/pings/setup', {});
   await post('/api/pings/streamers', { member_id: IDS.ping_member_id });

@@ -298,21 +298,178 @@ async function pingsSection(specs, streamers) {
   return group.node;
 }
 
+const UPLOADS_MODE_KEY = 'youtube_mode';
+const UPLOADS_NOTE ='When somebody linked here publishes on YouTube, Black Bloc posts it. '
+  + 'Shorts are left out unless youtube_announce_shorts says otherwise, and a live stream is '
+  + 'skipped because the go-live feed above already covers it.';
+const UPLOADS_NO_MODE = 'The bot did not report a youtube_mode key, so the switch is not shown '
+  + 'rather than guessed at.';
+const UPLOADS_MODE_HELP = 'off checks nothing at all; shadow writes what it would have posted; '
+  + 'on posts it. Uploads go to youtube_channel_id, or the go-live channel when that is blank.';
+const NO_UPLOAD_LINKS = 'Nobody has linked a YouTube channel. Add one below, or a member runs '
+  + '/youtube link themselves.';
+const NO_UPLOAD_VIDEOS = 'No uploads have been seen yet.';
+const NOT_SEEDED = 'The feed has not answered for this channel yet, so nothing is counted as '
+  + 'seen and nothing would be announced. The next sweep tries again.';
+const KEY_UNSET = 'No YOUTUBE_API_KEY is set. Shorts are still told apart by their address; a '
+  + 'live stream is only spotted while the member has a YouTube go-live session open.';
+
+const UPLOAD_STATES = { announced: 'ok', would: 'warn', skipped: 'quiet' };
+
+/** F3: what the uploads sweep is actually doing, health first. */
+function uploadsStatus(status) {
+  if (!status) return null;
+  const rows = [
+    ['Sweep', status.running ? badge('running', 'ok') : badge('stopped', 'warn')],
+    ['Last good sweep', status.last_ok_at ? when(status.last_ok_at) : 'never'],
+    ['Last error', status.last_error || 'none'],
+    ['Seen', `${status.videos} video(s), ${status.announced} announced`],
+  ];
+  return card('How the sweep is doing', [
+    el('div', { class: 'formrow' }, rows.map(([label, value]) => field(label, (
+      typeof value === 'string' ? el('p', { class: 'preview', text: value }) : value
+    )))),
+    status.api_key_set ? null : el('p', { class: 'field-help', text: KEY_UNSET }),
+  ].filter(Boolean));
+}
+
+/** F3: staff link somebody's channel without waiting for them to run /youtube link. */
+function uploadsLinkCard(say) {
+  const picker = memberPicker({ label: 'Member' });
+  const channel = el('input', {
+    class: 'input',
+    type: 'text',
+    placeholder: 'youtube.com/channel/UC… or @handle',
+  });
+  const go = button('Link their channel', async () => {
+    if (!picker.id) {
+      say.say('Pick the member this is about first.', 'warn');
+      return;
+    }
+    const done = await run(
+      say,
+      () => send('/api/youtube/links', 'POST', {
+        member_id: picker.id,
+        channel: channel.value.trim(),
+      }),
+      (found) => found?.message || 'Linked.',
+    );
+    if (done.ok) {
+      keepSaying('youtube.links', say);
+      refresh();
+    }
+  }, { tone: 'warn' });
+  return card('Link a member', [
+    picker.node,
+    el('div', { class: 'formrow' }, [field('YouTube channel', channel,
+      'The address that starts with youtube.com/channel/UC…, or their @handle.')]),
+    bar([go]),
+  ]);
+}
+
+async function uploadsSection(specs, links, videos, status) {
+  const say = notice();
+  const group = section('YouTube uploads', UPLOADS_NOTE, { count: links.length });
+  const spec = specs.find((one) => one.key === UPLOADS_MODE_KEY);
+  const mode = spec ? modeSwitch(spec, { say, onSaved: () => refresh() }) : null;
+
+  const linkTable = table([
+    { label: 'Member', cell: (row) => nameNode(row.user_id, row.user_name) },
+    { label: 'Channel', cell: (row) => row.title || row.channel_id, className: 'wrap' },
+    { label: 'Id', cell: (row) => row.channel_id, className: 'mono' },
+    {
+      label: 'Counted',
+      cell: (row) => (row.seeded ? badge('seeded', 'ok') : badge('not yet', 'warn')),
+    },
+    { label: 'Last video', cell: (row) => row.last_video || '—', className: 'wrap' },
+    { label: 'Linked', cell: (row) => when(row.linked_at), className: 'mono' },
+    {
+      label: '',
+      cell: (row) => button('Unlink', async () => {
+        const sure = await ask({
+          title: `Unlink ${row.user_name || row.user_id}?`,
+          body: [
+            `Black Bloc stops watching ${row.title || row.channel_id} for new uploads.`,
+            'Everything already seen is forgotten, so re-linking counts the current videos as '
+            + 'history again rather than announcing them.',
+          ],
+          confirmLabel: 'Unlink',
+        });
+        if (!sure) return;
+        const done = await run(
+          say,
+          () => api(`/api/youtube/links/${encodeURIComponent(row.user_id)}`, { method: 'DELETE' }),
+          'Unlinked.',
+        );
+        if (done.ok) {
+          keepSaying('youtube.links', say);
+          refresh();
+        }
+      }, { tone: 'danger' }),
+    },
+  ], links, { empty: NO_UPLOAD_LINKS });
+
+  const videoTable = table([
+    { label: 'Member', cell: (row) => nameNode(row.user_id, row.user_name) },
+    {
+      label: 'Video',
+      cell: (row) => el('a', { href: row.url, target: '_blank', rel: 'noreferrer', text: row.title || row.video_id }),
+      className: 'wrap',
+    },
+    { label: 'Kind', cell: (row) => badge(row.kind, row.kind === 'video' ? 'ok' : 'quiet') },
+    { label: 'Published', cell: (row) => when(row.published_at), className: 'mono' },
+    {
+      label: 'What happened',
+      cell: (row) => badge(row.state, UPLOAD_STATES[row.state] || 'quiet'),
+    },
+    { label: 'Mode then', cell: (row) => (row.mode ? row.mode : '—') },
+  ], videos, { empty: NO_UPLOAD_VIDEOS });
+
+  group.body.append(...[
+    mode
+      ? el('div', { class: 'formrow' }, [field('Upload announcements', mode.node, UPLOADS_MODE_HELP)])
+      : el('p', { class: 'say-nothing', text: UPLOADS_NO_MODE }),
+    uploadsStatus(status),
+    links.some((row) => !row.seeded) ? el('p', { class: 'field-help', text: NOT_SEEDED }) : null,
+    linkTable,
+    uploadsLinkCard(say),
+    card('Recent uploads', [videoTable], { count: videos.length, flush: true }),
+    sayAgain('youtube.links', say),
+  ].filter(Boolean));
+  return group.node;
+}
+
 async function load() {
-  const [linkPayload, optoutPayload, sessionPayload, streamerPayload, allSettings] = await Promise.all([
+  const [
+    linkPayload,
+    optoutPayload,
+    sessionPayload,
+    streamerPayload,
+    uploadLinkPayload,
+    uploadVideoPayload,
+    uploadStatus,
+    allSettings,
+  ] = await Promise.all([
     api('/api/golive/links'),
     api('/api/golive/optouts'),
     api('/api/golive/sessions?limit=50'),
     api('/api/pings/streamers'),
+    api('/api/youtube/links'),
+    api('/api/youtube/videos?limit=50'),
+    api('/api/youtube/status'),
     settings(true),
   ]);
   const links = listOf(linkPayload, 'links');
   const optouts = listOf(optoutPayload, 'optouts');
   const sessions = listOf(sessionPayload, 'sessions');
   const streamers = listOf(streamerPayload, 'streamers');
+  const uploadLinks = listOf(uploadLinkPayload, 'links');
+  const uploads = listOf(uploadVideoPayload, 'videos');
   await names(idsIn(links, ['user_id'])
     .concat(idsIn(optouts, ['user_id']))
     .concat(idsIn(sessions, ['user_id']))
+    .concat(idsIn(uploadLinks, ['user_id']))
+    .concat(idsIn(uploads, ['user_id']))
     .concat(idsIn(streamers, ['member_id', 'created_by'])));
 
   const say = notice();
@@ -380,6 +537,7 @@ async function load() {
 
   const golive = settingsNamespace(allSettings, 'golive');
   const pings = settingsNamespace(allSettings, 'pings');
+  const youtube = settingsNamespace(allSettings, 'youtube');
 
   document.getElementById('dash').replaceChildren(
     one.node,
@@ -388,6 +546,13 @@ async function load() {
     await wordingSection(golive),
     await namespaceSettings('golive', { onSaved: () => refresh(), omit: [TEMPLATE_KEY, END_MODE_KEY] }),
     await logsSection('golive'),
+    await uploadsSection(youtube, uploadLinks, uploads, uploadStatus),
+    await namespaceSettings('youtube', {
+      title: 'Upload settings',
+      onSaved: () => refresh(),
+      omit: [UPLOADS_MODE_KEY],
+    }),
+    await logsSection('youtube', { title: 'Upload logs' }),
     await pingsSection(pings, streamers),
     await namespaceSettings('pings', {
       title: 'Ping role settings',

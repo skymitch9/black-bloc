@@ -591,12 +591,14 @@ class YouTube(commands.Cog):
                 allowed_mentions=discord.AllowedMentions.none(),
             )
             return None
-        await set_link(self.bot.db, user_id, channel_id, _handle_of(channel), title)
-        counted = await self._seed_now(user_id, channel_id)
+        counted = await self.link_and_seed(user_id, channel_id, channel, title)
         return ((title or channel_id), counted)
 
-    async def _seed_now(self, user_id: int, channel_id: str) -> int:
-        """Linking counts the current feed as history; a feed that will not answer seeds later."""
+    async def link_and_seed(
+        self, user_id: int, channel_id: str, given: str, title: str | None
+    ) -> int:
+        """Store the link and count what is already published as history; the web calls it too."""
+        await set_link(self.bot.db, user_id, channel_id, _handle_of(given), title)
         row = await get_link(self.bot.db, user_id)
         try:
             _status, etag, videos = await self.client.fetch_feed(channel_id)

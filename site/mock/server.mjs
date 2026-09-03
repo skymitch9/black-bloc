@@ -179,7 +179,8 @@ const ROSTER = [
 const KIND_HEADS = {
   settings: 'core', commands: 'core', presence: 'core',
   automod: 'automod', honeypot: 'honeypot', mod: 'mod', case: 'mod',
-  modmail: 'modmail', golive: 'golive', event: 'events', events: 'events',
+  modmail: 'modmail', golive: 'golive', youtube: 'youtube',
+  event: 'events', events: 'events',
   birthday: 'birthday', tempvoice: 'tempvoice',
   role: 'rolemenu', role_menu: 'rolemenu', rolemenu: 'rolemenu',
   poll: 'poll', chat: 'chat', request: 'request', requests: 'request',
@@ -252,6 +253,7 @@ const LOG_LEVEL_FEATURES = [
   ['mod', 'moderation', 'mod'],
   ['modmail', 'modmail', 'modmail'],
   ['golive', 'go-live', 'golive'],
+  ['youtube', 'youtube uploads', 'uploads'],
   ['events', 'events', 'event'],
   ['birthday', 'birthdays', 'birthday'],
   ['tempvoice', 'temp voice', 'voice'],
@@ -277,6 +279,13 @@ const SETTING_SPECS = [
   ['golive_cooldown_minutes', 'int', 60, 60, 'minutes before the same person is announced again'],
   ['golive_ping_role_id', 'role', null, null, 'role mentioned in front of every go-live announcement'],
   ['golive_max_session_hours', 'int', 12, 12, 'hours before a stream still marked live is closed anyway'],
+  ['youtube_mode', 'enum', 'off', 'off', 'off, shadow (log only) or on (post an announcement for a new upload)', ['off', 'shadow', 'on']],
+  ['youtube_channel_id', 'channel', null, null, 'where a new-upload announcement is posted; leave it unset and the go-live channel is used instead'],
+  ['youtube_ping_role_id', 'role', null, null, 'role mentioned in front of every upload announcement'],
+  ['youtube_ping_fan_roles', 'bool', true, true, "also mention the uploader's own fan role, the one their followers wear; off pings only youtube_ping_role_id"],
+  ['youtube_announce_shorts', 'bool', false, false, 'announce Shorts as well as full videos; off is the default because a channel can post several a day'],
+  ['youtube_template', 'text', '**{name}** just dropped a new video: **{title}** {url}', '**{name}** just dropped a new video: **{title}** {url}', 'what an upload announcement says; {name} {title} {url} {channel} {kind}'],
+  ['youtube_poll_minutes', 'int', 10, 10, "minutes between checks of every linked channel's uploads feed"],
   ['pings_mode', 'enum', 'off', 'off', 'off, or on (members can opt in to go-live and event pings, and a streamer can have a role of their own that only their followers wear)', ['off', 'on']],
   ['pings_events_role_name', 'text', 'Events', 'Events', 'what `/pingroles setup` calls the one opt-in role for go-live and event pings when it has to make it; an existing role of that name is reused rather than duplicated'],
   ['pings_fan_role_creation', 'enum', 'self', 'self', 'who may start a streamer’s own ping role: self (the streamer, with `/pings fans on`), staff (only an Auntie/Uncle, with `/pingroles streamer add`), or auto (one is made the moment a Twitch channel is linked). Staff can always do it for anybody, whichever this says', ['self', 'staff', 'auto']],
@@ -558,6 +567,17 @@ function seedState() {
     sessions: [
       { id: 12, user_id: MEMBERS[1].id, source: 'twitch', url: 'https://twitch.tv/caseyfast', game: 'Lethal Company', title: 'late night runs', started_at: minutesAgo(120), ended_at: null, mode: 'shadow', announced_message_id: null },
       { id: 11, user_id: MEMBERS[2].id, source: 'presence', url: 'https://twitch.tv/rivetplays', game: 'Balatro', title: 'one more run', started_at: minutesAgo(1500), ended_at: minutesAgo(1300), mode: 'shadow', announced_message_id: null },
+    ],
+  },
+  youtube: {
+    links: [
+      { user_id: MEMBERS[1].id, channel_id: 'UCsXVk37bltHxD1rDPwtNM8Q', handle: '@caseyfast', title: 'Casey Fast', linked_at: minutesAgo(4000), seeded: true },
+      { user_id: MEMBERS[2].id, channel_id: 'UC_x5XG1OV2P6uZZ5FSM9Ttw', handle: null, title: 'Rivet Plays', linked_at: minutesAgo(300), seeded: false },
+    ],
+    videos: [
+      { video_id: 'tZ8i1RxGSYM', user_id: MEMBERS[1].id, channel_id: 'UCsXVk37bltHxD1rDPwtNM8Q', title: 'Can Earth Run Out of Water?', kind: 'short', published_at: minutesAgo(180), seen_at: minutesAgo(170), announced_at: null, mode: null, announced_message_id: null },
+      { video_id: 'Cyl3X88KEgg', user_id: MEMBERS[1].id, channel_id: 'UCsXVk37bltHxD1rDPwtNM8Q', title: 'Why Humanity Will Never Leave The Solar System', kind: 'video', published_at: minutesAgo(1500), seen_at: minutesAgo(1490), announced_at: minutesAgo(1490), mode: 'shadow', announced_message_id: null },
+      { video_id: 'PqtggjVAi8M', user_id: MEMBERS[1].id, channel_id: 'UCsXVk37bltHxD1rDPwtNM8Q', title: 'How Are Memories Stored Inside Your Brain?', kind: 'video', published_at: minutesAgo(6000), seen_at: minutesAgo(5990), announced_at: minutesAgo(5990), mode: 'on', announced_message_id: '830000000000000011' },
     ],
   },
   events: [
@@ -1962,6 +1982,125 @@ route('GET', '/api/golive/sessions', (context) => {
     mode: row.mode,
     announced_message_id: row.announced_message_id === null ? null : String(row.announced_message_id),
   }));
+});
+
+// F3. Upload announcements. The mock keeps them beside the go-live state for the same reason
+// the bot does: youtube_channel_id blank means the go-live channel, and one page shows both.
+function youtubeLinkRow(row) {
+  const seen = state.youtube.videos
+    .filter((video) => String(video.user_id) === String(row.user_id))
+    .sort((a, b) => String(b.published_at).localeCompare(String(a.published_at)))[0] || null;
+  return {
+    user_id: String(row.user_id),
+    user_name: memberName(row.user_id),
+    channel_id: row.channel_id,
+    handle: row.handle,
+    title: row.title,
+    linked_at: row.linked_at,
+    seeded: Boolean(row.seeded),
+    last_video: seen ? seen.title : null,
+    last_video_at: seen ? seen.published_at : null,
+  };
+}
+
+function youtubeVideoState(row) {
+  if (row.announced_at && row.mode === 'on') return 'announced';
+  if (row.announced_at) return 'would';
+  return 'skipped';
+}
+
+function youtubeVideoRow(row) {
+  return {
+    user_id: String(row.user_id),
+    user_name: memberName(row.user_id),
+    video_id: row.video_id,
+    channel_id: row.channel_id,
+    title: row.title,
+    url: 'https://www.youtube.com/watch?v=' + row.video_id,
+    kind: row.kind,
+    published_at: row.published_at,
+    seen_at: row.seen_at,
+    announced_at: row.announced_at,
+    mode: row.mode,
+    state: youtubeVideoState(row),
+    announced_message_id: row.announced_message_id === null ? null : String(row.announced_message_id),
+  };
+}
+
+route('GET', '/api/youtube/links', (context) => {
+  requireStaff(context.session);
+  return state.youtube.links.map(youtubeLinkRow);
+});
+
+route('POST', '/api/youtube/links', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const memberId = String(body.member_id || '');
+  const given = String(body.channel || '').trim();
+  if (!memberId) throw new Refused(400, 'bad_request', 'Pick the member this is about first.');
+  if (!given) {
+    throw new Refused(400, 'bad_request', 'No channel was given, so nothing was linked. Paste the channel address \u2014 the one that starts with youtube.com/channel/UC\u2026, or the @handle.');
+  }
+  const direct = given.match(/(UC[A-Za-z0-9_-]{22})/);
+  const handle = given.match(/^@?([A-Za-z0-9._-]{3,30})$/);
+  if (!direct && !handle) {
+    throw new Refused(400, 'bad_channel', 'I could not turn **' + given.slice(0, 60) + '** into a YouTube channel id, so nothing was linked. Paste the channel address that starts with youtube.com/channel/UC\u2026, or ask a Lead to set a YouTube API key so handles like @yourname can be looked up.');
+  }
+  const channelId = direct ? direct[1] : 'UCmockmockmockmockmock1';
+  const title = direct ? 'Kurzgesagt \u2013 In a Nutshell' : '@' + handle[1];
+  const owner = state.youtube.links.find((link) => link.channel_id === channelId);
+  if (owner && String(owner.user_id) !== memberId) {
+    throw new Refused(409, 'link_taken', '**' + title + '** is already linked to another member here, so nothing was changed. A YouTube channel can only belong to one member \u2014 if that channel is yours, ask a Lead to remove the other link first.');
+  }
+  const row = { user_id: memberId, channel_id: channelId, handle: direct ? null : '@' + handle[1], title, linked_at: now(), seeded: true };
+  const at = state.youtube.links.findIndex((link) => String(link.user_id) === memberId);
+  if (at >= 0) state.youtube.links[at] = row;
+  else state.youtube.links.unshift(row);
+  logAction('web.youtube.link', { target_id: memberId, details: { channel_id: channelId, title } });
+  const seeded = state.youtube.videos.filter((video) => video.channel_id === channelId).length;
+  return Object.assign(youtubeLinkRow(row), {
+    message: '**' + (memberName(memberId) || memberId) + '** is linked to ' + title + '. The ' + seeded + ' video(s) already on the channel are counted as seen, so nothing already published is announced.',
+  });
+});
+
+route('DELETE', '/api/youtube/links/:member_id', (context) => {
+  requireStaff(context.session);
+  const at = state.youtube.links.findIndex((link) => String(link.user_id) === context.params.member_id);
+  if (at < 0) {
+    throw new Refused(404, 'not_linked', '**' + context.params.member_id + '** has no YouTube channel linked, so there was nothing to unlink. The links table shows who has one.');
+  }
+  state.youtube.links.splice(at, 1);
+  logAction('web.youtube.unlink', { target_id: context.params.member_id });
+  return { unlinked: true, user_id: context.params.member_id };
+});
+
+route('GET', '/api/youtube/videos', (context) => {
+  requireStaff(context.session);
+  const limit = Math.max(1, Math.min(Number(context.url.searchParams.get('limit') || 50), 200));
+  return state.youtube.videos
+    .slice()
+    .sort((a, b) => String(b.published_at).localeCompare(String(a.published_at)))
+    .slice(0, limit)
+    .map(youtubeVideoRow);
+});
+
+route('GET', '/api/youtube/status', (context) => {
+  requireStaff(context.session);
+  const fetches = 24;
+  const unchanged = 0;
+  return {
+    api_key_set: false,
+    running: true,
+    last_ok_at: minutesAgo(4),
+    last_error: null,
+    failures: 0,
+    fetches,
+    unchanged,
+    unchanged_ratio: fetches ? Number((unchanged / fetches).toFixed(3)) : null,
+    links: state.youtube.links.length,
+    videos: state.youtube.videos.length,
+    announced: state.youtube.videos.filter((row) => row.announced_at && row.mode === 'on').length,
+  };
 });
 
 // F14. The mock keeps the fan roles beside the go-live state because that is where the real
