@@ -12,7 +12,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 22
+        assert SCHEMA_VERSION == 24
         cur = await db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = {r["name"] for r in await cur.fetchall()}
         assert {"settings", "action_log", "role_menus", "role_menu_options"} <= tables
@@ -460,7 +460,7 @@ async def test_a_schema_20_file_gains_the_fan_role_table_and_keeps_its_rows(tmp_
         cur = await again.conn.execute(
             "SELECT value FROM schema_meta WHERE key='schema_version'"
         )
-        assert (await cur.fetchone())["value"] == "22"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
         cur = await again.conn.execute("SELECT user_id FROM golive_sessions")
         assert [row["user_id"] for row in await cur.fetchall()] == [5]
         await again.conn.execute(
@@ -499,7 +499,7 @@ async def test_a_schema_21_file_gains_the_youtube_tables_and_keeps_its_rows(tmp_
         cur = await again.conn.execute(
             "SELECT value FROM schema_meta WHERE key='schema_version'"
         )
-        assert (await cur.fetchone())["value"] == "22"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
         cur = await again.conn.execute("SELECT user_id FROM golive_sessions")
         assert [row["user_id"] for row in await cur.fetchall()] == [5]
         await again.conn.execute(
@@ -661,3 +661,59 @@ async def test_an_events_row_gains_a_card_channel_column_on_an_older_file(tmp_pa
         assert "card_channel_id" in names
     finally:
         await again.close()
+
+
+async def test_a_schema_22_file_gains_the_raid_train_tables_and_keeps_its_rows(tmp_path):
+    """Schema 24 is additive: a file that shipped without raid trains gets both tables on the
+    next boot, and nothing already in it is rewritten."""
+    path = tmp_path / "old22.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await open_session(db, 5)
+    await db.conn.execute("DROP TABLE raid_slots")
+    await db.conn.execute("DROP TABLE raid_trains")
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '22')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        assert {"raid_trains", "raid_slots"} <= {row["name"] for row in await cur.fetchall()}
+        cur = await again.conn.execute(
+            "SELECT value FROM schema_meta WHERE key='schema_version'"
+        )
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+        cur = await again.conn.execute("SELECT user_id FROM golive_sessions")
+        assert [row["user_id"] for row in await cur.fetchall()] == [5]
+    finally:
+        await again.close()
+
+
+async def test_two_slots_cannot_share_one_position_on_a_train(tmp_path):
+    db = Database(tmp_path / "trains.sqlite3")
+    await db.connect()
+    try:
+        await db.conn.execute(
+            "INSERT INTO raid_trains(id, guild_id, organizer_id, title, starts_at, "
+            "slot_minutes, slot_count, created_at, updated_at) "
+            "VALUES (1, 7, 3, 'Saturday', '2026-09-14T19:00:00+00:00', 60, 2, 'now', 'now')"
+        )
+        await db.conn.execute(
+            "INSERT INTO raid_slots(train_id, position, starts_at, ends_at) "
+            "VALUES (1, 1, '2026-09-14T19:00:00+00:00', '2026-09-14T20:00:00+00:00')"
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            await db.conn.execute(
+                "INSERT INTO raid_slots(train_id, position, starts_at, ends_at) "
+                "VALUES (1, 1, '2026-09-14T19:00:00+00:00', '2026-09-14T20:00:00+00:00')"
+            )
+        cur = await db.conn.execute("SELECT status FROM raid_trains")
+        assert (await cur.fetchone())["status"] == "open"
+        cur = await db.conn.execute("SELECT locked FROM raid_slots")
+        assert (await cur.fetchone())["locked"] == 0
+    finally:
+        await db.close()
