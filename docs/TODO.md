@@ -243,7 +243,11 @@ docs bookkeeping lands with the work, not after.
   "Visible"** (`/apply` stays when the mode is off; the `HIDDEN_WHEN_OFF` entry goes); **I-A3 DECIDED
   14:12 — "Build the question sub panel"** (§C's Questions sub-panel as designed). Applications
   build landed 14:55 (401k), merged `853776c`, **live in v66 15:00** (43 → 42 commands). **WAVE 1
-  COMPLETE** — four landings in `DONE.md` 2026-09-03. Waves 2–4 remain (§5 of the program). Events I2 DECIDED 12:40 (`/timezone` retired).
+  COMPLETE** — four landings in `DONE.md` 2026-09-03. Waves 2–4 remain (§5 of the program).
+  **Wave 2 design docs DISPATCHED 15:45** (five Opus design agents, one file each:
+  `info/voice-panel-design.md`, `info/pings-panel-design.md`, `info/golive-panel-design.md`,
+  `info/youtube-panel-design.md`, `info/memory-panel-design.md`; ~60k each). Next: Fable reviews
+  each against §2, forks go to the owner one at a time, then builds in worktrees. Events I2 DECIDED 12:40 (`/timezone` retired).
   **Wave-1 builds all landed 13:40–13:50** (birthdays merged `58974e1`; events on
   `worktree-agent-a448c7ab780ed3c2b`, polls on `worktree-agent-aa735ab092d13477d`, both under Fable
   review); the applications build follows once I-A3 is answered. Merge in wave order, re-key
