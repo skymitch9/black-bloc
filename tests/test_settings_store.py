@@ -930,17 +930,19 @@ async def test_requests_ship_on_and_open_to_everyone_with_nothing_auto_approved(
         assert key in KEY_TYPES and KEY_HELP.get(key)
 
 
-async def test_every_card_posts_and_one_pair_of_eyes_is_enough_until_a_lead_says_otherwise(store):
-    """Owner, 2026-09-03: the accepter being somebody else is a setting, and it is off."""
+async def test_every_card_but_done_posts_and_one_pair_of_eyes_is_enough_until_a_lead_says_otherwise(
+    store,
+):
+    """Owner, 2026-09-03: the done card is the site log's business; a second pair of eyes is off."""
     assert store.get(7, "request_channel_moves") == [
         "filed",
         "in_progress",
         "review",
         "sent_back",
-        "done",
         "hold",
         "declined",
     ]
+    assert "done" in REQUEST_CARD_MOVES
     assert store.get(7, "request_review_by_other") is False
     assert KEY_TYPES["request_channel_moves"] == "enums"
     assert KEY_CHOICES["request_channel_moves"] == REQUEST_CARD_MOVES

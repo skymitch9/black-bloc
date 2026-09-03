@@ -867,6 +867,7 @@ REQUEST_CARD_MOVES = (
     "hold",
     "declined",
 )
+REQUEST_CARD_DEFAULT = tuple(move for move in REQUEST_CARD_MOVES if move != "done")
 
 KEY_TYPES.update(
     {
@@ -881,8 +882,8 @@ KEY_HELP.update(
     {
         "request_channel_moves": (
             "which moves put a card in the request channel: filed, in_progress, review, "
-            "sent_back, done, hold, declined; all seven by default, and an empty list posts "
-            "nothing at all"
+            "sent_back, done, hold, declined; every one but done by default (the done card "
+            "repeats what the site's log already says), and an empty list posts nothing at all"
         ),
         "request_review_by_other": (
             "true to make somebody other than the staffer who marked a request ready to check "
@@ -1298,7 +1299,7 @@ class SettingsStore:
         if key == "request_dm_on_decision":
             return True
         if key == "request_channel_moves":
-            return list(REQUEST_CARD_MOVES)
+            return list(REQUEST_CARD_DEFAULT)
         if key == "request_review_by_other":
             return False
         if key == "request_panel_minutes":

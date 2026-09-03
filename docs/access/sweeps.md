@@ -1,7 +1,9 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-03** — row **65** added, and rows **14–15** corrected again, by the owner's
+> **2026-09-03** — row **62** now says the done card does NOT post (owner: "suppress the
+> request.done box in discord" — `request_channel_moves` default drops `done`). Same
+> morning, row **65** added, and rows **14–15** corrected again, by the owner's
 > "make the view request thing staff only" (viewing requests on the panel): a member no
 > longer sees their own list unless `request_panel_own_list` is on. Before that, the same
 > day — rows **58–64** added by the requests fourth pass (`/request` becomes one
@@ -172,7 +174,7 @@ form for a full pass.
 | 59 | Requests — panel move, Hold | on an open / in-progress / review card, press **Hold**, fill "Why is it on hold?" | the card re-renders **on hold**; the asker is DMed the reason (`request_dm_on_decision`) |
 | 60 | Requests — panel move, Decline | press **Decline**, fill "Why?" | the card re-renders **declined**, final ("nothing moves it now"); the asker is DMed |
 | 61 | Requests — panel move, Ready to check | on an in-progress card, press **Ready to check**, fill "What was built?" (+ optional "How does somebody test it?") | the card re-renders **ready to check**; nobody is DMed — it is staff-facing |
-| 62 | Requests — panel move, Accept | on a review card, press **Accept** | the card re-renders **done**, final; the asker is DMed with what was built. Turn `request_review_by_other` on and reopen the same card as the staffer who marked it ready: Accept is gone, the footer says who may press it |
+| 62 | Requests — panel move, Accept | on a review card, press **Accept** | the card re-renders **done**, final; the asker is DMed with what was built; ⚠️ **no done card appears in the request channel** (owner 2026-09-03: website logs only — `request_channel_moves` defaults to every move but `done`; tick it back on the Settings page to see one). Turn `request_review_by_other` on and reopen the same card as the staffer who marked it ready: Accept is gone, the footer says who may press it |
 | 63 | Requests — panel move, Send back | on a review card, press **Send back**, fill "What's left?" | the card re-renders **being worked on**; whoever marked it ready is DMed the note |
 | 64 | Requests — panel move, Resume | on a held card, press **Resume** | the card re-renders back where it was held from — usually being worked on, sometimes ready to check |
 | 65 | Requests — giving members their list back | `/settings set-value key:request_panel_own_list value:true`, then `/request` as a non-staff member who has filed something | the member's own requests are summarised on the panel again (and "You have not asked for anything yet" when they have none) — exactly row 15's old behaviour. Set it back to `false` and the lines go away again; the Settings page has the same switch |

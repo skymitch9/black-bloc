@@ -9,6 +9,64 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-03 — Requests, fifth pass: the panel's own list is staff-only; the done card stops posting
+
+Two owner orders minutes after the fourth pass deployed (`ba5cb99`, 10:04), both moved here
+whole (the items are reproduced below). **Both were already settings or became one**, so
+each goes back the other way from the Settings page or `/settings set-value` (checklist 33).
+
+**1. "We need to make the view request thing staff only" (~10:10).** One clarifying
+question; the owner picked "Viewing requests on the panel". Members keep `File a request`
+and `Take one back…` (the withdraw select is still built from their own rows), but the
+embed no longer lists their own requests unless the new **`request_panel_own_list`**
+(bool, default **off**) is on; staff see their own list whatever the key says. Opus built
+it on `feat/requests-panel-own-list` (`dd7c788` code, `bda45da` docs) — gate at
+`cogs/community/requests.py:511` `if staff or panel_shows_own_list(store, guild.id):`,
+helper `requests.py:477`, registry `settings_store.py:877/898/1307`; no wording was added
+for the hidden list (the intro still reads honestly; deviation 12 in
+`info/requests-panel-design.md` says why). Three existing tests asserted the overturned
+behaviour and were rewritten to turn the key on. The build also corrected sweep rows 14–15
+(not 58–64 as the brief guessed), added row 65, and fixed two stale doc lines it was already
+editing (OWNER_GUIDE's "42 rows", feature-list F18 "not yet merged"). Merge **`c4420cc`**.
+Cost: 152k Opus tokens, 18 minutes.
+
+**2. "Let's suppress the request.done box in discord, it's redundant information. This
+should be in website logs only" (~10:17).** Located in a few greps: the done card was
+already gated by `request_channel_moves` (`requests.py:521` `posts_a_card`, third pass) and
+the live DB held **no** stored `request_*` row (measured over `flyctl ssh`), so the whole
+fix is the DEFAULT: `REQUEST_CARD_DEFAULT` = every move but `done` (`settings_store.py:870`,
+`:1302`); the choices still list all seven so `done` can be ticked back on — a single edited
+tuple would have made the Settings checkbox and `/settings set-value` REFUSE it. The
+requester's DM on done is untouched (it goes to the asker, not the channel). Done on `main`
+after the merge by the conductor (a default flip, not a build), shipped in the same deploy.
+Deviation 15 in `info/requests-embeds-design.md`; sweep row 62 amended.
+
+**Proof:** ruff clean; 3345 tests on the branch, the full suite re-run by `deploy.ps1`
+(`deploys.log` has the count); `check.mjs` 17 pages / 139 routes, site untouched.
+⚠️ **NOT verified by eye in Discord** — no panel opened, no Accept pressed. The owner's sweep
+is rows 14–15 (member sees no list), 62 (Accept posts no channel card), 65 (the key puts
+the list back).
+
+**The TODO items, whole:**
+
+- 🆕 **"We need to make the view request thing staff only" (owner, 2026-09-03 ~10:10, minutes
+  after the panel deploy `ba5cb99`).** Clarified ~10:12 — the owner picked "Viewing requests
+  on the panel": members keep `File a request` and `Take one back…`, but the list of their
+  own requests in the panel embed becomes staff-only (staff see everything as now). The
+  site's request reads were already staff-only (`api/writes.py:126` `reader_dependency`
+  wraps `staff_dependency`; only `/mine` is a member route). Per checklist 33 the gate is a
+  setting, **`request_panel_own_list`** (bool, default **off**), so the Settings page and
+  `/settings set-value` can put the list back. Build: Opus, branch
+  `feat/requests-panel-own-list`, worktree `.claude/worktrees/agent-own-list`; the brief
+  also asks for design-doc deviation 12, code-notes rows, OWNER_GUIDE / feature-list /
+  sweeps corrections. Status: **BUILDING** (dispatched 10:15) → landed, see below.
+
+- 🆕 **"Let's suppress the request.done box in discord, it's redundant information. This
+  should be in website logs only" (owner, 2026-09-03 ~10:17).** The done card the bot posts
+  to Discord when a request is accepted duplicates the website log row. Locating the poster
+  and confirming which message is meant; configurable both ways (checklist 33) — a setting
+  that defaults to off, so the card can come back. Status: **LOCATING** → located and landed, see below.
+
 ## 2026-09-03 — Requests, fourth pass: `/request` is ONE command that opens a panel
 
 Moved whole from `TODO.md` (the item is reproduced below the summary). Owner's ask ~06:50

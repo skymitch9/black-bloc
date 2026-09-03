@@ -181,7 +181,7 @@ says "ready to check".
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `request_channel_moves` | multi-enum of `filed,in_progress,review,sent_back,done,hold,declined` | all seven | which moves post a card to the channel |
+| `request_channel_moves` | multi-enum of `filed,in_progress,review,sent_back,done,hold,declined` | ~~all seven~~ every one but `done` (deviation 15) | which moves post a card to the channel |
 | `request_review_by_other` | bool | **off** (owner, 2026-09-03) | when on, the staffer in `ready_by` cannot accept their own review |
 
 Both in `settings_store.py` (registry, `KEY_TYPES`, descriptions), `labels.js`,
@@ -317,6 +317,14 @@ specified.
     through, so the two cannot drift. Fixed on `main` after the merge, before the
     deploy; the URL tests, the page/CSS comments and this document's two mentions
     were rewritten with it.
+
+15. **The `done` card no longer posts by default** (owner, 2026-09-03 10:17, after the
+    panel landed: "suppress the request.done box in discord, it's redundant information.
+    This should be in website logs only"). `request_channel_moves` defaults to the other
+    six (`settings_store.py` `REQUEST_CARD_DEFAULT`); the choices still list all seven so a
+    server can tick `done` back on. The live DB had no stored value, so the default is what
+    the owner's server runs. The requester's DM on done is unchanged. Made on `main` after
+    merge `c4420cc`, shipped in the same deploy as the panel's own-list gate.
 
 ## The landing data step — the exact one-off (conductor's, NOT run here)
 
