@@ -484,18 +484,20 @@ class RaidTrains(commands.Cog):
                 slots = await slots_for(self.bot.db, fresh["id"])
                 moved = await self._run_clock(guild, fresh, slots, now)
                 sent = await self._run_reminders(guild, fresh, slots, now)
-                seen = await self._run_checkins(guild, fresh, slots, now)
+                seen = await self._run_checkins(
+                    guild, fresh, slots, now, status=moved or str(fresh["status"])
+                )
                 if moved or sent or seen:
                     await self._refresh_lineup(guild, fresh["id"])
 
-    async def _run_clock(self, guild: Any, train: Any, slots: Any, now: datetime) -> bool:
-        """Locks at the start, runs, and finishes — the poller owns all three."""
+    async def _run_clock(self, guild: Any, train: Any, slots: Any, now: datetime) -> str | None:
+        """Locks at the start, runs, and finishes; answers with the status it left behind."""
         from ...raidtrain import ends_at as train_ends_at
 
         starts = parse_ts(train["starts_at"])
         status = str(train["status"])
         if starts is None:
-            return False
+            return None
         details = {"train_id": train["id"], "title": train["title"], "slots": len(slots)}
         if status in (OPEN, LOCKED) and now >= starts:
             if status == OPEN:
@@ -508,13 +510,13 @@ class RaidTrains(commands.Cog):
                 )
             await set_status(self.bot.db, train["id"], LIVE)
             await log_action(self.bot, guild, "raidtrain.live", details=details)
-            return True
+            return LIVE
         finish = train_ends_at(train, slots)
         if status == LIVE and finish is not None and now >= finish:
             await set_status(self.bot.db, train["id"], DONE)
             await log_action(self.bot, guild, "raidtrain.done", details=details)
-            return True
-        return False
+            return DONE
+        return None
 
     async def _run_reminders(self, guild: Any, train: Any, slots: Any, now: datetime) -> bool:
         lead = int(self.bot.store.get(guild.id, "raidtrain_reminder_minutes"))
@@ -567,10 +569,13 @@ class RaidTrains(commands.Cog):
             details=details | {"reason": "dm_refused"},
         )
 
-    async def _run_checkins(self, guild: Any, train: Any, slots: Any, now: datetime) -> bool:
+    async def _run_checkins(
+        self, guild: Any, train: Any, slots: Any, now: datetime, *, status: str
+    ) -> bool:
+        """`status` is what the clock just left, so a train that started this tick counts."""
         if not self.bot.store.get(guild.id, "raidtrain_live_posts"):
             return False
-        if str(train["status"]) != LIVE:
+        if status != LIVE:
             return False
         from .golive import open_sessions
 

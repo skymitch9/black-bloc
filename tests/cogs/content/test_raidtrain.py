@@ -711,7 +711,6 @@ async def test_a_holder_who_is_already_streaming_is_checked_in_and_the_train_mov
 
     await cog.sweep_once()
     assert (await get_train(db, GUILD, train_id))["status"] == LIVE
-    await cog.sweep_once()
 
     slots = await slots_for(db, train_id)
     assert slots[0]["checked_in_at"] is not None
@@ -729,7 +728,6 @@ async def test_the_train_moves_line_can_be_turned_off(bot, cog, organizer, alice
         cog, FakeInteraction(bot, organizer), str(train_id), 1, alice
     )
     await open_session(db, ALICE)
-    await cog.sweep_once()
     await cog.sweep_once()
     assert (await slots_for(db, train_id))[0]["checked_in_at"] is None
     assert "raidtrain.checkin" not in await kinds_logged(db)
