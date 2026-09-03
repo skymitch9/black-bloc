@@ -25,6 +25,7 @@ from ...events import (
     describe_duration,
     ends_at,
 )
+from ...logkinds import VIA_WEBSITE
 from ...timezones import get_timezone, is_known
 from ..auth import Refused, staff_dependency
 from ..names import resolve_one
@@ -128,19 +129,10 @@ def build_router(bot: Any) -> APIRouter:
         require_db(bot)
         await wanted_event(bot, guild, event_id)
         said, fresh = await apply_decision(
-            bot, guild, event_id, status, actor_for(bot, who, guild), reason
+            bot, guild, event_id, status, actor_for(bot, who, guild), reason, via=VIA_WEBSITE
         )
         if fresh is None:
             raise Refused(409, "already_decided", said)
-        await note(
-            bot,
-            guild,
-            f"web.event.{status}",
-            who,
-            target=fresh["requester_id"],
-            reason=reason,
-            details={"event_id": event_id},
-        )
         return {"event": event_row(guild, fresh), "message": said}
 
     @router.get("/{event_id}")
@@ -231,22 +223,15 @@ def build_router(bot: Any) -> APIRouter:
         require_db(bot)
         row = await wanted_event(bot, guild, event_id)
         reason = clamp((payload or {}).get("reason"), REASON_LIMIT) or "staff"
-        if not await cancel_event(bot, guild, row, reason, by=int(who["id"])):
+        if not await cancel_event(
+            bot, guild, row, reason, by=int(who["id"]), via=VIA_WEBSITE
+        ):
             raise Refused(
                 409,
                 "not_cancellable",
                 NOT_CANCELLABLE.format(event_id=event_id, status=row["status"]),
             )
         fresh = await wanted_event(bot, guild, event_id)
-        await note(
-            bot,
-            guild,
-            "web.event.cancel",
-            who,
-            target=fresh["requester_id"],
-            reason=reason,
-            details={"event_id": event_id},
-        )
         return {"event": event_row(guild, fresh), "message": "Cancelled."}
 
     return router

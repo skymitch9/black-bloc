@@ -48,6 +48,7 @@ from ...events import (
     start_error,
 )
 from ...golive import now_iso, parse_ts
+from ...logkinds import VIA_DISCORD, kind_via
 from ...settings_store import (
     DB_UNAVAILABLE,
     EVENTS_LATE_CEILING_MINUTES,
@@ -741,7 +742,7 @@ async def edit_announcement(bot: Any, guild: Any, row: Any) -> None:
 
 
 async def cancel_event(
-    bot: Any, guild: Any, row: Any, reason: str, *, by: int | None = None
+    bot: Any, guild: Any, row: Any, reason: str, *, by: int | None = None, via: str = VIA_DISCORD
 ) -> bool:
     """Cancel one event and undo what it left behind; False when it was past cancelling."""
     async with event_lock(bot, row["id"]):
@@ -753,10 +754,10 @@ async def cancel_event(
         await log_action(
             bot,
             guild,
-            "event.cancelled",
+            kind_via("event.cancelled", via),
             target=fresh["requester_id"],
             reason=reason,
-            details={"event_id": fresh["id"], "title": fresh["title"]},
+            details={"event_id": fresh["id"], "title": fresh["title"], "via": via},
         )
         await cancel_scheduled_event(bot, guild, fresh)
         fresh = await get_event(bot.db, row["id"])
@@ -778,7 +779,14 @@ async def cancel_event(
 
 
 async def apply_decision(
-    bot: Any, guild: Any, event_id: int, status: str, actor: Any, reason: str | None = None
+    bot: Any,
+    guild: Any,
+    event_id: int,
+    status: str,
+    actor: Any,
+    reason: str | None = None,
+    *,
+    via: str = VIA_DISCORD,
 ) -> tuple[str, Any]:
     """Approve or deny, once, whoever gets the lock first: (what to say, the settled row)."""
     async with event_lock(bot, event_id):
@@ -795,11 +803,11 @@ async def apply_decision(
         await log_action(
             bot,
             guild,
-            f"event.{status}",
+            kind_via(f"event.{status}", via),
             actor=actor,
             target=row["requester_id"],
             reason=reason,
-            details={"event_id": event_id, "title": row["title"]},
+            details={"event_id": event_id, "title": row["title"], "via": via},
         )
         fresh = await get_event(bot.db, event_id)
         requester = guild.get_member(row["requester_id"])

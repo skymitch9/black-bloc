@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import PlainTextResponse
 
 from ...cogs.community.requests import apply_decision, notify, resume_request
+from ...logkinds import VIA_WEBSITE
 from ...requests import (
     API_PAGE,
     COMMENT_LIMIT,
@@ -266,19 +267,16 @@ def build_router(bot: Any) -> APIRouter:
         require_db(bot)
         await _wanted(guild, request_id)
         said, fresh = await apply_decision(
-            bot, guild, request_id, status, actor_for(bot, who, guild), reason=reason
+            bot,
+            guild,
+            request_id,
+            status,
+            actor_for(bot, who, guild),
+            reason=reason,
+            via=VIA_WEBSITE,
         )
         if fresh is None:
             raise Refused(409, "not_decided", said)
-        await note(
-            bot,
-            guild,
-            f"web.request.{status}",
-            who,
-            target=fresh["user_id"],
-            reason=reason,
-            details={"request_id": request_id},
-        )
         return {"request": await _shown(guild, fresh), "message": said}
 
     @router.get("", dependencies=[Depends(reader)])
@@ -451,18 +449,10 @@ def build_router(bot: Any) -> APIRouter:
         require_db(bot)
         await _wanted(guild, request_id)
         said, fresh = await resume_request(
-            bot, guild, request_id, actor_for(bot, who, guild)
+            bot, guild, request_id, actor_for(bot, who, guild), via=VIA_WEBSITE
         )
         if fresh is None:
             raise Refused(409, "not_on_hold", said)
-        await note(
-            bot,
-            guild,
-            "web.request.resumed",
-            who,
-            target=fresh["user_id"],
-            details={"request_id": request_id, "held_from": fresh["status"]},
-        )
         return {"request": await _shown(guild, fresh), "message": said}
 
     @router.post("/{request_id}/status")
@@ -506,19 +496,16 @@ def build_router(bot: Any) -> APIRouter:
             )
         if status is not None:
             moved, fresh = await apply_decision(
-                bot, guild, request_id, status, actor_for(bot, who, guild), reason=reason or None
+                bot,
+                guild,
+                request_id,
+                status,
+                actor_for(bot, who, guild),
+                reason=reason or None,
+                via=VIA_WEBSITE,
             )
             if fresh is None:
                 raise Refused(409, "not_decided", moved)
-            await note(
-                bot,
-                guild,
-                f"web.request.{status}",
-                who,
-                target=fresh["user_id"],
-                reason=reason or None,
-                details={"request_id": request_id},
-            )
             said = moved
         fresh = await _wanted(guild, request_id)
         return {"request": await _shown(guild, fresh), "message": said}

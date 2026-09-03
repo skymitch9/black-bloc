@@ -1,5 +1,6 @@
 import ast
 import pathlib
+from typing import Any
 
 import pytest
 
@@ -17,11 +18,13 @@ from black_bloc.logkinds import (
     VIA_DISCORD,
     VIA_WEBSITE,
     VIA_WORDS,
+    WEB,
     bare,
     feature_of,
     heads_for,
     is_important,
     is_shadow,
+    kind_via,
     like_patterns,
     log_level_key,
     should_post,
@@ -54,27 +57,16 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.chat.personality_mode",
         "web.chat.trope_disabled",
         "web.chat.trope_enabled",
-        "web.event.cancel",
         "web.event.edited",
         "web.golive.link",
         "web.golive.optin",
         "web.golive.optout",
         "web.golive.unlink",
-        "web.honeypot.ban",
-        "web.honeypot.setup",
-        "web.mod.apply",
-        "web.mod.rule",
         "web.modmail.block",
-        "web.modmail.close",
         "web.modmail.reply",
         "web.modmail.snippet",
         "web.modmail.snippet_remove",
         "web.modmail.unblock",
-        "web.poll.approved",
-        "web.poll.cancel",
-        "web.poll.created",
-        "web.poll.denied",
-        "web.poll.end",
         "web.poll.recur_deleted",
         "web.poll.recur_paused",
         "web.poll.recur_resumed",
@@ -86,12 +78,7 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.raidtrain.unassign",
         "web.raidtrain.unlock",
         "web.request.comment",
-        "web.request.declined",
-        "web.request.done",
         "web.request.filed",
-        "web.request.hold",
-        "web.request.in_progress",
-        "web.request.resumed",
         "web.request.updated",
         "web.request.withdrawn",
         "web.role.ended",
@@ -102,13 +89,8 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.rolemenu.edit",
         "web.rolemenu.post",
         "web.role_menu.seeded",
-        "web.pings.fan_role_created",
-        "web.pings.fan_role_removed",
-        "web.pings.setup",
         "web.settings.clear",
         "web.settings.set",
-        "web.tempvoice.forget",
-        "web.tempvoice.setup",
         "web.application.form_created",
         "web.application.form_updated",
         "web.application.form_deleted",
@@ -130,6 +112,8 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
     "black_bloc/cogs/community/events.py::f'event.{status}'": (
         "event.approved",
         "event.denied",
+        "web.event.approved",
+        "web.event.denied",
     ),
     "black_bloc/cogs/content/youtube.py::kind": (
         "youtube.link",
@@ -140,7 +124,7 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "event.category_forgotten",
         "event.announce_channel_forgotten",
     ),
-    "black_bloc/cogs/community/tempvoice.py::f'{head}tempvoice.{kind}'": (
+    "black_bloc/cogs/community/tempvoice.py::f'tempvoice.{kind}'": (
         "tempvoice.ban",
         "tempvoice.ban_failed",
         "tempvoice.bitrate",
@@ -182,6 +166,10 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "request.done",
         "request.hold",
         "request.in_progress",
+        "web.request.declined",
+        "web.request.done",
+        "web.request.hold",
+        "web.request.in_progress",
     ),
     "black_bloc/cogs/community/requests.py::NOTIFY_SKIPPED_KIND": (
         "request.notify_skipped_test_mode",
@@ -219,6 +207,9 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "automod.would_delete",
         "automod.would_warn",
         "automod.would_timeout",
+        "web.automod.would_delete",
+        "web.automod.would_warn",
+        "web.automod.would_timeout",
     ),
     "black_bloc/cogs/moderation/modcmds.py::f'mod.would_{kind}'": (
         "mod.would_timeout",
@@ -227,6 +218,11 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "mod.would_ban",
         "mod.would_unban",
         "mod.would_purge",
+        "web.mod.would_timeout",
+        "web.mod.would_untimeout",
+        "web.mod.would_kick",
+        "web.mod.would_ban",
+        "web.mod.would_unban",
     ),
     "black_bloc/cogs/moderation/modcmds.py::f'mod.{kind}_failed'": (
         "mod.timeout_failed",
@@ -249,21 +245,7 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.role_menu.assign",
         "web.role_menu.unassign",
     ),
-    # F14: one helper serves the slash command and the dashboard, so the `web.` head is built
-    # at call time from the `via` the caller passed rather than being a second literal.
-    "black_bloc/pings.py::f'{head(via)}pings.setup'": (
-        "pings.setup",
-        "web.pings.setup",
-    ),
-    "black_bloc/pings.py::f'{head(via)}pings.fan_role_created'": (
-        "pings.fan_role_created",
-        "web.pings.fan_role_created",
-    ),
-    "black_bloc/pings.py::f'{head(via)}pings.fan_role_removed'": (
-        "pings.fan_role_removed",
-        "web.pings.fan_role_removed",
-    ),
-    "black_bloc/rolemenu_panels.py::f'{head}{kind}'": (
+    "black_bloc/rolemenu_panels.py::kind": (
         "role_menu.unposted",
         "role_menu.unpost_failed",
         "role_menu.would_unpost",
@@ -276,20 +258,20 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.role_menu.unpost_failed",
         "web.role_menu.would_unpost",
     ),
-    # Phase 19: the two decisions the dashboard and the card share, one kind each side.
-    "black_bloc/cogs/community/applications.py::f'{head}application.approved'": (
-        "application.approved",
-        "web.application.approved",
-    ),
-    "black_bloc/cogs/community/applications.py::f'{head}application.denied'": (
-        "application.denied",
-        "web.application.denied",
-    ),
 }
 
 
 def _source(node: ast.AST) -> str:
     return ast.unparse(node).replace('"', "'")
+
+
+def _branches(node: ast.AST, headed: bool = False) -> list[tuple[ast.AST, bool]]:
+    """One kind argument split into what it can be, with `kind_via(...)` unwrapped."""
+    if isinstance(node, ast.IfExp):
+        return _branches(node.body, headed) + _branches(node.orelse, headed)
+    if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "kind_via" and node.args:
+        return [(inner, True) for inner, _ in _branches(node.args[0])]
+    return [(node, headed)]
 
 
 def _call_sites() -> tuple[list[tuple[str, int, str]], list[str]]:
@@ -306,13 +288,11 @@ def _call_sites() -> tuple[list[tuple[str, int, str]], list[str]]:
             name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
             if name != "log_action" or len(node.args) < 3:
                 continue
-            wanted = node.args[2]
-            branches = (
-                [wanted.body, wanted.orelse] if isinstance(wanted, ast.IfExp) else [wanted]
-            )
-            for branch in branches:
+            for branch, headed in _branches(node.args[2]):
                 if isinstance(branch, ast.Constant) and isinstance(branch.value, str):
                     literals.append((rel, node.lineno, branch.value))
+                    if headed:
+                        literals.append((rel, node.lineno, f"{WEB}.{branch.value}"))
                 else:
                     dynamic.append(f"{rel}::{_source(branch)}")
     return literals, dynamic
@@ -350,6 +330,230 @@ def test_every_dynamic_kind_is_enumerated():
     )
     stale = sorted(set(KNOWN_DYNAMIC) - set(dynamic))
     assert not stale, f"KNOWN_DYNAMIC names call sites that are gone: {stale}"
+
+
+# Checklist 34: a route that calls a shared path which already logs must NOT `note()` the same
+# event again — that is the 2026-09-03 "double posted all messages with a web.request and a
+# request" defect. Nothing needs an exception today; an entry here is "<route fn>::<note kind>"
+# with the reason the second line is a DIFFERENT event, not the same one twice.
+DOUBLE_LOG_ALLOWED: dict[str, str] = {}
+
+
+def _owner(tree: ast.AST) -> dict[ast.AST, ast.AST]:
+    """Each node's nearest enclosing function, so a nested route is read on its own."""
+    found: dict[ast.AST, ast.AST] = {}
+
+    def walk(node: ast.AST, holder: ast.AST | None) -> None:
+        for child in ast.iter_child_nodes(node):
+            mine = child if isinstance(child, FUNCTIONS) else holder
+            if holder is not None:
+                found[child] = holder
+            if mine is not None and isinstance(child, FUNCTIONS):
+                found[child] = holder if holder is not None else child
+            walk(child, mine)
+
+    walk(tree, None)
+    return found
+
+
+FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef)
+
+
+def _defs(tree: ast.AST) -> dict[str, ast.AST]:
+    return {node.name: node for node in ast.walk(tree) if isinstance(node, FUNCTIONS)}
+
+
+def _called_names(node: ast.AST) -> set[str]:
+    """Every plain and dotted call name made anywhere under one function."""
+    found: set[str] = set()
+    for call in ast.walk(node):
+        if not isinstance(call, ast.Call):
+            continue
+        func = call.func
+        if isinstance(func, ast.Name):
+            found.add(func.id)
+        elif isinstance(func, ast.Attribute):
+            found.add(func.attr)
+            if isinstance(func.value, ast.Name):
+                found.add(f"{func.value.id}.{func.attr}")
+    return found
+
+
+def _kind_args(node: ast.AST, name: str) -> list[ast.AST]:
+    return [
+        call.args[2]
+        for call in ast.walk(node)
+        if isinstance(call, ast.Call)
+        and (
+            call.func.attr if isinstance(call.func, ast.Attribute) else getattr(call.func, "id", "")
+        )
+        == name
+        and len(call.args) > 2
+    ]
+
+
+def _modules() -> dict[str, tuple[ast.AST, dict[str, ast.AST]]]:
+    found: dict[str, tuple[ast.AST, dict[str, ast.AST]]] = {}
+    for path in sorted(PACKAGE.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        found[path.relative_to(ROOT).as_posix()] = (tree, _defs(tree))
+    return found
+
+
+def _logged_by(rel: str, name: str, modules: Any, seen: set[tuple[str, str]]) -> set[str]:
+    """The bare kinds one shared function leaves, following the helpers it calls in its module."""
+    if (rel, name) in seen or rel not in modules:
+        return set()
+    seen.add((rel, name))
+    tree, defs = modules[rel]
+    node = defs.get(name)
+    if node is None:
+        return set()
+    found: set[str] = set()
+    for wanted in _kind_args(node, "log_action"):
+        for branch, _ in _branches(wanted):
+            if isinstance(branch, ast.Constant) and isinstance(branch.value, str):
+                found.add(bare(branch.value))
+            else:
+                found.update(
+                    bare(kind)
+                    for kind in KNOWN_DYNAMIC.get(f"{rel}::{_source(branch)}", ())
+                )
+    for called in _called_names(node) & set(defs):
+        if called != name:
+            found |= _logged_by(rel, called, modules, seen)
+    return found
+
+
+def _imported(rel: str, tree: ast.AST) -> dict[str, tuple[str, str]]:
+    """`from ...cogs.x import f` and `from ... import y as z` resolved to (module file, name)."""
+    here = pathlib.PurePosixPath(rel).parent
+    found: dict[str, tuple[str, str]] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom) or not node.level:
+            continue
+        base = here
+        for _ in range(node.level - 1):
+            base = base.parent
+        stem = base.joinpath(*(node.module or "").split(".")) if node.module else base
+        for alias in node.names:
+            local = alias.asname or alias.name
+            module = f"{stem}.py"
+            if module in _MODULES:
+                found[local] = (module, alias.name)
+            elif f"{stem / alias.name}.py" in _MODULES:
+                found[local] = (f"{stem / alias.name}.py", "")
+    return found
+
+
+_MODULES = _modules()
+# The routes' own `note()` wrapper lives here and logs whatever kind it is handed, so a helper
+# from under `api/` is never the "shared path" this guard is about.
+API = "black_bloc/api/"
+
+
+def test_a_route_never_notes_an_event_its_shared_path_already_logged():
+    """The 2026-09-03 double-post: `request.done` from the cog AND `web.request.done` from the
+    route. One write leaves one row, so the shared path takes `via` and the route deletes its
+    `note()`. Only literal `note()` kinds are read; a computed one is reported as unchecked."""
+    doubles: list[str] = []
+    unchecked: list[str] = []
+    for path in sorted((PACKAGE / "api" / "tools").glob("*.py")):
+        rel = path.relative_to(ROOT).as_posix()
+        tree, defs = _MODULES[rel]
+        imports = _imported(rel, tree)
+        owner = _owner(tree)
+        for name, node in defs.items():
+            mine = [
+                call
+                for call in ast.walk(node)
+                if isinstance(call, ast.Call) and owner.get(call) is node
+            ]
+            shared: set[str] = set()
+            for call in mine:
+                func = call.func
+                local = (
+                    f"{func.value.id}.{func.attr}"
+                    if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name)
+                    else getattr(func, "id", None)
+                )
+                if local is None:
+                    continue
+                where, called = imports.get(local, (None, None))
+                if where is None and local and "." in local:
+                    head, _, tail = local.partition(".")
+                    where, called = imports.get(head, (None, None))
+                    called = tail if where else None
+                if where is None or not called or where.startswith(API):
+                    continue
+                shared |= _logged_by(where, called, _MODULES, set())
+            for call in mine:
+                if getattr(call.func, "id", None) != "note" or len(call.args) < 3:
+                    continue
+                for branch, _ in _branches(call.args[2]):
+                    if not (
+                        isinstance(branch, ast.Constant) and isinstance(branch.value, str)
+                    ):
+                        unchecked.append(f"{rel}::{name}::{_source(branch)}")
+                        continue
+                    key = f"{name}::{branch.value}"
+                    if bare(branch.value) in shared and key not in DOUBLE_LOG_ALLOWED:
+                        doubles.append(f"{rel}::{key}")
+    assert not sorted(doubles), (
+        "these routes call a shared path that already logs the event and then note() it again, "
+        "so one write leaves two rows and two embeds. Pass via=VIA_WEBSITE to the shared "
+        f"function and delete the note(): {sorted(doubles)}"
+    )
+    assert sorted(unchecked) == [
+        "black_bloc/api/tools/chat_memory.py::memory_forget::f'web.{FORGOT_KIND}'"
+    ], unchecked
+
+
+def test_a_shared_logger_stays_discord_unless_a_route_says_otherwise():
+    """The slash commands never pass `via`, so the default is what keeps their kinds bare.
+
+    A private helper may take `via` with no default — it is always handed one — but anything
+    that HAS a default must default to Discord, or a slash command starts writing `web.` kinds.
+    """
+    wrong: list[str] = []
+    for rel, (_tree, defs) in _MODULES.items():
+        if rel.startswith(API):
+            continue
+        for name, node in defs.items():
+            spec = node.args
+            for holder, room in ((spec.args, spec.defaults), (spec.kwonlyargs, spec.kw_defaults)):
+                names = [arg.arg for arg in holder]
+                if "via" not in names:
+                    continue
+                slot = names.index("via") - (len(holder) - len(room))
+                given = room[slot] if 0 <= slot < len(room) else None
+                if given is None:
+                    continue
+                if not (isinstance(given, ast.Name) and given.id == "VIA_DISCORD"):
+                    wrong.append(f"{rel}::{name}")
+    assert not sorted(wrong), (
+        "a shared function's `via` must default to VIA_DISCORD, or a slash command would start "
+        f"writing `web.` kinds: {sorted(wrong)}"
+    )
+
+
+def test_kind_via_is_bare_read_backwards():
+    assert kind_via("request.done", VIA_WEBSITE) == "web.request.done"
+    assert kind_via("request.done", VIA_DISCORD) == "request.done"
+    assert bare(kind_via("request.done", VIA_WEBSITE)) == "request.done"
+    assert via_of(kind_via("request.done", VIA_WEBSITE)) == VIA_WEBSITE
+    assert via_of(kind_via("request.done", VIA_DISCORD)) == VIA_DISCORD
+
+
+def test_no_module_builds_the_web_head_for_itself():
+    """One implementation: `kind_via` is the only place `web.` is put on a kind."""
+    guilty = [
+        path.relative_to(ROOT).as_posix()
+        for path in PACKAGE.rglob("*.py")
+        if path.name != "logkinds.py"
+        and 'f"{WEB}." if via ==' in path.read_text(encoding="utf-8")
+    ]
+    assert not guilty, f"these build the head by hand instead of calling kind_via: {guilty}"
 
 
 def test_every_emitted_kind_is_classified():

@@ -57,8 +57,7 @@ async def test_setup_makes_the_lobby_and_records_the_setting(client, sign_in, we
     made = guild.created[-1]
     assert made.name == "join to talk"
     assert web.store.get(wf.GUILD_ID, "tempvoice_creator_ids") == [made.id]
-    kinds = await wf.kinds_in(web.db)
-    assert "tempvoice.setup" in kinds and "web.tempvoice.setup" in kinds
+    await wf.one_web_row(web.db, "web.tempvoice.setup")
 
 
 async def test_a_second_setup_repairs_the_lobby_instead_of_making_another(
@@ -99,8 +98,7 @@ async def test_forget_drops_one_lobby_and_leaves_the_rest(client, sign_in, web, 
     assert response.json()["forgotten"] is True
     assert str(wf.VOICE_CHANNEL_ID) in response.json()["message"]
     assert web.store.get(wf.GUILD_ID, "tempvoice_creator_ids") == [4242]
-    kinds = await wf.kinds_in(web.db)
-    assert "tempvoice.creator_removed" in kinds and "web.tempvoice.forget" in kinds
+    await wf.one_web_row(web.db, "web.tempvoice.creator_removed")
 
 
 async def test_forget_says_in_words_that_a_channel_was_never_a_lobby(client, sign_in, web, wf):

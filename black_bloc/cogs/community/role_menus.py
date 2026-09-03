@@ -19,7 +19,7 @@ from ...actionlog import (
 from ...command_errors import NETWORK_ERRORS, AnswersErrors, SafeDynamicItem
 from ...command_visibility import STAFF_ONLY
 from ...golive import now_iso
-from ...logkinds import VIA_DISCORD, VIA_WEBSITE, WEB
+from ...logkinds import VIA_DISCORD, kind_via
 from ...modcases import pages_under_limit
 from ...settings_store import DB_UNAVAILABLE, ROLEMENU_MODES, require_staff
 
@@ -921,6 +921,7 @@ async def apply_request_decision(
     *,
     reason: str | None = None,
     days: Any = None,
+    via: str = VIA_DISCORD,
 ) -> tuple[str, Any]:
     """Approve or deny, once, whoever wins the update: (what to say, the settled row)."""
     row = await grants.get_request(bot.db, request_id)
@@ -935,10 +936,14 @@ async def apply_request_decision(
     label = await label_for(bot.db, guild, row["menu_id"], row["role_id"])
     member = guild.get_member(row["user_id"])
     if status == grants.DENIED:
-        return await _deny_request(bot, guild, row, member, label, menu, menu_name, actor, reason)
+        return await _deny_request(
+            bot, guild, row, member, label, menu, menu_name, actor, reason, via=via
+        )
     if member is None:
         return MEMBER_HAS_GONE.format(name=row["user_id"]), None
-    return await _approve_request(bot, guild, row, member, label, menu, menu_name, actor, days)
+    return await _approve_request(
+        bot, guild, row, member, label, menu, menu_name, actor, days, via=via
+    )
 
 
 async def _approve_request(
@@ -951,6 +956,8 @@ async def _approve_request(
     menu_name: str,
     actor: Any,
     days: Any,
+    *,
+    via: str = VIA_DISCORD,
 ) -> tuple[str, Any]:
     wanted = days if days is not None else expires_days_of(menu)
     until = grants.expires_at(wanted)
@@ -986,10 +993,11 @@ async def _approve_request(
     await log_action(
         bot,
         guild,
-        "role.approved",
+        kind_via("role.approved", via),
         actor=actor,
         target=member,
         details={
+            "via": via,
             "request_id": row["id"],
             "menu": menu_name,
             "role_id": row["role_id"],
@@ -1017,6 +1025,8 @@ async def _deny_request(
     menu_name: str,
     actor: Any,
     reason: str | None,
+    *,
+    via: str = VIA_DISCORD,
 ) -> tuple[str, Any]:
     said = grants.clamp(reason, grants.REASON_LIMIT) or "none given"
     if not await grants.decide_request(
@@ -1028,11 +1038,16 @@ async def _deny_request(
     await log_action(
         bot,
         guild,
-        "role.denied",
+        kind_via("role.denied", via),
         actor=actor,
         target=member if member is not None else row["user_id"],
         reason=said,
-        details={"request_id": row["id"], "menu": menu_name, "role_id": row["role_id"]},
+        details={
+            "request_id": row["id"],
+            "menu": menu_name,
+            "role_id": row["role_id"],
+            "via": via,
+        },
     )
     until = grants.retry_at(fresh["decided_at"], retry_days_of(menu))
     await dm(
@@ -1333,8 +1348,7 @@ async def staff_assign(
         until=grants.expires_at(expires_days_of(menu)),
     )
     await grants.record_removed(bot.db, guild.id, target.id, to_remove, grants.ENDED_BY_STAFF)
-    head = f"{WEB}." if via == VIA_WEBSITE else ""
-    kind = f"{head}role_menu.{'unassign' if remove else 'assign'}"
+    kind = kind_via(f"role_menu.{'unassign' if remove else 'assign'}", via)
     await log_action(
         bot,
         guild,

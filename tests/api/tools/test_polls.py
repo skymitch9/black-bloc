@@ -240,7 +240,7 @@ async def test_ending_a_poll_from_the_dashboard_closes_it_and_logs_the_web_line(
 
     assert response.status_code == 200
     assert response.json()["poll"]["status"] == pure.CLOSED
-    assert "web.poll.end" in await wf.kinds_in(web.db)
+    await wf.one_web_row(web.db, "web.poll.closed")
 
 
 async def test_a_poll_that_is_already_closed_cannot_be_closed_again(client, seeded):
@@ -280,7 +280,7 @@ async def test_cancelling_a_poll_from_the_dashboard_publishes_no_result(client, 
 
     assert response.status_code == 200
     assert response.json()["poll"]["status"] == pure.CANCELLED
-    assert "web.poll.cancel" in await wf.kinds_in(web.db)
+    await wf.one_web_row(web.db, "web.poll.cancelled")
 
 
 async def test_a_cancelled_poll_cannot_be_cancelled_twice(client, seeded):

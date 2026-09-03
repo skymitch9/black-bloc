@@ -35,6 +35,7 @@ from ...automod import (
 )
 from ...command_errors import SafeDynamicItem
 from ...command_visibility import STAFF_ONLY
+from ...logkinds import VIA_DISCORD, kind_via
 from ...modcases import (
     ALREADY_APPLIED_BY_SOMEBODY,
     add_case,
@@ -185,11 +186,12 @@ async def punish(
     case_id: Any,
     messages: list[Any] | None = None,
     actor: Any = None,
+    via: str = VIA_DISCORD,
 ) -> tuple[list[str], list[str]]:
     """Carry out one verdict's actions; returns what was done and what was refused."""
     done: list[str] = []
     refused: list[str] = []
-    details = {"case_id": case_id, "why": reason}
+    details = {"case_id": case_id, "why": reason, "via": via}
     if "delete" in actions and messages:
         for one in messages:
             failure = await do_delete(bot, one)
@@ -198,7 +200,8 @@ async def punish(
                 if "delete" not in done:
                     done.append("delete")
                 await log_action(
-                    bot, guild, "automod.deleted", actor=actor, target=member, details=where
+                    bot, guild, kind_via("automod.deleted", via), actor=actor, target=member,
+                    details=where
                 )
             elif failure == "test_mode":
                 if "test_mode" not in refused:
@@ -206,7 +209,7 @@ async def punish(
                 await log_action(
                     bot,
                     guild,
-                    "automod.would_delete",
+                    kind_via("automod.would_delete", via),
                     actor=actor,
                     target=member,
                     details=where | {"reason": "test_mode"},
@@ -217,7 +220,7 @@ async def punish(
                 await log_action(
                     bot,
                     guild,
-                    "automod.delete_failed",
+                    kind_via("automod.delete_failed", via),
                     actor=actor,
                     target=member,
                     details=where | {"reason": failure},
@@ -225,7 +228,13 @@ async def punish(
     if "warn" in actions:
         done.append("warn")
         await log_action(
-            bot, guild, "automod.warned", actor=actor, target=member, reason=reason, details=details
+            bot,
+            guild,
+            kind_via("automod.warned", via),
+            actor=actor,
+            target=member,
+            reason=reason,
+            details=details,
         )
     if "timeout" in actions:
         failure = await do_timeout(bot, member, timeout_s, f"Automod: {reason}")
@@ -234,7 +243,7 @@ async def punish(
             await log_action(
                 bot,
                 guild,
-                "automod.timed_out",
+                kind_via("automod.timed_out", via),
                 actor=actor,
                 target=member,
                 reason=reason,
@@ -245,7 +254,7 @@ async def punish(
             await log_action(
                 bot,
                 guild,
-                "automod.would_timeout",
+                kind_via("automod.would_timeout", via),
                 actor=actor,
                 target=member,
                 reason=reason,
@@ -256,7 +265,7 @@ async def punish(
             await log_action(
                 bot,
                 guild,
-                "automod.timeout_failed",
+                kind_via("automod.timeout_failed", via),
                 actor=actor,
                 target=member,
                 reason=reason,
@@ -278,7 +287,13 @@ async def punish(
 
 
 async def save_rule(
-    bot: Any, guild: Any, name: str, changes: dict[str, Any], actor: Any
+    bot: Any,
+    guild: Any,
+    name: str,
+    changes: dict[str, Any],
+    actor: Any,
+    *,
+    via: str = VIA_DISCORD,
 ) -> dict[str, Any]:
     """One rule after the changes; RuleError carries the sentence when they are refused."""
     if name not in RULE_ORDER:
@@ -289,9 +304,10 @@ async def save_rule(
     await log_action(
         bot,
         guild,
-        "automod.rule",
+        kind_via("automod.rule", via),
         actor=actor,
-        details={"rule": name} | {key: book[name].get(key) for key in changes},
+        details={"rule": name, "via": via}
+        | {key: book[name].get(key) for key in changes},
     )
     return book[name]
 
@@ -323,7 +339,9 @@ async def rewrite_card(
     await edit_case_card(bot, guild, case, embed)
 
 
-async def apply_case(bot: Any, guild: Any, case_id: int, actor: Any) -> tuple[str, str]:
+async def apply_case(
+    bot: Any, guild: Any, case_id: int, actor: Any, *, via: str = VIA_DISCORD
+) -> tuple[str, str]:
     """Apply one shadow verdict for real: (what happened, what to say)."""
     async with case_lock(bot, case_id):
         case = await get_case(bot.db, case_id)
@@ -341,11 +359,11 @@ async def apply_case(bot: Any, guild: Any, case_id: int, actor: Any) -> tuple[st
                 await log_action(
                     bot,
                     guild,
-                    f"automod.would_{action}",
+                    kind_via(f"automod.would_{action}", via),
                     actor=actor,
                     target=case["user_id"],
                     reason=reason,
-                    details={"case_id": case_id, "reason": "test_mode"},
+                    details={"case_id": case_id, "reason": "test_mode", "via": via},
                 )
             return ("test_mode", refusal_in_test_mode("time out"))
         if not await claim_case(bot.db, case_id):
@@ -360,6 +378,7 @@ async def apply_case(bot: Any, guild: Any, case_id: int, actor: Any) -> tuple[st
             case_id=case_id,
             messages=message_to_delete(bot, case, actions),
             actor=actor,
+            via=via,
         )
         await set_case_outcome(bot.db, case_id, done, refused)
         if not done:

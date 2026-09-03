@@ -370,18 +370,10 @@ def build_router(bot: Any) -> APIRouter:
             actor_for(bot, who, guild),
             reason=reason,
             days=days,
+            via=VIA_WEBSITE,
         )
         if fresh is None:
             raise Refused(409, "not_decided", said)
-        await note(
-            bot,
-            guild,
-            f"web.role.{status}",
-            who,
-            target=fresh["user_id"],
-            reason=reason,
-            details={"request_id": request_id, "role_id": fresh["role_id"]},
-        )
         menu = await get_menu_by_id(bot.db, fresh["menu_id"])
         return {
             "request": request_row(guild, fresh, menu["name"] if menu is not None else None),

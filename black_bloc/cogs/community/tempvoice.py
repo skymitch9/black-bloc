@@ -20,7 +20,7 @@ from ...actionlog import (
 from ...command_errors import AnswersErrors
 from ...command_visibility import STAFF_ONLY
 from ...golive import now_iso, parse_ts
-from ...logkinds import VIA_DISCORD, VIA_WEBSITE, WEB
+from ...logkinds import VIA_DISCORD, kind_via
 from ...settings_store import (
     DB_UNAVAILABLE,
     GUILD_ONLY,
@@ -189,7 +189,9 @@ LOBBY_FORGOTTEN = (
 )
 
 
-async def forget_creator(bot: Any, guild: Any, channel_id: int, actor: Any = None) -> bool:
+async def forget_creator(
+    bot: Any, guild: Any, channel_id: int, actor: Any = None, *, via: str = VIA_DISCORD
+) -> bool:
     """Stop treating one channel id as join-to-create; False when it was not one."""
     ids = list(bot.store.get(guild.id, "tempvoice_creator_ids") or [])
     if channel_id not in ids:
@@ -199,9 +201,9 @@ async def forget_creator(bot: Any, guild: Any, channel_id: int, actor: Any = Non
     await log_action(
         bot,
         guild,
-        "tempvoice.creator_removed",
+        kind_via("tempvoice.creator_removed", via),
         actor=actor,
-        details={"channel_id": channel_id},
+        details={"channel_id": channel_id, "via": via},
     )
     return True
 
@@ -660,7 +662,14 @@ def join_roles(bot: Any, guild: Any) -> list[Any]:
 
 
 async def repair_creator_channel(
-    bot: Any, guild: Any, actor: Any, live: list[Any], wanted: str, *, adopted: bool = False
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    live: list[Any],
+    wanted: str,
+    *,
+    adopted: bool = False,
+    via: str = VIA_DISCORD,
 ) -> tuple[str, str]:
     """Put the lobby the server already has back to its name and its own overwrites."""
     channel = live[0]
@@ -689,9 +698,9 @@ async def repair_creator_channel(
     await log_action(
         bot,
         guild,
-        "tempvoice.repair",
+        kind_via("tempvoice.repair", via),
         actor=actor,
-        details={"channel_id": channel.id, "name": wanted},
+        details={"channel_id": channel.id, "name": wanted, "via": via},
     )
     said = (ADOPTED if adopted else REPAIRED).format(
         where=channel.mention, name=wanted, who=roles_sentence(allow)
@@ -702,7 +711,7 @@ async def repair_creator_channel(
 
 
 async def adopt_creator_channel(
-    bot: Any, guild: Any, actor: Any, found: list[Any], wanted: str
+    bot: Any, guild: Any, actor: Any, found: list[Any], wanted: str, *, via: str = VIA_DISCORD
 ) -> tuple[str, str]:
     """Store a lobby that carries the name but was never written down, then repair it."""
     ids = list(bot.store.get(guild.id, "tempvoice_creator_ids") or [])
@@ -713,15 +722,17 @@ async def adopt_creator_channel(
     await log_action(
         bot,
         guild,
-        "tempvoice.adopt",
+        kind_via("tempvoice.adopt", via),
         actor=actor,
-        details={"channel_ids": [channel.id for channel in found], "name": wanted},
+        details={"channel_ids": [channel.id for channel in found], "name": wanted, "via": via},
     )
-    return await repair_creator_channel(bot, guild, actor, found, wanted, adopted=True)
+    return await repair_creator_channel(
+        bot, guild, actor, found, wanted, adopted=True, via=via
+    )
 
 
 async def make_creator_channel(
-    bot: Any, guild: Any, actor: Any, name: str | None = None
+    bot: Any, guild: Any, actor: Any, name: str | None = None, *, via: str = VIA_DISCORD
 ) -> tuple[str, str]:
     """Set up or repair join-to-create, for slash and web alike: (what happened, what to say)."""
     by = getattr(actor, "id", actor)
@@ -733,13 +744,13 @@ async def make_creator_channel(
     ids = list(bot.store.get(guild.id, "tempvoice_creator_ids") or [])
     live = [guild.get_channel(cid) for cid in ids if guild.get_channel(cid) is not None]
     if live:
-        return await repair_creator_channel(bot, guild, actor, live, wanted)
+        return await repair_creator_channel(bot, guild, actor, live, wanted, via=via)
     category, position, where = creator_spot(bot, guild)
     if where == "no_test_channel":
         return ("no_test_channel", NO_TEST_CHANNEL)
     unknown = lobbies_by_name(category, wanted, ids)
     if unknown:
-        return await adopt_creator_channel(bot, guild, actor, unknown, wanted)
+        return await adopt_creator_channel(bot, guild, actor, unknown, wanted, via=via)
     allow = join_roles(bot, guild)
     try:
         channel = await guild.create_voice_channel(
@@ -758,9 +769,9 @@ async def make_creator_channel(
     await log_action(
         bot,
         guild,
-        "tempvoice.setup",
+        kind_via("tempvoice.setup", via),
         actor=actor,
-        details={"channel_id": channel.id, "placed": where, "name": wanted},
+        details={"channel_id": channel.id, "placed": where, "name": wanted, "via": via},
     )
     return (
         "created",
@@ -847,11 +858,10 @@ async def panel_context(
 
 async def panel_log(who: Any, kind: str, channel_id: Any, **details: Any) -> None:
     via = getattr(who, "via", VIA_DISCORD)
-    head = f"{WEB}." if via == VIA_WEBSITE else ""
     await log_action(
         who.client,
         who.guild,
-        f"{head}tempvoice.{kind}",
+        kind_via(f"tempvoice.{kind}", via),
         actor=who.user,
         details={"channel_id": int(channel_id), "via": via} | details,
     )

@@ -17,7 +17,7 @@ from .cogs.community.role_menus import (
     remove_option,
 )
 from .golive import now_iso
-from .logkinds import VIA_DISCORD, VIA_WEBSITE, WEB
+from .logkinds import VIA_DISCORD, kind_via
 from .settings_store import PINGS_FAN_ROLE_TEMPLATE
 
 log = logging.getLogger(__name__)
@@ -130,10 +130,6 @@ class Outcome:
     message: str
     role_id: int | None = None
     created: bool = False
-
-
-def head(via: str) -> str:
-    return f"{WEB}." if via == VIA_WEBSITE else ""
 
 
 def mode_of(bot: Any, guild_id: int) -> str:
@@ -395,7 +391,7 @@ async def ensure_fan_role(
     await log_action(
         bot,
         guild,
-        f"{head(via)}pings.fan_role_created",
+        kind_via("pings.fan_role_created", via),
         actor=by,
         target=member,
         details={"role_id": role.id, "role": role.name, "reused": existing_role is not None,
@@ -435,7 +431,7 @@ async def remove_fan_role(
     await log_action(
         bot,
         guild,
-        f"{head(via)}pings.fan_role_removed",
+        kind_via("pings.fan_role_removed", via),
         actor=by,
         target=member if member is not None else int(user_id),
         details={"role_id": role_id, "deleted": deleted, "user_id": int(user_id), "via": via},
@@ -516,7 +512,7 @@ async def setup_events_role(
     await log_action(
         bot,
         guild,
-        f"{head(via)}pings.setup",
+        kind_via("pings.setup", via),
         actor=by,
         details={"role_id": role.id, "role": role.name, "created": made, "via": via},
     )

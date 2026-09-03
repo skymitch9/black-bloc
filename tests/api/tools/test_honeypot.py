@@ -61,8 +61,7 @@ async def test_ban_now_bans_the_account_and_marks_the_hit(client, sign_in, web, 
     assert response.status_code == 200
     assert guild.bans and guild.bans[0][0] == 21
     assert (await get_hit(web.db, hit_id))["action"] == "banned"
-    kinds = await wf.kinds_in(web.db)
-    assert "honeypot.banned" in kinds and "web.honeypot.ban" in kinds
+    assert (await wf.one_web_row(web.db, "web.honeypot.banned"))["hit_id"] == hit_id
 
 
 async def test_ban_now_is_refused_in_test_mode_with_the_slash_commands_sentence(
@@ -112,8 +111,7 @@ async def test_setup_makes_the_trap_and_records_the_channel(client, sign_in, web
     made = guild.created[-1]
     assert web.store.get(wf.GUILD_ID, "honeypot_channel_ids") == [made.id]
     assert made.messages and made.messages[0].pinned is True
-    kinds = await wf.kinds_in(web.db)
-    assert "honeypot.setup" in kinds and "web.honeypot.setup" in kinds
+    await wf.one_web_row(web.db, "web.honeypot.setup")
 
 
 async def test_a_second_trap_is_refused(client, sign_in, web, wf):

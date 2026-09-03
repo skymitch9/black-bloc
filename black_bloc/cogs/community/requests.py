@@ -9,6 +9,7 @@ from discord.ext import commands
 
 from ...actionlog import LOGS_DEFAULT, LOGS_MAX, LOGS_MIN, log_action, send_logs
 from ...command_errors import NETWORK_ERRORS, AnswersErrors
+from ...logkinds import VIA_DISCORD, kind_via
 from ...requests import (
     DM_STATUSES,
     DM_TEXT,
@@ -197,7 +198,14 @@ async def notify_move(bot: Any, guild: Any, row: Any, status: str) -> None:
 
 
 async def apply_decision(
-    bot: Any, guild: Any, request_id: int, status: str, actor: Any, reason: Any = None
+    bot: Any,
+    guild: Any,
+    request_id: int,
+    status: str,
+    actor: Any,
+    reason: Any = None,
+    *,
+    via: str = VIA_DISCORD,
 ) -> tuple[str, Any]:
     """(what to say, the row as it now is or None) — the one path a status moves by."""
     row = await get_request(bot.db, request_id)
@@ -220,18 +228,20 @@ async def apply_decision(
     await log_action(
         bot,
         guild,
-        f"request.{wanted}",
+        kind_via(f"request.{wanted}", via),
         actor=actor,
         target=row["user_id"],
         reason=kept or None,
-        details={"request_id": request_id, "was": row["status"]},
+        details={"request_id": request_id, "was": row["status"], "via": via},
     )
     await tell_requester(bot, guild, fresh, wanted)
     await notify_move(bot, guild, fresh, wanted)
     return (SET_SAID.format(request_id=request_id, status=STATUS_WORDS.get(wanted, wanted)), fresh)
 
 
-async def resume_request(bot: Any, guild: Any, request_id: int, actor: Any) -> tuple[str, Any]:
+async def resume_request(
+    bot: Any, guild: Any, request_id: int, actor: Any, *, via: str = VIA_DISCORD
+) -> tuple[str, Any]:
     """Off hold and back where it was held from — the Resume button and `/request resume`."""
     row = await get_request(bot.db, request_id)
     if row is None or row["guild_id"] != guild.id:
@@ -250,10 +260,10 @@ async def resume_request(bot: Any, guild: Any, request_id: int, actor: Any) -> t
     await log_action(
         bot,
         guild,
-        "request.resumed",
+        kind_via("request.resumed", via),
         actor=actor,
         target=row["user_id"],
-        details={"request_id": request_id, "was": HOLD, "held_from": wanted},
+        details={"request_id": request_id, "was": HOLD, "held_from": wanted, "via": via},
     )
     await tell_requester(bot, guild, fresh, wanted)
     await notify_move(bot, guild, fresh, wanted)

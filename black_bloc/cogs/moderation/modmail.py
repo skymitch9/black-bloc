@@ -21,6 +21,7 @@ from ...actionlog import (
 from ...command_visibility import STAFF_ONLY
 from ...events import clamp
 from ...golive import now_iso, parse_ts
+from ...logkinds import VIA_DISCORD, kind_via
 from ...modmail import (
     AUTO_ARCHIVE_MINUTES,
     CLOSED,
@@ -613,7 +614,14 @@ async def send_reply(
 
 
 async def close_ticket(
-    bot: Any, guild: Any, ticket: Any, *, by: Any = None, reason: Any = None, silent: bool = False
+    bot: Any,
+    guild: Any,
+    ticket: Any,
+    *,
+    by: Any = None,
+    reason: Any = None,
+    silent: bool = False,
+    via: str = VIA_DISCORD,
 ) -> tuple[bool, str | None]:
     """Transcript first, then the record, then the member, then the channel."""
     async with user_lock(bot, ticket["user_id"]):
@@ -632,11 +640,11 @@ async def close_ticket(
         await log_action(
             bot,
             guild,
-            "modmail.closed",
+            kind_via("modmail.closed", via),
             actor=by,
             target=fresh["user_id"],
             reason=clamp(reason, 400) or None,
-            details={"ticket_id": fresh["id"], "messages": len(rows)},
+            details={"ticket_id": fresh["id"], "messages": len(rows), "via": via},
         )
         if not silent:
             user = bot.get_user(fresh["user_id"]) or guild.get_member(fresh["user_id"])

@@ -22,6 +22,7 @@ from ...actionlog import (
 )
 from ...command_errors import NETWORK_ERRORS, AnswersErrors, SafeDynamicItem
 from ...golive import now_iso, parse_ts
+from ...logkinds import VIA_DISCORD, kind_via
 from ...polls import (
     ARCHIVED,
     BUTTONS_UP_TO,
@@ -322,6 +323,7 @@ async def store_poll(
     ping_role_id: int | None,
     auto_thread: bool,
     status: str | None = None,
+    via: str = VIA_DISCORD,
 ) -> tuple[Any, bool]:
     """A plan written down as a row, its options and one log line: (the row, is it held)."""
     reviewing = status is None and bot.store.get(guild.id, "poll_review_mode") == "on"
@@ -346,10 +348,11 @@ async def store_poll(
     await log_action(
         bot,
         guild,
-        "poll.created",
+        kind_via("poll.created", via),
         actor=creator_id,
         target=creator_id,
         details={
+            "via": via,
             "poll_id": poll_id,
             "kind": plan["kind"],
             "surface": plan["surface"],
@@ -1102,7 +1105,14 @@ async def refresh_voters(bot: Any, row: Any, message: Any, options: Any) -> None
 
 
 async def close_poll(
-    bot: Any, guild: Any, row: Any, *, reason: str, actor: Any = None, end_it: bool = True
+    bot: Any,
+    guild: Any,
+    row: Any,
+    *,
+    reason: str,
+    actor: Any = None,
+    end_it: bool = True,
+    via: str = VIA_DISCORD,
 ) -> tuple[bool, bool]:
     """(closed, results written). The status moves even when Discord will not answer."""
     async with poll_lock(bot, row["id"]):
@@ -1122,11 +1132,11 @@ async def close_poll(
         await log_action(
             bot,
             guild,
-            "poll.closed",
+            kind_via("poll.closed", via),
             actor=actor,
             target=fresh["creator_id"],
             reason=reason,
-            details={"poll_id": fresh["id"], "question": fresh["question"]},
+            details={"poll_id": fresh["id"], "question": fresh["question"], "via": via},
         )
         written = await _write_results(bot, guild, fresh, end_it=end_it)
         return (True, written)
@@ -1225,7 +1235,9 @@ async def _post_results(
         )
 
 
-async def cancel_poll(bot: Any, guild: Any, row: Any, *, by: Any = None) -> bool:
+async def cancel_poll(
+    bot: Any, guild: Any, row: Any, *, by: Any = None, via: str = VIA_DISCORD
+) -> bool:
     """Stop a poll without publishing a result; the vote is ended at Discord all the same."""
     async with poll_lock(bot, row["id"]):
         fresh = await get_poll(bot.db, row["id"])
@@ -1244,10 +1256,10 @@ async def cancel_poll(bot: Any, guild: Any, row: Any, *, by: Any = None) -> bool
         await log_action(
             bot,
             guild,
-            "poll.cancelled",
+            kind_via("poll.cancelled", via),
             actor=by,
             target=fresh["creator_id"],
-            details={"poll_id": fresh["id"], "question": fresh["question"]},
+            details={"poll_id": fresh["id"], "question": fresh["question"], "via": via},
         )
     if not fresh["message_id"]:
         return True
@@ -1376,7 +1388,14 @@ async def _open_thread(bot: Any, guild: Any, row: Any, message: Any) -> int | No
 
 
 async def apply_decision(
-    bot: Any, guild: Any, poll_id: int, status: str, actor: Any, reason: str | None = None
+    bot: Any,
+    guild: Any,
+    poll_id: int,
+    status: str,
+    actor: Any,
+    reason: str | None = None,
+    *,
+    via: str = VIA_DISCORD,
 ) -> tuple[str, Any]:
     """Approve or deny once, whoever gets the lock first: (what to say, the settled row)."""
     async with poll_lock(bot, poll_id):
@@ -1399,11 +1418,11 @@ async def apply_decision(
         await log_action(
             bot,
             guild,
-            "poll.approved" if wanted == OPEN else "poll.denied",
+            kind_via("poll.approved" if wanted == OPEN else "poll.denied", via),
             actor=actor,
             target=row["creator_id"],
             reason=reason,
-            details={"poll_id": poll_id, "question": row["question"]},
+            details={"poll_id": poll_id, "question": row["question"], "via": via},
         )
     fresh = await get_poll(bot.db, poll_id)
     creator = guild.get_member(fresh["creator_id"])

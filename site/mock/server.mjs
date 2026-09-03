@@ -2810,7 +2810,7 @@ route('POST', '/api/events/:id/cancel', (context) => {
   event.status = 'cancelled';
   event.decided_by = STAFF.id;
   event.decided_at = now();
-  logAction('web.event.cancel', { target_id: event.requester_id, details: { event_id: event.id } });
+  logAction('web.event.cancelled', { target_id: event.requester_id, details: { event_id: event.id } });
   return { event: eventRow(event), message: 'Cancelled.' };
 });
 
@@ -3125,7 +3125,7 @@ route('POST', '/api/polls/:id/end', (context) => {
   poll.status = 'closed';
   poll.closed_at = now();
   poll.total_votes = poll.options.reduce((sum, option) => sum + option.votes, 0);
-  logAction('web.poll.end', { target_id: poll.creator_id, details: { poll_id: poll.id } });
+  logAction('web.poll.closed', { target_id: poll.creator_id, details: { poll_id: poll.id } });
   return { poll: pollRow(poll), message: `Poll #${poll.id} is closed and the result is posted.` };
 });
 
@@ -3137,7 +3137,7 @@ route('POST', '/api/polls/:id/cancel', (context) => {
   }
   poll.status = 'cancelled';
   poll.closed_at = now();
-  logAction('web.poll.cancel', { target_id: poll.creator_id, details: { poll_id: poll.id } });
+  logAction('web.poll.cancelled', { target_id: poll.creator_id, details: { poll_id: poll.id } });
   return { poll: pollRow(poll), message: `Poll #${poll.id} is cancelled. No result was published.` };
 });
 
@@ -3379,7 +3379,7 @@ route('POST', '/api/tempvoice/forget', async (context) => {
     throw new Refused(404, 'not_a_lobby', `**${wanted}** is not one of Black Bloc's join-to-create channels, so nothing was forgotten. \`/tempvoice status\` lists the ones it knows about.`);
   }
   state.settings.set('tempvoice_creator_ids', ids.filter((id) => id !== wanted));
-  logAction('web.tempvoice.forget', { target_id: wanted });
+  logAction('web.tempvoice.creator_removed', { target_id: wanted });
   return {
     forgotten: true,
     channel_id: wanted,
@@ -3410,7 +3410,7 @@ route('POST', '/api/honeypot/hits/:id/ban', (context) => {
   if (!hit) throw new Refused(404, 'no_hit', 'That honeypot hit is not on file any more.');
   guard('banning from a honeypot hit');
   hit.action = 'banned';
-  logAction('web.honeypot.ban', { target_id: hit.user_id, details: { hit_id: hit.id } });
+  logAction('web.honeypot.banned', { target_id: hit.user_id, details: { hit_id: hit.id } });
   return { banned: true, hit_id: hit.id, message: `Banned <@${hit.user_id}> and purged their recent messages.` };
 });
 
@@ -3472,11 +3472,21 @@ route('POST', '/api/mod/cases/:id/apply', (context) => {
   guard('applying a shadow case');
   found.applied = true;
   found.done = found.actions;
-  logAction('web.mod.apply', { target_id: found.user_id, details: { case_id: found.id } });
+  logAction('web.automod.warned', { target_id: found.user_id, details: { case_id: found.id } });
   return { applied: true, case_id: found.id, message: `Case ${found.id} was carried out: ${found.done.join(', ')}.` };
 });
 
 const MOD_ACTIONS = ['warn', 'timeout', 'untimeout', 'kick', 'ban', 'unban'];
+// The shared punish helpers log what HAPPENED, not what was asked for, and the dashboard now
+// goes through them rather than leaving a second line of its own.
+const MOD_KIND_DONE = {
+  warn: 'warned',
+  timeout: 'timed_out',
+  untimeout: 'untimed_out',
+  kick: 'kicked',
+  ban: 'banned',
+  unban: 'unbanned',
+};
 
 for (const action of MOD_ACTIONS) {
   route('POST', `/api/mod/${action}`, async (context) => {
@@ -3505,7 +3515,7 @@ for (const action of MOD_ACTIONS) {
       failed: [],
     };
     state.cases.unshift(row);
-    logAction(`web.mod.${action}`, { target_id: row.user_id, reason: row.reason });
+    logAction(`web.mod.${MOD_KIND_DONE[action] || action}`, { target_id: row.user_id, reason: row.reason });
     return {
       done: true,
       kind: action,
@@ -3534,7 +3544,7 @@ route('PUT', '/api/mod/rules/:name', async (context) => {
   for (const key of ['enabled', 'window_s', 'threshold', 'actions', 'timeout_s', 'words']) {
     if (body[key] !== undefined) rule[key] = body[key];
   }
-  logAction('web.mod.rule', { reason: context.params.name, details: { rule: context.params.name } });
+  logAction('web.automod.rule', { reason: context.params.name, details: { rule: context.params.name } });
   return { name: context.params.name, help: RULE_HELP[context.params.name] || '', ...rule };
 });
 
@@ -3619,7 +3629,7 @@ route('POST', '/api/modmail/tickets/:id/close', async (context) => {
   ticket.closed_at = now();
   ticket.closed_by = STAFF.id;
   ticket.close_reason = body.reason || null;
-  logAction('web.modmail.close', { target_id: ticket.user_id, reason: ticket.close_reason, details: { ticket_id: ticket.id, silent: Boolean(body.silent) } });
+  logAction('web.modmail.closed', { target_id: ticket.user_id, reason: ticket.close_reason, details: { ticket_id: ticket.id, silent: Boolean(body.silent) } });
   return { closed: true, ticket: ticketRow(ticket), transcript: true };
 });
 

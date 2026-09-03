@@ -99,8 +99,7 @@ async def test_warn_works_in_test_mode_because_it_only_tells_them(
     assert response.status_code == 200
     assert "Warned" in response.json()["message"]
     assert member.dms
-    kinds = await wf.kinds_in(web.db)
-    assert "mod.warned" in kinds and "web.mod.warn" in kinds
+    await wf.one_web_row(web.db, "web.mod.warned")
 
 
 @pytest.mark.parametrize("kind", PUNISHMENTS)
@@ -119,9 +118,7 @@ async def test_every_destructive_route_is_409_while_the_guard_is_on(
     assert response.json()["error"] == "test_mode"
     assert "test mode" in response.json()["message"]
     assert (guild.bans, guild.kicks, guild.unbans, member.timeouts) == ([], [], [], [])
-    kinds = await wf.kinds_in(web.db)
-    assert f"mod.would_{kind}" in kinds
-    assert not [row for row in kinds if row.startswith("web.mod.")]
+    await wf.one_web_row(web.db, f"web.mod.would_{kind}")
 
 
 async def test_a_timeout_times_them_out_and_records_a_case(client, sign_in, web, guild, wf):
@@ -135,8 +132,7 @@ async def test_a_timeout_times_them_out_and_records_a_case(client, sign_in, web,
     assert response.status_code == 200
     assert member.timeouts[0][0] == timedelta(seconds=600)
     assert "Timed" in response.json()["message"]
-    kinds = await wf.kinds_in(web.db)
-    assert "mod.timed_out" in kinds and "web.mod.timeout" in kinds
+    await wf.one_web_row(web.db, "web.mod.timed_out")
 
 
 def test_a_duration_nobody_can_read_is_refused(client, sign_in, guild, wf):
@@ -166,8 +162,8 @@ async def test_a_ban_and_an_unban_go_through_the_guild(client, sign_in, web, gui
 
     assert banned.status_code == 200 and guild.bans[0][2] == 2 * 86400
     assert unbanned.status_code == 200 and guild.unbans[0][0] == 21
-    kinds = await wf.kinds_in(web.db)
-    assert "mod.banned" in kinds and "mod.unbanned" in kinds
+    kinds = [kind for kind, _ in await wf.web_rows_in(web.db)]
+    assert kinds == ["web.mod.banned", "web.mod.unbanned"], kinds
 
 
 async def test_a_kick_discord_refuses_is_not_reported_as_done(client, sign_in, web, guild, wf):
@@ -207,8 +203,8 @@ async def test_apply_now_carries_out_a_shadow_verdict(client, sign_in, web, guil
     assert response.status_code == 200
     assert member.timeouts and member.timeouts[0][0] == timedelta(seconds=300)
     assert (await get_case(web.db, case_id))["applied"] == 1
-    kinds = await wf.kinds_in(web.db)
-    assert "automod.timed_out" in kinds and "web.mod.apply" in kinds
+    kinds = [kind for kind, _ in await wf.web_rows_in(web.db)]
+    assert kinds == ["web.automod.warned", "web.automod.timed_out"], kinds
 
 
 async def test_apply_now_is_refused_in_test_mode_and_when_it_is_done(
@@ -226,7 +222,7 @@ async def test_apply_now_is_refused_in_test_mode_and_when_it_is_done(
 
     assert guarded.status_code == 409 and guarded.json()["error"] == "test_mode"
     assert (await get_case(web.db, case_id))["applied"] == 0
-    assert "automod.would_timeout" in await wf.kinds_in(web.db)
+    await wf.one_web_row(web.db, "web.automod.would_timeout")
 
     web.guard = None
     client.post(f"/api/mod/cases/{case_id}/apply")
@@ -262,8 +258,7 @@ async def test_a_rule_change_is_stored_and_logged(client, sign_in, web, wf):
     assert (response.json()["enabled"], response.json()["threshold"]) == (True, 80)
     stored = web.store.get(wf.GUILD_ID, "automod_rules")["caps"]
     assert stored["threshold"] == 80 and stored["actions"] == ["delete"]
-    kinds = await wf.kinds_in(web.db)
-    assert "automod.rule" in kinds and "web.mod.rule" in kinds
+    assert (await wf.one_web_row(web.db, "web.automod.rule"))["rule"] == "caps"
 
 
 def test_a_rule_out_of_range_is_refused_with_the_validators_sentence(client, sign_in):
