@@ -139,7 +139,14 @@ a migration.
 with `bot.add_view()` on `cog_load` (the pattern `TempVoicePanel` uses). If the
 bot restarts while a member's panel or request card is still open, every button
 and select on it answers Discord's own "This interaction failed" — the view's
-Python object is gone, and nothing on the message itself says so.
+Python object is gone, and nothing on the message itself says so. ⚠️ **A second way the same footer goes
+missing, and this one is a setting anybody can walk into:** `request_panel_minutes`
+of **15 or more** loses the "this panel has gone quiet" footer entirely, because
+the footer is written through a Discord interaction token that expires 15 minutes
+after the click that made it — the buttons simply stop answering with nothing to
+explain why. The default was lowered from 15 to **10** for exactly this reason and
+the key's own help text (`settings_store.py`, `KEY_HELP["request_panel_minutes"]`)
+carries the warning; the value is deliberately NOT clamped.
 
 **Why tolerated.** A panel is a moment, not a post: it exists for the seconds a
 member spends filing or a staffer spends triaging, then it is gone (its own

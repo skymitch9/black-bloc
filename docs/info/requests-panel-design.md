@@ -4,9 +4,10 @@
 `feat/requests-panel`, commit `4743b01`, worktree `.claude/worktrees/agent-requests-panel`
 — NOT merged and NOT deployed.** 172 new/rewritten tests
 (`tests/cogs/community/test_requests.py` 51, `tests/test_requests.py` +26 pure-helper and
-`withdraw_request` tests, `tests/test_settings_store.py` +1); **3321 tests pass**, ruff
+`withdraw_request` tests, `tests/test_settings_store.py` +1), then **17 more** for the
+three review findings (`79548c1`); **3338 tests pass** (3321 before the review fixes), ruff
 clean, `check.mjs` 17 pages / 139 routes, `labels.js` still parses (site untouched). See
-`## Deviations` at the foot. Owner's ask ~06:50 (verbatim in `../TODO.md`, "🔧 Open
+`## Deviations` at the foot — 9, 10 and 11 are the reviewer's findings and what changed. Owner's ask ~06:50 (verbatim in `../TODO.md`, "🔧 Open
 engineering items"): *"The flow
 seems tough, and request set and request ready seem overlapping."* → *"Let's also have
 /request open a menu maybe. Let's try and minimize slash commands and maximize interactive
@@ -109,8 +110,10 @@ Discord — accepted, the panel is a moment, not a post (a `KNOWN_ISSUES` entry,
 
 ### Settings (checklist 33 — every decision configurable both ways)
 
-One new key in `settings_store.py`: **`request_panel_minutes`** (`int`, default **15**, the
-minutes a panel stays live) — registry type, help text, default, on the Settings page and
+One new key in `settings_store.py`: **`request_panel_minutes`** (`int`, default **10** —
+15 as first built, lowered by review finding F2 / deviation 10, because the "gone quiet"
+footer can only be written while Discord's 15-minute interaction token is still valid) —
+registry type, help text, default, on the Settings page and
 via `/settings set-value` like every key. Nothing else here is a decision: the 25-option cap
 is Discord's, the button table is the state machine.
 
@@ -162,7 +165,10 @@ specified.
    `edit_message` offers, acknowledged first so the slow work gets the ~15-minute
    interaction-token window instead of 3 seconds. `code-notes.md` has the exact
    lines checked.
-2. **`RequestView(timeout=...)` is a fresh clock on every render, not one running
+2. ⚠️ **Superseded by deviation 9** — the second sentence below ("only the LAST one
+   nobody touches ever reaches `on_timeout`") was WRONG, and the fix is in 9. The
+   first sentence (a fresh clock per render) still holds.
+   **`RequestView(timeout=...)` is a fresh clock on every render, not one running
    total from when `/request` was first opened.** Each click replaces the
    displayed view with a brand-new `RequestView`; only the LAST one nobody
    touches ever reaches `on_timeout`. This reads as an inactivity timeout rather
@@ -215,3 +221,70 @@ specified.
    `code-notes.md` carries the detail; `review-checklist.md` itself was left
    untouched — updating that enumeration is the reviewer's call, not this
    build's.
+
+### The reviewer's three findings — written 2026-09-03, fixed in `79548c1`
+
+9. **A replaced view kept its timeout clock, and firing it overwrote the live
+   card with a stale disabled one (F1, supersedes deviation 2).** Every
+   re-render (`render_panel`, `open_card`, `open_withdraw_confirm`,
+   `finish_card`) builds a NEW `RequestView` and edits the message with it, but
+   nothing stopped the view it replaced. **The library lines that prove it:**
+   `discord/ui/view.py:940–968` (`ViewStore.add_view`) merely overwrites
+   `_synced_message_views[message_id]` — it never touches the displaced view's
+   `__timeout_task`, so that task keeps running, and when it fires
+   `_dispatch_timeout` (`view.py:611–620`) calls the OLD view's `on_timeout`,
+   which disabled the OLD children and edited the message with them. Deviation
+   2's "only the LAST one nobody touches ever reaches `on_timeout`" was simply
+   false: *every* view a member clicks past would eventually have reached it.
+   **What changed:** a module-level `retire(previous)` sets `previous.replaced =
+   True` and calls `previous.stop()` immediately before every re-render's edit;
+   each item callback passes its own `self.view` down as `previous`, and
+   `CardMoveButton` hands it to `ReadyModal`/`NoteModal` so the modal's submit
+   path retires it too. `RequestModal` (filing) never re-renders and takes
+   nothing. ⚠️ **The brief's belt-and-braces guard was NOT written as
+   `if self.is_finished(): return`** — measured against the installed library,
+   `_dispatch_timeout` sets `__stopped.set_result(True)` *before* creating the
+   `on_timeout()` task (`view.py:619` then `:620`), so `is_finished()` is
+   **already True inside a genuine timeout** (proved by running a real
+   `discord.ui.View` with a 0.05s timeout and reading the flag from inside
+   `on_timeout`). That guard would have disabled the footer entirely. The
+   explicit `replaced` flag says what is actually meant and cannot be confused
+   with a real expiry.
+10. **The "gone quiet" footer could essentially never be written at the default
+    15 minutes (F2).** `view.message` is an `InteractionMessage` bound to the
+    token of the interaction that rendered it, and Discord invalidates that
+    token 15 minutes after the interaction. `View._refresh_timeout`
+    (`view.py:315–317`, called from `_scheduled_task` at `view.py:596–597`)
+    extends the timeout on EVERY interaction with the view — including ones
+    that do not re-render at all (`Logs`, opening the File/Ready/Note modals) —
+    so by the time the timeout fires the message's token is at least
+    `request_panel_minutes` old and usually older. At 15 the `message.edit` in
+    `on_timeout` fails (caught, logged at info) practically always, and the
+    buttons just die with Discord's "This interaction failed" and no footer.
+    **What changed, two parts:** (a) `RequestView.interaction_check` records
+    `self.last_interaction = interaction` and returns True, and `on_timeout`
+    writes through `last_interaction.edit_original_response(embeds=…,
+    view=self)` first, falling back to `self.message.edit(...)` when there is no
+    recorded interaction *or* when the recorded one is itself refused — both
+    wrapped so an `HTTPException` is logged, never raised. (b) The default of
+    `request_panel_minutes` is now **10**, and its `KEY_HELP` says plainly that
+    the footer can only be written while Discord's 15-minute interaction window
+    is open, so 15 and above mean the buttons stop with no footer. **Nothing is
+    clamped** — the owner may still set 15+; the help text is the warning, and
+    `KNOWN_ISSUES` KI-20 carries the same sentence.
+11. **Staff moves lost the staff check the ten subcommands had (F3).** On `main`
+    every staff subcommand called `require_staff(interaction)`
+    (`settings_store.py:1092`) on every invocation. The panel asked
+    `store.is_staff` only when it *rendered*, so a staffer demoted while a card
+    was open kept moving requests until the panel timed out. **What changed:** a
+    `still_staff(interaction)` helper re-asks `interaction.client.store.is_staff`
+    and, on failure, answers `store.staff_refusal(guild.id)` through the existing
+    `answer()` helper (which already copes with responded/not-responded) and
+    returns without moving anything. It runs in `CardMoveButton.callback` before
+    any defer or modal, and at the top of `Requests.ready_submit` and
+    `Requests.note_submit` before their defers. ⚠️ **`require_staff` itself was
+    NOT reused**: it calls `interaction.response.send_message` directly, so it
+    only works where nothing has been deferred — `still_staff` + `answer()` is
+    the one shape used consistently at all three sites. `LogsButton` needed
+    nothing: `send_logs` (`actionlog.py:295–297`) already calls `require_staff`
+    itself, and a test now pins that.

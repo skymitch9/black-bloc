@@ -43,6 +43,16 @@ git -C <worktree> status --short             # uncommitted work — NEVER stash,
   `requests.py:withdraw_request`, `settings_store.py:request_panel_minutes`, tests, docs),
   run `ruff` + full `pytest` + `node site/mock/check.mjs` in the worktree, then land it.
 
+**Review done, three findings fixed on the branch (2026-09-03, `79548c1` + its docs
+commit).** F1 a re-render never stopped the view it replaced, so a stale timeout would
+overwrite the live card; F2 the "gone quiet" footer could not be written at the old
+15-minute default (Discord's interaction token expires at 15), so the default is now **10**
+and `on_timeout` writes through the freshest token; F3 card moves and the ready/note modal
+submits lost the staff check the ten subcommands had, and now re-ask. Detail:
+`info/requests-panel-design.md` deviations 9–11. **3338 tests pass**, ruff clean,
+`check.mjs` 17 pages / 139 routes. Still NOT merged, NOT deployed — the landing ritual
+below is unchanged.
+
 **Landing ritual (unchanged):** `git merge --no-ff feat/requests-panel` on `main` →
 `scripts/deploy.ps1` (refuses a dirty tree; ~10 min: ruff → pytest → check.mjs → push →
 `flyctl deploy --app black-bloc --ha=false --remote-only --yes`; flyctl lives at
