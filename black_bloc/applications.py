@@ -4,11 +4,14 @@ import json
 import logging
 import re
 import sqlite3
+from dataclasses import dataclass
 from typing import Any
 
 import discord
 
 from .golive import now_iso
+from .logkinds import FEATURE_PAGES
+from .panels import panel_minutes as library_panel_minutes
 from .rolegrants import (
     APPROVED,
     DENIED,
@@ -30,6 +33,9 @@ APPROVER_ROLE_KEY = "applications_approver_role_id"
 PING_ROLE_KEY = "applications_ping_role_id"
 RETRY_DAYS_KEY = "applications_retry_days"
 DM_KEY = "applications_dm_on_decision"
+ROSTER_SHOWS_LEFT_KEY = "applications_roster_shows_left"
+PANEL_MINUTES_KEY = "applications_panel_minutes"
+PANEL_OWN_LIST_KEY = "applications_panel_own_list"
 
 REMOVED = "removed"
 NO_ROLE = 0
@@ -39,10 +45,11 @@ SETTLED = (APPROVED, DENIED, WITHDRAWN, REMOVED)
 TRANSITIONS: dict[str, tuple[str, ...]] = {
     PENDING: (APPROVED, DENIED, WITHDRAWN),
     APPROVED: (REMOVED,),
-    DENIED: (),
+    DENIED: (APPROVED,),
     WITHDRAWN: (),
-    REMOVED: (),
+    REMOVED: (APPROVED,),
 }
+RESTORABLE = tuple(one for one in (DENIED, REMOVED) if APPROVED in TRANSITIONS[one])
 
 SHORT = "short"
 LONG = "long"
@@ -213,6 +220,69 @@ GRANT_FAILED_ON_CARD = (
     "Discord refused to add the role, so it is still off them — hand it over with `/role grant`."
 )
 
+PANEL_TITLE = "Applications"
+PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run /apply again"
+PANEL_INTRO = (
+    "Apply for what this server hands out, and see where what you already sent has got to."
+)
+NOTHING_OF_YOURS = "You have not applied for anything here yet."
+YOUR_APPLICATION = "**{title}** — {status}{extra}"
+STATUS_WAITING = ", waiting on staff"
+NOTHING_TO_SHOW = (
+    "Black Bloc has no application with that number, so there was nothing to show. Pick one "
+    "from **A form…** instead, or open the Role menus page."
+)
+COUNTS_LINE = "**{forms}** form(s) · **{waiting}** waiting · **{approved}** on a list"
+PICK_A_FORM = "A form…"
+PICK_AN_APPLICATION = "Pick an application…"
+APPLY_FOR = "Apply for…"
+TAKE_ONE_BACK = "Take one back…"
+SITE_BUTTON = "Open on the site"
+NOT_A_NUMBER = (
+    "**{given}** is not an application number, so nothing was looked up. They look like `#12`, "
+    "and the number is on the card."
+)
+WITHDRAWN_IS_THEIRS = (
+    "The person took this back themselves, so there is nothing for staff to move. They may "
+    "apply again whenever they like."
+)
+REINSTATED_SAID = "**#{application_id}** is approved again, and they have been told."
+NOT_REINSTATABLE = (
+    "That application is **{status}**, so there was nothing to put back. Only a denied one or "
+    "somebody taken off a list can be approved after the fact."
+)
+
+
+@dataclass(frozen=True)
+class MoveButton:
+    """One button on an application card: what it says, and which shared function it calls."""
+
+    label: str
+    style: str
+    action: str
+    needs_modal: bool = False
+
+
+APPROVE = MoveButton("Approve", "success", "approve")
+DENY = MoveButton("Deny", "danger", "deny", needs_modal=True)
+TAKE_OFF = MoveButton("Take off the list", "danger", "remove", needs_modal=True)
+APPROVE_AFTER_ALL = MoveButton("Approve after all", "success", "reinstate")
+PUT_BACK = MoveButton("Put them back on the list", "success", "reinstate")
+
+CARD_BUTTONS: dict[str, tuple[MoveButton, ...]] = {
+    PENDING: (APPROVE, DENY),
+    APPROVED: (TAKE_OFF,),
+    DENIED: (APPROVE_AFTER_ALL,),
+    WITHDRAWN: (),
+    REMOVED: (PUT_BACK,),
+}
+MOVE_TARGETS: dict[str, str] = {
+    "approve": APPROVED,
+    "deny": DENIED,
+    "remove": REMOVED,
+    "reinstate": APPROVED,
+}
+
 
 class ApplicationError(ValueError):
     """A form, a question or a decision arrived in a shape Black Bloc will not store."""
@@ -220,6 +290,18 @@ class ApplicationError(ValueError):
 
 def may_move(current: Any, wanted: str) -> bool:
     return wanted in TRANSITIONS.get(str(current or ""), ())
+
+
+def card_buttons(
+    status: Any, *, has_role: bool = False, may_decide: bool = True
+) -> tuple[MoveButton, ...]:
+    """The moves this card actually offers — never one the shared function would refuse."""
+    if not may_decide:
+        return ()
+    found = str(status or "")
+    if found == APPROVED and has_role:
+        return ()
+    return CARD_BUTTONS.get(found, ())
 
 
 def check_length(what: str, value: str, limit: int) -> str:
@@ -518,6 +600,111 @@ def decision_lines(
     if status == WITHDRAWN:
         return WITHDRAWN_SAID, ""
     return "", ""
+
+
+def application_id_from(text: Any) -> int | None:
+    """`#12`, `12` or ` #12 ` — the number on a card, or None when it is not one."""
+    found = str(text or "").strip().lstrip("#").strip()
+    if not found.isdigit():
+        return None
+    try:
+        return int(found)
+    except ValueError:
+        return None
+
+
+def panel_minutes(store: Any, guild_id: int) -> int:
+    return library_panel_minutes(store, guild_id, PANEL_MINUTES_KEY)
+
+
+def panel_shows_own_list(store: Any, guild_id: int) -> bool:
+    return bool(store.get(guild_id, PANEL_OWN_LIST_KEY))
+
+
+def site_page_url(origin: Any) -> str | None:
+    text = str(origin or "").strip()
+    if not text:
+        return None
+    return f"{text.rstrip('/')}/{FEATURE_PAGES['applications']}"
+
+
+def own_lines(rows: Any, forms_by_id: Any) -> list[str]:
+    """A member's own applications, one line each — what `/apply status` used to print."""
+    found = []
+    for row in rows or ():
+        form = (forms_by_id or {}).get(form_value(row, "form_id"))
+        extra = STATUS_WAITING if form_value(row, "status") == PENDING else ""
+        if form_value(row, "deny_reason"):
+            extra = f" — {form_value(row, 'deny_reason')}"
+        found.append(
+            YOUR_APPLICATION.format(
+                title=form_value(form, "title", f"form #{form_value(row, 'form_id')}"),
+                status=form_value(row, "status"),
+                extra=extra,
+            )
+        )
+    return found
+
+
+def form_lines(forms_: Any) -> list[str]:
+    """One line per form: whether it is open, and what an approval hands over."""
+    found = []
+    for one in forms_ or ():
+        role = role_of(one)
+        found.append(
+            f"**{form_value(one, 'name')}** — {'open' if is_open(one) else 'closed'}, "
+            f"{f'<@&{role}>' if role else 'list'}"
+        )
+    return found
+
+
+def application_lines(rows: Any, names: Any, listed: Any = (), logins: Any = None) -> list[str]:
+    """The queue, one line each; a Twitch login rides along where the form keeps a list."""
+    known = logins or {}
+    on_a_list = set(listed or ())
+    found = []
+    for row in rows or ():
+        who = form_value(row, "user_id")
+        form_id = form_value(row, "form_id")
+        extra = (
+            f" · twitch.tv/{known[who]}"
+            if form_id in on_a_list
+            and form_value(row, "status") == APPROVED
+            and who in known
+            else ""
+        )
+        found.append(
+            f"`#{form_value(row, 'id')}` <@{who}> · {(names or {}).get(form_id, '?')} · "
+            f"{form_value(row, 'status')} · {stamp(form_value(row, 'submitted_at'), 'R')}{extra}"
+        )
+    return found
+
+
+def question_lines(rows: Any) -> list[str]:
+    found = []
+    for row in rows or ():
+        optional = "" if form_value(row, "required") else ", optional"
+        found.append(
+            f"**{form_value(row, 'position')}.** {form_value(row, 'label')} — "
+            f"{form_value(row, 'style')}{optional}"
+        )
+    return found
+
+
+def counts_of(rows: Any) -> dict[str, int]:
+    found = dict.fromkeys(STATUSES, 0)
+    for row in rows or ():
+        status = str(form_value(row, "status", ""))
+        if status in found:
+            found[status] += 1
+    return found
+
+
+def counts_line(forms_: Any, rows: Any) -> str:
+    counts = counts_of(rows)
+    return COUNTS_LINE.format(
+        forms=len(list(forms_ or ())), waiting=counts[PENDING], approved=counts[APPROVED]
+    )
 
 
 async def create_form(
@@ -869,6 +1056,22 @@ async def remove_application(
     return bool(cur.rowcount)
 
 
+async def restore_application(
+    db: Any, application_id: int, *, decided_by: int | None = None
+) -> bool:
+    """Staff's exit from a no: denied or taken-off goes back to approved, and only from those."""
+    if not RESTORABLE:
+        raise ApplicationError("nothing may be approved after the fact")
+    marks = ", ".join("?" for _ in RESTORABLE)
+    cur = await db.conn.execute(
+        f"UPDATE applications SET status = ?, decided_by = ?, decided_at = ?, deny_reason = NULL "
+        f"WHERE id = ? AND status IN ({marks})",
+        (APPROVED, decided_by, now_iso(), application_id, *RESTORABLE),
+    )
+    await db.conn.commit()
+    return bool(cur.rowcount)
+
+
 async def set_card(db: Any, application_id: int, channel_id: Any, message_id: Any) -> None:
     await db.conn.execute(
         "UPDATE applications SET card_channel_id = ?, card_message_id = ? WHERE id = ?",
@@ -895,30 +1098,55 @@ async def cooling_until(db: Any, form: Any, user_id: int, retry_days: Any = None
 
 __all__ = [
     "APPROVER_ROLE_KEY",
+    "CARD_BUTTONS",
     "CHANNEL_KEY",
+    "COUNTS_LINE",
     "DAYS_MAX",
     "DM_KEY",
     "LABEL_MAX",
     "LONG",
     "MODES",
     "MODE_KEY",
+    "MOVE_TARGETS",
+    "NOTHING_OF_YOURS",
+    "NOTHING_TO_SHOW",
+    "NOT_A_NUMBER",
+    "NOT_REINSTATABLE",
     "NO_ROLE",
+    "PANEL_INTRO",
+    "PANEL_MINUTES_KEY",
+    "PANEL_OWN_LIST_KEY",
+    "PANEL_TIMEOUT_FOOTER",
+    "PANEL_TITLE",
     "PING_ROLE_KEY",
     "PLACEHOLDER_MAX",
     "QUESTIONS_MAX",
+    "REINSTATED_SAID",
     "REMOVED",
+    "RESTORABLE",
     "RETRY_DAYS_DEFAULT",
     "RETRY_DAYS_KEY",
+    "ROSTER_SHOWS_LEFT_KEY",
     "SETTLED",
     "SHORT",
+    "SITE_BUTTON",
     "STATUSES",
+    "STATUS_WAITING",
     "STYLES",
     "TRANSITIONS",
+    "WITHDRAWN_IS_THEIRS",
+    "YOUR_APPLICATION",
     "ApplicationError",
+    "MoveButton",
     "add_question",
     "answers_json",
+    "application_id_from",
+    "application_lines",
     "applications_for",
     "approved_text_of",
+    "card_buttons",
+    "counts_line",
+    "counts_of",
     "check_name",
     "check_position",
     "check_style",
@@ -932,6 +1160,7 @@ __all__ = [
     "delete_form",
     "edit_question",
     "expires_days_of",
+    "form_lines",
     "form_value",
     "get_application",
     "get_form",
@@ -942,19 +1171,25 @@ __all__ = [
     "may_move",
     "next_step_of",
     "open_application",
+    "own_lines",
     "owner_nudge",
     "owner_of",
+    "panel_minutes",
+    "panel_shows_own_list",
     "pending_count",
     "positive_days",
+    "question_lines",
     "questions_for",
     "read_answers",
     "remove_application",
     "remove_question",
     "render_card",
     "replace_questions",
+    "restore_application",
     "retry_days_of",
     "role_of",
     "set_card",
+    "site_page_url",
     "set_grant",
     "set_panel",
     "twitch_logins_for",

@@ -14,6 +14,7 @@ from black_bloc.applications import (
     QUESTIONS_MAX,
     REMOVE_NEEDS_A_REASON,
     REMOVED,
+    RESTORABLE,
     RETRY_DAYS_DEFAULT,
     SETTLED,
     SHORT,
@@ -85,7 +86,7 @@ async def a_form(db, name="twitch-team", **kwargs):
 
 def test_a_pending_application_may_only_move_to_the_three_settled_states():
     assert set(TRANSITIONS[PENDING]) == {APPROVED, DENIED, WITHDRAWN}
-    assert all(TRANSITIONS[one] == () for one in (DENIED, WITHDRAWN, REMOVED))
+    assert TRANSITIONS[WITHDRAWN] == ()
     assert set(STATUSES) == {PENDING, APPROVED, DENIED, WITHDRAWN, REMOVED}
     assert may_move(PENDING, APPROVED) is True
     assert may_move(APPROVED, DENIED) is False
@@ -96,8 +97,17 @@ def test_an_approved_application_may_only_move_to_removed():
     assert TRANSITIONS[APPROVED] == (REMOVED,)
     assert may_move(APPROVED, REMOVED) is True
     assert may_move(PENDING, REMOVED) is False
-    assert may_move(REMOVED, APPROVED) is False
     assert set(SETTLED) == {APPROVED, DENIED, WITHDRAWN, REMOVED}
+
+
+def test_staff_can_leave_a_denied_or_removed_application_but_never_a_withdrawn_one():
+    """Owner rule: no stored state staff cannot leave — except the one the member owns."""
+    assert TRANSITIONS[DENIED] == (APPROVED,)
+    assert TRANSITIONS[REMOVED] == (APPROVED,)
+    assert may_move(DENIED, APPROVED) is True
+    assert may_move(REMOVED, APPROVED) is True
+    assert may_move(WITHDRAWN, APPROVED) is False
+    assert RESTORABLE == (DENIED, REMOVED)
 
 
 def test_a_form_name_is_a_slug_and_says_so_when_it_is_not():
