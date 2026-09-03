@@ -223,3 +223,56 @@ it returns parseable JSON in the schema, an empty profile for the one-liner,
 and that the staff one is never sent. Record the measured behaviour in
 `code-notes.md` beside `parse_distilled`. If JSON mode is unreliable, STOP
 and report — do not build a retry loop around it.
+
+### J — MEASURED 2026-09-02 (the Phase 17 build agent)
+
+**Verdict: reliable. 100% parseable, no retry loop built.** Measured with
+`scripts/scan/phase17_j_distil.py` (gitignored, not product code) calling the
+real Groq endpoint with `response_format: {"type": "json_object"}` — the
+`json_only=True` flag added to `GroqClient.reply` for this.
+
+| Measurement | Value |
+|---|---|
+| Model pin | **`openai/gpt-oss-120b`** (`groq.DEFAULT_MODEL`, i.e. the `chat_simple_model` default) |
+| Distillations attempted | **29** over two runs (5 synthetic windows × 3 rounds, twice; ≥10 required) |
+| Calls that answered | **29** (one extra call in run 1 hit a Groq 429 — a transport failure, not a parse failure; that is the existing `LLMError(RATE_LIMITED)` path) |
+| Answers that were a valid JSON **object** | **29 / 29 = 100%** |
+| Answers `parse_distilled` accepted (schema + keys + lengths) | **29 / 29 = 100%** |
+| Latency (run 2, 15 calls) | min **0.35 s**, median **0.77 s**, max **1.78 s** |
+| Tokens per distillation | ~390–490 in, ~60–440 out (Groq tier is priced at $0 in `llm.PRICES`) |
+| Code fences seen | **none** — but `json_object()` tolerates one anyway |
+
+**The three checks the design asked for, each answered:**
+
+1. **Parseable JSON in the schema** — yes, 29/29, zero retries needed. Not one
+   answer carried prose, a fence, or a key outside `call_me`/`notes`/`threads`.
+2. **An empty profile for the one-liner** — yes. The `lol` / `Fair.` window
+   returned `call_me: null, notes: [], threads: []` on 5 of 6 attempts; the
+   sixth invented "prefers informal, light-hearted tone", which is a harmless
+   preference rather than content.
+3. **The staff window is never sent** — confirmed at the gate, not the model:
+   `chat_llm.about_staff` returns `True` for both member turns of the appeal
+   conversation, so it is filtered before any call is made. The script prints
+   `staff_words: about_staff -> NEVER SENT` and the summary's
+   `windows never sent` names it.
+
+**What the measurement CHANGED in the build** (run 1 found a real leak):
+
+- The model twice emitted third-person threads — `"namu quitting the server"`,
+  `"server member departures"` — which rule 1 forbids. Word-boundary matching
+  meant `quit` did not match `quitting`. Fixed by adding the departure family
+  (`quitting`, `quits`, `leaving`, `departure(s)`, plus `banned`, `kicked`,
+  `muted`, `warned`, `timed out`) to `OUTCOMES`, which is checked against
+  threads as well as notes. Run 2 dropped all three attempts as `event`.
+- Added a second, guild-aware guard: `other_names(guild, user_id)` collects
+  every *other* member's display name and `parse_distilled(others=…)` drops any
+  note or thread naming one. Phrase lists cannot catch an arbitrary name; this
+  can. It is not a proof — see `KNOWN_ISSUES.md`.
+- `straight` was removed from `SENSITIVE`: it collided with "likes straight
+  answers", which is a KEEP example in §D2-definition.
+
+⚠️ **NOT measured:** behaviour on any model other than the pin above; behaviour
+against real member conversations (all five windows are synthetic, written for
+this test); anything about the Anthropic tier, which is never used for
+distillation; and how often the model volunteers a *sensitive* item, since none
+of the synthetic windows contained one.
