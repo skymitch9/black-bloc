@@ -341,7 +341,13 @@ built as specified.
    used; a server that has set one clears it with `/settings clear
    chat_memory_model` rather than setting it to empty. This matches how every
    other blank-defaulting text key in the registry behaves.
-9. **Not built, and not in §I either: the design's §H doc list.** `code-notes.md`
+9. **The FEATURES line went into `personas.py`, not `chat_data.py`** (§D names
+   the latter). `chat_data.py` has no FEATURES block; the member-command list the
+   model reads to answer "does the bot remember me?" is `personas.FEATURES`, and
+   `tests/test_personas.py` fails the day a member-visible command is in the tree
+   and not in it. The `/help` entry §D also asks for needed no code at all —
+   `/help` is generated from the command tree.
+10. **Not built, and not in §I either: the design's §H doc list.** `code-notes.md`
    and this `info/README.md` row were written; `access/sweeps.md`,
    `cutover-plan.md`, `feature-list.md`, `architecture.md` counts and
    `OWNER_GUIDE.md` were **not** touched, on the standing rule that the reviewer
