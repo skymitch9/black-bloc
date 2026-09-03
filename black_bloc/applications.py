@@ -31,13 +31,17 @@ PING_ROLE_KEY = "applications_ping_role_id"
 RETRY_DAYS_KEY = "applications_retry_days"
 DM_KEY = "applications_dm_on_decision"
 
-STATUSES = (PENDING, APPROVED, DENIED, WITHDRAWN)
-SETTLED = (APPROVED, DENIED, WITHDRAWN)
+REMOVED = "removed"
+NO_ROLE = 0
+
+STATUSES = (PENDING, APPROVED, DENIED, WITHDRAWN, REMOVED)
+SETTLED = (APPROVED, DENIED, WITHDRAWN, REMOVED)
 TRANSITIONS: dict[str, tuple[str, ...]] = {
     PENDING: (APPROVED, DENIED, WITHDRAWN),
-    APPROVED: (),
+    APPROVED: (REMOVED,),
     DENIED: (),
     WITHDRAWN: (),
+    REMOVED: (),
 }
 
 SHORT = "short"
@@ -154,6 +158,14 @@ DENY_NEEDS_A_REASON = (
     "A denied application needs one line the person is sent, so nothing was done. Say why and "
     "send it again."
 )
+REMOVE_NEEDS_A_REASON = (
+    "Taking somebody off the list needs one line they are sent, so nothing was done. Say why "
+    "and send it again."
+)
+REMOVE_NOT_APPROVED = (
+    "That application is **{status}**, not approved, so there was nobody to take off the list. "
+    "`/applications list status:approved` says who is on it."
+)
 ROLE_REFUSED_AFTER_DECISION = (
     "The application is marked approved, but Discord refused to add **{role}** — Black Bloc "
     "needs Manage Roles and its own role has to sit above it in Server Settings → Roles. Fix "
@@ -162,8 +174,8 @@ ROLE_REFUSED_AFTER_DECISION = (
 NO_REVIEW_CHANNEL = "no_review_channel"
 NOTHING_PENDING = "Nobody is waiting on staff right now."
 NO_FORMS_YET = (
-    "This server has no application forms yet. `/applications create <name> <title> <role>` "
-    "makes the first one."
+    "This server has no application forms yet. `/applications create <name> <title>` makes the "
+    "first one."
 )
 FORM_HAS_PENDING = (
     "**{name}** still has {count} application(s) waiting on staff, so it was not deleted. "
@@ -178,7 +190,9 @@ PANEL_STUCK = (
     "see that channel and be able to post in it."
 )
 APPROVED_SAID = "Approved — **{name}** has **{role}** now.{extra}"
+APPROVED_ON_RECORD = "Approved — **{name}** is on the **{title}** list now."
 DENIED_SAID = "Denied, and they have been told why."
+REMOVED_SAID = "Taken off the list, and they have been told why."
 WITHDRAWN_SAID = "Taken back — staff will not be deciding it. Apply again whenever you want."
 OWNER_NUDGE = "<@{owner_id}> — next step: {next_step}"
 NEXT_STEP_UNOWNED = "Next step: {next_step}"
@@ -186,6 +200,10 @@ DM_APPROVED = "**{title}** on **{guild}** — approved. {said}"
 DM_DENIED = (
     "**{title}** on **{guild}** — staff said no. The reason given was: {reason}. You can apply "
     "again {stamp}."
+)
+DM_REMOVED = (
+    "**{title}** on **{guild}** — staff took you off the list. The reason given was: {reason}. "
+    "You can apply again {stamp}."
 )
 DM_RECEIVED = (
     "Your **{title}** application on **{guild}** is with staff now. You'll get a DM either way."
@@ -350,6 +368,15 @@ def form_value(form: Any, key: str, default: Any = None) -> Any:
     return default if found is None else found
 
 
+def role_of(form: Any) -> int | None:
+    """The role an approval hands over, or None when the form only keeps a list."""
+    found = form_value(form, "role_id")
+    try:
+        return int(found) if found else None
+    except (TypeError, ValueError):
+        return None
+
+
 def retry_days_of(form: Any, fallback: Any = RETRY_DAYS_DEFAULT) -> int:
     try:
         days = int(form_value(form, "retry_days", fallback))
@@ -401,11 +428,13 @@ def render_card(form: Any, row: Any, member: Any = None, answers: Any = None) ->
     """One place turns a stored application into the card every surface shows."""
     found = read_answers(answers if answers is not None else form_value(row, "answers", "[]"))
     who = form_value(row, "user_id")
+    role = role_of(form)
+    title = str(form_value(form, "title", "?"))
     embed = discord.Embed(
-        title=CARD_HEADING.format(
-            application_id=form_value(row, "id", "?"), title=form_value(form, "title", "?")
+        title=CARD_HEADING.format(application_id=form_value(row, "id", "?"), title=title),
+        description=(
+            f"<@{who}> applied for <@&{role}>" if role else f"<@{who}> applied for **{title}**"
         ),
-        description=f"<@{who}> applied for <@&{form_value(form, 'role_id', 0)}>",
     )
     name = getattr(member, "display_name", None)
     if name:
@@ -437,19 +466,26 @@ def decision_lines(
     guild_name: str = "the server",
     member_name: Any = None,
     until: Any = None,
-    granted: bool = True,
+    granted: bool | None = True,
 ) -> tuple[str, str]:
     """(what the card and the decider are told, what the applicant is DM'd)."""
     status = str(form_value(row, "status", PENDING))
     title = str(form_value(form, "title", "?"))
-    role = f"<@&{form_value(form, 'role_id', 0)}>"
+    role = role_of(form)
     if status == APPROVED:
-        extra = EXPIRES_EXTRA.format(stamp=stamp(until)) if until else ""
-        said = APPROVED_SAID.format(
-            name=member_name or form_value(row, "user_id"), role=role, extra=extra
-        )
-        if not granted:
-            said = f"{said} {GRANT_FAILED_ON_CARD}"
+        extra = EXPIRES_EXTRA.format(stamp=stamp(until)) if until and role else ""
+        if role:
+            said = APPROVED_SAID.format(
+                name=member_name or form_value(row, "user_id"),
+                role=f"<@&{role}>",
+                extra=extra,
+            )
+            if granted is False:
+                said = f"{said} {GRANT_FAILED_ON_CARD}"
+        else:
+            said = APPROVED_ON_RECORD.format(
+                name=member_name or form_value(row, "user_id"), title=title
+            )
         nudge = owner_nudge(form)
         card = f"{said} {nudge}".strip()
         body = f"{approved_text_of(form)}{extra}"
@@ -468,6 +504,17 @@ def decision_lines(
                 stamp=stamp(when) if when else "whenever you like",
             ),
         )
+    if status == REMOVED:
+        when = retry_at(form_value(row, "decided_at"), retry_days_of(form))
+        return (
+            REMOVED_SAID,
+            DM_REMOVED.format(
+                title=title,
+                guild=guild_name,
+                reason=str(form_value(row, "deny_reason", "none given")),
+                stamp=stamp(when) if when else "whenever you like",
+            ),
+        )
     if status == WITHDRAWN:
         return WITHDRAWN_SAID, ""
     return "", ""
@@ -478,7 +525,7 @@ async def create_form(
     guild_id: int,
     name: str,
     title: str,
-    role_id: int,
+    role_id: int | None,
     created_by: int,
     *,
     description: Any = None,
@@ -502,7 +549,7 @@ async def create_form(
             slug,
             heading,
             str(description) if description else None,
-            int(role_id),
+            int(role_id) if role_id else None,
             int(review_channel_id) if review_channel_id else None,
             int(approver_role_id) if approver_role_id else None,
             int(created_by),
@@ -556,6 +603,8 @@ async def update_form(db: Any, guild_id: int, name: str, **changes: Any) -> bool
     if form is None:
         return False
     wanted = {key: value for key, value in changes.items() if value is not None}
+    if wanted.get("role_id") == NO_ROLE:
+        wanted["role_id"] = None
     if "title" in wanted:
         wanted["title"] = check_title(wanted["title"])
     if "description" in wanted:
@@ -574,10 +623,13 @@ async def update_form(db: Any, guild_id: int, name: str, **changes: Any) -> bool
     kept = {key: value for key, value in wanted.items() if key in FORM_FIELDS}
     if not kept:
         return True
-    sets = ", ".join(f"{key} = ?" for key in kept)
+    sets = ", ".join(
+        f"{key} = NULL" if value is None else f"{key} = ?" for key, value in kept.items()
+    )
+    values = tuple(value for value in kept.values() if value is not None)
     await db.conn.execute(
         f"UPDATE application_forms SET {sets}, updated_at = ? WHERE id = ?",
-        (*kept.values(), now_iso(), form["id"]),
+        (*values, now_iso(), form["id"]),
     )
     await db.conn.commit()
     return True
@@ -724,11 +776,27 @@ async def open_application(db: Any, form_id: int, user_id: int) -> Any:
 
 async def last_decision(db: Any, form_id: int, user_id: int) -> Any:
     cur = await db.conn.execute(
-        "SELECT * FROM applications WHERE form_id = ? AND user_id = ? AND status IN (?, ?) "
+        "SELECT * FROM applications WHERE form_id = ? AND user_id = ? AND status IN (?, ?, ?) "
         "ORDER BY id DESC LIMIT 1",
-        (form_id, user_id, APPROVED, DENIED),
+        (form_id, user_id, APPROVED, DENIED, REMOVED),
     )
     return await cur.fetchone()
+
+
+async def twitch_logins_for(db: Any, user_ids: Any) -> dict[int, str]:
+    """One query for the whole roster, so a list of thirty is not thirty round trips."""
+    wanted = list(dict.fromkeys(int(one) for one in user_ids or ()))
+    if not wanted:
+        return {}
+    marks = ", ".join("?" for _ in wanted)
+    cur = await db.conn.execute(
+        f"SELECT user_id, twitch_login FROM golive_links WHERE user_id IN ({marks})", wanted
+    )
+    return {
+        int(row["user_id"]): str(row["twitch_login"])
+        for row in await cur.fetchall()
+        if row["twitch_login"]
+    }
 
 
 async def applications_for(
@@ -785,6 +853,22 @@ async def decide_application(
     return bool(cur.rowcount)
 
 
+async def remove_application(
+    db: Any, application_id: int, *, decided_by: int | None = None, reason: str | None = None
+) -> bool:
+    """Off an approved list, and only off an approved one: staff's way back out of a yes."""
+    said = str(reason or "").strip()
+    if not said:
+        raise ApplicationError(REMOVE_NEEDS_A_REASON)
+    cur = await db.conn.execute(
+        "UPDATE applications SET status = ?, decided_by = ?, decided_at = ?, deny_reason = ? "
+        "WHERE id = ? AND status = ?",
+        (REMOVED, decided_by, now_iso(), said, application_id, APPROVED),
+    )
+    await db.conn.commit()
+    return bool(cur.rowcount)
+
+
 async def set_card(db: Any, application_id: int, channel_id: Any, message_id: Any) -> None:
     await db.conn.execute(
         "UPDATE applications SET card_channel_id = ?, card_message_id = ? WHERE id = ?",
@@ -818,9 +902,11 @@ __all__ = [
     "LONG",
     "MODES",
     "MODE_KEY",
+    "NO_ROLE",
     "PING_ROLE_KEY",
     "PLACEHOLDER_MAX",
     "QUESTIONS_MAX",
+    "REMOVED",
     "RETRY_DAYS_DEFAULT",
     "RETRY_DAYS_KEY",
     "SETTLED",
@@ -862,13 +948,16 @@ __all__ = [
     "positive_days",
     "questions_for",
     "read_answers",
+    "remove_application",
     "remove_question",
     "render_card",
     "replace_questions",
     "retry_days_of",
+    "role_of",
     "set_card",
     "set_grant",
     "set_panel",
+    "twitch_logins_for",
     "update_form",
     "validate_question",
     "validate_questions",

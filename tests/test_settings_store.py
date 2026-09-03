@@ -1186,6 +1186,23 @@ async def test_the_application_keys_are_typed_and_the_mode_is_the_three_way_one(
         await store.set(1, "applications_mode", "maybe")
 
 
+async def test_the_roster_shows_people_who_left_until_a_lead_says_otherwise(store):
+    assert KEY_TYPES["applications_roster_shows_left"] == "bool"
+    assert store.get(1, "applications_roster_shows_left") is True
+    assert "marked as gone" in KEY_HELP["applications_roster_shows_left"]
+    assert await store.set(1, "applications_roster_shows_left", False) is False
+    assert store.get(1, "applications_roster_shows_left") is False
+    with pytest.raises(SettingError):
+        await store.set(1, "applications_roster_shows_left", "maybe")
+
+
+async def test_the_show_panel_goes_quiet_after_ten_minutes_unless_a_lead_changes_it(store):
+    assert KEY_TYPES["applications_panel_minutes"] == "int"
+    assert store.get(1, "applications_panel_minutes") == 10
+    assert "15" in KEY_HELP["applications_panel_minutes"]
+    assert await store.set(1, "applications_panel_minutes", 5) == 5
+
+
 async def test_a_wait_longer_than_ten_years_is_refused_with_its_own_sentence(store):
     assert await store.set(1, "applications_retry_days", 0) == 0
     with pytest.raises(SettingError) as caught:

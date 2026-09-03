@@ -20,6 +20,7 @@ from ...actionlog import (
 from ...command_errors import AnswersErrors, SafeDynamicItem
 from ...command_visibility import STAFF_ONLY
 from ...logkinds import VIA_DISCORD, kind_via
+from ...panels import NoteModal, Panel, panel_minutes
 from ...settings_store import DB_UNAVAILABLE, require_staff
 from .role_menus import answer, card_target, change_roles, dm, ping_mentions
 
@@ -34,6 +35,11 @@ ON = "on"
 APPROVAL_FALLBACK_CHANNEL_KEY = "rolemenu_approval_channel_id"
 APPROVAL_FALLBACK_ROLE_KEY = "rolemenu_approver_role_id"
 STAFF_CHANNEL_KEY = "staff_channel_id"
+PANEL_MINUTES_KEY = "applications_panel_minutes"
+PANEL_TIMEOUT_FOOTER = "This panel went quiet. Run /applications show again to bring it back."
+TAKE_OFF_LABEL = "Take off the list"
+TAKE_OFF_MODAL_TITLE = "Take them off the list?"
+TAKE_OFF_MODAL_LABEL = "One line they will be sent"
 
 NOT_IN_GUILD = (
     "Applications only work inside the server, and this did not come from one, so nothing was "
@@ -81,6 +87,14 @@ STATUS_WAITING = ", waiting on staff"
 NOTHING_TO_SHOW = (
     "Black Bloc has no application with that number, so there was nothing to show. "
     "`/applications list` names the ones it has."
+)
+REMOVE_IS_FOR_LISTS = (
+    "**{name}** hands over <@&{role}>; take the role off them with `/role revoke` and the "
+    "record follows."
+)
+ROLE_OR_NO_ROLE = (
+    "Pick a role or say `no_role:true`, not both, so nothing was changed. `no_role:true` clears "
+    "the role and the form keeps a list instead."
 )
 MODE_SAID = {
     "off": (
@@ -138,6 +152,13 @@ def holds_role(member: Any, role_id: int | None) -> bool:
     if role_id is None:
         return False
     return any(getattr(role, "id", None) == role_id for role in getattr(member, "roles", ()))
+
+
+def can_decide(bot: Any, guild_id: int, form: Any, user: Any) -> bool:
+    """The same question `may_decide` asks, with no refusal sent — for rendering a button."""
+    if holds_role(user, approver_role_id(bot, guild_id, form)):
+        return True
+    return bool(bot.store.is_staff(user))
 
 
 async def may_decide(interaction: discord.Interaction, form: Any) -> bool:
@@ -415,11 +436,12 @@ async def apply_decision(
 async def _approve(
     bot: Any, guild: Any, form: Any, row: Any, member: Any, actor: Any, via: str
 ) -> tuple[str, Any]:
-    until = grants.expires_at(forms.expires_days_of(form))
+    role = forms.role_of(form)
+    until = grants.expires_at(forms.expires_days_of(form)) if role else None
     details = {
         "application_id": row["id"],
         "form": form["name"],
-        "role_id": form["role_id"],
+        "role_id": role,
         "via": via,
     }
     if not await forms.decide_application(
@@ -428,7 +450,11 @@ async def _approve(
         fresh = await forms.get_application(bot.db, row["id"])
         return forms.ALREADY_DECIDED.format(status=fresh["status"]), None
     fresh = await forms.get_application(bot.db, row["id"])
-    granted = await _hand_over(bot, guild, form, fresh, member, actor, until, details)
+    granted = (
+        await _hand_over(bot, guild, form, fresh, member, actor, until, details)
+        if role
+        else None
+    )
     fresh = await forms.get_application(bot.db, row["id"])
     await log_action(
         bot,
@@ -448,13 +474,8 @@ async def _approve(
     )
     await send_dm(bot, guild, member, said, details)
     await edit_card(bot, guild, form, fresh, card)
-    if not granted and is_live(bot, guild.id):
-        return (
-            forms.ROLE_REFUSED_AFTER_DECISION.format(
-                role=f"<@&{form['role_id']}>"
-            ),
-            fresh,
-        )
+    if granted is False and is_live(bot, guild.id):
+        return forms.ROLE_REFUSED_AFTER_DECISION.format(role=f"<@&{role}>"), fresh
     return card, fresh
 
 
@@ -533,6 +554,55 @@ async def _deny(
     await send_dm(bot, guild, member, dm_said, details)
     await edit_card(bot, guild, form, fresh, card)
     return forms.DENIED_SAID, fresh
+
+
+async def remove(
+    bot: Any,
+    guild: Any,
+    application_id: int,
+    actor: Any,
+    reason: Any,
+    *,
+    via: str = VIA_DISCORD,
+) -> tuple[str, Any]:
+    """Staff's way back off an approved list; the role forms keep `/role revoke` instead."""
+    row = await forms.get_application(bot.db, application_id)
+    if row is None:
+        return forms.NOTHING_TO_DECIDE, None
+    if row["guild_id"] != guild.id:
+        return forms.NOT_THIS_SERVER, None
+    form = await forms.get_form_by_id(bot.db, row["form_id"])
+    if form is None:
+        return forms.NOTHING_TO_DECIDE, None
+    role = forms.role_of(form)
+    if role is not None:
+        return REMOVE_IS_FOR_LISTS.format(name=form["name"], role=role), None
+    said = grants.clamp(reason, forms.REASON_MAX)
+    if not said:
+        return forms.REMOVE_NEEDS_A_REASON, None
+    if row["status"] != grants.APPROVED:
+        return forms.REMOVE_NOT_APPROVED.format(status=row["status"]), None
+    if not await forms.remove_application(
+        bot.db, row["id"], decided_by=actor_id(actor), reason=said
+    ):
+        fresh = await forms.get_application(bot.db, row["id"])
+        return forms.REMOVE_NOT_APPROVED.format(status=fresh["status"]), None
+    fresh = await forms.get_application(bot.db, row["id"])
+    member = guild.get_member(row["user_id"])
+    details = {"application_id": row["id"], "form": form["name"], "reason": said, "via": via}
+    await log_action(
+        bot,
+        guild,
+        kind_via("application.removed", via),
+        actor=actor,
+        target=member if member is not None else row["user_id"],
+        reason=said,
+        details=details,
+    )
+    card, dm_said = forms.decision_lines(form, fresh, guild_name=guild.name)
+    await send_dm(bot, guild, member, dm_said, details)
+    await edit_card(bot, guild, form, fresh, card)
+    return forms.REMOVED_SAID, fresh
 
 
 class ApplyModal(AnswersErrors, discord.ui.Modal):
@@ -714,6 +784,69 @@ class DecisionButton(
         await answer(interaction, said)
 
 
+class ShowPanel(Panel):
+    def __init__(self, minutes: int) -> None:
+        super().__init__(minutes, footer=PANEL_TIMEOUT_FOOTER)
+
+
+class TakeOffButton(discord.ui.Button):
+    """Rendered only on an approved application on a form that keeps a list."""
+
+    def __init__(self, application_id: int) -> None:
+        super().__init__(label=TAKE_OFF_LABEL, style=discord.ButtonStyle.danger, row=0)
+        self.application_id = int(application_id)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        bot = interaction.client
+        if not bot.db.is_connected:
+            await answer(interaction, DB_UNAVAILABLE)
+            return
+        row = await forms.get_application(bot.db, self.application_id)
+        form = (
+            await forms.get_form_by_id(bot.db, row["form_id"]) if row is not None else None
+        )
+        if row is None or form is None:
+            await answer(interaction, forms.NOTHING_TO_DECIDE)
+            return
+        if not await may_decide(interaction, form):
+            return
+        if row["status"] != grants.APPROVED:
+            await answer(interaction, forms.REMOVE_NOT_APPROVED.format(status=row["status"]))
+            return
+        await interaction.response.send_modal(
+            NoteModal(
+                title=TAKE_OFF_MODAL_TITLE,
+                label=TAKE_OFF_MODAL_LABEL,
+                max_length=forms.REASON_MAX,
+                on_submit=self.take_off,
+            )
+        )
+
+    async def take_off(self, interaction: discord.Interaction, note: str) -> None:
+        await interaction.response.defer(ephemeral=True)
+        said, _ = await remove(
+            interaction.client,
+            interaction.guild,
+            self.application_id,
+            interaction.user,
+            note,
+        )
+        await answer(interaction, said)
+
+
+def show_panel(bot: Any, guild_id: int, form: Any, row: Any, user: Any) -> ShowPanel | None:
+    """A panel only when there is a move on it; otherwise the embed goes out bare, as before."""
+    if str(forms.form_value(row, "status", "")) != grants.APPROVED:
+        return None
+    if forms.role_of(form) is not None:
+        return None
+    if not can_decide(bot, guild_id, form, user):
+        return None
+    view = ShowPanel(panel_minutes(bot.store, guild_id, PANEL_MINUTES_KEY))
+    view.add_item(TakeOffButton(forms.form_value(row, "id")))
+    return view
+
+
 class Applications(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
@@ -865,7 +998,7 @@ class Applications(commands.Cog):
     @app_commands.describe(
         name="Short name the other commands use, like twitch-team",
         title="The heading on the form and on its card",
-        role="The role an approved application hands over",
+        role="The role an approved application hands over; leave it out to keep a list instead",
         channel="Where its cards wait; blank uses the applications channel setting",
         approver_role="Who may decide it; blank uses the setting, then staff",
     )
@@ -874,7 +1007,7 @@ class Applications(commands.Cog):
         interaction: discord.Interaction,
         name: str,
         title: str,
-        role: discord.Role,
+        role: discord.Role | None = None,
         channel: discord.TextChannel | None = None,
         approver_role: discord.Role | None = None,
     ) -> None:
@@ -886,7 +1019,7 @@ class Applications(commands.Cog):
                 interaction.guild.id,
                 name,
                 title,
-                role.id,
+                role.id if role else None,
                 interaction.user.id,
                 review_channel_id=channel.id if channel else None,
                 approver_role_id=approver_role.id if approver_role else None,
@@ -902,7 +1035,7 @@ class Applications(commands.Cog):
             interaction.guild,
             "application.form_created",
             actor=interaction.user,
-            details={"form": name, "role_id": role.id},
+            details={"form": name, "role_id": role.id if role else None},
         )
         await answer(
             interaction,
@@ -915,6 +1048,8 @@ class Applications(commands.Cog):
         title="The heading on the form",
         description="The line under the heading on the Apply panel",
         open="False stops it taking applications; True lets them in again",
+        role="The role an approved application hands over",
+        no_role="True clears the role so the form keeps a list instead",
         owner="Who is nudged to take the next step after an approval",
         next_step="What that person has to do, in one line",
         approved_text="What an approved applicant is DM'd",
@@ -928,6 +1063,8 @@ class Applications(commands.Cog):
         title: str | None = None,
         description: str | None = None,
         open: bool | None = None,
+        role: discord.Role | None = None,
+        no_role: bool | None = None,
         owner: discord.Member | None = None,
         next_step: str | None = None,
         approved_text: str | None = None,
@@ -935,6 +1072,9 @@ class Applications(commands.Cog):
         retry_days: app_commands.Range[int, 0, forms.DAYS_MAX] | None = None,
     ) -> None:
         if not await require_staff(interaction):
+            return
+        if role is not None and no_role:
+            await answer(interaction, ROLE_OR_NO_ROLE)
             return
         found = await self._form(interaction, form)
         if found is None:
@@ -947,6 +1087,7 @@ class Applications(commands.Cog):
                 title=title,
                 description=description,
                 open=open,
+                role_id=role.id if role else (forms.NO_ROLE if no_role else None),
                 owner_user_id=owner.id if owner else None,
                 next_step=next_step,
                 approved_text=approved_text,
@@ -1260,16 +1401,32 @@ class Applications(commands.Cog):
             limit=25,
         )
         named = {one["id"]: one["name"] for one in held}
+        listed = {one["id"] for one in held if forms.role_of(one) is None}
         lines = [
             f"**{one['name']}** — {'open' if forms.is_open(one) else 'closed'}, "
-            f"<@&{one['role_id']}>"
+            f"{f'<@&{forms.role_of(one)}>' if forms.role_of(one) else 'list'}"
             for one in held
             if wanted is None or one["id"] == wanted["id"]
         ]
+        logins = await forms.twitch_logins_for(
+            self.bot.db,
+            [
+                row["user_id"]
+                for row in rows
+                if row["form_id"] in listed and row["status"] == grants.APPROVED
+            ],
+        )
         lines.append("")
         lines.extend(
             f"`#{row['id']}` <@{row['user_id']}> · {named.get(row['form_id'], '?')} · "
             f"{row['status']} · {grants.stamp(row['submitted_at'], 'R')}"
+            + (
+                f" · twitch.tv/{logins[row['user_id']]}"
+                if row["form_id"] in listed
+                and row["status"] == grants.APPROVED
+                and row["user_id"] in logins
+                else ""
+            )
             for row in rows
         )
         if not rows:
@@ -1295,11 +1452,15 @@ class Applications(commands.Cog):
             await answer(interaction, NOTHING_TO_SHOW)
             return
         form = await forms.get_form_by_id(self.bot.db, row["form_id"])
+        view = show_panel(self.bot, interaction.guild.id, form, row, interaction.user)
         await interaction.response.send_message(
             embed=forms.render_card(form, row, interaction.guild.get_member(row["user_id"])),
             ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
+            **({"view": view} if view is not None else {}),
         )
+        if view is not None:
+            view.message = await interaction.original_response()
 
     @applications.command(
         name="approve",
