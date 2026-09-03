@@ -2637,6 +2637,308 @@
           "at"
         ]
       }
+    },
+    {
+      "method": "GET",
+      "path": "/api/applications/status",
+      "read_by": [
+        "page-rolemenus.js applications"
+      ],
+      "shape": "object",
+      "keys": [
+        "mode",
+        "forms",
+        "open_forms",
+        "pending",
+        "questions_max"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/applications/forms",
+      "read_by": [
+        "page-rolemenus.js applications"
+      ],
+      "shape": "list",
+      "keys": [
+        "id",
+        "name",
+        "title",
+        "description",
+        "role_id",
+        "role_name",
+        "review_channel_id",
+        "approver_role_id",
+        "owner_user_id",
+        "owner_name",
+        "next_step",
+        "approved_text",
+        "expires_days",
+        "retry_days",
+        "open",
+        "panel_channel_id",
+        "panel_message_id",
+        "pending",
+        "questions"
+      ],
+      "rows": {
+        "questions": [
+          "position",
+          "label",
+          "style",
+          "required",
+          "placeholder"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/applications/forms",
+      "body": {
+        "name": "contract-form",
+        "title": "Contract form",
+        "role_id": "{plain_role_id}"
+      },
+      "read_by": [
+        "page-rolemenus.js form editor"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "name",
+        "title",
+        "description",
+        "role_id",
+        "role_name",
+        "review_channel_id",
+        "approver_role_id",
+        "owner_user_id",
+        "owner_name",
+        "next_step",
+        "approved_text",
+        "expires_days",
+        "retry_days",
+        "open",
+        "panel_channel_id",
+        "panel_message_id",
+        "pending",
+        "questions"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/applications/forms/{application_form_id}",
+      "body": {
+        "title": "Twitch Team",
+        "open": true
+      },
+      "read_by": [
+        "page-rolemenus.js form editor"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "name",
+        "title",
+        "description",
+        "role_id",
+        "role_name",
+        "review_channel_id",
+        "approver_role_id",
+        "owner_user_id",
+        "owner_name",
+        "next_step",
+        "approved_text",
+        "expires_days",
+        "retry_days",
+        "open",
+        "panel_channel_id",
+        "panel_message_id",
+        "pending",
+        "questions"
+      ],
+      "rows": {
+        "questions": [
+          "position",
+          "label",
+          "style",
+          "required",
+          "placeholder"
+        ]
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/applications/forms/{application_form_id}/questions",
+      "body": {
+        "questions": [
+          {
+            "label": "Twitch handle",
+            "style": "short",
+            "required": true
+          }
+        ]
+      },
+      "read_by": [
+        "page-rolemenus.js question rows"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "name",
+        "title",
+        "description",
+        "role_id",
+        "role_name",
+        "review_channel_id",
+        "approver_role_id",
+        "owner_user_id",
+        "owner_name",
+        "next_step",
+        "approved_text",
+        "expires_days",
+        "retry_days",
+        "open",
+        "panel_channel_id",
+        "panel_message_id",
+        "pending",
+        "questions"
+      ],
+      "rows": {
+        "questions": [
+          "position",
+          "label",
+          "style",
+          "required",
+          "placeholder"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/applications/forms/{application_form_id}/panel",
+      "body": {
+        "channel_id": "{test_channel_id}"
+      },
+      "read_by": [
+        "page-rolemenus.js applications"
+      ],
+      "shape": "object",
+      "keys": [
+        "posted",
+        "id",
+        "name",
+        "channel_id",
+        "message_id"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/applications/forms/{empty_form_id}",
+      "needs": "a form nobody is waiting on",
+      "read_by": [
+        "page-rolemenus.js form editor"
+      ],
+      "shape": "object",
+      "keys": [
+        "deleted",
+        "id",
+        "name"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/applications",
+      "read_by": [
+        "page-rolemenus.js applications"
+      ],
+      "shape": "list",
+      "keys": [
+        "id",
+        "form_id",
+        "form_name",
+        "user_id",
+        "user_name",
+        "user_avatar",
+        "status",
+        "submitted_at",
+        "decided_by_id",
+        "decided_by_name",
+        "decided_at",
+        "deny_reason",
+        "grant_id",
+        "answers"
+      ],
+      "rows": {
+        "answers": [
+          "label",
+          "answer"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/applications/{application_id}",
+      "read_by": [
+        "page-rolemenus.js applications"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "form_id",
+        "form_name",
+        "user_id",
+        "user_name",
+        "user_avatar",
+        "status",
+        "submitted_at",
+        "decided_by_id",
+        "decided_by_name",
+        "decided_at",
+        "deny_reason",
+        "grant_id",
+        "answers"
+      ],
+      "rows": {
+        "answers": [
+          "label",
+          "answer"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/applications/{application_id}/decide",
+      "body": {
+        "status": "denied",
+        "reason": "not this month"
+      },
+      "read_by": [
+        "page-rolemenus.js applications"
+      ],
+      "shape": "object",
+      "keys": [
+        "application",
+        "message"
+      ],
+      "nested": {
+        "application": [
+          "id",
+          "form_id",
+          "form_name",
+          "user_id",
+          "user_name",
+          "user_avatar",
+          "status",
+          "submitted_at",
+          "decided_by_id",
+          "decided_by_name",
+          "decided_at",
+          "deny_reason",
+          "grant_id",
+          "answers"
+        ]
+      }
     }
   ],
   "pages": [
@@ -2743,6 +3045,13 @@
     "web.request.done",
     "web.request.withdrawn",
     "web.request.updated",
-    "web.request.comment"
+    "web.request.comment",
+    "web.application.form_created",
+    "web.application.form_updated",
+    "web.application.form_deleted",
+    "web.application.question_changed",
+    "web.application.panel_posted",
+    "web.application.approved",
+    "web.application.denied"
   ]
 }
