@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 24
+SCHEMA_VERSION = 25
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -563,6 +563,60 @@ CREATE TABLE IF NOT EXISTS raid_slots (
 
 CREATE INDEX IF NOT EXISTS raid_slots_due ON raid_slots(starts_at, reminded_at);
 CREATE INDEX IF NOT EXISTS raid_slots_by_member ON raid_slots(user_id, starts_at);
+CREATE TABLE IF NOT EXISTS application_forms (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id          INTEGER NOT NULL,
+    name              TEXT    NOT NULL,
+    title             TEXT    NOT NULL,
+    description       TEXT,
+    role_id           INTEGER NOT NULL,
+    review_channel_id INTEGER,
+    approver_role_id  INTEGER,
+    owner_user_id     INTEGER,
+    next_step         TEXT,
+    approved_text     TEXT,
+    expires_days      INTEGER,
+    retry_days        INTEGER,
+    open              INTEGER NOT NULL DEFAULT 1,
+    panel_channel_id  INTEGER,
+    panel_message_id  INTEGER,
+    created_by        INTEGER NOT NULL,
+    created_at        TEXT    NOT NULL,
+    updated_at        TEXT    NOT NULL,
+    UNIQUE (guild_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS application_questions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    form_id     INTEGER NOT NULL REFERENCES application_forms(id) ON DELETE CASCADE,
+    position    INTEGER NOT NULL,
+    label       TEXT    NOT NULL,
+    style       TEXT    NOT NULL DEFAULT 'short',
+    required    INTEGER NOT NULL DEFAULT 1,
+    placeholder TEXT,
+    UNIQUE (form_id, position)
+);
+
+CREATE TABLE IF NOT EXISTS applications (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id        INTEGER NOT NULL,
+    form_id         INTEGER NOT NULL,
+    user_id         INTEGER NOT NULL,
+    answers         TEXT    NOT NULL,
+    status          TEXT    NOT NULL DEFAULT 'pending',
+    submitted_at    TEXT    NOT NULL,
+    decided_by      INTEGER,
+    decided_at      TEXT,
+    deny_reason     TEXT,
+    grant_id        INTEGER,
+    card_channel_id INTEGER,
+    card_message_id INTEGER
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS applications_one_open
+    ON applications(form_id, user_id) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS applications_by_status
+    ON applications(guild_id, status, id);
 """
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (

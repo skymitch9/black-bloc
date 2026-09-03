@@ -50,6 +50,11 @@ const IDS = {
   ping_member_id: '700000000000000004',
   // Phase 18: train 1 is the upcoming one, still open, so lock/assign/swap all reach it.
   raid_train_id: '1',
+  // Phase 19: form 1 is the Twitch Team form with three questions and people waiting on it;
+  // form 2 is the closed one nobody has applied to, so the DELETE entry has something to remove.
+  application_form_id: '1',
+  empty_form_id: '2',
+  application_id: '1',
 };
 
 const failures = [];
@@ -197,6 +202,8 @@ const GUARDED = [
   ['POST', '/api/honeypot/hits/{hit_id}/ban', {}],
   ['POST', '/api/mod/cases/{case_id}/apply', {}],
   ['POST', '/api/modmail/tickets/{ticket_id}/close', {}],
+  // The body is NOT run through fill(), so this one carries the id itself.
+  ['POST', '/api/applications/forms/{application_form_id}/panel', { channel_id: IDS.test_channel_id }],
 ];
 const UNGUARDED = [
   // A room action is place-gated (tempvoice.py:may_act_in), not blanket-refused: a room
@@ -341,6 +348,14 @@ async function checkActionKinds() {
   await post(`/api/raidtrains/${IDS.raid_train_id}/status`, { status: 'locked' });
   await post(`/api/raidtrains/${IDS.raid_train_id}/status`, { status: 'open' });
   await post(`/api/raidtrains/${IDS.raid_train_id}/status`, { status: 'cancelled', reason: 'contract check' });
+  // The seven web.application.* kinds, each left by the write that spells it.
+  await post('/api/applications/forms', { name: 'contract-form-kinds', title: 'Contract form', role_id: IDS.plain_role_id });
+  await send('PATCH', `/api/applications/forms/${IDS.application_form_id}`, { title: 'Twitch Team' });
+  await send('PUT', `/api/applications/forms/${IDS.application_form_id}/questions`, { questions: [{ label: 'Twitch handle' }] });
+  await post(`/api/applications/forms/${IDS.application_form_id}/panel`, { channel_id: IDS.test_channel_id });
+  await send('DELETE', `/api/applications/forms/${IDS.empty_form_id}`, undefined);
+  await post(`/api/applications/${IDS.application_id}/decide`, { status: 'denied', reason: 'contract check' });
+  await post('/api/applications/4/decide', { status: 'approved' });
   const response = await fetch(`${BASE}/api/actions?limit=200`, { headers: { cookie: 'mock_as=staff' } });
   const payload = await response.json();
   const known = new Set(contract.action_kinds);

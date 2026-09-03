@@ -185,6 +185,7 @@ const KIND_HEADS = {
   role: 'rolemenu', role_menu: 'rolemenu', rolemenu: 'rolemenu',
   poll: 'poll', chat: 'chat', request: 'request', requests: 'request',
   pings: 'pings', raidtrain: 'raidtrain',
+  application: 'applications', applications: 'applications',
 };
 const IMPORTANT_SUFFIXES = [
   '_failed', '.approved', '.denied', '.expired', '.warned', '.timed_out', '.timeout',
@@ -202,6 +203,9 @@ const ROUTINE_KINDS = [
   'request.notify_skipped_test_mode',
   'request.in_progress', 'request.updated', 'request.comment',
   'chat.memory_distilled', 'chat.memory_expired', 'chat.memory_optin',
+  'application.submitted', 'application.withdrawn', 'application.panel_posted',
+  'application.form_created', 'application.form_updated', 'application.form_deleted',
+  'application.question_changed', 'application.mode',
 ];
 
 function bareKind(kind) {
@@ -266,6 +270,7 @@ const LOG_LEVEL_FEATURES = [
   ['request', 'requests', 'request'],
   ['pings', 'ping roles', 'pingroles'],
   ['raidtrain', 'raid trains', 'raidtrains'],
+  ['applications', 'applications', 'applications'],
 ];
 
 const SETTING_SPECS = [
@@ -396,6 +401,12 @@ const SETTING_SPECS = [
   ['raidtrain_live_posts', 'bool', true, true, 'on says `X is live — next up Y` in that thread when a slot holder starts streaming inside their own hour, and marks the slot checked in'],
   ['raidtrain_max_slots_per_member', 'int', 1, 1, 'how many slots one member may claim on one train; 0 means as many as they like. An organizer assigning a slot is never held to it', null, 24],
   ['raidtrain_scheduled_event', 'bool', false, false, 'on puts the train on Discord’s own event calendar as well. Off by default: Phase 4’s calendar helper writes to the events table, so raid trains keep their own'],
+  ['applications_mode', 'enum', 'off', 'off', 'off, shadow (log only, nothing posted or DMed) or on (members can apply and staff decide on the card)', ['off', 'shadow', 'on']],
+  ['applications_channel_id', 'channel', '800000000000000005', null, 'where an application card waits for Approve or Deny when the form does not name a channel of its own; blank falls back to rolemenu_approval_channel_id, then to staff_channel_id'],
+  ['applications_approver_role_id', 'role', null, null, 'who may approve or deny an application when the form does not name a role of its own; blank falls back to rolemenu_approver_role_id, then to staff'],
+  ['applications_ping_role_id', 'role', null, null, 'role mentioned when a new application arrives; blank pings nobody'],
+  ['applications_retry_days', 'int', 30, 30, 'days somebody waits after a decision before they may apply for the same form again; a form can set its own, and 0 lets them apply again straight away', null, 3650],
+  ['applications_dm_on_decision', 'bool', true, true, 'true to DM the applicant when their application is approved or denied'],
 ];
 
 const RULES = {
@@ -640,6 +651,58 @@ function seedState() {
   nextMenu: 4,
   nextRequest: 5,
   nextGrant: 6,
+  applicationForms: [
+    {
+      id: 1,
+      name: 'twitch-team',
+      title: 'Twitch Team',
+      description: 'Join the Black in a Flash! Twitch Team.',
+      role_id: '900000000000000005',
+      review_channel_id: '800000000000000005',
+      approver_role_id: null,
+      owner_user_id: STAFF.id,
+      next_step: 'the Team owner sends your twitch.tv invite — accept it from your Twitch notifications',
+      approved_text: "You're on the Team.",
+      expires_days: null,
+      retry_days: 30,
+      open: true,
+      panel_channel_id: '800000000000000002',
+      panel_message_id: '840000000000000001',
+      questions: [
+        { position: 1, label: 'Twitch handle', style: 'short', required: true, placeholder: 'twitch.tv/…' },
+        { position: 2, label: 'How long have you been streaming', style: 'short', required: true, placeholder: null },
+        { position: 3, label: 'Why the Team', style: 'long', required: false, placeholder: null },
+      ],
+    },
+    {
+      id: 2,
+      name: 'mod-team',
+      title: 'Mod Team',
+      description: null,
+      role_id: '900000000000000001',
+      review_channel_id: null,
+      approver_role_id: '900000000000000002',
+      owner_user_id: null,
+      next_step: null,
+      approved_text: null,
+      expires_days: 90,
+      retry_days: null,
+      open: false,
+      panel_channel_id: null,
+      panel_message_id: null,
+      questions: [
+        { position: 1, label: 'Why do you want to help moderate', style: 'long', required: true, placeholder: null },
+      ],
+    },
+  ],
+  applications: [
+    { id: 1, form_id: 1, user_id: MEMBERS[3].id, answers: [{ label: 'Twitch handle', answer: 'twitch.tv/rivetplays' }, { label: 'How long have you been streaming', answer: 'about two years' }, { label: 'Why the Team', answer: 'I stream the same games and half the Team already raids me.' }], status: 'pending', submitted_at: minutesAgo(40), decided_by: null, decided_at: null, deny_reason: null, grant_id: null },
+    { id: 2, form_id: 1, user_id: MEMBERS[1].id, answers: [{ label: 'Twitch handle', answer: 'twitch.tv/caseyfast' }, { label: 'How long have you been streaming', answer: 'four years' }, { label: 'Why the Team', answer: '' }], status: 'approved', submitted_at: minutesAgo(6000), decided_by: STAFF.id, decided_at: minutesAgo(5900), deny_reason: null, grant_id: '5' },
+    { id: 3, form_id: 1, user_id: MEMBERS[4].id, answers: [{ label: 'Twitch handle', answer: 'twitch.tv/nobody' }, { label: 'How long have you been streaming', answer: 'today' }, { label: 'Why the Team', answer: 'free raids' }], status: 'denied', submitted_at: minutesAgo(9000), decided_by: MEMBERS[1].id, decided_at: minutesAgo(8900), deny_reason: 'Come back once you have streamed here for a month.', grant_id: null },
+    { id: 4, form_id: 1, user_id: MEMBERS[6].id, answers: [{ label: 'Twitch handle', answer: 'twitch.tv/namu' }, { label: 'How long have you been streaming', answer: 'six months' }, { label: 'Why the Team', answer: 'I want the raid train.' }], status: 'pending', submitted_at: minutesAgo(90), decided_by: null, decided_at: null, deny_reason: null, grant_id: null },
+  ],
+  nextApplicationForm: 3,
+  nextApplication: 5,
   golive: {
     links: [
       { user_id: MEMBERS[1].id, twitch_login: 'caseyfast', twitch_user_id: '112233', linked_at: minutesAgo(4000) },
@@ -4705,6 +4768,249 @@ async function serveStatic(request, response, path, asked) {
     response.end(`no such file: ${wanted}`);
   }
 }
+
+// --- Applications (19) -------------------------------------------------------------
+// The Role menus page owns "how members get roles", so the Applications section lives
+// there rather than on a page of its own.
+
+const APPLICATION_STATUSES = ['pending', 'approved', 'denied', 'withdrawn'];
+const QUESTIONS_MAX = 5;
+const NO_SUCH_FORM = 'Black Bloc has no application form with that number any more, so nothing was changed. Reload the Role menus page — somebody may have deleted it.';
+const NO_SUCH_APPLICATION = 'Black Bloc has no application with that number any more, so nothing was changed. Reload the Role menus page.';
+
+function applicationForm(id) {
+  const found = state.applicationForms.find((one) => String(one.id) === String(id));
+  if (!found) throw new Refused(404, 'no_such_form', NO_SUCH_FORM);
+  return found;
+}
+
+function pendingOn(formId) {
+  return state.applications.filter((one) => one.form_id === formId && one.status === 'pending').length;
+}
+
+function applicationFormRow(form) {
+  return {
+    id: form.id,
+    name: form.name,
+    title: form.title,
+    description: form.description,
+    role_id: form.role_id,
+    role_name: memberName(form.role_id),
+    review_channel_id: form.review_channel_id,
+    approver_role_id: form.approver_role_id,
+    owner_user_id: form.owner_user_id,
+    owner_name: form.owner_user_id ? memberName(form.owner_user_id) : null,
+    next_step: form.next_step,
+    approved_text: form.approved_text,
+    expires_days: form.expires_days,
+    retry_days: form.retry_days,
+    open: Boolean(form.open),
+    panel_channel_id: form.panel_channel_id,
+    panel_message_id: form.panel_message_id,
+    pending: pendingOn(form.id),
+    questions: form.questions.map((one) => ({ ...one })),
+  };
+}
+
+function applicationRow(row) {
+  const form = state.applicationForms.find((one) => one.id === row.form_id);
+  return {
+    id: row.id,
+    form_id: String(row.form_id),
+    form_name: form ? form.name : null,
+    user_id: row.user_id,
+    user_name: memberName(row.user_id),
+    user_avatar: null,
+    status: row.status,
+    submitted_at: row.submitted_at,
+    decided_by_id: row.decided_by,
+    decided_by_name: row.decided_by ? memberName(row.decided_by) : null,
+    decided_at: row.decided_at,
+    deny_reason: row.deny_reason,
+    grant_id: row.grant_id,
+    answers: row.answers.map((one) => ({ ...one })),
+  };
+}
+
+function wantedQuestions(given) {
+  if (!Array.isArray(given)) {
+    throw new Refused(400, 'bad_questions', 'The questions arrived in a shape Black Bloc could not read, so nothing was changed. It is a fault in the page rather than in what you typed — reload the Role menus page and try again.');
+  }
+  if (given.length > QUESTIONS_MAX) {
+    throw new Refused(400, 'bad_request', `Discord shows at most ${QUESTIONS_MAX} boxes on one form and this would be number ${given.length}, so nothing was added. Remove one with \`/applications question remove\` first.`);
+  }
+  return given.map((one, at) => ({
+    position: at + 1,
+    label: String(one.label || '').slice(0, 45),
+    style: one.style === 'long' ? 'long' : 'short',
+    required: one.required === undefined ? true : Boolean(one.required),
+    placeholder: one.placeholder || null,
+  }));
+}
+
+route('GET', '/api/applications/status', (context) => {
+  requireStaff(context.session);
+  return {
+    mode: state.settings.get('applications_mode') || 'off',
+    forms: state.applicationForms.length,
+    open_forms: state.applicationForms.filter((one) => one.open).length,
+    pending: state.applications.filter((one) => one.status === 'pending').length,
+    questions_max: QUESTIONS_MAX,
+  };
+});
+
+route('GET', '/api/applications/forms', (context) => {
+  requireStaff(context.session);
+  return state.applicationForms.map(applicationFormRow);
+});
+
+route('POST', '/api/applications/forms', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const name = String(body.name || '').trim().toLowerCase();
+  if (!name || !body.title || !body.role_id) {
+    throw new Refused(400, 'bad_request', 'An application form needs a short name, a heading and the role it hands over, so nothing was created. Fill all three in and try again.');
+  }
+  if (!/^[a-z0-9][a-z0-9_-]*$/.test(name)) {
+    throw new Refused(400, 'bad_request', `**${body.name}** is not a name Black Bloc can use, so nothing was changed. Use lower-case letters, numbers, \`-\` and \`_\`, start with a letter or a number, and keep it under 32 characters — \`twitch-team\` is the shape.`);
+  }
+  if (state.applicationForms.some((one) => one.name === name)) {
+    throw new Refused(400, 'name_taken', `This server already has an application form called **${name}**, so nothing was created. Pick another name, or change that one with \`/applications edit\`.`);
+  }
+  const form = {
+    id: state.nextApplicationForm++,
+    name,
+    title: String(body.title),
+    description: body.description || null,
+    role_id: String(body.role_id),
+    review_channel_id: body.review_channel_id ? String(body.review_channel_id) : null,
+    approver_role_id: body.approver_role_id ? String(body.approver_role_id) : null,
+    owner_user_id: null,
+    next_step: null,
+    approved_text: null,
+    expires_days: null,
+    retry_days: null,
+    open: true,
+    panel_channel_id: null,
+    panel_message_id: null,
+    questions: [],
+  };
+  state.applicationForms.push(form);
+  logAction('web.application.form_created', { reason: name, details: { form: name, role_id: form.role_id } });
+  return applicationFormRow(form);
+});
+
+route('PATCH', '/api/applications/forms/:id', async (context) => {
+  requireStaff(context.session);
+  const form = applicationForm(context.params.id);
+  const body = await context.body();
+  const changed = [];
+  for (const field of ['title', 'description', 'next_step', 'approved_text', 'expires_days', 'retry_days', 'open']) {
+    if (body[field] !== undefined) {
+      form[field] = body[field];
+      changed.push(field);
+    }
+  }
+  for (const field of ['role_id', 'review_channel_id', 'approver_role_id', 'owner_user_id']) {
+    if (body[field] !== undefined) {
+      form[field] = body[field] ? String(body[field]) : null;
+      changed.push(field);
+    }
+  }
+  logAction('web.application.form_updated', { reason: form.name, details: { form: form.name, changed } });
+  return applicationFormRow(form);
+});
+
+route('DELETE', '/api/applications/forms/:id', (context) => {
+  requireStaff(context.session);
+  const form = applicationForm(context.params.id);
+  const waiting = pendingOn(form.id);
+  if (waiting) {
+    throw new Refused(409, 'form_has_pending', `**${form.name}** still has ${waiting} application(s) waiting on staff, so it was not deleted. Decide them first, or close the form with \`/applications edit ${form.name} open:false\`.`);
+  }
+  state.applicationForms = state.applicationForms.filter((one) => one.id !== form.id);
+  logAction('web.application.form_deleted', { reason: form.name, details: { form: form.name } });
+  return { deleted: true, id: form.id, name: form.name };
+});
+
+route('PUT', '/api/applications/forms/:id/questions', async (context) => {
+  requireStaff(context.session);
+  const form = applicationForm(context.params.id);
+  const body = await context.body();
+  form.questions = wantedQuestions(body.questions);
+  logAction('web.application.question_changed', { reason: form.name, details: { form: form.name, questions: form.questions.length } });
+  return applicationFormRow(form);
+});
+
+route('POST', '/api/applications/forms/:id/panel', async (context) => {
+  requireStaff(context.session);
+  const form = applicationForm(context.params.id);
+  const body = await context.body();
+  const channelId = body.channel_id ? String(body.channel_id) : form.panel_channel_id;
+  if (!channelId || !CHANNELS.some((one) => one.id === channelId)) {
+    throw new Refused(400, 'no_such_channel', `**${channelId}** is not a channel Black Bloc can see, so nothing was posted. Pick one from the list and try again.`);
+  }
+  guard('putting an Apply button up');
+  form.panel_channel_id = channelId;
+  form.panel_message_id = String(Date.now());
+  logAction('web.application.panel_posted', { reason: form.name, target_id: channelId, details: { form: form.name, channel_id: channelId, message_id: form.panel_message_id } });
+  return { posted: true, id: form.id, name: form.name, channel_id: channelId, message_id: form.panel_message_id };
+});
+
+route('GET', '/api/applications', (context) => {
+  requireStaff(context.session);
+  const wantedForm = context.url.searchParams.get('form');
+  const wantedStatus = (context.url.searchParams.get('status') || '').split(',').filter(Boolean);
+  for (const one of wantedStatus) {
+    if (!APPLICATION_STATUSES.includes(one)) {
+      throw new Refused(400, 'unknown_status', `**${one}** is not a state an application can be in, so nothing was listed. They are ${APPLICATION_STATUSES.join(', ')}.`);
+    }
+  }
+  return state.applications
+    .filter((one) => (wantedForm ? String(one.form_id) === String(wantedForm) : true))
+    .filter((one) => (wantedStatus.length ? wantedStatus.includes(one.status) : true))
+    .slice()
+    .sort((a, b) => (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1) || b.id - a.id)
+    .map(applicationRow);
+});
+
+route('GET', '/api/applications/:id', (context) => {
+  requireStaff(context.session);
+  const row = state.applications.find((one) => String(one.id) === String(context.params.id));
+  if (!row) throw new Refused(404, 'no_such_application', NO_SUCH_APPLICATION);
+  return applicationRow(row);
+});
+
+route('POST', '/api/applications/:id/decide', async (context) => {
+  requireStaff(context.session);
+  const row = state.applications.find((one) => String(one.id) === String(context.params.id));
+  if (!row) throw new Refused(404, 'no_such_application', NO_SUCH_APPLICATION);
+  const body = await context.body();
+  const status = String(body.status || '');
+  if (status !== 'approved' && status !== 'denied') {
+    throw new Refused(400, 'bad_status', `**${status || 'nothing'}** is not a decision, so nothing was changed. It is \`approved\` or \`denied\`.`);
+  }
+  const reason = String(body.reason || '').trim();
+  if (status === 'denied' && !reason) {
+    throw new Refused(400, 'no_reason', 'A denied application needs one line the person is sent, so nothing was done. Say why and send it again.');
+  }
+  if (row.status !== 'pending') {
+    throw new Refused(409, 'not_decided', `Somebody got there first — that application is already **${row.status}**, so nothing was changed. The card above says who decided and when.`);
+  }
+  const form = state.applicationForms.find((one) => one.id === row.form_id);
+  row.status = status;
+  row.decided_by = STAFF.id;
+  row.decided_at = now();
+  row.deny_reason = status === 'denied' ? reason : null;
+  if (status === 'approved') row.grant_id = String(state.nextGrant++);
+  logAction(`web.application.${status}`, { target_id: row.user_id, reason: reason || null, details: { application_id: row.id, form: form ? form.name : null } });
+  return {
+    application: applicationRow(row),
+    message: status === 'approved'
+      ? `Approved — **${memberName(row.user_id)}** has that role now.`
+      : 'Denied, and they have been told why.',
+  };
+});
 
 const server = createServer(async (request, response) => {
   const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);

@@ -156,6 +156,16 @@ export const LABELS = {
 };
 
 const NAMESPACES = ['golive', 'youtube', 'pings', 'tempvoice', 'honeypot', 'events', 'birthday', 'modmail', 'automod', 'rolemenu', 'raidtrain'];
+  applications_mode: 'Whether people can apply for a role',
+  applications_channel_id: 'Where an application card is posted',
+  applications_approver_role_id: 'Who may say yes to an application',
+  applications_ping_role_id: 'Who is pinged when an application arrives',
+  applications_retry_days: 'How long after a no before they may apply again',
+  applications_dm_on_decision: 'Whether the applicant is DMed the decision',
+  applications_log_level: 'How much of applications is repeated into Discord',
+};
+
+const NAMESPACES = ['golive', 'youtube', 'pings', 'tempvoice', 'honeypot', 'events', 'birthday', 'modmail', 'automod', 'rolemenu', 'applications'];
 
 function derived(key) {
   let name = String(key || '');

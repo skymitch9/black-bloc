@@ -109,6 +109,11 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.settings.set",
         "web.tempvoice.forget",
         "web.tempvoice.setup",
+        "web.application.form_created",
+        "web.application.form_updated",
+        "web.application.form_deleted",
+        "web.application.question_changed",
+        "web.application.panel_posted",
     ),
     "black_bloc/cogs/community/events.py::f'event.{kind}'": (
         "event.announce",
@@ -270,6 +275,15 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.role_menu.unposted",
         "web.role_menu.unpost_failed",
         "web.role_menu.would_unpost",
+    ),
+    # Phase 19: the two decisions the dashboard and the card share, one kind each side.
+    "black_bloc/cogs/community/applications.py::f'{head}application.approved'": (
+        "application.approved",
+        "web.application.approved",
+    ),
+    "black_bloc/cogs/community/applications.py::f'{head}application.denied'": (
+        "application.denied",
+        "web.application.denied",
     ),
 }
 
@@ -494,8 +508,8 @@ def test_an_unknown_level_is_todays_behaviour():
 
 
 def test_every_feature_has_one_settings_key():
-    assert len(FEATURES) == 16
-    assert len(set(FEATURES)) == 16
+    assert len(FEATURES) == 17
+    assert len(set(FEATURES)) == 17
     assert log_level_key("golive") == "golive_log_level"
     assert LEVELS == (OFF, IMPORTANT_ONLY, ALL)
 

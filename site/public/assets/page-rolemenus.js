@@ -72,6 +72,31 @@ const PICK_A_MEMBER = 'Pick the member this is about first.';
 const PICK_A_ROLE = 'Pick the role to give them first.';
 const A_REASON = 'Say why — they are sent exactly this.';
 
+const APPLICATIONS_MODE_KEY = 'applications_mode';
+const APPLICATIONS_NOTE = 'Forms staff write, that members fill in. Approving one hands the ' +
+  'form\u2019s role over, tells the applicant, and names whoever has to do the human step after it.';
+const APPLICATIONS_SWITCH = 'Off hides /apply and stops the Apply buttons; shadow writes ' +
+  'everything down but posts nothing, DMs nobody and hands no role over; on is the real thing.';
+const NO_APPLICATION_FORMS = 'No application form exists yet. Make one below \u2014 the Twitch ' +
+  'Team form is what this was built for.';
+const NO_APPLICATIONS = 'Nobody is waiting on staff.';
+const NO_DECIDED_APPLICATIONS = 'No application has been decided yet.';
+const QUESTIONS_NOTE = 'Discord shows at most five boxes on one form, in this order.';
+const FORM_NAME_HELP = 'Short, lower-case, no spaces \u2014 this is what /apply start finds it by.';
+const NEXT_STEP_HELP = 'The human step after an approval. The card says \u201c@owner \u2014 next ' +
+  'step: \u2026\u201d and the applicant is told the same thing.';
+const APPROVED_TEXT_HELP = 'What an approved applicant is DMed.';
+const APPLICATION_EXPIRES_HELP = 'Blank or 0 means the role never runs out.';
+const APPLICATION_RETRY_HELP = 'Blank uses applications_retry_days.';
+const A_DENY_REASON = 'Say why \u2014 they are sent exactly this.';
+
+const APPLICATION_TONE = {
+  pending: 'warn',
+  approved: 'ok',
+  denied: null,
+  withdrawn: null,
+};
+
 const STATUS_TONE = {
   pending: 'warn',
   approved: 'ok',
@@ -86,7 +111,7 @@ function askedFor() {
   return wanted && /^\d+$/.test(wanted) ? wanted : null;
 }
 
-const state = { editing: null, creating: false, member: askedFor() };
+const state = { editing: null, creating: false, form: null, newForm: false, member: askedFor() };
 
 let refresh = () => {};
 let roleColours = new Map();
@@ -600,6 +625,396 @@ function memberBanner(requests, grants) {
   ]);
 }
 
+/** One question row on the form editor; position is wherever it ends up in the list. */
+function questionRow(question, onMove) {
+  const label = el('input', { class: 'input', type: 'text', value: question ? question.label : '' });
+  const style = el('select', { class: 'input' });
+  for (const one of ['short', 'long']) {
+    style.append(el('option', { value: one, text: one, selected: question && question.style === one ? true : undefined }));
+  }
+  const required = segment(
+    [{ value: 'true', label: 'Required' }, { value: 'false', label: 'Optional' }],
+    question && question.required === false ? 'false' : 'true',
+  );
+  const placeholder = el('input', {
+    class: 'input',
+    type: 'text',
+    value: question && question.placeholder ? question.placeholder : '',
+    placeholder: 'grey hint inside the box',
+  });
+  const node = el('div', { class: 'formrow' }, [
+    field('Question', label),
+    field('Box', style),
+    field('Answer', required),
+    field('Hint', placeholder),
+    bar([
+      button('Up', () => onMove(node, -1), { tone: 'quiet' }),
+      button('Down', () => onMove(node, 1), { tone: 'quiet' }),
+      button('Remove', () => node.remove(), { tone: 'quiet' }),
+    ]),
+  ]);
+  return {
+    node,
+    read: () => {
+      const text = label.value.trim();
+      if (!text) return null;
+      return {
+        label: text,
+        style: style.value,
+        required: required.readValue() === 'true',
+        placeholder: placeholder.value.trim() || null,
+      };
+    },
+  };
+}
+
+async function formEditor(form, questionsMax) {
+  const say = notice();
+  const name = el('input', { class: 'input', type: 'text', value: form ? form.name : '', disabled: form ? true : undefined });
+  const title = el('input', { class: 'input', type: 'text', value: form ? form.title || '' : '' });
+  const description = el('input', { class: 'input', type: 'text', value: form ? form.description || '' : '' });
+  const role = await roleSelect(form ? form.role_id : null);
+  const channel = await channelSelect(form ? form.review_channel_id : null);
+  const approver = await roleSelect(form ? form.approver_role_id : null);
+  const owner = memberPicker({ label: 'Who does the next step' });
+  const nextStep = el('input', { class: 'input', type: 'text', value: form && form.next_step ? form.next_step : '' });
+  const approvedText = el('input', { class: 'input', type: 'text', value: form && form.approved_text ? form.approved_text : '' });
+  const expires = daysBox(form ? form.expires_days : null);
+  const retry = daysBox(form ? form.retry_days : null);
+  const open = segment(
+    [{ value: 'true', label: 'Open' }, { value: 'false', label: 'Closed' }],
+    form && form.open === false ? 'false' : 'true',
+  );
+
+  const rows = [];
+  const list = el('div');
+  const move = (node, by) => {
+    const held = [...list.children];
+    const at = held.indexOf(node);
+    const to = at + by;
+    if (at < 0 || to < 0 || to >= held.length) return;
+    list.insertBefore(by < 0 ? node : held[to], by < 0 ? held[to] : node);
+  };
+  const addQuestion = (question) => {
+    if (list.children.length >= questionsMax) {
+      say.say(`Discord shows at most ${questionsMax} boxes on one form, so no more were added.`, 'warn');
+      return;
+    }
+    const made = questionRow(question, move);
+    rows.push(made);
+    list.append(made.node);
+  };
+  for (const question of (form && form.questions) || []) addQuestion(question);
+
+  /** The order on screen IS the order stored, so read the DOM rather than the array. */
+  const readQuestions = () => [...list.children]
+    .map((node) => rows.find((one) => one.node === node))
+    .filter(Boolean)
+    .map((one) => one.read())
+    .filter(Boolean);
+
+  const save = button(form ? 'Save form' : 'Create form', async () => {
+    const body = {
+      title: title.value.trim(),
+      description: description.value.trim() || null,
+      role_id: readSelect(role, false),
+      review_channel_id: readSelect(channel, false) || null,
+      approver_role_id: readSelect(approver, false) || null,
+      owner_user_id: owner.id || (form ? form.owner_user_id : null),
+      next_step: nextStep.value.trim() || null,
+      approved_text: approvedText.value.trim() || null,
+      expires_days: expires.value.trim() === '' ? 0 : Number(expires.value),
+      retry_days: retry.value.trim() === '' ? null : Number(retry.value),
+      open: open.readValue() === 'true',
+    };
+    if (!form) body.name = name.value.trim();
+    const done = await run(
+      say,
+      () => (form
+        ? send(`/api/applications/forms/${encodeURIComponent(form.id)}`, 'PATCH', body)
+        : send('/api/applications/forms', 'POST', body)),
+      (found) => `Saved ${found?.name || body.name}.`,
+    );
+    if (!done.ok) return;
+    const id = done.found?.id ?? (form ? form.id : null);
+    if (id !== null) {
+      const questions = await run(
+        say,
+        () => send(`/api/applications/forms/${encodeURIComponent(id)}/questions`, 'PUT', { questions: readQuestions() }),
+        (found) => `Saved ${found?.name || ''} with ${(found?.questions || []).length} question(s).`,
+      );
+      if (!questions.ok) return;
+    }
+    keepSaying('applications', say);
+    state.form = null;
+    state.newForm = false;
+    refresh();
+  }, { small: false });
+
+  const close = button('Close editor', () => {
+    state.form = null;
+    state.newForm = false;
+    refresh();
+  }, { tone: 'quiet' });
+
+  return card(form ? `Editing ${form.name}` : 'New application form', [
+    el('div', { class: 'formrow' }, [
+      field('Name', name, form ? 'A form keeps its name for life; make a new one to rename it.' : FORM_NAME_HELP),
+      field('Heading', title),
+      field('Description', description),
+      field('Taking applications', open),
+    ]),
+    el('div', { class: 'formrow' }, [
+      field('Role it hands over', role),
+      field('Cards go to', channel, 'Blank uses applications_channel_id.'),
+      field('Who may decide', approver, 'Blank uses applications_approver_role_id, then staff.'),
+    ]),
+    owner.node,
+    el('div', { class: 'formrow' }, [
+      field('Next step', nextStep, NEXT_STEP_HELP),
+      field('Approved message', approvedText, APPROVED_TEXT_HELP),
+      field('Role lasts, days', expires, APPLICATION_EXPIRES_HELP),
+      field('Apply again after, days', retry, APPLICATION_RETRY_HELP),
+    ]),
+    el('h3', { text: 'Questions' }),
+    el('p', { class: 'field-help', text: QUESTIONS_NOTE }),
+    list,
+    bar([button('Add question', () => addQuestion(null), { tone: 'quiet' })]),
+    say,
+  ], { actions: [save, close] });
+}
+
+function answersList(row) {
+  const found = row.answers || [];
+  if (!found.length) return el('p', { class: 'field-help', text: 'They answered nothing.' });
+  return el('dl', { class: 'answers' }, found.flatMap((one) => [
+    el('dt', { text: one.label }),
+    el('dd', { class: 'wrap', text: one.answer || '(left blank)' }),
+  ]));
+}
+
+function applicationCard(row, say) {
+  const approve = button('Approve', async () => {
+    const done = await run(
+      say,
+      () => send(`/api/applications/${encodeURIComponent(row.id)}/decide`, 'POST', { status: 'approved' }),
+      (found) => found?.message || `Approved — ${row.user_name || row.user_id} has the role.`,
+    );
+    if (done.ok) {
+      keepSaying('applications', say);
+      refresh();
+    }
+  }, { tone: 'warn', small: false });
+
+  const deny = button('Deny', async () => {
+    const reason = el('input', { class: 'input', type: 'text', placeholder: 'why — they are sent this' });
+    const sure = await ask({
+      title: `Say no to ${row.user_name || row.user_id}?`,
+      body: [
+        'They are DM’d the reason you type here, and told when they may apply again.',
+        field('Reason', reason, A_DENY_REASON),
+      ],
+      confirmLabel: 'Deny it',
+    });
+    if (!sure) return;
+    const done = await run(
+      say,
+      () => send(`/api/applications/${encodeURIComponent(row.id)}/decide`, 'POST', {
+        status: 'denied',
+        reason: reason.value.trim(),
+      }),
+      (found) => found?.message || `Denied, and ${row.user_name || row.user_id} has been told why.`,
+    );
+    if (done.ok) {
+      keepSaying('applications', say);
+      refresh();
+    }
+  }, { tone: 'danger', small: false });
+
+  const sent = ago(row.submitted_at);
+  const head = el('div', { class: 'reqhead' }, [
+    avatar(row.user_name || row.user_id, row.user_avatar),
+    el('div', { class: 'rowlist-main' }, [
+      el('span', { class: 'rowlist-name', text: String(row.user_name || row.user_id) }),
+      el('span', {
+        class: 'rowlist-note',
+        title: sent.title,
+        text: `applied ${sent.text} · ${row.form_name || `form #${row.form_id}`}`,
+      }),
+    ]),
+    badge(`#${row.id}`),
+  ]);
+
+  return card(null, [head, answersList(row), bar([approve, deny])]);
+}
+
+function decidedApplications(rows) {
+  return table([
+    { label: 'Member', cell: (row) => nameNode(row.user_id, row.user_name) },
+    { label: 'Form', cell: (row) => row.form_name || `#${row.form_id}` },
+    { label: 'Status', cell: (row) => badge(row.status, APPLICATION_TONE[row.status] || null) },
+    { label: 'By', cell: (row) => nameNode(row.decided_by_id, row.decided_by_name) },
+    {
+      label: 'When',
+      cell: (row) => {
+        const said = ago(row.decided_at);
+        return el('span', { class: 'cell-quiet', title: said.title, text: said.text });
+      },
+    },
+    { label: 'Why not', cell: (row) => row.deny_reason, className: 'wrap' },
+  ], rows, { empty: NO_DECIDED_APPLICATIONS });
+}
+
+function formsTable(forms, say) {
+  return table([
+    { label: 'Name', cell: (row) => el('span', { class: 'mono', text: row.name }) },
+    { label: 'Heading', cell: (row) => row.title, className: 'wrap' },
+    { label: 'Role', cell: (row) => chipFor(row.role_id, row.role_name) },
+    { label: 'Questions', cell: (row) => (row.questions || []).length },
+    { label: 'Waiting', cell: (row) => (row.pending ? badge(String(row.pending), 'warn') : el('span', { class: 'cell-quiet', text: '0' })) },
+    { label: 'Taking', cell: (row) => (row.open ? badge('open', 'ok') : badge('closed', 'warn')) },
+    {
+      label: 'Apply button',
+      cell: (row) => (row.panel_message_id
+        ? nameNode(row.panel_channel_id, row.panel_channel_name)
+        : badge('not posted', 'warn')),
+    },
+    {
+      label: '',
+      cell: (row) => el('div', { class: 'bar' }, [
+        button('Edit', () => {
+          state.form = row.id;
+          state.newForm = false;
+          refresh();
+        }, { tone: 'quiet' }),
+        button('Delete', async () => {
+          const sure = await ask({
+            title: `Delete ${row.name}?`,
+            body: ['The form and its questions go. Nobody loses a role they already have, and the applications already decided stay on the record.'],
+            confirmLabel: 'Delete it',
+          });
+          if (!sure) return;
+          const done = await run(
+            say,
+            () => api(`/api/applications/forms/${encodeURIComponent(row.id)}`, { method: 'DELETE' }),
+            (found) => `Deleted ${found?.name || row.name}.`,
+          );
+          if (done.ok) {
+            keepSaying('applications', say);
+            refresh();
+          }
+        }, { tone: 'danger' }),
+      ]),
+    },
+  ], forms, { empty: NO_APPLICATION_FORMS });
+}
+
+async function panelCard(form, say) {
+  const where = await channelSelect(form.panel_channel_id);
+  return el('div', { class: 'formrow' }, [
+    field('Apply button in', where),
+    bar([
+      button('Post it', async () => {
+        const channelId = readSelect(where, false);
+        if (!channelId) {
+          say.say('Pick a channel to put the button in.', 'warn');
+          return;
+        }
+        const done = await run(
+          say,
+          () => send(`/api/applications/forms/${encodeURIComponent(form.id)}/panel`, 'POST', { channel_id: channelId }),
+          (found) => `The Apply button for ${found?.name || form.name} is up.`,
+        );
+        if (done.ok) {
+          keepSaying('applications', say);
+          refresh();
+        }
+      }, { tone: 'warn' }),
+    ]),
+  ]);
+}
+
+/** Off / shadow / on, saved the moment it is picked. */
+function applicationsMode(spec) {
+  const say = notice();
+  let stored = spec.value === null || spec.value === undefined ? 'off' : String(spec.value);
+  const picker = segment(
+    (spec.choices || ['off', 'shadow', 'on']).map((one) => ({ value: one, label: one })),
+    stored,
+    {
+      onChange: async () => {
+        const wanted = picker.readValue();
+        if (wanted === stored) return;
+        const done = await run(say, () => saveSetting(APPLICATIONS_MODE_KEY, wanted), `Applications are ${wanted}.`);
+        if (done.ok) {
+          stored = wanted;
+          refresh();
+        } else {
+          picker.setValue(stored);
+        }
+      },
+    },
+  );
+  return el('div', {}, [field('Now', picker, APPLICATIONS_SWITCH), say]);
+}
+
+async function applicationsSection(allSettings, say) {
+  const [forms, rows, status] = await Promise.all([
+    api('/api/applications/forms'),
+    api('/api/applications'),
+    api('/api/applications/status'),
+  ]);
+  const formRows = listOf(forms, 'forms');
+  const applications = onlyThem(listOf(rows, 'applications'), 'user_id');
+  const waiting = applications.filter((row) => row.status === 'pending');
+  const decided = applications.filter((row) => row.status !== 'pending');
+  await names(idsIn(formRows, ['role_id', 'review_channel_id', 'approver_role_id', 'panel_channel_id']));
+
+  const namespace = settingsNamespace(allSettings, 'applications');
+  const mode = namespace.find((spec) => spec.key === APPLICATIONS_MODE_KEY);
+  const one = section('Applications', APPLICATIONS_NOTE, { id: 'applications', count: waiting.length });
+
+  if (mode) {
+    one.body.append(card('Applications', [applicationsMode(mode)]));
+  } else {
+    one.body.append(sayNothing('The bot did not report an applications_mode key, so this switch is not shown rather than guessed at.'));
+  }
+
+  one.body.append(
+    waiting.length === 0
+      ? sayNothing(state.member ? 'They are not waiting on anything.' : NO_APPLICATIONS)
+      : el('div', { class: 'section-body' }, waiting.map((row) => applicationCard(row, say))),
+    foldout('Decided', [decidedApplications(decided)], { count: decided.length }),
+    bar([
+      button('New form', () => {
+        state.newForm = true;
+        state.form = null;
+        refresh();
+      }, { small: false }),
+    ]),
+    formsTable(formRows, say),
+    say,
+  );
+
+  for (const form of formRows) {
+    one.body.append(card(`Apply button for ${form.name}`, [await panelCard(form, say)]));
+  }
+
+  one.body.append(await settingsPanel(namespace.filter((spec) => spec.key !== APPLICATIONS_MODE_KEY), {
+    where: 'Applications',
+    empty: 'The bot registers no application settings beyond the switch above.',
+  }));
+
+  if (state.newForm) {
+    one.body.append(await formEditor(null, status.questions_max || 5));
+  } else if (state.form) {
+    const form = formRows.find((row) => row.id === state.form);
+    if (form) one.body.append(await formEditor(form, status.questions_max || 5));
+  }
+
+  return one.node;
+}
+
 async function load() {
   const [payload, roles, allSettings, allRequests, allGrants] = await Promise.all([
     api('/api/rolemenus'),
@@ -625,6 +1040,7 @@ async function load() {
 
   const say = notice();
   const askSay = sayAgain('requests', notice());
+  const applicationSay = sayAgain('applications', notice());
   const timedSay = sayAgain('timed', notice());
 
   const list = table([
@@ -746,7 +1162,9 @@ async function load() {
     one.node,
     two.node,
     box.node,
+    await applicationsSection(allSettings, applicationSay),
     await logsSection('rolemenu'),
+    await logsSection('applications', { title: 'Application logs' }),
   ].filter(Boolean);
   if (state.creating) {
     const made = section('New menu', null, { id: 'editor', open: true });

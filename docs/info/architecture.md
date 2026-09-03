@@ -3,6 +3,16 @@
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
 > Last verified: **2026-09-02** — the fast-moving figures re-measured on the
+> **Phase 19** branch (applications, built in parallel with 17 and 18 and merged LAST):
+> `SCHEMA_VERSION` is **25** — 23 and 24 are Phase 17's and Phase 18's and are empty on this
+> branch; 25 adds `application_forms`, `application_questions` and `applications`.
+> `bot.py:COGS` is **17** cogs and the tree has **41** top-level slash commands (`/apply`
+> for members, `/applications` for staff). `node site/mock/check.mjs` reports **17 pages /
+> 126 routes**; `ruff check black_bloc tests site` clean. New files:
+> `applications.py`, `cogs/community/applications.py`, `api/tools/applications.py` and
+> their mirrored tests. ⚠️ Measured on the Phase 19 branch only — NOT merged, NOT deployed,
+> and never run against live Discord. The row below is the Phase 18 reading it sits on.
+>
 > **Phase 18** branch: `SCHEMA_VERSION` is **24** (17 sessions, 18
 > `polls.vote_scheme`, 19 `golive_sessions.live_role_id`, 20 the chat tables,
 > 21 `golive_fan_roles`, 22 `youtube_links` + `youtube_videos`, ⚠️ **23 is

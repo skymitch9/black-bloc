@@ -17,6 +17,7 @@ HIDDEN_WHEN_OFF: dict[str, tuple[str, ...]] = {
     "rolemenu_mode": ("rolemenu",),
     "request_mode": ("request",),
     "chat_memory_mode": ("memory",),
+    "applications_mode": ("apply",),
 }
 NEVER_HIDDEN: tuple[str, ...] = ("settings",)
 OFF = "off"

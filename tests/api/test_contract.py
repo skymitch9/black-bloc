@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from discord.ext import tasks
 
-from black_bloc import knowledge, pings
+from black_bloc import applications, knowledge, pings
 from black_bloc import rolegrants as grants
 from black_bloc.api.settings_api import grouped
 from black_bloc.chat import add_line as add_chat_line
@@ -405,6 +405,38 @@ async def seeded(client, sign_in, web, guild, wf):
         slot_minutes=60,
         slot_count=3,
     )
+    # Phase 19: one form with questions and somebody waiting on it, plus an empty second
+    # form for the DELETE entry — a form with an application waiting refuses to be deleted.
+    await web.store.set(guild_id, "applications_mode", "on", by=7)
+    application_form_id = client.post(
+        "/api/applications/forms",
+        json={
+            "name": "twitch-team",
+            "title": "Twitch Team",
+            "description": "join the Team",
+            "role_id": str(wf.PLAIN_ROLE_ID),
+        },
+    ).json()["id"]
+    client.put(
+        f"/api/applications/forms/{application_form_id}/questions",
+        json={"questions": [{"label": "Twitch handle"}, {"label": "Why the Team"}]},
+    )
+    empty_form_id = client.post(
+        "/api/applications/forms",
+        json={"name": "mod-team", "title": "Mod Team", "role_id": str(wf.PLAIN_ROLE_ID)},
+    ).json()["id"]
+    # Every form in the list needs a question, or the list entry's row check never runs.
+    client.put(
+        f"/api/applications/forms/{empty_form_id}/questions",
+        json={"questions": [{"label": "Why do you want to help moderate", "style": "long"}]},
+    )
+    application_id = await applications.create_application(
+        db,
+        guild_id,
+        application_form_id,
+        MEMBER_ID,
+        applications.answers_json([("Twitch handle", "ada"), ("Why the Team", "the vibes")]),
+    )
     grant_id = await grants.add_grant(
         db,
         guild_id,
@@ -437,6 +469,9 @@ async def seeded(client, sign_in, web, guild, wf):
         "held_request_id": str(held_request_id),
         "raid_train_id": str(raid_train_id),
         "ping_member_id": str(PING_MEMBER_ID),
+        "application_form_id": str(application_form_id),
+        "empty_form_id": str(empty_form_id),
+        "application_id": str(application_id),
     }
 
 

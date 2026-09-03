@@ -1,8 +1,9 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-02** — rows **48–52** added by the Phase 18 (F19, raid trains) build; the file now
-> holds **52** un-exercised rows. ⚠️ Rows 48–52 are on the Phase 18 BRANCH — not merged, not
+> **2026-09-02** — rows **53–57** added by the Phase 19 (applications) build and rows
+> **48–52** by the Phase 18 (F19, raid trains) build, both built in parallel; the file now
+> holds **57** un-exercised rows. ⚠️ Rows 48–57 land with the 17 → 18 → 19 merge — not
 > deployed; do not attempt them until the conductor says the branch is live. Before that, rows
 > **43–47** were added by the Phase 16 (F3, YouTube uploads) build. ⚠️ Rows 43–47 are on the
 > Phase 16 BRANCH too. Before that, rows
@@ -150,6 +151,48 @@ form for a full pass.
   action-log rows (your sweep's `would_*` lines should be there), open counts. Theme
   dropdown: 5 themes. Try a second, non-staff account: expect the amber "not staff"
   sentence. Sign out → signed-out state again.
+
+### Phase 19 — applications (the Twitch Team form). ⚠️ On the branch; not merged, not deployed.
+
+| # | Feature | Do this | Expect |
+|---|---|---|---|
+| 53 | Applications — the switch | /rolemenus.html → **Applications** → set it to **shadow**, then **on**; or `/settings set-value applications_mode on` | the segment saves in place and says so; with it **off** `/apply` disappears from Discord within about five seconds and the Apply buttons stop working |
+| 54 | Applications — the form | follow the Twitch Team walk-through below (either the slash path or the dashboard editor) | `/applications question list twitch-team` shows five questions in order; the dashboard's form editor shows the same five, and Up/Down really reorders them |
+| 55 | Applications — applying | in `#mute-me-bot-test-spam`: `/apply start twitch-team` (or press **Apply** on the posted panel) | a modal with your five questions; on submit an ephemeral "Sent to staff…", a DM "…is with staff now", and a card with **Approve** / **Deny** in the test channel (test mode redirects it there and the reply says so) |
+| 56 | Applications — deciding | press **Approve** on that card | the applicant gets the role; the card is edited to say who has it and carries `@<owner> — next step: the Team owner sends your twitch.tv invite…`; the applicant is DMed the same thing; /rolemenus.html → Applications shows it under Decided and the Timed roles table has a clock on it if the form set one. Then apply again as somebody else and press **Deny** with a reason: the DM carries the reason AND the date they may apply again |
+| 57 | Applications — the second application guard | apply twice on the same form without withdrawing | the second one refuses in words ("you already have an application waiting"); `/apply withdraw twitch-team` takes it back and lets you apply again; after a **deny**, applying again says *when* you may, not just no |
+
+## The owner's Twitch Team form — the walk-through
+
+This is the form Phase 19 was built for (Pawpette's request, 2026-09-02). Nothing
+about the Team is in the code: it is all data you create, and you can make a second
+form the same way for anything else staff hand out.
+
+⚠️ **The twitch.tv Team invite has no API.** Black Bloc owns the form, the review, the
+role and the DMs; a human still clicks *invite* on twitch.tv. That click is what the
+`owner` + `next_step` fields exist to name — see `KNOWN_ISSUES.md`.
+
+**In Discord** (every step has a dashboard twin on /rolemenus.html → Applications):
+
+1. `/applications mode value:on`
+2. `/applications create name:twitch-team title:Twitch Team role:@Twitch Team`
+   — add `channel:` if the cards should not go to the staff channel, and
+   `approver_role:` if somebody other than staff decides them.
+3. The five questions, in this order:
+   - `/applications question add form:twitch-team label:Twitch handle placeholder:twitch.tv/…`
+   - `/applications question add form:twitch-team label:How long have you been streaming`
+   - `/applications question add form:twitch-team label:What is your usual schedule`
+   - `/applications question add form:twitch-team label:What do you stream`
+   - `/applications question add form:twitch-team label:Why the Team style:long required:False`
+4. `/applications edit form:twitch-team owner:@<the Team owner> next_step:the Team owner sends your twitch.tv invite — accept it from your Twitch notifications`
+   — and, if you want one, `approved_text:` (what the DM says) and `expires_days:`
+   (0 or blank means the role never runs out).
+5. `/applications panel form:twitch-team` — puts the **Apply** button up in that
+   channel. Run it again anywhere to move it. Members can also use `/apply start`.
+6. Check it: `/applications list`, `/applications show <id>`, `/applications logs`.
+
+**To close it for a while** (applications in progress are untouched):
+`/applications edit form:twitch-team open:False`.
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that

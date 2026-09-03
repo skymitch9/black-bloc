@@ -15,6 +15,7 @@ from .assets import NO_STORE, SiteFiles, build_id
 from .auth import Refused, refused_handler, validation_handler
 from .status import latency_ms
 from .tools import (
+    applications,
     birthdays,
     chat,
     chat_memory,
@@ -161,6 +162,7 @@ def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
     app.include_router(chat_memory.build_router(bot))
     app.include_router(requests.build_router(bot))
     app.include_router(raidtrain.build_router(bot))
+    app.include_router(applications.build_router(bot))
 
     root = Path(bot.settings.site_root)
     if root.is_dir():

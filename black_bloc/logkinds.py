@@ -33,6 +33,7 @@ FEATURES = (
     "request",
     "pings",
     "raidtrain",
+    "applications",
 )
 
 HEADS: dict[str, str] = {
@@ -59,6 +60,8 @@ HEADS: dict[str, str] = {
     "requests": "request",
     "pings": "pings",
     "raidtrain": "raidtrain",
+    "application": "applications",
+    "applications": "applications",
 }
 
 FEATURE_LABELS: dict[str, str] = {
@@ -78,6 +81,7 @@ FEATURE_LABELS: dict[str, str] = {
     "request": "Requests",
     "pings": "Ping roles",
     "raidtrain": "Raid trains",
+    "applications": "Applications",
 }
 
 FEATURE_PAGES: dict[str, str] = {
@@ -97,6 +101,7 @@ FEATURE_PAGES: dict[str, str] = {
     "request": "requests.html",
     "pings": "golive.html",
     "raidtrain": "events.html",
+    "applications": "rolemenus.html",
 }
 
 IMPORTANT_SUFFIXES = (
@@ -334,6 +339,15 @@ ROUTINE: frozenset[str] = frozenset(
         "tempvoice.unban",
         "tempvoice.unlock",
         "tempvoice.unpermit",
+        "application.mode",
+        "application.form_created",
+        "application.form_updated",
+        "application.form_deleted",
+        "application.question_changed",
+        "application.panel_posted",
+        "application.post_skipped_test_mode",
+        "application.submitted",
+        "application.withdrawn",
     }
 )
 
