@@ -6,8 +6,13 @@
 (`tests/cogs/community/test_requests.py` 51, `tests/test_requests.py` +26 pure-helper and
 `withdraw_request` tests, `tests/test_settings_store.py` +1), then **17 more** for the
 three review findings (`79548c1`); **3338 tests pass** (3321 before the review fixes), ruff
-clean, `check.mjs` 17 pages / 139 routes, `labels.js` still parses (site untouched). See
-`## Deviations` at the foot — 9, 10 and 11 are the reviewer's findings and what changed. Owner's ask ~06:50 (verbatim in `../TODO.md`, "🔧 Open
+clean, `check.mjs` 17 pages / 139 routes, `labels.js` still parses (site untouched). Since
+then, **deviation 12** (branch `feat/requests-panel-own-list`, ⚠️ **not yet merged**): the
+owner's *"We need to make the view request thing staff only"* — a member no longer sees
+their own requests written out on the panel unless the new `request_panel_own_list` is on
+(default off); **3345 tests pass**. See
+`## Deviations` at the foot — 9, 10 and 11 are the reviewer's findings and what changed, 12
+is the owner's change after deploy. Owner's ask ~06:50 (verbatim in `../TODO.md`, "🔧 Open
 engineering items"): *"The flow
 seems tough, and request set and request ready seem overlapping."* → *"Let's also have
 /request open a menu maybe. Let's try and minimize slash commands and maximize interactive
@@ -43,6 +48,8 @@ different panels from the same command.
 - **Embed** "Requests": one line saying what the panel is, then the caller's own requests
   (`list_requests(user_id=caller)`, newest first, `summary_line` each, at most `LIST_PAGE`);
   "You have not asked for anything yet" when empty. Colour: `EMBED_COLOURS[FILED_LOOK]`.
+  ⚠️ **The own-requests half is superseded by deviation 12** — a member sees those lines
+  only when `request_panel_own_list` is on (default off); staff always see theirs.
 - **Row 0 buttons:** `File a request` → the existing `RequestModal` (unchanged). `Refresh` →
   re-render. `Open on the site` → the existing `site_view` link (only when a site origin is
   configured, as today).
@@ -110,12 +117,16 @@ Discord — accepted, the panel is a moment, not a post (a `KNOWN_ISSUES` entry,
 
 ### Settings (checklist 33 — every decision configurable both ways)
 
-One new key in `settings_store.py`: **`request_panel_minutes`** (`int`, default **10** —
-15 as first built, lowered by review finding F2 / deviation 10, because the "gone quiet"
-footer can only be written while Discord's 15-minute interaction token is still valid) —
-registry type, help text, default, on the Settings page and
-via `/settings set-value` like every key. Nothing else here is a decision: the 25-option cap
-is Discord's, the button table is the state machine.
+**Two** keys in `settings_store.py`, each with a registry type, help text and a `default()`
+branch, so both reach the Settings page and `/settings set-value` like every key:
+
+| Key | Type | Default | What it decides |
+|---|---|---|---|
+| `request_panel_minutes` | `int` | **10** | how long the panel stays live. 15 as first built, lowered by review finding F2 / deviation 10, because the "gone quiet" footer can only be written while Discord's 15-minute interaction token is still valid |
+| `request_panel_own_list` | `bool` | **False** | whether a MEMBER sees their own requests written out on the panel. Staff always see theirs. Added by deviation 12 (the owner's "make the view request thing staff only", after deploy); on, the panel is exactly what shipped in `ba5cb99` |
+
+Nothing else here is a decision: the 25-option cap is Discord's, the button table is the
+state machine.
 
 ### What goes away
 
@@ -288,3 +299,39 @@ specified.
     the one shape used consistently at all three sites. `LogsButton` needed
     nothing: `send_logs` (`actionlog.py:295–297`) already calls `require_staff`
     itself, and a test now pins that.
+
+### The owner's change after deploy — written 2026-09-03, built on `feat/requests-panel-own-list`
+
+12. **A member no longer sees their own requests on the panel; the list is staff-only,
+    behind the new `request_panel_own_list` key (default `False`).** Owner, 2026-09-03
+    ~10:10, verbatim: *"We need to make the view request thing staff only"*, clarified as
+    *"Viewing requests on the panel"*. **What changed:** `build_panel`
+    (`cogs/community/requests.py:511`) wraps the own-request `summary_line` block and the
+    `PANEL_EMPTY` line in `if staff or panel_shows_own_list(store, guild.id):`. Everything
+    else is untouched — `PANEL_INTRO`, the counts line, the requests-off and
+    staff-only-filing lines, `NOTHING_OPEN`, the File / Refresh / site buttons, the staff
+    select and Logs. ⚠️ **`own_rows` is still fetched for every caller**, because the
+    "Take one back…" select needs it to know what is withdrawable — hiding the list is a
+    rendering decision, not a query one, and a member who has something withdrawable still
+    gets the select and its Yes/Keep confirm.
+    **The key** is `PANEL_OWN_LIST_KEY` (`requests.py:49`) with the one-line helper
+    `panel_shows_own_list` (`requests.py:477`) beside `PANEL_MINUTES_KEY`/`panel_minutes`,
+    registered in all three places `request_panel_minutes` is
+    (`settings_store.py:876` `KEY_TYPES`, `:897` `KEY_HELP`, `:1306` `default()`), so
+    checklist 33 is satisfied without a new slash command. With it on, the panel is what
+    shipped in `ba5cb99`.
+    ⚠️ **No "your requests are hidden" sentence was added.** For a member with the list
+    off the embed is `PANEL_INTRO` alone (plus the off / staff-only-filing line when one
+    applies), which reads fine: the intro's *"see where what you already asked for has got
+    to"* is still true of the site link and of the "Take one back…" select, which names
+    each withdrawable request by id and text. A line explaining an absence would be the
+    only place in this panel that describes what it is NOT showing.
+    **Three existing tests were rewritten rather than kept**, because they asserted the
+    behaviour the owner overturned: `test_a_member_with_nothing_filed_is_told_so` and
+    `test_a_member_sees_their_own_requests_summarised` now turn the key on (and are named
+    `…_when_the_list_is_on`), and `test_the_refresh_button_re_renders_the_panel` turns it
+    on too, since it proved a re-render by looking for a fresh request in the description.
+    Seven new tests cover the default-off member, the flipped-on member, staff either way,
+    and the helper/registry. 3345 tests pass (3338 at `ba5cb99`), ruff clean, `check.mjs`
+    17 pages / 139 routes (site untouched). ⚠️ **NOT verified against live Discord** — no
+    panel has been opened with the key off.

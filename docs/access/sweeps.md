@@ -1,9 +1,12 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-03** — rows **58–64** added by the requests fourth pass (`/request` becomes one
-> panel; rows 14–15 rewritten in place for the same build — the file now holds **64**
-> un-exercised rows). ⚠️ Rows 14–15 and 58–64 are **BUILT, not yet live** — merge and deploy
+> **2026-09-03** — row **65** added, and rows **14–15** corrected again, by the owner's
+> "make the view request thing staff only" (viewing requests on the panel): a member no
+> longer sees their own list unless `request_panel_own_list` is on. Before that, the same
+> day — rows **58–64** added by the requests fourth pass (`/request` becomes one
+> panel; rows 14–15 rewritten in place for the same build — the file now holds **65**
+> un-exercised rows). ⚠️ Rows 14–15 and 58–65 are **BUILT, not yet live** — merge and deploy
 > land them; not run against Discord (this build cannot reach it). Before that, **2026-09-02**
 > — rows **53–57** added by the Phase 19 (applications) build and rows
 > **48–52** by the Phase 18 (F19, raid trains) build, both built in parallel. ✅ Rows 43–57 are LIVE: 43–47 shipped with Phase 16
@@ -41,8 +44,8 @@ All of this happens in **`#mute-me-bot-test-spam`** (test mode) or on **https://
 | 11 | Birthday daily import | nothing to do — read the log after a restart | `birthdays: the daily import took nothing new — {… 'already': 38 …}` |
 | 12 | Logs (Phase 12, live 18:38) | flip `golive_log_level` to `all`, `/golive test`, then back to `important`, `/golive test` again; `/golive logs` | Discord line only in `all`; dashboard shows both; a role request still posts its card with `rolemenu_log_level = off` |
 | 13 | Emoji tone | `@Black Bloc hi` until a 👋 line comes up | dark tone by default; `emoji_skin_tone` setting changes it |
-| 14 | Requests — the panel, staff (fourth pass, `/request` is now ONE command) | `/request` in the test channel as staff | an ephemeral panel: a counts line (open / being worked on / ready to check / on hold), your own requests, **File a request** / **Refresh** / **Open on the site**, a **Pick a request…** select (capped at 25, says "N of M — the rest are on the site" past that), and a **Logs** button that answers with a NEW ephemeral message (the panel stays put) |
-| 15 | Requests — the panel, member | `/request` as a non-staff member | the same panel minus the staff controls: File a request / Refresh / Open on the site, and your own requests; once you have an open or held one, a **Take one back…** select appears — picking one shows its card with **Yes, take it back** / **Keep it** |
+| 14 | Requests — the panel, staff (fourth pass, `/request` is now ONE command) | `/request` in the test channel as staff | an ephemeral panel: a counts line (open / being worked on / ready to check / on hold), your own requests (staff always see theirs), **File a request** / **Refresh** / **Open on the site**, a **Pick a request…** select (capped at 25, says "N of M — the rest are on the site" past that), and a **Logs** button that answers with a NEW ephemeral message (the panel stays put) |
+| 15 | Requests — the panel, member | `/request` as a non-staff member | the same panel minus the staff controls: File a request / Refresh / Open on the site — and **NO list of your own requests**, because viewing requests on the panel is staff-only (`request_panel_own_list`, off by default). Once you have an open or held one, a **Take one back…** select still appears — picking one shows its card with **Yes, take it back** / **Keep it** |
 | 16 | Via column | change one setting from Discord (`/settings set-value …`) and one from the website | Logs page → Settings audit shows **Discord** and **Website** in the Via column; `/settings logs` says the same |
 | 17 | Cyberpunk look | cog → Cyberpunk | the estate's cyan/yellow palette again (no magenta) — say if it still reads wrong |
 | 18 | `/help` (batch 2) | `/help`, then `/help filter:temp` | command list with `(staff)` marks on staff-only entries |
@@ -172,6 +175,7 @@ form for a full pass.
 | 62 | Requests — panel move, Accept | on a review card, press **Accept** | the card re-renders **done**, final; the asker is DMed with what was built. Turn `request_review_by_other` on and reopen the same card as the staffer who marked it ready: Accept is gone, the footer says who may press it |
 | 63 | Requests — panel move, Send back | on a review card, press **Send back**, fill "What's left?" | the card re-renders **being worked on**; whoever marked it ready is DMed the note |
 | 64 | Requests — panel move, Resume | on a held card, press **Resume** | the card re-renders back where it was held from — usually being worked on, sometimes ready to check |
+| 65 | Requests — giving members their list back | `/settings set-value key:request_panel_own_list value:true`, then `/request` as a non-staff member who has filed something | the member's own requests are summarised on the panel again (and "You have not asked for anything yet" when they have none) — exactly row 15's old behaviour. Set it back to `false` and the lines go away again; the Settings page has the same switch |
 
 ## The owner's Twitch Team form — the walk-through
 

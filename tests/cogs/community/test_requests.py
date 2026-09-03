@@ -401,17 +401,72 @@ async def test_a_member_panel_shows_file_and_refresh_and_no_staff_controls(cog, 
     assert not any(isinstance(item, LogsButton) for item in view.children)
 
 
-async def test_a_member_with_nothing_filed_is_told_so(cog, bot, member):
+async def test_a_member_with_nothing_filed_is_told_so_when_the_list_is_on(cog, bot, member):
+    await bot.store.set(GUILD, "request_panel_own_list", True)
+
     interaction = await open_panel(cog, bot, member)
 
     assert pure.PANEL_EMPTY in panel_embed(interaction).description
 
 
-async def test_a_member_sees_their_own_requests_summarised(cog, bot, member):
+async def test_a_member_sees_their_own_requests_summarised_when_the_list_is_on(cog, bot, member):
+    await bot.store.set(GUILD, "request_panel_own_list", True)
     await file_one(cog, bot, member, what="a request board")
+
     interaction = await open_panel(cog, bot, member)
 
     assert "request board" in panel_embed(interaction).description
+
+
+async def test_a_member_is_not_shown_their_own_requests_by_default(cog, bot, member):
+    await file_one(cog, bot, member, what="a request board")
+
+    interaction = await open_panel(cog, bot, member)
+
+    assert "request board" not in panel_embed(interaction).description
+    assert pure.PANEL_EMPTY not in panel_embed(interaction).description
+    assert pure.PANEL_INTRO in panel_embed(interaction).description
+
+
+async def test_a_member_with_nothing_filed_is_told_nothing_by_default(cog, bot, member):
+    interaction = await open_panel(cog, bot, member)
+
+    assert pure.PANEL_EMPTY not in panel_embed(interaction).description
+
+
+async def test_a_member_keeps_filing_and_taking_one_back_with_the_list_hidden(cog, bot, member):
+    await file_one(cog, bot, member, what="a request board")
+
+    interaction = await open_panel(cog, bot, member)
+    view = panel_view(interaction)
+    labels = [getattr(item, "label", None) for item in view.children]
+
+    assert "File a request" in labels
+    assert any(isinstance(item, WithdrawPick) for item in view.children)
+
+
+async def test_staff_see_their_own_requests_whatever_the_key_says(cog, bot, lead):
+    await file_one(cog, bot, lead, what="a request board")
+
+    off = await open_panel(cog, bot, lead)
+    assert "request board" in panel_embed(off).description
+
+    await bot.store.set(GUILD, "request_panel_own_list", True)
+    on = await open_panel(cog, bot, lead)
+    assert "request board" in panel_embed(on).description
+
+
+async def test_staff_with_nothing_of_their_own_are_told_so_whatever_the_key_says(
+    cog, bot, lead, member
+):
+    await file_one(cog, bot, member)
+
+    off = await open_panel(cog, bot, lead)
+    assert pure.PANEL_EMPTY in panel_embed(off).description
+
+    await bot.store.set(GUILD, "request_panel_own_list", True)
+    on = await open_panel(cog, bot, lead)
+    assert pure.PANEL_EMPTY in panel_embed(on).description
 
 
 async def test_a_staff_panel_adds_the_select_and_logs(cog, bot, lead, member):
@@ -536,6 +591,7 @@ async def test_filing_through_the_panel_still_files_exactly_as_before(cog, bot, 
 
 
 async def test_the_refresh_button_re_renders_the_panel(cog, bot, member):
+    await bot.store.set(GUILD, "request_panel_own_list", True)
     interaction = await open_panel(cog, bot, member)
     button = find_item(panel_view(interaction), "Refresh")
     await file_one(cog, bot, member, what="a fresh one")

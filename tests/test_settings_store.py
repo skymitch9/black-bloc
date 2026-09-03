@@ -925,6 +925,7 @@ async def test_requests_ship_on_and_open_to_everyone_with_nothing_auto_approved(
         "request_channel_moves",
         "request_review_by_other",
         "request_panel_minutes",
+        "request_panel_own_list",
     ):
         assert key in KEY_TYPES and KEY_HELP.get(key)
 
@@ -988,6 +989,24 @@ async def test_the_request_panel_stays_up_ten_minutes_by_default(store):
     with pytest.raises(SettingError):
         coerce_value("request_panel_minutes", "15")
     assert parse_value("request_panel_minutes", "45") == 45
+
+
+async def test_the_panel_keeps_a_members_own_requests_to_themselves_until_a_lead_says_otherwise(
+    store,
+):
+    """Owner, 2026-09-03: viewing requests on the panel is staff-only, and it is a key."""
+    from black_bloc.cogs.core import VALUE_KEYS
+
+    assert store.get(7, "request_panel_own_list") is False
+    assert KEY_TYPES["request_panel_own_list"] == "bool"
+    assert "staff always see them" in KEY_HELP["request_panel_own_list"]
+    assert "request_panel_own_list" in VALUE_KEYS
+    await store.set(7, "request_panel_own_list", True)
+    assert store.get(7, "request_panel_own_list") is True
+    assert coerce_value("request_panel_own_list", True) is True
+    with pytest.raises(SettingError):
+        coerce_value("request_panel_own_list", "true")
+    assert parse_value("request_panel_own_list", "true") is True
 
 
 async def test_the_status_channel_is_blank_so_one_channel_carries_both_kinds_of_line(store):

@@ -71,6 +71,7 @@ from ...requests import (
     move_line,
     option_label,
     panel_minutes,
+    panel_shows_own_list,
     pick_placeholder,
     posts_a_card,
     request_embed,
@@ -507,10 +508,11 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
     lines = [PANEL_INTRO]
     if counts is not None:
         lines.append(counts_line(counts))
-    if own_rows:
-        lines.extend(summary_line(row) for row in own_rows[:LIST_PAGE])
-    else:
-        lines.append(PANEL_EMPTY)
+    if staff or panel_shows_own_list(store, guild.id):
+        if own_rows:
+            lines.extend(summary_line(row) for row in own_rows[:LIST_PAGE])
+        else:
+            lines.append(PANEL_EMPTY)
     if not on:
         lines.append(REQUESTS_OFF)
     elif not can_file:
