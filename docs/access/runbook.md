@@ -44,6 +44,12 @@ Incident that made it a script: 2026-09-01, an ungated `;`-chain deployed on a r
 suite. GitHub Actions (`.github/workflows/ci.yml`) also proves every push
 independently — a red ✗ on main is a stop-everything signal.
 A deploy restarts the bot (~10 s offline); expect one Fly proxy "refused connection" line in that window.
+⚠️ **"the script died at `git push` with NativeCommandError but the push landed"** (2026-09-02,
+Phase 16): PowerShell 5.1 + `$ErrorActionPreference = "Stop"` throws on anything git writes
+to stderr — including the harmless `To https://github.com/…` progress line — so the run
+stopped before `flyctl`. Fixed by routing the push through `cmd /c "… 2>&1"`. If it recurs
+for another native command in the script, that is the cause; check `origin/main` before
+assuming the push failed, then rerun the script (the gate reruns; it is idempotent).
 
 ## Restart / stop / start
 ```

@@ -28,7 +28,7 @@ if ($env:BLACKBLOC_SKIP_GATE -eq "1") {
     if ($contract -ne 0) { Write-Error "REFUSED: check.mjs is not green." }
 }
 
-git push origin main
+cmd /c "git push origin main 2>&1"
 if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: the push failed." }
 
 & $flyctl deploy --app black-bloc --ha=false --remote-only --yes
