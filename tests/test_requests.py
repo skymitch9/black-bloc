@@ -721,6 +721,13 @@ def test_panel_minutes_reads_the_settings_key():
     assert pure.panel_minutes(Store(request_panel_minutes=30), GUILD) == 30
 
 
+def test_the_panel_only_shows_a_member_their_own_list_when_the_key_says_so():
+    assert pure.PANEL_OWN_LIST_KEY == "request_panel_own_list"
+    assert pure.panel_shows_own_list(Store(request_panel_own_list=True), GUILD) is True
+    assert pure.panel_shows_own_list(Store(request_panel_own_list=False), GUILD) is False
+    assert pure.panel_shows_own_list(Store(), GUILD) is False
+
+
 class FakeBot:
     def __init__(self, db):
         self.db = db

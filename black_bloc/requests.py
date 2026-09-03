@@ -46,6 +46,7 @@ DM_LOOKS = (IN_PROGRESS, HOLD, DONE, DECLINED)
 CHANNEL_MOVES_KEY = "request_channel_moves"
 REVIEW_BY_OTHER_KEY = "request_review_by_other"
 PANEL_MINUTES_KEY = "request_panel_minutes"
+PANEL_OWN_LIST_KEY = "request_panel_own_list"
 
 SELECT_CAP = 25
 SELECT_OPTION_LIMIT = 100
@@ -471,6 +472,10 @@ def site_page_url(origin: Any) -> str | None:
 
 def panel_minutes(store: Any, guild_id: int) -> int:
     return int(store.get(guild_id, PANEL_MINUTES_KEY))
+
+
+def panel_shows_own_list(store: Any, guild_id: int) -> bool:
+    return bool(store.get(guild_id, PANEL_OWN_LIST_KEY))
 
 
 def wanted_statuses(given: Any) -> tuple[str, ...]:
@@ -941,6 +946,7 @@ __all__ = [
     "PANEL_EMPTY",
     "PANEL_INTRO",
     "PANEL_MINUTES_KEY",
+    "PANEL_OWN_LIST_KEY",
     "PANEL_TIMEOUT_FOOTER",
     "PANEL_TITLE",
     "REVIEW",
@@ -984,6 +990,7 @@ __all__ = [
     "option_label",
     "page_of",
     "panel_minutes",
+    "panel_shows_own_list",
     "parse_due",
     "pick_placeholder",
     "posts_a_card",
