@@ -14,17 +14,19 @@ from ...cogs.community.polls import (
 from ...cogs.community.polls import (
     cancel_poll,
     close_poll,
+    delete_recurrence,
     get_poll,
     get_recurrence,
     options_of,
     panel_counts,
+    pause_recurrence,
     poll_plan,
     polls_by_status,
     post_poll,
     recurrences,
     results_of,
+    resume_recurrence,
     send_review_card,
-    set_recur_next,
     set_status,
     store_poll,
     votes_of,
@@ -42,7 +44,6 @@ from ...polls import (
     clamp,
     counts_from_options,
     describe_cadence,
-    next_occurrence,
     winners,
 )
 from ..auth import Refused, staff_dependency
@@ -50,7 +51,6 @@ from ..names import resolve_one
 from ..writes import (
     actor_for,
     guard_of,
-    note,
     refuse_guarded,
     require_db,
     require_guild,
@@ -442,25 +442,14 @@ def build_router(bot: Any) -> APIRouter:
         row = await _wanted_recurrence(guild, poll_id)
         wanted = payload.get("paused")
         pausing = True if wanted is None else bool(wanted)
-        following = (
-            None
-            if pausing
-            else next_occurrence(row["recurrence"], row["recur_at"], row["recur_tz"])
-        )
-        if not pausing and following is None:
+        move = pause_recurrence if pausing else resume_recurrence
+        _, settled = await move(bot, guild, row, actor_for(bot, who, guild), via=VIA_WEBSITE)
+        if settled is None:
             raise Refused(
                 409,
                 "unreadable_cadence",
                 RECUR_UNREADABLE.format(question=clamp(row["question"], 80)),
             )
-        await set_recur_next(bot.db, poll_id, following.isoformat() if following else None)
-        await note(
-            bot,
-            guild,
-            "web.poll.recur_paused" if pausing else "web.poll.recur_resumed",
-            who,
-            details={"recurrence_id": poll_id},
-        )
         fresh = await get_recurrence(bot.db, guild.id, poll_id)
         said = RECUR_PAUSED_SAID if pausing else RECUR_RESUMED_SAID
         return {
@@ -474,15 +463,7 @@ def build_router(bot: Any) -> APIRouter:
         guild = require_guild(bot)
         require_db(bot)
         row = await _wanted_recurrence(guild, poll_id)
-        await set_recur_next(bot.db, poll_id, None)
-        await set_status(bot.db, poll_id, CANCELLED, closed=True)
-        await note(
-            bot,
-            guild,
-            "web.poll.recur_deleted",
-            who,
-            details={"recurrence_id": poll_id, "question": row["question"]},
-        )
+        await delete_recurrence(bot, guild, row, actor_for(bot, who, guild), via=VIA_WEBSITE)
         return {
             "recurrence_id": str(poll_id),
             "message": RECUR_DELETED_SAID.format(question=clamp(row["question"], 80)),

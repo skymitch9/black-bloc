@@ -9,6 +9,7 @@ import discord
 from .actionlog import log_action
 from .logkinds import FEATURE_PAGES, VIA_DISCORD, kind_via
 from .panels import CAPPED_PLACEHOLDER, capped_placeholder
+from .panels import option_label as library_option_label
 from .panels import panel_minutes as library_panel_minutes
 from .timezones import DEFAULT_TZ, zone
 
@@ -477,12 +478,13 @@ def look_for_status(status: Any) -> str:
 
 def option_label(row: Any, *, with_status: bool = True) -> str:
     """A select option's label, clamped to Discord's 100-character cap."""
-    parts = [f"#{row_value(row, 'id', '?')}"]
-    if with_status:
-        found = str(row_value(row, "status") or "")
-        parts.append(STATUS_WORDS.get(found, found))
-    prefix = " · ".join(parts) + " · "
-    return prefix + clamp(row_value(row, "what"), max(0, SELECT_OPTION_LIMIT - len(prefix)))
+    found = str(row_value(row, "status") or "")
+    return library_option_label(
+        row_value(row, "id", "?"),
+        STATUS_WORDS.get(found, found) if with_status else None,
+        row_value(row, "what"),
+        SELECT_OPTION_LIMIT,
+    )
 
 
 def pick_placeholder(shown: int, total: int) -> str:

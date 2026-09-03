@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, NamedTuple
 
 import discord
 
@@ -92,7 +92,7 @@ TRANSITIONS: dict[str, tuple[str, ...]] = {
     OPEN: (CLOSED, CANCELLED),
     CLOSED: (ARCHIVED,),
     CANCELLED: (ARCHIVED,),
-    DENIED: (),
+    DENIED: (OPEN,),
     ARCHIVED: (),
     RECURRING: (CANCELLED,),
 }
@@ -251,21 +251,37 @@ BAD_ZONE = (
 )
 RECUR_NOT_A_DATE = (
     "A **date** poll cannot recur, so nothing was saved — its slots are fixed days, and the second "
-    "time round it would be asking about a day that has been and gone. Run `/poll create "
-    "kind:date` when you need one, or recur a checkbox poll with the days written on it."
+    "time round it would be asking about a day that has been and gone. Make a one-off date poll "
+    "when you need one, or recur a checkbox poll with the days written on it."
 )
-RECUR_NONE = "No poll is set to repeat. `/poll recur create` starts one."
+RECUR_NONE = "No poll is set to repeat. **Repeat…** while you are writing one starts it off."
 RECUR_SAVED = "**{question}** will run {cadence}. The first one opens <t:{when}:R>."
 RECUR_PAUSED = "**{question}** is paused. Nothing opens until it is started again."
 RECUR_RESUMED = "**{question}** is running again. The next one opens <t:{when}:R>."
 RECUR_DELETED = "**{question}** will not run again. Polls it already opened are untouched."
 NOT_A_RECURRENCE = (
-    "Black Bloc has no repeating poll **#{poll_id}**, so nothing was done. `/poll recur list` has "
-    "the ones it knows about."
+    "Black Bloc has no repeating poll **#{poll_id}**, so nothing was done. The `/poll` panel "
+    "lists the ones it knows about."
 )
 CADENCE_DAILY = "every day at {clock} {zone}"
 CADENCE_WEEKLY = "every {day} at {clock} {zone}"
 CADENCE_MONTHLY = "on the {day}{ordinal} of each month at {clock} {zone}"
+
+PANEL_MINUTES_KEY = "poll_panel_minutes"
+CREATOR_MAY_END_KEY = "poll_creator_may_end"
+PANEL_TITLE = "Polls"
+PANEL_INTRO = "Put something to the room, or look at what is already running."
+PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run /poll again"
+PANEL_COUNTS = (
+    "**{running}** running · **{waiting}** waiting on a decision · **{repeating}** repeating"
+)
+PICK_A_POLL = "Pick a poll…"
+PICK_A_RECURRENCE = "Repeating polls…"
+FIND_BUTTON = "Find #…"
+SITE_BUTTON = "Open on the site"
+NO_MOVES_LEFT = "nothing moves a {status} poll now"
+RECURRENCE_TITLE = "Repeats: {question}"
+RECURRENCE_PAUSED = "paused — nothing opens until it is started again"
 
 RESULTS_TITLE = "{question}"
 NO_VOTES = "Nobody voted."
@@ -766,6 +782,114 @@ def closed_text(question: str) -> str:
 
 def thread_name(question: str) -> str:
     return clamp(question, THREAD_NAME_LIMIT) or "Poll"
+
+
+class MoveButton(NamedTuple):
+    action: str
+    label: str
+    style: str
+    needs_modal: bool = False
+    staff_only: bool = True
+
+
+CARD_BUTTONS: dict[str, tuple[MoveButton, ...]] = {
+    DRAFT: (
+        MoveButton("post", "Post it", "primary"),
+        MoveButton("cancel", "Cancel", "danger"),
+    ),
+    PENDING_REVIEW: (
+        MoveButton("approve", "Approve", "success"),
+        MoveButton("deny", "Deny", "danger", needs_modal=True),
+        MoveButton("cancel", "Cancel", "danger"),
+    ),
+    OPEN: (
+        MoveButton("end", "End", "primary", staff_only=False),
+        MoveButton("cancel", "Cancel", "danger"),
+    ),
+    CLOSED: (),
+    CANCELLED: (),
+    DENIED: (MoveButton("post_anyway", "Post it anyway", "success"),),
+    ARCHIVED: (),
+    RECURRING: (),
+}
+
+
+def card_buttons(
+    status: Any,
+    *,
+    staff: bool = False,
+    is_creator: bool = False,
+    creator_may_end: bool = True,
+) -> tuple[MoveButton, ...]:
+    """The §C table filtered by who is looking — a move nobody may make is never rendered."""
+    found = CARD_BUTTONS.get(str(status or ""), ())
+    kept = []
+    for one in found:
+        if one.staff_only:
+            if staff:
+                kept.append(one)
+        elif staff or (is_creator and creator_may_end):
+            kept.append(one)
+    return tuple(kept)
+
+
+def poll_id_from(text: Any) -> int | None:
+    """`12`, `#12`, ` 12 ` — the number, or None when it is not one."""
+    digits = str(text or "").strip().lstrip("#")
+    return int(digits) if digits.isdigit() else None
+
+
+def summary_line(row: Any, closes: datetime | None = None) -> str:
+    when = f"closes <t:{int(closes.timestamp())}:R>" if closes else "not posted yet"
+    where = f" · <#{row['channel_id']}>" if row["channel_id"] else ""
+    return (
+        f"**#{row['id']}** {clamp(row['question'], 60)} — {row['status']} · {when}"
+        f" · {describe_hours(row['hours'])}{where}"
+    )
+
+
+def recur_line(row: Any, following: datetime | None = None) -> str:
+    when = f"next <t:{int(following.timestamp())}:R>" if following else "**paused**"
+    return (
+        f"**#{row['id']}** {clamp(row['question'], 60)} — "
+        f"{describe_cadence(row['recurrence'], row['recur_at'], row['recur_tz'])} · "
+        f"{when} · <#{row['channel_id']}>"
+    )
+
+
+def recurrence_card(
+    *,
+    poll_id: Any,
+    question: str,
+    cadence: str,
+    following: datetime | None = None,
+    channel_id: Any = None,
+    kind: str = SINGLE,
+    labels: Any = (),
+    hours: Any = DEFAULT_HOURS,
+) -> discord.Embed:
+    """The card behind a repeating poll — what it asks, when it comes round, where it lands."""
+    embed = discord.Embed(
+        title=RECURRENCE_TITLE.format(question=clamp(question, QUESTION_LIMIT - 20)),
+        colour=COLOURS[RECURRING],
+    )
+    embed.add_field(name="Repeats", value=cadence, inline=False)
+    embed.add_field(
+        name="Next",
+        value=f"<t:{int(following.timestamp())}:R>" if following else RECURRENCE_PAUSED,
+        inline=True,
+    )
+    embed.add_field(
+        name="Where", value=f"<#{channel_id}>" if channel_id else "not set", inline=True
+    )
+    embed.add_field(name="Kind", value=KIND_NAMES.get(kind, kind), inline=True)
+    embed.add_field(name="Open for", value=describe_hours(hours), inline=True)
+    shown = "\n".join(
+        f"{n}. {clamp(label, LABEL_LIMIT)}" for n, label in enumerate(labels or (), 1)
+    )
+    embed.add_field(name="Options", value=shown or "none", inline=False)
+    embed.set_footer(text=f"Poll #{poll_id}")
+    return embed
 
 
 def counts_from_options(rows: Any) -> list[dict[str, Any]]:

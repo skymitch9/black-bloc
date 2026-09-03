@@ -531,8 +531,8 @@ KEY_HELP: dict[str, str] = {
         "minutes an event may start late and still be announced; later than that it goes live "
         "quietly"
     ),
-    "poll_mode": "off, or on (members and staff can run polls with /poll create)",
-    "poll_who_can_create": "who may run /poll create: staff, or everyone",
+    "poll_mode": "off, or on (members and staff can start polls from the /poll panel)",
+    "poll_who_can_create": "who may start a poll from the /poll panel: staff, or everyone",
     "poll_review_mode": (
         "off posts a poll straight away; on holds it for a staff Approve or Deny first"
     ),
@@ -541,7 +541,8 @@ KEY_HELP: dict[str, str] = {
         f"{POLL_MAX_HOURS} (32 days)"
     ),
     "poll_channel_id": (
-        "where a poll made from the dashboard goes; a slash command posts in its own channel"
+        "where a poll made from the dashboard goes; the /poll panel offers the channel it was "
+        "opened in and lets you pick another"
     ),
     "poll_ping_role_id": "role mentioned when a poll opens; blank pings nobody",
     "poll_reminder_minutes": (
@@ -929,6 +930,23 @@ KEY_HELP.update(
     }
 )
 
+# Polls panel — wave 1. Its own block so the parallel wave-1 branches merge textually.
+KEY_TYPES.update({"poll_panel_minutes": "int", "poll_creator_may_end": "bool"})
+KEY_HELP.update(
+    {
+        "poll_panel_minutes": (
+            "minutes the /poll panel stays live before its buttons disable themselves; 10 by "
+            "default. The 'this panel has gone quiet' footer can only be written while "
+            "Discord's 15-minute interaction window is still open, so 15 or more means the "
+            "buttons simply stop working with no footer to explain it"
+        ),
+        "poll_creator_may_end": (
+            "true to let whoever started a poll close it early from the /poll panel; staff can "
+            "always close one either way"
+        ),
+    }
+)
+
 
 GUILD_ONLY = (
     "That command changes settings for a server, so it has to be run in the server itself "
@@ -1279,6 +1297,10 @@ class SettingsStore:
             return True
         if key == "poll_date_labels":
             return POLL_DATE_LABEL_FORMS[0]
+        if key == "poll_panel_minutes":
+            return 10
+        if key == "poll_creator_may_end":
+            return True
         if key == "birthday_mode":
             return "shadow"
         if key == "birthday_channel_id":

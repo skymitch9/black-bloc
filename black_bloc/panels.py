@@ -12,6 +12,7 @@ from .settings_store import DB_UNAVAILABLE
 log = logging.getLogger(__name__)
 
 CAPPED_PLACEHOLDER = "{shown} of {total} — the rest are on the site"
+SELECT_OPTION_LIMIT = 100
 
 
 async def answer(interaction: discord.Interaction, text: str) -> None:
@@ -58,6 +59,17 @@ def capped_placeholder(
     if total > shown:
         return capped.format(shown=shown, total=total)
     return pick
+
+
+def option_label(
+    ident: Any, status: Any, text: Any, limit: int = SELECT_OPTION_LIMIT
+) -> str:
+    """A select option's label — id, optionally a status word, then as much text as fits."""
+    parts = [f"#{ident}"]
+    if status:
+        parts.append(str(status))
+    prefix = " · ".join(parts) + " · "
+    return prefix + str(text or "").strip()[: max(0, limit - len(prefix))]
 
 
 def panel_minutes(store: Any, guild_id: int, key: str) -> int:
@@ -133,11 +145,13 @@ class NoteModal(AnswersErrors, discord.ui.Modal):
 
 __all__ = [
     "CAPPED_PLACEHOLDER",
+    "SELECT_OPTION_LIMIT",
     "NoteModal",
     "Panel",
     "answer",
     "capped_placeholder",
     "db_ready",
+    "option_label",
     "panel_minutes",
     "retire",
     "still_staff",
