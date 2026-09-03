@@ -37,10 +37,58 @@ window closes. Today Phase 14's window IS the memory; it is deleted after an hou
 | # | Question | Proposed | Key |
 |---|---|---|---|
 | D1 | **Consent model.** Is memory on for everyone until they turn it off, or off until they turn it on? | ✅ **DECIDED 2026-09-02 17:20 (owner: "Yes opt out")** — **Opt-out**: on for everyone; `/chat memory off` stops writing AND deletes the profile. Reason: an opt-in nobody discovers is a feature nobody has; the profile is preferences only (D2), so the downside of default-on is small. | `chat_memory_consent` = `optout` / `optin` |
-| D2 | **What is remembered.** | **Preferences, not content**: what to call them, how they like to be talked to, up to 6 short notes (≤120 chars each), up to 5 open threads ("was asking about the Thursday event"). **Never**: quotes of what they said, anything about a third person, anything from a moderation/staff conversation (the `about_staff` gate already exists — those turns are excluded from distillation), availability ("they're usually on at 9"). | `chat_memory_notes_max` int 6, `chat_memory_threads_max` int 5 (the *never* list is code + prompt, not a setting) |
+| D2 | **What is remembered.** | ✅ **DECIDED 2026-09-02 17:55 (owner: "Let's do proposal but define what preferences vs content is")** — **Preferences, not content**, with the definition in §D2-definition below: what to call them, how they like to be talked to, up to 6 short notes (≤120 chars each), up to 5 open threads ("was asking about the Thursday event"). **Never**: quotes of what they said, anything about a third person, anything from a moderation/staff conversation (the `about_staff` gate already exists — those turns are excluded from distillation), availability ("they're usually on at 9"). | `chat_memory_notes_max` int 6, `chat_memory_threads_max` int 5 (the *never* list is code + prompt, not a setting) |
 | D3 | **Retention.** How long does a profile live untouched, and are raw turns archived beyond the hour? | **Profile: 180 days** since last update, then deleted; **raw turns: no archive** (the hour-long window stays the only raw store — the GABI tier-3 90-day archive is NOT ported; nothing in the feature list asks for "what did I say last month"). Leaving the server deletes the profile at once. | `chat_memory_retention_days` int 180 (0 = forever) |
 | D4 | **DMs vs the server.** Is what the bot learns in a DM usable in a public channel? | **Two scopes, one profile**: notes carry `where: dm|server`; a public-channel reply only sees the `server` notes, a DM sees both. The prompt-level guard GABI relies on becomes a data-level one — a DM note can never reach a public channel. | `chat_memory_dm_scope` = `separate` / `shared` |
 | D5 | **Who can read a profile.** Can staff see a member's memory on the dashboard? | **Counts only**: the Chat page shows how many profiles exist, when each was updated, and a Forget button; the *contents* are visible only to the person themselves (`/chat memory show`, ephemeral) and to the owner via the DB. Reason: staff already have modmail and case notes for what they need to know; a bot's private impressions of a member are not a moderation record. | `chat_memory_staff_view` = `counts` / `full` |
+
+### D2-definition — preference vs content (owner asked for the line, 2026-09-02)
+
+**The test, one sentence:** a *preference* is a durable fact about **how to
+treat this person** that they would expect the bot to still know next month; a
+*content* item is a record of **what was said or what happened**. The bot keeps
+the first kind and throws away the second — including the sentence the
+preference was learned from.
+
+| Preference (KEEP) | Content (DROP) |
+|---|---|
+| "goes by Sky" · "prefers she/her" | "said her name is Sky because …" (the quote) |
+| "likes short answers" · "hates emoji" · "wants blunt, no fluff" | the message where they complained about a long answer |
+| "is a Twitch streamer, plays Elden Ring" (a standing fact **they** stated about **themselves**) | "streamed Elden Ring last night and died to Malenia" (an event) |
+| "new to the server, still learning the channels" | "asked where #live-now was on Tuesday" |
+| "English is their second language — keep it simple" | anything they wrote in the other language |
+| open thread: "was asking about the Thursday event" (topic only, ≤120 chars, expires with the profile) | the full question, the bot's answer, the back-and-forth |
+
+**Hard rules the distil prompt and `parse_distilled` enforce, whatever the
+model returns:**
+
+1. **First person only.** Every note is about the person whose profile it is,
+   stated by them. "Sky said Namu is quitting" is dropped — it is about a
+   third person AND it is a quote.
+2. **No quotes.** A note may not contain quotation marks or a verbatim run of
+   ≥ 6 words from any turn (`parse_distilled` checks the window text; a note
+   that matches is dropped, the rest of the profile still saves).
+3. **No events, no dates.** A note describing something that *happened*
+   ("was banned", "lost a match", "joined the call") is content. The only
+   time-shaped field is an open thread, which is a *topic*, never an outcome.
+4. **No availability, location or schedule.** "usually on at 9", "lives in
+   Phoenix", "off on weekends" — dropped by a phrase list in code (the GABI
+   rule: the bot must never claim someone is online, free or somewhere).
+5. **No staff-conversation residue.** `about_staff` windows are never sent to
+   distillation, so nothing said in a moderation exchange can become a
+   preference — not even a benign one.
+6. **No sensitive categories** unless the person stated it *as* a preference
+   for how to be treated: pronouns and "keep it simple, ESL" are in; health,
+   religion, politics, sexuality, age and finances are out even if volunteered
+   (prompt instruction + a short keyword list; a false positive costs one
+   note, a false negative costs trust).
+7. **The person can read every note in plain words** (`/chat memory show`)
+   and drop any single one (`forget-this`). If a note would embarrass the bot
+   when shown back, it is content; the show command is the enforcement.
+
+The two counts (`chat_memory_notes_max` 6, `chat_memory_threads_max` 5) are
+settings; rules 1–7 are code and prompt, not settings — there is no dial that
+turns quotes back on.
 
 Plus the non-privacy defaults, decided by the Fable session: `chat_memory_mode`
 off/on (**off** at deploy — dark launch, flipped on the dashboard),
