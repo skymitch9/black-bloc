@@ -171,7 +171,27 @@ docs bookkeeping lands with the work, not after.
   *"Move the 2 done ones to ready to check, leave the other as hold"* → not possible
   until `review` exists (`done` is final today); recorded as the build's LANDING DATA
   STEP in the design (#1 and #2 `done → review` by a one-off on the live DB, #3 stays
-  `hold`). Status: **BUILDABLE now — the double-logging fix merged `df393ab`.**
+  `hold`). Status: ⚠️ **BUILT on `feat/requests-third-pass`, 2026-09-03 — NOT merged,
+  NOT deployed, and the landing data step NOT run.** 3260 tests pass, ruff clean,
+  `check.mjs` 17 pages / 139 routes, and the page was rendered against the mock; nothing
+  has been verified against live Discord or the live dashboard. What is left for the
+  conductor, in order: **(1)** merge and deploy (schema 26 migrates on boot — four
+  nullable columns, no backfill); **(2)** run the landing one-off in the design doc's
+  `## Deviations` foot (#1 and #2 `done → review`, #3 untouched) — it is idempotent and
+  was dry-run against a throwaway schema-26 file, but it must run AFTER the deploy;
+  **(3)** post one card of each of the seven looks to `#mute-me-bot-test-spam` and judge
+  "appealing" by eye — §J measured the shapes (worst look 2004 of Discord's 6000) but
+  nobody has seen one rendered. Move this item WHOLE to `DONE.md` at landing.
+
+- 🆕 **A defect this build found and fixed on the way, worth knowing about
+  separately: `site/public/assets/labels.js` had not parsed since `7b1c592`**, so
+  `LABELS` never loaded and **every dashboard page rendered blank**. The Phase 19 merge
+  pasted the applications labels after the `LABELS` object's closing brace. Fixed on
+  `feat/requests-third-pass` as its own commit (`1d7d84d`). ⚠️ **Nothing in the test
+  suite reads `labels.js`** — `node --check site/public/assets/labels.js` is the whole
+  test, and it caught this in one second. Worth adding to `deploy.ps1` beside ruff,
+  pytest and `check.mjs`; not done here, because it is a deploy-pipeline change and this
+  build had no brief for one.
 
 - **Via-labelling gap: `raidtrain.cancel_train` logs one row but calls a website cancel
   Via = Discord** (found by the double-logging build, 2026-09-03 — see `DONE.md` that
