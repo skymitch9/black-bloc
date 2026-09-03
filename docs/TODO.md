@@ -204,7 +204,9 @@ docs bookkeeping lands with the work, not after.
   here) accepted as a bearer on GET-only `/api/*` — the same JSON the dashboard reads, no new
   endpoints, no writes; every use logged with Via: operator; rate-limited like a session.
   ~40k Opus build. Interim: the owner's explicit permission in chat, then retry the `flyctl ssh`
-  read.
+  read. **DECIDED YES (owner, 2026-09-03 15:07: "Yes do it") — build DISPATCHED 15:10** (Opus,
+  own worktree; design in the brief → `info/operator-read-design.md`; access doc
+  `access/operator-read.md`; the token is minted and set by the owner, never seen by a session).
 
 
 - 🆕 **Panels over slash commands — the rest of the app (owner, 2026-09-03: "then carry it
