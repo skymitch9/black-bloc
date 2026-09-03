@@ -16,6 +16,7 @@ from black_bloc.logkinds import (
     ROUTINE,
     SHADOW,
     VIA_DISCORD,
+    VIA_OPERATOR,
     VIA_WEBSITE,
     VIA_WORDS,
     WEB,
@@ -241,6 +242,7 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "modmail.log_channel_forgotten",
     ),
     "black_bloc/command_visibility.py::LOG_KIND": ("commands.visibility",),
+    "black_bloc/api/auth.py::OPERATOR_READ_KIND": ("web.operator.read",),
     # B7: one helper serves the staff picker and the dashboard, so the head and the word are
     # both built at call time rather than being two literals in two places.
     "black_bloc/cogs/community/role_menus.py::kind": (
@@ -709,7 +711,18 @@ def test_via_reads_what_the_writer_recorded_and_falls_back_to_the_web_head():
     assert via_of("web") == "discord"
     assert via_word("web.settings.set") == "Website"
     assert via_word("settings.set") == "Discord"
-    assert set(VIA_WORDS) == {VIA_DISCORD, VIA_WEBSITE}
+    assert set(VIA_WORDS) == {VIA_DISCORD, VIA_WEBSITE, VIA_OPERATOR}
+
+
+def test_an_operator_read_says_so_only_because_the_writer_recorded_it():
+    """The kind carries a `web.` head, so nothing but `details["via"]` can make it operator."""
+    assert via_of("web.operator.read") == VIA_WEBSITE
+    assert via_of("web.operator.read", {"via": VIA_OPERATOR}) == VIA_OPERATOR
+    assert via_word("web.operator.read", {"via": VIA_OPERATOR}) == "Operator token"
+    assert via_of("web.operator.read", {"via": "the operator"}) == VIA_WEBSITE
+    assert feature_of("web.operator.read") == "core"
+    assert is_important("web.operator.read") is False
+    assert "operator.read" in ROUTINE
 
 
 def test_should_post_reads_the_three_levels():

@@ -8,7 +8,12 @@ SHADOW = ".would_"
 
 VIA_DISCORD = "discord"
 VIA_WEBSITE = "website"
-VIA_WORDS: dict[str, str] = {VIA_DISCORD: "Discord", VIA_WEBSITE: "Website"}
+VIA_OPERATOR = "operator"
+VIA_WORDS: dict[str, str] = {
+    VIA_DISCORD: "Discord",
+    VIA_WEBSITE: "Website",
+    VIA_OPERATOR: "Operator token",
+}
 
 OFF = "off"
 IMPORTANT_ONLY = "important"
@@ -277,6 +282,7 @@ ROUTINE: frozenset[str] = frozenset(
         "raidtrain.swap",
         "raidtrain.unassign",
         "raidtrain.unlock",
+        "operator.read",
         "presence.bio_set",
         "request.check_asked",
         "request.comment",
@@ -438,6 +444,7 @@ __all__ = [
     "OFF",
     "ROUTINE",
     "VIA_DISCORD",
+    "VIA_OPERATOR",
     "VIA_WEBSITE",
     "VIA_WORDS",
     "bare",

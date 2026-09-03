@@ -3395,6 +3395,7 @@
     "/requests.html"
   ],
   "action_kinds": [
+    "web.operator.read",
     "web.settings.set",
     "web.settings.clear",
     "web.rolemenu.create",
