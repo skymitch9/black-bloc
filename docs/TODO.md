@@ -265,7 +265,10 @@ docs bookkeeping lands with the work, not after.
   wave-2 build is ~2× its estimate, calibrate the rest up), merged `cb941d9`, live in v68 `cb941d9`
   16:48** (3710 → 3744 tests, 42 commands) — landing entry in `DONE.md` 2026-09-03; sweeps
   104–108 are the owner's to run (`chat_memory_mode` is still off live, so 104–107 need it on plus
-  a conversation first). Golive build in flight since 16:16. Events I2 DECIDED 12:40 (`/timezone` retired).
+  a conversation first). Golive build in flight since 16:16 (sweeps 109–129); **youtube build
+  DISPATCHED 16:52** in parallel (Opus, own worktree, base `ea252bd`, sweeps 130+, told to keep off
+  pings/golive files and to keep shared-string edits in its own blocks; F-Y2's shadow flip is the
+  conductor's after deploy). Pings waits for golive (shared `pings.py`/`personas.py`); voice last. Events I2 DECIDED 12:40 (`/timezone` retired).
   **Wave-1 builds all landed 13:40–13:50** (birthdays merged `58974e1`; events on
   `worktree-agent-a448c7ab780ed3c2b`, polls on `worktree-agent-aa735ab092d13477d`, both under Fable
   review); the applications build follows once I-A3 is answered. Merge in wave order, re-key
