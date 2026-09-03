@@ -1,5 +1,14 @@
 # Phase 17 — Chat long-term memory (per-person profiles)
 
+> ⚠️ **SUPERSEDED IN PART, 2026-09-03: the SLASH SURFACE this document describes is gone.**
+> `/memory show`, `/memory forget`, `/memory forget-this`, `/memory off` and `/memory on` are
+> retired; `/memory` is now ONE command that opens an ephemeral panel, and every one of those
+> subcommands is a button, a select or a modal on it — see
+> [`memory-panel-design.md`](memory-panel-design.md). **Nothing else here is superseded**: D1–D5,
+> the §D2-definition rules, the distillation path, the retention sweep, the schema and the site
+> section are all unchanged, and the panel undoes none of them. Wherever this document names a
+> subcommand (§D `:168–171`, deviations 1 and 2 at the foot), read "the panel".
+
 > **Audience:** the owner first (the five privacy decisions in §Decisions are
 > HIS, asked one at a time), then the Opus builder, then reviewers.
 > **Status:** TRACKED — **BUILT on branch `worktree-agent-a268aa7fa2979dd4a`,
