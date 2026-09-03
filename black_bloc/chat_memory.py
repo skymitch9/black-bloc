@@ -646,6 +646,77 @@ def drop_matching(profile: Profile, text: Any) -> tuple[Profile, int]:
     )
 
 
+FACT_NAME = "name"
+FACT_NOTE = "note"
+FACT_THREAD = "thread"
+FACT_KINDS = (FACT_NAME, FACT_NOTE, FACT_THREAD)
+
+
+@dataclass(frozen=True)
+class Fact:
+    """One thing a person can point at: what it is, where it sits, and what it says."""
+
+    kind: str
+    index: int
+    text: str
+    where: str = SERVER
+
+
+def facts_of(profile: Profile | None) -> tuple[Fact, ...]:
+    found: list[Fact] = []
+    if profile is None:
+        return ()
+    if profile.call_me:
+        found.append(Fact(FACT_NAME, 0, profile.call_me))
+    found.extend(
+        Fact(FACT_NOTE, spot, one.text, one.where) for spot, one in enumerate(profile.notes)
+    )
+    found.extend(
+        Fact(FACT_THREAD, spot, one.text, one.where) for spot, one in enumerate(profile.threads)
+    )
+    return tuple(found)
+
+
+def fact_key(fact: Fact) -> str:
+    return f"{fact.kind}:{fact.index}"
+
+
+def fact_at(profile: Profile | None, key: Any) -> Fact | None:
+    """None when the profile moved under the click, so no wrong line is ever dropped."""
+    wanted = str(key or "")
+    return next((one for one in facts_of(profile) if fact_key(one) == wanted), None)
+
+
+def dropped_at(rows: tuple[Note, ...], index: int) -> tuple[Note, ...]:
+    return tuple(one for spot, one in enumerate(rows) if spot != index)
+
+
+def drop_fact(profile: Profile, key: Any) -> tuple[Profile, int]:
+    """Exactly one fact, by identity; `drop_matching` is for typed words and drops every match."""
+    found = fact_at(profile, key)
+    if found is None:
+        return (profile, 0)
+    return (
+        Profile(
+            call_me="" if found.kind == FACT_NAME else profile.call_me,
+            notes=(
+                dropped_at(profile.notes, found.index)
+                if found.kind == FACT_NOTE
+                else profile.notes
+            ),
+            threads=(
+                dropped_at(profile.threads, found.index)
+                if found.kind == FACT_THREAD
+                else profile.threads
+            ),
+            turns_seen=profile.turns_seen,
+            created_at=profile.created_at,
+            updated_at=profile.updated_at,
+        ),
+        1,
+    )
+
+
 async def profile_for(db: Any, user_id: Any, guild_id: Any) -> Profile | None:
     try:
         cur = await db.conn.execute(

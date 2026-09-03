@@ -19,6 +19,7 @@ from ...panels import (
     answer,
     capped_placeholder,
     db_ready,
+    db_up,
     retire,
     still_staff,
 )
@@ -684,14 +685,6 @@ def decides_anything(bot: Any, guild_id: int, forms_: Any, user: Any) -> bool:
 
 def decidable(bot: Any, guild_id: int, forms_: Any, user: Any) -> list[Any]:
     return [form for form in forms_ or () if can_decide(bot, guild_id, form, user)]
-
-
-async def db_up(interaction: discord.Interaction) -> bool:
-    """`db_ready` answers a followup; this one is for the reads that happen BEFORE a defer."""
-    if interaction.client.db.is_connected:
-        return True
-    await answer(interaction, DB_UNAVAILABLE)
-    return False
 
 
 async def still_may_decide(interaction: discord.Interaction, form: Any) -> bool:
