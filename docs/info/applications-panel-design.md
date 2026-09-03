@@ -4,7 +4,7 @@
 > `worktree-agent-abf063b9177e02f17`** (base `main` `27452ac`, after the birthdays/events/polls
 > panels merged). Not merged, not deployed.
 > **Last verified: 2026-09-03** — the build measured `len(bot.tree.get_commands())` at **42**
-> (43 at the base: exactly the one-slot drop §B predicts), **3696 tests pass** (3644 at the base),
+> (43 at the base: exactly the one-slot drop §B predicts), **3697 tests pass** (3644 at the base),
 > `ruff check .` clean, `node site/mock/check.mjs` **17 pages / 142 routes** (unchanged by this
 > build — 142 is what `main` reads today, not the 141 §H guessed at `9891f71`), and both site
 > assets parse under `node --input-type=module --check`.
@@ -449,6 +449,13 @@ sub-panel).
     query, as §C requires); the "Take somebody off…" select caps at 25 with the shared
     `capped_placeholder`. A roster past 25 is still fully readable, just not fully actionable from
     Discord — the site's roster is the other door and the placeholder says so.
+15. **A `db_up(interaction)` gate was added for the reads that happen BEFORE a defer.**
+    `db_ready` (the library's) answers a *followup*, so it only works once something has
+    deferred — but a button that opens a MODAL cannot defer first, and several of them read the
+    form (or its questions) to build the modal. With the database down those reads would have
+    raised into `AnswersErrors`' generic fallback instead of saying `DB_UNAVAILABLE` in words
+    (checklist 8). `run_move` was also reordered to defer → `db_ready` → read, which is P5's
+    order anyway. One test pins it.
 14. **`decidable()` was added beside `decides_anything()`.** §F names only the boolean; the staff
     split needs the LIST too, so an approver's queue can be filtered to the forms they may decide
     without asking `can_decide` twice per form. `decides_anything` is `bool(decidable(...))` in

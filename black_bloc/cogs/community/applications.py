@@ -685,6 +685,14 @@ def decidable(bot: Any, guild_id: int, forms_: Any, user: Any) -> list[Any]:
     return [form for form in forms_ or () if can_decide(bot, guild_id, form, user)]
 
 
+async def db_up(interaction: discord.Interaction) -> bool:
+    """`db_ready` answers a followup; this one is for the reads that happen BEFORE a defer."""
+    if interaction.client.db.is_connected:
+        return True
+    await answer(interaction, DB_UNAVAILABLE)
+    return False
+
+
 async def still_may_decide(interaction: discord.Interaction, form: Any) -> bool:
     """`may_decide` after a defer would answer through `response`; this one always followups."""
     bot = interaction.client
@@ -1298,15 +1306,15 @@ async def run_move(
     note: Any = None,
     previous: Any = None,
 ) -> None:
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
     bot = interaction.client
     form = await forms.get_form_by_id(bot.db, form_id)
     if form is None:
         await answer(interaction, forms.NOTHING_TO_DECIDE)
         return
     if not await still_may_decide(interaction, form):
-        return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
         return
     said, fresh = await MOVE_FUNCS[action](
         bot, interaction.guild, application_id, interaction.user, note
@@ -1323,6 +1331,8 @@ class CardMoveButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if self.move.needs_modal:
+            if not await db_up(interaction):
+                return
             bot = interaction.client
             form = await forms.get_form_by_id(bot.db, self.form_id)
             if form is None:
@@ -1400,6 +1410,8 @@ class ApplyPick(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        if not await db_up(interaction):
+            return
         bot = interaction.client
         form = await forms.get_form_by_id(bot.db, int(self.values[0]))
         if form is None or form["guild_id"] != interaction.guild.id:
@@ -1687,6 +1699,8 @@ class FormButton(discord.ui.Button):
         self.form_id = int(form_id)
 
     async def form_of(self, interaction: discord.Interaction) -> Any:
+        if not await db_up(interaction):
+            return None
         form = await forms.get_form_by_id(interaction.client.db, self.form_id)
         if form is None or form["guild_id"] != interaction.guild.id:
             await answer(interaction, forms.NO_SUCH_FORM.format(name=str(self.form_id)[:40]))
@@ -1776,6 +1790,8 @@ class FillItInButton(FormButton):
         super().__init__(form_id, FILL_IT_IN, "primary", 1)
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        if not await db_up(interaction):
+            return
         form = await forms.get_form_by_id(interaction.client.db, self.form_id)
         if form is None or form["guild_id"] != interaction.guild.id:
             await answer(interaction, forms.NOTHING_TO_DECIDE)
@@ -1951,6 +1967,8 @@ class RosterPick(discord.ui.Select):
         self.form_id = int(form_id)
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        if not await db_up(interaction):
+            return
         bot = interaction.client
         form = await forms.get_form_by_id(bot.db, self.form_id)
         if form is None:
@@ -2697,6 +2715,7 @@ __all__ = [
     "can_decide",
     "change_question",
     "decidable",
+    "db_up",
     "decides_anything",
     "drop_form",
     "edit_card",

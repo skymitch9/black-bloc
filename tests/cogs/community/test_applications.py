@@ -1416,3 +1416,21 @@ async def test_every_click_re_asks_whether_the_database_is_there(bot, db, lead):
     await refresh.callback(clicking)
 
     assert clicking.sent == DB_UNAVAILABLE
+
+
+async def test_a_modal_that_reads_the_database_first_refuses_in_words_when_it_is_down(
+    bot, db, lead
+):
+    """`db_ready` only works after a defer; a button that opens a MODAL cannot defer first,
+    so the read it does beforehand needs its own gate or the click ends in a raw traceback."""
+    form = await a_form(db)
+    member = FakeMember(bot.guild)
+    row = await pending_row(bot, db, form, member)
+    button = CardMoveButton(row["id"], form["id"], forms.DENY)
+    bot.db = SimpleNamespace(is_connected=False, conn=db.conn)
+    interaction = FakeInteraction(bot, lead)
+
+    await button.callback(interaction)
+
+    assert interaction.sent == DB_UNAVAILABLE
+    assert interaction.response.modals == []
