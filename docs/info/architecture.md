@@ -3,15 +3,18 @@
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
 > Last verified: **2026-09-02** — the fast-moving figures re-measured on the
-> Phase 15 branch: `SCHEMA_VERSION` is **21** (17 sessions, 18
+> **Phase 16** branch: `SCHEMA_VERSION` is **22** (17 sessions, 18
 > `polls.vote_scheme`, 19 `golive_sessions.live_role_id`, 20 the chat tables,
-> 21 `golive_fan_roles`), `check.mjs` reports **17 pages / 111 routes**,
-> `pytest` runs **2714** tests (⚠️ ubuntu CI NOT re-run on this branch),
-> `ruff check .` clean; `bot.py:COGS` is now **15** cogs and the tree has
-> **37** top-level slash commands. New since
+> 21 `golive_fan_roles`, 22 `youtube_links` + `youtube_videos`), `check.mjs`
+> reports **17 pages / 116 routes**, `pytest` runs **2865** tests (⚠️ ubuntu CI
+> NOT re-run on this branch), `ruff check .` clean; `bot.py:COGS` is now **16**
+> cogs and the tree has **39** top-level slash commands. ⚠️ Phase 16 is on a
+> BRANCH — not merged and not deployed, so the LIVE bot is still schema 21 /
+> 15 cogs / 37 commands until the conductor merges it. New since
 > the tree below was drawn: `chat_llm.py`, `llm.py`, `groq.py`, `knowledge.py`,
 > `personas.py`, `directory.py`, `chat_check.py`, `dbsnapshot.py`,
-> `api/costs.py`, `pings.py`, `cogs/content/pings.py`, `api/tools/pings.py`. ⚠️ NOT re-checked: the Shape tree's per-file annotations
+> `api/costs.py`, `pings.py`, `cogs/content/pings.py`, `api/tools/pings.py`,
+> `youtube.py`, `cogs/content/youtube.py`, `api/tools/youtube.py`. ⚠️ NOT re-checked: the Shape tree's per-file annotations
 > (verified 2026-08-31). Three cogs (polls, requests, chat) and eleven modules the tree did not
 > list have been added, and the **Carl parity** entries removed — parity was
 > deleted in `47634b8` and `grep -ri carl black_bloc site` is empty.
@@ -154,9 +157,11 @@ black_bloc/
 │   └── content/      ← one cog per content feature
 │       ├── golive.py ← F1/F2: presence listener, Twitch poller, /golive + /twitch
 │       ├── chat.py   ← F10: the @-mention listener, cooldown, modmail routing, /chat
-│       └── pings.py  ← F14: /pingroles (staff) and /pings (everybody) — opt-in go-live and event
-│                        pings, and a role per streamer their followers wear
-├── storage/db.py     ← aiosqlite connection + schema bootstrap (SCHEMA_VERSION 21)
+│       ├── pings.py  ← F14: /pingroles (staff) and /pings (everybody) — opt-in go-live and event
+│       │                pings, and a role per streamer their followers wear
+│       └── youtube.py ← F3: the uploads sweep, /youtube (members) and /uploads (staff). Reads
+│                        the public Atom feed; YOUTUBE_API_KEY is optional (see KI-11)
+├── storage/db.py     ← aiosqlite connection + schema bootstrap (SCHEMA_VERSION 22)
 └── api/             ← the dashboard API, one router per surface (API_ENABLED)
     ├── server.py    ← create_app: /health (public), security headers, routers, then site/ at /
     ├── auth.py      ← Discord OAuth2 + the signed session cookie. The site's ONLY gate
@@ -173,6 +178,7 @@ black_bloc/
         ├── modmail.py    ← tickets, replies, closes, snippets, blocks
         ├── events.py     ← the approval queue: approve / deny / cancel
         ├── golive.py     ← links, opt-outs, recent sessions
+        ├── youtube.py    ← F3: upload links, the videos seen, and the sweep's own status
         ├── pings.py      ← F14: the streamer table, staff create/remove, the Events-role set-up
         ├── rolemenus.py  ← menus, options, post
         ├── birthdays.py  ← the list, set / remove, and the Birthday Bot import

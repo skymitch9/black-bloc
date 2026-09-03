@@ -3,10 +3,11 @@
 > **Audience:** the owner (also away from the machine) and Claude sessions. **Status:** TRACKED
 > (owner, 2026-08-31 — permanently; the purge-vs-keep question is settled, `docs/` stays in git).
 > Secret NAMES only. Last verified: **2026-09-02** — the schema version, the mock page/route counts and the
-> boot-line cog/command counts were re-measured on the Phase 15 branch (`SCHEMA_VERSION` = 21;
-> `node site/mock/check.mjs` = 17 pages / 111 routes; 15 cogs and 37 top-level commands, counted
+> boot-line cog/command counts were re-measured on the **Phase 16** branch (`SCHEMA_VERSION` = 22;
+> `node site/mock/check.mjs` = 17 pages / 116 routes; 16 cogs and 39 top-level commands, counted
 > from the loaded tree, ⚠️ NOT from a `deploys.log` line — nothing has been deployed from this
-> branch). ⚠️ **NOT re-measured today:** the flyctl commands, the machine/volume ids, the
+> branch). ⚠️ **The LIVE bot is still the Phase 15 shape** — schema 21, 15 cogs, 37 commands —
+> until the conductor merges Phase 16; the boot line below is what to expect AFTER that merge. ⚠️ **NOT re-measured today:** the flyctl commands, the machine/volume ids, the
 > failure table and the laptop steps — those are the 2026-08-27 reading, and the phone-side steps
 > (Discord app) are what the owner did, not measured by Claude.
 
@@ -62,12 +63,17 @@ push, deploy. Schema migrations are additive-only, so an older build runs agains
 <flyctl> logs --app black-bloc --no-tail | grep -i "error\|traceback"
 <flyctl> logs --app black-bloc --no-tail | grep "database:"      # migrations on boot
 ```
-Boot sequence to expect: `database ready` → `loaded cog …` ×15 → `synced 37 app commands` → `logged in as
+Boot sequence to expect: `database ready` → `loaded cog …` ×16 → `synced 39 app commands` → `logged in as
 Black_Bloc#6132` → `birthdays: the daily import …` → `chat: seeded N intent(s)` (first boot per guild only).
+With no `YOUTUBE_API_KEY` set you also get one INFO line at cog load — `youtube: no YOUTUBE_API_KEY,
+so uploads run on the public feed alone …`. That is the normal state, not a fault (see KI-11).
 
 ## Secrets (names; custody in [`RECOVERY.md`](RECOVERY.md))
 `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `SESSION_SECRET`, `POLL_VOTE_SECRET` (⚠️ losing it makes polls created under it unvotable — they refuse in words rather than double-count), `ANTHROPIC_API_KEY` + `GROQ_API_KEY` (chat LLM tiers, Phase 14 — unset means those tiers don't exist, never an error), `TWITCH_CLIENT_ID`,
-`TWITCH_CLIENT_SECRET`, `TEST_MODE`, `TEST_CHANNEL_ID`, `DEV_GUILD_ID`, `DATABASE_PATH`.
+`TWITCH_CLIENT_SECRET`, `YOUTUBE_API_KEY` (F3 upload posts — OPTIONAL and not yet minted; unset
+leaves uploads on the public feed, which still names every video and still spots a Short, but
+cannot tell a live broadcast from an upload — KI-11), `TEST_MODE`, `TEST_CHANNEL_ID`,
+`DEV_GUILD_ID`, `DATABASE_PATH`.
 Set on Fly with `<flyctl> secrets set NAME=value --app black-bloc` (each set restarts the machine);
 importing many: write an ASCII file and `cmd /c "<flyctl> secrets import --app black-bloc < file"` — a
 PowerShell pipe adds a BOM and the first key is rejected as `﻿KEY`.
@@ -118,5 +124,6 @@ use `& "C:\Program Files\Git\bin\bash.exe" scripts/env-lock.sh`. After any
 rotation: vault item first, then `.env`, then Fly, then (optionally) a fresh
 `.env.enc`.
 Variable NAMES in `.env`: `DISCORD_TOKEN DISCORD_CLIENT_ID DISCORD_CLIENT_SECRET SESSION_SECRET POLL_VOTE_SECRET
-TWITCH_CLIENT_ID TWITCH_CLIENT_SECRET DEV_GUILD_ID TEST_MODE TEST_CHANNEL_ID DATABASE_PATH API_ENABLED
-API_HOST API_PORT SITE_ORIGIN COMMAND_PREFIX LOG_LEVEL`.
+TWITCH_CLIENT_ID TWITCH_CLIENT_SECRET YOUTUBE_API_KEY DEV_GUILD_ID TEST_MODE TEST_CHANNEL_ID DATABASE_PATH
+API_ENABLED API_HOST API_PORT SITE_ORIGIN COMMAND_PREFIX LOG_LEVEL`. (`YOUTUBE_API_KEY` has no vault
+item yet — it has never been minted; the nine values above it are the ones the vault holds.)

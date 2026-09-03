@@ -2,8 +2,13 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-02 — KI-10 added from a live Fly log line during the
-> `d777f57` rolling deploy; nothing else re-tested.** Before that, 2026-08-31 for the STATUS line only. ⚠️ **No entry below
+> Last verified: **2026-09-02 — KI-11, KI-12 and KI-13 added from the Phase 16
+> section-J measurements against the LIVE YouTube feed (30 timed requests, the
+> response headers, and a real captured feed now kept as
+> `tests/fixtures/youtube_feed.xml`); KI-10 added earlier the same day from a
+> live Fly log line during the `d777f57` rolling deploy. Nothing else re-tested.**
+> ⚠️ The three new entries describe a branch that has NEVER run against live
+> Discord or a live YouTube API key. Before that, 2026-08-31 for the STATUS line only. ⚠️ **No entry below
 > was re-tested then**, and two carry thresholds that may already have been
 > crossed — see the note under KI-6. The dated history that follows is the
 > 2026-08-27 reading: KI-9 added (anonymous poll votes are a per-poll hash, accepted); before that KI-8 added when the role-menu panels started
@@ -21,6 +26,78 @@
 >
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
+
+## KI-13 — An upload announcement can be up to ~25 minutes late — `ACCEPTED`
+
+**Symptom.** Two delays add up. The feed is edge-cached: the live response
+carries `Cache-Control: public, max-age=900` and an `Age` header (measured
+2026-09-02: `Age: 56` on a fresh fetch), so a publish can be up to **15
+minutes** old before the feed even shows it. On top of that the sweep runs
+every `youtube_poll_minutes` — **10** by default. Worst case is therefore about
+**25 minutes** between hitting publish and the post appearing.
+
+**Status.** `ACCEPTED` — there is no push path without a key, and no push path
+at all short of PubSubHubbub, which needs a public callback URL this bot does
+not have.
+
+**Why tolerated.** An upload is not time-critical the way a go-live post is;
+nobody is being told to come and watch something that is already half over. The
+gap is a setting, so the owner can shorten it — but not below 5 minutes, and the
+validator says why: below the feed's own 15-minute cache, a shorter sweep
+re-fetches the same bytes and finds nothing new any sooner.
+
+**What would change it.** The owner reporting the lateness as a problem, or
+uploads becoming time-critical (a premiere people are meant to arrive for). The
+fix then is PubSubHubbub with a public callback, not a shorter poll.
+
+## KI-12 — YouTube's own uploads feed answers only about half the time — `ACCEPTED`
+
+**Symptom.** `https://www.youtube.com/feeds/videos.xml?channel_id=UC…` returns
+HTTP 404 or 500 for a channel that plainly exists, at random. Measured
+2026-09-02 from this machine, one channel, 30 requests two seconds apart:
+**15 × 200, 12 × 404, 3 × 500**. It is not per-channel — two other well-known
+channels took 11 and 24 tries respectively before their first 200 — and it is
+not the network: `youtube.com/robots.txt`, the channel page itself and an
+unrelated Atom feed all answered 200 throughout, and the failures carry
+YouTube's own `Server: YouTube RSS Feeds server` header.
+
+**Status.** `ACCEPTED` — worked around, not fixed. `YouTubeClient.fetch_feed`
+retries up to `FEED_ATTEMPTS` (4) per sweep, and a feed that never answers
+raises `YouTubeError`, which the poller treats as a **transient fetch failure**
+— never as "that channel is gone". Nothing is unlinked and nothing is seeded on
+a failure; the next sweep tries again.
+
+**Why tolerated.** It is YouTube's server, there is no alternative keyless
+source of the same data, and a 10-minute sweep with 4 tries each makes a missed
+upload very unlikely to be missed twice. The cost of a failure is lateness, not
+a wrong announcement.
+
+**What would change it.** A measured 200-rate below **~25%** (at which four
+tries stops being enough), or **1 upload confirmed missed for a whole day**.
+Either would mean moving to the Data API's `playlistItems.list` on the uploads
+playlist, which needs `YOUTUBE_API_KEY` and spends quota per channel per sweep.
+
+## KI-11 — Without `YOUTUBE_API_KEY` a live broadcast can be announced as an upload — `ACCEPTED`
+
+**Symptom.** The Atom feed carries no duration and no live-stream marker — it is
+`yt:videoId`, `title`, `published`, `link` and the author, and nothing else
+(measured 2026-09-02 against a real feed). So a scheduled or live broadcast that
+appears in the feed is indistinguishable from an ordinary upload. D6's keyless
+fallback skips an entry only while its uploader has an **open go-live session on
+platform `youtube`**; a broadcast published while they have no such session open
+is announced as "just dropped a new video".
+
+**Status.** `ACCEPTED` — the design decided this (D6) rather than discovering it.
+
+**Why tolerated.** Go-live presence already covers streams, so the overlap is
+narrow: it needs a YouTube broadcast whose author is linked here AND who is not
+showing as live on Discord at that moment. Shorts do NOT have this problem —
+the feed links them as `/shorts/<id>`, so they are told apart with no key at
+all, which is better than the design assumed.
+
+**What would change it.** `YOUTUBE_API_KEY` being set (the cog then asks
+`videos.list` for `liveStreamingDetails` and marks it `live`), or **1
+mis-announcement** the owner notices. Until then `youtube_mode` ships `off`.
 
 ## KI-10 — The OLD process logs `asyncio: Unclosed client session` while a rolling deploy replaces it — `WATCHING`
 

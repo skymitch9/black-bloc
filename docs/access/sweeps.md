@@ -1,8 +1,10 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-02** — rows **38–42** added by the Phase 15 (F14) build; the file now holds **42**
-> un-exercised rows. Before that, 2026-08-31 — rows 18–20 and the phase-script appendix moved in
+> **2026-09-02** — rows **43–47** added by the Phase 16 (F3, YouTube uploads) build; the file now
+> holds **47** un-exercised rows. ⚠️ Rows 43–47 are on the Phase 16 BRANCH — not merged, not
+> deployed; do not attempt them until the conductor says the branch is live. Before that, rows
+> **38–42** were added by the Phase 15 (F14) build. Before that, 2026-08-31 — rows 18–20 and the phase-script appendix moved in
 > whole from `TODO.md`; this file is the ONE home for un-exercised items. "Verified" below means a human did it in the real server;
 > everything else is test-suite evidence only. Tick a row by moving it to the verified table with the date.
 
@@ -60,6 +62,11 @@ All of this happens in **`#mute-me-bot-test-spam`** (test mode) or on **https://
 | 40 | Ping roles — the announcement prefix | with `golive_mode` on (or shadow, and read the `would_announce` line) and a fan role on the streamer: go live | the line starts `<@&Events> <@&… pings>` — both roles, never twice, the shared one first; end the stream with `golive_end_mode edit` and the edit adds the suffix without adding a mention |
 | 41 | Ping roles — 26 streamers (paging) | only if you ever have more than 25: `/pingroles streamer list` | there are TWO panels, `streamers` and `streamers-2`; post the second one too. ⚠️ Never exercised — the 25-per-select cap is Discord's documented limit, tested with 26 rows in the suite but not in the server |
 | 42 | Ping roles — the dashboard | Dashboard → Go-live → Pings | the table shows every streamer, their role, a follower count (or a dash when the role was deleted by hand), who started it; Remove asks first; "Create for a streamer" makes one; the Logs section under it is `pings.*` only |
+| 43 | YouTube uploads — link (F3, `youtube_mode` ships **off**) | `/youtube link` with your channel address (the `youtube.com/channel/UC…` one; an `@handle` works too), then `/youtube status` | the reply names the channel, says how many videos were counted as history, and says out loud that announcements are **off** until a Lead runs `/uploads mode on`. ⚠️ Nothing already published is ever announced — that is what the count is for |
+| 44 | YouTube uploads — an actual upload | with `/uploads mode shadow`: publish something on the linked channel, then wait and run `/uploads logs` | within ~25 minutes a `youtube.would_announce` line carrying the rendered text (**KI-13** explains the two delays). Flip to `on` and repeat for a real post in the test channel |
+| 45 | YouTube uploads — Shorts and live streams | publish a Short; separately, start a YouTube live stream | the Short is skipped with `youtube.skipped reason=short` (turn `youtube_announce_shorts` on and the next one posts); a live stream is skipped only while Discord shows you live on YouTube — see **KI-11**, that is the gap `YOUTUBE_API_KEY` would close |
+| 46 | YouTube uploads — the dashboard | Dashboard → Go-live → **YouTube uploads** | the sweep card says running with a last-good time; the links table shows who is linked and whether their feed has answered yet; Recent uploads colours each row announced / would / skipped; Unlink asks first; **Upload settings** and **Upload logs** sit under it |
+| 47 | YouTube uploads — the staff paths | `/uploads setup channel:#somewhere ping_role:@…`, `/uploads link-for @member <channel>`, `/uploads list` | setup names where posts will go; link-for counts their history the same way; list shows the mode, the channel, the sweep health and **api key — not set (feed only)** |
 | 35 | Personality + the cap drill (Phase 14) | `/chat personality set voice:noir` → @-mention again; then `/settings set-value key:chat_monthly_cap_usd value:0` → @-mention → set it back to 20; dashboard: /chat.html Knowledge/Personality/Spend sections | the noir answer is clipped but complete; at cap 0 you get an ordinary line with **no mention of money or limits** and one `chat.llm_capped` in `/chat logs`; the Spend meter names why each quiet tier is quiet |
 
 ## Detailed phase scripts (1–8a) — moved whole from `TODO.md` 2026-08-31
