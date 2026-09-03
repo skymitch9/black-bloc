@@ -1,8 +1,9 @@
 # Birthdays — `/birthday` is ONE command that opens a panel
 
-> **Audience:** the build agent and the reviewer. **Status:** TRACKED · **BUILT on
-> `worktree-agent-a19bdce15408f8243`** (2026-09-03; branched from `main` at `d3da02c`, v62 live, schema 28).
-> Not merged, not deployed. See the `## Deviations` foot for every departure.
+> **Audience:** the build agent and the reviewer. **Status:** TRACKED · ✅ **SHIPPED** — built on
+> `worktree-agent-a19bdce15408f8243` (2026-09-03; branched from `main` at `d3da02c`), Fable-reviewed
+> with no defect found, merged `58974e1` 13:47, **live in v63** (`616adb3`, 13:58; `deploys.log` line 62).
+> See the `## Deviations` foot for every departure.
 > **Last verified: 2026-09-03** — `ruff check .` clean and **3500 tests pass** on the branch
 > (3442 at `d3da02c`: +76 new, −19 command tests replaced by panel tests). `commands synced`
 > was measured at **44, unchanged**, by

@@ -9,6 +9,27 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-03 — Panels wave 1, first landing: `/birthday` is one command (v63, `616adb3`)
+
+Release **v63** (`616adb3`, 13:58; `deploys.log` line 62). This is a LANDING entry, not a
+move — the panels item stays on `TODO.md` until events, polls and applications have landed
+too. Merge `--no-ff` `58974e1` of `worktree-agent-a19bdce15408f8243` (Opus build, 412k; Fable
+review found no defect: `still_staff` before every `defer()`, `db_ready` after, `retire(previous)`
+on every re-render, `allowed_mentions=none()` on every send, one `log_action` per write with the
+kinds unchanged, `DateModal` reads its prefill before acknowledging so the modal can follow).
+Design: [`info/birthdays-panel-design.md`](info/birthdays-panel-design.md) (14 deviations at its
+foot). Sweep rows 87–93. Keys `birthday_panel_minutes` / `birthday_panel_next_for_members` /
+`birthday_panel_lookup` on https://blackbloc.heygabi.ai/settings.html.
+
+**The gate refused the first attempt (13:52)** on
+`tests/api/test_settings_api.py::test_writes_are_rate_limited_per_session` — the wall-clock flake
+both wave-1 build agents had reported: `TokenBucket` refills one token a second, so sixty PUTs
+that take over a second under `-n auto` let the sixty-first through. Fixed in `616adb3` by
+stubbing `auth.time` to one instant for that test (`code-notes.md` →
+`tests/api/test_settings_api.py:221`); three consecutive whole-suite runs green before the redeploy.
+Verified: boot log 20:58:15Z database ready, 20:58:16Z synced 44 app commands, 20:58:20Z logged
+in, no Traceback/Error. NOT verified: nothing by eye in Discord or on settings.html.
+
 ## 2026-09-03 — Applications without a role: keep a list instead (v62, `9891f71`, schema 28)
 
 Release **v62** (`9891f71`, 12:48; `deploys.log` line 61). Merge `--no-ff` of `feat/applications-no-role` after `feat/requests-check` (`SCHEMA_VERSION` 27 → 28 resolved at the merge); Fable review found no defect and reworded `REMOVE_IS_FOR_LISTS` (a `/role revoke` ends the grant, the approval stays on record — nothing in the revoke path touches `applications`). 3442 tests, ruff clean. Boot log 19:47:59Z: `rebuilding application_forms so a form may have no role` (the C1 rebuild ran on the live DB), logged in 19:48:03Z, no errors. ⚠️ NOT verified by eye: owner sweeps 69–72. The 🔧 item moved here whole:
