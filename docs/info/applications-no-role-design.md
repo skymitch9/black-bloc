@@ -1,7 +1,7 @@
 # Applications without a role — "let's have the bot store the info!"
 
-**Audience:** the Opus build agent, then the reviewer. **Status:** TRACKED · **BUILT** on
-`feat/applications-no-role` (2026-09-03) — not merged, not deployed.
+**Audience:** the Opus build agent, then the reviewer. **Status:** TRACKED · ✅ **SHIPPED** — merged `main`
+`9891f71` 12:40, live in **v62** 12:48 (schema 28; the C1 rebuild ran on the live DB, boot log 19:47:59Z).
 **Last verified:** 2026-09-03 — built to this spec; 3414 tests pass, ruff clean, `check.mjs`
 reports 17 pages / 141 routes. Five deviations at the foot. NOT verified: no Discord surface
 and no deployed site surface was exercised — `docs/access/sweeps.md` rows **69–72** are the

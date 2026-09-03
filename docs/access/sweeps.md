@@ -2,7 +2,7 @@
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
 > **2026-09-03** — rows **69–72** added by the applications no-role build (a form may keep a
-> LIST instead of handing a role over; merged `main` at 12:40, deploy v62 pending); rows **66–68**
+> LIST instead of handing a role over; merged `main` at 12:40, LIVE in v62 12:48); rows **66–68**
 > added by the requests SIXTH pass ("Ask them to check": the DM, the channel ping when their
 > DMs are closed, and the auto-ask at ready) — LIVE in v61 (`44170f4`, 12:29). The file now holds
 > **72** un-exercised rows; none of 66–72 has been run against Discord or the live site.

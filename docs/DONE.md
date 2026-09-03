@@ -9,6 +9,53 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-03 — Applications without a role: keep a list instead (v62, `9891f71`, schema 28)
+
+Release **v62** (`9891f71`, 12:48; `deploys.log` line 61). Merge `--no-ff` of `feat/applications-no-role` after `feat/requests-check` (`SCHEMA_VERSION` 27 → 28 resolved at the merge); Fable review found no defect and reworded `REMOVE_IS_FOR_LISTS` (a `/role revoke` ends the grant, the approval stays on record — nothing in the revoke path touches `applications`). 3442 tests, ruff clean. Boot log 19:47:59Z: `rebuilding application_forms so a form may have no role` (the C1 rebuild ran on the live DB), logged in 19:48:03Z, no errors. ⚠️ NOT verified by eye: owner sweeps 69–72. The 🔧 item moved here whole:
+
+- 🆕 **Applications without a role — "let's have the bot store the info!" (owner, 2026-09-03
+  ~12:10, relaying a member's Discord question verbatim: "is there a way for the twitch team
+  app to be done without a role? if not we may wanna think of adding a stream team role (which
+  might just be a good reference point to see who's applied and who would need to show up on
+  the team page)" → owner: "we can do no role and have the bot store the information or … a
+  temporary role … let's have the bot store the info! that way we can check the site and the
+  official team page").** Measured at `46e3ba4`: **not possible today** —
+  `application_forms.role_id` is `NOT NULL` (`storage/db.py:576`), `/applications create`
+  takes `role: discord.Role` as a required option (`cogs/community/applications.py:877`), and
+  `_hand_over` (`:461`) always grants. The applications themselves ARE already stored
+  (`applications` table: answers, status, who decided, when), so the roster exists in the DB
+  today — what is missing is (1) a form that grants nothing, (2) a roster on the site to
+  compare with the official Twitch team page. Design: `info/applications-no-role-design.md`
+  — role optional on create/edit (slash AND dashboard editor, checklist 33), schema **28**
+  makes `role_id` nullable (SQLite table rebuild, the `mod_cases` precedent at
+  `db.py:660–664`), approve on a role-less form skips `_hand_over` and the "hand it over with
+  `/role grant`" fallbacks and DMs `approved_text` + `next_step` as today, an **Approved
+  roster** per form in the Applications section of the Role menus page (name · approved when
+  · Twitch login from `golive_links` when linked, so it reads against twitch.tv/team/…) with
+  a plain-text copy. Status: **BUILDABLE** (2026-09-03 ~12:20) —
+  [`info/applications-no-role-design.md`](info/applications-no-role-design.md) written: role
+  optional per form (slash `role`/`no_role` on edit + the dashboard editor's "No role — keep a
+  list"); roster = approved applications, one home; new terminal status `removed` with a DM'd
+  reason (the only way off a no-role list — D2); `GET /api/applications/roster`, `POST
+  /{id}/remove`, roster foldout per form with Twitch login + Copy as text; one setting
+  `applications_roster_shows_left` (default true). ⚠️ Gotcha caught in design: the table
+  rebuild must run BEFORE `PRAGMA foreign_keys=ON` or `DROP TABLE application_forms`
+  cascade-deletes every question (§C1). Different cog from the "ask them to check" item, so
+  the two builds can run beside each other; both bump `SCHEMA_VERSION` — second to merge
+  re-keys. Owner answered the one question 2026-09-03 ~12:30: **"Always give staff final say
+  and permission"** — staff removal stays in, and the sentence is now a `CLAUDE.md` rule.
+  Then "Build all, keep going" → Opus build dispatched on `feat/applications-no-role`
+  (2026-09-03 ~12:35), beside `feat/requests-check` — which merged first (`44170f4`, v61,
+  schema 27). **BUILT** on that branch (2026-09-03,
+  four commits, `SCHEMA_VERSION` 28): 3414 tests pass, ruff clean, `check.mjs` 17 pages /
+  141 routes; five deviations at the foot of the design doc. ⚠️ **NOT merged, NOT deployed,
+  and not exercised against Discord or the live site** — `access/sweeps.md` rows **69–72**
+  are the owner's by-eye checks. Still open: merge (whichever of the two branches lands
+  second re-keys `SCHEMA_VERSION` and `code-notes.md`), deploy, then the sweep. This item
+  moves whole to `DONE.md` when it is live, not before.
+
+**SHIPPED** 2026-09-03 12:48 in v62. Design: [`info/applications-no-role-design.md`](info/applications-no-role-design.md) (five build deviations at its foot). Review link: https://blackbloc.heygabi.ai/rolemenus.html#applications
+
 ## 2026-09-03 — Requests sixth pass: "Ask them to check" (v61, `44170f4`)
 
 Release **v61** (`44170f4`, 12:29; `deploys.log` line 60). The 🔧 item moved here whole:

@@ -63,7 +63,7 @@ not rendered (P9, never a dead button).
 | Row | Control | Rendered when |
 |---|---|---|
 | 0 | `Propose an event` → `EventModal` `:978` unchanged | `events_mode != "off"` and db up |
-| 0 | `My time zone` → one-line modal (below) | always |
+| 0 | `My time zone` → one-line modal (below) | beside Propose only — same condition (I2: a zone is only needed where a member TYPES a time) |
 | 0 | `Refresh` → re-render | always |
 | 0 | `Open on the site` (link, `events.html` — `logkinds.py:95`) | an origin is configured |
 | 1 | `Call one off…` select over the caller's own `OPEN_STATUSES` events → `Yes, call it off` / `Keep it` | the caller has ≥1 |
@@ -254,11 +254,17 @@ polls take 80+, birthdays 87+):
   `TRANSITIONS[DENIED] = (APPROVED,)`, `TERMINAL_STATUSES` loses `denied`. It renders only
   while the review channel still resolves (the same check the card's link button makes) — with
   the channel gone the card says "denied — the room was cleaned up, propose it again" in words.
-- **I2 — does `/timezone` disappear entirely?** It also serves raid trains
-  (`raidtrain.py:1123`) and the site's event editor (`api/tools/events.py:160`), so after this
-  a member sets their zone through `/event` → *My time zone*. "Minimise slash commands" says
-  retire it; "the zone is not an events thing" says keep `/timezone` as a member command that
-  opens the same modal (and then `commands synced` stays 44).
+- ✅ **I2 — `/timezone` disappears entirely — DECIDED by the owner 2026-09-03 ("Remove it").**
+  `commands synced` 44 → 43 as §D already says. Raid trains and the site editor keep reading
+  the stored zone unchanged. Two refinements from the same exchange (the owner asked whether a
+  member's time can be picked up automatically): Discord exposes a member's `locale`, never a
+  time zone, so the stored zone stays the only way to READ a typed time; DISPLAY needs no zone
+  at all because `stamp()` (`timezones.py:86`) already emits `<t:…:F> (<t:…:R>)`, which every
+  reader's client renders in their own local time. So: (a) the **`My time zone` button is
+  rendered only where a member types a time** — the member panel's Propose row (and any raid
+  train panel later), not as a standalone feature; (b) **every confirmation that echoes a typed
+  time shows both**: "7:00 PM your time (America/Phoenix) · `<t:…:F>`" — the member sees what
+  the bot understood and what everyone else will see, in one line.
 
 ## Deviations
 

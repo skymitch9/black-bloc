@@ -1,4 +1,4 @@
-﻿# Black Bloc — TODO (active work only)
+# Black Bloc — TODO (active work only)
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then; secret NAMES only).
@@ -12,20 +12,24 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 ~11:45, v60 live)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 ~12:50, v62 deploying)
 
-**Machine and `main` agree.** v60 (`46e3ba4`: wave-0 `panels.py` + the faster deploy gate) is
-live, `deploys.log` line 59 edited, DONE entry written. Worktrees `agent-requests-panel`,
-`agent-own-list`, `agent-a056909c738b178df` and branches `feat/requests-panel*`,
-`feat/panels-library` are merged and can be pruned.
+**`main` = `9891f71`**: the applications-no-role merge (schema 28, 3442 tests). Its deploy
+(v62) was launched DETACHED at 12:45 — if it landed, `deploys.log` line 61 needs its EDIT
+markers filled, the applications item below moves whole to `DONE.md`, and
+`applications-no-role-design.md` + the `info/README.md` row flip to SHIPPED. The
+`# Applications, no-role pass` section of `code-notes.md` is keyed against `df99135` and
+needs re-keying against the merge (a cheap Sonnet sweep, no commit).
 
-**Next, the standing direction (owner 2026-09-03: "Build all, keep going"):** "Ask them to
-check" is LIVE in v61 (`44170f4`, 12:29 — moved whole to `DONE.md`; owner sweeps 66–68). In
-flight: the applications-no-role Opus build on `feat/applications-no-role` (schema 28), and a
-code-notes re-key against `44170f4`. Then: the applications panel design (wave 1's fourth
-doc), and Opus builds of the three reviewed wave-1 designs — events waits on fork I2
-(`/timezone` retire or keep). Owner's by-eye sweeps still owed: `access/sweeps.md` rows 14–15,
-58–68.
+**Dispatched 12:50 (owner 2026-09-03: "Good start building") — three Opus builds in their own
+worktrees, one per reviewed wave-1 design:** `feat/events-panel` (`events-panel-design.md`,
+fork I2 decided: `/timezone` retired, 44 → 43 commands), `feat/polls-panel`
+(`polls-panel-design.md`), `feat/birthdays-panel` (`birthdays-panel-design.md`). Each lands
+alone: Fable review → `merge --no-ff` → deploy → sweeps → DONE. Expect conflicts in
+`settings_store.py`, `logkinds.py`, `panels.py`, `tests/test_bot.py` (the command count) and
+every docs index — resolve, never drop either side. Still to dispatch: the applications panel
+design (wave 1's fourth doc). Owner's by-eye sweeps still owed: `access/sweeps.md` rows 14–15,
+58–72.
 
 **Landing ritual (unchanged):** branch → `git merge --no-ff` on `main` → `scripts/deploy.ps1`
 DETACHED (refuses a dirty tree; ~3 min now: ruff → pytest `-n auto` → ES-module parse of every
@@ -184,47 +188,6 @@ docs bookkeeping lands with the work, not after.
   `Black Block` once Black Bloc is stable.
 
 ## 🔧 Open engineering items
-
-- 🆕 **Applications without a role — "let's have the bot store the info!" (owner, 2026-09-03
-  ~12:10, relaying a member's Discord question verbatim: "is there a way for the twitch team
-  app to be done without a role? if not we may wanna think of adding a stream team role (which
-  might just be a good reference point to see who's applied and who would need to show up on
-  the team page)" → owner: "we can do no role and have the bot store the information or … a
-  temporary role … let's have the bot store the info! that way we can check the site and the
-  official team page").** Measured at `46e3ba4`: **not possible today** —
-  `application_forms.role_id` is `NOT NULL` (`storage/db.py:576`), `/applications create`
-  takes `role: discord.Role` as a required option (`cogs/community/applications.py:877`), and
-  `_hand_over` (`:461`) always grants. The applications themselves ARE already stored
-  (`applications` table: answers, status, who decided, when), so the roster exists in the DB
-  today — what is missing is (1) a form that grants nothing, (2) a roster on the site to
-  compare with the official Twitch team page. Design: `info/applications-no-role-design.md`
-  — role optional on create/edit (slash AND dashboard editor, checklist 33), schema **28**
-  makes `role_id` nullable (SQLite table rebuild, the `mod_cases` precedent at
-  `db.py:660–664`), approve on a role-less form skips `_hand_over` and the "hand it over with
-  `/role grant`" fallbacks and DMs `approved_text` + `next_step` as today, an **Approved
-  roster** per form in the Applications section of the Role menus page (name · approved when
-  · Twitch login from `golive_links` when linked, so it reads against twitch.tv/team/…) with
-  a plain-text copy. Status: **BUILDABLE** (2026-09-03 ~12:20) —
-  [`info/applications-no-role-design.md`](info/applications-no-role-design.md) written: role
-  optional per form (slash `role`/`no_role` on edit + the dashboard editor's "No role — keep a
-  list"); roster = approved applications, one home; new terminal status `removed` with a DM'd
-  reason (the only way off a no-role list — D2); `GET /api/applications/roster`, `POST
-  /{id}/remove`, roster foldout per form with Twitch login + Copy as text; one setting
-  `applications_roster_shows_left` (default true). ⚠️ Gotcha caught in design: the table
-  rebuild must run BEFORE `PRAGMA foreign_keys=ON` or `DROP TABLE application_forms`
-  cascade-deletes every question (§C1). Different cog from the "ask them to check" item, so
-  the two builds can run beside each other; both bump `SCHEMA_VERSION` — second to merge
-  re-keys. Owner answered the one question 2026-09-03 ~12:30: **"Always give staff final say
-  and permission"** — staff removal stays in, and the sentence is now a `CLAUDE.md` rule.
-  Then "Build all, keep going" → Opus build dispatched on `feat/applications-no-role`
-  (2026-09-03 ~12:35), beside `feat/requests-check` — which merged first (`44170f4`, v61,
-  schema 27). **BUILT** on that branch (2026-09-03,
-  four commits, `SCHEMA_VERSION` 28): 3414 tests pass, ruff clean, `check.mjs` 17 pages /
-  141 routes; five deviations at the foot of the design doc. ⚠️ **NOT merged, NOT deployed,
-  and not exercised against Discord or the live site** — `access/sweeps.md` rows **69–72**
-  are the owner's by-eye checks. Still open: merge (whichever of the two branches lands
-  second re-keys `SCHEMA_VERSION` and `code-notes.md`), deploy, then the sweep. This item
-  moves whole to `DONE.md` when it is live, not before.
 
 - 🆕 **Panels over slash commands — the rest of the app (owner, 2026-09-03: "then carry it
   through the rest of the app"; confirmed ~11:25: "do the change to all / commands. I like
