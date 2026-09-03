@@ -2,8 +2,8 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then; secret NAMES only).
-> Last verified: **2026-09-03 10:55** (fifth pass merged, deploy running) — the 🔁 resume
-> block below says only a deploy is in flight; first written 07:50 at the owner's order during API outages ("make sure if we lose progress and memory our docs survive");
+> Last verified: **2026-09-03 11:45** (v60 live, tree clean, nothing in flight) — the 🔁 resume
+> block below was refreshed then; first written 07:50 at the owner's order during API outages ("make sure if we lose progress and memory our docs survive");
 > everything in it was measured at that time (`git log`, `git worktree list`, the live
 > page, the deploys log). Earlier: 2026-09-02 handoff pass before the switch to Fable 5.1
 > (schema **20**, **2610** tests, 17 pages / **107** routes, 37 sweep rows — those counts
@@ -12,25 +12,23 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 ~11:55, wave 0 merged)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 ~11:45, v60 live)
 
-**`main` is ahead of the machine.** v59 (`a392a3f`) is live; `main` carries the wave-0 merge
-`1861923` (`black_bloc/panels.py`, behaviour-neutral) plus the commit after it (pytest-xdist
-`-n auto` and the ES-module parse in `scripts/deploy.ps1`, `code-notes.md` re-keyed). If
-`deploys.log`'s last line is still v59/`a392a3f`, the deploy did not land: run
-`scripts/deploy.ps1` DETACHED from a clean tree (`access/deploy.md`), EDIT the skeleton line,
-verify the boot log, then move the "Let's fix that" and `labels.js` 🔧 items WHOLE to
-`DONE.md`. Worktrees `agent-requests-panel`, `agent-own-list`, `agent-a056909c738b178df`
-and branches `feat/requests-panel*`, `feat/panels-library` are merged and can be pruned.
+**Machine and `main` agree.** v60 (`46e3ba4`: wave-0 `panels.py` + the faster deploy gate) is
+live, `deploys.log` line 59 edited, DONE entry written. Worktrees `agent-requests-panel`,
+`agent-own-list`, `agent-a056909c738b178df` and branches `feat/requests-panel*`,
+`feat/panels-library` are merged and can be pruned.
 
 **Next, the standing direction (owner 2026-09-03: "Keep building"):** the "ping the
-requester" 🔧 item (design doc `info/requests-check-design.md`, then an Opus build on a
-branch cut from `main` AFTER the merge), then wave 1 of `info/panels-program.md` (events ·
-polls · birthdays · applications, design docs first). Owner's by-eye sweep of the panel is
-still owed (`access/sweeps.md` rows 14–15, 58–65; he is doing 15 and 65 himself).
+requester" 🔧 item — write `info/requests-check-design.md` (the design is decided; the item
+below carries it in short), add its `info/README.md` row, then an Opus build on a branch cut
+from `main`, review, merge, deploy, sweep row, DONE. Then wave 1 of `info/panels-program.md`
+(events · polls · birthdays · applications, design docs first). Owner's by-eye sweep of the
+panel is still owed (`access/sweeps.md` rows 14–15, 58–65; he is doing 15 and 65 himself).
 
 **Landing ritual (unchanged):** branch → `git merge --no-ff` on `main` → `scripts/deploy.ps1`
-(refuses a dirty tree; ~10 min: ruff → pytest → check.mjs → push → `flyctl deploy --app
+DETACHED (refuses a dirty tree; ~3 min now: ruff → pytest `-n auto` → ES-module parse of every
+site asset → check.mjs → push → `flyctl deploy --app
 black-bloc --ha=false --remote-only --yes`; flyctl lives at
 `C:\Users\nbasl\AppData\Local\Microsoft\WinGet\Packages\Fly-io.flyctl_Microsoft.Winget.Source_8wekyb3d8bbwe\flyctl.exe`)
 → EDIT the skeleton line it appends to `docs/deploys.log` → verify the boot log
@@ -197,21 +195,6 @@ docs bookkeeping lands with the work, not after.
   no fork goes to him unless it is genuine. Status: **DESIGNING** — after wave 0 merges (it
   touches the same cog).
 
-- 🆕 **"Let's fix that" (owner, 2026-09-03 ~11:25) — `scripts/deploy.ps1` outruns the
-  10-minute tool ceiling.** Measured the same morning: pytest alone took **8:27** for 3345
-  tests (single process on a 32-core machine), so the wrapper was killed during the image
-  build and the orphaned `flyctl deploy` hung at "Waiting for depot builder" with a dead
-  stdout pipe; no release was made. Fix in two halves: (1) **`pytest-xdist`** in the dev
-  extras and `-n auto` in `deploy.ps1` — the tests are SQLite-per-`tmp_path`, so they should
-  parallelise; measure the wall time and that the count is still 3345; (2) a
-  `docs/access/deploy.md` gotcha titled for the symptom ("the deploy printed nothing after
-  Waiting for depot builder") saying to run the script detached (`Start-Process … -PassThru`)
-  and watch the pid, never inside a tool call with a ceiling. Status: **BUILT, awaiting the
-  deploy that proves it** (2026-09-03 ~11:55) — (2) landed in `06ace58`'s neighbour that
-  morning; (1) measured: `-n auto` on the 32-logical-core machine runs **3371 tests in 54 s**
-  (was 8:27 for 3345), count holds; `pytest-xdist>=3.6` in the dev extras, `-n auto` in
-  `deploy.ps1`. Moves to DONE when a deploy has run through the new gate.
-
 - 🆕 **Panels over slash commands — the rest of the app (owner, 2026-09-03: "then carry it
   through the rest of the app"; confirmed ~11:25: "do the change to all / commands. I like
   how request works").** Audit every command group (44 commands synced; `cogs/core.py:88`
@@ -228,28 +211,10 @@ docs bookkeeping lands with the work, not after.
   seventeen times, §5 four waves, §6 the three owner forks: F1 mod commands, F2 modmail's
   in-thread `/reply` set, F3 `/settings`). **Wave 0 is MERGED** (`1861923`, 2026-09-03 ~11:50:
   `black_bloc/panels.py` + `tests/test_panels.py`, 26 tests, the requests cog now inherits
-  `Panel`; 160k Opus / 20 min; `code-notes.md` re-keyed at the merge) — rides the next
-  deploy. Next: the "ping the requester" item above (same cog, small), then wave 1
-  events · polls · birthdays · applications as design docs first.
-
-- 🆕 **A defect this build found and fixed on the way, worth knowing about
-  separately: `site/public/assets/labels.js` had not parsed since `7b1c592`**, so
-  `LABELS` never loaded and **every dashboard page rendered blank**. The Phase 19 merge
-  pasted the applications labels after the `LABELS` object's closing brace. Fixed on
-  `feat/requests-third-pass` as its own commit (`1d7d84d`), shipped in the third-pass
-  deploy 2026-09-03. ⚠️ **Nothing in the test suite reads `labels.js`.** Measured
-  2026-09-03 06:40: `node --check site/public/assets/labels.js` **PASSES the broken
-  file** — a `.js` path is parsed as CommonJS, where the stray `key: 'value'` lines are
-  legal labels; the browser loads it as an ES module and dies at `labels.js:160
-  SyntaxError: Unexpected token ':'`. The guard that catches it is the module parse:
-  copy to `.mjs` and `node --check` that, or `node --input-type=module --check <
-  labels.js`. Add it to `deploy.ps1` beside ruff, pytest and `check.mjs` — for EVERY
-  `site/public/assets/*.js` (they are all modules). Small, own commit; not done in the
-  build because it is a deploy-pipeline change and the build had no brief for one.
-  **BUILT 2026-09-03 ~11:50**: `deploy.ps1` now runs `node --input-type=module --check <
-  file` over every asset after pytest; proved on a scratch file with the Phase 19 shape
-  (module parse exit 1, plain `--check` exit 0) and clean on all 29 current assets. Moves
-  to DONE with the "Let's fix that" item once a deploy has run through the gate.
+  `Panel`; 160k Opus / 20 min; `code-notes.md` re-keyed at the merge) **and LIVE in v60**
+  (2026-09-03 11:39; the wave-0 record itself is in `DONE.md` that date). Next: the "ping the
+  requester" item above (same cog, small), then wave 1 events · polls · birthdays ·
+  applications as design docs first.
 
 - **Via-labelling gap: `raidtrain.cancel_train` logs one row but calls a website cancel
   Via = Discord** (found by the double-logging build, 2026-09-03 — see `DONE.md` that

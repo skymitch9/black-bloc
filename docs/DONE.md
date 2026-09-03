@@ -9,6 +9,64 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-03 — Panels wave 0 (`black_bloc/panels.py`) and the deploy gate that fits inside a tool call
+
+Landed together in release **v60** (`46e3ba4`, 11:39; `deploys.log` line 59). Three things,
+two of them 🔧 items moved here whole below.
+
+**Wave 0 of the panels program** (`info/panels-program.md` §4): `black_bloc/panels.py` extracted
+from the requests cog so the three fourth-pass review defects (a replaced view never stopped;
+`on_timeout` editing through a stale token; staff not re-checked before a move) live in ONE
+place before seventeen panels inherit them. `Panel(AnswersErrors, discord.ui.View)` with
+`interaction_check`, `on_timeout` guarded by `self.replaced`, the `went_quiet` footer;
+`NoteModal` storing its callback as `takes_note` (NOT `on_submit`, which would shadow
+`Modal.on_submit`); `answer`, `still_staff`, `retire`, `db_ready`, `capped_placeholder`,
+`panel_minutes(store, guild_id, key)`. The requests cog re-based on it — `RequestView(Panel)`,
+`NoteModal(PanelNoteModal)` — behaviour identical, 163 requests tests unchanged, 26 new in
+`tests/test_panels.py`. Built by Opus on `feat/panels-library` in a worktree (160k / 20 min),
+Fable-reviewed (no defect; five deviations from the brief all accepted), merged `1861923`
+~11:50. `code-notes.md` third- and fourth-pass sections re-keyed by ANCHOR at the merge, seven
+rows now pointing into `panels.py` with "was … until wave 0" notes.
+
+- 🆕 **"Let's fix that" (owner, 2026-09-03 ~11:25) — `scripts/deploy.ps1` outruns the
+  10-minute tool ceiling.** Measured the same morning: pytest alone took **8:27** for 3345
+  tests (single process on a 32-core machine), so the wrapper was killed during the image
+  build and the orphaned `flyctl deploy` hung at "Waiting for depot builder" with a dead
+  stdout pipe; no release was made. Fix in two halves: (1) **`pytest-xdist`** in the dev
+  extras and `-n auto` in `deploy.ps1` — the tests are SQLite-per-`tmp_path`, so they should
+  parallelise; measure the wall time and that the count is still 3345; (2) a
+  `docs/access/deploy.md` gotcha titled for the symptom ("the deploy printed nothing after
+  Waiting for depot builder") saying to run the script detached (`Start-Process … -PassThru`)
+  and watch the pid, never inside a tool call with a ceiling. Status: **BUILT, awaiting the
+  deploy that proves it** (2026-09-03 ~11:55) — (2) landed in `06ace58`'s neighbour that
+  morning; (1) measured: `-n auto` on the 32-logical-core machine runs **3371 tests in 54 s**
+  (was 8:27 for 3345), count holds; `pytest-xdist>=3.6` in the dev extras, `-n auto` in
+  `deploy.ps1`. Moves to DONE when a deploy has run through the new gate.
+  **→ PROVED 11:39: the v60 deploy ran the whole script in 2:50 wall (pytest 1:22 inside the
+  gate beside the image build), still launched detached per the gotcha.**
+
+- 🆕 **A defect this build found and fixed on the way, worth knowing about
+  separately: `site/public/assets/labels.js` had not parsed since `7b1c592`**, so
+  `LABELS` never loaded and **every dashboard page rendered blank**. The Phase 19 merge
+  pasted the applications labels after the `LABELS` object's closing brace. Fixed on
+  `feat/requests-third-pass` as its own commit (`1d7d84d`), shipped in the third-pass
+  deploy 2026-09-03. ⚠️ **Nothing in the test suite reads `labels.js`.** Measured
+  2026-09-03 06:40: `node --check site/public/assets/labels.js` **PASSES the broken
+  file** — a `.js` path is parsed as CommonJS, where the stray `key: 'value'` lines are
+  legal labels; the browser loads it as an ES module and dies at `labels.js:160
+  SyntaxError: Unexpected token ':'`. The guard that catches it is the module parse:
+  copy to `.mjs` and `node --check` that, or `node --input-type=module --check <
+  labels.js`. Add it to `deploy.ps1` beside ruff, pytest and `check.mjs` — for EVERY
+  `site/public/assets/*.js` (they are all modules). Small, own commit; not done in the
+  build because it is a deploy-pipeline change and the build had no brief for one.
+  **BUILT 2026-09-03 ~11:50**: `deploy.ps1` now runs `node --input-type=module --check <
+  file` over every asset after pytest; proved on a scratch file with the Phase 19 shape
+  (module parse exit 1, plain `--check` exit 0) and clean on all 29 current assets. Moves
+  to DONE with the "Let's fix that" item once a deploy has run through the gate.
+  **→ the v60 gate ran it over all 29 assets, green.** Gotcha for the next person: piping
+  `node --check` into `findstr` masks the exit code (shows 0) — redirect to `>nul 2>&1`
+  when proving a guard by hand.
+
 ## 2026-09-03 — Requests, fifth pass: the panel's own list is staff-only; the done card stops posting
 
 Two owner orders minutes after the fourth pass deployed (`ba5cb99`, 10:04), both moved here
