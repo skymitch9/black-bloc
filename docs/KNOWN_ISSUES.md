@@ -104,6 +104,30 @@ unaffected — only the ✅ and the one thread line are missing.
 holder runs by hand). Number: **1 report** of a train whose lineup showed nobody
 checked in while it was visibly running.
 
+## KI-19 — Log rows written before 2026-09-03 keep their retired kinds — `ACCEPTED`
+
+**Symptom.** The double-post fix (owner report, 2026-09-03) stopped the routes
+writing a second `web.<kind>` line, and eight kinds are now never written again:
+`web.event.cancel`, `web.honeypot.ban`, `web.mod.apply`, `web.mod.rule`,
+`web.modmail.close`, `web.poll.cancel`, `web.poll.end`, `web.tempvoice.forget`
+(plus `web.mod.warn`/`timeout`/`untimeout`/`kick`/`ban`/`unban`). Rows already in
+`action_log` keep them. They still render, still filter onto the right feature
+page (`feature_of` reads the head, which is unchanged) and still classify as
+routine — with **one exception**: `honeypot.ban` was removed from `ROUTINE`, and
+`.ban` is an `IMPORTANT_SUFFIXES` entry, so historical `web.honeypot.ban` rows
+now read as *important* rather than routine.
+
+**Why tolerated.** Rewriting history in `action_log` is worse than a handful of
+retired kind strings: the log is the audit trail, and a migration that edits it
+destroys the thing it exists to prove. The one classification change moves a
+honeypot ban from quiet to loud, which matches how the replacement kind
+(`honeypot.banned`) classifies — so the old rows now agree with the new ones
+rather than disagreeing.
+
+**What would change it.** Nothing planned. Number: **1 report** of a stale kind
+confusing somebody reading the Logs page — the fix would be a display alias, not
+a migration.
+
 ## KI-18 — Editing a question changes the form, never the answers already sent — `ACCEPTED`
 
 **Symptom.** An application stores its answers as a snapshot of `{label, answer}` pairs
