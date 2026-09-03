@@ -15,6 +15,7 @@ from black_bloc.cogs.community.events import (
     EventModal,
     EventPick,
     Events,
+    EventView,
     ForgetPick,
     LogsButton,
     NoteModal,
@@ -74,9 +75,19 @@ class FakeMessage:
         self.content = content
         self.kwargs = kwargs
         self.edits = []
+        embed = kwargs.get("embed")
+        self.embeds = list(kwargs.get("embeds") or ([embed] if embed is not None else []))
+        self.view = kwargs.get("view")
 
     async def edit(self, **kwargs):
         self.edits.append(kwargs)
+        self.kwargs = kwargs
+        if "embeds" in kwargs:
+            self.embeds = list(kwargs["embeds"])
+        elif kwargs.get("embed") is not None:
+            self.embeds = [kwargs["embed"]]
+        if "view" in kwargs:
+            self.view = kwargs["view"]
 
 
 class _Response:
@@ -1815,3 +1826,353 @@ async def test_settings_can_forget_the_category_and_the_announce_channel(cog, bo
 
     assert bot.store.get(GUILD, "events_category_id") is None
     assert bot.store.get(GUILD, "events_announce_channel_id") == TEST_CHANNEL
+
+
+# --- the panel itself (wave 1) -----------------------------------------------------------------
+
+
+async def test_the_command_answers_ephemerally_with_a_panel(cog, bot, member):
+    interaction = await open_panel(cog, bot, member)
+
+    assert interaction.response.messages[0]["ephemeral"] is True
+    assert isinstance(panel_view(interaction), EventView)
+    assert panel_embed(interaction).title == events_pure.PANEL_TITLE
+
+
+async def test_the_command_run_in_a_dm_says_it_belongs_in_the_server(cog, bot, member):
+    interaction = FakeInteraction(bot, member)
+    interaction.guild = None
+
+    await cog.event.callback(cog, interaction)
+
+    assert "in the server itself" in interaction.sent
+
+
+async def test_the_command_refuses_in_words_when_the_database_is_down(
+    cog, bot, member, monkeypatch
+):
+    monkeypatch.setattr(bot.db, "_conn", None)
+    interaction = FakeInteraction(bot, member)
+
+    await cog.event.callback(cog, interaction)
+
+    assert "cannot reach its own database" in interaction.sent
+
+
+async def test_a_member_panel_shows_propose_the_zone_and_refresh_and_no_staff_controls(
+    cog, bot, member
+):
+    interaction = await open_panel(cog, bot, member)
+    view = panel_view(interaction)
+
+    assert has_item(view, "Propose an event")
+    assert has_item(view, "My time zone")
+    assert has_item(view, "Refresh")
+    assert has_item(view, events_pure.SITE_BUTTON)
+    assert not any(isinstance(one, EventPick) for one in view.children)
+
+
+async def test_a_staff_panel_adds_the_counts_the_select_settings_and_logs(
+    cog, bot, member, lead, db
+):
+    await submit(cog, bot, member)
+
+    interaction = await open_panel(cog, bot, lead)
+    view = panel_view(interaction)
+
+    assert any(isinstance(one, EventPick) for one in view.children)
+    assert any(isinstance(one, LogsButton) for one in view.children)
+    assert has_item(view, "Settings")
+    assert "pending" in panel_embed(interaction).description
+
+
+async def test_a_staff_panel_with_nothing_open_says_so_and_drops_the_select(cog, bot, lead):
+    interaction = await open_panel(cog, bot, lead)
+
+    assert not any(isinstance(one, EventPick) for one in panel_view(interaction).children)
+    assert events_pure.NOTHING_OPEN in panel_embed(interaction).description
+
+
+async def test_the_staff_select_caps_at_25_and_says_how_many_are_left(cog, bot, lead, db):
+    for _ in range(30):
+        await store_event(db, channel_id=TEST_CHANNEL)
+
+    interaction = await open_panel(cog, bot, lead)
+    select = next(one for one in panel_view(interaction).children if isinstance(one, EventPick))
+
+    assert len(select.options) == 25
+    assert select.placeholder == "25 of 30 — the rest are on the site"
+
+
+async def test_the_open_site_link_appears_only_when_an_origin_is_set(cog, bot, member, db):
+    bare = load_settings(
+        _env_file=None, test_mode=True, test_channel_id=TEST_CHANNEL, site_origin=""
+    )
+    bare_bot = FakeBot(db, bot.store, bare, bot.guild)
+    bare_bot._cog = Events(bare_bot)
+
+    without = await open_panel(bare_bot._cog, bare_bot, member)
+
+    assert not has_item(panel_view(without), events_pure.SITE_BUTTON)
+
+
+async def test_the_refresh_button_re_renders_the_panel(cog, bot, member, db):
+    await bot.store.set(GUILD, "event_panel_own_list", True)
+    panel = await open_panel(cog, bot, member)
+    button = find_item(panel_view(panel), "Refresh")
+    await submit(cog, bot, member, title="A Fresh One")
+
+    interaction = await click(bot, member, button)
+
+    assert "A Fresh One" in card_embed(interaction).description
+
+
+# --- the card: exactly the buttons the table says ----------------------------------------------
+
+EXPECTED_BUTTONS = {
+    PENDING: ["Approve", "Deny", "Call it off"],
+    APPROVED: ["Call it off"],
+    LIVE: ["Call it off"],
+    DENIED: ["Approve after all"],
+    DONE: [],
+    CANCELLED: [],
+}
+
+
+@pytest.mark.parametrize("status", events_pure.STATUSES)
+async def test_the_card_renders_exactly_the_buttons_the_table_says(cog, bot, lead, db, status):
+    event_id = await store_event(db, status=status, channel_id=TEST_CHANNEL)
+    row = await get_event(db, event_id)
+
+    embed, view = events_cog.build_card(bot, bot.guild, row, lead)
+
+    labels = [one.label for one in view.children]
+    assert labels[: len(EXPECTED_BUTTONS[status])] == EXPECTED_BUTTONS[status]
+    assert "Back" in labels
+    if not EXPECTED_BUTTONS[status]:
+        assert "nothing moves it now" in embed.footer.text
+    assert len([one for one in view.children if one.row == 0]) <= 5
+
+
+async def test_a_denied_card_whose_room_is_gone_says_so_instead_of_offering_a_move(
+    cog, bot, lead, db
+):
+    event_id = await store_event(db, status=DENIED, channel_id=4242)
+    row = await get_event(db, event_id)
+
+    embed, view = events_cog.build_card(bot, bot.guild, row, lead)
+
+    assert [one.label for one in view.children] == ["Back"]
+    assert "cleaned up" in embed.footer.text
+
+
+async def test_picking_an_event_opens_its_card(cog, bot, member, lead, db):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    panel = await open_panel(cog, bot, lead)
+    select = next(one for one in panel_view(panel).children if isinstance(one, EventPick))
+    select._values = [str(row["id"])]
+
+    interaction = await click(bot, lead, select)
+
+    assert card_embed(interaction).title == "Block Party"
+    assert [one.label for one in card_view(interaction).children][:3] == EXPECTED_BUTTONS[PENDING]
+
+
+async def test_picking_a_number_nobody_proposed_says_so_and_stays_on_the_panel(cog, bot, lead):
+    select = EventPick([], 0)
+    select._values = ["99"]
+
+    interaction = await click(bot, lead, select)
+
+    assert "no record of that event" in interaction.sent
+
+
+async def test_back_returns_to_the_panel(cog, bot, lead, db):
+    event_id = await store_event(db, channel_id=TEST_CHANNEL)
+    row = await get_event(db, event_id)
+    _, view = events_cog.build_card(bot, bot.guild, row, lead)
+
+    interaction = await click(bot, lead, find_item(view, "Back"))
+
+    assert card_embed(interaction).title == events_pure.PANEL_TITLE
+
+
+# --- each move calls the shared function, `via` untouched --------------------------------------
+
+
+async def test_approve_on_the_card_calls_apply_decision_and_leaves_via_alone(
+    cog, bot, lead, db, monkeypatch
+):
+    event_id = await store_event(db, channel_id=TEST_CHANNEL)
+    row = await get_event(db, event_id)
+    _, view = events_cog.build_card(bot, bot.guild, row, lead)
+    calls = []
+
+    async def fake(*args, **kwargs):
+        calls.append((args, kwargs))
+        return ("moved along", row)
+
+    monkeypatch.setattr(events_cog, "apply_decision", fake)
+
+    interaction = await click(bot, lead, find_item(view, "Approve"))
+
+    assert len(calls) == 1
+    args, kwargs = calls[0]
+    assert args[0] is bot and args[1] is bot.guild and args[3] == APPROVED
+    assert "via" not in kwargs
+    assert interaction.sent == "moved along"
+
+
+async def test_deny_on_the_card_opens_the_note_modal_and_submits_through_apply_decision(
+    cog, bot, lead, db, monkeypatch
+):
+    event_id = await store_event(db, channel_id=TEST_CHANNEL)
+    row = await get_event(db, event_id)
+    _, view = events_cog.build_card(bot, bot.guild, row, lead)
+    opened = await click(bot, lead, find_item(view, "Deny"))
+    modal = opened.response.modals[0]
+    assert isinstance(modal, NoteModal) and modal.note.required is True
+    modal.note._value = "clashes with the marathon"
+    calls = []
+
+    async def fake(*args, **kwargs):
+        calls.append((args, kwargs))
+        return ("denied", row)
+
+    monkeypatch.setattr(events_cog, "apply_decision", fake)
+
+    interaction = FakeInteraction(bot, lead)
+    await modal.on_submit(interaction)
+
+    args, kwargs = calls[0]
+    assert args[3] == DENIED and args[5] == "clashes with the marathon"
+    assert "via" not in kwargs
+    assert interaction.sent == "denied"
+
+
+async def test_call_it_off_on_the_card_submits_through_cancel_for(
+    cog, bot, lead, db, monkeypatch
+):
+    event_id = await store_event(db, channel_id=TEST_CHANNEL)
+    row = await get_event(db, event_id)
+    modal = NoteModal(cog, event_id, "cancel")
+    modal.note._value = "the park is shut"
+    calls = []
+
+    async def fake(*args, **kwargs):
+        calls.append((args, kwargs))
+        return ("called off", row)
+
+    monkeypatch.setattr(events_cog, "cancel_for", fake)
+
+    interaction = FakeInteraction(bot, lead)
+    await modal.on_submit(interaction)
+
+    args, kwargs = calls[0]
+    assert args[0] is bot and args[1] is bot.guild
+    assert kwargs == {"note": "the park is shut"}
+    assert interaction.sent == "called off"
+
+
+async def test_the_panel_and_the_review_card_reach_the_same_decision(cog, bot, member, lead, db):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    _, view = events_cog.build_card(bot, bot.guild, await get_event(db, row["id"]), lead)
+
+    await click(bot, lead, find_item(view, "Approve"))
+
+    assert (await get_event(db, row["id"]))["status"] == APPROVED
+    assert "event.approved" in await action_kinds(db)
+    assert bot.guild.created[0].name.startswith("approved-")
+    assert "approved" in member.dms[-1]["content"]
+
+
+# --- the gates every click re-asks -------------------------------------------------------------
+
+
+async def test_a_staffer_demoted_while_a_card_is_open_is_refused_the_move(cog, bot, lead, db):
+    event_id = await store_event(db, channel_id=TEST_CHANNEL)
+    row = await get_event(db, event_id)
+    _, view = events_cog.build_card(bot, bot.guild, row, lead)
+    button = find_item(view, "Approve")
+    lead.guild_permissions = FakePerms(manage_guild=False)
+
+    interaction = await click(bot, lead, button)
+
+    assert (await get_event(db, event_id))["status"] == PENDING
+    assert "staff" in interaction.sent.lower()
+
+
+async def test_a_database_that_drops_mid_panel_answers_in_words(
+    cog, bot, member, monkeypatch
+):
+    panel = await open_panel(cog, bot, member)
+    button = find_item(panel_view(panel), "Refresh")
+    monkeypatch.setattr(bot.db, "_conn", None)
+
+    interaction = await click(bot, member, button)
+
+    assert "cannot reach its own database" in interaction.sent
+
+
+async def test_the_logs_button_answers_a_new_message_and_keeps_its_own_staff_gate(
+    cog, bot, member, lead, db
+):
+    refused_one = await click(bot, member, LogsButton())
+    assert "staff" in refused_one.sent.lower()
+    assert refused_one._edited is None
+
+    allowed = await click(bot, lead, LogsButton())
+    assert allowed.response.messages[-1]["ephemeral"] is True
+    assert allowed._edited is None
+
+
+async def test_a_panel_that_goes_quiet_disables_every_item_and_says_so(cog, bot, member):
+    interaction = await open_panel(cog, bot, member)
+    view = panel_view(interaction)
+    view.message = await interaction.original_response()
+
+    await view.on_timeout()
+
+    assert all(item.disabled for item in view.children if hasattr(item, "disabled"))
+    assert "gone quiet" in view.message.embeds[0].footer.text
+
+
+async def test_a_replaced_panel_never_edits_the_render_that_replaced_it(cog, bot, member):
+    interaction = await open_panel(cog, bot, member)
+    view = panel_view(interaction)
+    view.message = await interaction.original_response()
+
+    await click(bot, member, find_item(view, "Refresh"))
+    await view.on_timeout()
+
+    assert view.replaced is True
+    assert view.message.embeds == [] or "gone quiet" not in str(
+        view.message.embeds[0].footer.text
+    )
+
+
+# --- proposing through the panel ---------------------------------------------------------------
+
+
+async def test_the_submitted_line_shows_both_readings_of_the_time_that_was_typed(
+    cog, bot, member, db
+):
+    interaction = await submit(cog, bot, member)
+
+    assert "your time (America/Phoenix)" in interaction.sent
+    assert "<t:" in interaction.sent
+
+
+async def test_proposing_through_the_panel_still_files_exactly_as_before(cog, bot, member, db):
+    panel = await open_panel(cog, bot, member)
+    opened = await click(bot, member, find_item(panel_view(panel), "Propose an event"))
+
+    assert isinstance(opened.response.modals[0], EventModal)
+
+    await submit(cog, bot, member)
+    rows = await events_by_status(db, GUILD, (PENDING,))
+
+    assert len(rows) == 1 and rows[0]["requester_id"] == member.id
+    assert "event.created" in await action_kinds(db)

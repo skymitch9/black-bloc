@@ -1228,3 +1228,37 @@ async def test_a_wait_longer_than_ten_years_is_refused_with_its_own_sentence(sto
     with pytest.raises(SettingError) as caught:
         await store.set(1, "applications_retry_days", 3651)
     assert "permanent no with extra steps" in str(caught.value)
+
+
+async def test_the_event_panel_stays_up_ten_minutes_by_default(store):
+    """Ten, not fifteen: the footer needs Discord's 15-minute interaction window still open."""
+    from black_bloc.cogs.core import VALUE_KEYS
+
+    assert store.get(7, "event_panel_minutes") == 10
+    assert "15" in KEY_HELP["event_panel_minutes"]
+    assert KEY_TYPES["event_panel_minutes"] == "int"
+    assert "event_panel_minutes" in VALUE_KEYS
+    await store.set(7, "event_panel_minutes", 30)
+    assert store.get(7, "event_panel_minutes") == 30
+    with pytest.raises(SettingError):
+        coerce_value("event_panel_minutes", -1)
+    with pytest.raises(SettingError):
+        coerce_value("event_panel_minutes", "15")
+    assert parse_value("event_panel_minutes", "45") == 45
+
+
+async def test_the_event_panel_keeps_a_members_own_events_to_themselves_until_a_lead_says_so(
+    store,
+):
+    """Mirrors request_panel_own_list: staff always see the open ones, members opt in."""
+    from black_bloc.cogs.core import VALUE_KEYS
+
+    assert store.get(7, "event_panel_own_list") is False
+    assert KEY_TYPES["event_panel_own_list"] == "bool"
+    assert "staff always" in KEY_HELP["event_panel_own_list"]
+    assert "event_panel_own_list" in VALUE_KEYS
+    await store.set(7, "event_panel_own_list", True)
+    assert store.get(7, "event_panel_own_list") is True
+    assert coerce_value("event_panel_own_list", True) is True
+    with pytest.raises(SettingError):
+        coerce_value("event_panel_own_list", "true")

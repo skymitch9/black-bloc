@@ -403,3 +403,18 @@ def test_the_library_says_what_it_offers_and_knows_nothing_about_requests():
         assert name in panels.__all__
     for name in ("RequestView", "PANEL_TIMEOUT_FOOTER", "PICK_A_REQUEST"):
         assert not hasattr(panels, name)
+
+
+async def test_a_note_modal_can_be_optional_so_dismissing_the_box_still_means_yes():
+    """Events' Call-it-off note: submit is yes, an empty line is still a submit."""
+
+    async def took(interaction, text):
+        return None
+
+    needed = NoteModal(title="Why not?", label="Why?", max_length=40, on_submit=took)
+    spare = NoteModal(
+        title="Why is it off?", label="Why?", max_length=40, on_submit=took, required=False
+    )
+
+    assert needed.note.required is True
+    assert spare.note.required is False
