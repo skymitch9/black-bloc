@@ -600,3 +600,49 @@ async def test_the_remove_route_refuses_a_role_form_and_a_blank_reason_in_words(
     missing = client.post("/api/applications/9999/remove", json={"reason": "who"})
     assert missing.status_code == 404
     assert "no application with that number" in missing.json()["message"]
+
+
+
+# Checklist 34 — one web write leaves ONE row, and the head is the only difference.
+
+
+async def test_each_form_write_from_the_site_leaves_exactly_one_log_row(
+    client, sign_in, web, wf
+):
+    """The five form routes call the same functions `/apply` does, with `via=VIA_WEBSITE`.
+    Counting is the point: a bare kind BESIDE the `web.` one is the double-post defect."""
+    sign_in(client)
+    await applications_on(web, wf)
+
+    made = a_form(client, wf)
+    client.patch(f"/api/applications/forms/{made['id']}", json={"title": "The Team"})
+    client.put(
+        f"/api/applications/forms/{made['id']}/questions",
+        json={"questions": [{"label": "Twitch handle"}]},
+    )
+    client.post(
+        f"/api/applications/forms/{made['id']}/panel",
+        json={"channel_id": str(wf.TEST_CHANNEL_ID)},
+    )
+    client.delete(f"/api/applications/forms/{made['id']}")
+
+    kinds = await wf.kinds_in(web.db)
+    for event in (
+        "application.form_created",
+        "application.form_updated",
+        "application.question_changed",
+        "application.panel_posted",
+        "application.form_deleted",
+    ):
+        assert kinds.count(f"web.{event}") == 1, event
+        assert kinds.count(event) == 0, event
+
+
+async def test_every_form_write_records_the_door_it_came_through(client, sign_in, web, wf):
+    sign_in(client)
+
+    made = a_form(client, wf)
+
+    rows = dict(await wf.web_rows_in(web.db))
+    assert rows["web.application.form_created"]["via"] == "website"
+    assert rows["web.application.form_created"]["form"] == made["name"]
