@@ -189,7 +189,9 @@ docs bookkeeping lands with the work, not after.
   log says `twitch: app token obtained` (20:13:48Z). Nothing to do.
 - **Cleanup (later, owner):** kick the dormant bots `Verification Bot`, `baf`,
   `Black Block` once Black Bloc is stable.
-- 🆕 **Spotify for the music bot (owner, 2026-09-03 ~13:55: "Check if we can do
+- ✅ **DECIDED 2026-09-03 14:22 — SKIPPED (owner: "still would be YouTube? Let's skip it then.
+  Back to the backlog dungeon with the music bot").** Request #3 stays on **hold**; nothing
+  is built. Original: **Spotify for the music bot (owner, 2026-09-03 ~13:55: "Check if we can do
   Spotify for the music bot")** — request #3 (PT, on hold). Checked the same
   afternoon: **not as a source.** Spotify's Web API exposes no audio stream (it
   only controls a signed-in user's own Spotify client), its developer terms name
