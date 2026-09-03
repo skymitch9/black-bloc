@@ -2,7 +2,10 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-02 — KI-11, KI-12 and KI-13 added from the Phase 16
+> Last verified: **2026-09-02 — KI-14 added by the Phase 17 build from its own
+> §J measurement (two leaked third-person threads in run 1, none in run 2 after
+> the fix); it describes a branch that has never run against live Discord and a
+> feature that ships OFF. Before that, KI-11, KI-12 and KI-13 added from the Phase 16
 > section-J measurements against the LIVE YouTube feed (30 timed requests, the
 > response headers, and a real captured feed now kept as
 > `tests/fixtures/youtube_feed.xml`); KI-10 added earlier the same day from a
@@ -26,6 +29,36 @@
 >
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
+
+## KI-14 — A memory note about a THIRD PERSON is prevented, not proved impossible — `ACCEPTED`
+
+**Symptom.** `chat_memory.parse_distilled` is what stops a preference note
+naming somebody other than the person whose profile it is (§D2-definition rule
+1). It is three layers, all of them heuristics: the distil prompt says so; a
+phrase list catches the obvious carriers (`said`, `told`, `according to`, `<@`,
+the departure family); and `other_names(guild, user_id)` drops any note
+containing another member's display name. None of them is a proof, and the last
+one only works for a name the guild cache actually holds — a nickname the person
+typed that no member wears would pass.
+
+**Status.** `ACCEPTED` for the dark launch (`chat_memory_mode` ships **off**).
+
+**Why tolerated.** The blast radius is one sentence, visible to one person, and
+that person can read every note the bot holds about them (`/memory show`) and
+drop any of them (`/memory forget-this`) — §D2-definition rule 7 makes the show
+command the enforcement of last resort. A note is also never a quote: the
+six-word shingle check against the window text (`shingles`) means whatever leaks
+is the model's paraphrase, not somebody's words. **Measured 2026-09-02, §J:** in
+run 1 the model produced third-person threads twice in six attempts on a window
+containing a third-person question; after the `OUTCOMES` fix all three run-2
+attempts were dropped. There is no measurement of the rate against real
+conversations — none have been distilled.
+
+**What would change it.** Number: **one leaked note reported by a member**, or
+**one note about a third person found by the owner in the DB**. At that point
+the fix is not a longer phrase list — it is to stop keeping `threads` at all
+(§I already excludes cross-person memory), since the note leaks measured so far
+were all threads, never preferences.
 
 ## KI-13 — An upload announcement can be up to ~25 minutes late — `ACCEPTED`
 

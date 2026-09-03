@@ -1,7 +1,9 @@
 # Requests, second pass — the state machine and the notifications
 
 **Audience:** the builder carrying this (rides along in the Phase 17 build),
-and the reviewer. **Status:** TRACKED · **BUILDABLE** — every decision below
+and the reviewer. **Status:** TRACKED · **BUILT on branch `worktree-agent-a268aa7fa2979dd4a`,
+2026-09-02, NOT merged and NOT deployed** — see the `## Deviations` list at the
+foot. Every decision below
 is the owner's, taken 2026-09-02 20:19–20:42 while reviewing the first three
 member requests. **Last verified: 2026-09-02** against `black_bloc/requests.py`,
 `cogs/community/requests.py`, `api/tools/requests.py`,
@@ -110,3 +112,47 @@ that we marked something as hold and why".
 
 A status history table (the audit log already carries `was:` on every move);
 per-move templates; requester-side hold. Say so in the report if tempted.
+
+**None of the three was built.** The audit log carries `was:` in `details` on
+every move, including `request.resumed`, which is the history this asked for.
+
+## Deviations — where the build departed from this document, and why
+
+Written by the Phase 17 build agent, 2026-09-02. Everything not listed here was
+built as specified.
+
+1. **The retired auto-approve key is `request_auto_approve_staff`**, not
+   `requests_auto_approve` as this document names it. The registry, the mock,
+   `labels.js`, `page-requests.js` and the exact-key-set test all used the longer
+   name; all five are cleared, and `tests/test_settings_store.py` now asserts the
+   key is absent from `KEY_TYPES`.
+2. **The web `/api/requests/{id}/approve` route is GONE rather than repurposed.**
+   `approved` is not a state any more, so the route had no meaning. Two routes
+   replace it: `POST /{id}/hold` (reason required) and `POST /{id}/resume`.
+   `POST /{id}/status` still takes any legal move, which is what the page's
+   in-progress card uses. `contract.json` and `site/mock/server.mjs` follow, and
+   `check.mjs` runs hold-then-resume-then-decline in the order the machine
+   allows.
+3. **The hold reason is stored in the existing `decline_reason` column.** A
+   `hold_reason` column would be a second home for one fact, and renaming
+   `decline_reason` is a migration on a persisted key. `set_status` writes the
+   reason for both states in `NEEDS_A_REASON` and clears it on any other move;
+   the page and the DM label it "On hold because:" versus "Why not:".
+4. **`pending_count` was renamed `open_count`.** It was exported but unused
+   outside `requests.py`; the sidebar badge and the API's index both read the
+   `open` count now, and the API's index key changed `pending` → `open` to match.
+5. **`/request list` scopes are `mine | open | all`**, where `open` means the
+   three non-final states (`open`, `in_progress`, `hold`), not the single `open`
+   state. "Still open" is the question a member is asking; a scope that showed
+   only untouched rows would hide their own request the moment staff picked it up.
+6. **The page's In progress card lost its status SEGMENT** in favour of the same
+   move buttons the Open and On hold cards use. A segment control implies every
+   step is reachable from every other, which the table denies; a bar built from
+   `row.moves` cannot draw an illegal move at all.
+7. **`request.notify_skipped_test_mode` is a new log kind** this document names
+   in passing ("a refused channel is logged"). It is classified ROUTINE, beside
+   the shadow kinds, so a test-mode weekend does not fill the Discord log channel.
+8. **Request #3 was NOT moved to `hold`.** This document asks for it at landing;
+   the build agent has no access to the live database, so it stays for the
+   reviewer. The exact move: `/request hold 3 youtube player is currently
+   unreliable. Will do further research on this.`

@@ -4667,3 +4667,117 @@ channel is gone".**
 | `tests/test_youtube.py:244` | The retry test encodes the measured failure mix (404, 500, 404, 200) rather than a tidy one, and asserts the exact number of attempts, so shrinking `FEED_ATTEMPTS` fails visibly. |
 | `tests/test_youtube.py:291` | The handle-resolution test deliberately puts a WRONG `"channelId":"UC…"` in the page body beside the right canonical link, so an implementation that goes back to scraping that field fails. That is exactly the bug the measurement found. |
 | `tests/cogs/content/test_youtube.py:578` | The test that says a dead feed leaves the link alone. It is the guard against the most damaging plausible bug in this phase: reading KI-12's 404 as "this channel does not exist" and unlinking a real member. |
+
+# Phase 17 — chat long-term memory, and the requests state machine
+
+> Keyed against the Phase 17 branch `worktree-agent-a268aa7fa2979dd4a` (the docs
+> commit carries this section). The phase ADDED `black_bloc/chat_memory.py`,
+> `black_bloc/chat_distil.py`, `black_bloc/cogs/content/chat_memory.py`,
+> `black_bloc/api/tools/chat_memory.py` and their four mirrored test files, and touched
+> `requests.py`, `cogs/community/requests.py`, `api/tools/requests.py`, `chat_llm.py`,
+> `groq.py`, `settings_store.py`, `logkinds.py`, `personas.py`, `storage/db.py`
+> (schema **23**), `api/status.py`, `api/server.py`, `bot.py`, `site/mock/*` and
+> `site/public/assets/{page-requests,page-chat,labels}.js`. ⚠️ **No key above this
+> section was re-keyed** — the phase appended to `settings_store.py`, `logkinds.py` and
+> `storage/db.py` rather than editing them in place, but `requests.py`,
+> `cogs/community/requests.py` and `api/tools/requests.py` WERE edited in place, so any
+> older key into those three should be trusted by anchor text, not by number.
+
+## `black_bloc/chat_memory.py` — the rules, the shapes and the storage
+
+| Key | Note |
+|---|---|
+| `black_bloc/chat_memory.py:278` | ⚠️ **`normalise` and `has_phrase` are wrappers around `chat.py`'s, imported LATE inside the function on purpose.** `settings_store.py` imports this module for its choice tuples, and `chat.py → chat_data.py → settings_store.py` is a cycle at module level. `chat_data.py` already uses the same late-import trick; duplicating the two functions would have broken checklist 15 instead. |
+| `black_bloc/chat_memory.py:71` | Only the DOUBLE-quote family and the backtick are banned. An apostrophe is not a quote mark in English, and banning it would drop "they're", "don't" and half the legitimate notes. |
+| `black_bloc/chat_memory.py:90` | The availability list is the GABI rule made mechanical: the bot must never claim somebody is online, free, or anywhere. `lives in` and `based in` are here rather than under sensitive because location is an availability claim first. |
+| `black_bloc/chat_memory.py:162` | ⚠️ **`OUTCOMES` is checked against THREADS as well as notes, and §J is why.** Run 1 of the measurement had the model return the thread `"namu quitting the server"`; `quit` was already on the list and did not match `quitting`, because `has_phrase` is word-boundary exact. The departure family (`quitting`, `quits`, `leaving`, `departure(s)`) plus `banned`/`kicked`/`muted`/`warned`/`timed out` were added for that one measured leak, and run 2 dropped all three attempts. |
+| `black_bloc/chat_memory.py:185` | `straight` was REMOVED from the sensitive list after §J: it collided with "likes straight answers", which §D2-definition names as a KEEP example. A false positive costs one note; that one would have cost a whole class of legitimate ones. |
+| `black_bloc/chat_memory.py:319` | ⚠️ **`other_names` is the only guard that can catch an arbitrary third-person name**, because a phrase list cannot enumerate the server's members. The cog passes it, so it is guild-aware; a note naming any other member is dropped. It is not a proof — see `KNOWN_ISSUES.md`. |
+| `black_bloc/chat_memory.py:332` | `why_dropped` returns the rule's NAME rather than a bool so the log and the tests can say which rule fired, and so `Distilled.dropped` can carry rule names and never the text. |
+| `black_bloc/chat_memory.py:389` | ⚠️ **`Profile.visible` is the D4 guard at the DATA level, not the prompt level.** GABI relies on telling the model not to use DM notes in public; here a `where = dm` note is filtered out of both the reply block AND the prompt the next distillation sees, so it cannot be re-emitted into the server scope by a model that ignores an instruction. |
+| `black_bloc/chat_memory.py:254` | The distil prompt states the KEEP list and the THROW AWAY list in the model's own terms, and `parse_distilled` re-checks every one of them. The prompt is the cheap filter; the parser is the one that is load-bearing. |
+| `black_bloc/chat_memory.py:488` | A code fence is the one wrapper tolerated. §J saw none in 29 calls with JSON mode on, but the cost of tolerating one is three lines and the cost of not is a whole conversation's distillation. |
+| `black_bloc/chat_memory.py:504` | ⚠️ **Structural problems are a no-op; one bad ITEM is a dropped item.** Bad JSON, an unknown key, a non-string note or an over-long `call_me` all return `None` and write nothing — never a partial profile. A note that breaks a privacy rule is dropped on its own and the rest of the profile still saves, which is what §D2-definition rule 2 asks for. An over-long NOTE is treated as a dropped item rather than a whole-profile reject; the design's "over-length fields → None" is read as the top-level fields. |
+| `black_bloc/chat_memory.py:546` | `widest` is why a note learned in a DM and then again in the server ends up `server`: dedupe would otherwise let the newer (DM) copy NARROW an existing public note, silently losing it from public replies. Widening is the safe direction and loses nothing. |
+| `black_bloc/chat_memory.py:578` | `merge` caps AFTER merging, so a newly learned preference always survives and the oldest drops off. The caps are `chat_memory_notes_max` / `_threads_max`, not constants. |
+| `black_bloc/chat_memory.py:619` | `drop_matching` matches on NORMALISED substrings, because `/memory forget-this` asks a person to type a few of the words they just read, not to quote a line exactly. |
+| `black_bloc/chat_memory.py:715` | ⚠️ **One table, one meaning: a row in `chat_memory_optout` means "this person is NOT on the server's default".** Under `optout` consent a row means do-not-remember; under `optin` it means remember-me. That is what lets D1 be a settings key rather than a schema change — the alternatives were a second table or a `choice` column the design's schema does not have. `set_remembered` is the only writer, so no caller has to think about which way round it is. |
+| `black_bloc/chat_memory.py:722` | `overridden` returns `None` on a read failure and `remembered(None)` is `False`, so an unreadable table means nobody is remembered. Failing towards forgetting is the only safe direction for a privacy feature. |
+| `black_bloc/chat_memory.py:702` | `forget_everywhere` is keyed on the member alone, not on the guild: `on_member_remove` fires for one guild, and D3 says leaving clears the profile at once. A single-guild bot makes the difference academic today, and the wider delete is the one that stays right if that changes. |
+| `black_bloc/chat_memory.py:777` | `expire(days=0)` returns 0 rather than deleting everything — `chat_memory_retention_days = 0` means FOREVER, and the read that makes that true has to be here rather than at the caller. |
+
+## `black_bloc/chat_distil.py` — the run
+
+| Key | Note |
+|---|---|
+| `black_bloc/chat_distil.py:69` | ⚠️ **`expiring` SELECTs the rows the sweep is about to delete, before `sweep_window` runs.** The whole design of the feature is that distillation is on the sweep and never on the reply path; `tests/cogs/content/test_chat.py` asserts the ORDER, because getting it backwards would silently distil nothing. |
+| `black_bloc/chat_distil.py:98` | Two member turns minimum, and not one `about_staff` word. The staff gate is checked on the MEMBER turns only — the bot's own reply mentioning "modmail" must not disqualify an ordinary conversation, and §J confirmed `about_staff` catches the appeal window on the member's side. |
+| `black_bloc/chat_distil.py:106` | The Groq client is built in its own slot (`MEMORY_TIER`) rather than sharing `SIMPLE`. With `chat_memory_model` set to something other than `chat_simple_model`, one shared slot would rebuild — and leak — an `aiohttp` session on every alternating call. |
+| `black_bloc/chat_distil.py:106` | The ledger row is written for the ERROR case too, with `client.model` rather than the (possibly blank) setting, so a month of failed distillations is visible on the Spend section rather than invisible. |
+| `black_bloc/chat_distil.py:195` | A capped or fused month BREAKS the loop rather than continuing: the allowance is a global fact, so re-checking it per conversation would spend the rest of the sweep proving the same thing. |
+| `black_bloc/chat_distil.py:195` | A DM has no guild, so it files under `dev_guild_id` with `where = dm`. One profile per person, two scopes inside it — D4. |
+| `black_bloc/chat_distil.py:240` | Expiry runs on the same sweep rather than a loop of its own, for the same reason the window sweep does: a bot that restarts weekly would otherwise never reach a timer that only fires monthly. |
+
+## `black_bloc/cogs/content/chat_memory.py` — `/memory`
+
+| Key | Note |
+|---|---|
+| `black_bloc/cogs/content/chat_memory.py:103` | ⚠️ **The group is top-level `/memory`, NOT `/chat memory` as the design says.** Discord applies `default_permissions` to the whole top-level command, and `/chat` is `STAFF_ONLY` — a member-visible subcommand under it is impossible without opening the whole `/chat` group to members, which would break the house rule about not rendering a control somebody cannot use. Listed in the design's Deviations. |
+| `black_bloc/cogs/content/chat_memory.py:107` | A DM has no guild, so `home` falls back to `dev_guild_id` — the same single-guild assumption `chat_distil` makes. With neither, the command says so in words rather than doing nothing. |
+| `black_bloc/cogs/content/chat_memory.py:119` | `ready` is the one gate: no server, no database, or the feature off. Each is a different sentence, because "nothing happened" for three different reasons is three different things to do about it. |
+| `black_bloc/cogs/content/chat_memory.py:88` | ⚠️ **`profile_words` is the enforcement mechanism for §D2-definition rule 7.** If a line would embarrass the bot when read back to the person it is about, it is content and should never have been kept. Everything the bot holds is printable here, in plain words, including the DM mark. |
+| `black_bloc/cogs/content/chat_memory.py:205` | `off` opts out AND wipes, in that order, so a crash between them leaves the person opted out with a stale profile rather than opted in with none — the safe half. |
+| `black_bloc/cogs/content/chat_memory.py:234` | `on_member_remove` forgets before checking anything else: D3 says leaving the server clears the profile at once, whatever `chat_memory_retention_days` says. |
+
+## `black_bloc/api/tools/chat_memory.py` and the Chat page's Memory section
+
+| Key | Note |
+|---|---|
+| `black_bloc/api/tools/chat_memory.py:46` | ⚠️ **`summary` takes `full` as a keyword and returns `call_me: None` / `lines: []` when it is false.** The gate is in the SHAPER, not in the route, so no route can accidentally return the notes — the D5 default (`counts`) is enforced on the way out of one function. |
+| `black_bloc/api/tools/chat_memory.py:116` | The 403 names the key, the value it needs, who can change it, and the command the member can always use on themselves. A bare 403 would send a staffer asking for access they do not need. |
+| `black_bloc/api/tools/chat_memory.py:93` | `dm_notes` is a COUNT of DM-scoped notes rather than a flag: it makes D4 visible on the page ("this many things are being kept out of public channels") without showing any of them. |
+| `site/public/assets/page-chat.js:54` | The `chat_memory_*` keys are edited INSIDE the Memory section, beside the profiles they govern, and are deliberately absent from the page's Settings block at the foot — one fact, one home, and the switch belongs where its effect is visible. |
+| `site/public/assets/page-chat.js:964` | The card leads with counts because that is all `counts` mode has; the notes list is simply absent rather than replaced by a placeholder, and the "kept private" sentence sits above the cards to explain the absence once instead of per row. |
+| `site/public/assets/page-chat.js:1007` | The section is on the Chat page, not a page of its own — the same ownership answer Phase 16 gave for uploads. Memory is a property of how the bot chats; a second page would split one question across two surfaces. |
+
+## `black_bloc/requests.py` — the state machine
+
+| Key | Note |
+|---|---|
+| `black_bloc/requests.py:20` | ⚠️ **`TRANSITIONS` is the one table, and every path asks it** — `moves_from`, `can_move`, `checked_move`, the API's `moves` field and the page's buttons all read this and nothing else. `STAFF_STATUSES` and `FINAL_STATUSES` are DERIVED from it rather than written out again, so adding a state to the table is the whole change. |
+| `black_bloc/requests.py:93` | A refused move says where it IS, where it cannot go, and where it CAN go, by name. `moves_sentence` is what makes the last part true from the table rather than from a hand-written list that would drift. |
+| `black_bloc/requests.py:243` | `checked_move` is the whole gate in one place: same-state, illegal move, and reason-required. The cog, the API's `/status`, `/hold` and `/decline` all go through it, so a rule cannot be enforced on one surface and not the other. |
+| `black_bloc/requests.py:454` | ⚠️ **`held_from` is written on the way INTO hold and cleared on the way out, in the same UPDATE.** Two statements would leave a window where a resumed request still claims to be parked. `decline_reason` carries the HOLD reason as well as the decline one — the column name is a persisted key and changing it would be a migration, so the note is here instead. |
+| `black_bloc/requests.py:556` | `resume_target` falls back to `in_progress` when `held_from` is `open`: `open → hold → open` would be a loop with no work in it, and the owner's machine has resume meaning "pick it back up". |
+| `black_bloc/requests.py:310` | `row_value` exists so a schema-22 row read before the `held_from` column is added reads as nothing rather than raising. `sqlite3.Row` throws `IndexError` on an unknown column, not `None`. |
+| `black_bloc/requests.py:300` | `status_channel_id` is the fallback rule in one place: `request_status_channel_id` if set, otherwise `request_notify_channel_id`, so one channel carries both kinds of line by default and nobody has to set two keys to get any output. |
+| `black_bloc/requests.py:154` | The four move lines are four constants rather than one templated key. The owner's answer was explicit: the shapes differ, so a single `request_status_template` would be worse than four fixed sentences. |
+
+## `black_bloc/cogs/community/requests.py` and the API
+
+| Key | Note |
+|---|---|
+| `black_bloc/cogs/community/requests.py:138` | `post_line` is the shared guarded post. A channel the guard refuses logs `request.notify_skipped_test_mode` and returns `None` — silence and refusal must be distinguishable in the log (checklist 2), and neither may raise into the move that already happened. |
+| `black_bloc/cogs/community/requests.py:199` | ⚠️ **The state moves FIRST, then the DM, then the channel line.** Checklist 12: the irreversible thing goes first, and a failed cosmetic must not abort it. Both notifications are best-effort and both log their own failure. |
+| `black_bloc/cogs/community/requests.py:234` | `resume_request` is its own path rather than a `set` with a computed target, because Resume is a BUTTON with no status to choose — the target comes off the row, and the log kind (`request.resumed`) is the one that says a human pressed resume rather than picked a state. |
+| `black_bloc/api/tools/requests.py:119` | The row carries `moves` and `resume_to` so the page can draw only the controls that would be accepted. The page never re-derives the machine; it renders what the API says is legal. |
+| `black_bloc/api/tools/requests.py:254` | `_may_file` no longer returns anything. `request_auto_approve_staff` is gone and every filing arrives `open` — owner, 2026-09-02: *"Even a staff request can be bad"*. |
+| `site/public/assets/page-requests.js:101` | `MOVES` is a label/tone/prompt table keyed by the state NAME, so `moveButtons` can build a bar straight from `row.moves` — a control that would be refused is never drawn, and adding a state to the machine needs one entry here. |
+| `site/public/assets/page-requests.js:504` | The hold card drops the resume target from its move list, so Resume and "Pick it up" are not two buttons doing the same thing. |
+
+## Where else Phase 17 touched
+
+| Key | Note |
+|---|---|
+| `black_bloc/storage/db.py:11` | Schema **23**: two new tables, `requests.held_from`, and the ONE data migration — `pending`/`approved`/`planned` → `open`. It is idempotent because after the first run no row matches; `tests/storage/test_db.py:740` boots the file three times to prove it. |
+| `black_bloc/storage/db.py:639` | The migration runs AFTER `_add_missing_columns`, so a schema-22 file has grown `held_from` before any row is touched. |
+| `black_bloc/chat_llm.py:494` | `memory_for` is one indexed SELECT on the reply path and returns `""` for every reason it might not have one — off, no server, no profile. The import is late because `chat_memory` must not pull `chat_llm` in at module level. |
+| `black_bloc/chat_llm.py:424` | `groq` grew a `slot` argument so the memory tier can hold its own client. The default is `SIMPLE`, so every existing caller and every test that monkeypatches a two-argument `groq` still works. |
+| `black_bloc/groq.py:76` | `json_only` is opt-in. A conversational reply must never ask for JSON mode, and §J measured 29/29 parseable objects with it on — so there is no retry loop anywhere, by design. |
+| `black_bloc/settings_store.py:18` | The registry imports the memory constants rather than restating them, which is why `chat_memory.py` has no module-level import of `chat.py`. Same direction as `chat_llm.py` importing `CHAT_DAILY_TURNS` from here. |
+| `black_bloc/api/status.py:27` | `chat_memory_mode` joins `chat_llm_mode` on `NOT_A_FEATURE`: it is a sub-switch of chat, and the Health page would otherwise offer a `chat_memory` feature with no page behind it. |
+| `black_bloc/logkinds.py:194` | ⚠️ **There is NO `chat_memory_log_level`, and the design's §E table is wrong to list one.** Log levels are per FEATURE and derived from the kind's dotted head; the memory kinds are `chat.memory_*`, so their head is `chat` and `chat_log_level` already governs them. A key that governed nothing would be worse than none. Listed in the design's Deviations. |
+| `black_bloc/personas.py:71` | `/memory` is in the member command block because the model reads that block to answer "does the bot remember me?". `tests/test_personas.py` fails the day a member-visible command is added to the tree and not to it. |
+| `tests/test_chat_memory.py:142` | The quote test uses a real six-word run from the window rather than a made-up string, because the shingle check is the rule most likely to be "simplified" away by somebody who has not seen it fire. |
+| `tests/test_chat_distil.py:224` | This test asserts what is NOT in the log line. The counts are the whole payload; a future change that adds the text to `details` for debugging fails here. |
+| `tests/api/tools/test_chat_memory.py:89` | The 403 test checks the WORDS, not the status code alone — the key name, the value it needs, and the member's own command. That is the house rule about bare statuses, made testable. |
