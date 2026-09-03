@@ -9,6 +9,74 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-03 — Requests, fourth pass: `/request` is ONE command that opens a panel
+
+Moved whole from `TODO.md` (the item is reproduced below the summary). Owner's ask ~06:50
+("The flow seems tough, and request set and request ready seem overlapping"), then the
+standing direction ~06:55 ("minimize slash commands and maximize interactive windows …
+Request first") — now a `CLAUDE.md` rule and the pattern for every later feature. Design:
+[`info/requests-panel-design.md`](info/requests-panel-design.md) (11 deviations — 9–11 are
+the reviewer's findings). **Sonnet 5 built it** on `feat/requests-panel` (`7b4d120`,
+`4743b01`, `39dfe17`) after Opus returned 529 Overloaded four times (07:44–08:35, nothing
+written each time); Fable reviewed; **Opus fixed the three findings** (`79548c1`,
+`7aaf24a`); merge **`ba5cb99`**, deployed the same commit — see `deploys.log`.
+
+**What shipped.** `/request` is a single command, no subcommands: one ephemeral message,
+an embed plus a `discord.ui.View`. Members see their own requests, `File a request` (the
+existing modal — hidden, with a line saying why, when filing is staff-only or requests are
+off), `Refresh`, `Open on the site`, and a "Take one back…" select with a Yes/Keep confirm.
+Staff additionally see a counts line, a "Pick a request…" select over the open statuses
+(capped at 25, placeholder "25 of N — the rest are on the site"), and `Logs`. Picking a
+request renders the card — the SAME `request_embed` the channel and DMs get — with ONLY
+the moves valid from its state as buttons (open: Pick up / Hold / Decline; in progress:
+Ready to check / Hold / Decline; ready to check: Accept (only when `may_accept`) / Send
+back / Hold / Decline; on hold: Resume / Decline; final states: none, the footer says so)
+plus `Back`. Every move calls the shared function that already existed (`apply_decision`,
+`mark_ready`, `accept`, `send_back`, `resume_request`), `via` at its Discord default —
+the panel never writes a row or a log line itself. `withdraw_request` was extracted so the
+panel's confirm and the site's withdraw route are one implementation with one log row
+(`kind_via`). New setting `request_panel_minutes` (int, default **10**). `commands synced`
+stays **44** — a `Group` was already one top-level slot (deviation 7 corrected the design's
+"drops by nine"). 3338 tests, ruff clean, `check.mjs` 17 pages / 139 routes.
+
+**Review findings, all fixed before merge (verified against the installed discord.py, not
+reasoned).** F1: `ViewStore.add_view` (`ui/view.py:940–968`) overwrites the message's view
+without stopping the old one, so a replaced panel's timeout would later overwrite the live
+card with a disabled stale one — now `retire()` stops the previous view before every
+replacing edit. F2: the "gone quiet" footer could not be written at the old default of 15
+minutes (an `InteractionMessage` token dies at 15, and non-rendering clicks refresh the
+timeout without refreshing the token) — buttons would have died silently; now `on_timeout`
+edits through the freshest interaction's token, the default is 10, and the help text says
+15+ loses the footer (KI-20 names it). F3: the ten subcommands called `require_staff` on
+every call, the panel only at render — `still_staff` now re-asks before every move and
+modal submit. The build's deviation 2 ("only the last view reaches on_timeout") was wrong
+and is marked superseded. The reviewer's own suggested guard (`is_finished()` in
+`on_timeout`) was also wrong — `_dispatch_timeout` marks the view finished BEFORE calling
+`on_timeout` — the fix agent measured it and used an explicit `replaced` flag instead.
+
+⚠️ **NOT verified:** anything by eye in Discord — no panel has been opened live. The
+owner's sweep is `access/sweeps.md` rows 58–64: `/request` in `#mute-me-bot-test-spam`,
+pick #1, Accept — that posts the first done card.
+
+**The TODO item, whole:**
+
+- 🆕 **Simplify the request slash flow — owner, 2026-09-03 ~06:50, verbatim: "The flow
+  seems tough, and request set and request ready seem overlapping."** Measured: after the
+  third pass `/request` has TEN subcommands and two ways to make most moves —
+  `set status:review` vs `ready`, `set status:done` vs `accept`, `set status:hold` vs
+  `hold`, `set status:in_progress` (from review) vs `sendback` (`cogs/community/requests.py:631–778`,
+  `STAFF_STATUSES` is every reachable status). Proposal put to the owner: ONE mover,
+  `/request set`, with `review` opening the built/how-to-test modal, `done` from review =
+  accept, `in_progress` from review requiring the note (= send back); delete `ready`,
+  `accept`, `sendback`, `hold`, `resume`. Site buttons unchanged. **Owner ~06:55, going
+  further:** *"Let's also have /request open a menu maybe. Let's try and minimize slash
+  commands and maximize interactive windows"* → *"Let's start this process with request
+  then carry it through the rest of the app. Request first."* Decided: `/request` becomes
+  ONE command that opens an ephemeral panel (embed + buttons + selects + modals); the nine
+  subcommands go. Design → [`info/requests-panel-design.md`](info/requests-panel-design.md);
+  rule added to `CLAUDE.md`. Status: **BUILDING** (Opus, `feat/requests-panel`, cut from
+  `3e18e4a`), 2026-09-03 ~07:05.
+
 ## 2026-09-03 — Requests, third pass: the review state, the embeds and the site link
 
 Moved whole from `TODO.md` (the item is reproduced below the summary). Owner's ask

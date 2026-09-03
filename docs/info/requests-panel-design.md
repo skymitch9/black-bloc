@@ -1,8 +1,8 @@
 # Requests, fourth pass — `/request` is ONE command that opens a panel
 
-**Audience:** the builder and the reviewer. **Status:** TRACKED · ✅ **BUILT on branch
-`feat/requests-panel`, commit `4743b01`, worktree `.claude/worktrees/agent-requests-panel`
-— NOT merged and NOT deployed.** 172 new/rewritten tests
+**Audience:** the builder and the reviewer. **Status:** TRACKED · ✅ **SHIPPED — merge
+`ba5cb99` (build `4743b01`, review fixes `79548c1`), deployed 2026-09-03; see `deploys.log`.**
+172 new/rewritten tests
 (`tests/cogs/community/test_requests.py` 51, `tests/test_requests.py` +26 pure-helper and
 `withdraw_request` tests, `tests/test_settings_store.py` +1), then **17 more** for the
 three review findings (`79548c1`); **3338 tests pass** (3321 before the review fixes), ruff

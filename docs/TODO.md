@@ -2,90 +2,48 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then; secret NAMES only).
-> Last verified: **2026-09-03 09:40** — the 🔁 resume block below refreshed (panel built on
-> its branch, fix agent in flight); first written 07:50 at the owner's order during API outages ("make sure if we lose progress and memory our docs survive");
+> Last verified: **2026-09-03** (after the panel landed, merge `ba5cb99`) — the 🔁 resume
+> block below says nothing is in flight; first written 07:50 at the owner's order during API outages ("make sure if we lose progress and memory our docs survive");
 > everything in it was measured at that time (`git log`, `git worktree list`, the live
 > page, the deploys log). Earlier: 2026-09-02 handoff pass before the switch to Fable 5.1
 > (schema **20**, **2610** tests, 17 pages / **107** routes, 37 sweep rows — those counts
-> are now stale: schema **26**, **3310** tests, 17 pages / **139** routes at `70a6720`).
+> are now stale: schema **26**, **3338** tests, 17 pages / **139** routes at `ba5cb99`).
 >
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 09:40, outages in progress)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 after the panel landed)
 
-**State of `main` (all pushed):** `f929ad5` = this resume block, on `5ecb292` (requests
-panel design + the `CLAUDE.md` rule), on `3e18e4a` (third-pass landing docs), on
-**`70a6720`, the LIVE deploy** (requests third pass: `review` state, seven-look embeds,
-site link, schema 26; `deploys.log` last line). Live is verified: boot clean, dashboard
-renders, `/requests.html` shows Ready to check 2 / On hold 1 / Done 0 (the landing
-one-off ran 06:41 — #1 and #2 `done → review`, #3 `hold`). Nothing on `main` is
-uncommitted.
+**Nothing is in flight.** `main` is clean and pushed; the LIVE deploy is the requests fourth
+pass — merge `ba5cb99`, the `/request` panel (`deploys.log` last line; the `DONE.md` entry
+dated 2026-09-03 "Requests, fourth pass" has the whole story). The worktree
+`.claude/worktrees/agent-requests-panel` and branch `feat/requests-panel` are merged and
+can be pruned (`git worktree remove`, `git branch -d`).
 
-**The `/request` panel is BUILT, not merged:** branch `feat/requests-panel`, worktree
-`.claude/worktrees/agent-requests-panel`, commits `7b4d120` (prep: `withdraw_request`,
-pure helpers, `request_panel_minutes`) → `4743b01` (the panel; `Group` + nine
-subcommands gone) → `39dfe17` (docs). Sonnet 5 built it (Opus returned 529 four times,
-07:44–08:35); 3321 tests, ruff clean, 8 deviations at the foot of
-[`info/requests-panel-design.md`](info/requests-panel-design.md). ⚠️ Deviation 7 corrects
-this block's earlier claim: `commands synced` counts TOP-LEVEL commands and **stays at
-44** — a `Group` was already one slot.
+**Next, the standing direction (owner 2026-09-03):** "carry it through the rest of the
+app" — the "Panels over slash commands — the rest of the app" item under 🔧. Agree the
+sequence with the owner ONE feature at a time; each gets a design doc with a button table
+per state, `info/requests-panel-design.md` as the template. Owner's by-eye sweep of the
+panel is still owed (`access/sweeps.md` rows 58–64).
 
-**In flight (dispatched 09:35, Opus):** a FIX agent on that same worktree for three
-review findings, verified against the installed discord.py (`ui/view.py:940–968`,
-`add_view` never stops the view it replaces): **F1** replaced `RequestView`s keep their
-timeout clocks and clobber the live card when they fire; **F2** the "gone quiet" footer
-cannot be written at the default 15 min (the `InteractionMessage` token dies at 15;
-fix = edit through the last interaction, default → 10, help text says why); **F3** card
-moves lost `require_staff` (old subcommands checked every call; the panel only at
-render). Expected on the branch: one or two more commits, deviations 9–11, KI-20 amended,
-test count > 3321. **A dead agent is invisible to the next session — check what it left:**
-
-```
-git -C .claude/worktrees/agent-requests-panel log --oneline main..HEAD   # 39dfe17 + the fix commits, if any
-git -C .claude/worktrees/agent-requests-panel status --short             # uncommitted work — NEVER stash, never revert; read it
-```
-
-- **Only `39dfe17`, tree clean** → re-dispatch the fix (the three findings above are the
-  whole brief; Opus, same worktree, no merge / no deploy / no push).
-- **Fix commits there** → review them (`is_finished()` on the replaced view; `on_timeout`
-  via `last_interaction.edit_original_response`; `is_staff` re-checked before every card
-  move / modal submit), run `ruff` + full `pytest` in the worktree, then land.
-
-**Review done, three findings fixed on the branch (2026-09-03, `79548c1` + its docs
-commit).** F1 a re-render never stopped the view it replaced, so a stale timeout would
-overwrite the live card; F2 the "gone quiet" footer could not be written at the old
-15-minute default (Discord's interaction token expires at 15), so the default is now **10**
-and `on_timeout` writes through the freshest token; F3 card moves and the ready/note modal
-submits lost the staff check the ten subcommands had, and now re-ask. Detail:
-`info/requests-panel-design.md` deviations 9–11. **3338 tests pass**, ruff clean,
-`check.mjs` 17 pages / 139 routes. Still NOT merged, NOT deployed — the landing ritual
-below is unchanged.
-
-**Landing ritual (unchanged):** `git merge --no-ff feat/requests-panel` on `main` →
-`scripts/deploy.ps1` (refuses a dirty tree; ~10 min: ruff → pytest → check.mjs → push →
-`flyctl deploy --app black-bloc --ha=false --remote-only --yes`; flyctl lives at
+**Landing ritual (unchanged):** branch → `git merge --no-ff` on `main` → `scripts/deploy.ps1`
+(refuses a dirty tree; ~10 min: ruff → pytest → check.mjs → push → `flyctl deploy --app
+black-bloc --ha=false --remote-only --yes`; flyctl lives at
 `C:\Users\nbasl\AppData\Local\Microsoft\WinGet\Packages\Fly-io.flyctl_Microsoft.Winget.Source_8wekyb3d8bbwe\flyctl.exe`)
 → EDIT the skeleton line it appends to `docs/deploys.log` → verify the boot log
-(`flyctl logs --app black-bloc --no-tail`: cogs loaded, `commands synced` **44**, no
-errors) → move the 🔧 "Simplify the request slash flow" item WHOLE to `DONE.md` (the
-build's report carried a draft; say Sonnet built it, not Opus), flip the design-doc header
-and the `info/README.md` row to SHIPPED, re-key `code-notes.md` → commit, push → tell the
-owner what to click (`/request` in `#mute-me-bot-test-spam`: the panel, pick #1, Accept —
-that posts the first card by eye).
+(`flyctl logs --app black-bloc --no-tail`) → move the 🔧 item WHOLE to `DONE.md`, flip the
+design-doc header and the `info/README.md` row to SHIPPED, re-key `code-notes.md` → commit,
+push → tell the owner what to click.
 
-**After that, the standing direction (owner 2026-09-03):** "carry it through the rest of
-the app" — the "Panels over slash commands — the rest of the app" item under 🔧. Agree the
-sequence with the owner ONE feature at a time; each gets a design doc with a button table
-per state, requests as the template.
-
-**Gotchas that cost time today:** `node --check file.js` passes a broken ES module (parses
+**Gotchas that cost time recently:** `node --check file.js` passes a broken ES module (parses
 as CommonJS) — use `--input-type=module`; the site is a `StaticFiles(html=True)` mount so
 page links carry `.html` (`logkinds.FEATURE_PAGES`); `flyctl ssh console -C` from
 PowerShell splits on spaces — run one-offs from Bash with the script base64-encoded (see
 `DONE.md` 2026-09-03 third pass); "The handle is invalid" after a flyctl ssh command is
 noise, the command ran; a `discord.ui.View` replaced on a message is NOT stopped — call
-`stop()` yourself or its timeout fires later against the wrong content.
+`stop()` yourself or its timeout fires later against the wrong content
+(`ui/view.py:940–968`); `commands synced` counts TOP-LEVEL commands — a `Group` is one slot,
+so collapsing subcommands into a panel does not change it.
 
 ## 🎯 Feature asks — the first list (owner, 2026-08-26, verbatim then expanded)
 
@@ -224,23 +182,6 @@ docs bookkeeping lands with the work, not after.
   `Black Block` once Black Bloc is stable.
 
 ## 🔧 Open engineering items
-
-- 🆕 **Simplify the request slash flow — owner, 2026-09-03 ~06:50, verbatim: "The flow
-  seems tough, and request set and request ready seem overlapping."** Measured: after the
-  third pass `/request` has TEN subcommands and two ways to make most moves —
-  `set status:review` vs `ready`, `set status:done` vs `accept`, `set status:hold` vs
-  `hold`, `set status:in_progress` (from review) vs `sendback` (`cogs/community/requests.py:631–778`,
-  `STAFF_STATUSES` is every reachable status). Proposal put to the owner: ONE mover,
-  `/request set`, with `review` opening the built/how-to-test modal, `done` from review =
-  accept, `in_progress` from review requiring the note (= send back); delete `ready`,
-  `accept`, `sendback`, `hold`, `resume`. Site buttons unchanged. **Owner ~06:55, going
-  further:** *"Let's also have /request open a menu maybe. Let's try and minimize slash
-  commands and maximize interactive windows"* → *"Let's start this process with request
-  then carry it through the rest of the app. Request first."* Decided: `/request` becomes
-  ONE command that opens an ephemeral panel (embed + buttons + selects + modals); the nine
-  subcommands go. Design → [`info/requests-panel-design.md`](info/requests-panel-design.md);
-  rule added to `CLAUDE.md`. Status: **BUILDING** (Opus, `feat/requests-panel`, cut from
-  `3e18e4a`), 2026-09-03 ~07:05.
 
 - 🆕 **Panels over slash commands — the rest of the app (owner, 2026-09-03: "then carry it
   through the rest of the app").** After the requests panel lands, audit every command
