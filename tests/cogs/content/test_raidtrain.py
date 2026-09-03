@@ -936,6 +936,60 @@ async def test_a_train_nobody_could_post_is_refused_before_it_is_written(
     assert await list_trains(bot.db, GUILD, scope="all") == []
 
 
+async def test_every_command_that_touches_discord_defers_before_it_does(
+    bot, cog, organizer, alice, db
+):
+    """Checklist 8 and 24: a lineup edit is a network call, and the 3-second window is not it."""
+    await link(db, ALICE, "alicestreams")
+    await link(db, ORGANIZER, "robinstreams")
+    train_id = await a_train(db)
+    calls = (
+        (cog.claim_command, (str(train_id),)),
+        (cog.assign_command, (str(train_id), 2, alice)),
+        (cog.unassign_command, (str(train_id), 2)),
+        (cog.swap_command, (str(train_id), 1, 2)),
+        (cog.lock_command, (str(train_id),)),
+        (cog.unlock_command, (str(train_id),)),
+        (cog.cancel_command, (str(train_id), "never mind")),
+    )
+    for command, args in calls:
+        interaction = FakeInteraction(bot, organizer)
+        await command.callback(cog, interaction, *args)
+        assert interaction.response.deferred is True, command.name
+        assert interaction.sent
+
+
+async def test_the_create_form_answers_after_the_lineup_has_been_posted(
+    bot, cog, organizer, db
+):
+    interaction = FakeInteraction(bot, organizer)
+    await cog.submit_train(
+        interaction,
+        tz_name="UTC",
+        title="Deferred train",
+        description="",
+        start="2099-09-14 19:30",
+        slot_minutes="60",
+        slot_count="2",
+    )
+    assert interaction.response.deferred is True
+    assert "is up with 2 slot(s)" in interaction.sent
+
+
+async def test_a_form_that_is_refused_never_defers(bot, cog, organizer):
+    interaction = FakeInteraction(bot, organizer)
+    await cog.submit_train(
+        interaction,
+        tz_name="UTC",
+        title="Refused train",
+        description="",
+        start="saturday-ish",
+        slot_minutes="60",
+        slot_count="2",
+    )
+    assert interaction.response.deferred is False
+
+
 async def test_a_good_form_writes_the_train_and_posts_its_lineup(bot, cog, organizer, db):
     bot.guard = FakeGuard([TEST_CHANNEL])
     interaction = FakeInteraction(bot, organizer)

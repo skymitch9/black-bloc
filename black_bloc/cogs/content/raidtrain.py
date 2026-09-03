@@ -992,9 +992,10 @@ class RaidTrains(commands.Cog):
         if not login and self.bot.store.get(interaction.guild.id, "raidtrain_require_link"):
             await interaction.response.send_message(NEEDS_LINK, ephemeral=True)
             return
+        await interaction.response.defer(ephemeral=True)
         async with self._lock(int(row["id"])):
             said = await self._claim(interaction, row, slot, login)
-        await interaction.response.send_message(
+        await interaction.followup.send(
             said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
         )
 
@@ -1056,9 +1057,10 @@ class RaidTrains(commands.Cog):
         row = await self._train_or_refusal(interaction, train)
         if row is None:
             return
+        await interaction.response.defer(ephemeral=True)
         async with self._lock(int(row["id"])):
             said = await self._release(interaction, row, slot)
-        await interaction.response.send_message(
+        await interaction.followup.send(
             said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
         )
 
@@ -1145,6 +1147,7 @@ class RaidTrains(commands.Cog):
             await interaction.response.send_message(numbers, ephemeral=True)
             return
         minutes, count = numbers
+        await interaction.response.defer(ephemeral=True)
         train_id = await create_train(
             self.bot.db,
             interaction.guild.id,
@@ -1171,7 +1174,7 @@ class RaidTrains(commands.Cog):
         await self.publish_lineup(interaction.guild, train_id)
         channel_id = self._channel_id(interaction.guild.id)
         where = LINEUP_HERE.format(channel_id=channel_id) if channel_id else LINEUP_NOWHERE
-        await interaction.response.send_message(
+        await interaction.followup.send(
             CREATED.format(
                 title=title, count=count, minutes=minutes, when=unix(starts), where=where
             ),
@@ -1232,9 +1235,10 @@ class RaidTrains(commands.Cog):
                 allowed_mentions=discord.AllowedMentions.none(),
             )
             return
+        await interaction.response.defer(ephemeral=True)
         async with self._lock(int(row["id"])):
             said = await self._assign(interaction, row, slot, member, login)
-        await interaction.response.send_message(
+        await interaction.followup.send(
             said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
         )
 
@@ -1272,6 +1276,7 @@ class RaidTrains(commands.Cog):
         row = await self._train_or_refusal(interaction, train)
         if row is None:
             return
+        await interaction.response.defer(ephemeral=True)
         async with self._lock(int(row["id"])):
             slots = await slots_for(self.bot.db, row["id"])
             wanted = slot_at(slots, slot)
@@ -1290,7 +1295,7 @@ class RaidTrains(commands.Cog):
                 )
                 await self._refresh_lineup(interaction.guild, row["id"])
                 said = UNASSIGNED.format(position=slot, title=row["title"])
-        await interaction.response.send_message(
+        await interaction.followup.send(
             said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
         )
 
@@ -1310,6 +1315,7 @@ class RaidTrains(commands.Cog):
         if int(first) == int(second):
             await interaction.response.send_message(SAME_SLOT, ephemeral=True)
             return
+        await interaction.response.defer(ephemeral=True)
         async with self._lock(int(row["id"])):
             slots = await slots_for(self.bot.db, row["id"])
             one, other = slot_at(slots, first), slot_at(slots, second)
@@ -1328,7 +1334,7 @@ class RaidTrains(commands.Cog):
                 )
                 await self._refresh_lineup(interaction.guild, row["id"])
                 said = SWAPPED.format(a=first, b=second, title=row["title"])
-        await interaction.response.send_message(
+        await interaction.followup.send(
             said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
         )
 
@@ -1357,6 +1363,7 @@ class RaidTrains(commands.Cog):
                 move_refusal(row["status"], to), ephemeral=True
             )
             return
+        await interaction.response.defer(ephemeral=True)
         await set_status(self.bot.db, row["id"], to)
         await log_action(
             self.bot,
@@ -1367,7 +1374,7 @@ class RaidTrains(commands.Cog):
         )
         await self._refresh_lineup(interaction.guild, row["id"])
         said = LOCKED_NOW if to == LOCKED else UNLOCKED_NOW
-        await interaction.response.send_message(
+        await interaction.followup.send(
             said.format(title=row["title"]),
             ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
