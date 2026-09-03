@@ -459,6 +459,26 @@ async def seeded(client, sign_in, web, guild, wf):
         MEMBER_ID,
         applications.answers_json([("Twitch handle", "ada"), ("Why the Team", "the vibes")]),
     )
+    # The no-role pass: a form that keeps a LIST, with one member approved onto it, so the
+    # roster entry has a row and the remove entry has somebody to take off.
+    listed_form_id = client.post(
+        "/api/applications/forms",
+        json={"name": "stream-team", "title": "Stream Team"},
+    ).json()["id"]
+    client.put(
+        f"/api/applications/forms/{listed_form_id}/questions",
+        json={"questions": [{"label": "Twitch handle"}]},
+    )
+    listed_application_id = await applications.create_application(
+        db,
+        guild_id,
+        listed_form_id,
+        MEMBER_ID,
+        applications.answers_json([("Twitch handle", "ada")]),
+    )
+    await applications.decide_application(
+        db, listed_application_id, grants.APPROVED, decided_by=7
+    )
     grant_id = await grants.add_grant(
         db,
         guild_id,
@@ -496,6 +516,8 @@ async def seeded(client, sign_in, web, guild, wf):
         "application_form_id": str(application_form_id),
         "empty_form_id": str(empty_form_id),
         "application_id": str(application_id),
+        "listed_form_id": str(listed_form_id),
+        "listed_application_id": str(listed_application_id),
     }
 
 

@@ -162,6 +162,8 @@ export const LABELS = {
   applications_ping_role_id: 'Who is pinged when an application arrives',
   applications_retry_days: 'How long after a no before they may apply again',
   applications_dm_on_decision: 'Whether the applicant is DMed the decision',
+  applications_roster_shows_left: 'Whether the approved list still shows people who left',
+  applications_panel_minutes: 'How long the /applications show panel stays live',
   applications_log_level: 'How much of applications is repeated into Discord',
 };
 

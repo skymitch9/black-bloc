@@ -205,7 +205,7 @@ const ROUTINE_KINDS = [
   'chat.memory_distilled', 'chat.memory_expired', 'chat.memory_optin',
   'application.submitted', 'application.withdrawn', 'application.panel_posted',
   'application.form_created', 'application.form_updated', 'application.form_deleted',
-  'application.question_changed', 'application.mode',
+  'application.question_changed', 'application.mode', 'application.removed',
 ];
 
 function bareKind(kind) {
@@ -409,6 +409,8 @@ const SETTING_SPECS = [
   ['applications_ping_role_id', 'role', null, null, 'role mentioned when a new application arrives; blank pings nobody'],
   ['applications_retry_days', 'int', 30, 30, 'days somebody waits after a decision before they may apply for the same form again; a form can set its own, and 0 lets them apply again straight away', null, 3650],
   ['applications_dm_on_decision', 'bool', true, true, 'true to DM the applicant when their application is approved or denied'],
+  ['applications_roster_shows_left', 'bool', true, true, 'whether the approved list still shows people who have left the server, marked as gone; false hides them'],
+  ['applications_panel_minutes', 'int', 10, 10, "minutes the /applications show panel stays live before its buttons disable themselves; 10 by default. The 'this panel went quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
 ];
 
 const RULES = {
@@ -663,7 +665,7 @@ function seedState() {
       name: 'twitch-team',
       title: 'Twitch Team',
       description: 'Join the Black in a Flash! Twitch Team.',
-      role_id: '900000000000000005',
+      role_id: null,
       review_channel_id: '800000000000000005',
       approver_role_id: null,
       owner_user_id: STAFF.id,
@@ -706,9 +708,11 @@ function seedState() {
     { id: 2, form_id: 1, user_id: MEMBERS[1].id, answers: [{ label: 'Twitch handle', answer: 'twitch.tv/caseyfast' }, { label: 'How long have you been streaming', answer: 'four years' }, { label: 'Why the Team', answer: '' }], status: 'approved', submitted_at: minutesAgo(6000), decided_by: STAFF.id, decided_at: minutesAgo(5900), deny_reason: null, grant_id: '5' },
     { id: 3, form_id: 1, user_id: MEMBERS[4].id, answers: [{ label: 'Twitch handle', answer: 'twitch.tv/nobody' }, { label: 'How long have you been streaming', answer: 'today' }, { label: 'Why the Team', answer: 'free raids' }], status: 'denied', submitted_at: minutesAgo(9000), decided_by: MEMBERS[1].id, decided_at: minutesAgo(8900), deny_reason: 'Come back once you have streamed here for a month.', grant_id: null },
     { id: 4, form_id: 1, user_id: MEMBERS[6].id, answers: [{ label: 'Twitch handle', answer: 'twitch.tv/namu' }, { label: 'How long have you been streaming', answer: 'six months' }, { label: 'Why the Team', answer: 'I want the raid train.' }], status: 'pending', submitted_at: minutesAgo(90), decided_by: null, decided_at: null, deny_reason: null, grant_id: null },
+    { id: 5, form_id: 1, user_id: MEMBERS[2].id, answers: [{ label: 'Twitch handle', answer: 'twitch.tv/rivetplays' }], status: 'approved', submitted_at: minutesAgo(12000), decided_by: STAFF.id, decided_at: minutesAgo(11900), deny_reason: null, grant_id: null },
+    { id: 6, form_id: 1, user_id: MEMBERS[7].id, answers: [{ label: 'Twitch handle', answer: 'twitch.tv/gone' }], status: 'approved', submitted_at: minutesAgo(20000), decided_by: STAFF.id, decided_at: minutesAgo(19900), deny_reason: null, grant_id: null },
   ],
   nextApplicationForm: 3,
-  nextApplication: 5,
+  nextApplication: 7,
   golive: {
     links: [
       { user_id: MEMBERS[1].id, twitch_login: 'caseyfast', twitch_user_id: '112233', linked_at: minutesAgo(4000) },
@@ -4888,8 +4892,16 @@ async function serveStatic(request, response, path, asked) {
 // The Role menus page owns "how members get roles", so the Applications section lives
 // there rather than on a page of its own.
 
-const APPLICATION_STATUSES = ['pending', 'approved', 'denied', 'withdrawn'];
+const APPLICATION_STATUSES = ['pending', 'approved', 'denied', 'withdrawn', 'removed'];
 const QUESTIONS_MAX = 5;
+// The one seeded member who is on a list but is no longer in the server. The record outlives
+// the membership, so `nameFor` still knows them and the roster flags them rather than hiding
+// them — which is what applications_roster_shows_left decides.
+const GONE_FROM_GUILD = new Set([MEMBERS[7].id]);
+const NO_ROSTER_FORM = 'Black Bloc has no application form with that number, so there is no list to show. Reload the Role menus page — somebody may have deleted it.';
+const REMOVE_NEEDS_A_REASON = 'Taking somebody off the list needs one line they are sent, so nothing was done. Say why and send it again.';
+const REMOVE_IS_FOR_LISTS = (name, role) => `**${name}** hands over <@&${role}>; take the role off them with \`/role revoke\` and the record follows.`;
+const REMOVE_NOT_APPROVED = (status) => `That application is **${status}**, not approved, so there was nobody to take off the list. \`/applications list status:approved\` says who is on it.`;
 const NO_SUCH_FORM = 'Black Bloc has no application form with that number any more, so nothing was changed. Reload the Role menus page — somebody may have deleted it.';
 const NO_SUCH_APPLICATION = 'Black Bloc has no application with that number any more, so nothing was changed. Reload the Role menus page.';
 
@@ -4910,7 +4922,7 @@ function applicationFormRow(form) {
     title: form.title,
     description: form.description,
     role_id: form.role_id,
-    role_name: memberName(form.role_id),
+    role_name: form.role_id ? memberName(form.role_id) : null,
     review_channel_id: form.review_channel_id,
     approver_role_id: form.approver_role_id,
     owner_user_id: form.owner_user_id,
@@ -4983,8 +4995,8 @@ route('POST', '/api/applications/forms', async (context) => {
   requireStaff(context.session);
   const body = await context.body();
   const name = String(body.name || '').trim().toLowerCase();
-  if (!name || !body.title || !body.role_id) {
-    throw new Refused(400, 'bad_request', 'An application form needs a short name, a heading and the role it hands over, so nothing was created. Fill all three in and try again.');
+  if (!name || !body.title) {
+    throw new Refused(400, 'bad_request', 'An application form needs a short name and a heading, so nothing was created. Fill both in and try again — the role is optional, and a form without one keeps a list instead.');
   }
   if (!/^[a-z0-9][a-z0-9_-]*$/.test(name)) {
     throw new Refused(400, 'bad_request', `**${body.name}** is not a name Black Bloc can use, so nothing was changed. Use lower-case letters, numbers, \`-\` and \`_\`, start with a letter or a number, and keep it under 32 characters — \`twitch-team\` is the shape.`);
@@ -4997,7 +5009,7 @@ route('POST', '/api/applications/forms', async (context) => {
     name,
     title: String(body.title),
     description: body.description || null,
-    role_id: String(body.role_id),
+    role_id: body.role_id ? String(body.role_id) : null,
     review_channel_id: body.review_channel_id ? String(body.review_channel_id) : null,
     approver_role_id: body.approver_role_id ? String(body.approver_role_id) : null,
     owner_user_id: null,
@@ -5072,6 +5084,31 @@ route('POST', '/api/applications/forms/:id/panel', async (context) => {
   return { posted: true, id: form.id, name: form.name, channel_id: channelId, message_id: form.panel_message_id };
 });
 
+route('GET', '/api/applications/roster', (context) => {
+  requireStaff(context.session);
+  const wanted = context.url.searchParams.get('form');
+  const form = state.applicationForms.find((one) => String(one.id) === String(wanted));
+  if (!form) throw new Refused(404, 'no_such_form', NO_ROSTER_FORM);
+  const showsLeft = state.settings.get('applications_roster_shows_left') !== false;
+  return state.applications
+    .filter((one) => one.form_id === form.id && one.status === 'approved')
+    .filter((one) => showsLeft || !GONE_FROM_GUILD.has(one.user_id))
+    .sort((a, b) => b.id - a.id)
+    .map((one) => {
+      const link = state.golive.links.find((two) => two.user_id === one.user_id);
+      return {
+        application_id: one.id,
+        user_id: one.user_id,
+        user_name: memberName(one.user_id),
+        user_avatar: null,
+        in_server: !GONE_FROM_GUILD.has(one.user_id),
+        twitch_login: link ? link.twitch_login : null,
+        decided_at: one.decided_at,
+        decided_by_name: one.decided_by ? memberName(one.decided_by) : null,
+      };
+    });
+});
+
 route('GET', '/api/applications', (context) => {
   requireStaff(context.session);
   const wantedForm = context.url.searchParams.get('form');
@@ -5124,6 +5161,31 @@ route('POST', '/api/applications/:id/decide', async (context) => {
     message: status === 'approved'
       ? `Approved — **${memberName(row.user_id)}** has that role now.`
       : 'Denied, and they have been told why.',
+  };
+});
+
+route('POST', '/api/applications/:id/remove', async (context) => {
+  requireStaff(context.session);
+  const row = state.applications.find((one) => String(one.id) === String(context.params.id));
+  if (!row) throw new Refused(404, 'no_such_application', NO_SUCH_APPLICATION);
+  const body = await context.body();
+  const reason = String(body.reason || '').trim();
+  if (!reason) throw new Refused(400, 'no_reason', REMOVE_NEEDS_A_REASON);
+  const form = state.applicationForms.find((one) => one.id === row.form_id);
+  if (form && form.role_id) {
+    throw new Refused(400, 'not_removed', REMOVE_IS_FOR_LISTS(form.name, form.role_id));
+  }
+  if (row.status !== 'approved') {
+    throw new Refused(400, 'not_removed', REMOVE_NOT_APPROVED(row.status));
+  }
+  row.status = 'removed';
+  row.decided_by = STAFF.id;
+  row.decided_at = now();
+  row.deny_reason = reason;
+  logAction('web.application.removed', { target_id: row.user_id, reason, details: { application_id: row.id, form: form ? form.name : null, reason } });
+  return {
+    application: applicationRow(row),
+    message: 'Taken off the list, and they have been told why.',
   };
 });
 

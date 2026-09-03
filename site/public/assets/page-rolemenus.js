@@ -89,12 +89,29 @@ const APPROVED_TEXT_HELP = 'What an approved applicant is DMed.';
 const APPLICATION_EXPIRES_HELP = 'Blank or 0 means the role never runs out.';
 const APPLICATION_RETRY_HELP = 'Blank uses applications_retry_days.';
 const A_DENY_REASON = 'Say why \u2014 they are sent exactly this.';
+const NO_ROLE_OPTION = 'No role \u2014 keep a list';
+const ROLE_FIELD_HELP = 'Leave blank to keep a list instead of handing over a role.';
+const NO_ROSTER_YET = 'Nobody is on this list yet.';
+const NOT_LINKED = 'not linked';
+const LEFT_THE_SERVER = 'left the server';
+const A_REMOVE_REASON = 'Say why \u2014 they are sent exactly this.';
+const COPIED = 'Copied. Paste it into the team page.';
+const COULD_NOT_COPY = 'This browser would not let the page reach the clipboard, so nothing '
+  + 'was copied. Select the lines in the table and copy them by hand.';
+
+/** D4: the shape of one copied line. */
+const ROSTER_LINE = (row) => {
+  const login = row.twitch_login ? `twitch.tv/${row.twitch_login}` : 'no Twitch linked';
+  const gone = row.in_server ? '' : ` (${LEFT_THE_SERVER})`;
+  return `${row.user_name || row.user_id} \u2014 ${login}${gone}`;
+};
 
 const APPLICATION_TONE = {
   pending: 'warn',
   approved: 'ok',
   denied: null,
   withdrawn: null,
+  removed: 'warn',
 };
 
 const STATUS_TONE = {
@@ -674,6 +691,8 @@ async function formEditor(form, questionsMax) {
   const title = el('input', { class: 'input', type: 'text', value: form ? form.title || '' : '' });
   const description = el('input', { class: 'input', type: 'text', value: form ? form.description || '' : '' });
   const role = await roleSelect(form ? form.role_id : null);
+  const blankRole = role.querySelector('option[value=""]');
+  if (blankRole) blankRole.textContent = NO_ROLE_OPTION;
   const channel = await channelSelect(form ? form.review_channel_id : null);
   const approver = await roleSelect(form ? form.approver_role_id : null);
   const owner = memberPicker({ label: 'Who does the next step' });
@@ -717,7 +736,7 @@ async function formEditor(form, questionsMax) {
     const body = {
       title: title.value.trim(),
       description: description.value.trim() || null,
-      role_id: readSelect(role, false),
+      role_id: readSelect(role, false) || (form ? '' : null),
       review_channel_id: readSelect(channel, false) || null,
       approver_role_id: readSelect(approver, false) || null,
       owner_user_id: owner.id || (form ? form.owner_user_id : null),
@@ -757,6 +776,11 @@ async function formEditor(form, questionsMax) {
     refresh();
   }, { tone: 'quiet' });
 
+  const expiresField = field('Role lasts, days', expires, APPLICATION_EXPIRES_HELP);
+  const syncRole = () => { expiresField.hidden = !readSelect(role, false); };
+  role.addEventListener('change', syncRole);
+  syncRole();
+
   return card(form ? `Editing ${form.name}` : 'New application form', [
     el('div', { class: 'formrow' }, [
       field('Name', name, form ? 'A form keeps its name for life; make a new one to rename it.' : FORM_NAME_HELP),
@@ -765,7 +789,7 @@ async function formEditor(form, questionsMax) {
       field('Taking applications', open),
     ]),
     el('div', { class: 'formrow' }, [
-      field('Role it hands over', role),
+      field('Role it hands over', role, ROLE_FIELD_HELP),
       field('Cards go to', channel, 'Blank uses applications_channel_id.'),
       field('Who may decide', approver, 'Blank uses applications_approver_role_id, then staff.'),
     ]),
@@ -773,7 +797,7 @@ async function formEditor(form, questionsMax) {
     el('div', { class: 'formrow' }, [
       field('Next step', nextStep, NEXT_STEP_HELP),
       field('Approved message', approvedText, APPROVED_TEXT_HELP),
-      field('Role lasts, days', expires, APPLICATION_EXPIRES_HELP),
+      expiresField,
       field('Apply again after, days', retry, APPLICATION_RETRY_HELP),
     ]),
     el('h3', { text: 'Questions' }),
@@ -869,7 +893,7 @@ function formsTable(forms, say) {
   return table([
     { label: 'Name', cell: (row) => el('span', { class: 'mono', text: row.name }) },
     { label: 'Heading', cell: (row) => row.title, className: 'wrap' },
-    { label: 'Role', cell: (row) => chipFor(row.role_id, row.role_name) },
+    { label: 'Role', cell: (row) => (row.role_id ? chipFor(row.role_id, row.role_name) : badge('list', null)) },
     { label: 'Questions', cell: (row) => (row.questions || []).length },
     { label: 'Waiting', cell: (row) => (row.pending ? badge(String(row.pending), 'warn') : el('span', { class: 'cell-quiet', text: '0' })) },
     { label: 'Taking', cell: (row) => (row.open ? badge('open', 'ok') : badge('closed', 'warn')) },
@@ -907,6 +931,97 @@ function formsTable(forms, say) {
       ]),
     },
   ], forms, { empty: NO_APPLICATION_FORMS });
+}
+
+async function copyLines(lines, say) {
+  const text = lines.join('\n');
+  try {
+    await navigator.clipboard.writeText(text);
+    say.say(COPIED, 'ok');
+  } catch (e) {
+    say.say(COULD_NOT_COPY, 'warn');
+  }
+}
+
+function rosterTable(rows, form, say) {
+  return table([
+    {
+      label: 'Member',
+      cell: (row) => el('div', { class: 'rowlist-main' }, [
+        nameNode(row.user_id, row.user_name),
+        row.in_server ? null : el('span', { class: 'rowlist-note', text: LEFT_THE_SERVER }),
+      ]),
+    },
+    {
+      label: 'Twitch',
+      cell: (row) => (row.twitch_login
+        ? el('a', {
+          href: `https://twitch.tv/${row.twitch_login}`,
+          target: '_blank',
+          rel: 'noreferrer',
+          text: `twitch.tv/${row.twitch_login}`,
+        })
+        : el('span', { class: 'cell-quiet', text: NOT_LINKED })),
+    },
+    {
+      label: 'Since',
+      cell: (row) => {
+        const said = ago(row.decided_at);
+        return el('span', { class: 'cell-quiet', title: said.title, text: said.text });
+      },
+    },
+    { label: 'By', cell: (row) => row.decided_by_name },
+    {
+      label: '',
+      cell: (row) => button('Take off the list', async () => {
+        const reason = el('input', { class: 'input', type: 'text', placeholder: 'why — they are sent this' });
+        const sure = await ask({
+          title: `Take ${row.user_name || row.user_id} off ${form.name}?`,
+          body: [
+            'They are DM’d the reason you type here, and told when they may apply again.',
+            field('Reason', reason, A_REMOVE_REASON),
+          ],
+          confirmLabel: 'Take them off',
+          tone: 'warn',
+        });
+        if (!sure) return;
+        const done = await run(
+          say,
+          () => send(`/api/applications/${encodeURIComponent(row.application_id)}/remove`, 'POST', {
+            reason: reason.value.trim(),
+          }),
+          (found) => found?.message || `${row.user_name || row.user_id} is off the list.`,
+        );
+        if (done.ok) {
+          keepSaying('applications', say);
+          refresh();
+        }
+      }, { tone: 'danger' }),
+    },
+  ], rows, {
+    empty: NO_ROSTER_YET,
+    tools: [textAction('Copy as text', () => copyLines(rows.map(ROSTER_LINE), say))],
+  });
+}
+
+/** The list a no-role form keeps, fetched only when somebody opens the fold. */
+function rosterFoldout(form, approved) {
+  const say = notice();
+  const body = el('div', { class: 'section-body' });
+  const fold = foldout(`Approved for ${form.name}`, [body, say], { count: approved });
+  let asked = false;
+  fold.addEventListener('toggle', async () => {
+    if (!fold.open || asked) return;
+    asked = true;
+    const rows = listOf(
+      await api(`/api/applications/roster?form=${encodeURIComponent(form.id)}`),
+      'roster',
+    );
+    const count = fold.querySelector('.sect-count');
+    if (count) count.textContent = String(rows.length);
+    body.replaceChildren(rosterTable(rows, form, say));
+  });
+  return fold;
 }
 
 async function panelCard(form, say) {
@@ -998,6 +1113,12 @@ async function applicationsSection(allSettings, say) {
 
   for (const form of formRows) {
     one.body.append(card(`Apply button for ${form.name}`, [await panelCard(form, say)]));
+    one.body.append(rosterFoldout(
+      form,
+      applications.filter(
+        (row) => row.status === 'approved' && String(row.form_id) === String(form.id),
+      ).length,
+    ));
   }
 
   one.body.append(await settingsPanel(namespace.filter((spec) => spec.key !== APPLICATIONS_MODE_KEY), {

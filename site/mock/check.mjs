@@ -59,6 +59,10 @@ const IDS = {
   application_form_id: '1',
   empty_form_id: '2',
   application_id: '1',
+  // The no-role pass: form 1 keeps a LIST rather than handing a role over, so its approved
+  // rows are the roster and row 2 is the one the remove entry takes off it.
+  listed_form_id: '1',
+  listed_application_id: '2',
 };
 
 const failures = [];
@@ -364,6 +368,7 @@ async function checkActionKinds() {
   await send('DELETE', `/api/applications/forms/${IDS.empty_form_id}`, undefined);
   await post(`/api/applications/${IDS.application_id}/decide`, { status: 'denied', reason: 'contract check' });
   await post('/api/applications/4/decide', { status: 'approved' });
+  await post(`/api/applications/${IDS.listed_application_id}/remove`, { reason: 'contract check' });
   const response = await fetch(`${BASE}/api/actions?limit=200`, { headers: { cookie: 'mock_as=staff' } });
   const payload = await response.json();
   const known = new Set(contract.action_kinds);
@@ -374,10 +379,35 @@ async function checkActionKinds() {
   }
 }
 
+// The roster foldout's walk, without a DOM: the list a no-role form keeps, one member taken
+// off it with a reason, and the row that leaves showing as `removed` in the Decided table.
+async function checkRoster() {
+  await setGuard(false);
+  await seed();
+  const roster = async () => (await (await send('GET', `/api/applications/roster?form=${IDS.listed_form_id}`, undefined)).json());
+  const before = await roster();
+  if (before.length !== 3) fail('GET /api/applications/roster', `listed ${before.length} row(s), not 3`);
+  if (!before.some((row) => row.twitch_login)) fail('GET /api/applications/roster', 'no row carries a twitch_login');
+  if (!before.some((row) => row.in_server === false)) fail('GET /api/applications/roster', 'no row is flagged as having left');
+
+  const off = await post(`/api/applications/${IDS.listed_application_id}/remove`, { reason: 'stopped streaming' });
+  if (off.status !== 200) fail('POST remove', `answered ${off.status}`);
+  const blank = await post(`/api/applications/${IDS.listed_application_id}/remove`, { reason: '  ' });
+  if (blank.status !== 400) fail('POST remove (no reason)', `answered ${blank.status}, not 400`);
+
+  const after = await roster();
+  if (after.length !== 2) fail('GET /api/applications/roster', `listed ${after.length} row(s) after a removal, not 2`);
+  const decided = await (await send('GET', '/api/applications?status=removed', undefined)).json();
+  if (!decided.some((row) => String(row.id) === IDS.listed_application_id)) {
+    fail('GET /api/applications?status=removed', 'the removed row is not in the Decided list');
+  }
+}
+
 process.stdout.write(`check: ${BASE} against ${HERE}contract.json\n`);
 await checkPages();
 await checkGuard();
 await checkRoutes();
+await checkRoster();
 await checkActionKinds();
 await setGuard(true);
 
