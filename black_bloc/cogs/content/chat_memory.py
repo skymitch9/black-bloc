@@ -387,7 +387,9 @@ async def render_panel(interaction: discord.Interaction, previous: Any = None) -
         return
     embed, view = await build_panel(bot, home, interaction.user)
     retire(previous)
-    view.message = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    )
 
 
 async def back_to_panel(interaction: discord.Interaction, previous: Any = None) -> None:
@@ -415,7 +417,9 @@ async def open_confirm(
     view.add_item(ConfirmYesButton(move))
     view.add_item(KeepItButton())
     retire(previous)
-    view.message = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    )
 
 
 async def run_move(

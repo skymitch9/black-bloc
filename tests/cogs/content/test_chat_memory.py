@@ -393,6 +393,21 @@ async def test_memory_opens_one_ephemeral_panel_with_the_lines_and_the_controls(
     assert interaction.rendered["allowed_mentions"].everyone is False
 
 
+async def test_every_send_and_every_edit_carries_allowed_mentions(bot, member, db):
+    """A `call_me` is attacker-supplied text, so no render of it may ever ping (checklist 11)."""
+    await a_profile(db, call_me="@everyone")
+    opening = await open_panel(bot, member)
+    clicking = FakeInteraction(bot, member)
+    await button(opening.view, "Refresh").callback(clicking)
+    asking = FakeInteraction(bot, member)
+    await button(clicking.view, "Forget everything").callback(asking)
+
+    for rendered in (opening.rendered, clicking.edits[-1], asking.edits[-1]):
+        mentions = rendered["allowed_mentions"]
+        assert mentions.everyone is False and mentions.roles is False
+        assert mentions.users is False
+
+
 async def test_nothing_stored_renders_no_picker_and_no_forget_everything(bot, member):
     interaction = await open_panel(bot, member)
 
