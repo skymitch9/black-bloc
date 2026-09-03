@@ -2,8 +2,8 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then; secret NAMES only).
-> Last verified: **2026-09-03** (after the panel landed, merge `ba5cb99`) — the 🔁 resume
-> block below says nothing is in flight; first written 07:50 at the owner's order during API outages ("make sure if we lose progress and memory our docs survive");
+> Last verified: **2026-09-03 10:15** (own-list build dispatched) — the 🔁 resume
+> block below names the agent in flight; first written 07:50 at the owner's order during API outages ("make sure if we lose progress and memory our docs survive");
 > everything in it was measured at that time (`git log`, `git worktree list`, the live
 > page, the deploys log). Earlier: 2026-09-02 handoff pass before the switch to Fable 5.1
 > (schema **20**, **2610** tests, 17 pages / **107** routes, 37 sweep rows — those counts
@@ -12,9 +12,25 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 after the panel landed)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 10:15, own-list build in flight)
 
-**Nothing is in flight.** `main` is clean and pushed; the LIVE deploy is the requests fourth
+**In flight (dispatched 10:15, Opus):** the "view request thing staff only" item under 🔧 —
+branch `feat/requests-panel-own-list`, worktree `.claude/worktrees/agent-own-list`, cut from
+`383eb44`. Expected: the `request_panel_own_list` setting (bool, default off) + the
+`build_panel` gate + tests + docs, no TODO.md edit (the conductor owns it), no merge/deploy/push.
+**A dead agent is invisible to the next session — check what it left:**
+
+```
+git -C .claude/worktrees/agent-own-list log --oneline main..HEAD
+git -C .claude/worktrees/agent-own-list status --short     # NEVER stash, never revert; read it
+```
+
+Commits there → review (gate is `staff or request_panel_own_list`; withdraw select still
+built from `own_rows`; key registered in all three `settings_store.py` places), `ruff` +
+full `pytest` in the worktree, then the landing ritual below and move the item to `DONE.md`.
+Nothing there → re-dispatch from the item's text.
+
+Otherwise `main` is clean and pushed; the LIVE deploy is the requests fourth
 pass — merge `ba5cb99`, the `/request` panel (`deploys.log` last line; the `DONE.md` entry
 dated 2026-09-03 "Requests, fourth pass" has the whole story). The worktree
 `.claude/worktrees/agent-requests-panel` and branch `feat/requests-panel` are merged and
@@ -182,6 +198,24 @@ docs bookkeeping lands with the work, not after.
   `Black Block` once Black Bloc is stable.
 
 ## 🔧 Open engineering items
+
+- 🆕 **"We need to make the view request thing staff only" (owner, 2026-09-03 ~10:10, minutes
+  after the panel deploy `ba5cb99`).** Clarified ~10:12 — the owner picked "Viewing requests
+  on the panel": members keep `File a request` and `Take one back…`, but the list of their
+  own requests in the panel embed becomes staff-only (staff see everything as now). The
+  site's request reads were already staff-only (`api/writes.py:126` `reader_dependency`
+  wraps `staff_dependency`; only `/mine` is a member route). Per checklist 33 the gate is a
+  setting, **`request_panel_own_list`** (bool, default **off**), so the Settings page and
+  `/settings set-value` can put the list back. Build: Opus, branch
+  `feat/requests-panel-own-list`, worktree `.claude/worktrees/agent-own-list`; the brief
+  also asks for design-doc deviation 12, code-notes rows, OWNER_GUIDE / feature-list /
+  sweeps corrections. Status: **BUILDING** (dispatched 10:15).
+
+- 🆕 **"Let's suppress the request.done box in discord, it's redundant information. This
+  should be in website logs only" (owner, 2026-09-03 ~10:17).** The done card the bot posts
+  to Discord when a request is accepted duplicates the website log row. Locating the poster
+  and confirming which message is meant; configurable both ways (checklist 33) — a setting
+  that defaults to off, so the card can come back. Status: **LOCATING**.
 
 - 🆕 **Panels over slash commands — the rest of the app (owner, 2026-09-03: "then carry it
   through the rest of the app").** After the requests panel lands, audit every command
