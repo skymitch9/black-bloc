@@ -3,7 +3,7 @@
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
 > **2026-09-03** — rows **80–86** added by the POLLS PANEL build (`/poll` becomes ONE command that
 > opens a panel; the eleven subcommands go), and rows **6, 8, 9 and 27** were rewritten in place
-> for it rather than added. Rows 80–86 are **merged, deploying as v65** and were not run against
+> for it rather than added. Rows 80–86 are **live in v65** (`d13e1a4`, 14:14) and were not run against
 > Discord by eye. Same day, before that — rows **73–79** added by the EVENTS PANEL build (`/event`
 > becomes one command that opens a panel and the whole `/timezone` group is retired — the
 > program's first real `commands synced` drop, 44 → 43); **live in v64** (`e670542`, 14:05),

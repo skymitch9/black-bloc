@@ -1,10 +1,11 @@
 # Polls — `/poll` is ONE command that opens a panel
 
-> **Audience:** the builder and the reviewer. **Status:** TRACKED · ✅ **BUILT on
-> `worktree-agent-aa735ab092d13477d`** (wave 1 of [`panels-program.md`](panels-program.md)) —
+> **Audience:** the builder and the reviewer. **Status:** TRACKED · ✅ **SHIPPED — live in v65** (`d13e1a4`, merged `--no-ff` `27452ac` 2026-09-03 after Fable review, 3644
+> tests; deployed 14:14, `deploys.log` line 64; synced 43 app commands; not run against Discord by eye). Built on
+> `worktree-agent-aa735ab092d13477d` (wave 1 of [`panels-program.md`](panels-program.md)) —
 > commits `83640cf` (the panel + the extractions + the routes), `fd73cfa` (the cog tests moved
 > onto the panel), `7826e94` (the panel's own tests) and the docs commit that follows them.
-> **Not merged, not deployed.** This doc adds only what is specific to polls; the seventeen
+> This doc adds only what is specific to polls; the seventeen
 > invariants **P1–P17** live in that file's §2 and are **not restated here** — a reviewer checks
 > the build against §2 first, then this, then the `## Deviations` foot.
 > **Last verified: 2026-09-03 (build)** — MEASURED on the branch: `ruff check .` clean;

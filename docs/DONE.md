@@ -9,6 +9,26 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-03 — Panels wave 1, third landing: `/poll` is one command (v65, `d13e1a4`)
+
+Release **v65** (`d13e1a4`, 14:14; `deploys.log` line 64). LANDING entry — the panels item stays
+on `TODO.md` until applications lands. Merge `--no-ff` `27452ac` of `worktree-agent-aa735ab092d13477d`
+(Opus build, 458k). Four conflicts against the events landing (`settings_store.py`, `sweeps.md`,
+`info/README.md`, `code-notes.md`), every one resolved by keeping both sides; 3644 tests green
+under `-n auto`. Fable review at pattern level found no blocking defect (`still_staff` 9 sites,
+defer 15, `db_ready` 10, `retire` 5, `allowed_mentions` 11, `log_action` 30; the `LATER_KINDS`
+deviation is not a regression). Notes on `TODO.md`: `draft` status is never written, no
+create-recurrence web route. What shipped: `/poll` opens one panel (Create · Find # · Refresh, plus
+Settings · Logs for staff); create is a two-step modal → preview, nothing written until **Post it**;
+picking a poll IS the results card with End / Cancel / Approve / Deny rendered only when valid;
+a denied poll keeps **Post it anyway** (staff final say); recurrence cards run the same code as the
+dashboard. `commands synced` **43 unchanged** (`/poll` was already one slot). Design:
+[`info/polls-panel-design.md`](info/polls-panel-design.md) (9 deviations at its foot). Sweep rows
+80–86 (rows 6, 8, 9, 27 rewritten). Keys `poll_panel_minutes` / `poll_creator_may_end` on
+https://blackbloc.heygabi.ai/settings.html. Verified: boot log 21:14:17Z database ready, 21:14:18Z
+synced 43 app commands, 21:14:23Z logged in, no Traceback/Error. NOT verified: nothing by eye in
+Discord or on polls.html.
+
 ## 2026-09-03 — Panels wave 1, second landing: `/event` is one command, `/timezone` retired (v64, `e670542`)
 
 Release **v64** (`e670542`, 14:05; `deploys.log` line 63). LANDING entry — the panels item stays

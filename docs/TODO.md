@@ -247,7 +247,7 @@ docs bookkeeping lands with the work, not after.
   rate-limit flake — fixed by freezing the clock in the test (`code-notes.md` →
   `tests/api/test_settings_api.py:221`), three `-n auto` runs green; **v63 live 13:58, v64
   (events, `e670542`) live 14:05** — both landings recorded in `DONE.md` 2026-09-03. Polls merged
-  `27452ac` (3644 tests), deploying as v65.
+  `27452ac` (3644 tests), **live in v65** (`d13e1a4`, 14:14) — landing entry in `DONE.md`.
 
 - **Wave-1 review findings, small, fold into the next build that touches each file (Fable
   review 2026-09-03 13:50–14:05):** `requests.py` re-renders lack `allowed_mentions`;
@@ -257,7 +257,7 @@ docs bookkeeping lands with the work, not after.
   (`tests/test_chat.py:158` pins it) and `code-notes.md:3451` has the same stale name;
   `NO_ANNOUNCE_CHANNEL` is dead in `events.py`; events `confirm_cancel` Yes button does not
   re-run `may_cancel` (trusts the panel's opener pin); polls: `draft` status never written, no
-  create-recurrence web route, `OWNER_GUIDE.md` has no polls row.
+  create-recurrence web route, (`OWNER_GUIDE.md` polls row added at the v65 landing).
 
 - **Via-labelling gap: `raidtrain.cancel_train` logs one row but calls a website cancel
   Via = Discord** (found by the double-logging build, 2026-09-03 — see `DONE.md` that
