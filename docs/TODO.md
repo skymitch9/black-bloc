@@ -12,14 +12,17 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 ~12:50, v62 deploying)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 14:10, v64 live)
 
-**`main` = `9891f71`**: the applications-no-role merge (schema 28, 3442 tests). Its deploy
-(v62) was launched DETACHED at 12:45 — if it landed, `deploys.log` line 61 needs its EDIT
-markers filled, the applications item below moves whole to `DONE.md`, and
-`applications-no-role-design.md` + the `info/README.md` row flip to SHIPPED. The
-`# Applications, no-role pass` section of `code-notes.md` is keyed against `df99135` and
-needs re-keying against the merge (a cheap Sonnet sweep, no commit).
+**`main` = `e670542`** (events panel merge; v64 live 14:05, 3560 tests, 43 commands). v62 and v63
+both landed and are recorded in `DONE.md`. **Next: merge polls** — branch
+`worktree-agent-aa735ab092d13477d` (worktree `.claude/worktrees/agent-aa735ab092d13477d`, reviewed,
+no blocking defect) with `git merge --no-ff --no-commit`; expect conflicts in `panels.py`,
+`settings_store.py`, `tests/test_bot.py` (43 stays 43 — `/poll` was already one slot),
+`tests/test_panels.py`, `tests/test_settings_store.py`, `sweeps.md`, `code-notes.md`,
+`feature-list.md`, `info/README.md`, `KNOWN_ISSUES.md` (KI-20) — keep both sides; ruff + pytest
+`-n auto`; commit via `git commit -F <msgfile>`; deploy DETACHED as v65. Then the applications
+panel build waits on fork I-A3 (asked 14:03, unanswered).
 
 **Dispatched 12:50 (owner 2026-09-03: "Good start building") — three Opus builds in their own
 worktrees, one per reviewed wave-1 design:** `feat/events-panel` (`events-panel-design.md`,
@@ -241,7 +244,19 @@ docs bookkeeping lands with the work, not after.
   review); the applications build follows once I-A3 is answered. Merge in wave order, re-key
   `code-notes.md` per merge, deploy per landing. ⚠️ The v63 deploy REFUSED at the gate 13:52 on the
   rate-limit flake — fixed by freezing the clock in the test (`code-notes.md` →
-  `tests/api/test_settings_api.py:221`), three `-n auto` runs green, redeploying.
+  `tests/api/test_settings_api.py:221`), three `-n auto` runs green; **v63 live 13:58, v64
+  (events, `e670542`) live 14:05** — both landings recorded in `DONE.md` 2026-09-03. Polls
+  merges next (v65).
+
+- **Wave-1 review findings, small, fold into the next build that touches each file (Fable
+  review 2026-09-03 13:50–14:05):** `requests.py` re-renders lack `allowed_mentions`;
+  `LOG_LEVEL_COMMANDS` help still says "`/birthday logs`" / "`/request logs`"; five form writes
+  are logged twice (cog and API); `role_menus.py:392` re-implements `panels.answer()`;
+  `chat.py:483–488` and `personas.py:75` still say `/request create` / `/request list`
+  (`tests/test_chat.py:158` pins it) and `code-notes.md:3451` has the same stale name;
+  `NO_ANNOUNCE_CHANNEL` is dead in `events.py`; events `confirm_cancel` Yes button does not
+  re-run `may_cancel` (trusts the panel's opener pin); polls: `draft` status never written, no
+  create-recurrence web route, `OWNER_GUIDE.md` has no polls row.
 
 - **Via-labelling gap: `raidtrain.cancel_train` logs one row but calls a website cancel
   Via = Discord** (found by the double-logging build, 2026-09-03 — see `DONE.md` that

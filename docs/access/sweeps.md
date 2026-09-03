@@ -3,8 +3,8 @@
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
 > **2026-09-03** — rows **73–79** added by the EVENTS PANEL build (`/event` becomes one command
 > that opens a panel and the whole `/timezone` group is retired — the program's first real
-> `commands synced` drop, 44 → 43). ⚠️ Rows 73–79 are **BUILT on `feat/events-panel`, not merged,
-> not deployed**, and not one of them has been run against Discord (this build cannot reach it);
+> `commands synced` drop, 44 → 43). Rows 73–79 are **live in v64** (`e670542`, 14:05), and not one of them has been run against
+> Discord by eye yet;
 > row 79's empty-select half is the one item the build could not check at all. Rows 32 and 48 and
 > the Phase 4 appendix script below were rewritten in place for the same build. The file now holds
 > **79** un-exercised rows. 

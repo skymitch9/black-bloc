@@ -3,7 +3,7 @@
 > **Audience:** you (the owner), on your phone or the laptop. **Status:** TRACKED (owner, 2026-08-31 —
 > permanently, not temporarily; secret NAMES only).
 > Last verified: **2026-09-03** for the EVENTS row (`/event` is one command that opens a panel and
-> `/timezone` is gone — merged after Fable review, deploying as v64; not run against Discord by eye) and
+> `/timezone` is gone — live in v64 since 14:05; not run against Discord by eye) and
 > the birthdays row (`/birthday` is ONE command that opens a panel — live in v63) and the sweeps
 > count (**79** rows, numbered to 93). Before that the same day, for the applications row
 > (a form may keep a LIST instead of handing a

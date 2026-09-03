@@ -1,9 +1,10 @@
 # Events — `/event` is ONE command that opens a panel (wave 1)
 
-> **Audience:** the build agent and the reviewer. **Status:** TRACKED · **BUILT on
-> `feat/events-panel`** (worktree branch `worktree-agent-a448c7ab780ed3c2b`, commits `9a1beb4`
+> **Audience:** the build agent and the reviewer. **Status:** TRACKED · ✅ **SHIPPED — live in v64** (`e670542`, merged `--no-ff` 2026-09-03 after Fable review,
+> deployed 14:05, `deploys.log` line 63; synced 43 app commands, not run against Discord by eye). Built on
+> `feat/events-panel` (worktree branch `worktree-agent-a448c7ab780ed3c2b`, commits `9a1beb4`
 > code, `d85274e` tests, `fbaf046` docs, `e6030c5` a one-constant cleanup; the branch is also
-> tagged `feat/events-panel` at the same commit) — **not merged, not deployed.**
+> tagged `feat/events-panel` at the same commit).
 > **Last verified: 2026-09-03** on that branch: `ruff check .` clean, **3502 tests pass** (3442 at
 > the base `d3da02c`), `commands synced` measured at **43** through
 > `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`, and

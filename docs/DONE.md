@@ -9,6 +9,25 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-03 — Panels wave 1, second landing: `/event` is one command, `/timezone` retired (v64, `e670542`)
+
+Release **v64** (`e670542`, 14:05; `deploys.log` line 63). LANDING entry — the panels item stays
+on `TODO.md` until polls and applications land. Merge `--no-ff` of `worktree-agent-a448c7ab780ed3c2b`
+(= `feat/events-panel`; Opus build, 433k). Six merge conflicts against the birthdays landing
+(`settings_store.py`, `tests/test_bot.py`, `OWNER_GUIDE.md`, `sweeps.md`, `architecture.md`,
+`code-notes.md`), every one resolved by keeping both branches' blocks; 3560 tests green under
+`-n auto` before the commit. Fable review found no blocking defect — the one note: the
+`confirm_cancel` Yes button trusts the panel's opener pin instead of re-running `may_cancel`
+(on `TODO.md`). What shipped: `/event` opens the member panel (Propose, `My time zone` modal,
+`Call one off…`) or the staff panel; the whole `/timezone` group is gone, the program's first
+real `commands synced` drop (44 → 43); the shared layer moved to `black_bloc/events.py`
+(`apply_decision`, `cancel_for` — which now also renames the review channel — `card_buttons`,
+`option_label`, `list_lines`). Design: [`info/events-panel-design.md`](info/events-panel-design.md).
+Sweep rows 73–79. Keys `event_panel_minutes` / `event_panel_own_list` on
+https://blackbloc.heygabi.ai/settings.html. Verified: boot log 21:05:00Z database ready,
+21:05:01Z synced 43 app commands, 21:05:04Z logged in, no Traceback/Error. NOT verified: nothing
+by eye in Discord or on events.html.
+
 ## 2026-09-03 — Panels wave 1, first landing: `/birthday` is one command (v63, `616adb3`)
 
 Release **v63** (`616adb3`, 13:58; `deploys.log` line 62). This is a LANDING entry, not a
