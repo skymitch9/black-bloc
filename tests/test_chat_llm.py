@@ -473,6 +473,60 @@ def test_a_message_that_named_nobody_carries_no_people_block():
     assert user_turn("just chatting", [], []) == "just chatting"
 
 
+def test_what_the_bot_remembers_rides_the_turn_beside_the_people_note():
+    said = user_turn("just chatting", [], [], "(What you remember: likes short answers)")
+
+    assert said.startswith("just chatting")
+    assert "likes short answers" in said
+    assert user_turn("just chatting", [], [], "") == "just chatting"
+
+
+async def test_the_reply_reads_the_profile_only_while_memory_is_on(tmp_path):
+    from black_bloc.chat_llm import memory_for
+    from black_bloc.chat_memory import Note, Profile, save_profile
+
+    db = await with_db(tmp_path, "mem.sqlite3")
+    try:
+        await save_profile(
+            db,
+            900,
+            7,
+            Profile(
+                notes=(
+                    Note("likes short answers", "server", "2026-09-02"),
+                    Note("prefers she/her", "dm", "2026-09-02"),
+                )
+            ),
+        )
+        off = Bot(db, FakeStore({"chat_memory_mode": "off"}), Settings())
+        on = Bot(db, FakeStore({"chat_memory_mode": "on"}), Settings())
+        on.settings.dev_guild_id = 7
+
+        assert await memory_for(off, db, 7, 900, in_dm=False) == ""
+        public = await memory_for(on, db, 7, 900, in_dm=False)
+        private = await memory_for(on, db, None, 900, in_dm=True)
+
+        assert "likes short answers" in public and "she/her" not in public
+        assert "never claim they are online" in public
+        assert "she/her" in private
+        assert await memory_for(on, db, 7, 4242, in_dm=False) == ""
+    finally:
+        await db.close()
+
+
+async def test_a_dm_with_no_server_at_all_reads_nothing_back(tmp_path):
+    from black_bloc.chat_llm import memory_for
+
+    db = await with_db(tmp_path, "nohome.sqlite3")
+    try:
+        bot = Bot(db, FakeStore({"chat_memory_mode": "on"}), Settings())
+        bot.settings.dev_guild_id = None
+
+        assert await memory_for(bot, db, None, 900, in_dm=True) == ""
+    finally:
+        await db.close()
+
+
 EVERYONE = SimpleNamespace(id=7, name="@everyone")
 
 

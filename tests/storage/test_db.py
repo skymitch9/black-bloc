@@ -12,7 +12,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 22
+        assert SCHEMA_VERSION == 23
         cur = await db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = {r["name"] for r in await cur.fetchall()}
         assert {"settings", "action_log", "role_menus", "role_menu_options"} <= tables
@@ -460,7 +460,7 @@ async def test_a_schema_20_file_gains_the_fan_role_table_and_keeps_its_rows(tmp_
         cur = await again.conn.execute(
             "SELECT value FROM schema_meta WHERE key='schema_version'"
         )
-        assert (await cur.fetchone())["value"] == "22"
+        assert (await cur.fetchone())["value"] == "23"
         cur = await again.conn.execute("SELECT user_id FROM golive_sessions")
         assert [row["user_id"] for row in await cur.fetchall()] == [5]
         await again.conn.execute(
@@ -499,7 +499,7 @@ async def test_a_schema_21_file_gains_the_youtube_tables_and_keeps_its_rows(tmp_
         cur = await again.conn.execute(
             "SELECT value FROM schema_meta WHERE key='schema_version'"
         )
-        assert (await cur.fetchone())["value"] == "22"
+        assert (await cur.fetchone())["value"] == "23"
         cur = await again.conn.execute("SELECT user_id FROM golive_sessions")
         assert [row["user_id"] for row in await cur.fetchall()] == [5]
         await again.conn.execute(
@@ -661,3 +661,140 @@ async def test_an_events_row_gains_a_card_channel_column_on_an_older_file(tmp_pa
         assert "card_channel_id" in names
     finally:
         await again.close()
+
+
+async def test_a_profile_and_an_optout_carry_what_the_memory_reads(tmp_path):
+    db = Database(tmp_path / "m.sqlite3")
+    await db.connect()
+    try:
+        cur = await db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        assert {"chat_profiles", "chat_memory_optout"} <= {
+            row["name"] for row in await cur.fetchall()
+        }
+        cur = await db.conn.execute("PRAGMA table_info(chat_profiles)")
+        assert {
+            "user_id",
+            "guild_id",
+            "call_me",
+            "notes",
+            "threads",
+            "turns_seen",
+            "created_at",
+            "updated_at",
+        } == {row["name"] for row in await cur.fetchall()}
+        await db.conn.execute(
+            "INSERT INTO chat_profiles(user_id, guild_id, created_at, updated_at) "
+            "VALUES (9, 7, '2026-09-02T00:00:00+00:00', '2026-09-02T00:00:00+00:00')"
+        )
+        cur = await db.conn.execute("SELECT notes, threads, turns_seen FROM chat_profiles")
+        row = await cur.fetchone()
+        assert (row["notes"], row["threads"], row["turns_seen"]) == ("[]", "[]", 0)
+        with pytest.raises(sqlite3.IntegrityError):
+            await db.conn.execute(
+                "INSERT INTO chat_profiles(user_id, guild_id, created_at, updated_at) "
+                "VALUES (9, 7, '2026-09-02T00:00:00+00:00', '2026-09-02T00:00:00+00:00')"
+            )
+    finally:
+        await db.close()
+
+
+async def test_a_schema_22_file_gains_the_memory_tables_and_the_held_from_column(tmp_path):
+    """Schema 23 is additive: the file that ships before long-term memory gets the two tables,
+    requests gain held_from, and nothing already in it is rewritten."""
+    path = tmp_path / "old22.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("DROP TABLE chat_profiles")
+    await db.conn.execute("DROP TABLE chat_memory_optout")
+    await db.conn.execute("ALTER TABLE requests DROP COLUMN held_from")
+    await db.conn.execute(
+        "INSERT INTO requests(id, guild_id, user_id, what, why, status, created_at) "
+        "VALUES (1, 7, 9, 'a bot', 'because', 'in_progress', '2026-08-27T00:00:00+00:00')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '22')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        assert {"chat_profiles", "chat_memory_optout"} <= {
+            row["name"] for row in await cur.fetchall()
+        }
+        cur = await again.conn.execute("PRAGMA table_info(requests)")
+        assert "held_from" in {row["name"] for row in await cur.fetchall()}
+        cur = await again.conn.execute("SELECT status, held_from FROM requests WHERE id = 1")
+        row = await cur.fetchone()
+        assert (row["status"], row["held_from"]) == ("in_progress", None)
+        cur = await again.conn.execute(
+            "SELECT value FROM schema_meta WHERE key='schema_version'"
+        )
+        assert (await cur.fetchone())["value"] == "23"
+    finally:
+        await again.close()
+
+
+async def test_the_retired_request_statuses_become_open_once_and_nothing_else_moves(tmp_path):
+    """pending, approved and planned are gone; a second boot finds nothing left to move."""
+    path = tmp_path / "states.sqlite3"
+    db = Database(path)
+    await db.connect()
+    for request_id, status in (
+        (1, "pending"),
+        (2, "approved"),
+        (3, "planned"),
+        (4, "in_progress"),
+        (5, "done"),
+        (6, "declined"),
+        (7, "withdrawn"),
+    ):
+        await db.conn.execute(
+            "INSERT INTO requests(id, guild_id, user_id, what, why, status, created_at) "
+            "VALUES (?, 7, 9, 'a bot', 'because', ?, '2026-08-27T00:00:00+00:00')",
+            (request_id, status),
+        )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("SELECT id, status FROM requests ORDER BY id")
+        assert [row["status"] for row in await cur.fetchall()] == [
+            "open",
+            "open",
+            "open",
+            "in_progress",
+            "done",
+            "declined",
+            "withdrawn",
+        ]
+    finally:
+        await again.close()
+
+    third = Database(path)
+    await third.connect()
+    try:
+        cur = await third.conn.execute(
+            "SELECT COUNT(*) AS found FROM requests WHERE status = ?", ("open",)
+        )
+        assert (await cur.fetchone())["found"] == 3
+    finally:
+        await third.close()
+
+
+async def test_a_new_request_row_defaults_to_open(tmp_path):
+    db = Database(tmp_path / "d.sqlite3")
+    await db.connect()
+    try:
+        await db.conn.execute(
+            "INSERT INTO requests(id, guild_id, user_id, what, why, created_at) "
+            "VALUES (1, 7, 9, 'a bot', 'because', '2026-09-02T00:00:00+00:00')"
+        )
+        cur = await db.conn.execute("SELECT status FROM requests WHERE id = 1")
+        assert (await cur.fetchone())["status"] == "open"
+    finally:
+        await db.close()

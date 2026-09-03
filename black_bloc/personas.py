@@ -83,6 +83,8 @@ go-live and event pings for everybody, `/pings fans on` gives your own followers
 `/poll` — `/poll create` puts a question to the room.
 `/voice` — rename, lock, hide and hand over a temporary voice channel somebody made.
 `/timezone` — `/timezone set` is what makes a time read in somebody's own clock.
+`/memory` — does the bot remember me? `/memory show` reads it back, `/memory forget-this` drops
+one line, `/memory forget` clears it and `/memory off` stops it writing anything down at all.
 `/help` — every command, in a list.
 `/ping` — checks Black Bloc is awake.
 `/about` — what Black Bloc is."""

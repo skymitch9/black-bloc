@@ -42,6 +42,9 @@ const IDS = {
   // own pair: 25 is the staff session's own pending row, 30 is somebody else's.
   feature_request_id: '25',
   member_request_id: '30',
+  // A row the seed already has ON HOLD, because /resume is only legal from there and every
+  // contract entry runs against a fresh seed.
+  held_request_id: '20',
   // F14: {member_id} already HAS a ping role in the seed, so the GET and the DELETE act on it
   // and the POST needs somebody who does not — otherwise it answers the 409 it should.
   ping_member_id: '700000000000000004',
@@ -308,12 +311,16 @@ async function checkActionKinds() {
   await send('PUT', '/api/chat/personality', { mode: 'pool' });
   await send('PUT', '/api/chat/personality/tsundere', { enabled: false });
   await send('PUT', '/api/chat/personality/tsundere', { enabled: true });
-  // The six web.request.* kinds. Withdraw is the member's own, so it is the one call here
-  // that goes in as somebody who is not staff.
+  // Phase 17: the one web.chat.memory_* kind the website can leave.
+  await send('DELETE', `/api/chat/memory/${IDS.member_id}`, undefined);
+  // The seven web.request.* kinds. Hold then resume walks the state machine both ways off one
+  // row. Withdraw is the member's own, so it is the one call here that goes in as somebody who
+  // is not staff.
   await post('/api/requests', { what: 'contract check', why: 'so web.request.filed is left' });
   await post(`/api/requests/${IDS.feature_request_id}/comments`, { text: 'contract check' });
   await post(`/api/requests/${IDS.feature_request_id}/status`, { priority: 2 });
-  await post(`/api/requests/${IDS.feature_request_id}/approve`, {});
+  await post(`/api/requests/${IDS.feature_request_id}/hold`, { reason: 'contract check' });
+  await post(`/api/requests/${IDS.feature_request_id}/resume`, {});
   await post('/api/requests/26/decline', { reason: 'contract check' });
   await fetch(`${BASE}/api/requests/${IDS.member_request_id}/withdraw`, {
     method: 'POST',

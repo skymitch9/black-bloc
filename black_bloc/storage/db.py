@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 22
+SCHEMA_VERSION = 23
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -439,6 +439,27 @@ CREATE TABLE IF NOT EXISTS chat_window (
 CREATE INDEX IF NOT EXISTS chat_window_by_place ON chat_window(channel_id, user_id, id);
 CREATE INDEX IF NOT EXISTS chat_window_by_age ON chat_window(at);
 
+CREATE TABLE IF NOT EXISTS chat_profiles (
+    user_id    INTEGER NOT NULL,
+    guild_id   INTEGER NOT NULL,
+    call_me    TEXT,
+    notes      TEXT    NOT NULL DEFAULT '[]',
+    threads    TEXT    NOT NULL DEFAULT '[]',
+    turns_seen INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT    NOT NULL,
+    updated_at TEXT    NOT NULL,
+    PRIMARY KEY (user_id, guild_id)
+);
+
+CREATE INDEX IF NOT EXISTS chat_profiles_by_age ON chat_profiles(updated_at);
+
+CREATE TABLE IF NOT EXISTS chat_memory_optout (
+    user_id  INTEGER NOT NULL,
+    guild_id INTEGER NOT NULL,
+    at       TEXT    NOT NULL,
+    PRIMARY KEY (user_id, guild_id)
+);
+
 CREATE TABLE IF NOT EXISTS llm_ledger (
     id                 INTEGER PRIMARY KEY AUTOINCREMENT,
     at                 TEXT    NOT NULL,
@@ -467,8 +488,9 @@ CREATE TABLE IF NOT EXISTS requests (
     what           TEXT    NOT NULL,
     why            TEXT    NOT NULL,
     due_on         TEXT,
-    status         TEXT    NOT NULL DEFAULT 'pending',
+    status         TEXT    NOT NULL DEFAULT 'open',
     priority       INTEGER,
+    held_from      TEXT,
     assignee_id    INTEGER,
     notes          TEXT,
     created_at     TEXT    NOT NULL,
@@ -523,6 +545,13 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("tempvoice_prefs", "permitted_ids", "TEXT"),
     ("tempvoice_prefs", "banned_ids", "TEXT"),
     ("polls", "vote_scheme", "TEXT"),
+    ("requests", "held_from", "TEXT"),
+)
+
+RETIRED_REQUEST_STATUSES = ("pending", "approved", "planned")
+OPEN_THE_RETIRED_STATUSES = (
+    "UPDATE requests SET status = 'open' WHERE status IN "
+    f"({', '.join('?' for _ in RETIRED_REQUEST_STATUSES)})"
 )
 
 MOD_CASES_CARRIED_OVER = (
@@ -565,6 +594,7 @@ class Database:
         await self._conn.executescript(SCHEMA)
         await self._add_missing_columns()
         await self._restore_set_aside_mod_cases()
+        await self._open_the_retired_request_statuses()
         await self._conn.execute(
             "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', ?)",
             (str(SCHEMA_VERSION),),
@@ -605,6 +635,14 @@ class Database:
             f"SELECT {MOD_CASES_CARRIED_OVER} FROM {MOD_CASES_OLD}"
         )
         await self.conn.execute(f"DROP TABLE {MOD_CASES_OLD}")
+
+    async def _open_the_retired_request_statuses(self) -> None:
+        """Schema 23: pending, approved and planned all became `open`; nothing else moves."""
+        cur = await self.conn.execute(
+            OPEN_THE_RETIRED_STATUSES, RETIRED_REQUEST_STATUSES
+        )
+        if cur.rowcount and cur.rowcount > 0:
+            log.warning("database: reopened %d request(s) into the new state machine", cur.rowcount)
 
     async def _add_missing_columns(self) -> None:
         for table, column, declaration in ADDED_COLUMNS:

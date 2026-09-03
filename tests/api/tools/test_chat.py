@@ -80,6 +80,14 @@ async def test_the_page_gets_the_chat_settings_in_the_shape_settings_uses(seeded
         "chat_monthly_cap_usd",
         "chat_status_admin_only",
         "chat_log_level",
+        "chat_memory_mode",
+        "chat_memory_consent",
+        "chat_memory_retention_days",
+        "chat_memory_dm_scope",
+        "chat_memory_staff_view",
+        "chat_memory_notes_max",
+        "chat_memory_threads_max",
+        "chat_memory_model",
     }
     for row in rows:
         assert {"key", "type", "value", "default", "help"} <= set(row)

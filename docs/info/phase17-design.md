@@ -2,7 +2,10 @@
 
 > **Audience:** the owner first (the five privacy decisions in §Decisions are
 > HIS, asked one at a time), then the Opus builder, then reviewers.
-> **Status:** TRACKED — **BUILDABLE. All five owner decisions taken 2026-09-02
+> **Status:** TRACKED — **BUILT on branch `worktree-agent-a268aa7fa2979dd4a`,
+> 2026-09-02, NOT merged and NOT deployed. §J is measured (see below); the
+> `## Deviations` list at the foot names every place the build departed from
+> this document.** All five owner decisions taken 2026-09-02
 > 17:20–18:38, one at a time** (D1 opt-out · D2 preferences with the
 > §D2-definition · D3 180 days, no raw archive · D4 separate scopes · D5 counts
 > only). Written 2026-09-02 by the Fable session (NEXT WAVE item 3). Each
@@ -223,3 +226,130 @@ it returns parseable JSON in the schema, an empty profile for the one-liner,
 and that the staff one is never sent. Record the measured behaviour in
 `code-notes.md` beside `parse_distilled`. If JSON mode is unreliable, STOP
 and report — do not build a retry loop around it.
+
+### J — MEASURED 2026-09-02 (the Phase 17 build agent)
+
+**Verdict: reliable. 100% parseable, no retry loop built.** Measured with
+`scripts/scan/phase17_j_distil.py` (gitignored, not product code) calling the
+real Groq endpoint with `response_format: {"type": "json_object"}` — the
+`json_only=True` flag added to `GroqClient.reply` for this.
+
+| Measurement | Value |
+|---|---|
+| Model pin | **`openai/gpt-oss-120b`** (`groq.DEFAULT_MODEL`, i.e. the `chat_simple_model` default) |
+| Distillations attempted | **29** over two runs (5 synthetic windows × 3 rounds, twice; ≥10 required) |
+| Calls that answered | **29** (one extra call in run 1 hit a Groq 429 — a transport failure, not a parse failure; that is the existing `LLMError(RATE_LIMITED)` path) |
+| Answers that were a valid JSON **object** | **29 / 29 = 100%** |
+| Answers `parse_distilled` accepted (schema + keys + lengths) | **29 / 29 = 100%** |
+| Latency (run 2, 15 calls) | min **0.35 s**, median **0.77 s**, max **1.78 s** |
+| Tokens per distillation | ~390–490 in, ~60–440 out (Groq tier is priced at $0 in `llm.PRICES`) |
+| Code fences seen | **none** — but `json_object()` tolerates one anyway |
+
+**The three checks the design asked for, each answered:**
+
+1. **Parseable JSON in the schema** — yes, 29/29, zero retries needed. Not one
+   answer carried prose, a fence, or a key outside `call_me`/`notes`/`threads`.
+2. **An empty profile for the one-liner** — yes. The `lol` / `Fair.` window
+   returned `call_me: null, notes: [], threads: []` on 5 of 6 attempts; the
+   sixth invented "prefers informal, light-hearted tone", which is a harmless
+   preference rather than content.
+3. **The staff window is never sent** — confirmed at the gate, not the model:
+   `chat_llm.about_staff` returns `True` for both member turns of the appeal
+   conversation, so it is filtered before any call is made. The script prints
+   `staff_words: about_staff -> NEVER SENT` and the summary's
+   `windows never sent` names it.
+
+**What the measurement CHANGED in the build** (run 1 found a real leak):
+
+- The model twice emitted third-person threads — `"namu quitting the server"`,
+  `"server member departures"` — which rule 1 forbids. Word-boundary matching
+  meant `quit` did not match `quitting`. Fixed by adding the departure family
+  (`quitting`, `quits`, `leaving`, `departure(s)`, plus `banned`, `kicked`,
+  `muted`, `warned`, `timed out`) to `OUTCOMES`, which is checked against
+  threads as well as notes. Run 2 dropped all three attempts as `event`.
+- Added a second, guild-aware guard: `other_names(guild, user_id)` collects
+  every *other* member's display name and `parse_distilled(others=…)` drops any
+  note or thread naming one. Phrase lists cannot catch an arbitrary name; this
+  can. It is not a proof — see `KNOWN_ISSUES.md`.
+- `straight` was removed from `SENSITIVE`: it collided with "likes straight
+  answers", which is a KEEP example in §D2-definition.
+
+⚠️ **NOT measured:** behaviour on any model other than the pin above; behaviour
+against real member conversations (all five windows are synthetic, written for
+this test); anything about the Anthropic tier, which is never used for
+distillation; and how often the model volunteers a *sensitive* item, since none
+of the synthetic windows contained one.
+
+## Deviations — where the build departed from this document, and why
+
+Written by the Phase 17 build agent, 2026-09-02. Everything not listed here was
+built as specified.
+
+1. **`/memory`, not `/chat memory`** (§D). Discord applies `default_permissions`
+   to the whole TOP-LEVEL command, and the `/chat` group is `STAFF_ONLY`
+   (`command_visibility.STAFF_ONLY`), so a member-visible subcommand under it is
+   impossible without opening every `/chat` subcommand to members. The house rule
+   is to prefer not rendering a control somebody cannot use over rendering one
+   that refuses, so the five member commands live in their own top-level group
+   `/memory` in its own cog, `black_bloc/cogs/content/chat_memory.py`. The
+   subcommand names are exactly the design's: `show`, `forget`, `forget-this`,
+   `off`, `on`. `/memory` is in `personas.py`'s member command block, which is
+   the FEATURES line §D asks for.
+2. **`/memory` follows the mode, which the design does not ask for.**
+   `command_visibility.HIDDEN_WHEN_OFF` gained `chat_memory_mode: ("memory",)`,
+   so while the feature is off the command is not in the tree at all — the same
+   treatment `/rolemenu` and `/request` already get, and the house rule about not
+   rendering a control somebody cannot use. It ships off, so nobody sees
+   `/memory` until the owner flips the switch on the dashboard.
+3. **There is NO `chat_memory_log_level` key** (§E's table lists one). Log levels
+   in this repo are per FEATURE and derived from a kind's dotted head
+   (`logkinds.HEADS`), and §F specifies the kinds as `chat.memory_*` — whose head
+   is `chat`. A `chat_memory_log_level` key would therefore govern nothing;
+   `chat_log_level` already governs these lines, and the Chat page's existing
+   Logs section already shows them. Eight registry keys were added rather than
+   nine. Changing this would mean renaming the kinds to `chat_memory.*`, which
+   would break §D's "Logs filtered to `chat.memory*`" and split the Chat page's
+   log feed into two features.
+4. **The opt-out table carries the person's OVERRIDE, not a fixed opt-out**
+   (§A). The schema is exactly as specified — two tables, the same columns — but
+   a row means "this person is not on the server's default". Under
+   `chat_memory_consent = optout` a row means do-not-remember; under `optin` it
+   means remember-me. Without this, `chat_memory_consent` would be a key that
+   could be set but could not work, because the schema has no place to record an
+   opt-IN. `remembered()` / `set_remembered()` are the only readers and writers.
+5. **`parse_distilled` drops an over-long NOTE rather than rejecting the whole
+   profile** (§B says "over-length fields → `None`"). Read as the TOP-LEVEL
+   fields: bad JSON, an unknown key, a non-list `notes`, a non-string item, or a
+   `call_me` over 40 characters are all a no-op; a single note over 120
+   characters is dropped like any other rule break, and the rest of the profile
+   saves. Rejecting a whole distillation because one note ran long would lose
+   preferences the model got right, and §D2-definition rule 2 already
+   establishes drop-the-item as the shape.
+6. **`parse_distilled` gained an `others=` gate that §B does not describe**,
+   and `other_names(guild, user_id)` with it. §J run 1 measured the model
+   emitting third-person threads that no phrase list could have caught; the only
+   mechanical guard against an arbitrary NAME is the guild's own member list.
+   This is additive — a stricter reading of rule 1, not a looser one.
+7. **The Memory section does not add a second, filtered log feed** (§D says
+   "Logs filtered to `chat.memory*`"). The Chat page already carries
+   `logsSection('chat')`, which includes every `chat.memory_*` line. A second
+   feed on the same page showing a subset of the first is the duplicate-surface
+   trap the docs standard names; the memory kinds are readable there and in
+   `/chat logs`.
+8. **`chat_memory_model` defaults to `""`, which the `text` validator will not
+   accept as a SET value.** The default is blank, so the Groq tier's own model is
+   used; a server that has set one clears it with `/settings clear
+   chat_memory_model` rather than setting it to empty. This matches how every
+   other blank-defaulting text key in the registry behaves.
+9. **The FEATURES line went into `personas.py`, not `chat_data.py`** (§D names
+   the latter). `chat_data.py` has no FEATURES block; the member-command list the
+   model reads to answer "does the bot remember me?" is `personas.FEATURES`, and
+   `tests/test_personas.py` fails the day a member-visible command is in the tree
+   and not in it. The `/help` entry §D also asks for needed no code at all —
+   `/help` is generated from the command tree.
+10. **Not built, and not in §I either: the design's §H doc list.** `code-notes.md`
+   and this `info/README.md` row were written; `access/sweeps.md`,
+   `cutover-plan.md`, `feature-list.md`, `architecture.md` counts and
+   `OWNER_GUIDE.md` were **not** touched, on the standing rule that the reviewer
+   moves `TODO.md`/`DONE.md` items at landing. They are named here so the
+   reviewer has the list.

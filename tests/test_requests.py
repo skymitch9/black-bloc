@@ -104,18 +104,64 @@ def test_a_priority_is_a_small_whole_number_or_a_sentence():
 
 
 def test_only_the_states_staff_can_set_are_settable():
-    assert pure.wanted_status("approved") == "approved"
+    assert pure.wanted_status("hold") == "hold"
     assert pure.wanted_status(" DONE ") == "done"
-    for bad in ("pending", "withdrawn", "shipped", ""):
+    for bad in ("open", "withdrawn", "approved", "planned", "pending", "shipped", ""):
         with pytest.raises(pure.RequestError):
             pure.wanted_status(bad)
 
 
+def test_one_table_says_where_a_request_may_go_and_every_path_asks_it():
+    """`TRANSITIONS` is the whole machine; the helpers only read it."""
+    assert pure.moves_from(pure.OPEN) == ("declined", "hold", "in_progress")
+    assert pure.moves_from(pure.IN_PROGRESS) == ("declined", "done", "hold")
+    assert pure.moves_from(pure.HOLD) == ("declined", "in_progress")
+    assert pure.moves_from(pure.DONE) == ()
+    assert pure.moves_from(pure.DECLINED) == ()
+    assert pure.moves_from(pure.WITHDRAWN) == ()
+    assert pure.can_move(pure.OPEN, pure.DONE) is False
+    assert pure.can_move(pure.HOLD, pure.IN_PROGRESS) is True
+    assert pure.FINAL_STATUSES == (pure.DONE, pure.DECLINED, pure.WITHDRAWN)
+
+
+def test_a_refused_move_says_which_moves_are_allowed_from_where_it_is():
+    with pytest.raises(pure.RequestError) as caught:
+        pure.checked_move(4, pure.OPEN, pure.DONE)
+
+    said = str(caught.value)
+    assert "**open**" in said and "**done**" in said
+    assert "in_progress" in said and "hold" in said
+
+    with pytest.raises(pure.RequestError) as final:
+        pure.checked_move(4, pure.DONE, pure.HOLD, "a reason")
+
+    assert "finishes" in str(final.value)
+
+
+def test_a_move_into_hold_or_declined_needs_the_sentence_the_person_is_sent():
+    for wanted in (pure.HOLD, pure.DECLINED):
+        with pytest.raises(pure.RequestError) as caught:
+            pure.checked_move(4, pure.OPEN, wanted, "  ")
+        assert "the person who asked is sent" in str(caught.value)
+    assert pure.checked_move(4, pure.OPEN, pure.HOLD, "waiting on the bill") == pure.HOLD
+    assert pure.checked_move(4, pure.OPEN, pure.IN_PROGRESS) == pure.IN_PROGRESS
+
+
+def test_moving_a_row_to_where_it_already_is_says_so():
+    with pytest.raises(pure.RequestError) as caught:
+        pure.checked_move(4, pure.IN_PROGRESS, pure.IN_PROGRESS)
+
+    assert "already" in str(caught.value)
+
+
 def test_a_filter_of_no_statuses_means_every_one_and_an_unknown_one_is_refused():
     assert pure.wanted_statuses("") == pure.STATUSES
-    assert pure.wanted_statuses("pending,done") == ("pending", "done")
+    assert pure.wanted_statuses("open,done") == ("open", "done")
     with pytest.raises(pure.RequestError):
-        pure.wanted_statuses("pending,shipped")
+        pure.wanted_statuses("open,shipped")
+    for retired in ("pending", "approved", "planned"):
+        with pytest.raises(pure.RequestError):
+            pure.wanted_statuses(retired)
 
 
 def test_a_page_that_is_past_the_end_shows_the_last_one_rather_than_nothing():
@@ -128,30 +174,23 @@ def test_a_page_that_is_past_the_end_shows_the_last_one_rather_than_nothing():
     assert pure.page_of([], 1, 10) == ([], 1, 1)
 
 
-async def test_a_filed_request_starts_pending_with_nobody_having_decided(db):
+async def test_a_filed_request_starts_open_with_nobody_having_decided(db):
     request_id = await file_one(db, due_on="2026-09-15")
     row = await pure.get_request(db, request_id)
 
-    assert row["status"] == pure.PENDING
+    assert row["status"] == pure.OPEN
     assert row["decided_by"] is None and row["decided_at"] is None
+    assert row["held_from"] is None
     assert row["due_on"] == "2026-09-15"
     assert row["created_at"]
 
 
-async def test_a_staffers_request_may_be_stored_approved_with_the_decision_stamped(db):
-    request_id = await file_one(db, status=pure.APPROVED, decided_by=STAFFER)
-    row = await pure.get_request(db, request_id)
-
-    assert row["status"] == pure.APPROVED
-    assert row["decided_by"] == STAFFER and row["decided_at"]
-
-
-async def test_the_list_puts_pending_first_and_then_the_newest(db):
+async def test_the_list_puts_open_first_and_then_the_newest(db):
     old = await file_one(db, what="old one")
     middle = await file_one(db, what="middle one")
     fresh = await file_one(db, what="fresh one")
-    await pure.set_status(db, fresh, pure.DONE, decided_by=STAFFER)
-    await pure.set_status(db, old, pure.APPROVED, decided_by=STAFFER)
+    await pure.set_status(db, fresh, pure.IN_PROGRESS, decided_by=STAFFER)
+    await pure.set_status(db, old, pure.IN_PROGRESS, decided_by=STAFFER)
 
     rows = await pure.list_requests(db, GUILD)
 
@@ -171,10 +210,10 @@ async def test_a_list_never_reaches_into_another_server(db):
 async def test_a_list_filters_by_status_by_asker_by_assignee_and_by_words(db):
     mine = await file_one(db, what="a request board", why="the doc is a mess")
     theirs = await file_one(db, user_id=STAFFER, what="a karaoke night", why="it is fun")
-    await pure.set_status(db, theirs, pure.PLANNED, decided_by=STAFFER)
+    await pure.set_status(db, theirs, pure.IN_PROGRESS, decided_by=STAFFER)
     await pure.set_fields(db, theirs, assignee_id=STAFFER)
 
-    assert [r["id"] for r in await pure.list_requests(db, GUILD, statuses=(pure.PENDING,))] == [
+    assert [r["id"] for r in await pure.list_requests(db, GUILD, statuses=(pure.OPEN,))] == [
         mine
     ]
     assert [r["id"] for r in await pure.list_requests(db, GUILD, user_id=STAFFER)] == [theirs]
@@ -237,11 +276,47 @@ async def test_moving_to_done_stamps_when_and_moving_off_declined_forgets_the_re
 
 async def test_a_decision_that_names_nobody_leaves_the_first_deciders_name_alone(db):
     request_id = await file_one(db)
-    await pure.set_status(db, request_id, pure.APPROVED, decided_by=STAFFER)
-    await pure.set_status(db, request_id, pure.PLANNED)
+    await pure.set_status(db, request_id, pure.IN_PROGRESS, decided_by=STAFFER)
+    await pure.set_status(db, request_id, pure.DONE)
     row = await pure.get_request(db, request_id)
 
     assert row["decided_by"] == STAFFER
+
+
+async def test_held_from_is_written_on_the_way_in_and_cleared_on_the_way_out(db):
+    request_id = await file_one(db)
+    await pure.set_status(db, request_id, pure.IN_PROGRESS, decided_by=STAFFER)
+    await pure.set_status(
+        db,
+        request_id,
+        pure.HOLD,
+        decided_by=STAFFER,
+        decline_reason="the bill",
+        was=pure.IN_PROGRESS,
+    )
+    parked = await pure.get_request(db, request_id)
+
+    assert parked["held_from"] == pure.IN_PROGRESS
+    assert parked["decline_reason"] == "the bill"
+    assert pure.held_words(parked) == "being worked on"
+    assert pure.resume_target(parked) == pure.IN_PROGRESS
+    assert "was: being worked on" in pure.summary_line(parked)
+
+    await pure.set_status(db, request_id, pure.IN_PROGRESS, decided_by=STAFFER)
+    back = await pure.get_request(db, request_id)
+
+    assert back["held_from"] is None and back["decline_reason"] is None
+
+
+async def test_a_hold_that_came_from_open_resumes_into_progress_rather_than_back_to_open(db):
+    request_id = await file_one(db)
+    await pure.set_status(
+        db, request_id, pure.HOLD, decided_by=STAFFER, decline_reason="waiting", was=pure.OPEN
+    )
+    row = await pure.get_request(db, request_id)
+
+    assert row["held_from"] == pure.OPEN
+    assert pure.resume_target(row) == pure.IN_PROGRESS
 
 
 async def test_only_the_fields_actually_sent_are_written(db):
@@ -277,12 +352,12 @@ async def test_comments_come_back_oldest_first_and_are_counted_per_request(db):
     assert await pure.comment_counts(db, []) == {}
 
 
-async def test_the_pending_count_is_what_the_sidebar_badge_reads(db):
+async def test_the_open_count_is_what_the_sidebar_badge_reads(db):
     await file_one(db)
     second = await file_one(db)
-    await pure.set_status(db, second, pure.APPROVED, decided_by=STAFFER)
+    await pure.set_status(db, second, pure.IN_PROGRESS, decided_by=STAFFER)
 
-    assert await pure.pending_count(db, GUILD) == 1
+    assert await pure.open_count(db, GUILD) == 1
 
 
 async def test_the_notice_message_id_is_kept_so_the_line_can_be_found_again(db):
@@ -297,5 +372,5 @@ async def test_a_summary_line_names_the_number_the_state_and_the_deadline(db):
     line = pure.summary_line(await pure.get_request(db, request_id))
 
     assert f"#{request_id}" in line
-    assert "waiting on staff" in line
+    assert "open" in line
     assert "<t:" in line

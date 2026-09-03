@@ -49,6 +49,19 @@ const SETTING_KEYS = [
   'emoji_skin_tone',
 ];
 
+// Phase 17. Their own list because they are edited inside the Memory section, beside the
+// profiles they govern, rather than in the Settings block at the foot of the page.
+const MEMORY_SETTING_KEYS = [
+  'chat_memory_mode',
+  'chat_memory_consent',
+  'chat_memory_dm_scope',
+  'chat_memory_staff_view',
+  'chat_memory_retention_days',
+  'chat_memory_notes_max',
+  'chat_memory_threads_max',
+  'chat_memory_model',
+];
+
 const TRY_NOTE = 'Type what somebody would say after the @-mention and Black Bloc tells you ' +
   'which intent it lands on and the exact line it would answer with. This is a dry run — ' +
   'nothing is sent anywhere.';
@@ -929,13 +942,101 @@ async function settingsSection(specs) {
   return one.node;
 }
 
+const MEMORY_NOTE = 'What Black Bloc remembers about each person between conversations — ' +
+  'preferences only, never anything anybody said. A profile is written after a conversation ' +
+  'ends, never while one is going on.';
+const MEMORY_COUNTS_ONLY = 'This server keeps the notes themselves private to the person they ' +
+  'are about, so only the counts are shown here. Set chat_memory_staff_view to full below if ' +
+  'staff should read them.';
+const MEMORY_NO_PROFILES = 'Nobody has a profile yet. One is written after somebody has said ' +
+  'two things in a conversation that then goes quiet.';
+const MEMORY_FORGOT_FAILED = 'That profile was not cleared.';
+const MEMORY_DM_MARK = 'learned in a DM';
+
+/** Counts always; the notes themselves only where the server has said staff may read them. */
+function memoryLine(one) {
+  return el('li', { class: 'chatline' }, [
+    el('span', { class: 'chatline-text', text: one.text }),
+    one.where === 'dm' ? badge(MEMORY_DM_MARK, 'warn') : null,
+  ]);
+}
+
+function memoryCard(row, say) {
+  const forget = button('Forget', async () => {
+    const sure = await ask({
+      title: `Clear what Black Bloc remembers about ${row.member.name}?`,
+      body: [
+        'Every preference and open topic goes at once. It can learn them again from the next ' +
+        'conversation unless they have turned memory off for themselves.',
+      ],
+      confirmLabel: 'Clear it',
+    });
+    if (!sure) return;
+    const done = await run(
+      say,
+      () => send(`/api/chat/memory/${encodeURIComponent(row.member.id)}`, 'DELETE'),
+      (found) => found?.message || MEMORY_FORGOT_FAILED,
+    );
+    if (!done.ok) return;
+    keepSaying('chat-memory', say);
+    refresh();
+  }, { tone: 'danger' });
+
+  const counts = `${row.notes} preference${row.notes === 1 ? '' : 's'} · ` +
+    `${row.threads} open topic${row.threads === 1 ? '' : 's'} · ${row.turns_seen} turn` +
+    `${row.turns_seen === 1 ? '' : 's'} seen`;
+
+  return card(null, [
+    el('div', { class: 'req-head' }, [
+      el('div', { class: 'req-headtext' }, [
+        el('p', { class: 'req-what', text: row.member.name }),
+        el('p', {
+          class: 'section-note',
+          text: `${counts}${row.updated_at ? ` · last changed ${when(row.updated_at)}` : ''}`,
+        }),
+      ]),
+      el('div', { class: 'req-marks' }, [row.call_me ? badge(`goes by ${row.call_me}`, 'info') : null]),
+    ]),
+    row.lines && row.lines.length
+      ? el('ul', { class: 'chatlines' }, row.lines.map(memoryLine))
+      : null,
+    bar([forget]),
+  ]);
+}
+
+async function memorySection(payload, specs, say) {
+  const rows = Array.isArray(payload?.profiles) ? payload.profiles : [];
+  const one = section('Memory', MEMORY_NOTE, { count: rows.length || null });
+  one.body.append(card(null, [
+    el('div', { class: 'chipbar' }, [
+      badge(payload?.on ? 'on' : 'off', payload?.on ? 'ok' : null),
+      badge(`${payload?.total ?? rows.length} profile(s)`, null),
+      badge(`${payload?.opted_out ?? 0} opted out`, null),
+      badge(`${payload?.dm_notes ?? 0} learned in a DM`, null),
+    ]),
+    payload?.message ? el('p', { class: 'section-note', text: payload.message }) : null,
+    payload?.staff_view === 'counts'
+      ? el('p', { class: 'section-note', text: MEMORY_COUNTS_ONLY })
+      : null,
+  ]));
+  one.body.append(
+    rows.length === 0
+      ? sayNothing(MEMORY_NO_PROFILES)
+      : el('div', { class: 'chatblock' }, rows.map((row) => memoryCard(row, say))),
+    await settingsPanel(specs, { where: 'Memory', empty: NO_SETTINGS }),
+    say,
+  );
+  return one.node;
+}
+
 async function load() {
-  const [payload, allSettings, knowledge, personality, spend] = await Promise.all([
+  const [payload, allSettings, knowledge, personality, spend, memory] = await Promise.all([
     api('/api/chat/intents'),
     settings(true),
     api('/api/chat/knowledge'),
     api('/api/chat/personality'),
     api('/api/chat/spend'),
+    api('/api/chat/memory'),
   ]);
 
   const intents = Array.isArray(payload?.intents) ? payload.intents : [];
@@ -948,7 +1049,9 @@ async function load() {
   const skinTone = specFor(allSettings, 'emoji_skin_tone');
   if (skinTone) fromRoute.set('emoji_skin_tone', skinTone);
   const specs = SETTING_KEYS.map((key) => fromRoute.get(key)).filter(Boolean);
+  const memorySpecs = MEMORY_SETTING_KEYS.map((key) => fromRoute.get(key)).filter(Boolean);
 
+  const memorySay = sayAgain('chat-memory', notice());
   const intentsSay = sayAgain('chat-intents', notice());
   const createSay = notice();
   const knowledgeSay = sayAgain('chat-knowledge', notice());
@@ -960,6 +1063,7 @@ async function load() {
     newIntentSection(createSay),
     knowledgeSection(knowledge, knowledgeSay),
     personalitySection(personality, personalitySay),
+    await memorySection(memory, memorySpecs, memorySay),
     spendSection(spend),
     await settingsSection(specs),
     await logsSection('chat'),

@@ -8,6 +8,7 @@ from black_bloc.cogs.community.requests import (
     Requests,
     apply_decision,
     notify,
+    resume_request,
 )
 from black_bloc.config import load_settings
 from black_bloc.settings_store import SettingsStore
@@ -309,37 +310,24 @@ async def test_the_modal_hands_its_three_boxes_to_the_cog(cog, bot, member):
     assert row["what"] == "a request board" and row["due_on"] == "2026-09-15"
 
 
-async def test_a_filed_request_is_stored_pending_and_confirmed_by_its_number(cog, bot, member, db):
+async def test_a_filed_request_is_stored_open_and_confirmed_by_its_number(cog, bot, member, db):
     interaction = await file_one(cog, bot, member, due="2026-09-15")
     row = await pure.get_request(db, 1)
 
-    assert row["status"] == pure.PENDING and row["user_id"] == member.id
+    assert row["status"] == pure.OPEN and row["user_id"] == member.id
     assert row["due_on"] == "2026-09-15"
     assert "#1" in interaction.sent and "staff will see it on the site" in interaction.sent
     assert interaction.response.messages[0]["deferred"] is True
     assert "request.filed" in await action_kinds(db)
 
 
-async def test_a_staffers_request_is_approved_on_the_spot_and_says_so(cog, bot, lead, db):
+async def test_a_staffers_own_request_waits_like_anybody_elses(cog, bot, lead, db):
+    """Owner, 2026-09-02: "Even a staff request can be bad" — nothing approves itself."""
     interaction = await file_one(cog, bot, lead)
     row = await pure.get_request(db, 1)
 
-    assert row["status"] == pure.APPROVED and row["decided_by"] == lead.id
-    assert "approved straight away" in interaction.sent
-    kinds = await action_kinds(db)
-
-    assert "request.filed" in kinds and "request.auto_approved" in kinds
-
-
-async def test_a_staffers_request_waits_like_anyone_elses_once_auto_approve_is_off(
-    cog, bot, lead, db
-):
-    await bot.store.set(GUILD, "request_auto_approve_staff", False)
-
-    await file_one(cog, bot, lead)
-    row = await pure.get_request(db, 1)
-
-    assert row["status"] == pure.PENDING
+    assert row["status"] == pure.OPEN and row["decided_by"] is None
+    assert "staff will see it on the site" in interaction.sent
     assert "request.auto_approved" not in await action_kinds(db)
 
 
@@ -440,16 +428,17 @@ async def test_the_list_shows_your_own_by_default_and_says_so_when_there_are_non
     assert "not filed a request yet" in interaction.sent
 
 
-async def test_the_list_can_show_the_pending_ones_or_every_one(cog, bot, member, lead):
+async def test_the_list_can_show_the_open_ones_or_every_one(cog, bot, member, lead, db):
     await file_one(cog, bot, member, what="a request board")
     await file_one(cog, bot, lead, what="a karaoke night")
+    await pure.set_status(db, 2, pure.DONE, decided_by=lead.id)
 
-    pending = FakeInteraction(bot, member)
-    await cog.request_list.callback(cog, pending, choice("pending"))
+    still_open = FakeInteraction(bot, member)
+    await cog.request_list.callback(cog, still_open, choice("open"))
     everything = FakeInteraction(bot, member)
     await cog.request_list.callback(cog, everything, choice("all"))
 
-    assert "request board" in pending.sent and "karaoke" not in pending.sent
+    assert "request board" in still_open.sent and "karaoke" not in still_open.sent
     assert "request board" in everything.sent and "karaoke" in everything.sent
 
 
@@ -468,13 +457,14 @@ async def test_the_list_pages_ten_at_a_time_and_names_the_next_page(cog, bot, me
     assert first.response.messages[-1]["ephemeral"] is True
 
 
-async def test_nothing_pending_says_so_rather_than_showing_an_empty_list(cog, bot, member, lead):
+async def test_nothing_open_says_so_rather_than_showing_an_empty_list(cog, bot, member, lead, db):
     await file_one(cog, bot, lead)
+    await pure.set_status(db, 1, pure.DONE, decided_by=lead.id)
     interaction = FakeInteraction(bot, member)
 
-    await cog.request_list.callback(cog, interaction, choice("pending"))
+    await cog.request_list.callback(cog, interaction, choice("open"))
 
-    assert "Nothing is waiting" in interaction.sent
+    assert "Nothing is open" in interaction.sent
 
 
 async def test_a_member_withdraws_their_own_pending_request(cog, bot, member, db):
@@ -507,15 +497,29 @@ async def test_somebody_elses_request_is_not_yours_to_withdraw(cog, bot, member,
     assert "not yours" in interaction.sent
 
 
-async def test_a_request_already_decided_cannot_be_withdrawn(cog, bot, member, lead, db):
+async def test_a_request_already_being_worked_on_cannot_be_withdrawn(cog, bot, member, lead, db):
     await file_one(cog, bot, member)
-    await pure.set_status(db, 1, pure.APPROVED, decided_by=lead.id)
+    await pure.set_status(db, 1, pure.IN_PROGRESS, decided_by=lead.id)
     interaction = FakeInteraction(bot, member)
 
     await cog.request_withdraw.callback(cog, interaction, "1")
 
-    assert (await pure.get_request(db, 1))["status"] == pure.APPROVED
-    assert "already" in interaction.sent
+    assert (await pure.get_request(db, 1))["status"] == pure.IN_PROGRESS
+    assert "nothing to withdraw" in interaction.sent
+
+
+async def test_a_request_on_hold_may_still_be_taken_back_by_the_person_who_filed_it(
+    cog, bot, member, lead, db
+):
+    await file_one(cog, bot, member)
+    await pure.set_status(
+        db, 1, pure.HOLD, decided_by=lead.id, decline_reason="waiting", was=pure.OPEN
+    )
+    interaction = FakeInteraction(bot, member)
+
+    await cog.request_withdraw.callback(cog, interaction, "1")
+
+    assert (await pure.get_request(db, 1))["status"] == pure.WITHDRAWN
 
 
 async def test_withdrawing_something_that_is_not_a_number_names_what_was_typed(cog, bot, member):
@@ -538,22 +542,34 @@ async def test_only_staff_may_move_a_request_along(cog, bot, member, lead, db):
     await file_one(cog, bot, member)
     interaction = FakeInteraction(bot, member)
 
-    await cog.request_set.callback(cog, interaction, "1", choice(pure.APPROVED))
+    await cog.request_set.callback(cog, interaction, "1", choice(pure.IN_PROGRESS))
 
-    assert (await pure.get_request(db, 1))["status"] == pure.PENDING
+    assert (await pure.get_request(db, 1))["status"] == pure.OPEN
     assert "staff only" in interaction.sent
 
 
-async def test_staff_approve_a_request_and_the_person_who_asked_is_dmed(cog, bot, member, lead, db):
+async def test_staff_pick_a_request_up_and_the_person_who_asked_is_dmed(cog, bot, member, lead, db):
     await file_one(cog, bot, member)
     interaction = FakeInteraction(bot, lead)
 
-    await cog.request_set.callback(cog, interaction, "1", choice(pure.APPROVED))
+    await cog.request_set.callback(cog, interaction, "1", choice(pure.IN_PROGRESS))
     row = await pure.get_request(db, 1)
 
-    assert row["status"] == pure.APPROVED and row["decided_by"] == lead.id
-    assert member.dms and "approved" in member.dms[-1]
-    assert "request.approved" in await action_kinds(db)
+    assert row["status"] == pure.IN_PROGRESS and row["decided_by"] == lead.id
+    assert member.dms and "being worked on" in member.dms[-1]
+    assert "request.in_progress" in await action_kinds(db)
+
+
+async def test_a_move_the_table_does_not_allow_says_which_ones_it_does(cog, bot, member, lead, db):
+    await file_one(cog, bot, member)
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.request_set.callback(cog, interaction, "1", choice(pure.DONE))
+
+    assert (await pure.get_request(db, 1))["status"] == pure.OPEN
+    assert "cannot move it" in interaction.sent
+    assert "in_progress" in interaction.sent
+    assert member.dms == []
 
 
 async def test_a_decline_needs_a_line_the_person_is_sent(cog, bot, member, lead, db):
@@ -562,9 +578,99 @@ async def test_a_decline_needs_a_line_the_person_is_sent(cog, bot, member, lead,
 
     await cog.request_set.callback(cog, interaction, "1", choice(pure.DECLINED))
 
-    assert (await pure.get_request(db, 1))["status"] == pure.PENDING
+    assert (await pure.get_request(db, 1))["status"] == pure.OPEN
     assert "needs one line" in interaction.sent
     assert member.dms == []
+
+
+async def test_a_hold_needs_a_line_too_and_remembers_where_it_came_from(cog, bot, member, lead, db):
+    await file_one(cog, bot, member)
+    await cog.request_set.callback(cog, FakeInteraction(bot, lead), "1", choice(pure.IN_PROGRESS))
+    bare = FakeInteraction(bot, lead)
+
+    await cog.request_hold.callback(cog, bare, "1", "   ")
+
+    assert (await pure.get_request(db, 1))["status"] == pure.IN_PROGRESS
+    assert "needs one line" in bare.sent
+
+    said = FakeInteraction(bot, lead)
+    await cog.request_hold.callback(cog, said, "1", "waiting on the hosting bill")
+    row = await pure.get_request(db, 1)
+
+    assert row["status"] == pure.HOLD and row["held_from"] == pure.IN_PROGRESS
+    assert "waiting on the hosting bill" in member.dms[-1]
+    assert "It was: being worked on" in member.dms[-1]
+    assert "request.hold" in await action_kinds(db)
+
+
+async def test_resume_puts_it_back_where_it_was_held_from_and_says_so(cog, bot, member, lead, db):
+    await file_one(cog, bot, member)
+    await cog.request_set.callback(cog, FakeInteraction(bot, lead), "1", choice(pure.IN_PROGRESS))
+    await cog.request_hold.callback(cog, FakeInteraction(bot, lead), "1", "waiting")
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.request_resume.callback(cog, interaction, "1")
+    row = await pure.get_request(db, 1)
+
+    assert row["status"] == pure.IN_PROGRESS and row["held_from"] is None
+    assert "off hold" in interaction.sent
+    assert "request.resumed" in await action_kinds(db)
+
+
+async def test_resuming_something_that_is_not_on_hold_says_so(cog, bot, member, lead, db):
+    await file_one(cog, bot, member)
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.request_resume.callback(cog, interaction, "1")
+
+    assert (await pure.get_request(db, 1))["status"] == pure.OPEN
+    assert "not on hold" in interaction.sent
+
+
+async def test_every_staff_move_puts_one_line_in_the_status_channel(cog, bot, member, lead, db):
+    await bot.store.set(GUILD, "request_status_channel_id", NOTIFY_CHANNEL)
+    await file_one(cog, bot, member)
+    channel = bot.guild.get_channel(NOTIFY_CHANNEL)
+
+    await cog.request_set.callback(cog, FakeInteraction(bot, lead), "1", choice(pure.IN_PROGRESS))
+    await cog.request_hold.callback(cog, FakeInteraction(bot, lead), "1", "waiting")
+    await cog.request_resume.callback(cog, FakeInteraction(bot, lead), "1")
+    await cog.request_set.callback(cog, FakeInteraction(bot, lead), "1", choice(pure.DONE))
+
+    said = [message.content for message in channel.messages]
+
+    assert len(said) == 4
+    assert "is being worked on" in said[0]
+    assert "is on hold — waiting" in said[1]
+    assert "is being worked on" in said[2]
+    assert "is done" in said[3]
+
+
+async def test_the_status_channel_falls_back_to_the_one_filings_go_to(cog, bot, member, lead, db):
+    await bot.store.set(GUILD, "request_notify_channel_id", NOTIFY_CHANNEL)
+    await bot.store.clear(GUILD, "request_status_channel_id")
+    await file_one(cog, bot, member)
+    channel = bot.guild.get_channel(NOTIFY_CHANNEL)
+
+    await cog.request_set.callback(cog, FakeInteraction(bot, lead), "1", choice(pure.IN_PROGRESS))
+
+    assert len(channel.messages) == 2
+    assert "New request" in channel.messages[0].content
+    assert "is being worked on" in channel.messages[1].content
+
+
+async def test_a_status_channel_the_guard_refuses_is_logged_rather_than_raised(
+    cog, bot, member, lead, db
+):
+    await bot.store.set(GUILD, "request_status_channel_id", NOTIFY_CHANNEL)
+    await file_one(cog, bot, member)
+    bot.guard = FakeGuard()
+
+    await cog.request_set.callback(cog, FakeInteraction(bot, lead), "1", choice(pure.IN_PROGRESS))
+
+    assert bot.guild.get_channel(NOTIFY_CHANNEL).messages == []
+    assert "request.notify_skipped_test_mode" in await action_kinds(db)
+    assert (await pure.get_request(db, 1))["status"] == pure.IN_PROGRESS
 
 
 async def test_a_declined_request_carries_its_reason_into_the_dm(cog, bot, member, lead, db):
@@ -582,30 +688,33 @@ async def test_a_declined_request_carries_its_reason_into_the_dm(cog, bot, membe
 
 async def test_finishing_a_request_stamps_when_and_tells_the_person(cog, bot, member, lead, db):
     await file_one(cog, bot, member)
+    await cog.request_set.callback(cog, FakeInteraction(bot, lead), "1", choice(pure.IN_PROGRESS))
     interaction = FakeInteraction(bot, lead)
 
     await cog.request_set.callback(cog, interaction, "1", choice(pure.DONE))
     row = await pure.get_request(db, 1)
 
     assert row["status"] == pure.DONE and row["done_at"]
-    assert "done" in member.dms[-1]
+    assert "is done" in member.dms[-1]
 
 
-async def test_the_middle_states_move_the_row_without_a_dm(cog, bot, member, lead, db):
+async def test_every_move_now_dms_the_person_who_asked(cog, bot, member, lead, db):
+    """Today the DM went out on approved, declined and done only."""
     await file_one(cog, bot, member)
-    for status in (pure.APPROVED, pure.PLANNED, pure.IN_PROGRESS):
-        await cog.request_set.callback(cog, FakeInteraction(bot, lead), "1", choice(status))
+    await cog.request_set.callback(cog, FakeInteraction(bot, lead), "1", choice(pure.IN_PROGRESS))
+    await cog.request_hold.callback(cog, FakeInteraction(bot, lead), "1", "waiting")
+    await cog.request_resume.callback(cog, FakeInteraction(bot, lead), "1")
 
+    assert len(member.dms) == 3
     assert (await pure.get_request(db, 1))["status"] == pure.IN_PROGRESS
-    assert len(member.dms) == 1
 
 
 async def test_a_request_already_in_that_state_is_left_alone(cog, bot, member, lead, db):
     await file_one(cog, bot, member)
-    await cog.request_set.callback(cog, FakeInteraction(bot, lead), "1", choice(pure.APPROVED))
+    await cog.request_set.callback(cog, FakeInteraction(bot, lead), "1", choice(pure.IN_PROGRESS))
     again = FakeInteraction(bot, lead)
 
-    await cog.request_set.callback(cog, again, "1", choice(pure.APPROVED))
+    await cog.request_set.callback(cog, again, "1", choice(pure.IN_PROGRESS))
 
     assert "already" in again.sent
     assert len(member.dms) == 1
@@ -615,37 +724,37 @@ async def test_a_number_from_another_server_is_not_found_here(cog, bot, lead, db
     await pure.create_request(db, 99, USER, what="elsewhere", why="elsewhere", due_on=None)
     interaction = FakeInteraction(bot, lead)
 
-    await cog.request_set.callback(cog, interaction, "1", choice(pure.APPROVED))
+    await cog.request_set.callback(cog, interaction, "1", choice(pure.IN_PROGRESS))
 
     assert "no request" in interaction.sent
-    assert (await pure.get_request(db, 1))["status"] == pure.PENDING
+    assert (await pure.get_request(db, 1))["status"] == pure.OPEN
 
 
 async def test_the_dm_is_skipped_when_the_server_has_turned_them_off(cog, bot, member, lead, db):
     await bot.store.set(GUILD, "request_dm_on_decision", False)
     await file_one(cog, bot, member)
 
-    await cog.request_set.callback(cog, FakeInteraction(bot, lead), "1", choice(pure.APPROVED))
+    await cog.request_set.callback(cog, FakeInteraction(bot, lead), "1", choice(pure.IN_PROGRESS))
 
     assert member.dms == []
-    assert (await pure.get_request(db, 1))["status"] == pure.APPROVED
+    assert (await pure.get_request(db, 1))["status"] == pure.IN_PROGRESS
 
 
 async def test_a_dm_that_bounces_is_logged_rather_than_lost(cog, bot, member, lead, db):
     await file_one(cog, bot, member)
     member.dm_raises = refused()
 
-    await cog.request_set.callback(cog, FakeInteraction(bot, lead), "1", choice(pure.APPROVED))
+    await cog.request_set.callback(cog, FakeInteraction(bot, lead), "1", choice(pure.IN_PROGRESS))
 
     assert "request.dm_failed" in await action_kinds(db)
-    assert (await pure.get_request(db, 1))["status"] == pure.APPROVED
+    assert (await pure.get_request(db, 1))["status"] == pure.IN_PROGRESS
 
 
 async def test_a_requester_who_has_left_is_a_logged_fact_not_a_crash(cog, bot, member, lead, db):
     await file_one(cog, bot, member)
     bot.guild.members.pop(member.id)
 
-    await cog.request_set.callback(cog, FakeInteraction(bot, lead), "1", choice(pure.APPROVED))
+    await cog.request_set.callback(cog, FakeInteraction(bot, lead), "1", choice(pure.IN_PROGRESS))
 
     assert "request.dm_failed" in await action_kinds(db)
 
@@ -653,11 +762,24 @@ async def test_a_requester_who_has_left_is_a_logged_fact_not_a_crash(cog, bot, m
 async def test_the_shared_decision_path_is_what_the_site_calls_too(cog, bot, member, lead, db):
     await file_one(cog, bot, member)
 
-    said, fresh = await apply_decision(bot, bot.guild, 1, pure.PLANNED, lead)
+    said, fresh = await apply_decision(bot, bot.guild, 1, pure.IN_PROGRESS, lead)
 
-    assert fresh is not None and fresh["status"] == pure.PLANNED
+    assert fresh is not None and fresh["status"] == pure.IN_PROGRESS
     assert "#1" in said
-    said, fresh = await apply_decision(bot, bot.guild, 99, pure.PLANNED, lead)
+    said, fresh = await apply_decision(bot, bot.guild, 99, pure.IN_PROGRESS, lead)
+
+    assert fresh is None and "no request" in said
+
+
+async def test_the_shared_resume_path_is_what_the_site_calls_too(cog, bot, member, lead, db):
+    await file_one(cog, bot, member)
+    await cog.request_hold.callback(cog, FakeInteraction(bot, lead), "1", "waiting")
+
+    said, fresh = await resume_request(bot, bot.guild, 1, lead)
+
+    assert fresh is not None and fresh["status"] == pure.IN_PROGRESS
+    assert "#1" in said
+    said, fresh = await resume_request(bot, bot.guild, 99, lead)
 
     assert fresh is None and "no request" in said
 

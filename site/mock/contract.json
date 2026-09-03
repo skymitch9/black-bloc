@@ -2405,11 +2405,60 @@
       }
     },
     {
-      "_": "Requests. {feature_request_id} is the signed-in staffer's own PENDING row (the mock seeds it as 25) and {member_request_id} is the member session's own pending row (30), the only kind Withdraw takes — both halves seed the pair so /api/requests/mine is never empty and the decide routes always have something to move. GET /api/requests/export.csv is NOT here: it answers CSV, not JSON, and this table only checks JSON keys. POST /api/requests/{feature_request_id}/withdraw is NOT here either: it only ever answers 200 for the person who filed the row, which one fixture session cannot exercise both ways.",
+      "_": "Phase 17 memory. GET /api/chat/memory/{member_id} is NOT here: chat_memory_staff_view ships as `counts`, so on a fresh seed it answers 403 in words on purpose — the D5 gate — and this table only checks routes that answer 200.",
+      "method": "GET",
+      "path": "/api/chat/memory",
+      "read_by": [
+        "17 page-chat.js Memory section"
+      ],
+      "shape": "object",
+      "keys": [
+        "mode",
+        "on",
+        "staff_view",
+        "profiles",
+        "total",
+        "opted_out",
+        "dm_notes",
+        "message"
+      ],
+      "rows": {
+        "profiles": [
+          "member",
+          "notes",
+          "threads",
+          "turns_seen",
+          "created_at",
+          "updated_at",
+          "call_me",
+          "lines"
+        ]
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/chat/memory/{member_id}",
+      "read_by": [
+        "17 page-chat.js Memory section Forget"
+      ],
+      "shape": "object",
+      "keys": [
+        "member",
+        "message"
+      ],
+      "nested": {
+        "member": [
+          "id",
+          "name"
+        ]
+      }
+    },
+    {
+      "_": "Requests. {feature_request_id} is the signed-in staffer's own OPEN row (the mock seeds it as 25) and {member_request_id} is the member session's own open row (30), the only kind Withdraw takes — both halves seed the pair so /api/requests/mine is never empty and the decide routes always have something to move. The four staff moves below run in the order the state machine allows: hold, then resume, then decline. GET /api/requests/export.csv is NOT here: it answers CSV, not JSON, and this table only checks JSON keys. POST /api/requests/{feature_request_id}/withdraw is NOT here either: it only ever answers 200 for the person who filed the row, which one fixture session cannot exercise both ways.",
       "method": "GET",
       "path": "/api/requests",
       "read_by": [
-        "13b page-requests.js pending, planned, done and declined lists"
+        "13b page-requests.js the Open, In progress, On hold, Done and Declined lists"
       ],
       "shape": "object",
       "keys": [
@@ -2418,7 +2467,7 @@
         "page",
         "pages",
         "per_page",
-        "pending"
+        "open"
       ],
       "rows": {
         "requests": [
@@ -2438,6 +2487,10 @@
           "decided_by_name",
           "decided_at",
           "decline_reason",
+          "held_from",
+          "held_word",
+          "moves",
+          "resume_to",
           "done_at"
         ]
       }
@@ -2527,6 +2580,10 @@
           "decided_by_name",
           "decided_at",
           "decline_reason",
+          "held_from",
+          "held_word",
+          "moves",
+          "resume_to",
           "done_at"
         ]
       },
@@ -2542,10 +2599,12 @@
     },
     {
       "method": "POST",
-      "path": "/api/requests/{feature_request_id}/approve",
-      "body": {},
+      "path": "/api/requests/{feature_request_id}/hold",
+      "body": {
+        "reason": "waiting on the hosting bill"
+      },
       "read_by": [
-        "13b page-requests.js Approve"
+        "13b page-requests.js Hold"
       ],
       "shape": "object",
       "keys": [
@@ -2557,6 +2616,34 @@
           "id",
           "status",
           "status_word",
+          "decline_reason",
+          "held_from",
+          "held_word",
+          "resume_to",
+          "decided_by",
+          "decided_at"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/requests/{held_request_id}/resume",
+      "body": {},
+      "read_by": [
+        "13b page-requests.js Resume"
+      ],
+      "shape": "object",
+      "keys": [
+        "request",
+        "message"
+      ],
+      "nested": {
+        "request": [
+          "id",
+          "status",
+          "status_word",
+          "held_from",
+          "moves",
           "decided_by",
           "decided_by_name",
           "decided_at"
@@ -2736,13 +2823,14 @@
     "web.chat.trope_enabled",
     "web.chat.trope_disabled",
     "web.request.filed",
-    "web.request.approved",
     "web.request.declined",
-    "web.request.planned",
+    "web.request.hold",
+    "web.request.resumed",
     "web.request.in_progress",
     "web.request.done",
     "web.request.withdrawn",
     "web.request.updated",
-    "web.request.comment"
+    "web.request.comment",
+    "web.chat.memory_forgot"
   ]
 }

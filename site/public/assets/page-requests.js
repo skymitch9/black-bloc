@@ -22,7 +22,6 @@ import {
   sayNothing,
   searchField,
   section,
-  segment,
   sentenceFor,
   settingsPanel,
   textAction,
@@ -30,15 +29,16 @@ import {
 
 const PER_PAGE = 25;
 const SHUT_PER_PAGE = 10;
-const BOARD = 'approved,planned,in_progress';
 const WHY_MAX = 1000;
 
-const SETTINGS_NOTE = 'Whether requests are open, who may file one, whether a mod filing one ' +
-  'skips the queue, where the bot says a request arrived, and whether it DMs the person who asked.';
-const PENDING_NOTE = 'Waiting on an answer, longest wait first. Approving puts it on the board ' +
-  'below; declining sends the person who asked exactly the reason you type.';
-const BOARD_NOTE = 'Everything approved and not finished. The buttons here save as you press ' +
-  'them — there is no separate Save for the status, the priority or who is on it.';
+const SETTINGS_NOTE = 'Whether requests are open, who may file one, where the bot says a request ' +
+  'arrived, where it says one moved, and whether it DMs the person who asked each time.';
+const OPEN_NOTE = 'Filed and not picked up, longest wait first. Every button here tells the ' +
+  'person who asked — picking one up, putting it on hold, and declining it.';
+const BOARD_NOTE = 'Being worked on. The buttons here save as you press them — there is no ' +
+  'separate Save for the status, the priority or who is on it.';
+const HELD_NOTE = 'Parked with a reason, and the reason is what the person who asked was sent. ' +
+  'Resume puts one back where it came from.';
 const DONE_NOTE = 'Requests that shipped. Nothing here needs anything from you; it is the ' +
   'record of what asking actually got built.';
 const DECLINED_NOTE = 'The answers that were no, with the reason the person who asked was sent, ' +
@@ -50,8 +50,9 @@ const MINE_NOTE = 'Every request you have filed and where each one got to. You c
 const MEMBER_FILE_NOTE = 'What you want built, and why it is worth building. Staff answer these ' +
   'on the same page you are looking at.';
 
-const NO_PENDING = 'Nothing is waiting on an answer. Everything filed has been decided.';
-const NO_BOARD = 'Nothing is approved and unfinished. Approve something above and it lands here.';
+const NO_OPEN = 'Nothing is open. Everything filed has been picked up, finished or answered.';
+const NO_BOARD = 'Nothing is being worked on. Pick something up above and it lands here.';
+const NO_HELD = 'Nothing is on hold.';
 const NO_DONE = 'Nothing has shipped yet.';
 const NO_DECLINED = 'Nothing has been declined.';
 const NO_WITHDRAWN = 'Nobody has taken a request back.';
@@ -68,38 +69,59 @@ const NEED_A_NOTE = 'There is nothing to add yet.';
 const SETTING_KEYS = [
   'request_mode',
   'request_who_can_file',
-  'request_auto_approve_staff',
   'request_notify_channel_id',
+  'request_status_channel_id',
   'request_dm_on_decision',
   'request_log_level',
 ];
 
 const SAID = {
-  pending: 'waiting',
-  approved: 'approved',
-  planned: 'planned',
+  open: 'open',
   in_progress: 'in progress',
+  hold: 'on hold',
   done: 'done',
   declined: 'declined',
   withdrawn: 'withdrawn',
 };
 
 const TONE = {
-  pending: 'warn',
-  approved: 'info',
-  planned: 'info',
+  open: 'warn',
   in_progress: 'info',
+  hold: 'warn',
   done: 'ok',
   declined: null,
   withdrawn: null,
 };
 
-const BOARD_STEPS = [
-  { value: 'approved', label: 'Approved' },
-  { value: 'planned', label: 'Planned' },
-  { value: 'in_progress', label: 'In progress' },
-  { value: 'done', label: 'Done' },
-];
+/**
+ * One button per move the row's own `moves` list allows, so a control that would
+ * refuse is never drawn. Hold and Decline ask for the sentence the requester is
+ * sent; the API refuses either without one, in words.
+ */
+const MOVES = {
+  in_progress: { label: 'Pick it up', tone: 'warn' },
+  done: { label: 'Mark it done', tone: 'warn' },
+  hold: {
+    label: 'Put it on hold',
+    tone: 'quiet',
+    reason: {
+      title: (row) => `Park ${row.requester.name}'s request?`,
+      body: 'They are sent exactly what you type here, and it moves to On hold.',
+      confirm: 'Put it on hold',
+      hint: 'Say what it is waiting on — this is the whole answer they get.',
+    },
+  },
+  declined: {
+    label: 'Decline',
+    tone: 'danger',
+    reason: {
+      title: (row) => `Say no to ${row.requester.name}?`,
+      body: 'They are sent exactly what you type here, and the request is closed for good.',
+      confirm: 'Decline it',
+      hint: 'Say why — this is the whole answer they get.',
+    },
+  },
+};
 
 const PRIORITY_SAID = {
   1: '1 — do it first',
@@ -115,7 +137,7 @@ const ASSIGNEE_FILTERS = [
   ['me', 'On me'],
 ];
 
-const state = { pending: 1, board: 1, done: 1, declined: 1, mine: 1, q: '', assignee: '' };
+const state = { open: 1, board: 1, held: 1, done: 1, declined: 1, mine: 1, q: '', assignee: '' };
 
 let refresh = () => {};
 let viewer = null;
@@ -159,6 +181,12 @@ function statusPill(row) {
   return badge(SAID[row.status] || row.status, TONE[row.status] ?? null);
 }
 
+/** "on hold — was: in progress", so a parked request says what it was parked from. */
+function heldChip(row) {
+  if (row.status !== 'hold' || !row.held_word) return null;
+  return badge(`was: ${row.held_word}`, null);
+}
+
 /**
  * The requester's face and name. The Members page has no deep link of its own,
  * so this goes to the page rather than to a filter it cannot honour, and the
@@ -189,7 +217,7 @@ function headBlock(row) {
       el('p', { class: 'req-what', text: row.what }),
       metaLine(row),
     ]),
-    el('div', { class: 'req-marks' }, [statusPill(row), dueChip(row)]),
+    el('div', { class: 'req-marks' }, [statusPill(row), heldChip(row), dueChip(row)]),
   ]);
 }
 
@@ -402,73 +430,90 @@ function notesRow(row, say) {
   ]);
 }
 
+/**
+ * One button per legal move, built from the row's own `moves` list — the same
+ * table `black_bloc/requests.py:TRANSITIONS` holds, so a button that would be
+ * refused is never drawn at all.
+ */
+function moveButtons(row, say, which) {
+  return (row.moves || []).map((wanted) => {
+    const spec = MOVES[wanted];
+    if (!spec) return null;
+    return button(spec.label, async () => {
+      const body = {};
+      if (spec.reason) {
+        const box = el('input', {
+          class: 'input', type: 'text', placeholder: 'why — they are sent this',
+        });
+        const sure = await ask({
+          title: spec.reason.title(row),
+          body: [spec.reason.body, field('Reason', box, spec.reason.hint)],
+          confirmLabel: spec.reason.confirm,
+        });
+        if (!sure) return;
+        body.reason = box.value.trim();
+      }
+      const found = await saveRow(say, row, { status: wanted, ...body });
+      if (!found) return;
+      keepSaying(which, say);
+      refresh();
+    }, { tone: spec.tone, small: false });
+  }).filter(Boolean);
+}
+
+function resumeButton(row, say, which) {
+  return button('Resume', async () => {
+    const done = await run(
+      say,
+      () => send(`/api/requests/${encodeURIComponent(row.id)}/resume`, 'POST', {}),
+      (found) => found?.message || 'Off hold.',
+    );
+    if (!done.ok) return;
+    keepSaying(which, say);
+    refresh();
+  }, { tone: 'warn', small: false });
+}
+
 function boardCard(row) {
   const say = notice();
-  const steps = segment(BOARD_STEPS, row.status, {
-    onChange: async () => {
-      const wanted = steps.readValue();
-      if (wanted === row.status) return;
-      const found = await saveRow(say, row, { status: wanted }, () => steps.setValue(row.status));
-      if (!found) return;
-      keepSaying('board', say);
-      refresh();
-    },
-  });
   return card(null, [
     headBlock(row),
     whyBlock(row.why),
     el('div', { class: 'formrow' }, [
-      field('Where it is', steps),
       field('Priority', prioritySelect(row, say)),
       field('Who is on it', assigneeControl(row, say)),
     ]),
     notesRow(row, say),
+    bar(moveButtons(row, say, 'board')),
     commentsDrawer(row),
     say,
   ]);
 }
 
-function pendingCard(row) {
+function openCard(row) {
   const say = notice();
-
-  const approve = button('Approve', async () => {
-    const done = await run(
-      say,
-      () => send(`/api/requests/${encodeURIComponent(row.id)}/approve`, 'POST', {}),
-      (found) => found?.message || 'Approved.',
-    );
-    if (!done.ok) return;
-    keepSaying('pending', say);
-    refresh();
-  }, { tone: 'warn', small: false });
-
-  const decline = button('Decline', async () => {
-    const reason = el('input', { class: 'input', type: 'text', placeholder: 'why — they are sent this' });
-    const sure = await ask({
-      title: `Say no to ${row.requester.name}?`,
-      body: [
-        'They are sent exactly what you type here, and the request comes off the board.',
-        field('Reason', reason, 'Say why — this is the whole answer they get.'),
-      ],
-      confirmLabel: 'Decline it',
-    });
-    if (!sure) return;
-    const done = await run(
-      say,
-      () => send(`/api/requests/${encodeURIComponent(row.id)}/decline`, 'POST', {
-        reason: reason.value.trim(),
-      }),
-      (found) => found?.message || 'Declined, and they have been told why.',
-    );
-    if (!done.ok) return;
-    keepSaying('pending', say);
-    refresh();
-  }, { tone: 'danger', small: false });
-
   return card(null, [
     headBlock(row),
     whyBlock(row.why),
-    bar([approve, decline]),
+    bar(moveButtons(row, say, 'open')),
+    commentsDrawer(row),
+    say,
+  ]);
+}
+
+function heldCard(row) {
+  const say = notice();
+  const moves = (row.moves || []).filter((one) => one !== row.resume_to);
+  return card(null, [
+    headBlock(row),
+    whyBlock(row.why),
+    row.decline_reason
+      ? el('p', { class: 'req-reason', text: `On hold because: ${row.decline_reason}` })
+      : null,
+    bar([
+      resumeButton(row, say, 'held'),
+      ...moveButtons({ ...row, moves }, say, 'held'),
+    ]),
     commentsDrawer(row),
     say,
   ]);
@@ -546,21 +591,21 @@ function pagerFor(which, payload, rows, perPage) {
   });
 }
 
-function pendingSection(payload, rows, say) {
-  const one = section('Pending', PENDING_NOTE, { count: payload.total ?? rows.length, open: true });
+function openSectionOf(payload, rows, say) {
+  const one = section('Open', OPEN_NOTE, { count: payload.total ?? rows.length, open: true });
   one.body.append(
     rows.length === 0
-      ? sayNothing(emptySaid('pending', payload, NO_PENDING, true), emptyDo('pending', payload, true))
-      : el('div', { class: 'section-body' }, rows.map(pendingCard)),
-    footFor('pending', payload, rows, PER_PAGE),
-    pagerFor('pending', payload, rows, PER_PAGE),
+      ? sayNothing(emptySaid('open', payload, NO_OPEN, true), emptyDo('open', payload, true))
+      : el('div', { class: 'section-body' }, rows.map(openCard)),
+    footFor('open', payload, rows, PER_PAGE),
+    pagerFor('open', payload, rows, PER_PAGE),
     say,
   );
   return one.node;
 }
 
 function boardSection(payload, rows, say) {
-  const one = section('Planned & in progress', BOARD_NOTE, {
+  const one = section('In progress', BOARD_NOTE, {
     count: payload.total ?? rows.length,
     open: true,
   });
@@ -570,6 +615,22 @@ function boardSection(payload, rows, say) {
       : el('div', { class: 'section-body' }, rows.map(boardCard)),
     footFor('board', payload, rows, PER_PAGE),
     pagerFor('board', payload, rows, PER_PAGE),
+    say,
+  );
+  return one.node;
+}
+
+function heldSection(payload, rows, say) {
+  const one = section('On hold', HELD_NOTE, {
+    count: payload.total ?? rows.length,
+    open: true,
+  });
+  one.body.append(
+    rows.length === 0
+      ? sayNothing(emptySaid('held', payload, NO_HELD, true), emptyDo('held', payload, true))
+      : el('div', { class: 'section-body' }, rows.map(heldCard)),
+    footFor('held', payload, rows, PER_PAGE),
+    pagerFor('held', payload, rows, PER_PAGE),
     say,
   );
   return one.node;
@@ -616,28 +677,25 @@ function declinedSection(payload, rows, gone) {
  * The sentence under the button, rebuilt on every keystroke: what pressing it
  * will actually do, including whether this person's request skips the queue.
  */
-function outcomeOf(form, auto) {
+function outcomeOf(form) {
   const what = form.what.value.trim();
   if (!what) return NEED_A_WHAT;
   const why = form.why.value.trim();
   if (!why) return NEED_A_WHY;
   const due = dueOn(form.due.value.trim());
-  const staff = viewer && viewer.staff === true;
-  const skips = staff && auto
-    ? ' It is approved the moment it lands, because you are staff.'
-    : ' Staff answer it on this page, and you are told what they decided.';
   const dated = due ? ` It is marked ${due.text.replace(/^due /, 'due ')}.` : '';
-  return `Files “${what}” under your name.${skips}${dated}`;
+  return `Files “${what}” under your name. It lands open, whoever files it, and you are DMed ` +
+    `every time staff move it.${dated}`;
 }
 
-function fileForm(say, auto, { note = FILE_NOTE } = {}) {
+function fileForm(say, { note = FILE_NOTE } = {}) {
   const what = el('input', { class: 'input', type: 'text', placeholder: 'what you want built', maxlength: String(WHY_MAX) });
   const why = el('textarea', { class: 'input area', rows: '3', placeholder: 'why it is worth building', maxlength: String(WHY_MAX) });
   const due = el('input', { class: 'input', type: 'date' });
   const outcome = el('p', { class: 'section-note' });
   const form = { what, why, due };
   const repaint = () => {
-    outcome.textContent = outcomeOf(form, auto);
+    outcome.textContent = outcomeOf(form);
   };
 
   const file = button('File the request', async () => {
@@ -688,7 +746,7 @@ function fileSection(node) {
   return one.node;
 }
 
-function toolbar(pendingPayload, boardPayload) {
+function toolbar(openPayload, boardPayload) {
   const chips = ASSIGNEE_FILTERS.map(([key, label]) => el('button', {
     class: 'chip-filter',
     type: 'button',
@@ -698,13 +756,14 @@ function toolbar(pendingPayload, boardPayload) {
     on: {
       click: () => {
         state.assignee = key;
-        state.pending = 1;
+        state.open = 1;
         state.board = 1;
+        state.held = 1;
         refresh();
       },
     },
   }));
-  const waiting = pendingPayload.total ?? 0;
+  const waiting = openPayload.total ?? 0;
   const open = boardPayload.total ?? 0;
   return el('div', { class: 'card' }, [
     el('div', { class: 'card-head' }, [
@@ -714,8 +773,9 @@ function toolbar(pendingPayload, boardPayload) {
         onQuery: (query) => {
           if (query === state.q) return;
           state.q = query;
-          state.pending = 1;
+          state.open = 1;
           state.board = 1;
+          state.held = 1;
           refresh();
         },
       }),
@@ -723,7 +783,7 @@ function toolbar(pendingPayload, boardPayload) {
       el('span', { class: 'topbar-gap' }),
       el('span', {
         class: 'table-count',
-        text: `${waiting} waiting · ${open} on the board`,
+        text: `${waiting} open · ${open} in progress`,
       }),
       el('a', { class: 'btn quiet small', href: '/api/requests/export.csv', text: 'Export CSV' }),
     ]),
@@ -751,8 +811,10 @@ function filtered(extra) {
   return query.toString();
 }
 
+const WITHDRAWABLE = ['open', 'hold'];
+
 function mineCard(row, say) {
-  const withdraw = row.status === 'pending'
+  const withdraw = WITHDRAWABLE.includes(row.status)
     ? button('Take it back', async () => {
       const sure = await ask({
         title: 'Take this request back?',
@@ -777,11 +839,14 @@ function mineCard(row, say) {
         el('p', { class: 'req-what', text: row.what }),
         metaLine(row),
       ]),
-      el('div', { class: 'req-marks' }, [statusPill(row), dueChip(row)]),
+      el('div', { class: 'req-marks' }, [statusPill(row), heldChip(row), dueChip(row)]),
     ]),
     whyBlock(row.why),
     row.decline_reason
-      ? el('p', { class: 'req-reason', text: `Why not: ${row.decline_reason}` })
+      ? el('p', {
+        class: 'req-reason',
+        text: `${row.status === 'hold' ? 'On hold because' : 'Why not'}: ${row.decline_reason}`,
+      })
       : null,
     withdraw ? bar([withdraw]) : null,
   ]);
@@ -809,7 +874,7 @@ async function loadMember() {
   const fileSay = sayAgain('file', notice());
   const mineSay = sayAgain('mine', notice());
   document.getElementById('dash').replaceChildren(
-    fileSection(fileForm(fileSay, false, { note: MEMBER_FILE_NOTE })),
+    fileSection(fileForm(fileSay, { note: MEMBER_FILE_NOTE })),
     mineSection(mine, rows, mineSay),
   );
   remeasure();
@@ -819,9 +884,10 @@ async function loadStaff() {
   const active = document.activeElement;
   const typed = active && active.classList && active.classList.contains('search') ? active.value : null;
 
-  const [waiting, working, shipped, refused, gone, allSettings] = await Promise.all([
-    api(`/api/requests?${filtered({ status: 'pending', page: String(state.pending), per_page: String(PER_PAGE) })}`),
-    api(`/api/requests?${filtered({ status: BOARD, page: String(state.board), per_page: String(PER_PAGE) })}`),
+  const [waiting, working, parked, shipped, refused, gone, allSettings] = await Promise.all([
+    api(`/api/requests?${filtered({ status: 'open', page: String(state.open), per_page: String(PER_PAGE) })}`),
+    api(`/api/requests?${filtered({ status: 'in_progress', page: String(state.board), per_page: String(PER_PAGE) })}`),
+    api(`/api/requests?${filtered({ status: 'hold', page: String(state.held), per_page: String(PER_PAGE) })}`),
     api(`/api/requests?status=done&page=${state.done}&per_page=${SHUT_PER_PAGE}`),
     api(`/api/requests?status=declined&page=${state.declined}&per_page=${SHUT_PER_PAGE}`),
     api('/api/requests?status=withdrawn&per_page=50'),
@@ -830,10 +896,10 @@ async function loadStaff() {
 
   const specs = settingsNamespace(allSettings, 'request')
     .filter((spec) => SETTING_KEYS.includes(spec.key));
-  const auto = (specs.find((spec) => spec.key === 'request_auto_approve_staff') || {}).value === true;
 
-  const pendingSay = sayAgain('pending', notice());
+  const openSay = sayAgain('open', notice());
   const boardSay = sayAgain('board', notice());
+  const heldSay = sayAgain('held', notice());
   const fileSay = sayAgain('file', notice());
 
   const settingsBox = section('Settings', SETTINGS_NOTE, { count: specs.length || null });
@@ -844,11 +910,12 @@ async function loadStaff() {
 
   document.getElementById('dash').replaceChildren(
     toolbar(waiting, working),
-    pendingSection(waiting, listOf(waiting, 'requests'), pendingSay),
+    openSectionOf(waiting, listOf(waiting, 'requests'), openSay),
     boardSection(working, listOf(working, 'requests'), boardSay),
+    heldSection(parked, listOf(parked, 'requests'), heldSay),
     doneSection(shipped, listOf(shipped, 'requests')),
     declinedSection(refused, listOf(refused, 'requests'), listOf(gone, 'requests')),
-    fileSection(fileForm(fileSay, auto)),
+    fileSection(fileForm(fileSay)),
     settingsBox.node,
     await logsSection('request'),
   );

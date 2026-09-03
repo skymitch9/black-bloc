@@ -22,6 +22,7 @@ DEFAULT_MODEL = "openai/gpt-oss-120b"
 REQUEST_TIMEOUT_SECONDS = 15
 TOO_MANY = 429
 SERVER_TROUBLE = 500
+JSON_OBJECT = {"type": "json_object"}
 
 
 def message_text(payload: Any) -> str:
@@ -72,12 +73,14 @@ class GroqClient:
             await self._session.close()
         self._session = None
 
-    async def reply(self, *, system: Any, messages: Any) -> Reply:
-        body = {
+    async def reply(self, *, system: Any, messages: Any, json_only: bool = False) -> Reply:
+        body: dict[str, Any] = {
             "model": self.model,
             "max_tokens": self.max_tokens,
             "messages": [{"role": "system", "content": str(system)}, *list(messages)],
         }
+        if json_only:
+            body["response_format"] = JSON_OBJECT
         try:
             status, payload = await self._request(
                 CHAT_URL,

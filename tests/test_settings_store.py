@@ -908,19 +908,24 @@ def test_no_log_level_key_is_read_as_a_feature_switch():
     """`api/status.py` calls every key ending in `_mode` a feature; none of these does."""
     assert not [key for key in mode_keys() if key.endswith("_log_level")]
     assert all(not key.endswith("_mode") for key in KEY_TYPES if key.endswith("_log_level"))
-async def test_requests_ship_on_open_to_everyone_and_auto_approving_staff(store):
+async def test_requests_ship_on_and_open_to_everyone_with_nothing_auto_approved(store):
+    """Nothing approves itself any more (owner, 2026-09-02: 'Even a staff request can be bad')."""
     assert store.get(7, "request_mode") == "on"
     assert store.get(7, "request_who_can_file") == "everyone"
-    assert store.get(7, "request_auto_approve_staff") is True
     assert store.get(7, "request_dm_on_decision") is True
+    assert "request_auto_approve_staff" not in KEY_TYPES
     for key in (
         "request_mode",
         "request_who_can_file",
-        "request_auto_approve_staff",
         "request_notify_channel_id",
+        "request_status_channel_id",
         "request_dm_on_decision",
     ):
         assert key in KEY_TYPES and KEY_HELP.get(key)
+
+
+async def test_the_status_channel_is_blank_so_one_channel_carries_both_kinds_of_line(store):
+    assert store.get(7, "request_status_channel_id") is None
 
 
 async def test_the_request_notice_lands_in_the_test_channel_while_test_mode_is_on(store):
@@ -943,14 +948,64 @@ async def test_the_request_notice_points_nowhere_once_test_mode_is_off(tmp_path,
 def test_the_request_switches_only_take_the_words_they_document():
     assert coerce_value("request_mode", "off") == "off"
     assert coerce_value("request_who_can_file", "staff") == "staff"
-    assert coerce_value("request_auto_approve_staff", False) is False
     assert coerce_value("request_notify_channel_id", 12) == 12
+    assert coerce_value("request_status_channel_id", 13) == 13
     for key, bad in (
         ("request_mode", "shadow"),
         ("request_who_can_file", "mods"),
-        ("request_auto_approve_staff", "yes"),
+        ("request_status_channel_id", "13"),
         ("request_notify_channel_id", "12"),
         ("request_dm_on_decision", 1),
     ):
         with pytest.raises(SettingError):
             coerce_value(key, bad)
+
+
+async def test_every_memory_decision_is_a_key_the_dashboard_and_the_bot_both_reach(store):
+    """Phase 17 D1-D5 plus the three the Fable session settled: none of them is a constant."""
+    for key in (
+        "chat_memory_mode",
+        "chat_memory_consent",
+        "chat_memory_retention_days",
+        "chat_memory_dm_scope",
+        "chat_memory_staff_view",
+        "chat_memory_notes_max",
+        "chat_memory_threads_max",
+        "chat_memory_model",
+    ):
+        assert key in KEY_TYPES and KEY_HELP.get(key)
+    assert store.get(7, "chat_memory_mode") == "off"
+    assert store.get(7, "chat_memory_consent") == "optout"
+    assert store.get(7, "chat_memory_retention_days") == 180
+    assert store.get(7, "chat_memory_dm_scope") == "separate"
+    assert store.get(7, "chat_memory_staff_view") == "counts"
+    assert store.get(7, "chat_memory_notes_max") == 6
+    assert store.get(7, "chat_memory_threads_max") == 5
+    assert store.get(7, "chat_memory_model") == ""
+
+
+def test_the_memory_choices_refuse_anything_else():
+    assert coerce_value("chat_memory_mode", "on") == "on"
+    assert coerce_value("chat_memory_consent", "optin") == "optin"
+    assert coerce_value("chat_memory_dm_scope", "shared") == "shared"
+    assert coerce_value("chat_memory_staff_view", "full") == "full"
+    assert coerce_value("chat_memory_retention_days", 0) == 0
+    assert coerce_value("chat_memory_notes_max", 20) == 20
+    for key, bad in (
+        ("chat_memory_mode", "shadow"),
+        ("chat_memory_consent", "always"),
+        ("chat_memory_dm_scope", "both"),
+        ("chat_memory_staff_view", "some"),
+        ("chat_memory_retention_days", "180"),
+        ("chat_memory_notes_max", 21),
+        ("chat_memory_threads_max", 21),
+        ("chat_memory_model", ""),
+    ):
+        with pytest.raises(SettingError):
+            coerce_value(key, bad)
+
+
+def test_the_memory_switch_is_a_part_of_chat_rather_than_a_feature_of_its_own():
+    """`api/status.py` would otherwise offer a `chat_memory` feature with no page behind it."""
+    assert "chat_memory_mode" in KEY_TYPES
+    assert "chat_memory_mode" not in mode_keys()
