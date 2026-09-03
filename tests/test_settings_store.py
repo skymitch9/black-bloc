@@ -885,7 +885,7 @@ def test_the_ping_role_mode_is_read_as_a_feature_switch_on_the_health_page():
 
 async def test_every_feature_has_a_log_level_key_defaulting_to_important(store):
     keys = [f"{feature}_log_level" for feature in FEATURES]
-    assert len(keys) == 15
+    assert len(keys) == 16
     assert "request_log_level" in keys
     assert "pings_log_level" in keys
     for key in keys:
@@ -954,3 +954,33 @@ def test_the_request_switches_only_take_the_words_they_document():
     ):
         with pytest.raises(SettingError):
             coerce_value(key, bad)
+
+
+async def test_applications_ship_off_with_a_thirty_day_wait_and_decision_dms_on(store):
+    assert store.get(1, "applications_mode") == "off"
+    assert store.get(1, "applications_retry_days") == 30
+    assert store.get(1, "applications_dm_on_decision") is True
+    assert store.get(1, "applications_channel_id") is None
+    assert store.get(1, "applications_approver_role_id") is None
+    assert store.get(1, "applications_ping_role_id") is None
+    assert store.get(1, "applications_log_level") == "important"
+
+
+async def test_the_application_keys_are_typed_and_the_mode_is_the_three_way_one(store):
+    assert KEY_TYPES["applications_mode"] == "enum"
+    assert KEY_TYPES["applications_channel_id"] == "channel"
+    assert KEY_TYPES["applications_approver_role_id"] == "role"
+    assert KEY_TYPES["applications_ping_role_id"] == "role"
+    assert KEY_TYPES["applications_retry_days"] == "int"
+    assert KEY_TYPES["applications_dm_on_decision"] == "bool"
+    for name in ("off", "shadow", "on"):
+        assert await store.set(1, "applications_mode", name) == name
+    with pytest.raises(SettingError):
+        await store.set(1, "applications_mode", "maybe")
+
+
+async def test_a_wait_longer_than_ten_years_is_refused_with_its_own_sentence(store):
+    assert await store.set(1, "applications_retry_days", 0) == 0
+    with pytest.raises(SettingError) as caught:
+        await store.set(1, "applications_retry_days", 3651)
+    assert "permanent no with extra steps" in str(caught.value)

@@ -85,7 +85,9 @@ go-live and event pings for everybody, `/pings fans on` gives your own followers
 `/timezone` — `/timezone set` is what makes a time read in somebody's own clock.
 `/help` — every command, in a list.
 `/ping` — checks Black Bloc is awake.
-`/about` — what Black Bloc is."""
+`/about` — what Black Bloc is.
+`/apply` — apply for something staff hand out, like the Twitch Team. `/apply start` opens the
+form, `/apply status` says where yours is, `/apply withdraw` takes one back."""
 
 COOKOUT_VOICE = """## How you sound
 You sound like the cookout: warm, easy, a little playful — somebody's favourite uncle working the

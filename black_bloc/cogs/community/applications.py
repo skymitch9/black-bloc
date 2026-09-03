@@ -459,7 +459,8 @@ async def _hand_over(
     if mode_of(bot, guild.id) == SHADOW:
         await log_action(bot, guild, "application.would_grant", target=member, details=details)
         return False
-    if not await change_roles(
+    held = holds_role(member, int(form["role_id"]))
+    if not held and not await change_roles(
         bot, member, guild, {form["role_id"]}, set(), f"Black Bloc application approved by {actor}"
     ):
         await log_action(
