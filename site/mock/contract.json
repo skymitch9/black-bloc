@@ -273,6 +273,7 @@
         "honeypot",
         "modmail",
         "pings",
+        "raidtrain",
         "rolemenu",
         "tempvoice"
       ],
@@ -2637,6 +2638,170 @@
           "at"
         ]
       }
+    },
+    {
+      "method": "GET",
+      "path": "/api/raidtrains",
+      "read_by": [
+        "18 page-events.js raid trains table"
+      ],
+      "shape": "list",
+      "keys": [
+        "id",
+        "title",
+        "starts_at",
+        "slot_minutes",
+        "slot_count",
+        "status",
+        "status_word",
+        "filled",
+        "slots_total",
+        "organizer_id",
+        "organizer_name",
+        "editable"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/raidtrains/status",
+      "read_by": [
+        "18 page-events.js raid trains header"
+      ],
+      "shape": "object",
+      "keys": [
+        "mode",
+        "running",
+        "last_ok_at",
+        "last_error",
+        "failures",
+        "every_minutes",
+        "trains",
+        "upcoming",
+        "slots",
+        "claimed"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/raidtrains/{raid_train_id}",
+      "read_by": [
+        "18 page-events.js raid train detail"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "title",
+        "status",
+        "status_word",
+        "filled",
+        "slots_total",
+        "slots",
+        "lineup",
+        "editable"
+      ],
+      "rows": {
+        "slots": [
+          "id",
+          "position",
+          "starts_at",
+          "ends_at",
+          "user_id",
+          "user_name",
+          "twitch_login",
+          "checked_in_at",
+          "state"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/raidtrains",
+      "body": {
+        "title": "Contract train",
+        "description": "Made by the contract run.",
+        "start": "2099-09-14 19:30",
+        "tz": "UTC",
+        "slot_minutes": 60,
+        "slot_count": 3
+      },
+      "read_by": [
+        "18 page-events.js new train form"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "title",
+        "status",
+        "slots_total",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/raidtrains/{raid_train_id}/slots/1",
+      "body": {
+        "member_id": "{member_id}"
+      },
+      "read_by": [
+        "18 page-events.js slot grid"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "filled",
+        "slots",
+        "message"
+      ],
+      "rows": {
+        "slots": [
+          "position",
+          "user_id",
+          "user_name",
+          "twitch_login",
+          "state"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/raidtrains/{raid_train_id}/swap",
+      "body": {
+        "a": 1,
+        "b": 2
+      },
+      "read_by": [
+        "18 page-events.js slot grid"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "slots",
+        "message"
+      ],
+      "rows": {
+        "slots": [
+          "position",
+          "user_id",
+          "state"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/raidtrains/{raid_train_id}/status",
+      "body": {
+        "status": "locked"
+      },
+      "read_by": [
+        "18 page-events.js lock, unlock and cancel"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "status",
+        "status_word",
+        "message"
+      ]
     }
   ],
   "pages": [
@@ -2743,6 +2908,13 @@
     "web.request.done",
     "web.request.withdrawn",
     "web.request.updated",
-    "web.request.comment"
+    "web.request.comment",
+    "web.raidtrain.create",
+    "web.raidtrain.assign",
+    "web.raidtrain.unassign",
+    "web.raidtrain.swap",
+    "web.raidtrain.lock",
+    "web.raidtrain.unlock",
+    "web.raidtrain.cancel"
   ]
 }

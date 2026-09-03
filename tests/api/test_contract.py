@@ -26,6 +26,8 @@ from black_bloc.cogs.community.polls import (
 from black_bloc.cogs.community.role_menus import add_option, create_menu, get_menu
 from black_bloc.cogs.community.tempvoice import add_channel
 from black_bloc.cogs.content.golive import set_link, set_optout, start_session
+from black_bloc.cogs.content.raidtrain import create_train
+from black_bloc.cogs.content.raidtrain import set_status as set_train_status
 from black_bloc.cogs.content.youtube import YouTube
 from black_bloc.cogs.content.youtube import set_link as set_youtube_link
 from black_bloc.cogs.moderation.honeypot import record_hit
@@ -82,6 +84,31 @@ class FakeCog:
 
     def loop_health(self, name: str):
         return (datetime.now(UTC).isoformat(), None)
+
+
+class FakeRaidTrains:
+    """The raid-train cog's three side effects, without a Discord channel to post into."""
+
+    @tasks.loop(minutes=5)
+    async def sweep(self) -> None:
+        return None
+
+    last_sweep_ok_at = None
+    last_sweep_error = None
+    sweep_failures = 0
+
+    def loop_health(self, name: str):
+        return (datetime.now(UTC).isoformat(), None)
+
+    async def publish_lineup(self, guild, train_id) -> None:
+        return None
+
+    async def _refresh_lineup(self, guild, train_id) -> None:
+        return None
+
+    async def cancel_train(self, guild, train, reason, actor) -> int:
+        await set_train_status(self.db, train["id"], "cancelled", reason=reason)
+        return 0
 
 
 def contract() -> dict:
@@ -328,6 +355,19 @@ async def seeded(client, sign_in, web, guild, wf):
     member_request_id = await make_request(
         db, guild_id, MEMBER_ID, "Karaoke night", PLANNED, decided_by=7
     )
+    raid_trains = FakeRaidTrains()
+    raid_trains.db = db
+    web.cogs["RaidTrains"] = raid_trains
+    raid_train_id = await create_train(
+        db,
+        guild_id,
+        7,
+        title="Saturday raid train",
+        description="Everyone welcome.",
+        starts_at=datetime.now(UTC) + timedelta(days=2),
+        slot_minutes=60,
+        slot_count=3,
+    )
     grant_id = await grants.add_grant(
         db,
         guild_id,
@@ -357,6 +397,7 @@ async def seeded(client, sign_in, web, guild, wf):
         "chat_section_id": str(chat_section_id),
         "feature_request_id": str(feature_request_id),
         "member_request_id": str(member_request_id),
+        "raid_train_id": str(raid_train_id),
         "ping_member_id": str(PING_MEMBER_ID),
     }
 

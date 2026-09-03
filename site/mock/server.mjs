@@ -495,8 +495,68 @@ function seedRequestComments() {
   }));
 }
 
+// Phase 18. Slots are built from the train's own start the way create_train does it, so the
+// times on the page are always consecutive and a swap never has to move one.
+const RAID_TRAIN_SEED = [
+  [1, 3, 'Saturday raid train', 'Eight hours, one streamer an hour, raid down the line.', -2880, 60, 4, 'open', ['830000000000000020', '830000000000000021']],
+  [2, 1, 'Launch-day train', 'The one that ran last month.', 43200, 60, 3, 'done', ['830000000000000022', null]],
+];
+const RAID_SLOT_SEED = {
+  1: [[1, 1, 40], [2, 2, 30], [3, null, null], [4, null, null]],
+  2: [[1, 1, 4300], [2, 2, 4200], [3, 3, 4100]],
+};
+
+function seedRaidTrains() {
+  return RAID_TRAIN_SEED.map(([id, who, title, description, aged, minutes, count, status, ids]) => ({
+    id,
+    organizer_id: who === 3 ? STAFF.id : MEMBERS[who].id,
+    title,
+    description,
+    starts_at: minutesAgo(aged),
+    slot_minutes: minutes,
+    slot_count: count,
+    status,
+    channel_id: '800000000000000003',
+    lineup_message_id: ids[0],
+    thread_id: ids[1],
+    scheduled_event_id: null,
+    cancel_reason: null,
+    created_at: minutesAgo(aged + 6000),
+  }));
+}
+
+function seedRaidSlots(trains) {
+  const rows = [];
+  let id = 1;
+  for (const train of trains) {
+    const start = new Date(train.starts_at).getTime();
+    const length = train.slot_minutes * 60000;
+    for (const [position, who, claimedAgo] of RAID_SLOT_SEED[train.id]) {
+      rows.push({
+        id: id += 1,
+        train_id: train.id,
+        position,
+        starts_at: new Date(start + length * (position - 1)).toISOString(),
+        ends_at: new Date(start + length * position).toISOString(),
+        user_id: who === null ? null : MEMBERS[who].id,
+        twitch_login: who === null ? null : ['caseyfast', 'rivetplays', 'mothlight'][who - 1],
+        claimed_at: claimedAgo === null ? null : minutesAgo(claimedAgo),
+        assigned_by: null,
+        reminded_at: null,
+        checked_in_at: null,
+        live_posted_at: null,
+      });
+    }
+  }
+  return rows;
+}
+
 function seedState() {
+  const raidTrains = seedRaidTrains();
   return {
+  raidTrains,
+  raidSlots: seedRaidSlots(raidTrains),
+  nextRaidTrain: 3,
   settings: new Map(SETTING_SPECS.map((spec) => [spec[0], spec[2]])),
   audit: [
     { key: 'automod_mode', value: 'shadow', updated_by: STAFF.id, updated_at: minutesAgo(220) },
@@ -2114,6 +2174,277 @@ route('GET', '/api/youtube/status', (context) => {
     videos: state.youtube.videos.length,
     announced: state.youtube.videos.filter((row) => row.announced_at && row.mode === 'on').length,
   };
+});
+
+// Phase 18. `/status` is declared before `/:train_id` because the mock's matcher takes the
+// first pattern of the right shape, exactly as FastAPI takes the first route that matches.
+const RAID_STATUS_WORDS = {
+  open: 'open for sign-ups',
+  locked: 'locked — the lineup is set',
+  live: 'running now',
+  done: 'finished',
+  cancelled: 'cancelled',
+};
+const RAID_MOVES = {
+  open: ['locked', 'live', 'cancelled'],
+  locked: ['open', 'live', 'cancelled'],
+  live: ['done'],
+  done: [],
+  cancelled: [],
+};
+
+function raidSlotsOf(trainId) {
+  return state.raidSlots
+    .filter((row) => row.train_id === Number(trainId))
+    .sort((a, b) => a.position - b.position);
+}
+
+function raidTrainOf(trainId) {
+  const found = state.raidTrains.find((row) => row.id === Number(trainId));
+  if (!found) {
+    throw new Refused(404, 'not_found', 'Black Bloc has no raid train **' + trainId + '** in this server, so nothing was done. The table above lists the ones it does have.');
+  }
+  return found;
+}
+
+function raidSlotRow(row) {
+  return {
+    id: row.id,
+    position: row.position,
+    starts_at: row.starts_at,
+    ends_at: row.ends_at,
+    user_id: row.user_id === null ? null : String(row.user_id),
+    user_name: row.user_id === null ? null : memberName(row.user_id),
+    twitch_login: row.twitch_login,
+    claimed_at: row.claimed_at,
+    assigned_by: row.assigned_by === null ? null : String(row.assigned_by),
+    reminded_at: row.reminded_at,
+    checked_in_at: row.checked_in_at,
+    state: row.user_id === null ? 'open' : 'taken',
+  };
+}
+
+function raidTrainRow(row) {
+  const slots = raidSlotsOf(row.id);
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    starts_at: row.starts_at,
+    slot_minutes: row.slot_minutes,
+    slot_count: row.slot_count,
+    status: row.status,
+    status_word: RAID_STATUS_WORDS[row.status] || row.status,
+    filled: slots.filter((one) => one.user_id !== null).length,
+    slots_total: slots.length,
+    channel_id: row.channel_id,
+    lineup_message_id: row.lineup_message_id,
+    thread_id: row.thread_id,
+    scheduled: Boolean(row.scheduled_event_id),
+    cancel_reason: row.cancel_reason,
+    created_at: row.created_at,
+    organizer_id: String(row.organizer_id),
+    organizer_name: memberName(row.organizer_id) || String(row.organizer_id),
+    editable: row.status === 'open' || row.status === 'locked',
+  };
+}
+
+function raidLineup(row) {
+  const slots = raidSlotsOf(row.id);
+  const lines = ['**' + row.title + '** — raid train', RAID_STATUS_WORDS[row.status] || row.status];
+  for (const slot of slots) {
+    const who = slot.user_id === null ? '_open_' : '<@' + slot.user_id + '> (https://twitch.tv/' + slot.twitch_login + ')';
+    lines.push('`#' + String(slot.position).padStart(2, ' ') + '` ' + who);
+  }
+  return lines.join('\n');
+}
+
+function raidDetail(row) {
+  return Object.assign(raidTrainRow(row), {
+    slots: raidSlotsOf(row.id).map(raidSlotRow),
+    lineup: raidLineup(row),
+  });
+}
+
+route('GET', '/api/raidtrains/status', (context) => {
+  requireStaff(context.session);
+  const slots = state.raidSlots;
+  return {
+    mode: state.settings.get('raidtrain_mode'),
+    channel_id: state.settings.get('raidtrain_channel_id') || null,
+    running: true,
+    last_ok_at: minutesAgo(3),
+    last_error: null,
+    failures: 0,
+    every_minutes: state.settings.get('raidtrain_poll_minutes'),
+    trains: state.raidTrains.length,
+    upcoming: state.raidTrains.filter((row) => ['open', 'locked', 'live'].includes(row.status)).length,
+    slots: slots.length,
+    claimed: slots.filter((row) => row.user_id !== null).length,
+  };
+});
+
+route('GET', '/api/raidtrains', (context) => {
+  requireStaff(context.session);
+  const scope = context.url.searchParams.get('scope') || 'upcoming';
+  const wanted = ['upcoming', 'past', 'all'].includes(scope) ? scope : 'upcoming';
+  return state.raidTrains
+    .filter((row) => {
+      if (wanted === 'all') return true;
+      const open = ['open', 'locked', 'live'].includes(row.status);
+      return wanted === 'upcoming' ? open : !open;
+    })
+    .sort((a, b) => String(a.starts_at).localeCompare(String(b.starts_at)))
+    .map(raidTrainRow);
+});
+
+route('GET', '/api/raidtrains/:train_id', (context) => {
+  requireStaff(context.session);
+  return raidDetail(raidTrainOf(context.params.train_id));
+});
+
+route('POST', '/api/raidtrains', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const title = String(body.title || '').trim().slice(0, 100);
+  if (!title) throw new Refused(400, 'bad_request', 'A raid train needs a title, so nothing was made. Give it one and try again.');
+  const minutes = Number(body.slot_minutes || state.settings.get('raidtrain_slot_minutes'));
+  const count = Number(body.slot_count || 0);
+  const startedAt = Date.parse(String(body.start || '').replace(' ', 'T'));
+  if (Number.isNaN(startedAt)) {
+    throw new Refused(400, 'bad_start', '**' + String(body.start || '').slice(0, 80) + '** is not a date Black Bloc can read, so nothing was submitted. Write it as `YYYY-MM-DD HH:MM` on a 24-hour clock.');
+  }
+  if (startedAt <= Date.now()) {
+    throw new Refused(400, 'start_in_the_past', '**' + String(body.start || '').slice(0, 80) + '** has already gone by, so nothing was submitted. Pick a time in the future.');
+  }
+  if (minutes < 15 || minutes > 720 || count < 1 || count > 24) {
+    throw new Refused(400, 'bad_size', 'A raid train runs 1 to 24 slots of 15 to 720 minutes each, so nothing was made. Discord will not carry a longer lineup in one message.');
+  }
+  const id = state.nextRaidTrain;
+  state.nextRaidTrain += 1;
+  const train = {
+    id,
+    organizer_id: context.session.id,
+    title,
+    description: String(body.description || '').slice(0, 500) || null,
+    starts_at: new Date(startedAt).toISOString(),
+    slot_minutes: minutes,
+    slot_count: count,
+    status: 'open',
+    channel_id: state.settings.get('raidtrain_channel_id'),
+    lineup_message_id: null,
+    thread_id: null,
+    scheduled_event_id: null,
+    cancel_reason: null,
+    created_at: now(),
+  };
+  state.raidTrains.push(train);
+  let nextId = Math.max(0, ...state.raidSlots.map((row) => row.id));
+  for (let position = 1; position <= count; position += 1) {
+    nextId += 1;
+    state.raidSlots.push({
+      id: nextId,
+      train_id: id,
+      position,
+      starts_at: new Date(startedAt + minutes * 60000 * (position - 1)).toISOString(),
+      ends_at: new Date(startedAt + minutes * 60000 * position).toISOString(),
+      user_id: null,
+      twitch_login: null,
+      claimed_at: null,
+      assigned_by: null,
+      reminded_at: null,
+      checked_in_at: null,
+      live_posted_at: null,
+    });
+  }
+  logAction('web.raidtrain.create', { details: { train_id: id, title, slot_minutes: minutes, slot_count: count } });
+  return Object.assign(raidTrainRow(train), {
+    message: '**' + title + '** is up with ' + count + ' slot(s) of ' + minutes + ' minutes each.',
+  });
+});
+
+route('POST', '/api/raidtrains/:train_id/slots/:position', async (context) => {
+  requireStaff(context.session);
+  const train = raidTrainOf(context.params.train_id);
+  const slots = raidSlotsOf(train.id);
+  const position = Number(context.params.position);
+  const slot = slots.find((row) => row.position === position);
+  if (!slot) {
+    throw new Refused(404, 'no_such_slot', 'This train has no slot **#' + position + '**, so nothing was changed. It runs from #1 to #' + slots.length + ' — `/raidtrain status` lists them.');
+  }
+  const body = await context.body();
+  const given = body.member_id;
+  let said;
+  if (given === null || given === undefined || given === '') {
+    if (slot.user_id === null) {
+      throw new Refused(409, 'already_empty', 'Slot #' + position + ' is already empty, so there was nothing to take off it.');
+    }
+    logAction('web.raidtrain.unassign', { target_id: slot.user_id, details: { train_id: train.id, position } });
+    Object.assign(slot, { user_id: null, twitch_login: null, claimed_at: null, assigned_by: null, reminded_at: null, checked_in_at: null });
+    said = 'Slot #' + position + ' is open again.';
+  } else {
+    const memberId = String(given);
+    const link = state.golive.links.find((one) => String(one.user_id) === memberId);
+    if (!link && state.settings.get('raidtrain_require_link')) {
+      throw new Refused(409, 'not_linked', '**' + (memberName(memberId) || memberId) + '** has no Twitch channel linked, so the lineup cannot say who to raid. They run `/twitch link`, or a Lead turns `raidtrain_require_link` off.');
+    }
+    Object.assign(slot, {
+      user_id: memberId,
+      twitch_login: link ? link.twitch_login : null,
+      claimed_at: now(),
+      assigned_by: context.session.id,
+    });
+    logAction('web.raidtrain.assign', { target_id: memberId, details: { train_id: train.id, position } });
+    said = 'Slot #' + position + ' now belongs to ' + (memberName(memberId) || memberId) + '.';
+  }
+  return Object.assign(raidDetail(train), { message: said });
+});
+
+route('POST', '/api/raidtrains/:train_id/swap', async (context) => {
+  requireStaff(context.session);
+  const train = raidTrainOf(context.params.train_id);
+  const body = await context.body();
+  const first = Number(body.a);
+  const second = Number(body.b);
+  if (first === second) throw new Refused(400, 'bad_request', 'Those are the same slot, so nothing was changed.');
+  const slots = raidSlotsOf(train.id);
+  const one = slots.find((row) => row.position === first);
+  const other = slots.find((row) => row.position === second);
+  if (!one || !other) {
+    throw new Refused(404, 'no_such_slot', 'This train has no slot **#' + (one ? second : first) + '**, so nothing was changed. It runs from #1 to #' + slots.length + ' — `/raidtrain status` lists them.');
+  }
+  const carried = ['user_id', 'twitch_login', 'claimed_at', 'assigned_by', 'reminded_at'];
+  const held = Object.fromEntries(carried.map((name) => [name, one[name]]));
+  for (const name of carried) one[name] = other[name];
+  for (const name of carried) other[name] = held[name];
+  logAction('web.raidtrain.swap', { details: { train_id: train.id, a: first, b: second } });
+  return Object.assign(raidDetail(train), { message: 'Slots #' + first + ' and #' + second + ' have changed places.' });
+});
+
+route('POST', '/api/raidtrains/:train_id/status', async (context) => {
+  requireStaff(context.session);
+  const train = raidTrainOf(context.params.train_id);
+  const body = await context.body();
+  const wanted = String(body.status || '').trim().toLowerCase();
+  if (!RAID_STATUS_WORDS[wanted]) {
+    throw new Refused(400, 'bad_status', '**' + (wanted || '(nothing)') + '** is not a state a raid train can be in. It is one of open, locked, live, done or cancelled, and only some of those can be reached from where this one is.');
+  }
+  const allowed = RAID_MOVES[train.status] || [];
+  if (!allowed.includes(wanted)) {
+    const words = allowed.length === 0
+      ? '**' + train.status + '** is the end of the line for a raid train, so nothing was changed.'
+      : 'A raid train that is **' + train.status + '** cannot be marked **' + wanted + '**, so nothing was changed. From here it can only become ' + allowed.map((one) => '**' + one + '**').join(', ') + '.';
+    throw new Refused(409, 'bad_move', words);
+  }
+  const reason = String(body.reason || '').trim().slice(0, 500);
+  if (wanted === 'cancelled' && !reason) {
+    throw new Refused(400, 'bad_request', 'Cancelling tells everybody who signed up, so it needs a reason to tell them. Type one and try again.');
+  }
+  train.status = wanted;
+  train.cancel_reason = wanted === 'cancelled' ? reason : null;
+  if (wanted === 'cancelled') logAction('web.raidtrain.cancel', { reason, details: { train_id: train.id, title: train.title } });
+  else logAction(wanted === 'locked' ? 'web.raidtrain.lock' : 'web.raidtrain.unlock', { details: { train_id: train.id, title: train.title } });
+  return Object.assign(raidDetail(train), { message: '**' + train.title + '** is now **' + wanted + '**.' });
 });
 
 // F14. The mock keeps the fan roles beside the go-live state because that is where the real
