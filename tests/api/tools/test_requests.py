@@ -380,6 +380,36 @@ async def test_staff_pick_it_up_from_the_site_and_the_asker_is_dmed(
     assert "web.request.in_progress" in await kinds(web, wf)
 
 
+async def test_a_decision_from_the_site_leaves_one_row_and_not_two(as_staff, client, web, wf):
+    """Owner, 2026-09-03: "The app double posted all messages with a web.request and a request".
+
+    The shared `apply_decision` logged `request.done` and the route noted `web.request.done` on
+    top of it, so one click left two rows and two embeds. It takes `via` now and notes nothing.
+    """
+    await file_one(client)
+
+    done = client.post("/api/requests/1/decline", json={"reason": "we already have one"})
+
+    assert done.status_code == 200
+    left = await wf.web_rows_in(web.db)
+    assert [kind for kind, _ in left] == ["web.request.filed", "web.request.declined"], left
+    details = left[-1][1]
+    assert details["request_id"] == 1 and details["was"] == "open"
+    assert details["via"] == wf.VIA_WEBSITE
+    assert [kind for kind in await kinds(web, wf) if kind.startswith("request.")] == []
+
+
+async def test_resuming_from_the_site_leaves_one_row_and_not_two(as_staff, client, web, wf):
+    await file_one(client)
+    client.post("/api/requests/1/hold", json={"reason": "waiting on the bill"})
+
+    back = client.post("/api/requests/1/resume", json={})
+
+    assert back.status_code == 200
+    left = [kind for kind, _ in await wf.web_rows_in(web.db)]
+    assert left == ["web.request.filed", "web.request.hold", "web.request.resumed"], left
+
+
 async def test_a_decline_without_a_line_is_refused(as_staff, client):
     await file_one(client)
 

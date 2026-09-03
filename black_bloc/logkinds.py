@@ -186,7 +186,6 @@ ROUTINE: frozenset[str] = frozenset(
         "event.announce",
         "event.announce_channel_forgotten",
         "event.announcement_edited",
-        "event.cancel",
         "event.category_forgotten",
         "event.channel_deleted",
         "event.created",
@@ -213,7 +212,6 @@ ROUTINE: frozenset[str] = frozenset(
         "youtube.setup",
         "youtube.skipped",
         "youtube.unlink",
-        "honeypot.ban",
         "honeypot.exempt",
         "honeypot.exempt_add",
         "honeypot.exempt_remove",
@@ -226,12 +224,9 @@ ROUTINE: frozenset[str] = frozenset(
         "automod.mode",
         "automod.observed",
         "automod.rule",
-        "mod.apply",
-        "mod.rule",
         "modmail.block",
         "modmail.blocked_dm",
         "modmail.category_forgotten",
-        "modmail.close",
         "modmail.forgotten",
         "modmail.log_channel_forgotten",
         "modmail.member_left",
@@ -253,11 +248,9 @@ ROUTINE: frozenset[str] = frozenset(
         "pings.setup",
         "pings.unfollow",
         "poll.archived",
-        "poll.cancel",
         "poll.channel_forgotten",
         "poll.closed",
         "poll.created",
-        "poll.end",
         "poll.opened",
         "poll.recur_created",
         "poll.recur_deleted",
@@ -320,7 +313,6 @@ ROUTINE: frozenset[str] = frozenset(
         "tempvoice.create",
         "tempvoice.creator_removed",
         "tempvoice.delete",
-        "tempvoice.forget",
         "tempvoice.hide",
         "tempvoice.kick",
         "tempvoice.limit",
@@ -357,6 +349,11 @@ def bare(kind: str) -> str:
     text = str(kind or "")
     head, dot, rest = text.partition(".")
     return rest if head == WEB and rest else text
+
+
+def kind_via(kind: str, via: str) -> str:
+    """The one place the `web.` head is put on: `bare()` read backwards."""
+    return f"{WEB}.{kind}" if via == VIA_WEBSITE else str(kind)
 
 
 def feature_of(kind: str) -> str:
@@ -444,6 +441,7 @@ __all__ = [
     "heads_for",
     "is_important",
     "is_shadow",
+    "kind_via",
     "like_patterns",
     "log_level_key",
     "should_post",

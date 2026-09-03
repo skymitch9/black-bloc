@@ -123,8 +123,8 @@ async def test_closing_files_the_transcript_and_tells_the_member(
     assert response.json()["closed"] is True and response.json()["transcript"] is True
     assert (await get_ticket(web.db, ticket_id))["status"] == "closed"
     assert member.dms and "answered" in member.dms[-1]
-    kinds = await wf.kinds_in(web.db)
-    assert "modmail.closed" in kinds and "web.modmail.close" in kinds
+    kinds = [kind for kind, _ in await wf.web_rows_in(web.db)]
+    assert kinds == ["web.modmail.closed"], kinds
 
 
 async def test_a_silent_close_tells_nobody(client, sign_in, web, guild, wf):

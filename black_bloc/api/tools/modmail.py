@@ -21,6 +21,7 @@ from ...cogs.moderation.modmail import (
     tickets_by_status,
 )
 from ...events import clamp
+from ...logkinds import VIA_WEBSITE
 from ...modmail import CLOSED, OPEN, load_attachments
 from ..auth import Refused, staff_dependency
 from ..names import resolve_one
@@ -214,19 +215,16 @@ def build_router(bot: Any) -> APIRouter:
             if place is not None and not may_remove(bot, place):
                 refuse_guarded(CLOSE_WOULD_DELETE)
         closed, why_not = await close_ticket(
-            bot, guild, row, by=actor_for(bot, who, guild), reason=reason, silent=silent
+            bot,
+            guild,
+            row,
+            by=actor_for(bot, who, guild),
+            reason=reason,
+            silent=silent,
+            via=VIA_WEBSITE,
         )
         if not closed:
             raise Refused(409, "close_raced", CLOSE_RACED.format(ticket_id=ticket_id))
-        await note(
-            bot,
-            guild,
-            "web.modmail.close",
-            who,
-            target=row["user_id"],
-            reason=reason,
-            details={"ticket_id": ticket_id, "silent": silent},
-        )
         fresh = await get_ticket(bot.db, ticket_id)
         return {
             "closed": True,

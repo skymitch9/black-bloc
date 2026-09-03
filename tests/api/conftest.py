@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
@@ -9,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from black_bloc.api.server import SAME_ORIGIN, SAME_SITE_HEADER, create_app
 from black_bloc.config import load_settings
+from black_bloc.logkinds import VIA_DISCORD, VIA_WEBSITE
 from black_bloc.settings_store import SettingsStore
 from black_bloc.storage.db import Database
 
@@ -392,6 +394,23 @@ async def kinds_in(db: Any) -> list[str]:
     return [row["kind"] for row in await cur.fetchall()]
 
 
+async def web_rows_in(db: Any) -> list[tuple[str, dict]]:
+    """The `web.*` lines with their details, so a test can count one row per dashboard write."""
+    cur = await db.conn.execute(
+        "SELECT kind, details FROM action_log WHERE kind LIKE 'web.%' ORDER BY id"
+    )
+    return [(row["kind"], json.loads(row["details"] or "{}")) for row in await cur.fetchall()]
+
+
+async def one_web_row(db: Any, kind: str) -> dict:
+    """Exactly one `web.*` row of this kind and no other — the double-post guard, per route."""
+    rows = await web_rows_in(db)
+    assert [found for found, _ in rows] == [kind], rows
+    details = rows[0][1]
+    assert details.get("via") == VIA_WEBSITE, details
+    return details
+
+
 @pytest.fixture
 def wf():
     """The api fakes as a fixture, because a conftest is not importable by name."""
@@ -404,6 +423,10 @@ def wf():
         Role=WebRole,
         member=member,
         kinds_in=kinds_in,
+        web_rows_in=web_rows_in,
+        one_web_row=one_web_row,
+        VIA_DISCORD=VIA_DISCORD,
+        VIA_WEBSITE=VIA_WEBSITE,
         SECRET=SECRET,
         ORIGIN=ORIGIN,
         SAME_SITE=SAME_SITE,

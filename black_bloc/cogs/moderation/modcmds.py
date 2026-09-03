@@ -17,6 +17,7 @@ from ...actionlog import (
 )
 from ...automod import TIMEOUT_MAX_SECONDS
 from ...command_visibility import STAFF_ONLY
+from ...logkinds import VIA_DISCORD, kind_via
 from ...modcases import (
     CASES_PER_PAGE,
     PURGE_MAX,
@@ -168,6 +169,7 @@ async def refuse_in_test_mode(
     reason: Any = None,
     duration_s: int | None = None,
     channel_id: int | None = None,
+    via: str = VIA_DISCORD,
 ) -> str:
     """Record what would have happened and give back the refusal to say."""
     target_id = getattr(target, "id", target)
@@ -186,11 +188,11 @@ async def refuse_in_test_mode(
     await log_action(
         bot,
         guild,
-        f"mod.would_{kind}",
+        kind_via(f"mod.would_{kind}", via),
         actor=moderator,
         target=target_id,
         reason=reason,
-        details={"case_id": case_id, "reason": "test_mode"},
+        details={"case_id": case_id, "reason": "test_mode", "via": via},
     )
     return refusal_in_test_mode(wording)
 
@@ -227,17 +229,19 @@ async def tell_member(
     )
 
 
-async def warn_member(bot: Any, guild: Any, member: Any, moderator: Any, reason: Any) -> str:
+async def warn_member(
+    bot: Any, guild: Any, member: Any, moderator: Any, reason: Any, *, via: str = VIA_DISCORD
+) -> str:
     await tell_member(bot, guild, member, "warn", reason)
     case_id = await record_case(bot, guild, member.id, "warn", moderator=moderator, reason=reason)
     await log_action(
         bot,
         guild,
-        "mod.warned",
+        kind_via("mod.warned", via),
         actor=moderator,
         target=member,
         reason=reason,
-        details={"case_id": case_id},
+        details={"case_id": case_id, "via": via},
     )
     count = await warn_count(bot.db, guild.id, member.id)
     threshold = int(bot.store.get(guild.id, "automod_warn_threshold") or 0)
@@ -256,7 +260,14 @@ async def warn_member(bot: Any, guild: Any, member: Any, moderator: Any, reason:
 
 
 async def timeout_member(
-    bot: Any, guild: Any, member: Any, moderator: Any, seconds: int, reason: Any
+    bot: Any,
+    guild: Any,
+    member: Any,
+    moderator: Any,
+    seconds: int,
+    reason: Any,
+    *,
+    via: str = VIA_DISCORD,
 ) -> str:
     try:
         await member.timeout(
@@ -277,11 +288,11 @@ async def timeout_member(
     await log_action(
         bot,
         guild,
-        "mod.timed_out",
+        kind_via("mod.timed_out", via),
         actor=moderator,
         target=member,
         reason=reason,
-        details={"case_id": case_id, "duration_s": clamp_timeout(seconds)},
+        details={"case_id": case_id, "duration_s": clamp_timeout(seconds), "via": via},
     )
     return (
         f"Timed **{member.display_name}** out for {describe_duration(seconds)} — case "
@@ -289,7 +300,9 @@ async def timeout_member(
     )
 
 
-async def untimeout_member(bot: Any, guild: Any, member: Any, moderator: Any, reason: Any) -> str:
+async def untimeout_member(
+    bot: Any, guild: Any, member: Any, moderator: Any, reason: Any, *, via: str = VIA_DISCORD
+) -> str:
     try:
         await member.timeout(None, reason=audit_reason(moderator, reason))
     except discord.HTTPException as exc:
@@ -301,16 +314,18 @@ async def untimeout_member(bot: Any, guild: Any, member: Any, moderator: Any, re
     await log_action(
         bot,
         guild,
-        "mod.untimed_out",
+        kind_via("mod.untimed_out", via),
         actor=moderator,
         target=member,
         reason=reason,
-        details={"case_id": case_id},
+        details={"case_id": case_id, "via": via},
     )
     return f"**{member.display_name}** is out of their timeout — case **#{case_id}**."
 
 
-async def kick_member(bot: Any, guild: Any, member: Any, moderator: Any, reason: Any) -> str:
+async def kick_member(
+    bot: Any, guild: Any, member: Any, moderator: Any, reason: Any, *, via: str = VIA_DISCORD
+) -> str:
     await tell_member(bot, guild, member, "kick", reason)
     try:
         await guild.kick(member, reason=audit_reason(moderator, reason))
@@ -320,17 +335,24 @@ async def kick_member(bot: Any, guild: Any, member: Any, moderator: Any, reason:
     await log_action(
         bot,
         guild,
-        "mod.kicked",
+        kind_via("mod.kicked", via),
         actor=moderator,
         target=member,
         reason=reason,
-        details={"case_id": case_id},
+        details={"case_id": case_id, "via": via},
     )
     return f"Kicked **{member.display_name}** — case **#{case_id}**."
 
 
 async def ban_member(
-    bot: Any, guild: Any, member: Any, moderator: Any, reason: Any, purge_days: int = 0
+    bot: Any,
+    guild: Any,
+    member: Any,
+    moderator: Any,
+    reason: Any,
+    purge_days: int = 0,
+    *,
+    via: str = VIA_DISCORD,
 ) -> str:
     days = clamp_purge_days(purge_days)
     await tell_member(bot, guild, member, "ban", reason)
@@ -352,11 +374,11 @@ async def ban_member(
     await log_action(
         bot,
         guild,
-        "mod.banned",
+        kind_via("mod.banned", via),
         actor=moderator,
         target=member,
         reason=reason,
-        details={"case_id": case_id, "purge_days": days},
+        details={"case_id": case_id, "purge_days": days, "via": via},
     )
     return (
         f"Banned **{member.display_name}** and deleted {days} day(s) of their messages — case "
@@ -364,7 +386,9 @@ async def ban_member(
     )
 
 
-async def unban_member(bot: Any, guild: Any, user_id: int, moderator: Any, reason: Any) -> str:
+async def unban_member(
+    bot: Any, guild: Any, user_id: int, moderator: Any, reason: Any, *, via: str = VIA_DISCORD
+) -> str:
     try:
         await guild.unban(discord.Object(id=int(user_id)), reason=audit_reason(moderator, reason))
     except discord.NotFound:
@@ -377,11 +401,11 @@ async def unban_member(bot: Any, guild: Any, user_id: int, moderator: Any, reaso
     await log_action(
         bot,
         guild,
-        "mod.unbanned",
+        kind_via("mod.unbanned", via),
         actor=moderator,
         target=int(user_id),
         reason=reason,
-        details={"case_id": case_id},
+        details={"case_id": case_id, "via": via},
     )
     return f"Lifted the ban on **{user_id}** — case **#{case_id}**."
 

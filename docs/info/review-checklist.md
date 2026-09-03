@@ -3,14 +3,16 @@
 > **Audience:** every build agent (read BEFORE building) and every review
 > agent (score against it). **Status:** TRACKED (owner, 2026-08-31 — was
 > local-only until then). **Last verified:
-> 2026-08-31** — the file now holds **33 numbered items** (counted today), not
+> 2026-09-03** — the file now holds **34 numbered items**, not
 > the 20 it started with: items 1–20 are CONFIRMED findings from the Phase 2
 > adversarial review (`phase2-design.md` build, commit `ece5e3b`) or an
-> incident earlier the same day; 21–33 were added by later phases, the newest
-> being **33** (every decision configurable from both the dashboard and the bot
-> — owner, 2026-08-27, commit `ad1ab5a`). Generic advice is deliberately absent.
-> ⚠️ Only the COUNT and item 33's provenance were re-verified today; the wording
-> of items 1–32 was not re-traced to its incident.
+> incident earlier the same day; 21–33 were added by later phases, and **34**
+> (one web write leaves one log row) was added today from the owner's
+> 2026-09-03 double-post report. Generic advice is deliberately absent.
+> ⚠️ Only item 34 was verified today — against the code it describes and the
+> three tests that guard it. The wording of items 1–33 was not re-traced to
+> its incident, and item 33's count line was the only thing checked on
+> 2026-08-31.
 
 ## Test policy and rollout
 
@@ -127,3 +129,5 @@
     and after landing; builds run 150–260k Opus tokens here.
 
 33. **Is every decision this change introduces configurable from BOTH the dashboard and the bot?** (owner rule 2026-08-27: "all decisions we make here can be configured in dashboard and with bot"). A decided default is a registry key (`KEY_TYPES`/`KEY_HELP`/`KEY_CHOICES`), which gives the Settings page + `/settings set-value` for free; a per-item choice (menu approval, poll anonymity, request status) needs a slash subcommand AND a dashboard control. Traced to: Phase 12 log levels, Phase 9 approval fields, Phase 10 per-poll flags — all built that way; the rule stops the next one from being a constant.
+
+34. **A web route that calls a shared path which already logs passes `via=VIA_WEBSITE` and never `note()`s the same event again.** One write leaves ONE `action_log` row and ONE Discord embed. The shared function takes a keyword-only `via: str = VIA_DISCORD`, builds its kind with `logkinds.kind_via(kind, via)` — the single inverse of `bare()`, never a hand-rolled `f"{WEB}."` — and records `details["via"] = via`; the route passes `via=VIA_WEBSITE` and deletes its own `note()`. `note()` stays ONLY where the route is the sole logger (`web.request.filed`, `web.request.updated`, comments, withdraw, the raid-train and role-menu CRUD). Consequential rows the bot emits on its own (`request.dm_failed`, `request.notify_failed`, `modmail.place_kept`) keep their bare kind — only the actor's action row takes the head. Traced to: owner, 2026-09-03, "The app double posted all messages with a web.request and a request" — `apply_decision` logged `request.done` and the route noted `web.request.done` on top of it, in 8 route files. Guarded by `tests/test_logkinds.py::test_a_route_never_notes_an_event_its_shared_path_already_logged` (an AST walk of `api/tools/*.py`), `::test_no_module_builds_the_web_head_for_itself` and `::test_a_shared_logger_stays_discord_unless_a_route_says_otherwise`.

@@ -19,6 +19,7 @@ from ...actionlog import (
 )
 from ...command_errors import SafeDynamicItem
 from ...command_visibility import STAFF_ONLY
+from ...logkinds import VIA_DISCORD, kind_via
 from ...settings_store import (
     DB_UNAVAILABLE,
     HONEYPOT_MODES,
@@ -243,7 +244,9 @@ async def _dm_before_ban(guild: Any, user: Any) -> None:
         log.info("honeypot: could not warn %s before the ban: %s", getattr(user, "id", "?"), exc)
 
 
-async def ban_hit(bot: Any, guild: Any, hit_id: int, actor: Any, by: str) -> tuple[str, str]:
+async def ban_hit(
+    bot: Any, guild: Any, hit_id: int, actor: Any, by: str, *, via: str = VIA_DISCORD
+) -> tuple[str, str]:
     """The Ban-now path, for the button and the web alike: (what happened, what to say)."""
     hit = await get_hit(bot.db, hit_id)
     if hit is None:
@@ -283,16 +286,16 @@ async def ban_hit(bot: Any, guild: Any, hit_id: int, actor: Any, by: str) -> tup
     await log_action(
         bot,
         guild,
-        "honeypot.banned",
+        kind_via("honeypot.banned", via),
         actor=actor,
         target=hit["user_id"],
-        details={"hit_id": hit_id, "by": by},
+        details={"hit_id": hit_id, "by": by, "via": via},
     )
     return ("banned", f"Banned <@{hit['user_id']}> for that trap post.")
 
 
 async def make_trap_channel(
-    bot: Any, guild: Any, actor: Any, name: str | None = None
+    bot: Any, guild: Any, actor: Any, name: str | None = None, *, via: str = VIA_DISCORD
 ) -> tuple[str, str]:
     """Create the trap channel, for slash and web alike: (what happened, what to say)."""
     live = [
@@ -337,9 +340,9 @@ async def make_trap_channel(
     await log_action(
         bot,
         guild,
-        "honeypot.setup",
+        kind_via("honeypot.setup", via),
         actor=actor,
-        details={"channel_id": channel.id, "notice_posted": posted},
+        details={"channel_id": channel.id, "notice_posted": posted, "via": via},
     )
     mode = bot.store.get(guild.id, "honeypot_mode")
     return (

@@ -16,7 +16,7 @@ from .cogs.community.role_menus import (
     unposted_menus,
 )
 from .command_visibility import controller as visibility_controller
-from .logkinds import VIA_DISCORD, VIA_WEBSITE, WEB
+from .logkinds import VIA_DISCORD, kind_via
 
 log = logging.getLogger(__name__)
 
@@ -41,12 +41,11 @@ def guild_of(bot: Any, guild_id: int) -> Any:
 async def note(
     bot: Any, menu: Any, kind: str, actor: Any, *, via: str = VIA_DISCORD, **extra: Any
 ) -> None:
-    head = f"{WEB}." if via == VIA_WEBSITE else ""
     try:
         await log_action(
             bot,
             guild_of(bot, menu["guild_id"]),
-            f"{head}{kind}",
+            kind_via(kind, via),
             actor=actor,
             details={
                 "menu": menu["name"],

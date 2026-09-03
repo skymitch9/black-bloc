@@ -29,6 +29,7 @@ from ...cogs.community.polls import (
     store_poll,
     votes_of,
 )
+from ...logkinds import VIA_WEBSITE
 from ...polls import (
     CANCELLED,
     CLOSED,
@@ -381,15 +382,9 @@ def build_router(bot: Any) -> APIRouter:
                 if payload.get("auto_thread") is not None
                 else bool(bot.store.get(guild.id, "poll_auto_thread"))
             ),
+            via=VIA_WEBSITE,
         )
         said = await _open_or_hold(guild, row, reviewing, int(channel_id))
-        await note(
-            bot,
-            guild,
-            "web.poll.created",
-            who,
-            details={"poll_id": row["id"], "kind": plan["kind"], "surface": plan["surface"]},
-        )
         fresh = await get_poll(bot.db, row["id"])
         return {
             "poll": await _shown(guild, fresh),
@@ -507,19 +502,10 @@ def build_router(bot: Any) -> APIRouter:
         if status == OPEN:
             refuse_outside_the_test_channel(bot, row)
         said, fresh = await decide_poll(
-            bot, guild, poll_id, status, actor_for(bot, who, guild), reason
+            bot, guild, poll_id, status, actor_for(bot, who, guild), reason, via=VIA_WEBSITE
         )
         if fresh is None:
             raise Refused(409, "already_decided", said)
-        await note(
-            bot,
-            guild,
-            "web.poll.approved" if status == OPEN else "web.poll.denied",
-            who,
-            target=fresh["creator_id"],
-            reason=reason,
-            details={"poll_id": poll_id},
-        )
         return {"poll": await _shown(guild, fresh), "message": said}
 
     @router.post("/requests/{poll_id}/approve")
@@ -556,21 +542,13 @@ def build_router(bot: Any) -> APIRouter:
             )
         refuse_outside_the_test_channel(bot, row)
         closed, written = await close_poll(
-            bot, guild, row, reason="web", actor=actor_for(bot, who, guild)
+            bot, guild, row, reason="web", actor=actor_for(bot, who, guild), via=VIA_WEBSITE
         )
         if not closed:
             fresh = await wanted_poll(bot, guild, poll_id)
             raise Refused(
                 409, "not_closeable", NOT_CLOSEABLE.format(poll_id=poll_id, status=fresh["status"])
             )
-        await note(
-            bot,
-            guild,
-            "web.poll.end",
-            who,
-            target=row["creator_id"],
-            details={"poll_id": poll_id},
-        )
         fresh = await wanted_poll(bot, guild, poll_id)
         said = CLOSED_SAID if written else CLOSED_NO_RESULT
         return {"poll": await _shown(guild, fresh), "message": said.format(poll_id=poll_id)}
@@ -582,20 +560,14 @@ def build_router(bot: Any) -> APIRouter:
         require_db(bot)
         row = await wanted_poll(bot, guild, poll_id)
         refuse_outside_the_test_channel(bot, row)
-        if not await cancel_poll(bot, guild, row, by=actor_for(bot, who, guild)):
+        if not await cancel_poll(
+            bot, guild, row, by=actor_for(bot, who, guild), via=VIA_WEBSITE
+        ):
             raise Refused(
                 409,
                 "not_cancellable",
                 NOT_CANCELLABLE.format(poll_id=poll_id, status=row["status"]),
             )
-        await note(
-            bot,
-            guild,
-            "web.poll.cancel",
-            who,
-            target=row["creator_id"],
-            details={"poll_id": poll_id},
-        )
         fresh = await wanted_poll(bot, guild, poll_id)
         return {
             "poll": await _shown(guild, fresh),

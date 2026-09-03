@@ -6,9 +6,10 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from ...cogs.moderation.honeypot import ban_hit, make_trap_channel, recent_hits
+from ...logkinds import VIA_WEBSITE
 from ..auth import Refused, staff_dependency
 from ..names import resolve_one
-from ..writes import actor_for, note, require_db, require_guild, writer_dependency
+from ..writes import actor_for, require_db, require_guild, writer_dependency
 
 log = logging.getLogger(__name__)
 
@@ -62,12 +63,11 @@ def build_router(bot: Any) -> APIRouter:
         guild = require_guild(bot)
         require_db(bot)
         outcome, said = await ban_hit(
-            bot, guild, hit_id, actor_for(bot, who, guild), "web"
+            bot, guild, hit_id, actor_for(bot, who, guild), "web", via=VIA_WEBSITE
         )
         if outcome != "banned":
             status, error = BAN_REFUSED.get(outcome, (409, "ban_refused"))
             raise Refused(status, error, said)
-        await note(bot, guild, "web.honeypot.ban", who, details={"hit_id": hit_id})
         return {"banned": True, "hit_id": hit_id, "message": said}
 
     @router.post("/setup")
@@ -78,10 +78,11 @@ def build_router(bot: Any) -> APIRouter:
         guild = require_guild(bot)
         require_db(bot)
         name = str((payload or {}).get("name") or "").strip() or None
-        outcome, said = await make_trap_channel(bot, guild, actor_for(bot, who, guild), name)
+        outcome, said = await make_trap_channel(
+            bot, guild, actor_for(bot, who, guild), name, via=VIA_WEBSITE
+        )
         if outcome != "created":
             raise Refused(409, SETUP_REFUSED.get(outcome, "setup_refused"), said)
-        await note(bot, guild, "web.honeypot.setup", who, details={"name": name})
         return {"created": True, "message": said}
 
     return router

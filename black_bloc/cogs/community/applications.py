@@ -19,7 +19,7 @@ from ...actionlog import (
 )
 from ...command_errors import AnswersErrors, SafeDynamicItem
 from ...command_visibility import STAFF_ONLY
-from ...logkinds import VIA_DISCORD, VIA_WEBSITE, WEB
+from ...logkinds import VIA_DISCORD, kind_via
 from ...settings_store import DB_UNAVAILABLE, require_staff
 from .role_menus import answer, card_target, change_roles, dm, ping_mentions
 
@@ -430,11 +430,10 @@ async def _approve(
     fresh = await forms.get_application(bot.db, row["id"])
     granted = await _hand_over(bot, guild, form, fresh, member, actor, until, details)
     fresh = await forms.get_application(bot.db, row["id"])
-    head = f"{WEB}." if via == VIA_WEBSITE else ""
     await log_action(
         bot,
         guild,
-        f"{head}application.approved",
+        kind_via("application.approved", via),
         actor=actor,
         target=member,
         details=details | {"expires_at": until, "granted": granted},
@@ -520,12 +519,11 @@ async def _deny(
         return forms.ALREADY_DECIDED.format(status=fresh["status"]), None
     fresh = await forms.get_application(bot.db, row["id"])
     member = guild.get_member(row["user_id"])
-    head = f"{WEB}." if via == VIA_WEBSITE else ""
     details = {"application_id": row["id"], "form": form["name"], "via": via}
     await log_action(
         bot,
         guild,
-        f"{head}application.denied",
+        kind_via("application.denied", via),
         actor=actor,
         target=member if member is not None else row["user_id"],
         reason=said,

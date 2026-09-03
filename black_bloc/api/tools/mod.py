@@ -26,6 +26,7 @@ from ...cogs.moderation.modcmds import (
     untimeout_member,
     warn_member,
 )
+from ...logkinds import VIA_WEBSITE
 from ...modcases import (
     CASES_PER_PAGE,
     cases_for,
@@ -43,7 +44,6 @@ from ..names import resolve_one
 from ..writes import (
     actor_for,
     guard_of,
-    note,
     reader_dependency,
     refuse_guarded,
     require_db,
@@ -139,7 +139,14 @@ def build_router(bot: Any) -> APIRouter:
 
     async def _refuse_under_guard(guild: Any, target: Any, kind: str, actor: Any, reason: Any):
         said = await refuse_in_test_mode(
-            bot, guild, target, kind, WORDING[kind], moderator=actor, reason=reason
+            bot,
+            guild,
+            target,
+            kind,
+            WORDING[kind],
+            moderator=actor,
+            reason=reason,
+            via=VIA_WEBSITE,
         )
         refuse_guarded(said)
 
@@ -166,22 +173,27 @@ def build_router(bot: Any) -> APIRouter:
         if member is None and kind != "unban":
             raise Refused(404, "not_a_member", NOT_A_MEMBER.format(user_id=user_id))
         if kind == "warn":
-            said = await warn_member(bot, guild, member, actor, reason or NO_REASON)
+            said = await warn_member(
+                bot, guild, member, actor, reason or NO_REASON, via=VIA_WEBSITE
+            )
         elif kind == "timeout":
-            said = await timeout_member(bot, guild, member, actor, seconds, reason)
+            said = await timeout_member(
+                bot, guild, member, actor, seconds, reason, via=VIA_WEBSITE
+            )
         elif kind == "untimeout":
-            said = await untimeout_member(bot, guild, member, actor, reason)
+            said = await untimeout_member(bot, guild, member, actor, reason, via=VIA_WEBSITE)
         elif kind == "kick":
-            said = await kick_member(bot, guild, member, actor, reason)
+            said = await kick_member(bot, guild, member, actor, reason, via=VIA_WEBSITE)
         elif kind == "ban":
-            said = await ban_member(bot, guild, member, actor, reason, purge_days)
+            said = await ban_member(
+                bot, guild, member, actor, reason, purge_days, via=VIA_WEBSITE
+            )
         else:
-            said = await unban_member(bot, guild, user_id, actor, reason)
+            said = await unban_member(bot, guild, user_id, actor, reason, via=VIA_WEBSITE)
             if said == NOT_BANNED.format(user_id=user_id):
                 raise Refused(404, "not_banned", said)
         if said == REFUSED.get(kind):
             raise Refused(502, "discord_refused", said)
-        await note(bot, guild, f"web.mod.{kind}", who, target=user_id, reason=reason)
         return {"done": True, "kind": kind, "user_id": str(user_id), "message": said}
 
     @router.get("/cases", dependencies=[Depends(reader)])
@@ -227,18 +239,12 @@ def build_router(bot: Any) -> APIRouter:
         row = await get_case(bot.db, case_id)
         if row is None or row["guild_id"] != guild.id:
             raise Refused(404, "no_such_case", NO_SUCH_CASE.format(case_id=case_id))
-        outcome, said = await apply_case(bot, guild, case_id, actor_for(bot, who, guild))
+        outcome, said = await apply_case(
+            bot, guild, case_id, actor_for(bot, who, guild), via=VIA_WEBSITE
+        )
         if outcome != "applied":
             status, error = APPLY_REFUSED.get(outcome, (409, "apply_refused"))
             raise Refused(status, error, said)
-        await note(
-            bot,
-            guild,
-            "web.mod.apply",
-            who,
-            target=row["user_id"],
-            details={"case_id": case_id},
-        )
         return {"applied": True, "case_id": case_id, "message": said}
 
     @router.post("/warn")
@@ -281,10 +287,11 @@ def build_router(bot: Any) -> APIRouter:
         known = DEFAULT_RULES.get(name, {})
         changes = {key: value for key, value in payload.items() if key in known}
         try:
-            rule = await save_rule(bot, guild, name, changes, actor_for(bot, who, guild))
+            rule = await save_rule(
+                bot, guild, name, changes, actor_for(bot, who, guild), via=VIA_WEBSITE
+            )
         except (RuleError, ValueError) as exc:
             raise Refused(400, "bad_rule", str(exc)) from None
-        await note(bot, guild, "web.mod.rule", who, details={"rule": name} | changes)
         return {"name": name, "help": RULE_HELP.get(name, "")} | rule
 
     return router

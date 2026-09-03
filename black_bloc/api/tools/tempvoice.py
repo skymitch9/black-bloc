@@ -28,7 +28,6 @@ from ..auth import Refused, staff_dependency
 from ..names import resolve_one
 from ..writes import (
     actor_for,
-    note,
     require_db,
     require_guild,
     wanted_id,
@@ -121,10 +120,11 @@ def build_router(bot: Any) -> APIRouter:
         guild = require_guild(bot)
         require_db(bot)
         name = str((payload or {}).get("name") or "").strip() or None
-        outcome, said = await make_creator_channel(bot, guild, actor_for(bot, who, guild), name)
+        outcome, said = await make_creator_channel(
+            bot, guild, actor_for(bot, who, guild), name, via=VIA_WEBSITE
+        )
         if outcome not in SETUP_DONE:
             raise Refused(409, SETUP_REFUSED.get(outcome, "setup_refused"), said)
-        await note(bot, guild, "web.tempvoice.setup", who, details={"name": name})
         return {"created": True, "outcome": outcome, "message": said}
 
     @router.post("/forget")
@@ -134,9 +134,8 @@ def build_router(bot: Any) -> APIRouter:
         require_db(bot)
         wanted = wanted_id(payload.get("channel_id"))
         actor = actor_for(bot, who, guild)
-        if not await forget_creator(bot, guild, wanted, actor):
+        if not await forget_creator(bot, guild, wanted, actor, via=VIA_WEBSITE):
             raise Refused(404, "not_a_lobby", NOT_A_LOBBY.format(channel_id=wanted))
-        await note(bot, guild, "web.tempvoice.forget", who, target=wanted)
         return {
             "forgotten": True,
             "channel_id": str(wanted),
