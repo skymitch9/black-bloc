@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import sqlite3
 from typing import Any
 
 import discord
@@ -695,11 +696,15 @@ async def create_application(
     """The new application's id, or None when one is already open for that person and form."""
     if await open_application(db, form_id, user_id) is not None:
         return None
-    cur = await db.conn.execute(
-        "INSERT INTO applications(guild_id, form_id, user_id, answers, status, submitted_at) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        (guild_id, form_id, user_id, answers, PENDING, now_iso()),
-    )
+    try:
+        cur = await db.conn.execute(
+            "INSERT INTO applications(guild_id, form_id, user_id, answers, status, submitted_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (guild_id, form_id, user_id, answers, PENDING, now_iso()),
+        )
+    except sqlite3.IntegrityError:
+        log.info("applications: %s already had one open on form %s", user_id, form_id)
+        return None
     await db.conn.commit()
     return cur.lastrowid
 

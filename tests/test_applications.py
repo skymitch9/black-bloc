@@ -395,3 +395,23 @@ async def test_a_form_with_no_wait_of_its_own_falls_back_to_the_server_default(d
     assert form["retry_days"] is None
     assert retry_days_of(form) == RETRY_DAYS_DEFAULT
     assert retry_days_of(form, 14) == 14
+
+
+async def test_the_unique_index_catches_a_second_application_the_check_did_not_see(
+    db, monkeypatch
+):
+    """The read-then-write is a race; the partial unique index is what actually holds.
+    `open_application` is stubbed to `None` so the INSERT is the thing that loses."""
+    import black_bloc.applications as module
+
+    form = await a_form(db)
+    first = await create_application(db, GUILD, form["id"], MEMBER, answers_json([]))
+
+    async def sees_nothing(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(module, "open_application", sees_nothing)
+
+    assert await module.create_application(db, GUILD, form["id"], MEMBER, answers_json([])) is None
+    assert await pending_count(db, form["id"]) == 1
+    assert (await get_application(db, first))["status"] == PENDING

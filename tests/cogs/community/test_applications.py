@@ -5,7 +5,6 @@ from black_bloc import applications as forms
 from black_bloc import rolegrants as grants
 from black_bloc.cogs.community.applications import (
     DECIDE_TEMPLATE,
-    nudge_mentions,
     MODE_SAID,
     NOT_AN_APPROVER,
     Applications,
@@ -16,6 +15,7 @@ from black_bloc.cogs.community.applications import (
     apply_decision,
     approver_role_id,
     mode_of,
+    nudge_mentions,
     open_form_modal,
     post_panel,
     review_channel,
