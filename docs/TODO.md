@@ -2,15 +2,68 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then; secret NAMES only).
-> Last verified: **2026-09-02** — handoff pass before the owner's switch to
-> Fable 5.1: the F-table's stale "design/parked/future" statuses corrected to
-> BUILT (the code was always ahead of the labels), the 🚀 NEXT WAVE block added
-> (the owner's "We're going to build those… then we go"), counts re-measured
-> (schema **20**, **2610** tests, 17 pages / **107** routes, 37 sweep rows,
-> CI green on ubuntu). What remains below is genuinely active or waiting.
+> Last verified: **2026-09-03 07:50** — the 🔁 resume block below written at the owner's
+> order during API outages ("make sure if we lose progress and memory our docs survive");
+> everything in it was measured at that time (`git log`, `git worktree list`, the live
+> page, the deploys log). Earlier: 2026-09-02 handoff pass before the switch to Fable 5.1
+> (schema **20**, **2610** tests, 17 pages / **107** routes, 37 sweep rows — those counts
+> are now stale: schema **26**, **3310** tests, 17 pages / **139** routes at `70a6720`).
 >
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
+
+## 🔁 IF THIS SESSION DIES — resume here (written 2026-09-03 07:50, outages in progress)
+
+**State of `main` (all pushed):** `5ecb292` = docs (requests panel design + the new
+`CLAUDE.md` rule) on top of `3e18e4a` (third-pass landing docs) on top of **`70a6720`, the
+LIVE deploy** (requests third pass: `review` state, seven-look embeds, site link, schema
+26; `deploys.log` last line). Live is verified: boot clean, dashboard renders,
+`/requests.html` shows Ready to check 2 / On hold 1 / Done 0 (the landing one-off ran at
+06:41 — #1 and #2 `done → review`, #3 `hold`). Nothing on `main` is uncommitted.
+
+**In flight:** an Opus build agent for the **`/request` panel** (design:
+[`info/requests-panel-design.md`](info/requests-panel-design.md); brief = that doc + the
+"Simplify the request slash flow" item under 🔧 below). It was dispatched 07:40, died at
+07:44 on an API 529 before writing anything, and was resumed 07:45. **A dead agent is
+invisible to the next session — check what it left:**
+
+```
+git worktree list                      # expect .claude/worktrees/agent-requests-panel (or agent-*) on feat/requests-panel
+git branch --list "feat/requests-panel*"
+git -C <worktree> log --oneline main..HEAD   # its commits, if any
+git -C <worktree> status --short             # uncommitted work — NEVER stash, never revert; read it
+```
+
+- **Nothing there** → re-dispatch the build from the design doc (Opus, own worktree cut
+  from `main`, the brief's rules: no stash / no add -A / no merge / no deploy / no push,
+  full pytest polled to completion, docs rewrites listed in the design doc's "What goes
+  away", DONE.md draft in the report).
+- **Commits there, no report** → review the branch against the design doc's button table
+  and §J yourself (it is a one-cog change: `cogs/community/requests.py`,
+  `requests.py:withdraw_request`, `settings_store.py:request_panel_minutes`, tests, docs),
+  run `ruff` + full `pytest` + `node site/mock/check.mjs` in the worktree, then land it.
+
+**Landing ritual (unchanged):** `git merge --no-ff feat/requests-panel` on `main` →
+`scripts/deploy.ps1` (refuses a dirty tree; ~10 min: ruff → pytest → check.mjs → push →
+`flyctl deploy --app black-bloc --ha=false --remote-only --yes`; flyctl lives at
+`C:\Users\nbasl\AppData\Local\Microsoft\WinGet\Packages\Fly-io.flyctl_Microsoft.Winget.Source_8wekyb3d8bbwe\flyctl.exe`)
+→ EDIT the skeleton line it appends to `docs/deploys.log` → verify the boot log
+(`flyctl logs --app black-bloc --no-tail`: cogs loaded, `commands synced` count DROPS by
+nine, no errors) → move the 🔧 item WHOLE to `DONE.md`, flip the design-doc header and the
+`info/README.md` row to SHIPPED, re-key `code-notes.md` → commit, push → tell the owner
+what to click (`/request` in `#mute-me-bot-test-spam`: the panel, pick #1, Accept).
+
+**After that, the standing direction (owner 2026-09-03):** "carry it through the rest of
+the app" — the "Panels over slash commands — the rest of the app" item under 🔧. Agree the
+sequence with the owner ONE feature at a time; each gets a design doc with a button table
+per state, requests as the template.
+
+**Gotchas that cost time today:** `node --check file.js` passes a broken ES module (parses
+as CommonJS) — use `--input-type=module`; the site is a `StaticFiles(html=True)` mount so
+page links carry `.html` (`logkinds.FEATURE_PAGES`); `flyctl ssh console -C` from
+PowerShell splits on spaces — run one-offs from Bash with the script base64-encoded (see
+`DONE.md` 2026-09-03 third pass); "The handle is invalid" after a flyctl ssh command is
+noise, the command ran.
 
 ## 🎯 Feature asks — the first list (owner, 2026-08-26, verbatim then expanded)
 
