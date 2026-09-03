@@ -126,8 +126,9 @@ REASON_NEEDED: dict[str, str] = {
 }
 READY_NEEDS_WHAT_WAS_BUILT = (
     "Marking a request ready to check needs a line saying what was actually built, so nothing was "
-    "changed. That sentence is what the person who asked reads on the card — write it and send it "
-    "again."
+    "changed. That sentence is what the person who asked reads on the card. "
+    "`/request ready {request_id}` opens a box for it — or use the **Ready to check** button on "
+    "the site."
 )
 SENDING_BACK_NEEDS_A_NOTE = (
     "Sending a request back needs one line saying what is still to do, so nothing was changed. The "
@@ -360,7 +361,7 @@ def checked_move(
     look = look_of(where, to)
     owed = {REVIEW: built, SENT_BACK: note}.get(look)
     if look in TEXT_NEEDED and not str(owed or "").strip():
-        raise RequestError(TEXT_NEEDED[look])
+        raise RequestError(TEXT_NEEDED[look].format(request_id=request_id))
     return to
 
 

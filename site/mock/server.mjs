@@ -4424,7 +4424,7 @@ const REQUEST_NEEDS_WHY = 'A request needs a line saying why it is worth doing, 
 const REQUEST_DECLINE_NEEDS_A_REASON = 'A declined request needs one line the person who asked is sent, so nothing was changed. Say why and send it again.';
 const REQUEST_HOLD_NEEDS_A_REASON = 'A request put on hold needs one line the person who asked is sent, so nothing was changed. Say why it is waiting and send it again.';
 const REQUEST_REASON_NEEDED = { declined: REQUEST_DECLINE_NEEDS_A_REASON, hold: REQUEST_HOLD_NEEDS_A_REASON };
-const REQUEST_READY_NEEDS_BUILT = 'Marking a request ready to check needs a line saying what was actually built, so nothing was changed. That sentence is what the person who asked reads on the card — write it and send it again.';
+const REQUEST_READY_NEEDS_BUILT = 'Marking a request ready to check needs a line saying what was actually built, so nothing was changed. That sentence is what the person who asked reads on the card. `/request ready {id}` opens a box for it — or use the **Ready to check** button on the site.';
 const REQUEST_SENDBACK_NEEDS_A_NOTE = 'Sending a request back needs one line saying what is still to do, so nothing was changed. The staffer who marked it ready is sent exactly what you type — say what is missing and send it again.';
 const REQUEST_NOT_READY = 'Request **#{id}** is **{status}**, not ready to check, so there was nothing to send back. `/request ready {id}` is what puts one there.';
 const REQUEST_REVIEW_BY_OTHER = 'You are the one who marked request **#{id}** ready to check, and this server asks somebody else on staff to check it, so nothing was changed. Ask another staffer to press Accept, or a Lead can turn `request_review_by_other` off if one pair of eyes is enough.';
@@ -4546,7 +4546,7 @@ function askDecide(row, status, reason, extra = {}) {
   }
   const look = askLook(where, status);
   if (look === 'review' && !String(extra.built || row.built || '').trim()) {
-    throw new Refused(400, 'no_built', REQUEST_READY_NEEDS_BUILT);
+    throw new Refused(400, 'no_built', REQUEST_READY_NEEDS_BUILT.split('{id}').join(row.id));
   }
   if (look === 'sent_back' && !String(extra.sent_back_reason || '').trim()) {
     throw new Refused(400, 'no_reason', REQUEST_SENDBACK_NEEDS_A_NOTE);
@@ -4730,7 +4730,7 @@ route('POST', '/api/requests/:id/ready', async (context) => {
   const row = wantedAsk(context.params.id);
   const body = await context.body();
   const built = String(body.built || '').trim().slice(0, 1000);
-  if (!built) throw new Refused(400, 'no_built', REQUEST_READY_NEEDS_BUILT);
+  if (!built) throw new Refused(400, 'no_built', REQUEST_READY_NEEDS_BUILT.split('{id}').join(row.id));
   const howToTest = String(body.how_to_test || '').trim().slice(0, 1000);
   const said = askDecide(row, 'review', null, { built, how_to_test: howToTest });
   return { request: askRow(row), message: said };

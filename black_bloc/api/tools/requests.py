@@ -496,7 +496,9 @@ def build_router(bot: Any) -> APIRouter:
         await _wanted(guild, request_id)
         built = clamp(payload.get("built"), BUILT_LIMIT)
         if not built:
-            raise Refused(400, "no_built", TEXT_NEEDED[REVIEW])
+            raise Refused(
+                400, "no_built", TEXT_NEEDED[REVIEW].format(request_id=request_id)
+            )
         said, fresh = await mark_ready(
             bot,
             guild,
@@ -537,7 +539,9 @@ def build_router(bot: Any) -> APIRouter:
         await _wanted(guild, request_id)
         reason = clamp(payload.get("reason"), SENT_BACK_LIMIT)
         if not reason:
-            raise Refused(400, "no_reason", TEXT_NEEDED[SENT_BACK])
+            raise Refused(
+                400, "no_reason", TEXT_NEEDED[SENT_BACK].format(request_id=request_id)
+            )
         said, fresh = await send_back(
             bot, guild, request_id, actor_for(bot, who, guild), reason, via=VIA_WEBSITE
         )
