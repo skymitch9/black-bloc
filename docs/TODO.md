@@ -208,6 +208,16 @@ docs bookkeeping lands with the work, not after.
 
 ## 🔧 Open engineering items
 
+- 🆕 **Operator read access for the session (owner, 2026-09-03 14:24: "Make apis that you can
+  access so you can see things. Or use my explicit permission to check it").** Today a live
+  read means `flyctl ssh console` + SQLite, which the permission classifier blocks about half
+  the time. Proposed (awaiting owner yes/no): one `OPERATOR_READ_TOKEN` (Fly secret, name only
+  here) accepted as a bearer on GET-only `/api/*` — the same JSON the dashboard reads, no new
+  endpoints, no writes; every use logged with Via: operator; rate-limited like a session.
+  ~40k Opus build. Interim: the owner's explicit permission in chat, then retry the `flyctl ssh`
+  read.
+
+
 - 🆕 **Panels over slash commands — the rest of the app (owner, 2026-09-03: "then carry it
   through the rest of the app"; confirmed ~11:25: "do the change to all / commands. I like
   how request works").** Audit every command group (44 commands synced; `cogs/core.py:88`
@@ -273,7 +283,9 @@ docs bookkeeping lands with the work, not after.
   request in our /request features lets review them").** Read what has landed
   via `/request` (Requests page, `/api/requests`), present them to the owner one
   at a time, record each decision (accept → a TODO item; decline → the reason)
-  and close them out on the Requests page. Three in (all staff-filed →
+  and close them out on the Requests page. **Live read 2026-09-03 14:25 (`requests` table via
+  `flyctl ssh`, owner-authorised): #1 done (Pawpette marked it), #2 review (→ done when `/apply`
+  ships, v66), #3 hold (Spotify skipped 14:22), #4 "Do" done (a test).** Three in (all staff-filed →
   auto-approved, unassigned): #1 Pawpette — raid-train scheduler replacing
   r3dlabs.com (owner: "can we capture all the features of this tool" →
   [`info/raid-train-capture.md`](info/raid-train-capture.md), full inventory
