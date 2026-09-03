@@ -672,6 +672,15 @@ def test_a_request_is_loud_only_when_it_is_answered_or_fails():
     assert feature_of("web.request.hold") == "request"
 
 
+def test_taking_somebody_off_an_application_list_is_routine_because_the_dm_is_the_loud_part():
+    """`.removed` is a loud suffix; this one is listed as routine on purpose."""
+    assert "application.removed" in ROUTINE
+    assert is_important("application.removed") is False
+    assert is_important("web.application.removed") is False
+    assert feature_of("application.removed") == "applications"
+    assert feature_of("web.application.removed") == "applications"
+
+
 def test_memory_is_loud_when_something_is_forgotten_and_quiet_the_rest_of_the_time():
     """Writing a profile is housekeeping; losing one, and somebody opting out, are not."""
     for kind in ("chat.memory_distilled", "chat.memory_expired", "chat.memory_optin"):

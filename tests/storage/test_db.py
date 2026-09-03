@@ -12,7 +12,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 27
+        assert SCHEMA_VERSION == 28
         cur = await db.conn.execute("PRAGMA table_info(requests)")
         assert {
             "built",
@@ -946,3 +946,125 @@ async def test_two_slots_cannot_share_one_position_on_a_train(tmp_path):
         assert (await cur.fetchone())["locked"] == 0
     finally:
         await db.close()
+
+
+APPLICATION_FORMS_AT_26 = """
+CREATE TABLE application_forms (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id          INTEGER NOT NULL,
+    name              TEXT    NOT NULL,
+    title             TEXT    NOT NULL,
+    description       TEXT,
+    role_id           INTEGER NOT NULL,
+    review_channel_id INTEGER,
+    approver_role_id  INTEGER,
+    owner_user_id     INTEGER,
+    next_step         TEXT,
+    approved_text     TEXT,
+    expires_days      INTEGER,
+    retry_days        INTEGER,
+    open              INTEGER NOT NULL DEFAULT 1,
+    panel_channel_id  INTEGER,
+    panel_message_id  INTEGER,
+    created_by        INTEGER NOT NULL,
+    created_at        TEXT    NOT NULL,
+    updated_at        TEXT    NOT NULL,
+    UNIQUE (guild_id, name)
+)
+"""
+
+
+async def _a_schema_26_applications_file(path):
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("PRAGMA foreign_keys=OFF")
+    await db.conn.execute("DROP TABLE application_forms")
+    await db.conn.execute(APPLICATION_FORMS_AT_26)
+    for form_id, name in ((1, "twitch-team"), (2, "mod-team")):
+        await db.conn.execute(
+            "INSERT INTO application_forms(id, guild_id, name, title, role_id, created_by, "
+            "created_at, updated_at) VALUES (?, 7, ?, ?, 4242, 1, 'then', 'then')",
+            (form_id, name, name.title()),
+        )
+    for form_id, position, label in ((1, 1, "Twitch handle"), (1, 2, "How long"), (2, 1, "Why")):
+        await db.conn.execute(
+            "INSERT INTO application_questions(form_id, position, label) VALUES (?, ?, ?)",
+            (form_id, position, label),
+        )
+    await db.conn.execute(
+        "INSERT INTO applications(id, guild_id, form_id, user_id, answers, status, submitted_at) "
+        "VALUES (1, 7, 1, 900, '[]', 'approved', 'then')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '26')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+
+async def test_a_schema_26_file_lets_a_form_drop_its_role_and_keeps_every_question(tmp_path):
+    """Schema 28 rebuilds application_forms BEFORE foreign_keys goes on, because the drop
+    would otherwise cascade every application_questions row away with it."""
+    path = tmp_path / "old26.sqlite3"
+    await _a_schema_26_applications_file(path)
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("PRAGMA table_info(application_forms)")
+        role = next(row for row in await cur.fetchall() if row["name"] == "role_id")
+        assert role["notnull"] == 0
+        cur = await again.conn.execute(
+            "SELECT id, name, role_id FROM application_forms ORDER BY id"
+        )
+        assert [tuple(row) for row in await cur.fetchall()] == [
+            (1, "twitch-team", 4242),
+            (2, "mod-team", 4242),
+        ]
+        cur = await again.conn.execute(
+            "SELECT form_id, position, label FROM application_questions ORDER BY form_id, position"
+        )
+        assert [tuple(row) for row in await cur.fetchall()] == [
+            (1, 1, "Twitch handle"),
+            (1, 2, "How long"),
+            (2, 1, "Why"),
+        ]
+        cur = await again.conn.execute("SELECT status FROM applications WHERE id = 1")
+        assert (await cur.fetchone())["status"] == "approved"
+        cur = await again.conn.execute("PRAGMA foreign_keys")
+        assert (await cur.fetchone())[0] == 1
+        cur = await again.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        assert "application_forms_loosened" not in {row["name"] for row in await cur.fetchall()}
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+        await again.conn.execute(
+            "INSERT INTO application_forms(guild_id, name, title, role_id, created_by, "
+            "created_at, updated_at) VALUES (7, 'no-role', 'No role', NULL, 1, 'now', 'now')"
+        )
+    finally:
+        await again.close()
+
+
+async def test_the_application_forms_rebuild_runs_once_and_is_quiet_the_second_time(
+    tmp_path, caplog
+):
+    path = tmp_path / "twice.sqlite3"
+    await _a_schema_26_applications_file(path)
+
+    caplog.clear()
+    with caplog.at_level("WARNING"):
+        first = Database(path)
+        await first.connect()
+        await first.close()
+    assert any("rebuilding application_forms" in one.message for one in caplog.records)
+
+    caplog.clear()
+    with caplog.at_level("WARNING"):
+        second = Database(path)
+        await second.connect()
+        try:
+            cur = await second.conn.execute("SELECT COUNT(*) AS n FROM application_questions")
+            assert (await cur.fetchone())["n"] == 3
+        finally:
+            await second.close()
+    assert not any("rebuilding application_forms" in one.message for one in caplog.records)

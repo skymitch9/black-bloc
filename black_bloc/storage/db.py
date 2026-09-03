@@ -8,9 +8,32 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 27
+SCHEMA_VERSION = 28
 
-SCHEMA = """
+APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id          INTEGER NOT NULL,
+    name              TEXT    NOT NULL,
+    title             TEXT    NOT NULL,
+    description       TEXT,
+    role_id           INTEGER,
+    review_channel_id INTEGER,
+    approver_role_id  INTEGER,
+    owner_user_id     INTEGER,
+    next_step         TEXT,
+    approved_text     TEXT,
+    expires_days      INTEGER,
+    retry_days        INTEGER,
+    open              INTEGER NOT NULL DEFAULT 1,
+    panel_channel_id  INTEGER,
+    panel_message_id  INTEGER,
+    created_by        INTEGER NOT NULL,
+    created_at        TEXT    NOT NULL,
+    updated_at        TEXT    NOT NULL,
+    UNIQUE (guild_id, name)"""
+
+APPLICATION_FORMS_LOOSENED = "application_forms_loosened"
+
+SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS schema_meta (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -570,26 +593,7 @@ CREATE TABLE IF NOT EXISTS raid_slots (
 CREATE INDEX IF NOT EXISTS raid_slots_due ON raid_slots(starts_at, reminded_at);
 CREATE INDEX IF NOT EXISTS raid_slots_by_member ON raid_slots(user_id, starts_at);
 CREATE TABLE IF NOT EXISTS application_forms (
-    id                INTEGER PRIMARY KEY AUTOINCREMENT,
-    guild_id          INTEGER NOT NULL,
-    name              TEXT    NOT NULL,
-    title             TEXT    NOT NULL,
-    description       TEXT,
-    role_id           INTEGER NOT NULL,
-    review_channel_id INTEGER,
-    approver_role_id  INTEGER,
-    owner_user_id     INTEGER,
-    next_step         TEXT,
-    approved_text     TEXT,
-    expires_days      INTEGER,
-    retry_days        INTEGER,
-    open              INTEGER NOT NULL DEFAULT 1,
-    panel_channel_id  INTEGER,
-    panel_message_id  INTEGER,
-    created_by        INTEGER NOT NULL,
-    created_at        TEXT    NOT NULL,
-    updated_at        TEXT    NOT NULL,
-    UNIQUE (guild_id, name)
+{APPLICATION_FORMS_COLUMNS}
 );
 
 CREATE TABLE IF NOT EXISTS application_questions (
@@ -694,6 +698,7 @@ class Database:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = await aiosqlite.connect(self.path)
         self._conn.row_factory = aiosqlite.Row
+        await self._loosen_application_form_roles()
         await self._conn.execute("PRAGMA journal_mode=WAL")
         await self._conn.execute("PRAGMA foreign_keys=ON")
         await self._close_duplicate_open_sessions()
@@ -723,6 +728,26 @@ class Database:
                 "database: closed %d duplicate open go-live session(s) before indexing them",
                 cur.rowcount,
             )
+
+    async def _loosen_application_form_roles(self) -> None:
+        """Schema 28: a form may keep a list instead of handing a role over."""
+        cur = await self.conn.execute("PRAGMA table_info(application_forms)")
+        rows = await cur.fetchall()
+        if not any(row["name"] == "role_id" and row["notnull"] for row in rows):
+            return
+        await self.conn.execute(f"DROP TABLE IF EXISTS {APPLICATION_FORMS_LOOSENED}")
+        await self.conn.execute(
+            f"CREATE TABLE {APPLICATION_FORMS_LOOSENED} (\n{APPLICATION_FORMS_COLUMNS}\n)"
+        )
+        await self.conn.execute(
+            f"INSERT INTO {APPLICATION_FORMS_LOOSENED} SELECT * FROM application_forms"
+        )
+        await self.conn.execute("DROP TABLE application_forms")
+        await self.conn.execute(
+            f"ALTER TABLE {APPLICATION_FORMS_LOOSENED} RENAME TO application_forms"
+        )
+        await self.conn.commit()
+        log.warning("database: rebuilding application_forms so a form may have no role")
 
     async def _set_aside_mod_cases_with_a_required_user(self) -> None:
         cur = await self.conn.execute("PRAGMA table_info(mod_cases)")

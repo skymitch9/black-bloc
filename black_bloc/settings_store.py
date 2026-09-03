@@ -820,6 +820,8 @@ KEY_TYPES.update(
         "applications_ping_role_id": "role",
         "applications_retry_days": "int",
         "applications_dm_on_decision": "bool",
+        "applications_roster_shows_left": "bool",
+        "applications_panel_minutes": "int",
     }
 )
 KEY_CHOICES["applications_mode"] = APPLICATIONS_MODES
@@ -852,6 +854,16 @@ KEY_HELP.update(
         ),
         "applications_dm_on_decision": (
             "true to DM the applicant when their application is approved or denied"
+        ),
+        "applications_roster_shows_left": (
+            "whether the approved list still shows people who have left the server, marked as "
+            "gone; false hides them"
+        ),
+        "applications_panel_minutes": (
+            "minutes the /applications show panel stays live before its buttons disable "
+            "themselves; 10 by default. The 'this panel went quiet' footer can only be written "
+            "while Discord's 15-minute interaction window is still open, so 15 or more means "
+            "the buttons simply stop working with no footer to explain it"
         ),
     }
 )
@@ -1397,6 +1409,10 @@ class SettingsStore:
             return APPLICATIONS_RETRY_DAYS
         if key == "applications_dm_on_decision":
             return True
+        if key == "applications_roster_shows_left":
+            return True
+        if key == "applications_panel_minutes":
+            return 10
         if key.endswith("_log_level"):
             return LEVEL_DEFAULT
         if KEY_TYPES.get(key) in ("channels", "roles"):

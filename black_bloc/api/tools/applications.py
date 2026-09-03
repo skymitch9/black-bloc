@@ -8,9 +8,11 @@ from fastapi import APIRouter, Depends, Request
 from ... import applications as forms
 from ... import rolegrants as grants
 from ...cogs.community.applications import (
+    ROSTER_SHOWS_LEFT_KEY,
     apply_decision,
     mode_of,
     post_panel,
+    remove,
 )
 from ...logkinds import VIA_WEBSITE
 from ..auth import Refused, staff_dependency
@@ -28,8 +30,12 @@ from ..writes import (
 log = logging.getLogger(__name__)
 
 NEEDS_A_NAME = (
-    "An application form needs a short name, a heading and the role it hands over, so nothing "
-    "was created. Fill all three in and try again."
+    "An application form needs a short name and a heading, so nothing was created. Fill both "
+    "in and try again — the role is optional, and a form without one keeps a list instead."
+)
+NO_ROSTER_FORM = (
+    "Black Bloc has no application form with that number, so there is no list to show. Reload "
+    "the Role menus page — somebody may have deleted it."
 )
 NO_SUCH_FORM_ID = (
     "Black Bloc has no application form with that number any more, so nothing was changed. "
@@ -78,13 +84,14 @@ def question_row(row: Any) -> dict[str, Any]:
 
 def form_row(guild: Any, form: Any, questions: Any, waiting: int = 0) -> dict[str, Any]:
     owner = forms.owner_of(form)
+    role = forms.role_of(form)
     return {
         "id": form["id"],
         "name": form["name"],
         "title": form["title"],
         "description": form["description"],
-        "role_id": str(form["role_id"]),
-        "role_name": resolve_one(guild, form["role_id"])["display_name"],
+        "role_id": str(role) if role else None,
+        "role_name": resolve_one(guild, role)["display_name"] if role else None,
         "review_channel_id": str(form["review_channel_id"]) if form["review_channel_id"] else None,
         "approver_role_id": str(form["approver_role_id"]) if form["approver_role_id"] else None,
         "owner_user_id": str(owner) if owner else None,
@@ -210,16 +217,16 @@ def build_router(bot: Any) -> APIRouter:
         require_db(bot)
         name = str(payload.get("name") or "").strip()
         title = str(payload.get("title") or "").strip()
-        if not name or not title or payload.get("role_id") in (None, ""):
+        if not name or not title:
             raise Refused(400, "bad_request", NEEDS_A_NAME)
-        role = wanted_role(guild, payload.get("role_id"))
+        role = wanted_role(guild, payload.get("role_id")) if payload.get("role_id") else None
         form_id = await checked(
             forms.create_form,
             bot.db,
             guild.id,
             name,
             title,
-            role.id,
+            role.id if role else None,
             int(who["id"]),
             description=payload.get("description"),
             review_channel_id=as_id(payload.get("review_channel_id")),
@@ -232,7 +239,7 @@ def build_router(bot: Any) -> APIRouter:
             guild,
             "web.application.form_created",
             who,
-            details={"form": name, "role_id": role.id},
+            details={"form": name, "role_id": role.id if role else None},
         )
         return await one_form(bot, guild, await read_form(bot, guild, form_id))
 
@@ -258,7 +265,11 @@ def build_router(bot: Any) -> APIRouter:
             if key in payload
         }
         if "role_id" in payload:
-            changes["role_id"] = wanted_role(guild, payload["role_id"]).id
+            changes["role_id"] = (
+                wanted_role(guild, payload["role_id"]).id
+                if payload["role_id"]
+                else forms.NO_ROLE
+            )
         for key, field in (
             ("review_channel_id", "review_channel_id"),
             ("approver_role_id", "approver_role_id"),
@@ -353,6 +364,41 @@ def build_router(bot: Any) -> APIRouter:
             "message_id": str(message.id),
         }
 
+    @router.get("/roster")
+    async def applications_roster(form: str = "") -> list[dict[str, Any]]:
+        guild = require_guild(bot)
+        require_db(bot)
+        wanted = as_id(form)
+        held = await forms.get_form_by_id(bot.db, wanted) if wanted is not None else None
+        if held is None or held["guild_id"] != guild.id:
+            raise Refused(404, "no_such_form", NO_ROSTER_FORM)
+        rows = await forms.applications_for(
+            bot.db, guild.id, form_id=held["id"], statuses=(grants.APPROVED,), limit=500
+        )
+        logins = await forms.twitch_logins_for(bot.db, [row["user_id"] for row in rows])
+        shows_left = bool(bot.store.get(guild.id, ROSTER_SHOWS_LEFT_KEY))
+        found = []
+        for row in rows:
+            member = guild.get_member(row["user_id"])
+            if member is None and not shows_left:
+                continue
+            by = row["decided_by"]
+            found.append(
+                {
+                    "application_id": row["id"],
+                    "user_id": str(row["user_id"]),
+                    "user_name": resolve_one(guild, row["user_id"])["display_name"],
+                    "user_avatar": avatar_url(member) if member is not None else None,
+                    "in_server": member is not None,
+                    "twitch_login": logins.get(row["user_id"]),
+                    "decided_at": row["decided_at"],
+                    "decided_by_name": (
+                        resolve_one(guild, by)["display_name"] if by else None
+                    ),
+                }
+            )
+        return found
+
     @router.get("")
     async def applications_index(form: str = "", status: str = "") -> list[dict[str, Any]]:
         guild = require_guild(bot)
@@ -413,6 +459,37 @@ def build_router(bot: Any) -> APIRouter:
         )
         if fresh is None:
             raise Refused(409, "not_decided", said)
+        form = await forms.get_form_by_id(bot.db, fresh["form_id"])
+        return {
+            "application": application_row(
+                guild, fresh, forms.form_value(form, "name") if form is not None else None
+            ),
+            "message": said,
+        }
+
+    @router.post("/{application_id}/remove")
+    async def applications_remove(
+        request: Request, application_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        reason = grants.clamp(payload.get("reason"), forms.REASON_MAX)
+        if not reason:
+            raise Refused(400, "no_reason", forms.REMOVE_NEEDS_A_REASON)
+        row = await forms.get_application(bot.db, application_id)
+        if row is None or row["guild_id"] != guild.id:
+            raise Refused(404, "no_such_application", NO_SUCH_APPLICATION)
+        said, fresh = await remove(
+            bot,
+            guild,
+            application_id,
+            actor_for(bot, who, guild),
+            reason,
+            via=VIA_WEBSITE,
+        )
+        if fresh is None:
+            raise Refused(400, "not_removed", said)
         form = await forms.get_form_by_id(bot.db, fresh["form_id"])
         return {
             "application": application_row(

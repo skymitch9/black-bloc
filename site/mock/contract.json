@@ -3320,6 +3320,59 @@
           "answers"
         ]
       }
+    },
+    {
+      "method": "GET",
+      "path": "/api/applications/roster?form={listed_form_id}",
+      "needs": "a form that keeps a list, with people approved on it",
+      "read_by": [
+        "page-rolemenus.js roster foldout"
+      ],
+      "shape": "list",
+      "keys": [
+        "application_id",
+        "user_id",
+        "user_name",
+        "user_avatar",
+        "in_server",
+        "twitch_login",
+        "decided_at",
+        "decided_by_name"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/applications/{listed_application_id}/remove",
+      "body": {
+        "reason": "stopped streaming"
+      },
+      "needs": "an approved application on a form with no role",
+      "read_by": [
+        "page-rolemenus.js roster foldout"
+      ],
+      "shape": "object",
+      "keys": [
+        "application",
+        "message"
+      ],
+      "nested": {
+        "application": [
+          "id",
+          "form_id",
+          "form_name",
+          "user_id",
+          "user_name",
+          "user_avatar",
+          "status",
+          "submitted_at",
+          "decided_by_id",
+          "decided_by_name",
+          "decided_at",
+          "deny_reason",
+          "grant_id",
+          "answers"
+        ]
+      }
     }
   ],
   "pages": [
@@ -3445,6 +3498,7 @@
     "web.application.question_changed",
     "web.application.panel_posted",
     "web.application.approved",
-    "web.application.denied"
+    "web.application.denied",
+    "web.application.removed"
   ]
 }

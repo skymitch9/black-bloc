@@ -343,6 +343,7 @@ ROUTINE: frozenset[str] = frozenset(
         "application.post_skipped_test_mode",
         "application.submitted",
         "application.withdrawn",
+        "application.removed",
     }
 )
 

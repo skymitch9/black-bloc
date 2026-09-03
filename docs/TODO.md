@@ -218,7 +218,13 @@ docs bookkeeping lands with the work, not after.
   and permission"** — staff removal stays in, and the sentence is now a `CLAUDE.md` rule.
   Then "Build all, keep going" → Opus build dispatched on `feat/applications-no-role`
   (2026-09-03 ~12:35), beside `feat/requests-check` — which merged first (`44170f4`, v61,
-  schema 27), so this build's schema **28** stands as designed.
+  schema 27). **BUILT** on that branch (2026-09-03,
+  four commits, `SCHEMA_VERSION` 28): 3414 tests pass, ruff clean, `check.mjs` 17 pages /
+  141 routes; five deviations at the foot of the design doc. ⚠️ **NOT merged, NOT deployed,
+  and not exercised against Discord or the live site** — `access/sweeps.md` rows **69–72**
+  are the owner's by-eye checks. Still open: merge (whichever of the two branches lands
+  second re-keys `SCHEMA_VERSION` and `code-notes.md`), deploy, then the sweep. This item
+  moves whole to `DONE.md` when it is live, not before.
 
 - 🆕 **Panels over slash commands — the rest of the app (owner, 2026-09-03: "then carry it
   through the rest of the app"; confirmed ~11:25: "do the change to all / commands. I like

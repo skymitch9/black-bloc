@@ -18,6 +18,8 @@ ROUTES = [
     ("GET", "/api/applications", None),
     ("GET", "/api/applications/1", None),
     ("POST", "/api/applications/1/decide", {"status": "approved"}),
+    ("GET", "/api/applications/roster?form=1", None),
+    ("POST", "/api/applications/1/remove", {"reason": "stopped streaming"}),
 ]
 
 
@@ -39,6 +41,12 @@ def a_form(client, wf, name: str = "twitch-team") -> dict:
             "description": "join the Team",
             "role_id": str(wf.PLAIN_ROLE_ID),
         },
+    ).json()
+
+
+def a_list_form(client, name: str = "stream-team") -> dict:
+    return client.post(
+        "/api/applications/forms", json={"name": name, "title": "Stream Team"}
     ).json()
 
 
@@ -417,3 +425,178 @@ async def test_the_status_route_counts_the_forms_and_the_queue(client, sign_in, 
         "pending": 1,
         "questions_max": forms.QUESTIONS_MAX,
     }
+
+
+# A form that keeps a list instead of handing a role over.
+
+
+async def test_a_form_can_be_made_with_no_role_and_never_resolves_one(
+    client, sign_in, web, wf, monkeypatch
+):
+    """`resolve_one(guild, None)` would name the guild's @everyone; it is never called."""
+    import black_bloc.api.tools.applications as module
+
+    sign_in(client)
+    asked = []
+    original = module.resolve_one
+
+    def watching(guild, wanted):
+        asked.append(wanted)
+        return original(guild, wanted)
+
+    monkeypatch.setattr(module, "resolve_one", watching)
+    made = a_list_form(client)
+
+    assert made["role_id"] is None and made["role_name"] is None
+    assert None not in asked
+    listed = client.get("/api/applications/forms").json()
+    assert [one["role_id"] for one in listed] == [None]
+
+
+async def test_a_form_created_with_neither_a_name_nor_a_heading_is_refused_in_words(
+    client, sign_in
+):
+    sign_in(client)
+
+    response = client.post("/api/applications/forms", json={"title": "Stream Team"})
+
+    assert response.status_code == 400
+    assert "short name and a heading" in response.json()["message"]
+
+
+async def test_a_blank_role_on_a_patch_clears_it_and_a_real_one_puts_it_back(
+    client, sign_in, wf
+):
+    sign_in(client)
+    made = a_form(client, wf)
+
+    cleared = client.patch(f"/api/applications/forms/{made['id']}", json={"role_id": ""}).json()
+    assert cleared["role_id"] is None and cleared["role_name"] is None
+
+    back = client.patch(
+        f"/api/applications/forms/{made['id']}", json={"role_id": str(wf.PLAIN_ROLE_ID)}
+    ).json()
+    assert back["role_id"] == str(wf.PLAIN_ROLE_ID)
+
+
+async def test_approving_on_a_list_form_hands_nothing_over(client, sign_in, web, wf):
+    sign_in(client)
+    await applications_on(web, wf)
+    member = wf.member(web.guild, MEMBER, name="ada")
+    member.roles = []
+    made = a_list_form(client)
+    application_id = await an_application(web, wf, made["id"])
+
+    body = client.post(
+        f"/api/applications/{application_id}/decide", json={"status": "approved"}
+    ).json()
+
+    assert body["application"]["status"] == grants.APPROVED
+    assert member.edits == [] and body["application"]["grant_id"] is None
+    assert "on the **Stream Team** list now" in body["message"]
+
+
+async def test_the_roster_names_the_twitch_login_and_flags_who_has_left(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    await applications_on(web, wf)
+    wf.member(web.guild, MEMBER, name="ada")
+    made = a_list_form(client)
+    here = await an_application(web, wf, made["id"])
+    gone = await an_application(web, wf, made["id"], user_id=901)
+    for one in (here, gone):
+        await forms.decide_application(web.db, one, grants.APPROVED, decided_by=7)
+    await web.db.conn.execute(
+        "INSERT INTO golive_links(user_id, twitch_login, twitch_user_id, linked_at) "
+        "VALUES (?, 'ada', '1', 'then')",
+        (MEMBER,),
+    )
+    await web.db.conn.commit()
+
+    rows = client.get(f"/api/applications/roster?form={made['id']}").json()
+
+    by_id = {row["user_id"]: row for row in rows}
+    assert set(by_id) == {str(MEMBER), "901"}
+    assert by_id[str(MEMBER)]["twitch_login"] == "ada"
+    assert by_id[str(MEMBER)]["in_server"] is True
+    assert by_id["901"]["twitch_login"] is None and by_id["901"]["in_server"] is False
+    assert by_id[str(MEMBER)]["decided_at"] and by_id[str(MEMBER)]["application_id"] == here
+
+
+async def test_the_roster_hides_people_who_left_when_the_setting_says_so(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    await applications_on(web, wf)
+    wf.member(web.guild, MEMBER, name="ada")
+    made = a_list_form(client)
+    here = await an_application(web, wf, made["id"])
+    gone = await an_application(web, wf, made["id"], user_id=901)
+    for one in (here, gone):
+        await forms.decide_application(web.db, one, grants.APPROVED, decided_by=7)
+    await web.store.set(wf.GUILD_ID, "applications_roster_shows_left", False)
+
+    rows = client.get(f"/api/applications/roster?form={made['id']}").json()
+
+    assert [row["user_id"] for row in rows] == [str(MEMBER)]
+
+
+async def test_a_roster_for_a_form_that_is_gone_says_so_rather_than_answering_empty(
+    client, sign_in
+):
+    sign_in(client)
+
+    response = client.get("/api/applications/roster?form=9999")
+
+    assert response.status_code == 404
+    assert "no list to show" in response.json()["message"]
+
+
+async def test_the_site_can_take_somebody_off_a_list_and_logs_the_web_kind(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    await applications_on(web, wf)
+    member = wf.member(web.guild, MEMBER, name="ada")
+    made = a_list_form(client)
+    application_id = await an_application(web, wf, made["id"])
+    client.post(f"/api/applications/{application_id}/decide", json={"status": "approved"})
+    member.dms.clear()
+
+    body = client.post(
+        f"/api/applications/{application_id}/remove", json={"reason": "stopped streaming"}
+    ).json()
+
+    assert body["application"]["status"] == forms.REMOVED
+    assert body["application"]["deny_reason"] == "stopped streaming"
+    assert any("stopped streaming" in said for said in member.dms)
+    kinds = await wf.kinds_in(web.db)
+    assert "web.application.removed" in kinds
+    assert kinds.count("web.application.removed") == 1
+    assert client.get(f"/api/applications/roster?form={made['id']}").json() == []
+
+
+async def test_the_remove_route_refuses_a_role_form_and_a_blank_reason_in_words(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    await applications_on(web, wf)
+    wf.member(web.guild, MEMBER, name="ada")
+    made = a_form(client, wf)
+    application_id = await an_application(web, wf, made["id"])
+    client.post(f"/api/applications/{application_id}/decide", json={"status": "approved"})
+
+    blank = client.post(f"/api/applications/{application_id}/remove", json={"reason": "  "})
+    assert blank.status_code == 400 and "needs one line" in blank.json()["message"]
+
+    refused = client.post(
+        f"/api/applications/{application_id}/remove", json={"reason": "no longer needed"}
+    )
+    assert refused.status_code == 400
+    assert "/role revoke" in refused.json()["message"]
+    assert "web.application.removed" not in await wf.kinds_in(web.db)
+
+    missing = client.post("/api/applications/9999/remove", json={"reason": "who"})
+    assert missing.status_code == 404
+    assert "no application with that number" in missing.json()["message"]

@@ -4,13 +4,18 @@ import pytest
 
 from black_bloc.applications import (
     APPROVED,
+    APPROVED_ON_RECORD,
     DENIED,
     LABEL_MAX,
     LONG,
+    NO_ROLE,
     PENDING,
     PLACEHOLDER_MAX,
     QUESTIONS_MAX,
+    REMOVE_NEEDS_A_REASON,
+    REMOVED,
     RETRY_DAYS_DEFAULT,
+    SETTLED,
     SHORT,
     STATUSES,
     TITLE_MAX,
@@ -41,13 +46,16 @@ from black_bloc.applications import (
     pending_count,
     questions_for,
     read_answers,
+    remove_application,
     remove_question,
     render_card,
     replace_questions,
     retry_days_of,
+    role_of,
     set_card,
     set_grant,
     set_panel,
+    twitch_logins_for,
     update_form,
     validate_question,
     validate_questions,
@@ -77,11 +85,19 @@ async def a_form(db, name="twitch-team", **kwargs):
 
 def test_a_pending_application_may_only_move_to_the_three_settled_states():
     assert set(TRANSITIONS[PENDING]) == {APPROVED, DENIED, WITHDRAWN}
-    assert all(TRANSITIONS[one] == () for one in (APPROVED, DENIED, WITHDRAWN))
-    assert set(STATUSES) == {PENDING, APPROVED, DENIED, WITHDRAWN}
+    assert all(TRANSITIONS[one] == () for one in (DENIED, WITHDRAWN, REMOVED))
+    assert set(STATUSES) == {PENDING, APPROVED, DENIED, WITHDRAWN, REMOVED}
     assert may_move(PENDING, APPROVED) is True
     assert may_move(APPROVED, DENIED) is False
     assert may_move(None, APPROVED) is False
+
+
+def test_an_approved_application_may_only_move_to_removed():
+    assert TRANSITIONS[APPROVED] == (REMOVED,)
+    assert may_move(APPROVED, REMOVED) is True
+    assert may_move(PENDING, REMOVED) is False
+    assert may_move(REMOVED, APPROVED) is False
+    assert set(SETTLED) == {APPROVED, DENIED, WITHDRAWN, REMOVED}
 
 
 def test_a_form_name_is_a_slug_and_says_so_when_it_is_not():
@@ -415,3 +431,139 @@ async def test_the_unique_index_catches_a_second_application_the_check_did_not_s
     assert await module.create_application(db, GUILD, form["id"], MEMBER, answers_json([])) is None
     assert await pending_count(db, form["id"]) == 1
     assert (await get_application(db, first))["status"] == PENDING
+
+
+# A form that keeps a list instead of handing a role over.
+
+
+async def a_list_form(db, name="stream-team"):
+    form_id = await create_form(db, GUILD, name, "Stream Team", None, STAFF)
+    return await get_form_by_id(db, form_id)
+
+
+def test_a_role_is_read_through_one_helper_that_answers_none_for_a_list():
+    assert role_of({"role_id": 4242}) == 4242
+    assert role_of({"role_id": None}) is None
+    assert role_of({"role_id": 0}) is None
+    assert role_of({}) is None
+    assert role_of({"role_id": "nonsense"}) is None
+
+
+async def test_a_form_may_be_created_with_no_role_at_all(db):
+    form = await a_list_form(db)
+
+    assert form["role_id"] is None
+    assert role_of(form) is None
+
+
+async def test_a_role_is_cleared_only_when_the_caller_spells_it_no_role(db):
+    form = await a_form(db)
+
+    assert await update_form(db, GUILD, form["name"], role_id=None) is True
+    assert role_of(await get_form_by_id(db, form["id"])) == ROLE
+
+    assert await update_form(db, GUILD, form["name"], role_id=NO_ROLE) is True
+    fresh = await get_form_by_id(db, form["id"])
+    assert fresh["role_id"] is None and fresh["title"] == "Twitch Team"
+
+    assert await update_form(db, GUILD, form["name"], role_id=99) is True
+    assert role_of(await get_form_by_id(db, form["id"])) == 99
+
+
+async def test_the_card_on_a_list_form_names_the_form_rather_than_a_role(db):
+    form = await a_list_form(db)
+    made = await create_application(
+        db, GUILD, form["id"], MEMBER, answers_json([("Twitch handle", "ada")])
+    )
+
+    embed = render_card(form, await get_application(db, made))
+
+    assert embed.description == f"<@{MEMBER}> applied for **Stream Team**"
+    assert "<@&" not in embed.description
+
+
+async def test_an_approval_on_a_list_form_says_they_are_on_the_list(db):
+    form = await a_list_form(db)
+    await update_form(db, GUILD, form["name"], expires_days=7, approved_text="You're on it.")
+    form = await get_form_by_id(db, form["id"])
+    made = await create_application(db, GUILD, form["id"], MEMBER, answers_json([]))
+    await decide_application(db, made, APPROVED, decided_by=STAFF)
+    row = await get_application(db, made)
+
+    card, said = decision_lines(
+        form, row, member_name="Ada", until="2099-01-01T00:00:00+00:00", granted=None
+    )
+
+    assert card == APPROVED_ON_RECORD.format(name="Ada", title="Stream Team")
+    assert "runs out" not in card and "runs out" not in said
+    assert "Discord refused" not in card
+    assert "You're on it." in said
+
+
+async def test_a_removed_member_is_told_why_and_when_they_may_apply_again(db):
+    form = await a_list_form(db)
+    await update_form(db, GUILD, form["name"], retry_days=30)
+    form = await get_form_by_id(db, form["id"])
+    made = await create_application(db, GUILD, form["id"], MEMBER, answers_json([]))
+    await decide_application(db, made, APPROVED, decided_by=STAFF)
+
+    assert await remove_application(db, made, decided_by=STAFF, reason="stopped streaming")
+
+    row = await get_application(db, made)
+    assert row["status"] == REMOVED and row["deny_reason"] == "stopped streaming"
+    assert row["decided_by"] == STAFF and row["decided_at"]
+    card, said = decision_lines(form, row, guild_name="Black in a Flash!")
+    assert card == "Taken off the list, and they have been told why."
+    assert "stopped streaming" in said and "<t:" in said
+    assert (await last_decision(db, form["id"], MEMBER))["id"] == made
+    assert await cooling_until(db, form, MEMBER) is not None
+
+
+async def test_only_an_approved_application_can_be_taken_off_the_list(db):
+    form = await a_list_form(db)
+    made = await create_application(db, GUILD, form["id"], MEMBER, answers_json([]))
+
+    assert await remove_application(db, made, decided_by=STAFF, reason="no") is False
+    assert (await get_application(db, made))["status"] == PENDING
+
+    await decide_application(db, made, DENIED, decided_by=STAFF, deny_reason="not this time")
+    assert await remove_application(db, made, decided_by=STAFF, reason="no") is False
+    assert (await get_application(db, made))["status"] == DENIED
+
+
+async def test_taking_somebody_off_the_list_needs_a_line_they_are_sent(db):
+    form = await a_list_form(db)
+    made = await create_application(db, GUILD, form["id"], MEMBER, answers_json([]))
+    await decide_application(db, made, APPROVED, decided_by=STAFF)
+
+    with pytest.raises(ApplicationError) as caught:
+        await remove_application(db, made, decided_by=STAFF, reason="   ")
+
+    assert str(caught.value) == REMOVE_NEEDS_A_REASON
+    assert (await get_application(db, made))["status"] == APPROVED
+
+
+async def test_the_whole_roster_s_twitch_logins_come_back_in_one_query(db):
+    for user_id, login in ((MEMBER, "ada"), (901, "bee")):
+        await db.conn.execute(
+            "INSERT INTO golive_links(user_id, twitch_login, twitch_user_id, linked_at) "
+            "VALUES (?, ?, ?, 'then')",
+            (user_id, login, str(user_id)),
+        )
+    await db.conn.commit()
+    counted = []
+    original = db.conn.execute
+
+    async def counting(sql, *args, **kwargs):
+        counted.append(sql)
+        return await original(sql, *args, **kwargs)
+
+    db.conn.execute = counting
+    try:
+        found = await twitch_logins_for(db, [MEMBER, 901, 902, MEMBER])
+    finally:
+        db.conn.execute = original
+
+    assert found == {MEMBER: "ada", 901: "bee"}
+    assert len(counted) == 1
+    assert await twitch_logins_for(db, []) == {}
