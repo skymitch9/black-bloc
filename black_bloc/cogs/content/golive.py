@@ -399,7 +399,6 @@ async def link_channel(
     if owner is not None and owner != wanted:
         return "taken", ""
     twitch_user_id = None
-    checked = helix is None
     if helix is not None:
         try:
             users = await helix.get_users([cleaned])
@@ -409,8 +408,8 @@ async def link_channel(
         if users == []:
             return "no_such_channel", ""
         if users:
-            checked = True
             twitch_user_id = users[0].id
+    checked = twitch_user_id is not None
     await set_link(bot.db, wanted, cleaned, twitch_user_id)
     extra = await auto_fan_role(bot, guild, target, by=target_id(actor))
     await log_action(
@@ -421,7 +420,7 @@ async def link_channel(
         target=target,
         details={"login": cleaned, "checked": checked, "via": via},
     )
-    return ("linked" if checked else "linked_unchecked"), extra
+    return ("linked_unchecked" if helix is not None and not checked else "linked"), extra
 
 
 async def unlink_channel(

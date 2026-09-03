@@ -10,6 +10,7 @@ from black_bloc.actionlog import log_action
 from black_bloc.cogs.content import golive as cog_module
 from black_bloc.cogs.content.golive import (
     GoLive,
+    PostResult,
     all_links,
     clean_login,
     clear_optout,
@@ -27,10 +28,18 @@ from black_bloc.cogs.content.golive import (
     start_session,
 )
 from black_bloc.config import load_settings
-from black_bloc.golive import StreamInfo, from_twitch, now_iso
+from black_bloc.golive import (
+    CHANGE_CHANNEL,
+    LINK_CHANNEL,
+    SITE_BUTTON,
+    StreamInfo,
+    from_twitch,
+    now_iso,
+    panel_buttons,
+)
 from black_bloc.settings_store import SettingsStore
 from black_bloc.storage.db import Database
-from black_bloc.twitch import TwitchError, TwitchGame, TwitchStream
+from black_bloc.twitch import TwitchError, TwitchGame, TwitchStream, TwitchUser
 
 GUILD = 7
 CHANNEL = 111
@@ -126,6 +135,7 @@ class FakeMember:
 class FakeGuard:
     def __init__(self, allowed=CHANNEL):
         self.allowed = allowed
+        self.test_channel_id = CHANNEL
 
     def allows_channel(self, channel_id):
         return channel_id == self.allowed
@@ -142,9 +152,13 @@ class FakeBot:
         self.guard = None
         self.guilds = [guild]
         self.guild = guild
+        self.cog = None
 
     def get_channel(self, channel_id):
         return self.guild.get_channel(channel_id)
+
+    def get_cog(self, name):
+        return self.cog
 
     async def wait_until_ready(self):
         return None
@@ -153,9 +167,41 @@ class FakeBot:
 class FakeResponse:
     def __init__(self):
         self.messages = []
+        self.modals = []
+        self.deferred = False
 
     async def send_message(self, content=None, ephemeral=False, **kwargs):
         self.messages.append({"content": content, "ephemeral": ephemeral, "kwargs": kwargs})
+
+    async def defer(self, ephemeral=False):
+        self.deferred = True
+
+    async def send_modal(self, modal):
+        self.modals.append(modal)
+        self.deferred = True
+
+    def is_done(self):
+        return self.deferred or bool(self.messages)
+
+
+class FakeFollowup:
+    def __init__(self, response):
+        self.response = response
+
+    async def send(self, content=None, ephemeral=False, **kwargs):
+        self.response.messages.append(
+            {"content": content, "ephemeral": ephemeral, "kwargs": kwargs}
+        )
+
+
+class FakePanelMessage:
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+        self.embeds = [kwargs["embed"]] if kwargs.get("embed") is not None else []
+        self.edits = []
+
+    async def edit(self, **kwargs):
+        self.edits.append(kwargs)
 
 
 class FakeInteraction:
@@ -166,10 +212,67 @@ class FakeInteraction:
         self.guild_id = guild.id if guild else None
         self.channel_id = CHANNEL
         self.response = FakeResponse()
+        self.followup = FakeFollowup(self.response)
+        self.edits = []
 
     @property
     def sent(self):
-        return self.response.messages[-1]["content"] if self.response.messages else None
+        said = [
+            one["content"] for one in self.response.messages if one.get("content") is not None
+        ]
+        return said[-1] if said else None
+
+    async def original_response(self):
+        return FakePanelMessage()
+
+    async def edit_original_response(self, **kwargs):
+        self.edits.append(kwargs)
+        return FakePanelMessage(**kwargs)
+
+    @property
+    def rendered(self):
+        """What the panel last put on the screen — an edit if there was one, else the send."""
+        if self.edits:
+            return self.edits[-1]
+        if not self.response.messages:
+            return {}
+        return self.response.messages[-1]["kwargs"]
+
+    @property
+    def view(self):
+        return self.rendered.get("view")
+
+    @property
+    def embed(self):
+        return self.rendered.get("embed")
+
+    @property
+    def words(self):
+        found = self.embed
+        return "" if found is None else str(found.description or "")
+
+    def labels(self):
+        found = self.view
+        return [] if found is None else [getattr(one, "label", None) for one in found.children]
+
+    def placeholders(self):
+        found = self.view
+        return [] if found is None else [
+            getattr(one, "placeholder", None) for one in found.children
+        ]
+
+
+def child(view, label):
+    return next(one for one in view.children if getattr(one, "label", None) == label)
+
+
+def picker(view, placeholder):
+    return next(one for one in view.children if getattr(one, "placeholder", None) == placeholder)
+
+
+def as_staff(bot, yes=True):
+    """The one staff question, answered without building a role tree in every test."""
+    bot.store.is_staff = lambda member: yes
 
 
 class FakeHelix:
@@ -262,7 +365,9 @@ async def bot(db, monkeypatch):
 
 @pytest.fixture
 def cog(bot):
-    return GoLive(bot)
+    made = GoLive(bot)
+    bot.cog = made
+    return made
 
 
 @pytest.fixture
@@ -722,222 +827,6 @@ async def test_the_sweep_loop_starts_without_twitch_credentials(cog, bot, db):
         assert cog.poller.is_running()
     finally:
         await cog.cog_unload()
-
-
-async def test_optout_and_optin_commands(cog, bot, member, db):
-    interaction = FakeInteraction(bot, member, bot.guild)
-    await GoLive.optout.callback(cog, interaction)
-    assert await is_opted_out(db, member.id) is True
-    assert "will not announce" in interaction.sent
-
-    interaction = FakeInteraction(bot, member, bot.guild)
-    await GoLive.optin.callback(cog, interaction)
-    assert await is_opted_out(db, member.id) is False
-    assert "again" in interaction.sent
-
-    interaction = FakeInteraction(bot, member, bot.guild)
-    await GoLive.optin.callback(cog, interaction)
-    assert "were not opted out" in interaction.sent
-
-
-async def test_link_and_unlink_commands(cog, bot, member, db):
-    interaction = FakeInteraction(bot, member, bot.guild)
-    await GoLive.link.callback(cog, interaction, "https://www.twitch.tv/Alice")
-    assert (await get_link(db, member.id))["twitch_login"] == "alice"
-    assert "Linked **alice**" in interaction.sent
-
-    interaction = FakeInteraction(bot, member, bot.guild)
-    await GoLive.link.callback(cog, interaction, "not a login")
-    assert "does not look like a Twitch channel name" in interaction.sent
-
-    interaction = FakeInteraction(bot, member, bot.guild)
-    await GoLive.unlink.callback(cog, interaction)
-    assert await get_link(db, member.id) is None
-
-    interaction = FakeInteraction(bot, member, bot.guild)
-    await GoLive.unlink.callback(cog, interaction)
-    assert "had no Twitch channel linked" in interaction.sent
-
-
-async def test_a_link_makes_a_ping_role_only_when_the_setting_says_auto(
-    cog, bot, member, db, monkeypatch
-):
-    """F14: `pings_fan_role_creation` is the whole gate, and its default is `self`."""
-    asked = []
-
-    async def fake(bot_, guild, who, *, by, via="discord"):
-        asked.append((guild.id, who.id, by))
-        return cog_module.pings.Outcome(True, "Made **Alice pings**.")
-
-    monkeypatch.setattr(cog_module.pings, "maybe_auto_create", fake)
-    interaction = FakeInteraction(bot, member, bot.guild)
-
-    await GoLive.link.callback(cog, interaction, "alice")
-
-    assert asked == [(GUILD, member.id, member.id)]
-    assert interaction.sent.endswith("Made **Alice pings**.")
-    assert interaction.response.messages[-1]["kwargs"]["allowed_mentions"].roles is False
-
-
-async def test_unlink_and_optout_ask_what_should_happen_to_the_streamers_own_role(
-    cog, bot, member, db, monkeypatch
-):
-    asked = []
-
-    async def fake(bot_, guild, user_id, *, by, via="discord"):
-        asked.append(user_id)
-        return cog_module.pings.Outcome(True, "The role is gone.")
-
-    monkeypatch.setattr(cog_module.pings, "on_streamer_left", fake)
-    await set_link(db, member.id, "alice", None)
-
-    interaction = FakeInteraction(bot, member, bot.guild)
-    await GoLive.unlink.callback(cog, interaction)
-    assert interaction.sent.endswith("The role is gone.")
-
-    interaction = FakeInteraction(bot, member, bot.guild)
-    await GoLive.optout.callback(cog, interaction)
-    assert interaction.sent.endswith("The role is gone.")
-    assert asked == [member.id, member.id]
-
-
-async def test_the_default_keep_setting_says_nothing_extra_at_all(cog, bot, member, db):
-    await set_link(db, member.id, "alice", None)
-    interaction = FakeInteraction(bot, member, bot.guild)
-
-    await GoLive.unlink.callback(cog, interaction)
-
-    assert interaction.sent.endswith("stops that too.")
-
-
-async def test_link_refuses_a_login_twitch_does_not_know(cog, bot, member, db):
-    cog.helix = FakeHelix(users=[])
-    interaction = FakeInteraction(bot, member, bot.guild)
-
-    await GoLive.link.callback(cog, interaction, "ghost")
-
-    assert "Twitch has no channel called **ghost**" in interaction.sent
-    assert await get_link(db, member.id) is None
-
-
-async def test_golive_test_previews_ephemerally_without_the_ping_role(
-    cog, bot, member, db, monkeypatch
-):
-    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
-    await bot.store.set(GUILD, "golive_ping_role_id", 77)
-    interaction = FakeInteraction(bot, member, bot.guild)
-
-    await GoLive.test.callback(cog, interaction)
-
-    assert interaction.sent.startswith("REGULATORS! Mount up! **Alice**")
-    assert "<@&77>" not in interaction.sent
-    assert interaction.response.messages[0]["ephemeral"] is True
-    assert await open_sessions(db, GUILD) == []
-    assert "golive.test" in await action_kinds(db)
-
-
-async def test_golive_test_can_fake_a_youtube_stream(cog, bot, member, db, monkeypatch):
-    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
-    await bot.store.set(GUILD, "golive_template", "{name} on {platform}: {url}")
-    interaction = FakeInteraction(bot, member, bot.guild)
-
-    await GoLive.test.callback(
-        cog, interaction, discord.app_commands.Choice(name="YouTube", value="YouTube")
-    )
-
-    assert interaction.sent == "Alice on YouTube: https://www.youtube.com/watch?v=blackblocbaf"
-    assert interaction.response.messages[0]["ephemeral"] is True
-    assert await open_sessions(db, GUILD) == []
-
-
-async def test_golive_test_still_fakes_twitch_by_default(cog, bot, member, db, monkeypatch):
-    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
-    await bot.store.set(GUILD, "golive_template", "{platform}: {url}")
-    interaction = FakeInteraction(bot, member, bot.guild)
-
-    await GoLive.test.callback(cog, interaction)
-
-    assert interaction.sent == "Twitch: https://www.twitch.tv/blackbloc"
-
-
-async def test_golive_test_prefers_a_real_stream_when_no_platform_is_chosen(
-    cog, bot, monkeypatch
-):
-    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
-    await bot.store.set(GUILD, "golive_template", "{platform}: {url}")
-    live = FakeMember(bot.guild, activities=(youtube_activity(),))
-    interaction = FakeInteraction(bot, live, bot.guild)
-
-    await GoLive.test.callback(cog, interaction)
-
-    assert interaction.sent == "YouTube: https://www.youtube.com/watch?v=xyz"
-
-
-async def test_golive_mode_command_stores_and_logs(cog, bot, member, db, monkeypatch):
-    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
-    interaction = FakeInteraction(bot, member, bot.guild)
-
-    await GoLive.mode.callback(cog, interaction, discord.app_commands.Choice(name="on", value="on"))
-
-    assert bot.store.get(GUILD, "golive_mode") == "on"
-    assert "golive.mode" in await action_kinds(db)
-
-
-async def test_golive_status_reports_the_setup(cog, bot, member, db, monkeypatch):
-    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
-    await set_link(db, member.id, "alice")
-    interaction = FakeInteraction(bot, member, bot.guild)
-
-    await GoLive.status.callback(cog, interaction)
-
-    assert "**mode** — shadow" in interaction.sent
-    assert f"<#{CHANNEL}>" in interaction.sent
-    assert "no Twitch credentials" in interaction.sent
-    assert "ages sessions out" in interaction.sent
-    assert "**links** — 1" in interaction.sent
-
-
-async def test_golive_status_says_the_announcement_is_left_alone_when_the_end_mode_is_off(
-    cog, bot, member, db, monkeypatch
-):
-    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
-    interaction = FakeInteraction(bot, member, bot.guild)
-
-    await GoLive.status.callback(cog, interaction)
-
-    assert "**stream end** — off (left as posted)" in interaction.sent
-    assert "stream ended" not in interaction.sent
-
-
-async def test_golive_status_quotes_the_end_wording_when_the_end_mode_is_edit(
-    cog, bot, member, db, monkeypatch
-):
-    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
-    await bot.store.set(GUILD, "golive_end_mode", "edit")
-    await bot.store.set(GUILD, "golive_end_suffix", " (that's a wrap)")
-    interaction = FakeInteraction(bot, member, bot.guild)
-
-    await GoLive.status.callback(cog, interaction)
-
-    assert "**stream end** — edit (\" (that's a wrap)\")" in interaction.sent
-
-
-async def test_golive_status_names_the_platform_of_everyone_live(cog, bot, member, db, monkeypatch):
-    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
-    await start_session(
-        db, GUILD, member.id, "presence", StreamInfo(url="u", platform="YouTube"), "on"
-    )
-    stranger = FakeMember(bot.guild, user_id=4242, display_name="Bo")
-    await start_session(db, GUILD, stranger.id, "presence", StreamInfo(url="u"), "on")
-    interaction = FakeInteraction(bot, member, bot.guild)
-
-    await GoLive.status.callback(cog, interaction)
-
-    assert "• Alice on YouTube" in interaction.sent
-    assert "• Bo on an unknown platform" in interaction.sent
-    assert interaction.response.messages[0]["kwargs"]["allowed_mentions"].everyone is False
-
-
 async def test_reconcile_on_start_closes_a_session_nothing_is_streaming(cog, bot, member, db):
     await start_session(db, GUILD, member.id, "presence", StreamInfo(url="u"), "on")
 
@@ -1250,21 +1139,6 @@ async def test_a_failed_end_edit_does_not_abort_the_role_or_the_log(cog, bot, me
     assert member.removed == [LIVE_ROLE]
     assert "golive.end" in await action_kinds(db)
     assert await open_session_for(db, GUILD, member.id) is None
-
-
-async def test_status_reports_the_last_poll_error(cog, bot, member, db, monkeypatch):
-    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
-    await set_link(db, member.id, "alice")
-    cog.helix = FakeHelix(raises=TwitchError("twitch unreachable: boom"))
-    await cog.poll_once()
-
-    interaction = FakeInteraction(bot, member, bot.guild)
-    await GoLive.status.callback(cog, interaction)
-
-    assert "**last poll error** — twitch unreachable: boom (1 in a row)" in interaction.sent
-    assert "**last good poll** — never" in interaction.sent
-
-
 async def test_a_run_of_failed_polls_is_logged_once_and_ends_nothing(cog, bot, member, db):
     await set_link(db, member.id, "alice")
     await start_session(db, GUILD, member.id, "twitch", StreamInfo(url="u"), "on")
@@ -1298,52 +1172,6 @@ async def test_a_good_poll_clears_the_run_so_the_next_outage_is_logged_again(
         await cog.poll_once()
 
     assert (await action_kinds(db)).count("golive.poll_degraded") == 2
-
-
-async def test_status_reports_a_good_poll(cog, bot, member, db, monkeypatch):
-    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
-    await set_link(db, member.id, "alice")
-    cog.helix = FakeHelix(streams=[])
-    await cog.poll_once()
-
-    interaction = FakeInteraction(bot, member, bot.guild)
-    await GoLive.status.callback(cog, interaction)
-
-    assert "**last poll error** — none" in interaction.sent
-    assert "**last good poll** — never" not in interaction.sent
-
-
-async def test_link_refuses_a_login_another_member_already_uses(cog, bot, db):
-    theirs = FakeMember(bot.guild, user_id=1)
-    mine = FakeMember(bot.guild, user_id=2)
-    await set_link(db, theirs.id, "alice")
-    interaction = FakeInteraction(bot, mine, bot.guild)
-
-    await GoLive.link.callback(cog, interaction, "Alice")
-
-    assert "already linked to another member" in interaction.sent
-    assert await get_link(db, mine.id) is None
-
-
-async def test_relinking_your_own_login_still_works(cog, bot, member, db):
-    await set_link(db, member.id, "alice")
-    interaction = FakeInteraction(bot, member, bot.guild)
-
-    await GoLive.link.callback(cog, interaction, "alice")
-
-    assert "Linked **alice**" in interaction.sent
-
-
-async def test_link_says_so_when_twitch_could_not_be_checked(cog, bot, member, db):
-    cog.helix = FakeHelix(raises=TwitchError("twitch unreachable: boom"))
-    interaction = FakeInteraction(bot, member, bot.guild)
-
-    await GoLive.link.callback(cog, interaction, "alice")
-
-    assert "could not be reached to check that the channel name exists" in interaction.sent
-    assert (await get_link(db, member.id))["twitch_login"] == "alice"
-
-
 async def test_the_poller_warns_about_two_members_on_the_same_login(cog, bot, db, caplog):
     first = FakeMember(bot.guild, user_id=1)
     second = FakeMember(bot.guild, user_id=2)
@@ -1360,40 +1188,8 @@ async def test_the_poller_warns_about_two_members_on_the_same_login(cog, bot, db
 
     assert "linked to both" in caplog.text
     assert len(await open_sessions(db, GUILD)) == 1
-
-
-async def test_a_command_says_so_when_the_database_is_unreachable(cog, bot, member, db):
-    await db.close()
-    interaction = FakeInteraction(bot, member, bot.guild)
-
-    await GoLive.optout.callback(cog, interaction)
-
-    assert "cannot reach its own database" in interaction.sent
-
-
 async def _always_staff(interaction):
     return True
-
-
-def test_the_link_command_asks_for_a_channel_name_and_never_says_login():
-    assert set(GoLive.link._params) == {"channel"}
-    assert str(GoLive.link._params["channel"].description) == (
-        "Your Twitch channel name (the part after twitch.tv/)"
-    )
-    said = " ".join(
-        [
-            str(GoLive.link.description),
-            str(GoLive.link._params["channel"].description),
-            cog_module.BAD_LOGIN,
-            cog_module.NOT_LINKED,
-            cog_module.LINK_NOT_CHECKED,
-            cog_module.LINK_TAKEN,
-        ]
-    )
-    assert "login" not in said.lower()
-    assert "channel name" in said
-
-
 async def test_the_announcement_carries_the_sentence_and_the_card(cog, bot, member, db):
     await bot.store.set(GUILD, "golive_mode", "on")
     info = StreamInfo(
@@ -1545,20 +1341,437 @@ async def test_ending_a_stream_posted_without_a_card_still_marks_the_sentence(
     assert "embed" not in posted.edits[0]
 
 
-async def test_golive_test_previews_the_card_for_the_chosen_platform(
-    cog, bot, member, db, monkeypatch
-):
-    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
-    cog.helix = FakeHelix(games=[twitch_game()])
-    interaction = FakeInteraction(bot, member, bot.guild)
+async def open_panel(cog, bot, who):
+    interaction = FakeInteraction(bot, who, bot.guild)
+    await GoLive.golive.callback(cog, interaction)
+    return interaction
 
-    await GoLive.test.callback(
-        cog, interaction, discord.app_commands.Choice(name="Twitch", value="Twitch")
-    )
+
+async def press(bot, who, view, label):
+    interaction = FakeInteraction(bot, who, bot.guild)
+    await child(view, label).callback(interaction)
+    return interaction
+
+
+async def choose(bot, who, view, placeholder, value):
+    interaction = FakeInteraction(bot, who, bot.guild)
+    select = picker(view, placeholder)
+    select._values = [str(value)]
+    await select.callback(interaction)
+    return interaction
+
+
+async def submit_link(bot, who, view, given):
+    """Press the link/change button, then submit the modal it opened."""
+    opened = await press(bot, who, view, child_label(view))
+    modal = opened.response.modals[-1]
+    modal.channel._value = given
+    interaction = FakeInteraction(bot, who, bot.guild)
+    await modal.on_submit(interaction)
+    return interaction
+
+
+def child_label(view):
+    for wanted in (LINK_CHANNEL.label, CHANGE_CHANNEL.label):
+        if any(getattr(one, "label", None) == wanted for one in view.children):
+            return wanted
+    raise AssertionError("no link control on this panel")
+
+
+def moves(interaction):
+    """The panel's buttons; a select has no label and the site link is a plain URL."""
+    return [one for one in interaction.labels() if one and one != SITE_BUTTON]
+
+
+async def test_golive_opens_one_ephemeral_panel_a_member_can_use(cog, bot, member, db):
+    interaction = await open_panel(cog, bot, member)
 
     said = interaction.response.messages[-1]
-    embed = said["kwargs"]["embed"]
     assert said["ephemeral"] is True
+    assert said["kwargs"]["allowed_mentions"].everyone is False
+    assert interaction.embed.title == "Go-live"
+    assert "none linked yet" in interaction.words
+    assert "announced here whenever" in interaction.words
+    assert moves(interaction) == [
+        "Link my Twitch channel",
+        "Stop announcing my streams",
+        "Refresh",
+    ]
+    assert set(interaction.placeholders()) == {None}
+    assert SITE_BUTTON in interaction.labels()
+
+
+@pytest.mark.parametrize("linked", [False, True])
+@pytest.mark.parametrize("opted_out", [False, True])
+@pytest.mark.parametrize("staff", [False, True])
+async def test_the_panel_renders_exactly_the_row_the_table_says(
+    cog, bot, member, db, linked, opted_out, staff
+):
+    """The button table is DATA, and every one of the eight states is proved against it."""
+    if linked:
+        await set_link(db, member.id, "alice", "42")
+    if opted_out:
+        await set_optout(db, member.id)
+    as_staff(bot, staff)
+
+    interaction = await open_panel(cog, bot, member)
+
+    wanted = [
+        move.label
+        for move in panel_buttons(linked=linked, opted_out=opted_out, staff=staff)
+    ]
+    assert moves(interaction) == wanted
+    staff_only = {"Logs", "Streamers…"}
+    assert bool(staff_only & set(moves(interaction))) is staff
+    assert (cog_module.PREVIEW_PICK in interaction.placeholders()) is staff
+    assert (cog_module.MODE_PICK in interaction.placeholders()) is staff
+    assert ("**mode** — shadow" in interaction.words) is staff
+    assert (cog_module.STAFF_ONLY_LINE in interaction.words) == (not staff)
+
+
+async def test_the_member_panel_says_when_test_mode_is_why_nothing_is_announced(
+    cog, bot, member, db
+):
+    bot.guard = FakeGuard()
+    await bot.store.set(GUILD, "golive_channel_id", 999)
+
+    interaction = await open_panel(cog, bot, member)
+
+    assert f"test mode means nothing is posted outside <#{CHANNEL}>" in interaction.words
+    assert interaction.words.startswith("Your Twitch channel, and whether")
+
+
+async def test_the_staff_panel_is_the_member_panel_plus_the_status_lines(
+    cog, bot, member, db
+):
+    as_staff(bot)
+    await set_link(db, member.id, "alice", "42")
+
+    interaction = await open_panel(cog, bot, member)
+
+    assert "twitch.tv/alice" in interaction.words
+    assert "**mode** — shadow" in interaction.words
+    assert f"**channel** — <#{CHANNEL}>" in interaction.words
+    assert "**stream end** — off (left as posted)" in interaction.words
+    assert "no Twitch credentials" in interaction.words
+    assert "ages sessions out" in interaction.words
+    assert "**links** — 1" in interaction.words
+    assert "**last good poll** — never" in interaction.words
+    assert "**last poll error** — none" in interaction.words
+
+
+async def test_the_status_channel_line_says_test_mode_is_why_nothing_real_posts(
+    cog, bot, member, db
+):
+    as_staff(bot)
+    bot.guard = FakeGuard()
+    await bot.store.set(GUILD, "golive_channel_id", 999)
+
+    interaction = await open_panel(cog, bot, member)
+
+    assert "**channel** — <#999> — but test mode means nothing is posted" in interaction.words
+
+
+async def test_the_status_lines_quote_the_end_wording_when_the_end_mode_is_edit(
+    cog, bot, member, db
+):
+    as_staff(bot)
+    await bot.store.set(GUILD, "golive_end_mode", "edit")
+    await bot.store.set(GUILD, "golive_end_suffix", " (that's a wrap)")
+
+    interaction = await open_panel(cog, bot, member)
+
+    assert "**stream end** — edit (\" (that's a wrap)\")" in interaction.words
+
+
+async def test_the_status_lines_name_the_platform_of_everyone_live(cog, bot, member, db):
+    as_staff(bot)
+    await start_session(
+        db, GUILD, member.id, "presence", StreamInfo(url="u", platform="YouTube"), "on"
+    )
+    stranger = FakeMember(bot.guild, user_id=4242, display_name="Bo")
+    await start_session(db, GUILD, stranger.id, "presence", StreamInfo(url="u"), "on")
+
+    interaction = await open_panel(cog, bot, member)
+
+    assert "• Alice on YouTube" in interaction.words
+    assert "• Bo on an unknown platform" in interaction.words
+
+
+async def test_the_status_lines_report_the_last_poll_error(cog, bot, member, db):
+    as_staff(bot)
+    await set_link(db, member.id, "alice")
+    cog.helix = FakeHelix(raises=TwitchError("twitch unreachable: boom"))
+    await cog.poll_once()
+
+    interaction = await open_panel(cog, bot, member)
+
+    assert "**last poll error** — twitch unreachable: boom (1 in a row)" in interaction.words
+    assert "**last good poll** — never" in interaction.words
+
+
+async def test_the_status_lines_report_a_good_poll(cog, bot, member, db):
+    as_staff(bot)
+    await set_link(db, member.id, "alice")
+    cog.helix = FakeHelix(streams=[])
+    await cog.poll_once()
+
+    interaction = await open_panel(cog, bot, member)
+
+    assert "**last poll error** — none" in interaction.words
+    assert "**last good poll** — never" not in interaction.words
+
+
+async def test_the_status_lines_say_so_when_the_cog_is_not_loaded(cog, bot, member, db):
+    as_staff(bot)
+    bot.cog = None
+
+    interaction = await open_panel(cog, bot, member)
+
+    assert "the go-live cog is not loaded" in interaction.words
+
+
+async def test_opting_out_and_back_in_from_the_panel(cog, bot, member, db):
+    panel = await open_panel(cog, bot, member)
+
+    out = await press(bot, member, panel.view, "Stop announcing my streams")
+
+    assert await is_opted_out(db, member.id) is True
+    assert "will not announce" in out.sent
+    assert child(out.view, "Announce my streams again") is not None
+
+    back = await press(bot, member, out.view, "Announce my streams again")
+
+    assert await is_opted_out(db, member.id) is False
+    assert "again" in back.sent
+    assert await action_kinds(db) == ["golive.optout", "golive.optin"]
+
+
+async def test_linking_and_unlinking_from_the_panel(cog, bot, member, db):
+    panel = await open_panel(cog, bot, member)
+
+    said = await submit_link(bot, member, panel.view, "https://www.twitch.tv/Alice")
+
+    assert (await get_link(db, member.id))["twitch_login"] == "alice"
+    assert "Linked **alice**" in said.sent
+    assert "twitch.tv/alice" in said.words
+    assert child(said.view, "Change my channel") is not None
+
+    gone = await press(bot, member, said.view, "Unlink")
+
+    assert await get_link(db, member.id) is None
+    assert "forgotten your Twitch channel" in gone.sent
+    assert await action_kinds(db) == ["golive.link", "golive.unlink"]
+
+
+async def test_change_my_channel_opens_the_modal_already_filled_in(cog, bot, member, db):
+    await set_link(db, member.id, "alice", "42")
+    panel = await open_panel(cog, bot, member)
+
+    opened = await press(bot, member, panel.view, "Change my channel")
+
+    modal = opened.response.modals[-1]
+    assert modal.channel.default == "alice"
+    assert modal.title == "Your Twitch channel"
+    assert modal.channel.max_length == 25
+
+
+async def test_the_modal_refuses_a_login_that_is_not_one(cog, bot, member, db):
+    panel = await open_panel(cog, bot, member)
+
+    said = await submit_link(bot, member, panel.view, "not a login")
+
+    assert "does not look like a Twitch channel name" in said.sent
+    assert await get_link(db, member.id) is None
+    assert await action_kinds(db) == []
+
+
+async def test_the_modal_refuses_a_login_another_member_already_holds(cog, bot, db):
+    theirs = FakeMember(bot.guild, user_id=1, display_name="Bo")
+    mine = FakeMember(bot.guild, user_id=2, display_name="Cy")
+    await set_link(db, theirs.id, "alice")
+    panel = await open_panel(cog, bot, mine)
+
+    said = await submit_link(bot, mine, panel.view, "Alice")
+
+    assert "already linked to another member" in said.sent
+    assert "Bo" not in said.sent
+    assert await get_link(db, mine.id) is None
+
+
+async def test_relinking_your_own_login_still_works(cog, bot, member, db):
+    await set_link(db, member.id, "alice")
+    panel = await open_panel(cog, bot, member)
+
+    said = await submit_link(bot, member, panel.view, "alice")
+
+    assert "Linked **alice**" in said.sent
+
+
+async def test_the_panel_says_so_when_twitch_could_not_be_checked(cog, bot, member, db):
+    cog.helix = FakeHelix(raises=TwitchError("twitch unreachable: boom"))
+    panel = await open_panel(cog, bot, member)
+
+    said = await submit_link(bot, member, panel.view, "alice")
+
+    assert "could not be reached to check that the channel name exists" in said.sent
+    assert (await get_link(db, member.id))["twitch_login"] == "alice"
+    assert "not verified with Twitch" in said.words
+
+
+async def test_the_panel_refuses_a_login_twitch_does_not_know(cog, bot, member, db):
+    cog.helix = FakeHelix(users=[])
+    panel = await open_panel(cog, bot, member)
+
+    said = await submit_link(bot, member, panel.view, "ghost")
+
+    assert "Twitch has no channel called **ghost**" in said.sent
+    assert await get_link(db, member.id) is None
+
+
+async def test_a_link_makes_a_ping_role_only_when_the_setting_says_auto(
+    cog, bot, member, db, monkeypatch
+):
+    """F14: `pings_fan_role_creation` is the whole gate, and its default is `self`."""
+    asked = []
+
+    async def fake(bot_, guild, who, *, by, via="discord"):
+        asked.append((guild.id, who.id, by))
+        return cog_module.pings.Outcome(True, "Made **Alice pings**.")
+
+    monkeypatch.setattr(cog_module.pings, "maybe_auto_create", fake)
+    panel = await open_panel(cog, bot, member)
+
+    said = await submit_link(bot, member, panel.view, "alice")
+
+    assert asked == [(GUILD, member.id, member.id)]
+    assert said.sent.endswith("Made **Alice pings**.")
+    assert said.response.messages[-1]["kwargs"]["allowed_mentions"].roles is False
+
+
+async def test_unlink_and_optout_ask_what_should_happen_to_the_streamers_own_role(
+    cog, bot, member, db, monkeypatch
+):
+    asked = []
+
+    async def fake(bot_, guild, user_id, *, by, via="discord"):
+        asked.append(user_id)
+        return cog_module.pings.Outcome(True, "The role is gone.")
+
+    monkeypatch.setattr(cog_module.pings, "on_streamer_left", fake)
+    await set_link(db, member.id, "alice", None)
+
+    panel = await open_panel(cog, bot, member)
+    gone = await press(bot, member, panel.view, "Unlink")
+    assert gone.sent.endswith("The role is gone.")
+
+    out = await press(bot, member, gone.view, "Stop announcing my streams")
+    assert out.sent.endswith("The role is gone.")
+    assert asked == [member.id, member.id]
+
+
+async def test_the_default_keep_setting_says_nothing_extra_at_all(cog, bot, member, db):
+    await set_link(db, member.id, "alice", None)
+    panel = await open_panel(cog, bot, member)
+
+    gone = await press(bot, member, panel.view, "Unlink")
+
+    assert gone.sent.endswith("stops that too.")
+
+
+async def test_the_mode_select_writes_the_mode_and_leaves_one_row(cog, bot, member, db):
+    as_staff(bot)
+    panel = await open_panel(cog, bot, member)
+
+    said = await choose(bot, member, panel.view, cog_module.MODE_PICK, "on")
+
+    assert bot.store.get(GUILD, "golive_mode") == "on"
+    assert await action_kinds(db) == ["golive.mode"]
+    assert "now **on**" in said.sent
+    assert "**mode** — on" in said.words
+    chosen = [one.value for one in picker(said.view, cog_module.MODE_PICK).options if one.default]
+    assert chosen == ["on"]
+
+
+async def test_the_preview_answers_a_new_message_and_posts_nothing(cog, bot, member, db):
+    as_staff(bot)
+    await bot.store.set(GUILD, "golive_ping_role_id", 77)
+    panel = await open_panel(cog, bot, member)
+
+    said = await choose(bot, member, panel.view, cog_module.PREVIEW_PICK, "Twitch")
+
+    answered = said.response.messages[-1]
+    assert answered["ephemeral"] is True
+    assert answered["content"].startswith("REGULATORS! Mount up! **Alice**")
+    assert "<@&77>" not in answered["content"]
+    assert answered["kwargs"]["allowed_mentions"].everyone is False
+    assert said.edits == []
+    assert bot.guild.channel.messages == []
+    assert await open_sessions(db, GUILD) == []
+    assert await action_kinds(db) == ["golive.test"]
+
+
+async def test_the_preview_never_reaches_the_post_path(cog, bot, member, db, monkeypatch):
+    as_staff(bot)
+    posted = []
+
+    async def never(self, *args, **kwargs):
+        posted.append(args)
+        return PostResult()
+
+    monkeypatch.setattr(GoLive, "_post", never)
+    panel = await open_panel(cog, bot, member)
+
+    await choose(bot, member, panel.view, cog_module.PREVIEW_PICK, "Twitch")
+
+    assert posted == []
+
+
+async def test_the_preview_can_fake_a_youtube_stream(cog, bot, member, db):
+    as_staff(bot)
+    await bot.store.set(GUILD, "golive_template", "{name} on {platform}: {url}")
+    panel = await open_panel(cog, bot, member)
+
+    said = await choose(bot, member, panel.view, cog_module.PREVIEW_PICK, "YouTube")
+
+    assert said.sent == "Alice on YouTube: https://www.youtube.com/watch?v=blackblocbaf"
+
+
+async def test_the_preview_uses_your_own_stream_when_you_pick_as_you_are_now(cog, bot, db):
+    as_staff(bot)
+    await bot.store.set(GUILD, "golive_template", "{platform}: {url}")
+    live = FakeMember(bot.guild, activities=(youtube_activity(),))
+    panel = await open_panel(cog, bot, live)
+
+    said = await choose(
+        bot, live, panel.view, cog_module.PREVIEW_PICK, cog_module.PREVIEW_SELF
+    )
+
+    assert said.sent == "YouTube: https://www.youtube.com/watch?v=xyz"
+
+
+async def test_the_preview_falls_back_to_twitch_when_you_are_not_streaming(cog, bot, member, db):
+    as_staff(bot)
+    await bot.store.set(GUILD, "golive_template", "{platform}: {url}")
+    panel = await open_panel(cog, bot, member)
+
+    said = await choose(
+        bot, member, panel.view, cog_module.PREVIEW_PICK, cog_module.PREVIEW_SELF
+    )
+
+    assert said.sent == "Twitch: https://www.twitch.tv/blackbloc"
+
+
+async def test_the_preview_carries_the_card_for_the_chosen_platform(cog, bot, member, db):
+    as_staff(bot)
+    cog.helix = FakeHelix(games=[twitch_game()])
+    panel = await open_panel(cog, bot, member)
+
+    said = await choose(bot, member, panel.view, cog_module.PREVIEW_PICK, "Twitch")
+
+    answered = said.response.messages[-1]
+    embed = answered["kwargs"]["embed"]
+    assert answered["ephemeral"] is True
     assert embed.author.name == "Alice is now live on Twitch!"
     assert [(f.name, f.value) for f in embed.fields] == [("Game", "Just Chatting")]
     assert embed.image.url.endswith("ttv-boxart/509658-285x380.jpg")
@@ -1567,46 +1780,42 @@ async def test_golive_test_previews_the_card_for_the_chosen_platform(
     assert "embed" in json.loads(await action_details(db, "golive.test"))
 
 
-async def test_golive_test_previews_the_youtube_card_with_its_own_artwork(
-    cog, bot, member, db, monkeypatch
-):
-    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
-    interaction = FakeInteraction(bot, member, bot.guild)
+async def test_the_preview_carries_the_youtube_card_with_its_own_artwork(cog, bot, member, db):
+    as_staff(bot)
+    panel = await open_panel(cog, bot, member)
 
-    await GoLive.test.callback(
-        cog, interaction, discord.app_commands.Choice(name="YouTube", value="YouTube")
-    )
+    said = await choose(bot, member, panel.view, cog_module.PREVIEW_PICK, "YouTube")
 
-    embed = interaction.response.messages[-1]["kwargs"]["embed"]
+    embed = said.response.messages[-1]["kwargs"]["embed"]
     assert embed.author.name == "Alice is now live on YouTube!"
     assert embed.image.url == "https://i.ytimg.com/vi/aqz-KE-bpKQ/hqdefault.jpg"
     assert embed.footer.text == "Black Bloc · via Discord activity"
 
 
-async def test_golive_test_shows_no_card_when_the_setting_is_off(cog, bot, member, monkeypatch):
-    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+async def test_the_preview_shows_no_card_when_the_setting_is_off(cog, bot, member, db):
+    as_staff(bot)
     await bot.store.set(GUILD, "golive_embed", False)
-    interaction = FakeInteraction(bot, member, bot.guild)
+    panel = await open_panel(cog, bot, member)
 
-    await GoLive.test.callback(cog, interaction)
+    said = await choose(bot, member, panel.view, cog_module.PREVIEW_PICK, "Twitch")
 
-    assert "embed" not in interaction.response.messages[-1]["kwargs"]
+    assert "embed" not in said.response.messages[-1]["kwargs"]
 
 
-async def test_golive_logs_shows_this_features_lines_and_nothing_else(
-    cog, bot, member, db, monkeypatch
-):
+async def test_logs_answers_a_new_message_and_the_panel_stays(cog, bot, member, db, monkeypatch):
     monkeypatch.setattr(actionlog, "require_staff", _always_staff)
+    as_staff(bot)
     for kind in ("golive.announce", "poll.created", "golive.post_failed"):
         await log_action(bot, bot.guild, kind, actor=member, target=member)
-    interaction = FakeInteraction(bot, member, bot.guild)
+    panel = await open_panel(cog, bot, member)
 
-    await GoLive.golive_logs.callback(cog, interaction)
+    said = await press(bot, member, panel.view, "Logs")
 
-    said = interaction.response.messages[-1]
-    embed = said["kwargs"]["embed"]
-    assert said["ephemeral"] is True
-    assert said["kwargs"]["allowed_mentions"].everyone is False
+    answered = said.response.messages[-1]
+    embed = answered["kwargs"]["embed"]
+    assert answered["ephemeral"] is True
+    assert answered["kwargs"]["allowed_mentions"].everyone is False
+    assert said.edits == []
     assert embed.title == "Go-live log"
     assert "`golive.post_failed`" in embed.description
     assert "`golive.announce`" in embed.description
@@ -1614,27 +1823,217 @@ async def test_golive_logs_shows_this_features_lines_and_nothing_else(
     assert embed.footer.text.endswith("/golive.html")
 
 
-async def test_golive_logs_important_only_leaves_out_the_routine_lines(
-    cog, bot, member, db, monkeypatch
-):
-    monkeypatch.setattr(actionlog, "require_staff", _always_staff)
-    for kind in ("golive.announce", "golive.post_failed"):
-        await log_action(bot, bot.guild, kind)
-    interaction = FakeInteraction(bot, member, bot.guild)
+async def test_logs_still_refuses_a_staffer_who_was_demoted(cog, bot, member, db):
+    as_staff(bot)
+    panel = await open_panel(cog, bot, member)
+    as_staff(bot, False)
 
-    await GoLive.golive_logs.callback(cog, interaction, 50, True)
+    said = await press(bot, member, panel.view, "Logs")
 
-    embed = interaction.response.messages[-1]["kwargs"]["embed"]
-    assert embed.title == "Go-live log — important only"
-    assert "`golive.post_failed`" in embed.description
-    assert "golive.announce" not in embed.description
+    assert "for staff only" in said.sent
 
 
-async def test_golive_logs_says_so_when_the_database_is_away(cog, bot, member, db, monkeypatch):
-    monkeypatch.setattr(actionlog, "require_staff", _always_staff)
+async def test_a_staffer_demoted_mid_panel_moves_nothing(cog, bot, member, db):
+    as_staff(bot)
+    panel = await open_panel(cog, bot, member)
+    as_staff(bot, False)
+
+    mode = await choose(bot, member, panel.view, cog_module.MODE_PICK, "on")
+    streamers = await press(bot, member, panel.view, "Streamers…")
+    shown = await choose(bot, member, panel.view, cog_module.PREVIEW_PICK, "Twitch")
+
+    assert bot.store.get(GUILD, "golive_mode") == "shadow"
+    assert await action_kinds(db) == []
+    for said in (mode, streamers, shown):
+        assert "for staff only" in said.sent
+        assert said.edits == []
+
+
+async def test_every_move_says_so_when_the_database_is_away(cog, bot, member, db):
+    panel = await open_panel(cog, bot, member)
+    await db.close()
+
+    pressed = await press(bot, member, panel.view, "Stop announcing my streams")
+    modal = await press(bot, member, panel.view, "Link my Twitch channel")
+
+    assert "cannot reach its own database" in pressed.sent
+    assert pressed.response.deferred is True
+    assert "cannot reach its own database" in modal.sent
+    assert modal.response.modals == []
+
+
+async def test_the_command_says_so_when_the_database_is_unreachable(cog, bot, member, db):
     await db.close()
     interaction = FakeInteraction(bot, member, bot.guild)
 
-    await GoLive.golive_logs.callback(cog, interaction)
+    await GoLive.golive.callback(cog, interaction)
 
     assert "cannot reach its own database" in interaction.sent
+
+
+async def test_a_re_render_retires_the_view_it_replaced(cog, bot, member, db):
+    panel = await open_panel(cog, bot, member)
+    first = panel.view
+
+    second = await press(bot, member, first, "Refresh")
+
+    assert first.replaced is True
+    assert first.is_finished() is True
+    assert second.view.replaced is False
+
+
+async def test_the_timeout_disables_every_control_and_writes_the_footer(cog, bot, member, db):
+    panel = await open_panel(cog, bot, member)
+    view = panel.view
+    view.message = FakePanelMessage(embed=panel.embed)
+
+    await view.on_timeout()
+
+    assert all(one.disabled for one in view.children)
+    assert view.message.edits[-1]["embeds"][0].footer.text == (
+        "This panel has gone quiet — run /golive again"
+    )
+
+
+async def test_the_panel_carries_the_site_link_only_with_an_origin(cog, bot, member, db):
+    said = await open_panel(cog, bot, member)
+    assert child(said.view, SITE_BUTTON).url.endswith("/golive.html")
+
+    bot.settings = load_settings(
+        _env_file=None, test_mode=True, test_channel_id=CHANNEL, site_origin=""
+    )
+    without = await open_panel(cog, bot, member)
+
+    assert SITE_BUTTON not in without.labels()
+
+
+async def test_the_streamers_panel_lists_everyone_who_linked_a_channel(cog, bot, member, db):
+    as_staff(bot)
+    other = FakeMember(bot.guild, user_id=4242, display_name="Bo")
+    await set_link(db, member.id, "alice", "42")
+    await set_link(db, other.id, "bo", None)
+    panel = await open_panel(cog, bot, member)
+
+    shown = await press(bot, member, panel.view, "Streamers…")
+
+    assert shown.embed.title == "Streamers"
+    options = picker(shown.view, cog_module.PICK_A_STREAMER).options
+    assert [one.label for one in options] == [
+        "Alice — twitch.tv/alice",
+        "Bo — twitch.tv/bo",
+    ]
+    assert moves(shown) == ["Back"]
+
+
+async def test_the_streamers_select_says_how_many_it_could_not_show(cog, bot, member, db):
+    as_staff(bot)
+    for number in range(30):
+        await set_link(db, 1000 + number, f"s{number:02d}", None)
+    panel = await open_panel(cog, bot, member)
+
+    shown = await press(bot, member, panel.view, "Streamers…")
+
+    assert picker(shown.view, "25 of 30 — the rest are on the site") is not None
+
+
+async def test_staff_unlink_somebody_else_through_the_same_function(cog, bot, member, db):
+    as_staff(bot)
+    other = FakeMember(bot.guild, user_id=4242, display_name="Bo")
+    await set_link(db, other.id, "bo", None)
+    panel = await open_panel(cog, bot, member)
+    shown = await press(bot, member, panel.view, "Streamers…")
+
+    card = await choose(bot, member, shown.view, cog_module.PICK_A_STREAMER, other.id)
+    assert "**Bo** — twitch.tv/bo — not verified with Twitch" in card.words
+
+    asked = await press(bot, member, card.view, "Unlink them")
+    assert "Unlink **Bo** from twitch.tv/bo?" in asked.words
+
+    done = await press(bot, member, asked.view, "Yes, unlink them")
+
+    assert await get_link(db, other.id) is None
+    assert "**Bo** is no longer linked" in done.sent
+    assert await action_kinds(db) == ["golive.unlink"]
+
+
+async def test_staff_opt_somebody_else_out_and_back_in(cog, bot, member, db):
+    as_staff(bot)
+    other = FakeMember(bot.guild, user_id=4242, display_name="Bo")
+    await set_link(db, other.id, "bo", "9")
+    panel = await open_panel(cog, bot, member)
+    shown = await press(bot, member, panel.view, "Streamers…")
+    card = await choose(bot, member, shown.view, cog_module.PICK_A_STREAMER, other.id)
+
+    out = await press(bot, member, card.view, "Opt them out")
+    assert await is_opted_out(db, other.id) is True
+    assert "no stream of **Bo**'s is announced" in out.sent
+    assert "Opted out" in out.words
+
+    back = await press(bot, member, out.view, "Opt them back in")
+    assert await is_opted_out(db, other.id) is False
+    assert "**Bo**'s streams can be announced again" in back.sent
+    assert await action_kinds(db) == ["golive.optout", "golive.optin"]
+
+
+async def test_back_returns_to_the_root_panel(cog, bot, member, db):
+    as_staff(bot)
+    await set_link(db, member.id, "alice", "42")
+    panel = await open_panel(cog, bot, member)
+    shown = await press(bot, member, panel.view, "Streamers…")
+
+    said = await press(bot, member, shown.view, "Back")
+
+    assert said.embed.title == "Go-live"
+    assert "**mode** — shadow" in said.words
+
+
+async def test_a_link_with_twitch_turned_off_never_claims_it_was_checked(
+    cog, bot, member, db
+):
+    """Checklist 10: with no Twitch client nothing was verified, and the row says so —
+    but the sentence does not blame Twitch for being unreachable, because nobody asked it."""
+    assert cog.helix is None
+    panel = await open_panel(cog, bot, member)
+
+    said = await submit_link(bot, member, panel.view, "alice")
+
+    assert "could not be reached" not in said.sent
+    assert "Linked **alice**" in said.sent
+    assert json.loads(await action_details(db, "golive.link"))["checked"] is False
+    assert "not verified with Twitch" in said.words
+
+
+async def test_a_checked_link_says_so_in_the_row_and_on_the_card(cog, bot, member, db):
+    cog.helix = FakeHelix(users=[TwitchUser("42", "alice", "Alice")])
+    panel = await open_panel(cog, bot, member)
+
+    said = await submit_link(bot, member, panel.view, "alice")
+
+    assert (await get_link(db, member.id))["twitch_user_id"] == "42"
+    assert json.loads(await action_details(db, "golive.link"))["checked"] is True
+    assert "not verified" not in said.words
+
+
+async def test_every_panel_move_leaves_exactly_one_log_row(cog, bot, member, db):
+    """Checklist 34, counted rather than merely named."""
+    panel = await open_panel(cog, bot, member)
+
+    linked = await submit_link(bot, member, panel.view, "alice")
+    out = await press(bot, member, linked.view, "Stop announcing my streams")
+    back = await press(bot, member, out.view, "Announce my streams again")
+    await press(bot, member, back.view, "Unlink")
+
+    assert await action_kinds(db) == [
+        "golive.link",
+        "golive.optout",
+        "golive.optin",
+        "golive.unlink",
+    ]
+
+
+async def test_every_panel_move_records_which_door_it_came_through(cog, bot, member, db):
+    panel = await open_panel(cog, bot, member)
+
+    await submit_link(bot, member, panel.view, "alice")
+
+    assert json.loads(await action_details(db, "golive.link"))["via"] == "discord"
