@@ -256,3 +256,61 @@ trivial:
 - `role_menus.py`, `rolegrants.py`, `events.py`, `golive.py` are READ-ONLY
   (import, call, never edit) — §J.
 - Commit at clean boundaries: schema+helpers → cog → API+page → docs.
+
+## Deviations — what the build did differently, and why
+
+Written by the Phase 19 builder at landing, 2026-09-02. Everything not listed here
+was built as §A–§K describe it.
+
+1. **`add_grant(source="application:<form>")` was not possible — the grant uses
+   `source="approval"` instead.** `rolegrants.add_grant` validates `source` against a
+   fixed `SOURCES` tuple and raises `ValueError` on anything else, and `rolegrants.py`
+   is READ-ONLY for this build (§K). An approved application IS a staff approval, so
+   `grants.APPROVAL` is the honest existing value; the form is recorded in the
+   `application.granted` log details and the grant's row id is stored on
+   `applications.grant_id`, so nothing about the provenance is lost. Adding a source is
+   a migration to `SOURCES` and to every reader of it, which is the reviewer's call
+   after the merge, not a parallel builder's.
+2. **Shadow mode gained a third log kind, `application.would_grant`.** §F named only
+   `.would_post` and `.would_dm`, but review-checklist item 1 requires every side effect
+   the HTTP guard cannot see — a role add is one — to be checked explicitly and logged as
+   `would_…` in shadow. Without it, approving in shadow would really hand the role over.
+3. **The card's footer is `#<id> · <form name>`; the submitted time is a FIELD.**
+   §B asked for a footer of `#id · <t:submitted:R>`. Discord does not render `<t:…>`
+   timestamps inside an embed footer, so the relative stamp is an inline **Sent** field
+   (the way `role_menus.request_card` does it) and the footer carries the id and the form.
+4. **The `/apply` line went into `personas.py:FEATURES`, not `chat_data.py`.** The brief
+   named `chat_data.py`; the block the conversational model actually reads is
+   `black_bloc/personas.py:FEATURES`, and `tests/test_personas.py` fails by name when a
+   member-facing command is missing from it. `chat_data.py` has no such list.
+5. **`/applications approve` and `/applications deny` carry `extras={"staff_only": True}`.**
+   Their gate is two hops away (`_decide` → `may_decide` → `require_staff`) and
+   `settings_store.is_staff_command` walks one. The registry already supports the extra;
+   using it states the fact on the command instead of hiding it in a test's exception list.
+6. **`/applications delete` exists; §C did not list it.** `/applications create` with no
+   way back would have left the owner unable to undo a typo from Discord, and the
+   dashboard's DELETE was already in §E. It refuses in words while anybody is waiting.
+7. **A member who already holds the form's role is recorded, not re-added.** Approving
+   otherwise sends Discord a duplicate role in one `member.edit`. Found by the API tests,
+   where the seeded applicant already wears the role the form hands out.
+8. **Two settings constants live in `settings_store.py`, not `applications.py`.**
+   `APPLICATIONS_MODES` and `APPLICATIONS_RETRY_DAYS` are declared there and imported by
+   `applications.py`, because `applications.py` → `golive.py` → `settings_store.py` is a
+   real import chain and the other direction would be a cycle. This is the same shape
+   `golive.py` uses for `GOLIVE_TEMPLATE`.
+9. **§J's fallback was not needed.** `role_menus.change_roles` is module-level and calls
+   `rolegrants.remember_change` itself, so the approve path imports and calls it; no edit
+   to `role_menus.py`. The proof is
+   `tests/cogs/community/test_applications.py::test_a_role_this_cog_adds_is_never_reported_as_a_change_made_by_hand`,
+   with its negative twin beside it.
+
+### Not done
+
+- **`/applications question reorder` has no slash twin.** Reordering is a dashboard
+  control only (the editor's Up/Down, saved through `PUT …/questions`); from Discord the
+  way to reorder is `question remove` + `question add`, which fills the freed slot. The
+  slash path can edit, add and remove every question, so checklist 33 is met for the
+  questions themselves — but if the owner wants ordering from Discord too, that is a
+  small follow-up.
+- **Nothing here has run against live Discord**, and no application has ever been
+  submitted by a real person. Every claim above is test-suite evidence.

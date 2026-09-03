@@ -4667,3 +4667,54 @@ channel is gone".**
 | `tests/test_youtube.py:244` | The retry test encodes the measured failure mix (404, 500, 404, 200) rather than a tidy one, and asserts the exact number of attempts, so shrinking `FEED_ATTEMPTS` fails visibly. |
 | `tests/test_youtube.py:291` | The handle-resolution test deliberately puts a WRONG `"channelId":"UC…"` in the page body beside the right canonical link, so an implementation that goes back to scraping that field fails. That is exactly the bug the measurement found. |
 | `tests/cogs/content/test_youtube.py:578` | The test that says a dead feed leaves the link alone. It is the guard against the most damaging plausible bug in this phase: reading KI-12's 404 as "this channel does not exist" and unlinking a real member. |
+
+
+# Phase 19 — applications (the Twitch Team form)
+
+> Keys are `path:line` against commit `69c751b` on the Phase 19 branch. Trust the
+> anchor text over the number; re-key after the 17 → 18 → 19 merge.
+
+## §J — the two things measured before anything was written
+
+| Key | Note |
+|---|---|
+| `black_bloc/cogs/community/role_menus.py:700` | ⚠️ **`change_roles` is a MODULE-LEVEL function and it calls `rolegrants.remember_change` itself**, for both directions, and `forget_change` when the edit is refused. So a second cog can add a role through it by importing it — `role_menus.py` never had to be edited, and the §J fallback (writing our own `_add_role`) was not needed. This is the measurement §J asked for. |
+| `black_bloc/cogs/community/role_menus.py:1526` | The reconciler is `RoleMenus.on_member_update`, and it filters with `grants.was_ours(...)` — one entry per remembered change, expiring after ~30 s. `tests/cogs/community/test_applications.py::test_a_role_this_cog_adds_is_never_reported_as_a_change_made_by_hand` runs the approve path and then this listener and asserts NO `role.changed_by_hand` line; the test beside it does the same edit WITHOUT the ledger and asserts the line is there, so the proof cannot pass by accident. |
+| `black_bloc/cogs/community/applications.py:1` | ⚠️ **The persistent buttons are `DynamicItem`s, registered by TEMPLATE, not by message id.** `cog_load` calls `bot.add_dynamic_items(ApplyButton, DecisionButton)` once; every Approve/Deny and every Apply button keeps working after a restart because the custom_id itself carries the number. `bot.add_view` is still called for each posted Apply panel, which is what `role_menus.py` does for its selects. |
+
+## The helpers
+
+| Key | Note |
+|---|---|
+| `black_bloc/applications.py:1` | The module is shaped like `rolegrants.py`, not like a cog: constants, the wording every surface shares, the validators, and the async storage helpers. The cog and `api/tools/applications.py` are two sets of words over one implementation. |
+| `black_bloc/applications.py:1` | ⚠️ **`MODES` and `RETRY_DAYS_DEFAULT` are imported FROM `settings_store`, not declared here.** `golive.py` does the same with its template: the registry owns a decided default, and importing the other way round would be a cycle (`applications` → `golive` → `settings_store`). |
+| `black_bloc/applications.py:answers_json` | The snapshot stores `{label, answer}` pairs, so editing a question later changes the modal and never the history. Recorded as an accepted residual in `KNOWN_ISSUES.md`. |
+| `black_bloc/applications.py:read_answers` | An unreadable snapshot logs a warning and renders as no answers rather than raising — a card that cannot be drawn is worse than a card with nothing on it, and the row is still decidable. |
+| `black_bloc/applications.py:add_question` | The new question takes the LOWEST free slot, not `count + 1`, so removing question 2 and adding another puts it back at 2 rather than leaving a hole or colliding with the `UNIQUE (form_id, position)` index. |
+| `black_bloc/applications.py:decide_application` | Asks `may_move` BEFORE the UPDATE, so a status that is not a transition raises rather than silently matching no rows — the two failures would otherwise be indistinguishable. The UPDATE itself still carries `AND status = 'pending'`, which is what makes two clicks safe. |
+| `black_bloc/applications.py:last_decision` | Deliberately looks only at `approved` and `denied`. A withdrawn application is the member changing their mind, and starting a 30-day cooling period on it would punish somebody for tidying up. |
+
+## The cog
+
+| Key | Note |
+|---|---|
+| `black_bloc/cogs/community/applications.py:review_channel` | Four fallbacks in one place: the form's own channel, `applications_channel_id`, `rolemenu_approval_channel_id`, `staff_channel_id`. The card then goes through `role_menus.card_target`, which is what redirects it to the test channel while the guard is on. |
+| `black_bloc/cogs/community/applications.py:may_decide` | The approver ROLE wins, then staff. A refusal names the role and says which command points the form at a different one — never a bare "you can't do that". |
+| `black_bloc/cogs/community/applications.py:_hand_over` | ⚠️ **Shadow logs `application.would_grant` and adds nothing** (review-checklist item 1: the HTTP guard cannot see a role edit, so the cog checks the mode itself). The design's log list named only `would_post` and `would_dm`; this is the third, and it is in `## Deviations`. |
+| `black_bloc/cogs/community/applications.py:_hand_over` | A member who ALREADY holds the role is recorded rather than re-added. Without this the approve path sends Discord a duplicate role in `member.edit` — found by `tests/api/tools/test_applications.py`, where the seeded member wears the form's role already. |
+| `black_bloc/cogs/community/applications.py:_approve` | The order is decide → role → grant → card → DM, and the row is re-read after `_hand_over` so `grant_id` is on the object the card and the API answer with. Checklist item 12: the irreversible thing first, cosmetics last; `edit_card` swallows its own errors. |
+| `black_bloc/cogs/community/applications.py:ApplyModal` | The modal is built at open time from `application_questions`, so the questions are data the owner edits, never code. Discord's five-box cap is enforced at `add_question`/`replace_questions`, which is why the modal can trust its input. |
+| `black_bloc/cogs/community/applications.py:open_form_modal` | Every refusal a member can meet is checked BEFORE the modal opens — off, no questions, closed, already waiting — so nobody types three paragraphs into a form that is going to refuse them. The cooling check is the one exception: it needs the answers-free path in `submit_application` too, because a form can be applied for from two entry points. |
+| `black_bloc/cogs/community/applications.py:applications_approve` | `extras={"staff_only": True}` because the gate is two hops away (`_decide` → `may_decide` → `require_staff`) and `settings_store.is_staff_command` only walks one. The alternative was adding the path to `GATE_IS_TWO_HOPS_AWAY` in `tests/test_bot.py`, which hides the fact in a test instead of stating it on the command. |
+
+## The API and the page
+
+| Key | Note |
+|---|---|
+| `black_bloc/api/tools/applications.py:checked` | ⚠️ **It is `async` and it `await`s inside the `try`.** The first version wrapped the call only, which builds a coroutine and catches nothing — every `ApplicationError` escaped as a 500 until the tests caught it. |
+| `black_bloc/api/tools/applications.py:build_router` | `/status` and `/forms` are registered BEFORE `/{application_id}`, because FastAPI matches in declaration order and `status` is not an int. |
+| `black_bloc/api/tools/applications.py:applications_form_delete` | Deleting a form with somebody waiting answers **409 in words** with the count and the `open:false` alternative. A form is data the owner made; refusing is cheaper than orphaning three people's applications. |
+| `site/public/assets/page-rolemenus.js:applicationsMode` | The page already owns a two-way `modeSwitch`; importing `ui.js`'s would be a duplicate declaration in the same module scope, so the three-way one is its own function built from the same `segment` + `saveSetting` pieces. |
+| `site/public/assets/page-rolemenus.js:formEditor` | The question rows are read from the DOM, not from the array they were pushed into, so Up/Down really do decide the stored order. |
+| `site/public/assets/page-rolemenus.js:applicationsSection` | ⚠️ **The section is on the Role menus page, not a page of its own** — the same ownership answer as F14's Pings and F3's uploads. "How does somebody get a role here" is one question and it has one surface. |
+| `site/mock/check.mjs:GUARDED` | The guarded entry carries `IDS.test_channel_id` rather than `'{test_channel_id}'`: `checkGuard` fills the PATH but not the BODY, so a placeholder in the body reaches the route as literal text and gets a 400 instead of the guard's 409. |

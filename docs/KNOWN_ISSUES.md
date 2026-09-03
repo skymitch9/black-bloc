@@ -2,7 +2,10 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-02 — KI-11, KI-12 and KI-13 added from the Phase 16
+> Last verified: **2026-09-02 — KI-14 and KI-15 added by the Phase 19 (applications) build
+> from its design measurements (Twitch publishes no Teams API; the answers snapshot is by
+> design). ⚠️ Both describe a BRANCH that has never run against live Discord. Before that,
+> the same day: KI-11, KI-12 and KI-13 added from the Phase 16
 > section-J measurements against the LIVE YouTube feed (30 timed requests, the
 > response headers, and a real captured feed now kept as
 > `tests/fixtures/youtube_feed.xml`); KI-10 added earlier the same day from a
@@ -26,6 +29,44 @@
 >
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
+
+## KI-15 — Editing a question changes the form, never the answers already sent — `ACCEPTED`
+
+**Symptom.** An application stores its answers as a snapshot of `{label, answer}` pairs
+(`black_bloc/applications.py:answers_json`). Rewording question 3, or removing it, changes
+what the NEXT applicant is asked and leaves every card already on the record exactly as it
+was — so two cards side by side can show different questions.
+
+**Status.** `ACCEPTED` — chosen, not discovered (Phase 19 §A).
+
+**Why tolerated.** The alternative is worse in both directions: joining answers to the
+live question rows would silently relabel somebody's answer with a question they were
+never asked, and refusing to edit a question once anybody has applied would freeze the
+form at its first draft. A card is a record of what was asked and what was said.
+
+**What would change it.** Staff reporting confusion between two cards. The fix then is a
+version number on the question set and a "asked as it stood on <date>" line on the card,
+not live joins.
+
+## KI-14 — Black Bloc cannot confirm the twitch.tv Team invite was ever sent — `ACCEPTED`
+
+**Symptom.** Approving a Twitch Team application grants the Discord role and names the
+person who has to send the twitch.tv invite (`owner` + `next_step` on the form), but the
+invite itself is a human clicking a button on twitch.tv. Black Bloc has no way to see
+whether it was sent, accepted, or forgotten — so an application can read **approved** here
+while the person is not on the Team at all.
+
+**Status.** `ACCEPTED` — measured at design time, 2026-09-02: Twitch publishes **no Teams
+API**. Only the Team owner can add members, and only from twitch.tv.
+
+**Why tolerated.** Everything around the click is automated — the form, the review, the
+role, both DMs — and the design turns the one manual step into a named nudge on the card
+rather than pretending it does not exist. The alternative (asking the applicant to confirm)
+adds a step that can also be forgotten and proves nothing.
+
+**What would change it.** Twitch publishing a Teams API, or **1** applicant reporting they
+never got an invite. The cheap fix for the second is a per-form reminder on the card after
+N days, not a new integration.
 
 ## KI-13 — An upload announcement can be up to ~25 minutes late — `ACCEPTED`
 
