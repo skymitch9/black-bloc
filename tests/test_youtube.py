@@ -7,21 +7,43 @@ import pytest
 
 from black_bloc.settings_store import YOUTUBE_TEMPLATE
 from black_bloc.youtube import (
+    BACK,
     FEED_ATTEMPTS,
+    LINK,
+    LINK_FOR,
     LIVE,
+    LOGS,
+    NOBODY_LINKED,
+    NOT_SEEDED_YET,
+    PANEL_MINUTES_KEY,
+    PANEL_MOVES,
+    PANEL_TIMEOUT_FOOTER,
+    REFRESH,
+    REFRESH_MOVE,
+    RELINK,
+    RELINK_FOR,
+    SETUP,
     SHORT,
     UNKNOWN,
+    UNLINK,
+    UNLINK_FOR,
     VIDEO,
     YouTubeClient,
     YouTubeError,
+    card_buttons,
     channel_id_in,
     classify_row,
     duration_seconds,
     feed_title,
     handle_in,
+    health_lines,
     kind_of,
+    link_lines,
+    panel_minutes,
     parse_feed,
     render,
+    status_lines,
+    where_words,
 )
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "youtube_feed.xml"
@@ -470,3 +492,205 @@ def test_the_channel_and_kind_fields_are_offered_to_a_staff_written_template():
     text = render("{channel} put out a {kind}", _video(kind=SHORT), None)
 
     assert text == "Kurzgesagt put out a short"
+
+
+# --- the panel's table, as data ------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("mine", [True, False])
+@pytest.mark.parametrize("linked", [True, False])
+@pytest.mark.parametrize("staff", [True, False])
+def test_the_button_table_offers_a_refresh_from_every_state(mine, linked, staff):
+    found = card_buttons(linked=linked, mine=mine, staff=staff)
+
+    assert REFRESH_MOVE in found
+    assert len(found) == len(set(found))
+
+
+def test_my_card_offers_link_when_there_is_nothing_linked_and_never_an_unlink():
+    found = card_buttons(linked=False, mine=True, staff=False)
+
+    assert [move.action for move in found] == [LINK, REFRESH]
+
+
+def test_my_card_offers_relink_and_unlink_once_a_channel_is_linked():
+    found = card_buttons(linked=True, mine=True, staff=False)
+
+    assert [move.action for move in found] == [RELINK, UNLINK, REFRESH]
+
+
+def test_staff_get_the_three_extra_moves_only_on_their_own_card():
+    own = [move.action for move in card_buttons(linked=True, mine=True, staff=True)]
+    theirs = [move.action for move in card_buttons(linked=True, mine=False, staff=True)]
+
+    assert own[-3:] == [LINK_FOR, SETUP, LOGS]
+    assert LOGS not in theirs
+    assert theirs == [RELINK_FOR, UNLINK_FOR, REFRESH, BACK]
+
+
+def test_a_card_for_somebody_with_nothing_linked_still_offers_a_way_back():
+    found = [move.action for move in card_buttons(linked=False, mine=False, staff=True)]
+
+    assert found == [REFRESH, BACK]
+
+
+def test_a_member_is_never_offered_a_move_that_writes_for_somebody_else():
+    for linked in (True, False):
+        found = card_buttons(linked=linked, mine=True, staff=False)
+        assert not {move.action for move in found} & {LINK_FOR, SETUP, LOGS, UNLINK_FOR}
+
+
+def test_only_the_unlink_asks_first_and_only_the_link_moves_open_a_modal():
+    asking = [move.action for move in PANEL_MOVES if move.question]
+    modal = [move.action for move in PANEL_MOVES if move.modal]
+
+    assert asking == [UNLINK]
+    assert modal == [LINK, RELINK, RELINK_FOR, UNLINK_FOR]
+
+
+def test_every_move_in_the_table_has_a_style_the_panel_knows():
+    assert {move.style for move in PANEL_MOVES} <= {"primary", "secondary", "success", "danger"}
+
+
+# --- the lines the panel prints -------------------------------------------------------------------
+
+
+def _link_row(**overrides):
+    row = {
+        "title": "Kurzgesagt",
+        "channel_id": "UC123",
+        "linked_at": "2026-09-01T00:00:00+00:00",
+        "seeded": 1,
+        "user_id": 900,
+    }
+    return row | overrides
+
+
+def test_the_status_lines_are_the_five_a_member_used_to_get_from_a_subcommand():
+    lines = status_lines(_link_row(), "A video", where="yes, in <#5>", shorts=False)
+
+    assert lines[0] == "**channel** — Kurzgesagt"
+    assert lines[2] == "**last video seen** — A video"
+    assert lines[3] == "**announced here** — yes, in <#5>"
+    assert lines[4] == "**Shorts** — not announced"
+
+
+def test_a_link_whose_feed_has_not_answered_says_so_rather_than_none_yet():
+    unseeded = status_lines(_link_row(seeded=0), None, where="x", shorts=True)
+    seeded = status_lines(_link_row(), None, where="x", shorts=True)
+
+    assert NOT_SEEDED_YET in unseeded[2]
+    assert "none yet" in seeded[2]
+    assert seeded[4] == "**Shorts** — announced too"
+
+
+def test_a_channel_with_no_title_falls_back_to_its_id_rather_than_a_blank():
+    lines = status_lines(_link_row(title=None), None, where="x", shorts=False)
+
+    assert lines[0] == "**channel** — UC123"
+
+
+@pytest.mark.parametrize("mode", ["off", "shadow"])
+def test_where_words_explains_the_mode_rather_than_saying_a_bare_no(mode):
+    said = where_words(mode, 5)
+
+    assert said.startswith("no —")
+    assert f"**{mode}**" in said
+
+
+def test_where_words_with_nowhere_set_names_the_panel_that_sets_it():
+    said = where_words("on", None)
+
+    assert "Setup" in said
+    assert "/uploads" not in said
+
+
+def test_where_words_on_with_a_channel_names_the_channel():
+    assert where_words("on", 5) == "yes, in <#5>"
+
+
+def test_the_health_lines_are_the_seven_the_staff_list_used_to_print():
+    lines = health_lines(
+        mode="shadow",
+        channel_id=None,
+        minutes=10,
+        keyed=False,
+        last_ok_at=None,
+        last_error=None,
+        failures=0,
+        totals={"links": 2, "videos": 9, "announced": 1},
+    )
+
+    assert len(lines) == 7
+    assert lines[0] == "**mode** — shadow"
+    assert lines[1] == "**channel** — not set"
+    assert lines[3] == "**api key** — not set (feed only)"
+    assert lines[4] == "**last good sweep** — never"
+    assert lines[5] == "**last error** — none"
+    assert "**links** — 2" in lines[6]
+
+
+def test_a_run_of_failures_is_counted_beside_the_error_rather_than_hidden():
+    lines = health_lines(
+        mode="on",
+        channel_id=7,
+        minutes=5,
+        keyed=True,
+        last_ok_at="then",
+        last_error="youtube unreachable",
+        failures=3,
+        totals={"links": 0, "videos": 0, "announced": 0},
+    )
+
+    assert lines[1] == "**channel** — <#7>"
+    assert lines[3] == "**api key** — set"
+    assert lines[5] == "**last error** — youtube unreachable (3 sweep(s) in a row)"
+
+
+def test_the_link_lines_name_the_member_when_the_bot_can_see_them():
+    lines = link_lines([_link_row(), _link_row(user_id=901, seeded=0)], {900: "Casey"})
+
+    assert lines[0] == "• Casey — Kurzgesagt (seeded)"
+    assert lines[1] == f"• 901 — Kurzgesagt ({NOT_SEEDED_YET})"
+
+
+def test_nobody_linked_is_a_sentence_not_an_empty_list():
+    assert link_lines([], {}) == [NOBODY_LINKED]
+
+
+def test_the_panel_minutes_come_from_the_key_the_settings_page_edits():
+    store = SimpleNamespace(get=lambda guild_id, key: 4 if key == PANEL_MINUTES_KEY else 99)
+
+    assert panel_minutes(store, 7) == 4
+
+
+def test_the_gone_quiet_footer_names_the_command_that_opens_the_panel_again():
+    assert "/youtube" in PANEL_TIMEOUT_FOOTER
+
+
+# --- an outage and a bad paste are different things -----------------------------------------------
+
+
+def test_an_error_says_at_the_raise_site_whether_it_was_the_network():
+    assert YouTubeError("bad paste").network is False
+    assert YouTubeError("down", network=True).network is True
+
+
+async def test_a_feed_that_never_answers_raises_a_network_error(monkeypatch):
+    client = YouTubeClient(
+        None, request=_Request((500, {}, ""), (500, {}, ""), (500, {}, ""), (500, {}, ""))
+    )
+
+    with pytest.raises(YouTubeError) as raised:
+        await client.fetch_feed("UC123")
+
+    assert raised.value.network is True
+
+
+async def test_a_paste_that_is_not_a_channel_is_not_a_network_error():
+    client = YouTubeClient(None, request=_Request((200, {}, "")))
+
+    with pytest.raises(YouTubeError) as raised:
+        await client.resolve("not a channel at all/nor this")
+
+    assert raised.value.network is False

@@ -6,19 +6,26 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from ...cogs.content.youtube import (
-    ALREADY_LINKED,
+    LinkRefused,
     all_links,
     counts,
     get_link,
     latest_video,
-    link_owner,
+    link_channel,
     recent_videos,
-    remove_link,
+    unlink_channel,
 )
-from ...youtube import YouTubeError
+from ...logkinds import VIA_WEBSITE
 from ..auth import Refused, staff_dependency
 from ..names import resolve_one
-from ..writes import note, require_cog, require_db, require_guild, wanted_id, writer_dependency
+from ..writes import (
+    actor_for,
+    require_cog,
+    require_db,
+    require_guild,
+    wanted_id,
+    writer_dependency,
+)
 
 log = logging.getLogger(__name__)
 
@@ -111,32 +118,25 @@ def build_router(bot: Any) -> APIRouter:
         who = await writer(request)
         guild = require_guild(bot)
         db = require_db(bot)
-        cog = require_cog(bot, COG, FEATURE)
+        require_cog(bot, COG, FEATURE)
         wanted = wanted_id(payload.get("member_id"))
         given = str(payload.get("channel") or "").strip()
         if not given:
             raise Refused(400, "bad_request", NO_CHANNEL_GIVEN)
+        member = guild.get_member(wanted) or wanted
         try:
-            channel_id, title = await cog.client.resolve(given)
-        except YouTubeError as exc:
-            raise Refused(400, "bad_channel", str(exc)) from exc
-        owner = await link_owner(db, channel_id)
-        if owner is not None and owner != wanted:
-            raise Refused(409, "link_taken", ALREADY_LINKED.format(channel=title or channel_id))
-        done = await cog.link_and_seed(wanted, channel_id, given, title)
-        await note(
-            bot,
-            guild,
-            "web.youtube.link",
-            who,
-            target=wanted,
-            details={"channel_id": channel_id, "title": title, "seeded": done},
-        )
-        row = link_row(guild, await get_link(db, wanted))
+            _said, stored, counted = await link_channel(
+                bot, guild, actor_for(bot, who, guild), member, given, via=VIA_WEBSITE
+            )
+        except LinkRefused as exc:
+            raise Refused(exc.status, exc.code, str(exc)) from exc
+        row = link_row(guild, stored if stored is not None else await get_link(db, wanted))
         said = LINKED if row["seeded"] else LINKED_NOT_SEEDED
         return row | {
             "message": said.format(
-                name=row["user_name"] or wanted, title=title or channel_id, count=done
+                name=row["user_name"] or wanted,
+                title=row["title"] or row["channel_id"],
+                count=counted,
             )
         }
 
@@ -146,9 +146,12 @@ def build_router(bot: Any) -> APIRouter:
         guild = require_guild(bot)
         db = require_db(bot)
         wanted = wanted_id(member_id)
-        if not await remove_link(db, wanted):
+        if await get_link(db, wanted) is None:
             raise Refused(404, "not_linked", NOT_LINKED.format(user_id=wanted))
-        await note(bot, guild, "web.youtube.unlink", who, target=wanted)
+        member = guild.get_member(wanted) or wanted
+        await unlink_channel(
+            bot, guild, actor_for(bot, who, guild), member, via=VIA_WEBSITE
+        )
         return {"unlinked": True, "user_id": str(wanted)}
 
     @router.get("/videos")

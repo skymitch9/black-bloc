@@ -4,9 +4,10 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NamedTuple
 from xml.etree import ElementTree
 
+from .panels import panel_minutes as _panel_minutes
 from .settings_store import YOUTUBE_TEMPLATE
 
 log = logging.getLogger(__name__)
@@ -55,6 +56,10 @@ FEED_REFUSED = (
 
 class YouTubeError(RuntimeError):
     """YouTube refused a request or answered with something unusable."""
+
+    def __init__(self, message: str, *, network: bool = False) -> None:
+        super().__init__(message)
+        self.network = network
 
 
 @dataclass(frozen=True)
@@ -113,7 +118,9 @@ def parse_feed(xml: Any) -> list[Video]:
     try:
         root = ElementTree.fromstring(body)
     except ElementTree.ParseError as exc:
-        raise YouTubeError(f"YouTube's feed was not readable XML: {exc}") from exc
+        raise YouTubeError(
+            f"YouTube's feed was not readable XML: {exc}", network=True
+        ) from exc
     found: list[Video] = []
     for node in root.findall("a:entry", NS):
         video = _entry(node)
@@ -225,7 +232,9 @@ class YouTubeClient:
             ) as response:
                 return (response.status, dict(response.headers), await response.text())
         except (TimeoutError, aiohttp.ClientError, OSError) as exc:
-            raise YouTubeError(f"youtube unreachable: {type(exc).__name__}: {exc}") from exc
+            raise YouTubeError(
+                f"youtube unreachable: {type(exc).__name__}: {exc}", network=True
+            ) from exc
 
     async def close(self) -> None:
         if self._session is not None and not self._session.closed:
@@ -251,7 +260,7 @@ class YouTubeClient:
             if status == 200:
                 return (status, response_headers.get("ETag") or None, parse_feed(body))
         log.warning("youtube: the feed for %s answered %s", channel_id, seen)
-        raise YouTubeError(FEED_REFUSED.format(attempts=FEED_ATTEMPTS))
+        raise YouTubeError(FEED_REFUSED.format(attempts=FEED_ATTEMPTS), network=True)
 
     async def _api(self, path: str, params: dict[str, str]) -> dict[str, Any]:
         if not self.keyed:
@@ -267,7 +276,9 @@ class YouTubeClient:
             said = ""
             if isinstance(payload, dict):
                 said = str((payload.get("error") or {}).get("message") or "")
-            raise YouTubeError(f"YouTube's API answered {status} for {path}. {said}".strip())
+            raise YouTubeError(
+                f"YouTube's API answered {status} for {path}. {said}".strip(), network=True
+            )
         return payload
 
     async def resolve(self, text: Any) -> tuple[str, str]:
@@ -336,3 +347,147 @@ class YouTubeClient:
                 if video_id:
                     found[video_id] = classify_row(row)
         return found
+
+
+PANEL_MINUTES_KEY = "youtube_panel_minutes"
+PANEL_TITLE = "Your YouTube channel"
+PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run /youtube again"
+SELECT_CAP = 25
+
+NOT_SEEDED_YET = "not checked yet"
+NOBODY_LINKED = "Nobody has linked a YouTube channel yet."
+
+LINK = "link"
+RELINK = "relink"
+UNLINK = "unlink"
+RELINK_FOR = "relink_for"
+UNLINK_FOR = "unlink_for"
+LINK_FOR = "link_for"
+SETUP = "setup"
+LOGS = "logs"
+REFRESH = "refresh"
+BACK = "back"
+
+UNLINK_QUESTION = (
+    "Forget your YouTube channel? Black Bloc stops watching it for new uploads. You can link "
+    "it again whenever you like."
+)
+UNLINK_YES = "Yes, forget it"
+KEEP_IT = "Keep it"
+
+
+class PanelMove(NamedTuple):
+    action: str
+    label: str
+    style: str = "secondary"
+    row: int = 0
+    question: str = ""
+    yes: str = ""
+    modal: bool = False
+
+
+LINK_MOVE = PanelMove(LINK, "Link my channel", "primary", modal=True)
+RELINK_MOVE = PanelMove(RELINK, "Relink…", "secondary", modal=True)
+UNLINK_MOVE = PanelMove(
+    UNLINK, "Unlink", "danger", question=UNLINK_QUESTION, yes=UNLINK_YES
+)
+RELINK_FOR_MOVE = PanelMove(RELINK_FOR, "Relink for…", "secondary", modal=True)
+UNLINK_FOR_MOVE = PanelMove(UNLINK_FOR, "Unlink for", "danger", modal=True)
+REFRESH_MOVE = PanelMove(REFRESH, "Refresh", "secondary")
+BACK_MOVE = PanelMove(BACK, "Back", "secondary")
+LINK_FOR_MOVE = PanelMove(LINK_FOR, "Link for somebody…", "secondary", row=3)
+SETUP_MOVE = PanelMove(SETUP, "Setup", "secondary", row=3)
+LOGS_MOVE = PanelMove(LOGS, "Logs", "secondary", row=3)
+
+PANEL_MOVES = (
+    LINK_MOVE,
+    RELINK_MOVE,
+    UNLINK_MOVE,
+    RELINK_FOR_MOVE,
+    UNLINK_FOR_MOVE,
+    REFRESH_MOVE,
+    BACK_MOVE,
+    LINK_FOR_MOVE,
+    SETUP_MOVE,
+    LOGS_MOVE,
+)
+
+CARD_BUTTONS: dict[tuple[bool, bool], tuple[PanelMove, ...]] = {
+    (True, False): (LINK_MOVE,),
+    (True, True): (RELINK_MOVE, UNLINK_MOVE),
+    (False, False): (),
+    (False, True): (RELINK_FOR_MOVE, UNLINK_FOR_MOVE),
+}
+STAFF_MOVES = (LINK_FOR_MOVE, SETUP_MOVE, LOGS_MOVE)
+
+
+def card_buttons(*, linked: bool, mine: bool, staff: bool) -> tuple[PanelMove, ...]:
+    """The §C table as data: what a card offers is the product of whose it is and its state."""
+    found = list(CARD_BUTTONS[(bool(mine), bool(linked))])
+    found.append(REFRESH_MOVE)
+    if not mine:
+        found.append(BACK_MOVE)
+    elif staff:
+        found.extend(STAFF_MOVES)
+    return tuple(found)
+
+
+def where_words(mode: str, channel_id: Any) -> str:
+    """Why an upload would not be posted, in words — never a bare mode name on its own."""
+    if mode != "on":
+        return f"no — upload announcements are **{mode}** for this server at the moment"
+    if not channel_id:
+        return "no — nowhere is set to post them; a Lead picks one under **Setup** on this panel"
+    return f"yes, in <#{channel_id}>"
+
+
+def status_lines(row: Any, latest_title: Any, *, where: str, shorts: Any) -> list[str]:
+    seen = latest_title or ("none yet" if row["seeded"] else NOT_SEEDED_YET)
+    return [
+        f"**channel** — {row['title'] or row['channel_id']}",
+        f"**linked** — {row['linked_at']}",
+        f"**last video seen** — {seen}",
+        f"**announced here** — {where}",
+        f"**Shorts** — {'announced too' if shorts else 'not announced'}",
+    ]
+
+
+def health_lines(
+    *,
+    mode: str,
+    channel_id: Any,
+    minutes: Any,
+    keyed: bool,
+    last_ok_at: Any,
+    last_error: Any,
+    failures: int,
+    totals: dict[str, int],
+) -> list[str]:
+    return [
+        f"**mode** — {mode}",
+        f"**channel** — {f'<#{channel_id}>' if channel_id else 'not set'}",
+        f"**every** — {minutes} minute(s)",
+        f"**api key** — {'set' if keyed else 'not set (feed only)'}",
+        f"**last good sweep** — {last_ok_at or 'never'}",
+        f"**last error** — {last_error or 'none'}"
+        + (f" ({failures} sweep(s) in a row)" if failures else ""),
+        f"**links** — {totals['links']} · **videos seen** — {totals['videos']} · "
+        f"**announced** — {totals['announced']}",
+    ]
+
+
+def link_lines(rows: Any, names: dict[int, str] | None = None) -> list[str]:
+    found = list(rows or ())
+    if not found:
+        return [NOBODY_LINKED]
+    known = names or {}
+    lines = []
+    for row in found:
+        named = known.get(int(row["user_id"])) or row["user_id"]
+        seen = "seeded" if row["seeded"] else NOT_SEEDED_YET
+        lines.append(f"• {named} — {row['title'] or row['channel_id']} ({seen})")
+    return lines
+
+
+def panel_minutes(store: Any, guild_id: int) -> int:
+    return _panel_minutes(store, guild_id, PANEL_MINUTES_KEY)

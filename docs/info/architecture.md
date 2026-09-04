@@ -191,8 +191,9 @@ black_bloc/
 │       ├── chat.py   ← F10: the @-mention listener, cooldown, modmail routing, /chat
 │       ├── pings.py  ← F14: /pingroles (staff) and /pings (everybody) — opt-in go-live and event
 │       │                pings, and a role per streamer their followers wear
-│       └── youtube.py ← F3: the uploads sweep, /youtube (members) and /uploads (staff). Reads
-│                        the public Atom feed; YOUTUBE_API_KEY is optional (see KI-11)
+│       └── youtube.py ← F3: the uploads sweep and /youtube, ONE command that opens a panel for
+│                        members and staff alike (2026-09-03; /uploads is retired). Reads the
+│                        public Atom feed; YOUTUBE_API_KEY is optional (see KI-11)
 ├── storage/db.py     ← aiosqlite connection + schema bootstrap (SCHEMA_VERSION 22)
 └── api/             ← the dashboard API, one router per surface (API_ENABLED)
     ├── server.py    ← create_app: /health (public), security headers, routers, then site/ at /

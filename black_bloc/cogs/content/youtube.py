@@ -8,20 +8,64 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 from ... import pings
-from ...actionlog import (
-    LOGS_DEFAULT,
-    LOGS_MAX,
-    LOGS_MIN,
-    log_action,
-    send_logs,
-)
-from ...command_visibility import STAFF_ONLY
+from ...actionlog import log_action, send_logs
+from ...command_errors import AnswersErrors
 from ...golive import now_iso
-from ...settings_store import DB_UNAVAILABLE, YOUTUBE_MODES, require_staff
-from ...youtube import LIVE, SHORT, UNKNOWN, YouTubeClient, YouTubeError, render
+from ...logkinds import VIA_DISCORD, kind_via
+from ...panels import (
+    NoteModal,
+    Panel,
+    answer,
+    capped_placeholder,
+    db_ready,
+    db_up,
+    option_label,
+    retire,
+    still_staff,
+)
+from ...settings_store import (
+    DB_UNAVAILABLE,
+    GUILD_ONLY,
+    YOUTUBE_MODES,
+    YOUTUBE_POLL_MIN_MINUTES,
+    SettingError,
+    coerce_value,
+)
+from ...youtube import (
+    BACK,
+    KEEP_IT,
+    LINK,
+    LINK_FOR,
+    LIVE,
+    LOGS,
+    NOBODY_LINKED,
+    NOT_SEEDED_YET,
+    PANEL_MINUTES_KEY,
+    PANEL_TIMEOUT_FOOTER,
+    PANEL_TITLE,
+    REFRESH,
+    RELINK,
+    SELECT_CAP,
+    SETUP,
+    SHORT,
+    UNKNOWN,
+    UNLINK,
+    UNLINK_FOR,
+    PanelMove,
+    YouTubeClient,
+    YouTubeError,
+    card_buttons,
+    health_lines,
+    link_lines,
+    panel_minutes,
+    render,
+    status_lines,
+    where_words,
+)
 
 log = logging.getLogger(__name__)
 
+COG_NAME = "YouTube"
 POLL_FAILURES_BEFORE_DEGRADED = 3
 NO_KEY = (
     "youtube: no YOUTUBE_API_KEY, so uploads run on the public feed alone — Shorts are still "
@@ -33,21 +77,29 @@ ALREADY_LINKED = (
     "other link first."
 )
 NOT_LINKED = (
-    "You have no YouTube channel linked, so there was nothing to change. Link one with "
-    "`/youtube link <your channel address>`."
+    "You have no YouTube channel linked, so there was nothing to change. **Link my channel** "
+    "on this panel connects one."
 )
 NOT_LINKED_FOR = (
-    "**{who}** has no YouTube channel linked, so there was nothing to unlink. `/uploads list` "
-    "shows who has one."
+    "**{who}** has no YouTube channel linked, so there was nothing to unlink. The panel lists "
+    "everybody who has one."
 )
 LINKED = (
     "Linked **{title}** to you. Black Bloc will post here when you put a new video out — the "
     "{count} already on the channel are counted as seen, so nothing old is announced. "
-    "`/youtube unlink` undoes it."
+    "**Unlink** on this panel undoes it."
 )
 LINKED_FOR = (
     "Linked **{title}** to {who}. The {count} video(s) already on the channel are counted as "
     "seen, so nothing old is announced."
+)
+LINKED_NOT_SEEDED = (
+    "Linked **{title}** to you, but YouTube's feed would not answer just now, so nothing has "
+    "been counted as seen yet. The next sweep does it — until then no upload is announced."
+)
+LINKED_FOR_NOT_SEEDED = (
+    "Linked **{title}** to {who}, but YouTube's feed would not answer just now, so nothing has "
+    "been counted as seen yet. The next sweep does it — until then no upload is announced."
 )
 UNLINKED = (
     "Done — Black Bloc has forgotten your YouTube channel and will not announce your uploads."
@@ -55,21 +107,121 @@ UNLINKED = (
 UNLINKED_FOR = (
     "Done — **{who}**'s YouTube channel is forgotten and their uploads are not announced."
 )
-NOT_SEEDED_YET = "not checked yet"
-NOBODY_LINKED = "Nobody has linked a YouTube channel yet."
+UNLINKED_DM = (
+    "A Lead has removed the YouTube channel Black Bloc had linked to you in **{guild}**, so "
+    "your uploads are no longer announced there. You can link one again with `/youtube`."
+)
+UNLINKED_DM_WHY = "\n\nWhat they said: {why}"
 MODE_OFF_NOTE = (
-    " Announcements are **off** at the moment, so nothing is posted until a Lead runs "
-    "`/uploads mode on`."
+    " Announcements are **off** at the moment, so nothing is posted until a Lead sets "
+    "**Announcements are…** on this panel to shadow or on."
 )
+MODE_OFF_LINE = (
+    "Announcements are **off** for this server at the moment, so nothing is posted. Linking is "
+    "still worth doing — it is your own opt-in, and the mode is the server's switch. A Lead "
+    "changes it with **Announcements are…** on this panel."
+)
+MODE_SET = "Upload announcements are now **{mode}**."
 SETUP_DONE = "Upload announcements now go to {where}{ping}."
-SETUP_NOTHING = (
-    "Nothing was given, so nothing changed. Pass a channel, a ping role, or both — "
-    "`/uploads setup channel:#somewhere ping_role:@Fans`."
-)
+SETUP_NOTHING = "Nothing was given, so nothing changed."
 NO_CHANNEL = (
     "Uploads have nowhere to go: neither `youtube_channel_id` nor `golive_channel_id` is set. "
-    "Run `/uploads setup channel:#somewhere` and they will start posting."
+    "**Setup** on this panel picks one and they will start posting."
 )
+FALLS_BACK = "the go-live channel <#{channel}>"
+NOWHERE = "nowhere — neither an upload channel nor a go-live channel is set"
+FEATURE_MISSING = (
+    "The uploads feature is not loaded right now, so nothing was changed. Tell a Lead — the "
+    "bot needs a restart."
+)
+
+
+PANEL_INTRO = (
+    "Tell Black Bloc where your YouTube channel is and it posts here when you put a new video "
+    "out. Nothing already published is ever announced."
+)
+SITE_BUTTON = "Open on the site"
+SITE_PAGE = "golive.html"
+PICK_A_CHANNEL = "Somebody's channel…"
+MODE_PLACEHOLDER = "Announcements are…"
+MODE_LABELS = {
+    "off": "off — nothing is checked and nothing is posted",
+    "shadow": "shadow — the sweep runs and logs, nothing is posted",
+    "on": "on — a new upload is announced",
+}
+WHOSE_CHANNEL = "Whose channel is it?"
+THEIR_CARD = "**{who}**'s YouTube channel"
+CONFIRM_TITLE = "Are you sure?"
+LINK_TITLE = "Link your YouTube channel"
+LINK_FOR_TITLE = "Link a channel for {who}"
+LINK_LABEL = "Your channel address, @handle, or UC… id"
+LINK_FOR_LABEL = "Their channel address, @handle, or UC… id"
+LINK_LIMIT = 200
+UNLINK_FOR_TITLE = "Why?"
+UNLINK_FOR_LABEL = "One line they will be sent"
+NOTE_LIMIT = 400
+
+SETUP_TITLE = "Where uploads are posted"
+WHERE_UPLOADS = "Where uploads are posted…"
+WHO_IS_PINGED = "Who is pinged…"
+SHORTS_ON = "Shorts: announced"
+SHORTS_OFF = "Shorts: not announced"
+FANS_ON = "Fans pinged: on"
+FANS_OFF = "Fans pinged: off"
+WORDS_BUTTON = "Words…"
+NUMBERS_BUTTON = "Numbers…"
+FORGET_BUTTON = "Forget…"
+FORGET_PLACEHOLDER = "Clear one of these…"
+FORGET_CHANNEL = "the upload channel — uploads fall back to the go-live one"
+FORGET_PING_ROLE = "the ping role — nobody is pinged"
+WORDS_TITLE = "What an upload announcement says"
+WORDS_LABEL = "{name} {title} {url} {channel} {kind}"
+TEMPLATE_LIMIT = 500
+NUMBERS_TITLE = "Numbers"
+EVERY_LABEL = "Minutes between checks"
+PANEL_MINUTES_LABEL = "Minutes this panel stays live"
+NOT_A_NUMBER = (
+    "**{given}** is not a whole number, so nothing was changed. {label} takes a number of "
+    "minutes — {floor} or more."
+)
+WORDS_SAVED = "Saved. An upload announcement now reads like this:"
+STYLES = {
+    "primary": discord.ButtonStyle.primary,
+    "secondary": discord.ButtonStyle.secondary,
+    "success": discord.ButtonStyle.success,
+    "danger": discord.ButtonStyle.danger,
+}
+SETUP_KEYS = (
+    "youtube_channel_id",
+    "youtube_ping_role_id",
+    "youtube_announce_shorts",
+    "youtube_ping_fan_roles",
+    "youtube_template",
+    "youtube_poll_minutes",
+    PANEL_MINUTES_KEY,
+)
+SHORTS = "shorts"
+FANS = "fans"
+WORDS = "words"
+NUMBERS = "numbers"
+FORGET = "forget"
+
+SHORTS_MOVE = PanelMove(SHORTS, SHORTS_OFF, "secondary", row=2)
+FANS_MOVE = PanelMove(FANS, FANS_OFF, "secondary", row=2)
+WORDS_MOVE = PanelMove(WORDS, WORDS_BUTTON, "secondary", row=2, modal=True)
+NUMBERS_MOVE = PanelMove(NUMBERS, NUMBERS_BUTTON, "secondary", row=2, modal=True)
+SETUP_BACK_MOVE = PanelMove(BACK, "Back", "secondary", row=2)
+FORGET_MOVE = PanelMove(FORGET, FORGET_BUTTON, "secondary", row=3)
+SETUP_MOVES = (SHORTS_MOVE, FANS_MOVE, WORDS_MOVE, NUMBERS_MOVE, SETUP_BACK_MOVE, FORGET_MOVE)
+
+
+class LinkRefused(RuntimeError):
+    """A link the shared path will not make: the paste, or somebody else already owning it."""
+
+    def __init__(self, message: str, *, status: int, code: str) -> None:
+        super().__init__(message)
+        self.status = status
+        self.code = code
 
 
 def _row_value(row: Any, key: str) -> Any:
@@ -79,6 +231,57 @@ def _row_value(row: Any, key: str) -> Any:
         return row[key]
     except (IndexError, KeyError):
         return None
+
+
+def cog_of(bot: Any) -> Any:
+    getter = getattr(bot, "get_cog", None)
+    return getter(COG_NAME) if callable(getter) else None
+
+
+def display_of(member: Any) -> str:
+    return str(
+        getattr(member, "display_name", None) or getattr(member, "name", None) or member
+    )
+
+
+def id_of(member: Any) -> int:
+    return int(getattr(member, "id", member) or 0)
+
+
+def upload_channel_id(store: Any, guild_id: int) -> int | None:
+    """D3: blank means the go-live channel, so one place is set up rather than two."""
+    return store.get(guild_id, "youtube_channel_id") or store.get(guild_id, "golive_channel_id")
+
+
+def setup_words(store: Any, guild_id: int) -> str:
+    upload = store.get(guild_id, "youtube_channel_id")
+    golive = store.get(guild_id, "golive_channel_id")
+    if upload:
+        where = f"<#{upload}>"
+    elif golive:
+        where = FALLS_BACK.format(channel=golive)
+    else:
+        where = NOWHERE
+    role = store.get(guild_id, "youtube_ping_role_id")
+    ping = f", pinging <@&{role}>" if role else ", pinging nobody"
+    return SETUP_DONE.format(where=where, ping=ping)
+
+
+def site_page_url(origin: Any) -> str:
+    kept = str(origin or "").strip().rstrip("/")
+    return f"{kept}/{SITE_PAGE}" if kept else ""
+
+
+def add_site_button(view: Any, bot: Any, row: int) -> None:
+    """No origin, no button — a link that goes nowhere is worse than no link at all."""
+    url = site_page_url(getattr(getattr(bot, "settings", None), "origin", ""))
+    if not url:
+        return
+    view.add_item(
+        discord.ui.Button(
+            style=discord.ButtonStyle.link, label=SITE_BUTTON, url=url, row=row
+        )
+    )
 
 
 async def set_link(
@@ -201,6 +404,172 @@ async def counts(db: Any) -> dict[str, int]:
     }
 
 
+async def link_channel(
+    bot: Any, guild: Any, actor: Any, member: Any, given: Any, *, via: str = VIA_DISCORD
+) -> tuple[str, Any, int]:
+    """Resolve, refuse a channel somebody else owns, store and seed — one write, one log row."""
+    cog = cog_of(bot)
+    if cog is None:
+        return (FEATURE_MISSING, None, 0)
+    user_id = id_of(member)
+    mine = id_of(actor) == user_id
+    try:
+        channel_id, title = await cog.client.resolve(given)
+    except YouTubeError as exc:
+        await log_action(
+            bot,
+            guild,
+            kind_via("youtube.resolve_failed", via),
+            actor=actor,
+            target=member,
+            details={
+                "given": str(given)[:80],
+                "reason": str(exc),
+                "network": bool(getattr(exc, "network", False)),
+                "via": via,
+            },
+        )
+        raise LinkRefused(str(exc), status=400, code="bad_channel") from exc
+    owner = await link_owner(bot.db, channel_id)
+    if owner is not None and owner != user_id:
+        raise LinkRefused(
+            ALREADY_LINKED.format(channel=title or channel_id), status=409, code="link_taken"
+        )
+    counted = await cog.link_and_seed(user_id, channel_id, given, title)
+    row = await get_link(bot.db, user_id)
+    named = title or channel_id
+    who = display_of(member)
+    if _row_value(row, "seeded"):
+        said = (LINKED if mine else LINKED_FOR).format(title=named, who=who, count=counted)
+    else:
+        said = (LINKED_NOT_SEEDED if mine else LINKED_FOR_NOT_SEEDED).format(
+            title=named, who=who
+        )
+    if mine and bot.store.get(guild.id, "youtube_mode") == "off":
+        said += MODE_OFF_NOTE
+    await log_action(
+        bot,
+        guild,
+        kind_via("youtube.link", via),
+        actor=actor,
+        target=member,
+        details={
+            "title": title,
+            "seeded": counted,
+            "counted": bool(_row_value(row, "seeded")),
+            "via": via,
+        },
+    )
+    return (said, row, counted)
+
+
+async def tell_unlinked(bot: Any, guild: Any, user_id: int, note: Any) -> bool:
+    """Staff-final-say: a move that affects somebody carries a reason, best effort."""
+    person = guild.get_member(user_id)
+    if person is None and callable(getattr(bot, "get_user", None)):
+        person = bot.get_user(user_id)
+    send = getattr(person, "send", None)
+    if send is None:
+        return False
+    why = str(note or "").strip()
+    text = UNLINKED_DM.format(guild=getattr(guild, "name", "the server"))
+    if why:
+        text += UNLINKED_DM_WHY.format(why=why)
+    try:
+        await send(text, allowed_mentions=discord.AllowedMentions.none())
+    except Exception as exc:
+        log.info("youtube: could not DM %s about an unlink: %s", user_id, exc)
+        return False
+    return True
+
+
+async def unlink_channel(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    member: Any,
+    *,
+    note: Any = None,
+    via: str = VIA_DISCORD,
+) -> tuple[str, Any]:
+    """The one path a link is forgotten by, from either door — one write, one log row."""
+    user_id = id_of(member)
+    mine = id_of(actor) == user_id
+    if not await remove_link(bot.db, user_id):
+        return ((NOT_LINKED if mine else NOT_LINKED_FOR.format(who=display_of(member))), None)
+    details: dict[str, Any] = {"user_id": user_id, "via": via}
+    if not mine and bot.store.get(guild.id, "youtube_unlink_dms_them"):
+        told = await tell_unlinked(bot, guild, user_id, note)
+        details["told"] = told
+        if not told:
+            details["dm_failed"] = True
+    why = str(note or "").strip()
+    await log_action(
+        bot,
+        guild,
+        kind_via("youtube.unlink", via),
+        actor=actor,
+        target=member,
+        reason=why or None,
+        details=details,
+    )
+    return ((UNLINKED if mine else UNLINKED_FOR.format(who=display_of(member))), None)
+
+
+async def set_mode(
+    bot: Any, guild: Any, actor: Any, value: str, *, via: str = VIA_DISCORD
+) -> tuple[str, Any]:
+    try:
+        await bot.store.set(guild.id, "youtube_mode", value, by=id_of(actor) or None)
+    except SettingError as exc:
+        return (str(exc), None)
+    extra = "" if upload_channel_id(bot.store, guild.id) else f" {NO_CHANNEL}"
+    await log_action(
+        bot,
+        guild,
+        kind_via("youtube.mode", via),
+        actor=actor,
+        details={"mode": value, "via": via},
+    )
+    return (MODE_SET.format(mode=value) + extra, None)
+
+
+async def save_setup(
+    bot: Any, guild: Any, actor: Any, changes: Any, *, via: str = VIA_DISCORD
+) -> tuple[str, Any]:
+    """A dict so the sub-panel and any later route write identically; None clears a key."""
+    wanted = {key: value for key, value in (changes or {}).items() if key in SETUP_KEYS}
+    if not wanted:
+        return (SETUP_NOTHING, None)
+    for key, value in wanted.items():
+        if value is None:
+            continue
+        try:
+            coerce_value(key, value)
+        except SettingError as exc:
+            return (str(exc), None)
+    by = id_of(actor) or None
+    for key, value in wanted.items():
+        if value is None:
+            await bot.store.clear(guild.id, key, by=by)
+        else:
+            await bot.store.set(guild.id, key, value, by=by)
+    await log_action(
+        bot,
+        guild,
+        kind_via("youtube.setup", via),
+        actor=actor,
+        details={
+            "changed": {
+                key: (str(value)[:80] if isinstance(value, str) else value)
+                for key, value in wanted.items()
+            },
+            "via": via,
+        },
+    )
+    return (setup_words(bot.store, guild.id), None)
+
+
 class YouTube(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
@@ -210,13 +579,6 @@ class YouTube(commands.Cog):
         self.poll_failures = 0
         self.fetches = 0
         self.unchanged = 0
-
-    youtube = app_commands.Group(name="youtube", description="Your YouTube channel")
-    uploads = app_commands.Group(
-        name="uploads",
-        description="New-upload announcements",
-        default_permissions=STAFF_ONLY,
-    )
 
     def loop_health(self, name: str) -> tuple[str | None, str | None]:
         if name != "poller":
@@ -510,24 +872,10 @@ class YouTube(commands.Cog):
         )
 
     def _channel_id(self, guild_id: int) -> int | None:
-        """D3: blank means the go-live channel, so one place is set up rather than two."""
-        store = self.bot.store
-        return store.get(guild_id, "youtube_channel_id") or store.get(
-            guild_id, "golive_channel_id"
-        )
+        return upload_channel_id(self.bot.store, guild_id)
 
     def _mode(self, guild_id: int) -> str:
         return self.bot.store.get(guild_id, "youtube_mode")
-
-    def _where_words(self, guild_id: int) -> str:
-        """Why an upload would not be posted, in words — never a bare mode name on its own."""
-        mode = self._mode(guild_id)
-        where = self._channel_id(guild_id)
-        if mode != "on":
-            return f"no — upload announcements are **{mode}** for this server at the moment"
-        if not where:
-            return "no — nowhere is set to post them; a Lead runs `/uploads setup`"
-        return f"yes, in <#{where}>"
 
     def _find_member(self, user_id: int) -> Any:
         for guild in self.bot.guilds:
@@ -562,37 +910,7 @@ class YouTube(commands.Cog):
                 },
             )
 
-    # --- commands ----------------------------------------------------------------------------
-
-    async def _database_ready(self, interaction: discord.Interaction) -> bool:
-        if self.bot.db.is_connected:
-            return True
-        log.warning("youtube: refused a command — the database is not connected")
-        await interaction.response.send_message(DB_UNAVAILABLE, ephemeral=True)
-        return False
-
-    async def _link_to(
-        self, interaction: discord.Interaction, user_id: int, channel: str
-    ) -> tuple[str, int] | None:
-        """Resolve, refuse a channel somebody else owns, store, and seed. None means refused."""
-        try:
-            channel_id, title = await self.client.resolve(channel)
-        except YouTubeError as exc:
-            await interaction.followup.send(str(exc), ephemeral=True)
-            await self._log(
-                interaction, "youtube.resolve_failed", {"given": channel[:80], "reason": str(exc)}
-            )
-            return None
-        owner = await link_owner(self.bot.db, channel_id)
-        if owner is not None and owner != user_id:
-            await interaction.followup.send(
-                ALREADY_LINKED.format(channel=title or channel_id),
-                ephemeral=True,
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
-            return None
-        counted = await self.link_and_seed(user_id, channel_id, channel, title)
-        return ((title or channel_id), counted)
+    # --- the command -------------------------------------------------------------------------
 
     async def link_and_seed(
         self, user_id: int, channel_id: str, given: str, title: str | None
@@ -608,243 +926,25 @@ class YouTube(commands.Cog):
         await self._seed(user_id, row, videos, etag)
         return len(videos)
 
-    @youtube.command(name="link", description="Tell Black Bloc your YouTube channel")
-    @app_commands.describe(channel="Your channel address, or @handle, or its UC… id")
-    async def link(self, interaction: discord.Interaction, channel: str) -> None:
-        if not await self._database_ready(interaction):
-            return
-        await interaction.response.defer(ephemeral=True)
-        done = await self._link_to(interaction, interaction.user.id, channel)
-        if done is None:
-            return
-        title, counted = done
-        note = "" if self._mode(interaction.guild.id) != "off" else MODE_OFF_NOTE
-        await interaction.followup.send(
-            LINKED.format(title=title, count=counted) + note,
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-        await self._log(interaction, "youtube.link", {"title": title, "seeded": counted})
-
-    @youtube.command(name="unlink", description="Forget your YouTube channel")
-    async def unlink(self, interaction: discord.Interaction) -> None:
-        if not await self._database_ready(interaction):
-            return
-        if not await remove_link(self.bot.db, interaction.user.id):
-            await interaction.response.send_message(NOT_LINKED, ephemeral=True)
-            return
-        await interaction.response.send_message(UNLINKED, ephemeral=True)
-        await self._log(interaction, "youtube.unlink")
-
-    @youtube.command(name="status", description="What Black Bloc does with your uploads")
-    async def status(self, interaction: discord.Interaction) -> None:
-        if not await self._database_ready(interaction):
-            return
-        row = await get_link(self.bot.db, interaction.user.id)
-        if row is None:
-            await interaction.response.send_message(NOT_LINKED, ephemeral=True)
-            return
-        guild = interaction.guild
-        latest = await latest_video(self.bot.db, interaction.user.id)
-        seen = _row_value(latest, "title")
-        if not seen:
-            seen = "none yet" if row["seeded"] else NOT_SEEDED_YET
-        shorts = self.bot.store.get(guild.id, "youtube_announce_shorts")
-        lines = [
-            f"**channel** — {row['title'] or row['channel_id']}",
-            f"**linked** — {row['linked_at']}",
-            f"**last video seen** — {seen}",
-            f"**announced here** — {self._where_words(guild.id)}",
-            f"**Shorts** — {'announced too' if shorts else 'not announced'}",
-        ]
-        await interaction.response.send_message(
-            "\n".join(lines), ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-        )
-
-    @uploads.command(name="logs", description="The last few upload log lines")
-    @app_commands.describe(
-        count="How many lines, 1 to 50 (10 by default)",
-        important_only="True to leave out the dry runs and the housekeeping",
+    @app_commands.command(
+        name="youtube", description="Your YouTube channel, and how uploads are announced"
     )
-    async def uploads_logs(
-        self,
-        interaction: discord.Interaction,
-        count: app_commands.Range[int, LOGS_MIN, LOGS_MAX] = LOGS_DEFAULT,
-        important_only: bool = False,
-    ) -> None:
-        await send_logs(interaction, "youtube", count=count, important_only=important_only)
-
-    @uploads.command(name="mode", description="Turn upload announcements off, shadow or on")
-    @app_commands.describe(mode="off, shadow (log only) or on (post announcements)")
-    @app_commands.choices(
-        mode=[app_commands.Choice(name=name, value=name) for name in YOUTUBE_MODES]
-    )
-    async def mode(
-        self, interaction: discord.Interaction, mode: app_commands.Choice[str]
-    ) -> None:
-        if not await require_staff(interaction):
-            return
-        await self.bot.store.set(
-            interaction.guild.id, "youtube_mode", mode.value, by=interaction.user.id
-        )
-        extra = "" if self._channel_id(interaction.guild.id) else f" {NO_CHANNEL}"
-        await interaction.response.send_message(
-            f"Upload announcements are now **{mode.value}**.{extra}", ephemeral=True
-        )
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "youtube.mode",
-            actor=interaction.user,
-            details={"mode": mode.value},
-        )
-
-    @uploads.command(name="setup", description="Where uploads are posted, and who is pinged")
-    @app_commands.describe(
-        channel="Where to post; leave it out to keep using the go-live channel",
-        ping_role="Role to mention in front of every upload announcement",
-    )
-    async def setup_uploads(
-        self,
-        interaction: discord.Interaction,
-        channel: discord.TextChannel | None = None,
-        ping_role: discord.Role | None = None,
-    ) -> None:
-        if not await require_staff(interaction):
-            return
-        if channel is None and ping_role is None:
-            await interaction.response.send_message(SETUP_NOTHING, ephemeral=True)
-            return
-        store = self.bot.store
-        if channel is not None:
-            await store.set(
-                interaction.guild.id, "youtube_channel_id", channel.id, by=interaction.user.id
-            )
-        if ping_role is not None:
-            await store.set(
-                interaction.guild.id, "youtube_ping_role_id", ping_role.id, by=interaction.user.id
-            )
-        where = f"<#{self._channel_id(interaction.guild.id)}>"
-        ping = f", pinging {ping_role.mention}" if ping_role is not None else ""
-        await interaction.response.send_message(
-            SETUP_DONE.format(where=where, ping=ping),
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "youtube.setup",
-            actor=interaction.user,
-            details={
-                "channel_id": getattr(channel, "id", None),
-                "ping_role_id": getattr(ping_role, "id", None),
-            },
-        )
-
-    @uploads.command(name="link-for", description="Link a member's YouTube channel for them")
-    @app_commands.describe(member="Whose channel this is", channel="Their channel address or id")
-    async def link_for(
-        self, interaction: discord.Interaction, member: discord.Member, channel: str
-    ) -> None:
-        if not await require_staff(interaction):
-            return
-        if not await self._database_ready(interaction):
-            return
-        await interaction.response.defer(ephemeral=True)
-        done = await self._link_to(interaction, member.id, channel)
-        if done is None:
-            return
-        title, counted = done
-        await interaction.followup.send(
-            LINKED_FOR.format(title=title, who=member.display_name, count=counted),
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "youtube.link",
-            actor=interaction.user,
-            target=member,
-            details={"title": title, "seeded": counted},
-        )
-
-    @uploads.command(name="unlink-for", description="Forget a member's YouTube channel")
-    @app_commands.describe(member="Whose channel to forget")
-    async def unlink_for(
-        self, interaction: discord.Interaction, member: discord.Member
-    ) -> None:
-        if not await require_staff(interaction):
-            return
-        if not await self._database_ready(interaction):
-            return
-        if not await remove_link(self.bot.db, member.id):
-            await interaction.response.send_message(
-                NOT_LINKED_FOR.format(who=member.display_name),
-                ephemeral=True,
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
-            return
-        await interaction.response.send_message(
-            UNLINKED_FOR.format(who=member.display_name),
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "youtube.unlink",
-            actor=interaction.user,
-            target=member,
-            details={"user_id": member.id},
-        )
-
-    @uploads.command(name="list", description="Who has a YouTube channel linked, and how it is")
-    async def list_links(self, interaction: discord.Interaction) -> None:
-        if not await require_staff(interaction):
-            return
-        if not await self._database_ready(interaction):
-            return
-        guild = interaction.guild
-        rows = await all_links(self.bot.db)
-        totals = await counts(self.bot.db)
-        where = self._channel_id(guild.id)
-        lines = [
-            f"**mode** — {self._mode(guild.id)}",
-            f"**channel** — {f'<#{where}>' if where else 'not set'}",
-            f"**every** — {self.bot.store.get(guild.id, 'youtube_poll_minutes')} minute(s)",
-            f"**api key** — {'set' if self.client.keyed else 'not set (feed only)'}",
-            f"**last good sweep** — {self.last_poll_ok_at or 'never'}",
-            f"**last error** — {self.last_poll_error or 'none'}"
-            + (f" ({self.poll_failures} sweep(s) in a row)" if self.poll_failures else ""),
-            f"**links** — {totals['links']} · **videos seen** — {totals['videos']} · "
-            f"**announced** — {totals['announced']}",
-        ]
-        for row in rows:
-            member = guild.get_member(int(row["user_id"]))
-            named = getattr(member, "display_name", None) or row["user_id"]
-            seen = "seeded" if row["seeded"] else NOT_SEEDED_YET
-            lines.append(f"• {named} — {row['title'] or row['channel_id']} ({seen})")
-        if not rows:
-            lines.append(NOBODY_LINKED)
-        await interaction.response.send_message(
-            "\n".join(lines), ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-        )
-
-    async def _log(
-        self, interaction: discord.Interaction, kind: str, details: dict[str, Any] | None = None
-    ) -> None:
+    async def youtube(self, interaction: discord.Interaction) -> None:
         if interaction.guild is None:
+            await answer(interaction, GUILD_ONLY)
             return
-        await log_action(
-            self.bot,
-            interaction.guild,
-            kind,
-            actor=interaction.user,
-            target=interaction.user,
-            details=details,
+        if not self.bot.db.is_connected:
+            log.warning("youtube: refused the panel — the database is not connected")
+            await answer(interaction, DB_UNAVAILABLE)
+            return
+        embed, view = await build_panel(self.bot, interaction.guild, interaction.user)
+        await interaction.response.send_message(
+            embed=embed,
+            view=view,
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
         )
+        view.message = await interaction.original_response()
 
 
 def _handle_of(text: str) -> str | None:
@@ -853,5 +953,752 @@ def _handle_of(text: str) -> str | None:
     return None if channel_id_in(text) else handle_in(text)
 
 
+# --- the panel ---------------------------------------------------------------------------------
+
+
+class YouTubePanel(Panel):
+    def __init__(self, minutes: int) -> None:
+        super().__init__(minutes, footer=PANEL_TIMEOUT_FOOTER)
+        self.member_id: int | None = None
+        self.mine = True
+        self.picking = False
+
+
+def minutes_for(bot: Any, guild_id: int) -> int:
+    return panel_minutes(bot.store, guild_id)
+
+
+async def card_state(bot: Any, member: Any) -> tuple[Any, Any]:
+    user_id = id_of(member)
+    row = await get_link(bot.db, user_id)
+    latest = await latest_video(bot.db, user_id) if row is not None else None
+    return (row, latest)
+
+
+def member_lines(
+    bot: Any, guild: Any, member: Any, row: Any, latest: Any, *, mine: bool
+) -> list[str]:
+    store = bot.store
+    mode = store.get(guild.id, "youtube_mode")
+    lines: list[str] = []
+    if row is None:
+        lines.append(PANEL_INTRO if mine else THEIR_CARD.format(who=display_of(member)))
+        lines.append(NOT_LINKED if mine else NOT_LINKED_FOR.format(who=display_of(member)))
+    else:
+        if not mine:
+            lines.append(THEIR_CARD.format(who=display_of(member)))
+        lines.extend(
+            status_lines(
+                row,
+                _row_value(latest, "title"),
+                where=where_words(mode, upload_channel_id(store, guild.id)),
+                shorts=store.get(guild.id, "youtube_announce_shorts"),
+            )
+        )
+    if mode == "off":
+        lines.append(MODE_OFF_LINE)
+    return lines
+
+
+def names_of(guild: Any, rows: Any) -> dict[int, str]:
+    found: dict[int, str] = {}
+    for row in rows:
+        user_id = int(row["user_id"])
+        member = guild.get_member(user_id)
+        if member is not None:
+            found[user_id] = display_of(member)
+    return found
+
+
+async def staff_lines(bot: Any, guild: Any, rows: Any, names: dict[int, str]) -> list[str]:
+    cog = cog_of(bot)
+    client = getattr(cog, "client", None)
+    lines = [""]
+    lines.extend(
+        health_lines(
+            mode=bot.store.get(guild.id, "youtube_mode"),
+            channel_id=upload_channel_id(bot.store, guild.id),
+            minutes=bot.store.get(guild.id, "youtube_poll_minutes"),
+            keyed=bool(getattr(client, "keyed", False)),
+            last_ok_at=getattr(cog, "last_poll_ok_at", None),
+            last_error=getattr(cog, "last_poll_error", None),
+            failures=int(getattr(cog, "poll_failures", 0) or 0),
+            totals=await counts(bot.db),
+        )
+    )
+    if not getattr(client, "keyed", False):
+        lines.append(NO_KEY)
+    lines.extend(link_lines(rows[:SELECT_CAP], names))
+    return lines
+
+
+async def panel_embed(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, Any, list[Any]]:
+    """The root embed, plus what the controls need: the caller's row and every linked row."""
+    staff = bot.store.is_staff(actor)
+    row, latest = await card_state(bot, actor)
+    lines = member_lines(bot, guild, actor, row, latest, mine=True)
+    rows: list[Any] = []
+    if staff:
+        rows = list(reversed(await all_links(bot.db)))
+        lines.extend(await staff_lines(bot, guild, rows, names_of(guild, rows)))
+    embed = discord.Embed(title=PANEL_TITLE, description="\n".join(lines))
+    return (embed, row, rows)
+
+
+async def build_panel(
+    bot: Any, guild: Any, actor: Any, *, picking: bool = False
+) -> tuple[discord.Embed, YouTubePanel]:
+    """One command, one panel: the member's own card, and the staff half only for staff."""
+    staff = bot.store.is_staff(actor)
+    embed, row, rows = await panel_embed(bot, guild, actor)
+    view = YouTubePanel(minutes_for(bot, guild.id))
+    view.member_id = id_of(actor)
+    view.mine = True
+    view.picking = picking
+    for move in card_buttons(linked=row is not None, mine=True, staff=staff):
+        view.add_item(MoveButton(move))
+    add_site_button(view, bot, row=0)
+    if staff and rows:
+        view.add_item(LinkedPick(rows[:SELECT_CAP], len(rows), names_of(guild, rows)))
+    if staff:
+        view.add_item(ModePick(bot.store.get(guild.id, "youtube_mode")))
+    if staff and picking:
+        view.add_item(WhoPick())
+    return (embed, view)
+
+
+async def build_card(
+    bot: Any, guild: Any, member: Any
+) -> tuple[discord.Embed, YouTubePanel]:
+    row, latest = await card_state(bot, member)
+    embed = discord.Embed(
+        title=PANEL_TITLE,
+        description="\n".join(member_lines(bot, guild, member, row, latest, mine=False)),
+    )
+    view = YouTubePanel(minutes_for(bot, guild.id))
+    view.member_id = id_of(member)
+    view.mine = False
+    for move in card_buttons(linked=row is not None, mine=False, staff=True):
+        view.add_item(MoveButton(move))
+    add_site_button(view, bot, row=0)
+    return (embed, view)
+
+
+def setup_embed(bot: Any, guild: Any) -> discord.Embed:
+    store = bot.store
+    cog = cog_of(bot)
+    client = getattr(cog, "client", None)
+    lines = health_lines(
+        mode=store.get(guild.id, "youtube_mode"),
+        channel_id=upload_channel_id(store, guild.id),
+        minutes=store.get(guild.id, "youtube_poll_minutes"),
+        keyed=bool(getattr(client, "keyed", False)),
+        last_ok_at=getattr(cog, "last_poll_ok_at", None),
+        last_error=getattr(cog, "last_poll_error", None),
+        failures=int(getattr(cog, "poll_failures", 0) or 0),
+        totals={"links": 0, "videos": 0, "announced": 0},
+    )[:6]
+    role = store.get(guild.id, "youtube_ping_role_id")
+    lines.append(f"**ping role** — {f'<@&{role}>' if role else 'nobody'}")
+    lines.append(
+        f"**fans pinged too** — {'yes' if store.get(guild.id, 'youtube_ping_fan_roles') else 'no'}"
+    )
+    lines.append(
+        f"**Shorts** — "
+        f"{'announced too' if store.get(guild.id, 'youtube_announce_shorts') else 'not announced'}"
+    )
+    lines.append(f"**words** — {store.get(guild.id, 'youtube_template')}")
+    lines.append(f"**this panel stays live** — {minutes_for(bot, guild.id)} minute(s)")
+    return discord.Embed(title=SETUP_TITLE, description="\n".join(lines))
+
+
+def setup_view(bot: Any, guild: Any) -> YouTubePanel:
+    store = bot.store
+    view = YouTubePanel(minutes_for(bot, guild.id))
+    view.add_item(UploadChannelPick())
+    view.add_item(PingRolePick())
+    for move in SETUP_MOVES:
+        label = move.label
+        if move.action == SHORTS:
+            label = SHORTS_ON if store.get(guild.id, "youtube_announce_shorts") else SHORTS_OFF
+        if move.action == FANS:
+            label = FANS_ON if store.get(guild.id, "youtube_ping_fan_roles") else FANS_OFF
+        view.add_item(SetupButton(move._replace(label=label)))
+    add_site_button(view, bot, row=3)
+    return view
+
+
+# --- rendering ---------------------------------------------------------------------------------
+
+
+async def render_panel(
+    interaction: discord.Interaction, previous: Any = None, *, picking: bool = False
+) -> None:
+    bot = interaction.client
+    embed, view = await build_panel(bot, interaction.guild, interaction.user, picking=picking)
+    retire(previous)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+async def render_card(
+    interaction: discord.Interaction, member_id: Any, previous: Any = None
+) -> None:
+    bot = interaction.client
+    guild = interaction.guild
+    member = guild.get_member(int(member_id)) or int(member_id)
+    embed, view = await build_card(bot, guild, member)
+    retire(previous)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+async def render_setup(interaction: discord.Interaction, previous: Any = None) -> None:
+    bot = interaction.client
+    embed = setup_embed(bot, interaction.guild)
+    view = setup_view(bot, interaction.guild)
+    retire(previous)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+async def render_forget(interaction: discord.Interaction, previous: Any = None) -> None:
+    bot = interaction.client
+    embed = setup_embed(bot, interaction.guild)
+    view = YouTubePanel(minutes_for(bot, interaction.guild.id))
+    view.add_item(ForgetPick())
+    view.add_item(SetupButton(SETUP_BACK_MOVE._replace(row=1)))
+    retire(previous)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+async def back_to_panel(
+    interaction: discord.Interaction, previous: Any = None, *, picking: bool = False
+) -> None:
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    await render_panel(interaction, previous, picking=picking)
+
+
+async def open_card(
+    interaction: discord.Interaction, member_id: Any, previous: Any = None
+) -> None:
+    if not await still_staff(interaction):
+        return
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    await render_card(interaction, member_id, previous)
+
+
+async def open_setup(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await still_staff(interaction):
+        return
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    await render_setup(interaction, previous)
+
+
+async def open_forget(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await still_staff(interaction):
+        return
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    await render_forget(interaction, previous)
+
+
+async def open_confirm(
+    interaction: discord.Interaction, move: PanelMove, previous: Any = None
+) -> None:
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    bot = interaction.client
+    embed, _row, _rows = await panel_embed(bot, interaction.guild, interaction.user)
+    embed.add_field(name=CONFIRM_TITLE, value=move.question, inline=False)
+    view = YouTubePanel(minutes_for(bot, interaction.guild.id))
+    view.member_id = id_of(interaction.user)
+    view.add_item(ConfirmYesButton(move))
+    view.add_item(KeepItButton())
+    retire(previous)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+# --- the moves, one function each ----------------------------------------------------------------
+
+
+async def run_link(
+    interaction: discord.Interaction,
+    member: Any,
+    given: str,
+    *,
+    mine: bool,
+    previous: Any = None,
+) -> None:
+    if not mine and not await still_staff(interaction):
+        return
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    try:
+        said, _row, _counted = await link_channel(
+            interaction.client, interaction.guild, interaction.user, member, given
+        )
+    except LinkRefused as exc:
+        said = str(exc)
+    if mine:
+        await render_panel(interaction, previous)
+    else:
+        await render_card(interaction, id_of(member), previous)
+    await answer(interaction, said)
+
+
+async def run_unlink(
+    interaction: discord.Interaction,
+    member: Any,
+    *,
+    mine: bool,
+    note: Any = None,
+    previous: Any = None,
+) -> None:
+    if not mine and not await still_staff(interaction):
+        return
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    said, _row = await unlink_channel(
+        interaction.client, interaction.guild, interaction.user, member, note=note
+    )
+    if mine:
+        await render_panel(interaction, previous)
+    else:
+        await render_card(interaction, id_of(member), previous)
+    await answer(interaction, said)
+
+
+async def run_mode(
+    interaction: discord.Interaction, value: str, previous: Any = None
+) -> None:
+    if not await still_staff(interaction):
+        return
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    said, _row = await set_mode(
+        interaction.client, interaction.guild, interaction.user, value
+    )
+    await render_panel(interaction, previous)
+    await answer(interaction, said)
+
+
+async def run_setup(
+    interaction: discord.Interaction,
+    changes: dict[str, Any],
+    previous: Any = None,
+    *,
+    forgetting: bool = False,
+) -> None:
+    if not await still_staff(interaction):
+        return
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    said, _row = await save_setup(
+        interaction.client, interaction.guild, interaction.user, changes
+    )
+    if forgetting:
+        await render_forget(interaction, previous)
+    else:
+        await render_setup(interaction, previous)
+    await answer(interaction, said)
+
+
+# --- the controls ------------------------------------------------------------------------------
+
+
+class MoveButton(discord.ui.Button):
+    def __init__(self, move: PanelMove) -> None:
+        super().__init__(label=move.label, style=STYLES[move.style], row=move.row)
+        self.move = move
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        action = self.move.action
+        if action == REFRESH:
+            if view.mine:
+                await back_to_panel(interaction, view)
+            else:
+                await open_card(interaction, view.member_id, view)
+            return
+        if action == BACK:
+            await back_to_panel(interaction, view)
+            return
+        if action == LOGS:
+            await send_logs(interaction, "youtube")
+            return
+        if action == SETUP:
+            await open_setup(interaction, view)
+            return
+        if action == LINK_FOR:
+            if not await still_staff(interaction):
+                return
+            await back_to_panel(interaction, view, picking=True)
+            return
+        if action == UNLINK:
+            await open_confirm(interaction, self.move, view)
+            return
+        if action == UNLINK_FOR:
+            if not await still_staff(interaction):
+                return
+            if not await db_up(interaction):
+                return
+            await interaction.response.send_modal(UnlinkForModal(view.member_id, view))
+            return
+        if action in (LINK, RELINK):
+            if not await db_up(interaction):
+                return
+            row = await get_link(interaction.client.db, id_of(interaction.user))
+            await interaction.response.send_modal(
+                LinkModal(interaction.user, mine=True, previous=view, given=given_of(row))
+            )
+            return
+        if not await still_staff(interaction):
+            return
+        if not await db_up(interaction):
+            return
+        member = interaction.guild.get_member(int(view.member_id)) or int(view.member_id)
+        row = await get_link(interaction.client.db, id_of(member))
+        await interaction.response.send_modal(
+            LinkModal(member, mine=False, previous=view, given=given_of(row))
+        )
+
+
+def given_of(row: Any) -> str | None:
+    handle = _row_value(row, "handle")
+    return str(handle) if handle else (_row_value(row, "channel_id") or None)
+
+
+class ConfirmYesButton(discord.ui.Button):
+    def __init__(self, move: PanelMove) -> None:
+        super().__init__(label=move.yes, style=discord.ButtonStyle.danger, row=0)
+        self.move = move
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_unlink(interaction, interaction.user, mine=True, previous=self.view)
+
+
+class KeepItButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label=KEEP_IT, style=discord.ButtonStyle.secondary, row=0)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await back_to_panel(interaction, self.view)
+
+
+class LinkedPick(discord.ui.Select):
+    def __init__(self, rows: Any, total: int, names: dict[int, str]) -> None:
+        shown = list(rows)
+        super().__init__(
+            placeholder=capped_placeholder(len(shown), total, pick=PICK_A_CHANNEL),
+            options=[
+                discord.SelectOption(
+                    label=option_label(
+                        spot + 1,
+                        None,
+                        f"{names.get(int(row['user_id'])) or row['user_id']} — "
+                        f"{row['title'] or row['channel_id']}",
+                    ),
+                    value=str(row["user_id"]),
+                )
+                for spot, row in enumerate(shown)
+            ],
+            min_values=1,
+            max_values=1,
+            row=1,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_card(interaction, int(self.values[0]), self.view)
+
+
+class ModePick(discord.ui.Select):
+    def __init__(self, current: str) -> None:
+        super().__init__(
+            placeholder=MODE_PLACEHOLDER,
+            options=[
+                discord.SelectOption(
+                    label=MODE_LABELS[name], value=name, default=(name == current)
+                )
+                for name in YOUTUBE_MODES
+            ],
+            min_values=1,
+            max_values=1,
+            row=2,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_mode(interaction, self.values[0], self.view)
+
+
+class WhoPick(discord.ui.UserSelect):
+    def __init__(self) -> None:
+        super().__init__(placeholder=WHOSE_CHANNEL, min_values=1, max_values=1, row=4)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await still_staff(interaction):
+            return
+        if not await db_up(interaction):
+            return
+        member = self.values[0]
+        row = await get_link(interaction.client.db, id_of(member))
+        await interaction.response.send_modal(
+            LinkModal(member, mine=False, previous=self.view, given=given_of(row))
+        )
+
+
+class UploadChannelPick(discord.ui.ChannelSelect):
+    def __init__(self) -> None:
+        super().__init__(
+            placeholder=WHERE_UPLOADS,
+            channel_types=[discord.ChannelType.text],
+            min_values=0,
+            max_values=1,
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        picked = int(self.values[0].id) if self.values else None
+        await run_setup(interaction, {"youtube_channel_id": picked}, self.view)
+
+
+class PingRolePick(discord.ui.RoleSelect):
+    def __init__(self) -> None:
+        super().__init__(placeholder=WHO_IS_PINGED, min_values=0, max_values=1, row=1)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        picked = int(self.values[0].id) if self.values else None
+        await run_setup(interaction, {"youtube_ping_role_id": picked}, self.view)
+
+
+class ForgetPick(discord.ui.Select):
+    """Events deviation 6: a client that will not submit an empty picker still has a way out."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            placeholder=FORGET_PLACEHOLDER,
+            options=[
+                discord.SelectOption(label=FORGET_CHANNEL, value="youtube_channel_id"),
+                discord.SelectOption(label=FORGET_PING_ROLE, value="youtube_ping_role_id"),
+            ],
+            min_values=1,
+            max_values=1,
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_setup(interaction, {self.values[0]: None}, self.view, forgetting=True)
+
+
+class SetupButton(discord.ui.Button):
+    def __init__(self, move: PanelMove) -> None:
+        super().__init__(label=move.label, style=STYLES[move.style], row=move.row)
+        self.move = move
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        action = self.move.action
+        if action == BACK:
+            if self.move.row == 1:
+                await open_setup(interaction, self.view)
+            else:
+                await back_to_panel(interaction, self.view)
+            return
+        if action == FORGET:
+            await open_forget(interaction, self.view)
+            return
+        store = interaction.client.store
+        guild_id = interaction.guild.id
+        if action == SHORTS:
+            await run_setup(
+                interaction,
+                {"youtube_announce_shorts": not store.get(guild_id, "youtube_announce_shorts")},
+                self.view,
+            )
+            return
+        if action == FANS:
+            await run_setup(
+                interaction,
+                {"youtube_ping_fan_roles": not store.get(guild_id, "youtube_ping_fan_roles")},
+                self.view,
+            )
+            return
+        if not await still_staff(interaction):
+            return
+        if not await db_up(interaction):
+            return
+        if action == WORDS:
+            await interaction.response.send_modal(
+                WordsModal(store.get(guild_id, "youtube_template"), self.view)
+            )
+            return
+        await interaction.response.send_modal(
+            NumbersModal(
+                store.get(guild_id, "youtube_poll_minutes"),
+                minutes_for(interaction.client, guild_id),
+                self.view,
+            )
+        )
+
+
+# --- the modals --------------------------------------------------------------------------------
+
+
+class LinkModal(AnswersErrors, discord.ui.Modal):
+    channel = discord.ui.TextInput(label=LINK_LABEL, max_length=LINK_LIMIT)
+
+    def __init__(
+        self, member: Any, *, mine: bool, previous: Any = None, given: Any = None
+    ) -> None:
+        title = LINK_TITLE if mine else LINK_FOR_TITLE.format(who=display_of(member))
+        super().__init__(title=title[:45])
+        self.member = member
+        self.mine = mine
+        self.previous = previous
+        self.channel.label = LINK_LABEL if mine else LINK_FOR_LABEL
+        self.channel.default = str(given) if given else None
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await run_link(
+            interaction,
+            self.member,
+            str(self.channel),
+            mine=self.mine,
+            previous=self.previous,
+        )
+
+
+class UnlinkForModal(NoteModal):
+    def __init__(self, member_id: Any, previous: Any = None) -> None:
+        self.member_id = member_id
+        self.previous = previous
+        super().__init__(
+            title=UNLINK_FOR_TITLE,
+            label=UNLINK_FOR_LABEL,
+            max_length=NOTE_LIMIT,
+            on_submit=self.reason_given,
+            required=False,
+        )
+
+    async def reason_given(self, interaction: discord.Interaction, note: str) -> None:
+        member = interaction.guild.get_member(int(self.member_id)) or int(self.member_id)
+        await run_unlink(
+            interaction, member, mine=False, note=note, previous=self.previous
+        )
+
+
+class WordsModal(AnswersErrors, discord.ui.Modal):
+    words = discord.ui.TextInput(
+        label=WORDS_LABEL, style=discord.TextStyle.paragraph, max_length=TEMPLATE_LIMIT
+    )
+
+    def __init__(self, current: Any, previous: Any = None) -> None:
+        super().__init__(title=WORDS_TITLE[:45])
+        self.previous = previous
+        self.words.default = str(current or "")
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await run_setup(interaction, {"youtube_template": str(self.words)}, self.previous)
+
+
+class NumbersModal(AnswersErrors, discord.ui.Modal):
+    every = discord.ui.TextInput(label=EVERY_LABEL, max_length=5)
+    stays = discord.ui.TextInput(label=PANEL_MINUTES_LABEL, max_length=5)
+
+    def __init__(self, poll: Any, panel: Any, previous: Any = None) -> None:
+        super().__init__(title=NUMBERS_TITLE[:45])
+        self.previous = previous
+        self.every.default = str(poll)
+        self.stays.default = str(panel)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        """A modal has no Range, so the floor is checked here and refused in words."""
+        changes: dict[str, Any] = {}
+        for field, key, label, floor in (
+            (self.every, "youtube_poll_minutes", EVERY_LABEL, YOUTUBE_POLL_MIN_MINUTES),
+            (self.stays, PANEL_MINUTES_KEY, PANEL_MINUTES_LABEL, 1),
+        ):
+            given = str(field).strip()
+            if not given.isdigit():
+                await answer(
+                    interaction,
+                    NOT_A_NUMBER.format(given=given[:40] or "nothing", label=label, floor=floor),
+                )
+                return
+            changes[key] = int(given)
+        await run_setup(interaction, changes, self.previous)
+
+
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(YouTube(bot))
+
+
+__all__ = [
+    "ALREADY_LINKED",
+    "LINKED",
+    "LINKED_NOT_SEEDED",
+    "MODE_OFF_LINE",
+    "NOBODY_LINKED",
+    "NOT_LINKED",
+    "NOT_LINKED_FOR",
+    "NOT_SEEDED_YET",
+    "NO_KEY",
+    "SETUP_NOTHING",
+    "UNLINKED",
+    "UNLINKED_FOR",
+    "ConfirmYesButton",
+    "ForgetPick",
+    "KeepItButton",
+    "LinkModal",
+    "LinkRefused",
+    "LinkedPick",
+    "ModePick",
+    "MoveButton",
+    "NumbersModal",
+    "PingRolePick",
+    "SetupButton",
+    "UnlinkForModal",
+    "UploadChannelPick",
+    "WhoPick",
+    "WordsModal",
+    "YouTube",
+    "YouTubePanel",
+    "all_links",
+    "back_to_panel",
+    "build_card",
+    "build_panel",
+    "counts",
+    "get_link",
+    "latest_video",
+    "link_channel",
+    "link_owner",
+    "recent_videos",
+    "remove_link",
+    "render_panel",
+    "save_setup",
+    "set_link",
+    "set_mode",
+    "setup_view",
+    "setup_words",
+    "tell_unlinked",
+    "unlink_channel",
+    "upload_channel_id",
+]

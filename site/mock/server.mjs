@@ -415,6 +415,8 @@ const SETTING_SPECS = [
   ['applications_roster_shows_left', 'bool', true, true, 'whether the approved list still shows people who have left the server, marked as gone; false hides them'],
   ['applications_panel_minutes', 'int', 10, 10, "minutes the /applications show panel stays live before its buttons disable themselves; 10 by default. The 'this panel went quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
   ['memory_panel_minutes', 'int', 10, 10, "minutes the /memory panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
+  ['youtube_panel_minutes', 'int', 10, 10, "minutes the /youtube panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
+  ['youtube_unlink_dms_them', 'bool', true, true, 'true to DM a member the reason when STAFF forget their YouTube channel for them; a member unlinking their own channel is never DMed'],
 ];
 
 const RULES = {

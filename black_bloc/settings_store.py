@@ -1030,6 +1030,25 @@ KEY_HELP.update(
 )
 
 
+# YouTube panel (wave 2) — the two decisions `/youtube`'s panel introduces, in their own block so
+# the parallel wave-2 branches merge textually.
+KEY_TYPES.update({"youtube_panel_minutes": "int", "youtube_unlink_dms_them": "bool"})
+KEY_HELP.update(
+    {
+        "youtube_panel_minutes": (
+            "minutes the /youtube panel stays live before its buttons disable themselves; 10 by "
+            "default. The 'this panel has gone quiet' footer can only be written while "
+            "Discord's 15-minute interaction window is still open, so 15 or more means the "
+            "buttons simply stop working with no footer to explain it"
+        ),
+        "youtube_unlink_dms_them": (
+            "true to DM a member the reason when STAFF forget their YouTube channel for them; a "
+            "member unlinking their own channel is never DMed"
+        ),
+    }
+)
+
+
 # Operator read token — the token itself is the on/off switch; this is the one decision left.
 KEY_TYPES.update({"operator_read_log": "bool"})
 KEY_HELP.update(
@@ -1548,6 +1567,10 @@ class SettingsStore:
             return True
         if key == "memory_panel_minutes":
             return 10
+        if key == "youtube_panel_minutes":
+            return 10
+        if key == "youtube_unlink_dms_them":
+            return True
         if key.endswith("_log_level"):
             return LEVEL_DEFAULT
         if KEY_TYPES.get(key) in ("channels", "roles"):

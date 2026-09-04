@@ -8,6 +8,12 @@
 > kinds are all exactly what it says. Only the way in moved:
 > [`golive-panel-design.md`](golive-panel-design.md). This doc is NOT rewritten.
 
+> ⚠️ **The COMMAND SURFACE below (§C's last three bullets) was superseded on 2026-09-03 by
+> [`youtube-panel-design.md`](youtube-panel-design.md):** `/youtube` is now ONE command that
+> opens a panel, and the `youtube` and `uploads` groups and their nine subcommands are gone.
+> **Everything else in this document still stands** — the poller, the seed rule (D10), the
+> guarded post path, the settings and every log kind are untouched by that build.
+>
 > **Audience:** the Opus builder first, reviewers second, the owner for the
 > decisions table. **Status:** TRACKED — DESIGN, written 2026-09-02 by the
 > Fable session (NEXT WAVE item 2). Secret NAMES only.

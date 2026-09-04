@@ -112,11 +112,6 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.event.approved",
         "web.event.denied",
     ),
-    "black_bloc/cogs/content/youtube.py::kind": (
-        "youtube.link",
-        "youtube.unlink",
-        "youtube.resolve_failed",
-    ),
     "black_bloc/cogs/community/events.py::kind": (
         "event.category_forgotten",
         "event.announce_channel_forgotten",

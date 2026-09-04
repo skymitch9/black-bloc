@@ -119,7 +119,9 @@ async def test_an_unlink_removes_the_row_and_leaves_a_web_line(client, sign_in, 
 
     assert response.json() == {"unlinked": True, "user_id": "21"}
     assert await get_link(web.db, 21) is None
-    assert "web.youtube.unlink" in await wf.kinds_in(web.db)
+    kinds = await wf.kinds_in(web.db)
+    assert kinds.count("web.youtube.unlink") == 1
+    assert "youtube.unlink" not in kinds
 
 
 def test_unlinking_somebody_who_is_not_linked_says_where_to_look(client, sign_in):
@@ -158,7 +160,9 @@ async def test_linking_resolves_seeds_and_says_how_many_count_as_history(
     assert "5 video(s)" in body["message"]
     assert "nothing already published is announced" in body["message"]
     assert (await get_link(web.db, 21))["channel_id"] == CHANNEL
-    assert "web.youtube.link" in await wf.kinds_in(web.db)
+    kinds = await wf.kinds_in(web.db)
+    assert kinds.count("web.youtube.link") == 1
+    assert "youtube.link" not in kinds
 
 
 async def test_a_link_whose_feed_would_not_answer_says_the_seed_is_still_to_come(

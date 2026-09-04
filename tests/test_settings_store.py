@@ -1047,6 +1047,46 @@ async def test_the_memory_panel_stays_up_ten_minutes_by_default(store):
     assert parse_value("memory_panel_minutes", "45") == 45
 
 
+async def test_the_youtube_panel_stays_up_ten_minutes_by_default(store):
+    """Same reason as every other panel: 15 loses Discord's window and the gone-quiet footer."""
+    from black_bloc.cogs.core import VALUE_KEYS
+
+    assert store.get(7, "youtube_panel_minutes") == 10
+    assert "15" in KEY_HELP["youtube_panel_minutes"]
+    assert KEY_TYPES["youtube_panel_minutes"] == "int"
+    assert "youtube_panel_minutes" in VALUE_KEYS
+    await store.set(7, "youtube_panel_minutes", 25)
+    assert store.get(7, "youtube_panel_minutes") == 25
+    with pytest.raises(SettingError):
+        coerce_value("youtube_panel_minutes", -1)
+    assert parse_value("youtube_panel_minutes", "45") == 45
+
+
+async def test_whether_staff_unlinking_somebody_dms_them_is_a_setting_not_a_constant(store):
+    """Staff-final-say says the person is told; checklist 33 says the server may decide."""
+    from black_bloc.cogs.core import VALUE_KEYS
+
+    assert store.get(7, "youtube_unlink_dms_them") is True
+    assert KEY_TYPES["youtube_unlink_dms_them"] == "bool"
+    assert "youtube_unlink_dms_them" in KEY_HELP
+    assert "youtube_unlink_dms_them" in VALUE_KEYS
+    await store.set(7, "youtube_unlink_dms_them", False)
+    assert store.get(7, "youtube_unlink_dms_them") is False
+    with pytest.raises(SettingError):
+        coerce_value("youtube_unlink_dms_them", "yes")
+
+
+async def test_the_seven_youtube_keys_the_panel_only_reads_keep_their_defaults(store):
+    """The panel changed the door, not the room: no `youtube_*` default moved."""
+    assert store.get(7, "youtube_mode") == "off"
+    assert store.get(7, "youtube_poll_minutes") == 10
+    assert store.get(7, "youtube_announce_shorts") is False
+    assert store.get(7, "youtube_ping_fan_roles") is True
+    assert store.get(7, "youtube_ping_role_id") is None
+    assert store.get(7, "youtube_channel_id") is None
+    assert store.get(7, "youtube_template").startswith("**{name}**")
+
+
 async def test_the_eight_chat_memory_keys_are_untouched_by_the_panel(store):
     """The panel changed the door, not the room: no `chat_memory_*` default moved."""
     assert store.get(7, "chat_memory_mode") == "off"
