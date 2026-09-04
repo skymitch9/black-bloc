@@ -1,7 +1,10 @@
 # Chat — `/chat` is ONE command that opens a panel (wave 3)
 
 > **Audience:** the build agent and the reviewer, and the owner for §I. **Status:** TRACKED ·
-> **PLANNING** — nothing here is built.
+> ✅ **SHIPPED in v75** (`251dd14`, 2026-09-04 15:58; built on `worktree-agent-ab33797d235cf0d96` for
+> 441k, five commits off `5db58fb`; landing entry in `docs/DONE.md` 2026-09-04). The `path:line`
+> keys below are the PLANNING-time ones and were not re-read after the build — `code-notes.md`'s
+> `# Chat panel (wave 3)` section is the post-merge map. Sweeps **155–162**.
 > **Last verified: 2026-09-04** — every `path:line` below was READ against `main` at `bf3e447`
 > (the working tree is `4336a66`, a docs-only commit on top of it; **no source file differs**),
 > in `black_bloc/cogs/content/chat.py` (757 lines), `black_bloc/knowledge.py` (554),

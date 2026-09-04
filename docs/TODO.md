@@ -12,21 +12,20 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-04 15:46, v74 live, wave 3: automod SHIPPED, chat build IN FLIGHT)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-04 15:59, v75 live, wave 3: automod + chat SHIPPED)
 
-**`main` = `0b1b2bf`** (automod panel merge; v74 live 15:45, 4332 tests, **38 commands**; `youtube_mode` is
+**`main` = `251dd14`** (chat panel merge; v75 live 15:58, 4402 tests, **38 commands**; `youtube_mode` is
 **shadow** since 2026-09-03 17:42). Panels waves 1 and 2 are COMPLETE (memory v68, golive v70, youtube v71,
 pings v72, voice v73; landing entries in `DONE.md` 2026-09-03). **Wave 3 is in progress:** all four
 designs landed and all 13 forks are DECIDED (every one (a), plus the role-menus Grants audit amendment —
-see the panels item below); **automod SHIPPED in v74** (`DONE.md` 2026-09-04); **the chat build is IN
-FLIGHT** on its own worktree (Opus; sweeps placeholders `C1…Cn` renumber from **155** at merge; expected
-append-shaped conflicts in `settings_store.py`, `tests/test_bot.py`, `code-notes.md`, `sweeps.md`,
-`logkinds.py`). **Next:** (1) chat lands → usage read → Fable review → merge → deploy v75 → docs → report;
-(2) dispatch raidtrain (380–450k) then role menus (420–500k, brief carries §I-amend), Opus, own worktrees
-off the then-current `main`, usage read before each, weekly cut-off 90%; (3) the three sweeps the automod
+see the panels item below); **automod SHIPPED in v74, chat SHIPPED in v75** (both `DONE.md` 2026-09-04;
+sweeps 144–154 and 155–162). **Next:** (1) usage read → dispatch raidtrain (380–450k, sweeps from **163**)
+and role menus (420–500k, brief carries §I-amend, sweeps after raidtrain's — use letters `R1…` if the
+two run in parallel), Opus, own worktrees off `251dd14`, usage read before each and after each lands,
+weekly cut-off 90%; each lands → Fable review → merge → deploy → docs → report; (2) the three sweeps the automod
 landing deferred (🔧 below: confirm-helper fold ×5, `LOG_LEVEL_COMMANDS` pass, settings-API gate pass —
 KI-21); (4) the small review findings folded into whatever touches those files; (5) owner by-eye sweeps
-14–15, 58–103, 144–154; (6) Pawpette's Twitch Team form still needs the owner's walk-through
+14–15, 58–103, 144–162; (6) Pawpette's Twitch Team form still needs the owner's walk-through
 (`access/sweeps.md` → "The owner's Twitch Team form") — no form exists on the live site as of 15:54. Merged
 worktrees/branches (`agent-a19bdce15408f8243` birthdays, `agent-a448c7ab780ed3c2b` events,
 `agent-aa735ab092d13477d` polls, `agent-abf063b9177e02f17` applications) can be pruned.
@@ -326,11 +325,15 @@ docs bookkeeping lands with the work, not after.
   commits off `5db58fb`), Fable-reviewed approve with one merge-time relabel (the Settings toggle says what it
   will do), merged `0b1b2bf` (clean, no conflicts), live in v74 15:45** (4265 → 4332 tests, `commands synced`
   **38 → 38 measured at boot**) — landing entry in `DONE.md` 2026-09-04; sweeps 144–154 are the owner's to run.
-  **Chat still IN FLIGHT** — it uses sweeps placeholders `C1…Cn` that the conductor renumbers from **155** at
-  merge; expected conflicts, all append-shaped: `settings_store.py` registry, `tests/test_bot.py` count,
-  `code-notes.md`, `sweeps.md`, `logkinds.py`. If this session dies: `git worktree list` / `git branch --list
-  'worktree-agent-*'` finds the branch; merge only a branch whose FINAL commit is a doc/string sweep with a
-  passing full suite. Raidtrain and role menus are dispatched after chat lands.
+  **Chat LANDED (441k against 300–360k; five commits off `5db58fb`), Fable-reviewed approve, merged
+  `251dd14` (five append-shaped conflicts against automod, all resolved HEAD-then-branch; sweeps `C1`–`C8`
+  numbered 155–162 at the merge), live in v75 15:58** (4332 → 4402 tests, `commands synced` **38 → 38
+  measured at boot**) — landing entry in `DONE.md` 2026-09-04; sweeps 155–162 are the owner's to run.
+  **Raidtrain and role menus are NEXT** — both still to dispatch (Opus, own worktrees off `251dd14`,
+  raidtrain sweeps from 163; if the two run in parallel the second numbers its rows with letters and the
+  conductor assigns digits at the merge, as chat did). If this session dies: `git worktree list` /
+  `git branch --list 'worktree-agent-*'` finds a branch; merge only one whose FINAL commit is a doc/string
+  sweep with a passing full suite.
   Events I2 DECIDED 12:40 (`/timezone` retired).
   **Wave-1 builds all landed 13:40–13:50** (birthdays merged `58974e1`; events on
   `worktree-agent-a448c7ab780ed3c2b`, polls on `worktree-agent-aa735ab092d13477d`, both under Fable
@@ -386,7 +389,11 @@ docs bookkeeping lands with the work, not after.
   folded at the merge). One `panels.confirm(...)` in `black_bloc/panels.py` with tests in `tests/test_panels.py`,
   the five callers delegating; checklist 15/17. Its own Opus sweep AFTER wave 3 (the chat, raidtrain and
   role-menus builds each add a confirm card of their own — fold once, after the last one lands, not three
-  times). Est. 120–180k.
+  times). **Chat landed 2026-09-04 (v75) and made it SIX** (`RemoveYesButton` / `KeepItButton` in
+  `cogs/content/chat.py`). **Same sweep, second helper:** the `still_staff` / `defer` / `db_ready` triplet is
+  repeated **14×** in `cogs/content/chat.py` where automod carries a cog-local `opened()` — one
+  `panels.opened(...)` beside `panels.confirm(...)`, both callers' copies delegating (chat review finding,
+  non-blocking). Est. 120–180k.
 - 🔧 **`LOG_LEVEL_COMMANDS` is stale for eight features (report from the automod build, 2026-09-04):**
   `settings_store.py` still names `tempvoice` (now `voice`), `events` (now `event`), `poll`, `birthday`,
   `golive`, `request`, `applications` (now `/apply`) and `pings` (`pingroles`, retired) as the command that

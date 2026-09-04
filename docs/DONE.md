@@ -9,6 +9,57 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-04 — Chat panel: `/chat` is one window (wave 3 SECOND landing, v75, `251dd14`)
+
+Release **v75** (`251dd14`, 15:58; `deploys.log` line 74). Merge `--no-ff` of
+`worktree-agent-ab33797d235cf0d96` — **five commits off `5db58fb`** (`d08994d` the pure half
+`black_bloc/chat_panel.py`, `99dd8d5` the cog, `e4304e1` the logkinds table, `b0b62b1` a note
+card keeping the filter words, `1767109` the doc sweep). Built by one Opus agent for **441k
+against a 300–360k estimate** (dispatched 15:10 in parallel with automod, landed second),
+Fable-reviewed **approve**. Design: `info/chat-panel-design.md` (header flipped to SHIPPED).
+
+**What it is.** The `chat` group's eight leaf subcommands are retired for ONE staff-only
+`/chat` that opens an ephemeral panel: the status block at the root (mode, the two tiers, the
+turns and money — hidden by `chat_status_admin_only` for non-administrators — and the notes
+count), then **Personality…** (the voice select and the two mood selects), **Knowledge…** (the
+note picker, **Write one down…**, **Edit…**, **Remove** behind a confirm, **Find…**),
+**Settings** (read-only numbers plus **Limits…**), the two mode toggles and **Logs**. The
+forks landed as decided, every one (a): **F-C1** Settings WRITES through one five-field
+`LimitsModal` (five is Discord's ceiling); **F-C2** a note is edited in the SAME
+`NoteFieldsModal` prefilled; **F-C3** turning the models on is one press — the monthly cap is
+the brake; **F-C4** the two mood-pool guards moved onto the Discord door, and the ONE place
+they live is `chat_panel.mood_options` / `mood_refusal`, read by both the select (which never
+offers a move the function would refuse) and `set_mood` itself. Every move is an async shared
+function in `black_bloc/chat_panel.py` carrying `via`; `api/tools/chat.py` now calls the same
+functions with `via=VIA_WEBSITE`, which is how the two doors stay one implementation
+(checklist 15/17). New key `chat_panel_minutes` (int, 10) in its own `settings_store` block;
+log kinds `chat.mode` and `chat.settings` classify ROUTINE; the chat row left `LOGS_GROUPS`.
+`commands synced` **38 → 38, measured at boot** (a group already counted as one slot).
+
+**The merge.** Five conflicts, all append-shaped, because both wave-3 branches appended at the
+same anchors: `settings_store.py` (three hunks — the first two interleaved the automod and chat
+KEY_HELP blocks around a shared help-text tail, resolved by splitting them back into two whole
+blocks, automod first; the defaults hunk keeps all three `if key ==` lines), `labels.js`,
+`tests/test_settings_store.py`, `sweeps.md` and `code-notes.md` (HEAD then branch, byte for
+byte). The branch wrote its sweep rows as `C1`–`C8` on purpose — two builds numbering from 144
+concurrently — and the conductor numbered them **155–162** at the merge and moved the
+`OWNER_GUIDE.md` count 154 → 162. `docs/info/code-notes.md`'s `# Chat panel (wave 3)` section
+was re-keyed to the merge. **4332 → 4402 tests** (`tests/test_chat_panel.py` is new;
+`tests/cogs/content/test_chat.py` rewritten around the panel).
+
+**Review finding, non-blocking, deferred to the fold sweep:** the `still_staff` / `defer` /
+`db_ready` triplet is repeated **14×** in `cogs/content/chat.py` where automod has a cog-local
+`opened()` helper — fold an `opened()` into `black_bloc/panels.py` in the same sweep as the
+confirm helper, of which this build adds the **sixth** copy (`RemoveYesButton` / `KeepItButton`).
+Cosmetic, not acted on: the **Settings** button lacks the ellipsis every other sub-panel
+opener carries.
+
+**Verified:** ruff clean; 4402 passed; boot clean at 22:58:25Z (`database ready` / `synced 38`
+/ `logged in`, no Traceback). **NOT verified:** `/chat` was not opened in Discord — no note
+written, no model called, no mood moved, the Limits modal not submitted, and the website chat
+page not exercised after its routes moved onto `chat_panel`. Sweeps **155–162** are the
+owner's to run, in `#mute-me-bot-test-spam`, as a Lead.
+
 ## 2026-09-04 — Automod panel: `/automod` is one window (wave 3 FIRST landing, v74, `0b1b2bf`)
 
 Release **v74** (`0b1b2bf`, 15:45; `deploys.log` line 73). Merge `--no-ff` of
