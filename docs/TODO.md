@@ -12,11 +12,13 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 17:30, v70 live, golive shipped, youtube in flight)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 17:45, v71 live, youtube shipped, pings next)
 
-**`main` = `0aeed72`** (golive panel merge; v70 live 17:25, 3796 tests, **41 commands**). Panels wave 1
-is COMPLETE, wave 2 has TWO of five shipped (memory v68, golive v70) with every fork decided (🔧 panels item
-below); the golive landing entry is in `DONE.md` 2026-09-03. Youtube build still in flight (since 16:52; usage read → Fable review → merge → deploy → flip `youtube_mode` to shadow via the site = F-Y2). Pings is UNBLOCKED now that golive is in (usage read before dispatch; weekly cut-off 90%); voice last. **Next:** (1) the operator token MINT is owed — classifier-blocked,
+**`main` = `b764757`** (youtube panel merge; v71 live 17:37, 3872 tests, **40 commands**; `youtube_mode` is
+**shadow** since 17:42 = F-Y2 done). Panels wave 1 is COMPLETE, wave 2 has THREE of five shipped (memory v68,
+golive v70, youtube v71) with every fork decided (🔧 panels item below); all three landing entries are in
+`DONE.md` 2026-09-03. **Pings is next** (Fable-review `info/pings-panel-design.md` against §2 first, then Opus
+build in its own worktree off `main`, sweeps 126+; usage read before dispatch; weekly cut-off 90%); voice last. **Next:** (1) the operator token MINT is owed — classifier-blocked,
 see the 🔧 item; (2) wave-2 builds in cost order, memory first (Opus, own worktree, brief carries the
 decided forks + `info/review-checklist.md` + the design doc), merge/deploy each as it lands; (3) the
 small review findings (🔧 below) folded into whatever touches those files; (4) owner by-eye sweeps
@@ -268,10 +270,13 @@ docs bookkeeping lands with the work, not after.
   a conversation first). **Golive LANDED 17:05 (464k against a 230–300k estimate — again ~2×; four commits off `8cbe453`),
   Fable-reviewed approve, merged `0aeed72` (four append-only conflicts with the memory merge), live in
   v70 17:25** (3750 → 3796 tests, `commands synced` **42 → 41 measured at boot**) — landing entry in
-  `DONE.md` 2026-09-03; sweeps 109–117 are the owner's to run. **youtube build
-  DISPATCHED 16:52** in parallel (Opus, own worktree, base `ea252bd`, sweeps 130+, told to keep off
-  pings/golive files and to keep shared-string edits in its own blocks; F-Y2's shadow flip is the
-  conductor's after deploy). Pings waits for golive (shared `pings.py`/`personas.py`); voice last. Events I2 DECIDED 12:40 (`/timezone` retired).
+  `DONE.md` 2026-09-03; sweeps 109–117 are the owner's to run. **Youtube LANDED 17:10 (371k against a
+  180–250k estimate — ~2× again; three commits off `ea252bd`), Fable-reviewed approve, merged `b764757`
+  (six append-only conflicts with the golive merge; its sweeps rows renumbered 130–137 → 118–125), live in
+  v71 17:37** (3796 → 3872 tests, `commands synced` **41 → 40 measured at boot**), **F-Y2 done 17:42**
+  (`youtube_mode` off → shadow on the Go-live page, PUT logged 00:42:53Z) — landing entry in `DONE.md`
+  2026-09-03; sweeps 118–125 are the owner's to run. Pings is UNBLOCKED (golive and youtube both in;
+  shared `pings.py`/`personas.py` are quiet); voice last. Events I2 DECIDED 12:40 (`/timezone` retired).
   **Wave-1 builds all landed 13:40–13:50** (birthdays merged `58974e1`; events on
   `worktree-agent-a448c7ab780ed3c2b`, polls on `worktree-agent-aa735ab092d13477d`, both under Fable
   review); the applications build follows once I-A3 is answered. Merge in wave order, re-key

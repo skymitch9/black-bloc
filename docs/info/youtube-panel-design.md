@@ -1,9 +1,12 @@
 # YouTube — `/youtube` is ONE command that opens a panel (wave 2)
 
 > **Audience:** the build agent and the reviewer, and the owner for §I. **Status:** TRACKED ·
-> ✅ **BUILT** — 2026-09-03, branch `worktree-agent-a74823f4d9293d080` off `main` `ea252bd`
+> ✅ **SHIPPED v71 `b764757` 2026-09-03 17:37** (merged after Fable review; boot measured `commands
+> synced` **40**; 3872 tests; **F-Y2 done 17:42 — `youtube_mode` is shadow**; nothing run against
+> Discord or YouTube by eye — sweeps 118–125 are the owner's). Written as BUILT 2026-09-03 on branch
+> `worktree-agent-a74823f4d9293d080` off `main` `ea252bd`
 > (v68 live), commits `7809b57` (code), `7f800cb` (tests) and the docs commit that follows
-> them. **Not merged, not deployed.** Gates: **3820 tests pass** (3744 on the base commit —
+> them. Gates at the time: **3820 tests pass** (3744 on the base commit —
 > +76, none lost), ruff clean over the whole tree, `node site/mock/check.mjs` ok (17 pages,
 > 142 routes), `labels.js` and `page-golive.js` both parse, and
 > `import black_bloc.youtube, black_bloc.cogs.content.youtube, black_bloc.api.tools.youtube,
@@ -515,4 +518,5 @@ the channel are counted as seen".
 modal submitted, no channel resolved, no feed fetched, no DM delivered. Whether a Discord
 client will submit an EMPTY `ChannelSelect`/`RoleSelect` at `min_values=0` is still unproven
 here as it was for events and applications — `Forget…` is the fallback and is built either
-way. The `youtube_mode` flip (F-Y2) has NOT been made; the mode is still `off`.
+way. The `youtube_mode` flip (F-Y2) was made by the conductor on the Go-live page at 17:42 after
+v71 deployed; the mode is `shadow`.

@@ -9,6 +9,51 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-03 — YouTube panel: `/youtube` is one window (wave 2, v71, `b764757`)
+
+Release **v71** (`b764757`, 17:37; `deploys.log` line 70). Merge `--no-ff` of
+`worktree-agent-a74823f4d9293d080` (Opus build, **371k** against a 180–250k estimate — the third wave-2
+build to run ~2× its estimate; three commits off `ea252bd`: code `7809b57`, tests `7f800cb`, docs) after
+Fable review — approve, no blocking defect (one path per move with `via`; `LinkRefused` keeps the site's
+400/409; `still_staff` gates every non-mine path; the DM'd reason is a key; both keys registered). Six
+merge conflicts, every one an append-only collision with the golive merge (`personas.py` both panel
+lines; `settings_store.py` both key blocks; `phase16-design.md` both SUPERSEDED banners; `sweeps.md` —
+the branch wrote its rows as 130–137 because golive had reserved 109–129, so they were **renumbered to
+118–125 at the merge** and row 47's cross-reference with them; `OWNER_GUIDE.md` 125 rows; `code-notes.md`
+header). Both branches had pinned `tests/test_bot.py` at 41 for their own drop; together it is **40**, so
+the test now says 40. Verified: boot clean (00:37:42Z database ready / **synced 40** / 00:37:45Z logged
+in), ruff clean, **3872 tests** (3796 + 76, none lost). **F-Y2 done 17:42**: `youtube_mode` flipped
+off → shadow from the Go-live page's "Whether the bot posts new YouTube uploads" switch — `PUT
+/api/settings/youtube_mode 200` on Fly at 00:42:53Z, `/api/settings` reads `shadow`. (The first two
+attempts, clicked by accessibility ref, never reached the switch's handler and the tree then misreported
+"on" as pressed — the value was checked at the API before and after, and a real DOM click did it.) NOT
+verified: `/youtube` has not been opened in Discord, no button pressed, no modal submitted, nothing
+fetched from YouTube — sweeps 118–125 (`access/sweeps.md`) are the owner's.
+
+What shipped. `/youtube` is a single member-visible command opening an ephemeral panel; the `youtube`
+and `uploads` groups and their nine subcommands are retired — both decided forks built as decided
+(**F-Y1 = `/youtube` and `/golive` stay separate**, **F-Y2 = shadow at landing, by the conductor on the
+site**, owner 16:15). Members: **Link my channel** (one-line modal; **Relink** afterwards, prefilled) and
+**Unlink** behind a **Keep it / Yes, forget it** confirm, from a `card_buttons(linked, mine, staff)`
+table keyed `(mine, linked)`. Staff: the health block inline (`health_lines` — sweep running, last good
+sweep, last error, counts, API key set or not), the linked list as lines beside a linked-member picker
+(deviation 3), **Link for somebody**, **Relink for / Unlink for** on their card (the unlink DMs the
+member the reason via `tell_unlinked` when `youtube_unlink_dms_them` is true — a member unlinking their
+own is never DMed), **Setup** (upload channel, ping role, off/shadow/on select, words, numbers, and a
+**Forget…** view with Back — deviation 4) and **Logs**. One function per move with `via`
+(`link_channel/unlink_channel/set_mode/save_setup`) serves BOTH doors: `api/tools/youtube.py` now calls
+them with `via=VIA_WEBSITE`; `link_channel` raises `LinkRefused(status=, code=)` and returns
+`(said, row, counted)` so the site keeps its exact 400/409 bodies without a second YouTube resolve
+(deviation 1); `save_setup` validates every value with `coerce_value` before writing any (deviation 9);
+`YouTubeError` carries a `network` flag decided at the raise site (deviation 7). Keys
+`youtube_panel_minutes` (10) and `youtube_unlink_dms_them` (true), checklist 33. §K finding 1 fixed
+because checklist 10 forced it (a link whose feed did not answer no longer claims "0 counted as seen");
+findings 2, 3, 4, 6 reported and left, 5 moot. Design
+[`info/youtube-panel-design.md`](info/youtube-panel-design.md) (eleven deviations at its foot);
+`OWNER_GUIDE.md` and `code-notes.md` youtube keys point by anchor on the branch (NOT re-keyed against
+`b764757` — anchor text is authoritative). Review link: `/youtube` in `#mute-me-bot-test-spam`; the
+YouTube uploads section of https://blackbloc.heygabi.ai/golive.html shows the switch on shadow.
+
 ## 2026-09-03 — Go-live panel: `/golive` is one window (wave 2, v70, `0aeed72`)
 
 Release **v70** (`0aeed72`, 17:25; `deploys.log` line 69). Merge `--no-ff` of
