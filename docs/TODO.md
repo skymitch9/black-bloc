@@ -12,16 +12,16 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 18:35, v72 live, pings shipped, voice next)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 22:08, v73 live, WAVE 2 COMPLETE, wave 3 next)
 
-**`main` = `a5ad521`** (pings panel merge; v72 live 18:30, 4050 tests, **39 commands**; `youtube_mode` is
-**shadow** since 17:42). Panels wave 1 is COMPLETE, wave 2 has FOUR of five shipped (memory v68, golive v70,
-youtube v71, pings v72) with every fork decided (🔧 panels item below); all four landing entries are in
-`DONE.md` 2026-09-03. The operator read token is LIVE (v72 applied the staged secret; bearer read verified
-18:31; moved whole to `DONE.md`). **Voice is last** (Fable-review `info/voice-panel-design.md` against §2
-first, then Opus build in its own worktree off `main`, sweeps 135+, fork F1 = leave the in-channel control
-post; usage read before dispatch; weekly cut-off 90%). **Next:** (1) voice; (2) wave-2 builds in cost order, memory first (Opus, own worktree, brief carries the
-decided forks + `info/review-checklist.md` + the design doc), merge/deploy each as it lands; (3) the
+**`main` = `4d64b36`** (voice panel merge; v73 live 22:08, 4265 tests, **38 commands**; `youtube_mode` is
+**shadow** since 17:42). Panels wave 1 AND wave 2 are COMPLETE (memory v68, golive v70, youtube v71,
+pings v72, voice v73); all five landing entries are in `DONE.md` 2026-09-03. The operator read token is
+LIVE (v72; moved whole to `DONE.md`). **Wave 3 is next** (`info/panels-program.md` §5: raidtrain · role
+menus · chat · automod) and follows the program ritual — Opus design doc per feature (~200k each), Fable
+review against §2, owner forks ONE AT A TIME, then Opus builds in their own worktrees off `main`, sweeps
+144+; usage read before every dispatch; weekly cut-off 90%. **Next:** (1) wave-3 design docs; (2) their
+forks to the owner one at a time, builds in cost order, merge/deploy each as it lands; (3) the
 small review findings (🔧 below) folded into whatever touches those files; (4) owner by-eye sweeps
 14–15, 58–103; (5) Pawpette's Twitch Team form still needs the owner's walk-through
 (`access/sweeps.md` → "The owner's Twitch Team form") — no form exists on the live site as of 15:54. Merged
@@ -279,8 +279,11 @@ docs bookkeeping lands with the work, not after.
   P1–P17; drift since it was measured, carried in the brief: 39 → 38 commands not 42 → 41, sweeps start
   at **135** not 104, `panels.site_page_url(origin, "tempvoice")` now exists so no copy, `panel_minutes`
   takes a key, `voice_panel_minutes` also gets its `labels.js` + `server.mjs` label like golive/pings).
-  **Voice build DISPATCHED 21:30** (Opus, own worktree off `f09825e`, est. 420–480k — expect the ~2×
-  pattern to hold or not; the pings build was the first to land near estimate). Events I2 DECIDED 12:40 (`/timezone` retired).
+  **Voice LANDED 21:55 (385k against a 420–480k estimate — the first to land UNDER; five commits off
+  `2854d74`), Fable-reviewed approve with one merge-time fold (`clamped` into `panels.py`), merged
+  `4d64b36` (clean, no conflicts), live in v73 22:08** (4050 → 4265 tests, `commands synced` **39 → 38
+  measured at boot**) — landing entry in `DONE.md` 2026-09-03; sweeps 135–143 are the owner's to run.
+  **WAVE 2 COMPLETE.** Events I2 DECIDED 12:40 (`/timezone` retired).
   **Wave-1 builds all landed 13:40–13:50** (birthdays merged `58974e1`; events on
   `worktree-agent-a448c7ab780ed3c2b`, polls on `worktree-agent-aa735ab092d13477d`, both under Fable
   review); the applications build follows once I-A3 is answered. Merge in wave order, re-key

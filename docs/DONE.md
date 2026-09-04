@@ -9,6 +9,30 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-03 — Voice panel: `/voice` is one window (wave 2 COMPLETE, v73, `4d64b36`)
+
+Release **v73** (`4d64b36`, 22:08; `deploys.log` line 72). Merge `--no-ff` of
+`worktree-agent-a386d425f5527fe95` (Opus build, **385k** against a 420–480k estimate — the first wave-2
+build to land UNDER its estimate; five commits off `2854d74`: `128c716`, `492fe16`, `1f7fedd`, `c35fac6`,
+`377dbcb`) after Fable review — approve, no defect; one merge-time fold per the build's own deviation 8:
+`clamped()` and `DESCRIPTION_LIMIT` now live once in `black_bloc/panels.py` and the copies in the pings
+and tempvoice cogs are gone. **Clean merge, no conflicts.** The 22 `/voice` + `/tempvoice` subcommands
+became one ephemeral panel: the pure `black_bloc/tempvoice.py` holds the state table
+(`panel_state` → blocked/none/owner/orphan/guest, `card_buttons`, `people_controls`, `undo_options`,
+`named_regions` = 25 so no select is capped) and the cog's `VoicePanel` routes every press to the
+existing `do_*` helpers (`act_on_own` re-reads ownership on every press, `ready_to_move` defers +
+`db_ready`); staff moves (Setup, Forget a lobby…, join-to-create on/off, Logs, the staff card's
+Hand it over… with a DM to the new owner) re-ask `still_staff` on every press; the in-channel control
+post is untouched (owner fork F1 = "Leave it as is"). 13 deviations at the design doc's foot, all
+P-consistent (Forget a lobby lists stored ids only — a stray cannot be forgotten, so it is not offered).
+Key `voice_panel_minutes` (10) with its `labels.js` + `server.mjs` rows. Verified: boot clean
+(05:08:39Z database ready / **synced 38** (39 → 38 as measured) / 05:08:43Z logged in, no
+Traceback), ruff clean, **4265 tests** (4050 + 215, none lost). NOT verified: `/voice` has not been
+opened in Discord, no button pressed, no channel renamed/locked/moved, no DM sent — sweeps 135–143
+(`access/sweeps.md`) are the owner's. Review link: `/voice` in `#mute-me-bot-test-spam`. Cost note for
+the calibration table: memory 329k, golive 464k, youtube 371k, pings 379k, voice 385k — the ~2× pattern
+held for the first two and not the last three.
+
 ## 2026-09-03 — Decision: YouTube lives stay with `/golive`; uploads stay on shadow (no build)
 
 Owner asked at 17:59 to announce a linked channel *going live* on YouTube by default and make

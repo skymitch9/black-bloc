@@ -1,7 +1,8 @@
 # Temp voice — `/voice` is ONE command that opens a panel (wave 2)
 
 > **Audience:** the build agent and the reviewer, and the owner for §I. **Status:** TRACKED ·
-> **BUILT 2026-09-03 on `worktree-agent-a386d425f5527fe95`** — see the `## Deviations` foot for
+> ✅ **SHIPPED v73 `4d64b36` 2026-09-03 22:08** (built on `worktree-agent-a386d425f5527fe95`;
+> `clamped` folded into `panels.py` at the merge) — see the `## Deviations` foot for
 > what differs and what was measured. ⚠️ Several numbers in the body below were measured against
 > `main` at `1735ff8` and were already stale at build time; the Deviations foot carries the
 > re-measured ones.
