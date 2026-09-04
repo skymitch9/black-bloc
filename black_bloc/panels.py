@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
 from typing import Any
 
 import discord
@@ -15,6 +16,21 @@ log = logging.getLogger(__name__)
 CAPPED_PLACEHOLDER = "{shown} of {total} — the rest are on the site"
 SELECT_OPTION_LIMIT = 100
 DESCRIPTION_LIMIT = 4000
+
+
+@dataclass(frozen=True)
+class Outcome:
+    """One answer both doors read: words for Discord, a status and a code for the website."""
+
+    ok: bool
+    message: str
+    code: str = ""
+    status: int = 0
+    value: Any = field(default=None)
+
+
+def refusal(message: str, code: str, status: int) -> Outcome:
+    return Outcome(False, message, code, status)
 
 
 async def answer(interaction: discord.Interaction, text: str) -> None:
@@ -186,6 +202,7 @@ __all__ = [
     "DESCRIPTION_LIMIT",
     "SELECT_OPTION_LIMIT",
     "NoteModal",
+    "Outcome",
     "Panel",
     "answer",
     "capped_placeholder",
@@ -194,6 +211,7 @@ __all__ = [
     "db_up",
     "option_label",
     "panel_minutes",
+    "refusal",
     "retire",
     "site_page_url",
     "still_allowed",

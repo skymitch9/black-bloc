@@ -1135,6 +1135,25 @@ async def test_the_chat_panel_key_is_picked_up_by_the_prefix_scan_with_no_second
     assert parse_value("chat_panel_minutes", "45") == 45
 
 
+async def test_the_raid_train_panel_stays_up_ten_minutes_by_default(store):
+    """Same reason as every other panel: 15 loses Discord's window and the gone-quiet footer."""
+    from black_bloc.cogs.core import VALUE_KEYS
+    from black_bloc.raidtrain import PANEL_MINUTES_KEY
+
+    assert store.get(7, PANEL_MINUTES_KEY) == 10
+    assert "15" in KEY_HELP[PANEL_MINUTES_KEY]
+    assert "/raidtrain panel" in KEY_HELP[PANEL_MINUTES_KEY]
+    assert KEY_TYPES[PANEL_MINUTES_KEY] == "int"
+    assert PANEL_MINUTES_KEY in VALUE_KEYS
+    await store.set(7, PANEL_MINUTES_KEY, 25)
+    assert store.get(7, PANEL_MINUTES_KEY) == 25
+    with pytest.raises(SettingError):
+        coerce_value(PANEL_MINUTES_KEY, -1)
+    with pytest.raises(SettingError):
+        coerce_value(PANEL_MINUTES_KEY, "15")
+    assert parse_value(PANEL_MINUTES_KEY, "45") == 45
+
+
 async def test_whether_staff_unlinking_somebody_dms_them_is_a_setting_not_a_constant(store):
     """Staff-final-say says the person is told; checklist 33 says the server may decide."""
     from black_bloc.cogs.core import VALUE_KEYS

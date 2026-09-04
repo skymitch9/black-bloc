@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
 from typing import Any, NamedTuple
 
 from .actionlog import log_action
@@ -20,6 +19,7 @@ from .knowledge import (
     update_section,
 )
 from .logkinds import VIA_DISCORD, kind_via
+from .panels import Outcome, refusal
 from .panels import panel_minutes as library_panel_minutes
 from .panels import site_page_url as library_site_page_url
 from .personas import COOKOUT, PERSONALITY_KEY, POOL, forget_tropes, get_trope, list_tropes
@@ -184,21 +184,6 @@ PANEL_MOVES: tuple[PanelMove, ...] = (
     EDIT_MOVE,
     LIMITS_MOVE,
 )
-
-
-@dataclass(frozen=True)
-class Outcome:
-    """One answer both doors read: words for Discord, a status and a code for the website."""
-
-    ok: bool
-    message: str
-    code: str = ""
-    status: int = 0
-    value: Any = field(default=None)
-
-
-def refusal(message: str, code: str, status: int) -> Outcome:
-    return Outcome(False, message, code, status)
 
 
 def toggle_move(state: PanelState, key: str) -> PanelMove:

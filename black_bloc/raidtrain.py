@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, NamedTuple
 
 from .events import clamp
 from .golive import parse_ts, ping_prefix
+from .panels import SELECT_OPTION_LIMIT, option_label
+from .panels import panel_minutes as library_panel_minutes
 from .timezones import unix
 
 log = logging.getLogger(__name__)
@@ -57,26 +59,101 @@ NEEDS_LINK = (
     "channel**, and claim the slot again — nothing was taken in the meantime."
 )
 SLOT_TAKEN = (
-    "Slot **#{position}** already belongs to someone else, so nothing was changed. "
-    "`/raidtrain status` shows which slots are still open."
+    "Slot **#{position}** already belongs to someone else, so nothing was changed. The lineup "
+    "above says which slots are still open — press **Refresh** to see it as it is now."
 )
 SLOT_UNKNOWN = (
     "This train has no slot **#{position}**, so nothing was changed. It runs from #1 to "
-    "#{last} — `/raidtrain status` lists them."
+    "#{last}, and the lineup lists every one of them."
 )
 TRAIN_FULL = "Every slot on **{title}** is taken, so there was nothing to claim."
 CAP_REACHED = (
     "You already hold {held} slot(s) on **{title}**, which is as many as this server allows one "
-    "person. Release one with `/raidtrain release` if you would rather take a different hour, or "
+    "person. Give one back on the train's card if you would rather take a different hour, or "
     "ask an organizer to assign you another."
 )
 TRAIN_LOCKED = (
-    "**{title}** is locked, so its lineup cannot be changed. An organizer unlocks it with "
-    "`/raidtrain unlock`, and a train locks itself when it starts."
+    "**{title}** is locked, so its lineup cannot be changed. An organizer opens it again with "
+    "**Open it for sign-ups**, and a train locks itself when it starts."
 )
 NOT_YOURS = (
-    "Slot **#{position}** is not yours, so nothing was released. `/raidtrain mine` lists the "
-    "slots you hold."
+    "Slot **#{position}** is not yours, so nothing was released. **My slots…** on `/raidtrain` "
+    "lists the slots you hold."
+)
+CLAIM_HERE = (
+    "Take an hour with `/raidtrain` — pick this train, then **Take an hour…**. Link your Twitch "
+    "channel on `/golive` first."
+)
+
+PANEL_MINUTES_KEY = "raidtrain_panel_minutes"
+PANEL_TITLE = "Raid trains"
+PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run /raidtrain again"
+
+MODE_OFF = "off"
+
+TRAIN_SELECT = "train"
+MODE_SELECT = "mode"
+CLAIM_SELECT = "claim"
+TAKE_OFF_SELECT = "take_off"
+
+OPEN_SLOTS = "open"
+TAKEN_SLOTS = "taken"
+ALL_SLOTS = "all"
+
+START_TRAIN = "start_train"
+MINE = "mine"
+SETUP = "setup"
+LOGS = "logs"
+REFRESH = "refresh"
+BACK = "back"
+GIVE_BACK = "give_back"
+GIVE_BACK_MANY = "give_back_many"
+PUT_IN = "put_in"
+SWAP = "swap"
+MOVE_TRAIN = "move_train"
+CALL_OFF = "call_off"
+PUT_THEM_IN = "put_them_in"
+SWAP_THEM = "swap_them"
+SAVE = "save"
+
+GIVE_BACK_LABEL = "Give back slot #{position}"
+
+
+class RaidMove(NamedTuple):
+    action: str
+    label: str
+    style: str = "secondary"
+    row: int = 2
+
+
+START_MOVE = RaidMove(START_TRAIN, "Start a raid train", "primary", 2)
+MINE_MOVE = RaidMove(MINE, "My slots…", row=2)
+SETUP_MOVE = RaidMove(SETUP, "Setup…", row=2)
+LOGS_MOVE = RaidMove(LOGS, "Logs", row=2)
+REFRESH_MOVE = RaidMove(REFRESH, "Refresh", row=2)
+BACK_MOVE = RaidMove(BACK, "Back", row=3)
+CARD_REFRESH_MOVE = RaidMove(REFRESH, "Refresh", row=3)
+GIVE_BACK_MOVE = RaidMove(GIVE_BACK, GIVE_BACK_LABEL, row=2)
+GIVE_BACK_MANY_MOVE = RaidMove(GIVE_BACK_MANY, "Give an hour back…", row=2)
+PUT_IN_MOVE = RaidMove(PUT_IN, "Put somebody in…", row=2)
+SWAP_MOVE = RaidMove(SWAP, "Change two slots round…", row=2)
+LOCK_MOVE = RaidMove(MOVE_TRAIN, "Lock the lineup", row=2)
+UNLOCK_MOVE = RaidMove(MOVE_TRAIN, "Open it for sign-ups", row=2)
+CALL_OFF_MOVE = RaidMove(CALL_OFF, "Call it off…", "danger", 3)
+PUT_THEM_IN_MOVE = RaidMove(PUT_THEM_IN, "Put them in", "primary", 2)
+SWAP_THEM_MOVE = RaidMove(SWAP_THEM, "Swap them", "primary", 2)
+SAVE_MOVE = RaidMove(SAVE, "Save", "primary", 4)
+
+CARD_MOVES: tuple[RaidMove, ...] = (
+    GIVE_BACK_MOVE,
+    GIVE_BACK_MANY_MOVE,
+    PUT_IN_MOVE,
+    SWAP_MOVE,
+    LOCK_MOVE,
+    UNLOCK_MOVE,
+    CALL_OFF_MOVE,
+    BACK_MOVE,
+    CARD_REFRESH_MOVE,
 )
 
 
@@ -231,7 +308,7 @@ def render_lineup(train: Any, slots: Any, *, ping_role_id: Any = None) -> str:
     lines.extend(_slot_line(slot) for slot in rows)
     if status == OPEN:
         lines.append("")
-        lines.append("Take an hour with `/raidtrain claim`; link Twitch on `/golive` first.")
+        lines.append(CLAIM_HERE)
     return "\n".join(lines)
 
 
@@ -356,18 +433,196 @@ def positions_word(slots: Any) -> str:
     return ", ".join(f"#{one}" for one in sorted(found))
 
 
+def taken_positions(slots: Any) -> list[int]:
+    return [
+        int(_value(slot, "position"))
+        for slot in slots or ()
+        if _value(slot, "user_id") is not None
+    ]
+
+
+def may_claim(
+    train: Any,
+    slots: Any,
+    user_id: Any,
+    *,
+    ceiling: Any = 0,
+    linked: bool = True,
+    require_link: bool = True,
+) -> bool:
+    """The four conditions the claim select renders on, so button and refusal read one source."""
+    if str(_value(train, "status") or OPEN) != OPEN:
+        return False
+    if not open_positions(slots):
+        return False
+    if not caps_ok(slots, user_id, ceiling):
+        return False
+    return bool(linked) or not require_link
+
+
+def root_selects(*, staff: bool, has_trains: bool) -> tuple[str, ...]:
+    found = []
+    if has_trains:
+        found.append(TRAIN_SELECT)
+    if staff:
+        found.append(MODE_SELECT)
+    return tuple(found)
+
+
+def root_buttons(
+    *, organizer: bool, staff: bool, holds_any: bool, mode: Any
+) -> tuple[RaidMove, ...]:
+    """§B's root table as data; the mode gate stops a Start button the cog would refuse."""
+    found = []
+    if organizer and str(mode) != MODE_OFF:
+        found.append(START_MOVE)
+    if holds_any:
+        found.append(MINE_MOVE)
+    if staff:
+        found.append(SETUP_MOVE)
+        found.append(LOGS_MOVE)
+    found.append(REFRESH_MOVE)
+    return tuple(found)
+
+
+def card_selects(
+    status: Any, *, organizer: bool, claimable: bool, has_taken: bool
+) -> tuple[str, ...]:
+    found = []
+    if str(status) == OPEN and claimable:
+        found.append(CLAIM_SELECT)
+    if organizer and has_taken and str(status) in (OPEN, LOCKED):
+        found.append(TAKE_OFF_SELECT)
+    return tuple(found)
+
+
+def card_buttons(
+    status: Any, *, organizer: bool, held: Any = (), slot_count: int = 0
+) -> tuple[RaidMove, ...]:
+    """§C's card table as data — one spelling of each move, and never two doors onto one."""
+    mine = sorted(int(one) for one in held or ())
+    said = str(status)
+    found: list[RaidMove] = []
+    if said == OPEN and len(mine) == 1:
+        found.append(GIVE_BACK_MOVE._replace(label=GIVE_BACK_LABEL.format(position=mine[0])))
+    elif said == OPEN and len(mine) > 1:
+        found.append(GIVE_BACK_MANY_MOVE)
+    if organizer and said in (OPEN, LOCKED):
+        found.append(PUT_IN_MOVE)
+        if int(slot_count) >= 2:
+            found.append(SWAP_MOVE)
+        if may_move(said, LOCKED):
+            found.append(LOCK_MOVE)
+        elif may_move(said, OPEN):
+            found.append(UNLOCK_MOVE)
+    if organizer and may_move(said, CANCELLED):
+        found.append(CALL_OFF_MOVE)
+    return (*found, BACK_MOVE, CARD_REFRESH_MOVE)
+
+
+def train_options(rows: Any) -> tuple[tuple[str, str], ...]:
+    return tuple(
+        (
+            str(_value(row, "id")),
+            option_label(
+                _value(row, "id"),
+                STATUS_WORDS.get(str(_value(row, "status")), _value(row, "status")),
+                _value(row, "title"),
+            ),
+        )
+        for row in rows or ()
+    )
+
+
+def mine_options(rows: Any) -> tuple[tuple[str, str], ...]:
+    """One option per TRAIN a member holds an hour on, however many hours that is."""
+    seen: dict[str, str] = {}
+    for row in rows or ():
+        train_id = str(_value(row, "train_id"))
+        if train_id in seen:
+            continue
+        seen[train_id] = option_label(
+            train_id,
+            STATUS_WORDS.get(str(_value(row, "train_status")), _value(row, "train_status")),
+            _value(row, "train_title"),
+        )
+    return tuple(seen.items())
+
+
+def slot_label(slot: Any, names: Any = None) -> str:
+    """Discord renders no markdown inside an option, so the window is plain UTC, not `<t:…>`."""
+    position = int(_value(slot, "position") or 0)
+    start = parse_ts(_value(slot, "starts_at"))
+    when = start.strftime("%H:%M UTC") if start is not None else "time unreadable"
+    user_id = _value(slot, "user_id")
+    if user_id is None:
+        return f"#{position} · {when}"[:SELECT_OPTION_LIMIT]
+    named = (names or {}).get(int(user_id)) or str(_value(slot, "twitch_login") or "").strip()
+    who = named or f"member {int(user_id)}"
+    return f"#{position} · {when} · {who}"[:SELECT_OPTION_LIMIT]
+
+
+def slot_options(
+    slots: Any, kind: str = ALL_SLOTS, *, names: Any = None
+) -> tuple[tuple[str, str], ...]:
+    rows = sorted(slots or (), key=lambda one: int(_value(one, "position") or 0))
+    found = []
+    for slot in rows:
+        taken = _value(slot, "user_id") is not None
+        if kind == OPEN_SLOTS and taken:
+            continue
+        if kind == TAKEN_SLOTS and not taken:
+            continue
+        found.append((str(int(_value(slot, "position") or 0)), slot_label(slot, names)))
+    return tuple(found)
+
+
+def panel_minutes(store: Any, guild_id: int) -> int:
+    return library_panel_minutes(store, guild_id, PANEL_MINUTES_KEY)
+
+
 __all__ = [
+    "ALL_SLOTS",
+    "BACK",
+    "CALL_OFF",
     "CANCELLED",
     "CAP_REACHED",
+    "CARD_MOVES",
+    "CLAIM_HERE",
+    "CLAIM_SELECT",
     "DESCRIPTION_LIMIT",
     "DONE",
+    "GIVE_BACK",
+    "GIVE_BACK_LABEL",
+    "GIVE_BACK_MANY",
     "LIVE",
     "LOCKED",
+    "LOGS",
+    "MINE",
+    "MODE_OFF",
+    "MODE_SELECT",
+    "MOVE_TRAIN",
     "NEEDS_LINK",
     "NOT_YOURS",
     "OPEN",
+    "OPEN_SLOTS",
     "OPEN_STATUSES",
+    "PANEL_MINUTES_KEY",
+    "PANEL_TIMEOUT_FOOTER",
+    "PANEL_TITLE",
+    "PUT_IN",
+    "PUT_THEM_IN",
+    "REFRESH",
+    "SAVE",
+    "SETUP",
     "SLOT_COUNT_MAX",
+    "START_TRAIN",
+    "SWAP",
+    "SWAP_THEM",
+    "TAKEN_SLOTS",
+    "TAKE_OFF_SELECT",
+    "TRAIN_SELECT",
+    "RaidMove",
     "SLOT_COUNT_MIN",
     "SLOT_MINUTES_MAX",
     "SLOT_MINUTES_MIN",
@@ -383,22 +638,33 @@ __all__ = [
     "allowed_moves",
     "caps_ok",
     "cancelled_text",
+    "card_buttons",
+    "card_selects",
     "due_checkins",
     "due_reminders",
     "ends_at",
     "filled",
     "live_post_text",
+    "may_claim",
     "may_move",
+    "mine_options",
     "missed_reminders",
     "move_refusal",
     "neighbours",
     "next_open_position",
     "open_positions",
+    "panel_minutes",
     "positions_word",
     "reminder_text",
     "render_lineup",
+    "root_buttons",
+    "root_selects",
     "slot_at",
+    "slot_label",
+    "slot_options",
     "slot_times",
     "slots_held",
+    "taken_positions",
+    "train_options",
     "twitch_url",
 ]
