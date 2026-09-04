@@ -187,7 +187,7 @@ black_bloc/
 │   │   ├── automod.py     ← F7: the message listener, the Apply-now button, /automod
 │   │   └── modcmds.py     ← F7: /warn /timeout /untimeout /kick /ban /unban /purge /case /cases
 │   └── content/      ← one cog per content feature
-│       ├── golive.py ← F1/F2: presence listener, Twitch poller, /golive + /twitch
+│       ├── golive.py ← F1/F2: presence listener, Twitch poller, the /golive panel
 │       ├── chat.py   ← F10: the @-mention listener, cooldown, modmail routing, /chat
 │       ├── pings.py  ← F14: /pingroles (staff) and /pings (everybody) — opt-in go-live and event
 │       │                pings, and a role per streamer their followers wear

@@ -1360,6 +1360,47 @@ async def test_the_event_panel_stays_up_ten_minutes_by_default(store):
     assert parse_value("event_panel_minutes", "45") == 45
 
 
+async def test_the_golive_panel_stays_up_ten_minutes_by_default(store):
+    """Ten, not fifteen: the footer needs Discord's 15-minute interaction window still open."""
+    from black_bloc.cogs.core import VALUE_KEYS
+
+    assert store.get(7, "golive_panel_minutes") == 10
+    assert "15" in KEY_HELP["golive_panel_minutes"]
+    assert "/golive panel" in KEY_HELP["golive_panel_minutes"]
+    assert KEY_TYPES["golive_panel_minutes"] == "int"
+    assert "golive_panel_minutes" in VALUE_KEYS
+    await store.set(7, "golive_panel_minutes", 30)
+    assert store.get(7, "golive_panel_minutes") == 30
+    with pytest.raises(SettingError):
+        coerce_value("golive_panel_minutes", -1)
+    with pytest.raises(SettingError):
+        coerce_value("golive_panel_minutes", "15")
+    assert parse_value("golive_panel_minutes", "45") == 45
+
+
+async def test_the_twelve_golive_keys_the_site_owns_are_untouched(store):
+    """The panel WRITES only golive_mode; the rest stay the Go-live page's to edit."""
+    wanted = {
+        "golive_mode": "shadow",
+        "golive_channel_id": None,
+        "golive_template": None,
+        "golive_end_mode": "off",
+        "golive_end_suffix": None,
+        "golive_live_role_id": None,
+        "golive_require_role_id": None,
+        "golive_ignore_role_id": None,
+        "golive_cooldown_minutes": 60,
+        "golive_ping_role_id": None,
+        "golive_max_session_hours": 12,
+        "golive_embed": True,
+    }
+    for key, value in wanted.items():
+        assert key in KEY_TYPES, key
+        assert KEY_HELP[key], key
+        if value is not None:
+            assert store.get(7, key) == value, key
+
+
 async def test_the_event_panel_keeps_a_members_own_events_to_themselves_until_a_lead_says_so(
     store,
 ):

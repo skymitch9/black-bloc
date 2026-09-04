@@ -120,7 +120,7 @@ UNLOCKED_NOW = "**{title}** is open for sign-ups again."
 CANCELLED_NOW = "**{title}** is cancelled, and the {count} person/people who held a slot were told."
 MEMBER_NOT_LINKED = (
     "**{who}** has no Twitch channel linked, so the lineup cannot say who to raid. They run "
-    "`/twitch link`, or a Lead turns `raidtrain_require_link` off."
+    "`/golive` → **Link my Twitch channel**, or a Lead turns `raidtrain_require_link` off."
 )
 MODE_SET = "Raid trains are now **{mode}**.{extra}"
 NO_CHANNEL_YET = (

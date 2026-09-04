@@ -288,6 +288,7 @@ const SETTING_SPECS = [
   ['golive_cooldown_minutes', 'int', 60, 60, 'minutes before the same person is announced again'],
   ['golive_ping_role_id', 'role', null, null, 'role mentioned in front of every go-live announcement'],
   ['golive_max_session_hours', 'int', 12, 12, 'hours before a stream still marked live is closed anyway'],
+  ['golive_panel_minutes', 'int', 10, 10, "minutes the /golive panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
   ['youtube_mode', 'enum', 'off', 'off', 'off, shadow (log only) or on (post an announcement for a new upload)', ['off', 'shadow', 'on']],
   ['youtube_channel_id', 'channel', null, null, 'where a new-upload announcement is posted; leave it unset and the go-live channel is used instead'],
   ['youtube_ping_role_id', 'role', null, null, 'role mentioned in front of every upload announcement'],
@@ -400,7 +401,7 @@ const SETTING_SPECS = [
   ['raidtrain_slot_minutes', 'int', 60, 60, 'how long one slot is by default, 15-720 minutes; each train may be created with its own length', null, 720, 15],
   ['raidtrain_reminder_minutes', 'int', 30, 30, 'how long before their slot a holder is DMed, with who raids into them and who they raid next; the DM is sent once', null, 1440, 5],
   ['raidtrain_poll_minutes', 'int', 5, 5, 'minutes between sweeps that send those reminders, start and finish a train, and notice who is live', null, 60, 1],
-  ['raidtrain_require_link', 'bool', true, true, 'on makes `/twitch link` a condition of claiming a slot, so the lineup carries the name the streamer before raids; off lets anybody claim and leaves the name off'],
+  ['raidtrain_require_link', 'bool', true, true, 'on makes a linked Twitch channel (`/golive` → Link my Twitch channel) a condition of claiming a slot, so the lineup carries the name the streamer before raids; off lets anybody claim and leaves the name off'],
   ['raidtrain_thread', 'bool', true, true, 'on opens a thread under the lineup post for the people on the train'],
   ['raidtrain_live_posts', 'bool', true, true, 'on says `X is live — next up Y` in that thread when a slot holder starts streaming inside their own hour, and marks the slot checked in'],
   ['raidtrain_max_slots_per_member', 'int', 1, 1, 'how many slots one member may claim on one train; 0 means as many as they like. An organizer assigning a slot is never held to it', null, 24],
@@ -2512,7 +2513,7 @@ route('POST', '/api/raidtrains/:train_id/slots/:position', async (context) => {
     const memberId = String(given);
     const link = state.golive.links.find((one) => String(one.user_id) === memberId);
     if (!link && state.settings.get('raidtrain_require_link')) {
-      throw new Refused(409, 'not_linked', '**' + (memberName(memberId) || memberId) + '** has no Twitch channel linked, so the lineup cannot say who to raid. They run `/twitch link`, or a Lead turns `raidtrain_require_link` off.');
+      throw new Refused(409, 'not_linked', '**' + (memberName(memberId) || memberId) + '** has no Twitch channel linked, so the lineup cannot say who to raid. They run `/golive` → **Link my Twitch channel**, or a Lead turns `raidtrain_require_link` off.');
     }
     Object.assign(slot, {
       user_id: memberId,

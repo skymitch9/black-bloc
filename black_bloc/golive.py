@@ -7,6 +7,8 @@ from typing import Any
 
 import discord
 
+from .logkinds import FEATURE_PAGES
+from .panels import panel_minutes as library_panel_minutes
 from .settings_store import GOLIVE_END_EDIT, GOLIVE_END_SUFFIX, GOLIVE_TEMPLATE
 
 log = logging.getLogger(__name__)
@@ -331,7 +333,7 @@ def end_details(end_mode: Any) -> dict[str, str]:
 
 
 def end_summary(end_mode: Any, suffix: str | None = GOLIVE_END_SUFFIX) -> str:
-    """One phrase for `/golive status`: what happens to an announcement once the stream ends."""
+    """One phrase for the staff panel: what happens to an announcement once the stream ends."""
     if edits_on_end(end_mode):
         return f'{GOLIVE_END_EDIT} ("{suffix or ""}")'
     return f"{end_mode} (left as posted)"
@@ -342,3 +344,105 @@ def ended_text(text: str, suffix: str | None = GOLIVE_END_SUFFIX) -> str:
     if not tail.strip() or text.endswith(tail):
         return text
     return text + tail
+
+
+PANEL_MINUTES_KEY = "golive_panel_minutes"
+PANEL_TITLE = "Go-live"
+PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run /golive again"
+SITE_BUTTON = "Open on the site"
+PANEL_INTRO = "Your Twitch channel, and whether your streams get announced."
+NO_LINK_LINE = (
+    "**Your Twitch channel** — none linked yet. Linking one lets Black Bloc fill in your game "
+    "and title, and spot streams Discord does not show."
+)
+LINK_LINE = "**Your Twitch channel** — twitch.tv/{login}"
+LINK_UNVERIFIED = (
+    " — not verified with Twitch, so the game and title may not fill in. **Change my channel** "
+    "re-checks it."
+)
+OPTED_OUT_LINE = (
+    "**Your streams** — not announced, because you opted out. **Announce my streams again** "
+    "undoes that."
+)
+ANNOUNCED_LINE = "**Your streams** — announced here whenever Black Bloc sees you go live."
+MODE_LINES = {
+    "off": (
+        "Go-live announcements are **off** right now, so nobody's streams are announced. "
+        "Linking still counts: raid trains and fan roles read it."
+    ),
+    "shadow": (
+        "Go-live announcements are in **shadow** right now — the log says what would have been "
+        "posted and nothing is."
+    ),
+}
+
+
+@dataclass(frozen=True)
+class PanelMove:
+    """One control on the go-live panel: what it says, where it sits, what it does."""
+
+    label: str
+    style: str
+    action: str
+    row: int = 0
+    needs_modal: bool = False
+
+
+LINK_CHANNEL = PanelMove("Link my Twitch channel", "primary", "link", needs_modal=True)
+CHANGE_CHANNEL = PanelMove("Change my channel", "secondary", "change", needs_modal=True)
+UNLINK_CHANNEL = PanelMove("Unlink", "danger", "unlink")
+STOP_ANNOUNCING = PanelMove("Stop announcing my streams", "danger", "optout", row=1)
+ANNOUNCE_AGAIN = PanelMove("Announce my streams again", "success", "optin", row=1)
+REFRESH = PanelMove("Refresh", "secondary", "refresh", row=2)
+LOGS = PanelMove("Logs", "secondary", "logs", row=2)
+STREAMERS = PanelMove("Streamers…", "secondary", "streamers", row=2)
+
+PANEL_BUTTONS: dict[tuple[bool, bool], tuple[PanelMove, ...]] = {
+    (False, False): (LINK_CHANNEL, STOP_ANNOUNCING, REFRESH),
+    (False, True): (LINK_CHANNEL, ANNOUNCE_AGAIN, REFRESH),
+    (True, False): (CHANGE_CHANNEL, UNLINK_CHANNEL, STOP_ANNOUNCING, REFRESH),
+    (True, True): (CHANGE_CHANNEL, UNLINK_CHANNEL, ANNOUNCE_AGAIN, REFRESH),
+}
+STAFF_BUTTONS: tuple[PanelMove, ...] = (LOGS, STREAMERS)
+
+
+def panel_buttons(
+    *, linked: bool, opted_out: bool, staff: bool = False
+) -> tuple[PanelMove, ...]:
+    """The controls this panel actually offers — never one the shared function would refuse."""
+    found = PANEL_BUTTONS[(bool(linked), bool(opted_out))]
+    return found + STAFF_BUTTONS if staff else found
+
+
+def card_lines(
+    login: Any,
+    verified: Any,
+    opted_out: Any,
+    *,
+    mode: Any = None,
+    channel_note: Any = None,
+) -> list[str]:
+    """The half of the embed that is about the person reading it."""
+    lines = [PANEL_INTRO]
+    if login:
+        lines.append(LINK_LINE.format(login=login) + ("" if verified else LINK_UNVERIFIED))
+    else:
+        lines.append(NO_LINK_LINE)
+    lines.append(OPTED_OUT_LINE if opted_out else ANNOUNCED_LINE)
+    said = MODE_LINES.get(str(mode or ""))
+    if said:
+        lines.append(said)
+    if channel_note:
+        lines.append(str(channel_note))
+    return lines
+
+
+def panel_minutes(store: Any, guild_id: int) -> int:
+    return library_panel_minutes(store, guild_id, PANEL_MINUTES_KEY)
+
+
+def site_page_url(origin: Any) -> str | None:
+    text = str(origin or "").strip()
+    if not text:
+        return None
+    return f"{text.rstrip('/')}/{FEATURE_PAGES['golive']}"

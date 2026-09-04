@@ -158,8 +158,8 @@ SELF_SERVICE = [
     ("how do i make an event", "host_an_event", "/event"),
     ("can i file a request", "file_a_request", "/request create"),
     ("i want to make a suggestion", "file_a_request", "/request create"),
-    ("how do i link my twitch", "link_twitch", "/twitch link"),
-    ("can you announce my streams", "link_twitch", "/twitch link"),
+    ("how do i link my twitch", "link_twitch", "/golive"),
+    ("can you announce my streams", "link_twitch", "/golive"),
     ("how do i set my birthday", "set_a_birthday", "/birthday set"),
     ("where do i add my birthday", "set_a_birthday", "/birthday set"),
 ]

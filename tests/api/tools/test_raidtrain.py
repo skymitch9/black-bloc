@@ -297,7 +297,7 @@ async def test_assigning_somebody_with_no_twitch_link_names_the_command(
     )
 
     assert response.status_code == 409
-    assert "`/twitch link`" in response.json()["message"]
+    assert "**Link my Twitch channel**" in response.json()["message"]
     assert (await slots_for(web.db, train_id))[0]["user_id"] is None
 
 

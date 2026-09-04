@@ -46,7 +46,8 @@ async def test_an_unlink_removes_the_row_and_leaves_a_web_line(client, sign_in, 
 
     assert response.json() == {"unlinked": True, "user_id": "21"}
     assert await get_link(web.db, 21) is None
-    assert "web.golive.unlink" in await wf.kinds_in(web.db)
+    assert await wf.one_web_row(web.db, "web.golive.unlink") == {"via": wf.VIA_WEBSITE}
+    assert await wf.kinds_in(web.db) == ["web.golive.unlink"]
 
 
 def test_unlinking_somebody_who_is_not_linked_says_so(client, sign_in):
@@ -127,7 +128,9 @@ async def test_linking_a_member_stores_the_login_and_says_it_was_not_checked(
     assert "did not check" in body["message"]
     row = await get_link(web.db, 21)
     assert row["twitch_login"] == "adastreams"
-    assert "web.golive.link" in await wf.kinds_in(web.db)
+    details = await wf.one_web_row(web.db, "web.golive.link")
+    assert details == {"via": wf.VIA_WEBSITE, "login": "adastreams", "checked": False}
+    assert await wf.kinds_in(web.db) == ["web.golive.link"]
 
 
 async def test_linking_refuses_a_channel_another_member_already_holds(
@@ -145,6 +148,7 @@ async def test_linking_refuses_a_channel_another_member_already_holds(
     assert response.status_code == 409
     assert "only belong to one member" in response.json()["message"]
     assert await get_link(web.db, 22) is None
+    assert await wf.kinds_in(web.db) == []
 
 
 def test_linking_refuses_something_that_is_not_a_channel_name_in_words(client, sign_in):
@@ -172,8 +176,10 @@ async def test_opting_a_member_out_and_back_in_again(client, sign_in, web, guild
     assert back.json()["opted_out"] is False
     assert await is_opted_out(web.db, 21) is False
 
-    kinds = await wf.kinds_in(web.db)
-    assert "web.golive.optout" in kinds and "web.golive.optin" in kinds
+    rows = await wf.web_rows_in(web.db)
+    assert [kind for kind, _ in rows] == ["web.golive.optout", "web.golive.optin"]
+    assert [found["via"] for _, found in rows] == [wf.VIA_WEBSITE, wf.VIA_WEBSITE]
+    assert await wf.kinds_in(web.db) == ["web.golive.optout", "web.golive.optin"]
 
 
 def test_taking_away_an_optout_nobody_has_says_so_in_words(client, sign_in):
@@ -183,3 +189,31 @@ def test_taking_away_an_optout_nobody_has_says_so_in_words(client, sign_in):
 
     assert response.status_code == 404
     assert "nothing to undo" in response.json()["message"]
+
+
+async def test_a_refused_link_leaves_no_row_at_all(client, sign_in, web, wf):
+    """Checklist 34 the other way: a write that did not happen leaves nothing behind."""
+    sign_in(client)
+
+    client.post("/api/golive/links", json={"user_id": "21", "twitch_login": "not a name!"})
+    client.delete("/api/golive/links/21")
+    client.delete("/api/golive/optouts/21")
+
+    assert await wf.kinds_in(web.db) == []
+
+
+async def test_the_website_never_says_a_link_it_did_not_check_was_checked(
+    client, sign_in, web, guild, wf
+):
+    """Checklist 10: the route passes helix=None, so `checked` is false and the row says so."""
+    wf.member(guild, 21, name="ada")
+    sign_in(client)
+
+    body = client.post(
+        "/api/golive/links", json={"user_id": "21", "twitch_login": "adastreams"}
+    ).json()
+
+    assert body["checked"] is False
+    assert "did not check" in body["message"]
+    assert (await get_link(web.db, 21))["twitch_user_id"] is None
+    assert (await wf.one_web_row(web.db, "web.golive.link"))["checked"] is False

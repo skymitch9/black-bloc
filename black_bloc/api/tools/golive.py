@@ -10,17 +10,23 @@ from ...cogs.content.golive import (
     all_links,
     all_optouts,
     clean_login,
-    clear_optout,
     get_link,
-    link_owner,
+    link_channel,
+    opt_in,
+    opt_out,
     recent_sessions,
-    remove_link,
-    set_link,
-    set_optout,
+    unlink_channel,
 )
+from ...logkinds import VIA_WEBSITE
 from ..auth import Refused, staff_dependency
 from ..names import resolve_one
-from ..writes import note, require_db, require_guild, wanted_id, writer_dependency
+from ..writes import (
+    actor_for,
+    require_db,
+    require_guild,
+    wanted_id,
+    writer_dependency,
+)
 
 log = logging.getLogger(__name__)
 
@@ -97,9 +103,11 @@ def build_router(bot: Any) -> APIRouter:
         guild = require_guild(bot)
         require_db(bot)
         wanted = wanted_id(user_id)
-        if not await remove_link(bot.db, wanted):
+        removed, _ = await unlink_channel(
+            bot, guild, actor_for(bot, who, guild), wanted, via=VIA_WEBSITE
+        )
+        if not removed:
             raise Refused(404, "not_linked", NOT_LINKED.format(user_id=wanted))
-        await note(bot, guild, "web.golive.unlink", who, target=wanted)
         return {"unlinked": True, "user_id": str(wanted)}
 
     @router.post("/links")
@@ -109,18 +117,25 @@ def build_router(bot: Any) -> APIRouter:
         require_db(bot)
         wanted = wanted_id(payload.get("user_id"))
         given = str(payload.get("twitch_login") or "")
-        cleaned = clean_login(given)
-        if cleaned is None:
+        outcome, _ = await link_channel(
+            bot,
+            guild,
+            actor_for(bot, who, guild),
+            wanted,
+            given,
+            helix=None,
+            via=VIA_WEBSITE,
+        )
+        if outcome == "bad_login":
             raise Refused(400, "bad_login", BAD_LOGIN.format(given=given[:40] or "nothing"))
-        owner = await link_owner(bot.db, cleaned)
-        if owner is not None and owner != wanted:
-            raise Refused(409, "link_taken", LINK_TAKEN.format(channel=cleaned))
-        await set_link(bot.db, wanted, cleaned)
-        await note(bot, guild, "web.golive.link", who, target=wanted, details={"login": cleaned})
+        if outcome == "taken":
+            raise Refused(409, "link_taken", LINK_TAKEN.format(channel=clean_login(given)))
         row = link_row(guild, await get_link(bot.db, wanted))
         return row | {
             "checked": False,
-            "message": LINKED.format(name=row["user_name"] or wanted, login=cleaned),
+            "message": LINKED.format(
+                name=row["user_name"] or wanted, login=row["twitch_login"]
+            ),
         }
 
     @router.get("/optouts")
@@ -138,8 +153,7 @@ def build_router(bot: Any) -> APIRouter:
         guild = require_guild(bot)
         require_db(bot)
         wanted = wanted_id(payload.get("user_id"))
-        await set_optout(bot.db, wanted)
-        await note(bot, guild, "web.golive.optout", who, target=wanted)
+        await opt_out(bot, guild, actor_for(bot, who, guild), wanted, via=VIA_WEBSITE)
         named = with_name(guild, wanted)
         return named | {
             "opted_out": True,
@@ -152,9 +166,8 @@ def build_router(bot: Any) -> APIRouter:
         guild = require_guild(bot)
         require_db(bot)
         wanted = wanted_id(user_id)
-        if not await clear_optout(bot.db, wanted):
+        if not await opt_in(bot, guild, actor_for(bot, who, guild), wanted, via=VIA_WEBSITE):
             raise Refused(404, "not_opted_out", NOT_OPTED_OUT.format(user_id=wanted))
-        await note(bot, guild, "web.golive.optin", who, target=wanted)
         named = with_name(guild, wanted)
         return named | {
             "opted_out": False,

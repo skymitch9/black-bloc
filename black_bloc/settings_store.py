@@ -755,8 +755,9 @@ KEY_HELP: dict[str, str] = {
         "who is live"
     ),
     "raidtrain_require_link": (
-        "on makes `/twitch link` a condition of claiming a slot, so the lineup carries the name "
-        "the streamer before raids; off lets anybody claim and leaves the name off"
+        "on makes a linked Twitch channel (`/golive` → Link my Twitch channel) a condition of "
+        "claiming a slot, so the lineup carries the name the streamer before raids; off lets "
+        "anybody claim and leaves the name off"
     ),
     "raidtrain_thread": "on opens a thread under the lineup post for the people on the train",
     "raidtrain_live_posts": (
@@ -1011,6 +1012,20 @@ KEY_HELP.update(
             "Discord's 15-minute interaction window is still open, so 15 or more means the "
             "buttons simply stop working with no footer to explain it"
         )
+    }
+)
+
+
+# Go-live panel — wave 2. Its own block so the parallel wave-2 branches merge textually.
+KEY_TYPES.update({"golive_panel_minutes": "int"})
+KEY_HELP.update(
+    {
+        "golive_panel_minutes": (
+            "minutes the /golive panel stays live before its buttons disable themselves; 10 by "
+            "default. The 'this panel has gone quiet' footer can only be written while "
+            "Discord's 15-minute interaction window is still open, so 15 or more means the "
+            "buttons simply stop working with no footer to explain it"
+        ),
     }
 )
 
@@ -1381,6 +1396,8 @@ class SettingsStore:
             return 10
         if key == "poll_creator_may_end":
             return True
+        if key == "golive_panel_minutes":
+            return 10
         if key == "birthday_mode":
             return "shadow"
         if key == "birthday_channel_id":

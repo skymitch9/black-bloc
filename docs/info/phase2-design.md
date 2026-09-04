@@ -1,5 +1,13 @@
 # Phase 2 design — go-live feed (F1 + F2 + the F5 hook)
 
+> ⚠️ **SUPERSEDED IN PART, 2026-09-03 — the slash surface below is gone.** `/golive` and
+> `/twitch` and all eight of their subcommands (`logs`, `optout`, `optin`, `status`, `mode`,
+> `test`, `link`, `unlink`) were replaced by ONE `/golive` command that opens an ephemeral
+> panel; every subcommand is a button, a select or a modal on it. The behaviour this doc
+> describes is unchanged — the announcer, the poller, the sessions, the settings and the log
+> kinds are all exactly what it says. Only the way in moved:
+> [`golive-panel-design.md`](golive-panel-design.md). This doc is NOT rewritten.
+
 > **Audience:** the Phase 2 build agent and the reviewer. **Status:** LOCAL
 > ONLY. **Last verified: 2026-08-26** — incumbent behaviour is measured
 > (`archive/current-bots/discord-scan-2026-08-26.md` §G, 199 YAGPDB posts;

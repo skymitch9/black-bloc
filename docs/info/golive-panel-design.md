@@ -1,7 +1,16 @@
 # Go-live / Twitch — `/golive` is ONE command that opens a panel (wave 2)
 
-> **Audience:** the build agent, the reviewer and the owner. **Status:** TRACKED · **DESIGNED, not
-> built.**
+> **Audience:** the build agent, the reviewer and the owner. **Status:** TRACKED · ✅ **BUILT
+> 2026-09-03** on branch `worktree-agent-a87a00d41b8dc47d1` (off `main` `8cbe453`, v67 live), in
+> four commits — code, tests, the cross-feature string sweep, docs. **3756 tests pass** (3710 on
+> the base commit, +46, none lost), `ruff check .` clean, `node site/mock/check.mjs` reports the
+> same **17 pages / 142 routes** as `main`, and `labels.js` parses. `commands synced` is
+> **41**, one lower than the base's 42, **measured** through
+> `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits` — ⚠️ **no boot was
+> run** (no bot token here), and **nothing has met live Discord**: no panel opened, no button
+> pressed, no Helix call made. **Not merged and not deployed.** Both owner forks were decided
+> before the build and built as decided: **I1 = `/golive`**, **I2 = build the `Streamers…`
+> sub-panel**. ⚠️ **Read the `## Deviations` foot before trusting the body of this doc.**
 > **Last verified: 2026-09-03** — every `path:line` below was READ at `f49e493` (`main`) in
 > `black_bloc/cogs/content/golive.py`, `black_bloc/golive.py`, `black_bloc/panels.py`,
 > `black_bloc/guard.py`, `black_bloc/settings_store.py`, `black_bloc/command_visibility.py`,
@@ -319,9 +328,11 @@ changed nothing about announcing (wave-0 deviation 4).
 load-sensitive flake under `pytest -n auto` (events deviations, "One flaky test"). Measure the base
 commit before calling anything a regression.
 
-**Sweep rows — this feature takes 104 onward** (`docs/access/sweeps.md`'s last row is **102**; 103
-is claimed by a sibling wave-2 doc, so **rows 104+, renumber at landing** if the siblings land
-first). Rows 12, 19, 31, 49 and the Phase 2 appendix are rewritten in place, not added.
+**Sweep rows — BUILT as 109–117** (`docs/access/sweeps.md`; 103 is the operator-token row and
+104–108 are claimed by a sibling wave-2 build, so this one took 109 onward — **the conductor
+renumbers at landing** if the siblings land first). The table below is the DESIGN's numbering;
+what shipped is rows 109–117, one per row here, plus a tenth for the panel going quiet. Rows 12,
+19, 31, 49 and the Phase 2 appendix were rewritten in place, not added.
 
 | # | Do this | Expect |
 |---|---|---|
@@ -348,7 +359,10 @@ Settled first, by the standing rules, so they are NOT put to him:
   P9: the panel says the feature is off in words rather than vanishing, and `HIDDEN_WHEN_OFF` gains
   nothing.
 
-Two are genuinely his:
+Two were genuinely his, and he answered both on 2026-09-03 at 16:10 — ✅ **I1 = `/golive`**
+(described *"Your Twitch channel, and whether your streams get announced"*, member-visible, the
+`twitch` group retired) and ✅ **I2 = build the `Streamers…` sub-panel**. Both are built as
+decided; the arguments are kept below because they are why:
 
 - **I1 — what is the ONE command called, `/golive` or `/twitch`?** Two groups become one command
   and one word has to carry both halves. `/golive` is what the feature, the log kinds
@@ -404,5 +418,99 @@ files — brief the builder to do the string sweep as its own commit at a clean 
 
 ## Deviations
 
-<!-- The build agent writes this section: everything built differently from the above, with the
-reason. Left empty on purpose. -->
+Written by the build agent, 2026-09-03. Everything not listed here was built as this document says,
+including both decided forks (I1 `/golive`, I2 the `Streamers…` sub-panel) and every item in §J's
+"what NOT to build".
+
+1. ⚠️ **`checked` is `twitch_user_id is not None`, not `helix is None` — and the old expression
+   would have made the website LIE in its own log.** §F says `link_channel` takes `helix` as a
+   parameter and the route passes `helix=None` so its `"checked": false` stays true. It does; but
+   the body absorbed from `/twitch link` opened with `checked = self.helix is None`, which meant
+   "Twitch enrichment is off, so do not blame Twitch for being unreachable". Read with
+   `helix=None` coming from a ROUTE that simply never asked, that expression evaluates **true**,
+   so `POST /api/golive/links` would have written `checked: true` into `action_log` beside a
+   response body saying `"checked": false`. That is checklist 10's exact defect, moved from a
+   sentence into a log line. `checked` now means *a Twitch lookup confirmed this channel exists*
+   and nothing else. The **outcome** is a separate question, so the Discord wording is unchanged:
+   with no Twitch client at all the sentence is still the plain "Linked **x** to you", because
+   nothing was unreachable — nobody asked. ⚠️ **Found by `tests/api/tools/test_golive.py`, not by
+   reading**, which is why that file now asserts the row's `checked` value and not only its kind.
+2. **The four move functions return `(outcome, extra)`, not §F's `(outcome, row)`.** `extra` is the
+   fan-role sentence `pings.maybe_auto_create` / `pings.on_streamer_left` produce, and the caller
+   cannot recover it any other way; `row` would only have saved the link route one `get_link` it
+   already makes. All four return the same shape, so the two doors read alike.
+3. ⚠️ **This is a real behaviour change for the WEBSITE, and it is the point of §F.** The fan-role
+   step used to belong to the Discord door alone: `POST /api/golive/links` never ran
+   `pings.maybe_auto_create` and `DELETE /api/golive/links/{id}` never ran `pings.on_streamer_left`.
+   Now they do, because one function serves both doors. So with `pings_fan_role_creation` on `auto`,
+   linking somebody from `golive.html` makes their fan role; with `pings_fan_role_on_unlink` on
+   `delete`, unlinking from the site drops it. Both were already the configured behaviour — the
+   site was quietly not honouring it. The same shape as events deviation 2. `pings` logs those rows
+   itself, so the one-write-one-row count is unaffected and the route tests prove it.
+4. **`preview()` returns `(text, embed, details)` and the SELECT writes the `golive.test` row.**
+   §F asks for exactly this ("WITHOUT the reply and WITHOUT the log call"), but it is worth naming
+   because it is the one place in this build where a panel control logs rather than a shared
+   function (P4). The reason is that the log line is about a reply that may not have happened, and
+   a function with no interaction cannot know. The count is what the test asserts.
+5. **`panels.option_label` was not used for the `Streamers…` select.** §C names it. Its shape is
+   `#<id> · <status> · <text>`, and `#900000000000000002` is not what a staffer picking a streamer
+   reads — the label is the display name and the channel. The 100-character clamp still has one
+   home: `panels.SELECT_OPTION_LIMIT`. This is the same call wave 0 deviation 2 left open ("for the
+   first feature wave that actually needs a second copy of it"); this feature needs a different
+   shape, not a second copy, so nothing was promoted into `panels.py`.
+6. **`NOT_LINKED` and `NOT_OPTED_OUT` were deleted, and NOTHING replaced them.** §E says they are
+   unreachable under P9 and go. The races are still real (two clicks a millisecond apart), so the
+   question was what to say. Inventing "you were already unlinked" would have re-created the
+   sentences the panel exists to remove, so instead **`unlink_channel` and `opt_in` log only when
+   they actually changed a row** and the caller says the same thing either way — which is true
+   either way ("Black Bloc has forgotten your Twitch channel" is a statement about the end state).
+   The routes keep their own 404s off the returned boolean, so the website is unchanged.
+7. ⚠️ **The Logs button loses `/golive logs`'s two options, `count` and `important_only`.** It calls
+   `send_logs(interaction, FEATURE)` at its defaults, exactly as the applications and events panels'
+   Logs buttons do. Reported rather than fixed: matching wave 1 is worth more than a bespoke control
+   here, the site's Logs page has both filters, and adding two selects would cost the row **Streamers…**
+   sits in. If the owner wants them back it is a modal, not a subcommand.
+8. **`polling_summary` moved out of the cog to module level and takes the cog.** §F only lists
+   `status_lines`, which "includes `_polling_summary`". Making it a module function is what lets
+   `status_lines(bot, None, guild)` say *the go-live cog is not loaded* rather than raising — the
+   same health-not-liveness rule (checklist 9) read one level up. `code-notes.md:531` carries the
+   note that used to sit on `_polling_summary`.
+
+### What §H could and could not prove
+
+| # | §H item | Proven? |
+|---|---|---|
+| 1 | boot reports `commands synced` **41** | **Measured, not booted** — `tests/test_bot.py` builds the real tree by loading every cog and counts `bot.tree.get_commands()`: **42 at `8cbe453`, 41 on this branch**, and the drop is exactly the one slot §B predicts. ⚠️ **No boot was run**: there is no bot token in this environment, the same gap wave 0 deviation 5 and events deviation 13 recorded |
+| 2 | the parametrised panel test | **Proven** — `test_the_panel_renders_exactly_the_row_the_table_says` over linked × opted-out × staff asserts the rendered labels ARE `panel_buttons(...)` and that Logs / Streamers… / the two selects / the status lines appear only for staff; `tests/test_golive.py` proves the table itself over the same eight states |
+| 3 | the seven-module import check | **Proven** — `python -c "import black_bloc.golive, black_bloc.cogs.content.golive, black_bloc.api.tools.golive, black_bloc.personas, black_bloc.chat, black_bloc.pings, black_bloc.raidtrain"` passes. It matters here because this build creates a real new import edge, `black_bloc/golive.py` → `black_bloc/panels.py` → `settings_store` |
+| 4 | ruff, full pytest, `check.mjs`, `labels.js` | **Proven** — ruff clean; **3756 passed** (3710 at `8cbe453`); `node site/mock/check.mjs` says **17 pages, 142 routes, all keys present**, the same as the base; `node --input-type=module --check < site/public/assets/labels.js` parses |
+| 5 | the checklist sweep | **Proven by test** for 1/2 (the detection tests are green **unchanged in assertion**, which is the proof the announce path did not move), 9 (last-good-poll and last-error, never `is_running` alone), 10 (deviation 1), 11 (`AllowedMentions.none()` on every send and edit, asserted), 13 (the preview is ephemeral, unpinged, and `_post` is asserted never called), 15/17 (one `answer`, one move table), 16 (the `link_owner` clash survives, and still never names the holder), 33 (§D), 34 (row COUNTs on both doors). **8 and 30** are structural: `LinkModal` is `AnswersErrors + discord.ui.Modal` and every view is a `Panel`, which is `AnswersErrors` too |
+| — | anything a person SEES | **NOT proven** — no panel has been opened in Discord, no button pressed, no modal submitted, no Helix call made. Sweep rows 109–117 are what would prove it |
+| — | the `default=` on a re-rendered select | **NOT proven and cannot be here** — that the mode select and the streamer select show the current value as chosen is asserted on the option objects, not seen in a client |
+
+### One flaky test, not seen on this branch
+
+`tests/api/test_settings_api.py::test_writes_are_rate_limited_per_session` is the known
+load-sensitive flake (events deviations, "One flaky test"). It did **not** fire in any run on this
+branch, including the base measurement — `8cbe453` gave **3710 passed, 0 failed** under
+`pytest -q -n auto` and this branch gives **3756 passed, 0 failed** the same way. Recorded so the
+next reader knows the counts are clean ones, not ones with a flake subtracted.
+
+### Findings in existing code, reported and NOT fixed
+
+The design already lists five. These are the ones this build met:
+
+1. ⚠️ **Four wave-1 settings keys have no label anywhere on the site.** `event_panel_minutes`,
+   `poll_panel_minutes`, `birthday_panel_minutes` and `request_panel_minutes` are in the registry
+   but appear in neither `site/public/assets/labels.js` nor `site/mock/server.mjs`, so the Settings
+   page falls through to a tidied-up key name for all four. Measured today by grep while adding
+   `golive_panel_minutes`, which HAS both. Four one-line rows in somebody else's feature; not
+   touched.
+2. **`api/tools/golive.py` still imports `clean_login` from the cog, for wording only.** The 400 and
+   409 name the cleaned channel, and the shared function has no reason to hand it back. Harmless,
+   but it means the route cleans a login it does not store — if `clean_login` ever became two
+   functions, this is a place that would need looking at.
+3. **The `# Applications, no-role pass` and `# Events panel (wave 1)` sections of `code-notes.md`
+   are keyed against UNMERGED branches**, as their own banners say. This build re-keyed only the
+   golive keys; the conductor's merge-order re-key still owes the rest.
+

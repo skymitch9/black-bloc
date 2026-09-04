@@ -489,13 +489,14 @@ LINES: dict[str, tuple[str, ...]] = {
         "have already asked for.",
     ),
     "link_twitch": (
-        "`/twitch link` and your channel name, {name} — after that I shout about it when you go "
-        "live.",
-        "Tell me the channel with `/twitch link`, {name}. `/golive optout` stops me announcing "
-        "you if you ever change your mind.",
-        "`/twitch link` is the one, {name}, and then you never have to remember to say anything.",
-        "Point me at your channel with `/twitch link`, {name}, and I take it from there.",
-        "That is `/twitch link`, {name} — one go and I watch for you going live.",
+        "Run `/golive` and press **Link my Twitch channel**, {name} — after that I shout about "
+        "it when you go live.",
+        "`/golive` opens a little window, {name}: **Link my Twitch channel** for the name, and "
+        "**Stop announcing my streams** if you ever change your mind.",
+        "`/golive` is the one, {name}, and then you never have to remember to say anything.",
+        "Point me at your channel from `/golive`, {name}, and I take it from there.",
+        "That is `/golive` → **Link my Twitch channel**, {name} — one go and I watch for you "
+        "going live.",
     ),
     "set_a_birthday": (
         "`/birthday set`, {name} — give me the day and the cookout gets a heads-up on it.",

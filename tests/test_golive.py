@@ -1,13 +1,21 @@
 from datetime import UTC, datetime, timedelta
 
 import discord
+import pytest
 
 from black_bloc.golive import (
     EMBED_COLOUR_DEFAULT,
     EMBED_NO_TITLE,
     GAME_FALLBACK,
+    PANEL_BUTTONS,
+    PANEL_MINUTES_KEY,
+    PANEL_TIMEOUT_FOOTER,
+    PANEL_TITLE,
+    SITE_BUTTON,
+    STAFF_BUTTONS,
     StreamInfo,
     announcement_embed,
+    card_lines,
     edits_on_end,
     embed_summary,
     end_details,
@@ -18,6 +26,8 @@ from black_bloc.golive import (
     extract_stream,
     from_twitch,
     is_streaming,
+    panel_buttons,
+    panel_minutes,
     parse_ts,
     passes_role_filters,
     ping_prefix,
@@ -25,6 +35,7 @@ from black_bloc.golive import (
     presence_image,
     render,
     should_announce,
+    site_page_url,
     twitch_enrichable,
     twitch_login_from_url,
     with_box_art,
@@ -530,3 +541,82 @@ def test_box_art_is_only_filled_in_once():
     assert filled.box_art_url == "https://boxart/1.jpg"
     assert with_box_art(filled, TwitchGame("1", "Hades", "https://other.jpg")) is filled
     assert with_box_art(info, TwitchGame("1", "Hades", "")) is info
+
+
+@pytest.mark.parametrize("linked", [False, True])
+@pytest.mark.parametrize("opted_out", [False, True])
+@pytest.mark.parametrize("staff", [False, True])
+def test_the_button_table_offers_one_link_move_and_one_opt_move(linked, opted_out, staff):
+    """Eight member states; never both spellings of one move, never a move that is invalid."""
+    found = panel_buttons(linked=linked, opted_out=opted_out, staff=staff)
+    labels = [move.label for move in found]
+
+    assert ("Link my Twitch channel" in labels) is not linked
+    assert ("Change my channel" in labels) is linked
+    assert ("Unlink" in labels) is linked
+    assert ("Stop announcing my streams" in labels) is not opted_out
+    assert ("Announce my streams again" in labels) is opted_out
+    assert "Refresh" in labels
+    assert ({"Logs", "Streamers…"} <= set(labels)) is staff
+    assert len(labels) == len(set(labels))
+    assert found == PANEL_BUTTONS[(linked, opted_out)] + (STAFF_BUTTONS if staff else ())
+
+
+def test_the_link_moves_open_a_modal_and_nothing_else_does():
+    every = {move for row in PANEL_BUTTONS.values() for move in row} | set(STAFF_BUTTONS)
+    assert {move.action for move in every if move.needs_modal} == {"link", "change"}
+    assert {move.row for move in every} == {0, 1, 2}
+
+
+def test_the_card_says_whether_a_link_was_ever_checked():
+    """Checklist 10: a link Twitch could not confirm never claims it was verified."""
+    verified = card_lines("alice", "42", False)
+    unverified = card_lines("alice", None, False)
+
+    assert "twitch.tv/alice" in verified[1]
+    assert "not verified" not in verified[1]
+    assert "not verified with Twitch" in unverified[1]
+
+
+def test_the_card_says_which_way_the_opt_out_points():
+    assert "announced here whenever" in card_lines("alice", "42", False)[2]
+    assert "because you opted out" in card_lines("alice", "42", True)[2]
+    assert "none linked yet" in card_lines(None, None, False)[1]
+
+
+def test_the_card_says_in_words_when_announcements_are_off_or_shadow():
+    """P9: the feature being off is a LINE, never a refusal and never a dead button."""
+    assert len(card_lines("alice", "42", False, mode="on")) == 3
+    off = card_lines("alice", "42", False, mode="off")
+    shadow = card_lines("alice", "42", False, mode="shadow")
+
+    assert "**off** right now" in off[-1]
+    assert "Linking still counts" in off[-1]
+    assert "**shadow** right now" in shadow[-1]
+
+
+def test_the_card_carries_a_channel_note_last_when_it_is_given_one():
+    lines = card_lines("alice", "42", False, mode="on", channel_note="Test mode is on.")
+    assert lines[-1] == "Test mode is on."
+    assert card_lines("alice", "42", False, mode="on")[-1] != "Test mode is on."
+
+
+def test_the_gone_quiet_footer_names_the_one_command_that_reopens_the_panel():
+    assert PANEL_TIMEOUT_FOOTER == "This panel has gone quiet — run /golive again"
+    assert PANEL_TITLE == "Go-live"
+    assert SITE_BUTTON == "Open on the site"
+
+
+def test_the_site_link_points_at_the_go_live_page_only_with_an_origin():
+    assert site_page_url("https://blackbloc.test/") == "https://blackbloc.test/golive.html"
+    assert site_page_url("") is None
+    assert site_page_url(None) is None
+
+
+def test_the_panel_minutes_key_reads_the_registry():
+    class Store:
+        def get(self, guild_id, key):
+            assert key == PANEL_MINUTES_KEY
+            return "12"
+
+    assert panel_minutes(Store(), 7) == 12

@@ -73,8 +73,9 @@ Everything a member can run. Half a line each; `/help` prints the whole thing in
 `/event` — propose an event. It opens a panel; **Propose an event** is the form, and staff
 look it over first. **My time zone** is on the same panel.
 `/request` — ask the server for something. `/request create` files it for staff to decide on.
-`/twitch` — `/twitch link` connects a Twitch channel so going live gets announced.
-`/golive` — `/golive optout` and `/golive optin` decide whether streams are announced at all.
+`/golive` — your Twitch channel, and whether your streams get announced. It opens a panel:
+**Link my Twitch channel** connects one so going live gets announced, and **Stop announcing my
+streams** turns it off again.
 `/youtube` — `/youtube link` connects a YouTube channel so a new upload gets posted here;
 `/youtube status` says what happens to yours and `/youtube unlink` stops it.
 `/pings` — `/pings follow` gets one streamer's go-live pings, `/pings events on` gets the

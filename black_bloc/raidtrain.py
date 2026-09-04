@@ -53,8 +53,8 @@ CANNOT_MOVE = (
 )
 NEEDS_LINK = (
     "Black Bloc needs to know your Twitch channel before you can take a slot, because the "
-    "streamer before you raids the name on the lineup. Run `/twitch link <your channel name>` "
-    "and claim the slot again — nothing was taken in the meantime."
+    "streamer before you raids the name on the lineup. Run `/golive`, press **Link my Twitch "
+    "channel**, and claim the slot again — nothing was taken in the meantime."
 )
 SLOT_TAKEN = (
     "Slot **#{position}** already belongs to someone else, so nothing was changed. "
@@ -231,7 +231,7 @@ def render_lineup(train: Any, slots: Any, *, ping_role_id: Any = None) -> str:
     lines.extend(_slot_line(slot) for slot in rows)
     if status == OPEN:
         lines.append("")
-        lines.append("Take an hour with `/raidtrain claim`; `/twitch link` first if you have not.")
+        lines.append("Take an hour with `/raidtrain claim`; link Twitch on `/golive` first.")
     return "\n".join(lines)
 
 
