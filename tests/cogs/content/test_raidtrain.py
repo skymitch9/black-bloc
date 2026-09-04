@@ -133,12 +133,16 @@ class FakeBot:
         self.guilds = [guild]
         self.settings = settings
         self.guard = None
+        self.cogs = {}
 
     def get_channel(self, channel_id):
         return self.guild.get_channel(channel_id)
 
     def get_user(self, user_id):
         return self.guild.get_member(user_id)
+
+    def get_cog(self, name):
+        return self.cogs.get(name)
 
 
 class FakeResponse:
@@ -208,7 +212,9 @@ async def bot(db, monkeypatch):
 
 @pytest.fixture
 def cog(bot):
-    return RaidTrains(bot)
+    made = RaidTrains(bot)
+    bot.cogs["RaidTrains"] = made
+    return made
 
 
 @pytest.fixture
@@ -322,7 +328,7 @@ async def test_every_member_command_refuses_in_words_while_the_feature_is_off(bo
     interaction = FakeInteraction(bot, alice)
     await cog.list_command.callback(cog, interaction)
     assert interaction.sent == FEATURE_OFF.format(mode="off")
-    assert "`/raidtrains mode on`" in interaction.sent
+    assert "**Mode…**" in interaction.sent
 
 
 async def test_a_command_outside_a_server_says_so_rather_than_failing(bot, cog, alice):
@@ -409,7 +415,7 @@ async def test_a_locked_train_refuses_a_claim_and_says_who_unlocks_it(bot, cog, 
     await db.conn.commit()
     interaction = FakeInteraction(bot, alice)
     await cog.claim_command.callback(cog, interaction, str(train_id))
-    assert "`/raidtrain unlock`" in interaction.sent
+    assert "**Open it for sign-ups**" in interaction.sent
     assert all(row["user_id"] is None for row in await slots_for(db, train_id))
 
 
@@ -836,7 +842,7 @@ async def test_the_mode_command_warns_when_nothing_has_anywhere_to_go(bot, cog, 
     await cog.mode_command.callback(
         cog, interaction, SimpleNamespace(name="on", value="on")
     )
-    assert "`/raidtrains setup channel:#somewhere`" in interaction.sent
+    assert "**Setup…**" in interaction.sent
     assert bot.store.get(GUILD, "raidtrain_mode") == "on"
 
 
@@ -845,7 +851,7 @@ async def test_setup_with_nothing_given_changes_nothing_and_says_how_to_use_it(
 ):
     interaction = FakeInteraction(bot, organizer)
     await cog.setup_command.callback(cog, interaction)
-    assert "Nothing was given" in interaction.sent
+    assert "Nothing was picked" in interaction.sent
 
 
 async def test_setup_stores_each_thing_it_was_given(bot, cog, organizer):

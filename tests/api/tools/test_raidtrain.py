@@ -42,11 +42,20 @@ class FakeCog:
     async def _refresh_lineup(self, guild, train_id):
         self.refreshed.append(int(train_id))
 
-    async def cancel_train(self, guild, train, reason, actor):
+    async def cancel_train(self, guild, train, reason, actor, *, via="discord"):
+        from black_bloc.actionlog import log_action
         from black_bloc.cogs.content.raidtrain import set_status
+        from black_bloc.logkinds import kind_via
 
         await set_status(self.db, train["id"], CANCELLED, reason=reason)
-        self.cancelled.append((int(train["id"]), reason))
+        await log_action(
+            self.bot,
+            guild,
+            kind_via("raidtrain.cancel", via),
+            actor=actor,
+            details={"train_id": train["id"], "via": via},
+        )
+        self.cancelled.append((int(train["id"]), reason, via))
         return 1
 
 
@@ -80,6 +89,7 @@ async def link(db, user_id, login):
 def cogged(web):
     cog = FakeCog()
     cog.db = web.db
+    cog.bot = web
     web.cogs["RaidTrains"] = cog
     return cog
 
@@ -194,7 +204,7 @@ async def test_creating_a_train_writes_its_slots_and_posts_the_lineup(
     assert "4 slot(s) of 60 minutes" in body["message"]
     assert len(await slots_for(web.db, body["id"])) == 4
     assert cogged.published == [body["id"]]
-    assert "web.raidtrain.create" in await wf.kinds_in(web.db)
+    await wf.one_web_row(web.db, "web.raidtrain.create")
 
 
 @pytest.mark.parametrize(
@@ -258,8 +268,10 @@ async def test_a_slot_is_filled_and_emptied_through_one_route(
     emptied = client.post(f"/api/raidtrains/{train_id}/slots/2", json={"member_id": None}).json()
     assert "open again" in emptied["message"]
     assert emptied["slots"][1]["user_id"] is None
-    kinds = await wf.kinds_in(web.db)
-    assert "web.raidtrain.assign" in kinds and "web.raidtrain.unassign" in kinds
+    rows = await wf.web_rows_in(web.db)
+    assert [kind for kind, _ in rows] == ["web.raidtrain.assign", "web.raidtrain.unassign"]
+    assert all(details.get("via") == wf.VIA_WEBSITE for _, details in rows)
+    assert [one for one in await wf.kinds_in(web.db) if one.startswith("raidtrain.")] == []
     assert cogged.refreshed == [train_id, train_id]
 
 
@@ -335,7 +347,11 @@ async def test_a_swap_moves_the_people_and_leaves_the_times(
     assert "changed places" in body["message"]
     assert [row["user_id"] for row in body["slots"]] == [str(BOB), str(ALICE), None]
     assert [row["starts_at"] for row in await slots_for(web.db, train_id)] == before
-    assert "web.raidtrain.swap" in await wf.kinds_in(web.db)
+    assert [kind for kind, _ in await wf.web_rows_in(web.db)] == [
+        "web.raidtrain.assign",
+        "web.raidtrain.assign",
+        "web.raidtrain.swap",
+    ]
 
 
 async def test_swapping_a_slot_with_itself_is_refused(client, sign_in, web, cogged):
@@ -365,8 +381,11 @@ async def test_locking_and_unlocking_go_through_the_transition_table(
     opened = client.post(f"/api/raidtrains/{train_id}/status", json={"status": "open"})
     assert opened.status_code == 200
     assert (await get_train(web.db, GUILD, train_id))["status"] == OPEN
-    kinds = await wf.kinds_in(web.db)
-    assert "web.raidtrain.lock" in kinds and "web.raidtrain.unlock" in kinds
+    assert [kind for kind, _ in await wf.web_rows_in(web.db)] == [
+        "web.raidtrain.lock",
+        "web.raidtrain.unlock",
+    ]
+    assert [one for one in await wf.kinds_in(web.db) if one.startswith("raidtrain.")] == []
 
 
 async def test_a_status_that_is_not_one_of_the_five_is_named_back(client, sign_in, web, cogged):
@@ -380,8 +399,9 @@ async def test_a_status_that_is_not_one_of_the_five_is_named_back(client, sign_i
 
 
 async def test_cancelling_needs_a_reason_and_then_goes_through_the_cog(
-    client, sign_in, web, cogged
+    client, sign_in, web, cogged, wf
 ):
+    """A website cancellation used to read Via = Discord; the `via` keyword is what fixes it."""
     train_id = await a_train(web.db)
     sign_in(client)
 
@@ -394,8 +414,9 @@ async def test_cancelling_needs_a_reason_and_then_goes_through_the_cog(
         json={"status": "cancelled", "reason": "the venue fell through"},
     )
     assert done.status_code == 200
-    assert cogged.cancelled == [(train_id, "the venue fell through")]
+    assert cogged.cancelled == [(train_id, "the venue fell through", wf.VIA_WEBSITE)]
     assert (await get_train(web.db, GUILD, train_id))["status"] == CANCELLED
+    await wf.one_web_row(web.db, "web.raidtrain.cancel")
 
 
 async def test_the_row_shapes_never_leak_a_raw_snowflake_as_a_number(client, web, guild, wf):
