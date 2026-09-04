@@ -1,7 +1,10 @@
 # Ping roles — `/pings` is ONE command that opens a panel (wave 2)
 
 > **Audience:** the build agent and the reviewer (Claude sessions), and the owner for §I.
-> **Status:** TRACKED · **BUILT 2026-09-03** on `worktree-agent-a86e71fd801362ca2` — see the
+> **Status:** TRACKED · ✅ **SHIPPED v72 `a5ad521` 2026-09-03 18:30** (merged clean after Fable
+> review, one merge-time fix: the Names… echo only follows a successful save; boot measured `commands
+> synced` **39**; 4050 tests; nothing run against Discord by eye — sweeps 126–134 and 38–42 are the
+> owner's). Written as BUILT 2026-09-03 on `worktree-agent-a86e71fd801362ca2` — see the
 > `## Deviations` foot for what was built differently and what was measured.
 > **Last verified: 2026-09-03** — every `path:line` below was READ in this working tree on `main`
 > (the tree whose newest commit is `1735ff8`, after the four wave-1 panels merged), in

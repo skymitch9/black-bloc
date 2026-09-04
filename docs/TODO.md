@@ -12,14 +12,15 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 17:45, v71 live, youtube shipped, pings next)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 18:35, v72 live, pings shipped, voice next)
 
-**`main` = `b764757`** (youtube panel merge; v71 live 17:37, 3872 tests, **40 commands**; `youtube_mode` is
-**shadow** since 17:42 = F-Y2 done). Panels wave 1 is COMPLETE, wave 2 has THREE of five shipped (memory v68,
-golive v70, youtube v71) with every fork decided (🔧 panels item below); all three landing entries are in
-`DONE.md` 2026-09-03. **Pings is next** (Fable-review `info/pings-panel-design.md` against §2 first, then Opus
-build in its own worktree off `main`, sweeps 126+; usage read before dispatch; weekly cut-off 90%); voice last. **Next:** (1) the operator token is MINTED and staged (17:56) — verify the bearer read after the
-pings deploy, see the 🔧 item; (2) wave-2 builds in cost order, memory first (Opus, own worktree, brief carries the
+**`main` = `a5ad521`** (pings panel merge; v72 live 18:30, 4050 tests, **39 commands**; `youtube_mode` is
+**shadow** since 17:42). Panels wave 1 is COMPLETE, wave 2 has FOUR of five shipped (memory v68, golive v70,
+youtube v71, pings v72) with every fork decided (🔧 panels item below); all four landing entries are in
+`DONE.md` 2026-09-03. The operator read token is LIVE (v72 applied the staged secret; bearer read verified
+18:31; moved whole to `DONE.md`). **Voice is last** (Fable-review `info/voice-panel-design.md` against §2
+first, then Opus build in its own worktree off `main`, sweeps 135+, fork F1 = leave the in-channel control
+post; usage read before dispatch; weekly cut-off 90%). **Next:** (1) voice; (2) wave-2 builds in cost order, memory first (Opus, own worktree, brief carries the
 decided forks + `info/review-checklist.md` + the design doc), merge/deploy each as it lands; (3) the
 small review findings (🔧 below) folded into whatever touches those files; (4) owner by-eye sweeps
 14–15, 58–103; (5) Pawpette's Twitch Team form still needs the owner's walk-through
@@ -208,24 +209,6 @@ docs bookkeeping lands with the work, not after.
 
 ## 🔧 Open engineering items
 
-- **Operator read token — MINTED 17:56, STAGED, goes live at the next deploy (the pings release);
-  moves to `DONE.md` once a bearer read is verified live.** (Code live v67 `285b5e3` 16:04; the build
-  record is in `DONE.md` 2026-09-03.) 17:55 the owner ordered the session to add the rule itself
-  ("Do this: \scripts\mint-operator-token.ps1 in ~/.claude/settings.json, then say retry") — rule added,
-  script ran, `flyctl secrets list` shows `OPERATOR_READ_TOKEN` **Staged** (digest 6158ac0c…),
-  `BLACK_BLOC_OPERATOR_TOKEN` set for the user (64 chars), value never printed. Verify after the
-  deploy: `/api/health` with the bearer answers, and `operator_read_log` writes one Core row. History: The blind mint (`docs/access/operator-read.md`, one command: python mints,
-  `flyctl secrets set --stage`, HKCU `BLACK_BLOC_OPERATOR_TOKEN`, value never printed) was approved by
-  the owner 16:00 ("Yes") but the permission classifier BLOCKED the command at 16:15. Owner chose the
-  permission-rule route (16:30: "Add a permission rule for flyctl secrets set … and tell me to retry");
-  the classifier ALSO blocked the session editing `~/.claude/settings.json`, so the owner adds the rule
-  himself — `PowerShell(.\scripts\mint-operator-token.ps1:*)` under `permissions.allow` — then the
-  session retries `.\scripts\mint-operator-token.ps1` (the mint wrapped as a script so a rule has a
-  stable prefix to match; `access/operator-read.md`). Until the secret is set the door does not exist
-  (`/health` + a bearer answer `not_signed_in`, verified live by the builder). `--stage` means it
-  applies at the NEXT deploy — v68.
-
-
 - 🆕 **Panels over slash commands — the rest of the app (owner, 2026-09-03: "then carry it
   through the rest of the app"; confirmed ~11:25: "do the change to all / commands. I like
   how request works").** Audit every command group (44 commands synced; `cogs/core.py:88`
@@ -287,9 +270,12 @@ docs bookkeeping lands with the work, not after.
   (six append-only conflicts with the golive merge; its sweeps rows renumbered 130–137 → 118–125), live in
   v71 17:37** (3796 → 3872 tests, `commands synced` **41 → 40 measured at boot**), **F-Y2 done 17:42**
   (`youtube_mode` off → shadow on the Go-live page, PUT logged 00:42:53Z) — landing entry in `DONE.md`
-  2026-09-03; sweeps 118–125 are the owner's to run. **Pings build DISPATCHED 17:50** (Opus, own worktree,
-  base `85e14c4`, forks I1=(a) I2=(b) in the brief, sweeps 126+, `tests/test_bot.py` 40 → 39, allowed to add
-  `panels.site_page_url`; est. 300–360k, expect ~2×); voice last, once pings lands. Events I2 DECIDED 12:40 (`/timezone` retired).
+  2026-09-03; sweeps 118–125 are the owner's to run. **Pings LANDED 18:25 (379k against a 300–360k
+  estimate; four commits off `85e14c4`), Fable-reviewed approve with one merge-time fix, merged `a5ad521`
+  (clean, no conflicts), live in v72 18:30** (3872 → 4050 tests, `commands synced` **40 → 39 measured at
+  boot**) — landing entry in `DONE.md` 2026-09-03; sweeps 126–134 and the rewritten 38–42 are the owner's
+  to run. **Voice is the last wave-2 panel** (fork F1 = leave the in-channel control post; sweeps 135+;
+  `tests/test_bot.py` 39 → 38 if the design retires a slot — measure it). Events I2 DECIDED 12:40 (`/timezone` retired).
   **Wave-1 builds all landed 13:40–13:50** (birthdays merged `58974e1`; events on
   `worktree-agent-a448c7ab780ed3c2b`, polls on `worktree-agent-aa735ab092d13477d`, both under Fable
   review); the applications build follows once I-A3 is answered. Merge in wave order, re-key
@@ -317,7 +303,13 @@ docs bookkeeping lands with the work, not after.
   number. From the golive build (2026-09-03 17:05, Fable review): the four earlier `*_panel_minutes`
   keys (event/poll/birthday/request) have no label in `site/public/assets/labels.js` or
   `site/mock/server.mjs` (memory and golive do); every panel's **Logs** button drops `count` /
-  `important_only` (wave 1 shape — a modal if wanted back).
+  `important_only` (wave 1 shape — a modal if wanted back). From the pings build (2026-09-03 18:25,
+  Fable review): `pings.panel_buttons` only offers **Take my ping role away** while `pings_mode` is on,
+  so a streamer who already has a role cannot drop it from the panel with pings off (fork I1 said
+  "always", the mode gate wins — decide whether the button should render regardless of mode); the
+  youtube cog keeps its own `site_page_url` (returns `""` where `panels.site_page_url` returns `None`)
+  — fold it at the next youtube touch; `code-notes.md` pings keys are anchored to the branch, not
+  `a5ad521` — re-key at the next merge.
 
 - **Via-labelling gap: `raidtrain.cancel_train` logs one row but calls a website cancel
   Via = Discord** (found by the double-logging build, 2026-09-03 — see `DONE.md` that

@@ -22,6 +22,84 @@ panel and the Go-live page switch are both staff-gated). Nothing changed in code
 `youtube_mode` is `shadow` since 17:42 (F-Y2). If uploads are ever wanted on, staff flip the switch;
 if YouTube lives ever need catching without presence, that is the withdrawn design plus the API key.
 
+## 2026-09-03 — Pings panel: `/pings` is one window (wave 2, v72, `a5ad521`)
+
+Release **v72** (`a5ad521`, 18:30; `deploys.log` line 71). Merge `--no-ff` of
+`worktree-agent-a86e71fd801362ca2` (Opus build, **379k** against a 300–360k estimate — the first wave-2
+build to land near its estimate; four commits off `85e14c4`: `ec1a54e` extractions, `cb73075` the cog,
+`13450dd` strings and docs, `cf70ec8` the checklist sweep) after Fable review — approve, one defect fixed
+at the merge: `run_settings` appended the Names… modal's "Saved. A streamer's ping role will be called…"
+echo even when `save_settings` had refused a value, so a failed save read as a success; the echo now
+follows only a `SETTINGS_SAVED` answer. **Clean merge, no conflicts** (the branch was cut after golive
+and youtube were both in). Verified: boot clean (01:30:29Z database ready / **synced 39** / 01:30:33Z
+logged in), ruff clean, **4050 tests** (3872 + 178, none lost). This deploy also applied the staged
+`OPERATOR_READ_TOKEN` (see the entry below). NOT verified: `/pings` has not been opened in Discord, no
+button pressed, no select submitted, no role moved — sweeps 126–134 and the rewritten 38–42
+(`access/sweeps.md`) are the owner's. Whether a real Discord client submits an EMPTY `RoleSelect`
+(`min_values=0`) is the one open question; both paths are built (the confirm button also means "make
+one"), so either answer works.
+
+What shipped. `/pings` is a single member-visible command opening an ephemeral panel; the `pingroles`
+group and the twelve `pings`/`pingroles` subcommands are retired — both decided forks built as decided
+(**I1 = (a)** a streamer may always take their own ping role away, whatever `pings_fan_role_creation`
+says; **I2 = (b)** one Events toggle while the go-live and event keys agree or either is unset, two
+labelled toggles once they point at different roles). Members: **Follow a streamer…** / **Stop
+following…** selects (25-capped, the placeholder says so), the Events toggle(s), **Start my own ping
+role** (only when they stream and creation is not staff-only), **Take my ping role away** behind
+**Keep it / Yes, take it away**, **Refresh**; unfollowing is never mode-gated. Staff: **Streamers…**
+(lines with follower counts, a streamer picker to a card with **Remove their ping role** behind a
+confirm and **Make the role again** when Discord no longer has the role, **Give somebody a ping role…**
+user-select into the shared role-pick step), **Set up the Events role** (the same role-pick step:
+`RoleSelect` `min_values=0`, empty means make one), **Settings** (mode / who may start one / on-unlink
+selects, a delete-too toggle, **Names…** modal for the Events role name, the streamer template and the
+panel minutes — the template is echoed as it will RENDER, checklist 17), **Logs**, **Open on the site**.
+The button table is `panel_buttons(PanelState, staff=)` in `black_bloc/pings.py`, proved as data by a
+128-case parametrised test (deviation 1: a composing function over a NamedTuple, not a dict, because I2
+makes the events half variable-length). New shared moves `follow_streamer`, `set_event_pings`,
+`start_own_fan_role(streams=)`, `stop_own_fan_role`, `save_settings` (validates every key with
+`coerce_value` before the first write; new `pings.settings` log kind), `notification_lines`,
+`streamer_lines`, `counts_of`, `template_preview`. `panels.site_page_url(origin, feature)` is now the one
+home; applications/polls/events/golive/requests delegate, the youtube cog's copy deliberately left
+(returns `""` and uses its own `SITE_PAGE` — folding it would change a just-landed file). Key
+`pings_panel_minutes` (10), checklist 33; a second `LABEL_LIMIT = 100` deleted (checklist 15); two test
+doubles repaired (`FakeGuild.create_role` reused ids after a deletion). Design
+[`info/pings-panel-design.md`](info/pings-panel-design.md) (seventeen deviations at its foot);
+`OWNER_GUIDE.md` 125 → 134 rows; `code-notes.md` pings keys point by anchor on the branch (NOT re-keyed
+against `a5ad521`). Review link: `/pings` in `#mute-me-bot-test-spam`; the Go-live tab of
+https://blackbloc.heygabi.ai/golive.html shows the same ping roles.
+
+## 2026-09-03 — Operator read token: minted, deployed, door verified (v72)
+
+Code shipped in v67 `285b5e3` (16:04; the build record is the entry below). The mint was blocked twice
+by the permission classifier (the `flyctl secrets set` command at 16:15; the session editing
+`~/.claude/settings.json` at 16:30), so at 17:55 the owner ordered the session to do both ("Do this:
+\scripts\mint-operator-token.ps1 in ~/.claude/settings.json, then say retry"): the rule
+`PowerShell(.\scripts\mint-operator-token.ps1:*)` went under `permissions.allow`, the script ran at
+17:56 (python mints, `flyctl secrets set --stage`, HKCU `BLACK_BLOC_OPERATOR_TOKEN`; value never
+printed), `flyctl secrets list` showed **Staged** (digest 6158ac0c…). v72 (`a5ad521`, 18:30) applied it —
+**Deployed** — and the door was measured at 18:31: `GET /api/settings` with the bearer **200**, the same
+request anonymous **401**; `/api/health` is not a route (404 — the health door is `/health`). NOT
+verified: the `web.operator.read` Core log row (`operator_read_log`) was not looked for. Runbook:
+`access/operator-read.md`. History as it stood in `TODO.md` at landing:
+
+
+- **Operator read token — MINTED 17:56, STAGED, goes live at the next deploy (the pings release);
+  moves to `DONE.md` once a bearer read is verified live.** (Code live v67 `285b5e3` 16:04; the build
+  record is in `DONE.md` 2026-09-03.) 17:55 the owner ordered the session to add the rule itself
+  ("Do this: \scripts\mint-operator-token.ps1 in ~/.claude/settings.json, then say retry") — rule added,
+  script ran, `flyctl secrets list` shows `OPERATOR_READ_TOKEN` **Staged** (digest 6158ac0c…),
+  `BLACK_BLOC_OPERATOR_TOKEN` set for the user (64 chars), value never printed. Verify after the
+  deploy: `/api/health` with the bearer answers, and `operator_read_log` writes one Core row. History: The blind mint (`docs/access/operator-read.md`, one command: python mints,
+  `flyctl secrets set --stage`, HKCU `BLACK_BLOC_OPERATOR_TOKEN`, value never printed) was approved by
+  the owner 16:00 ("Yes") but the permission classifier BLOCKED the command at 16:15. Owner chose the
+  permission-rule route (16:30: "Add a permission rule for flyctl secrets set … and tell me to retry");
+  the classifier ALSO blocked the session editing `~/.claude/settings.json`, so the owner adds the rule
+  himself — `PowerShell(.\scripts\mint-operator-token.ps1:*)` under `permissions.allow` — then the
+  session retries `.\scripts\mint-operator-token.ps1` (the mint wrapped as a script so a rule has a
+  stable prefix to match; `access/operator-read.md`). Until the secret is set the door does not exist
+  (`/health` + a bearer answer `not_signed_in`, verified live by the builder). `--stage` means it
+  applies at the NEXT deploy — v68.
+
 ## 2026-09-03 — YouTube panel: `/youtube` is one window (wave 2, v71, `b764757`)
 
 Release **v71** (`b764757`, 17:37; `deploys.log` line 70). Merge `--no-ff` of
