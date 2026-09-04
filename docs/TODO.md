@@ -12,11 +12,11 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 16:48, v68 live, memory panel shipped, golive in flight)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 17:20, v69 live, golive landed and under merge)
 
-**`main` = `cb941d9`** (memory panel docs; v68 live 16:48, 3744 tests, 42 commands). Panels wave 1
+**`main` = `5a97a19`** (request card is the Discord record; v69 live 17:14, 3750 tests, 42 commands). Panels wave 1
 is COMPLETE, wave 2 has ONE of five shipped (memory, v68) with every fork decided (🔧 panels item
-below). In flight: the golive build (Opus, own worktree, since 16:16). **Next:** (1) the operator token MINT is owed — classifier-blocked,
+below). Golive build LANDED 17:05 (464k, branch `worktree-agent-a87a00d41b8dc47d1`, 4 commits off `8cbe453`, Fable-reviewed: approve) — merge/deploy is the next step; youtube build still in flight (since 16:52). **Next:** (1) the operator token MINT is owed — classifier-blocked,
 see the 🔧 item; (2) wave-2 builds in cost order, memory first (Opus, own worktree, brief carries the
 decided forks + `info/review-checklist.md` + the design doc), merge/deploy each as it lands; (3) the
 small review findings (🔧 below) folded into whatever touches those files; (4) owner by-eye sweeps
@@ -198,21 +198,6 @@ docs bookkeeping lands with the work, not after.
   Spotify playback is not.
 
 ## 🔧 Open engineering items
-
-- 🆕 **The request card is the official Discord close format, not the raw `request.done`
-  box (owner, 2026-09-03 ~17:00, with a screenshot of `#mute-me-bot-test-spam`: "I don't want
-  the request.done part in discord I want the other box as the official close format").**
-  Diagnosis: the raw box is the action-log mirror (`log_channel_id`, `request_log_level`
-  default `important`, `request.done` in `IMPORTANT`); the green card is the request's own
-  status post (`notify_move` → `request_status_channel_id`/`request_notify_channel_id`). Both
-  were pointed at the test channel, so every move showed twice. Design: `log_action(...,
-  carded=True)` skips the raw embed at `important` when the caller is posting its own card
-  (`requests.card_will_post` = move enabled in `request_channel_moves` AND a status channel
-  set); the DB row and the Logs page are untouched; `request_log_level = all` still restores
-  the raw line beside the card (configurable both ways, checklist 33); `notify=True` still
-  outranks it. Status: **BUILT in the main loop 17:15** (Fable, small) — `logkinds.should_post`,
-  `actionlog.log_action`, `requests.card_will_post`, the cog's `apply_decision` /
-  `resume_request` / `ask_check`; +6 tests; landing next as v69.
 
 - **Operator read token — MINT STILL OWED (code live v67 `285b5e3` 16:04; the build record is in
   `DONE.md` 2026-09-03).** The blind mint (`docs/access/operator-read.md`, one command: python mints,
