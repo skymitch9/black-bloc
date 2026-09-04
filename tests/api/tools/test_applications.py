@@ -594,7 +594,7 @@ async def test_the_remove_route_refuses_a_role_form_and_a_blank_reason_in_words(
         f"/api/applications/{application_id}/remove", json={"reason": "no longer needed"}
     )
     assert refused.status_code == 400
-    assert "/role revoke" in refused.json()["message"]
+    assert "**End it now**" in refused.json()["message"]
     assert "web.application.removed" not in await wf.kinds_in(web.db)
 
     missing = client.post("/api/applications/9999/remove", json={"reason": "who"})

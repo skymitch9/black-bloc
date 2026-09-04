@@ -595,7 +595,7 @@ async def test_a_refused_role_leaves_the_application_approved_and_says_so(bot, d
 
     assert fresh["status"] == grants.APPROVED and fresh["grant_id"] is None
     assert "application.grant_failed" in await action_kinds(db)
-    assert "Discord refused to add" in said and "/role grant" in said
+    assert "Discord refused to add" in said and "**Give somebody a role…**" in said
     card = bot.guild.get_channel(STAFF_CHANNEL).messages[0]
     assert "Discord refused to add the role" in card.kwargs["content"]
 
@@ -1037,7 +1037,7 @@ async def test_the_card_says_where_an_approved_role_application_can_go_instead(b
     embed, view = build_card(bot, bot.guild, form, fresh, lead)
 
     assert [one.label for one in view.children] == ["Back"]
-    assert any("/role revoke" in field.value for field in embed.fields)
+    assert any("**End it now**" in field.value for field in embed.fields)
 
 
 async def test_a_withdrawn_card_says_the_member_owns_it(bot, db):

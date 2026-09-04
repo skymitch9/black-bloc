@@ -9,8 +9,6 @@ from black_bloc.logkinds import FEATURES
 TOP_LEVEL_MAX = 100
 CHILDREN_MAX = 25
 LOGS_GROUPS = {
-    "rolemenu": "rolemenu",
-    "role": "rolemenu",
     "honeypot": "honeypot",
     "modmail": "modmail",
     "mod": "mod",
@@ -35,7 +33,6 @@ STAFF_COMMANDS = {
     "purge",
     "raidtrains",
     "reply",
-    "role",
     "rolemenu",
     "settings",
     "snippet",
@@ -167,7 +164,7 @@ async def test_every_feature_group_has_a_logs_command(settings):
         logs = next(child for child in group.commands if child.name == "logs")
         assert [option.name for option in logs.parameters] == ["count", "important_only"]
         assert feature in FEATURES
-    assert "chat" not in groups
+    assert "chat" not in groups and "rolemenu" not in groups
     await bot.close()
 
 
@@ -179,7 +176,7 @@ async def test_the_command_tree_stays_inside_discords_limits(settings):
 
     top = bot.tree.get_commands()
     assert len(top) <= TOP_LEVEL_MAX
-    assert len(top) == 38
+    assert len(top) == 37
     for command in top:
         if isinstance(command, app_commands.Group):
             assert len(command.commands) <= CHILDREN_MAX, command.name

@@ -13,8 +13,8 @@ from black_bloc.storage.db import Database
 
 GUILD = 4242
 TEST_CHANNEL = 555
-MODE_KEY = "rolemenu_mode"
-NAMES = ("help", "rolemenu", "settings")
+MODE_KEY = "request_mode"
+NAMES = ("help", "request", "settings")
 DEV_GUILD = discord.Object(id=GUILD)
 
 
@@ -93,6 +93,7 @@ async def bot(db, monkeypatch):
     )
     store = SettingsStore(db, settings)
     await store.load()
+    await store.set(GUILD, MODE_KEY, "off")
     return FakeBot(settings, store, db)
 
 
@@ -118,8 +119,8 @@ async def logged(db):
 async def test_a_mode_that_is_off_at_startup_hides_its_commands_and_syncs_once(bot, waits):
     control = cv.install(bot)
 
-    assert bot.tree.removed == ["rolemenu"]
-    assert bot.tree.get_command("rolemenu", guild=DEV_GUILD) is None
+    assert bot.tree.removed == ["request"]
+    assert bot.tree.get_command("request", guild=DEV_GUILD) is None
     assert bot.tree.syncs == []
 
     waits.gate.set()
@@ -131,7 +132,7 @@ async def test_a_mode_that_is_off_at_startup_hides_its_commands_and_syncs_once(b
     assert [row["kind"] for row in rows] == [cv.LOG_KIND]
     assert json.loads(rows[0]["details"]) == {
         "commands": 2,
-        "hidden": ["rolemenu"],
+        "hidden": ["request"],
         "via": "discord",
     }
 
@@ -142,7 +143,7 @@ async def test_a_mode_that_is_on_leaves_the_commands_alone_and_does_not_sync(bot
     control = cv.install(bot)
 
     assert bot.tree.removed == [] and bot.tree.added == []
-    assert bot.tree.get_command("rolemenu", guild=DEV_GUILD) is not None
+    assert bot.tree.get_command("request", guild=DEV_GUILD) is not None
     assert control.task is None
     assert bot.tree.syncs == []
     assert await logged(bot.db) == []
@@ -166,28 +167,28 @@ async def test_flipping_the_setting_syncs_exactly_once_after_the_debounce(bot, w
 
 
 async def test_turning_it_back_on_puts_the_same_command_object_back(bot, waits):
-    original = bot.tree.guilds[GUILD]["rolemenu"]
+    original = bot.tree.guilds[GUILD]["request"]
     control = cv.install(bot)
 
     await bot.store.set(GUILD, MODE_KEY, "on")
 
-    assert bot.tree.get_command("rolemenu", guild=DEV_GUILD) is original
-    assert bot.tree.added == ["rolemenu"]
+    assert bot.tree.get_command("request", guild=DEV_GUILD) is original
+    assert bot.tree.added == ["request"]
     waits.gate.set()
     await control.task
     assert bot.tree.syncs == [GUILD]
 
 
 async def test_the_settings_group_is_never_hidden(bot, waits, monkeypatch):
-    monkeypatch.setitem(cv.HIDDEN_WHEN_OFF, MODE_KEY, ("rolemenu", "settings"))
+    monkeypatch.setitem(cv.HIDDEN_WHEN_OFF, MODE_KEY, ("request", "settings"))
 
     cv.install(bot)
 
-    assert bot.tree.removed == ["rolemenu"]
+    assert bot.tree.removed == ["request"]
     assert bot.tree.get_command("settings", guild=DEV_GUILD) is not None
     assert "settings" not in cv.hidden_names(bot, GUILD)
-    assert "rolemenu" in cv.hidden_names(bot, GUILD)
-    assert cv.hidden_names(bot, GUILD) == {"rolemenu"}
+    assert "request" in cv.hidden_names(bot, GUILD)
+    assert cv.hidden_names(bot, GUILD) == {"request"}
 
 
 async def test_a_second_change_waits_out_the_rate_limit_window(bot, waits):
@@ -222,7 +223,7 @@ async def test_no_dev_guild_means_no_hiding_at_all(bot, waits, monkeypatch):
 
 
 def test_hidden_names_reads_the_store_and_needs_a_guild(bot):
-    assert cv.hidden_names(bot, GUILD) == {"rolemenu"}
+    assert cv.hidden_names(bot, GUILD) == {"request"}
     assert cv.hidden_names(bot, None) == set()
 
 
@@ -253,11 +254,19 @@ async def test_apply_stays_in_the_tree_even_while_applications_are_off(bot):
 
 async def test_the_request_group_is_shown_while_requests_are_on_and_hidden_when_they_are_off(bot):
     assert cv.HIDDEN_WHEN_OFF["request_mode"] == ("request",)
+    assert "request" in cv.hidden_names(bot, GUILD)
+
+    await bot.store.set(GUILD, "request_mode", "on", by=5)
+
     assert "request" not in cv.hidden_names(bot, GUILD)
 
-    await bot.store.set(GUILD, "request_mode", "off", by=5)
 
-    assert "request" in cv.hidden_names(bot, GUILD)
+async def test_rolemenu_stays_in_the_tree_even_while_role_menus_are_off(bot):
+    """`rolemenu_mode` ships off, so hiding `/rolemenu` would hide the only Discord way to turn
+    it back on — the panel says picking is off as a LINE instead (design B, staff final say)."""
+    assert "rolemenu_mode" not in cv.HIDDEN_WHEN_OFF
+    assert bot.store.get(GUILD, "rolemenu_mode") == "off"
+    assert "rolemenu" not in cv.hidden_names(bot, GUILD)
 
 
 async def test_the_real_command_tree_hides_and_gives_back_the_group(tmp_path, monkeypatch, waits):
@@ -272,11 +281,12 @@ async def test_the_real_command_tree_hides_and_gives_back_the_group(tmp_path, mo
     black_bloc = BlackBlocBot(settings)
     await black_bloc.db.connect()
     await black_bloc.store.load()
-    for name in ("black_bloc.cogs.core", "black_bloc.cogs.community.role_menus"):
+    await black_bloc.store.set(GUILD, MODE_KEY, "off")
+    for name in ("black_bloc.cogs.core", "black_bloc.cogs.community.requests"):
         assert name in COGS
         await black_bloc.load_extension(name)
     black_bloc.tree.copy_global_to(guild=DEV_GUILD)
-    group = black_bloc.tree.get_command("rolemenu", guild=DEV_GUILD)
+    group = black_bloc.tree.get_command("request", guild=DEV_GUILD)
     synced = []
 
     async def fake_sync(*, guild=None):
@@ -287,12 +297,11 @@ async def test_the_real_command_tree_hides_and_gives_back_the_group(tmp_path, mo
     control = cv.install(black_bloc)
 
     in_guild = {command.name for command in black_bloc.tree.get_commands(guild=DEV_GUILD)}
-    assert "rolemenu" not in in_guild and "settings" in in_guild
+    assert "request" not in in_guild and "settings" in in_guild
 
     await black_bloc.store.set(GUILD, MODE_KEY, "on", by=5)
 
-    assert black_bloc.tree.get_command("rolemenu", guild=DEV_GUILD) is group
-    assert group.default_permissions == cv.STAFF_ONLY
+    assert black_bloc.tree.get_command("request", guild=DEV_GUILD) is group
     waits.gate.set()
     await control.task
     await black_bloc.close()

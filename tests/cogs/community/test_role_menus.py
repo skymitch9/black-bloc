@@ -4,9 +4,10 @@ from types import SimpleNamespace
 
 import discord
 import pytest
-from discord import app_commands
 
 from black_bloc import rolegrants as grants
+from black_bloc import rolemenus as menus
+from black_bloc.cogs.community import role_menus as cog_module
 from black_bloc.cogs.community.role_menus import (
     APPROVAL_CHANNEL_KEY,
     APPROVER_ROLE_KEY,
@@ -15,20 +16,18 @@ from black_bloc.cogs.community.role_menus import (
     LABEL_MAX,
     MODE_KEY,
     MODES,
-    NO_MENUS_YET,
-    NOTHING_TO_UNPOST,
     OPTIONS_MAX,
     ROLE_MENUS_OFF,
     SEED,
     TITLE_MAX,
     UNSET,
+    AssignPick,
     MenuLimitError,
     RequestApproveModal,
     RequestButton,
     RequestDenyModal,
     RoleMenus,
     RoleMenuView,
-    StaffAssignSelect,
     add_option,
     audit_actor,
     card_target,
@@ -41,9 +40,7 @@ from black_bloc.cogs.community.role_menus import (
     get_options,
     list_menus,
     max_values_for,
-    menu_heading,
     needs_approval,
-    option_line,
     panel_embed,
     parse_custom_id,
     positive_days,
@@ -180,6 +177,7 @@ class FakeMessage:
     def __init__(self, message_id, channel, **kwargs):
         self.id = message_id
         self.channel = channel
+        self.jump_url = f"https://discord.test/{message_id}"
         self.kwargs = kwargs
 
     async def edit(self, **kwargs):
@@ -192,9 +190,16 @@ class FakeMessage:
 class FakeChannel:
     def __init__(self, channel_id):
         self.id = channel_id
+        self.mention = f"<#{channel_id}>"
         self.overwrites = {}
         self.messages = []
         self.send_raises = None
+
+    async def fetch_message(self, message_id):
+        found = next((m for m in self.messages if m.id == message_id), None)
+        if found is None:
+            raise LookupError(message_id)
+        return found
 
     async def send(self, content=None, **kwargs):
         if self.send_raises is not None:
@@ -284,6 +289,10 @@ class FakeBot:
         self.guild = guild
         self.guilds = [guild]
         self.guard = None
+        self.views = []
+
+    def add_view(self, view, *, message_id=None):
+        self.views.append((view, message_id))
 
     def get_channel(self, channel_id):
         return self.guild.get_channel(channel_id)
@@ -320,27 +329,66 @@ class FakeFollowup:
         self.response.messages.append({"content": content, "ephemeral": ephemeral, **kwargs})
 
 
+class PanelMessage:
+    def __init__(self, message_id, **kwargs):
+        self.id = message_id
+        self.kwargs = kwargs
+
+    async def edit(self, **kwargs):
+        self.kwargs |= kwargs
+
+    @property
+    def embeds(self):
+        one = self.kwargs.get("embed")
+        return [one] if one is not None else list(self.kwargs.get("embeds") or ())
+
+
 class FakeInteraction:
     def __init__(self, bot, user):
         self.client = bot
         self.user = user
         self.guild = bot.guild
         self.guild_id = bot.guild.id
+        self.channel = bot.guild.get_channel(TEST_CHANNEL)
         self.channel_id = TEST_CHANNEL
         self.response = FakeResponse()
         self.followup = FakeFollowup(self.response)
+        self.edits = []
+
+    async def original_response(self):
+        return PanelMessage(1)
+
+    async def edit_original_response(self, **kwargs):
+        self.edits.append(kwargs)
+        return PanelMessage(9500, **kwargs)
 
     @property
     def said(self):
-        return [m["content"] for m in self.response.messages]
+        return [m["content"] for m in self.response.messages if m.get("content") is not None]
 
     @property
     def sent(self):
-        return self.response.messages[-1]["content"] if self.response.messages else None
+        spoken = self.said
+        return spoken[-1] if spoken else None
+
+    @property
+    def rendered(self):
+        if self.edits:
+            return self.edits[-1]
+        return self.response.messages[-1] if self.response.messages else {}
+
+    @property
+    def embed(self):
+        return self.rendered.get("embed")
+
+    @property
+    def body(self):
+        one = self.embed
+        return "" if one is None else str(one.description or "")
 
     @property
     def view(self):
-        return self.response.messages[-1].get("view")
+        return self.rendered.get("view")
 
 
 @pytest.fixture
@@ -359,6 +407,23 @@ def lead(bot):
     return FakeMember(bot.guild, user_id=1, display_name="Lead", manage_guild=True)
 
 
+def a_panel(where=cog_module.ROOT, **state):
+    view = cog_module.RoleMenuPanel(10)
+    view.where = where
+    for key, value in state.items():
+        setattr(view, key, value)
+    return view
+
+
+def assign_pick(menu_id, options, target, *, remove):
+    """The picker as the panel builds it: inside a view that knows which menu it came from."""
+    view = a_panel(cog_module.HAND_VIEW, menu_name="runner-status", member_id=target.id)
+    view.removing = remove
+    pick = AssignPick(menu_id, options, target, remove=remove)
+    view.add_item(pick)
+    return pick
+
+
 async def staff_menu(db, name="runner-status"):
     menu_id = await create_menu(db, GUILD, name, "Runner status", None, "staff")
     await add_option(db, menu_id, 10, "Runner")
@@ -371,33 +436,10 @@ async def action_kinds(db):
     return [row["kind"] for row in await cur.fetchall()]
 
 
-async def test_a_staff_menu_refuses_to_be_posted_and_says_what_to_use(bot, db, lead):
-    await staff_menu(db)
-    interaction = FakeInteraction(bot, lead)
-
-    await RoleMenus.post.callback(RoleMenus(bot), interaction, "runner-status", None)
-
-    assert "staff-assigned" in interaction.sent
-    assert "/rolemenu assign" in interaction.sent
-    assert (await get_menu(db, GUILD, "runner-status"))["message_id"] is None
-
-
-async def test_assign_offers_the_menu_s_roles_with_the_ones_they_have_preselected(bot, db, lead):
-    await staff_menu(db)
-    target = FakeMember(bot.guild, user_id=900, roles=(10,))
-    interaction = FakeInteraction(bot, lead)
-
-    await RoleMenus.assign.callback(RoleMenus(bot), interaction, "runner-status", target)
-
-    select = interaction.view.children[0]
-    assert [option.value for option in select.options] == ["10", "11"]
-    assert [option.default for option in select.options] == [True, False]
-
-
 async def test_assign_applies_the_diff_to_the_target_and_logs_who_did_it(bot, db, lead):
     menu_id = await staff_menu(db)
     target = FakeMember(bot.guild, user_id=900, roles=(10, 99))
-    select = StaffAssignSelect(menu_id, await get_options(db, menu_id), target, remove=False)
+    select = assign_pick(menu_id, await get_options(db, menu_id), target, remove=False)
     select._values = ["11"]
     interaction = FakeInteraction(bot, lead)
 
@@ -408,32 +450,11 @@ async def test_assign_applies_the_diff_to_the_target_and_logs_who_did_it(bot, db
     assert "role_menu.assign" in await action_kinds(db)
 
 
-async def test_unassign_only_offers_what_they_actually_have(bot, db, lead):
-    await staff_menu(db)
-    target = FakeMember(bot.guild, user_id=900, roles=(11,))
-    interaction = FakeInteraction(bot, lead)
-
-    await RoleMenus.unassign.callback(RoleMenus(bot), interaction, "runner-status", target)
-
-    assert [option.value for option in interaction.view.children[0].options] == ["11"]
-
-
-async def test_unassign_says_so_when_they_have_none_of_them(bot, db, lead):
-    await staff_menu(db)
-    target = FakeMember(bot.guild, user_id=900, display_name="Bo")
-    interaction = FakeInteraction(bot, lead)
-
-    await RoleMenus.unassign.callback(RoleMenus(bot), interaction, "runner-status", target)
-
-    assert "nothing to take off" in interaction.sent
-    assert interaction.view is None
-
-
 async def test_unassign_takes_only_the_picked_roles_off(bot, db, lead):
     menu_id = await staff_menu(db)
     target = FakeMember(bot.guild, user_id=900, roles=(10, 11, 99))
     options = [row for row in await get_options(db, menu_id)]
-    select = StaffAssignSelect(menu_id, options, target, remove=True)
+    select = assign_pick(menu_id, options, target, remove=True)
     select._values = ["10"]
 
     await select.callback(FakeInteraction(bot, lead))
@@ -446,7 +467,7 @@ async def test_assigning_is_refused_in_test_mode(bot, db, lead):
     menu_id = await staff_menu(db)
     bot.guard = FakeGuard(allowed=LOG_CHANNEL)
     target = FakeMember(bot.guild, user_id=900)
-    select = StaffAssignSelect(menu_id, await get_options(db, menu_id), target, remove=False)
+    select = assign_pick(menu_id, await get_options(db, menu_id), target, remove=False)
     select._values = ["10"]
     interaction = FakeInteraction(bot, lead)
 
@@ -459,7 +480,7 @@ async def test_a_refused_role_edit_says_the_member_is_unchanged(bot, db, lead):
     menu_id = await staff_menu(db)
     target = FakeMember(bot.guild, user_id=900, display_name="Bo")
     target.edit_raises = discord.HTTPException(_Refused(403), "no")
-    select = StaffAssignSelect(menu_id, await get_options(db, menu_id), target, remove=False)
+    select = assign_pick(menu_id, await get_options(db, menu_id), target, remove=False)
     select._values = ["10"]
     interaction = FakeInteraction(bot, lead)
 
@@ -467,16 +488,6 @@ async def test_a_refused_role_edit_says_the_member_is_unchanged(bot, db, lead):
 
     assert "still has exactly the roles they had" in interaction.sent
     assert "role_menu.assign" not in await action_kinds(db)
-
-
-async def test_assign_is_staff_only(bot, db):
-    await staff_menu(db)
-    plain = FakeMember(bot.guild, user_id=900)
-    interaction = FakeInteraction(bot, plain)
-
-    await RoleMenus.assign.callback(RoleMenus(bot), interaction, "runner-status", plain)
-
-    assert "staff only" in interaction.sent
 
 
 @pytest.fixture
@@ -524,7 +535,7 @@ async def test_a_click_changes_nothing_while_role_menus_are_off(bot, db, clicker
 async def test_the_staff_select_changes_nothing_while_role_menus_are_off(bot, db, lead):
     menu_id = await staff_menu(db)
     target = FakeMember(bot.guild, user_id=900, roles=(10,))
-    select = StaffAssignSelect(menu_id, await get_options(db, menu_id), target, remove=False)
+    select = assign_pick(menu_id, await get_options(db, menu_id), target, remove=False)
     select._values = ["11"]
     await bot.store.set(GUILD, MODE_KEY, "off")
     interaction = FakeInteraction(bot, lead)
@@ -536,104 +547,13 @@ async def test_the_staff_select_changes_nothing_while_role_menus_are_off(bot, db
     assert "role_menu.assign" not in await action_kinds(db)
 
 
-async def test_unpost_takes_the_panel_down_and_leaves_the_menu(bot, db, lead):
-    menu_id = await self_serve_menu(db)
-    channel = bot.guild.get_channel(TEST_CHANNEL)
-    message = await channel.send(content="panel")
-    await set_message(db, menu_id, TEST_CHANNEL, message.id)
-    interaction = FakeInteraction(bot, lead)
-
-    await RoleMenus.unpost.callback(RoleMenus(bot), interaction, "pronouns")
-
-    assert "panel is down" in interaction.sent
-    assert channel.messages == []
-    menu = await get_menu(db, GUILD, "pronouns")
-    assert menu["message_id"] is None and menu["channel_id"] == TEST_CHANNEL
-    assert "role_menu.unposted" in await action_kinds(db)
-
-
-async def test_unpost_of_a_menu_with_no_panel_says_so(bot, db, lead):
-    await self_serve_menu(db)
-    interaction = FakeInteraction(bot, lead)
-
-    await RoleMenus.unpost.callback(RoleMenus(bot), interaction, "pronouns")
-
-    assert interaction.sent == NOTHING_TO_UNPOST.format(name="pronouns")
-
-
 def test_seed_summary_is_the_one_wording_both_doors_show():
     said = seed_summary(["pronouns"], ["colours"])
 
     assert "Created: pronouns" in said
     assert "Already there, left alone: colours" in said
-    assert "/rolemenu post <name>" in said
+    assert "press **Post it**" in said
     assert "Already there" not in seed_summary(["pronouns"], [])
-
-
-async def test_posting_a_panel_is_refused_while_role_menus_are_off(bot, db, lead):
-    await self_serve_menu(db)
-    await bot.store.set(GUILD, MODE_KEY, "off")
-    interaction = FakeInteraction(bot, lead)
-
-    await RoleMenus.post.callback(RoleMenus(bot), interaction, "pronouns", None)
-
-    assert interaction.sent == ROLE_MENUS_OFF
-    assert (await get_menu(db, GUILD, "pronouns"))["message_id"] is None
-
-
-async def test_the_staff_pickers_are_refused_while_role_menus_are_off(bot, db, lead):
-    await staff_menu(db)
-    await bot.store.set(GUILD, MODE_KEY, "off")
-    target = FakeMember(bot.guild, user_id=900, roles=(10,))
-
-    assign = FakeInteraction(bot, lead)
-    await RoleMenus.assign.callback(RoleMenus(bot), assign, "runner-status", target)
-    unassign = FakeInteraction(bot, lead)
-    await RoleMenus.unassign.callback(RoleMenus(bot), unassign, "runner-status", target)
-
-    assert assign.sent == ROLE_MENUS_OFF and assign.view is None
-    assert unassign.sent == ROLE_MENUS_OFF and unassign.view is None
-
-
-async def test_staff_can_still_build_a_menu_while_role_menus_are_off(bot, db, lead):
-    """Off stops members picking, not staff preparing — `create` and `add` still work."""
-    await bot.store.set(GUILD, MODE_KEY, "off")
-    created = FakeInteraction(bot, lead)
-    await RoleMenus.create.callback(RoleMenus(bot), created, "colours", "Colours")
-    added = FakeInteraction(bot, lead)
-    await RoleMenus.add.callback(RoleMenus(bot), added, "colours", FakeRole(5), None, None)
-
-    menu = await get_menu(db, GUILD, "colours")
-    assert menu is not None
-    assert [row["role_id"] for row in await get_options(db, menu["id"])] == [5]
-
-
-async def test_mode_stores_the_choice_and_logs_it(bot, db, lead):
-    off = FakeInteraction(bot, lead)
-    await RoleMenus.mode.callback(
-        RoleMenus(bot), off, app_commands.Choice(name="off", value="off")
-    )
-
-    assert bot.store.get(GUILD, MODE_KEY) == "off"
-    assert "**off**" in off.sent
-    assert "role_menu.mode" in await action_kinds(db)
-
-    on = FakeInteraction(bot, lead)
-    await RoleMenus.mode.callback(RoleMenus(bot), on, app_commands.Choice(name="on", value="on"))
-
-    assert bot.store.get(GUILD, MODE_KEY) == "on"
-    assert "**on**" in on.sent
-
-
-async def test_mode_is_staff_only(bot):
-    stranger = FakeInteraction(bot, FakeMember(bot.guild, user_id=900))
-
-    await RoleMenus.mode.callback(
-        RoleMenus(bot), stranger, app_commands.Choice(name="off", value="off")
-    )
-
-    assert "staff only" in stranger.sent
-    assert bot.store.get(GUILD, MODE_KEY) == "on"
 
 
 class _Refused:
@@ -723,8 +643,7 @@ def test_every_sentence_about_the_seed_counts_the_menus_correctly():
     source = inspect.getsource(role_menus)
     assert "five" not in source
     assert source.count("six") >= 2
-    describe = RoleMenus.create.parameters[3]
-    assert "staff" in describe.description
+    assert "staff hands them out" in role_menus.BAD_MODE
 
 
 def test_the_marathons_option_carries_the_incumbents_own_emoji():
@@ -757,61 +676,6 @@ def test_the_panel_renders_a_custom_emoji_option():
     options = [{"role_id": 1, "label": "Marathons", "emoji": JOY_GAMING}]
     select = RoleMenuView(9, options, "multiple").children[0]
     assert select.options[0].emoji.id == 1337948924844965931
-
-
-async def test_showall_lists_every_menu_with_its_options_and_never_pings(bot, db, lead):
-    await staff_menu(db)
-    posted_id = await create_menu(db, GUILD, "pronouns", "Pronouns", None, "multiple")
-    await add_option(db, posted_id, 20, "He/Him", "❤️")
-    await add_option(db, posted_id, 21, "She/Her")
-    await set_message(db, posted_id, 500, 600)
-    await create_menu(db, GUILD, "empty", "Nothing here yet")
-    interaction = FakeInteraction(bot, lead)
-
-    await RoleMenus.showall.callback(RoleMenus(bot), interaction)
-
-    said = "\n".join(interaction.said)
-    assert "**pronouns** — Pronouns (multiple, posted)" in said
-    assert "**runner-status** — Runner status (staff, not posted)" in said
-    assert "❤️ He/Him — <@&20>" in said and "• She/Her — <@&21>" in said
-    assert "• Runner — <@&10>" in said and "• Live Runner — <@&11>" in said
-    assert "no roles yet" in said
-    assert all(m["ephemeral"] for m in interaction.response.messages)
-    assert all(m["allowed_mentions"].roles is False for m in interaction.response.messages)
-
-
-async def test_showall_splits_a_long_list_over_several_messages(bot, db, lead):
-    """Four full menus rather than one over-full one — Discord shows 25 options at most."""
-    for menu in range(4):
-        menu_id = await create_menu(db, GUILD, f"big{menu}", "Big")
-        for option in range(OPTIONS_MAX):
-            role_id = menu * OPTIONS_MAX + option
-            await add_option(db, menu_id, role_id, f"role name number {role_id} " + "x" * 40)
-    interaction = FakeInteraction(bot, lead)
-
-    await RoleMenus.showall.callback(RoleMenus(bot), interaction)
-
-    assert len(interaction.said) > 1
-    assert all(len(page) <= 1900 for page in interaction.said)
-
-
-async def test_showall_is_staff_only_and_says_so_when_there_is_nothing(bot, db, lead):
-    stranger = FakeMember(bot.guild, user_id=900)
-    refused = FakeInteraction(bot, stranger)
-    await RoleMenus.showall.callback(RoleMenus(bot), refused)
-    assert "staff only" in refused.sent
-
-    empty = FakeInteraction(bot, lead)
-    await RoleMenus.showall.callback(RoleMenus(bot), empty)
-    assert empty.sent == NO_MENUS_YET
-
-
-def test_a_menu_heading_and_an_option_line_have_one_home_each():
-    menu = {"name": "pronouns", "title": "Pronouns", "mode": "multiple", "message_id": None}
-    assert menu_heading(menu) == "**pronouns** — Pronouns (multiple, not posted)"
-    assert menu_heading(menu | {"message_id": 5}).endswith("(multiple, posted)")
-    assert option_line({"emoji": None, "label": "Runner", "role_id": 10}) == "• Runner — <@&10>"
-    assert option_line({"emoji": "❤️", "label": "He/Him", "role_id": 1}) == "❤️ He/Him — <@&1>"
 
 
 async def test_a_heading_or_a_line_over_discords_limit_is_refused_not_cut_down(db):
@@ -1193,7 +1057,7 @@ async def test_a_staff_assign_starts_the_menus_clock(bot, db, lead):
     menu_id = await create_menu(db, GUILD, "timed", "Timed", None, "staff", expires_days=7)
     await add_option(db, menu_id, 10, "Runner")
     target = FakeMember(bot.guild, user_id=900)
-    select = StaffAssignSelect(menu_id, await get_options(db, menu_id), target, remove=False)
+    select = assign_pick(menu_id, await get_options(db, menu_id), target, remove=False)
     select._values = ["10"]
 
     await select.callback(FakeInteraction(bot, lead))
@@ -1235,46 +1099,6 @@ def test_days_that_mean_no_end_date_all_read_the_same_way():
     assert positive_days(None) is None and positive_days("soon") is None
 
 
-async def test_editing_a_menu_turns_approval_on_and_sets_the_clocks(bot, db, lead):
-    await create_menu(db, GUILD, "runner-status", "Runner status")
-    interaction = FakeInteraction(bot, lead)
-
-    await RoleMenus.edit.callback(RoleMenus(bot), interaction, "runner-status", True, 7, 14)
-
-    menu = await get_menu(db, GUILD, "runner-status")
-    assert needs_approval(menu) and expires_days_of(menu) == 7 and retry_days_of(menu) == 14
-    assert "approval on" in interaction.sent and "7 day(s)" in interaction.sent
-    assert "role_menu.edit" in await action_kinds(db)
-
-
-async def test_editing_with_zero_days_clears_the_end_date(bot, db, lead):
-    await create_menu(db, GUILD, "runner-status", "Runner status", expires_days=7)
-
-    await RoleMenus.edit.callback(
-        RoleMenus(bot), FakeInteraction(bot, lead), "runner-status", None, 0, None
-    )
-
-    assert expires_days_of(await get_menu(db, GUILD, "runner-status")) is None
-
-
-async def test_editing_a_menu_nobody_has_says_so(bot, db, lead):
-    interaction = FakeInteraction(bot, lead)
-
-    await RoleMenus.edit.callback(RoleMenus(bot), interaction, "ghost", True, None, None)
-
-    assert "no role menu called **ghost**" in interaction.sent
-
-
-async def test_editing_is_staff_only(bot, db):
-    await create_menu(db, GUILD, "runner-status", "Runner status")
-    stranger = FakeInteraction(bot, FakeMember(bot.guild, user_id=901))
-
-    await RoleMenus.edit.callback(RoleMenus(bot), stranger, "runner-status", True, None, None)
-
-    assert "staff only" in stranger.sent
-    assert not needs_approval(await get_menu(db, GUILD, "runner-status"))
-
-
 async def test_an_update_leaves_the_columns_it_was_not_given(db):
     await create_menu(db, GUILD, "m", "M", approval=True, expires_days=7, retry_days=14)
 
@@ -1284,90 +1108,6 @@ async def test_an_update_leaves_the_columns_it_was_not_given(db):
     assert menu["title"] == "Menu"
     assert needs_approval(menu) and expires_days_of(menu) == 7 and retry_days_of(menu) == 14
     assert UNSET is not None
-
-
-async def test_role_grant_hands_the_role_over_and_starts_the_clock(bot, db, lead):
-    member = FakeMember(bot.guild, user_id=900, display_name="Bo")
-    interaction = FakeInteraction(bot, lead)
-
-    await RoleMenus.role_grant.callback(
-        RoleMenus(bot), interaction, member, FakeRole(10), 7, "for the marathon"
-    )
-
-    assert member.edits == [[10]]
-    grant = await grants.open_grant(db, GUILD, 900, 10)
-    assert grant["source"] == "staff" and grant["expires_at"] is not None
-    assert "**Bo** has **role-10**" in interaction.sent
-    assert "role.granted" in await action_kinds(db)
-
-
-async def test_role_grant_on_a_role_they_already_have_only_starts_the_clock(bot, db, lead):
-    member = FakeMember(bot.guild, user_id=900, display_name="Bo", roles=(10,))
-    interaction = FakeInteraction(bot, lead)
-
-    await RoleMenus.role_grant.callback(RoleMenus(bot), interaction, member, FakeRole(10), 7, None)
-
-    assert member.edits == []
-    assert await grants.open_grant(db, GUILD, 900, 10) is not None
-    assert "only keeping time on it now" in interaction.sent
-
-
-async def test_granting_over_a_clock_that_is_running_resets_it_rather_than_starting_a_second(
-    bot, db, lead
-):
-    """The two implementations reconciled onto the website's: one open grant, a new end date."""
-    member = FakeMember(bot.guild, user_id=900, display_name="Bo", roles=(10,))
-    grant_id = await grants.add_grant(db, GUILD, 900, 10, "staff", until=grants.expires_at(3))
-    interaction = FakeInteraction(bot, lead)
-
-    await RoleMenus.role_grant.callback(RoleMenus(bot), interaction, member, FakeRole(10), 7, None)
-
-    rows = await grants.grants_for(db, GUILD)
-    assert [row["id"] for row in rows] == [grant_id]
-    assert (grants.parse_ts(rows[0]["expires_at"]) - datetime.now(UTC)).days == 6
-    assert "only keeping time on it now" in interaction.sent
-
-
-async def test_role_grant_is_staff_only(bot, db):
-    member = FakeMember(bot.guild, user_id=900)
-    stranger = FakeInteraction(bot, FakeMember(bot.guild, user_id=901))
-
-    await RoleMenus.role_grant.callback(RoleMenus(bot), stranger, member, FakeRole(10), 7, None)
-
-    assert "staff only" in stranger.sent
-    assert await grants.grants_for(db, GUILD) == []
-
-
-async def test_role_extend_pushes_the_end_date_back(bot, db, lead):
-    member = FakeMember(bot.guild, user_id=900, display_name="Bo", roles=(10,))
-    grant_id = await grants.add_grant(db, GUILD, 900, 10, "staff", until=grants.expires_at(3))
-    interaction = FakeInteraction(bot, lead)
-
-    await RoleMenus.role_extend.callback(RoleMenus(bot), interaction, member, FakeRole(10), 4)
-
-    row = await grants.get_grant(db, grant_id)
-    assert (grants.parse_ts(row["expires_at"]) - datetime.now(UTC)).days == 6
-    assert "now runs out" in interaction.sent
-    assert "role.extended" in await action_kinds(db)
-
-
-async def test_role_extend_says_so_when_there_is_no_clock_to_push(bot, db, lead):
-    member = FakeMember(bot.guild, user_id=900, display_name="Bo")
-    interaction = FakeInteraction(bot, lead)
-
-    await RoleMenus.role_extend.callback(RoleMenus(bot), interaction, member, FakeRole(10), 4)
-
-    assert "not keeping time" in interaction.sent
-
-
-async def test_role_extend_says_so_when_the_grant_has_no_end_date(bot, db, lead):
-    member = FakeMember(bot.guild, user_id=900, display_name="Bo")
-    await grants.add_grant(db, GUILD, 900, 10, "staff")
-    interaction = FakeInteraction(bot, lead)
-
-    await RoleMenus.role_extend.callback(RoleMenus(bot), interaction, member, FakeRole(10), 4)
-
-    assert "no end date" in interaction.sent
 
 
 async def test_a_grant_that_is_due_comes_off_and_the_member_is_told(bot, db):
@@ -1561,3 +1301,785 @@ def test_the_expiry_loop_reports_its_own_health(bot):
     cog.last_ok_at["expiry"] = "2026-08-27T00:00:00+00:00"
     cog.last_error["expiry"] = "boom"
     assert cog.loop_health("_expiry_loop") == ("2026-08-27T00:00:00+00:00", "boom")
+
+
+# --- the panel (wave 3) --------------------------------------------------------------------------
+
+
+def labels(view):
+    return [one.label for one in view.children if getattr(one, "label", None)]
+
+
+def button(view, label):
+    return next(one for one in view.children if getattr(one, "label", None) == label)
+
+
+def picker(view, placeholder):
+    return next(
+        one for one in view.children if getattr(one, "placeholder", None) == placeholder
+    )
+
+
+def has_picker(view, placeholder):
+    return any(getattr(one, "placeholder", None) == placeholder for one in view.children)
+
+
+async def press(interaction, label, view=None):
+    control = button(view if view is not None else interaction.view, label)
+    await control.callback(interaction)
+
+
+async def choose(interaction, placeholder, values, view=None):
+    control = picker(view if view is not None else interaction.view, placeholder)
+    control._values = list(values)
+    await control.callback(interaction)
+
+
+async def open_the_panel(bot, who):
+    interaction = FakeInteraction(bot, who)
+    await RoleMenus.rolemenu_panel_command.callback(RoleMenus(bot), interaction)
+    return interaction
+
+
+async def open_a_menu(bot, who, name):
+    interaction = await open_the_panel(bot, who)
+    await choose(interaction, menus.MENU_PICK, [name])
+    return interaction
+
+
+async def test_rolemenu_opens_one_ephemeral_panel_with_the_root_moves(bot, db, lead):
+    await self_serve_menu(db)
+
+    interaction = await open_the_panel(bot, lead)
+
+    assert interaction.response.messages[0]["ephemeral"] is True
+    assert labels(interaction.view) == [
+        "New menu",
+        "Seed the defaults",
+        "Grants…",
+        menus.MODE_OFF_LABEL,
+        "Logs",
+        "Refresh",
+    ]
+    assert has_picker(interaction.view, menus.MENU_PICK)
+    assert "**pronouns** — 2 role(s), multiple, not posted" in interaction.body
+
+
+async def test_rolemenu_is_staff_only_and_never_leaves_a_dead_button(bot, db):
+    stranger = FakeMember(bot.guild, user_id=901)
+
+    interaction = await open_the_panel(bot, stranger)
+
+    assert "staff only" in interaction.sent
+    assert interaction.view is None
+
+
+@pytest.mark.parametrize("picking", [True, False])
+async def test_the_root_renders_its_row_and_no_other_in_either_mode(bot, db, lead, picking):
+    """S1/S2/S3 crossed with the mode: the mode never takes a control off the root."""
+    await bot.store.set(GUILD, MODE_KEY, "on" if picking else "off")
+
+    empty = await open_the_panel(bot, lead)
+    assert not has_picker(empty.view, menus.MENU_PICK)
+    assert menus.NO_MENUS_LINE in empty.body
+    assert "Waiting on staff" not in " ".join(labels(empty.view))
+
+    menu_id = await approval_menu(db)
+    listed = await open_the_panel(bot, lead)
+    assert has_picker(listed.view, menus.MENU_PICK)
+    assert "Waiting on staff" not in " ".join(labels(listed.view))
+
+    await grants.create_request(db, GUILD, menu_id, 900, 10)
+    waiting = await open_the_panel(bot, lead)
+    assert "Waiting on staff (1)…" in labels(waiting.view)
+
+    for one in (empty, listed, waiting):
+        assert ((menus.PICKING_IS_OFF in one.body) is not picking)
+        wanted = menus.MODE_OFF_LABEL if picking else menus.MODE_ON_LABEL
+        assert wanted in labels(one.view)
+
+
+async def test_the_menu_card_says_what_rolemenu_show_used_to_print(bot, db, lead):
+    await self_serve_menu(db)
+
+    interaction = await open_a_menu(bot, lead, "pronouns")
+
+    assert "**pronouns** — Pronouns (multiple, not posted)" in interaction.body
+    assert "• He/Him — <@&1>" in interaction.body
+    assert labels(interaction.view) == [
+        "Add a role…",
+        "Words…",
+        "Rules…",
+        menus.APPROVAL_ON_LABEL,
+        menus.POST_LABEL,
+        "Hand roles out…",
+        "Delete it",
+        "Back",
+        "Refresh",
+    ]
+
+
+async def test_post_it_is_missing_on_a_staff_menu_and_the_card_says_why(bot, db, lead):
+    await staff_menu(db)
+
+    interaction = await open_a_menu(bot, lead, "runner-status")
+
+    assert menus.POST_LABEL not in labels(interaction.view)
+    assert menus.NOBODY_PICKS_THESE in interaction.body
+    assert "Hand roles out…" in labels(interaction.view)
+
+
+async def test_post_it_and_handing_out_are_gone_while_the_mode_is_off(bot, db, lead):
+    await self_serve_menu(db)
+    await bot.store.set(GUILD, MODE_KEY, "off")
+
+    interaction = await open_a_menu(bot, lead, "pronouns")
+
+    assert menus.POST_LABEL not in labels(interaction.view)
+    assert "Hand roles out…" not in labels(interaction.view)
+    assert "Words…" in labels(interaction.view) and "Delete it" in labels(interaction.view)
+    assert menus.PICKING_IS_OFF in interaction.body
+
+
+async def test_an_empty_menu_offers_no_post_and_no_way_to_remove_a_role(bot, db, lead):
+    await create_menu(db, GUILD, "empty", "Nothing yet")
+
+    interaction = await open_a_menu(bot, lead, "empty")
+
+    assert menus.POST_LABEL not in labels(interaction.view)
+    assert not has_picker(interaction.view, menus.REMOVE_PICK)
+    assert menus.NO_ROLES_YET in interaction.body
+
+
+async def test_a_full_menu_stops_offering_another_role_and_says_so(bot, db, lead):
+    menu_id = await create_menu(db, GUILD, "full", "Full")
+    for role_id in range(OPTIONS_MAX):
+        await add_option(db, menu_id, role_id + 1, f"role {role_id}")
+
+    interaction = await open_a_menu(bot, lead, "full")
+
+    assert "Add a role…" not in labels(interaction.view)
+    assert "Split it into a second menu" in interaction.body
+
+
+async def test_take_it_down_renders_only_while_a_panel_is_up(bot, db, lead):
+    menu_id = await self_serve_menu(db)
+    before = await open_a_menu(bot, lead, "pronouns")
+    assert "Take it down" not in labels(before.view)
+
+    await set_message(db, menu_id, TEST_CHANNEL, 5)
+    after = await open_a_menu(bot, lead, "pronouns")
+
+    assert "Take it down" in labels(after.view)
+    assert menus.MOVE_LABEL in labels(after.view)
+
+
+async def test_taking_the_panel_down_leaves_the_menu_and_everybody_s_roles(bot, db, lead):
+    menu_id = await self_serve_menu(db)
+    channel = bot.guild.get_channel(TEST_CHANNEL)
+    message = await channel.send(content="panel")
+    await set_message(db, menu_id, TEST_CHANNEL, message.id)
+    interaction = await open_a_menu(bot, lead, "pronouns")
+
+    await press(interaction, "Take it down")
+
+    assert "panel is down" in interaction.sent
+    assert channel.messages == []
+    menu = await get_menu(db, GUILD, "pronouns")
+    assert menu["message_id"] is None and menu["channel_id"] == TEST_CHANNEL
+    assert "role_menu.unposted" in await action_kinds(db)
+
+
+async def test_posting_asks_where_and_puts_the_panel_in_the_channel_picked(bot, db, lead):
+    await self_serve_menu(db)
+    interaction = await open_a_menu(bot, lead, "pronouns")
+
+    await press(interaction, menus.POST_LABEL)
+    assert has_picker(interaction.view, cog_module.WHERE_PICK)
+    await choose(interaction, cog_module.WHERE_PICK, [SimpleNamespace(id=TEST_CHANNEL)])
+
+    channel = bot.guild.get_channel(TEST_CHANNEL)
+    assert len(channel.messages) == 1
+    assert (await get_menu(db, GUILD, "pronouns"))["message_id"] == channel.messages[0].id
+    assert "role_menu.post" in await action_kinds(db)
+
+
+async def test_posting_anywhere_but_the_test_channel_is_refused_in_words(bot, db, lead):
+    await self_serve_menu(db)
+    bot.guard = FakeGuard(allowed=TEST_CHANNEL)
+    interaction = await open_a_menu(bot, lead, "pronouns")
+
+    await press(interaction, menus.POST_LABEL)
+    await choose(interaction, cog_module.WHERE_PICK, [SimpleNamespace(id=LOG_CHANNEL)])
+
+    assert interaction.sent == "test mode"
+    assert bot.guild.get_channel(LOG_CHANNEL).messages == []
+    assert "role_menu.post" not in await action_kinds(db)
+
+
+async def test_adding_a_role_black_bloc_cannot_hand_out_is_refused_in_words(bot, db, lead):
+    await self_serve_menu(db)
+    interaction = await open_a_menu(bot, lead, "pronouns")
+    await press(interaction, "Add a role…")
+
+    class Above(FakeRole):
+        def is_assignable(self):
+            return False
+
+    bot.guild.get_role = lambda role_id: Above(role_id)
+    await choose(interaction, menus.ROLE_PICK, [SimpleNamespace(id=42)])
+    await press(interaction, "Use the role's own name")
+
+    assert "cannot hand out" in interaction.sent
+    menu = await get_menu(db, GUILD, "pronouns")
+    assert 42 not in [row["role_id"] for row in await get_options(db, menu["id"])]
+
+
+async def test_adding_a_role_by_its_own_name_lands_and_leaves_one_log_row(bot, db, lead):
+    await self_serve_menu(db)
+    interaction = await open_a_menu(bot, lead, "pronouns")
+
+    await press(interaction, "Add a role…")
+    await choose(interaction, menus.ROLE_PICK, [SimpleNamespace(id=42)])
+    await press(interaction, "Use the role's own name")
+
+    menu = await get_menu(db, GUILD, "pronouns")
+    rows = await get_options(db, menu["id"])
+    assert (42, "role-42") in [(row["role_id"], row["label"]) for row in rows]
+    assert (await action_kinds(db)).count("role_menu.option_added") == 1
+
+
+async def test_removing_a_role_says_nobody_loses_the_one_they_have(bot, db, lead):
+    await self_serve_menu(db)
+    interaction = await open_a_menu(bot, lead, "pronouns")
+
+    await choose(interaction, menus.REMOVE_PICK, ["1"])
+
+    assert "Nobody loses the role they already have" in interaction.sent
+    menu = await get_menu(db, GUILD, "pronouns")
+    assert [row["role_id"] for row in await get_options(db, menu["id"])] == [2]
+    assert "role_menu.option_removed" in await action_kinds(db)
+
+
+async def test_taking_roles_back_renders_only_when_they_hold_one(bot, db, lead):
+    await staff_menu(db)
+    FakeMember(bot.guild, user_id=900, display_name="Bo")
+    FakeMember(bot.guild, user_id=901, display_name="Cy", roles=(10,))
+    interaction = await open_a_menu(bot, lead, "runner-status")
+    await press(interaction, "Hand roles out…")
+
+    await choose(interaction, menus.WHOSE_ROLES, [SimpleNamespace(id=900)])
+    assert "Take roles back…" not in labels(interaction.view)
+    assert "Give them roles…" in labels(interaction.view)
+
+    await choose(interaction, menus.WHOSE_ROLES, [SimpleNamespace(id=901)])
+    assert "Take roles back…" in labels(interaction.view)
+
+
+async def test_the_mode_button_flips_it_and_says_what_it_will_do(bot, db, lead):
+    interaction = await open_the_panel(bot, lead)
+
+    await press(interaction, menus.MODE_OFF_LABEL)
+
+    assert bot.store.get(GUILD, MODE_KEY) == "off"
+    assert "**off**" in interaction.sent
+    assert "role_menu.mode" in await action_kinds(db)
+    assert menus.MODE_ON_LABEL in labels(interaction.view)
+
+
+async def test_a_new_menu_arrives_from_a_modal_and_a_bad_mode_saves_nothing(bot, db, lead):
+    interaction = await open_the_panel(bot, lead)
+    await press(interaction, "New menu")
+    modal = interaction.response.modals[-1]
+
+    modal.name._value = "colours"
+    modal.heading._value = "Colours"
+    modal.description._value = ""
+    modal.mode._value = "sometimes"
+    await modal.on_submit(interaction)
+
+    assert "is not a way a role menu can work" in interaction.sent
+    assert await get_menu(db, GUILD, "colours") is None
+
+    modal.mode._value = "single"
+    await modal.on_submit(interaction)
+
+    assert (await get_menu(db, GUILD, "colours"))["mode"] == "single"
+    assert "role_menu.create" in await action_kinds(db)
+
+
+async def test_a_name_already_taken_is_refused_in_words(bot, db, lead):
+    await self_serve_menu(db)
+    interaction = await open_the_panel(bot, lead)
+    await press(interaction, "New menu")
+    modal = interaction.response.modals[-1]
+    modal.name._value = "pronouns"
+    modal.heading._value = "Again"
+    modal.description._value = ""
+    modal.mode._value = ""
+
+    await modal.on_submit(interaction)
+
+    assert "already has a role menu called **pronouns**" in interaction.sent
+    assert len(await list_menus(db, GUILD)) == 1
+
+
+async def test_the_rules_modal_refuses_a_word_where_a_number_belongs(bot, db, lead):
+    await self_serve_menu(db)
+    interaction = await open_a_menu(bot, lead, "pronouns")
+    await press(interaction, "Rules…")
+    modal = interaction.response.modals[-1]
+    modal.expires._value = "a week"
+    modal.retry._value = "7"
+
+    await modal.on_submit(interaction)
+
+    assert "not a whole number of days" in interaction.sent
+    assert expires_days_of(await get_menu(db, GUILD, "pronouns")) is None
+
+
+async def test_the_rules_modal_sets_the_clocks_and_clears_them_with_zero(bot, db, lead):
+    await self_serve_menu(db)
+    interaction = await open_a_menu(bot, lead, "pronouns")
+    await press(interaction, "Rules…")
+    modal = interaction.response.modals[-1]
+    modal.expires._value = "7"
+    modal.retry._value = "14"
+    await modal.on_submit(interaction)
+
+    menu = await get_menu(db, GUILD, "pronouns")
+    assert expires_days_of(menu) == 7 and retry_days_of(menu) == 14
+    assert "role_menu.edit" in await action_kinds(db)
+
+    modal.expires._value = "0"
+    await modal.on_submit(interaction)
+
+    assert expires_days_of(await get_menu(db, GUILD, "pronouns")) is None
+
+
+async def test_the_approval_button_turns_it_on_and_then_off_again(bot, db, lead):
+    await self_serve_menu(db)
+    interaction = await open_a_menu(bot, lead, "pronouns")
+
+    await press(interaction, menus.APPROVAL_ON_LABEL)
+
+    assert needs_approval(await get_menu(db, GUILD, "pronouns"))
+    assert menus.APPROVAL_OFF_LABEL in labels(interaction.view)
+
+    await press(interaction, menus.APPROVAL_OFF_LABEL)
+
+    assert not needs_approval(await get_menu(db, GUILD, "pronouns"))
+
+
+async def test_an_edit_refreshes_a_posted_panel_rather_than_posting_a_second(bot, db, lead):
+    """Fork F-R3(a): `post_panel` edits the message it already has, so this cannot double-post."""
+    menu_id = await self_serve_menu(db)
+    channel = bot.guild.get_channel(TEST_CHANNEL)
+    message = await channel.send(content="panel")
+    await set_message(db, menu_id, TEST_CHANNEL, message.id)
+    interaction = await open_a_menu(bot, lead, "pronouns")
+
+    await press(interaction, "Words…")
+    modal = interaction.response.modals[-1]
+    modal.heading._value = "Your pronouns"
+    modal.description._value = ""
+    await modal.on_submit(interaction)
+
+    assert len(channel.messages) == 1
+    assert channel.messages[0].kwargs["embed"].title == "Your pronouns"
+    assert (await action_kinds(db)).count("role_menu.post") == 0
+
+
+async def test_deleting_a_menu_asks_first_and_keeping_it_changes_nothing(bot, db, lead):
+    await self_serve_menu(db)
+    interaction = await open_a_menu(bot, lead, "pronouns")
+
+    await press(interaction, "Delete it")
+    assert labels(interaction.view) == ["Yes, delete it", "Keep it"]
+    await press(interaction, "Keep it")
+
+    assert await get_menu(db, GUILD, "pronouns") is not None
+
+    await press(interaction, "Delete it")
+    await press(interaction, "Yes, delete it")
+
+    assert await get_menu(db, GUILD, "pronouns") is None
+    assert "role_menu.delete" in await action_kinds(db)
+
+
+async def test_seeding_asks_first_and_says_what_it_did(bot, db, lead):
+    interaction = await open_the_panel(bot, lead)
+
+    await press(interaction, "Seed the defaults")
+    assert labels(interaction.view) == ["Yes, make them", "Leave it"]
+    await press(interaction, "Yes, make them")
+
+    assert "Created: pronouns" in interaction.sent
+    assert len(await list_menus(db, GUILD)) == len(SEED)
+    assert "role_menu.seeded" in await action_kinds(db)
+
+
+# --- the grants audit (design §I-amend) ------------------------------------------------------
+
+
+async def test_the_grants_sub_panel_opens_as_an_audit_soonest_first(bot, db, lead):
+    FakeMember(bot.guild, user_id=900, display_name="Bo")
+    FakeMember(bot.guild, user_id=901, display_name="Cy")
+    later = await grants.add_grant(db, GUILD, 900, 1, "staff", until=grants.expires_at(9))
+    sooner = await grants.add_grant(db, GUILD, 901, 2, "staff", until=grants.expires_at(1))
+    forever = await grants.add_grant(db, GUILD, 901, 3, "staff")
+    interaction = await open_the_panel(bot, lead)
+
+    await press(interaction, "Grants…")
+
+    assert "**3** timed role(s) running" in interaction.body
+    assert interaction.body.index("<@901> · <@&2>") < interaction.body.index("<@900> · <@&1>")
+    assert menus.NO_END_DATE in interaction.body
+    assert [one.value for one in picker(interaction.view, menus.GRANT_PICK).options] == [
+        str(sooner),
+        str(later),
+        str(forever),
+    ]
+
+
+async def test_whose_roles_narrows_the_audit_to_one_member(bot, db, lead):
+    FakeMember(bot.guild, user_id=900, display_name="Bo")
+    FakeMember(bot.guild, user_id=901, display_name="Cy")
+    await grants.add_grant(db, GUILD, 900, 1, "staff", until=grants.expires_at(9))
+    mine = await grants.add_grant(db, GUILD, 901, 2, "staff", until=grants.expires_at(1))
+    interaction = await open_the_panel(bot, lead)
+    await press(interaction, "Grants…")
+
+    await choose(interaction, menus.WHOSE_ROLES, [SimpleNamespace(id=901)])
+
+    assert "**1** timed role(s) running for that member" in interaction.body
+    assert [one.value for one in picker(interaction.view, menus.GRANT_PICK).options] == [
+        str(mine)
+    ]
+
+
+async def test_an_empty_audit_says_so_rather_than_offering_a_dead_select(bot, db, lead):
+    interaction = await open_the_panel(bot, lead)
+
+    await press(interaction, "Grants…")
+
+    assert menus.NO_GRANTS in interaction.body
+    assert not has_picker(interaction.view, menus.GRANT_PICK)
+    assert "Give somebody a role…" in labels(interaction.view)
+
+
+async def test_push_it_back_is_absent_on_a_grant_with_no_end_date(bot, db, lead):
+    FakeMember(bot.guild, user_id=900, display_name="Bo")
+    forever = await grants.add_grant(db, GUILD, 900, 1, "staff")
+    timed = await grants.add_grant(db, GUILD, 900, 2, "staff", until=grants.expires_at(3))
+    interaction = await open_the_panel(bot, lead)
+    await press(interaction, "Grants…")
+
+    await choose(interaction, menus.GRANT_PICK, [str(forever)])
+    assert labels(interaction.view) == ["End it now", "Back"]
+
+    await press(interaction, "Back")
+    await choose(interaction, menus.GRANT_PICK, [str(timed)])
+    assert labels(interaction.view) == ["Push it back…", "End it now", "Back"]
+
+
+async def test_a_closed_grant_offers_no_move_at_all(bot, db, lead):
+    FakeMember(bot.guild, user_id=900, display_name="Bo")
+    grant_id = await grants.add_grant(db, GUILD, 900, 1, "staff", until=grants.expires_at(3))
+    await grants.end_grant(db, grant_id, grants.ENDED_BY_STAFF)
+    interaction = await open_the_panel(bot, lead)
+    await press(interaction, "Grants…")
+    view = a_panel(cog_module.GRANTS_VIEW)
+
+    await cog_module.open_grant(interaction, grant_id, view)
+
+    assert labels(interaction.view) == ["Back"]
+
+
+async def test_end_it_now_asks_first_then_takes_the_role_back_without_a_dm(bot, db, lead):
+    """The `/role revoke` four docs promised: a staff reversal, logged, and no DM."""
+    member = FakeMember(bot.guild, user_id=900, display_name="Bo", roles=(1, 99))
+    grant_id = await grants.add_grant(db, GUILD, 900, 1, "staff", until=grants.expires_at(3))
+    interaction = await open_the_panel(bot, lead)
+    await press(interaction, "Grants…")
+    await choose(interaction, menus.GRANT_PICK, [str(grant_id)])
+
+    await press(interaction, "End it now")
+    assert labels(interaction.view) == ["Yes, take it back", "Leave it"]
+    await press(interaction, "Yes, take it back")
+
+    assert member.edits == [[99]]
+    assert member.dms == []
+    row = await grants.get_grant(db, grant_id)
+    assert row["removed_at"] and row["removed_reason"] == "ended_by_staff"
+    assert "role.ended" in await action_kinds(db)
+
+
+async def test_leaving_a_grant_alone_changes_nothing(bot, db, lead):
+    member = FakeMember(bot.guild, user_id=900, display_name="Bo", roles=(1,))
+    grant_id = await grants.add_grant(db, GUILD, 900, 1, "staff", until=grants.expires_at(3))
+    interaction = await open_the_panel(bot, lead)
+    await press(interaction, "Grants…")
+    await choose(interaction, menus.GRANT_PICK, [str(grant_id)])
+
+    await press(interaction, "End it now")
+    await press(interaction, "Leave it")
+
+    assert member.edits == []
+    assert (await grants.get_grant(db, grant_id))["removed_at"] is None
+
+
+async def test_push_it_back_moves_the_end_date_from_the_one_it_had(bot, db, lead):
+    FakeMember(bot.guild, user_id=900, display_name="Bo", roles=(1,))
+    grant_id = await grants.add_grant(db, GUILD, 900, 1, "staff", until=grants.expires_at(3))
+    interaction = await open_the_panel(bot, lead)
+    await press(interaction, "Grants…")
+    await choose(interaction, menus.GRANT_PICK, [str(grant_id)])
+
+    await press(interaction, "Push it back…")
+    modal = interaction.response.modals[-1]
+    modal.days._value = "4"
+    await modal.on_submit(interaction)
+
+    row = await grants.get_grant(db, grant_id)
+    assert (grants.parse_ts(row["expires_at"]) - datetime.now(UTC)).days == 6
+    assert "role.extended" in await action_kinds(db)
+
+
+async def test_giving_somebody_a_role_needs_who_and_which_before_it_asks_how_long(bot, db, lead):
+    member = FakeMember(bot.guild, user_id=900, display_name="Bo")
+    interaction = await open_the_panel(bot, lead)
+    await press(interaction, "Grants…")
+
+    await press(interaction, "Give somebody a role…")
+    assert "How long for…" not in labels(interaction.view)
+
+    await choose(interaction, menus.WHO_GETS_IT, [SimpleNamespace(id=900)])
+    assert "How long for…" not in labels(interaction.view)
+
+    await choose(interaction, menus.WHICH_ROLE, [SimpleNamespace(id=5)])
+    assert "How long for…" in labels(interaction.view)
+
+    await press(interaction, "How long for…")
+    modal = interaction.response.modals[-1]
+    modal.days._value = "7"
+    await modal.on_submit(interaction)
+
+    assert member.edits == [[5]]
+    row = await grants.open_grant(db, GUILD, 900, 5)
+    assert row["expires_at"] is not None and row["granted_by"] == lead.id
+    assert "role.granted" in await action_kinds(db)
+
+
+async def test_a_grant_of_zero_days_never_runs_out(bot, db, lead):
+    """Fork F-R2(a): the Days modal takes 0, exactly as the website always has."""
+    FakeMember(bot.guild, user_id=900, display_name="Bo")
+    interaction = await open_the_panel(bot, lead)
+    await press(interaction, "Grants…")
+    await press(interaction, "Give somebody a role…")
+    await choose(interaction, menus.WHO_GETS_IT, [SimpleNamespace(id=900)])
+    await choose(interaction, menus.WHICH_ROLE, [SimpleNamespace(id=5)])
+
+    await press(interaction, "How long for…")
+    modal = interaction.response.modals[-1]
+    modal.days._value = "0"
+    await modal.on_submit(interaction)
+
+    assert (await grants.open_grant(db, GUILD, 900, 5))["expires_at"] is None
+
+
+async def test_giving_a_role_out_is_refused_outside_the_test_channel(bot, db, lead):
+    FakeMember(bot.guild, user_id=900, display_name="Bo")
+    bot.guard = FakeGuard(allowed=LOG_CHANNEL)
+    interaction = await open_the_panel(bot, lead)
+    view = a_panel(cog_module.NEW_GRANT_VIEW, member_id=900, role_id=5)
+
+    await cog_module.run_grant(interaction, 7, view)
+
+    assert interaction.sent == "test mode"
+    assert await grants.grants_for(db, GUILD) == []
+
+
+# --- the requests queue (fork F-R1) ---------------------------------------------------------------
+
+
+async def test_a_pending_request_can_be_approved_from_the_panel(bot, db, lead):
+    member = FakeMember(bot.guild, user_id=900, display_name="Bo")
+    menu_id = await approval_menu(db)
+    request_id = await grants.create_request(db, GUILD, menu_id, 900, 10)
+    interaction = await open_the_panel(bot, lead)
+
+    await press(interaction, "Waiting on staff (1)…")
+    await choose(interaction, menus.REQUEST_PICK, [str(request_id)])
+    assert labels(interaction.view) == ["Approve", "Deny…", "Back"]
+    await press(interaction, "Approve")
+
+    assert member.edits == [[10]]
+    assert (await grants.get_request(db, request_id))["status"] == "approved"
+    assert "role.approved" in await action_kinds(db)
+    assert labels(interaction.view) == ["Back"]
+
+
+async def test_a_second_press_says_it_was_already_decided_rather_than_acting_twice(bot, db, lead):
+    member = FakeMember(bot.guild, user_id=900, display_name="Bo")
+    menu_id = await approval_menu(db)
+    request_id = await grants.create_request(db, GUILD, menu_id, 900, 10)
+    interaction = await open_the_panel(bot, lead)
+    await press(interaction, "Waiting on staff (1)…")
+    await choose(interaction, menus.REQUEST_PICK, [str(request_id)])
+    approve = button(interaction.view, "Approve")
+    await approve.callback(interaction)
+
+    await approve.callback(interaction)
+
+    assert "already" in interaction.sent
+    assert member.edits == [[10]]
+
+
+async def test_a_menu_with_a_clock_asks_how_long_before_it_approves(bot, db, lead):
+    FakeMember(bot.guild, user_id=900, display_name="Bo")
+    menu_id = await approval_menu(db, expires=7)
+    request_id = await grants.create_request(db, GUILD, menu_id, 900, 10)
+    interaction = await open_the_panel(bot, lead)
+    await press(interaction, "Waiting on staff (1)…")
+    await choose(interaction, menus.REQUEST_PICK, [str(request_id)])
+
+    assert "Approve for a while…" in labels(interaction.view)
+    await press(interaction, "Approve for a while…")
+    modal = interaction.response.modals[-1]
+    modal.days._value = "3"
+    await modal.on_submit(interaction)
+
+    row = await grants.open_grant(db, GUILD, 900, 10)
+    assert row["expires_at"] is not None
+
+
+async def test_denying_from_the_panel_sends_the_reason_and_closes_the_row(bot, db, lead):
+    member = FakeMember(bot.guild, user_id=900, display_name="Bo")
+    menu_id = await approval_menu(db)
+    request_id = await grants.create_request(db, GUILD, menu_id, 900, 10)
+    interaction = await open_the_panel(bot, lead)
+    await press(interaction, "Waiting on staff (1)…")
+    await choose(interaction, menus.REQUEST_PICK, [str(request_id)])
+
+    await press(interaction, "Deny…")
+    modal = interaction.response.modals[-1]
+    modal.reason._value = "not this month"
+    await modal.on_submit(interaction)
+
+    row = await grants.get_request(db, request_id)
+    assert row["status"] == "denied" and row["deny_reason"] == "not this month"
+    assert any("not this month" in str(one) for one in member.dms)
+    assert member.edits == []
+
+
+async def test_the_requests_sub_panel_says_so_when_nothing_is_waiting(bot, db, lead):
+    interaction = await open_the_panel(bot, lead)
+    view = a_panel()
+
+    await cog_module.open_requests(interaction, view)
+
+    assert menus.NO_REQUESTS in interaction.body
+    assert not has_picker(interaction.view, menus.REQUEST_PICK)
+
+
+# --- the panel's own guards -----------------------------------------------------------------------
+
+
+async def test_a_staffer_demoted_mid_card_moves_nothing_and_is_told_why(bot, db, lead):
+    await self_serve_menu(db)
+    interaction = await open_a_menu(bot, lead, "pronouns")
+    lead.guild_permissions = FakePerms(manage_guild=False)
+
+    await press(interaction, "Delete it")
+
+    assert "staff only" in interaction.sent
+    assert await get_menu(db, GUILD, "pronouns") is not None
+
+
+async def test_a_read_re_asks_the_staff_question_too(bot, db, lead):
+    await self_serve_menu(db)
+    interaction = await open_the_panel(bot, lead)
+    lead.guild_permissions = FakePerms(manage_guild=False)
+
+    await press(interaction, "Grants…")
+
+    assert "staff only" in interaction.sent
+    assert interaction.edits == []
+
+
+async def test_a_click_after_the_database_goes_away_answers_a_sentence(bot, db, lead):
+    await self_serve_menu(db)
+    interaction = await open_the_panel(bot, lead)
+    bot.db = FakeDownDatabase()
+
+    await press(interaction, "Grants…")
+
+    assert "database" in interaction.sent.lower() or "unavailable" in interaction.sent.lower()
+    assert interaction.response.deferred is True
+
+
+class FakeDownDatabase:
+    is_connected = False
+    conn = None
+
+
+async def test_a_re_render_retires_the_view_it_replaced(bot, db, lead):
+    await self_serve_menu(db)
+    interaction = await open_the_panel(bot, lead)
+    first = interaction.view
+
+    await choose(interaction, menus.MENU_PICK, ["pronouns"])
+
+    assert first.replaced is True and first.is_finished()
+    assert interaction.view is not first
+
+
+async def test_a_panel_that_goes_quiet_disables_every_control_and_says_so(bot, db, lead):
+    await self_serve_menu(db)
+    interaction = await open_the_panel(bot, lead)
+    view = interaction.view
+    view.message = PanelMessage(1, embed=interaction.embed)
+
+    await view.on_timeout()
+
+    assert all(one.disabled for one in view.children)
+    assert view.message.kwargs["embeds"][0].footer.text == menus.PANEL_TIMEOUT_FOOTER
+
+
+async def test_a_replaced_view_never_writes_over_the_card_that_replaced_it(bot, db, lead):
+    await self_serve_menu(db)
+    interaction = await open_the_panel(bot, lead)
+    first = interaction.view
+    first.message = PanelMessage(1)
+    await choose(interaction, menus.MENU_PICK, ["pronouns"])
+    edits = len(interaction.edits)
+
+    await first.on_timeout()
+
+    assert len(interaction.edits) == edits
+
+
+async def test_the_panel_stays_live_for_the_minutes_the_setting_says(bot, db, lead):
+    await bot.store.set(GUILD, menus.PANEL_MINUTES_KEY, 4)
+
+    interaction = await open_the_panel(bot, lead)
+
+    assert interaction.view.timeout == 4 * 60
+
+
+async def test_the_panel_never_offers_a_link_when_there_is_no_dashboard(bot, db, lead):
+    interaction = await open_the_panel(bot, lead)
+
+    assert not [one for one in interaction.view.children if getattr(one, "url", None)]
+
+
+async def test_every_control_sits_inside_discords_five_rows(bot, db, lead):
+    menu_id = await self_serve_menu(db)
+    await set_message(db, menu_id, TEST_CHANNEL, 5)
+
+    root = await open_the_panel(bot, lead)
+    card = await open_a_menu(bot, lead, "pronouns")
+
+    for view in (root.view, card.view):
+        assert all(0 <= one.row <= 4 for one in view.children)

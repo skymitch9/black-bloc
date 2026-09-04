@@ -89,7 +89,8 @@ YOUR_APPLICATION = forms.YOUR_APPLICATION
 STATUS_WAITING = forms.STATUS_WAITING
 NOTHING_TO_SHOW = forms.NOTHING_TO_SHOW
 REMOVE_IS_FOR_LISTS = (
-    "**{name}** hands over <@&{role}>, so there is no list to take them off; `/role revoke` "
+    "**{name}** hands over <@&{role}>, so there is no list to take them off; `/rolemenu` ▸ "
+    "**Grants…** ▸ the grant ▸ **End it now** "
     "takes the role back and ends the grant — the approval stays on record."
 )
 MODE_SAID = {
@@ -639,7 +640,7 @@ async def remove(
     *,
     via: str = VIA_DISCORD,
 ) -> tuple[str, Any]:
-    """Staff's way back off an approved list; the role forms keep `/role revoke` instead."""
+    """Staff's way back off an approved list; a role form ends the grant on `/rolemenu`."""
     row = await forms.get_application(bot.db, application_id)
     if row is None:
         return forms.NOTHING_TO_DECIDE, None

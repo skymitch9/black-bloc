@@ -37,11 +37,11 @@ import {
 
 const MODE_KEY = 'rolemenu_mode';
 const DEFAULT_CHANNEL_KEY = 'role_menu_channel_id';
-const SWITCH_HELP = 'Off takes the panels down and hides the /rolemenu commands; on posts every ' +
+const SWITCH_HELP = 'Off takes the panels down; on posts every ' +
   'menu again, and nobody loses a role either way.';
 const TURNED_ON = 'On. Every menu that has a channel is posted there again, and the /rolemenu ' +
   'commands come back, within about five seconds.';
-const TURNED_OFF = 'Off. The posted panels are removed and the /rolemenu commands disappear from ' +
+const TURNED_OFF = 'Off. The posted panels are removed, and /rolemenu stays where it is in ' +
   'Discord within about five seconds. Nobody loses a role and no menu is changed.';
 const NO_KEY = 'The bot did not report a rolemenu_mode key, so this switch is not shown rather ' +
   'than guessed at.';
@@ -65,7 +65,7 @@ const TIMED_NOTE = 'Every role Black Bloc is holding a clock on. Ending one take
 const NO_REQUESTS = 'Nobody is waiting on staff. A menu only asks first when its Approval is on.';
 const NO_DECIDED = 'Nothing has been decided yet.';
 const NO_GRANTS = 'No role has a clock on it. Grant one below, or give a menu an "Expires after".';
-const ASSIGN_HELP = 'The same path /rolemenu assign takes: only the roles on the menu you pick ' +
+const ASSIGN_HELP = 'The same path /rolemenu ▸ Hand roles out… takes: only the roles on the menu you pick ' +
   'are touched, and a clock starts if that menu has one.';
 const NO_MENU_TO_ASSIGN = 'No menu has a role on it yet, so there is nothing to hand out.';
 const PICK_A_MEMBER = 'Pick the member this is about first.';

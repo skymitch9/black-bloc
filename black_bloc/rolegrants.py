@@ -81,11 +81,11 @@ NEVER_EXPIRES = ""
 GRANTED_SAID = "**{name}** has **{label}**{until}."
 NO_SUCH_GRANT = (
     "Black Bloc is not keeping time on **{label}** for **{name}**, so there was nothing to change. "
-    "`/role grant` starts one."
+    "`/rolemenu` ▸ **Grants…** ▸ **Give somebody a role…** starts one."
 )
 GRANT_NEVER_ENDS = (
-    "**{name}**'s **{label}** has no end date, so there is nothing to push back. Take it off with "
-    "`/rolemenu unassign` when they should lose it."
+    "**{name}**'s **{label}** has no end date, so there is nothing to push back. **End it now** on "
+    "its card takes it off when they should lose it."
 )
 EXTENDED_SAID = "**{name}**'s **{label}** now runs out {stamp}."
 CANNOT_EDIT_THEIRS = (
