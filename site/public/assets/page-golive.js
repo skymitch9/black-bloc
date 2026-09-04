@@ -306,8 +306,8 @@ const UPLOADS_NO_MODE = 'The bot did not report a youtube_mode key, so the switc
   + 'rather than guessed at.';
 const UPLOADS_MODE_HELP = 'off checks nothing at all; shadow writes what it would have posted; '
   + 'on posts it. Uploads go to youtube_channel_id, or the go-live channel when that is blank.';
-const NO_UPLOAD_LINKS = 'Nobody has linked a YouTube channel. Add one below, or a member runs '
-  + '/youtube link themselves.';
+const NO_UPLOAD_LINKS = 'Nobody has linked a YouTube channel. Add one below, or a member opens '
+  + '/youtube and links their own.';
 const NO_UPLOAD_VIDEOS = 'No uploads have been seen yet.';
 const NOT_SEEDED = 'The feed has not answered for this channel yet, so nothing is counted as '
   + 'seen and nothing would be announced. The next sweep tries again.';
@@ -333,7 +333,7 @@ function uploadsStatus(status) {
   ].filter(Boolean));
 }
 
-/** F3: staff link somebody's channel without waiting for them to run /youtube link. */
+/** F3: staff link somebody's channel without waiting for them to open /youtube. */
 function uploadsLinkCard(say) {
   const picker = memberPicker({ label: 'Member' });
   const channel = el('input', {

@@ -36,6 +36,8 @@ export const LABELS = {
   youtube_template: 'What an upload announcement says',
   youtube_poll_minutes: 'How often the bot checks for new uploads',
   youtube_log_level: 'How much of uploads is repeated into Discord',
+  youtube_panel_minutes: 'How long the /youtube panel stays live',
+  youtube_unlink_dms_them: 'Whether staff forgetting somebody’s channel DMs them why',
 
   pings_mode: 'Whether people can opt in to pings',
   pings_events_role_name: 'What the shared Events role is called',

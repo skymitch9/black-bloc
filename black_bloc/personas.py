@@ -75,8 +75,8 @@ look it over first. **My time zone** is on the same panel.
 `/request` — ask the server for something. `/request create` files it for staff to decide on.
 `/twitch` — `/twitch link` connects a Twitch channel so going live gets announced.
 `/golive` — `/golive optout` and `/golive optin` decide whether streams are announced at all.
-`/youtube` — `/youtube link` connects a YouTube channel so a new upload gets posted here;
-`/youtube status` says what happens to yours and `/youtube unlink` stops it.
+`/youtube` — your YouTube channel. It opens a panel saying what happens to your uploads, with
+**Link my channel** to connect one and **Unlink** to stop it.
 `/pings` — `/pings follow` gets one streamer's go-live pings, `/pings events on` gets the
 go-live and event pings for everybody, `/pings fans on` gives your own followers a role, and
 `/pings list` says what you get. The *Streamer pings* and *Notifications* panels do the same.
