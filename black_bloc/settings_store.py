@@ -484,14 +484,15 @@ KEY_HELP: dict[str, str] = {
         "role of their own that only their followers wear)"
     ),
     "pings_events_role_name": (
-        "what `/pingroles setup` calls the one opt-in role for go-live and event pings when it "
-        "has to make it; an existing role of that name is reused rather than duplicated"
+        "what **Set up the Events role** on `/pings` calls the one opt-in role for go-live and "
+        "event pings when it has to make it; an existing role of that name is reused rather than "
+        "duplicated"
     ),
     "pings_fan_role_creation": (
-        "who may start a streamer's own ping role: self (the streamer, with `/pings fans on`), "
-        "staff (only an Auntie/Uncle, with `/pingroles streamer add`), or auto (one is made the "
-        "moment a Twitch channel is linked). Staff can always do it for anybody, whichever this "
-        "says"
+        "who may start a streamer's own ping role: self (the streamer, with **Start my own ping "
+        "role** on `/pings`), staff (only an Auntie/Uncle, from `/pings` ▸ **Streamers…**), or "
+        "auto (one is made the moment a Twitch channel is linked). Staff can always do it for "
+        "anybody, whichever this says"
     ),
     "pings_fan_role_template": (
         "what a streamer's own ping role is called; {name} is their display name at the moment "
@@ -1049,6 +1050,21 @@ KEY_HELP.update(
 )
 
 
+# Pings panel (wave 2) — the one decision `/pings`'s panel introduces, in its own block so the
+# parallel wave-2 branches merge textually.
+KEY_TYPES.update({"pings_panel_minutes": "int"})
+KEY_HELP.update(
+    {
+        "pings_panel_minutes": (
+            "minutes the /pings panel stays live before its buttons disable themselves; 10 by "
+            "default. The 'this panel has gone quiet' footer can only be written while "
+            "Discord's 15-minute interaction window is still open, so 15 or more means the "
+            "buttons simply stop working with no footer to explain it"
+        ),
+    }
+)
+
+
 # Operator read token — the token itself is the on/off switch; this is the one decision left.
 KEY_TYPES.update({"operator_read_log": "bool"})
 KEY_HELP.update(
@@ -1571,6 +1587,8 @@ class SettingsStore:
             return 10
         if key == "youtube_unlink_dms_them":
             return True
+        if key == "pings_panel_minutes":
+            return 10
         if key.endswith("_log_level"):
             return LEVEL_DEFAULT
         if KEY_TYPES.get(key) in ("channels", "roles"):

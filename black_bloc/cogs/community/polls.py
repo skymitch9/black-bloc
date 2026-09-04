@@ -20,7 +20,7 @@ from ...actionlog import (
 )
 from ...command_errors import NETWORK_ERRORS, AnswersErrors, SafeDynamicItem
 from ...golive import now_iso, parse_ts
-from ...logkinds import FEATURE_PAGES, VIA_DISCORD, kind_via
+from ...logkinds import VIA_DISCORD, kind_via
 from ...panels import NoteModal as PanelNoteModal
 from ...panels import (
     Panel,
@@ -32,6 +32,7 @@ from ...panels import (
     retire,
     still_staff,
 )
+from ...panels import site_page_url as library_site_page_url
 from ...polls import (
     ARCHIVED,
     AT_CLOSE,
@@ -1870,8 +1871,7 @@ def creator_may_end(store: Any, guild_id: int) -> bool:
 
 
 def site_page_url(origin: Any) -> str | None:
-    text = str(origin or "").strip()
-    return f"{text.rstrip('/')}/{FEATURE_PAGES['poll']}" if text else None
+    return library_site_page_url(origin, "poll")
 
 
 def pick_placeholder(shown: int, total: int) -> str:

@@ -7,6 +7,7 @@ from typing import Any
 import discord
 
 from .command_errors import AnswersErrors
+from .logkinds import FEATURE_PAGES
 from .settings_store import DB_UNAVAILABLE
 
 log = logging.getLogger(__name__)
@@ -83,6 +84,14 @@ def option_label(
 
 def panel_minutes(store: Any, guild_id: int, key: str) -> int:
     return int(store.get(guild_id, key))
+
+
+def site_page_url(origin: Any, feature: str) -> str | None:
+    """The one home for a feature's dashboard address; no origin means no link at all."""
+    text = str(origin or "").strip()
+    if not text:
+        return None
+    return f"{text.rstrip('/')}/{FEATURE_PAGES[feature]}"
 
 
 class Panel(AnswersErrors, discord.ui.View):
@@ -166,5 +175,6 @@ __all__ = [
     "option_label",
     "panel_minutes",
     "retire",
+    "site_page_url",
     "still_staff",
 ]

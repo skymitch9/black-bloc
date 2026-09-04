@@ -189,8 +189,9 @@ black_bloc/
 │   └── content/      ← one cog per content feature
 │       ├── golive.py ← F1/F2: presence listener, Twitch poller, the /golive panel
 │       ├── chat.py   ← F10: the @-mention listener, cooldown, modmail routing, /chat
-│       ├── pings.py  ← F14: /pingroles (staff) and /pings (everybody) — opt-in go-live and event
-│       │                pings, and a role per streamer their followers wear
+│       ├── pings.py  ← F14: /pings — ONE command, one ephemeral panel (wave 2). Member half:
+│       │                follow/stop-following selects, the Events toggle(s), the fan button.
+│       │                Staff half: Streamers…, Set up the Events role, Settings, Logs
 │       └── youtube.py ← F3: the uploads sweep and /youtube, ONE command that opens a panel for
 │                        members and staff alike (2026-09-03; /uploads is retired). Reads the
 │                        public Atom feed; YOUTUBE_API_KEY is optional (see KI-11)

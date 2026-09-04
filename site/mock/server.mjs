@@ -297,8 +297,8 @@ const SETTING_SPECS = [
   ['youtube_template', 'text', '**{name}** just dropped a new video: **{title}** {url}', '**{name}** just dropped a new video: **{title}** {url}', 'what an upload announcement says; {name} {title} {url} {channel} {kind}'],
   ['youtube_poll_minutes', 'int', 10, 10, "minutes between checks of every linked channel's uploads feed"],
   ['pings_mode', 'enum', 'off', 'off', 'off, or on (members can opt in to go-live and event pings, and a streamer can have a role of their own that only their followers wear)', ['off', 'on']],
-  ['pings_events_role_name', 'text', 'Events', 'Events', 'what `/pingroles setup` calls the one opt-in role for go-live and event pings when it has to make it; an existing role of that name is reused rather than duplicated'],
-  ['pings_fan_role_creation', 'enum', 'self', 'self', 'who may start a streamer’s own ping role: self (the streamer, with `/pings fans on`), staff (only an Auntie/Uncle, with `/pingroles streamer add`), or auto (one is made the moment a Twitch channel is linked). Staff can always do it for anybody, whichever this says', ['self', 'staff', 'auto']],
+  ['pings_events_role_name', 'text', 'Events', 'Events', 'what **Set up the Events role** on `/pings` calls the one opt-in role for go-live and event pings when it has to make it; an existing role of that name is reused rather than duplicated'],
+  ['pings_fan_role_creation', 'enum', 'self', 'self', 'who may start a streamer’s own ping role: self (the streamer, with **Start my own ping role** on `/pings`), staff (only an Auntie/Uncle, from `/pings` ▸ **Streamers…**), or auto (one is made the moment a Twitch channel is linked). Staff can always do it for anybody, whichever this says', ['self', 'staff', 'auto']],
   ['pings_fan_role_template', 'text', '{name} pings', '{name} pings', 'what a streamer’s own ping role is called; {name} is their display name at the moment the role is made and is the only field there is'],
   ['pings_fan_role_on_unlink', 'enum', 'keep', 'keep', 'what happens to a streamer’s ping role when they unlink Twitch or opt out of announcements: keep leaves it alone (nothing is announced, so nobody is pinged), delete takes the role off the server', ['keep', 'delete']],
   ['pings_fan_role_delete', 'bool', true, true, 'true to delete the Discord role itself when a streamer’s ping role is removed; false forgets the role here and leaves it on the server for somebody to tidy by hand'],
@@ -416,6 +416,7 @@ const SETTING_SPECS = [
   ['applications_panel_minutes', 'int', 10, 10, "minutes the /applications show panel stays live before its buttons disable themselves; 10 by default. The 'this panel went quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
   ['memory_panel_minutes', 'int', 10, 10, "minutes the /memory panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
   ['youtube_panel_minutes', 'int', 10, 10, "minutes the /youtube panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
+  ['pings_panel_minutes', 'int', 10, 10, "minutes the /pings panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
   ['youtube_unlink_dms_them', 'bool', true, true, 'true to DM a member the reason when STAFF forget their YouTube channel for them; a member unlinking their own channel is never DMed'],
 ];
 
@@ -2619,7 +2620,7 @@ route('POST', '/api/pings/streamers', async (context) => {
     throw new Refused(404, 'no_such_member', `**${memberId}** is not somebody Black Bloc can see in this server, so nothing was changed. Pick them from the list rather than typing an id.`);
   }
   if (state.golive.fanRoles.some((row) => String(row.user_id) === memberId)) {
-    throw new Refused(409, 'not_created', `**${memberName(memberId)}** already has a ping role. Nothing was changed; people follow it with \`/pings follow\`.`);
+    throw new Refused(409, 'not_created', `**${memberName(memberId)}** already has a ping role. Nothing was changed; people follow it with **Follow a streamer…** on \`/pings\`.`);
   }
   const given = body.role_id ? String(body.role_id) : null;
   if (given && !roleOf(given)) {
@@ -2639,8 +2640,8 @@ route('POST', '/api/pings/streamers', async (context) => {
   return {
     ...fanRoleRow(row),
     message: given
-      ? `Used the role **${name}** for **${memberName(memberId)}** and put it on the *streamers* panel. People pick it there, or with \`/pings follow\`.`
-      : `Made **${name}** and put it on the *streamers* panel. People pick it there, or with \`/pings follow\`, and Black Bloc mentions it in front of their go-live announcement.`,
+      ? `Used the role **${name}** for **${memberName(memberId)}** and put it on the *streamers* panel. People pick it there, or with **Follow a streamer…** on \`/pings\`.`
+      : `Made **${name}** and put it on the *streamers* panel. People pick it there, or with **Follow a streamer…** on \`/pings\`, and Black Bloc mentions it in front of their go-live announcement.`,
   };
 });
 
@@ -2649,7 +2650,7 @@ route('DELETE', '/api/pings/streamers/:member_id', (context) => {
   const memberId = String(context.params.member_id);
   const at = state.golive.fanRoles.findIndex((row) => String(row.user_id) === memberId);
   if (at < 0) {
-    throw new Refused(404, 'no_fan_role', `**${memberName(memberId) || memberId}** has no ping role, so there was nothing to take away. \`/pingroles streamer list\` shows who has one.`);
+    throw new Refused(404, 'no_fan_role', `**${memberName(memberId) || memberId}** has no ping role, so there was nothing to take away. \`/pings\` ▸ **Streamers…** shows who has one.`);
   }
   const [row] = state.golive.fanRoles.splice(at, 1);
   const role = roleOf(row.role_id) || (row.role_name ? { name: row.role_name } : null);

@@ -7,8 +7,8 @@ from typing import Any
 
 import discord
 
-from .logkinds import FEATURE_PAGES
 from .panels import panel_minutes as library_panel_minutes
+from .panels import site_page_url as library_site_page_url
 from .settings_store import GOLIVE_END_EDIT, GOLIVE_END_SUFFIX, GOLIVE_TEMPLATE
 
 log = logging.getLogger(__name__)
@@ -442,7 +442,4 @@ def panel_minutes(store: Any, guild_id: int) -> int:
 
 
 def site_page_url(origin: Any) -> str | None:
-    text = str(origin or "").strip()
-    if not text:
-        return None
-    return f"{text.rstrip('/')}/{FEATURE_PAGES['golive']}"
+    return library_site_page_url(origin, "golive")

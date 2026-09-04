@@ -185,7 +185,7 @@ const PINGS_NOTE = 'One opt-in role for go-live and event pings, and a role per 
 const PINGS_NO_MODE = 'The bot did not report a pings_mode key, so the switch is not shown '
   + 'rather than guessed at.';
 const NO_STREAMERS = 'Nobody has a ping role yet. Start one below, or a streamer starts their '
-  + 'own with /pings fans on.';
+  + 'own from /pings.';
 const ROLE_GONE = 'deleted by hand';
 const SETUP_HELP = 'Makes (or reuses) the Events role, points both feeds at it and puts it on '
   + 'the Notifications panel. Post that panel from the Role menus tab.';

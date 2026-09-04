@@ -11,6 +11,7 @@ from .logkinds import FEATURE_PAGES, VIA_DISCORD, kind_via
 from .panels import CAPPED_PLACEHOLDER, capped_placeholder
 from .panels import option_label as library_option_label
 from .panels import panel_minutes as library_panel_minutes
+from .panels import site_page_url as library_site_page_url
 from .timezones import DEFAULT_TZ, zone
 
 log = logging.getLogger(__name__)
@@ -501,10 +502,7 @@ def counts_line(counts: dict[str, int]) -> str:
 
 
 def site_page_url(origin: Any) -> str | None:
-    text = str(origin or "").strip()
-    if not text:
-        return None
-    return f"{text.rstrip('/')}/{FEATURE_PAGES['request']}"
+    return library_site_page_url(origin, "request")
 
 
 def panel_minutes(store: Any, guild_id: int) -> int:

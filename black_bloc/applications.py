@@ -10,8 +10,8 @@ from typing import Any
 import discord
 
 from .golive import now_iso
-from .logkinds import FEATURE_PAGES
 from .panels import panel_minutes as library_panel_minutes
+from .panels import site_page_url as library_site_page_url
 from .rolegrants import (
     APPROVED,
     DENIED,
@@ -622,10 +622,7 @@ def panel_shows_own_list(store: Any, guild_id: int) -> bool:
 
 
 def site_page_url(origin: Any) -> str | None:
-    text = str(origin or "").strip()
-    if not text:
-        return None
-    return f"{text.rstrip('/')}/{FEATURE_PAGES['applications']}"
+    return library_site_page_url(origin, "applications")
 
 
 def own_lines(rows: Any, forms_by_id: Any) -> list[str]:
