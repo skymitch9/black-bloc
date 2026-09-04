@@ -1347,6 +1347,48 @@ async def test_the_channel_copy_is_off_by_default_and_never_doubles_the_ping(
     assert channel.messages[0].content == f"<@{member.id}>"
 
 
+def log_titles(bot):
+    return [
+        message.kwargs["embed"].title
+        for message in bot.guild.get_channel(LOG_CHANNEL).messages
+        if message.kwargs.get("embed") is not None
+    ]
+
+
+async def test_the_done_card_is_the_discord_record_not_the_raw_log_line(
+    cog, bot, member, lead, db
+):
+    await bot.store.set(GUILD, "request_channel_moves", list(pure.LOOKS))
+    request_id = await request_at(bot, member, lead, pure.REVIEW)
+    channel = bot.guild.get_channel(TEST_CHANNEL)
+    channel.messages.clear()
+    bot.guild.get_channel(LOG_CHANNEL).messages.clear()
+
+    await requests_cog.accept(bot, bot.guild, request_id, lead)
+
+    assert len(channel.messages) == 1
+    assert log_titles(bot) == []
+    assert (await action_kinds(db))[-1] == "request.done"
+
+    await bot.store.set(GUILD, "request_log_level", "all")
+    second = await request_at(bot, member, lead, pure.REVIEW)
+    bot.guild.get_channel(LOG_CHANNEL).messages.clear()
+
+    await requests_cog.accept(bot, bot.guild, second, lead)
+
+    assert log_titles(bot) == ["request.done"]
+
+
+async def test_a_move_without_a_card_still_reaches_the_log_channel(cog, bot, member, lead):
+    await bot.store.set(GUILD, "request_channel_moves", [])
+    request_id = await request_at(bot, member, lead, pure.REVIEW)
+    bot.guild.get_channel(LOG_CHANNEL).messages.clear()
+
+    await requests_cog.accept(bot, bot.guild, request_id, lead)
+
+    assert log_titles(bot) == ["request.done"]
+
+
 async def test_marking_ready_asks_automatically_only_when_the_server_says_so(
     cog, bot, member, lead, db
 ):

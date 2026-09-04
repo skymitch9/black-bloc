@@ -397,12 +397,12 @@ def is_important(kind: str) -> bool:
     return any(text.endswith(suffix) for suffix in IMPORTANT_SUFFIXES)
 
 
-def should_post(kind: str, level: str | None) -> bool:
+def should_post(kind: str, level: str | None, *, carded: bool = False) -> bool:
     """An unknown level is `all` — today's behaviour — so nothing goes quiet by accident."""
     if level == OFF:
         return False
     if level == IMPORTANT_ONLY:
-        return is_important(kind)
+        return is_important(kind) and not carded
     return True
 
 

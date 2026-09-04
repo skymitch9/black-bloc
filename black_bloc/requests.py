@@ -564,6 +564,11 @@ def posts_a_card(store: Any, guild_id: int, look: str) -> bool:
     return look in channel_moves(store, guild_id)
 
 
+def card_will_post(store: Any, guild_id: int, look: str) -> bool:
+    """The card is the Discord record of a move; the raw log line stays off Discord beside one."""
+    return posts_a_card(store, guild_id, look) and bool(status_channel_id(store, guild_id))
+
+
 def review_by_other(store: Any, guild_id: int) -> bool:
     return bool(store.get(guild_id, REVIEW_BY_OTHER_KEY))
 
@@ -1079,6 +1084,7 @@ __all__ = [
     "panel_shows_own_list",
     "parse_due",
     "pick_placeholder",
+    "card_will_post",
     "posts_a_card",
     "request_embed",
     "request_url",

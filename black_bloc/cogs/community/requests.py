@@ -61,6 +61,7 @@ from ...requests import (
     RequestError,
     card_buttons,
     card_footer_override,
+    card_will_post,
     check_falls_back,
     checked_fields,
     checked_move,
@@ -350,6 +351,7 @@ async def apply_decision(
         target=row["user_id"],
         reason=kept or kept_note or None,
         details={"request_id": request_id, "was": row["status"], "via": via},
+        carded=card_will_post(bot.store, guild.id, look),
     )
     await tell_person(bot, guild, fresh, look)
     await notify_move(bot, guild, fresh, look)
@@ -442,6 +444,7 @@ async def resume_request(
         actor=actor,
         target=row["user_id"],
         details={"request_id": request_id, "was": HOLD, "held_from": wanted, "via": via},
+        carded=card_will_post(bot.store, guild.id, wanted),
     )
     await tell_person(bot, guild, fresh, wanted)
     await notify_move(bot, guild, fresh, wanted)
@@ -510,6 +513,7 @@ async def ask_check(
         actor=actor,
         target=wanted,
         details={"request_id": request_id, "told": told, "via": via},
+        carded=told == "channel" or card_will_post(bot.store, guild.id, CHECK_ASKED),
     )
     if told != "channel":
         await notify_move(bot, guild, fresh, CHECK_ASKED)

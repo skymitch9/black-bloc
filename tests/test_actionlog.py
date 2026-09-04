@@ -162,6 +162,38 @@ async def test_notify_forces_the_line_through_any_level(wired):
     assert [sent["embed"].title for sent in channel.sent] == ["poll.created"]
 
 
+async def test_a_carded_move_writes_the_row_and_leaves_discord_to_the_card(wired):
+    db, store = wired
+    channel = _Channel()
+    bot = _Bot(db, store, channel)
+
+    await log_action(bot, _Guild(), "request.done", actor=1, target=2, carded=True)
+
+    assert [row["kind"] for row in await _rows(db)] == ["request.done"]
+    assert channel.sent == []
+
+
+async def test_all_still_posts_the_raw_line_beside_the_card(wired):
+    db, store = wired
+    await store.set(7, "request_log_level", "all")
+    channel = _Channel()
+    bot = _Bot(db, store, channel)
+
+    await log_action(bot, _Guild(), "request.done", actor=1, target=2, carded=True)
+
+    assert [sent["embed"].title for sent in channel.sent] == ["request.done"]
+
+
+async def test_notify_outranks_carded(wired):
+    db, store = wired
+    channel = _Channel()
+    bot = _Bot(db, store, channel)
+
+    await log_action(bot, _Guild(), "request.done", actor=1, carded=True, notify=True)
+
+    assert [sent["embed"].title for sent in channel.sent] == ["request.done"]
+
+
 async def test_each_feature_is_gated_on_its_own_key(wired):
     db, store = wired
     await store.set(7, "poll_log_level", "all")

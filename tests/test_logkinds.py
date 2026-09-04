@@ -731,6 +731,13 @@ def test_should_post_reads_the_three_levels():
     assert should_post("poll.created", ALL) is True
 
 
+def test_a_carded_important_kind_only_posts_at_all():
+    assert should_post("request.done", IMPORTANT_ONLY, carded=True) is False
+    assert should_post("request.done", IMPORTANT_ONLY, carded=False) is True
+    assert should_post("request.done", ALL, carded=True) is True
+    assert should_post("request.done", OFF, carded=True) is False
+
+
 def test_an_unknown_level_is_todays_behaviour():
     for level in (None, "", "quiet", "IMPORTANT"):
         assert should_post("poll.created", level) is True

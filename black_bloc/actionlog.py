@@ -114,6 +114,7 @@ async def log_action(
     reason: str | None = None,
     details: dict[str, Any] | None = None,
     notify: bool = False,
+    carded: bool = False,
 ) -> int | None:
     """Record one action: a DB row always, a log-channel embed when the level asks for it."""
     at = datetime.now(UTC)
@@ -132,7 +133,7 @@ async def log_action(
         ),
     )
     await bot.db.conn.commit()
-    if notify or should_post(kind, level_for(bot, guild, kind)):
+    if notify or should_post(kind, level_for(bot, guild, kind), carded=carded):
         embed = build_embed(
             kind, actor=actor, target=target, reason=reason, details=details, at=at
         )
