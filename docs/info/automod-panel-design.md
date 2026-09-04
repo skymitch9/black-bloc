@@ -624,3 +624,84 @@ additions + `_as_words` + their tests, (2) the cog extractions (`set_mode`, `set
 string and doc sweep — so a kill costs the last layer rather than the build. The brief carries
 `docs/info/review-checklist.md`, `docs/info/panels-program.md` and this file, and the standing
 rule that **`git stash` is never run in a shared tree**.
+
+## Build deviations
+
+Written by the build agent, 2026-09-04, on `worktree-agent-ae7bb4ba9c5540ad4`. Everything
+not listed here was built as this document says.
+
+1. **There IS a Settings sub-panel, which §C's table does not list.** §I's fork F-A3 was
+   answered (a) — no controls for `automod_warn_threshold` / `mod_dm_on_action` — and the
+   brief spelled that as *"read-only lines on the Settings sub-panel saying they are set on
+   the Moderation page"*. The two keys §D adds also need a Discord door of their own
+   (checklist 33, and every shipped panel puts its `*_panel_minutes` on the panel rather than
+   only in `/settings set-value`). So the root's row 2 carries **Exemptions… · Settings… ·
+   Refresh · Logs · Open on the site** — exactly Discord's five — and the sub-panel holds
+   `Numbers…` (panel minutes), one toggle for `automod_arm_needs_confirm` that says which way
+   it is set, `Back`, and the two read-only lines with a sentence naming where they live.
+   Both keys are still reachable from the Settings page and `/settings set-value`.
+2. **`root_buttons` takes `has_site` only, not `may_arm`.** §F gives the signature
+   `root_buttons(*, may_arm, has_site)`; `may_arm` changes nothing about the buttons — it
+   governs the mode SELECT (`mode_options`) and, through `needs_confirm`, the confirm view.
+   A parameter the function cannot use is dead weight, so it was dropped rather than passed
+   and ignored.
+3. **`_typed` moved as `typed`, public.** §E says it moves and is "re-exported from the cog by
+   name so no existing import changes" — measured, **nothing outside the cog imported it**
+   (or `RULE_FIELDS`), so there was nothing to preserve, and a module-private name that
+   crosses a module boundary is not private. `RULE_FIELDS` moved unchanged.
+4. **`black_bloc/automod.py` imports `panels` INSIDE two functions, not at module level.**
+   §F's `panel_minutes` is "a one-liner over `panels.panel_minutes`, exactly as the five
+   shipped panels do" — but the five shipped pure modules are not imported BY
+   `settings_store.py`, and this one is (`validate_rules`). `panels` imports
+   `DB_UNAVAILABLE` from `settings_store`, so a module-level import closes the loop and every
+   import of `settings_store` dies. `panel_minutes` and `exempt_options` (which needs
+   `SELECT_OPTION_LIMIT`) each do a function-local import instead — cheaper than a second copy
+   of either fact. The §H import check is what would have caught it.
+5. **The confirm's second button is labelled from the current mode.** §I's (a) names
+   `Keep it in shadow`; from `off → on` that sentence is wrong, so the button reads **Keep it
+   off** there. `Yes, arm it` is unchanged.
+6. **The rule picker's option labels are sliced, not built with `panels.option_label`.** §C
+   says "clamped by `panels.option_label`/`SELECT_OPTION_LIMIT`"; `option_label`'s shape is
+   `#<id> · <status> · <text>` and would render `#mention_spam · how many…`. The label is
+   `f"{name} — {RULE_HELP[name]}"[:SELECT_OPTION_LIMIT]`, which is the clamp without the
+   request-row prefix.
+7. **`status_lines` decides "every rule is off" from the rules, not from `rules_summary`'s
+   sentence.** Comparing the summary string to the literal `"every rule is off"` would put
+   one fact in two homes; the line renders when no `rule_config(book, name)["enabled"]` is
+   true, which is the same condition `rules_summary` uses.
+8. **`_as_words`' type error now names lines as well as commas.** §F's change is the split;
+   the sentence for a non-string value still said "takes a comma-separated list of words",
+   which would have been the one place still telling somebody the old rule.
+   `RULE_HELP["bad_words"]` was reworded to *"the bad_words rule's own word list holds them"*
+   per §E — it is served to the website by `rule_row`, so it names no command at all.
+9. **`LOG_LEVEL_COMMANDS["automod"]` was REMOVED, not re-pointed** (§E left the choice open).
+   `log_level_help` renders *"and in `/<command> logs`"*, and there is no `/automod logs`
+   after this build; with no row the help text simply says the lines are kept on the
+   dashboard, which is true. ⚠️ This makes automod the only correct row in that map: **eight
+   of the remaining thirteen now name a retired subcommand too** (`pings` → `pingroles`,
+   already flagged by §J; plus `tempvoice` → `voice`, `events` → `event`, `poll`, `birthday`,
+   `golive`, `request`, `applications`). Reported, not fixed — it wants one pass of its own.
+10. **A new log kind, `automod.settings`** (ROUTINE, beside `automod.rule`), for the Settings
+    sub-panel's write. §F lists no function for those two keys because §D treated them as
+    registry-only; `save_settings` follows `youtube.save_setup`'s shape exactly — validate
+    every key before writing any, then ONE log row with `kind_via`.
+11. **`AutomodMove` has no `question` / `yes` fields.** §F asks for `AutomodMove` +
+    `PANEL_MOVES` + the two button functions; the confirm's question and its two labels are
+    one each, so they are module constants (`ARM_QUESTION`, `ARM_MOVE`, `KEEP_*_MOVE`) rather
+    than fields carried on every move. `PANEL_MOVES` is the whole set and a test proves every
+    entry is distinct.
+12. **The confirm helper was built LOCALLY and nothing was added to `panels.py`**, as §F
+    instructs. `open_confirm` / `build_confirm` here is the third hand-rolled copy after
+    `youtube.open_confirm` and pings' deviation 8 — **handed to the conductor to fold into
+    `panels.py` at the merge**, the way `clamped` landed.
+
+⚠️ **What was NOT verified.** Nothing was run against Discord: no boot (there is no bot
+token in this environment), no panel opened, no modal submitted, no message judged. The
+substitutes actually run are `python -c "import black_bloc.automod,
+black_bloc.cogs.moderation.automod, black_bloc.api.tools.mod, black_bloc.panels"` (passes),
+the full `pytest` suite (**4330 passed**, 4268 before), `ruff check .` (clean), `node
+site/mock/check.mjs` (**17 pages / 142 routes**, unchanged) and `node --input-type=module
+--check < site/public/assets/labels.js` (passes). `commands synced` was measured through
+`tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits` at **38, unchanged**.
+Whether a real client submits an EMPTY multi-`Select` at `min_values=0` is still unproven —
+`Log only` is the fallback and both paths are built.

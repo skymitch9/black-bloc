@@ -11,29 +11,60 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from ...actionlog import (
-    LOGS_DEFAULT,
-    LOGS_MAX,
-    LOGS_MIN,
-    log_action,
-    send_logs,
-)
+from ...actionlog import log_action, send_logs
 from ...automod import (
-    AUTOMOD_MODES,
+    ACTIONS,
+    ARM,
+    ARM_CONFIRM,
+    ARM_CONFIRM_KEY,
+    BACK,
+    CHANNEL,
+    DEFAULT_RULES,
+    DISABLE,
+    ENABLE,
+    EXEMPT_BACK_MOVE,
+    EXEMPTIONS,
+    KEEP,
+    LOG_ONLY,
+    LOGS,
+    NUMBERS,
+    PANEL_MINUTES_KEY,
+    PANEL_NUMBERS,
+    PANEL_TIMEOUT_FOOTER,
+    PANEL_TITLE,
+    REFRESH,
+    ROLE,
     RULE_HELP,
     RULE_ORDER,
+    SETTINGS,
+    SITE,
+    THRESHOLD_MAX,
+    TIMEOUT_MAX_SECONDS,
+    WINDOW_MAX_SECONDS,
+    AutomodMove,
     RuleError,
     Verdict,
     WindowState,
+    arm_needs_confirm,
+    card_buttons,
     channel_exempt,
+    confirm_buttons,
     describe_rule,
     evaluate,
+    exempt_options,
     exempt_reason,
     facts_from,
+    mode_options,
+    needs_confirm,
     normalise_rule,
+    panel_minutes,
+    root_buttons,
     rule_config,
+    rule_field_labels,
+    settings_buttons,
+    typed,
 )
-from ...command_errors import SafeDynamicItem
+from ...command_errors import AnswersErrors, SafeDynamicItem
 from ...command_visibility import STAFF_ONLY
 from ...logkinds import VIA_DISCORD, kind_via
 from ...modcases import (
@@ -54,20 +85,39 @@ from ...modcases import (
     set_case_log_message,
     set_case_outcome,
 )
-from ...settings_store import DB_UNAVAILABLE, require_staff, staff_roles_sentence
+from ...panels import (
+    DESCRIPTION_LIMIT,
+    SELECT_OPTION_LIMIT,
+    Panel,
+    answer,
+    capped_placeholder,
+    clamped,
+    db_ready,
+    db_up,
+    retire,
+    site_page_url,
+    still_staff,
+)
+from ...settings_store import (
+    DB_UNAVAILABLE,
+    GUILD_ONLY,
+    SettingError,
+    coerce_value,
+    require_staff,
+    staff_roles_sentence,
+)
 
 log = logging.getLogger(__name__)
 
 MESSAGE_TYPES = (discord.MessageType.default, discord.MessageType.reply)
 APPLY_TEMPLATE = r"automod:apply:(?P<case_id>[0-9]+)"
-RULE_FIELDS = ("enabled", "window_s", "threshold", "actions", "timeout_s", "words")
 STAFF_CACHE_SECONDS = 60
 
 NO_STAFF_ROLES = (
     "Black Bloc cannot work out who counts as staff, so automod was left as it was. Nobody but "
     "server admins would be exempt from it, which means a moderator posting five pings would be "
     "timed out. Point `staff_channel_id` at a channel only staff can see with `/settings set "
-    "staff_channel_id`, check `/automod status` lists the roles you expect, then arm it again."
+    "staff_channel_id`, then check the panel lists the roles you expect and arm it again."
 )
 NO_STAFF_WARNING = (
     "⚠️ **No staff roles resolve.** Only people with Manage Server are exempt, so a moderator "
@@ -88,14 +138,95 @@ TIMEOUT_REFUSED = (
     "an admin to fix that, then time them out by hand."
 )
 UNKNOWN_RULE_CHOICE = (
-    "**{given}** is not one of Black Bloc's automod rules, so nothing was changed. `/automod "
-    "status` lists them."
+    "**{given}** is not one of Black Bloc's automod rules, so nothing was changed. `/automod` "
+    "lists them."
 )
 STAFF_IS_THE_TEST_CHANNEL = (
     "`staff_channel_id` is still the test channel, so everybody who can see it would count as "
     "staff and automod would punish nobody. Set a real staff channel first with `/settings set "
-    "staff_channel_id`, check `/automod status` lists the roles you expect, then arm it again."
+    "staff_channel_id`, then check the panel lists the roles you expect and arm it again."
 )
+
+MODE_SET = "Automod is now **{mode}**."
+ALREADY = "<{mark}{ident}> was already {state}, so nothing changed."
+CHANGED = "<{mark}{ident}> is {state}"
+EXEMPT_NOW = "exempt from automod now."
+WATCHED_AGAIN = "watched by automod again."
+SETTINGS_NOTHING = "Nothing was given, so nothing changed."
+SETTINGS_DONE = "The panel stays live {minutes} minute(s), and arming automod {what}."
+ONE_MESSAGE_AT_A_TIME = (
+    "**how it counts** — one message at a time; nothing carries over from the message before."
+)
+OVER_A_WINDOW = "**how it counts** — everything one member does in {seconds} seconds, added up."
+ACTION_LABELS = {
+    "delete": "delete what they posted",
+    "warn": "warn them",
+    "timeout": "time them out",
+}
+WHAT_IT_DOES = "What it does…"
+NUMBER_LABEL = "A whole number"
+SELECT_CAP = 25
+PANEL_KEYS = (PANEL_MINUTES_KEY, ARM_CONFIRM_KEY)
+EVERY_RULE_OFF = (
+    "⚠️ **Every rule is off**, so automod reads what people post and can never act on it. Open "
+    "**A rule…** below and turn one on."
+)
+EXEMPT_TITLE = "What automod never reads"
+EXEMPT_INTRO = (
+    "Staff are always exempt. These are the roles and channels automod skips on top of that."
+)
+HONEYPOT_LINE = (
+    "**never read either** — {channels}, because they are the honeypot's own traps. They are not "
+    "on the list below: the honeypot owns them."
+)
+NOTHING_EXEMPT = "Nothing extra is exempt yet."
+PICK_A_RULE = "A rule…"
+MODE_PLACEHOLDER = "What automod does…"
+ADD_ROLE = "Stop watching a role…"
+ADD_CHANNEL = "Stop watching a channel…"
+REMOVE_PLACEHOLDER = "Watch it again…"
+SETTINGS_TITLE = "How the automod panel behaves"
+SITE_ONLY_LINES = (
+    "**warn threshold** and **what a punished member is told** belong to moderation as a whole, "
+    "not to automod, so they are changed on the Moderation page of the dashboard or with "
+    "`/settings set-value` — not here, where a change would quietly alter `/warn` too."
+)
+CONFIRM_TITLE = "Are you sure?"
+ARM_QUESTION = (
+    "Turning automod **on** starts deleting messages, warning people and timing them out for "
+    "real, from the next message. Nothing you have read in shadow is applied retrospectively."
+)
+NUMBERS_TITLE = "Change the numbers"
+WORDS_TITLE = "Words that are not allowed"
+WORDS_LABEL = "One per line, or separated by commas"
+WORDS_TOO_LONG = (
+    "This word list is longer than a Discord box holds, so it can only be edited on the "
+    "dashboard's Automod page. Nothing was changed."
+)
+PANEL_NUMBERS_TITLE = "Numbers"
+PANEL_MINUTES_LABEL = "Minutes this panel stays live"
+NOT_A_NUMBER = (
+    "**{given}** is not a whole number, so nothing was changed. {label} takes a number of "
+    "minutes — 1 or more."
+)
+ASKS_TWICE = "asks a second time first"
+ONE_PRESS = "takes one press"
+
+EXEMPT_KEYS: dict[str, tuple[str, str]] = {
+    ROLE: ("automod_exempt_role_ids", "@&"),
+    CHANNEL: ("automod_exempt_channel_ids", "#"),
+}
+STYLES = {
+    "primary": discord.ButtonStyle.primary,
+    "secondary": discord.ButtonStyle.secondary,
+    "success": discord.ButtonStyle.success,
+    "danger": discord.ButtonStyle.danger,
+}
+FIELD_LIMITS = {
+    "window_s": len(str(WINDOW_MAX_SECONDS)),
+    "threshold": len(str(THRESHOLD_MAX)),
+    "timeout_s": len(str(TIMEOUT_MAX_SECONDS)),
+}
 
 
 def apply_custom_id(case_id: int) -> str:
@@ -424,15 +555,6 @@ class AutoMod(commands.Cog):
         self.state = WindowState()
         self._staff: dict[int, tuple[float, set[int]]] = {}
 
-    automod = app_commands.Group(
-        name="automod", description="The rules that watch what people post",
-        default_permissions=STAFF_ONLY,
-    )
-    rule = app_commands.Group(name="rule", description="One automod rule", parent=automod)
-    exempt = app_commands.Group(
-        name="exempt", description="Roles and channels automod ignores", parent=automod
-    )
-
     async def cog_load(self) -> None:
         self.bot.add_dynamic_items(ApplyNowButton)
 
@@ -580,250 +702,650 @@ class AutoMod(commands.Cog):
         message_id = await send_modlog(self.bot, guild, embed, view)
         await set_case_log_message(self.bot.db, case_id, message_id)
 
-    async def _database_ready(self, interaction: discord.Interaction) -> bool:
-        if self.bot.db.is_connected:
-            return True
-        log.warning("automod: refused a command — the database is not connected")
-        await interaction.response.send_message(DB_UNAVAILABLE, ephemeral=True)
-        return False
-
-    @automod.command(name="logs", description="The last few automod log lines")
-    @app_commands.describe(
-        count="How many lines, 1 to 50 (10 by default)",
-        important_only="True to leave out the dry runs and the housekeeping",
+    @app_commands.command(
+        name="automod", description="The rules that watch what people post"
     )
-    async def automod_logs(
-        self,
-        interaction: discord.Interaction,
-        count: app_commands.Range[int, LOGS_MIN, LOGS_MAX] = LOGS_DEFAULT,
-        important_only: bool = False,
-    ) -> None:
-        await send_logs(interaction, "automod", count=count, important_only=important_only)
-
-    @automod.command(name="status", description="Show what automod is set to and has seen")
-    async def status(self, interaction: discord.Interaction) -> None:
+    @app_commands.default_permissions(STAFF_ONLY)
+    async def automod(self, interaction: discord.Interaction) -> None:
+        if interaction.guild is None:
+            await answer(interaction, GUILD_ONLY)
+            return
         if not await require_staff(interaction):
             return
-        if not await self._database_ready(interaction):
+        if not await db_up(interaction):
             return
-        guild = interaction.guild
-        store = self.bot.store
-        mode = store.get(guild.id, "automod_mode")
-        staff = store.staff_roles(guild)
-        book = store.get(guild.id, "automod_rules")
-        roles = store.get(guild.id, "automod_exempt_role_ids") or []
-        channels = store.get(guild.id, "automod_exempt_channel_ids") or []
-        cur = await self.bot.db.conn.execute(
-            "SELECT applied, COUNT(*) AS n FROM mod_cases WHERE guild_id = ? AND kind = 'automod' "
-            "GROUP BY applied",
-            (guild.id,),
-        )
-        totals = {int(row["applied"]): int(row["n"]) for row in await cur.fetchall()}
-        lines = [
-            f"**mode** — {mode}",
-            f"**staff (always exempt)** — {staff_roles_sentence(staff)}",
-            f"**tells the member** — {store.get(guild.id, 'mod_dm_on_action')}",
-            f"**warn threshold** — {store.get(guild.id, 'automod_warn_threshold')} (log only)",
-            "**modlog** — "
-            + (f"<#{store.get(guild.id, 'modlog_channel_id')}>"
-               if store.get(guild.id, "modlog_channel_id") else "not set"),
-            "**exempt roles** — "
-            + (", ".join(f"<@&{r}>" for r in roles) if roles else "staff only"),
-            "**exempt channels** — "
-            + (", ".join(f"<#{c}>" for c in channels) if channels else "none"),
-            f"**seen** — {totals.get(1, 0)} acted on · {totals.get(0, 0)} logged only",
-            "",
-            *[describe_rule(name, rule_config(book, name)) for name in RULE_ORDER],
-        ]
-        if not staff and mode == "on":
-            lines.append(NO_STAFF_WARNING)
+        embed, view = await build_root(self.bot, interaction.guild)
         await interaction.response.send_message(
-            "\n".join(lines), ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-        )
-
-    @automod.command(name="mode", description="Turn automod off, to shadow, or on")
-    @app_commands.describe(mode="off, shadow (log what it would do) or on (punish)")
-    @app_commands.choices(
-        mode=[app_commands.Choice(name=name, value=name) for name in AUTOMOD_MODES]
-    )
-    async def mode(
-        self, interaction: discord.Interaction, mode: app_commands.Choice[str]
-    ) -> None:
-        if not await require_staff(interaction):
-            return
-        if mode.value == "on":
-            store = self.bot.store
-            if store.get(interaction.guild.id, "staff_channel_id") == (
-                self.bot.settings.test_channel_id
-            ):
-                await interaction.response.send_message(
-                    STAFF_IS_THE_TEST_CHANNEL, ephemeral=True
-                )
-                return
-            if not store.staff_roles(interaction.guild):
-                await interaction.response.send_message(NO_STAFF_ROLES, ephemeral=True)
-                return
-        await self.bot.store.set(
-            interaction.guild.id, "automod_mode", mode.value, by=interaction.user.id
-        )
-        await interaction.response.send_message(
-            f"Automod is now **{mode.value}**.", ephemeral=True
-        )
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "automod.mode",
-            actor=interaction.user,
-            details={"mode": mode.value},
-        )
-
-    @rule.command(name="enable", description="Arm one automod rule")
-    @app_commands.describe(name="Which rule")
-    async def rule_enable(self, interaction: discord.Interaction, name: str) -> None:
-        await self._set_field(interaction, name, "enabled", "true")
-
-    @rule.command(name="disable", description="Stop one automod rule running")
-    @app_commands.describe(name="Which rule")
-    async def rule_disable(self, interaction: discord.Interaction, name: str) -> None:
-        await self._set_field(interaction, name, "enabled", "false")
-
-    @rule.command(name="set", description="Change one number on one automod rule")
-    @app_commands.describe(
-        name="Which rule", field="What to change", value="What to change it to"
-    )
-    @app_commands.choices(
-        field=[app_commands.Choice(name=item, value=item) for item in RULE_FIELDS]
-    )
-    async def rule_set(
-        self,
-        interaction: discord.Interaction,
-        name: str,
-        field: app_commands.Choice[str],
-        value: str,
-    ) -> None:
-        await self._set_field(interaction, name, field.value, value)
-
-    @rule_enable.autocomplete("name")
-    @rule_disable.autocomplete("name")
-    @rule_set.autocomplete("name")
-    async def rule_names(
-        self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[str]]:
-        lowered = (current or "").lower()
-        return [
-            app_commands.Choice(name=f"{name} — {RULE_HELP[name]}"[:100], value=name)
-            for name in RULE_ORDER
-            if lowered in name
-        ][:25]
-
-    async def _set_field(
-        self, interaction: discord.Interaction, name: str, field: str, raw: str
-    ) -> None:
-        if not await require_staff(interaction):
-            return
-        if name not in RULE_ORDER:
-            await interaction.response.send_message(
-                UNKNOWN_RULE_CHOICE.format(given=name), ephemeral=True
-            )
-            return
-        try:
-            rule = await save_rule(
-                self.bot,
-                interaction.guild,
-                name,
-                {field: _typed(field, raw)},
-                interaction.user,
-            )
-        except (RuleError, ValueError) as exc:
-            await interaction.response.send_message(str(exc), ephemeral=True)
-            return
-        await interaction.response.send_message(
-            describe_rule(name, rule),
+            embed=embed,
+            view=view,
             ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
         )
+        view.message = await interaction.original_response()
 
-    @exempt.command(name="add", description="Let a role or a channel go unwatched")
-    async def exempt_add(
-        self,
-        interaction: discord.Interaction,
-        role: discord.Role | None = None,
-        channel: discord.abc.GuildChannel | None = None,
-    ) -> None:
-        await self._change_exempt(interaction, role, channel, add=True)
 
-    @exempt.command(name="remove", description="Watch a role or a channel again")
-    async def exempt_remove(
-        self,
-        interaction: discord.Interaction,
-        role: discord.Role | None = None,
-        channel: discord.abc.GuildChannel | None = None,
-    ) -> None:
-        await self._change_exempt(interaction, role, channel, add=False)
+# --- the moves, one function each, one write and one log row -------------------------------------
 
-    async def _change_exempt(
-        self, interaction: discord.Interaction, role: Any, channel: Any, *, add: bool
-    ) -> None:
-        if not await require_staff(interaction):
+
+def arming_refusal(bot: Any, guild: Any) -> str | None:
+    """The mode picker and `set_mode` read one answer, so offer and verdict cannot disagree."""
+    store = bot.store
+    if store.get(guild.id, "staff_channel_id") == bot.settings.test_channel_id:
+        return STAFF_IS_THE_TEST_CHANNEL
+    if not store.staff_roles(guild):
+        return NO_STAFF_ROLES
+    return None
+
+
+async def set_mode(bot: Any, guild: Any, value: str, actor: Any, *, via: str = VIA_DISCORD) -> str:
+    if value == "on":
+        refusal = arming_refusal(bot, guild)
+        if refusal is not None:
+            return refusal
+    await bot.store.set(guild.id, "automod_mode", value, by=getattr(actor, "id", actor))
+    await log_action(
+        bot,
+        guild,
+        kind_via("automod.mode", via),
+        actor=actor,
+        details={"mode": value, "via": via},
+    )
+    return MODE_SET.format(mode=value)
+
+
+async def set_exempt(
+    bot: Any,
+    guild: Any,
+    kind: str,
+    entity_id: Any,
+    actor: Any,
+    *,
+    add: bool,
+    via: str = VIA_DISCORD,
+) -> str:
+    """One role or one channel per call; the kind picks the key and the mark it is written with."""
+    key, mark = EXEMPT_KEYS[kind]
+    ident = int(entity_id)
+    ids = list(bot.store.get(guild.id, key) or [])
+    if add and ident not in ids:
+        ids.append(ident)
+    elif not add and ident in ids:
+        ids.remove(ident)
+    else:
+        return ALREADY.format(mark=mark, ident=ident, state="exempt" if add else "not exempt")
+    await bot.store.set(guild.id, key, ids, by=getattr(actor, "id", actor))
+    await log_action(
+        bot,
+        guild,
+        kind_via("automod.exempt_add" if add else "automod.exempt_remove", via),
+        actor=actor,
+        details={key: ident, "via": via},
+    )
+    return CHANGED.format(mark=mark, ident=ident, state=EXEMPT_NOW if add else WATCHED_AGAIN)
+
+
+async def save_settings(
+    bot: Any, guild: Any, changes: Any, actor: Any, *, via: str = VIA_DISCORD
+) -> str:
+    """The two panel keys, written together so one press leaves one log row."""
+    wanted = {key: value for key, value in (changes or {}).items() if key in PANEL_KEYS}
+    if not wanted:
+        return SETTINGS_NOTHING
+    for key, value in wanted.items():
+        try:
+            coerce_value(key, value)
+        except SettingError as exc:
+            return str(exc)
+    for key, value in wanted.items():
+        await bot.store.set(guild.id, key, value, by=getattr(actor, "id", actor))
+    await log_action(
+        bot,
+        guild,
+        kind_via("automod.settings", via),
+        actor=actor,
+        details={"changed": wanted, "via": via},
+    )
+    return SETTINGS_DONE.format(
+        minutes=panel_minutes(bot.store, guild.id),
+        what=ASKS_TWICE if arm_needs_confirm(bot.store, guild.id) else ONE_PRESS,
+    )
+
+
+async def case_totals(db: Any, guild_id: int) -> dict[int, int]:
+    cur = await db.conn.execute(
+        "SELECT applied, COUNT(*) AS n FROM mod_cases WHERE guild_id = ? AND kind = 'automod' "
+        "GROUP BY applied",
+        (guild_id,),
+    )
+    return {int(row["applied"]): int(row["n"]) for row in await cur.fetchall()}
+
+
+def status_lines(bot: Any, guild: Any, totals: dict[int, int]) -> list[str]:
+    """The panel embed and what `/automod status` printed are ONE list, never two shapes."""
+    store = bot.store
+    mode = store.get(guild.id, "automod_mode")
+    staff = store.staff_roles(guild)
+    book = store.get(guild.id, "automod_rules")
+    roles = store.get(guild.id, "automod_exempt_role_ids") or []
+    channels = store.get(guild.id, "automod_exempt_channel_ids") or []
+    modlog = store.get(guild.id, "modlog_channel_id")
+    lines = [
+        f"**mode** — {mode}",
+        f"**staff (always exempt)** — {staff_roles_sentence(staff)}",
+        f"**tells the member** — {store.get(guild.id, 'mod_dm_on_action')}",
+        f"**warn threshold** — {store.get(guild.id, 'automod_warn_threshold')} (log only)",
+        "**modlog** — " + (f"<#{modlog}>" if modlog else "not set"),
+        "**exempt roles** — "
+        + (", ".join(f"<@&{one}>" for one in roles) if roles else "staff only"),
+        "**exempt channels** — "
+        + (", ".join(f"<#{one}>" for one in channels) if channels else "none"),
+        f"**seen** — {totals.get(1, 0)} acted on · {totals.get(0, 0)} logged only",
+    ]
+    blocker = arming_refusal(bot, guild)
+    if blocker is not None:
+        lines.append(blocker)
+    if not any(rule_config(book, name)["enabled"] for name in RULE_ORDER):
+        lines.append(EVERY_RULE_OFF)
+    lines.append("")
+    lines.extend(describe_rule(name, rule_config(book, name)) for name in RULE_ORDER)
+    if not staff and mode == "on":
+        lines.append(NO_STAFF_WARNING)
+    return lines
+
+
+def card_lines(name: str, cfg: dict[str, Any]) -> list[str]:
+    lines = [describe_rule(name, cfg), "", f"**what it counts** — {RULE_HELP[name]}"]
+    if cfg["window_s"]:
+        lines.append(OVER_A_WINDOW.format(seconds=cfg["window_s"]))
+    else:
+        lines.append(ONE_MESSAGE_AT_A_TIME)
+    if "words" in cfg:
+        lines.append(f"**words** — {', '.join(cfg['words']) or 'none yet'}")
+    return lines
+
+
+def exempt_lines(bot: Any, guild: Any) -> list[str]:
+    store = bot.store
+    roles = store.get(guild.id, "automod_exempt_role_ids") or []
+    channels = store.get(guild.id, "automod_exempt_channel_ids") or []
+    honeypots = store.get(guild.id, "honeypot_channel_ids") or []
+    lines = [
+        EXEMPT_INTRO,
+        "",
+        "**exempt roles** — "
+        + (", ".join(f"<@&{one}>" for one in roles) if roles else "staff only"),
+        "**exempt channels** — "
+        + (", ".join(f"<#{one}>" for one in channels) if channels else "none"),
+    ]
+    if honeypots:
+        lines.append(HONEYPOT_LINE.format(channels=", ".join(f"<#{one}>" for one in honeypots)))
+    if not roles and not channels:
+        lines.append(NOTHING_EXEMPT)
+    return lines
+
+
+def settings_lines(bot: Any, guild: Any) -> list[str]:
+    store = bot.store
+    return [
+        f"**this panel stays live** — {panel_minutes(store, guild.id)} minute(s)",
+        "**arming automod** — " + (ASKS_TWICE if arm_needs_confirm(store, guild.id) else ONE_PRESS),
+        "",
+        f"**warn threshold** — {store.get(guild.id, 'automod_warn_threshold')} (log only)",
+        f"**tells the member** — {store.get(guild.id, 'mod_dm_on_action')}",
+        SITE_ONLY_LINES,
+    ]
+
+
+def exempt_names(guild: Any, roles: Any, channels: Any) -> dict[tuple[str, int], str]:
+    found: dict[tuple[str, int], str] = {}
+    for kind, ids, getter in (
+        (ROLE, roles, getattr(guild, "get_role", None)),
+        (CHANNEL, channels, getattr(guild, "get_channel", None)),
+    ):
+        for one in ids or ():
+            entity = getter(int(one)) if getter is not None else None
+            if entity is not None:
+                found[(kind, int(one))] = str(getattr(entity, "name", one))
+    return found
+
+
+# --- the panel -----------------------------------------------------------------------------------
+
+
+class AutomodPanel(Panel):
+    def __init__(self, minutes: int) -> None:
+        super().__init__(minutes, footer=PANEL_TIMEOUT_FOOTER)
+        self.rule_name: str | None = None
+
+
+def minutes_for(bot: Any, guild_id: int) -> int:
+    return panel_minutes(bot.store, guild_id)
+
+
+def add_root_buttons(view: Any, bot: Any) -> None:
+    url = site_page_url(getattr(getattr(bot, "settings", None), "origin", ""), "automod")
+    for move in root_buttons(has_site=url is not None):
+        view.add_item(SiteButton(move, url) if move.action == SITE else MoveButton(move))
+
+
+async def build_root(bot: Any, guild: Any) -> tuple[discord.Embed, AutomodPanel]:
+    totals = await case_totals(bot.db, guild.id)
+    embed = discord.Embed(title=PANEL_TITLE, description=clamped(status_lines(bot, guild, totals)))
+    view = AutomodPanel(minutes_for(bot, guild.id))
+    view.add_item(RulePick())
+    view.add_item(
+        ModePick(bot.store.get(guild.id, "automod_mode"), arming_refusal(bot, guild) is None)
+    )
+    add_root_buttons(view, bot)
+    return (embed, view)
+
+
+def build_card(bot: Any, guild: Any, name: str) -> tuple[discord.Embed, AutomodPanel]:
+    cfg = rule_config(bot.store.get(guild.id, "automod_rules"), name)
+    embed = discord.Embed(title=PANEL_TITLE, description=clamped(card_lines(name, cfg)))
+    view = AutomodPanel(minutes_for(bot, guild.id))
+    view.rule_name = name
+    for move in card_buttons(cfg, has_words="words" in DEFAULT_RULES[name]):
+        view.add_item(MoveButton(move))
+    view.add_item(ActionsPick(cfg["actions"]))
+    return (embed, view)
+
+
+def build_exemptions(bot: Any, guild: Any) -> tuple[discord.Embed, AutomodPanel]:
+    store = bot.store
+    roles = store.get(guild.id, "automod_exempt_role_ids") or []
+    channels = store.get(guild.id, "automod_exempt_channel_ids") or []
+    embed = discord.Embed(title=EXEMPT_TITLE, description=clamped(exempt_lines(bot, guild)))
+    view = AutomodPanel(minutes_for(bot, guild.id))
+    view.add_item(ExemptRolePick())
+    view.add_item(ExemptChannelPick())
+    options = exempt_options(roles, channels, exempt_names(guild, roles, channels))
+    if options:
+        view.add_item(ExemptRemovePick(options))
+    view.add_item(MoveButton(EXEMPT_BACK_MOVE))
+    return (embed, view)
+
+
+def build_settings(bot: Any, guild: Any) -> tuple[discord.Embed, AutomodPanel]:
+    embed = discord.Embed(title=SETTINGS_TITLE, description=clamped(settings_lines(bot, guild)))
+    view = AutomodPanel(minutes_for(bot, guild.id))
+    for move in settings_buttons(asks_twice=arm_needs_confirm(bot.store, guild.id)):
+        view.add_item(MoveButton(move))
+    return (embed, view)
+
+
+async def build_confirm(bot: Any, guild: Any) -> tuple[discord.Embed, AutomodPanel]:
+    """Arming replaces the root's controls rather than adding a row to them."""
+    totals = await case_totals(bot.db, guild.id)
+    embed = discord.Embed(title=PANEL_TITLE, description=clamped(status_lines(bot, guild, totals)))
+    embed.add_field(name=CONFIRM_TITLE, value=ARM_QUESTION, inline=False)
+    view = AutomodPanel(minutes_for(bot, guild.id))
+    for move in confirm_buttons(bot.store.get(guild.id, "automod_mode")):
+        view.add_item(MoveButton(move))
+    return (embed, view)
+
+
+# --- rendering -----------------------------------------------------------------------------------
+
+
+async def show(interaction: discord.Interaction, built: Any, previous: Any) -> None:
+    embed, view = built
+    retire(previous)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+async def render_root(interaction: discord.Interaction, previous: Any = None) -> None:
+    await show(interaction, await build_root(interaction.client, interaction.guild), previous)
+
+
+async def render_card(interaction: discord.Interaction, name: str, previous: Any = None) -> None:
+    await show(interaction, build_card(interaction.client, interaction.guild, name), previous)
+
+
+async def render_exemptions(interaction: discord.Interaction, previous: Any = None) -> None:
+    await show(interaction, build_exemptions(interaction.client, interaction.guild), previous)
+
+
+async def render_settings(interaction: discord.Interaction, previous: Any = None) -> None:
+    await show(interaction, build_settings(interaction.client, interaction.guild), previous)
+
+
+async def opened(interaction: discord.Interaction) -> bool:
+    """Staff are re-asked before every move, the reads included, and then the database is."""
+    if not await still_staff(interaction):
+        return False
+    await interaction.response.defer()
+    return await db_ready(interaction)
+
+
+async def back_to_root(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await opened(interaction):
+        return
+    await render_root(interaction, previous)
+
+
+async def open_card(interaction: discord.Interaction, name: str, previous: Any = None) -> None:
+    if not await opened(interaction):
+        return
+    await render_card(interaction, name, previous)
+
+
+async def open_exemptions(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await opened(interaction):
+        return
+    await render_exemptions(interaction, previous)
+
+
+async def open_settings(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await opened(interaction):
+        return
+    await render_settings(interaction, previous)
+
+
+async def open_confirm(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await opened(interaction):
+        return
+    await show(interaction, await build_confirm(interaction.client, interaction.guild), previous)
+
+
+async def run_rule(
+    interaction: discord.Interaction, name: Any, changes: dict[str, Any], previous: Any = None
+) -> None:
+    """A refused value is answered and the card is NOT re-rendered, so it cannot read as a save."""
+    if not await opened(interaction):
+        return
+    store = interaction.client.store
+    try:
+        await save_rule(interaction.client, interaction.guild, str(name), changes, interaction.user)
+    except (RuleError, ValueError) as exc:
+        await answer(interaction, str(exc))
+        return
+    await render_card(interaction, str(name), previous)
+    cfg = rule_config(store.get(interaction.guild.id, "automod_rules"), str(name))
+    await answer(interaction, describe_rule(str(name), cfg))
+
+
+async def run_mode(
+    interaction: discord.Interaction,
+    value: str,
+    previous: Any = None,
+    *,
+    confirmed: bool = False,
+) -> None:
+    bot = interaction.client
+    guild = interaction.guild
+    if not confirmed and needs_confirm(
+        bot.store.get(guild.id, "automod_mode"), value, arm_needs_confirm(bot.store, guild.id)
+    ):
+        await open_confirm(interaction, previous)
+        return
+    if not await opened(interaction):
+        return
+    said = await set_mode(bot, guild, value, interaction.user)
+    await render_root(interaction, previous)
+    await answer(interaction, said)
+
+
+async def run_exempt(
+    interaction: discord.Interaction,
+    kind: str,
+    entity_id: Any,
+    previous: Any = None,
+    *,
+    add: bool,
+) -> None:
+    if not await opened(interaction):
+        return
+    said = await set_exempt(
+        interaction.client, interaction.guild, kind, entity_id, interaction.user, add=add
+    )
+    await render_exemptions(interaction, previous)
+    await answer(interaction, said)
+
+
+async def run_settings(
+    interaction: discord.Interaction, changes: dict[str, Any], previous: Any = None
+) -> None:
+    if not await opened(interaction):
+        return
+    said = await save_settings(interaction.client, interaction.guild, changes, interaction.user)
+    await render_settings(interaction, previous)
+    await answer(interaction, said)
+
+
+# --- the controls --------------------------------------------------------------------------------
+
+
+class MoveButton(discord.ui.Button):
+    def __init__(self, move: AutomodMove) -> None:
+        super().__init__(label=move.label, style=STYLES[move.style], row=move.row)
+        self.move = move
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        action = self.move.action
+        if action == LOGS:
+            await send_logs(interaction, "automod")
             return
-        if role is None and channel is None:
-            await interaction.response.send_message(
-                "Name a role or a channel — that command needs one of them to do anything.",
-                ephemeral=True,
-            )
+        if action in (REFRESH, BACK, KEEP):
+            await back_to_root(interaction, view)
             return
+        if action == EXEMPTIONS:
+            await open_exemptions(interaction, view)
+            return
+        if action == SETTINGS:
+            await open_settings(interaction, view)
+            return
+        if action == ARM:
+            await run_mode(interaction, "on", view, confirmed=True)
+            return
+        if action in (ENABLE, DISABLE):
+            await run_rule(interaction, view.rule_name, {"enabled": action == ENABLE}, view)
+            return
+        if action == LOG_ONLY:
+            await run_rule(interaction, view.rule_name, {"actions": []}, view)
+            return
+        if action == ARM_CONFIRM:
+            asks = arm_needs_confirm(interaction.client.store, interaction.guild.id)
+            await run_settings(interaction, {ARM_CONFIRM_KEY: not asks}, view)
+            return
+        await self.open_modal(interaction, view)
+
+    async def open_modal(self, interaction: discord.Interaction, view: Any) -> None:
+        if not await still_staff(interaction):
+            return
+        if not await db_up(interaction):
+            return
+        bot = interaction.client
         guild = interaction.guild
-        said: list[str] = []
-        for entity, key, mark in (
-            (role, "automod_exempt_role_ids", "@&"),
-            (channel, "automod_exempt_channel_ids", "#"),
-        ):
-            if entity is None:
-                continue
-            ids = list(self.bot.store.get(guild.id, key) or [])
-            if add and entity.id not in ids:
-                ids.append(entity.id)
-            elif not add and entity.id in ids:
-                ids.remove(entity.id)
-            else:
-                said.append(
-                    f"<{mark}{entity.id}> was already "
-                    + ("exempt" if add else "not exempt")
-                    + ", so nothing changed."
+        if self.move.action == PANEL_NUMBERS:
+            await interaction.response.send_modal(
+                PanelNumbersModal(minutes_for(bot, guild.id), view)
+            )
+            return
+        cfg = rule_config(bot.store.get(guild.id, "automod_rules"), view.rule_name)
+        if self.move.action == NUMBERS:
+            await interaction.response.send_modal(NumbersModal(view.rule_name, cfg, view))
+            return
+        given = "\n".join(cfg.get("words") or ())
+        if len(given) > DESCRIPTION_LIMIT:
+            await answer(interaction, WORDS_TOO_LONG)
+            return
+        await interaction.response.send_modal(WordsModal(view.rule_name, given, view))
+
+
+class SiteButton(discord.ui.Button):
+    def __init__(self, move: AutomodMove, url: str) -> None:
+        super().__init__(label=move.label, style=discord.ButtonStyle.link, url=url, row=move.row)
+
+
+class RulePick(discord.ui.Select):
+    def __init__(self) -> None:
+        super().__init__(
+            placeholder=PICK_A_RULE,
+            options=[
+                discord.SelectOption(
+                    label=f"{name} — {RULE_HELP[name]}"[:SELECT_OPTION_LIMIT], value=name
                 )
-                continue
-            await self.bot.store.set(guild.id, key, ids, by=interaction.user.id)
-            said.append(
-                f"<{mark}{entity.id}> is "
-                + ("exempt from automod now." if add else "watched by automod again.")
-            )
-            await log_action(
-                self.bot,
-                guild,
-                "automod.exempt_add" if add else "automod.exempt_remove",
-                actor=interaction.user,
-                details={key: entity.id},
-            )
-        await interaction.response.send_message(
-            " ".join(said), ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+                for name in RULE_ORDER
+            ],
+            min_values=1,
+            max_values=1,
+            row=0,
         )
 
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_card(interaction, self.values[0], self.view)
 
-def _typed(field: str, raw: str) -> Any:
-    text = str(raw or "").strip()
-    if field == "enabled":
-        if text.lower() in ("true", "yes", "on"):
-            return True
-        if text.lower() in ("false", "no", "off"):
-            return False
-        raise RuleError(f"`enabled` takes true or false, not {raw!r}.")
-    if field in ("window_s", "threshold", "timeout_s"):
-        if not text.isdigit():
-            raise RuleError(f"`{field}` takes a whole number, not {raw!r}.")
-        return int(text)
-    if field in ("actions", "words"):
-        return text
-    raise RuleError(f"`{field}` is not something an automod rule has.")
+
+class ModePick(discord.ui.Select):
+    def __init__(self, current: str, may_arm: bool) -> None:
+        super().__init__(
+            placeholder=MODE_PLACEHOLDER,
+            options=[
+                discord.SelectOption(label=label, value=value, default=now)
+                for value, label, now in mode_options(current, may_arm)
+            ],
+            min_values=1,
+            max_values=1,
+            row=1,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_mode(interaction, self.values[0], self.view)
+
+
+class ActionsPick(discord.ui.Select):
+    """`Log only` is the same move by a second door: an empty submit is untested on clients."""
+
+    def __init__(self, actions: Any) -> None:
+        super().__init__(
+            placeholder=WHAT_IT_DOES,
+            options=[
+                discord.SelectOption(
+                    label=ACTION_LABELS[name], value=name, default=name in (actions or ())
+                )
+                for name in ACTIONS
+            ],
+            min_values=0,
+            max_values=len(ACTIONS),
+            row=1,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_rule(interaction, self.view.rule_name, {"actions": list(self.values)}, self.view)
+
+
+class ExemptRolePick(discord.ui.RoleSelect):
+    def __init__(self) -> None:
+        super().__init__(placeholder=ADD_ROLE, min_values=1, max_values=1, row=0)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_exempt(interaction, ROLE, self.values[0].id, self.view, add=True)
+
+
+class ExemptChannelPick(discord.ui.ChannelSelect):
+    def __init__(self) -> None:
+        super().__init__(placeholder=ADD_CHANNEL, min_values=1, max_values=1, row=1)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_exempt(interaction, CHANNEL, self.values[0].id, self.view, add=True)
+
+
+class ExemptRemovePick(discord.ui.Select):
+    """One control for both kinds, so add and remove never become two spellings of one move."""
+
+    def __init__(self, options: list[tuple[str, int, str]]) -> None:
+        shown = list(options)[:SELECT_CAP]
+        super().__init__(
+            placeholder=capped_placeholder(len(shown), len(options), pick=REMOVE_PLACEHOLDER),
+            options=[
+                discord.SelectOption(label=label, value=f"{kind}:{ident}")
+                for kind, ident, label in shown
+            ],
+            min_values=1,
+            max_values=1,
+            row=2,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        kind, _, ident = str(self.values[0]).partition(":")
+        await run_exempt(interaction, kind, int(ident), self.view, add=False)
+
+
+# --- the modals ----------------------------------------------------------------------------------
+
+
+class NumbersModal(AnswersErrors, discord.ui.Modal):
+    window = discord.ui.TextInput(label=NUMBER_LABEL, max_length=FIELD_LIMITS["window_s"])
+    threshold = discord.ui.TextInput(label=NUMBER_LABEL, max_length=FIELD_LIMITS["threshold"])
+    timeout = discord.ui.TextInput(label=NUMBER_LABEL, max_length=FIELD_LIMITS["timeout_s"])
+
+    def __init__(self, name: str, cfg: dict[str, Any], previous: Any = None) -> None:
+        super().__init__(title=NUMBERS_TITLE[:45])
+        self.rule_name = name
+        self.previous = previous
+        labels = rule_field_labels(name)
+        for item, key in self.fields():
+            item.label = labels[key]
+            item.default = str(cfg[key])
+
+    def fields(self) -> tuple[tuple[Any, str], ...]:
+        return (
+            (self.window, "window_s"),
+            (self.threshold, "threshold"),
+            (self.timeout, "timeout_s"),
+        )
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        """A modal has no Range, so every field is parsed before anything at all is written."""
+        changes: dict[str, Any] = {}
+        for item, key in self.fields():
+            try:
+                changes[key] = typed(key, str(item))
+            except RuleError as exc:
+                await answer(interaction, str(exc))
+                return
+        await run_rule(interaction, self.rule_name, changes, self.previous)
+
+
+class WordsModal(AnswersErrors, discord.ui.Modal):
+    words = discord.ui.TextInput(
+        label=WORDS_LABEL,
+        style=discord.TextStyle.paragraph,
+        max_length=DESCRIPTION_LIMIT,
+        required=False,
+    )
+
+    def __init__(self, name: str, given: str, previous: Any = None) -> None:
+        super().__init__(title=WORDS_TITLE[:45])
+        self.rule_name = name
+        self.previous = previous
+        self.words.default = given or None
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await run_rule(interaction, self.rule_name, {"words": str(self.words)}, self.previous)
+
+
+class PanelNumbersModal(AnswersErrors, discord.ui.Modal):
+    stays = discord.ui.TextInput(label=PANEL_MINUTES_LABEL, max_length=5)
+
+    def __init__(self, minutes: Any, previous: Any = None) -> None:
+        super().__init__(title=PANEL_NUMBERS_TITLE[:45])
+        self.previous = previous
+        self.stays.default = str(minutes)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        given = str(self.stays).strip()
+        if not given.isdigit() or int(given) < 1:
+            await answer(
+                interaction,
+                NOT_A_NUMBER.format(given=given[:40] or "nothing", label=PANEL_MINUTES_LABEL),
+            )
+            return
+        await run_settings(interaction, {PANEL_MINUTES_KEY: int(given)}, self.previous)
 
 
 async def setup(bot: commands.Bot) -> None:

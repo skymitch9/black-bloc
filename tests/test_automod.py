@@ -3,22 +3,43 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from black_bloc.automod import (
+    ARM_CONFIRM_KEY,
+    AUTOMOD_MODES,
+    CAPS_THRESHOLD_LABEL,
     DEFAULT_RULES,
+    LOG_ONLY_MOVE,
+    PANEL_MINUTES_KEY,
+    PANEL_MOVES,
+    RULE_FIELDS,
     RULE_ORDER,
+    SITE_MOVE,
     TIMEOUT_MAX_SECONDS,
+    WORDS_MAX,
+    WORDS_MOVE,
     MessageFacts,
     RuleError,
     WindowState,
+    arm_needs_confirm,
+    card_buttons,
     channel_exempt,
+    confirm_buttons,
     describe_rule,
     evaluate,
+    exempt_options,
     exempt_reason,
     facts_from,
     largest_window,
     matched_words,
+    mode_options,
+    needs_confirm,
     normalise_rule,
+    panel_minutes,
+    root_buttons,
     rule_config,
+    rule_field_labels,
     rules_summary,
+    settings_buttons,
+    typed,
     validate_rules,
 )
 
@@ -364,3 +385,145 @@ def test_the_summary_names_the_armed_rules():
     assert "mention_spam 5/30s delete+warn+timeout" in rules_summary(validate_rules({}))
     assert rules_summary({name: {"enabled": False} for name in RULE_ORDER}) == "every rule is off"
     assert "log only" in describe_rule("slowmode", rule_config({}, "slowmode"))
+
+
+class FakeStore:
+    def __init__(self, **values):
+        self.values = values
+
+    def get(self, _guild_id, key):
+        return self.values[key]
+
+
+def test_a_word_list_reads_the_same_whether_it_is_typed_in_lines_or_commas():
+    """The site's textarea is one word per line and the modal copies it, so both must parse."""
+    lines = normalise_rule("bad_words", {"words": "grifter\nwrecker\nscab"})["words"]
+    commas = normalise_rule("bad_words", {"words": "grifter, wrecker, scab"})["words"]
+    mixed = normalise_rule("bad_words", {"words": "grifter, wrecker\r\nscab"})["words"]
+
+    assert lines == commas == mixed == ["grifter", "wrecker", "scab"]
+    assert normalise_rule("bad_words", {"words": "\n\n"})["words"] == []
+    assert normalise_rule("bad_words", {"words": "A\na"})["words"] == ["a"]
+    with pytest.raises(RuleError):
+        normalise_rule("bad_words", {"words": "\n".join(str(n) for n in range(WORDS_MAX + 1))})
+    with pytest.raises(RuleError):
+        normalise_rule("bad_words", {"words": 5})
+
+
+def test_a_rule_field_is_typed_or_refused_in_words():
+    assert typed("enabled", "true") is True and typed("enabled", "OFF") is False
+    assert typed("window_s", " 30 ") == 30 and typed("threshold", "0") == 0
+    assert typed("words", " a, b ") == "a, b"
+    for field_name, given in (("enabled", "maybe"), ("threshold", "lots"), ("colour", "red")):
+        with pytest.raises(RuleError):
+            typed(field_name, given)
+    assert RULE_FIELDS == ("enabled", "window_s", "threshold", "actions", "timeout_s", "words")
+
+
+@pytest.mark.parametrize("name", RULE_ORDER)
+def test_a_rule_card_offers_one_spelling_of_every_move_it_has(name):
+    cfg = dict(DEFAULT_RULES[name])
+    has_words = "words" in DEFAULT_RULES[name]
+
+    for enabled in (True, False):
+        for actions in ([], ["delete"]):
+            moves = card_buttons(cfg | {"enabled": enabled, "actions": actions},
+                                 has_words=has_words)
+            labels = [move.label for move in moves]
+            assert len(moves) <= 5, labels
+            assert len(set(labels)) == len(labels)
+            assert ("Turn it off" in labels) is enabled
+            assert ("Turn it on" in labels) is (not enabled)
+            assert (LOG_ONLY_MOVE in moves) is bool(actions)
+            assert (WORDS_MOVE in moves) is has_words
+            assert labels[-1] == "Back"
+
+
+def test_only_bad_words_ever_shows_the_words_button():
+    with_words = [
+        name
+        for name in RULE_ORDER
+        if WORDS_MOVE in card_buttons(DEFAULT_RULES[name], has_words="words" in DEFAULT_RULES[name])
+    ]
+    assert with_words == ["bad_words"]
+
+
+def test_the_root_row_drops_the_site_link_when_there_is_nowhere_to_send_anybody():
+    assert SITE_MOVE in root_buttons(has_site=True)
+    assert SITE_MOVE not in root_buttons(has_site=False)
+    assert len(root_buttons(has_site=True)) == 5
+    assert [move.row for move in root_buttons(has_site=True)] == [2, 2, 2, 2, 2]
+
+
+def test_every_panel_move_is_its_own_button():
+    assert len(set(PANEL_MOVES)) == len(PANEL_MOVES)
+    assert all(move.label and move.style for move in PANEL_MOVES)
+
+
+def test_on_is_not_on_the_picker_while_arming_would_be_refused():
+    armable = mode_options("shadow", True)
+    locked = mode_options("shadow", False)
+
+    assert [value for value, _label, _now in armable] == list(AUTOMOD_MODES)
+    assert [value for value, _label, _now in locked] == ["off", "shadow"]
+    assert [now for _value, _label, now in locked] == [False, True]
+    assert all("—" in label for _value, label, _now in armable)
+
+
+def test_only_arming_asks_twice():
+    assert needs_confirm("shadow", "on", True) is True
+    assert needs_confirm("off", "on", True) is True
+    assert needs_confirm("on", "on", True) is False
+    assert needs_confirm("on", "off", True) is False
+    assert needs_confirm("shadow", "off", True) is False
+    assert needs_confirm("shadow", "on", False) is False
+    shadow = [move.label for move in confirm_buttons("shadow")]
+    assert shadow == ["Yes, arm it", "Keep it in shadow"]
+    assert confirm_buttons("off")[1].label == "Keep it off"
+
+
+@pytest.mark.parametrize("name", RULE_ORDER)
+def test_every_rule_has_three_modal_labels_short_enough_for_discord(name):
+    labels = rule_field_labels(name)
+
+    assert set(labels) == {"window_s", "threshold", "timeout_s"}
+    assert all(len(text) <= 45 for text in labels.values())
+    assert "0 = one message" in labels["window_s"]
+    if name == "caps":
+        assert labels["threshold"] == CAPS_THRESHOLD_LABEL
+        assert "%" not in labels["threshold"] and "1–100" in labels["threshold"]
+    else:
+        assert "how many" in labels["threshold"].lower()
+
+
+def test_the_removal_select_carries_the_kind_and_still_offers_what_discord_lost():
+    options = exempt_options([11, 12], [21], {("role", 11): "Friends", ("channel", 21): "vent"})
+
+    assert options == [
+        ("role", 11, "role — Friends"),
+        ("role", 12, "a role Discord no longer has (12)"),
+        ("channel", 21, "channel — #vent"),
+    ]
+    assert exempt_options([], [], {}) == []
+    assert exempt_options(None, None) == []
+    long_name = exempt_options([11], [], {("role", 11): "x" * 200})[0][2]
+    assert len(long_name) == 100
+
+
+def test_the_panel_reads_its_two_settings_rather_than_a_constant():
+    store = FakeStore(automod_panel_minutes=25, automod_arm_needs_confirm=False)
+
+    assert PANEL_MINUTES_KEY == "automod_panel_minutes"
+    assert ARM_CONFIRM_KEY == "automod_arm_needs_confirm"
+    assert panel_minutes(store, 7) == 25
+    assert arm_needs_confirm(store, 7) is False
+    assert arm_needs_confirm(FakeStore(automod_arm_needs_confirm=True), 7) is True
+
+
+def test_the_settings_sub_panel_says_which_way_the_confirm_is_set():
+    assert [move.label for move in settings_buttons(asks_twice=True)] == [
+        "Numbers…",
+        "Stop asking before arming",
+        "Back",
+    ]
+    assert settings_buttons(asks_twice=False)[1].label == "Ask before arming"

@@ -1084,6 +1084,37 @@ async def test_the_pings_panel_stays_up_ten_minutes_by_default(store):
     assert parse_value("pings_panel_minutes", "45") == 45
 
 
+async def test_the_automod_panel_stays_up_ten_minutes_by_default(store):
+    """Same reason as every other panel: 15 loses Discord's window and the gone-quiet footer."""
+    from black_bloc.cogs.core import VALUE_KEYS
+
+    assert store.get(7, "automod_panel_minutes") == 10
+    assert "15" in KEY_HELP["automod_panel_minutes"]
+    assert KEY_TYPES["automod_panel_minutes"] == "int"
+    assert "automod_panel_minutes" in VALUE_KEYS
+    await store.set(7, "automod_panel_minutes", 25)
+    assert store.get(7, "automod_panel_minutes") == 25
+    with pytest.raises(SettingError):
+        coerce_value("automod_panel_minutes", -1)
+    with pytest.raises(SettingError):
+        coerce_value("automod_panel_minutes", "15")
+    assert parse_value("automod_panel_minutes", "45") == 45
+
+
+async def test_whether_arming_automod_asks_twice_is_a_setting_not_a_constant(store):
+    """Owner fork F-A1 = (a): confirm by default, and a server that finds it tedious may stop it."""
+    from black_bloc.cogs.core import VALUE_KEYS
+
+    assert store.get(7, "automod_arm_needs_confirm") is True
+    assert KEY_TYPES["automod_arm_needs_confirm"] == "bool"
+    assert "automod_arm_needs_confirm" in KEY_HELP
+    assert "automod_arm_needs_confirm" in VALUE_KEYS
+    await store.set(7, "automod_arm_needs_confirm", False)
+    assert store.get(7, "automod_arm_needs_confirm") is False
+    with pytest.raises(SettingError):
+        coerce_value("automod_arm_needs_confirm", "yes")
+
+
 async def test_whether_staff_unlinking_somebody_dms_them_is_a_setting_not_a_constant(store):
     """Staff-final-say says the person is told; checklist 33 says the server may decide."""
     from black_bloc.cogs.core import VALUE_KEYS

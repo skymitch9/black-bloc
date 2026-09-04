@@ -1,6 +1,15 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-04** — rows **144–154** added by the AUTOMOD PANEL build (`/automod` becomes ONE
+> staff-only command that opens a panel; the `automod`, `rule` and `exempt` groups and all
+> eight leaf subcommands are retired, and the top-level count does **NOT** move — **38 → 38,
+> measured** through `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`,
+> since a group already counted as one slot). The **Phase 6 appendix block** below was
+> rewritten IN PLACE for it rather than added to. ⚠️ **Nothing in 144–154 has met live
+> Discord** — no panel opened, no rule changed, no mode flipped; and while the test guard is
+> installed `on` behaves like `shadow`, so row 152 proves the control and row 154 proves the
+> enforcement path is unchanged. Before that,
 > **2026-09-03** — rows **135–143** added by the TEMP-VOICE PANEL build (`/voice` becomes ONE
 > member-visible command that opens a panel; the `tempvoice` and `voice` groups and all
 > twenty-two subcommands are retired, so the top-level count drops by one — **39 → 38, measured**
@@ -207,14 +216,16 @@ form for a full pass.
   relayed) → `/close reason:done` → transcript `.txt` + summary in the test channel,
   DM to the member. Try `/snippet add`, `/modmail block`. Then `/modmail settings
   enabled:false` again so the incumbent keeps the real tickets.
-- **Phase 6 (live, automod `shadow`):** `/automod status` (mode shadow, resolved staff,
-  rules: mention_spam armed, others log-only) → from a second account post 5 @mentions
-  within 30 s in the test channel: expect ONE `automod.would_*` case card with an
-  **Apply now** button (nothing deleted/timed out), and a following "sorry" message
-  does NOT re-fire → `/warn @second reason` (allowed) → `/timeout @second 5m x`
-  (expect the test-mode refusal + `mod.would_timeout`) → `/cases @second`, `/case 1`
-  → `/settings show` (chunked, no 400). `/automod mode on` must REFUSE while the
-  staff channel is still the test channel.
+- **Phase 6 (live, automod `shadow`):** `/automod` — ONE panel carrying everything
+  `/automod status` used to print (mode shadow, resolved staff, rules: mention_spam armed,
+  others log-only) → from a second account post 5 @mentions within 30 s in the test
+  channel: expect ONE `automod.would_*` case card with an **Apply now** button (nothing
+  deleted/timed out), and a following "sorry" message does NOT re-fire → `/warn @second
+  reason` (allowed) → `/timeout @second 5m x` (expect the test-mode refusal +
+  `mod.would_timeout`) → `/cases @second`, `/case 1` → `/settings show` (chunked, no 400).
+  Arming is not offered-and-refused any more: **on** is simply NOT on the *What automod
+  does…* picker while the staff channel is still the test channel, and the panel says so
+  in words.
 - **Phase 8a (live):** open https://blackbloc.heygabi.ai → expect the signed-out
   state with a "Sign in with Discord" button (no bare errors) → sign in (Discord
   authorise; you are staff via Manage Server) → expect the dashboard: health, uptime,
@@ -411,6 +422,33 @@ functions.
 | 141 | The staff half | `/voice` as a Lead | adds the whole status block that `/tempvoice status` used to print, then **Setup · Forget a lobby… · Turn join-to-create off · Logs**, a **A channel…** picker of every open temp channel, and **Open on the site**. **Logs** answers a NEW message and the panel stays. A Lead WITHOUT the Member role still gets all of that, and is told why there is no card of their own |
 | 142 | Setup, forgetting a lobby, and the mode | **Setup** → a name; then **Forget a lobby…** → the lobby; then **Turn join-to-create off** and re-join the lobby; then leave the panel `voice_panel_minutes` (10) minutes | Setup says **repaired / took it over** (never a second lobby); forgetting removes it from the list and joining it makes nothing; with the mode off joining makes no channel and existing ones still work; then every control greys out and the footer reads *This panel has gone quiet — run /voice again*. A lobby Black Bloc is NOT keeping track of is named in the status block with what to do about it — it is not offered on **Forget a lobby…**, because forgetting an id it never stored would do nothing |
 | 143 | Staff reassigning somebody's channel | as a Lead: **A channel…** → somebody else's channel → **Hand it over…** → pick a third member | the row's owner moves, the new owner gets the channel's controls, and the displaced owner is DM'd one line naming who has it now. Staff always get the final say on a stored decision; the member's own **Hand it over…** sends no DM, because they are the person affected |
+
+## The automod panel — rows 144–154
+
+Written 2026-09-04 by the automod panel build. ⚠️ **None of it has been run against
+Discord** — no panel opened, no rule changed, no mode flipped; everything below is what the
+code and its tests say should happen. Eight leaf subcommands over ONE top-level slot became
+ONE `/automod`, so the top-level count does **NOT** move — **38 → 38, measured** through
+`tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`, not a boot. The
+Phase 6 appendix block above was rewritten IN PLACE for this build rather than added to.
+⚠️ **Run every row in `#mute-me-bot-test-spam`.** While the guard is installed the engine
+only ever sees that channel, and **`on` behaves like `shadow`** — nothing is punished,
+everything is logged. So row 152 proves the CONTROL works and proves nothing about
+enforcement; row 154 is the row that proves enforcement did not change.
+
+| # | What | Do this | Expect |
+|---|---|---|---|
+| 144 | The panel is the whole status block | `/automod` as a Lead in `#mute-me-bot-test-spam` | ONE ephemeral panel titled *What automod is watching*: mode, resolved staff, what the member is told, warn threshold, modlog, both exemption lists, the acted-on/logged-only counts, then every rule on its own line — over **A rule… · What automod does… · Exemptions… · Settings… · Refresh · Logs · Open on the site**. Nothing anywhere says `/automod status` or `/automod rule` |
+| 145 | Arming is not offered while it would be refused | look at **What automod does…** while `staff_channel_id` is still the test channel | it offers **off** and **shadow** and **NOT on**, and the panel says in words that the staff channel is still the test channel and what to set instead. Arming is not offered-and-refused; it is not offered |
+| 146 | A rule card | **A rule…** → `mention_spam` | its card: **Turn it off · Change the numbers… · Log only · Back**, a *What it does…* picker with delete, warn and timeout already ticked, and a line saying it counts everything one member does in 30 seconds. **No Words…** — that button is `bad_words`' alone |
+| 147 | A refused number saves nothing at all | **Change the numbers…** → type `abc` in the seconds box, leave the other two | one sentence saying `window_s` takes a whole number — and **nothing is saved**: re-open the card and all three numbers are what they were, including the two that parsed. Then try `4000` in the same box: one sentence naming the 0–3600 range, again nothing saved |
+| 148 | The toggle says what it will do | **Turn it off**, then **Back** → **A rule…** → `mention_spam` | the button now reads **Turn it on** — never both — and the line above it agrees, because both read the same rule object. **Log only** is gone once the rule has no actions left |
+| 149 | The word list, one per line | **A rule…** → `bad_words` → **Words…** | the box arrives prefilled with the words there are; typing a list ONE PER LINE saves them all (not one long word), and so does a comma list. More than 200 is refused in words, and a list too long for the box says to use the dashboard instead of quietly truncating |
+| 150 | Caps asks for a percent | **A rule…** → `caps` → **Change the numbers…** | the threshold box is labelled **Percent capitals, 1–100**, not a count — and `200` is refused naming the 1–100 range |
+| 151 | Exemptions, both kinds on one removal select | **Exemptions…** → *Stop watching a role…*, then *Stop watching a channel…*, then *Watch it again…* | each add says what happened and the lists above update; the removal select carries the role AND the channel with the right word each; a second add of the same thing says it was already exempt and changes nothing. The honeypot channels are named as also-never-read and are **not** on the removal select — the honeypot owns them |
+| 152 | Arming asks a second time, going quieter does not | **What automod does…** → **on** (with a real staff channel set), then **Keep it in shadow**; then → **shadow**, then → **off** | **on** re-renders the panel with *Are you sure?* and **Yes, arm it / Keep it in shadow**; keeping it changes nothing and leaves no log row. Every other move is ONE press and leaves ONE `automod.mode` row. ⚠️ Arming here proves the CONTROL only: while the guard is installed `on` still punishes nobody |
+| 153 | Settings, and the quiet footer | **Settings…** → **Stop asking before arming** (it flips to *Ask before arming*), → **Numbers…** → `0` then `25`; then leave the panel `automod_panel_minutes` minutes | the toggle flips and leaves ONE `automod.settings` row; `0` is refused in words and `25` saves. The warn threshold and what a punished member is told are LINES here with a sentence saying they live on the dashboard's Moderation page — no control, because they belong to `/warn` too. Then every control greys out and the footer reads *This panel has gone quiet — run /automod again* |
+| 154 | Nothing about enforcement changed | post five @mentions from a second account in the test channel | ⚠️ unchanged from before this build: ONE `automod.would_*` case card with **Apply now**, nothing deleted, and a following "sorry" does not re-fire. **This is the most important row in the set** — it is the proof the panel changed only how automod is configured |
 
 ## The owner's Twitch Team form — the walk-through
 
