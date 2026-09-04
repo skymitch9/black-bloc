@@ -9,6 +9,47 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-03 — Go-live panel: `/golive` is one window (wave 2, v70, `0aeed72`)
+
+Release **v70** (`0aeed72`, 17:25; `deploys.log` line 69). Merge `--no-ff` of
+`worktree-agent-a87a00d41b8dc47d1` (Opus build, **464k** against a 230–300k estimate — the second wave-2
+build to run ~2× its estimate; four commits off `8cbe453`: code, tests, the cross-feature string sweep,
+docs) after Fable review — approve, no blocking defect. Four merge conflicts, every one an append-only
+collision with the memory merge (`settings_store.py` both `*_panel_minutes` blocks; `sweeps.md` memory
+rows 104–108 then golive rows 109–117 — the numbering held, nothing renumbered; `OWNER_GUIDE.md` 117 rows
+plus the golive row; `code-notes.md` header, both sentences kept). Verified: boot clean (00:25:01Z
+database ready / **synced 41** — the 42 → 41 drop the build measured through `tests/test_bot.py` is now
+measured at a real boot / 00:25:05Z logged in), ruff clean, **3796 tests** (3750 + 46, none lost). NOT
+verified: `/golive` has not been opened in Discord, no button pressed, no Helix call made —
+sweeps 109–117 (`access/sweeps.md`) are the owner's.
+
+What shipped. `/golive` is a single member-visible command opening an ephemeral panel; the `golive` and
+`twitch` groups and their eight subcommands (`/twitch link`, `/twitch unlink`, `/golive optout`,
+`/golive optin`, `/golive status`, `/golive mode`, `/golive test`, `/golive logs`) are retired — both
+decided forks built as decided (**I1 = `/golive`**, **I2 = the staff `Streamers…` sub-panel**, owner
+16:10). Members: **Link my Twitch channel** (one-line modal; **Change my channel** afterwards,
+prefilled), **Unlink**, and exactly one of **Stop announcing my streams** / **Announce my streams
+again** from a `panel_buttons(linked, opted_out, staff)` table proved by a parametrised test. Staff: the
+whole of the old status embed inline (mode, stream end, channel, cooldown, twitch polling, last good
+poll, last poll error, counts, who is live now — in test mode the channel line SAYS when
+`golive_channel_id` is not the test channel), **Logs**, **Streamers…** (unlink or opt out somebody else,
+the same moves the Go-live page makes), **Preview an announcement…** (ephemeral, never pings, never
+posts) and an **off / shadow / on** select. One function per move with `via`
+(`link_channel/unlink_channel/opt_out/opt_in/set_mode`) serves BOTH doors: `api/tools/golive.py` now calls
+them with `via=VIA_WEBSITE`, so the fan-role step (`pings.maybe_auto_create` / `pings.on_streamer_left`)
+finally runs on the website too — it was the configured behaviour the site was quietly not honouring
+(deviation 3). `checked` now means *a Helix lookup confirmed the channel* (`twitch_user_id is not None`);
+the old `helix is None` expression would have written `checked: true` into `action_log` beside a route
+body saying `false` — found by `tests/api/tools/test_golive.py`, not by reading (deviation 1). One key
+`golive_panel_minutes` (default 10, checklist 33; `labels.js` entry). Design
+[`info/golive-panel-design.md`](info/golive-panel-design.md) (eight deviations at its foot); rows 12,
+19, 31, 49 of `sweeps.md` and the Phase 2 appendix rewritten in place; `OWNER_GUIDE.md` gains the
+"Link your Twitch" row; `code-notes.md` golive keys re-pointed by anchor on the branch (NOT re-keyed
+against `0aeed72` yet — anchor text is authoritative). Findings left open, small: the Logs button loses
+`/golive logs`'s `count`/`important_only` (same as every wave-1 panel; a modal if wanted back); the
+four earlier `*_panel_minutes` keys (event/poll/birthday/request) still lack `labels.js` /
+`site/mock/server.mjs` labels (🔧 in `TODO.md`). Review link: `/golive` in `#mute-me-bot-test-spam`.
+
 ## 2026-09-03 — The request card is the Discord record of a move (v69, `5a97a19`)
 
 Release **v69** (`5a97a19`, 17:14; `deploys.log` line 68). Built in the main loop — one flag

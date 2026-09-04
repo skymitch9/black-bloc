@@ -1,7 +1,9 @@
 # Go-live / Twitch — `/golive` is ONE command that opens a panel (wave 2)
 
-> **Audience:** the build agent, the reviewer and the owner. **Status:** TRACKED · ✅ **BUILT
-> 2026-09-03** on branch `worktree-agent-a87a00d41b8dc47d1` (off `main` `8cbe453`, v67 live), in
+> **Audience:** the build agent, the reviewer and the owner. **Status:** TRACKED · ✅ **SHIPPED v70
+> `0aeed72` 2026-09-03 17:25** (merged from the branch below after Fable review; boot measured `commands synced`
+> **41**; 3796 tests; nothing run against Discord by eye — sweeps 109–117 are the owner's). Written as BUILT
+> 2026-09-03 on branch `worktree-agent-a87a00d41b8dc47d1` (off `main` `8cbe453`, v67 live), in
 > four commits — code, tests, the cross-feature string sweep, docs. **3756 tests pass** (3710 on
 > the base commit, +46, none lost), `ruff check .` clean, `node site/mock/check.mjs` reports the
 > same **17 pages / 142 routes** as `main`, and `labels.js` parses. `commands synced` is

@@ -12,11 +12,11 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 17:20, v69 live, golive landed and under merge)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-03 17:30, v70 live, golive shipped, youtube in flight)
 
-**`main` = `5a97a19`** (request card is the Discord record; v69 live 17:14, 3750 tests, 42 commands). Panels wave 1
-is COMPLETE, wave 2 has ONE of five shipped (memory, v68) with every fork decided (🔧 panels item
-below). Golive build LANDED 17:05 (464k, branch `worktree-agent-a87a00d41b8dc47d1`, 4 commits off `8cbe453`, Fable-reviewed: approve) — merge/deploy is the next step; youtube build still in flight (since 16:52). **Next:** (1) the operator token MINT is owed — classifier-blocked,
+**`main` = `0aeed72`** (golive panel merge; v70 live 17:25, 3796 tests, **41 commands**). Panels wave 1
+is COMPLETE, wave 2 has TWO of five shipped (memory v68, golive v70) with every fork decided (🔧 panels item
+below); the golive landing entry is in `DONE.md` 2026-09-03. Youtube build still in flight (since 16:52; usage read → Fable review → merge → deploy → flip `youtube_mode` to shadow via the site = F-Y2). Pings is UNBLOCKED now that golive is in (usage read before dispatch; weekly cut-off 90%); voice last. **Next:** (1) the operator token MINT is owed — classifier-blocked,
 see the 🔧 item; (2) wave-2 builds in cost order, memory first (Opus, own worktree, brief carries the
 decided forks + `info/review-checklist.md` + the design doc), merge/deploy each as it lands; (3) the
 small review findings (🔧 below) folded into whatever touches those files; (4) owner by-eye sweeps
@@ -265,7 +265,10 @@ docs bookkeeping lands with the work, not after.
   wave-2 build is ~2× its estimate, calibrate the rest up), merged `cb941d9`, live in v68 `cb941d9`
   16:48** (3710 → 3744 tests, 42 commands) — landing entry in `DONE.md` 2026-09-03; sweeps
   104–108 are the owner's to run (`chat_memory_mode` is still off live, so 104–107 need it on plus
-  a conversation first). Golive build in flight since 16:16 (sweeps 109–129); **youtube build
+  a conversation first). **Golive LANDED 17:05 (464k against a 230–300k estimate — again ~2×; four commits off `8cbe453`),
+  Fable-reviewed approve, merged `0aeed72` (four append-only conflicts with the memory merge), live in
+  v70 17:25** (3750 → 3796 tests, `commands synced` **42 → 41 measured at boot**) — landing entry in
+  `DONE.md` 2026-09-03; sweeps 109–117 are the owner's to run. **youtube build
   DISPATCHED 16:52** in parallel (Opus, own worktree, base `ea252bd`, sweeps 130+, told to keep off
   pings/golive files and to keep shared-string edits in its own blocks; F-Y2's shadow flip is the
   conductor's after deploy). Pings waits for golive (shared `pings.py`/`personas.py`); voice last. Events I2 DECIDED 12:40 (`/timezone` retired).
@@ -293,7 +296,10 @@ docs bookkeeping lands with the work, not after.
   byte-for-byte copy of `panels.answer`; `architecture.md`'s "current" command counts are stale
   (a ⚠️ line names the real figures); `applications.py:NOT_YOUR_APPLICATION` / `NO_REVIEW_CHANNEL`
   look dead; `OWNER_GUIDE.md` restates the sweeps count (95) instead of linking — two homes for one
-  number.
+  number. From the golive build (2026-09-03 17:05, Fable review): the four earlier `*_panel_minutes`
+  keys (event/poll/birthday/request) have no label in `site/public/assets/labels.js` or
+  `site/mock/server.mjs` (memory and golive do); every panel's **Logs** button drops `count` /
+  `important_only` (wave 1 shape — a modal if wanted back).
 
 - **Via-labelling gap: `raidtrain.cancel_train` logs one row but calls a website cancel
   Via = Discord** (found by the double-logging build, 2026-09-03 — see `DONE.md` that
