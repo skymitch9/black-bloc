@@ -9,6 +9,38 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-04 — Automod panel: `/automod` is one window (wave 3 FIRST landing, v74, `0b1b2bf`)
+
+Release **v74** (`0b1b2bf`, 15:45; `deploys.log` line 73). Merge `--no-ff` of
+`worktree-agent-ae7bb4ba9c5540ad4` (Opus build, **370k** against a 300–360k estimate; three commits off
+`5db58fb`: `8c5bee9` pure module, `d0fa2c9` cog, `220cacc` docs) after Fable review — approve with one
+merge-time relabel: the Settings toggle read "Arming asks twice" / "Arming is one press" (the current
+state) and now reads **Stop asking before arming** / **Ask before arming** (what it will do — the
+standing button rule). **Clean merge, no conflicts.** The eight `/automod` leaf subcommands became one
+staff panel: the pure `black_bloc/automod.py` holds the tables (`PANEL_MOVES`, `card_buttons`,
+`root_buttons`, `settings_buttons`, `confirm_buttons`, `mode_options(current, may_arm)`,
+`needs_confirm`, `rule_field_labels`, `exempt_options`, `typed`, `panel_minutes`, `arm_needs_confirm`;
+`_as_words` learned newlines so the Words… modal matches the site's textarea) and the cog routes every
+press through `opened()` (still_staff + defer + db_ready) to `run_rule` / `run_mode` / `run_exempt` /
+`run_settings`; `arming_refusal` is read by both the mode select (so `on` is never offered while it
+would be refused) and `set_mode` (so offer and verdict cannot disagree); the confirm card sits behind
+`automod_arm_needs_confirm` (default true, owner fork F-A1 = a) and going quieter is one press;
+bad words is one prefilled paragraph field, over 4000 chars says use the website (F-A2 = a);
+`automod_warn_threshold` / `mod_dm_on_action` are read-only lines pointing at the Moderation page
+(F-A3 = a). Enforcement untouched — `punish`, `do_delete`, `do_timeout`, `_answer_for` byte-identical.
+Deviations at the design doc's foot (a Settings sub-panel exists, for the two new keys' Discord door —
+checklist 33). Keys `automod_panel_minutes` (10) and `automod_arm_needs_confirm` (true) with their
+`labels.js` + `server.mjs` rows; `LOG_LEVEL_COMMANDS["automod"]` and the `LOGS_GROUPS` automod row
+retired. Verified: boot clean (22:45:04Z database ready / **synced 38** (38 → 38 as measured) /
+22:45:08Z logged in, no Traceback), ruff clean, **4332 tests** (4265 + 67, none lost). NOT verified:
+`/automod` has not been opened in Discord, no button pressed, no rule or exemption changed, no message
+judged — sweeps 144–154 (`access/sweeps.md`) are the owner's. Review link: `/automod` in
+`#mute-me-bot-test-spam`; the site's Automod page is unchanged at
+<https://blackbloc.heygabi.ai/automod.html>. Deferred to their own items on `TODO.md`: the confirm
+helper is now FIVE copies (memory, birthdays, youtube, pings, automod `build_confirm`/`confirm_buttons`)
+— a fold sweep, not a merge-time edit; the settings-API-can-arm defect is **KI-21**; `LOG_LEVEL_COMMANDS`
+is stale for eight features. The chat build was in flight in its own worktree when this shipped.
+
 ## 2026-09-03 — Voice panel: `/voice` is one window (wave 2 COMPLETE, v73, `4d64b36`)
 
 Release **v73** (`4d64b36`, 22:08; `deploys.log` line 72). Merge `--no-ff` of

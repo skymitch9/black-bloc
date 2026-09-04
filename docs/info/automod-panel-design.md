@@ -1,7 +1,10 @@
 # Automod — `/automod` is ONE command that opens a panel (wave 3)
 
 > **Audience:** the build agent and the reviewer, and the owner for §I. **Status:** TRACKED ·
-> **PLANNING** — nothing here is built.
+> ✅ **SHIPPED in v74** (`0b1b2bf`, 2026-09-04 15:45; synced 38 measured on the boot log; built on
+> `worktree-agent-ae7bb4ba9c5540ad4`, deviations at the foot, one merge-time relabel of the Settings
+> toggle; sweeps 144–154 are the owner's). The body below is the design as briefed, not re-verified
+> against the merge — `## Build deviations` at the foot is the delta.
 > **Last verified: 2026-09-04** — every `path:line` below was READ against `main` at `bf3e447`
 > (the tree's HEAD is `4336a66`, a docs-only commit on top of it; no code differs), in
 > `black_bloc/cogs/moderation/automod.py` (**830 lines**), `black_bloc/automod.py` (**451
