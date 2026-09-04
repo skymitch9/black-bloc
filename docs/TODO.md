@@ -275,8 +275,9 @@ docs bookkeeping lands with the work, not after.
   (six append-only conflicts with the golive merge; its sweeps rows renumbered 130–137 → 118–125), live in
   v71 17:37** (3796 → 3872 tests, `commands synced` **41 → 40 measured at boot**), **F-Y2 done 17:42**
   (`youtube_mode` off → shadow on the Go-live page, PUT logged 00:42:53Z) — landing entry in `DONE.md`
-  2026-09-03; sweeps 118–125 are the owner's to run. Pings is UNBLOCKED (golive and youtube both in;
-  shared `pings.py`/`personas.py` are quiet); voice last. Events I2 DECIDED 12:40 (`/timezone` retired).
+  2026-09-03; sweeps 118–125 are the owner's to run. **Pings build DISPATCHED 17:50** (Opus, own worktree,
+  base `85e14c4`, forks I1=(a) I2=(b) in the brief, sweeps 126+, `tests/test_bot.py` 40 → 39, allowed to add
+  `panels.site_page_url`; est. 300–360k, expect ~2×); voice last, once pings lands. Events I2 DECIDED 12:40 (`/timezone` retired).
   **Wave-1 builds all landed 13:40–13:50** (birthdays merged `58974e1`; events on
   `worktree-agent-a448c7ab780ed3c2b`, polls on `worktree-agent-aa735ab092d13477d`, both under Fable
   review); the applications build follows once I-A3 is answered. Merge in wave order, re-key
