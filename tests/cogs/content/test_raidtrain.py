@@ -3,12 +3,14 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
+import discord
 import pytest
 
+from black_bloc.cogs.content import raidtrain as cog_module
 from black_bloc.cogs.content.raidtrain import (
-    FEATURE_OFF,
     NOT_AN_ORGANIZER,
     RaidTrains,
+    assign_slot,
     counts,
     create_train,
     get_train,
@@ -145,11 +147,28 @@ class FakeBot:
         return self.cogs.get(name)
 
 
+class PanelMessage:
+    def __init__(self, message_id, **kwargs):
+        self.id = message_id
+        self.kwargs = kwargs
+
+    async def edit(self, **kwargs):
+        self.kwargs |= kwargs
+
+    @property
+    def embeds(self):
+        one = self.kwargs.get("embed")
+        return [one] if one is not None else list(self.kwargs.get("embeds") or ())
+
+
 class FakeResponse:
     def __init__(self):
         self.messages = []
-        self.deferred = False
         self.modals = []
+        self.deferred = False
+
+    def is_done(self):
+        return self.deferred or bool(self.messages)
 
     async def defer(self, ephemeral=False):
         self.deferred = True
@@ -159,6 +178,7 @@ class FakeResponse:
 
     async def send_modal(self, modal):
         self.modals.append(modal)
+        self.deferred = True
 
 
 class FakeFollowup:
@@ -178,11 +198,35 @@ class FakeInteraction:
         self.channel_id = TEST_CHANNEL
         self.response = FakeResponse()
         self.followup = FakeFollowup(self.response)
-        self.namespace = SimpleNamespace(train=None)
+        self.edits = []
+
+    async def original_response(self):
+        return PanelMessage(1)
+
+    async def edit_original_response(self, **kwargs):
+        self.edits.append(kwargs)
+        return PanelMessage(9500, **kwargs)
+
+    @property
+    def rendered(self):
+        if self.edits:
+            return self.edits[-1]
+        return self.response.messages[-1] if self.response.messages else {}
+
+    @property
+    def view(self):
+        return self.rendered.get("view")
+
+    @property
+    def embed(self):
+        return self.rendered.get("embed")
 
     @property
     def sent(self):
-        return self.response.messages[-1]["content"] if self.response.messages else None
+        spoken = [
+            one["content"] for one in self.response.messages if one.get("content") is not None
+        ]
+        return spoken[-1] if spoken else None
 
 
 @pytest.fixture
@@ -267,7 +311,68 @@ async def open_session(db, user_id, *, ended=None):
     await db.conn.commit()
 
 
-# --- storage -----------------------------------------------------------------------------------
+async def seat(bot, train_id, member, position, *, by=None):
+    """The organizer door, used as a fixture: it is the shared function, not a command."""
+    train = await get_train(bot.db, GUILD, train_id)
+    login = await twitch_login_of(bot.db, member.id)
+    return await assign_slot(
+        bot, bot.guild, by or member, train, position, member, login
+    )
+
+
+# --- panel helpers -------------------------------------------------------------------------------
+
+
+def labels(view):
+    return [one.label for one in view.children if getattr(one, "label", None)]
+
+
+def placeholders(view):
+    return [
+        one.placeholder for one in view.children if getattr(one, "placeholder", None) is not None
+    ]
+
+
+def button(view, label):
+    return next(one for one in view.children if getattr(one, "label", None) == label)
+
+
+def picker(view, placeholder):
+    return next(one for one in view.children if getattr(one, "placeholder", None) == placeholder)
+
+
+def options(interaction, placeholder):
+    return [one.value for one in picker(interaction.view, placeholder).options]
+
+
+async def press(interaction, label):
+    await button(interaction.view, label).callback(interaction)
+
+
+async def pick_one(interaction, placeholder, value):
+    control = picker(interaction.view, placeholder)
+    control._values = [value]
+    await control.callback(interaction)
+
+
+async def open_the_panel(cog, bot, who):
+    interaction = FakeInteraction(bot, who)
+    await RaidTrains.raidtrain_panel_command.callback(cog, interaction)
+    return interaction
+
+
+async def open_the_card(cog, bot, who, train_id):
+    """The select is one door onto the card; a finished train is only reachable this way."""
+    interaction = await open_the_panel(cog, bot, who)
+    await cog_module.open_card(interaction, train_id, interaction.view)
+    return interaction
+
+
+def db_is_down(monkeypatch):
+    monkeypatch.setattr(Database, "is_connected", property(lambda self: False))
+
+
+# --- storage -------------------------------------------------------------------------------------
 
 
 async def test_a_new_train_gets_every_slot_at_once(db):
@@ -320,276 +425,415 @@ async def test_a_twitch_login_is_read_from_the_go_live_link(db):
     assert await twitch_login_of(db, BOB) is None
 
 
-# --- the mode gate -----------------------------------------------------------------------------
+# --- the root ------------------------------------------------------------------------------------
 
 
-async def test_every_member_command_refuses_in_words_while_the_feature_is_off(bot, cog, alice):
-    await bot.store.set(GUILD, "raidtrain_mode", "off")
-    interaction = FakeInteraction(bot, alice)
-    await cog.list_command.callback(cog, interaction)
-    assert interaction.sent == FEATURE_OFF.format(mode="off")
-    assert "**Mode…**" in interaction.sent
+async def test_the_command_opens_one_ephemeral_panel(bot, cog, alice, db):
+    await a_train(db)
+    interaction = await open_the_panel(cog, bot, alice)
+    assert interaction.rendered["ephemeral"] is True
+    assert "Saturday train" in interaction.embed.description
+    assert "A train…" in placeholders(interaction.view)
+    assert labels(interaction.view) == ["Refresh"]
 
 
-async def test_a_command_outside_a_server_says_so_rather_than_failing(bot, cog, alice):
+async def test_the_panel_outside_a_server_says_so_rather_than_failing(bot, cog, alice):
     interaction = FakeInteraction(bot, alice)
     interaction.guild = None
-    await cog.list_command.callback(cog, interaction)
+    await RaidTrains.raidtrain_panel_command.callback(cog, interaction)
     assert "server" in interaction.sent
+    assert interaction.view is None
 
 
-# --- claiming ----------------------------------------------------------------------------------
+async def test_the_panel_says_so_when_the_database_is_down(bot, cog, alice, monkeypatch):
+    db_is_down(monkeypatch)
+    interaction = await open_the_panel(cog, bot, alice)
+    assert "database" in interaction.sent.lower()
+    assert interaction.view is None
 
 
-async def test_claiming_without_a_twitch_link_names_the_command_that_fixes_it(bot, cog, alice, db):
-    train_id = await a_train(db)
-    interaction = FakeInteraction(bot, alice)
-    await cog.claim_command.callback(cog, interaction, str(train_id))
-    assert interaction.sent == NEEDS_LINK
-    assert "**Link my Twitch channel**" in interaction.sent
-    assert all(row["user_id"] is None for row in await slots_for(db, train_id))
+async def test_the_panel_still_opens_while_raid_trains_are_off(bot, cog, alice, db):
+    await bot.store.set(GUILD, "raidtrain_mode", "off")
+    await a_train(db)
+    interaction = await open_the_panel(cog, bot, alice)
+    assert "**off**" in interaction.embed.description
+    assert "nothing new can be started" in interaction.embed.description
+    assert labels(interaction.view) == ["Refresh"]
+    assert "Mode…" not in placeholders(interaction.view)
 
 
-async def test_claiming_with_the_link_requirement_off_takes_the_slot_anyway(bot, cog, alice, db):
-    await bot.store.set(GUILD, "raidtrain_require_link", False)
-    train_id = await a_train(db)
-    interaction = FakeInteraction(bot, alice)
-    await cog.claim_command.callback(cog, interaction, str(train_id))
-    assert (await slots_for(db, train_id))[0]["user_id"] == ALICE
+async def test_the_mode_off_panel_still_gives_staff_the_mode_select(bot, cog, organizer):
+    """`/raidtrains mode` is gone, so this select is the ONLY door back to `on`."""
+    await bot.store.set(GUILD, "raidtrain_mode", "off")
+    interaction = await open_the_panel(cog, bot, organizer)
+    assert "Mode…" in placeholders(interaction.view)
+    assert labels(interaction.view) == ["Setup…", "Logs", "Refresh", "Open on the site"]
 
 
-async def test_a_claim_takes_the_next_open_slot_and_says_when_it_is(bot, cog, alice, db):
-    await link(db, ALICE, "alicestreams")
-    train_id = await a_train(db)
-    interaction = FakeInteraction(bot, alice)
-    await cog.claim_command.callback(cog, interaction, str(train_id))
-    assert "Slot **#1**" in interaction.sent
-    slots = await slots_for(db, train_id)
-    assert slots[0]["user_id"] == ALICE and slots[0]["twitch_login"] == "alicestreams"
-    assert "raidtrain.claim" in await kinds_logged(db)
+async def test_a_shadow_panel_renders_exactly_like_an_on_one_plus_a_line(bot, cog, organizer, db):
+    await a_train(db)
+    live = await open_the_panel(cog, bot, organizer)
+    await bot.store.set(GUILD, "raidtrain_mode", "shadow")
+    quiet = await open_the_panel(cog, bot, organizer)
+    assert labels(quiet.view) == labels(live.view)
+    assert placeholders(quiet.view) == placeholders(live.view)
+    assert "held back" in quiet.embed.description
+    assert "held back" not in live.embed.description
 
 
-async def test_a_second_claim_is_refused_by_the_one_slot_ceiling(bot, cog, alice, db):
-    await link(db, ALICE, "alicestreams")
-    train_id = await a_train(db)
-    first = FakeInteraction(bot, alice)
-    await cog.claim_command.callback(cog, first, str(train_id))
-    second = FakeInteraction(bot, alice)
-    await cog.claim_command.callback(cog, second, str(train_id), 2)
-    assert "as many as this server allows" in second.sent
-    assert (await slots_for(db, train_id))[1]["user_id"] is None
+async def test_a_member_never_reaches_the_staff_half(bot, cog, alice, db):
+    await a_train(db)
+    interaction = await open_the_panel(cog, bot, alice)
+    said = labels(interaction.view)
+    assert "Setup…" not in said and "Logs" not in said
+    assert "Open on the site" not in said
+    assert "Mode…" not in placeholders(interaction.view)
 
 
-async def test_the_ceiling_can_be_lifted_altogether(bot, cog, alice, db):
-    await bot.store.set(GUILD, "raidtrain_max_slots_per_member", 0)
-    await link(db, ALICE, "alicestreams")
-    train_id = await a_train(db)
-    for position in (1, 2):
-        interaction = FakeInteraction(bot, alice)
-        await cog.claim_command.callback(cog, interaction, str(train_id), position)
-    assert [row["user_id"] for row in await slots_for(db, train_id)] == [ALICE, ALICE, None]
+async def test_a_non_organizer_is_never_offered_start_a_raid_train(bot, cog, alice, organizer):
+    assert "Start a raid train" not in labels((await open_the_panel(cog, bot, alice)).view)
+    assert "Start a raid train" in labels((await open_the_panel(cog, bot, organizer)).view)
 
 
-async def test_a_slot_somebody_else_holds_is_refused_in_words(bot, cog, alice, bobby, db):
-    await link(db, ALICE, "alicestreams")
-    await link(db, BOB, "bobstreams")
-    train_id = await a_train(db)
-    await cog.claim_command.callback(cog, FakeInteraction(bot, alice), str(train_id), 1)
-    interaction = FakeInteraction(bot, bobby)
-    await cog.claim_command.callback(cog, interaction, str(train_id), 1)
-    assert "already belongs to someone else" in interaction.sent
-
-
-async def test_a_slot_number_that_does_not_exist_says_how_many_there_are(bot, cog, alice, db):
-    await link(db, ALICE, "alicestreams")
-    train_id = await a_train(db, count=3)
-    interaction = FakeInteraction(bot, alice)
-    await cog.claim_command.callback(cog, interaction, str(train_id), 9)
-    assert "#1 to #3" in interaction.sent
-
-
-async def test_a_locked_train_refuses_a_claim_and_says_who_unlocks_it(bot, cog, alice, db):
-    await link(db, ALICE, "alicestreams")
-    train_id = await a_train(db)
-    await db.conn.execute("UPDATE raid_trains SET status = ? WHERE id = ?", (LOCKED, train_id))
-    await db.conn.commit()
-    interaction = FakeInteraction(bot, alice)
-    await cog.claim_command.callback(cog, interaction, str(train_id))
-    assert "**Open it for sign-ups**" in interaction.sent
-    assert all(row["user_id"] is None for row in await slots_for(db, train_id))
-
-
-async def test_an_unknown_train_is_refused_before_anything_is_read(bot, cog, alice, db):
-    interaction = FakeInteraction(bot, alice)
-    await cog.claim_command.callback(cog, interaction, "404")
-    assert "no raid train" in interaction.sent
-
-
-async def test_a_release_opens_the_hour_again_and_only_its_holder_may_do_it(
-    bot, cog, alice, bobby, db
-):
-    await link(db, ALICE, "alicestreams")
-    train_id = await a_train(db)
-    await cog.claim_command.callback(cog, FakeInteraction(bot, alice), str(train_id), 1)
-    theirs = FakeInteraction(bot, bobby)
-    await cog.release_command.callback(cog, theirs, str(train_id), 1)
-    assert "not yours" in theirs.sent
-    mine = FakeInteraction(bot, alice)
-    await cog.release_command.callback(cog, mine, str(train_id))
-    assert "open again" in mine.sent
-    assert (await slots_for(db, train_id))[0]["user_id"] is None
-
-
-async def test_mine_lists_what_somebody_holds_and_says_so_when_it_is_nothing(
-    bot, cog, alice, db
-):
-    empty = FakeInteraction(bot, alice)
-    await cog.mine_command.callback(cog, empty)
-    assert "do not hold a slot" in empty.sent
-    await link(db, ALICE, "alicestreams")
-    train_id = await a_train(db)
-    await cog.claim_command.callback(cog, FakeInteraction(bot, alice), str(train_id), 2)
-    held = FakeInteraction(bot, alice)
-    await cog.mine_command.callback(cog, held)
-    assert "slot #2" in held.sent
-
-
-async def test_the_list_and_the_status_read_the_lineup_without_pinging_anybody(
-    bot, cog, alice, db
-):
-    nothing = FakeInteraction(bot, alice)
-    await cog.list_command.callback(cog, nothing)
-    assert "no raid train on the calendar" in nothing.sent
-    train_id = await a_train(db)
-    listed = FakeInteraction(bot, alice)
-    await cog.list_command.callback(cog, listed)
-    assert "0/3 filled" in listed.sent
-    assert "open: #1, #2, #3" in listed.sent
-    shown = FakeInteraction(bot, alice)
-    await cog.status_command.callback(cog, shown, str(train_id))
-    assert "Saturday train" in shown.sent
-    assert shown.response.messages[-1]["ephemeral"] is True
-
-
-# --- organizers --------------------------------------------------------------------------------
-
-
-async def test_an_ordinary_member_cannot_build_a_lineup(bot, cog, alice, db):
-    train_id = await a_train(db)
-    interaction = FakeInteraction(bot, alice)
-    await cog.lock_command.callback(cog, interaction, str(train_id))
-    assert interaction.sent == NOT_AN_ORGANIZER.format(who="staff")
-    assert (await get_train(db, GUILD, train_id))["status"] == OPEN
-
-
-async def test_the_organizer_role_stands_in_for_staff(bot, cog, alice, db):
+async def test_the_organizer_role_stands_in_for_staff(bot, cog, alice):
     role = FakeRole(4242)
     await bot.store.set(GUILD, "raidtrain_organizer_role_id", role.id)
     assert cog.is_organizer(alice) is False
     alice.roles = [role]
     assert cog.is_organizer(alice) is True
-    interaction = FakeInteraction(bot, alice)
-    interaction.user.roles = []
-    await cog.lock_command.callback(cog, interaction, str(await a_train(db)))
-    assert f"<@&{role.id}>" in interaction.sent
+    assert "Start a raid train" in labels((await open_the_panel(cog, bot, alice)).view)
 
 
-async def test_locking_and_unlocking_move_the_train_and_are_refused_when_they_cannot(
+async def test_staff_read_the_sweeps_health_on_the_root_rather_than_behind_a_button(
     bot, cog, organizer, db
 ):
+    await a_train(db)
+    interaction = await open_the_panel(cog, bot, organizer)
+    said = interaction.embed.description
+    assert "The sweep runs every 5 minute(s)" in said
+    assert "1 train(s), 1 still to come" in said
+    assert f"<#{TEST_CHANNEL}>" in said
+
+
+async def test_my_slots_only_renders_when_the_caller_holds_one(bot, cog, alice, db):
     train_id = await a_train(db)
-    locked = FakeInteraction(bot, organizer)
-    await cog.lock_command.callback(cog, locked, str(train_id))
-    assert "is locked" in locked.sent
+    assert "My slots…" not in labels((await open_the_panel(cog, bot, alice)).view)
+    await take_slot(db, (await slots_for(db, train_id))[1]["id"], ALICE, "alice", None)
+    held = await open_the_panel(cog, bot, alice)
+    assert "My slots…" in labels(held.view)
+    await press(held, "My slots…")
+    assert "slot #2" in held.embed.description
+    assert labels(held.view) == ["Back"]
+
+
+async def test_my_slots_says_so_when_there_is_nothing_and_the_train_select_opens_a_card(
+    bot, cog, alice, db
+):
+    train_id = await a_train(db)
+    await take_slot(db, (await slots_for(db, train_id))[0]["id"], ALICE, "alice", None)
+    interaction = await open_the_panel(cog, bot, alice)
+    await press(interaction, "My slots…")
+    await pick_one(interaction, "A train…", str(train_id))
+    assert "Saturday train" in interaction.embed.description
+    assert "Back" in labels(interaction.view)
+
+
+# --- the card ------------------------------------------------------------------------------------
+
+
+async def test_the_train_select_opens_the_card_the_room_reads(bot, cog, alice, db):
+    train_id = await a_train(db)
+    interaction = await open_the_panel(cog, bot, alice)
+
+    await pick_one(interaction, "A train…", str(train_id))
+
+    assert "**Saturday train** — raid train" in interaction.embed.description
+    assert "0/3 slot(s) filled" in interaction.embed.description
+    assert labels(interaction.view) == ["Back", "Refresh"]
+
+    await press(interaction, "Back")
+    assert "A train…" in placeholders(interaction.view)
+
+
+async def test_a_train_that_vanished_lands_back_on_the_root_in_words(bot, cog, alice, db):
+    train_id = await a_train(db)
+    interaction = await open_the_panel(cog, bot, alice)
+    await db.conn.execute("DELETE FROM raid_trains WHERE id = ?", (train_id,))
+    await db.conn.commit()
+    await pick_one(interaction, "A train…", str(train_id))
+    assert "no raid train" in interaction.sent
+    assert "Refresh" in labels(interaction.view)
+
+
+async def test_an_unlinked_member_gets_a_line_and_never_a_greyed_button(bot, cog, alice, db):
+    train_id = await a_train(db)
+    interaction = await open_the_card(cog, bot, alice, train_id)
+    assert "Take an hour…" not in placeholders(interaction.view)
+    assert NEEDS_LINK in [field.value for field in interaction.embed.fields]
+    assert "**Link my Twitch channel**" in interaction.embed.fields[0].value
+
+
+async def test_the_link_requirement_can_be_turned_off(bot, cog, alice, db):
+    await bot.store.set(GUILD, "raidtrain_require_link", False)
+    train_id = await a_train(db)
+    interaction = await open_the_card(cog, bot, alice, train_id)
+    assert "Take an hour…" in placeholders(interaction.view)
+    assert interaction.embed.fields == []
+
+
+async def test_taking_an_hour_edits_the_lineup_and_then_the_cap_removes_the_control(
+    bot, cog, alice, db
+):
+    await link(db, ALICE, "alicestreams")
+    bot.guard = FakeGuard([TEST_CHANNEL])
+    train_id = await a_train(db)
+    await cog.publish_lineup(bot.guild, train_id)
+    channel = bot.guild.get_channel(TEST_CHANNEL)
+
+    interaction = await open_the_card(cog, bot, alice, train_id)
+    assert options(interaction, "Take an hour…") == ["1", "2", "3"]
+    await pick_one(interaction, "Take an hour…", "1")
+
+    assert "Slot **#1**" in interaction.sent
+    slots = await slots_for(db, train_id)
+    assert slots[0]["user_id"] == ALICE and slots[0]["twitch_login"] == "alicestreams"
+    assert "raidtrain.claim" in await kinds_logged(db)
+    assert len(channel.posts) == 1
+    assert "alicestreams" in channel.messages[9000].content
+    assert "Take an hour…" not in placeholders(interaction.view)
+    assert "Give back slot #1" in labels(interaction.view)
+
+
+async def test_a_slot_somebody_took_first_is_refused_in_words(bot, cog, alice, bobby, db):
+    await link(db, ALICE, "alicestreams")
+    await link(db, BOB, "bobstreams")
+    train_id = await a_train(db)
+    interaction = await open_the_card(cog, bot, bobby, train_id)
+    await take_slot(db, (await slots_for(db, train_id))[0]["id"], ALICE, "alicestreams", None)
+
+    await pick_one(interaction, "Take an hour…", "1")
+
+    assert "already belongs to someone else" in interaction.sent
+    assert (await slots_for(db, train_id))[0]["user_id"] == ALICE
+
+
+async def test_the_ceiling_can_be_lifted_and_then_the_button_becomes_a_select(
+    bot, cog, alice, db
+):
+    await bot.store.set(GUILD, "raidtrain_max_slots_per_member", 0)
+    await link(db, ALICE, "alicestreams")
+    train_id = await a_train(db)
+    interaction = await open_the_card(cog, bot, alice, train_id)
+    await pick_one(interaction, "Take an hour…", "1")
+    await pick_one(interaction, "Take an hour…", "2")
+    assert [row["user_id"] for row in await slots_for(db, train_id)] == [ALICE, ALICE, None]
+    said = labels(interaction.view)
+    assert "Give an hour back…" in said
+    assert not any(one.startswith("Give back slot") for one in said)
+
+
+async def test_giving_one_hour_back_reads_its_number_and_opens_it_again(bot, cog, alice, db):
+    await link(db, ALICE, "alicestreams")
+    train_id = await a_train(db)
+    interaction = await open_the_card(cog, bot, alice, train_id)
+    await pick_one(interaction, "Take an hour…", "2")
+    assert "Give back slot #2" in labels(interaction.view)
+
+    await press(interaction, "Give back slot #2")
+
+    assert "open again" in interaction.sent
+    assert (await slots_for(db, train_id))[1]["user_id"] is None
+    assert "raidtrain.release" in await kinds_logged(db)
+
+
+async def test_giving_an_hour_back_from_the_sub_panel_lands_on_the_card(bot, cog, alice, db):
+    await bot.store.set(GUILD, "raidtrain_max_slots_per_member", 0)
+    await link(db, ALICE, "alicestreams")
+    train_id = await a_train(db)
+    interaction = await open_the_card(cog, bot, alice, train_id)
+    await pick_one(interaction, "Take an hour…", "1")
+    await pick_one(interaction, "Take an hour…", "3")
+
+    await press(interaction, "Give an hour back…")
+    assert options(interaction, "Which hour…") == ["1", "3"]
+    await pick_one(interaction, "Which hour…", "3")
+
+    assert "open again" in interaction.sent
+    assert [row["user_id"] for row in await slots_for(db, train_id)] == [ALICE, None, None]
+    assert "**Saturday train** — raid train" in interaction.embed.description
+
+
+@pytest.mark.parametrize("status", [LOCKED, LIVE, DONE, CANCELLED])
+async def test_no_claim_control_survives_the_train_leaving_open(bot, cog, alice, db, status):
+    await link(db, ALICE, "alicestreams")
+    train_id = await a_train(db)
+    await db.conn.execute("UPDATE raid_trains SET status = ? WHERE id = ?", (status, train_id))
+    await db.conn.commit()
+    interaction = await open_the_card(cog, bot, alice, train_id)
+    assert "Take an hour…" not in placeholders(interaction.view)
+    assert not any(one.startswith("Give back slot") for one in labels(interaction.view))
+
+
+async def test_lock_and_open_are_one_button_and_never_both(bot, cog, organizer, db):
+    train_id = await a_train(db)
+    interaction = await open_the_card(cog, bot, organizer, train_id)
+    assert "Lock the lineup" in labels(interaction.view)
+    assert "Open it for sign-ups" not in labels(interaction.view)
+
+    await press(interaction, "Lock the lineup")
+
+    assert "is locked" in interaction.sent
     assert (await get_train(db, GUILD, train_id))["status"] == LOCKED
-    again = FakeInteraction(bot, organizer)
-    await cog.lock_command.callback(cog, again, str(train_id))
-    assert "cannot be marked **locked**" in again.sent
-    opened = FakeInteraction(bot, organizer)
-    await cog.unlock_command.callback(cog, opened, str(train_id))
+    assert "Open it for sign-ups" in labels(interaction.view)
+    assert "Lock the lineup" not in labels(interaction.view)
+
+    await press(interaction, "Open it for sign-ups")
     assert (await get_train(db, GUILD, train_id))["status"] == OPEN
     assert {"raidtrain.lock", "raidtrain.unlock"} <= set(await kinds_logged(db))
 
 
-async def test_an_organizer_assigns_a_slot_over_the_ceiling(bot, cog, organizer, alice, db):
+async def test_a_live_train_offers_an_organizer_no_move_at_all(bot, cog, organizer, db):
+    train_id = await a_train(db)
+    await db.conn.execute("UPDATE raid_trains SET status = ? WHERE id = ?", (LIVE, train_id))
+    await db.conn.commit()
+    interaction = await open_the_card(cog, bot, organizer, train_id)
+    assert labels(interaction.view) == ["Back", "Refresh"]
+
+
+async def test_take_somebody_off_lists_only_the_hours_that_are_taken(
+    bot, cog, organizer, alice, db
+):
     await link(db, ALICE, "alicestreams")
     train_id = await a_train(db)
-    for position in (1, 2):
-        interaction = FakeInteraction(bot, organizer)
-        await cog.assign_command.callback(cog, interaction, str(train_id), position, alice)
-        assert "now belongs to Alice" in interaction.sent
-    assert [row["user_id"] for row in await slots_for(db, train_id)] == [ALICE, ALICE, None]
-    assert (await slots_for(db, train_id))[0]["assigned_by"] == ORGANIZER
+    empty = await open_the_card(cog, bot, organizer, train_id)
+    assert "Take somebody off…" not in placeholders(empty.view)
+
+    await seat(bot, train_id, alice, 2, by=organizer)
+    interaction = await open_the_card(cog, bot, organizer, train_id)
+
+    assert options(interaction, "Take somebody off…") == ["2"]
+    assert "Alice" in picker(interaction.view, "Take somebody off…").options[0].label
+    await pick_one(interaction, "Take somebody off…", "2")
+    assert "open again" in interaction.sent
+    assert (await slots_for(db, train_id))[1]["user_id"] is None
+    assert "raidtrain.unassign" in await kinds_logged(db)
 
 
-async def test_assigning_somebody_with_no_link_says_which_command_they_run(
+async def test_a_member_is_never_offered_an_organizer_move(bot, cog, alice, bobby, db):
+    await link(db, BOB, "bobstreams")
+    train_id = await a_train(db)
+    await seat(bot, train_id, bobby, 1)
+    interaction = await open_the_card(cog, bot, alice, train_id)
+    said = labels(interaction.view)
+    assert said == ["Back", "Refresh"]
+    assert "Take somebody off…" not in placeholders(interaction.view)
+
+
+async def test_no_row_on_a_rendered_card_carries_more_than_five_controls(
+    bot, cog, organizer, db
+):
+    await link(db, ORGANIZER, "robinstreams")
+    train_id = await a_train(db, count=4)
+    interaction = await open_the_card(cog, bot, organizer, train_id)
+    await pick_one(interaction, "Take an hour…", "1")
+    counted: dict[int, int] = {}
+    for item in interaction.view.children:
+        counted[item.row] = counted.get(item.row, 0) + 1
+    assert max(counted.values()) <= 5
+    assert counted[2] == 4
+
+
+# --- the organizer sub-panels --------------------------------------------------------------------
+
+
+async def test_putting_somebody_in_needs_both_picks_and_then_ignores_the_ceiling(
+    bot, cog, organizer, alice, db
+):
+    await link(db, ALICE, "alicestreams")
+    train_id = await a_train(db)
+    interaction = await open_the_card(cog, bot, organizer, train_id)
+
+    await press(interaction, "Put somebody in…")
+    await press(interaction, "Put them in")
+    assert "Pick an hour and a person" in interaction.sent
+
+    await pick_one(interaction, "Which slot…", "1")
+    control = picker(interaction.view, "Who takes it?")
+    control._values = [alice]
+    await control.callback(interaction)
+    await press(interaction, "Put them in")
+
+    assert "now belongs to Alice" in interaction.sent
+    slots = await slots_for(db, train_id)
+    assert slots[0]["user_id"] == ALICE and slots[0]["assigned_by"] == ORGANIZER
+    assert "**Saturday train** — raid train" in interaction.embed.description
+
+
+async def test_putting_in_somebody_with_no_twitch_is_a_worded_refusal(
     bot, cog, organizer, alice, db
 ):
     train_id = await a_train(db)
-    interaction = FakeInteraction(bot, organizer)
-    await cog.assign_command.callback(cog, interaction, str(train_id), 1, alice)
+    interaction = await open_the_card(cog, bot, organizer, train_id)
+    await press(interaction, "Put somebody in…")
+    await pick_one(interaction, "Which slot…", "1")
+    control = picker(interaction.view, "Who takes it?")
+    control._values = [alice]
+    await control.callback(interaction)
+
+    await press(interaction, "Put them in")
+
     assert "**Link my Twitch channel**" in interaction.sent
     assert (await slots_for(db, train_id))[0]["user_id"] is None
 
 
-async def test_unassign_empties_a_slot_and_says_so_when_it_was_empty(
-    bot, cog, organizer, alice, db
-):
-    await link(db, ALICE, "alicestreams")
-    train_id = await a_train(db)
-    await cog.assign_command.callback(
-        cog, FakeInteraction(bot, organizer), str(train_id), 1, alice
-    )
-    taken = FakeInteraction(bot, organizer)
-    await cog.unassign_command.callback(cog, taken, str(train_id), 1)
-    assert "open again" in taken.sent
-    empty = FakeInteraction(bot, organizer)
-    await cog.unassign_command.callback(cog, empty, str(train_id), 1)
-    assert "already empty" in empty.sent
-
-
-async def test_a_swap_moves_the_people_and_never_the_times(bot, cog, organizer, alice, bobby, db):
-    await link(db, ALICE, "alicestreams")
-    await link(db, BOB, "bobstreams")
-    train_id = await a_train(db)
-    await cog.assign_command.callback(
-        cog, FakeInteraction(bot, organizer), str(train_id), 1, alice
-    )
-    await cog.assign_command.callback(
-        cog, FakeInteraction(bot, organizer), str(train_id), 2, bobby
-    )
-    before = [row["starts_at"] for row in await slots_for(db, train_id)]
-    interaction = FakeInteraction(bot, organizer)
-    await cog.swap_command.callback(cog, interaction, str(train_id), 1, 2)
-    assert "changed places" in interaction.sent
-    slots = await slots_for(db, train_id)
-    assert [row["user_id"] for row in slots] == [BOB, ALICE, None]
-    assert [row["twitch_login"] for row in slots] == ["bobstreams", "alicestreams", None]
-    assert [row["starts_at"] for row in slots] == before
-
-
-async def test_swapping_a_slot_with_itself_changes_nothing(bot, cog, organizer, db):
-    train_id = await a_train(db)
-    interaction = FakeInteraction(bot, organizer)
-    await cog.swap_command.callback(cog, interaction, str(train_id), 2, 2)
-    assert "same slot" in interaction.sent
-
-
-async def test_cancelling_dms_every_holder_and_records_the_one_that_refused(
+async def test_the_second_swap_select_never_offers_the_first_pick(
     bot, cog, organizer, alice, bobby, db
 ):
     await link(db, ALICE, "alicestreams")
     await link(db, BOB, "bobstreams")
     train_id = await a_train(db)
-    await cog.assign_command.callback(
-        cog, FakeInteraction(bot, organizer), str(train_id), 1, alice
-    )
-    await cog.assign_command.callback(
-        cog, FakeInteraction(bot, organizer), str(train_id), 2, bobby
-    )
+    await seat(bot, train_id, alice, 1, by=organizer)
+    await seat(bot, train_id, bobby, 2, by=organizer)
+    before = [row["starts_at"] for row in await slots_for(db, train_id)]
+    interaction = await open_the_card(cog, bot, organizer, train_id)
+
+    await press(interaction, "Change two slots round…")
+    await press(interaction, "Swap them")
+    assert "Pick two hours" in interaction.sent
+
+    await pick_one(interaction, "First…", "1")
+    assert options(interaction, "Second…") == ["2", "3"]
+    await pick_one(interaction, "Second…", "2")
+    await press(interaction, "Swap them")
+
+    assert "changed places" in interaction.sent
+    slots = await slots_for(db, train_id)
+    assert [row["user_id"] for row in slots] == [BOB, ALICE, None]
+    assert [row["starts_at"] for row in slots] == before
+
+
+async def test_a_one_slot_train_is_never_offered_a_swap(bot, cog, organizer, db):
+    train_id = await a_train(db, count=1)
+    interaction = await open_the_card(cog, bot, organizer, train_id)
+    assert "Change two slots round…" not in labels(interaction.view)
+
+
+async def test_calling_a_train_off_is_one_modal_and_the_reason_is_the_confirmation(
+    bot, cog, organizer, alice, bobby, db
+):
+    await link(db, ALICE, "alicestreams")
+    await link(db, BOB, "bobstreams")
+    train_id = await a_train(db)
+    await seat(bot, train_id, alice, 1, by=organizer)
+    await seat(bot, train_id, bobby, 2, by=organizer)
     bobby.refuse_dm = True
-    interaction = FakeInteraction(bot, organizer)
-    await cog.cancel_command.callback(cog, interaction, str(train_id), "the venue fell through")
+    interaction = await open_the_card(cog, bot, organizer, train_id)
+
+    await press(interaction, "Call it off…")
+    modal = interaction.response.modals[-1]
+    assert modal.note.required is True
+    modal.note._value = "the venue fell through"
+    await modal.on_submit(interaction)
 
     assert (await get_train(db, GUILD, train_id))["status"] == CANCELLED
     assert "the venue fell through" in alice.dms[0]
@@ -597,21 +841,314 @@ async def test_cancelling_dms_every_holder_and_records_the_one_that_refused(
     kinds = await kinds_logged(db)
     assert "raidtrain.cancel" in kinds and "raidtrain.dm_failed" in kinds
     assert "1 person/people" in interaction.sent
+    assert labels(interaction.view) == ["Back", "Refresh"]
 
 
-async def test_a_finished_train_cannot_be_cancelled_and_says_what_it_can_be(
+async def test_a_finished_train_cannot_be_called_off_and_has_no_button_for_it(
     bot, cog, organizer, db
 ):
     train_id = await a_train(db)
     await db.conn.execute("UPDATE raid_trains SET status = ? WHERE id = ?", (DONE, train_id))
     await db.conn.commit()
-    interaction = FakeInteraction(bot, organizer)
-    await cog.cancel_command.callback(cog, interaction, str(train_id), "never mind")
-    assert "end of the line" in interaction.sent
+    interaction = await open_the_card(cog, bot, organizer, train_id)
+    assert "Call it off…" not in labels(interaction.view)
     assert (await get_train(db, GUILD, train_id))["status"] == DONE
 
 
-# --- the sweep ---------------------------------------------------------------------------------
+# --- the staff row -------------------------------------------------------------------------------
+
+
+async def test_the_mode_select_turns_the_feature_on_and_warns_about_nowhere_to_post(
+    bot, cog, organizer
+):
+    await bot.store.clear(GUILD, "raidtrain_channel_id")
+    await bot.store.set(GUILD, "events_announce_channel_id", 0)
+    await bot.store.set(GUILD, "raidtrain_mode", "off")
+    interaction = await open_the_panel(cog, bot, organizer)
+
+    await pick_one(interaction, "Mode…", "on")
+
+    assert bot.store.get(GUILD, "raidtrain_mode") == "on"
+    assert "**Setup…**" in interaction.sent
+    assert "raidtrain.mode" in await kinds_logged(bot.db)
+    assert "Start a raid train" in labels(interaction.view)
+
+
+async def test_a_member_never_sees_the_mode_select_and_a_demoted_one_cannot_use_it(
+    bot, cog, organizer, alice
+):
+    assert "Mode…" not in placeholders((await open_the_panel(cog, bot, alice)).view)
+    interaction = await open_the_panel(cog, bot, organizer)
+    organizer.guild_permissions = SimpleNamespace(manage_guild=False)
+
+    await pick_one(interaction, "Mode…", "off")
+
+    assert "staff" in interaction.sent
+    assert bot.store.get(GUILD, "raidtrain_mode") == "on"
+
+
+async def test_setup_saves_one_row_for_the_whole_form_and_clears_one_key_at_a_time(
+    bot, cog, organizer, db
+):
+    interaction = await open_the_panel(cog, bot, organizer)
+    await press(interaction, "Setup…")
+    role = FakeRole(4242)
+    ping = FakeRole(4343)
+    channel = bot.guild.get_channel(RAID_CHANNEL)
+
+    picker(interaction.view, "Where the lineup post lives")._values = [channel]
+    await picker(interaction.view, "Where the lineup post lives").callback(interaction)
+    picker(interaction.view, "Who may build a lineup, besides staff")._values = [role]
+    await picker(interaction.view, "Who may build a lineup, besides staff").callback(interaction)
+    picker(interaction.view, "Who is pinged in front of a lineup")._values = [ping]
+    await picker(interaction.view, "Who is pinged in front of a lineup").callback(interaction)
+    await press(interaction, "Save")
+
+    assert bot.store.get(GUILD, "raidtrain_channel_id") == RAID_CHANNEL
+    assert bot.store.get(GUILD, "raidtrain_organizer_role_id") == role.id
+    assert bot.store.get(GUILD, "raidtrain_ping_role_id") == ping.id
+    assert (await kinds_logged(db)).count("raidtrain.setup") == 1
+
+    await pick_one(interaction, "Clear…", "raidtrain_ping_role_id")
+
+    assert bot.store.get(GUILD, "raidtrain_ping_role_id") is None
+    assert bot.store.get(GUILD, "raidtrain_organizer_role_id") == role.id
+    assert "nobody is pinged" in interaction.sent
+
+
+async def test_setup_with_nothing_picked_writes_nothing(bot, cog, organizer, db):
+    interaction = await open_the_panel(cog, bot, organizer)
+    await press(interaction, "Setup…")
+    await press(interaction, "Save")
+    assert "Nothing was picked" in interaction.sent
+    assert "raidtrain.setup" not in await kinds_logged(db)
+
+
+async def test_clear_only_offers_the_keys_that_are_actually_set(bot, cog, organizer):
+    interaction = await open_the_panel(cog, bot, organizer)
+    await press(interaction, "Setup…")
+    assert options(interaction, "Clear…") == ["raidtrain_channel_id"]
+    await pick_one(interaction, "Clear…", "raidtrain_channel_id")
+    assert "Clear…" not in placeholders(interaction.view)
+
+
+async def test_a_demoted_staffer_opens_no_sub_panel_and_writes_nothing(bot, cog, organizer):
+    interaction = await open_the_panel(cog, bot, organizer)
+    organizer.guild_permissions = SimpleNamespace(manage_guild=False)
+    await press(interaction, "Setup…")
+    assert "staff" in interaction.sent
+    assert interaction.edits == []
+
+
+async def test_an_organizer_demoted_mid_card_moves_nothing(bot, cog, organizer, alice, db):
+    await link(db, ALICE, "alicestreams")
+    train_id = await a_train(db)
+    interaction = await open_the_card(cog, bot, organizer, train_id)
+    organizer.guild_permissions = SimpleNamespace(manage_guild=False)
+
+    await press(interaction, "Lock the lineup")
+
+    assert interaction.sent == NOT_AN_ORGANIZER.format(who="staff")
+    assert (await get_train(db, GUILD, train_id))["status"] == OPEN
+
+
+# --- the create modal ----------------------------------------------------------------------------
+
+
+async def test_the_create_form_is_only_offered_to_organizers(bot, cog, alice, organizer):
+    interaction = await open_the_panel(cog, bot, organizer)
+    await press(interaction, "Start a raid train")
+    assert len(interaction.response.modals) == 1
+    assert "Start a raid train" not in labels((await open_the_panel(cog, bot, alice)).view)
+
+
+async def test_a_start_in_the_past_is_refused_in_words_and_never_defers(bot, cog, organizer):
+    interaction = FakeInteraction(bot, organizer)
+    await cog_module.run_create(
+        interaction,
+        None,
+        tz_name="UTC",
+        title="Old train",
+        description="",
+        start="2020-01-01 10:00",
+        slot_minutes="60",
+        slot_count="3",
+    )
+    assert "already gone by" in interaction.sent
+    assert interaction.response.deferred is False
+    assert await list_trains(bot.db, GUILD, scope="all") == []
+
+
+async def test_a_start_nobody_can_read_names_the_shape_it_wants(bot, cog, organizer):
+    interaction = FakeInteraction(bot, organizer)
+    await cog_module.run_create(
+        interaction,
+        None,
+        tz_name="UTC",
+        title="Bad train",
+        description="",
+        start="saturday-ish",
+        slot_minutes="60",
+        slot_count="3",
+    )
+    assert "YYYY-MM-DD HH:MM" in interaction.sent
+
+
+@pytest.mark.parametrize(
+    ("minutes", "count", "said"),
+    [
+        ("ten", "3", "not a whole number"),
+        ("60", "many", "not a whole number"),
+        ("5", "3", "15 to 720 minutes"),
+        ("60", "99", "1 to 24 slots"),
+    ],
+)
+async def test_a_train_nobody_could_post_is_refused_before_it_is_written(
+    bot, cog, organizer, minutes, count, said
+):
+    """A modal has no `app_commands.Range`, so the bounds are re-asked in the handler."""
+    interaction = FakeInteraction(bot, organizer)
+    await cog_module.run_create(
+        interaction,
+        None,
+        tz_name="UTC",
+        title="Long train",
+        description="",
+        start="2099-09-14 19:30",
+        slot_minutes=minutes,
+        slot_count=count,
+    )
+    assert said in interaction.sent
+    assert await list_trains(bot.db, GUILD, scope="all") == []
+
+
+async def test_a_good_form_defers_writes_the_train_posts_it_and_lands_on_the_root(
+    bot, cog, organizer, db
+):
+    bot.guard = FakeGuard([TEST_CHANNEL])
+    interaction = FakeInteraction(bot, organizer)
+    await cog_module.run_create(
+        interaction,
+        None,
+        tz_name="UTC",
+        title="Saturday train",
+        description="Everyone welcome.",
+        start="2099-09-14 19:30",
+        slot_minutes="60",
+        slot_count="4",
+    )
+    assert interaction.response.deferred is True
+    trains = await list_trains(db, GUILD, scope="all")
+    assert len(trains) == 1
+    assert len(await slots_for(db, trains[0]["id"])) == 4
+    assert "raidtrain.create" in await kinds_logged(db)
+    assert bot.guild.get_channel(TEST_CHANNEL).posts
+    assert "The lineup is in" in interaction.sent
+    assert "A train…" in placeholders(interaction.view)
+
+
+# --- panel discipline ----------------------------------------------------------------------------
+
+
+async def test_every_move_defers_before_it_touches_discord(bot, cog, organizer, alice, db):
+    """Checklist 8 and 24: a lineup edit is a network call, and 3 seconds is not enough."""
+    await link(db, ALICE, "alicestreams")
+    await link(db, ORGANIZER, "robinstreams")
+    train_id = await a_train(db)
+    interaction = await open_the_card(cog, bot, organizer, train_id)
+    assert interaction.response.deferred is True
+
+    for doing in (
+        lambda: pick_one(interaction, "Take an hour…", "1"),
+        lambda: press(interaction, "Put somebody in…"),
+        lambda: press(interaction, "Back"),
+        lambda: press(interaction, "Lock the lineup"),
+        lambda: press(interaction, "Refresh"),
+    ):
+        interaction.response.deferred = False
+        await doing()
+        assert interaction.response.deferred is True
+
+
+async def test_a_click_with_the_database_gone_answers_rather_than_crashing(
+    bot, cog, alice, db, monkeypatch
+):
+    train_id = await a_train(db)
+    interaction = await open_the_panel(cog, bot, alice)
+    db_is_down(monkeypatch)
+
+    await pick_one(interaction, "A train…", str(train_id))
+
+    assert "database" in interaction.sent.lower()
+    assert interaction.response.deferred is True
+    assert len(interaction.edits) == 0
+
+
+async def test_every_move_goes_through_the_shared_function_at_its_discord_default(
+    bot, cog, alice, db, monkeypatch
+):
+    await link(db, ALICE, "alicestreams")
+    train_id = await a_train(db)
+    seen = []
+    real = cog_module.claim_slot
+
+    async def watched(*args, **kwargs):
+        seen.append(kwargs)
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(cog_module, "claim_slot", watched)
+    interaction = await open_the_card(cog, bot, alice, train_id)
+    await pick_one(interaction, "Take an hour…", "1")
+
+    assert seen == [{}]
+    assert "raidtrain.claim" in await kinds_logged(db)
+    assert "web.raidtrain.claim" not in await kinds_logged(db)
+
+
+async def test_a_re_render_retires_the_view_it_replaced(bot, cog, alice, db):
+    train_id = await a_train(db)
+    interaction = await open_the_panel(cog, bot, alice)
+    first = interaction.view
+    await pick_one(interaction, "A train…", str(train_id))
+    assert first.replaced is True
+    assert first.is_finished() is True
+    assert interaction.view.replaced is False
+
+
+async def test_the_timeout_greys_every_control_and_says_the_panel_went_quiet(bot, cog, alice, db):
+    await a_train(db)
+    interaction = await open_the_panel(cog, bot, alice)
+    view = interaction.view
+    view.message = PanelMessage(1, embed=interaction.embed)
+
+    await view.on_timeout()
+
+    assert all(item.disabled for item in view.children)
+    assert view.message.kwargs["embeds"][0].footer.text.endswith("run /raidtrain again")
+
+
+async def test_the_panel_length_is_read_from_the_setting(bot, cog, alice):
+    await bot.store.set(GUILD, "raidtrain_panel_minutes", 3)
+    interaction = await open_the_panel(cog, bot, alice)
+    assert interaction.view.timeout == 180
+
+
+async def test_the_site_link_is_staff_only_because_every_route_behind_it_is(
+    bot, cog, alice, organizer
+):
+    theirs = await open_the_panel(cog, bot, organizer)
+    link_button = next(
+        one for one in theirs.view.children if isinstance(one, discord.ui.Button) and one.url
+    )
+    assert link_button.url.endswith("/events.html")
+    assert not [
+        one
+        for one in (await open_the_panel(cog, bot, alice)).view.children
+        if isinstance(one, discord.ui.Button) and getattr(one, "url", None)
+    ]
+
+
+# --- the sweep -----------------------------------------------------------------------------------
 
 
 async def test_the_sweep_locks_a_train_at_its_start_then_finishes_it(bot, cog, db):
@@ -644,12 +1181,8 @@ async def test_a_reminder_goes_out_once_with_both_neighbours_in_it(
     await link(db, ALICE, "alicestreams")
     await link(db, BOB, "bobstreams")
     train_id = await a_train(db, starts=datetime.now(UTC) + timedelta(minutes=20))
-    await cog.assign_command.callback(
-        cog, FakeInteraction(bot, organizer), str(train_id), 1, alice
-    )
-    await cog.assign_command.callback(
-        cog, FakeInteraction(bot, organizer), str(train_id), 2, bobby
-    )
+    await seat(bot, train_id, alice, 1, by=organizer)
+    await seat(bot, train_id, bobby, 2, by=organizer)
 
     await cog.sweep_once()
     assert len(alice.dms) == 1
@@ -667,9 +1200,7 @@ async def test_shadow_writes_what_it_would_have_sent_and_sends_nothing(
 ):
     await link(db, ALICE, "alicestreams")
     train_id = await a_train(db, starts=datetime.now(UTC) + timedelta(minutes=20))
-    await cog.assign_command.callback(
-        cog, FakeInteraction(bot, organizer), str(train_id), 1, alice
-    )
+    await seat(bot, train_id, alice, 1, by=organizer)
     await bot.store.set(GUILD, "raidtrain_mode", "shadow")
     await cog.sweep_once()
     assert alice.dms == []
@@ -707,12 +1238,8 @@ async def test_a_holder_who_is_already_streaming_is_checked_in_and_the_train_mov
     await link(db, BOB, "bobstreams")
     bot.guard = FakeGuard([TEST_CHANNEL])
     train_id = await a_train(db, starts=datetime.now(UTC) - timedelta(minutes=1))
-    await cog.assign_command.callback(
-        cog, FakeInteraction(bot, organizer), str(train_id), 1, alice
-    )
-    await cog.assign_command.callback(
-        cog, FakeInteraction(bot, organizer), str(train_id), 2, bobby
-    )
+    await seat(bot, train_id, alice, 1, by=organizer)
+    await seat(bot, train_id, bobby, 2, by=organizer)
     await open_session(db, ALICE)
 
     await cog.sweep_once()
@@ -730,16 +1257,14 @@ async def test_the_train_moves_line_can_be_turned_off(bot, cog, organizer, alice
     await bot.store.set(GUILD, "raidtrain_live_posts", False)
     await link(db, ALICE, "alicestreams")
     train_id = await a_train(db, starts=datetime.now(UTC) - timedelta(minutes=1))
-    await cog.assign_command.callback(
-        cog, FakeInteraction(bot, organizer), str(train_id), 1, alice
-    )
+    await seat(bot, train_id, alice, 1, by=organizer)
     await open_session(db, ALICE)
     await cog.sweep_once()
     assert (await slots_for(db, train_id))[0]["checked_in_at"] is None
     assert "raidtrain.checkin" not in await kinds_logged(db)
 
 
-# --- posting -----------------------------------------------------------------------------------
+# --- posting -------------------------------------------------------------------------------------
 
 
 async def test_the_lineup_is_posted_once_and_edited_in_place_after_that(
@@ -754,9 +1279,8 @@ async def test_the_lineup_is_posted_once_and_edited_in_place_after_that(
     train = await get_train(db, GUILD, train_id)
     assert train["lineup_message_id"] and train["thread_id"]
 
-    await cog.assign_command.callback(
-        cog, FakeInteraction(bot, organizer), str(train_id), 1, alice
-    )
+    await seat(bot, train_id, alice, 1, by=organizer)
+
     assert len(channel.posts) == 1
     message = channel.messages[train["lineup_message_id"]]
     assert "alicestreams" in message.content
@@ -802,7 +1326,7 @@ async def test_no_ping_role_means_the_lineup_mentions_nobody(bot, cog):
     assert cog._mentions(GUILD).roles is False
 
 
-# --- the sweep's own health --------------------------------------------------------------------
+# --- the sweep's own health ----------------------------------------------------------------------
 
 
 async def test_the_sweep_records_its_health_for_the_status_page(bot, cog):
@@ -825,6 +1349,18 @@ async def test_a_sweep_that_keeps_failing_says_so_in_the_log_once(bot, cog, monk
     assert "boom" in cog.last_sweep_error
 
 
+async def test_a_sweep_in_trouble_says_so_on_the_staff_half_of_the_panel(
+    bot, cog, organizer, monkeypatch
+):
+    async def explode():
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(cog, "sweep_once", explode)
+    await cog.sweep()
+    interaction = await open_the_panel(cog, bot, organizer)
+    assert "did not finish: RuntimeError: boom" in interaction.embed.description
+
+
 async def test_the_sweep_gap_is_re_read_rather_than_frozen_at_boot(bot, cog):
     assert cog._minutes() == 5
     await bot.store.set(GUILD, "raidtrain_poll_minutes", 2)
@@ -832,183 +1368,5 @@ async def test_the_sweep_gap_is_re_read_rather_than_frozen_at_boot(bot, cog):
     assert cog.sweep.minutes == 2
 
 
-# --- staff commands ----------------------------------------------------------------------------
-
-
-async def test_the_mode_command_warns_when_nothing_has_anywhere_to_go(bot, cog, organizer):
-    await bot.store.clear(GUILD, "raidtrain_channel_id")
-    await bot.store.set(GUILD, "events_announce_channel_id", 0)
-    interaction = FakeInteraction(bot, organizer)
-    await cog.mode_command.callback(
-        cog, interaction, SimpleNamespace(name="on", value="on")
-    )
-    assert "**Setup…**" in interaction.sent
-    assert bot.store.get(GUILD, "raidtrain_mode") == "on"
-
-
-async def test_setup_with_nothing_given_changes_nothing_and_says_how_to_use_it(
-    bot, cog, organizer
-):
-    interaction = FakeInteraction(bot, organizer)
-    await cog.setup_command.callback(cog, interaction)
-    assert "Nothing was picked" in interaction.sent
-
-
-async def test_setup_stores_each_thing_it_was_given(bot, cog, organizer):
-    channel = bot.guild.get_channel(RAID_CHANNEL)
-    role = FakeRole(4242)
-    interaction = FakeInteraction(bot, organizer)
-    await cog.setup_command.callback(cog, interaction, channel, role, None)
-    assert bot.store.get(GUILD, "raidtrain_channel_id") == RAID_CHANNEL
-    assert bot.store.get(GUILD, "raidtrain_organizer_role_id") == role.id
-    assert "raidtrain.setup" in await kinds_logged(bot.db)
-
-
-async def test_a_member_cannot_change_the_mode(bot, cog, alice):
-    interaction = FakeInteraction(bot, alice)
-    await cog.mode_command.callback(
-        cog, interaction, SimpleNamespace(name="on", value="on")
-    )
-    assert "staff only" in interaction.sent
-    assert bot.store.get(GUILD, "raidtrain_mode") == "on"
-
-
-# --- the create modal --------------------------------------------------------------------------
-
-
-async def test_the_create_form_is_only_offered_to_organizers(bot, cog, alice, organizer):
-    refused = FakeInteraction(bot, alice)
-    await cog.create_command.callback(cog, refused)
-    assert refused.response.modals == []
-    allowed = FakeInteraction(bot, organizer)
-    await cog.create_command.callback(cog, allowed)
-    assert len(allowed.response.modals) == 1
-
-
-async def test_a_start_in_the_past_is_refused_in_words(bot, cog, organizer):
-    interaction = FakeInteraction(bot, organizer)
-    await cog.submit_train(
-        interaction,
-        tz_name="UTC",
-        title="Old train",
-        description="",
-        start="2020-01-01 10:00",
-        slot_minutes="60",
-        slot_count="3",
-    )
-    assert "already gone by" in interaction.sent
-    assert await list_trains(bot.db, GUILD, scope="all") == []
-
-
-async def test_a_start_nobody_can_read_names_the_shape_it_wants(bot, cog, organizer):
-    interaction = FakeInteraction(bot, organizer)
-    await cog.submit_train(
-        interaction,
-        tz_name="UTC",
-        title="Bad train",
-        description="",
-        start="saturday-ish",
-        slot_minutes="60",
-        slot_count="3",
-    )
-    assert "YYYY-MM-DD HH:MM" in interaction.sent
-
-
-@pytest.mark.parametrize(
-    ("minutes", "count", "said"),
-    [
-        ("ten", "3", "not a whole number"),
-        ("60", "many", "not a whole number"),
-        ("5", "3", "15 to 720 minutes"),
-        ("60", "99", "1 to 24 slots"),
-    ],
-)
-async def test_a_train_nobody_could_post_is_refused_before_it_is_written(
-    bot, cog, organizer, minutes, count, said
-):
-    interaction = FakeInteraction(bot, organizer)
-    await cog.submit_train(
-        interaction,
-        tz_name="UTC",
-        title="Long train",
-        description="",
-        start="2099-09-14 19:30",
-        slot_minutes=minutes,
-        slot_count=count,
-    )
-    assert said in interaction.sent
-    assert await list_trains(bot.db, GUILD, scope="all") == []
-
-
-async def test_every_command_that_touches_discord_defers_before_it_does(
-    bot, cog, organizer, alice, db
-):
-    """Checklist 8 and 24: a lineup edit is a network call, and the 3-second window is not it."""
-    await link(db, ALICE, "alicestreams")
-    await link(db, ORGANIZER, "robinstreams")
-    train_id = await a_train(db)
-    calls = (
-        (cog.claim_command, (str(train_id),)),
-        (cog.assign_command, (str(train_id), 2, alice)),
-        (cog.unassign_command, (str(train_id), 2)),
-        (cog.swap_command, (str(train_id), 1, 2)),
-        (cog.lock_command, (str(train_id),)),
-        (cog.unlock_command, (str(train_id),)),
-        (cog.cancel_command, (str(train_id), "never mind")),
-    )
-    for command, args in calls:
-        interaction = FakeInteraction(bot, organizer)
-        await command.callback(cog, interaction, *args)
-        assert interaction.response.deferred is True, command.name
-        assert interaction.sent
-
-
-async def test_the_create_form_answers_after_the_lineup_has_been_posted(
-    bot, cog, organizer, db
-):
-    interaction = FakeInteraction(bot, organizer)
-    await cog.submit_train(
-        interaction,
-        tz_name="UTC",
-        title="Deferred train",
-        description="",
-        start="2099-09-14 19:30",
-        slot_minutes="60",
-        slot_count="2",
-    )
-    assert interaction.response.deferred is True
-    assert "is up with 2 slot(s)" in interaction.sent
-
-
-async def test_a_form_that_is_refused_never_defers(bot, cog, organizer):
-    interaction = FakeInteraction(bot, organizer)
-    await cog.submit_train(
-        interaction,
-        tz_name="UTC",
-        title="Refused train",
-        description="",
-        start="saturday-ish",
-        slot_minutes="60",
-        slot_count="2",
-    )
-    assert interaction.response.deferred is False
-
-
-async def test_a_good_form_writes_the_train_and_posts_its_lineup(bot, cog, organizer, db):
-    bot.guard = FakeGuard([TEST_CHANNEL])
-    interaction = FakeInteraction(bot, organizer)
-    await cog.submit_train(
-        interaction,
-        tz_name="UTC",
-        title="Saturday train",
-        description="Everyone welcome.",
-        start="2099-09-14 19:30",
-        slot_minutes="60",
-        slot_count="4",
-    )
-    trains = await list_trains(db, GUILD, scope="all")
-    assert len(trains) == 1
-    assert len(await slots_for(db, trains[0]["id"])) == 4
-    assert "raidtrain.create" in await kinds_logged(db)
-    assert bot.guild.get_channel(TEST_CHANNEL).posts
-    assert "The lineup is in" in interaction.sent
+def test_the_test_channel_constants_are_still_what_the_fakes_expect():
+    assert CARL not in (ALICE, BOB, ORGANIZER)
