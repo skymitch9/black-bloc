@@ -133,7 +133,20 @@ role was moved. The empty-`RoleSelect` submit is still unproven (deviation 5).
     "say `/twitch link` and let the conductor reconcile" is therefore moot; only its
     `/pingroles streamer add` half needed rewriting, to `/pings` ▸ **Streamers…**.
 
-15. **The panel block was appended to the FOOT of `black_bloc/pings.py`**, after the
+15. **Checklist 15 caught one more duplicate during the sweep: the cog's own
+    `LABEL_LIMIT = 100`.** `panels.SELECT_OPTION_LIMIT` is the same 100 and already has a
+    home, so the constant was deleted and every select-option clamp reads the library's.
+    `pings.ROLE_NAME_LIMIT` is left as a separate 100 on purpose — that one is Discord's
+    role-NAME ceiling, a different fact that happens to share a number.
+
+16. **Checklist 29, checked against the installed source rather than guessed:**
+    `discord/ui/select.py`'s `RoleSelect` documents `min_values` as *"must be between 0 and
+    25"* and does **not** validate it at construction, so `min_values=0` is accepted by the
+    library. That settles the LIBRARY half of the empty-picker question; the CLIENT half —
+    whether Discord's own UI will submit an empty selection — is still unproven and is why
+    deviation 5's second path exists.
+
+17. **The panel block was appended to the FOOT of `black_bloc/pings.py`**, after the
     existing shared layer, matching `black_bloc/youtube.py`'s shape rather than sitting
     between the string constants and `Outcome`. Nothing already in that file was renamed or
     re-homed (§J) — `api/tools/pings.py` imports it by name and its sixteen tests are

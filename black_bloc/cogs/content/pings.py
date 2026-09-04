@@ -11,6 +11,7 @@ from ... import pings
 from ...actionlog import send_logs
 from ...command_errors import AnswersErrors
 from ...panels import (
+    SELECT_OPTION_LIMIT,
     Panel,
     answer,
     capped_placeholder,
@@ -114,7 +115,6 @@ NOT_A_NUMBER = (
 )
 
 DESCRIPTION_LIMIT = 4000
-LABEL_LIMIT = 100
 
 NAMES_MOVE = pings.PanelMove(pings.NAMES, NAMES_BUTTON, row=3)
 DELETE_MOVE = pings.PanelMove(pings.DELETE_TOGGLE, DELETE_OFF, row=3)
@@ -277,7 +277,7 @@ def build_role_pick(
     role = pings.role_of(guild, picked)
     lines = [ROLE_PICK_INTRO]
     lines.append(ROLE_PICKED.format(role=role.name) if role is not None else ROLE_NOT_PICKED)
-    embed = discord.Embed(title=title[:LABEL_LIMIT], description=clamped(lines))
+    embed = discord.Embed(title=title[:SELECT_OPTION_LIMIT], description=clamped(lines))
     view = PingsPanel(minutes_for(bot, guild.id))
     view.where = ROLE_VIEW
     view.purpose = purpose
@@ -762,7 +762,7 @@ class FollowPick(discord.ui.Select):
             ),
             options=[
                 discord.SelectOption(
-                    label=pings.option_label(guild, one)[:LABEL_LIMIT],
+                    label=pings.option_label(guild, one)[:SELECT_OPTION_LIMIT],
                     value=str(one["user_id"]),
                 )
                 for one in shown
@@ -786,7 +786,7 @@ class StreamerPick(discord.ui.Select):
             placeholder=capped_placeholder(len(shown), len(found), pick=STREAMER_PLACEHOLDER),
             options=[
                 discord.SelectOption(
-                    label=pings.option_label(guild, one)[:LABEL_LIMIT],
+                    label=pings.option_label(guild, one)[:SELECT_OPTION_LIMIT],
                     value=str(one["user_id"]),
                 )
                 for one in shown
@@ -846,7 +846,7 @@ class ChoicePick(discord.ui.Select):
             placeholder=placeholder,
             options=[
                 discord.SelectOption(
-                    label=labels[name][:LABEL_LIMIT], value=name, default=(name == current)
+                    label=labels[name][:SELECT_OPTION_LIMIT], value=name, default=(name == current)
                 )
                 for name in choices
             ],
