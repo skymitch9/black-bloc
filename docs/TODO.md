@@ -274,8 +274,13 @@ docs bookkeeping lands with the work, not after.
   estimate; four commits off `85e14c4`), Fable-reviewed approve with one merge-time fix, merged `a5ad521`
   (clean, no conflicts), live in v72 18:30** (3872 → 4050 tests, `commands synced` **40 → 39 measured at
   boot**) — landing entry in `DONE.md` 2026-09-03; sweeps 126–134 and the rewritten 38–42 are the owner's
-  to run. **Voice is the last wave-2 panel** (fork F1 = leave the in-channel control post; sweeps 135+;
-  `tests/test_bot.py` 39 → 38 if the design retires a slot — measure it). Events I2 DECIDED 12:40 (`/timezone` retired).
+  to run. **Voice is the last wave-2 panel** — F1 RE-CONFIRMED by the owner 21:20 ("Leave it as is" = (a),
+  the in-channel control post stays untouched); design Fable-reviewed against §2 21:25 (consistent on
+  P1–P17; drift since it was measured, carried in the brief: 39 → 38 commands not 42 → 41, sweeps start
+  at **135** not 104, `panels.site_page_url(origin, "tempvoice")` now exists so no copy, `panel_minutes`
+  takes a key, `voice_panel_minutes` also gets its `labels.js` + `server.mjs` label like golive/pings).
+  **Voice build DISPATCHED 21:30** (Opus, own worktree off `f09825e`, est. 420–480k — expect the ~2×
+  pattern to hold or not; the pings build was the first to land near estimate). Events I2 DECIDED 12:40 (`/timezone` retired).
   **Wave-1 builds all landed 13:40–13:50** (birthdays merged `58974e1`; events on
   `worktree-agent-a448c7ab780ed3c2b`, polls on `worktree-agent-aa735ab092d13477d`, both under Fable
   review); the applications build follows once I-A3 is answered. Merge in wave order, re-key
