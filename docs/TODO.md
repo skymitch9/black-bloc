@@ -283,7 +283,11 @@ docs bookkeeping lands with the work, not after.
   `2854d74`), Fable-reviewed approve with one merge-time fold (`clamped` into `panels.py`), merged
   `4d64b36` (clean, no conflicts), live in v73 22:08** (4050 → 4265 tests, `commands synced` **39 → 38
   measured at boot**) — landing entry in `DONE.md` 2026-09-03; sweeps 135–143 are the owner's to run.
-  **WAVE 2 COMPLETE.** Events I2 DECIDED 12:40 (`/timezone` retired).
+  **WAVE 2 COMPLETE.** Owner 2026-09-04 09:05 "Keep going" → **wave-3 design docs DISPATCHED 09:15**
+  (four Opus agents in parallel, one doc each — `info/raidtrain-panel-design.md`,
+  `info/role-menus-panel-design.md`, `info/chat-panel-design.md`, `info/automod-panel-design.md` —
+  ~200k each, read-only on code, no commits; Fable reviews each against §2, then the genuine forks go
+  to the owner ONE AT A TIME before any build is briefed). Events I2 DECIDED 12:40 (`/timezone` retired).
   **Wave-1 builds all landed 13:40–13:50** (birthdays merged `58974e1`; events on
   `worktree-agent-a448c7ab780ed3c2b`, polls on `worktree-agent-aa735ab092d13477d`, both under Fable
   review); the applications build follows once I-A3 is answered. Merge in wave order, re-key
