@@ -1336,6 +1336,25 @@ async def test_find_filters_the_list_and_leaves_no_row_behind_it(cog, bot, membe
     assert "Nothing written down matches" in interaction.embed.description
 
 
+async def test_back_from_a_card_returns_to_the_list_you_were_looking_at(cog, bot, member, db,
+                                                                       monkeypatch):
+    """Find… is the way past the 25-cap, so opening a note must not throw the filter away."""
+    made = await knowledge.add_section(db, GUILD, "Cookout hours", "Fridays.")
+    await knowledge.add_section(db, GUILD, "Rules", "Be kind.")
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+    await button(interaction.view, "Knowledge…").callback(interaction)
+    await button(interaction.view, "Find…").callback(interaction)
+    modal = interaction.response.modals[-1]
+    modal.note._value = "cookout"
+    await modal.on_submit(interaction)
+
+    await pick_one(interaction, cog_module.NOTE_PLACEHOLDER, str(made))
+    await button(interaction.view, "Back").callback(interaction)
+
+    assert "Cookout hours" in interaction.embed.description
+    assert "Rules" not in interaction.embed.description
+
+
 async def test_picking_a_note_shows_it_whole_with_both_moves(cog, bot, member, db, monkeypatch):
     made = await knowledge.add_section(db, GUILD, "Cookout hours", "Fridays.", tag="events")
     interaction = await open_the_panel(cog, bot, member, monkeypatch)

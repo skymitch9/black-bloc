@@ -463,11 +463,14 @@ async def render_knowledge(
 async def render_note(
     interaction: discord.Interaction, note_id: Any, previous: Any = None
 ) -> None:
+    """The card carries the list's `Find…` words, so Back returns to the list you were in."""
+    query = str(getattr(previous, "query", "") or "")
     embed, view = await build_note(interaction.client, interaction.guild, note_id)
     if view is None:
-        await render_knowledge(interaction, "", previous)
+        await render_knowledge(interaction, query, previous)
         await answer(interaction, chat_panel.NO_SUCH_NOTE.format(id=note_id))
         return
+    view.query = query
     await render(interaction, embed, view, previous)
 
 
@@ -535,7 +538,7 @@ async def open_remove_confirm(interaction: discord.Interaction, view: Any) -> No
     guild = interaction.guild
     row, _held = await chat_panel.wanted_note(bot, guild, view.note_id)
     if row is None:
-        await render_knowledge(interaction, "", view)
+        await render_knowledge(interaction, view.query, view)
         await answer(interaction, chat_panel.NO_SUCH_NOTE.format(id=view.note_id))
         return
     embed = discord.Embed(
@@ -549,6 +552,7 @@ async def open_remove_confirm(interaction: discord.Interaction, view: Any) -> No
     fresh = ChatPanel(minutes_for(bot, guild.id))
     fresh.where = NOTE_VIEW
     fresh.note_id = int(row["id"])
+    fresh.query = view.query
     fresh.add_item(RemoveYesButton())
     fresh.add_item(KeepItButton())
     await render(interaction, embed, fresh, view)
