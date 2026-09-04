@@ -1,5 +1,16 @@
 # Phase 15 — Ping roles (F14): the opt-in Events role + per-streamer fan roles
 
+> ⚠️ **SUPERSEDED IN PART, 2026-09-03 — this feature's OWN slash surface is gone too.**
+> `/pingroles` (with its `streamer` group) and `/pings` (with `events` and `fans`) and all
+> twelve of their leaf subcommands (`follow`, `unfollow`, `list`, `events on`/`off`,
+> `fans on`/`off`, `setup`, `streamer add`/`remove`/`list`, `logs`) were replaced by ONE
+> `/pings` command that opens an ephemeral panel; every subcommand is a button, a select or
+> one modal on it. The behaviour this doc describes is unchanged — the fan-role store, the
+> Events-role set-up, the Streamer pings panels, the seven settings (D1–D7) and the log kinds
+> are all exactly what it says. Only the way in moved, plus two decisions the panel added:
+> **Stop following… is not mode-gated** and **split feeds get two labelled toggles**. See
+> [`pings-panel-design.md`](pings-panel-design.md). This doc is NOT rewritten.
+
 > ⚠️ **SUPERSEDED IN PART, 2026-09-03 — the slash surface below is gone.** `/golive` and
 > `/twitch` and all eight of their subcommands (`logs`, `optout`, `optin`, `status`, `mode`,
 > `test`, `link`, `unlink`) were replaced by ONE `/golive` command that opens an ephemeral

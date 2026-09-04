@@ -47,6 +47,7 @@ export const LABELS = {
   pings_fan_role_on_unlink: 'What happens to it when they unlink or opt out',
   pings_fan_role_delete: 'Whether removing one deletes the Discord role too',
   pings_log_level: 'How much of ping roles is repeated into Discord',
+  pings_panel_minutes: 'How long the /pings panel stays live',
 
   tempvoice_mode: 'Whether people can make their own voice rooms',
   tempvoice_creator_ids: 'Which channels people join to get a room',

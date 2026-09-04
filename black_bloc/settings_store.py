@@ -484,14 +484,15 @@ KEY_HELP: dict[str, str] = {
         "role of their own that only their followers wear)"
     ),
     "pings_events_role_name": (
-        "what `/pingroles setup` calls the one opt-in role for go-live and event pings when it "
-        "has to make it; an existing role of that name is reused rather than duplicated"
+        "what **Set up the Events role** on `/pings` calls the one opt-in role for go-live and "
+        "event pings when it has to make it; an existing role of that name is reused rather than "
+        "duplicated"
     ),
     "pings_fan_role_creation": (
-        "who may start a streamer's own ping role: self (the streamer, with `/pings fans on`), "
-        "staff (only an Auntie/Uncle, with `/pingroles streamer add`), or auto (one is made the "
-        "moment a Twitch channel is linked). Staff can always do it for anybody, whichever this "
-        "says"
+        "who may start a streamer's own ping role: self (the streamer, with **Start my own ping "
+        "role** on `/pings`), staff (only an Auntie/Uncle, from `/pings` ▸ **Streamers…**), or "
+        "auto (one is made the moment a Twitch channel is linked). Staff can always do it for "
+        "anybody, whichever this says"
     ),
     "pings_fan_role_template": (
         "what a streamer's own ping role is called; {name} is their display name at the moment "
