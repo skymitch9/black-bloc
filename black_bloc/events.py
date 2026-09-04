@@ -12,9 +12,10 @@ import discord
 from .actionlog import log_action
 from .command_errors import NETWORK_ERRORS
 from .golive import now_iso, parse_ts
-from .logkinds import FEATURE_PAGES, VIA_DISCORD, kind_via
+from .logkinds import VIA_DISCORD, kind_via
 from .panels import capped_placeholder
 from .panels import panel_minutes as library_panel_minutes
+from .panels import site_page_url as library_site_page_url
 from .settings_store import (
     EVENTS_LATE_CEILING_MINUTES,
     EVENTS_RETENTION_MAX_DAYS,
@@ -1265,10 +1266,7 @@ def pick_placeholder(shown: int, total: int) -> str:
 
 
 def site_page_url(origin: Any) -> str | None:
-    text = str(origin or "").strip()
-    if not text:
-        return None
-    return f"{text.rstrip('/')}/{FEATURE_PAGES['events']}"
+    return library_site_page_url(origin, "events")
 
 
 def review_channel_url(guild_id: Any, channel_id: Any) -> str:

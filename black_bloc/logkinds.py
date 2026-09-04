@@ -252,6 +252,7 @@ ROUTINE: frozenset[str] = frozenset(
         "pings.events_on",
         "pings.fan_role_missing",
         "pings.follow",
+        "pings.settings",
         "pings.setup",
         "pings.unfollow",
         "poll.archived",

@@ -291,7 +291,7 @@ async def test_events_on_needs_the_role_to_exist_first(cog, bot, fan):
 
     await cog.events_on.callback(cog, interaction)
 
-    assert "/pingroles setup" in interaction.said and fan.roles == []
+    assert "Set up the Events role" in interaction.said and fan.roles == []
 
 
 async def test_events_on_and_off_move_the_shared_role(cog, bot, fan, lead, db):
@@ -323,7 +323,7 @@ async def test_events_on_says_so_when_the_role_was_deleted_by_hand(cog, bot, fan
     await cog.events_on.callback(cog, interaction)
 
     assert "not a role in this server any more" in interaction.said
-    assert "/pingroles setup" in interaction.said
+    assert "Set up the Events role" in interaction.said
 
 
 async def test_fans_on_refuses_somebody_black_bloc_has_never_seen_stream(cog, bot, fan):
@@ -353,7 +353,7 @@ async def test_fans_on_is_refused_when_only_staff_may_start_one(cog, bot, stream
 
     await cog.fans_on.callback(cog, interaction)
 
-    assert "/pingroles streamer add" in interaction.said
+    assert "**Streamers…**" in interaction.said
     assert bot.guild.made == []
 
 
