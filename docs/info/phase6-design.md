@@ -1,5 +1,11 @@
 # Phase 6 design — moderation (F7), shadow beside Carl-bot
 
+> ⚠️ **2026-09-04 — the `/automod` COMMAND SHAPE below is superseded by
+> [`automod-panel-design.md`](automod-panel-design.md).** `/automod status|mode|rule …|exempt
+> …` is now ONE `/automod` that opens a panel; the eight leaf subcommands are retired. This
+> document is the record of what was decided in Phase 6 and is deliberately NOT rewritten —
+> every rule, bound, mode and log kind it names is still exactly what the engine does.
+>
 > **Audience:** the Phase 6 build agent and the reviewer. **Status:** LOCAL
 > ONLY. **Last verified: 2026-08-26** — Carl's live config from the owner's
 > `!am` dump (`archive/current-bots/carl-bot-dashboard-2026-08-26.md`);
