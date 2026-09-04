@@ -1,10 +1,12 @@
 import asyncio
 import re
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import discord
 import pytest
 
+from black_bloc.automod import RULE_HELP, RULE_ORDER, rule_config
 from black_bloc.cogs.moderation import automod as automod_cog
 from black_bloc.cogs.moderation.automod import (
     APPLY_TEMPLATE,
@@ -122,6 +124,9 @@ class FakeGuild:
     def get_member(self, user_id):
         return self.members.get(user_id)
 
+    def get_role(self, role_id):
+        return next((one for one in self.roles if one.id == role_id), None)
+
 
 class FakeMember:
     def __init__(self, guild, user_id=USER, roles=(), manage_guild=False, bot=False):
@@ -206,11 +211,21 @@ class FakeBot:
 class FakeResponse:
     def __init__(self):
         self.messages = []
+        self.modals = []
+        self.deferred = False
+
+    def is_done(self):
+        return self.deferred or bool(self.messages)
 
     async def send_message(self, content=None, ephemeral=False, **kwargs):
         self.messages.append({"content": content, "ephemeral": ephemeral, **kwargs})
 
+    async def send_modal(self, modal):
+        self.modals.append(modal)
+        self.deferred = True
+
     async def defer(self, ephemeral=False):
+        self.deferred = True
         self.messages.append({"content": None, "deferred": True})
 
 
@@ -231,10 +246,35 @@ class FakeInteraction:
         self.channel_id = channel_id
         self.response = FakeResponse()
         self.followup = FakeFollowup(self.response)
+        self.edits = []
+
+    async def original_response(self):
+        return FakeMessage(1, "")
+
+    async def edit_original_response(self, **kwargs):
+        self.edits.append(kwargs)
+        return FakeMessage(9500, "", **kwargs)
+
+    @property
+    def rendered(self):
+        if self.edits:
+            return self.edits[-1]
+        return self.response.messages[-1] if self.response.messages else {}
+
+    @property
+    def view(self):
+        return self.rendered.get("view")
+
+    @property
+    def embed(self):
+        return self.rendered.get("embed")
 
     @property
     def sent(self):
-        return self.response.messages[-1]["content"] if self.response.messages else None
+        said = [
+            one["content"] for one in self.response.messages if one.get("content") is not None
+        ]
+        return said[-1] if said else None
 
 
 async def action_kinds(db):
@@ -643,142 +683,590 @@ async def test_the_apply_button_says_so_when_it_is_already_applied_or_gone(bot, 
     assert "no record" in missing.sent
 
 
-async def test_arming_automod_is_refused_while_the_staff_channel_is_the_test_channel(
-    cog, bot, lead
+def labels(view):
+    return [one.label for one in view.children if getattr(one, "label", None)]
+
+
+def placeholders(view):
+    return [
+        one.placeholder for one in view.children if getattr(one, "placeholder", None) is not None
+    ]
+
+
+def options(view, placeholder):
+    picker = next(one for one in view.children if getattr(one, "placeholder", None) == placeholder)
+    return picker.options
+
+
+def control(view, placeholder):
+    return next(
+        one for one in view.children if getattr(one, "placeholder", None) == placeholder
+    )
+
+
+def button(view, label):
+    return next(one for one in view.children if getattr(one, "label", None) == label)
+
+
+def has(view, label):
+    return any(getattr(one, "label", None) == label for one in view.children)
+
+
+async def pick(picker, values, interaction):
+    picker._values = list(values)
+    await picker.callback(interaction)
+
+
+def armable(bot, role_id=STAFF_ROLE):
+    """A real staff channel that resolves at least one role — state S3."""
+    give_staff(bot, role_id=role_id, channel_id=STAFF_CHANNEL)
+    return bot.store.set(GUILD, "staff_channel_id", STAFF_CHANNEL)
+
+
+async def open_panel(cog, bot, who):
+    interaction = FakeInteraction(bot, who)
+    await cog.automod.callback(cog, interaction)
+    return interaction
+
+
+async def test_the_command_answers_one_ephemeral_panel_carrying_the_whole_status_block(
+    cog, bot, lead, db
 ):
-    interaction = FakeInteraction(bot, lead)
+    give_staff(bot)
+    await add_case(db, GUILD, USER, "automod", mode="shadow", applied=False)
 
-    await cog.mode.callback(
-        cog, interaction, discord.app_commands.Choice(name="on", value="on")
+    interaction = await open_panel(cog, bot, lead)
+
+    assert len(interaction.response.messages) == 1
+    said = interaction.response.messages[0]
+    assert said["ephemeral"] is True and said["allowed_mentions"].everyone is False
+    embed = said["embed"]
+    assert embed.title == automod_cog.PANEL_TITLE
+    for line in ("**mode** — shadow", "**warn threshold**", "**modlog**", "1 logged only"):
+        assert line in embed.description
+    assert "**mention_spam** — on · 5 in 30s · delete, warn, timeout (300s)" in embed.description
+    assert "**caps** — off" in embed.description
+    assert "/automod status" not in embed.description
+    assert "/automod rule" not in embed.description
+    assert placeholders(said["view"]) == [automod_cog.PICK_A_RULE, automod_cog.MODE_PLACEHOLDER]
+    assert labels(said["view"]) == [
+        "Exemptions…",
+        "Settings…",
+        "Refresh",
+        "Logs",
+        "Open on the site",
+    ]
+
+
+async def test_the_panel_is_staff_only_and_says_so_in_words(cog, bot, spammer):
+    interaction = await open_panel(cog, bot, spammer)
+
+    assert "staff only" in interaction.sent
+    assert interaction.response.messages[-1].get("embed") is None
+
+
+async def test_the_panel_says_so_rather_than_opening_when_the_database_is_down(cog, bot, lead):
+    bot.db = SimpleNamespace(is_connected=False, conn=bot.db.conn)
+    interaction = await open_panel(cog, bot, lead)
+
+    assert "cannot reach its own database" in interaction.sent
+    assert interaction.view is None
+
+
+@pytest.mark.parametrize("mode", ["off", "shadow", "on"])
+@pytest.mark.parametrize("state", ["test_channel", "no_roles", "armable"])
+async def test_every_state_renders_exactly_its_row_of_the_mode_table(cog, bot, lead, mode, state):
+    """Checklist 3 and 12: `on` is not offered where arming would be refused, it is absent."""
+    if state != "test_channel":
+        await bot.store.set(GUILD, "staff_channel_id", STAFF_CHANNEL)
+    if state == "armable":
+        give_staff(bot, channel_id=STAFF_CHANNEL)
+    await bot.store.set(GUILD, "automod_mode", mode)
+
+    embed, view = await automod_cog.build_root(bot, bot.guild)
+
+    offered = [one.value for one in options(view, automod_cog.MODE_PLACEHOLDER)]
+    if state == "armable":
+        assert offered == ["off", "shadow", "on"]
+        assert "still the test channel" not in embed.description
+        assert "cannot work out who counts as staff" not in embed.description
+    else:
+        assert offered == ["off", "shadow"]
+        wanted = (
+            "still the test channel" if state == "test_channel" else "cannot work out who counts"
+        )
+        assert wanted in embed.description
+    assert [one.default for one in options(view, automod_cog.MODE_PLACEHOLDER)].count(True) <= 1
+    assert ("No staff roles resolve" in embed.description) == (
+        mode == "on" and state != "armable"
     )
 
-    assert bot.store.get(GUILD, "automod_mode") == "shadow"
-    assert "still the test channel" in interaction.sent
+
+async def test_the_panel_says_out_loud_when_every_rule_is_off(cog, bot, lead):
+    book = {name: {"enabled": False} for name in RULE_ORDER}
+    await bot.store.set(GUILD, "automod_rules", book)
+
+    embed, _view = await automod_cog.build_root(bot, bot.guild)
+
+    assert "Every rule is off" in embed.description
+
+    await bot.store.set(GUILD, "automod_rules", {})
+    again, _view = await automod_cog.build_root(bot, bot.guild)
+    assert "Every rule is off" not in again.description
 
 
-async def test_arming_automod_is_refused_while_no_staff_role_resolves(cog, bot, lead):
-    await bot.store.set(GUILD, "staff_channel_id", STAFF_CHANNEL)
+async def test_there_is_no_site_button_when_there_is_nowhere_to_send_anybody(bot):
+    bot.settings = bot.settings.model_copy(update={"site_origin": ""})
+
+    _embed, view = await automod_cog.build_root(bot, bot.guild)
+
+    assert not has(view, "Open on the site")
+
+
+@pytest.mark.parametrize("name", list(RULE_ORDER))
+async def test_a_rule_card_offers_one_spelling_of_each_move_and_says_how_it_counts(bot, name):
+    embed, view = automod_cog.build_card(bot, bot.guild, name)
+    cfg = rule_config(bot.store.get(GUILD, "automod_rules"), name)
+
+    assert f"**{name}**" in embed.description
+    assert RULE_HELP[name] in embed.description
+    assert ("one message at a time" in embed.description) == (cfg["window_s"] == 0)
+    assert has(view, "Turn it off") is cfg["enabled"]
+    assert has(view, "Turn it on") is not cfg["enabled"]
+    assert has(view, "Log only") is bool(cfg["actions"])
+    assert has(view, "Words…") is (name == "bad_words")
+    assert labels(view)[-1] == "Back"
+    assert placeholders(view) == [automod_cog.WHAT_IT_DOES]
+    assert len([one for one in view.children if getattr(one, "label", None)]) <= 5
+
+
+async def test_the_rule_picker_opens_the_card_and_back_returns_to_the_panel(cog, bot, lead):
+    interaction = await open_panel(cog, bot, lead)
+    root = interaction.view
+
+    await pick(control(root, automod_cog.PICK_A_RULE), ["mention_spam"], interaction)
+
+    assert root.replaced is True
+    card = interaction.view
+    assert card.rule_name == "mention_spam"
+
+    await button(card, "Back").callback(interaction)
+
+    assert card.replaced is True
+    assert placeholders(interaction.view) == [
+        automod_cog.PICK_A_RULE,
+        automod_cog.MODE_PLACEHOLDER,
+    ]
+
+
+async def test_turning_a_rule_off_flips_the_button_and_leaves_one_log_row(cog, bot, lead, db):
+    _embed, card = automod_cog.build_card(bot, bot.guild, "mention_spam")
     interaction = FakeInteraction(bot, lead)
 
-    await cog.mode.callback(
-        cog, interaction, discord.app_commands.Choice(name="on", value="on")
-    )
+    await button(card, "Turn it off").callback(interaction)
+
+    assert bot.store.get(GUILD, "automod_rules")["mention_spam"]["enabled"] is False
+    assert has(interaction.view, "Turn it on") and not has(interaction.view, "Turn it off")
+    assert (await action_kinds(db)).count("automod.rule") == 1
+
+
+async def test_log_only_clears_the_actions_and_then_stops_being_offered(cog, bot, lead):
+    _embed, card = automod_cog.build_card(bot, bot.guild, "mention_spam")
+    interaction = FakeInteraction(bot, lead)
+
+    await button(card, "Log only").callback(interaction)
+
+    assert bot.store.get(GUILD, "automod_rules")["mention_spam"]["actions"] == []
+    assert not has(interaction.view, "Log only")
+
+
+async def test_the_actions_picker_is_the_other_door_onto_the_same_move(cog, bot, lead):
+    _embed, card = automod_cog.build_card(bot, bot.guild, "mention_spam")
+    interaction = FakeInteraction(bot, lead)
+    picker = control(card, automod_cog.WHAT_IT_DOES)
+
+    assert [one.default for one in picker.options] == [True, True, True]
+
+    await pick(picker, ["warn"], interaction)
+
+    assert bot.store.get(GUILD, "automod_rules")["mention_spam"]["actions"] == ["warn"]
+
+    await pick(control(interaction.view, automod_cog.WHAT_IT_DOES), [], interaction)
+
+    assert bot.store.get(GUILD, "automod_rules")["mention_spam"]["actions"] == []
+
+
+async def test_the_numbers_modal_arrives_full_and_writes_nothing_when_one_field_is_refused(
+    cog, bot, lead, db
+):
+    _embed, card = automod_cog.build_card(bot, bot.guild, "mention_spam")
+    interaction = FakeInteraction(bot, lead)
+
+    await button(card, "Change the numbers…").callback(interaction)
+    modal = interaction.response.modals[0]
+
+    assert [str(item.default) for item, _key in modal.fields()] == ["30", "5", "300"]
+    assert "0 = one message" in modal.window.label
+
+    modal.window._value = "abc"
+    modal.threshold._value = "9"
+    modal.timeout._value = "60"
+    refused = FakeInteraction(bot, lead)
+    await modal.on_submit(refused)
+
+    assert "whole number" in refused.sent
+    assert refused.edits == []
+    rule = bot.store.get(GUILD, "automod_rules")["mention_spam"]
+    assert (rule["window_s"], rule["threshold"], rule["timeout_s"]) == (30, 5, 300)
+    assert "automod.rule" not in await action_kinds(db)
+
+
+async def test_a_number_the_engine_bounds_is_refused_in_words_and_saves_nothing(cog, bot, lead):
+    _embed, card = automod_cog.build_card(bot, bot.guild, "mention_spam")
+    opening = FakeInteraction(bot, lead)
+    await button(card, "Change the numbers…").callback(opening)
+    modal = opening.response.modals[0]
+    modal.window._value = "4000"
+    modal.threshold._value = "5"
+    modal.timeout._value = "300"
+    interaction = FakeInteraction(bot, lead)
+
+    await modal.on_submit(interaction)
+
+    assert "between 0 and 3600" in interaction.sent
+    assert interaction.edits == []
+    assert bot.store.get(GUILD, "automod_rules")["mention_spam"]["window_s"] == 30
+
+
+async def test_the_caps_card_asks_for_a_percent_and_refuses_a_count(cog, bot, lead):
+    _embed, card = automod_cog.build_card(bot, bot.guild, "caps")
+    opening = FakeInteraction(bot, lead)
+    await button(card, "Change the numbers…").callback(opening)
+    modal = opening.response.modals[0]
+
+    assert modal.threshold.label == "Percent capitals, 1–100"
+
+    modal.window._value = "0"
+    modal.threshold._value = "200"
+    modal.timeout._value = "0"
+    interaction = FakeInteraction(bot, lead)
+    await modal.on_submit(interaction)
+
+    assert "between 1 and 100" in interaction.sent
+    assert bot.store.get(GUILD, "automod_rules")["caps"]["threshold"] == 70
+
+
+async def test_the_words_box_arrives_full_and_one_per_line_saves_them_all(cog, bot, lead):
+    book = dict(bot.store.get(GUILD, "automod_rules"))
+    book["bad_words"] = {"words": ["grifter"]}
+    await bot.store.set(GUILD, "automod_rules", book)
+    _embed, card = automod_cog.build_card(bot, bot.guild, "bad_words")
+    opening = FakeInteraction(bot, lead)
+
+    await button(card, "Words…").callback(opening)
+    modal = opening.response.modals[0]
+
+    assert modal.words.default == "grifter"
+
+    modal.words._value = "grifter\nwrecker\nscab"
+    interaction = FakeInteraction(bot, lead)
+    await modal.on_submit(interaction)
+
+    assert bot.store.get(GUILD, "automod_rules")["bad_words"]["words"] == [
+        "grifter",
+        "wrecker",
+        "scab",
+    ]
+
+
+async def test_a_word_list_too_long_for_the_box_says_to_use_the_website(cog, bot, lead):
+    book = dict(bot.store.get(GUILD, "automod_rules"))
+    book["bad_words"] = {"words": [f"{one}{'x' * 60}" for one in range(100)]}
+    await bot.store.set(GUILD, "automod_rules", book)
+    _embed, card = automod_cog.build_card(bot, bot.guild, "bad_words")
+    interaction = FakeInteraction(bot, lead)
+
+    await button(card, "Words…").callback(interaction)
+
+    assert interaction.response.modals == []
+    assert "dashboard" in interaction.sent
+
+
+async def test_more_words_than_the_engine_holds_is_refused_in_words(cog, bot, lead):
+    _embed, card = automod_cog.build_card(bot, bot.guild, "bad_words")
+    opening = FakeInteraction(bot, lead)
+    await button(card, "Words…").callback(opening)
+    modal = opening.response.modals[0]
+    modal.words._value = "\n".join(str(one) for one in range(300))
+    interaction = FakeInteraction(bot, lead)
+
+    await modal.on_submit(interaction)
+
+    assert "more than 200 words" in interaction.sent
+    assert bot.store.get(GUILD, "automod_rules")["bad_words"]["words"] == []
+
+
+async def test_arming_from_the_panel_asks_once_more_and_only_then_writes(cog, bot, lead, db):
+    await armable(bot)
+    _embed, root = await automod_cog.build_root(bot, bot.guild)
+    interaction = FakeInteraction(bot, lead)
+
+    await pick(control(root, automod_cog.MODE_PLACEHOLDER), ["on"], interaction)
 
     assert bot.store.get(GUILD, "automod_mode") == "shadow"
-    assert "staff_channel_id" in interaction.sent
+    confirm = interaction.view
+    assert labels(confirm) == ["Yes, arm it", "Keep it in shadow"]
+    assert "Are you sure?" in [one.name for one in interaction.embed.fields]
 
-    give_staff(bot, channel_id=STAFF_CHANNEL)
-    again = FakeInteraction(bot, lead)
-    await cog.mode.callback(cog, again, discord.app_commands.Choice(name="on", value="on"))
+    await button(confirm, "Yes, arm it").callback(interaction)
+
+    assert bot.store.get(GUILD, "automod_mode") == "on"
+    assert (await action_kinds(db)).count("automod.mode") == 1
+
+
+async def test_keeping_it_in_shadow_changes_nothing_and_goes_back(cog, bot, lead, db):
+    await armable(bot)
+    _embed, root = await automod_cog.build_root(bot, bot.guild)
+    interaction = FakeInteraction(bot, lead)
+    await pick(control(root, automod_cog.MODE_PLACEHOLDER), ["on"], interaction)
+
+    await button(interaction.view, "Keep it in shadow").callback(interaction)
+
+    assert bot.store.get(GUILD, "automod_mode") == "shadow"
+    assert await action_kinds(db) == []
+    assert placeholders(interaction.view) == [
+        automod_cog.PICK_A_RULE,
+        automod_cog.MODE_PLACEHOLDER,
+    ]
+
+
+async def test_going_quieter_never_asks_twice(cog, bot, lead, db):
+    await armable(bot)
+    _embed, root = await automod_cog.build_root(bot, bot.guild)
+    interaction = FakeInteraction(bot, lead)
+
+    await pick(control(root, automod_cog.MODE_PLACEHOLDER), ["off"], interaction)
+
+    assert bot.store.get(GUILD, "automod_mode") == "off"
+    assert (await action_kinds(db)).count("automod.mode") == 1
+    assert "Automod is now **off**." == interaction.sent
+
+
+async def test_the_confirm_can_be_turned_off_and_then_arming_is_one_press(cog, bot, lead):
+    await armable(bot)
+    await bot.store.set(GUILD, "automod_arm_needs_confirm", False)
+    _embed, root = await automod_cog.build_root(bot, bot.guild)
+    interaction = FakeInteraction(bot, lead)
+
+    await pick(control(root, automod_cog.MODE_PLACEHOLDER), ["on"], interaction)
+
     assert bot.store.get(GUILD, "automod_mode") == "on"
 
 
-async def test_status_names_the_mode_the_staff_and_every_rule(cog, bot, lead, db):
-    role = give_staff(bot)
-    await add_case(db, GUILD, USER, "automod", mode="shadow", applied=False)
-    interaction = FakeInteraction(bot, lead)
+async def test_arming_is_refused_by_the_same_answer_the_picker_read(cog, bot, lead, db):
+    """The website can still write `on`; `set_mode` refuses it with the sentence, not silently."""
+    said = await automod_cog.set_mode(bot, bot.guild, "on", lead)
 
-    await cog.status.callback(cog, interaction)
+    assert "still the test channel" in said
+    assert bot.store.get(GUILD, "automod_mode") == "shadow"
 
-    assert "**mode** — shadow" in interaction.sent
-    assert role.name in interaction.sent
-    assert "**mention_spam** — on · 5 in 30s · delete, warn, timeout (300s)" in interaction.sent
-    assert "**caps** — off" in interaction.sent
-    assert "1 logged only" in interaction.sent
+    await bot.store.set(GUILD, "staff_channel_id", STAFF_CHANNEL)
+    said = await automod_cog.set_mode(bot, bot.guild, "on", lead)
 
+    assert "cannot work out who counts as staff" in said
+    assert bot.store.get(GUILD, "automod_mode") == "shadow"
+    assert await action_kinds(db) == []
 
-async def test_status_warns_loudly_when_armed_with_no_staff(cog, bot, lead):
-    await bot.store.set(GUILD, "automod_mode", "on")
-    interaction = FakeInteraction(bot, lead)
+    give_staff(bot, channel_id=STAFF_CHANNEL)
+    said = await automod_cog.set_mode(bot, bot.guild, "on", lead)
 
-    await cog.status.callback(cog, interaction)
-
-    assert "No staff roles resolve" in interaction.sent
+    assert bot.store.get(GUILD, "automod_mode") == "on" and "**on**" in said
+    assert await action_kinds(db) == ["automod.mode"]
 
 
-async def test_a_rule_is_enabled_disabled_and_tuned(cog, bot, lead):
-    await cog.rule_disable.callback(cog, FakeInteraction(bot, lead), "mention_spam")
-    assert bot.store.get(GUILD, "automod_rules")["mention_spam"]["enabled"] is False
+async def test_a_mode_written_from_the_website_takes_the_web_head_and_says_so(bot, lead, db):
+    await armable(bot)
 
-    await cog.rule_enable.callback(cog, FakeInteraction(bot, lead), "mention_spam")
-    assert bot.store.get(GUILD, "automod_rules")["mention_spam"]["enabled"] is True
+    await automod_cog.set_mode(bot, bot.guild, "off", lead, via="website")
 
-    await cog.rule_set.callback(
-        cog,
-        FakeInteraction(bot, lead),
-        "mention_spam",
-        discord.app_commands.Choice(name="threshold", value="threshold"),
-        "3",
-    )
-    assert bot.store.get(GUILD, "automod_rules")["mention_spam"]["threshold"] == 3
-
-    await cog.rule_set.callback(
-        cog,
-        FakeInteraction(bot, lead),
-        "bad_words",
-        discord.app_commands.Choice(name="words", value="words"),
-        "grifter, wrecker",
-    )
-    assert bot.store.get(GUILD, "automod_rules")["bad_words"]["words"] == ["grifter", "wrecker"]
+    assert await action_kinds(db) == ["web.automod.mode"]
 
 
-async def test_a_rule_change_discord_would_refuse_is_answered_with_a_sentence(cog, bot, lead):
-    over = FakeInteraction(bot, lead)
-    await cog.rule_set.callback(
-        cog, over, "mention_spam",
-        discord.app_commands.Choice(name="timeout_s", value="timeout_s"), "9999999",
-    )
-    assert "between" in over.sent
-    assert bot.store.get(GUILD, "automod_rules")["mention_spam"]["timeout_s"] == 300
-
-    nonsense = FakeInteraction(bot, lead)
-    await cog.rule_set.callback(
-        cog, nonsense, "mention_spam",
-        discord.app_commands.Choice(name="threshold", value="threshold"), "lots",
-    )
-    assert "whole number" in nonsense.sent
-
-    unknown = FakeInteraction(bot, lead)
-    await cog.rule_enable.callback(cog, unknown, "shouting")
-    assert "not one of" in unknown.sent
-
-    wrong_field = FakeInteraction(bot, lead)
-    await cog.rule_set.callback(
-        cog, wrong_field, "mention_spam",
-        discord.app_commands.Choice(name="words", value="words"), "a, b",
-    )
-    assert "not something an automod rule has" in wrong_field.sent
-
-
-async def test_a_rule_command_is_staff_only(cog, bot, spammer):
-    interaction = FakeInteraction(bot, spammer)
-
-    await cog.rule_disable.callback(cog, interaction, "mention_spam")
-
-    assert bot.store.get(GUILD, "automod_rules")["mention_spam"]["enabled"] is True
-    assert "staff only" in interaction.sent
-
-
-async def test_exempt_roles_and_channels_are_added_and_removed(cog, bot, lead, db):
-    role = FakeRole(EXEMPT_ROLE)
+async def test_exemptions_add_both_kinds_and_take_them_off_one_select(cog, bot, lead, db):
+    role = give_staff(bot, role_id=EXEMPT_ROLE)
     channel = bot.guild.get_channel(ELSEWHERE)
+    interaction = FakeInteraction(bot, lead)
+    _embed, root = await automod_cog.build_root(bot, bot.guild)
 
-    await cog.exempt_add.callback(cog, FakeInteraction(bot, lead), role, channel)
+    await button(root, "Exemptions…").callback(interaction)
+    page = interaction.view
+
+    assert automod_cog.REMOVE_PLACEHOLDER not in placeholders(page)
+    assert placeholders(page) == [automod_cog.ADD_ROLE, automod_cog.ADD_CHANNEL]
+
+    await pick(control(page, automod_cog.ADD_ROLE), [role], interaction)
+    await pick(control(interaction.view, automod_cog.ADD_CHANNEL), [channel], interaction)
+
     assert bot.store.get(GUILD, "automod_exempt_role_ids") == [EXEMPT_ROLE]
     assert bot.store.get(GUILD, "automod_exempt_channel_ids") == [ELSEWHERE]
+    removal = control(interaction.view, automod_cog.REMOVE_PLACEHOLDER)
+    assert [one.value for one in removal.options] == [
+        f"role:{EXEMPT_ROLE}",
+        f"channel:{ELSEWHERE}",
+    ]
+    assert [one.label for one in removal.options] == [
+        f"role — {role.name}",
+        f"channel — #{channel.name}",
+    ]
 
-    again = FakeInteraction(bot, lead)
-    await cog.exempt_add.callback(cog, again, role, None)
-    assert "already exempt" in again.sent
+    await pick(removal, [f"role:{EXEMPT_ROLE}"], interaction)
 
-    await cog.exempt_remove.callback(cog, FakeInteraction(bot, lead), role, channel)
     assert bot.store.get(GUILD, "automod_exempt_role_ids") == []
-    assert bot.store.get(GUILD, "automod_exempt_channel_ids") == []
+    kinds = await action_kinds(db)
+    assert kinds == ["automod.exempt_add", "automod.exempt_add", "automod.exempt_remove"]
 
-    empty = FakeInteraction(bot, lead)
-    await cog.exempt_add.callback(cog, empty, None, None)
-    assert "Name a role or a channel" in empty.sent
-    assert "automod.exempt_add" in await action_kinds(db)
+
+async def test_adding_the_same_exemption_twice_changes_nothing_and_says_so(cog, bot, lead, db):
+    await bot.store.set(GUILD, "automod_exempt_role_ids", [EXEMPT_ROLE])
+
+    said = await automod_cog.set_exempt(bot, bot.guild, "role", EXEMPT_ROLE, lead, add=True)
+
+    assert "was already exempt" in said
+    assert bot.store.get(GUILD, "automod_exempt_role_ids") == [EXEMPT_ROLE]
+    assert await action_kinds(db) == []
+
+    gone = await automod_cog.set_exempt(bot, bot.guild, "channel", ELSEWHERE, lead, add=False)
+
+    assert "was already not exempt" in gone
+    assert await action_kinds(db) == []
+
+
+async def test_something_discord_no_longer_has_is_still_offered_for_removal(cog, bot, lead):
+    await bot.store.set(GUILD, "automod_exempt_role_ids", [4242])
+
+    _embed, page = automod_cog.build_exemptions(bot, bot.guild)
+    removal = control(page, automod_cog.REMOVE_PLACEHOLDER)
+
+    assert [one.label for one in removal.options] == ["a role Discord no longer has (4242)"]
+
+    interaction = FakeInteraction(bot, lead)
+    await pick(removal, ["role:4242"], interaction)
+
+    assert bot.store.get(GUILD, "automod_exempt_role_ids") == []
+
+
+async def test_the_honeypots_are_named_as_never_read_and_are_not_on_the_removal_select(bot):
+    embed, page = automod_cog.build_exemptions(bot, bot.guild)
+
+    assert f"<#{HONEYPOT}>" in embed.description
+    assert "the honeypot owns them" in embed.description
+    assert automod_cog.REMOVE_PLACEHOLDER not in placeholders(page)
+
+
+async def test_the_settings_page_says_what_it_owns_and_what_the_site_owns(cog, bot, lead, db):
+    interaction = FakeInteraction(bot, lead)
+    _embed, root = await automod_cog.build_root(bot, bot.guild)
+
+    await button(root, "Settings…").callback(interaction)
+    page = interaction.view
+
+    assert "**this panel stays live** — 10 minute(s)" in interaction.embed.description
+    assert "Moderation page" in interaction.embed.description
+    assert labels(page) == ["Numbers…", "Arming asks twice", "Back"]
+
+    await button(page, "Arming asks twice").callback(interaction)
+
+    assert bot.store.get(GUILD, "automod_arm_needs_confirm") is False
+    assert has(interaction.view, "Arming is one press")
+    assert (await action_kinds(db)).count("automod.settings") == 1
+
+
+async def test_the_panel_minutes_modal_refuses_nonsense_and_saves_a_number(cog, bot, lead):
+    _embed, page = automod_cog.build_settings(bot, bot.guild)
+    opening = FakeInteraction(bot, lead)
+
+    await button(page, "Numbers…").callback(opening)
+    modal = opening.response.modals[0]
+
+    assert modal.stays.default == "10"
+
+    modal.stays._value = "0"
+    refused = FakeInteraction(bot, lead)
+    await modal.on_submit(refused)
+
+    assert "is not a whole number" in refused.sent
+    assert bot.store.get(GUILD, "automod_panel_minutes") == 10
+
+    modal.stays._value = "25"
+    saved = FakeInteraction(bot, lead)
+    await modal.on_submit(saved)
+
+    assert bot.store.get(GUILD, "automod_panel_minutes") == 25
+    assert automod_cog.minutes_for(bot, GUILD) == 25
+
+
+async def test_logs_answers_a_new_message_and_leaves_the_panel_where_it_is(cog, bot, lead, db):
+    give_staff(bot)
+    interaction = await open_panel(cog, bot, lead)
+    root = interaction.view
+
+    await button(root, "Logs").callback(interaction)
+
+    assert root.replaced is False
+    assert interaction.edits == []
+    assert len(interaction.response.messages) == 2
+
+
+async def test_a_staffer_demoted_mid_panel_moves_nothing_at_all(cog, bot, lead, db):
+    _embed, root = await automod_cog.build_root(bot, bot.guild)
+    _embed, card = automod_cog.build_card(bot, bot.guild, "mention_spam")
+    _embed, page = automod_cog.build_exemptions(bot, bot.guild)
+    bot.store.is_staff = lambda who: False
+
+    for control_and_args in (
+        (button(root, "Exemptions…").callback,),
+        (button(root, "Settings…").callback,),
+        (button(root, "Refresh").callback,),
+        (button(card, "Turn it off").callback,),
+        (button(card, "Change the numbers…").callback,),
+        (button(page, "Back").callback,),
+    ):
+        interaction = FakeInteraction(bot, lead)
+        await control_and_args[0](interaction)
+        assert "staff only" in interaction.sent
+        assert interaction.edits == [] and interaction.response.modals == []
+
+    picking = FakeInteraction(bot, lead)
+    await pick(control(root, automod_cog.PICK_A_RULE), ["caps"], picking)
+    assert "staff only" in picking.sent and picking.edits == []
+
+    moding = FakeInteraction(bot, lead)
+    await pick(control(root, automod_cog.MODE_PLACEHOLDER), ["off"], moding)
+    assert "staff only" in moding.sent
+    assert bot.store.get(GUILD, "automod_rules")["mention_spam"]["enabled"] is True
+    assert bot.store.get(GUILD, "automod_mode") == "shadow"
+
+
+async def test_every_click_re_checks_the_database_after_the_defer(cog, bot, lead):
+    _embed, root = await automod_cog.build_root(bot, bot.guild)
+    _embed, card = automod_cog.build_card(bot, bot.guild, "mention_spam")
+    bot.db = SimpleNamespace(is_connected=False, conn=bot.db.conn)
+
+    for click in (
+        button(root, "Exemptions…").callback,
+        button(root, "Settings…").callback,
+        button(card, "Turn it off").callback,
+    ):
+        interaction = FakeInteraction(bot, lead)
+        await click(interaction)
+        assert interaction.response.messages[0].get("deferred") is True
+        assert "cannot reach its own database" in interaction.sent
+        assert interaction.edits == []
+
+    modal = FakeInteraction(bot, lead)
+    await button(card, "Change the numbers…").callback(modal)
+    assert modal.response.modals == [] and "cannot reach its own database" in modal.sent
+    assert bot.store.get(GUILD, "automod_rules")["mention_spam"]["enabled"] is True
 
 
 async def test_every_message_that_fed_the_window_is_deleted(cog, bot, spammer, db):

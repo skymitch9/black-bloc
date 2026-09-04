@@ -11,7 +11,6 @@ CHILDREN_MAX = 25
 LOGS_GROUPS = {
     "rolemenu": "rolemenu",
     "role": "rolemenu",
-    "automod": "automod",
     "honeypot": "honeypot",
     "modmail": "modmail",
     "chat": "chat",

@@ -231,6 +231,7 @@ ROUTINE: frozenset[str] = frozenset(
         "automod.mode",
         "automod.observed",
         "automod.rule",
+        "automod.settings",
         "modmail.block",
         "modmail.blocked_dm",
         "modmail.category_forgotten",

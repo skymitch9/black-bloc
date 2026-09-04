@@ -574,7 +574,7 @@ KEY_HELP: dict[str, str] = {
     "modmail_staff_channel_id": "the channel ticket threads are made in, in thread mode",
     "modmail_log_channel_id": "where a closed ticket's transcript is posted",
     "automod_mode": "off, shadow (log what it would do) or on (delete, warn and time out)",
-    "automod_rules": "the automod rule book; /automod rule is what changes it",
+    "automod_rules": "the automod rule book; /automod then A rule… is what changes it",
     "automod_exempt_role_ids": "roles automod ignores; staff are always ignored too",
     "automod_exempt_channel_ids": "channels automod never reads",
     "automod_warn_threshold": "warnings before Black Bloc says so in the log, 0 to stop counting",
@@ -780,7 +780,6 @@ LOG_LEVEL_HELP = (
     "on a member, or failed) or all. Every line is kept on the dashboard{extra} either way"
 )
 LOG_LEVEL_COMMANDS: dict[str, str] = {
-    "automod": "automod",
     "honeypot": "honeypot",
     "mod": "mod",
     "modmail": "modmail",
@@ -1075,6 +1074,25 @@ KEY_HELP.update(
             "default. The 'this panel has gone quiet' footer can only be written while "
             "Discord's 15-minute interaction window is still open, so 15 or more means the "
             "buttons simply stop working with no footer to explain it"
+        ),
+    }
+)
+
+
+# Automod panel (wave 3) — the two decisions `/automod`'s panel introduces, in its own block so
+# the parallel wave-3 branches merge textually.
+KEY_TYPES.update({"automod_panel_minutes": "int", "automod_arm_needs_confirm": "bool"})
+KEY_HELP.update(
+    {
+        "automod_panel_minutes": (
+            "minutes the /automod panel stays live before its buttons disable themselves; 10 by "
+            "default. The 'this panel has gone quiet' footer can only be written while "
+            "Discord's 15-minute interaction window is still open, so 15 or more means the "
+            "buttons simply stop working with no footer to explain it"
+        ),
+        "automod_arm_needs_confirm": (
+            "true to ask a second time before automod is turned on from the panel, naming what "
+            "will start happening; turning it off or back to shadow is always one press"
         ),
     }
 )
@@ -1606,6 +1624,10 @@ class SettingsStore:
             return 10
         if key == "voice_panel_minutes":
             return 10
+        if key == "automod_panel_minutes":
+            return 10
+        if key == "automod_arm_needs_confirm":
+            return True
         if key.endswith("_log_level"):
             return LEVEL_DEFAULT
         if KEY_TYPES.get(key) in ("channels", "roles"):

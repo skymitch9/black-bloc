@@ -49,6 +49,8 @@ export const LABELS = {
   pings_log_level: 'How much of ping roles is repeated into Discord',
   pings_panel_minutes: 'How long the /pings panel stays live',
   voice_panel_minutes: 'How long the /voice panel stays live',
+  automod_panel_minutes: 'How long the /automod panel stays live',
+  automod_arm_needs_confirm: 'Whether arming automod asks twice',
 
   tempvoice_mode: 'Whether people can make their own voice rooms',
   tempvoice_creator_ids: 'Which channels people join to get a room',
