@@ -24,6 +24,7 @@ from black_bloc.cogs.community.tempvoice import (
     TempVoice,
     TempVoicePanel,
     UndoPick,
+    VoicePanel,
     act_on_own,
     add_channel,
     apply_remembered_members,
@@ -76,6 +77,7 @@ from black_bloc.cogs.community.tempvoice import (
     spawn_position,
     with_member,
 )
+from black_bloc.command_errors import AnswersErrors
 from black_bloc.config import load_settings
 from black_bloc.settings_store import (
     DB_UNAVAILABLE,
@@ -2429,3 +2431,49 @@ async def test_a_move_on_a_channel_that_was_handed_away_mid_card_changes_nothing
 
     assert "not yours any more" in interaction.sent
     assert made.permissions == []
+
+
+async def details_for(db, kind):
+    cur = await db.conn.execute(
+        "SELECT details FROM action_log WHERE kind = ? ORDER BY id DESC LIMIT 1", (kind,)
+    )
+    row = await cur.fetchone()
+    return json.loads(row["details"]) if row is not None else None
+
+
+async def test_the_bitrate_modal_bounds_what_the_range_used_to(cog, bot, creator, member, db):
+    """Checklist 22: a modal has no `app_commands.Range`, so it has to say no itself."""
+    made = await a_channel(cog, bot, creator, member)
+    before = await action_kinds(db)
+
+    for given in ("0", "500", "-8"):
+        modal = BitrateModal(previous=object())
+        modal.kbps._value = given
+        told = FakeInteraction(bot, member)
+        await modal.on_submit(told)
+        assert "8" in told.sent and "96" in told.sent
+
+    assert await action_kinds(db) == before
+    assert made.bitrate == 0
+
+
+async def test_every_panel_move_leaves_a_discord_row_and_never_a_website_one(
+    cog, bot, creator, member, lead, db
+):
+    """Checklist 34: the panel writes nothing itself, so `via` stays at its Discord default."""
+    await a_channel(cog, bot, creator, member)
+    _embed, view = await panel_for(bot, member)
+    await press(bot, member, view, "Lock")
+    _embed, staff = await panel_for(bot, lead)
+    await press(bot, lead, staff, "Turn join-to-create off")
+
+    kinds = await action_kinds(db)
+    assert not [one for one in kinds if one.startswith("web.")]
+    assert (await details_for(db, "tempvoice.lock"))["via"] == "discord"
+    assert (await details_for(db, "tempvoice.mode"))["via"] == "discord"
+
+
+def test_every_view_and_modal_answers_its_own_errors(cog):
+    """Checklist 8 and 30: components never reach `tree.on_error`."""
+    for shape in (VoicePanel, RenameModal, LimitModal, BitrateModal, SetupModal, TempVoicePanel):
+        assert issubclass(shape, AnswersErrors), shape.__name__

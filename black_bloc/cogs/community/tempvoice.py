@@ -2164,8 +2164,9 @@ class BitrateModal(AnswersErrors, discord.ui.Modal, title="How good should it so
         self.previous = previous
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
+        """The bound `app_commands.Range` used to enforce; a modal has none (checklist 22)."""
         given = str(self.kbps).strip()
-        if not given.isdigit():
+        if not given.isdigit() or not MIN_BITRATE <= int(given) <= MAX_BITRATE:
             await answer(interaction, NOT_A_BITRATE.format(given=given[:40] or "nothing"))
             return
         await act_on_own(interaction, do_bitrate, int(given), previous=self.previous)
