@@ -394,7 +394,7 @@ async def allowance(
 
 
 def tier_errors(bot: Any) -> dict[str, str]:
-    """What each tier's last call did, so `/chat status` can say a tier is down."""
+    """What each tier's last call did, so the `/chat` panel can say a tier is down."""
     found = getattr(bot, ERRORS_ATTR, None)
     if not isinstance(found, dict):
         found = {}

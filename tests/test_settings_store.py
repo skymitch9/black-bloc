@@ -1086,8 +1086,8 @@ async def test_the_pings_panel_stays_up_ten_minutes_by_default(store):
 
 async def test_the_chat_panel_key_is_picked_up_by_the_prefix_scan_with_no_second_edit(store):
     """`CHAT_KEYS` is `startswith('chat_')` over `KEY_TYPES`, so registering it is the only edit."""
-    from black_bloc.cogs.core import VALUE_KEYS
     from black_bloc.cogs.content.chat import CHAT_KEYS
+    from black_bloc.cogs.core import VALUE_KEYS
 
     assert store.get(7, "chat_panel_minutes") == 10
     assert "15" in KEY_HELP["chat_panel_minutes"]

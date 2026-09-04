@@ -262,7 +262,7 @@ def status_lines(
     notes: str = "",
     trouble: str = "",
 ) -> list[str]:
-    """What `/chat status` printed, as a list, so the embed and any later read share one home."""
+    """The status block as a list, so the panel embed and any later read share one home."""
     llm_on = str(store.get(guild_id, LLM_MODE_KEY)) == ON
     lines = [
         STATUS_MODE.format(mode=store.get(guild_id, MODE_KEY), llm=ON if llm_on else OFF)

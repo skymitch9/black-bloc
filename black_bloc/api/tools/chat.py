@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
-from ... import chat_llm, knowledge, personas
+from ... import chat_llm, chat_panel, knowledge, personas
 from ...chat import (
     BUILTIN_NAMES,
     CANNED,
@@ -99,26 +99,6 @@ SECTION_GONE = "**{title}** is gone. Black Bloc will not quote it again."
 STAFF_WROTE_IT = "written here by staff"
 SERVER_WROTE_IT = "written by Black Bloc from the server itself, every day"
 
-NO_SUCH_TROPE = (
-    "**{name}** is not one of the voices Black Bloc knows, so nothing was changed. The list on "
-    "this page is all of them."
-)
-MODE_NEEDS_A_NAME = (
-    "That arrived with no voice in it, so nothing was changed. Pick the cookout voice, the pool, "
-    "or one of the names on the list."
-)
-TROPE_IS_OFF = (
-    "**{label}** is switched off in the pool, so Black Bloc cannot be it. Turn it back on first, "
-    "or pick another one."
-)
-LAST_TROPE_ON = (
-    "**{label}** is the last voice left on and the pool is what Black Bloc is using, so it was "
-    "left alone. Turn another one on first, or move the voice to the cookout one."
-)
-TROPE_IN_USE = (
-    "Black Bloc is set to be **{label}** and nothing else, so that voice cannot be switched off. "
-    "Point it at the cookout voice or the pool first."
-)
 MODE_SET_COOKOUT = "Black Bloc talks in the cookout voice from now on."
 MODE_SET_POOL = (
     "Black Bloc picks a voice out of the pool for each conversation from now on, and moves a step "
@@ -276,29 +256,11 @@ def money(dollars: float) -> str:
     return f"${dollars:,.2f}"
 
 
-def note_refused(exc: knowledge.KnowledgeError) -> Refused:
-    return Refused(400, "chat_refused", str(exc))
-
-
-def clean_title(value: Any) -> str:
-    try:
-        return knowledge.clean_title(value)
-    except knowledge.KnowledgeError as exc:
-        raise note_refused(exc) from exc
-
-
-def clean_body(value: Any) -> str:
-    try:
-        return knowledge.clean_body(value)
-    except knowledge.KnowledgeError as exc:
-        raise note_refused(exc) from exc
-
-
-def clean_tag(value: Any) -> str:
-    try:
-        return knowledge.clean_tag(value)
-    except knowledge.KnowledgeError as exc:
-        raise note_refused(exc) from exc
+def answered(outcome: Any) -> Any:
+    """The shared function's refusal, in its own words, with the status the site expects."""
+    if not outcome.ok:
+        raise Refused(outcome.status, outcome.code, outcome.message)
+    return outcome
 
 
 def refused(exc: ChatError) -> Refused:
@@ -591,26 +553,20 @@ def build_router(bot: Any) -> APIRouter:
         who = await writer(request)
         guild = require_guild(bot)
         require_db(bot)
-        title = clean_title(payload.get("title"))
-        body = clean_body(payload.get("body"))
-        tag = clean_tag(payload.get("tag"))
-        try:
-            section_id = await knowledge.add_section(
-                bot.db, guild.id, title, body, tag=tag, by=int(who["id"])
-            )
-        except knowledge.KnowledgeError as exc:
-            raise Refused(409, "title_taken", str(exc)) from exc
-        await note(
+        outcome = await chat_panel.add_note(
             bot,
             guild,
-            "web.chat.knowledge_added",
-            who,
-            details={"title": title, "via": VIA_WEBSITE},
+            actor_for(bot, who, guild),
+            payload.get("title"),
+            payload.get("body"),
+            payload.get("tag"),
+            via=VIA_WEBSITE,
         )
-        row = await knowledge.get_section(bot.db, section_id)
+        answered(outcome)
+        row = await knowledge.get_section(bot.db, outcome.value)
         return {
             "section": section_row(guild, row),
-            "message": SECTION_MADE.format(title=title),
+            "message": SECTION_MADE.format(title=str(row["title"])),
         }
 
     @router.put("/knowledge/{section_id}")
@@ -624,21 +580,20 @@ def build_router(bot: Any) -> APIRouter:
         _staff_row_only(row)
         fields: dict[str, Any] = {}
         if payload.get("title") is not None:
-            fields["title"] = clean_title(payload["title"])
+            fields["title"] = payload["title"]
         if payload.get("body") is not None:
-            fields["body"] = clean_body(payload["body"])
+            fields["body"] = payload["body"]
         if "tag" in payload:
-            fields["tag"] = clean_tag(payload["tag"])
-        try:
-            await knowledge.update_section(bot.db, section_id, by=int(who["id"]), **fields)
-        except knowledge.KnowledgeError as exc:
-            raise Refused(409, "title_taken", str(exc)) from exc
-        await note(
-            bot,
-            guild,
-            "web.chat.knowledge_edited",
-            who,
-            details={"section_id": section_id, "changed": sorted(fields), "via": VIA_WEBSITE},
+            fields["tag"] = payload["tag"]
+        answered(
+            await chat_panel.edit_note(
+                bot,
+                guild,
+                actor_for(bot, who, guild),
+                section_id,
+                fields,
+                via=VIA_WEBSITE,
+            )
         )
         fresh = await knowledge.get_section(bot.db, section_id)
         return {
@@ -654,13 +609,10 @@ def build_router(bot: Any) -> APIRouter:
         row = await _wanted_section(guild, section_id)
         _staff_row_only(row)
         title = str(row["title"])
-        await knowledge.remove_section(bot.db, section_id)
-        await note(
-            bot,
-            guild,
-            "web.chat.knowledge_removed",
-            who,
-            details={"title": title, "via": VIA_WEBSITE},
+        answered(
+            await chat_panel.remove_note(
+                bot, guild, actor_for(bot, who, guild), section_id, via=VIA_WEBSITE
+            )
         )
         return {
             "removed": True,
@@ -702,26 +654,17 @@ def build_router(bot: Any) -> APIRouter:
         require_db(bot)
         await personas.seed_tropes(bot.db)
         wanted = str(payload.get("mode") or "").strip().lower()
-        if not wanted:
-            raise Refused(400, "chat_refused", MODE_NEEDS_A_NAME)
-        said = MODE_SET_COOKOUT
-        if wanted not in (personas.COOKOUT, personas.POOL):
-            row = await personas.get_trope(bot.db, wanted)
-            if row is None:
-                raise Refused(404, "no_such_trope", NO_SUCH_TROPE.format(name=wanted))
-            if not row["enabled"]:
-                raise Refused(409, "voice_is_off", TROPE_IS_OFF.format(label=str(row["label"])))
-            said = MODE_SET_TROPE.format(label=str(row["label"]))
-        elif wanted == personas.POOL:
-            said = MODE_SET_POOL
-        await bot.store.set(guild.id, personas.PERSONALITY_KEY, wanted, by=int(who["id"]))
-        await note(
-            bot,
-            guild,
-            "web.chat.personality_mode",
-            who,
-            details={"mode": wanted, "via": VIA_WEBSITE},
+        answered(
+            await chat_panel.set_voice(
+                bot, guild, actor_for(bot, who, guild), wanted, via=VIA_WEBSITE
+            )
         )
+        said = MODE_SET_COOKOUT
+        if wanted == personas.POOL:
+            said = MODE_SET_POOL
+        elif wanted != personas.COOKOUT:
+            row = await personas.get_trope(bot.db, wanted)
+            said = MODE_SET_TROPE.format(label=str(row["label"]))
         found = await _personality(guild)
         return {
             "mode": found["mode"],
@@ -738,32 +681,18 @@ def build_router(bot: Any) -> APIRouter:
         guild = require_guild(bot)
         require_db(bot)
         await personas.seed_tropes(bot.db)
-        row = await personas.get_trope(bot.db, str(name).strip().lower())
-        if row is None:
-            raise Refused(404, "no_such_trope", NO_SUCH_TROPE.format(name=name))
-        label = str(row["label"])
+        said = str(name).strip().lower()
         wanted = payload.get("enabled") is not False
         mode = persona_mode(bot, guild.id)
-        if not wanted and mode == str(row["name"]):
-            raise Refused(409, "voice_in_use", TROPE_IN_USE.format(label=label))
-        rows = await personas.list_tropes(bot.db)
-        on_now = [one for one in rows if one["enabled"]]
-        last_one = len(on_now) == 1 and on_now[0]["name"] == row["name"]
-        if not wanted and last_one and mode == personas.POOL:
-            raise Refused(409, "last_voice", LAST_TROPE_ON.format(label=label))
-        await personas.set_enabled(bot.db, str(row["name"]), wanted, by=int(who["id"]))
-        personas.forget_tropes(bot)
-        await note(
-            bot,
-            guild,
-            "web.chat.trope_enabled" if wanted else "web.chat.trope_disabled",
-            who,
-            details={"trope": str(row["name"]), "via": VIA_WEBSITE},
+        answered(
+            await chat_panel.set_mood(
+                bot, guild, actor_for(bot, who, guild), said, wanted, via=VIA_WEBSITE
+            )
         )
-        fresh = await personas.get_trope(bot.db, str(row["name"]))
+        fresh = await personas.get_trope(bot.db, said)
         return {
             "trope": trope_row(guild, fresh, mode),
-            "message": (TROPE_ON if wanted else TROPE_OFF).format(label=label),
+            "message": (TROPE_ON if wanted else TROPE_OFF).format(label=str(fresh["label"])),
         }
 
     def _tier(name: str, label: str, key: str, *, mode_on: bool, cap_said: str | None):

@@ -617,8 +617,8 @@ KEY_HELP: dict[str, str] = {
     "chat_home_channel_id": (
         "where somebody is sent when a conversational answer points at a channel that does not "
         "exist. Blank is safe: the sentence is written again without the channel in it rather "
-        "than pointing anywhere. Either way the invention is logged, so `/chat logs` and the "
-        "Logs page count how often it happens"
+        "than pointing anywhere. Either way the invention is logged, so `/chat` ▸ **Logs** and "
+        "the Logs page count how often it happens"
     ),
     "chat_visibility_role_id": (
         "the role whose view of the server IS the bot's map: channels this role can read are "
@@ -676,9 +676,10 @@ KEY_HELP: dict[str, str] = {
         f"from its own written lines; 0 stops them altogether"
     ),
     "chat_status_admin_only": (
-        "on keeps `/chat status` (what the conversation models are spending) to server "
-        "administrators; off lets any staff member read it. The dashboard's Spend section "
-        "stays staff-visible either way"
+        "on keeps the spend block on `/chat` (what the conversation models are spending) to "
+        "server administrators; the rest of the panel still opens for any staff member, and off "
+        "lets them read the spend too. The dashboard's Spend section stays staff-visible either "
+        "way"
     ),
     "chat_memory_mode": (
         "off, or on (Black Bloc keeps a few preferences about each person — what to call them, "
