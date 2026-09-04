@@ -78,9 +78,10 @@ look it over first. **My time zone** is on the same panel.
 streams** turns it off again.
 `/youtube` — your YouTube channel. It opens a panel saying what happens to your uploads, with
 **Link my channel** to connect one and **Unlink** to stop it.
-`/pings` — `/pings follow` gets one streamer's go-live pings, `/pings events on` gets the
-go-live and event pings for everybody, `/pings fans on` gives your own followers a role, and
-`/pings list` says what you get. The *Streamer pings* and *Notifications* panels do the same.
+`/pings` — which pings you get. It opens a panel saying what you already wear, with **Follow a
+streamer…** and **Stop following…** for one streamer's go-live pings, a toggle for the go-live
+and event pings everybody can have, and **Start my own ping role** if you stream. The *Streamer
+pings* and *Notifications* panels do the same.
 `/birthday` — `/birthday set` stores a birthday, `/birthday optout` takes it back off.
 `/poll` — `/poll create` puts a question to the room.
 `/raidtrain` — the raid trains. `/raidtrain list` shows what is coming up and which hours are

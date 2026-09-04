@@ -548,3 +548,343 @@ async def test_the_streamers_menus_are_the_only_ones_the_sync_touches(bot, strea
     await pings.remove_fan_role(bot, bot.guild, STREAMER, by=STAFF)
 
     assert [menu["name"] for menu in await list_menus(bot.db, GUILD)] == ["pronouns"]
+
+
+# --- the panel layer -------------------------------------------------------------------------
+
+
+@pytest.fixture
+def fan(bot):
+    return FakeMember(bot.guild, FAN, "Fan")
+
+
+def a_state(**changed):
+    base = {
+        "mode_on": True,
+        "events": ((pings.BOTH_FEEDS, pings.NOT_WORN),),
+        "own_role": False,
+        "creation": "self",
+        "streams": False,
+        "followed": 0,
+        "unfollowed": 0,
+    }
+    return pings.PanelState(**(base | changed))
+
+
+def moves(state, **kwargs):
+    return [move.label for move in pings.panel_buttons(state, **kwargs)]
+
+
+def test_the_mode_being_off_leaves_nothing_but_refresh():
+    assert moves(a_state(mode_on=False, own_role=True, streams=True)) == ["Refresh"]
+
+
+def test_an_unset_or_gone_events_role_renders_no_toggle_at_all():
+    for wear in (pings.UNSET, pings.GONE):
+        assert moves(a_state(events=((pings.BOTH_FEEDS, wear),))) == ["Refresh"]
+
+
+def test_the_one_events_toggle_says_what_pressing_it_does():
+    assert moves(a_state()) == ["Turn event pings on", "Refresh"]
+    assert moves(a_state(events=((pings.BOTH_FEEDS, pings.WORN),))) == [
+        "Turn them off",
+        "Refresh",
+    ]
+
+
+def test_split_feeds_get_two_labelled_toggles():
+    """I2 (b): a split feed is the only case where one toggle would lie about what it does."""
+    state = a_state(events=((pings.GOLIVE_FEED, pings.WORN), (pings.EVENTS_FEED, pings.NOT_WORN)))
+    assert moves(state) == ["Turn go-live pings off", "Turn event pings on", "Refresh"]
+
+
+def test_the_fan_button_is_the_one_the_state_allows():
+    assert moves(a_state(streams=True)) == [
+        "Turn event pings on",
+        "Start my own ping role",
+        "Refresh",
+    ]
+    assert "Start my own ping role" not in moves(a_state(streams=False))
+    assert "Start my own ping role" not in moves(a_state(streams=True, creation="staff"))
+
+
+def test_taking_your_own_role_away_renders_whoever_may_start_one():
+    """I1 (a): the access-REDUCING move is never gated on who was allowed to start it."""
+    for creation in ("self", "staff", "auto"):
+        state = a_state(own_role=True, creation=creation)
+        assert "Take my ping role away" in moves(state)
+        assert "Start my own ping role" not in moves(state)
+
+
+def test_the_staff_row_is_appended_and_only_for_staff():
+    assert moves(a_state(), staff=True)[-4:] == [
+        "Streamers…",
+        "Set up the Events role",
+        "Settings",
+        "Logs",
+    ]
+    assert "Logs" not in moves(a_state(), staff=False)
+
+
+def test_the_card_offers_a_repair_only_when_the_discord_role_has_gone():
+    assert [move.label for move in pings.card_buttons(role_gone=False)] == [
+        "Remove their ping role",
+        "Back",
+    ]
+    assert [move.label for move in pings.card_buttons(role_gone=True)] == [
+        "Remove their ping role",
+        "Make the role again",
+        "Back",
+    ]
+
+
+async def test_the_state_is_read_off_the_rows_and_the_settings(bot, streamer, fan):
+    made = await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
+    role = bot.guild.get_role(made.role_id)
+    await fan.add_roles(role)
+    rows = await pings.all_fan_roles(bot.db, GUILD)
+
+    mine = pings.panel_state(bot, bot.guild, streamer, rows, streams=True)
+    theirs = pings.panel_state(bot, bot.guild, fan, rows, streams=False)
+
+    assert mine.own_role is True and mine.followed == 0 and mine.unfollowed == 1
+    assert theirs.own_role is False and theirs.followed == 1 and theirs.unfollowed == 0
+    assert mine.mode_on is True and mine.creation == "self"
+
+
+async def test_the_feeds_are_one_while_the_two_keys_agree_and_two_once_they_split(bot):
+    assert pings.events_feeds(bot, GUILD) == ((pings.BOTH_FEEDS, None),)
+
+    await pings.setup_events_role(bot, bot.guild, by=STAFF)
+    shared = bot.store.get(GUILD, "golive_ping_role_id")
+    assert pings.events_feeds(bot, GUILD) == ((pings.BOTH_FEEDS, shared),)
+
+    await bot.store.set(GUILD, "events_ping_role_id", 4242)
+    assert pings.events_feeds(bot, GUILD) == (
+        (pings.GOLIVE_FEED, shared),
+        (pings.EVENTS_FEED, 4242),
+    )
+    assert pings.feed_role_id(bot, GUILD, pings.EVENTS_FEED) == 4242
+    assert pings.feed_role_id(bot, GUILD, pings.GOLIVE_FEED) == shared
+
+
+async def test_following_leaves_exactly_one_log_row_with_the_right_kind(bot, streamer, fan):
+    made = await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
+    row = await pings.get_fan_role(bot.db, GUILD, STREAMER)
+    before = len(await kinds(bot.db))
+
+    said = await pings.follow_streamer(bot, bot.guild, fan, row, add=True)
+
+    found = await kinds(bot.db)
+    assert len(found) == before + 1 and found[-1] == "pings.follow"
+    assert [one.id for one in fan.roles] == [made.role_id]
+    assert "SuperNamu pings" in said
+
+    stopped = await pings.follow_streamer(bot, bot.guild, fan, row, add=False)
+    found = await kinds(bot.db)
+    assert len(found) == before + 2 and found[-1] == "pings.unfollow"
+    assert fan.roles == [] and "no longer get" in stopped
+
+
+async def test_following_twice_writes_nothing_and_says_so(bot, streamer, fan):
+    await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
+    row = await pings.get_fan_role(bot.db, GUILD, STREAMER)
+    await pings.follow_streamer(bot, bot.guild, fan, row, add=True)
+    before = len(await kinds(bot.db))
+
+    said = await pings.follow_streamer(bot, bot.guild, fan, row, add=True)
+
+    assert "already follow" in said and len(await kinds(bot.db)) == before
+
+
+async def test_following_a_role_discord_no_longer_has_refuses_in_words(bot, streamer, fan):
+    made = await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
+    row = await pings.get_fan_role(bot.db, GUILD, STREAMER)
+    bot.guild.roles = [one for one in bot.guild.roles if one.id != made.role_id]
+    before = len(await kinds(bot.db))
+
+    said = await pings.follow_streamer(bot, bot.guild, fan, row, add=True)
+
+    assert "Press **Refresh**" in said and len(await kinds(bot.db)) == before
+
+
+async def test_the_events_pings_move_leaves_exactly_one_log_row(bot, fan):
+    await pings.setup_events_role(bot, bot.guild, by=STAFF)
+    before = len(await kinds(bot.db))
+
+    said = await pings.set_event_pings(bot, bot.guild, fan, add=True)
+
+    found = await kinds(bot.db)
+    assert len(found) == before + 1 and found[-1] == "pings.events_on"
+    assert "go-live and event pings" in said
+
+    await pings.set_event_pings(bot, bot.guild, fan, add=False)
+    found = await kinds(bot.db)
+    assert len(found) == before + 2 and found[-1] == "pings.events_off"
+    assert fan.roles == []
+
+
+async def test_the_events_move_names_the_feed_it_moved(bot, fan):
+    golive = bot.guild.add_role(FakeRole(71, "Go live"))
+    bot.guild.add_role(FakeRole(72, "Events"))
+    await bot.store.set(GUILD, "golive_ping_role_id", 71)
+    await bot.store.set(GUILD, "events_ping_role_id", 72)
+
+    said = await pings.set_event_pings(bot, bot.guild, fan, add=True, feed=pings.GOLIVE_FEED)
+
+    assert "go-live pings" in said
+    assert [one.id for one in fan.roles] == [golive.id]
+    assert (await details(bot.db, "pings.events_on"))["feed"] == pings.GOLIVE_FEED
+
+
+async def test_the_events_move_refuses_before_staff_have_made_the_role(bot, fan):
+    before = len(await kinds(bot.db))
+
+    said = await pings.set_event_pings(bot, bot.guild, fan, add=True)
+
+    assert "Set up the Events role" in said and len(await kinds(bot.db)) == before
+
+
+async def test_starting_your_own_role_asks_the_mode_the_setting_and_the_link(bot, streamer):
+    await bot.store.set(GUILD, "pings_mode", "off")
+    assert "turned off" in (
+        await pings.start_own_fan_role(bot, bot.guild, streamer, streams=True)
+    ).message
+
+    await bot.store.set(GUILD, "pings_mode", "on")
+    await bot.store.set(GUILD, "pings_fan_role_creation", "staff")
+    assert "Only staff start" in (
+        await pings.start_own_fan_role(bot, bot.guild, streamer, streams=True)
+    ).message
+
+    await bot.store.set(GUILD, "pings_fan_role_creation", "self")
+    assert "does not know you stream" in (
+        await pings.start_own_fan_role(bot, bot.guild, streamer, streams=False)
+    ).message
+
+    made = await pings.start_own_fan_role(bot, bot.guild, streamer, streams=True)
+    assert made.ok and bot.guild.made == [("SuperNamu pings", False, pings.ROLE_REASON)]
+
+
+async def test_stopping_your_own_role_says_so_when_there_is_none(bot, streamer):
+    assert "nothing to take away" in (
+        await pings.stop_own_fan_role(bot, bot.guild, streamer)
+    ).message
+
+    await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
+    gone = await pings.stop_own_fan_role(bot, bot.guild, streamer)
+
+    assert gone.ok and await pings.get_fan_role(bot.db, GUILD, STREAMER) is None
+
+
+async def test_the_notification_lines_say_both_halves(bot, streamer, fan):
+    feeds = pings.events_feeds(bot, GUILD)
+    empty = pings.notification_lines(bot.guild, fan, [], feeds)
+    assert "have not set up the Events role" in empty[0]
+    assert "follow no streamers" in empty[1]
+
+    await pings.setup_events_role(bot, bot.guild, by=STAFF)
+    made = await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
+    await fan.add_roles(bot.guild.get_role(made.role_id))
+    rows = await pings.all_fan_roles(bot.db, GUILD)
+
+    lines = pings.notification_lines(bot.guild, fan, rows, pings.events_feeds(bot, GUILD))
+
+    assert "**off**" in lines[0]
+    assert "SuperNamu pings" in lines[1]
+
+
+async def test_a_gone_events_role_is_a_line_not_a_zero(bot, fan):
+    await pings.setup_events_role(bot, bot.guild, by=STAFF)
+    bot.guild.roles = []
+
+    lines = pings.notification_lines(bot.guild, fan, [], pings.events_feeds(bot, GUILD))
+
+    assert "not in this server any more" in lines[0]
+
+
+async def test_the_streamer_lines_count_followers_and_never_say_zero_for_a_gone_role(
+    bot, streamer, fan
+):
+    assert pings.streamer_lines(bot.guild, []) == [pings.STREAMER_LIST_EMPTY]
+
+    made = await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
+    bot.guild.get_role(made.role_id).members.append(fan)
+    rows = await pings.all_fan_roles(bot.db, GUILD)
+    assert "1 follower(s)" in pings.streamer_lines(bot.guild, rows)[0]
+
+    bot.guild.roles = []
+    assert pings.FOLLOWERS_UNKNOWN in pings.streamer_lines(bot.guild, rows)[0]
+
+
+async def test_the_counts_tell_rows_apart_from_roles_discord_still_has(bot, streamer):
+    made = await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
+    rows = await pings.all_fan_roles(bot.db, GUILD)
+    assert pings.counts_of(rows, bot.guild) == {"streamers": 1, "with_role": 1}
+
+    bot.guild.roles = [one for one in bot.guild.roles if one.id != made.role_id]
+    assert pings.counts_of(rows, bot.guild) == {"streamers": 1, "with_role": 0}
+    assert "**1** streamer(s)" in pings.counts_line(rows, bot.guild)
+
+
+def test_the_template_preview_shows_what_a_broken_one_will_actually_produce():
+    assert pings.template_preview("{name} pings", "Ada") == ("Ada pings", False)
+    assert pings.template_preview("fans of {name}!", "Ada") == ("fans of Ada!", False)
+    assert pings.template_preview("{game} pings", "Ada") == ("Ada pings", True)
+    assert pings.template_preview("   ", "Ada") == ("Ada pings", True)
+
+
+async def test_the_panel_minutes_and_the_site_page_come_from_one_home(bot):
+    assert pings.panel_minutes(bot.store, GUILD) == 10
+    await bot.store.set(GUILD, "pings_panel_minutes", 4)
+    assert pings.panel_minutes(bot.store, GUILD) == 4
+    assert pings.site_page_url("https://blackbloc.test/") == "https://blackbloc.test/golive.html"
+    assert pings.site_page_url("") is None
+    assert pings.site_page_url(None) is None
+
+
+async def test_saving_settings_writes_every_key_and_leaves_one_log_row(bot, streamer):
+    before = len(await kinds(bot.db))
+
+    said = await pings.save_settings(
+        bot, bot.guild, streamer, {"pings_mode": "off", "pings_panel_minutes": 12}
+    )
+
+    assert bot.store.get(GUILD, "pings_mode") == "off"
+    assert bot.store.get(GUILD, "pings_panel_minutes") == 12
+    found = await kinds(bot.db)
+    assert len(found) == before + 1 and found[-1] == "pings.settings"
+    assert "pings_mode" in said
+
+
+async def test_saving_settings_refuses_a_value_the_registry_will_not_take(bot, streamer):
+    before = len(await kinds(bot.db))
+
+    said = await pings.save_settings(bot, bot.guild, streamer, {"pings_mode": "maybe"})
+
+    assert bot.store.get(GUILD, "pings_mode") == "on"
+    assert len(await kinds(bot.db)) == before
+    assert "maybe" in said
+
+
+async def test_saving_nothing_changes_nothing(bot, streamer):
+    before = len(await kinds(bot.db))
+
+    assert await pings.save_settings(bot, bot.guild, streamer, {}) == pings.SETTINGS_NOTHING
+    assert await pings.save_settings(bot, bot.guild, streamer, {"log_channel_id": 1}) == (
+        pings.SETTINGS_NOTHING
+    )
+    assert len(await kinds(bot.db)) == before
+
+
+async def test_the_web_head_is_built_for_every_panel_move_too(bot, streamer, fan):
+    await pings.setup_events_role(bot, bot.guild, by=STAFF)
+    await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
+    row = await pings.get_fan_role(bot.db, GUILD, STREAMER)
+
+    await pings.follow_streamer(bot, bot.guild, fan, row, add=True, via="website")
+    await pings.set_event_pings(bot, bot.guild, fan, add=True, via="website")
+
+    found = await kinds(bot.db)
+    assert "web.pings.follow" in found and "web.pings.events_on" in found
+    assert (await details(bot.db, "web.pings.follow"))["via"] == "website"

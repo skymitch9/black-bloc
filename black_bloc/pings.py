@@ -20,7 +20,7 @@ from .golive import now_iso
 from .logkinds import VIA_DISCORD, kind_via
 from .panels import panel_minutes as library_panel_minutes
 from .panels import site_page_url as library_site_page_url
-from .settings_store import PINGS_FAN_ROLE_TEMPLATE
+from .settings_store import PINGS_FAN_ROLE_TEMPLATE, SettingError, coerce_value
 
 log = logging.getLogger(__name__)
 
@@ -962,6 +962,11 @@ async def save_settings(
     wanted = {key: value for key, value in (changes or {}).items() if key in SETTINGS_KEYS}
     if not wanted:
         return SETTINGS_NOTHING
+    for key, value in wanted.items():
+        try:
+            coerce_value(key, value)
+        except SettingError as exc:
+            return str(exc)
     by = int(getattr(actor, "id", actor) or 0) or None
     for key, value in wanted.items():
         await bot.store.set(guild.id, key, value, by=by)
