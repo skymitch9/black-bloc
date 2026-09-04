@@ -4,7 +4,7 @@ import re
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, NamedTuple
 
 ACTIONS = ("delete", "warn", "timeout")
 AUTOMOD_MODES = ("off", "shadow", "on")
@@ -78,7 +78,7 @@ RULE_HELP: dict[str, str] = {
     "invitespam": "how many Discord invites one member may post in the window",
     "attachmentspam": "how many files one member may post in the window",
     "caps": "the percentage of capital letters one message may be",
-    "bad_words": "words that are not allowed; set them with /automod rule set bad_words words",
+    "bad_words": "words that are not allowed; the bad_words rule's own word list holds them",
 }
 
 URL_PATTERN = re.compile(r"https?://\S+", re.IGNORECASE)
@@ -207,13 +207,18 @@ def _as_actions(value: Any) -> list[str]:
     return [action for action in ACTIONS if action in picked]
 
 
+WORD_SEPARATORS = re.compile(r"[,\r\n]")
+
+
 def _as_words(value: Any) -> list[str]:
     if isinstance(value, str):
-        items = [part.strip() for part in value.split(",")]
+        items = [part.strip() for part in WORD_SEPARATORS.split(value)]
     elif isinstance(value, list | tuple):
         items = [str(part).strip() for part in value]
     else:
-        raise RuleError("`bad_words.words` takes a comma-separated list of words.")
+        raise RuleError(
+            "`bad_words.words` takes a list of words, one per line or separated by commas."
+        )
     words: list[str] = []
     for item in items:
         lowered = item.lower()
@@ -448,3 +453,196 @@ def exempt_reason(
 def channel_exempt(channel: Any, exempt_channel_ids: set[int], honeypot_ids: set[int]) -> bool:
     ids = {getattr(channel, "id", None), getattr(channel, "parent_id", None)} - {None}
     return bool(ids & (exempt_channel_ids | honeypot_ids))
+
+
+PANEL_MINUTES_KEY = "automod_panel_minutes"
+ARM_CONFIRM_KEY = "automod_arm_needs_confirm"
+PANEL_TITLE = "What automod is watching"
+PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run /automod again"
+
+RULE_FIELDS = ("enabled", "window_s", "threshold", "actions", "timeout_s", "words")
+
+MODE_LABELS: dict[str, str] = {
+    "off": "off — nothing is read and nothing is counted",
+    "shadow": "shadow — it logs what it would have done, and does none of it",
+    "on": "on — it deletes, warns and times people out for real",
+}
+
+ROLE = "role"
+CHANNEL = "channel"
+EXEMPT_ROLE_LABEL = "role — {name}"
+EXEMPT_CHANNEL_LABEL = "channel — #{name}"
+GONE_ROLE = "a role Discord no longer has ({ident})"
+GONE_CHANNEL = "a channel Discord no longer has ({ident})"
+
+WINDOW_LABEL = "Seconds counted over (0 = one message)"
+TIMEOUT_LABEL = "Timeout in seconds (0 = no timeout)"
+CAPS_THRESHOLD_LABEL = "Percent capitals, 1–100"
+THRESHOLD_LABEL = "How many {plural} it allows"
+THRESHOLD_FALLBACK = "How many before it acts"
+
+ENABLE = "enable"
+DISABLE = "disable"
+NUMBERS = "numbers"
+LOG_ONLY = "log_only"
+WORDS = "words"
+BACK = "back"
+EXEMPTIONS = "exemptions"
+SETTINGS = "settings"
+REFRESH = "refresh"
+LOGS = "logs"
+SITE = "site"
+PANEL_NUMBERS = "panel_numbers"
+ARM_CONFIRM = "arm_confirm"
+ARM = "arm"
+KEEP = "keep"
+
+
+class AutomodMove(NamedTuple):
+    action: str
+    label: str
+    style: str = "secondary"
+    row: int = 0
+    modal: bool = False
+
+
+TURN_ON_MOVE = AutomodMove(ENABLE, "Turn it on", "primary")
+TURN_OFF_MOVE = AutomodMove(DISABLE, "Turn it off", "secondary")
+NUMBERS_MOVE = AutomodMove(NUMBERS, "Change the numbers…", "secondary", modal=True)
+LOG_ONLY_MOVE = AutomodMove(LOG_ONLY, "Log only", "danger")
+WORDS_MOVE = AutomodMove(WORDS, "Words…", "secondary", modal=True)
+BACK_MOVE = AutomodMove(BACK, "Back", "secondary")
+
+EXEMPTIONS_MOVE = AutomodMove(EXEMPTIONS, "Exemptions…", "secondary", row=2)
+SETTINGS_MOVE = AutomodMove(SETTINGS, "Settings…", "secondary", row=2)
+REFRESH_MOVE = AutomodMove(REFRESH, "Refresh", "secondary", row=2)
+LOGS_MOVE = AutomodMove(LOGS, "Logs", "secondary", row=2)
+SITE_MOVE = AutomodMove(SITE, "Open on the site", "link", row=2)
+
+EXEMPT_BACK_MOVE = AutomodMove(BACK, "Back", "secondary", row=3)
+PANEL_NUMBERS_MOVE = AutomodMove(PANEL_NUMBERS, "Numbers…", "secondary", modal=True)
+CONFIRM_ON_MOVE = AutomodMove(ARM_CONFIRM, "Arming asks twice", "secondary")
+CONFIRM_OFF_MOVE = AutomodMove(ARM_CONFIRM, "Arming is one press", "secondary")
+ARM_MOVE = AutomodMove(ARM, "Yes, arm it", "danger")
+KEEP_SHADOW_MOVE = AutomodMove(KEEP, "Keep it in shadow", "secondary")
+KEEP_OFF_MOVE = AutomodMove(KEEP, "Keep it off", "secondary")
+
+PANEL_MOVES = (
+    TURN_ON_MOVE,
+    TURN_OFF_MOVE,
+    NUMBERS_MOVE,
+    LOG_ONLY_MOVE,
+    WORDS_MOVE,
+    BACK_MOVE,
+    EXEMPTIONS_MOVE,
+    SETTINGS_MOVE,
+    REFRESH_MOVE,
+    LOGS_MOVE,
+    SITE_MOVE,
+    EXEMPT_BACK_MOVE,
+    PANEL_NUMBERS_MOVE,
+    CONFIRM_ON_MOVE,
+    CONFIRM_OFF_MOVE,
+    ARM_MOVE,
+    KEEP_SHADOW_MOVE,
+    KEEP_OFF_MOVE,
+)
+
+
+def card_buttons(cfg: dict[str, Any], *, has_words: bool) -> tuple[AutomodMove, ...]:
+    """One rule card's first row: never both spellings of the toggle, never a dead button."""
+    found = [TURN_OFF_MOVE if cfg.get("enabled") else TURN_ON_MOVE, NUMBERS_MOVE]
+    if cfg.get("actions"):
+        found.append(LOG_ONLY_MOVE)
+    if has_words:
+        found.append(WORDS_MOVE)
+    found.append(BACK_MOVE)
+    return tuple(found)
+
+
+def root_buttons(*, has_site: bool) -> tuple[AutomodMove, ...]:
+    found = [EXEMPTIONS_MOVE, SETTINGS_MOVE, REFRESH_MOVE, LOGS_MOVE]
+    if has_site:
+        found.append(SITE_MOVE)
+    return tuple(found)
+
+
+def settings_buttons(*, asks_twice: bool) -> tuple[AutomodMove, ...]:
+    toggle = CONFIRM_ON_MOVE if asks_twice else CONFIRM_OFF_MOVE
+    return (PANEL_NUMBERS_MOVE, toggle, BACK_MOVE)
+
+
+def confirm_buttons(current: str) -> tuple[AutomodMove, ...]:
+    return (ARM_MOVE, KEEP_SHADOW_MOVE if current == "shadow" else KEEP_OFF_MOVE)
+
+
+def mode_options(current: str, may_arm: bool) -> list[tuple[str, str, bool]]:
+    """P3: `on` is left off the picker while arming would refuse, never offered-and-refused."""
+    return [
+        (name, MODE_LABELS[name], name == current)
+        for name in AUTOMOD_MODES
+        if may_arm or name != "on"
+    ]
+
+
+def needs_confirm(current: str, wanted: str, asked: bool) -> bool:
+    """Only arming asks twice; every quieter move fails safe and goes through in one press."""
+    return bool(asked) and wanted == "on" and current != "on"
+
+
+def rule_field_labels(name: str) -> dict[str, str]:
+    """RULE_NOUNS has no `caps` entry, so the modal's labels are their own map, not a lookup."""
+    if name == "caps":
+        threshold = CAPS_THRESHOLD_LABEL
+    else:
+        nouns = RULE_NOUNS.get(name)
+        threshold = THRESHOLD_LABEL.format(plural=nouns[1]) if nouns else THRESHOLD_FALLBACK
+    return {"window_s": WINDOW_LABEL, "threshold": threshold, "timeout_s": TIMEOUT_LABEL}
+
+
+def exempt_options(
+    role_ids: Any, channel_ids: Any, names: Any = None
+) -> list[tuple[str, int, str]]:
+    """One removal select for both kinds; something Discord lost still gets a row to remove."""
+    from .panels import SELECT_OPTION_LIMIT
+
+    known = names or {}
+    found: list[tuple[str, int, str]] = []
+    for kind, ids, label, gone in (
+        (ROLE, role_ids, EXEMPT_ROLE_LABEL, GONE_ROLE),
+        (CHANNEL, channel_ids, EXEMPT_CHANNEL_LABEL, GONE_CHANNEL),
+    ):
+        for one in ids or ():
+            ident = int(one)
+            name = known.get((kind, ident))
+            said = label.format(name=name) if name else gone.format(ident=ident)
+            found.append((kind, ident, said[:SELECT_OPTION_LIMIT]))
+    return found
+
+
+def typed(field_name: str, raw: Any) -> Any:
+    """One rule field as the engine wants it; RuleError carries the sentence when it is not."""
+    text = str(raw or "").strip()
+    if field_name == "enabled":
+        if text.lower() in ("true", "yes", "on"):
+            return True
+        if text.lower() in ("false", "no", "off"):
+            return False
+        raise RuleError(f"`enabled` takes true or false, not {raw!r}.")
+    if field_name in ("window_s", "threshold", "timeout_s"):
+        if not text.isdigit():
+            raise RuleError(f"`{field_name}` takes a whole number, not {raw!r}.")
+        return int(text)
+    if field_name in ("actions", "words"):
+        return text
+    raise RuleError(f"`{field_name}` is not something an automod rule has.")
+
+
+def panel_minutes(store: Any, guild_id: int) -> int:
+    from .panels import panel_minutes as _minutes
+
+    return _minutes(store, guild_id, PANEL_MINUTES_KEY)
+
+
+def arm_needs_confirm(store: Any, guild_id: int) -> bool:
+    return bool(store.get(guild_id, ARM_CONFIRM_KEY))
