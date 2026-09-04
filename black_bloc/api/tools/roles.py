@@ -6,10 +6,11 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from ... import rolegrants as grants
-from ...cogs.community.role_menus import change_roles
+from ...cogs.community.role_menus import extend_role, grant_role, revoke_grant
+from ...logkinds import VIA_WEBSITE
 from ..auth import Refused, staff_dependency
 from ..names import as_id, resolve_one
-from ..writes import note, require_db, require_guild, wanted_id, writer_dependency
+from ..writes import actor_for, require_db, require_guild, wanted_id, writer_dependency
 
 log = logging.getLogger(__name__)
 
@@ -41,14 +42,6 @@ BAD_DAYS = (
 )
 DAYS_NEEDED = (
     "Extending a role needs a number of days, so nothing was changed. Send how many to add."
-)
-CANNOT_ADD = (
-    "Discord refused to add **{label}**, so **{name}** was left exactly as they were. Black Bloc "
-    "needs Manage Roles and its own role has to sit above that one in Server Settings → Roles."
-)
-CANNOT_REMOVE = (
-    "Discord refused to take **{label}** off **{name}**, so nothing was changed and the timed "
-    "role is still open. Black Bloc needs Manage Roles and its own role has to sit above that one."
 )
 
 
@@ -131,39 +124,18 @@ def build_router(bot: Any) -> APIRouter:
             )
         days = wanted_days(payload.get("days"), required=False)
         reason = grants.clamp(payload.get("reason"), grants.REASON_LIMIT) or None
-        held = any(r.id == role.id for r in member.roles)
-        if not held and not await change_roles(
-            bot, member, guild, {role.id}, set(), f"Black Bloc dashboard grant by {who['id']}"
-        ):
-            raise Refused(
-                409,
-                "role_refused",
-                CANNOT_ADD.format(label=role.name, name=member.display_name),
-            )
-        until = grants.expires_at(days)
-        open_row = await grants.open_grant(bot.db, guild.id, member.id, role.id)
-        if open_row is not None:
-            await grants.extend_grant(bot.db, open_row["id"], until)
-            grant_id = open_row["id"]
-        else:
-            grant_id = await grants.add_grant(
-                bot.db,
-                guild.id,
-                member.id,
-                role.id,
-                grants.STAFF,
-                granted_by=int(who["id"]),
-                until=until,
-            )
-        await note(
+        grant_id, said = await grant_role(
             bot,
             guild,
-            "web.role.granted",
-            who,
-            target=member,
+            actor_for(bot, who, guild),
+            member,
+            role,
+            days,
             reason=reason,
-            details={"grant_id": grant_id, "role_id": role.id, "expires_at": until},
+            via=VIA_WEBSITE,
         )
+        if grant_id is None:
+            raise Refused(409, "role_refused", said)
         return grant_row(guild, await grants.get_grant(bot.db, grant_id))
 
     @router.post("/grants/{grant_id}/extend")
@@ -179,15 +151,8 @@ def build_router(bot: Any) -> APIRouter:
         if not row["expires_at"]:
             raise Refused(409, "no_end_date", NO_END_DATE)
         days = wanted_days(payload.get("days"), required=True)
-        until = grants.pushed_back(row["expires_at"], max(int(days or 0), 1))
-        await grants.extend_grant(bot.db, grant_id, until)
-        await note(
-            bot,
-            guild,
-            "web.role.extended",
-            who,
-            target=row["user_id"],
-            details={"grant_id": grant_id, "role_id": row["role_id"], "expires_at": until},
+        await extend_role(
+            bot, guild, actor_for(bot, who, guild), row, days, via=VIA_WEBSITE
         )
         return grant_row(guild, await grants.get_grant(bot.db, grant_id))
 
@@ -199,33 +164,11 @@ def build_router(bot: Any) -> APIRouter:
         row = await wanted_grant(bot, guild, grant_id)
         if row["removed_at"]:
             raise Refused(409, "already_ended", ALREADY_ENDED.format(when=row["removed_at"]))
-        member = guild.get_member(row["user_id"])
-        if member is not None and any(r.id == row["role_id"] for r in member.roles):
-            if not await change_roles(
-                bot,
-                member,
-                guild,
-                set(),
-                {row["role_id"]},
-                f"Black Bloc dashboard ended a timed role, by {who['id']}",
-            ):
-                raise Refused(
-                    409,
-                    "role_refused",
-                    CANNOT_REMOVE.format(
-                        label=resolve_one(guild, row["role_id"])["display_name"],
-                        name=member.display_name,
-                    ),
-                )
-        await grants.end_grant(bot.db, grant_id, grants.ENDED_BY_STAFF)
-        await note(
-            bot,
-            guild,
-            "web.role.ended",
-            who,
-            target=row["user_id"],
-            details={"grant_id": grant_id, "role_id": row["role_id"]},
+        done, said = await revoke_grant(
+            bot, guild, actor_for(bot, who, guild), row, via=VIA_WEBSITE
         )
+        if not done:
+            raise Refused(409, "role_refused", said)
         return grant_row(guild, await grants.get_grant(bot.db, grant_id))
 
     return router

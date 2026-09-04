@@ -1719,7 +1719,7 @@ function movePanel(menu, channelId) {
   checkMove(menu, channelId);
   menu.channel_id = channelId;
   menu.message_id = String(Date.now());
-  logAction('web.rolemenu.post', { reason: menu.name, target_id: menu.channel_id, details: { menu: menu.name, channel_id: menu.channel_id, message_id: menu.message_id } });
+  logAction('web.role_menu.post', { reason: menu.name, target_id: menu.channel_id, details: { menu: menu.name, channel_id: menu.channel_id, message_id: menu.message_id } });
 }
 
 function menuNameOf(menuId) {
@@ -1819,7 +1819,7 @@ route('POST', '/api/rolemenus', async (context) => {
     options: Array.isArray(body.options) ? body.options : [],
   };
   state.menus.unshift(menu);
-  logAction('web.rolemenu.create', { reason: name, details: { menu: name, mode: menu.mode } });
+  logAction('web.role_menu.create', { reason: name, details: { menu: name, mode: menu.mode } });
   return menuRow(menu);
 });
 
@@ -1841,7 +1841,7 @@ route('PUT', '/api/rolemenus/:name', async (context) => {
   if (body.expires_days !== undefined) menu.expires_days = wantedDays(body.expires_days, 'expires_days') || null;
   if (body.retry_days !== undefined) menu.retry_days = wantedDays(body.retry_days, 'retry_days') ?? menu.retry_days;
   if (Array.isArray(body.options)) menu.options = body.options;
-  logAction('web.rolemenu.edit', { reason: menu.name, details: { menu: menu.name } });
+  logAction('web.role_menu.edit', { reason: menu.name, details: { menu: menu.name } });
   if (moving !== null && moving !== menu.channel_id) movePanel(menu, moving);
   return menuRow(menu);
 });
@@ -1851,7 +1851,7 @@ route('DELETE', '/api/rolemenus/:name', (context) => {
   const at = state.menus.findIndex((entry) => entry.name === context.params.name);
   if (at < 0) throw new Refused(404, 'no_menu', `There is no role menu called ${context.params.name}.`);
   state.menus.splice(at, 1);
-  logAction('web.rolemenu.delete', { reason: context.params.name, details: { menu: context.params.name } });
+  logAction('web.role_menu.delete', { reason: context.params.name, details: { menu: context.params.name } });
   return { deleted: true, name: context.params.name };
 });
 
@@ -1865,7 +1865,7 @@ route('POST', '/api/rolemenus/:name/post', async (context) => {
   guard('posting a role menu');
   menu.channel_id = String(body.channel_id);
   menu.message_id = String(Date.now());
-  logAction('web.rolemenu.post', { reason: menu.name, target_id: menu.channel_id, details: { menu: menu.name, channel_id: menu.channel_id, message_id: menu.message_id } });
+  logAction('web.role_menu.post', { reason: menu.name, target_id: menu.channel_id, details: { menu: menu.name, channel_id: menu.channel_id, message_id: menu.message_id } });
   return { posted: true, name: menu.name, channel_id: menu.channel_id, message_id: menu.message_id };
 });
 

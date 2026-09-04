@@ -21,6 +21,7 @@ from ...command_visibility import STAFF_ONLY
 from ...golive import now_iso
 from ...logkinds import VIA_DISCORD, kind_via
 from ...modcases import pages_under_limit
+from ...panels import answer
 from ...settings_store import DB_UNAVAILABLE, ROLEMENU_MODES, require_staff
 
 log = logging.getLogger(__name__)
@@ -223,12 +224,20 @@ BAD_DAYS = (
     "**{given}** is not a number of days, so nothing was decided. Type a whole number, or 0 for a "
     "role that never runs out."
 )
-ALREADY_TIMED = (
-    "**{name}** already has **{label}** on a clock that runs out {stamp}, so nothing was changed. "
-    "`/role extend` pushes it back."
-)
 GRANT_STARTED_ON_A_ROLE_THEY_HAD = (
     " They already had it, so nothing was added — Black Bloc is only keeping time on it now."
+)
+CANNOT_ADD = (
+    "Discord refused to add **{label}**, so **{name}** was left exactly as they were. Black Bloc "
+    "needs Manage Roles and its own role has to sit above that one in Server Settings → Roles."
+)
+CANNOT_REMOVE = (
+    "Discord refused to take **{label}** off **{name}**, so nothing was changed and the timed "
+    "role is still open. Black Bloc needs Manage Roles and its own role has to sit above that one."
+)
+GRANT_ENDED = (
+    "**{label}** is off **{name}** and the clock is closed. They were not sent a DM — the log "
+    "records who ended it."
 )
 
 
@@ -387,17 +396,6 @@ def panel_embed(menu: Any, options: Any) -> discord.Embed:
     if note:
         embed.add_field(name="Before you pick", value=note, inline=False)
     return embed
-
-
-async def answer(interaction: discord.Interaction, text: str) -> None:
-    if interaction.response.is_done():
-        await interaction.followup.send(
-            text, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-        )
-        return
-    await interaction.response.send_message(
-        text, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-    )
 
 
 async def dm(user: Any, text: str, embed: discord.Embed | None = None) -> bool:
@@ -1422,6 +1420,276 @@ class StaffAssignView(discord.ui.View):
         self.add_item(StaffAssignSelect(menu_id, options, target, remove=remove))
 
 
+# --- one function per move, one write, one log row; both doors call these ------------------------
+
+
+async def make_menu(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    name: str,
+    title: str,
+    description: Any = None,
+    mode: str = "multiple",
+    *,
+    approval: Any = None,
+    expires_days: Any = None,
+    retry_days: Any = None,
+    via: str = VIA_DISCORD,
+) -> int | None:
+    menu_id = await create_menu(
+        bot.db,
+        guild.id,
+        name,
+        title,
+        description,
+        mode,
+        approval=approval,
+        expires_days=expires_days,
+        retry_days=retry_days,
+    )
+    if menu_id is None:
+        return None
+    await log_action(
+        bot,
+        guild,
+        kind_via("role_menu.create", via),
+        actor=actor,
+        details={"menu": name, "mode": mode, "via": via},
+    )
+    return menu_id
+
+
+async def change_menu(
+    bot: Any, guild: Any, actor: Any, name: str, *, via: str = VIA_DISCORD, **fields: Any
+) -> Any:
+    """The changed menu row, or None when this server has no menu by that name."""
+    if not await update_menu(bot.db, guild.id, name, **fields):
+        return None
+    menu = await get_menu(bot.db, guild.id, name)
+    await log_action(
+        bot,
+        guild,
+        kind_via("role_menu.edit", via),
+        actor=actor,
+        details={
+            "menu": name,
+            "approval": needs_approval(menu),
+            "expires_days": expires_days_of(menu),
+            "retry_days": retry_days_of(menu),
+            "via": via,
+        },
+    )
+    return menu
+
+
+async def drop_menu(bot: Any, guild: Any, actor: Any, name: str, *, via: str = VIA_DISCORD) -> bool:
+    if not await delete_menu(bot.db, guild.id, name):
+        return False
+    await log_action(
+        bot,
+        guild,
+        kind_via("role_menu.delete", via),
+        actor=actor,
+        details={"menu": name, "via": via},
+    )
+    return True
+
+
+async def put_option(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    menu: Any,
+    role_id: int,
+    label: str,
+    emoji: Any = None,
+    *,
+    via: str = VIA_DISCORD,
+) -> None:
+    await add_option(bot.db, menu["id"], int(role_id), label, emoji)
+    await log_action(
+        bot,
+        guild,
+        kind_via("role_menu.option_added", via),
+        actor=actor,
+        details={"menu": menu["name"], "role_id": int(role_id), "label": label, "via": via},
+    )
+
+
+async def drop_option(
+    bot: Any, guild: Any, actor: Any, menu: Any, role_id: int, *, via: str = VIA_DISCORD
+) -> bool:
+    if not await remove_option(bot.db, menu["id"], int(role_id)):
+        return False
+    await log_action(
+        bot,
+        guild,
+        kind_via("role_menu.option_removed", via),
+        actor=actor,
+        details={"menu": menu["name"], "role_id": int(role_id), "via": via},
+    )
+    return True
+
+
+async def post_menu(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    menu: Any,
+    options: Any,
+    target: Any,
+    *,
+    via: str = VIA_DISCORD,
+) -> Any:
+    message = await post_panel(bot, menu, options, target)
+    await log_action(
+        bot,
+        guild,
+        kind_via("role_menu.post", via),
+        actor=actor,
+        details={
+            "menu": menu["name"],
+            "channel_id": target.id,
+            "message_id": message.id,
+            "via": via,
+        },
+    )
+    return message
+
+
+async def seed_menus(
+    bot: Any, guild: Any, actor: Any, *, via: str = VIA_DISCORD
+) -> tuple[list[str], list[str]]:
+    created, skipped = await seed_default_menus(bot.db, guild.id)
+    await log_action(
+        bot,
+        guild,
+        kind_via("role_menu.seeded", via),
+        actor=actor,
+        details={"created": created, "skipped": skipped, "via": via},
+    )
+    return created, skipped
+
+
+async def set_mode(bot: Any, guild: Any, actor: Any, value: Any, *, via: str = VIA_DISCORD) -> str:
+    await bot.store.set(guild.id, MODE_KEY, value, by=actor_id(actor))
+    await log_action(
+        bot,
+        guild,
+        kind_via("role_menu.mode", via),
+        actor=actor,
+        details={"mode": value, "via": via},
+    )
+    return MODE_ON if value == "on" else MODE_OFF
+
+
+async def grant_role(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    member: Any,
+    role: Any,
+    days: Any = None,
+    *,
+    reason: Any = None,
+    via: str = VIA_DISCORD,
+) -> tuple[Any, str]:
+    """One timed role: `days` of None or 0 means it never runs out, as the website has always
+    allowed. A role they already hold only starts the clock; an open grant has its clock reset."""
+    held = any(r.id == role.id for r in member.roles)
+    if not held and not await change_roles(
+        bot, member, guild, {role.id}, set(), f"Black Bloc timed role by {actor}"
+    ):
+        return None, CANNOT_ADD.format(label=role.name, name=member.display_name)
+    until = grants.expires_at(days)
+    open_row = await grants.open_grant(bot.db, guild.id, member.id, role.id)
+    if open_row is not None:
+        await grants.extend_grant(bot.db, open_row["id"], until)
+        grant_id = open_row["id"]
+    else:
+        grant_id = await grants.add_grant(
+            bot.db,
+            guild.id,
+            member.id,
+            role.id,
+            grants.STAFF,
+            granted_by=actor_id(actor),
+            until=until,
+        )
+    await log_action(
+        bot,
+        guild,
+        kind_via("role.granted", via),
+        actor=actor,
+        target=member,
+        reason=reason,
+        details={"grant_id": grant_id, "role_id": role.id, "expires_at": until, "via": via},
+    )
+    said = grants.GRANTED_SAID.format(
+        name=member.display_name,
+        label=role.name,
+        until=f" until {grants.stamp(until)}" if until else "",
+    )
+    return grant_id, said + ("" if not held else GRANT_STARTED_ON_A_ROLE_THEY_HAD)
+
+
+def grant_names(guild: Any, row: Any) -> tuple[str, str]:
+    member = guild.get_member(row["user_id"]) if guild is not None else None
+    name = str(getattr(member, "display_name", None) or row["user_id"])
+    return name, role_name(guild, row["role_id"])
+
+
+async def extend_role(
+    bot: Any, guild: Any, actor: Any, row: Any, days: Any, *, via: str = VIA_DISCORD
+) -> tuple[str, str]:
+    """Extending starts from the later of now and the end it already had."""
+    wanted = max(int(days or 0), 1)
+    until = grants.pushed_back(row["expires_at"], wanted)
+    await grants.extend_grant(bot.db, row["id"], until)
+    name, label = grant_names(guild, row)
+    await log_action(
+        bot,
+        guild,
+        kind_via("role.extended", via),
+        actor=actor,
+        target=row["user_id"],
+        details={
+            "grant_id": row["id"],
+            "role_id": row["role_id"],
+            "days": wanted,
+            "expires_at": until,
+            "via": via,
+        },
+    )
+    return until, grants.EXTENDED_SAID.format(
+        name=name, label=label, stamp=grants.stamp(until)
+    )
+
+
+async def revoke_grant(
+    bot: Any, guild: Any, actor: Any, row: Any, *, via: str = VIA_DISCORD
+) -> tuple[bool, str]:
+    """The staff reversal every stored decision gets — the Discord half that never existed."""
+    member = guild.get_member(row["user_id"]) if guild is not None else None
+    name, label = grant_names(guild, row)
+    if member is not None and any(r.id == row["role_id"] for r in member.roles):
+        if not await change_roles(
+            bot, member, guild, set(), {row["role_id"]}, f"Black Bloc timed role ended by {actor}"
+        ):
+            return False, CANNOT_REMOVE.format(label=label, name=name)
+    await grants.end_grant(bot.db, row["id"], grants.ENDED_BY_STAFF)
+    await log_action(
+        bot,
+        guild,
+        kind_via("role.ended", via),
+        actor=actor,
+        target=member if member is not None else row["user_id"],
+        details={"grant_id": row["id"], "role_id": row["role_id"], "via": via},
+    )
+    return True, GRANT_ENDED.format(label=label, name=name)
+
+
 class RoleMenus(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
@@ -1625,8 +1893,14 @@ class RoleMenus(commands.Cog):
             return
         chosen = mode.value if mode else "multiple"
         try:
-            menu_id = await create_menu(
-                self.bot.db, interaction.guild.id, name, title, description, chosen
+            menu_id = await make_menu(
+                self.bot,
+                interaction.guild,
+                interaction.user,
+                name,
+                title,
+                description,
+                chosen,
             )
         except MenuLimitError as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
@@ -1675,7 +1949,15 @@ class RoleMenus(commands.Cog):
             )
             return
         try:
-            await add_option(self.bot.db, menu["id"], role.id, label or role.name, emoji)
+            await put_option(
+                self.bot,
+                interaction.guild,
+                interaction.user,
+                menu,
+                role.id,
+                label or role.name,
+                emoji,
+            )
         except MenuLimitError as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
             return
@@ -1695,7 +1977,9 @@ class RoleMenus(commands.Cog):
         if menu is None:
             await interaction.response.send_message(self._no_such_menu(name), ephemeral=True)
             return
-        if not await remove_option(self.bot.db, menu["id"], role.id):
+        if not await drop_option(
+            self.bot, interaction.guild, interaction.user, menu, role.id
+        ):
             await interaction.response.send_message(
                 f"**{role.name}** was not on **{name}**, so nothing changed. `/rolemenu show "
                 f"{name}` lists what is on it.",
@@ -1727,18 +2011,18 @@ class RoleMenus(commands.Cog):
     ) -> None:
         if not await require_staff(interaction):
             return
-        changed = await update_menu(
-            self.bot.db,
-            interaction.guild.id,
+        menu = await change_menu(
+            self.bot,
+            interaction.guild,
+            interaction.user,
             name,
             approval=approval,
             expires_days=UNSET if expires_days is None else expires_days,
             retry_days=retry_days,
         )
-        if not changed:
+        if menu is None:
             await interaction.response.send_message(self._no_such_menu(name), ephemeral=True)
             return
-        menu = await get_menu(self.bot.db, interaction.guild.id, name)
         days = expires_days_of(menu)
         await interaction.response.send_message(
             f"**{name}** — approval {'on' if needs_approval(menu) else 'off'}, "
@@ -1746,18 +2030,6 @@ class RoleMenus(commands.Cog):
             + f", a no lasts {retry_days_of(menu)} day(s). "
             + "Run `/rolemenu post` again so the panel says the same thing.",
             ephemeral=True,
-        )
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "role_menu.edit",
-            actor=interaction.user,
-            details={
-                "menu": name,
-                "approval": needs_approval(menu),
-                "expires_days": days,
-                "retry_days": retry_days_of(menu),
-            },
         )
 
     @role.command(name="logs", description="The last few role menu log lines")
@@ -1790,65 +2062,17 @@ class RoleMenus(commands.Cog):
     ) -> None:
         if not await require_staff(interaction):
             return
-        guild = interaction.guild
-        open_row = await grants.open_grant(self.bot.db, guild.id, member.id, role.id)
-        if open_row is not None and open_row["expires_at"]:
-            await interaction.response.send_message(
-                ALREADY_TIMED.format(
-                    name=member.display_name,
-                    label=role.name,
-                    stamp=grants.stamp(open_row["expires_at"]),
-                ),
-                ephemeral=True,
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
-            return
         await interaction.response.defer(ephemeral=True)
-        held = any(r.id == role.id for r in member.roles)
-        if not held and not await change_roles(
+        _, said = await grant_role(
             self.bot,
+            interaction.guild,
+            interaction.user,
             member,
-            guild,
-            {role.id},
-            set(),
-            f"Black Bloc /role grant by {interaction.user}",
-        ):
-            await answer(
-                interaction,
-                grants.CANNOT_EDIT_THEIRS.format(name=member.display_name, label=role.name),
-            )
-            return
-        until = grants.expires_at(days)
-        if open_row is not None:
-            await grants.extend_grant(self.bot.db, open_row["id"], until)
-        else:
-            await grants.add_grant(
-                self.bot.db,
-                guild.id,
-                member.id,
-                role.id,
-                grants.STAFF,
-                granted_by=interaction.user.id,
-                until=until,
-            )
-        await log_action(
-            self.bot,
-            guild,
-            "role.granted",
-            actor=interaction.user,
-            target=member,
+            role,
+            days,
             reason=reason,
-            details={"role_id": role.id, "days": int(days), "expires_at": until},
         )
-        await answer(
-            interaction,
-            grants.GRANTED_SAID.format(
-                name=member.display_name,
-                label=role.name,
-                until=f" until {grants.stamp(until)}",
-            )
-            + ("" if not held else GRANT_STARTED_ON_A_ROLE_THEY_HAD),
-        )
+        await answer(interaction, said)
 
     @role.command(name="extend", description="Push back the day a timed role runs out")
     @app_commands.describe(member="Who has it", role="The timed role", days="Days to add")
@@ -1876,23 +2100,11 @@ class RoleMenus(commands.Cog):
                 allowed_mentions=discord.AllowedMentions.none(),
             )
             return
-        until = grants.pushed_back(row["expires_at"], int(days))
-        await grants.extend_grant(self.bot.db, row["id"], until)
-        await interaction.response.send_message(
-            grants.EXTENDED_SAID.format(
-                name=member.display_name, label=role.name, stamp=grants.stamp(until)
-            ),
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
+        _, said = await extend_role(
+            self.bot, interaction.guild, interaction.user, row, days
         )
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "role.extended",
-            actor=interaction.user,
-            target=member,
-            details={"grant_id": row["id"], "role_id": role.id, "days": int(days),
-                     "expires_at": until},
+        await interaction.response.send_message(
+            said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
         )
 
     @rolemenu.command(name="list", description="List this server's role menus")
@@ -1992,16 +2204,11 @@ class RoleMenus(commands.Cog):
             await interaction.response.send_message(guard.refusal_message(), ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True)
-        message = await post_panel(self.bot, menu, options, target)
+        message = await post_menu(
+            self.bot, interaction.guild, interaction.user, menu, options, target
+        )
         await interaction.followup.send(
             f"**{name}** is live in {target.mention}. {message.jump_url}", ephemeral=True
-        )
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "role_menu.post",
-            actor=interaction.user,
-            details={"menu": name, "channel_id": target.id, "message_id": message.id},
         )
 
     @rolemenu.command(name="unpost", description="Take a role menu's panel down")
@@ -2092,40 +2299,22 @@ class RoleMenus(commands.Cog):
     ) -> None:
         if not await require_staff(interaction):
             return
-        await self.bot.store.set(
-            interaction.guild.id, MODE_KEY, mode.value, by=interaction.user.id
-        )
+        said = await set_mode(self.bot, interaction.guild, interaction.user, mode.value)
         await interaction.response.send_message(
-            f"Picking roles from the panels is now **{mode.value}**. "
-            + (MODE_ON if mode.value == "on" else MODE_OFF),
-            ephemeral=True,
-        )
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "role_menu.mode",
-            actor=interaction.user,
-            details={"mode": mode.value},
+            f"Picking roles from the panels is now **{mode.value}**. {said}", ephemeral=True
         )
 
     @rolemenu.command(name="delete", description="Delete a role menu")
     async def delete(self, interaction: discord.Interaction, name: str) -> None:
         if not await require_staff(interaction):
             return
-        if not await delete_menu(self.bot.db, interaction.guild.id, name):
+        if not await drop_menu(self.bot, interaction.guild, interaction.user, name):
             await interaction.response.send_message(self._no_such_menu(name), ephemeral=True)
             return
         await interaction.response.send_message(
             f"Deleted **{name}**. Nobody loses a role they already have, and any panel already "
             "posted stops working — delete that message by hand.",
             ephemeral=True,
-        )
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "role_menu.delete",
-            actor=interaction.user,
-            details={"menu": name},
         )
 
     @rolemenu.command(
@@ -2134,16 +2323,9 @@ class RoleMenus(commands.Cog):
     async def seed(self, interaction: discord.Interaction) -> None:
         if not await require_staff(interaction):
             return
-        created, skipped = await seed_default_menus(self.bot.db, interaction.guild.id)
+        created, skipped = await seed_menus(self.bot, interaction.guild, interaction.user)
         await interaction.response.send_message(
             seed_summary(created, skipped), ephemeral=True
-        )
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "role_menu.seeded",
-            actor=interaction.user,
-            details={"created": created, "skipped": skipped},
         )
 
     def _default_channel(self, interaction: discord.Interaction) -> Any:

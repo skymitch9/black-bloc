@@ -1312,15 +1312,20 @@ async def test_role_grant_on_a_role_they_already_have_only_starts_the_clock(bot,
     assert "only keeping time on it now" in interaction.sent
 
 
-async def test_role_grant_refuses_when_a_clock_is_already_running(bot, db, lead):
+async def test_granting_over_a_clock_that_is_running_resets_it_rather_than_starting_a_second(
+    bot, db, lead
+):
+    """The two implementations reconciled onto the website's: one open grant, a new end date."""
     member = FakeMember(bot.guild, user_id=900, display_name="Bo", roles=(10,))
-    await grants.add_grant(db, GUILD, 900, 10, "staff", until=grants.expires_at(3))
+    grant_id = await grants.add_grant(db, GUILD, 900, 10, "staff", until=grants.expires_at(3))
     interaction = FakeInteraction(bot, lead)
 
     await RoleMenus.role_grant.callback(RoleMenus(bot), interaction, member, FakeRole(10), 7, None)
 
-    assert "already has" in interaction.sent and "/role extend" in interaction.sent
-    assert len(await grants.grants_for(db, GUILD)) == 1
+    rows = await grants.grants_for(db, GUILD)
+    assert [row["id"] for row in rows] == [grant_id]
+    assert (grants.parse_ts(rows[0]["expires_at"]) - datetime.now(UTC)).days == 6
+    assert "only keeping time on it now" in interaction.sent
 
 
 async def test_role_grant_is_staff_only(bot, db):
