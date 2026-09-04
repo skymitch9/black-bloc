@@ -317,6 +317,13 @@ docs bookkeeping lands with the work, not after.
   Then builds in cost order (automod ~300–360k, chat ~300–360k, raidtrain
   380–450k, role menus 420–500k), each Opus in its own worktree off `main`, layer-boundary commits, sweeps
   numbered from 144 at build time; usage read before each dispatch; weekly cut-off 90%.
+  **IN FLIGHT 2026-09-04 15:10 Phoenix: automod AND chat builds dispatched IN PARALLEL** (Opus, own worktrees
+  off `5db58fb`; usage at dispatch session 2% / weekly 0% / Fable 1% — the weekly had reset with a "50% higher
+  through September 13" boost on the page). Automod numbers sweeps from 144; chat uses placeholders `C1…Cn`
+  that the conductor renumbers at merge. Expected merge conflicts, all append-shaped: `settings_store.py`
+  registry, `tests/test_bot.py` count, `code-notes.md`, `sweeps.md`. Merge automod first (numbered rows),
+  then chat. If this session dies: `git worktree list` / `git branch --list 'agent-*'` finds the branches;
+  merge only branches whose FINAL commit is a doc/string sweep with a passing full suite.
   Events I2 DECIDED 12:40 (`/timezone` retired).
   **Wave-1 builds all landed 13:40–13:50** (birthdays merged `58974e1`; events on
   `worktree-agent-a448c7ab780ed3c2b`, polls on `worktree-agent-aa735ab092d13477d`, both under Fable
