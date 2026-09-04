@@ -1,5 +1,13 @@
 ﻿# Phase 12 — Logs: quiet Discord, loud website, `/… logs` everywhere
 
+> ⚠️ **SUPERSEDED IN PART, 2026-09-03 — the slash surface below is gone.** `/golive` and
+> `/twitch` and all eight of their subcommands (`logs`, `optout`, `optin`, `status`, `mode`,
+> `test`, `link`, `unlink`) were replaced by ONE `/golive` command that opens an ephemeral
+> panel; every subcommand is a button, a select or a modal on it. The behaviour this doc
+> describes is unchanged — the announcer, the poller, the sessions, the settings and the log
+> kinds are all exactly what it says. Only the way in moved:
+> [`golive-panel-design.md`](golive-panel-design.md). This doc is NOT rewritten.
+
 > ✅ **12a BUILT (2026-08-27)** on branch `agent-ac3b8dd35b6cc0c5d` off `main` @ `0090fd8`, in seven
 > commits: `313fa48` (`logkinds.py` + the classification test), `e352f33` (the twelve
 > `_log_level` keys), `d6f0541` (the gate in `log_action` + the shared renderer),

@@ -1,7 +1,14 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-03** — row **103** added by the OPERATOR READ TOKEN build (a Claude session can read
+> **2026-09-03** — rows **109–117** added by the GO-LIVE PANEL build (`/golive` becomes ONE command that
+> opens a panel; the `golive` and `twitch` groups and all eight subcommands are retired — a real
+> `commands synced` drop, 42 → 41, measured through `tests/test_bot.py` rather than a boot). Rows **12,
+> 19, 31, 49** and the Phase 2 appendix script below were rewritten in place for it rather than added;
+> ⚠️ the **verified** row for `/golive test` (2026-08-27) is HISTORY and is left exactly as it is. Rows
+> 104–108 are a sibling wave-2 build's, which is why these start at 109 — the conductor renumbers at
+> landing. ⚠️ **Nothing in 109–117 has met live Discord.** Before that, same day — row **103** added by
+> the OPERATOR READ TOKEN build (a Claude session can read
 > `/api/*` with a bearer and change nothing). ⚠️ It is the first row here that cannot be run at
 > all until the owner mints a secret, and nothing in it has met the live app. Same day —
 > rows **80–86** added by the POLLS PANEL build (`/poll` becomes ONE command that
@@ -71,14 +78,14 @@ All of this happens in **`#mute-me-bot-test-spam`** (test mode) or on **https://
 | 9 | Polls — recurring, reminder | `/poll` → **Create** → **Repeat…** weekly; and a 1-hour poll | the next occurrence opens on schedule; a reminder 60 min before close |
 | 10 | Chat 2 | `@Black Bloc how many of us` / `who's live` / `what's next` / `birthdays` / `my roles` / `I need a mod`; edit a greeting line on /chat.html then `hi` | live answers; the edited line is used; 👋🏿 tone visible |
 | 11 | Birthday daily import | nothing to do — read the log after a restart | `birthdays: the daily import took nothing new — {… 'already': 38 …}` |
-| 12 | Logs (Phase 12, live 18:38) | flip `golive_log_level` to `all`, `/golive test`, then back to `important`, `/golive test` again; `/golive logs` | Discord line only in `all`; dashboard shows both; a role request still posts its card with `rolemenu_log_level = off` |
+| 12 | Logs (Phase 12, live 18:38) | flip `golive_log_level` to `all`, `/golive` → **Preview an announcement…**, then back to `important` and preview again; `/golive` → **Logs** | Discord line only in `all`; dashboard shows both; a role request still posts its card with `rolemenu_log_level = off` |
 | 13 | Emoji tone | `@Black Bloc hi` until a 👋 line comes up | dark tone by default; `emoji_skin_tone` setting changes it |
 | 14 | Requests — the panel, staff (fourth pass, `/request` is now ONE command) | `/request` in the test channel as staff | an ephemeral panel: a counts line (open / being worked on / ready to check / on hold), your own requests (staff always see theirs), **File a request** / **Refresh** / **Open on the site**, a **Pick a request…** select (capped at 25, says "N of M — the rest are on the site" past that), and a **Logs** button that answers with a NEW ephemeral message (the panel stays put) |
 | 15 | Requests — the panel, member | `/request` as a non-staff member | the same panel minus the staff controls: File a request / Refresh / Open on the site — and **NO list of your own requests**, because viewing requests on the panel is staff-only (`request_panel_own_list`, off by default). Once you have an open or held one, a **Take one back…** select still appears — picking one shows its card with **Yes, take it back** / **Keep it** |
 | 16 | Via column | change one setting from Discord (`/settings set-value …`) and one from the website | Logs page → Settings audit shows **Discord** and **Website** in the Via column; `/settings logs` says the same |
 | 17 | Cyberpunk look | cog → Cyberpunk | the estate's cyan/yellow palette again (no magenta) — say if it still reads wrong |
 | 18 | `/help` (batch 2) | `/help`, then `/help filter:temp` | command list with `(staff)` marks on staff-only entries |
-| 19 | Round-1 fixes | `/rolemenu showall`; open the `/twitch link` picker; `/tempvoice setup` | showall lists every menu (ephemeral); the picker says **channel**, never *login*; setup says **repaired / took it over** (never a second lobby), lobby named "join to create a channel", Member + staff can connect |
+| 19 | Round-1 fixes | `/rolemenu showall`; `/golive` → **Link my Twitch channel**; `/tempvoice setup` | showall lists every menu (ephemeral); the modal says **channel**, never *login*; setup says **repaired / took it over** (never a second lobby), lobby named "join to create a channel", Member + staff can connect |
 | 20 | Temp-voice memory (batch 4) | in your temp channel: `/voice permit @someone`, `/voice ban @someone-else`, `/voice region us-west` → leave (channel deletes) → re-join the lobby | the new channel has the same region and the same two people set; `/voice info` shows both halves; `/voice reset` clears it |
 | 21 | Temp-voice room controls (B4, live 2026-08-31) | with a temp channel open: https://blackbloc.heygabi.ai/tempvoice.html → Open now | each row shows In it / Cap / Access + Rename, Cap, Lock, Hide buttons; press Rename — the channel renames and the reply says "remembered for next time" |
 | 22 | Role-menu Un-post + Seed (B5+B6, live 2026-08-31) | /rolemenus.html → Un-post beside Post on a posted card; the Seed defaults button beside New menu; also `/rolemenu unpost` in Discord | un-post takes the panel down in the channel (in test mode: a `would_unpost` log line instead); seed says created/left-alone in words and never rewrites an existing menu |
@@ -90,7 +97,7 @@ All of this happens in **`#mute-me-bot-test-spam`** (test mode) or on **https://
 | 28 | The Black Bloc look (R2, live 2026-08-31 ~13:14) | https://blackbloc.heygabi.ai — you'll land in the new default theme | warm charcoal + ember, the BLACK BLOC wordmark and page titles in Bangers, the Overview opens with a TODAY sentence ("Nothing's on fire. …") whose clauses link to their pages; ⚙ → flip Appearance to Light and back; your previously chosen theme (if you ever picked one) still wins over the default |
 | 29 | Ctrl+K palette (R2) | press **Ctrl K** on any page, type `birthday_role`, Enter; then Ctrl K → type `theme: cyber` | lands on Settings with the row flashed ember; the theme switches instantly; the palette also finds pages and actions (sign out, show keys) |
 | 30 | Show keys + Cases drawer (R2) | Settings → **Show keys** top-right, toggle + reload; Moderation → click a case row | keys hidden by default, toggle remembered per browser; the case opens in a right-hand drawer, Esc closes; note the table toolbars and "Showing 1–N of M" feet on Logs/Members/Cases/Polls/Requests |
-| 31 | Live role survives a repoint (live 2026-09-01) | set `golive_live_role_id`, go live, CHANGE the setting to a different role mid-stream, stop | the **first** role comes off (not the new one); `/golive logs` shows `remove_role` with the original id |
+| 31 | Live role survives a repoint (live 2026-09-01) | set `golive_live_role_id`, go live, CHANGE the setting to a different role mid-stream, stop | the **first** role comes off (not the new one); `/golive` → **Logs** shows `remove_role` with the original id |
 | 32 | Requester in their review channel (live 2026-09-01) | `/event` → **Propose an event** (in the test channel while TEST_MODE; was `/event create` before 2026-09-03) | the reply says the pending channel is yours to post in; you can see + type in `pending-<you>-<title>`, and still can after Approve renames it |
 | 33 | Chat LLM — before/after the switch (Phase 14, live 2026-09-01, OFF) | `/chat status` now (expect "off", tiers named as not ready); after you set both keys + flip `chat_llm_mode on`: `/chat status` again, then `@Black Bloc what do you make of all this then` | a real in-voice answer instead of "Not sure I follow"; `/chat status` shows answers today 1 and the month above $0.00 — **the first real cost figure anyone will have seen** |
 | 34 | Knowledge grounding (Phase 14) | `/chat knowledge add title:Cookout hours body:The cookout runs Friday evenings.` → `@Black Bloc when is the cookout?`; `/chat knowledge list`; try `remove` on a server-written note | the answer quotes your note; the list shows yours + the server-written ones once the daily loop runs; removing a server note refuses in words |
@@ -107,7 +114,7 @@ All of this happens in **`#mute-me-bot-test-spam`** (test mode) or on **https://
 | 46 | YouTube uploads — the dashboard | Dashboard → Go-live → **YouTube uploads** | the sweep card says running with a last-good time; the links table shows who is linked and whether their feed has answered yet; Recent uploads colours each row announced / would / skipped; Unlink asks first; **Upload settings** and **Upload logs** sit under it |
 | 47 | YouTube uploads — the staff paths | `/uploads setup channel:#somewhere ping_role:@…`, `/uploads link-for @member <channel>`, `/uploads list` | setup names where posts will go; link-for counts their history the same way; list shows the mode, the channel, the sweep health and **api key — not set (feed only)** |
 | 48 | Raid trains — build one (F19, `raidtrain_mode` ships **off**) | `/raidtrains mode on` (or Events page → Raid train settings), then `/raidtrain create` — title, what it is, `2026-09-14 19:30`, 60, 4 | the form is read in YOUR stored zone (set it with **My time zone** on `/event`; `/timezone` was retired 2026-09-03); the reply names where the lineup went; in the test channel a lineup post appears with four `open` rows and a thread under it. ⚠️ In TEST_MODE the post only lands if `raidtrain_channel_id` is the test channel — otherwise `/raidtrains logs` has one `raidtrain.post_skipped_test_mode` line and nothing is posted |
-| 49 | Raid trains — claim, release, the cap | `/raidtrain list`, then `/raidtrain claim` with no slot; try `/raidtrain claim` a second time; `/raidtrain mine`; `/raidtrain release` | the first claim takes slot **#1** and the lineup post EDITS itself (no second message); the second refuses in words naming `raidtrain_max_slots_per_member`; `mine` shows the hour in your own clock; release opens it again. From an account with no `/twitch link`, claim refuses and names `/twitch link` |
+| 49 | Raid trains — claim, release, the cap | `/raidtrain list`, then `/raidtrain claim` with no slot; try `/raidtrain claim` a second time; `/raidtrain mine`; `/raidtrain release` | the first claim takes slot **#1** and the lineup post EDITS itself (no second message); the second refuses in words naming `raidtrain_max_slots_per_member`; `mine` shows the hour in your own clock; release opens it again. From an account with no linked Twitch channel, claim refuses and points at `/golive` → **Link my Twitch channel** |
 | 50 | Raid trains — the reminder DM | claim a slot that starts **inside the next 30 minutes** (make a train starting ~35 min out), then wait one sweep (5 min) | ⚠️ **a DM, not a channel post** — it names your slot time, who raids INTO you and who you raid NEXT, with their twitch.tv links, plus a jump link to the lineup. Exactly once, ever. `/raidtrains logs` has one `raidtrain.remind`; in `shadow` it is `raidtrain.would_remind` and no DM |
 | 51 | Raid trains — the train moves | with a train running (`live`) and `raidtrain_live_posts` on: have a slot holder actually go live on Twitch | within one sweep the slot gets a ✅ on the lineup and a line lands in the train's thread: "**login** is live — next up **login** at …". ⚠️ It sees only what go-live sees — a hidden presence with no Twitch link is never noticed (**KI-16**) |
 | 52 | Raid trains — the organizer half and the dashboard | `/raidtrain assign`, `unassign`, `swap`, `lock`, `unlock`, `cancel`; then https://blackbloc.heygabi.ai/events.html#sect-raidtrains | assign ignores the per-member cap; swap moves the PEOPLE and never the times; lock refuses further claims and says who unlocks it; cancel DMs every holder with your reason. On the page: the trains table, Open → the slot grid with Put somebody in / Take off, "Change two slots round", Lock/Cancel, **Raid train settings** (13 keys) and **Raid train logs** below it |
@@ -125,13 +132,15 @@ form for a full pass.
   ephemeral "Added: …/Removed: …" and your roles change) → `/rolemenu show
   interests`. Try `/rolemenu list` from a non-staff account: expect the staff
   sentence. Check the action-log embeds landed in the same channel.
-- **Phase 2 (live, mode `shadow`):** `/golive status` (expect mode shadow, channel =
-  test channel, Twitch polling running with a last-ok time) → `/golive test` (ephemeral
-  preview, no ping) → `/twitch link <your channel>` (expect "linked" or "could not be
-  checked") → go live on Twitch once with Discord showing the Streaming status: expect
-  a `golive.would_announce` embed in the test channel within seconds (presence) — and
-  nothing in `#live-now`. Stop streaming: expect `golive.end` ~2 min later. Try
-  `/golive optout` then `/golive optin`. `/settings show` now lists the 8 golive keys.
+- **Phase 2 (live, mode `shadow`; ONE command since 2026-09-03):** `/golive` as staff —
+  the embed carries the status lines (expect mode shadow, channel = test channel, Twitch
+  polling running with a last-ok time) → **Preview an announcement…** → *Twitch*
+  (ephemeral preview, no ping, nothing posted) → **Link my Twitch channel** and type your
+  channel (expect "Linked" or "could not be reached to check") → go live on Twitch once
+  with Discord showing the Streaming status: expect a `golive.would_announce` embed in
+  the test channel within seconds (presence) — and nothing in `#live-now`. Stop
+  streaming: expect `golive.end` ~2 min later. Try **Stop announcing my streams** then
+  **Announce my streams again**. `/settings show` now lists the golive keys.
 - **Phase 3 (live; honeypot `shadow`):** `/tempvoice setup` (expect a "join to
   create a channel" voice channel created INSIDE the test channel's category while
   TEST_MODE, and the reply saying so) → join it: expect `<you>'s bloc` to appear next
@@ -275,6 +284,30 @@ nothing below can happen at all.
 | # | What | Do this | Expect |
 |---|---|---|---|
 | 103 | A session's read shows up in your log | mint `OPERATOR_READ_TOKEN` (one command, `access/operator-read.md`) and deploy; ask the session to run `.\scripts\read.ps1 -Path /api/requests`; then open the **Logs** page (or `/settings logs`) | one new line, `web.operator.read`, whose **Via** column reads **Operator token** rather than Discord or Website, with `path=/api/requests` in its details. One line per read, not one per route. Nothing is posted to Discord (it is a routine Core kind, so `core_log_level` at its default stays quiet). If you would rather see nothing at all, turn **Whether an operator-token read leaves a log line** (`operator_read_log`) off on the Settings page and read again — same data, no line. Ask the session to try a CHANGE and it is refused in words: *the operator token can only look, never change* |
+
+## Go-live — `/golive` is ONE command that opens a panel (wave 2)
+
+Built 2026-09-03 (`info/golive-panel-design.md`), branch
+`worktree-agent-a87a00d41b8dc47d1`. ⚠️ **The `golive` and `twitch` groups and all
+eight subcommands are gone** — `/golive logs`, `/golive optout`, `/golive optin`,
+`/golive status`, `/golive mode`, `/golive test`, `/twitch link` and
+`/twitch unlink` are each a button or a select on one panel now, and
+`commands synced` drops 42 → 41. ⚠️ **Nothing here has met live Discord**: no
+panel has been opened, no button pressed and no Helix call made. Rows **104–108
+are claimed by a sibling wave-2 build**, so these take **109 onward** and the
+conductor renumbers at landing if the siblings land first.
+
+| # | What | Do this | Expect |
+|---|---|---|---|
+| 109 | The member panel | `/golive` from an account with no Twitch linked | ONE ephemeral panel titled **Go-live**: an intro line, "**Your Twitch channel** — none linked yet", "**Your streams** — announced here whenever Black Bloc sees you go live", a line saying announcements are in **shadow** right now, and the buttons **Link my Twitch channel · Stop announcing my streams · Refresh · Open on the site**. ⚠️ **No status lines, no Logs, no preview, no mode select** — and the panel says in words that the feed's settings are for staff rather than hiding anything |
+| 110 | Linking, and changing your mind | **Link my Twitch channel** → type your channel name; then **Change my channel** → type nonsense; then try a name another member already holds | the first links and the panel says `twitch.tv/<you>` (or "not verified with Twitch" if Twitch could not be reached, which is honest, not a failure); the modal opens **already filled in** the second time; nonsense refuses in words and changes nothing; the taken name refuses **without ever naming who holds it** |
+| 111 | Opting out and back in | **Stop announcing my streams**, then **Announce my streams again** | exactly one of the two buttons is ever on the panel; the "Your streams" line flips each way; **Logs** shows one `golive.optout` and one `golive.optin` — one row each, never two |
+| 112 | Unlinking is not opting out | **Unlink**, then go live on Twitch with Discord showing Streaming | the link is gone (and the fan role does whatever `pings_fan_role_on_unlink` says); presence still announces you, because unlinking and opting out are different things |
+| 113 | The staff panel | `/golive` as a Lead | the same embed **plus** the eleven status lines — mode, stream end, channel, cooldown, twitch polling, last good poll, last poll error, links/opt-outs/live-now, and one line per open session — and **Logs · Streamers… · Preview an announcement… · Announcements: off / shadow / on**. ⚠️ **There is no Status button: the status IS the embed.** Press **Logs**: it answers a **NEW** message and the panel stays put |
+| 114 | Previewing an announcement | **Preview an announcement…** → *Twitch*, then *YouTube*, then *As you are now* | three ephemeral previews with the sentence and the card, **no ping**, **nothing posted in any channel**, and one `golive.test` log row each. ⚠️ With `golive_channel_id` pointing anywhere but `#mute-me-bot-test-spam`, the **channel** line SAYS test mode is why nothing real would post — the answer to "why was my stream not announced", in words |
+| 115 | The mode select | **Announcements: off / shadow / on** → **on**, then **shadow** | the panel re-renders with the new mode and the select shows it as the chosen option; one `golive.mode` row each; the next go-live behaves accordingly (a real post on `on`, `golive.would_announce` on `shadow`) |
+| 116 | Staff acting for somebody else (the gap the website used to be the only door for) | **Streamers…** → pick somebody → **Unlink them** → **Yes, unlink them**; pick another → **Opt them out**, then **Opt them back in** | the same result the Go-live page gives, because it is the same function: one log row each, the card re-renders, and **Unlink them** asks first. Past 25 linked members the select says "25 of N — the rest are on the site" |
+| 117 | The panel goes quiet | leave `/golive` alone for `golive_panel_minutes` (10) minutes | every control greys out and the embed footer reads *This panel has gone quiet — run /golive again*. ⚠️ Setting it to 15 or more loses the footer (KI-20) and the help text on the Settings page says so |
 
 ## The owner's Twitch Team form — the walk-through
 

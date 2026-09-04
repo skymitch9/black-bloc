@@ -69,7 +69,7 @@ were all threads, never preferences.
 ## KI-15 — A raid-train slot keeps the Twitch name it was claimed with — `ACCEPTED`
 
 **Symptom.** `raid_slots.twitch_login` is COPIED at claim time from
-`golive_links`. A member who runs `/twitch unlink`, or who re-links to a
+`golive_links`. A member who presses **Unlink** on `/golive`, or who re-links to a
 different channel, keeps their slot and the lineup keeps naming the OLD login —
 so the streamer before them may raid a channel that no longer belongs to
 anybody. Nothing tells the organizer.
