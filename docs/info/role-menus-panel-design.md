@@ -620,3 +620,105 @@ at clean boundaries, one layer at a time —
 4. the doc/string/site sweep + `tests/test_bot.py` + `command_visibility.py`
 
 — so a kill costs the last layer rather than the build.
+
+
+## Deviations from this design
+
+Written by the BUILD agent, 2026-09-04, on `worktree-agent-ace2086f9f7cfa541`. Everything not
+listed here was built as §B–§H say. The header above is the CONDUCTOR's to flip at landing.
+
+1. **§I-amend — the owner's addition to F-R2, built.** `Grants…` **opens as an audit** of every
+   timed role running in the guild: soonest to end first (a grant with no end date sorts LAST, not
+   first), one line per grant — member · role · time left · the end date, or `no end date` twice
+   over. Capped at 25 lines with a sentence pointing at the site's Timed roles table. The
+   `UserSelect` **Whose roles?** NARROWS that audit rather than being the only way to see anything,
+   and `A timed role…` picks from whatever is currently shown. `active_grants(db, guild_id, *,
+   user_id=None)` is the one shared function behind it, in the pure module, and the ordering and
+   the "time left" wording (`grant_order`, `time_left`, `grant_line`, `grant_lines`) are unit
+   tested in `tests/test_rolemenus.py`, including the no-end-date case and the 25 cap.
+
+2. **`menu_heading` and `option_line` MOVED into `black_bloc/rolemenus.py`.** §F says they stay in
+   the cog and are imported by the new module. That is a circular import — the cog imports the pure
+   module for its button tables, so the pure module importing the cog closes the loop — and §H.3
+   exists to catch exactly that shape. They are pure formatters with no route importing them
+   (measured: `api/tools/rolemenus.py` imports neither), so moving them costs nothing. `panel_note`,
+   `summary`, `seed_summary`, `needs_approval`, `expires_days_of` and `retry_days_of` all STAY in
+   the cog as the design says; `menu_lines` takes the note as a keyword instead of computing it.
+
+3. **The card's rows are Discord rows, not the design's logical groupings.** §C puts four buttons
+   AND a select on "row 0" of the menu card, which Discord cannot draw — a select occupies a whole
+   action row. Built as: row 0 the `Take a role off this menu…` select, row 1 `Add a role…` ·
+   `Words…` · `Rules…` · the approval toggle, row 2 `Post it`/`Move it…` · `Take it down` ·
+   `Hand roles out…` · `Delete it`, row 3 `Back` · `Refresh`. Every state is asserted to sit inside
+   Discord's five rows.
+
+4. **`Post it` opens a "where should it go?" view rather than dropping a `ChannelSelect` onto the
+   card.** discord.py's `ChannelSelect` cannot be pre-defaulted to a channel the way §C's
+   "defaulting to `_default_channel`" asks, so the default is named in a SENTENCE on that view
+   instead (`_default_channel` survives as the module-level `default_channel`, exactly as §E says).
+   `Back` returns to the card.
+
+5. **`grant_role` / `extend_role` / `revoke_grant` reconciled onto the WEBSITE's behaviour, on all
+   three measured differences** (§F says the build picks one per difference and records it):
+   days are optional — `None` or `0` means the role never runs out (fork F-R2 (a), and the site
+   has always allowed it); a second grant over an open one RESETS its clock rather than being
+   refused (`ALREADY_TIMED` is deleted — nothing refuses that now); the kind is
+   `kind_via("role.granted", via)`. The routes keep their own member/role lookups and their own
+   `Refused` codes, so **`tests/api/tools/test_roles.py` needed no edit at all** — which is the
+   proof the reconciliation did not move the website.
+
+6. **`put_option` / `drop_option` are panel-only.** §F's table implies both doors; the website's
+   `PUT /api/rolemenus/{name}` rewrites the whole option list in one request, so routing
+   `sync_options` through them would write nine `role_menu.option_*` rows for one edit that
+   `role_menu.edit` already records. They still take `via` at its Discord default.
+
+7. **`StaffAssignSelect` and `StaffAssignView` were REPLACED, not "reused unchanged".** §C asks for
+   the select to be dropped into the sub-panel untouched; its callback sends a NEW ephemeral
+   message, which is the thing a panel exists to stop. `AssignPick` keeps the option building and
+   the `default=` marking of held roles byte-for-byte and re-renders the card in place instead.
+   `StaffAssignView` had no other caller once `_staff_pick` went, so it is gone.
+
+8. **The three role-changing moves keep an explicit `guard.allows_channel` check** (`guarded`,
+   used by `run_assign`, `run_grant`, `run_revoke`). §H says these change REAL roles in test mode
+   and the design does not ask for a guard; but the retired `StaffAssignSelect` DID check it, and
+   silently dropping it would have been an access-INCREASING change made by accident. Reads are not
+   guarded.
+
+9. **An automatic re-post writes no log row.** Fork F-R3 (a) is built, but `repost_if_live` calls
+   `post_panel` directly rather than `post_menu`, so a `Words…`/`Rules…` edit leaves ONE
+   `role_menu.edit` row and no `role_menu.post` beside it. A failure is swallowed and adds one
+   sentence to the reply (checklist 12).
+
+10. **The log kinds are the `role_menu.*` family throughout, so four `web.rolemenu.*` kinds were
+    RENAMED.** §F pairs `make_menu` with the route's `web.rolemenu.create` and `change_menu` with
+    the cog's `role_menu.edit`; those are two different families and one shared function can only
+    emit one. `role_menu.*` won (it is the Discord-side family already in `ROUTINE`), so
+    `web.rolemenu.create|edit|delete|post` became `web.role_menu.*` in `logkinds.ROUTINE`,
+    `site/mock/contract.json`, `site/mock/server.mjs` and the route tests. `HEADS["rolemenu"]`
+    stays, so rows already in the database still classify.
+
+11. **`tests/test_command_visibility.py` was re-pointed at `request_mode`, not trimmed.** §E says
+    "its case in `tests/test_command_visibility.py` goes with it"; in fact the WHOLE file used
+    `rolemenu_mode` as its exemplar, and `request_mode` is the only entry left in
+    `HIDDEN_WHEN_OFF`. Its `bot` fixture now sets `request_mode` off before `install` (it defaults
+    **on**), and the one real-tree test that pins the staff LOCK still loads the role-menus cog,
+    because `/request` is a member command and could not have proved it. A new test says
+    `rolemenu_mode` is not in `HIDDEN_WHEN_OFF` and `/rolemenu` is never hidden.
+
+12. **Two strings the design did not list were rewritten**, because they also named a command that
+    no longer exists: `black_bloc/applications.py` (twice, `/role grant`) and
+    `black_bloc/pings.py` (twice, `/rolemenu post <menu>`), plus their mock-server copies and three
+    lines of `site/public/assets/page-rolemenus.js` that told the reader the mode hides the
+    commands. `docs/access/sweeps.md` row **12** was in §E's list but names no retired subcommand,
+    so it was left alone and the header says so.
+
+13. **`docs/access/OWNER_GUIDE.md` gained its `/rolemenu` row; its sweeps COUNT is untouched** —
+    the new sweep rows are lettered `M1`–`M10` and the conductor numbers them at the merge, so
+    moving the count here would be a guess.
+
+14. **What was NOT verified.** No boot (`python -m black_bloc` — no bot token in this environment;
+    the §H.3 import check plus `import black_bloc.bot` is the substitute), nothing against live
+    Discord, and no `commands synced` line read off a real login — 38 → 37 was measured through
+    `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`, which counts the real
+    tree after loading every cog. `node site/mock/check.mjs` reports **17 pages / 142 routes**,
+    unchanged (no route was added or removed).

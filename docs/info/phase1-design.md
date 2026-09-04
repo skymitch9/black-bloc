@@ -1,5 +1,9 @@
 # Phase 1 design — settings store, action log, role menus (F16)
 
+> ⚠️ **SUPERSEDED IN PART, 2026-09-04:** every `/rolemenu …` and `/role …` subcommand named below is retired — `/rolemenu` is now ONE staff command that opens a panel. The behaviour is unchanged; only the door is. See
+> [`role-menus-panel-design.md`](role-menus-panel-design.md) and
+> [`panels-program.md`](panels-program.md).
+>
 > **Audience:** the Phase 1 build agent and the reviewer. **Status:** LOCAL
 > ONLY. **Last verified: 2026-08-26** — role/channel IDs below are from the
 > same-day Discord scan; everything else is design, not measurement.
