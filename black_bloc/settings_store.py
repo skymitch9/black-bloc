@@ -617,8 +617,8 @@ KEY_HELP: dict[str, str] = {
     "chat_home_channel_id": (
         "where somebody is sent when a conversational answer points at a channel that does not "
         "exist. Blank is safe: the sentence is written again without the channel in it rather "
-        "than pointing anywhere. Either way the invention is logged, so `/chat logs` and the "
-        "Logs page count how often it happens"
+        "than pointing anywhere. Either way the invention is logged, so `/chat` ▸ **Logs** and "
+        "the Logs page count how often it happens"
     ),
     "chat_visibility_role_id": (
         "the role whose view of the server IS the bot's map: channels this role can read are "
@@ -676,9 +676,10 @@ KEY_HELP: dict[str, str] = {
         f"from its own written lines; 0 stops them altogether"
     ),
     "chat_status_admin_only": (
-        "on keeps `/chat status` (what the conversation models are spending) to server "
-        "administrators; off lets any staff member read it. The dashboard's Spend section "
-        "stays staff-visible either way"
+        "on keeps the spend block on `/chat` (what the conversation models are spending) to "
+        "server administrators; the rest of the panel still opens for any staff member, and off "
+        "lets them read the spend too. The dashboard's Spend section stays staff-visible either "
+        "way"
     ),
     "chat_memory_mode": (
         "off, or on (Black Bloc keeps a few preferences about each person — what to call them, "
@@ -1093,6 +1094,21 @@ KEY_HELP.update(
         "automod_arm_needs_confirm": (
             "true to ask a second time before automod is turned on from the panel, naming what "
             "will start happening; turning it off or back to shadow is always one press"
+        ),
+    }
+)
+
+
+# Chat panel (wave 3) — the one decision `/chat`'s panel introduces, in its own block so the
+# parallel wave-3 branches merge textually. `CHAT_KEYS` is a prefix scan, so this is the only edit.
+KEY_TYPES.update({"chat_panel_minutes": "int"})
+KEY_HELP.update(
+    {
+        "chat_panel_minutes": (
+            "minutes the /chat panel stays live before its buttons disable themselves; 10 by "
+            "default. The 'this panel has gone quiet' footer can only be written while "
+            "Discord's 15-minute interaction window is still open, so 15 or more means the "
+            "buttons simply stop working with no footer to explain it"
         ),
     }
 )
@@ -1628,6 +1644,8 @@ class SettingsStore:
             return 10
         if key == "automod_arm_needs_confirm":
             return True
+        if key == "chat_panel_minutes":
+            return 10
         if key.endswith("_log_level"):
             return LEVEL_DEFAULT
         if KEY_TYPES.get(key) in ("channels", "roles"):

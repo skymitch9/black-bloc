@@ -354,7 +354,7 @@ const SETTING_SPECS = [
   ['chat_cooldown_seconds', 'int', 20, 20, 'seconds before the same person gets another @-mention reply, 5 to 600', null, 600, 5],
   ['chat_ignore_channels', 'channels', [], [], 'channels Black Bloc never answers an @-mention in'],
   ['chat_ignore_categories', 'channels', [], [], 'categories Black Bloc leaves out of everything it reads and tells people about — the channel names and topics it learns each day, and the channel list every conversational answer is written against. The modmail category and any category with `archive` in its name are left out already, and so is every channel @everyone cannot see'],
-  ['chat_home_channel_id', 'channel', null, null, 'where somebody is sent when a conversational answer points at a channel that does not exist. Blank is safe: the sentence is written again without the channel in it rather than pointing anywhere. Either way the invention is logged, so `/chat logs` and the Logs page count how often it happens'],
+  ['chat_home_channel_id', 'channel', null, null, 'where somebody is sent when a conversational answer points at a channel that does not exist. Blank is safe: the sentence is written again without the channel in it rather than pointing anywhere. Either way the invention is logged, so `/chat` ▸ **Logs** and the Logs page count how often it happens'],
   ['chat_visibility_role_id', 'role', '1073741054563602532', '1073741054563602532', "the role whose view of the server IS the bot's map: channels this role can read are the ones the bot may learn about, list and point people at. This server hides everything from @everyone until the rules screen grants Member, so the default is the Member role - clearing it falls back to @everyone, which on this server means almost no channels at all"],
   ['chat_staff_can_ping_roles', 'bool', true, true, "on lets Black Bloc's conversational answers mention a role when the person who @-mentioned it is staff — an Auntie or Uncle and up. Nobody else can make it ping anything, and `@everyone` and `@here` never go through for anyone. Off means a conversational answer pings nobody at all, whoever asked"],
   ['chat_escalation_names', 'int', 2, 2, 'how many online staff Black Bloc names when somebody asks for a mod, 0 to name nobody and up to 10. They are named in plain words, never pinged — the person does that themselves. Nobody online says so instead', null, 10],
@@ -367,7 +367,7 @@ const SETTING_SPECS = [
   ['chat_person_hourly_turns', 'int', 20, 20, "how many conversational answers one member may get in a rolling hour, up to 10000; 0 means no ceiling of its own. Past it they still get Black Bloc's own written lines", null, 10000],
   ['chat_daily_turns', 'int', 200, 200, 'how many conversational answers the whole server may get in a UTC day, up to 10000; 0 means no ceiling of its own', null, 10000],
   ['chat_monthly_cap_usd', 'int', 20, 20, "whole dollars a month Black Bloc may run the conversation models for, up to 1000. At the figure it stops calling them until the 1st and answers from its own written lines; 0 stops them altogether", null, 1000],
-  ['chat_status_admin_only', 'bool', true, true, "on keeps `/chat status` (what the conversation models are spending) to server administrators; off lets any staff member read it. The dashboard's Spend section stays staff-visible either way"],
+  ['chat_status_admin_only', 'bool', true, true, "on keeps the spend block on `/chat` (what the conversation models are spending) to server administrators; the rest of the panel still opens for any staff member, and off lets them read the spend too. The dashboard's Spend section stays staff-visible either way"],
   ...LOG_LEVEL_FEATURES.map(([feature, label, command]) => [
     `${feature}_log_level`,
     'enum',
@@ -418,6 +418,7 @@ const SETTING_SPECS = [
   ['youtube_panel_minutes', 'int', 10, 10, "minutes the /youtube panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
   ['pings_panel_minutes', 'int', 10, 10, "minutes the /pings panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
   ['voice_panel_minutes', 'int', 10, 10, "minutes the /voice panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
+  ['chat_panel_minutes', 'int', 10, 10, "minutes the /chat panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
   ['youtube_unlink_dms_them', 'bool', true, true, 'true to DM a member the reason when STAFF forget their YouTube channel for them; a member unlinking their own channel is never DMed'],
   ['automod_panel_minutes', 'int', 10, 10, "minutes the /automod panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
   ['automod_arm_needs_confirm', 'bool', true, true, 'true to ask a second time before automod is turned on from the panel, naming what will start happening; turning it off or back to shadow is always one press'],
@@ -3739,7 +3740,8 @@ const CHAT_SETTING_KEYS = ['chat_mode', 'chat_cooldown_seconds', 'chat_ignore_ch
   'chat_ignore_categories', 'chat_home_channel_id', 'chat_visibility_role_id', 'chat_staff_can_ping_roles', 'chat_escalation_names',
   'chat_greeting_reaction', 'chat_reply_in_threads',
   'chat_route_ping_staff', 'chat_llm_mode', 'chat_simple_model', 'chat_personality',
-  'chat_person_hourly_turns', 'chat_daily_turns', 'chat_monthly_cap_usd', 'chat_log_level'];
+  'chat_person_hourly_turns', 'chat_daily_turns', 'chat_monthly_cap_usd', 'chat_panel_minutes',
+  'chat_log_level'];
 // Phase 17. Their own list because the Memory section reads them as one block.
 const CHAT_MEMORY_SETTING_KEYS = ['chat_memory_mode', 'chat_memory_consent',
   'chat_memory_retention_days', 'chat_memory_dm_scope', 'chat_memory_staff_view',

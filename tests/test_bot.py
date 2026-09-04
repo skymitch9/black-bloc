@@ -13,7 +13,6 @@ LOGS_GROUPS = {
     "role": "rolemenu",
     "honeypot": "honeypot",
     "modmail": "modmail",
-    "chat": "chat",
     "mod": "mod",
     "raidtrains": "raidtrain",
 }
@@ -168,13 +167,7 @@ async def test_every_feature_group_has_a_logs_command(settings):
         logs = next(child for child in group.commands if child.name == "logs")
         assert [option.name for option in logs.parameters] == ["count", "important_only"]
         assert feature in FEATURES
-    assert {child.name for child in groups["chat"].commands} == {
-        "logs",
-        "settings",
-        "knowledge",
-        "personality",
-        "status",
-    }
+    assert "chat" not in groups
     await bot.close()
 
 

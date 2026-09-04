@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import discord
 import pytest
 
-from black_bloc import actionlog
+from black_bloc import actionlog, chat_panel, knowledge, personas
 from black_bloc import chat as chat_module
 from black_bloc import chat_llm as chat_llm_module
 from black_bloc.actionlog import log_action
@@ -23,7 +23,12 @@ from black_bloc.cogs.content import chat as cog_module
 from black_bloc.cogs.content.chat import Chat, in_a_thread, mentions_bot
 from black_bloc.config import load_settings
 from black_bloc.llm import ANTHROPIC, MODEL, Usage, record
-from black_bloc.settings_store import CHAT_COOLDOWN_SECONDS, SettingsStore
+from black_bloc.personas import list_tropes
+from black_bloc.settings_store import (
+    CHAT_COOLDOWN_SECONDS,
+    DB_UNAVAILABLE,
+    SettingsStore,
+)
 from black_bloc.storage.db import Database
 
 GUILD = 7
@@ -31,6 +36,7 @@ CHANNEL = 111
 LOG_CHANNEL = 222
 USER = 900
 BOT_ID = 55
+ORIGIN = "https://blackbloc.example"
 
 
 class StaffRole:
@@ -179,9 +185,13 @@ class FakeBot:
         self.guilds = [guild]
         self.user = FakeUser()
         self.guard = None
+        self.cogs = {}
 
     def get_channel(self, channel_id):
         return self.guild.get_channel(channel_id)
+
+    def get_cog(self, name):
+        return self.cogs.get(name)
 
 
 @pytest.fixture
@@ -206,7 +216,25 @@ async def bot(db, monkeypatch):
 
 @pytest.fixture
 def cog(bot):
-    return Chat(bot)
+    made = Chat(bot)
+    bot.cogs["Chat"] = made
+    return made
+
+
+@pytest.fixture
+async def off_the_site(db, monkeypatch):
+    """A second bot with no dashboard address at all, so the link has nowhere to go."""
+    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
+    settings = load_settings(
+        _env_file=None, test_mode=True, test_channel_id=CHANNEL, site_origin=""
+    )
+    store = SettingsStore(db, settings)
+    await store.load()
+    await store.set(GUILD, "log_channel_id", LOG_CHANNEL)
+    alone = FakeBot(db, store, settings, FakeGuild())
+    made = Chat(alone)
+    alone.cogs["Chat"] = made
+    return (made, alone)
 
 
 @pytest.fixture
@@ -627,12 +655,46 @@ async def test_the_staff_note_obeys_the_guard(cog, bot, member, caplog):
     assert caplog.records == []
 
 
+class PanelMessage:
+    def __init__(self, message_id, **kwargs):
+        self.id = message_id
+        self.kwargs = kwargs
+
+    async def edit(self, **kwargs):
+        self.kwargs |= kwargs
+
+    @property
+    def embeds(self):
+        one = self.kwargs.get("embed")
+        return [one] if one is not None else list(self.kwargs.get("embeds") or ())
+
+
 class FakeResponse:
     def __init__(self):
         self.messages = []
+        self.modals = []
+        self.deferred = False
+
+    def is_done(self):
+        return self.deferred or bool(self.messages)
+
+    async def defer(self, ephemeral=False):
+        self.deferred = True
 
     async def send_message(self, content=None, ephemeral=False, **kwargs):
         self.messages.append({"content": content, "ephemeral": ephemeral, **kwargs})
+
+    async def send_modal(self, modal):
+        self.modals.append(modal)
+        self.deferred = True
+
+
+class FakeFollowup:
+    def __init__(self, response):
+        self.response = response
+
+    async def send(self, content=None, ephemeral=False, **kwargs):
+        self.response.messages.append({"content": content, "ephemeral": ephemeral, **kwargs})
 
 
 class FakeInteraction:
@@ -643,52 +705,94 @@ class FakeInteraction:
         self.guild_id = bot.guild.id
         self.channel_id = CHANNEL
         self.response = FakeResponse()
+        self.followup = FakeFollowup(self.response)
+        self.edits = []
+
+    async def original_response(self):
+        return PanelMessage(1)
+
+    async def edit_original_response(self, **kwargs):
+        self.edits.append(kwargs)
+        return PanelMessage(9500, **kwargs)
+
+    @property
+    def rendered(self):
+        if self.edits:
+            return self.edits[-1]
+        return self.response.messages[-1] if self.response.messages else {}
+
+    @property
+    def view(self):
+        return self.rendered.get("view")
+
+    @property
+    def embed(self):
+        return self.rendered.get("embed")
 
     @property
     def sent(self):
-        return self.response.messages[-1]["content"]
+        spoken = [
+            one["content"] for one in self.response.messages if one.get("content") is not None
+        ]
+        return spoken[-1] if spoken else None
 
 
 async def _always_staff(interaction):
     return True
 
 
-async def test_chat_logs_shows_the_chat_lines_only(cog, bot, member, db, monkeypatch):
-    monkeypatch.setattr(actionlog, "require_staff", _always_staff)
-    for kind in ("chat.route", "poll.created", "chat.insult"):
-        await log_action(bot, bot.guild, kind, actor=member)
-    interaction = FakeInteraction(bot, member)
-
-    await Chat.chat_logs.callback(cog, interaction)
-
-    said = interaction.response.messages[-1]
-    assert said["ephemeral"] is True
-    assert said["embed"].title == "Chat log"
-    assert "`chat.insult`" in said["embed"].description
-    assert "`chat.route`" in said["embed"].description
-    assert "poll.created" not in said["embed"].description
-    assert said["embed"].footer.text.endswith("/chat.html")
+def staff_is(bot, yes=True):
+    bot.store.is_staff = lambda who: yes
 
 
-async def test_chat_settings_lists_every_chat_key_including_its_log_level(
-    cog, bot, member, monkeypatch
-):
+def labels(view):
+    return [one.label for one in view.children if getattr(one, "label", None)]
+
+
+def placeholders(view):
+    return [
+        one.placeholder for one in view.children if getattr(one, "placeholder", None) is not None
+    ]
+
+
+def button(view, label):
+    return next(one for one in view.children if getattr(one, "label", None) == label)
+
+
+def picker(view, placeholder):
+    return next(one for one in view.children if getattr(one, "placeholder", None) == placeholder)
+
+
+def only_select(view):
+    return next(one for one in view.children if isinstance(one, discord.ui.Select))
+
+
+def options(view, placeholder):
+    return [one.value for one in picker(view, placeholder).options]
+
+
+async def pick_one(interaction, placeholder, value):
+    control = picker(interaction.view, placeholder)
+    control._values = [value]
+    await control.callback(interaction)
+
+
+def fill(modal, **fields):
+    for name, value in fields.items():
+        getattr(modal, name)._value = value
+
+
+async def open_the_panel(cog, bot, who, monkeypatch):
     monkeypatch.setattr(cog_module, "require_staff", _always_staff)
-    await bot.store.set(GUILD, "chat_log_level", "off")
-    interaction = FakeInteraction(bot, member)
-
-    await Chat.chat_settings.callback(cog, interaction)
-
-    said = interaction.sent
-    assert "`chat_mode` — **on**" in said
-    assert "`chat_log_level` — **off**" in said
-    assert "/settings set" in said
+    staff_is(bot)
+    interaction = FakeInteraction(bot, who)
+    await Chat.chat_panel_command.callback(cog, interaction)
+    return interaction
 
 
-class FakeChoice:
-    def __init__(self, value):
-        self.name = value
-        self.value = value
+async def kinds_of(db):
+    cur = await db.conn.execute("SELECT kind FROM action_log ORDER BY id")
+    return [row["kind"] for row in await cur.fetchall()]
 
 
 def answering(said="Pull up a chair, Nia.", tier="simple"):
@@ -782,15 +886,60 @@ async def test_the_same_question_with_no_model_keeps_the_worded_refusal(cog, bot
     assert "no role here called" in message.replies[0]["content"]
 
 
-async def test_status_says_what_is_on_and_that_nothing_is_keyed_yet(
-    cog, bot, member, monkeypatch
-):
+# --- the command ---------------------------------------------------------------------------
+
+
+async def test_the_command_answers_one_ephemeral_panel_and_nothing_else(cog, bot, member,
+                                                                       monkeypatch):
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+
+    assert len(interaction.response.messages) == 1
+    said = interaction.response.messages[0]
+    assert said["ephemeral"] is True
+    assert said["embed"].title == chat_panel.PANEL_TITLE
+    assert said["allowed_mentions"].to_dict() == discord.AllowedMentions.none().to_dict()
+    assert said["view"].message is not None
+
+
+async def test_the_command_refuses_a_dm_in_words(cog, bot, member, monkeypatch):
     monkeypatch.setattr(cog_module, "require_staff", _always_staff)
     interaction = FakeInteraction(bot, member)
+    interaction.guild = None
 
-    await Chat.chat_status.callback(cog, interaction)
+    await Chat.chat_panel_command.callback(cog, interaction)
 
-    said = interaction.sent
+    assert "has to be run in the server itself" in interaction.sent
+
+
+async def test_the_command_refuses_somebody_who_is_not_staff(cog, bot, member):
+    staff_is(bot, False)
+    interaction = FakeInteraction(bot, member)
+
+    await Chat.chat_panel_command.callback(cog, interaction)
+
+    assert "for staff only" in interaction.sent
+    assert interaction.rendered.get("view") is None
+
+
+async def test_the_command_refuses_while_the_database_is_down(cog, bot, member, db, monkeypatch):
+    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+    staff_is(bot)
+    await db.close()
+    interaction = FakeInteraction(bot, member)
+
+    await Chat.chat_panel_command.callback(cog, interaction)
+
+    assert interaction.sent == DB_UNAVAILABLE
+
+
+# --- the root panel ------------------------------------------------------------------------
+
+
+async def test_the_root_says_what_is_on_and_that_nothing_is_keyed_yet(cog, bot, member,
+                                                                     monkeypatch):
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+
+    said = interaction.embed.description
     assert "Conversation model: **off**" in said
     assert said.count("no key set") == 2
     assert "Answers today: **0** of 200" in said
@@ -799,10 +948,9 @@ async def test_status_says_what_is_on_and_that_nothing_is_keyed_yet(
     assert "the daily read has not run yet" in said
 
 
-async def test_status_counts_what_the_ledger_holds_and_says_when_it_is_closed(
+async def test_the_root_counts_what_the_ledger_holds_and_says_when_it_is_closed(
     cog, bot, member, db, monkeypatch
 ):
-    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
     await bot.store.set(GUILD, "chat_monthly_cap_usd", 1)
     for turn in ("t1", "t2"):
         await record(
@@ -815,231 +963,574 @@ async def test_status_counts_what_the_ledger_holds_and_says_when_it_is_closed(
             tier="important",
             usage=Usage(input_tokens=600_000),
         )
-    interaction = FakeInteraction(bot, member)
 
-    await Chat.chat_status.callback(cog, interaction)
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
 
-    said = interaction.sent
+    said = interaction.embed.description
     assert "Answers today: **2**" in said
     assert "This month so far: **$1.20** of $1" in said
     assert "resting until the 1st" in said
 
 
-async def test_status_says_a_tier_is_down_rather_than_calling_it_ready(
-    cog, bot, member, monkeypatch
-):
+async def test_the_root_says_a_tier_is_down_rather_than_calling_it_ready(cog, bot, member,
+                                                                        monkeypatch):
     """poll_degraded honesty: a tier that failed says so instead of reading as fine."""
-    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
     monkeypatch.setattr(type(bot.settings), "simple_tier_configured", property(lambda s: True))
     tier_errors(bot)["simple"] = "unreachable"
-    interaction = FakeInteraction(bot, member)
 
-    await Chat.chat_status.callback(cog, interaction)
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
 
-    assert "last call failed (unreachable)" in interaction.sent
+    assert "last call failed (unreachable)" in interaction.embed.description
 
 
-async def test_status_reports_the_notes_and_a_daily_read_that_did_not_finish(
+async def test_the_root_reports_the_notes_and_a_daily_read_that_did_not_finish(
     cog, bot, member, monkeypatch
 ):
-    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
     bot.guild.text_channels = [open_channel("general", "Chat.")]
     bot.guild.roles = []
     await cog.ingest_once()
     cog.last_ingest_error = "RuntimeError: no"
-    interaction = FakeInteraction(bot, member)
 
-    await Chat.chat_status.callback(cog, interaction)
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
 
-    said = interaction.sent
+    said = interaction.embed.description
     assert "**2** written down" in said
     assert "The last daily read did not finish: RuntimeError: no" in said
 
 
-async def test_status_is_for_administrators_by_default(cog, bot, monkeypatch):
-    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+async def test_the_spend_block_is_hidden_from_a_non_admin_and_the_panel_still_opens(
+    cog, bot, monkeypatch
+):
+    """The key now hides the BLOCK, not the command — the same command carries Knowledge."""
     staffer = FakeMember(bot.guild, user_id=USER + 1, display_name="Uncle", admin=False)
-    interaction = FakeInteraction(bot, staffer)
 
-    await Chat.chat_status.callback(cog, interaction)
+    interaction = await open_the_panel(cog, bot, staffer, monkeypatch)
 
-    said = interaction.sent
-    assert "administrators" in said
-    assert "chat_status_admin_only" in said
+    said = interaction.embed.description
+    assert "administrators" in said and "chat_status_admin_only" in said
     assert "$" not in said
-    assert interaction.response.messages[-1]["ephemeral"] is True
+    assert "Knowledge…" in labels(interaction.view)
+    assert "/chat status" not in said
 
 
-async def test_status_opens_to_staff_when_the_key_is_off(cog, bot, monkeypatch):
-    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+async def test_the_spend_block_appears_once_the_key_is_off(cog, bot, monkeypatch):
     await bot.store.set(GUILD, "chat_status_admin_only", False)
     staffer = FakeMember(bot.guild, user_id=USER + 1, display_name="Uncle", admin=False)
-    interaction = FakeInteraction(bot, staffer)
 
-    await Chat.chat_status.callback(cog, interaction)
+    interaction = await open_the_panel(cog, bot, staffer, monkeypatch)
 
-    assert "Conversation model" in interaction.sent
+    said = interaction.embed.description
+    assert "This month so far" in said
+    assert chat_panel.STATUS_ADMIN_ONLY not in said
 
 
-async def test_the_voice_and_the_pool_are_both_shown(cog, bot, member, monkeypatch):
-    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+async def test_the_root_points_at_memory_with_a_line_and_never_a_button(cog, bot, member,
+                                                                       monkeypatch):
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+
+    assert chat_panel.MEMORY_LINE in interaction.embed.description
+    assert not [one for one in labels(interaction.view) if "memory" in one.lower()]
+
+
+async def test_nothing_the_panel_says_names_a_retired_subcommand(cog, bot, member, db,
+                                                                 monkeypatch):
+    await knowledge.add_section(db, GUILD, "Rules", "Be kind.")
     await cog.seed_guilds()
-    interaction = FakeInteraction(bot, member)
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+    written = [interaction.embed.description]
+    for opener in (cog_module.build_personality, cog_module.build_knowledge):
+        embed, _view = await opener(bot, bot.guild)
+        written.append(embed.description)
+    embed, _view = cog_module.build_settings(bot, bot.guild)
+    written.append(embed.description)
 
-    await Chat.personality_show.callback(cog, interaction)
+    said = "\n".join(written)
 
-    said = interaction.sent
-    assert "The voice is **cookout**" in said
-    assert "**noir** (noir) — on" in said
+    for gone in ("/chat status", "/chat knowledge", "/chat personality", "/chat settings"):
+        assert gone not in said, gone
+
+
+@pytest.mark.parametrize(
+    ("chat_on", "llm_on", "wanted"),
+    [
+        ("on", "off", (chat_panel.ANSWER_OFF, chat_panel.LLM_ON)),
+        ("off", "on", (chat_panel.ANSWER_ON, chat_panel.LLM_OFF)),
+    ],
+)
+async def test_a_mode_button_says_what_it_will_do_and_never_both(
+    cog, bot, member, monkeypatch, chat_on, llm_on, wanted
+):
+    await bot.store.set(GUILD, "chat_mode", chat_on)
+    await bot.store.set(GUILD, "chat_llm_mode", llm_on)
+
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+
+    shown = labels(interaction.view)
+    assert wanted[0] in shown and wanted[1] in shown
+    assert chat_panel.ANSWER_ON not in shown or chat_panel.ANSWER_OFF not in shown
+    assert chat_panel.LLM_ON not in shown or chat_panel.LLM_OFF not in shown
+
+
+async def test_one_click_turns_the_models_on_and_leaves_one_row(cog, bot, member, db,
+                                                                monkeypatch):
+    """Fork F-C3: no confirm — the monthly cap is the brake, and it is on the embed above."""
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+
+    await button(interaction.view, chat_panel.LLM_ON).callback(interaction)
+
+    assert bot.store.get(GUILD, "chat_llm_mode") == "on"
+    assert await kinds_of(db) == ["chat.mode"]
+    assert chat_panel.LLM_OFF in labels(interaction.view)
+
+
+async def test_the_answering_toggle_goes_both_ways(cog, bot, member, db, monkeypatch):
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+
+    await button(interaction.view, chat_panel.ANSWER_OFF).callback(interaction)
+    assert bot.store.get(GUILD, "chat_mode") == "off"
+
+    await button(interaction.view, chat_panel.ANSWER_ON).callback(interaction)
+
+    assert bot.store.get(GUILD, "chat_mode") == "on"
+    assert await kinds_of(db) == ["chat.mode", "chat.mode"]
+
+
+async def test_logs_answers_a_new_message_and_the_panel_stays(cog, bot, member, db, monkeypatch):
+    monkeypatch.setattr(actionlog, "require_staff", _always_staff)
+    for kind in ("chat.route", "poll.created", "chat.insult"):
+        await log_action(bot, bot.guild, kind, actor=member)
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+    view = interaction.view
+
+    await button(view, "Logs").callback(interaction)
+
+    said = interaction.response.messages[-1]
+    assert said["ephemeral"] is True
+    assert said["embed"].title == "Chat log"
+    assert "`chat.insult`" in said["embed"].description
+    assert "poll.created" not in said["embed"].description
+    assert said["embed"].footer.text.endswith("/chat.html")
+    assert view.replaced is False
+
+
+async def test_a_staffer_demoted_while_the_panel_is_open_moves_nothing(cog, bot, member, db,
+                                                                      monkeypatch):
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+    view = interaction.view
+    staff_is(bot, False)
+
+    await button(view, chat_panel.ANSWER_OFF).callback(interaction)
+    await button(view, "Knowledge…").callback(interaction)
+
+    assert "for staff only" in interaction.sent
+    assert bot.store.get(GUILD, "chat_mode") == "on"
+    assert await kinds_of(db) == []
+
+
+async def test_a_click_after_the_database_went_away_says_so_rather_than_crashing(
+    cog, bot, member, db, monkeypatch
+):
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+    view = interaction.view
+    await db.close()
+
+    await button(view, "Refresh").callback(interaction)
+
+    assert interaction.sent == DB_UNAVAILABLE
+
+
+async def test_a_re_render_retires_the_view_it_replaced(cog, bot, member, monkeypatch):
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+    first = interaction.view
+
+    await button(first, "Settings").callback(interaction)
+
+    assert first.replaced is True
+    assert interaction.view is not first
+    assert interaction.view.where == cog_module.SETTINGS_VIEW
+
+
+async def test_a_timeout_greys_every_control_and_says_what_to_run(cog, bot, member, monkeypatch):
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+    view = interaction.view
+    view.message = PanelMessage(3, embed=interaction.embed)
+    view.last_interaction = interaction
+
+    await view.on_timeout()
+
+    assert all(one.disabled for one in view.children)
+    assert interaction.edits[-1]["embeds"][0].footer.text == chat_panel.PANEL_TIMEOUT_FOOTER
+    assert "run /chat again" in chat_panel.PANEL_TIMEOUT_FOOTER
+
+
+async def test_open_on_the_site_is_there_only_when_an_origin_is_configured(
+    cog, bot, member, monkeypatch, off_the_site
+):
+    linked = await open_the_panel(cog, bot, member, monkeypatch)
+
+    assert button(linked.view, cog_module.SITE_BUTTON).url == f"{bot.settings.origin}/chat.html"
+
+    alone_cog, alone_bot = off_the_site
+    alone = await open_the_panel(alone_cog, alone_bot, FakeMember(alone_bot.guild), monkeypatch)
+
+    assert cog_module.SITE_BUTTON not in labels(alone.view)
+
+
+# --- Personality ---------------------------------------------------------------------------
+
+
+async def test_the_voice_and_the_pool_are_both_shown(cog, bot):
+    await cog.seed_guilds()
+
+    embed, view = await cog_module.build_personality(bot, bot.guild)
+
+    assert "The voice is **cookout**" in embed.description
+    assert "**noir** (noir) — on" in embed.description
+    assert placeholders(view) == [
+        cog_module.VOICE_PLACEHOLDER,
+        cog_module.MOOD_OFF_PLACEHOLDER,
+    ]
+
+
+async def test_the_card_says_nothing_is_using_the_voice_while_the_models_are_off(cog, bot):
+    await cog.seed_guilds()
+
+    embed, _view = await cog_module.build_personality(bot, bot.guild)
+
+    assert cog_module.VOICE_OFF in embed.description
 
 
 async def test_the_voice_is_set_through_the_registry_so_the_website_sees_it_too(
     cog, bot, member, db, monkeypatch
 ):
-    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
-    interaction = FakeInteraction(bot, member)
+    await cog.seed_guilds()
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+    await button(interaction.view, "Personality…").callback(interaction)
 
-    await Chat.personality_set.callback(cog, interaction, FakeChoice("pool"))
+    await pick_one(interaction, cog_module.VOICE_PLACEHOLDER, "pool")
 
     assert "The voice is **pool**" in interaction.sent
     assert bot.store.get(GUILD, "chat_personality") == "pool"
-    assert await rows(db, "chat.personality_mode")
+    assert await kinds_of(db) == ["chat.personality_mode"]
 
 
-async def test_a_mood_is_switched_off_and_the_cached_pool_is_dropped(
+async def test_a_mood_moves_between_the_two_selects_and_the_cached_pool_is_dropped(
     cog, bot, member, db, monkeypatch
 ):
-    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
     await cog.seed_guilds()
     bot._chat_tropes = ("stale",)
-    interaction = FakeInteraction(bot, member)
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+    await button(interaction.view, "Personality…").callback(interaction)
 
-    await Chat.personality_mood.callback(cog, interaction, "Flirty", False)
+    await pick_one(interaction, cog_module.MOOD_OFF_PLACEHOLDER, "flirty")
 
     assert "**flirty** is off" in interaction.sent
     assert not hasattr(bot, "_chat_tropes")
-    cur = await db.conn.execute("SELECT enabled FROM personality_tropes WHERE name = 'flirty'")
-    assert (await cur.fetchone())["enabled"] == 0
-    assert await rows(db, "chat.trope_disabled")
+    assert "flirty" in options(interaction.view, cog_module.MOOD_ON_PLACEHOLDER)
+    assert "flirty" not in options(interaction.view, cog_module.MOOD_OFF_PLACEHOLDER)
+
+    await pick_one(interaction, cog_module.MOOD_ON_PLACEHOLDER, "flirty")
+
+    assert "**flirty** is on" in interaction.sent
+    assert await kinds_of(db) == ["chat.trope_disabled", "chat.trope_enabled"]
 
 
-async def test_a_mood_nobody_has_is_refused_in_words(cog, bot, member, db, monkeypatch):
-    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
+async def test_the_mood_that_is_the_voice_is_not_on_the_select_at_all(cog, bot):
+    """Fork F-C4: the panel never offers a move its own function would refuse."""
     await cog.seed_guilds()
-    interaction = FakeInteraction(bot, member)
+    await bot.store.set(GUILD, "chat_personality", "noir")
 
-    await Chat.personality_mood.callback(cog, interaction, "grumpy", False)
+    _embed, view = await cog_module.build_personality(bot, bot.guild)
 
-    assert "is not one of the moods" in interaction.sent
-    assert await rows(db, "chat.trope_disabled") == []
+    assert "noir" not in options(view, cog_module.MOOD_OFF_PLACEHOLDER)
 
 
-async def add_a_note(cog, bot, member, monkeypatch, title="Cookout hours", body="Fridays.",
-                     tag=""):
-    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
-    interaction = FakeInteraction(bot, member)
-    await Chat.knowledge_add.callback(cog, interaction, title, body, tag)
-    return interaction
+async def test_the_card_says_why_a_mood_is_missing_from_the_off_select(cog, bot):
+    await cog.seed_guilds()
+    await bot.store.set(GUILD, "chat_personality", "noir")
+
+    embed, _view = await cog_module.build_personality(bot, bot.guild)
+
+    assert chat_panel.POOL_GUARDS in embed.description
+
+
+async def test_the_off_select_is_not_rendered_when_nothing_may_be_turned_off(cog, bot, db):
+    await cog.seed_guilds()
+    await bot.store.set(GUILD, "chat_personality", "pool")
+    pooled = await list_tropes(db)
+    for row in pooled[:-1]:
+        await personas.set_enabled(db, str(row["name"]), False)
+
+    _embed, view = await cog_module.build_personality(bot, bot.guild)
+
+    assert cog_module.MOOD_OFF_PLACEHOLDER not in placeholders(view)
+    assert cog_module.MOOD_ON_PLACEHOLDER in placeholders(view)
+
+
+# --- Knowledge -----------------------------------------------------------------------------
+
+
+async def test_an_empty_list_offers_only_the_way_to_start_one(cog, bot, member, monkeypatch):
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+
+    await button(interaction.view, "Knowledge…").callback(interaction)
+
+    assert "Nothing has been written down yet" in interaction.embed.description
+    assert placeholders(interaction.view) == []
+    assert "Find…" not in labels(interaction.view)
+    assert "Write one down…" in labels(interaction.view)
 
 
 async def test_a_staff_note_is_saved_logged_and_then_listed(cog, bot, member, db, monkeypatch):
-    interaction = await add_a_note(cog, bot, member, monkeypatch, tag="events")
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+    await button(interaction.view, "Knowledge…").callback(interaction)
+
+    await button(interaction.view, "Write one down…").callback(interaction)
+    modal = interaction.response.modals[-1]
+    fill(modal, note_title="Cookout hours", body="Fridays.", tag="events")
+    await modal.on_submit(interaction)
 
     assert "Saved as note" in interaction.sent
-    assert interaction.response.messages[-1]["ephemeral"] is True
-    assert [row["kind"] for row in await rows(db, "chat.knowledge_added")] == [
-        "chat.knowledge_added"
-    ]
-
-    listing = FakeInteraction(bot, member)
-    await Chat.knowledge_list.callback(cog, listing, "")
-    assert "Cookout hours" in listing.sent
-    assert "events" in listing.sent
+    assert await kinds_of(db) == ["chat.knowledge_added"]
+    assert "Cookout hours" in interaction.embed.description
+    assert "events" in interaction.embed.description
+    assert cog_module.NOTE_PLACEHOLDER in placeholders(interaction.view)
 
 
 async def test_a_note_that_is_refused_says_why_and_saves_nothing(cog, bot, member, db,
                                                                  monkeypatch):
-    interaction = await add_a_note(cog, bot, member, monkeypatch, title="   ", body="Fridays.")
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+    await button(interaction.view, "Knowledge…").callback(interaction)
+    await button(interaction.view, "Write one down…").callback(interaction)
+
+    modal = interaction.response.modals[-1]
+    fill(modal, note_title="   ", body="Fridays.", tag="")
+    await modal.on_submit(interaction)
 
     assert "needs a title" in interaction.sent
-    cur = await db.conn.execute("SELECT COUNT(*) AS n FROM knowledge_sections")
-    assert (await cur.fetchone())["n"] == 0
+    assert await knowledge.list_sections(db, GUILD) == []
+    assert await kinds_of(db) == []
 
 
-async def test_listing_with_words_searches_rather_than_paging(cog, bot, member, monkeypatch):
-    await add_a_note(cog, bot, member, monkeypatch, title="Cookout hours", body="Fridays.")
-    await add_a_note(cog, bot, member, monkeypatch, title="Rules", body="Be kind.")
+async def test_find_filters_the_list_and_leaves_no_row_behind_it(cog, bot, member, db,
+                                                                 monkeypatch):
+    await knowledge.add_section(db, GUILD, "Cookout hours", "Fridays.")
+    await knowledge.add_section(db, GUILD, "Rules", "Be kind.")
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+    await button(interaction.view, "Knowledge…").callback(interaction)
 
-    hit = FakeInteraction(bot, member)
-    await Chat.knowledge_list.callback(cog, hit, "cookout")
-    assert "Cookout hours" in hit.sent and "Rules" not in hit.sent
+    await button(interaction.view, "Find…").callback(interaction)
+    modal = interaction.response.modals[-1]
+    modal.note._value = "cookout"
+    await modal.on_submit(interaction)
 
-    miss = FakeInteraction(bot, member)
-    await Chat.knowledge_list.callback(cog, miss, "parliament")
-    assert "Nothing written down matches" in miss.sent
+    assert "Cookout hours" in interaction.embed.description
+    assert "Rules" not in interaction.embed.description
+    assert await kinds_of(db) == []
+
+    await button(interaction.view, "Find…").callback(interaction)
+    miss = interaction.response.modals[-1]
+    miss.note._value = "parliament"
+    await miss.on_submit(interaction)
+
+    assert "Nothing written down matches" in interaction.embed.description
 
 
-async def test_an_empty_list_says_how_to_start_one(cog, bot, member, monkeypatch):
-    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
-    interaction = FakeInteraction(bot, member)
-    await Chat.knowledge_list.callback(cog, interaction, "")
-    assert "Nothing has been written down yet" in interaction.sent
+async def test_back_from_a_card_returns_to_the_list_you_were_looking_at(cog, bot, member, db,
+                                                                       monkeypatch):
+    """Find… is the way past the 25-cap, so opening a note must not throw the filter away."""
+    made = await knowledge.add_section(db, GUILD, "Cookout hours", "Fridays.")
+    await knowledge.add_section(db, GUILD, "Rules", "Be kind.")
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+    await button(interaction.view, "Knowledge…").callback(interaction)
+    await button(interaction.view, "Find…").callback(interaction)
+    modal = interaction.response.modals[-1]
+    modal.note._value = "cookout"
+    await modal.on_submit(interaction)
+
+    await pick_one(interaction, cog_module.NOTE_PLACEHOLDER, str(made))
+    await button(interaction.view, "Back").callback(interaction)
+
+    assert "Cookout hours" in interaction.embed.description
+    assert "Rules" not in interaction.embed.description
 
 
-async def test_a_note_is_removed_by_the_number_the_list_shows(cog, bot, member, db, monkeypatch):
-    await add_a_note(cog, bot, member, monkeypatch)
-    cur = await db.conn.execute("SELECT id FROM knowledge_sections")
-    note_id = (await cur.fetchone())["id"]
+async def test_picking_a_note_shows_it_whole_with_both_moves(cog, bot, member, db, monkeypatch):
+    made = await knowledge.add_section(db, GUILD, "Cookout hours", "Fridays.", tag="events")
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+    await button(interaction.view, "Knowledge…").callback(interaction)
 
-    interaction = FakeInteraction(bot, member)
-    await Chat.knowledge_remove.callback(cog, interaction, note_id)
+    await pick_one(interaction, cog_module.NOTE_PLACEHOLDER, str(made))
+
+    assert "Fridays." in interaction.embed.description
+    assert labels(interaction.view) == ["Remove", "Edit…", "Back"]
+
+
+async def test_a_server_written_note_shows_neither_move_and_says_why(cog, bot, member, db,
+                                                                    monkeypatch):
+    """One writer per row: tomorrow's ingest would put an edit straight back."""
+    made = await knowledge.add_section(
+        db, GUILD, "#general", "Chat here.", tag="channel", source=knowledge.SERVER
+    )
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+    await button(interaction.view, "Knowledge…").callback(interaction)
+
+    await pick_one(interaction, cog_module.NOTE_PLACEHOLDER, str(made))
+
+    assert labels(interaction.view) == ["Back"]
+    assert "overwritten by tomorrow" in interaction.embed.description
+
+
+async def test_a_note_is_removed_only_after_a_yes(cog, bot, member, db, monkeypatch):
+    made = await knowledge.add_section(db, GUILD, "Cookout hours", "Fridays.")
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+    await button(interaction.view, "Knowledge…").callback(interaction)
+    await pick_one(interaction, cog_module.NOTE_PLACEHOLDER, str(made))
+
+    await button(interaction.view, "Remove").callback(interaction)
+    assert chat_panel.KEEP_IT in labels(interaction.view)
+    assert await knowledge.get_section(db, made) is not None
+
+    await button(interaction.view, chat_panel.REMOVE_YES).callback(interaction)
 
     assert "is gone" in interaction.sent
-    assert await rows(db, "chat.knowledge_removed")
-    cur = await db.conn.execute("SELECT COUNT(*) AS n FROM knowledge_sections")
-    assert (await cur.fetchone())["n"] == 0
+    assert await kinds_of(db) == ["chat.knowledge_removed"]
+    assert await knowledge.get_section(db, made) is None
 
 
-async def test_a_note_from_another_server_is_not_reachable_by_its_number(cog, bot, member,
-                                                                        db, monkeypatch):
-    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
-    await db.conn.execute(
-        "INSERT INTO knowledge_sections(id, guild_id, title, body, source, tag, updated_at) "
-        "VALUES (5, 999, 'Elsewhere', 'Not yours.', 'staff', '', 'now')"
-    )
-    await db.conn.commit()
+async def test_keeping_it_puts_the_card_back_untouched(cog, bot, member, db, monkeypatch):
+    made = await knowledge.add_section(db, GUILD, "Cookout hours", "Fridays.")
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+    await button(interaction.view, "Knowledge…").callback(interaction)
+    await pick_one(interaction, cog_module.NOTE_PLACEHOLDER, str(made))
+    await button(interaction.view, "Remove").callback(interaction)
 
-    interaction = FakeInteraction(bot, member)
-    await Chat.knowledge_remove.callback(cog, interaction, 5)
+    await button(interaction.view, chat_panel.KEEP_IT).callback(interaction)
 
-    assert "no note" in interaction.sent
-    cur = await db.conn.execute("SELECT COUNT(*) AS n FROM knowledge_sections")
-    assert (await cur.fetchone())["n"] == 1
+    assert labels(interaction.view) == ["Remove", "Edit…", "Back"]
+    assert await knowledge.get_section(db, made) is not None
 
 
-async def test_a_server_written_note_refuses_to_be_removed_by_hand(cog, bot, member, db,
-                                                                   monkeypatch):
-    """One writer per row: tomorrow's ingest would put it straight back."""
-    monkeypatch.setattr(cog_module, "require_staff", _always_staff)
-    await db.conn.execute(
-        "INSERT INTO knowledge_sections(id, guild_id, title, body, source, tag, updated_at) "
-        "VALUES (6, ?, '#general', 'Chat here.', 'server', 'channel', 'now')",
-        (GUILD,),
-    )
-    await db.conn.commit()
+async def test_a_note_is_edited_in_place_keeping_its_number(cog, bot, member, db, monkeypatch):
+    """Fork F-C2: one prefilled modal, the same id, one `chat.knowledge_edited` row."""
+    made = await knowledge.add_section(db, GUILD, "Cookout hours", "Fridays.", tag="events")
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+    await button(interaction.view, "Knowledge…").callback(interaction)
+    await pick_one(interaction, cog_module.NOTE_PLACEHOLDER, str(made))
 
-    interaction = FakeInteraction(bot, member)
-    await Chat.knowledge_remove.callback(cog, interaction, 6)
+    await button(interaction.view, "Edit…").callback(interaction)
+    modal = interaction.response.modals[-1]
+    assert str(modal.note_title.default) == "Cookout hours"
+    assert str(modal.body.default) == "Fridays."
+    assert str(modal.tag.default) == "events"
+    fill(modal, note_title="Cookout hours", body="Saturdays.", tag="events")
+    await modal.on_submit(interaction)
 
-    assert "overwritten by tomorrow" in interaction.sent
-    cur = await db.conn.execute("SELECT COUNT(*) AS n FROM knowledge_sections")
-    assert (await cur.fetchone())["n"] == 1
+    assert await kinds_of(db) == ["chat.knowledge_edited"]
+    row = await knowledge.get_section(db, made)
+    assert str(row["body"]) == "Saturdays." and int(row["id"]) == made
+    assert "Saturdays." in interaction.embed.description
+
+
+async def test_a_note_from_another_server_is_not_reachable_by_its_number(cog, bot, member, db):
+    elsewhere = await knowledge.add_section(db, 999, "Elsewhere", "Not yours.")
+
+    outcome = await chat_panel.remove_note(bot, bot.guild, member, elsewhere)
+
+    assert not outcome.ok and "no note" in outcome.message
+    assert await knowledge.get_section(db, elsewhere) is not None
+
+
+async def test_past_twenty_five_notes_the_picker_says_how_many_and_where_the_rest_are(
+    cog, bot, db
+):
+    for one in range(26):
+        await knowledge.add_section(db, GUILD, f"Note {one}", "Words.")
+
+    _embed, view = await cog_module.build_knowledge(bot, bot.guild)
+
+    control = only_select(view)
+    assert len(control.options) == 25
+    assert "25 of 26" in control.placeholder
+    assert "Knowledge section" in control.placeholder
+
+
+# --- Settings ------------------------------------------------------------------------------
+
+
+async def test_the_settings_card_lists_every_chat_key_and_names_memorys_home(cog, bot, member,
+                                                                            monkeypatch):
+    await bot.store.set(GUILD, "chat_log_level", "off")
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+
+    await button(interaction.view, "Settings").callback(interaction)
+
+    said = interaction.embed.description
+    assert "`chat_mode` — **on**" in said
+    assert "`chat_log_level` — **off**" in said
+    assert "`chat_panel_minutes` — **10**" in said
+    assert "`chat_memory_mode`" in said
+    assert "/memory" in said
+    assert "/settings set-value" in said
+
+
+async def test_the_limits_modal_arrives_prefilled_and_saves_all_five_at_once(
+    cog, bot, member, db, monkeypatch
+):
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+    await button(interaction.view, "Settings").callback(interaction)
+
+    await button(interaction.view, "Limits…").callback(interaction)
+    modal = interaction.response.modals[-1]
+    assert str(modal.cap.default) == "20" and str(modal.stays.default) == "10"
+    fill(modal, cooldown="9", hourly="11", daily="150", cap="25", stays="12")
+    await modal.on_submit(interaction)
+
+    assert bot.store.get(GUILD, "chat_cooldown_seconds") == 9
+    assert bot.store.get(GUILD, "chat_monthly_cap_usd") == 25
+    assert bot.store.get(GUILD, "chat_panel_minutes") == 12
+    assert await kinds_of(db) == ["chat.settings"]
+    assert "`chat_daily_turns` — **150**" in interaction.embed.description
+
+
+async def test_one_bad_number_refuses_the_whole_modal_and_saves_nothing(
+    cog, bot, member, db, monkeypatch
+):
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+    await button(interaction.view, "Settings").callback(interaction)
+    await button(interaction.view, "Limits…").callback(interaction)
+
+    modal = interaction.response.modals[-1]
+    fill(modal, cooldown="9", hourly="11", daily="not a number", cap="25", stays="12")
+    await modal.on_submit(interaction)
+
+    assert "chat_daily_turns" in interaction.sent
+    assert bot.store.get(GUILD, "chat_cooldown_seconds") != 9
+    assert await kinds_of(db) == []
+
+
+async def test_a_number_outside_its_range_names_the_field_and_the_range(
+    cog, bot, member, db, monkeypatch
+):
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+    await button(interaction.view, "Settings").callback(interaction)
+    await button(interaction.view, "Limits…").callback(interaction)
+
+    modal = interaction.response.modals[-1]
+    fill(modal, cooldown="9", hourly="11", daily="150", cap="999999", stays="12")
+    await modal.on_submit(interaction)
+
+    assert "chat_monthly_cap_usd" in interaction.sent
+    assert "cannot be more than" in interaction.sent
+    assert bot.store.get(GUILD, "chat_monthly_cap_usd") == 20
+    assert await kinds_of(db) == []
+
 
 
 async def test_the_daily_ingest_writes_the_server_rows_and_leaves_staff_rows_alone(
     cog, bot, member, db, monkeypatch
 ):
-    await add_a_note(cog, bot, member, monkeypatch, title="Rules", body="Be kind.")
+    await knowledge.add_section(db, GUILD, "Rules", "Be kind.")
     bot.guild.text_channels = [open_channel("general", "Chat about anything.")]
     bot.guild.roles = [SimpleNamespace(name="Member")]
 
@@ -1125,7 +1616,7 @@ async def test_the_daily_ingest_writes_out_who_holds_a_small_role(cog, bot, db):
 async def test_a_hand_written_note_survives_the_role_holder_ingest(
     cog, bot, member, db, monkeypatch
 ):
-    await add_a_note(cog, bot, member, monkeypatch, title="Rules", body="Be kind.")
+    await knowledge.add_section(db, GUILD, "Rules", "Be kind.")
     bot.guild.text_channels = []
     bot.guild.roles = [
         SimpleNamespace(

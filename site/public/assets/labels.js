@@ -51,6 +51,7 @@ export const LABELS = {
   voice_panel_minutes: 'How long the /voice panel stays live',
   automod_panel_minutes: 'How long the /automod panel stays live',
   automod_arm_needs_confirm: 'Whether arming automod asks twice',
+  chat_panel_minutes: 'How long the /chat panel stays live',
 
   tempvoice_mode: 'Whether people can make their own voice rooms',
   tempvoice_creator_ids: 'Which channels people join to get a room',
@@ -128,7 +129,7 @@ export const LABELS = {
   chat_greeting_reaction: 'Whether a bare hello gets a wave',
   chat_reply_in_threads: 'Whether the bot answers inside threads',
   chat_route_ping_staff: 'Whether staff are told when a mod is asked for',
-  chat_status_admin_only: 'Whether /chat status is for administrators only',
+  chat_status_admin_only: 'Whether the spend block on /chat is for administrators only',
   chat_log_level: 'How much of chat is repeated into Discord',
   chat_memory_mode: 'Whether the bot remembers people between conversations',
   chat_memory_consent: 'Whether memory is on for everybody, or only for those who ask',
