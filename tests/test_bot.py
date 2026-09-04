@@ -9,7 +9,6 @@ from black_bloc.logkinds import FEATURES
 TOP_LEVEL_MAX = 100
 CHILDREN_MAX = 25
 LOGS_GROUPS = {
-    "voice": "tempvoice",
     "rolemenu": "rolemenu",
     "role": "rolemenu",
     "automod": "automod",
@@ -42,7 +41,6 @@ STAFF_COMMANDS = {
     "rolemenu",
     "settings",
     "snippet",
-    "tempvoice",
     "timeout",
     "unban",
     "untimeout",
@@ -189,7 +187,7 @@ async def test_the_command_tree_stays_inside_discords_limits(settings):
 
     top = bot.tree.get_commands()
     assert len(top) <= TOP_LEVEL_MAX
-    assert len(top) == 39
+    assert len(top) == 38
     for command in top:
         if isinstance(command, app_commands.Group):
             assert len(command.commands) <= CHILDREN_MAX, command.name

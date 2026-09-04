@@ -10,23 +10,27 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from ...actionlog import (
-    LOGS_DEFAULT,
-    LOGS_MAX,
-    LOGS_MIN,
-    log_action,
-    send_logs,
-)
+from ... import tempvoice as helpers
+from ...actionlog import log_action, send_logs
 from ...command_errors import AnswersErrors
-from ...command_visibility import STAFF_ONLY
 from ...golive import now_iso, parse_ts
 from ...logkinds import VIA_DISCORD, kind_via
+from ...panels import (
+    SELECT_OPTION_LIMIT,
+    Panel,
+    answer,
+    capped_placeholder,
+    db_ready,
+    db_up,
+    option_label,
+    retire,
+    still_staff,
+)
 from ...settings_store import (
     DB_UNAVAILABLE,
     GUILD_ONLY,
     TEMPVOICE_MODES,
     TEMPVOICE_NAME_TEMPLATE,
-    require_staff,
 )
 
 log = logging.getLogger(__name__)
@@ -43,35 +47,8 @@ MEMBER_MEMORY_MAX = 50
 PERMITTED = "permitted"
 BANNED = "banned"
 FORGOTTEN = "forgotten"
-AUTO_REGION = "auto"
-VOICE_REGIONS = (
-    AUTO_REGION,
-    "brazil",
-    "bucharest",
-    "buenos-aires",
-    "dubai",
-    "finland",
-    "frankfurt",
-    "hongkong",
-    "india",
-    "japan",
-    "madrid",
-    "milan",
-    "rotterdam",
-    "russia",
-    "santiago",
-    "singapore",
-    "south-korea",
-    "southafrica",
-    "stockholm",
-    "sydney",
-    "tel-aviv",
-    "us-central",
-    "us-east",
-    "us-south",
-    "us-west",
-    "warsaw",
-)
+AUTO_REGION = helpers.AUTO_REGION
+VOICE_REGIONS = helpers.VOICE_REGIONS
 
 NOT_A_TEMP_CHANNEL = (
     "This panel is not attached to a temporary voice channel any more, so nothing was changed. "
@@ -126,7 +103,7 @@ NO_OWNED_CHANNEL = (
 )
 CLAIM_NEEDS_A_CHANNEL = (
     "You are not in one of Black Bloc's temporary voice channels, so there is nothing to claim. "
-    "Join the one you want, then run `/voice claim` again."
+    "Join the one you want, then press **Refresh**."
 )
 CANNOT_SET_REGION = (
     "Discord would not use **{region}** as this channel's voice region, so nothing changed. Pick "
@@ -135,12 +112,7 @@ CANNOT_SET_REGION = (
 PREFS_CLEARED = (
     "Forgotten. Your next temporary channel starts from the server's defaults — name, limit, "
     "lock, hidden, bitrate, region, and everyone you had let in or shut out by name. The channel "
-    "you are in now is not changed; `/voice info` shows it."
-)
-NOTHING_REMEMBERED = (
-    "There was nothing to forget — Black Bloc keeps no voice settings for you yet. It starts "
-    "remembering the first time you rename, cap, lock, hide, permit or ban in one of your "
-    "channels."
+    "you are in now is not changed; **Refresh** shows it."
 )
 REPAIRED = (
     "Black Bloc repaired the join-to-create channel it already had — {where} — instead of making "
@@ -153,12 +125,12 @@ ADOPTED = (
 )
 EXTRA_LOBBIES = (
     " There are other join-to-create channels too — {extras} — so drop the ones you do not want "
-    "with `/tempvoice forget <id>`."
+    "with **Forget a lobby…** on `/voice`."
 )
 STRAY_LOBBIES = (
     "**not kept track of** — {extras}. Each of those is called **{name}** and sits where the "
-    "join-to-create channel belongs, but Black Bloc does not treat it as one. Run `/tempvoice "
-    "setup` to take it over and repair it, or delete the channel."
+    "join-to-create channel belongs, but Black Bloc does not treat it as one. Press **Setup** on "
+    "`/voice` to take it over and repair it, or delete the channel."
 )
 CANNOT_REPAIR = (
     "Discord refused to change {where}, so nothing was repaired. Black Bloc needs the Manage "
@@ -172,21 +144,89 @@ OUTSIDE_TEST_CATEGORY = (
 )
 NOT_A_LOBBY = (
     "**{channel_id}** is not one of Black Bloc's join-to-create channels, so nothing was "
-    "forgotten. `/tempvoice status` lists the ones it knows about."
+    "forgotten. `/voice` lists the ones it knows about."
 )
 OUTSIDE_TEST_ROOM = (
     "**{name}** sits outside the test channel's category, so test mode stopped that change and "
     "nothing happened. Black Bloc only edits temporary channels made from a lobby in that "
     "category while test mode is on — turn test mode off to reach the rest."
 )
-NOT_AN_ID = (
-    "**{given}** is not a channel id, so nothing was forgotten. Right-click the channel and "
-    "choose Copy Channel ID, or read the id out of `/tempvoice status`."
-)
 LOBBY_FORGOTTEN = (
     "Black Bloc has forgotten **{channel_id}** — joining it no longer makes anybody a temporary "
     "channel."
 )
+MODE_SET = "Join-to-create is now **{mode}**."
+NOT_A_MODE = (
+    "**{given}** is not a setting Black Bloc knows for join-to-create, so nothing was changed. "
+    "It is either **off** or **on**."
+)
+HANDED_OVER_DM = (
+    "An Auntie/Uncle handed the temporary voice channel **{channel}** to **{who}**, so it is not "
+    "yours any more. Join the join-to-create channel to make yourself another one."
+)
+LOST_THE_CHANNEL = (
+    "That temporary voice channel is not yours any more, so nothing was changed. The panel above "
+    "has been brought up to date."
+)
+NO_SUCH_MEMBER = (
+    "**{member_id}** is not somebody Black Bloc can see in this server any more, so nothing was "
+    "changed. Press **Refresh** and pick again."
+)
+NOT_A_LIMIT = (
+    "That is not a number between 0 and 99, so nothing was changed. Type a whole number — 0 lets "
+    "anyone in."
+)
+NOT_A_BITRATE = (
+    "**{given}** is not a whole number of kbps, so nothing was changed. Type a number from "
+    "**8** to **96** — higher needs a higher server boost level."
+)
+PEOPLE_INTRO = (
+    "Who may be in your channel. Letting somebody in or shutting them out is remembered for your "
+    "next channel too; moving somebody out is just for now."
+)
+REGION_INTRO = (
+    "Which of Discord's servers carries the audio. **Automatic** lets Discord pick the closest "
+    "one, which is usually what you want."
+)
+HAND_OVER_INTRO = (
+    "Pick who should own **{channel}**. They get the controls and you do not — you keep whatever "
+    "Black Bloc remembers for your own next channel."
+)
+LOBBY_INTRO = (
+    "The channels Black Bloc treats as join-to-create. Forgetting one leaves the Discord channel "
+    "alone; it just stops making anybody a temporary channel."
+)
+LOBBY_GONE = "not on the server any more"
+CHANNEL_LEFT = "gone from the server"
+SITE_BUTTON = "Open on the site"
+CAPPED_HERE = "{shown} of {total} in the channel"
+CAPPED_UNDO = "{shown} of {total} — the rest are on the site"
+UNDO_LABELS = {
+    "unpermit": "{name} — take their way in back",
+    "unban": "{name} — let them back in",
+}
+DESCRIPTION_LIMIT = 4000
+
+ROOT = "root"
+PEOPLE_VIEW = "people"
+REGION_VIEW = "region"
+HAND_OVER_VIEW = "hand_over"
+LOBBY_VIEW = "lobbies"
+STAFF_CARD_VIEW = "staff_card"
+CONFIRM_VIEW = "confirm"
+
+STYLES = {
+    "primary": discord.ButtonStyle.primary,
+    "secondary": discord.ButtonStyle.secondary,
+    "success": discord.ButtonStyle.success,
+    "danger": discord.ButtonStyle.danger,
+}
+
+
+def member_label(guild: Any, user_id: Any) -> str:
+    member = guild.get_member(int(user_id)) if guild is not None else None
+    name = getattr(member, "display_name", None) or str(user_id)
+    return str(name)[:SELECT_OPTION_LIMIT]
 
 
 async def forget_creator(
@@ -622,7 +662,7 @@ def where_sentence(where: str) -> str:
     if where == "test_category":
         return (
             "Test mode is on, so it went in the test channel's category — join it there to "
-            "try it. Run `/tempvoice setup` again once test mode is off and it will go "
+            "try it. Press **Setup** on `/voice` again once test mode is off and it will go "
             "directly above the AFK channel."
         )
     if where == "above_afk":
@@ -867,17 +907,6 @@ async def panel_log(who: Any, kind: str, channel_id: Any, **details: Any) -> Non
     )
 
 
-async def answer(interaction: discord.Interaction, text: str) -> None:
-    if interaction.response.is_done():
-        await interaction.followup.send(
-            text, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-        )
-        return
-    await interaction.response.send_message(
-        text, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-    )
-
-
 def rate_limited(exc: Any) -> bool:
     return isinstance(exc, discord.RateLimited) or getattr(exc, "status", None) == 429
 
@@ -1061,11 +1090,6 @@ def clamp_bitrate(kbps: Any, ceiling: Any) -> int:
     return min(wanted, max(top, MIN_BITRATE * 1000))
 
 
-def region_choices(current: str) -> list[str]:
-    text = (current or "").strip().lower()
-    return [name for name in VOICE_REGIONS if text in name][:25]
-
-
 def member_lists(overwrites: Any, owner_id: Any, role_ids: Any) -> tuple[list[int], list[int]]:
     """Who this channel lets in by name and who it shuts out by name, from its own overwrites."""
     permitted: list[int] = []
@@ -1137,7 +1161,7 @@ def remembered_lines(prefs: Any) -> list[str]:
         f"• region — {'automatic' if not region or region == AUTO_REGION else region}",
         f"• let in by name — {mentions(id_list(pref(prefs, 'permitted_ids')))}",
         f"• kept out by name — {mentions(id_list(pref(prefs, 'banned_ids')))}",
-        "`/voice reset` forgets all of it.",
+        "**Forget my settings** drops all of it.",
     ]
 
 
@@ -1208,14 +1232,893 @@ async def do_claim(interaction: discord.Interaction, channel: Any, row: Any) -> 
     return "This channel is yours now."
 
 
+async def set_mode(who: Any, value: Any) -> Said:
+    """Join-to-create off or on, from whichever door asked — one write, one log row."""
+    wanted = str(value or "").strip().lower()
+    if wanted not in TEMPVOICE_MODES:
+        return Said(NOT_A_MODE.format(given=str(value)[:40]), ok=False)
+    via = getattr(who, "via", VIA_DISCORD)
+    await who.client.store.set(who.guild.id, "tempvoice_mode", wanted, by=who.user.id)
+    await log_action(
+        who.client,
+        who.guild,
+        kind_via("tempvoice.mode", via),
+        actor=who.user,
+        details={"mode": wanted, "via": via},
+    )
+    return Said(MODE_SET.format(mode=wanted))
+
+
+async def reset_prefs(who: Any) -> Said:
+    via = getattr(who, "via", VIA_DISCORD)
+    if await clear_prefs(who.client.db, who.user.id):
+        await log_action(
+            who.client,
+            who.guild,
+            kind_via("tempvoice.prefs_reset", via),
+            actor=who.user,
+            target=who.user,
+            details={"via": via},
+        )
+    return Said(PREFS_CLEARED)
+
+
+async def staff_hand_over(who: Any, channel: Any, row: Any, target: Any) -> str:
+    """Staff get the final say on a stored owner, and the person who loses it is told."""
+    displaced = int(row["owner_id"])
+    said = await do_transfer(who, channel, row, target)
+    if said in (NOT_A_TEMP_CHANNEL, CLAIM_LOST) or displaced == int(target.id):
+        return said
+    member = channel.guild.get_member(displaced)
+    if member is not None:
+        try:
+            await member.send(
+                HANDED_OVER_DM.format(
+                    channel=getattr(channel, "name", ""), who=target.display_name
+                ),
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+        except discord.HTTPException as exc:
+            log.info("temp voice: could not DM %s about the hand over: %s", displaced, exc)
+    return said
+
+
+async def voice_gate(interaction: discord.Interaction) -> bool:
+    """The half of the gate that has to refuse outright: a guild, and a database to read."""
+    if interaction.guild is None:
+        await answer(interaction, GUILD_ONLY)
+        return False
+    if not interaction.client.db.is_connected:
+        log.warning("temp voice: refused the panel — the database is not connected")
+        await answer(interaction, DB_UNAVAILABLE)
+        return False
+    return True
+
+
+def has_voice_role(bot: Any, guild: Any, actor: Any) -> bool:
+    return may_use_voice(bot.store.get(guild.id, "tempvoice_allowed_role_id"), actor)
+
+
+def may_open(bot: Any, guild: Any, actor: Any) -> bool:
+    """Staff never fall outside their own server's voice controls, allowed role or not."""
+    return bot.store.is_staff(actor) or has_voice_role(bot, guild, actor)
+
+
+def stray_lobbies(bot: Any, guild: Any) -> list[Any]:
+    store = bot.store
+    return lobbies_by_name(
+        creator_spot(bot, guild)[0],
+        store.get(guild.id, "tempvoice_creator_name"),
+        store.get(guild.id, "tempvoice_creator_ids") or [],
+    )
+
+
+def lobby_choices(bot: Any, guild: Any) -> list[tuple[int, str]]:
+    """Only the ids `forget_creator` can actually drop; the strays are named in the embed."""
+    found: list[tuple[int, str]] = []
+    for channel_id in bot.store.get(guild.id, "tempvoice_creator_ids") or []:
+        channel = guild.get_channel(int(channel_id))
+        found.append((int(channel_id), getattr(channel, "name", None) or LOBBY_GONE))
+    return found
+
+
+def voice_health(bot: Any) -> tuple[Any, Any]:
+    finder = getattr(bot, "get_cog", None)
+    cog = finder("TempVoice") if finder is not None else None
+    return (getattr(cog, "last_ok_at", None), getattr(cog, "last_error", None))
+
+
+def status_lines(bot: Any, guild: Any, rows: Any) -> list[str]:
+    """The staff block — what `/tempvoice status` printed, written out rather than hidden."""
+    store = bot.store
+    creators = store.get(guild.id, "tempvoice_creator_ids") or []
+    role_id = store.get(guild.id, "tempvoice_allowed_role_id")
+    wanted = store.get(guild.id, "tempvoice_creator_name")
+    last_ok, last_error = voice_health(bot)
+    lines = [
+        f"**mode** — {store.get(guild.id, 'tempvoice_mode')}",
+        "**join-to-create** — "
+        + (", ".join(f"<#{one}>" for one in creators) if creators else "not set up yet"),
+        f"**name template** — `{store.get(guild.id, 'tempvoice_name_template')}`",
+        f"**join-to-create name** — `{wanted}`",
+        f"**allowed role** — {f'<@&{role_id}>' if role_id else 'anyone'}",
+        f"**channels open now** — {len(list(rows or ()))}",
+        f"**last reconcile** — {last_ok or 'not yet'}",
+        f"**last error** — {last_error or 'none'}",
+    ]
+    unknown = stray_lobbies(bot, guild)
+    if unknown:
+        lines.append(
+            STRAY_LOBBIES.format(
+                extras=", ".join(f"<#{channel.id}>" for channel in unknown), name=wanted
+            )
+        )
+    return lines
+
+
+def role_ids_of(guild: Any) -> list[int]:
+    found = [getattr(role, "id", 0) for role in getattr(guild, "roles", ())]
+    found.append(getattr(getattr(guild, "default_role", None), "id", 0))
+    return found
+
+
+def clamped(lines: list[str]) -> str:
+    found: list[str] = []
+    spent = 0
+    for line in lines:
+        if spent + len(line) + 1 > DESCRIPTION_LIMIT:
+            break
+        found.append(line)
+        spent += len(line) + 1
+    return "\n".join(found)
+
+
+def minutes_for(bot: Any, guild_id: int) -> int:
+    return helpers.panel_minutes(bot.store, guild_id)
+
+
+def add_site_button(view: Any, bot: Any, row: int) -> None:
+    """The dashboard page is behind the staff gate, so only staff are ever offered it."""
+    url = helpers.site_page_url(getattr(getattr(bot, "settings", None), "origin", ""))
+    if not url:
+        return
+    view.add_item(
+        discord.ui.Button(style=discord.ButtonStyle.link, label=SITE_BUTTON, url=url, row=row)
+    )
+
+
+class Facts(NamedTuple):
+    state: str
+    row: Any
+    channel: Any
+    prefs: Any
+    rows: list[Any]
+    staff: bool
+    has_role: bool
+
+
+async def panel_facts(bot: Any, guild: Any, actor: Any) -> Facts:
+    """Everything the panel renders from, re-read at every click — nothing is remembered."""
+    rows = await rows_for_guild(bot.db, guild.id)
+    here = getattr(getattr(actor, "voice", None), "channel", None)
+    here_id = getattr(here, "id", None)
+    state = helpers.panel_state(
+        rows,
+        actor.id,
+        here_id,
+        connected_ids(here) if here is not None else (),
+        allowed=may_open(bot, guild, actor),
+    )
+    row = None
+    if state in (helpers.OWNER, helpers.ORPHAN, helpers.GUEST):
+        row = pick_row(rows, actor.id, here_id, owner_only=state == helpers.OWNER)
+    channel = guild.get_channel(int(row["channel_id"])) if row is not None else None
+    if channel is None and state != helpers.BLOCKED:
+        state, row = helpers.NONE, None
+    return Facts(
+        state,
+        row,
+        channel,
+        await get_prefs(bot.db, actor.id),
+        rows,
+        bot.store.is_staff(actor),
+        has_voice_role(bot, guild, actor),
+    )
+
+
+def panel_lines(bot: Any, guild: Any, facts: Facts) -> list[str]:
+    store = bot.store
+    role_id = store.get(guild.id, "tempvoice_allowed_role_id")
+    lines: list[str] = []
+    if facts.state == helpers.BLOCKED:
+        lines.append(VOICE_NEEDS_ROLE.format(role_id=role_id))
+    elif facts.state == helpers.OWNER:
+        lines.append(helpers.PANEL_INTRO)
+        lines += info_lines(facts.channel, facts.row, role_ids_of(guild))
+        lines += remembered_lines(facts.prefs)
+    elif facts.state == helpers.ORPHAN:
+        lines.append(helpers.ORPHAN_LINE.format(owner_id=facts.row["owner_id"]))
+    elif facts.state == helpers.GUEST:
+        lines.append(helpers.GUEST_LINE.format(owner_id=facts.row["owner_id"]))
+    else:
+        lines.append(
+            NO_OWNED_CHANNEL.format(lobby=store.get(guild.id, "tempvoice_creator_name"))
+        )
+        if store.get(guild.id, "tempvoice_mode") != "on":
+            lines.append(helpers.MODE_OFF_LINE)
+    if facts.staff and not facts.has_role and role_id:
+        lines.append(helpers.STAFF_WITHOUT_ROLE.format(role_id=role_id))
+    if facts.staff:
+        lines.append("")
+        lines += status_lines(bot, guild, facts.rows)
+    return lines
+
+
+class VoicePanel(Panel):
+    def __init__(self, minutes: int) -> None:
+        super().__init__(minutes, footer=helpers.PANEL_TIMEOUT_FOOTER)
+        self.where = ROOT
+        self.channel_id: int | None = None
+
+
+async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, VoicePanel]:
+    """One command, one panel: the caller's own channel, and the staff half only for staff."""
+    facts = await panel_facts(bot, guild, actor)
+    locked, hidden = privacy_of(facts.channel) if facts.channel is not None else (False, False)
+    embed = discord.Embed(
+        title=helpers.PANEL_TITLE, description=clamped(panel_lines(bot, guild, facts))
+    )
+    view = VoicePanel(minutes_for(bot, guild.id))
+    for move in helpers.card_buttons(
+        facts.state,
+        locked=locked,
+        hidden=hidden,
+        has_prefs=facts.prefs is not None,
+        staff=facts.staff,
+        mode_on=bot.store.get(guild.id, "tempvoice_mode") == "on",
+        has_lobbies=bool(lobby_choices(bot, guild)),
+    ):
+        view.add_item(MoveButton(move))
+    if facts.staff:
+        if facts.rows:
+            view.add_item(ChannelPick(guild, facts.rows, row=3))
+        add_site_button(view, bot, row=4)
+    return (embed, view)
+
+
+async def build_people(
+    bot: Any, guild: Any, actor: Any
+) -> tuple[discord.Embed | None, VoicePanel | None]:
+    facts = await panel_facts(bot, guild, actor)
+    if facts.state != helpers.OWNER:
+        return (None, None)
+    channel = facts.channel
+    here = sorted(connected_ids(channel))
+    others = [one for one in here if one != int(facts.row["owner_id"])]
+    permitted, banned = member_lists(
+        getattr(channel, "overwrites", {}), facts.row["owner_id"], role_ids_of(guild)
+    )
+    undo = helpers.undo_options(permitted, banned)
+    embed = discord.Embed(
+        title=helpers.PEOPLE_TITLE,
+        description=clamped(
+            [
+                PEOPLE_INTRO,
+                f"**in it now** — {mentions(here)}",
+                f"**let in by name** — {mentions(permitted)}",
+                f"**kept out by name** — {mentions(banned)}",
+            ]
+        ),
+    )
+    view = VoicePanel(minutes_for(bot, guild.id))
+    view.where = PEOPLE_VIEW
+    for control in helpers.people_controls(others_here=bool(others), has_lists=bool(undo)):
+        if control == helpers.PERMIT_PICK:
+            view.add_item(MemberPickOne("permit", helpers.PICK_PERMIT, row=0))
+        elif control == helpers.BAN_PICK:
+            view.add_item(MemberPickOne("ban", helpers.PICK_BAN, row=1))
+        elif control == helpers.KICK_PICK:
+            view.add_item(KickPick(guild, others, row=2))
+        else:
+            view.add_item(UndoPick(guild, undo, row=3))
+    view.add_item(MoveButton(helpers.BACK_MOVE))
+    return (embed, view)
+
+
+def build_region(bot: Any, guild: Any, current: Any) -> tuple[discord.Embed, VoicePanel]:
+    embed = discord.Embed(
+        title=helpers.REGION_TITLE,
+        description=clamped([REGION_INTRO, f"**now** — {current or 'automatic'}"]),
+    )
+    view = VoicePanel(minutes_for(bot, guild.id))
+    view.where = REGION_VIEW
+    view.add_item(RegionPick(current, row=0))
+    view.add_item(MoveButton(helpers.AUTOMATIC_MOVE))
+    view.add_item(MoveButton(helpers.BACK_MOVE._replace(row=1)))
+    return (embed, view)
+
+
+def build_hand_over(
+    bot: Any, guild: Any, channel: Any, *, channel_id: int | None = None
+) -> tuple[discord.Embed, VoicePanel]:
+    embed = discord.Embed(
+        title=helpers.HAND_OVER_TITLE,
+        description=clamped([HAND_OVER_INTRO.format(channel=getattr(channel, "name", ""))]),
+    )
+    view = VoicePanel(minutes_for(bot, guild.id))
+    view.where = HAND_OVER_VIEW
+    view.channel_id = channel_id
+    view.add_item(NewOwnerPick(row=0))
+    view.add_item(MoveButton(helpers.BACK_MOVE._replace(row=1)))
+    return (embed, view)
+
+
+def build_lobbies(bot: Any, guild: Any) -> tuple[discord.Embed, VoicePanel]:
+    found = lobby_choices(bot, guild)
+    embed = discord.Embed(
+        title=helpers.LOBBY_TITLE,
+        description=clamped([LOBBY_INTRO] + status_lines(bot, guild, ())),
+    )
+    view = VoicePanel(minutes_for(bot, guild.id))
+    view.where = LOBBY_VIEW
+    if found:
+        view.add_item(LobbyPick(found, row=0))
+    view.add_item(MoveButton(helpers.BACK_MOVE._replace(row=1)))
+    return (embed, view)
+
+
+async def build_staff_card(
+    bot: Any, guild: Any, channel_id: Any
+) -> tuple[discord.Embed | None, VoicePanel | None]:
+    row = await get_row(bot.db, int(channel_id))
+    channel = guild.get_channel(int(channel_id)) if row is not None else None
+    if row is None or channel is None:
+        return (None, None)
+    embed = discord.Embed(
+        title=helpers.STAFF_CARD_TITLE,
+        description=clamped(info_lines(channel, row, role_ids_of(guild))),
+    )
+    view = VoicePanel(minutes_for(bot, guild.id))
+    view.where = STAFF_CARD_VIEW
+    view.channel_id = int(channel_id)
+    view.add_item(MoveButton(helpers.STAFF_TRANSFER_MOVE))
+    view.add_item(MoveButton(helpers.BACK_MOVE._replace(row=0)))
+    return (embed, view)
+
+
+def build_forget_confirm(bot: Any, guild: Any) -> tuple[discord.Embed, VoicePanel]:
+    embed = discord.Embed(
+        title=helpers.FORGET_TITLE, description=clamped([helpers.FORGET_QUESTION])
+    )
+    view = VoicePanel(minutes_for(bot, guild.id))
+    view.where = CONFIRM_VIEW
+    view.add_item(ForgetYesButton())
+    view.add_item(KeepItButton())
+    return (embed, view)
+
+
+async def render(interaction: discord.Interaction, embed: Any, view: Any, previous: Any) -> None:
+    retire(previous)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+async def render_panel(interaction: discord.Interaction, previous: Any = None) -> None:
+    embed, view = await build_panel(
+        interaction.client, interaction.guild, interaction.user
+    )
+    await render(interaction, embed, view, previous)
+
+
+async def render_people(interaction: discord.Interaction, previous: Any = None) -> None:
+    embed, view = await build_people(
+        interaction.client, interaction.guild, interaction.user
+    )
+    if view is None:
+        await render_panel(interaction, previous)
+        await answer(interaction, LOST_THE_CHANNEL)
+        return
+    await render(interaction, embed, view, previous)
+
+
+async def render_staff_card(
+    interaction: discord.Interaction, channel_id: Any, previous: Any = None
+) -> None:
+    embed, view = await build_staff_card(interaction.client, interaction.guild, channel_id)
+    if view is None:
+        await render_panel(interaction, previous)
+        await answer(interaction, CHANNEL_GONE)
+        return
+    await render(interaction, embed, view, previous)
+
+
+async def ready_to_move(interaction: discord.Interaction) -> bool:
+    await interaction.response.defer()
+    return await db_ready(interaction)
+
+
+async def owned_now(interaction: discord.Interaction) -> Target | None:
+    """The caller's own channel, re-read at click time — ownership moves while a card is open."""
+    facts = await panel_facts(interaction.client, interaction.guild, interaction.user)
+    if facts.state != helpers.OWNER:
+        return None
+    return Target(facts.row, facts.channel)
+
+
+async def back_to_panel(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await ready_to_move(interaction):
+        return
+    await render_panel(interaction, previous)
+
+
+async def open_people(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await ready_to_move(interaction):
+        return
+    await render_people(interaction, previous)
+
+
+async def open_region(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await ready_to_move(interaction):
+        return
+    found = await owned_now(interaction)
+    if found is None:
+        await render_panel(interaction, previous)
+        await answer(interaction, LOST_THE_CHANNEL)
+        return
+    embed, view = build_region(
+        interaction.client, interaction.guild, getattr(found.channel, "rtc_region", None)
+    )
+    await render(interaction, embed, view, previous)
+
+
+async def open_hand_over(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await ready_to_move(interaction):
+        return
+    found = await owned_now(interaction)
+    if found is None:
+        await render_panel(interaction, previous)
+        await answer(interaction, LOST_THE_CHANNEL)
+        return
+    embed, view = build_hand_over(interaction.client, interaction.guild, found.channel)
+    await render(interaction, embed, view, previous)
+
+
+async def open_staff_hand_over(
+    interaction: discord.Interaction, channel_id: Any, previous: Any = None
+) -> None:
+    if not await still_staff(interaction):
+        return
+    if not await ready_to_move(interaction):
+        return
+    channel = interaction.guild.get_channel(int(channel_id)) if channel_id else None
+    if channel is None:
+        await render_panel(interaction, previous)
+        await answer(interaction, CHANNEL_GONE)
+        return
+    embed, view = build_hand_over(
+        interaction.client, interaction.guild, channel, channel_id=int(channel_id)
+    )
+    await render(interaction, embed, view, previous)
+
+
+async def open_lobbies(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await still_staff(interaction):
+        return
+    if not await ready_to_move(interaction):
+        return
+    embed, view = build_lobbies(interaction.client, interaction.guild)
+    await render(interaction, embed, view, previous)
+
+
+async def open_staff_card(
+    interaction: discord.Interaction, channel_id: Any, previous: Any = None
+) -> None:
+    if not await still_staff(interaction):
+        return
+    if not await ready_to_move(interaction):
+        return
+    await render_staff_card(interaction, channel_id, previous)
+
+
+async def open_forget_confirm(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await ready_to_move(interaction):
+        return
+    embed, view = build_forget_confirm(interaction.client, interaction.guild)
+    await render(interaction, embed, view, previous)
+
+
+async def act_on_own(
+    interaction: discord.Interaction, handler: Any, *args: Any, previous: Any = None
+) -> None:
+    """Every owner move: defer, re-read the row, call the shared function, re-render, say so."""
+    if not await ready_to_move(interaction):
+        return
+    found = await owned_now(interaction)
+    if found is None:
+        await render_panel(interaction, previous)
+        await answer(interaction, LOST_THE_CHANNEL)
+        return
+    said = await handler(interaction, found.channel, found.row, *args)
+    await render_panel(interaction, previous)
+    await answer(interaction, str(said))
+
+
+async def run_people_move(
+    interaction: discord.Interaction, handler: Any, *args: Any, previous: Any = None
+) -> None:
+    if not await ready_to_move(interaction):
+        return
+    found = await owned_now(interaction)
+    if found is None:
+        await render_panel(interaction, previous)
+        await answer(interaction, LOST_THE_CHANNEL)
+        return
+    said = await handler(interaction, found.channel, found.row, *args)
+    await render_people(interaction, previous)
+    await answer(interaction, str(said))
+
+
+async def run_claim(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await ready_to_move(interaction):
+        return
+    facts = await panel_facts(interaction.client, interaction.guild, interaction.user)
+    if facts.state != helpers.ORPHAN:
+        await render_panel(interaction, previous)
+        await answer(interaction, CLAIM_NEEDS_A_CHANNEL)
+        return
+    said = await do_claim(interaction, facts.channel, facts.row)
+    await render_panel(interaction, previous)
+    await answer(interaction, said)
+
+
+async def run_region(
+    interaction: discord.Interaction, region: str, previous: Any = None
+) -> None:
+    if not await ready_to_move(interaction):
+        return
+    found = await owned_now(interaction)
+    if found is None:
+        await render_panel(interaction, previous)
+        await answer(interaction, LOST_THE_CHANNEL)
+        return
+    said = await do_region(interaction, found.channel, found.row, region)
+    embed, view = build_region(
+        interaction.client, interaction.guild, getattr(found.channel, "rtc_region", None)
+    )
+    await render(interaction, embed, view, previous)
+    await answer(interaction, said)
+
+
+async def run_transfer(
+    interaction: discord.Interaction, target: Any, channel_id: Any = None, previous: Any = None
+) -> None:
+    """The member's own hand-over is `do_transfer`; a staffer's also DMs the displaced owner."""
+    if channel_id is None:
+        await act_on_own(interaction, do_transfer, target, previous=previous)
+        return
+    if not await still_staff(interaction):
+        return
+    if not await ready_to_move(interaction):
+        return
+    row = await get_row(interaction.client.db, int(channel_id))
+    channel = interaction.guild.get_channel(int(channel_id)) if row is not None else None
+    if row is None or channel is None:
+        await render_panel(interaction, previous)
+        await answer(interaction, CHANNEL_GONE)
+        return
+    said = await staff_hand_over(interaction, channel, row, target)
+    await render_staff_card(interaction, channel_id, previous)
+    await answer(interaction, said)
+
+
+async def run_forget_prefs(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await ready_to_move(interaction):
+        return
+    said = await reset_prefs(interaction)
+    await render_panel(interaction, previous)
+    await answer(interaction, str(said))
+
+
+async def run_mode(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await still_staff(interaction):
+        return
+    if not await ready_to_move(interaction):
+        return
+    store = interaction.client.store
+    now = store.get(interaction.guild.id, "tempvoice_mode")
+    said = await set_mode(interaction, "off" if now == "on" else "on")
+    await render_panel(interaction, previous)
+    await answer(interaction, str(said))
+
+
+async def run_setup(
+    interaction: discord.Interaction, name: Any = None, previous: Any = None
+) -> None:
+    if not await still_staff(interaction):
+        return
+    if not await ready_to_move(interaction):
+        return
+    _, said = await make_creator_channel(
+        interaction.client, interaction.guild, interaction.user, name
+    )
+    await render_panel(interaction, previous)
+    await answer(interaction, said)
+
+
+async def run_forget_lobby(
+    interaction: discord.Interaction, channel_id: Any, previous: Any = None
+) -> None:
+    if not await still_staff(interaction):
+        return
+    if not await ready_to_move(interaction):
+        return
+    dropped = await forget_creator(
+        interaction.client, interaction.guild, int(channel_id), interaction.user
+    )
+    said = (
+        LOBBY_FORGOTTEN if dropped else NOT_A_LOBBY
+    ).format(channel_id=int(channel_id))
+    embed, view = build_lobbies(interaction.client, interaction.guild)
+    await render(interaction, embed, view, previous)
+    await answer(interaction, said)
+
+
+class MoveButton(discord.ui.Button):
+    def __init__(self, move: Any) -> None:
+        super().__init__(label=move.label, style=STYLES[move.style], row=move.row)
+        self.move = move
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        action = self.move.action
+        if action == helpers.REFRESH:
+            await back_to_panel(interaction, view)
+            return
+        if action == helpers.BACK:
+            await back_from(interaction, view)
+            return
+        if action == helpers.LOGS:
+            await send_logs(interaction, "tempvoice")
+            return
+        if action == helpers.PEOPLE:
+            await open_people(interaction, view)
+            return
+        if action == helpers.REGION:
+            await open_region(interaction, view)
+            return
+        if action == helpers.AUTOMATIC:
+            await run_region(interaction, AUTO_REGION, view)
+            return
+        if action == helpers.TRANSFER:
+            if view.where == STAFF_CARD_VIEW:
+                await open_staff_hand_over(interaction, view.channel_id, view)
+                return
+            await open_hand_over(interaction, view)
+            return
+        if action == helpers.CLAIM:
+            await run_claim(interaction, view)
+            return
+        if action == helpers.FORGET_PREFS:
+            await open_forget_confirm(interaction, view)
+            return
+        if action in (helpers.LOCK, helpers.UNLOCK):
+            await act_on_own(
+                interaction, do_privacy, "connect", action == helpers.LOCK, previous=view
+            )
+            return
+        if action in (helpers.HIDE, helpers.SHOW):
+            await act_on_own(
+                interaction, do_privacy, "view_channel", action == helpers.HIDE, previous=view
+            )
+            return
+        if action == helpers.MODE:
+            await run_mode(interaction, view)
+            return
+        if action == helpers.LOBBIES:
+            await open_lobbies(interaction, view)
+            return
+        if action == helpers.SETUP:
+            if not await still_staff(interaction):
+                return
+            if not await db_up(interaction):
+                return
+            await interaction.response.send_modal(
+                SetupModal(interaction.client, interaction.guild.id, view)
+            )
+            return
+        if not await db_up(interaction):
+            return
+        await interaction.response.send_modal(MODALS[action](view))
+
+
+async def back_from(interaction: discord.Interaction, view: Any) -> None:
+    if view.where == HAND_OVER_VIEW and view.channel_id is not None:
+        await open_staff_card(interaction, view.channel_id, view)
+        return
+    await back_to_panel(interaction, view)
+
+
+class ForgetYesButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label=helpers.FORGET_YES, style=discord.ButtonStyle.danger, row=0)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_forget_prefs(interaction, self.view)
+
+
+class KeepItButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label=helpers.KEEP_IT, style=discord.ButtonStyle.secondary, row=0)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await back_to_panel(interaction, self.view)
+
+
+class MemberPickOne(discord.ui.UserSelect):
+    def __init__(self, action: str, placeholder: str, row: int) -> None:
+        super().__init__(placeholder=placeholder, min_values=1, max_values=1, row=row)
+        self.action = action
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        handler = do_permit if self.action == "permit" else do_ban
+        await run_people_move(
+            interaction, handler, self.values[0], previous=self.view
+        )
+
+
+class KickPick(discord.ui.Select):
+    def __init__(self, guild: Any, user_ids: Any, row: int) -> None:
+        found = list(user_ids)
+        shown = found[: helpers.SELECT_CAP]
+        super().__init__(
+            placeholder=capped_placeholder(
+                len(shown), len(found), pick=helpers.PICK_KICK, capped=CAPPED_HERE
+            ),
+            options=[
+                discord.SelectOption(label=member_label(guild, one), value=str(one))
+                for one in shown
+            ],
+            min_values=1,
+            max_values=1,
+            row=row,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        target = interaction.guild.get_member(int(self.values[0]))
+        if target is None:
+            await back_to_panel(interaction, self.view)
+            await answer(interaction, NO_SUCH_MEMBER.format(member_id=self.values[0]))
+            return
+        await run_people_move(interaction, do_kick, target, previous=self.view)
+
+
+class UndoPick(discord.ui.Select):
+    """One control whose options already know which undo they are (P3: never two spellings)."""
+
+    def __init__(self, guild: Any, options: Any, row: int) -> None:
+        found = list(options)
+        shown = found[: helpers.SELECT_CAP]
+        super().__init__(
+            placeholder=capped_placeholder(
+                len(shown), len(found), pick=helpers.PICK_UNDO, capped=CAPPED_UNDO
+            ),
+            options=[
+                discord.SelectOption(
+                    label=UNDO_LABELS[kind].format(name=member_label(guild, user_id))[
+                        :SELECT_OPTION_LIMIT
+                    ],
+                    value=f"{kind}:{user_id}",
+                )
+                for user_id, kind in shown
+            ],
+            min_values=1,
+            max_values=1,
+            row=row,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        kind, _, user_id = self.values[0].partition(":")
+        target = interaction.guild.get_member(int(user_id))
+        if target is None:
+            await back_to_panel(interaction, self.view)
+            await answer(interaction, NO_SUCH_MEMBER.format(member_id=user_id))
+            return
+        await run_people_move(
+            interaction, do_forget_member, target, kind, previous=self.view
+        )
+
+
+class RegionPick(discord.ui.Select):
+    def __init__(self, current: Any, row: int) -> None:
+        now = str(current or "")
+        super().__init__(
+            placeholder=helpers.PICK_REGION,
+            options=[
+                discord.SelectOption(label=name, value=name, default=(name == now))
+                for name in helpers.named_regions()
+            ],
+            min_values=1,
+            max_values=1,
+            row=row,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_region(interaction, self.values[0], self.view)
+
+
+class NewOwnerPick(discord.ui.UserSelect):
+    def __init__(self, row: int) -> None:
+        super().__init__(
+            placeholder=helpers.PICK_NEW_OWNER, min_values=1, max_values=1, row=row
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        await run_transfer(interaction, self.values[0], view.channel_id, view)
+
+
+class ChannelPick(discord.ui.Select):
+    def __init__(self, guild: Any, rows: Any, row: int) -> None:
+        found = list(rows)
+        shown = found[: helpers.SELECT_CAP]
+        super().__init__(
+            placeholder=capped_placeholder(
+                len(shown), len(found), pick=helpers.PICK_CHANNEL
+            ),
+            options=[
+                discord.SelectOption(
+                    label=option_label(
+                        one["channel_id"],
+                        None,
+                        getattr(guild.get_channel(int(one["channel_id"])), "name", CHANNEL_LEFT),
+                    ),
+                    value=str(one["channel_id"]),
+                )
+                for one in shown
+            ],
+            min_values=1,
+            max_values=1,
+            row=row,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_staff_card(interaction, int(self.values[0]), self.view)
+
+
+class LobbyPick(discord.ui.Select):
+    def __init__(self, choices: Any, row: int) -> None:
+        found = list(choices)
+        shown = found[: helpers.SELECT_CAP]
+        super().__init__(
+            placeholder=capped_placeholder(len(shown), len(found), pick=helpers.PICK_LOBBY),
+            options=[
+                discord.SelectOption(
+                    label=option_label(channel_id, None, name), value=str(channel_id)
+                )
+                for channel_id, name in shown
+            ],
+            min_values=1,
+            max_values=1,
+            row=row,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_forget_lobby(interaction, int(self.values[0]), self.view)
+
+
 class RenameModal(AnswersErrors, discord.ui.Modal, title="Rename this channel"):
     name = discord.ui.TextInput(label="New name", max_length=NAME_LIMIT)
 
-    def __init__(self, channel_id: int | None = None) -> None:
+    def __init__(self, channel_id: int | None = None, previous: Any = None) -> None:
         super().__init__()
         self.channel_id = channel_id
+        self.previous = previous
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
+        if self.previous is not None:
+            await act_on_own(interaction, do_rename, str(self.name), previous=self.previous)
+            return
         found = await panel_context(interaction, channel_id=self.channel_id)
         if found is None:
             return
@@ -1228,24 +2131,63 @@ class RenameModal(AnswersErrors, discord.ui.Modal, title="Rename this channel"):
 class LimitModal(AnswersErrors, discord.ui.Modal, title="How many people?"):
     limit = discord.ui.TextInput(label="0 to 99 (0 means no limit)", max_length=2)
 
-    def __init__(self, channel_id: int | None = None) -> None:
+    def __init__(self, channel_id: int | None = None, previous: Any = None) -> None:
         super().__init__()
         self.channel_id = channel_id
+        self.previous = previous
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
+        value = parse_limit(str(self.limit))
+        if self.previous is not None:
+            if value is None:
+                await answer(interaction, NOT_A_LIMIT)
+                return
+            await act_on_own(interaction, do_limit, value, previous=self.previous)
+            return
         found = await panel_context(interaction, channel_id=self.channel_id)
         if found is None:
             return
         await interaction.response.defer(ephemeral=True)
-        value = parse_limit(str(self.limit))
         if value is None:
-            await answer(
-                interaction,
-                "That is not a number between 0 and 99, so nothing was changed. Type a whole "
-                "number — 0 lets anyone in.",
-            )
+            await answer(interaction, NOT_A_LIMIT)
             return
         await answer(interaction, await do_limit(interaction, found.channel, found.row, value))
+
+
+class BitrateModal(AnswersErrors, discord.ui.Modal, title="How good should it sound?"):
+    kbps = discord.ui.TextInput(
+        label=f"{MIN_BITRATE} to {MAX_BITRATE} kbps", max_length=3
+    )
+
+    def __init__(self, previous: Any = None) -> None:
+        super().__init__()
+        self.previous = previous
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        given = str(self.kbps).strip()
+        if not given.isdigit():
+            await answer(interaction, NOT_A_BITRATE.format(given=given[:40] or "nothing"))
+            return
+        await act_on_own(interaction, do_bitrate, int(given), previous=self.previous)
+
+
+class SetupModal(AnswersErrors, discord.ui.Modal, title="The join-to-create channel"):
+    name = discord.ui.TextInput(label="What it should be called", max_length=NAME_LIMIT)
+
+    def __init__(self, bot: Any, guild_id: int, previous: Any = None) -> None:
+        super().__init__()
+        self.previous = previous
+        self.name.default = str(bot.store.get(guild_id, "tempvoice_creator_name"))
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await run_setup(interaction, str(self.name), self.previous)
+
+
+MODALS = {
+    helpers.RENAME: lambda view: RenameModal(previous=view),
+    helpers.LIMIT: lambda view: LimitModal(previous=view),
+    helpers.BITRATE: lambda view: BitrateModal(view),
+}
 
 
 MEMBER_ACTIONS = {
@@ -1386,14 +2328,6 @@ class TempVoice(commands.Cog):
         self._creator_locks: dict[int, asyncio.Lock] = {}
         self.last_ok_at: str | None = None
         self.last_error: str | None = None
-
-    tempvoice = app_commands.Group(
-        name="tempvoice", description="Temporary voice channels people make by joining one",
-        default_permissions=STAFF_ONLY,
-    )
-    voice = app_commands.Group(
-        name="voice", description="Change your own temporary voice channel"
-    )
 
     def loop_health(self, name: str) -> tuple[str | None, str | None]:
         if name != "_reconcile_loop":
@@ -1684,51 +2618,6 @@ class TempVoice(commands.Cog):
             lock = locks[key] = asyncio.Lock()
         return lock
 
-    async def _database_ready(self, interaction: discord.Interaction) -> bool:
-        if self.bot.db.is_connected:
-            return True
-        log.warning("temp voice: refused a command — the database is not connected")
-        await interaction.response.send_message(DB_UNAVAILABLE, ephemeral=True)
-        return False
-
-    @tempvoice.command(name="setup", description="Create or repair the join-to-create channel")
-    @app_commands.describe(name="What the join-to-create channel is called")
-    async def setup_channel(
-        self, interaction: discord.Interaction, name: str | None = None
-    ) -> None:
-        if not await require_staff(interaction):
-            return
-        if not await self._database_ready(interaction):
-            return
-        await interaction.response.defer(ephemeral=True)
-        _, said = await make_creator_channel(
-            self.bot, interaction.guild, interaction.user, name
-        )
-        await interaction.followup.send(
-            said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-        )
-
-    @tempvoice.command(name="forget", description="Stop treating a channel id as join-to-create")
-    @app_commands.describe(channel_id="The id of the join-to-create channel to forget")
-    async def forget(self, interaction: discord.Interaction, channel_id: str) -> None:
-        if not await require_staff(interaction):
-            return
-        digits = channel_id.strip().lstrip("<#").rstrip(">")
-        if not digits.isdigit():
-            await interaction.response.send_message(
-                NOT_AN_ID.format(given=channel_id), ephemeral=True
-            )
-            return
-        removed = await self._forget(interaction.guild, int(digits), actor=interaction.user)
-        if not removed:
-            await interaction.response.send_message(
-                NOT_A_LOBBY.format(channel_id=digits), ephemeral=True
-            )
-            return
-        await interaction.response.send_message(
-            LOBBY_FORGOTTEN.format(channel_id=digits), ephemeral=True
-        )
-
     async def _forget(self, guild: Any, channel_id: int, actor: Any = None) -> bool:
         return await forget_creator(self.bot, guild, channel_id, actor)
 
@@ -1740,245 +2629,20 @@ class TempVoice(commands.Cog):
         await delete_row(self.bot.db, channel.id)
         disown_channel(self.bot, channel.id)
 
-    @tempvoice.command(name="status", description="Show how temporary voice channels are set up")
-    async def status(self, interaction: discord.Interaction) -> None:
-        if not await require_staff(interaction):
-            return
-        if not await self._database_ready(interaction):
-            return
-        guild = interaction.guild
-        store = self.bot.store
-        creators = store.get(guild.id, "tempvoice_creator_ids") or []
-        role_id = store.get(guild.id, "tempvoice_allowed_role_id")
-        wanted = store.get(guild.id, "tempvoice_creator_name")
-        rows = await rows_for_guild(self.bot.db, guild.id)
-        category, _, _ = self._creator_spot(guild)
-        unknown = lobbies_by_name(category, wanted, creators)
-        lines = [
-            f"**mode** — {store.get(guild.id, 'tempvoice_mode')}",
-            "**join-to-create** — "
-            + (", ".join(f"<#{c}>" for c in creators) if creators else "not set up yet"),
-            f"**name template** — `{store.get(guild.id, 'tempvoice_name_template')}`",
-            f"**join-to-create name** — `{wanted}`",
-            f"**allowed role** — {f'<@&{role_id}>' if role_id else 'anyone'}",
-            f"**channels open now** — {len(rows)}",
-            f"**last reconcile** — {self.last_ok_at or 'not yet'}",
-            f"**last error** — {self.last_error or 'none'}",
-        ]
-        if unknown:
-            lines.append(
-                STRAY_LOBBIES.format(
-                    extras=", ".join(f"<#{channel.id}>" for channel in unknown), name=wanted
-                )
-            )
-        await interaction.response.send_message(
-            "\n".join(lines), ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-        )
-
-    @tempvoice.command(name="mode", description="Turn join-to-create off or on")
-    @app_commands.describe(mode="off, or on (join-to-create makes channels)")
-    @app_commands.choices(
-        mode=[app_commands.Choice(name=name, value=name) for name in TEMPVOICE_MODES]
+    @app_commands.command(
+        name="voice", description="Your temporary voice channel, and everything you can change"
     )
-    async def mode(
-        self, interaction: discord.Interaction, mode: app_commands.Choice[str]
-    ) -> None:
-        if not await require_staff(interaction):
+    async def voice_panel(self, interaction: discord.Interaction) -> None:
+        if not await voice_gate(interaction):
             return
-        await self.bot.store.set(
-            interaction.guild.id, "tempvoice_mode", mode.value, by=interaction.user.id
-        )
+        embed, view = await build_panel(self.bot, interaction.guild, interaction.user)
         await interaction.response.send_message(
-            f"Join-to-create is now **{mode.value}**.", ephemeral=True
-        )
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "tempvoice.mode",
-            actor=interaction.user,
-            details={"mode": mode.value},
-        )
-
-    async def _voice_allowed(self, interaction: discord.Interaction) -> bool:
-        """The half of the `/voice` gate that needs no channel: guild, role, database."""
-        if interaction.guild is None:
-            await interaction.response.send_message(GUILD_ONLY, ephemeral=True)
-            return False
-        role_id = self.bot.store.get(interaction.guild.id, "tempvoice_allowed_role_id")
-        if not may_use_voice(role_id, interaction.user):
-            await interaction.response.send_message(
-                VOICE_NEEDS_ROLE.format(role_id=role_id),
-                ephemeral=True,
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
-            return False
-        return await self._database_ready(interaction)
-
-    async def _voice_target(
-        self, interaction: discord.Interaction, *, owner_only: bool = True
-    ) -> Target | None:
-        """The temp channel this command acts on, or None once the caller has been answered."""
-        if not await self._voice_allowed(interaction):
-            return None
-        store = self.bot.store
-        rows = await rows_for_guild(self.bot.db, interaction.guild.id)
-        here = getattr(getattr(interaction.user, "voice", None), "channel", None)
-        row = pick_row(rows, interaction.user.id, getattr(here, "id", None), owner_only=owner_only)
-        if row is None:
-            lobby = store.get(interaction.guild.id, "tempvoice_creator_name")
-            await interaction.response.send_message(
-                NO_OWNED_CHANNEL.format(lobby=lobby) if owner_only else CLAIM_NEEDS_A_CHANNEL,
-                ephemeral=True,
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
-            return None
-        channel = temp_channel(interaction, row["channel_id"])
-        if channel is None:
-            await interaction.response.send_message(CHANNEL_GONE, ephemeral=True)
-            return None
-        return Target(row, channel)
-
-    async def _act(
-        self, interaction: discord.Interaction, handler: Any, *args: Any, owner_only: bool = True
-    ) -> None:
-        found = await self._voice_target(interaction, owner_only=owner_only)
-        if found is None:
-            return
-        await interaction.response.defer(ephemeral=True)
-        await answer(interaction, await handler(interaction, found.channel, found.row, *args))
-
-    @voice.command(name="logs", description="The last few temp voice log lines")
-    @app_commands.describe(
-        count="How many lines, 1 to 50 (10 by default)",
-        important_only="True to leave out the dry runs and the housekeeping",
-    )
-    async def voice_logs(
-        self,
-        interaction: discord.Interaction,
-        count: app_commands.Range[int, LOGS_MIN, LOGS_MAX] = LOGS_DEFAULT,
-        important_only: bool = False,
-    ) -> None:
-        await send_logs(interaction, "tempvoice", count=count, important_only=important_only)
-
-    @voice.command(name="rename", description="Rename your temporary voice channel")
-    @app_commands.describe(name="What the channel should be called")
-    async def voice_rename(self, interaction: discord.Interaction, name: str) -> None:
-        await self._act(interaction, do_rename, name)
-
-    @voice.command(name="limit", description="Cap how many people can be in your channel")
-    @app_commands.describe(people="0 to 99; 0 means no limit")
-    async def voice_limit(
-        self, interaction: discord.Interaction, people: app_commands.Range[int, 0, 99]
-    ) -> None:
-        await self._act(interaction, do_limit, int(people))
-
-    @voice.command(name="lock", description="Stop anyone new joining your channel")
-    async def voice_lock(self, interaction: discord.Interaction) -> None:
-        await self._act(interaction, do_privacy, "connect", True)
-
-    @voice.command(name="unlock", description="Let people join your channel again")
-    async def voice_unlock(self, interaction: discord.Interaction) -> None:
-        await self._act(interaction, do_privacy, "connect", False)
-
-    @voice.command(name="hide", description="Hide your channel from everyone not in it")
-    async def voice_hide(self, interaction: discord.Interaction) -> None:
-        await self._act(interaction, do_privacy, "view_channel", True)
-
-    @voice.command(name="show", description="Show your channel to everyone again")
-    async def voice_show(self, interaction: discord.Interaction) -> None:
-        await self._act(interaction, do_privacy, "view_channel", False)
-
-    @voice.command(name="kick", description="Move somebody out of your channel")
-    @app_commands.describe(member="Who should leave")
-    async def voice_kick(self, interaction: discord.Interaction, member: discord.Member) -> None:
-        await self._act(interaction, do_kick, member)
-
-    @voice.command(name="ban", description="Keep somebody out of your channel")
-    @app_commands.describe(member="Who should be kept out")
-    async def voice_ban(self, interaction: discord.Interaction, member: discord.Member) -> None:
-        await self._act(interaction, do_ban, member)
-
-    @voice.command(name="unban", description="Let somebody you banned back in")
-    @app_commands.describe(member="Who should be let back in")
-    async def voice_unban(self, interaction: discord.Interaction, member: discord.Member) -> None:
-        await self._act(interaction, do_forget_member, member, "unban")
-
-    @voice.command(name="permit", description="Let somebody into your channel by name")
-    @app_commands.describe(member="Who should be let in")
-    async def voice_permit(self, interaction: discord.Interaction, member: discord.Member) -> None:
-        await self._act(interaction, do_permit, member)
-
-    @voice.command(name="unpermit", description="Take back somebody's way into your channel")
-    @app_commands.describe(member="Whose invite should be taken back")
-    async def voice_unpermit(
-        self, interaction: discord.Interaction, member: discord.Member
-    ) -> None:
-        await self._act(interaction, do_forget_member, member, "unpermit")
-
-    @voice.command(name="claim", description="Take over the channel you are in when its owner left")
-    async def voice_claim(self, interaction: discord.Interaction) -> None:
-        await self._act(interaction, do_claim, owner_only=False)
-
-    @voice.command(name="transfer", description="Hand your channel to somebody else")
-    @app_commands.describe(member="Who should own it")
-    async def voice_transfer(
-        self, interaction: discord.Interaction, member: discord.Member
-    ) -> None:
-        await self._act(interaction, do_transfer, member)
-
-    @voice.command(name="bitrate", description="Set your channel's audio quality")
-    @app_commands.describe(kbps="8 to 96; higher needs a higher server boost level")
-    async def voice_bitrate(
-        self, interaction: discord.Interaction, kbps: app_commands.Range[int, MIN_BITRATE,
-                                                                        MAX_BITRATE]
-    ) -> None:
-        await self._act(interaction, do_bitrate, int(kbps))
-
-    @voice.command(name="region", description="Pick which of Discord's servers carries the audio")
-    @app_commands.describe(region="A region, or auto to let Discord choose")
-    async def voice_region(self, interaction: discord.Interaction, region: str) -> None:
-        await self._act(interaction, do_region, region)
-
-    @voice_region.autocomplete("region")
-    async def _region_options(
-        self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[str]]:
-        return [app_commands.Choice(name=name, value=name) for name in region_choices(current)]
-
-    @voice.command(name="info", description="Show how your temporary channel is set up")
-    async def voice_info(self, interaction: discord.Interaction) -> None:
-        found = await self._voice_target(interaction)
-        if found is None:
-            return
-        role_ids = [getattr(role, "id", 0) for role in getattr(interaction.guild, "roles", ())]
-        role_ids.append(getattr(interaction.guild.default_role, "id", 0))
-        prefs = await get_prefs(self.bot.db, interaction.user.id)
-        await interaction.response.send_message(
-            "\n".join(info_lines(found.channel, found.row, role_ids) + remembered_lines(prefs)),
+            embed=embed,
+            view=view,
             ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
         )
-
-    @voice.command(
-        name="reset", description="Forget the settings Black Bloc keeps for your voice channels"
-    )
-    async def voice_reset(self, interaction: discord.Interaction) -> None:
-        if not await self._voice_allowed(interaction):
-            return
-        cleared = await clear_prefs(self.bot.db, interaction.user.id)
-        if cleared:
-            await log_action(
-                self.bot,
-                interaction.guild,
-                "tempvoice.prefs_reset",
-                actor=interaction.user,
-                target=interaction.user,
-            )
-        await interaction.response.send_message(
-            PREFS_CLEARED if cleared else NOTHING_REMEMBERED,
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
+        view.message = await interaction.original_response()
 
 
 async def setup(bot: commands.Bot) -> None:

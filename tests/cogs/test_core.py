@@ -468,7 +468,7 @@ async def test_help_marks_the_staff_commands_the_real_bot_registers(settings):
     await black_bloc.close()
 
     assert "**/help** — List every command Black Bloc can run" in said
-    assert "/tempvoice setup — Create or repair the join-to-create channel (staff)" in said
+    assert "**/voice** — Your temporary voice channel, and everything you can change" in said
     assert "/settings show — Show Black Bloc's settings for this server (staff)" in said
     assert "**/warn** — " in said and "(staff)" in said.split("**/warn** — ")[1].split("\n")[0]
     assert "**/ping** — Check that Black Bloc is alive" in said

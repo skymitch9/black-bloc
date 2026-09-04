@@ -4,18 +4,32 @@ from datetime import UTC, datetime, timedelta
 
 import discord
 import pytest
+from discord import app_commands
 
+from black_bloc import tempvoice as voice
 from black_bloc.cogs.community.tempvoice import (
     MEMBER_MEMORY_MAX,
     RECONCILE_GRACE_SECONDS,
     RECONCILE_MINUTES,
     RENAMED_TOO_OFTEN,
+    SITE_BUTTON,
+    BitrateModal,
+    ChannelPick,
+    LimitModal,
+    LobbyPick,
+    NewOwnerPick,
+    RegionPick,
     RenameModal,
+    SetupModal,
     TempVoice,
     TempVoicePanel,
+    UndoPick,
+    act_on_own,
     add_channel,
     apply_remembered_members,
     bottom_position,
+    build_panel,
+    build_people,
     category_overwrites,
     channel_name,
     clamp_bitrate,
@@ -23,8 +37,10 @@ from black_bloc.cogs.community.tempvoice import (
     creator_position,
     delete_row,
     do_ban,
+    do_bitrate,
     do_forget_member,
     do_kick,
+    do_permit,
     do_privacy,
     do_rename,
     do_transfer,
@@ -45,9 +61,15 @@ from black_bloc.cogs.community.tempvoice import (
     panel_id,
     parse_limit,
     pick_row,
-    region_choices,
+    privacy_of,
     remembered_lines,
     rows_for_guild,
+    run_claim,
+    run_forget_lobby,
+    run_forget_prefs,
+    run_people_move,
+    run_region,
+    run_setup,
     save_prefs,
     set_owner,
     set_panel_message,
@@ -56,6 +78,7 @@ from black_bloc.cogs.community.tempvoice import (
 )
 from black_bloc.config import load_settings
 from black_bloc.settings_store import (
+    DB_UNAVAILABLE,
     MEMBER_ROLE_ID,
     TEMPVOICE_CREATOR_NAME,
     SettingsStore,
@@ -88,6 +111,14 @@ class FakeMessage:
         self.id = message_id
         self.content = content
         self.kwargs = kwargs
+
+    async def edit(self, **kwargs):
+        self.kwargs |= kwargs
+
+    @property
+    def embeds(self):
+        one = self.kwargs.get("embed")
+        return [one] if one is not None else list(self.kwargs.get("embeds") or ())
 
 
 class _Response:
@@ -297,9 +328,13 @@ class FakeBot:
         self.guilds = [guild]
         self.guild = guild
         self.views = []
+        self.cogs = {}
 
     def get_channel(self, channel_id):
         return self.guild.get_channel(channel_id)
+
+    def get_cog(self, name):
+        return self.cogs.get(name)
 
     def add_view(self, view, **kwargs):
         self.views.append(view)
@@ -352,21 +387,81 @@ class FakeFollowup:
 
 
 class FakeInteraction:
-    def __init__(self, bot, user, channel=None, message=None):
+    def __init__(self, bot, user, channel=None, message=None, guild=True):
         self.client = bot
         self.user = user
-        self.guild = bot.guild
-        self.guild_id = bot.guild.id
+        self.guild = bot.guild if guild else None
+        self.guild_id = getattr(self.guild, "id", None)
         self.channel = channel
         self.channel_id = channel.id if channel is not None else TEST_CHANNEL
         self.message = message
         self.response = FakeResponse()
         self.followup = FakeFollowup(self.response)
+        self.edits = []
+
+    async def original_response(self):
+        return FakeMessage(1, "")
+
+    async def edit_original_response(self, **kwargs):
+        self.edits.append(kwargs)
+        return FakeMessage(9500, "", **kwargs)
 
     @property
     def sent(self):
         said = [m["content"] for m in self.response.messages if m["content"] is not None]
         return said[-1] if said else None
+
+    @property
+    def rendered(self):
+        if self.edits:
+            return self.edits[-1]
+        return self.response.messages[-1] if self.response.messages else {}
+
+    @property
+    def view(self):
+        return self.rendered.get("view")
+
+    @property
+    def shown(self):
+        embed = self.rendered.get("embed")
+        return embed.description if embed is not None else ""
+
+
+def labels(view):
+    return [one.label for one in view.children if getattr(one, "label", None)]
+
+
+def button(view, label):
+    return next(one for one in view.children if getattr(one, "label", None) == label)
+
+
+def picker(view, kind):
+    return next(one for one in view.children if isinstance(one, kind))
+
+
+def placeholders(view):
+    return [
+        one.placeholder for one in view.children if getattr(one, "placeholder", None) is not None
+    ]
+
+
+async def panel_for(bot, actor):
+    return await build_panel(bot, bot.guild, actor)
+
+
+async def press(bot, actor, view, label):
+    """One click on a live panel, the way Discord dispatches it."""
+    interaction = FakeInteraction(bot, actor)
+    await button(view, label).callback(interaction)
+    return interaction
+
+
+async def choose(bot, actor, view, kind, value):
+    interaction = FakeInteraction(bot, actor)
+    control = picker(view, kind)
+    control._values = [value if not isinstance(value, (int, str)) else str(value)]
+    await control.callback(interaction)
+    return interaction
 
 
 async def action_kinds(db):
@@ -881,7 +976,7 @@ async def test_setup_puts_the_creator_in_the_test_category_while_test_mode_is_on
     bot.guard = FakeGuard()
     interaction = FakeInteraction(bot, lead)
 
-    await cog.setup_channel.callback(cog, interaction, None)
+    await run_setup(interaction, None)
 
     made = bot.guild.created[0]
     assert made.name == TEMPVOICE_CREATOR_NAME == "join to create a channel"
@@ -893,7 +988,7 @@ async def test_setup_puts_the_creator_in_the_test_category_while_test_mode_is_on
 async def test_setup_refuses_someone_who_is_not_staff(cog, bot, member):
     interaction = FakeInteraction(bot, member)
 
-    await cog.setup_channel.callback(cog, interaction, None)
+    await run_setup(interaction, None)
 
     assert bot.guild.created == []
     assert "staff only" in interaction.sent
@@ -903,7 +998,7 @@ async def test_setup_refuses_when_test_mode_cannot_see_its_channel(cog, bot, lea
     bot.guard = FakeGuard()
     interaction = FakeInteraction(bot, lead)
 
-    await cog.setup_channel.callback(cog, interaction, None)
+    await run_setup(interaction, None)
 
     assert bot.guild.created == []
     assert "test mode" in interaction.sent.lower()
@@ -1249,7 +1344,7 @@ async def test_setup_repairs_the_lobby_it_already_has_instead_of_making_a_second
     creator.name = "join"
     interaction = FakeInteraction(bot, lead)
 
-    await cog.setup_channel.callback(cog, interaction, None)
+    await run_setup(interaction, None)
 
     assert bot.guild.created == []
     assert creator.name == "join to create a channel"
@@ -1262,7 +1357,7 @@ async def test_a_repair_that_discord_refuses_says_so_and_is_logged(cog, bot, lea
     creator.edit_raises = refused()
     interaction = FakeInteraction(bot, lead)
 
-    await cog.setup_channel.callback(cog, interaction, None)
+    await run_setup(interaction, None)
 
     assert "refused" in interaction.sent
     assert "tempvoice.repair_failed" in await action_kinds(db)
@@ -1273,9 +1368,9 @@ async def test_a_repair_names_the_other_lobbies_and_how_to_drop_them(cog, bot, l
     await bot.store.set(GUILD, "tempvoice_creator_ids", [CREATOR, second.id])
     interaction = FakeInteraction(bot, lead)
 
-    await cog.setup_channel.callback(cog, interaction, None)
+    await run_setup(interaction, None)
 
-    assert f"<#{second.id}>" in interaction.sent and "/tempvoice forget" in interaction.sent
+    assert f"<#{second.id}>" in interaction.sent and "Forget a lobby…" in interaction.sent
     assert second.name == "join"
 
 
@@ -1284,7 +1379,7 @@ async def test_test_mode_will_not_repair_a_lobby_outside_the_test_category(cog, 
     bot.guard = FakeGuard()
     interaction = FakeInteraction(bot, lead)
 
-    await cog.setup_channel.callback(cog, interaction, None)
+    await run_setup(interaction, None)
 
     assert creator.name == "join to create a channel"
     assert creator.edits == []
@@ -1294,7 +1389,7 @@ async def test_test_mode_will_not_repair_a_lobby_outside_the_test_category(cog, 
 async def test_a_name_given_to_setup_is_remembered_as_the_setting(cog, bot, lead, creator):
     interaction = FakeInteraction(bot, lead)
 
-    await cog.setup_channel.callback(cog, interaction, "Join Here")
+    await run_setup(interaction, "Join Here")
 
     assert bot.store.get(GUILD, "tempvoice_creator_name") == "Join Here"
     assert creator.name == "Join Here"
@@ -1302,23 +1397,22 @@ async def test_a_name_given_to_setup_is_remembered_as_the_setting(cog, bot, lead
 
 async def test_forget_drops_a_creator_id_and_refuses_anything_else(cog, bot, lead, db):
     interaction = FakeInteraction(bot, lead)
-    await cog.forget.callback(cog, interaction, str(CREATOR))
+    await run_forget_lobby(interaction, CREATOR)
     assert bot.store.get(GUILD, "tempvoice_creator_ids") == []
     assert "tempvoice.creator_removed" in await action_kinds(db)
 
     again = FakeInteraction(bot, lead)
-    await cog.forget.callback(cog, again, str(CREATOR))
+    await run_forget_lobby(again, CREATOR)
     assert "not one of" in again.sent
 
-    nonsense = FakeInteraction(bot, lead)
-    await cog.forget.callback(cog, nonsense, "the lobby")
-    assert "not a channel id" in nonsense.sent
+    embed, view = await panel_for(bot, lead)
+    assert "Forget a lobby…" not in labels(view)
 
 
 async def test_forget_is_staff_only(cog, bot, member):
     interaction = FakeInteraction(bot, member)
 
-    await cog.forget.callback(cog, interaction, str(CREATOR))
+    await run_forget_lobby(interaction, CREATOR)
 
     assert bot.store.get(GUILD, "tempvoice_creator_ids") == [CREATOR]
     assert "staff only" in interaction.sent
@@ -1340,7 +1434,7 @@ async def test_the_setup_reply_never_pings(cog, bot, lead):
     await bot.store.set(GUILD, "tempvoice_creator_ids", [])
     interaction = FakeInteraction(bot, lead)
 
-    await cog.setup_channel.callback(cog, interaction, None)
+    await run_setup(interaction, None)
 
     assert interaction.response.messages[-1]["allowed_mentions"].everyone is False
 
@@ -1375,7 +1469,7 @@ async def test_the_lobby_lets_the_allowed_role_staff_and_the_bot_in(cog, bot, le
     member_role, staff_role = staffed(bot, category)
     bot.guard = FakeGuard()
 
-    await cog.setup_channel.callback(cog, FakeInteraction(bot, lead), None)
+    await run_setup(FakeInteraction(bot, lead), None)
 
     given = bot.guild.created[0].given_overwrites
     assert given[member_role].view_channel is True and given[member_role].connect is True
@@ -1394,7 +1488,7 @@ async def test_a_repair_puts_those_overwrites_on_the_lobby_it_already_has(cog, b
         FakeVoice(CREATOR, bot.guild, category=category, position=4, name="join")
     )
 
-    await cog.setup_channel.callback(cog, FakeInteraction(bot, lead), None)
+    await run_setup(FakeInteraction(bot, lead), None)
 
     assert lobby.name == "join to create a channel"
     assert lobby.overwrites[member_role].connect is True
@@ -1439,7 +1533,7 @@ async def test_an_allowed_role_that_no_longer_exists_is_left_out(cog, bot, lead)
     bot.guild.add(FakeText(TEST_CHANNEL, category=category))
     bot.guard = FakeGuard()
 
-    await cog.setup_channel.callback(cog, FakeInteraction(bot, lead), None)
+    await run_setup(FakeInteraction(bot, lead), None)
 
     assert bot.guild.created[0].given_overwrites == {
         bot.guild.me: discord.PermissionOverwrite(
@@ -1480,15 +1574,12 @@ async def test_a_reconcile_loop_that_stopped_records_the_error_and_restarts_itse
     assert cog._reconcile_loop._error is not None
 
 
-def test_the_voice_group_carries_every_control_the_panel_has_and_more():
-    groups = {group.name: group for group in TempVoice.__cog_app_commands__}
+def test_the_cog_carries_one_member_visible_command_and_no_group_at_all():
+    found = list(TempVoice.__cog_app_commands__)
 
-    assert sorted(command.name for command in groups["voice"].commands) == [
-        "ban", "bitrate", "claim", "hide", "info", "kick", "limit", "lock", "logs", "permit",
-        "region", "rename", "reset", "show", "transfer", "unban", "unlock", "unpermit",
-    ]
-    region = next(c for c in groups["voice"].commands if c.name == "region")
-    assert region._params["region"].autocomplete is not None
+    assert [one.name for one in found] == ["voice"]
+    assert not isinstance(found[0], app_commands.Group)
+    assert found[0].default_permissions is None
 
 
 def test_bitrates_are_clamped_to_discord_s_range_and_the_guild_s_ceiling():
@@ -1506,13 +1597,6 @@ def test_the_guild_s_ceiling_falls_back_to_ninety_six_kbps():
     boosted = FakeGuild()
     boosted.bitrate_limit = 256000.0
     assert guild_bitrate_ceiling(boosted) == 256000
-
-
-def test_region_autocomplete_offers_auto_and_matches_what_was_typed():
-    assert region_choices("")[0] == "auto"
-    assert region_choices("us-") == ["us-central", "us-east", "us-south", "us-west"]
-    assert region_choices("nowhere") == []
-    assert len(region_choices("")) <= 25
 
 
 def test_the_allowed_role_is_what_lets_someone_use_the_commands():
@@ -1535,37 +1619,43 @@ def test_a_command_acts_on_the_channel_you_are_in_then_the_one_you_own():
     assert pick_row(rows, USER, None, owner_only=False) is None
 
 
-async def test_voice_rename_changes_the_channel_the_caller_owns(cog, bot, creator, member, db):
+async def test_the_rename_modal_changes_the_channel_the_caller_owns(cog, bot, creator, member, db):
     await cog._maybe_create(member, creator)
     made = bot.guild.created[0]
+    _embed, view = await panel_for(bot, member)
     interaction = FakeInteraction(bot, member)
 
-    await cog.voice_rename.callback(cog, interaction, "The Pit")
+    await button(view, "Rename").callback(interaction)
+    modal = interaction.response.modals[0]
+    modal.name._value = "The Pit"
+    submit = FakeInteraction(bot, member)
+    await modal.on_submit(submit)
 
+    assert isinstance(modal, RenameModal)
     assert made.name == "The Pit"
     assert (await get_prefs(db, member.id))["name"] == "The Pit"
     assert "tempvoice.rename" in await action_kinds(db)
-    assert interaction.response.messages[0].get("deferred") is True
+    assert submit.response.messages[0].get("deferred") is True
 
 
-async def test_voice_refuses_someone_without_the_allowed_role(cog, bot, creator, db):
+async def test_someone_without_the_allowed_role_is_told_why_and_offered_nothing(
+    cog, bot, creator, db
+):
     stranger = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo", roles=())
-    interaction = FakeInteraction(bot, stranger)
 
-    await cog.voice_rename.callback(cog, interaction, "The Pit")
+    embed, view = await panel_for(bot, stranger)
 
-    assert f"<@&{MEMBER_ROLE_ID}>" in interaction.sent
-    assert interaction.response.messages[-1]["allowed_mentions"].roles is False
+    assert f"<@&{MEMBER_ROLE_ID}>" in embed.description
+    assert labels(view) == ["Refresh"]
     assert await action_kinds(db) == []
 
 
-async def test_voice_says_how_to_get_a_channel_when_you_have_none(cog, bot, member):
-    interaction = FakeInteraction(bot, member)
+async def test_the_panel_says_how_to_get_a_channel_when_you_have_none(cog, bot, member):
+    embed, view = await panel_for(bot, member)
 
-    await cog.voice_rename.callback(cog, interaction, "The Pit")
-
-    assert "don't own a temp channel" in interaction.sent
-    assert "join to create a channel" in interaction.sent
+    assert "don't own a temp channel" in embed.description
+    assert "join to create a channel" in embed.description
+    assert labels(view) == ["Refresh"]
 
 
 async def test_voice_lock_and_unlock_call_the_same_helper_the_button_does(
@@ -1574,16 +1664,16 @@ async def test_voice_lock_and_unlock_call_the_same_helper_the_button_does(
     await cog._maybe_create(member, creator)
     made = bot.guild.created[0]
 
-    await cog.voice_lock.callback(cog, FakeInteraction(bot, member))
+    await act_on_own(FakeInteraction(bot, member), do_privacy, "connect", True)
     assert made.permissions[-1][1].connect is False
     assert (await get_prefs(db, member.id))["locked"] == 1
 
     again = FakeInteraction(bot, member)
-    await cog.voice_lock.callback(cog, again)
+    await act_on_own(again, do_privacy, "connect", True)
     assert "already locked" in again.sent
     assert len(made.permissions) == 1
 
-    await cog.voice_unlock.callback(cog, FakeInteraction(bot, member))
+    await act_on_own(FakeInteraction(bot, member), do_privacy, "connect", False)
     assert made.permissions[-1][1].connect is None
     kinds = await action_kinds(db)
     assert "tempvoice.lock" in kinds and "tempvoice.unlock" in kinds
@@ -1594,7 +1684,7 @@ async def test_voice_kick_moves_the_member_out_and_logs_it(cog, bot, creator, me
     made = bot.guild.created[0]
     stranger = connect(FakeMember(bot.guild, user_id=USER + 1, display_name="Bo"), made)
 
-    await cog.voice_kick.callback(cog, FakeInteraction(bot, member), stranger)
+    await run_people_move(FakeInteraction(bot, member), do_kick, stranger)
 
     assert stranger.moves == [None]
     assert "tempvoice.kick" in await action_kinds(db)
@@ -1604,10 +1694,10 @@ async def test_voice_unban_clears_the_overwrite_ban_left(cog, bot, creator, memb
     await cog._maybe_create(member, creator)
     made = bot.guild.created[0]
     stranger = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
-    await cog.voice_ban.callback(cog, FakeInteraction(bot, member), stranger)
+    await run_people_move(FakeInteraction(bot, member), do_ban, stranger)
     made.overwrites[stranger] = discord.PermissionOverwrite(connect=False, view_channel=False)
 
-    await cog.voice_unban.callback(cog, FakeInteraction(bot, member), stranger)
+    await run_people_move(FakeInteraction(bot, member), do_forget_member, stranger, "unban")
 
     assert made.permissions[-1][:2] == (stranger, None)
     kinds = await action_kinds(db)
@@ -1620,7 +1710,7 @@ async def test_voice_claim_acts_on_the_channel_the_caller_is_in(cog, bot, creato
     made.members.clear()
     stranger = connect(FakeMember(bot.guild, user_id=USER + 1, display_name="Bo"), made)
 
-    await cog.voice_claim.callback(cog, FakeInteraction(bot, stranger))
+    await run_claim(FakeInteraction(bot, stranger))
 
     assert (await get_row(db, made.id))["owner_id"] == stranger.id
     assert "tempvoice.claim" in await action_kinds(db)
@@ -1631,7 +1721,7 @@ async def test_voice_claim_needs_you_to_be_in_a_temp_channel(cog, bot, creator, 
     stranger = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
     interaction = FakeInteraction(bot, stranger)
 
-    await cog.voice_claim.callback(cog, interaction)
+    await run_claim(interaction)
 
     assert "nothing to claim" in interaction.sent
     assert "tempvoice.claim" not in await action_kinds(db)
@@ -1644,7 +1734,7 @@ async def test_voice_bitrate_is_clamped_remembered_and_reused_next_time(
     made = bot.guild.created[0]
     interaction = FakeInteraction(bot, member)
 
-    await cog.voice_bitrate.callback(cog, interaction, 96)
+    await act_on_own(interaction, do_bitrate, 96)
 
     assert made.bitrate == 96000
     assert (await get_prefs(db, member.id))["bitrate"] == 96000
@@ -1662,7 +1752,7 @@ async def test_voice_bitrate_says_when_the_boost_level_capped_it(cog, bot, creat
     bot.guild.bitrate_limit = 64000
     interaction = FakeInteraction(bot, member)
 
-    await cog.voice_bitrate.callback(cog, interaction, 96)
+    await act_on_own(interaction, do_bitrate, 96)
 
     assert bot.guild.created[0].bitrate == 64000
     assert "64 kbps" in interaction.sent and "boost level" in interaction.sent
@@ -1672,11 +1762,11 @@ async def test_voice_region_sets_and_clears_the_rtc_region(cog, bot, creator, me
     await cog._maybe_create(member, creator)
     made = bot.guild.created[0]
 
-    await cog.voice_region.callback(cog, FakeInteraction(bot, member), "us-west")
+    await run_region(FakeInteraction(bot, member), "us-west")
     assert made.rtc_region == "us-west"
 
     auto = FakeInteraction(bot, member)
-    await cog.voice_region.callback(cog, auto, "auto")
+    await run_region(auto, "auto")
     assert made.rtc_region is None
     assert "automatic" in auto.sent
     assert (await action_kinds(db)).count("tempvoice.region") == 2
@@ -1688,13 +1778,13 @@ async def test_a_region_discord_refuses_says_which_one(cog, bot, creator, member
     made.edit_raises = refused()
     interaction = FakeInteraction(bot, member)
 
-    await cog.voice_region.callback(cog, interaction, "atlantis")
+    await run_region(interaction, "atlantis")
 
     assert "atlantis" in interaction.sent
     assert "tempvoice.region_failed" in await action_kinds(db)
 
 
-async def test_voice_info_reports_the_channel_s_own_state(cog, bot, creator, member, db):
+async def test_the_owner_card_reports_the_channel_s_own_state(cog, bot, creator, member, db):
     await cog._maybe_create(member, creator)
     made = bot.guild.created[0]
     banned = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
@@ -1702,17 +1792,15 @@ async def test_voice_info_reports_the_channel_s_own_state(cog, bot, creator, mem
     made.overwrites[banned] = discord.PermissionOverwrite(connect=False)
     made.overwrites[guest] = discord.PermissionOverwrite(connect=True)
     made.user_limit = 4
-    interaction = FakeInteraction(bot, member)
 
-    await cog.voice_info.callback(cog, interaction)
+    embed, _view = await panel_for(bot, member)
 
-    said = interaction.sent
+    said = embed.description
     assert f"**owner** — <@{member.id}>" in said
     assert "**limit** — 4 people" in said
     assert "**locked** — no" in said
     assert f"**let in by name** — <@{guest.id}>" in said
     assert f"**kept out by name** — <@{banned.id}>" in said
-    assert interaction.response.messages[-1]["allowed_mentions"].users is False
 
 
 def test_roles_never_count_as_permitted_or_banned_members():
@@ -1728,15 +1816,15 @@ def test_roles_never_count_as_permitted_or_banned_members():
     assert member_lists(overwrites, 1, [9]) == ([], [USER])
 
 
-async def test_status_shows_the_lobby_name_and_the_loop_s_health(cog, bot, lead):
+async def test_the_staff_block_shows_the_lobby_name_and_the_loop_s_health(cog, bot, lead):
     cog.last_ok_at = "2026-08-26T12:00:00+00:00"
+    bot.cogs["TempVoice"] = cog
 
-    interaction = FakeInteraction(bot, lead)
-    await cog.status.callback(cog, interaction)
+    embed, _view = await panel_for(bot, lead)
 
-    assert "join to create a channel" in interaction.sent
-    assert "2026-08-26T12:00:00+00:00" in interaction.sent
-    assert "**last error** — none" in interaction.sent
+    assert "join to create a channel" in embed.description
+    assert "2026-08-26T12:00:00+00:00" in embed.description
+    assert "**last error** — none" in embed.description
 
 
 def test_a_lobby_is_recognised_by_its_name_when_the_id_list_does_not_know_it():
@@ -1769,7 +1857,7 @@ async def test_setup_takes_over_a_lobby_it_lost_track_of_instead_of_making_a_sec
     await bot.store.set(GUILD, "tempvoice_creator_name", "join")
     interaction = FakeInteraction(bot, lead)
 
-    await cog.setup_channel.callback(cog, interaction, None)
+    await run_setup(interaction, None)
 
     assert bot.guild.created == []
     assert bot.store.get(GUILD, "tempvoice_creator_ids") == [lobby.id]
@@ -1784,7 +1872,7 @@ async def test_setup_leaves_a_channel_with_another_name_alone_and_makes_its_own(
     _, lobby = where_the_lobby_belongs(bot, name="General")
     interaction = FakeInteraction(bot, lead)
 
-    await cog.setup_channel.callback(cog, interaction, None)
+    await run_setup(interaction, None)
 
     assert lobby.edits == []
     assert [c.name for c in bot.guild.created] == [TEMPVOICE_CREATOR_NAME]
@@ -1799,23 +1887,23 @@ async def test_a_lobby_taken_over_is_stored_even_when_discord_refuses_the_repair
     lobby.edit_raises = refused()
     interaction = FakeInteraction(bot, lead)
 
-    await cog.setup_channel.callback(cog, interaction, None)
+    await run_setup(interaction, None)
 
     assert bot.store.get(GUILD, "tempvoice_creator_ids") == [lobby.id]
     assert "refused" in interaction.sent
     assert "tempvoice.repair_failed" in await action_kinds(db)
 
 
-async def test_status_names_the_lobbies_black_bloc_is_not_keeping_track_of(cog, bot, lead):
+async def test_the_staff_block_names_the_lobbies_black_bloc_is_not_keeping_track_of(
+    cog, bot, lead
+):
     _, lobby = where_the_lobby_belongs(bot)
-    interaction = FakeInteraction(bot, lead)
 
-    await cog.status.callback(cog, interaction)
+    embed, _view = await panel_for(bot, lead)
 
-    assert f"<#{lobby.id}>" in interaction.sent
-    assert "not kept track of" in interaction.sent
-    assert "`/tempvoice setup`" in interaction.sent
-    assert interaction.response.messages[-1]["allowed_mentions"].everyone is False
+    assert f"<#{lobby.id}>" in embed.description
+    assert "not kept track of" in embed.description
+    assert "**Setup**" in embed.description
 
 
 def test_a_stored_id_list_survives_junk_and_never_grows_forever():
@@ -1851,8 +1939,8 @@ async def test_permit_and_ban_are_remembered_and_put_back_on_the_next_channel(
     guest = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
     pest = FakeMember(bot.guild, user_id=USER + 2, display_name="Cass")
 
-    await cog.voice_permit.callback(cog, FakeInteraction(bot, member), guest)
-    await cog.voice_ban.callback(cog, FakeInteraction(bot, member), pest)
+    await run_people_move(FakeInteraction(bot, member), do_permit, guest)
+    await run_people_move(FakeInteraction(bot, member), do_ban, pest)
 
     prefs = await get_prefs(db, member.id)
     assert id_list(prefs["permitted_ids"]) == [guest.id]
@@ -1871,11 +1959,11 @@ async def test_unpermit_and_unban_are_forgotten_for_next_time_too(cog, bot, crea
     await cog._maybe_create(member, creator)
     guest = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
     pest = FakeMember(bot.guild, user_id=USER + 2, display_name="Cass")
-    await cog.voice_permit.callback(cog, FakeInteraction(bot, member), guest)
-    await cog.voice_ban.callback(cog, FakeInteraction(bot, member), pest)
+    await run_people_move(FakeInteraction(bot, member), do_permit, guest)
+    await run_people_move(FakeInteraction(bot, member), do_ban, pest)
 
-    await cog.voice_unpermit.callback(cog, FakeInteraction(bot, member), guest)
-    await cog.voice_unban.callback(cog, FakeInteraction(bot, member), pest)
+    await run_people_move(FakeInteraction(bot, member), do_forget_member, guest, "unpermit")
+    await run_people_move(FakeInteraction(bot, member), do_forget_member, pest, "unban")
 
     prefs = await get_prefs(db, member.id)
     assert id_list(prefs["permitted_ids"]) == [] and id_list(prefs["banned_ids"]) == []
@@ -1885,7 +1973,7 @@ async def test_a_remembered_region_is_used_for_the_next_channel(cog, bot, creato
     await cog._maybe_create(member, creator)
     made = bot.guild.created[0]
 
-    await cog.voice_region.callback(cog, FakeInteraction(bot, member), "us-west")
+    await run_region(FakeInteraction(bot, member), "us-west")
 
     assert (await get_prefs(db, member.id))["region"] == "us-west"
 
@@ -1895,7 +1983,7 @@ async def test_a_remembered_region_is_used_for_the_next_channel(cog, bot, creato
 
     assert bot.guild.created[1].rtc_region == "us-west"
 
-    await cog.voice_region.callback(cog, FakeInteraction(bot, member), "auto")
+    await run_region(FakeInteraction(bot, member), "auto")
     second = bot.guild.created[1]
     second.members.clear()
     await cog._maybe_delete(bot.guild, second)
@@ -1904,16 +1992,16 @@ async def test_a_remembered_region_is_used_for_the_next_channel(cog, bot, creato
     assert bot.guild.created[2].rtc_region is None
 
 
-async def test_voice_reset_forgets_everything_and_says_so(cog, bot, creator, member, db):
+async def test_forgetting_the_settings_drops_everything_and_says_so(cog, bot, creator, member, db):
     await cog._maybe_create(member, creator)
-    await cog.voice_rename.callback(cog, FakeInteraction(bot, member), "The Pit")
-    nothing_yet = FakeInteraction(bot, FakeMember(bot.guild, user_id=USER + 5, display_name="Dee"))
+    await act_on_own(FakeInteraction(bot, member), do_rename, "The Pit")
+    nobody = FakeMember(bot.guild, user_id=USER + 5, display_name="Dee")
 
-    await cog.voice_reset.callback(cog, nothing_yet)
-    assert "nothing to forget" in nothing_yet.sent
+    _embed, view = await panel_for(bot, nobody)
+    assert "Forget my settings" not in labels(view)
 
     interaction = FakeInteraction(bot, member)
-    await cog.voice_reset.callback(cog, interaction)
+    await run_forget_prefs(interaction)
 
     assert await get_prefs(db, member.id) is None
     assert "Forgotten" in interaction.sent
@@ -1921,22 +2009,423 @@ async def test_voice_reset_forgets_everything_and_says_so(cog, bot, creator, mem
     assert bot.guild.created[0].name == "The Pit"
 
 
-async def test_voice_info_says_what_is_remembered(cog, bot, creator, member, db):
+async def test_the_owner_card_says_what_is_remembered(cog, bot, creator, member, db):
     await cog._maybe_create(member, creator)
     guest = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
-    await cog.voice_permit.callback(cog, FakeInteraction(bot, member), guest)
-    await cog.voice_region.callback(cog, FakeInteraction(bot, member), "us-west")
-    interaction = FakeInteraction(bot, member)
+    await run_people_move(FakeInteraction(bot, member), do_permit, guest)
+    await run_region(FakeInteraction(bot, member), "us-west")
 
-    await cog.voice_info.callback(cog, interaction)
+    embed, _view = await panel_for(bot, member)
 
-    assert "remembered for next time" in interaction.sent
-    assert "us-west" in interaction.sent and f"<@{guest.id}>" in interaction.sent
-    assert "`/voice reset`" in interaction.sent
-    assert interaction.response.messages[-1]["allowed_mentions"].everyone is False
+    said = embed.description
+    assert "remembered for next time" in said
+    assert "us-west" in said and f"<@{guest.id}>" in said
+    assert "**Forget my settings**" in said
 
 
 def test_remembered_lines_say_so_when_nothing_is_remembered_yet():
     said = "\n".join(remembered_lines(None))
 
     assert "nothing yet" in said and "kept" in said
+
+
+# --- the panel ------------------------------------------------------------------------------
+
+
+class DatabaseDown:
+    """The database dropping mid-panel, which a property cannot be set to."""
+
+    def __init__(self, db):
+        self.conn = db.conn
+        self.is_connected = False
+
+
+async def a_channel(cog, bot, creator, member):
+    await bot.store.set(GUILD, "tempvoice_mode", "on")
+    await cog._maybe_create(member, creator)
+    made = bot.guild.created[0]
+    connect(member, made)
+    return made
+
+
+async def test_the_command_answers_one_ephemeral_panel_and_nothing_else(cog, bot, member):
+    interaction = FakeInteraction(bot, member)
+
+    await cog.voice_panel.callback(cog, interaction)
+
+    assert len(interaction.response.messages) == 1
+    said = interaction.response.messages[0]
+    assert said["ephemeral"] is True
+    assert said["embed"].title == voice.PANEL_TITLE
+    assert said["allowed_mentions"].everyone is False
+
+
+async def test_the_command_refuses_a_direct_message_and_a_database_that_is_down(cog, bot, member):
+    outside = FakeInteraction(bot, member, guild=False)
+    await cog.voice_panel.callback(cog, outside)
+    assert "server" in outside.sent
+
+    bot.db = DatabaseDown(bot.db)
+    down = FakeInteraction(bot, member)
+    await cog.voice_panel.callback(cog, down)
+    assert down.sent == DB_UNAVAILABLE
+    assert down.response.messages[0].get("embed") is None
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("state", ["blocked", "none", "owner", "orphan", "guest"])
+@pytest.mark.parametrize("staff", [False, True])
+async def test_every_state_renders_exactly_its_row_of_the_button_table(
+    cog, bot, creator, db, mode, state, staff
+):
+    """Checklist 3 and 12: the table is data, and no state may render a move it forbids."""
+    actor = FakeMember(
+        bot.guild,
+        user_id=USER,
+        roles=() if state == "blocked" else (MEMBER_ROLE_ID,),
+        manage_guild=staff,
+    )
+    owner = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
+    if state == "owner":
+        await a_channel(cog, bot, creator, actor)
+    elif state in ("orphan", "guest"):
+        made = await a_channel(cog, bot, creator, owner)
+        made.members.clear()
+        owner.voice = None
+        connect(actor, made)
+        if state == "guest":
+            connect(owner, made)
+    await bot.store.set(GUILD, "tempvoice_mode", mode)
+
+    _embed, view = await panel_for(bot, actor)
+    said = labels(view)
+
+    wanted = [
+        move.label
+        for move in voice.card_buttons(
+            state if state != "blocked" or not staff else "blocked",
+            has_prefs=await get_prefs(db, actor.id) is not None,
+            staff=staff,
+            mode_on=mode == "on",
+            has_lobbies=True,
+        )
+    ]
+    assert said == wanted + ([SITE_BUTTON] if staff else [])
+
+
+async def test_a_staffer_without_the_allowed_role_still_gets_the_staff_row_and_is_told_why(
+    cog, bot
+):
+    lead = FakeMember(bot.guild, user_id=3, display_name="Lead", roles=(), manage_guild=True)
+
+    embed, view = await panel_for(bot, lead)
+
+    assert "Setup" in labels(view) and "Logs" in labels(view)
+    assert f"<@&{MEMBER_ROLE_ID}>" in embed.description
+    assert "Rename" not in labels(view)
+
+
+async def test_a_member_is_never_offered_the_staff_half_or_the_site(cog, bot, creator, member):
+    await a_channel(cog, bot, creator, member)
+
+    _embed, view = await panel_for(bot, member)
+
+    for staff_only in ("Setup", "Forget a lobby…", "Logs", SITE_BUTTON):
+        assert staff_only not in labels(view)
+    assert "Turn join-to-create off" not in labels(view)
+    assert not [one for one in view.children if isinstance(one, ChannelPick)]
+
+
+async def test_lock_and_unlock_are_one_button_that_says_what_it_will_do(
+    cog, bot, creator, member, db
+):
+    made = await a_channel(cog, bot, creator, member)
+
+    _embed, view = await panel_for(bot, member)
+    assert "Lock" in labels(view) and "Unlock" not in labels(view)
+    assert "Hide" in labels(view) and "Show" not in labels(view)
+
+    await press(bot, member, view, "Lock")
+    await press(bot, member, view, "Hide")
+
+    _embed, again = await panel_for(bot, member)
+    assert "Unlock" in labels(again) and "Lock" not in labels(again)
+    assert "Show" in labels(again) and "Hide" not in labels(again)
+    assert privacy_of(made) == (True, True)
+    kinds = await action_kinds(db)
+    assert "tempvoice.lock" in kinds and "tempvoice.hide" in kinds
+
+
+async def test_claim_renders_only_where_the_owner_has_gone(cog, bot, creator, member, db):
+    made = await a_channel(cog, bot, creator, member)
+    stranger = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
+
+    _embed, mine = await panel_for(bot, member)
+    assert "Claim" not in labels(mine)
+
+    connect(stranger, made)
+    _embed, visiting = await panel_for(bot, stranger)
+    assert "Claim" not in labels(visiting)
+
+    made.members = [stranger]
+    member.voice = None
+    _embed, alone = await panel_for(bot, stranger)
+    assert "Claim" in labels(alone)
+
+    await press(bot, stranger, alone, "Claim")
+    assert (await get_row(db, made.id))["owner_id"] == stranger.id
+    assert "tempvoice.claim" in await action_kinds(db)
+
+
+async def test_move_someone_out_is_absent_until_somebody_else_is_in_the_channel(
+    cog, bot, creator, member
+):
+    made = await a_channel(cog, bot, creator, member)
+
+    _embed, alone = await build_people(bot, bot.guild, member)
+    assert voice.PICK_KICK not in placeholders(alone)
+
+    connect(FakeMember(bot.guild, user_id=USER + 1, display_name="Bo"), made)
+    _embed, crowded = await build_people(bot, bot.guild, member)
+    assert voice.PICK_KICK in placeholders(crowded)
+
+
+async def test_undo_for_carries_the_right_word_for_each_name_and_is_absent_with_none(
+    cog, bot, creator, member, db
+):
+    made = await a_channel(cog, bot, creator, member)
+    guest = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
+    pest = FakeMember(bot.guild, user_id=USER + 2, display_name="Cass")
+
+    _embed, empty = await build_people(bot, bot.guild, member)
+    assert voice.PICK_UNDO not in placeholders(empty)
+
+    made.overwrites[guest] = discord.PermissionOverwrite(connect=True)
+    made.overwrites[pest] = discord.PermissionOverwrite(connect=False)
+    _embed, view = await build_people(bot, bot.guild, member)
+    undo = picker(view, UndoPick)
+
+    assert {one.value for one in undo.options} == {
+        f"unpermit:{guest.id}",
+        f"unban:{pest.id}",
+    }
+    assert "let them back in" in next(
+        one.label for one in undo.options if one.value.startswith("unban")
+    )
+
+    await choose(bot, member, view, UndoPick, f"unban:{pest.id}")
+    assert "tempvoice.unban" in await action_kinds(db)
+
+
+async def test_the_region_select_holds_every_named_region_and_automatic_is_its_own_button(
+    cog, bot, creator, member, db
+):
+    made = await a_channel(cog, bot, creator, member)
+    _embed, panel = await panel_for(bot, member)
+    opened = await press(bot, member, panel, "Region…")
+    view = opened.view
+
+    assert len(picker(view, RegionPick).options) == 25
+    assert "auto" not in [one.value for one in picker(view, RegionPick).options]
+
+    await choose(bot, member, view, RegionPick, "us-west")
+    assert made.rtc_region == "us-west"
+
+    back = await press(bot, member, view, "Automatic")
+    assert made.rtc_region is None
+    assert "automatic" in back.sent
+
+
+async def test_hand_it_over_moves_the_stored_owner_through_the_shared_function(
+    cog, bot, creator, member, db
+):
+    made = await a_channel(cog, bot, creator, member)
+    friend = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
+    _embed, panel = await panel_for(bot, member)
+
+    opened = await press(bot, member, panel, "Hand it over…")
+    handed = await choose(bot, member, opened.view, NewOwnerPick, friend)
+
+    assert (await get_row(db, made.id))["owner_id"] == friend.id
+    assert "tempvoice.transfer" in await action_kinds(db)
+    assert friend.display_name in handed.sent
+    assert member.dms == []
+
+
+async def test_staff_can_reassign_any_open_channel_and_the_displaced_owner_is_told(
+    cog, bot, creator, member, lead, db
+):
+    made = await a_channel(cog, bot, creator, member)
+    friend = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
+    _embed, panel = await panel_for(bot, lead)
+
+    card = await choose(bot, lead, panel, ChannelPick, made.id)
+    opened = await press(bot, lead, card.view, "Hand it over…")
+    await choose(bot, lead, opened.view, NewOwnerPick, friend)
+
+    assert (await get_row(db, made.id))["owner_id"] == friend.id
+    assert member.dms and friend.display_name in member.dms[0]
+    assert "tempvoice.transfer" in await action_kinds(db)
+
+
+async def test_a_staffer_demoted_while_a_card_is_open_moves_nothing(cog, bot, lead, db):
+    _embed, view = await panel_for(bot, lead)
+    bot.store.is_staff = lambda who: False
+
+    for label in ("Setup", "Turn join-to-create off", "Forget a lobby…"):
+        refused = await press(bot, lead, view, label)
+        assert "staff only" in refused.sent
+
+    assert bot.store.get(GUILD, "tempvoice_mode") == "on"
+    assert await action_kinds(db) == []
+
+
+async def test_the_mode_button_says_what_it_will_do_and_logs_which_door_asked(cog, bot, lead, db):
+    _embed, view = await panel_for(bot, lead)
+    assert "Turn join-to-create off" in labels(view)
+
+    said = await press(bot, lead, view, "Turn join-to-create off")
+
+    assert bot.store.get(GUILD, "tempvoice_mode") == "off"
+    assert "off" in said.sent
+    assert "tempvoice.mode" in await action_kinds(db)
+    _embed, again = await panel_for(bot, lead)
+    assert "Turn join-to-create on" in labels(again)
+
+
+async def test_setup_defers_before_it_creates_a_channel(cog, bot, lead):
+    await bot.store.set(GUILD, "tempvoice_creator_ids", [])
+    _embed, view = await panel_for(bot, lead)
+
+    opened = await press(bot, lead, view, "Setup")
+    modal = opened.response.modals[0]
+    assert isinstance(modal, SetupModal)
+    assert modal.name.default == TEMPVOICE_CREATOR_NAME
+
+    modal.name._value = "Join Here"
+    submit = FakeInteraction(bot, lead)
+    await modal.on_submit(submit)
+
+    assert submit.response.messages[0].get("deferred") is True
+    assert bot.store.get(GUILD, "tempvoice_creator_name") == "Join Here"
+    assert bot.guild.created
+
+
+async def test_forget_a_lobby_drops_it_from_the_list_and_says_so(cog, bot, lead, creator, db):
+    _embed, view = await panel_for(bot, lead)
+
+    opened = await press(bot, lead, view, "Forget a lobby…")
+    dropped = await choose(bot, lead, opened.view, LobbyPick, CREATOR)
+
+    assert bot.store.get(GUILD, "tempvoice_creator_ids") == []
+    assert str(CREATOR) in dropped.sent
+    assert "tempvoice.creator_removed" in await action_kinds(db)
+
+
+async def test_the_limit_and_bitrate_modals_refuse_what_discord_would(
+    cog, bot, creator, member, db
+):
+    await a_channel(cog, bot, creator, member)
+    before = await action_kinds(db)
+
+    limit = LimitModal(previous=object())
+    limit.limit._value = "nope"
+    said = FakeInteraction(bot, member)
+    await limit.on_submit(said)
+    assert "between 0 and 99" in said.sent
+
+    bitrate = BitrateModal(previous=object())
+    bitrate.kbps._value = "loud"
+    told = FakeInteraction(bot, member)
+    await bitrate.on_submit(told)
+    assert "8" in told.sent and "96" in told.sent
+    assert await action_kinds(db) == before
+
+
+async def test_the_bitrate_modal_writes_through_the_shared_function(cog, bot, creator, member, db):
+    made = await a_channel(cog, bot, creator, member)
+    _embed, view = await panel_for(bot, member)
+
+    opened = await press(bot, member, view, "Bitrate")
+    modal = opened.response.modals[0]
+    modal.kbps._value = "96"
+    await modal.on_submit(FakeInteraction(bot, member))
+
+    assert made.bitrate == 96000
+    assert (await get_prefs(db, member.id))["bitrate"] == 96000
+    assert "tempvoice.bitrate" in await action_kinds(db)
+
+
+async def test_the_limit_modal_writes_through_the_shared_function(cog, bot, creator, member, db):
+    made = await a_channel(cog, bot, creator, member)
+    _embed, view = await panel_for(bot, member)
+
+    opened = await press(bot, member, view, "Limit")
+    modal = opened.response.modals[0]
+    modal.limit._value = "4"
+    await modal.on_submit(FakeInteraction(bot, member))
+
+    assert made.user_limit == 4
+    assert "tempvoice.limit" in await action_kinds(db)
+
+
+async def test_logs_answers_a_new_message_and_still_refuses_a_demoted_staffer(cog, bot, lead):
+    _embed, view = await panel_for(bot, lead)
+
+    shown = await press(bot, lead, view, "Logs")
+    assert shown.edits == []
+    assert shown.response.messages[-1]["embed"] is not None
+
+    bot.store.is_staff = lambda who: False
+    lead.guild_permissions = FakePerms(manage_guild=False)
+    refused = await press(bot, lead, view, "Logs")
+    assert "staff only" in refused.sent
+
+
+async def test_every_click_re_checks_the_database_after_its_own_defer(
+    cog, bot, creator, member, db
+):
+    await a_channel(cog, bot, creator, member)
+    _embed, view = await panel_for(bot, member)
+    bot.db = DatabaseDown(bot.db)
+
+    interaction = FakeInteraction(bot, member)
+    await button(view, "Refresh").callback(interaction)
+
+    assert interaction.response.messages[0].get("deferred") is True
+    assert interaction.sent == DB_UNAVAILABLE
+    assert interaction.edits == []
+
+
+async def test_a_re_render_retires_the_view_it_replaced_and_a_timeout_disables_every_item(
+    cog, bot, creator, member
+):
+    await a_channel(cog, bot, creator, member)
+    _embed, view = await panel_for(bot, member)
+
+    interaction = await press(bot, member, view, "Refresh")
+
+    assert view.replaced is True and view.is_finished()
+    fresh = interaction.view
+    assert fresh.replaced is False
+
+    fresh.message = FakeMessage(1, "", embed=discord.Embed(title="x"))
+    fresh.last_interaction = interaction
+    await fresh.on_timeout()
+
+    assert all(item.disabled for item in fresh.children if hasattr(item, "disabled"))
+    assert interaction.edits[-1]["embeds"][0].footer.text == voice.PANEL_TIMEOUT_FOOTER
+
+
+async def test_a_move_on_a_channel_that_was_handed_away_mid_card_changes_nothing(
+    cog, bot, creator, member, db
+):
+    made = await a_channel(cog, bot, creator, member)
+    _embed, view = await panel_for(bot, member)
+    friend = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
+    await set_owner(db, made.id, friend.id)
+
+    interaction = await press(bot, member, view, "Lock")
+
+    assert "not yours any more" in interaction.sent
+    assert made.permissions == []
