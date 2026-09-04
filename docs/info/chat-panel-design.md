@@ -531,3 +531,99 @@ commit at clean boundaries — **one layer at a time: (1) `chat_panel.py` + `tes
 (2) the route rewrites + the AST guard green, (3) the cog panel, (4) the doc and string sweep** —
 so a kill costs the last layer rather than the build. Layer 2 before layer 3 on purpose: it is the
 one that can fail a test nobody expected, and it is worth nothing half-finished.
+
+## Build deviations
+
+Written by the build agent, 2026-09-04, on `worktree-agent-ab33797d235cf0d96`. Everything
+not listed here was built as §A–§J say, with the owner's four forks all at **(a)**.
+⚠️ **NOT verified: anything against live Discord.** No boot (no token), no panel opened, no
+note written, no model called. The substitutes are named in the measurements at the foot.
+
+1. **The shared functions return an `Outcome` dataclass, not the bare string
+   `pings.save_settings` returns.** §F specified "the `pings.save_settings` shape
+   byte-for-byte". A string cannot carry the HTTP status and error code the website door has
+   to raise `Refused` with, and the alternative — the route re-deriving a status by matching
+   on the message — is exactly the drift one shared function exists to stop. `Outcome(ok,
+   message, code, status, value)` is what both doors read; Discord uses `message`, the
+   website adds `status`/`code`, and `value` carries the new note's id.
+
+2. **`status_lines` takes `(store, guild_id, *, tiers, spend, hidden, notes, trouble)`, not
+   `(bot, guild, actor, *, spend, notes, tiers)`.** Nothing in the lines depends on who is
+   looking: the admin gate decides whether `spend` is passed at all, and the caller passes
+   `hidden=True` in its place. An `actor` the function never reads would be an argument a
+   later reader has to disprove.
+
+3. **The `/memory` line is appended by the COG, not by `status_lines`.** §C puts it on the
+   root; §F describes `status_lines` as "the pure half of `:226–259`, so the embed and any
+   later `/api/chat/status` read one list". A `/memory` pointer is a Discord-panel sentence,
+   not a status fact, and a future JSON status route should not carry it. It lives as
+   `chat_panel.MEMORY_LINE` so it still has one home.
+
+4. **The routes KEEP their `_wanted_section` and `_staff_row_only` pre-checks in front of the
+   shared functions.** §F says `remove_note` "keeps the guild check and the `SERVER`
+   refusal", and it does — but the route's own guards fire first, so the website's wording
+   and status codes are unchanged (`SERVER_ROW_LOCKED` "cannot be changed by hand", 409;
+   `NO_SUCH_SECTION`, 404). Removing them would have moved two messages and two status codes
+   that `tests/api/tools/test_chat.py` pins, for no gain: the shared guards are still what
+   the Discord door hits, and both doors still refuse the same moves. The cost is that two
+   sentences exist for the `server` refusal — as they already did on `main`.
+
+5. **The five refusal strings moved to `chat_panel.py` and were DELETED from the router**
+   (`NO_SUCH_TROPE`, `MODE_NEEDS_A_NAME`, `TROPE_IS_OFF`, `TROPE_IN_USE`, `LAST_TROPE_ON`),
+   along with the router's three `clean_*` wrappers and `note_refused`. §E did not list them;
+   leaving them would have been a second home for a sentence the shared function now returns
+   (checklist 15). The strings themselves are byte-identical, which is why every personality
+   test in `tests/api/tools/test_chat.py` stayed green with no edit.
+
+6. **`edit_note` does not refuse an unchanged edit.** It was written that way first and taken
+   out: the website route has always saved an unchanged PUT and returned 200, and a new 400
+   there would be a behaviour change nobody asked for. A no-op edit therefore leaves one
+   `chat.knowledge_edited` row on both doors.
+
+7. **`KNOWN_DYNAMIC` in `tests/test_logkinds.py` lost five entries and six kinds.** The five
+   `cogs/content/chat.py::<CONSTANT>` call sites are gone (the shared functions build their
+   kinds with `kind_via` over string LITERALS, which the guard reads directly and which need
+   no entry), and the six `web.chat.*` kinds no route can produce any more left the `note()`
+   enumeration. The stale half of `test_every_dynamic_kind_is_enumerated` is what caught
+   both — it is not cosmetic tidying.
+
+8. **Sweep rows are numbered `C1`–`C8`, not from 144.** §H told the build to number from the
+   next free row; a second wave-3 build was numbering from 144 concurrently and the merge
+   order is not fixed, so letters make a half-renumbered table impossible to mistake for a
+   finished one. The conductor assigns the digits at landing. Rows **33, 34, 35, 36, 37**
+   were rewritten in place as §E asked.
+
+9. **`docs/access/OWNER_GUIDE.md` gains its chat row but the sweeps COUNT is left alone**
+   (`:5`, `:82` still say 143). The count depends on both wave-3 builds landing, and this
+   branch cannot know the total. The conductor moves it with the renumber.
+
+10. **`docs/TODO.md`, `docs/DONE.md`, `docs/info/README.md` and this document's header were
+    not touched**, per the brief — the conductor owns them at landing. This foot is the one
+    thing this build appends to the design.
+
+11. **`chat_panel.py` imports `panels.py`, which imports `discord`.** The brief called the new
+    module "pure (no discord imports)", and it has none of its own — but `panel_minutes` and
+    `site_page_url` are one-liners over the library, exactly as `pings.py` does it, and
+    re-implementing them would be a second home for two functions wave 0 exists to share.
+    Nothing in `chat_panel.py` touches a Discord object.
+
+12. **A `NoteFieldsModal` field is called `note_title`, not `title`.** `discord.ui.Modal`
+    already owns `title`; the class attribute would have collided with the modal's own.
+
+13. **The note card carries the list's `Find…` words.** §C does not say so — `Back` just
+    returns to the list. But `Find…` is the answer to the 25-cap, and throwing the filter away
+    the moment you open a note would make the cap bite again on the way back. The card, and the
+    remove confirm behind it, copy `query` from the view they replaced.
+
+### What §J measured
+
+| Check | Result |
+|---|---|
+| `commands synced` | ⚠️ **No boot — no token.** Measured the only other way: every cog loaded and the real tree counted. **38 top-level, delta ZERO**, and `/chat` is an `app_commands.Command`, no longer a `Group`. `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits` still asserts 38, unedited |
+| Full suite | **4338 passed**, 0 failed (baseline measured on this worktree at `5db58fb` before any change: **4268**). `tests/cogs/content/test_chat.py` went 72 → **98** tests; `tests/test_chat_panel.py` is new at **43** |
+| `ruff check .` | clean |
+| Import edge | `python -c "import black_bloc.chat_panel, black_bloc.cogs.content.chat, black_bloc.api.tools.chat, black_bloc.knowledge, black_bloc.personas, black_bloc.settings_store"` — passes, no cycle |
+| `node site/mock/check.mjs` | **17 pages / 142 routes, all keys present** — unchanged, as §E predicted (no route added, removed or renamed) |
+| `labels.js` / `server.mjs` parse | both parse |
+| The AST guard | `test_a_route_never_notes_an_event_its_shared_path_already_logged` passes with the five `note()`s gone |
+| Not measured | anything live: no Discord, no dashboard in a browser, no model provider called. `chat_llm_mode` is still `off` and this build does not change it |

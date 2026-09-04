@@ -1,5 +1,10 @@
 ﻿# Phase 11 — Chat 2 (F10 step 2): editable lines, data intents, routing, manners
 
+> ⚠️ **SUPERSEDED IN PART, 2026-09-04, by [`chat-panel-design.md`](chat-panel-design.md)** —
+> the FEATURE behaviour below is what shipped, but every `/chat …` subcommand it names is
+> retired: `/chat` is now ONE staff command that opens a panel. Read the doors off the panel
+> design; read the behaviour here.
+
 > ✅ **11a built in `e508232` + `6a91b87` + `f00e8de`** (branch `worktree-agent-aba2337a090a6d590`
 > off `main` @ `ebf99a2`, 2026-08-27). Sections 1 (storage, seed, classification
 > order, `POST /api/chat/try`), 2, 3 and 4 are **done and tested** — `pytest -q`

@@ -1,5 +1,11 @@
 # Phase 14 — Chat step 3: the real conversation (three tiers, knowledge, personas)
 
+> ⚠️ **SUPERSEDED IN PART, 2026-09-04, by [`chat-panel-design.md`](chat-panel-design.md)** —
+> the tiers, the knowledge store, the personas and the spend cap are all as described, but the
+> `/chat status`, `/chat knowledge …` and `/chat personality …` subcommands this doc walks
+> through (`:78`, `:105`, `:126`, `:137`, `:144`) are retired: `/chat` is now ONE staff command
+> that opens a panel, and every one of them is a button, a select or a modal on it.
+
 > **Audience:** the Phase 14 build agents and the reviewer. **Status:** TRACKED.
 > **Last verified: 2026-09-01** — owner decisions taken this morning (one at a
 > time, verbatim below); the GABI mechanics cited were surveyed today from
