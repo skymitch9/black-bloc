@@ -18,8 +18,8 @@
 **shadow** since 17:42 = F-Y2 done). Panels wave 1 is COMPLETE, wave 2 has THREE of five shipped (memory v68,
 golive v70, youtube v71) with every fork decided (🔧 panels item below); all three landing entries are in
 `DONE.md` 2026-09-03. **Pings is next** (Fable-review `info/pings-panel-design.md` against §2 first, then Opus
-build in its own worktree off `main`, sweeps 126+; usage read before dispatch; weekly cut-off 90%); voice last. **Next:** (1) the operator token MINT is owed — classifier-blocked,
-see the 🔧 item; (2) wave-2 builds in cost order, memory first (Opus, own worktree, brief carries the
+build in its own worktree off `main`, sweeps 126+; usage read before dispatch; weekly cut-off 90%); voice last. **Next:** (1) the operator token is MINTED and staged (17:56) — verify the bearer read after the
+pings deploy, see the 🔧 item; (2) wave-2 builds in cost order, memory first (Opus, own worktree, brief carries the
 decided forks + `info/review-checklist.md` + the design doc), merge/deploy each as it lands; (3) the
 small review findings (🔧 below) folded into whatever touches those files; (4) owner by-eye sweeps
 14–15, 58–103; (5) Pawpette's Twitch Team form still needs the owner's walk-through
@@ -201,8 +201,13 @@ docs bookkeeping lands with the work, not after.
 
 ## 🔧 Open engineering items
 
-- **Operator read token — MINT STILL OWED (code live v67 `285b5e3` 16:04; the build record is in
-  `DONE.md` 2026-09-03).** The blind mint (`docs/access/operator-read.md`, one command: python mints,
+- **Operator read token — MINTED 17:56, STAGED, goes live at the next deploy (the pings release);
+  moves to `DONE.md` once a bearer read is verified live.** (Code live v67 `285b5e3` 16:04; the build
+  record is in `DONE.md` 2026-09-03.) 17:55 the owner ordered the session to add the rule itself
+  ("Do this: \scripts\mint-operator-token.ps1 in ~/.claude/settings.json, then say retry") — rule added,
+  script ran, `flyctl secrets list` shows `OPERATOR_READ_TOKEN` **Staged** (digest 6158ac0c…),
+  `BLACK_BLOC_OPERATOR_TOKEN` set for the user (64 chars), value never printed. Verify after the
+  deploy: `/api/health` with the bearer answers, and `operator_read_log` writes one Core row. History: The blind mint (`docs/access/operator-read.md`, one command: python mints,
   `flyctl secrets set --stage`, HKCU `BLACK_BLOC_OPERATOR_TOKEN`, value never printed) was approved by
   the owner 16:00 ("Yes") but the permission classifier BLOCKED the command at 16:15. Owner chose the
   permission-rule route (16:30: "Add a permission rule for flyctl secrets set … and tell me to retry");
