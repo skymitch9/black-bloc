@@ -1,41 +1,65 @@
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 
 from black_bloc.raidtrain import (
+    ALL_SLOTS,
     CANCELLED,
+    CARD_MOVES,
+    CLAIM_SELECT,
     DONE,
     LIVE,
     LOCKED,
+    MODE_SELECT,
     OPEN,
+    OPEN_SLOTS,
+    PANEL_MINUTES_KEY,
+    PANEL_TIMEOUT_FOOTER,
+    SLOT_COUNT_MAX,
     STATUS_WORDS,
     STATUSES,
+    TAKE_OFF_SELECT,
+    TAKEN_SLOTS,
     TERMINAL_STATUSES,
+    TRAIN_SELECT,
     TRANSITIONS,
     allowed_moves,
     cancelled_text,
     caps_ok,
+    card_buttons,
+    card_selects,
     due_checkins,
     due_reminders,
     ends_at,
     filled,
     live_post_text,
+    may_claim,
     may_move,
+    mine_options,
     missed_reminders,
     move_refusal,
     neighbours,
     next_open_position,
     open_positions,
+    panel_minutes,
     positions_word,
     reminder_text,
     render_lineup,
+    root_buttons,
+    root_selects,
     slot_at,
+    slot_label,
+    slot_options,
     slot_times,
     slots_held,
+    taken_positions,
+    train_options,
     twitch_url,
 )
 
 START = datetime(2026, 9, 14, 19, 0, tzinfo=UTC)
+SELECT_CAP = 25
 
 
 def iso(when):
@@ -165,12 +189,13 @@ def test_the_lineup_names_the_ping_role_only_and_reads_every_slot():
     assert "2/3 slot(s) filled" in text
     assert "https://twitch.tv/alpha" in text
     assert "<@11>" in text and "_open_" in text
-    assert "`/raidtrain claim`" in text
+    assert "**Take an hour…**" in text
+    assert "/raidtrain claim" not in text
 
 
 def test_a_locked_lineup_stops_inviting_claims_and_a_cancelled_one_says_so():
     locked = render_lineup(train(status=LOCKED), lineup())
-    assert "`/raidtrain claim`" not in locked
+    assert "**Take an hour…**" not in locked
     assert "locked" in locked
     off = render_lineup(train(status=CANCELLED, cancel_reason="the venue fell through"), lineup())
     assert "**This train is cancelled.**" in off
@@ -256,3 +281,212 @@ def test_a_twitch_url_survives_an_at_sign():
 @pytest.mark.parametrize("status", [OPEN, LOCKED, LIVE, DONE, CANCELLED])
 def test_every_status_renders_a_lineup_rather_than_raising(status):
     assert render_lineup(train(status=status), lineup())
+
+
+# --- the panel tables, as data -------------------------------------------------------------------
+
+
+def test_a_slot_select_can_never_cap_because_a_train_is_shorter_than_the_ceiling():
+    """§D rests on this: 24 slots is a message-length limit, and it is below Discord's 25."""
+    assert SLOT_COUNT_MAX < SELECT_CAP
+    assert len(slot_options([slot(one) for one in range(1, SLOT_COUNT_MAX + 1)])) < SELECT_CAP
+
+
+def test_taken_positions_is_the_mirror_of_the_open_ones():
+    rows = lineup()
+    assert taken_positions(rows) == [1, 2]
+    assert open_positions(rows) == [3]
+    assert taken_positions([]) == []
+
+
+@pytest.mark.parametrize(
+    ("status", "linked", "require", "ceiling", "who", "wanted"),
+    [
+        (OPEN, True, True, 1, 99, True),
+        (LOCKED, True, True, 1, 99, False),
+        (LIVE, True, True, 1, 99, False),
+        (DONE, True, True, 1, 99, False),
+        (CANCELLED, True, True, 1, 99, False),
+        (OPEN, False, True, 1, 99, False),
+        (OPEN, False, False, 1, 99, True),
+        (OPEN, True, True, 1, 11, False),
+        (OPEN, True, True, 0, 11, True),
+    ],
+)
+def test_the_claim_select_renders_on_four_conditions_and_no_others(
+    status, linked, require, ceiling, who, wanted
+):
+    assert (
+        may_claim(
+            train(status=status),
+            lineup(),
+            who,
+            ceiling=ceiling,
+            linked=linked,
+            require_link=require,
+        )
+        is wanted
+    )
+
+
+def test_a_full_train_offers_no_claim_even_while_it_is_open():
+    full = [slot(one, user_id=100 + one) for one in (1, 2, 3)]
+    assert may_claim(train(), full, 99, ceiling=0, linked=True, require_link=True) is False
+
+
+@pytest.mark.parametrize("status", [OPEN, LOCKED, LIVE, DONE, CANCELLED])
+def test_every_state_renders_its_own_card_row_and_no_other(status):
+    said = [
+        move.label for move in card_buttons(status, organizer=True, held=[], slot_count=3)
+    ]
+    assert said[-2:] == ["Back", "Refresh"]
+    assert ("Lock the lineup" in said) is (status == OPEN)
+    assert ("Open it for sign-ups" in said) is (status == LOCKED)
+    assert not ("Lock the lineup" in said and "Open it for sign-ups" in said)
+    assert ("Call it off…" in said) is (status in (OPEN, LOCKED))
+    assert ("Put somebody in…" in said) is (status in (OPEN, LOCKED))
+    assert ("Change two slots round…" in said) is (status in (OPEN, LOCKED))
+
+
+def test_a_live_train_carries_neither_lock_button():
+    said = [move.label for move in card_buttons(LIVE, organizer=True, held=[1], slot_count=3)]
+    assert said == ["Back", "Refresh"]
+
+
+def test_a_member_sees_only_the_move_that_is_theirs_to_make():
+    alone = [move.label for move in card_buttons(OPEN, organizer=False, held=[2], slot_count=3)]
+    assert alone == ["Give back slot #2", "Back", "Refresh"]
+    many = [move.label for move in card_buttons(OPEN, organizer=False, held=[1, 2], slot_count=3)]
+    assert many == ["Give an hour back…", "Back", "Refresh"]
+    assert [row["position"] for row in slots_held(lineup(), 11)] == [1]
+
+
+def test_give_back_and_give_an_hour_back_never_coexist():
+    for count in range(0, 4):
+        said = [
+            move.label
+            for move in card_buttons(
+                OPEN, organizer=True, held=list(range(1, count + 1)), slot_count=4
+            )
+        ]
+        assert not (
+            any(one.startswith("Give back slot") for one in said)
+            and "Give an hour back…" in said
+        )
+
+
+def test_no_row_on_a_card_ever_carries_more_than_five_controls():
+    counted: dict[int, int] = {}
+    for move in card_buttons(OPEN, organizer=True, held=[1], slot_count=4):
+        counted[move.row] = counted.get(move.row, 0) + 1
+    assert max(counted.values()) <= 5
+    assert counted[2] == 4
+
+
+def test_a_one_slot_train_is_never_offered_a_swap():
+    said = [move.label for move in card_buttons(OPEN, organizer=True, held=[], slot_count=1)]
+    assert "Change two slots round…" not in said
+
+
+@pytest.mark.parametrize("status", [OPEN, LOCKED, LIVE, DONE, CANCELLED])
+def test_take_somebody_off_only_renders_where_the_lineup_may_still_change(status):
+    found = card_selects(status, organizer=True, claimable=True, has_taken=True)
+    assert (TAKE_OFF_SELECT in found) is (status in (OPEN, LOCKED))
+    assert (CLAIM_SELECT in found) is (status == OPEN)
+
+
+def test_an_empty_lineup_is_never_offered_take_somebody_off():
+    assert card_selects(OPEN, organizer=True, claimable=False, has_taken=False) == ()
+    assert card_selects(OPEN, organizer=False, claimable=False, has_taken=True) == ()
+
+
+@pytest.mark.parametrize("mode", ["off", "shadow", "on"])
+def test_the_root_offers_start_only_when_the_feature_can_carry_a_new_train(mode):
+    said = [
+        move.label
+        for move in root_buttons(organizer=True, staff=False, holds_any=False, mode=mode)
+    ]
+    assert ("Start a raid train" in said) is (mode != "off")
+    assert said[-1] == "Refresh"
+
+
+def test_a_member_never_reaches_the_staff_half_of_the_root():
+    said = [
+        move.label
+        for move in root_buttons(organizer=False, staff=False, holds_any=False, mode="on")
+    ]
+    assert said == ["Refresh"]
+    mine = [
+        move.label
+        for move in root_buttons(organizer=False, staff=False, holds_any=True, mode="on")
+    ]
+    assert mine == ["My slots…", "Refresh"]
+
+
+def test_staff_reach_setup_and_logs_even_while_raid_trains_are_off():
+    said = [
+        move.label
+        for move in root_buttons(organizer=True, staff=True, holds_any=False, mode="off")
+    ]
+    assert said == ["Setup…", "Logs", "Refresh"]
+    assert root_selects(staff=True, has_trains=False) == (MODE_SELECT,)
+    assert root_selects(staff=False, has_trains=True) == (TRAIN_SELECT,)
+
+
+def test_the_train_select_names_the_train_and_the_state_it_is_in():
+    found = train_options([train(), train(id=2, title="Sunday train", status=LOCKED)])
+    assert found[0] == ("1", "#1 · open for sign-ups · Saturday train")
+    assert found[1][0] == "2"
+    assert "locked" in found[1][1]
+    assert train_options(None) == ()
+
+
+def test_the_slot_selects_split_the_open_hours_from_the_taken_ones():
+    rows = lineup()
+    assert [value for value, _ in slot_options(rows, OPEN_SLOTS)] == ["3"]
+    assert [value for value, _ in slot_options(rows, TAKEN_SLOTS)] == ["1", "2"]
+    assert [value for value, _ in slot_options(rows, ALL_SLOTS)] == ["1", "2", "3"]
+
+
+def test_a_slot_option_says_the_hour_in_plain_words_and_names_its_holder():
+    rows = lineup()
+    assert slot_options(rows, TAKEN_SLOTS)[0][1] == "#1 · 19:00 UTC · alpha"
+    assert slot_options(rows, TAKEN_SLOTS, names={11: "Alice"})[0][1].endswith("Alice")
+    assert slot_options(rows, OPEN_SLOTS)[0][1] == "#3 · 21:00 UTC"
+
+
+def test_a_holder_with_neither_a_name_nor_a_login_is_still_named_something():
+    assert slot_options([slot(1, user_id=44)], TAKEN_SLOTS)[0][1] == "#1 · 19:00 UTC · member 44"
+    assert slot_label({"position": 2, "starts_at": "not a time", "user_id": None}) == (
+        "#2 · time unreadable"
+    )
+
+
+def test_my_slots_lists_one_option_per_train_however_many_hours_are_held():
+    rows = [
+        slot(1, user_id=11, train_id=5, train_title="Saturday train", train_status=OPEN),
+        slot(2, user_id=11, train_id=5, train_title="Saturday train", train_status=OPEN),
+        slot(1, user_id=11, train_id=6, train_title="Sunday train", train_status=LOCKED),
+    ]
+    found = mine_options(rows)
+    assert [value for value, _ in found] == ["5", "6"]
+    assert "Saturday train" in found[0][1]
+    assert mine_options(()) == ()
+
+
+def test_the_panel_length_is_a_setting_and_not_a_constant():
+    store = SimpleNamespace(get=lambda guild_id, key: 12 if key == PANEL_MINUTES_KEY else None)
+    assert panel_minutes(store, 7) == 12
+    assert PANEL_MINUTES_KEY == "raidtrain_panel_minutes"
+
+
+def test_the_gone_quiet_footer_is_a_whole_sentence_naming_the_command():
+    assert PANEL_TIMEOUT_FOOTER.endswith("run /raidtrain again")
+
+
+def test_every_card_move_has_exactly_one_home_in_the_move_table():
+    said = [move.label for move in CARD_MOVES]
+    assert len(said) == len(set(said))
+    for status in STATUSES:
+        for move in card_buttons(status, organizer=True, held=[1], slot_count=4):
+            assert move.action in {one.action for one in CARD_MOVES}

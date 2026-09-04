@@ -7,29 +7,29 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from ...cogs.content.raidtrain import (
-    MEMBER_NOT_LINKED,
+    assign_slot,
     counts,
-    create_train,
-    empty_slot,
+    create_and_publish,
     get_train,
     list_trains,
+    move_train,
     slots_for,
-    swap_holders,
-    take_slot,
+    swap_slots,
     twitch_login_of,
+    unassign_slot,
 )
-from ...events import DESCRIPTION_LIMIT, START_IN_THE_PAST, clamp, start_error
+from ...events import START_IN_THE_PAST, clamp, start_error
 from ...golive import parse_ts
+from ...logkinds import VIA_WEBSITE
 from ...raidtrain import (
     CANCELLED,
+    DESCRIPTION_LIMIT,
     LOCKED,
     OPEN,
     SLOT_COUNT_MAX,
     SLOT_COUNT_MIN,
     SLOT_MINUTES_MAX,
     SLOT_MINUTES_MIN,
-    SLOT_TAKEN,
-    SLOT_UNKNOWN,
     STATUS_WORDS,
     STATUSES,
     TITLE_LIMIT,
@@ -37,12 +37,18 @@ from ...raidtrain import (
     may_move,
     move_refusal,
     render_lineup,
-    slot_at,
 )
 from ...timezones import DEFAULT_TZ, START_EXAMPLE, parse_start
 from ..auth import Refused, staff_dependency
 from ..names import resolve_one
-from ..writes import note, require_cog, require_db, require_guild, wanted_id, writer_dependency
+from ..writes import (
+    actor_for,
+    require_cog,
+    require_db,
+    require_guild,
+    wanted_id,
+    writer_dependency,
+)
 
 log = logging.getLogger(__name__)
 
@@ -64,11 +70,6 @@ BAD_STATUS = (
     "or cancelled, and only some of those can be reached from where this one is."
 )
 CREATED = "**{title}** is up with {count} slot(s) of {minutes} minutes each."
-ASSIGNED = "Slot #{position} now belongs to {who}."
-UNASSIGNED = "Slot #{position} is open again."
-NOBODY_THERE = "Slot #{position} is already empty, so there was nothing to take off it."
-SWAPPED = "Slots #{a} and #{b} have changed places."
-SAME_SLOT = "Those are the same slot, so nothing was changed."
 STATUS_SET = "**{title}** is now **{status}**."
 CANCEL_NEEDS_REASON = (
     "Cancelling tells everybody who signed up, so it needs a reason to tell them. Type one and "
@@ -125,6 +126,13 @@ def train_row(guild: Any, row: Any, slots: Any) -> dict[str, Any]:
         "organizer_name": resolve_one(guild, row["organizer_id"])["display_name"],
         "editable": str(row["status"]) in (OPEN, LOCKED),
     }
+
+
+def answered(outcome: Any) -> Any:
+    """The shared function's refusal, in its own words, with the status the site expects."""
+    if not outcome.ok:
+        raise Refused(outcome.status, outcome.code, outcome.message)
+    return outcome
 
 
 def build_router(bot: Any) -> APIRouter:
@@ -190,7 +198,7 @@ def build_router(bot: Any) -> APIRouter:
         who = await writer(request)
         guild = require_guild(bot)
         db = require_db(bot)
-        cog = require_cog(bot, COG, FEATURE)
+        require_cog(bot, COG, FEATURE)
         title = clamp(payload.get("title"), TITLE_LIMIT)
         if not title:
             raise Refused(400, "bad_request", NO_TITLE)
@@ -222,29 +230,20 @@ def build_router(bot: Any) -> APIRouter:
                     count_max=SLOT_COUNT_MAX,
                 ),
             )
-        train_id = await create_train(
-            db,
-            guild.id,
-            int(who["id"]),
-            title=title,
-            description=clamp(payload.get("description"), DESCRIPTION_LIMIT),
-            starts_at=starts,
-            slot_minutes=minutes,
-            slot_count=count,
+        made = answered(
+            await create_and_publish(
+                bot,
+                guild,
+                actor_for(bot, who, guild),
+                title=title,
+                description=clamp(payload.get("description"), DESCRIPTION_LIMIT),
+                starts_at=starts,
+                slot_minutes=minutes,
+                slot_count=count,
+                via=VIA_WEBSITE,
+            )
         )
-        await note(
-            bot,
-            guild,
-            "web.raidtrain.create",
-            who,
-            details={
-                "train_id": train_id,
-                "title": title,
-                "slot_minutes": minutes,
-                "slot_count": count,
-            },
-        )
-        await cog.publish_lineup(guild, train_id)
+        train_id = made.value
         row = await get_train(db, guild.id, train_id)
         return train_row(guild, row, await slots_for(db, train_id)) | {
             "message": CREATED.format(title=title, count=count, minutes=minutes)
@@ -258,53 +257,33 @@ def build_router(bot: Any) -> APIRouter:
         who = await writer(request)
         guild = require_guild(bot)
         db = require_db(bot)
-        cog = require_cog(bot, COG, FEATURE)
+        require_cog(bot, COG, FEATURE)
         train = await wanted_train(guild, db, train_id)
-        slots = await slots_for(db, train_id)
-        wanted = slot_at(slots, position)
-        if wanted is None:
-            raise Refused(
-                404,
-                "no_such_slot",
-                SLOT_UNKNOWN.format(position=position, last=len(slots)),
-            )
+        actor = actor_for(bot, who, guild)
         given = payload.get("member_id")
         if given in (None, "", "null"):
-            if not await empty_slot(db, wanted["id"]):
-                raise Refused(409, "already_empty", NOBODY_THERE.format(position=position))
-            await note(
-                bot,
-                guild,
-                "web.raidtrain.unassign",
-                who,
-                target=wanted["user_id"],
-                details={"train_id": train_id, "position": position},
+            done = answered(
+                await unassign_slot(bot, guild, actor, train, position, via=VIA_WEBSITE)
             )
-            said = UNASSIGNED.format(position=position)
         else:
             member_id = wanted_id(given)
-            login = await twitch_login_of(db, member_id)
-            named = resolve_one(guild, member_id)["display_name"]
-            if not login and bot.store.get(guild.id, "raidtrain_require_link"):
-                raise Refused(409, "not_linked", MEMBER_NOT_LINKED.format(who=named))
-            if wanted["user_id"] is not None:
-                await empty_slot(db, wanted["id"])
-            if not await take_slot(db, wanted["id"], member_id, login, int(who["id"])):
-                raise Refused(409, "slot_taken", SLOT_TAKEN.format(position=position))
-            await note(
-                bot,
-                guild,
-                "web.raidtrain.assign",
-                who,
-                target=member_id,
-                details={"train_id": train_id, "position": position, "twitch_login": login},
+            done = answered(
+                await assign_slot(
+                    bot,
+                    guild,
+                    actor,
+                    train,
+                    position,
+                    member_id,
+                    await twitch_login_of(db, member_id),
+                    named=resolve_one(guild, member_id)["display_name"],
+                    via=VIA_WEBSITE,
+                )
             )
-            said = ASSIGNED.format(position=position, who=named)
-        await cog._refresh_lineup(guild, train_id)
         fresh = await slots_for(db, train_id)
         return train_row(guild, train, fresh) | {
             "slots": [slot_row(guild, one) for one in fresh],
-            "message": said,
+            "message": done.message,
         }
 
     @router.post("/{train_id}/swap")
@@ -314,34 +293,23 @@ def build_router(bot: Any) -> APIRouter:
         who = await writer(request)
         guild = require_guild(bot)
         db = require_db(bot)
-        cog = require_cog(bot, COG, FEATURE)
+        require_cog(bot, COG, FEATURE)
         train = await wanted_train(guild, db, train_id)
-        first, second = _whole(payload.get("a"), 0), _whole(payload.get("b"), 0)
-        if first == second:
-            raise Refused(400, "bad_request", SAME_SLOT)
-        slots = await slots_for(db, train_id)
-        one, other = slot_at(slots, first), slot_at(slots, second)
-        if one is None or other is None:
-            raise Refused(
-                404,
-                "no_such_slot",
-                SLOT_UNKNOWN.format(
-                    position=first if one is None else second, last=len(slots)
-                ),
+        done = answered(
+            await swap_slots(
+                bot,
+                guild,
+                actor_for(bot, who, guild),
+                train,
+                _whole(payload.get("a"), 0),
+                _whole(payload.get("b"), 0),
+                via=VIA_WEBSITE,
             )
-        await swap_holders(db, one, other)
-        await note(
-            bot,
-            guild,
-            "web.raidtrain.swap",
-            who,
-            details={"train_id": train_id, "a": first, "b": second},
         )
-        await cog._refresh_lineup(guild, train_id)
         fresh = await slots_for(db, train_id)
         return train_row(guild, train, fresh) | {
             "slots": [slot_row(guild, one) for one in fresh],
-            "message": SWAPPED.format(a=first, b=second),
+            "message": done.message,
         }
 
     @router.post("/{train_id}/status")
@@ -359,24 +327,14 @@ def build_router(bot: Any) -> APIRouter:
             raise Refused(400, "bad_status", BAD_STATUS.format(status=wanted or "(nothing)"))
         if not may_move(train["status"], wanted):
             raise Refused(409, "bad_move", move_refusal(train["status"], wanted))
-        reason = clamp(payload.get("reason"), DESCRIPTION_LIMIT)
+        actor = actor_for(bot, who, guild)
         if wanted == CANCELLED:
+            reason = clamp(payload.get("reason"), DESCRIPTION_LIMIT)
             if not reason:
                 raise Refused(400, "bad_request", CANCEL_NEEDS_REASON)
-            actor = guild.get_member(int(who["id"])) or int(who["id"])
-            await cog.cancel_train(guild, train, reason, actor)
+            await cog.cancel_train(guild, train, reason, actor, via=VIA_WEBSITE)
         else:
-            from ...cogs.content.raidtrain import set_status
-
-            await set_status(db, train_id, wanted)
-            await note(
-                bot,
-                guild,
-                "web.raidtrain.lock" if wanted == LOCKED else "web.raidtrain.unlock",
-                who,
-                details={"train_id": train_id, "title": train["title"]},
-            )
-            await cog._refresh_lineup(guild, train_id)
+            answered(await move_train(bot, guild, actor, train, wanted, via=VIA_WEBSITE))
         fresh = await get_train(db, guild.id, train_id)
         slots = await slots_for(db, train_id)
         return train_row(guild, fresh, slots) | {

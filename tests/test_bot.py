@@ -14,7 +14,6 @@ LOGS_GROUPS = {
     "honeypot": "honeypot",
     "modmail": "modmail",
     "mod": "mod",
-    "raidtrains": "raidtrain",
 }
 
 
@@ -33,7 +32,6 @@ STAFF_COMMANDS = {
     "note",
     "presence",
     "purge",
-    "raidtrains",
     "reply",
     "role",
     "rolemenu",
@@ -168,6 +166,7 @@ async def test_every_feature_group_has_a_logs_command(settings):
         assert [option.name for option in logs.parameters] == ["count", "important_only"]
         assert feature in FEATURES
     assert "chat" not in groups
+    assert "raidtrains" not in groups
     await bot.close()
 
 
@@ -179,7 +178,7 @@ async def test_the_command_tree_stays_inside_discords_limits(settings):
 
     top = bot.tree.get_commands()
     assert len(top) <= TOP_LEVEL_MAX
-    assert len(top) == 38
+    assert len(top) == 37
     for command in top:
         if isinstance(command, app_commands.Group):
             assert len(command.commands) <= CHILDREN_MAX, command.name

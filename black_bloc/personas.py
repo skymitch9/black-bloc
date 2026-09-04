@@ -84,10 +84,10 @@ and event pings everybody can have, and **Start my own ping role** if you stream
 pings* and *Notifications* panels do the same.
 `/birthday` — `/birthday set` stores a birthday, `/birthday optout` takes it back off.
 `/poll` — `/poll create` puts a question to the room.
-`/raidtrain` — the raid trains. `/raidtrain list` shows what is coming up and which hours are
-free, `/raidtrain claim` takes one (link Twitch first), `/raidtrain release` gives it back, and
-`/raidtrain mine` says what you hold. Black Bloc DMs you before your slot with who raids into
-you and who you raid next.
+`/raidtrain` — the raid trains. It opens one window listing what is coming up: pick a train to
+see the whole lineup and which hours are free, **Take an hour…** claims one (link Twitch on
+`/golive` first), **Give back slot #N** hands it back, and **My slots…** says what you hold.
+Black Bloc DMs you before your slot with who raids into you and who you raid next.
 `/voice` — one window for your own temporary voice channel: rename it, set how many people fit,
 lock it, hide it, let people in or keep them out, and hand it to somebody else.
 `/memory` — does the bot remember me? It opens one window with everything Black Bloc has written

@@ -161,7 +161,7 @@ function decide(row, say) {
 }
 
 const TRAIN_TONE = { open: 'ok', locked: 'warn', live: 'warn', done: null, cancelled: null };
-const NO_TRAINS = 'No raid train matches that. Staff start one below, or with /raidtrain create in Discord.';
+const NO_TRAINS = 'No raid train matches that. Staff start one below, or with /raidtrain in Discord.';
 const TRAIN_OFF = 'Raid trains are {mode} at the moment, so nothing is posted and no reminder is sent. The Settings below turn them on.';
 
 function trainHealth(status) {

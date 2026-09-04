@@ -593,3 +593,85 @@ functions + the route edits + the API tests, (3) the cog panel, (4) the doc/stri
 costs the last layer rather than the build. Point the brief at
 [`review-checklist.md`](review-checklist.md), [`panels-program.md`](panels-program.md) §2 and this
 document, and carry the owner's F-R1/F-R2/F-R3 answers in it.
+
+## Deviations
+
+Written by the BUILD agent, 2026-09-04, on branch `worktree-agent-aba5d44f8e27a8e28`
+(commits `3e54d52`, `f584676`, `4bb059c` and the doc sweep). Everything not listed here was
+built as §B–§H say, and all three forks were built as the owner answered them: **F-R1 (a)** the
+lineup post is untouched and still carries no components; **F-R2 (a)** the train select is
+`scope="upcoming"` only; **F-R3 (a)** `Take an hour…` is the single claim door and there is no
+`Take the next open hour` button beside it.
+
+1. **`Outcome` and `refusal` moved into `black_bloc/panels.py`; `chat_panel.py` re-exports
+   them.** §F said the ONE thing to add to `panels.py` was `still_allowed` — which was already
+   there when this branch started, landed by an earlier wave-3 build. But the shared functions
+   need an answer object carrying `(ok, message, code, status)` for the website door, and
+   `chat_panel.Outcome` is exactly that. Defining a second frozen dataclass of the same name in
+   `cogs/content/raidtrain.py` would have been a checklist-15 duplicate on arrival, so the one
+   definition moved down into the library and `chat_panel` imports it and keeps its `__all__`
+   entry. No chat test moved; the change is append-shaped in `panels.py` and a three-line
+   deletion in `chat_panel.py`.
+2. **`card_buttons` and `card_selects` are two functions, not the design's single
+   `card_buttons(status, *, organizer, staff, held, may_claim, has_taken, slot_count)`.** The
+   selects are not buttons and the parametrised test needs to assert on them separately; folding
+   both into one return would have meant a tuple-of-tuples nobody could read. `staff` is not a
+   parameter of either: staff ⊆ organizer on a card (`is_organizer` returns true for staff), so
+   it would have been an argument neither function reads. `may_claim` became `claimable` on
+   `card_selects` because the pure function of that name is what computes it. Same for the root:
+   `root_selects(*, staff, has_trains)` carries `has_trains`, so `root_buttons` does not.
+3. **`Take somebody off…` also requires the train to be `open` or `locked`.** §C's table gates it
+   on "organizer · at least one taken slot" only. Cancelling does not empty the slots, so on a
+   cancelled train that gate would still render an organizer move — and §H's `Call it off…` row
+   says the card afterwards "offers no move at all except **Back**". The status gate is what
+   makes that true.
+4. **A select option's time is `%H:%M UTC`, not `<t:…:t>`.** §C asks for each option to carry its
+   `<t:…:t>` window. Discord renders no markdown inside a select option's label, so that would
+   print as the literal text `<t:1789…:t>`. The viewer's own clock is still honoured on the card
+   embed, which is `render_lineup` and is full of real timestamps; the option carries UTC, the
+   way the retired `_slot_choices` autocomplete did.
+5. **`NOBODY_THERE` is KEPT in the cog and the website's duplicate copy is DELETED instead** —
+   the reverse of §E. Once the route calls `unassign_slot`, the shared function is what produces
+   the refusal, so the router's own copy became dead. It is still reachable: a card can be
+   minutes old and its *Take somebody off…* select stale, and the website reaches it directly.
+   One home, in the function that returns it.
+6. **`move_train` handles all four reachable targets, not just lock and unlock**, keyed by
+   `MOVE_KINDS`. `POST /api/raidtrains/{id}/status` accepts any status the transition table
+   allows, so `status=live` was reachable from the website — and used to write
+   `web.raidtrain.unlock`, the wrong kind entirely. The four bare and four `web.` kinds are
+   enumerated in `tests/test_logkinds.py`'s `KNOWN_DYNAMIC`, which is the guard §H asked for.
+7. **`site/mock/contract.json`'s kind list is UNCHANGED**, where §J expected six kinds to stop
+   being written. Because the shared functions build their kind with `kind_via`, every one of the
+   seven `web.raidtrain.*` kinds is still produced — byte-identical to what `note()` wrote — and
+   `web.raidtrain.cancel`, which the contract already listed, starts being written for the first
+   time. So there is **no KI-19 note to append**: no kind stopped being written and none was
+   renamed. `node site/mock/check.mjs` reports the same **17 pages, 142 routes**.
+8. **`FEATURE_OFF` was deleted rather than rewritten.** §E lists it as a string to rewrite; with
+   `_ready` gone nothing reads it, and the panel's own `OFF_LINE` says the same thing in the
+   place a person now sees it. A rewritten string nothing renders is a second home for the fact.
+9. **`docs/info/phase18-design.md`'s superseded banner was REPLACED, not added to.** It already
+   carried one, dated 2026-09-03 — describing `/golive` and `/twitch`, the wrong feature
+   entirely, written into this doc by mistake by an earlier build. The new banner says so out
+   loud rather than quietly correcting it.
+10. **`docs/info/cutover-plan.md:45` was also fixed**, though §E does not list it: its row 3d told
+    the owner to run `/raidtrains setup channel:… organizer_role:…` and `/twitch link`, both of
+    which are now gone. `docs/info/raid-train-capture.md`'s command list was deliberately left
+    alone — it is the record of what was ASKED for in 2026-09, not a runbook.
+11. **`docs/access/OWNER_GUIDE.md`'s sweeps count (`:5`, `:86`) was NOT moved**, per the brief:
+    the conductor moves it at the merge, once the final row numbers are fixed. The "Run a raid
+    train" row was added. This branch numbered its sweep rows **163–172** from the next free row
+    at build time; a sibling wave-3 build landing first means renumbering at the merge.
+12. **The four earlier `*_panel_minutes` keys still have no `labels.js` / `server.mjs` rows.** §D
+    offered that as an optional rider; it was left, because it is four unrelated keys' worth of
+    diff in files two other wave-3 branches also touch. `raidtrain_panel_minutes` has both rows.
+13. **`python -m black_bloc` (invariant P17) was NOT run** — this build has no bot token and was
+    told not to look for one. `python -c "import black_bloc.raidtrain, black_bloc.cogs.content
+    .raidtrain, black_bloc.api.tools.raidtrain, black_bloc.personas, black_bloc.panels"` and
+    `import black_bloc.bot` are the substitutes and both pass. The command count was measured the
+    only other way, through
+    `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`: **38 → 37**.
+14. **`tests/test_bot.py::test_every_feature_group_has_a_logs_command` now covers five groups**
+    (`rolemenu`, `role`, `honeypot`, `modmail`, `mod`) and the recorded finding stands: the
+    guarantee should be re-expressed against the panels' **Logs** button before it covers
+    nothing. Not this build's job — a positive assertion that `"raidtrains" not in groups` was
+    added instead, so the retirement is measured rather than merely absent.

@@ -9,20 +9,32 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from ...actionlog import (
-    LOGS_DEFAULT,
-    LOGS_MAX,
-    LOGS_MIN,
-    log_action,
-    send_logs,
-)
+from ... import raidtrain as rt
+from ...actionlog import log_action, send_logs, stamp
 from ...command_errors import NETWORK_ERRORS, AnswersErrors
-from ...command_visibility import STAFF_ONLY
-from ...events import DESCRIPTION_LIMIT, START_IN_THE_PAST, clamp, start_error
+from ...events import START_IN_THE_PAST, clamp, start_error
 from ...golive import now_iso, parse_ts
+from ...logkinds import VIA_DISCORD, kind_via
+from ...panels import (
+    SELECT_OPTION_LIMIT,
+    NoteModal,
+    Outcome,
+    Panel,
+    answer,
+    capped_placeholder,
+    clamped,
+    db_ready,
+    db_up,
+    refusal,
+    retire,
+    site_page_url,
+    still_allowed,
+    still_staff,
+)
 from ...raidtrain import (
     CANCELLED,
     CAP_REACHED,
+    DESCRIPTION_LIMIT,
     DONE,
     LIVE,
     LOCKED,
@@ -57,7 +69,13 @@ from ...raidtrain import (
     slot_times,
     slots_held,
 )
-from ...settings_store import DB_UNAVAILABLE, GUILD_ONLY, RAIDTRAIN_MODES, require_staff
+from ...settings_store import (
+    DB_UNAVAILABLE,
+    GUILD_ONLY,
+    RAIDTRAIN_MODES,
+    SettingError,
+    coerce_value,
+)
 from ...timezones import START_EXAMPLE, get_timezone, parse_start, unix
 
 log = logging.getLogger(__name__)
@@ -68,23 +86,28 @@ LIST_LIMIT = 20
 MINE_LIMIT = 10
 MODAL_ZONE_HINT = "{example} — read in {tz}"
 
-FEATURE_OFF = (
-    "Raid trains are **{mode}** on this server, so nothing was done. A Lead turns them on with "
-    "`/raidtrains mode on`."
-)
+REFUSED = "raidtrain_refused"
+NO_SUCH_SLOT_CODE = "no_such_slot"
+SLOT_TAKEN_CODE = "slot_taken"
+ALREADY_EMPTY_CODE = "already_empty"
+NOT_LINKED_CODE = "not_linked"
+BAD_MOVE_CODE = "bad_move"
+
 NOT_AN_ORGANIZER = (
     "Building a raid train's lineup is for {who}, so nothing was changed. Ask one of them to "
     "make the change, or to give you the organizer role."
 )
 NO_SUCH_TRAIN = (
-    "Black Bloc has no raid train **{train}** here, so nothing was done. `/raidtrain list` shows "
-    "the ones coming up."
+    "Black Bloc has no raid train **{train}** here any more, so nothing was done. Press "
+    "**Refresh** and pick again."
 )
 NOTHING_UPCOMING = (
-    "There is no raid train on the calendar right now. An organizer starts one with "
-    "`/raidtrain create`."
+    "There is no raid train on the calendar right now. An organizer starts one with **Start a "
+    "raid train**."
 )
-NOTHING_HELD = "You do not hold a slot on any raid train. `/raidtrain list` shows what is running."
+NOTHING_HELD = (
+    "You do not hold a slot on any raid train. **Back** shows the ones that are coming up."
+)
 BAD_NUMBER = (
     "**{given}** is not a whole number, so no train was made. Slots are {min}–{max} minutes "
     "long, and a train runs {count_min}–{count_max} of them."
@@ -95,12 +118,12 @@ OUT_OF_RANGE = (
 )
 CREATED = (
     "**{title}** is up with {count} slot(s) of {minutes} minutes, starting <t:{when}:F>. "
-    "{where} People claim an hour with `/raidtrain claim`."
+    "{where} People claim an hour from `/raidtrain`."
 )
 LINEUP_HERE = "The lineup is in <#{channel_id}>."
 LINEUP_NOWHERE = (
-    "There is nowhere to put the lineup yet — a Lead runs `/raidtrains setup channel:#somewhere`, "
-    "and until then the train only shows on the dashboard."
+    "There is nowhere to put the lineup yet — a Lead picks a channel under **Setup…**, and until "
+    "then the train only shows on the dashboard."
 )
 CLAIMED = (
     "Slot **#{position}** on **{title}** is yours — <t:{when}:F> (<t:{when}:R>). You will get a "
@@ -125,13 +148,27 @@ MEMBER_NOT_LINKED = (
 MODE_SET = "Raid trains are now **{mode}**.{extra}"
 NO_CHANNEL_YET = (
     " Nothing has anywhere to be posted yet: neither `raidtrain_channel_id` nor "
-    "`events_announce_channel_id` is set. `/raidtrains setup channel:#somewhere` fixes that."
+    "`events_announce_channel_id` is set. **Setup…** fixes that."
 )
-SETUP_NOTHING = (
-    "Nothing was given, so nothing changed. Pass a channel, an organizer role, a ping role, or "
-    "any mix — `/raidtrains setup channel:#raids organizer_role:@Organizers`."
-)
+SETUP_NOTHING = "Nothing was picked, so nothing changed."
 SETUP_DONE = "Raid trains: {parts}."
+SETUP_WORDS: dict[str, str] = {
+    "raidtrain_channel_id": "lineups go to {}",
+    "raidtrain_organizer_role_id": "organizers are {}",
+    "raidtrain_ping_role_id": "{} is pinged",
+}
+SETUP_CLEARED: dict[str, str] = {
+    "raidtrain_channel_id": "lineups have nowhere of their own again",
+    "raidtrain_organizer_role_id": "only staff may build a lineup again",
+    "raidtrain_ping_role_id": "nobody is pinged in front of a lineup",
+}
+MOVE_KINDS: dict[str, str] = {
+    LOCKED: "raidtrain.lock",
+    OPEN: "raidtrain.unlock",
+    LIVE: "raidtrain.live",
+    DONE: "raidtrain.done",
+}
+MOVED_NOW = "**{title}** is now **{status}**."
 
 
 def _row(row: Any, key: str, fallback: Any = None) -> Any:
@@ -345,6 +382,365 @@ async def dm(user: Any, text: str) -> bool:
     return True
 
 
+# --- one function per move, called by BOTH doors -------------------------------------------------
+
+
+def raid_cog(bot: Any) -> Any:
+    getter = getattr(bot, "get_cog", None)
+    return getter("RaidTrains") if callable(getter) else None
+
+
+async def redraw(bot: Any, guild: Any, train_id: Any) -> None:
+    """The lineup post is cosmetics: a failure here must never undo a committed claim."""
+    cog = raid_cog(bot)
+    if cog is None:
+        return
+    await cog._refresh_lineup(guild, int(train_id))
+
+
+def mode_of(bot: Any, guild_id: int) -> str:
+    return str(bot.store.get(guild_id, "raidtrain_mode"))
+
+
+def actor_id(actor: Any) -> int | None:
+    return int(getattr(actor, "id", actor) or 0) or None
+
+
+def shadow_tail(bot: Any, guild: Any) -> str:
+    return "" if mode_of(bot, guild.id) == "on" else CLAIMED_SHADOW
+
+
+async def claim_slot(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    train: Any,
+    position: Any,
+    login: Any,
+    *,
+    via: str = VIA_DISCORD,
+) -> Outcome:
+    """The caller holds the train's lock; `take_slot`'s WHERE clause is the second half of it."""
+    if str(train["status"]) != OPEN:
+        return refusal(TRAIN_LOCKED.format(title=train["title"]), REFUSED, 409)
+    who = actor_id(actor)
+    slots = await slots_for(bot.db, train["id"])
+    ceiling = bot.store.get(guild.id, "raidtrain_max_slots_per_member")
+    if not caps_ok(slots, who, ceiling):
+        return refusal(
+            CAP_REACHED.format(held=len(slots_held(slots, who)), title=train["title"]),
+            REFUSED,
+            409,
+        )
+    if position is None:
+        position = next_open_position(slots)
+        if position is None:
+            return refusal(TRAIN_FULL.format(title=train["title"]), REFUSED, 409)
+    wanted = slot_at(slots, position)
+    if wanted is None:
+        return refusal(
+            SLOT_UNKNOWN.format(position=position, last=len(slots)), NO_SUCH_SLOT_CODE, 404
+        )
+    if not await take_slot(bot.db, wanted["id"], who, login, None):
+        return refusal(SLOT_TAKEN.format(position=position), SLOT_TAKEN_CODE, 409)
+    await log_action(
+        bot,
+        guild,
+        kind_via("raidtrain.claim", via),
+        actor=actor,
+        target=actor,
+        details={
+            "train_id": train["id"],
+            "position": int(position),
+            "twitch_login": login,
+            "via": via,
+        },
+    )
+    await redraw(bot, guild, train["id"])
+    start = parse_ts(wanted["starts_at"])
+    said = CLAIMED.format(
+        position=position,
+        title=train["title"],
+        when=unix(start) if start is not None else 0,
+    )
+    return Outcome(True, said + shadow_tail(bot, guild), value=int(position))
+
+
+async def release_slot(
+    bot: Any, guild: Any, actor: Any, train: Any, position: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    if str(train["status"]) != OPEN:
+        return refusal(TRAIN_LOCKED.format(title=train["title"]), REFUSED, 409)
+    who = actor_id(actor)
+    slots = await slots_for(bot.db, train["id"])
+    mine = slots_held(slots, who)
+    wanted = slot_at(slots, position) if position is not None else (mine[0] if mine else None)
+    if wanted is None or wanted["user_id"] != who:
+        return refusal(
+            NOT_YOURS.format(position=position if position is not None else "—"), REFUSED, 409
+        )
+    await empty_slot(bot.db, wanted["id"])
+    await log_action(
+        bot,
+        guild,
+        kind_via("raidtrain.release", via),
+        actor=actor,
+        target=actor,
+        details={"train_id": train["id"], "position": wanted["position"], "via": via},
+    )
+    await redraw(bot, guild, train["id"])
+    return Outcome(
+        True,
+        RELEASED.format(position=wanted["position"], title=train["title"]),
+        value=int(wanted["position"]),
+    )
+
+
+async def assign_slot(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    train: Any,
+    position: Any,
+    member: Any,
+    login: Any,
+    *,
+    named: Any = None,
+    via: str = VIA_DISCORD,
+) -> Outcome:
+    """Assigning ignores the per-member ceiling on purpose — an organizer outranks it."""
+    member_id = actor_id(member)
+    who = str(named or getattr(member, "display_name", "") or f"member {member_id}")
+    if not login and bot.store.get(guild.id, "raidtrain_require_link"):
+        return refusal(MEMBER_NOT_LINKED.format(who=who), NOT_LINKED_CODE, 409)
+    slots = await slots_for(bot.db, train["id"])
+    wanted = slot_at(slots, position)
+    if wanted is None:
+        return refusal(
+            SLOT_UNKNOWN.format(position=position, last=len(slots)), NO_SUCH_SLOT_CODE, 404
+        )
+    if wanted["user_id"] is not None:
+        await empty_slot(bot.db, wanted["id"])
+    if not await take_slot(bot.db, wanted["id"], member_id, login, actor_id(actor)):
+        return refusal(SLOT_TAKEN.format(position=position), SLOT_TAKEN_CODE, 409)
+    await log_action(
+        bot,
+        guild,
+        kind_via("raidtrain.assign", via),
+        actor=actor,
+        target=member_id,
+        details={
+            "train_id": train["id"],
+            "position": int(position),
+            "twitch_login": login,
+            "via": via,
+        },
+    )
+    await redraw(bot, guild, train["id"])
+    return Outcome(
+        True,
+        ASSIGNED.format(position=position, title=train["title"], who=who),
+        value=int(position),
+    )
+
+
+async def unassign_slot(
+    bot: Any, guild: Any, actor: Any, train: Any, position: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    slots = await slots_for(bot.db, train["id"])
+    wanted = slot_at(slots, position)
+    if wanted is None:
+        return refusal(
+            SLOT_UNKNOWN.format(position=position, last=len(slots)), NO_SUCH_SLOT_CODE, 404
+        )
+    held_by = wanted["user_id"]
+    if not await empty_slot(bot.db, wanted["id"]):
+        return refusal(NOBODY_THERE.format(position=position), ALREADY_EMPTY_CODE, 409)
+    await log_action(
+        bot,
+        guild,
+        kind_via("raidtrain.unassign", via),
+        actor=actor,
+        target=held_by,
+        details={"train_id": train["id"], "position": int(position), "via": via},
+    )
+    await redraw(bot, guild, train["id"])
+    return Outcome(
+        True,
+        UNASSIGNED.format(position=position, title=train["title"]),
+        value=int(position),
+    )
+
+
+async def swap_slots(
+    bot: Any, guild: Any, actor: Any, train: Any, first: Any, second: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    if int(first) == int(second):
+        return refusal(SAME_SLOT, REFUSED, 400)
+    slots = await slots_for(bot.db, train["id"])
+    one, other = slot_at(slots, first), slot_at(slots, second)
+    if one is None or other is None:
+        return refusal(
+            SLOT_UNKNOWN.format(position=first if one is None else second, last=len(slots)),
+            NO_SUCH_SLOT_CODE,
+            404,
+        )
+    await swap_holders(bot.db, one, other)
+    await log_action(
+        bot,
+        guild,
+        kind_via("raidtrain.swap", via),
+        actor=actor,
+        details={"train_id": train["id"], "a": int(first), "b": int(second), "via": via},
+    )
+    await redraw(bot, guild, train["id"])
+    return Outcome(True, SWAPPED.format(a=first, b=second, title=train["title"]))
+
+
+async def move_train(
+    bot: Any, guild: Any, actor: Any, train: Any, to: str, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """Lock, unlock and the two the clock walks — one function, one transition table."""
+    if not may_move(train["status"], to):
+        return refusal(move_refusal(train["status"], to), BAD_MOVE_CODE, 409)
+    await set_status(bot.db, train["id"], to)
+    await log_action(
+        bot,
+        guild,
+        kind_via(MOVE_KINDS[to], via),
+        actor=actor,
+        details={"train_id": train["id"], "title": train["title"], "via": via},
+    )
+    await redraw(bot, guild, train["id"])
+    if to == LOCKED:
+        said = LOCKED_NOW.format(title=train["title"])
+    elif to == OPEN:
+        said = UNLOCKED_NOW.format(title=train["title"])
+    else:
+        said = MOVED_NOW.format(title=train["title"], status=to)
+    return Outcome(True, said, value=to)
+
+
+async def create_and_publish(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    *,
+    title: str,
+    description: str,
+    starts_at: datetime,
+    slot_minutes: int,
+    slot_count: int,
+    via: str = VIA_DISCORD,
+) -> Outcome:
+    train_id = await create_train(
+        bot.db,
+        guild.id,
+        actor_id(actor) or 0,
+        title=title,
+        description=description,
+        starts_at=starts_at,
+        slot_minutes=slot_minutes,
+        slot_count=slot_count,
+    )
+    await log_action(
+        bot,
+        guild,
+        kind_via("raidtrain.create", via),
+        actor=actor,
+        details={
+            "train_id": train_id,
+            "title": title,
+            "slot_minutes": slot_minutes,
+            "slot_count": slot_count,
+            "starts_at": starts_at.isoformat(),
+            "via": via,
+        },
+    )
+    cog = raid_cog(bot)
+    if cog is not None:
+        await cog.publish_lineup(guild, train_id)
+    channel_id = lineup_channel(bot, guild.id)
+    where = LINEUP_HERE.format(channel_id=channel_id) if channel_id else LINEUP_NOWHERE
+    return Outcome(
+        True,
+        CREATED.format(
+            title=title,
+            count=slot_count,
+            minutes=slot_minutes,
+            when=unix(starts_at),
+            where=where,
+        ),
+        value=train_id,
+    )
+
+
+def lineup_channel(bot: Any, guild_id: int) -> int | None:
+    """D7: blank means the events announcement channel, so one place is set up, not two."""
+    store = bot.store
+    return store.get(guild_id, "raidtrain_channel_id") or store.get(
+        guild_id, "events_announce_channel_id"
+    )
+
+
+async def set_mode(
+    bot: Any, guild: Any, actor: Any, value: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    try:
+        wanted = coerce_value("raidtrain_mode", value)
+    except SettingError as exc:
+        return refusal(str(exc), REFUSED, 400)
+    await bot.store.set(guild.id, "raidtrain_mode", wanted, by=actor_id(actor))
+    await log_action(
+        bot,
+        guild,
+        kind_via("raidtrain.mode", via),
+        actor=actor,
+        details={"mode": wanted, "via": via},
+    )
+    extra = "" if lineup_channel(bot, guild.id) else NO_CHANNEL_YET
+    return Outcome(True, MODE_SET.format(mode=wanted, extra=extra), value=wanted)
+
+
+async def save_setup(
+    bot: Any, guild: Any, actor: Any, fields: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """Every field is read before the first write, so a bad one saves none of the others."""
+    wanted = {key: value for key, value in (fields or {}).items() if key in SETUP_WORDS}
+    if not wanted:
+        return refusal(SETUP_NOTHING, REFUSED, 400)
+    for key, value in wanted.items():
+        if value is None:
+            continue
+        try:
+            coerce_value(key, value)
+        except SettingError as exc:
+            return refusal(str(exc), REFUSED, 400)
+    by = actor_id(actor)
+    parts = []
+    for key, value in wanted.items():
+        if value is None:
+            await bot.store.clear(guild.id, key, by=by)
+            parts.append(SETUP_CLEARED[key])
+            continue
+        await bot.store.set(guild.id, key, coerce_value(key, value), by=by)
+        parts.append(SETUP_WORDS[key].format(getattr(value, "mention", value)))
+    await log_action(
+        bot,
+        guild,
+        kind_via("raidtrain.setup", via),
+        actor=actor,
+        details={
+            "changed": {
+                key: (None if value is None else int(coerce_value(key, value)))
+                for key, value in wanted.items()
+            },
+            "via": via,
+        },
+    )
+    return Outcome(True, SETUP_DONE.format(parts=", ".join(parts)), value=wanted)
+
+
 class TrainModal(AnswersErrors, discord.ui.Modal, title="Start a raid train"):
     train_title = discord.ui.TextInput(label="Title", max_length=TITLE_LIMIT)
     description = discord.ui.TextInput(
@@ -378,6 +774,1018 @@ class TrainModal(AnswersErrors, discord.ui.Modal, title="Start a raid train"):
         )
 
 
+# --- what renders --------------------------------------------------------------------------------
+
+
+ROOT = "root"
+CARD = "card"
+MINE_VIEW = "mine"
+SETUP_VIEW = "setup"
+PUT_IN_VIEW = "put_in"
+SWAP_VIEW = "swap"
+GIVE_BACK_VIEW = "give_back"
+
+SELECT_CAP = 25
+MODAL_TITLE_LIMIT = 45
+
+DO_CLAIM = "do_claim"
+DO_UNASSIGN = "do_unassign"
+DO_RELEASE = "do_release"
+DO_FIRST = "do_first"
+DO_SECOND = "do_second"
+DO_SEAT = "do_seat"
+
+STYLES = {
+    "primary": discord.ButtonStyle.primary,
+    "secondary": discord.ButtonStyle.secondary,
+    "success": discord.ButtonStyle.success,
+    "danger": discord.ButtonStyle.danger,
+}
+
+SITE_BUTTON = "Open on the site"
+CARD_TITLE = "Raid train #{train_id}"
+MINE_TITLE = "The hours you hold"
+SETUP_TITLE = "Where lineups go, and who may run them"
+PUT_IN_TITLE = "Put somebody in"
+SWAP_TITLE = "Change two slots round"
+GIVE_BACK_TITLE = "Give an hour back"
+CANCEL_TITLE = "Call off {title}"
+CANCEL_LABEL = "What the people who signed up are told"
+LINK_FIRST = "Before you can take an hour"
+
+TRAIN_PLACEHOLDER = "A train…"
+TRAIN_CAPPED = "{shown} of {total} — the rest are on the Events page"
+MODE_PLACEHOLDER = "Mode…"
+CLAIM_PLACEHOLDER = "Take an hour…"
+TAKE_OFF_PLACEHOLDER = "Take somebody off…"
+SLOT_PLACEHOLDER = "Which slot…"
+FIRST_PLACEHOLDER = "First…"
+SECOND_PLACEHOLDER = "Second…"
+HOUR_PLACEHOLDER = "Which hour…"
+WHO_PLACEHOLDER = "Who takes it?"
+CHANNEL_PLACEHOLDER = "Where the lineup post lives"
+ORGANIZER_PLACEHOLDER = "Who may build a lineup, besides staff"
+PING_PLACEHOLDER = "Who is pinged in front of a lineup"
+CLEAR_PLACEHOLDER = "Clear…"
+
+MODE_LINE = "Raid trains are **{mode}**."
+SHADOW_LINE = (
+    "In **shadow** every move is recorded and the lineup post and the DMs are held back."
+)
+OFF_LINE = "Raid trains are **off**, so nothing new can be started."
+OFF_LINE_STAFF = " **Mode…** below is how a Lead turns them on."
+TRAIN_LINE = (
+    "**#{train_id} {title}** — {when} · {taken}/{total} filled · {status} · open: {free}"
+)
+LINEUP_CHANNEL = "Lineups go to <#{channel_id}>."
+SWEEP_LINE = (
+    "The sweep runs every {every} minute(s): {running}, last clean pass {ok}, "
+    "{failures} failure(s) in a row."
+)
+SWEEP_RUNNING = "running"
+SWEEP_STOPPED = "**not running**"
+SWEEP_NEVER = "never"
+SWEEP_TROUBLE = "The last sweep did not finish: {why}."
+TOTALS_LINE = (
+    "{trains} train(s), {upcoming} still to come · {claimed} of {slots} hour(s) claimed."
+)
+MINE_LINE = "**#{train_id} {title}** — slot #{position}, {when}"
+SETUP_CHANNEL_NOW = "The lineup post goes to {where}."
+SETUP_ORGANIZER_NOW = "Organizers are {who}."
+SETUP_PING_NOW = "The lineup pings {who}."
+SETUP_UNSET = "nobody yet"
+SETUP_HOW = (
+    "Pick what you want to change and press **Save**. **Clear…** empties one of them again."
+)
+SETUP_LABELS: dict[str, str] = {
+    "raidtrain_channel_id": "The lineup channel",
+    "raidtrain_organizer_role_id": "The organizer role",
+    "raidtrain_ping_role_id": "The ping role",
+}
+PUT_IN_HOW = "Pick the hour and the person, then press **Put them in**."
+PUT_IN_PICKED = "Hour **#{slot}**, {who}."
+PUT_IN_NEEDS_BOTH = "Pick an hour and a person first, then press **Put them in**."
+SWAP_HOW = "Pick two hours, then press **Swap them**. The people move; the times do not."
+SWAP_PICKED = "First **#{first}**, second **{second}**."
+SWAP_NEEDS_BOTH = "Pick two hours first, then press **Swap them**."
+GIVE_BACK_HOW = "Pick the hour you would rather not keep. It opens again for somebody else."
+NOT_ON_THIS_TRAIN = "You do not hold an hour on this train any more, so nothing was given back."
+
+
+class RaidPanel(Panel):
+    def __init__(self, minutes: int) -> None:
+        super().__init__(minutes, footer=rt.PANEL_TIMEOUT_FOOTER)
+        self.where = ROOT
+        self.train_id: int | None = None
+        self.first: int | None = None
+        self.second: int | None = None
+        self.member_id: int | None = None
+        self.setup: dict[str, Any] = {}
+
+
+def minutes_for(bot: Any, guild_id: int) -> int:
+    return rt.panel_minutes(bot.store, guild_id)
+
+
+def is_organizer(bot: Any, member: Any) -> bool:
+    """Staff OR the configured role — three audiences from one command, not two."""
+    guild = getattr(member, "guild", None)
+    if guild is None:
+        return False
+    role_id = bot.store.get(guild.id, "raidtrain_organizer_role_id")
+    if role_id and any(
+        int(getattr(role, "id", 0)) == int(role_id) for role in getattr(member, "roles", ())
+    ):
+        return True
+    return bool(bot.store.is_staff(member))
+
+
+def organizer_words(bot: Any, guild: Any) -> str:
+    role_id = bot.store.get(guild.id, "raidtrain_organizer_role_id")
+    return f"staff or <@&{role_id}>" if role_id else "staff"
+
+
+async def still_organizer(interaction: discord.Interaction) -> bool:
+    bot = interaction.client
+    return await still_allowed(
+        interaction,
+        is_organizer(bot, interaction.user),
+        NOT_AN_ORGANIZER.format(who=organizer_words(bot, interaction.guild)),
+    )
+
+
+def add_site_button(view: Any, bot: Any, row: int) -> None:
+    """No origin, no button — and it is staff-only, because every route behind it is."""
+    url = site_page_url(getattr(getattr(bot, "settings", None), "origin", ""), "raidtrain")
+    if not url:
+        return
+    view.add_item(
+        discord.ui.Button(style=discord.ButtonStyle.link, label=SITE_BUTTON, url=url, row=row)
+    )
+
+
+def names_in(guild: Any, slots: Any) -> dict[int, str]:
+    found: dict[int, str] = {}
+    for slot in slots or ():
+        user_id = slot["user_id"]
+        if user_id is None:
+            continue
+        member = guild.get_member(int(user_id))
+        if member is not None:
+            found[int(user_id)] = str(getattr(member, "display_name", ""))
+    return found
+
+
+async def train_lines(bot: Any, rows: Any) -> list[str]:
+    lines = []
+    for train in list(rows)[:LIST_LIMIT]:
+        slots = await slots_for(bot.db, train["id"])
+        start = parse_ts(train["starts_at"])
+        lines.append(
+            TRAIN_LINE.format(
+                train_id=train["id"],
+                title=train["title"],
+                when=f"<t:{unix(start)}:F>" if start is not None else train["starts_at"],
+                taken=len([one for one in slots if one["user_id"] is not None]),
+                total=len(slots),
+                status=STATUS_WORDS.get(str(train["status"]), train["status"]),
+                free=positions_word(slots),
+            )
+        )
+    return lines
+
+
+async def staff_lines(bot: Any, guild: Any) -> list[str]:
+    """The status route's own shape, written out always — a warning behind a button is lost."""
+    cog = raid_cog(bot)
+    channel_id = lineup_channel(bot, guild.id)
+    ok_at, error = cog.loop_health("sweep") if cog is not None else (None, None)
+    lines = [
+        LINEUP_CHANNEL.format(channel_id=channel_id) if channel_id else NO_CHANNEL_YET.strip(),
+        SWEEP_LINE.format(
+            every=bot.store.get(guild.id, "raidtrain_poll_minutes"),
+            running=(
+                SWEEP_RUNNING
+                if cog is not None and cog.sweep.is_running()
+                else SWEEP_STOPPED
+            ),
+            ok=stamp(ok_at) if ok_at else SWEEP_NEVER,
+            failures=int(getattr(cog, "sweep_failures", 0) or 0),
+        ),
+    ]
+    if error:
+        lines.append(SWEEP_TROUBLE.format(why=error))
+    totals = await counts(bot.db, guild.id)
+    lines.append(TOTALS_LINE.format(**totals))
+    return lines
+
+
+async def root_lines(bot: Any, guild: Any, rows: Any, *, mode: str, staff: bool) -> list[str]:
+    lines = [MODE_LINE.format(mode=mode)]
+    if mode == rt.MODE_OFF:
+        lines.append(OFF_LINE + (OFF_LINE_STAFF if staff else ""))
+    elif mode == "shadow":
+        lines.append(SHADOW_LINE)
+    lines.append("")
+    lines.extend(await train_lines(bot, rows) or [NOTHING_UPCOMING])
+    if staff:
+        lines.append("")
+        lines.extend(await staff_lines(bot, guild))
+    return lines
+
+
+async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, RaidPanel]:
+    """One command, three audiences: member, organizer and staff, split at render time."""
+    staff = bool(bot.store.is_staff(actor))
+    organizer = is_organizer(bot, actor)
+    mode = mode_of(bot, guild.id)
+    rows = await list_trains(bot.db, guild.id, scope="upcoming")
+    mine = await slots_of_member(bot.db, guild.id, actor.id)
+    embed = discord.Embed(
+        title=rt.PANEL_TITLE,
+        description=clamped(await root_lines(bot, guild, rows, mode=mode, staff=staff)),
+    )
+    view = RaidPanel(minutes_for(bot, guild.id))
+    picks = rt.root_selects(staff=staff, has_trains=bool(rows))
+    if rt.TRAIN_SELECT in picks:
+        view.add_item(TrainPick(rt.train_options(rows), placeholder=TRAIN_PLACEHOLDER, row=0))
+    if rt.MODE_SELECT in picks:
+        view.add_item(ModePick(mode, row=1))
+    for move in rt.root_buttons(
+        organizer=organizer, staff=staff, holds_any=bool(mine), mode=mode
+    ):
+        view.add_item(MoveButton(move))
+    if staff:
+        add_site_button(view, bot, row=3)
+    return (embed, view)
+
+
+async def build_card(
+    bot: Any, guild: Any, actor: Any, train_id: Any
+) -> tuple[discord.Embed | None, RaidPanel | None]:
+    train = await get_train(bot.db, guild.id, train_id)
+    if train is None:
+        return (None, None)
+    slots = await slots_for(bot.db, train["id"])
+    organizer = is_organizer(bot, actor)
+    login = await twitch_login_of(bot.db, actor.id)
+    require = bool(bot.store.get(guild.id, "raidtrain_require_link"))
+    embed = discord.Embed(
+        title=CARD_TITLE.format(train_id=train["id"]),
+        description=clamped(render_lineup(train, slots).split("\n")),
+    )
+    if require and not login and str(train["status"]) == OPEN:
+        embed.add_field(name=LINK_FIRST, value=NEEDS_LINK, inline=False)
+    view = RaidPanel(minutes_for(bot, guild.id))
+    view.where = CARD
+    view.train_id = int(train["id"])
+    picks = rt.card_selects(
+        train["status"],
+        organizer=organizer,
+        claimable=rt.may_claim(
+            train,
+            slots,
+            actor.id,
+            ceiling=bot.store.get(guild.id, "raidtrain_max_slots_per_member"),
+            linked=bool(login),
+            require_link=require,
+        ),
+        has_taken=bool(rt.taken_positions(slots)),
+    )
+    if rt.CLAIM_SELECT in picks:
+        view.add_item(SlotPick(slots, rt.OPEN_SLOTS, CLAIM_PLACEHOLDER, DO_CLAIM, row=0))
+    if rt.TAKE_OFF_SELECT in picks:
+        view.add_item(
+            SlotPick(
+                slots,
+                rt.TAKEN_SLOTS,
+                TAKE_OFF_PLACEHOLDER,
+                DO_UNASSIGN,
+                row=1,
+                names=names_in(guild, slots),
+            )
+        )
+    for move in rt.card_buttons(
+        train["status"],
+        organizer=organizer,
+        held=[one["position"] for one in slots_held(slots, actor.id)],
+        slot_count=len(slots),
+    ):
+        view.add_item(MoveButton(move))
+    return (embed, view)
+
+
+async def build_mine(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, RaidPanel]:
+    """Cross-train, so it cannot live on a card: the hours you hold, wherever they are."""
+    rows = await slots_of_member(bot.db, guild.id, actor.id)
+    lines = []
+    for row in rows[:MINE_LIMIT]:
+        start = parse_ts(row["starts_at"])
+        lines.append(
+            MINE_LINE.format(
+                train_id=row["train_id"],
+                title=row["train_title"],
+                position=row["position"],
+                when=(
+                    f"<t:{unix(start)}:F> (<t:{unix(start)}:R>)"
+                    if start is not None
+                    else row["starts_at"]
+                ),
+            )
+        )
+    embed = discord.Embed(title=MINE_TITLE, description=clamped(lines or [NOTHING_HELD]))
+    view = RaidPanel(minutes_for(bot, guild.id))
+    view.where = MINE_VIEW
+    if rows:
+        view.add_item(TrainPick(rt.mine_options(rows), placeholder=TRAIN_PLACEHOLDER, row=0))
+    view.add_item(MoveButton(rt.BACK_MOVE._replace(row=1)))
+    return (embed, view)
+
+
+def setup_lines(bot: Any, guild: Any) -> list[str]:
+    store = bot.store
+    channel_id = store.get(guild.id, "raidtrain_channel_id")
+    organizer_id = store.get(guild.id, "raidtrain_organizer_role_id")
+    ping_id = store.get(guild.id, "raidtrain_ping_role_id")
+    return [
+        SETUP_CHANNEL_NOW.format(
+            where=f"<#{channel_id}>" if channel_id else SETUP_UNSET
+        ),
+        SETUP_ORGANIZER_NOW.format(
+            who=f"staff and <@&{organizer_id}>" if organizer_id else "staff only"
+        ),
+        SETUP_PING_NOW.format(who=f"<@&{ping_id}>" if ping_id else SETUP_UNSET),
+        "",
+        SETUP_HOW,
+    ]
+
+
+def set_keys(bot: Any, guild: Any) -> list[str]:
+    return [key for key in SETUP_WORDS if bot.store.get(guild.id, key)]
+
+
+def build_setup(bot: Any, guild: Any) -> tuple[discord.Embed, RaidPanel]:
+    """Five rows is Discord's ceiling, so nothing else may ever join this sub-panel."""
+    embed = discord.Embed(title=SETUP_TITLE, description=clamped(setup_lines(bot, guild)))
+    view = RaidPanel(minutes_for(bot, guild.id))
+    view.where = SETUP_VIEW
+    view.add_item(LineupChannelPick(row=0))
+    view.add_item(SetupRolePick("raidtrain_organizer_role_id", ORGANIZER_PLACEHOLDER, row=1))
+    view.add_item(SetupRolePick("raidtrain_ping_role_id", PING_PLACEHOLDER, row=2))
+    already = set_keys(bot, guild)
+    if already:
+        view.add_item(ClearPick(already, row=3))
+    view.add_item(MoveButton(rt.SAVE_MOVE))
+    view.add_item(MoveButton(rt.BACK_MOVE._replace(row=4)))
+    return (embed, view)
+
+
+async def build_put_in(
+    bot: Any, guild: Any, previous: Any
+) -> tuple[discord.Embed | None, RaidPanel | None]:
+    train = await get_train(bot.db, guild.id, previous.train_id)
+    if train is None:
+        return (None, None)
+    slots = await slots_for(bot.db, train["id"])
+    said = [PUT_IN_HOW]
+    if previous.first is not None or previous.member_id is not None:
+        said.append(
+            PUT_IN_PICKED.format(
+                slot=previous.first if previous.first is not None else "—",
+                who=f"<@{previous.member_id}>" if previous.member_id else "nobody yet",
+            )
+        )
+    embed = discord.Embed(title=PUT_IN_TITLE, description=clamped(said))
+    view = RaidPanel(minutes_for(bot, guild.id))
+    view.where = PUT_IN_VIEW
+    view.train_id = int(train["id"])
+    view.first = previous.first
+    view.member_id = previous.member_id
+    view.add_item(
+        SlotPick(
+            slots,
+            rt.ALL_SLOTS,
+            SLOT_PLACEHOLDER,
+            DO_SEAT,
+            row=0,
+            names=names_in(guild, slots),
+        )
+    )
+    view.add_item(WhoPick(row=1))
+    view.add_item(MoveButton(rt.PUT_THEM_IN_MOVE))
+    view.add_item(MoveButton(rt.BACK_MOVE._replace(row=2)))
+    return (embed, view)
+
+
+async def build_swap(
+    bot: Any, guild: Any, previous: Any
+) -> tuple[discord.Embed | None, RaidPanel | None]:
+    train = await get_train(bot.db, guild.id, previous.train_id)
+    if train is None:
+        return (None, None)
+    slots = await slots_for(bot.db, train["id"])
+    said = [SWAP_HOW]
+    if previous.first is not None:
+        said.append(
+            SWAP_PICKED.format(
+                first=previous.first,
+                second=f"#{previous.second}" if previous.second is not None else "nothing yet",
+            )
+        )
+    embed = discord.Embed(title=SWAP_TITLE, description=clamped(said))
+    view = RaidPanel(minutes_for(bot, guild.id))
+    view.where = SWAP_VIEW
+    view.train_id = int(train["id"])
+    view.first = previous.first
+    view.second = previous.second
+    named = names_in(guild, slots)
+    view.add_item(
+        SlotPick(slots, rt.ALL_SLOTS, FIRST_PLACEHOLDER, DO_FIRST, row=0, names=named)
+    )
+    if previous.first is not None:
+        rest = [one for one in slots if int(one["position"]) != int(previous.first)]
+        view.add_item(
+            SlotPick(rest, rt.ALL_SLOTS, SECOND_PLACEHOLDER, DO_SECOND, row=1, names=named)
+        )
+    view.add_item(MoveButton(rt.SWAP_THEM_MOVE))
+    view.add_item(MoveButton(rt.BACK_MOVE._replace(row=2)))
+    return (embed, view)
+
+
+async def build_give_back(
+    bot: Any, guild: Any, actor: Any, previous: Any
+) -> tuple[discord.Embed | None, RaidPanel | None]:
+    train = await get_train(bot.db, guild.id, previous.train_id)
+    if train is None:
+        return (None, None)
+    slots = await slots_for(bot.db, train["id"])
+    mine = slots_held(slots, actor.id)
+    embed = discord.Embed(
+        title=GIVE_BACK_TITLE, description=clamped([GIVE_BACK_HOW if mine else NOT_ON_THIS_TRAIN])
+    )
+    view = RaidPanel(minutes_for(bot, guild.id))
+    view.where = GIVE_BACK_VIEW
+    view.train_id = int(train["id"])
+    if mine:
+        view.add_item(SlotPick(mine, rt.ALL_SLOTS, HOUR_PLACEHOLDER, DO_RELEASE, row=0))
+    view.add_item(MoveButton(rt.BACK_MOVE._replace(row=1)))
+    return (embed, view)
+
+
+# --- rendering -----------------------------------------------------------------------------------
+
+
+async def render(interaction: discord.Interaction, embed: Any, view: Any, previous: Any) -> None:
+    retire(previous)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+async def render_root(interaction: discord.Interaction, previous: Any = None) -> None:
+    embed, view = await build_panel(interaction.client, interaction.guild, interaction.user)
+    await render(interaction, embed, view, previous)
+
+
+async def render_card(
+    interaction: discord.Interaction, train_id: Any, previous: Any = None
+) -> None:
+    embed, view = await build_card(
+        interaction.client, interaction.guild, interaction.user, train_id
+    )
+    if view is None:
+        await render_root(interaction, previous)
+        await answer(interaction, NO_SUCH_TRAIN.format(train=str(train_id)[:40]))
+        return
+    await render(interaction, embed, view, previous)
+
+
+async def render_mine(interaction: discord.Interaction, previous: Any = None) -> None:
+    embed, view = await build_mine(interaction.client, interaction.guild, interaction.user)
+    await render(interaction, embed, view, previous)
+
+
+async def render_setup(interaction: discord.Interaction, previous: Any = None) -> None:
+    embed, view = build_setup(interaction.client, interaction.guild)
+    await render(interaction, embed, view, previous)
+
+
+async def render_sub(interaction: discord.Interaction, view: Any, where: str) -> None:
+    """The three organizer sub-panels; a train that vanished lands back on the root."""
+    bot, guild = interaction.client, interaction.guild
+    if where == PUT_IN_VIEW:
+        embed, fresh = await build_put_in(bot, guild, view)
+    elif where == SWAP_VIEW:
+        embed, fresh = await build_swap(bot, guild, view)
+    else:
+        embed, fresh = await build_give_back(bot, guild, interaction.user, view)
+    if fresh is None:
+        await render_root(interaction, view)
+        await answer(interaction, NO_SUCH_TRAIN.format(train=str(view.train_id)))
+        return
+    await render(interaction, embed, fresh, view)
+
+
+async def opened(interaction: discord.Interaction) -> bool:
+    """Every click defers first, then re-asks the database — the card may be minutes old."""
+    await interaction.response.defer()
+    return await db_ready(interaction)
+
+
+async def open_root(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await opened(interaction):
+        return
+    await render_root(interaction, previous)
+
+
+async def open_card(
+    interaction: discord.Interaction, train_id: Any, previous: Any = None
+) -> None:
+    if not await opened(interaction):
+        return
+    await render_card(interaction, train_id, previous)
+
+
+async def open_mine(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await opened(interaction):
+        return
+    await render_mine(interaction, previous)
+
+
+async def open_setup(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await still_staff(interaction):
+        return
+    if not await opened(interaction):
+        return
+    await render_setup(interaction, previous)
+
+
+async def open_sub(interaction: discord.Interaction, view: Any, where: str) -> None:
+    if where != GIVE_BACK_VIEW and not await still_organizer(interaction):
+        return
+    if not await opened(interaction):
+        return
+    await render_sub(interaction, view, where)
+
+
+async def refresh_where(interaction: discord.Interaction, view: Any) -> None:
+    if view.where == CARD:
+        await open_card(interaction, view.train_id, view)
+        return
+    if view.where == MINE_VIEW:
+        await open_mine(interaction, view)
+        return
+    if view.where == SETUP_VIEW:
+        await open_setup(interaction, view)
+        return
+    if view.where in (PUT_IN_VIEW, SWAP_VIEW, GIVE_BACK_VIEW):
+        await open_sub(interaction, view, view.where)
+        return
+    await open_root(interaction, view)
+
+
+async def back_from(interaction: discord.Interaction, view: Any) -> None:
+    if view.where in (PUT_IN_VIEW, SWAP_VIEW, GIVE_BACK_VIEW):
+        await open_card(interaction, view.train_id, view)
+        return
+    await open_root(interaction, view)
+
+
+# --- the panel's moves ---------------------------------------------------------------------------
+
+
+async def run_move(interaction: discord.Interaction, view: Any, doing: Any) -> None:
+    """Every write re-reads the train first: it can be locked, filled or called off mid-card."""
+    bot, guild = interaction.client, interaction.guild
+    train = await get_train(bot.db, guild.id, view.train_id)
+    if train is None:
+        await render_root(interaction, view)
+        await answer(interaction, NO_SUCH_TRAIN.format(train=str(view.train_id)))
+        return
+    cog = raid_cog(bot)
+    if cog is None:
+        outcome = await doing(train)
+    else:
+        async with cog._lock(int(train["id"])):
+            outcome = await doing(train)
+    await render_card(interaction, view.train_id, view)
+    await answer(interaction, outcome.message)
+
+
+async def run_claim(interaction: discord.Interaction, view: Any, position: int) -> None:
+    if not await opened(interaction):
+        return
+    bot = interaction.client
+    login = await twitch_login_of(bot.db, interaction.user.id)
+    if not login and bot.store.get(interaction.guild.id, "raidtrain_require_link"):
+        await render_card(interaction, view.train_id, view)
+        await answer(interaction, NEEDS_LINK)
+        return
+    await run_move(
+        interaction,
+        view,
+        lambda train: claim_slot(
+            bot, interaction.guild, interaction.user, train, position, login
+        ),
+    )
+
+
+async def run_release(interaction: discord.Interaction, view: Any, position: Any) -> None:
+    if not await opened(interaction):
+        return
+    await run_move(
+        interaction,
+        view,
+        lambda train: release_slot(
+            interaction.client, interaction.guild, interaction.user, train, position
+        ),
+    )
+
+
+async def run_unassign(interaction: discord.Interaction, view: Any, position: int) -> None:
+    if not await still_organizer(interaction):
+        return
+    if not await opened(interaction):
+        return
+    await run_move(
+        interaction,
+        view,
+        lambda train: unassign_slot(
+            interaction.client, interaction.guild, interaction.user, train, position
+        ),
+    )
+
+
+async def run_assign(interaction: discord.Interaction, view: Any) -> None:
+    if not await still_organizer(interaction):
+        return
+    if not await opened(interaction):
+        return
+    if view.first is None or view.member_id is None:
+        await render_sub(interaction, view, PUT_IN_VIEW)
+        await answer(interaction, PUT_IN_NEEDS_BOTH)
+        return
+    bot, guild = interaction.client, interaction.guild
+    member = guild.get_member(int(view.member_id)) or int(view.member_id)
+    login = await twitch_login_of(bot.db, int(view.member_id))
+    await run_move(
+        interaction,
+        view,
+        lambda train: assign_slot(
+            bot, guild, interaction.user, train, view.first, member, login
+        ),
+    )
+
+
+async def run_swap(interaction: discord.Interaction, view: Any) -> None:
+    if not await still_organizer(interaction):
+        return
+    if not await opened(interaction):
+        return
+    if view.first is None or view.second is None:
+        await render_sub(interaction, view, SWAP_VIEW)
+        await answer(interaction, SWAP_NEEDS_BOTH)
+        return
+    await run_move(
+        interaction,
+        view,
+        lambda train: swap_slots(
+            interaction.client,
+            interaction.guild,
+            interaction.user,
+            train,
+            view.first,
+            view.second,
+        ),
+    )
+
+
+async def run_lock(interaction: discord.Interaction, view: Any) -> None:
+    if not await still_organizer(interaction):
+        return
+    if not await opened(interaction):
+        return
+
+    async def moving(train: Any) -> Any:
+        to = LOCKED if str(train["status"]) == OPEN else OPEN
+        return await move_train(
+            interaction.client, interaction.guild, interaction.user, train, to
+        )
+
+    await run_move(interaction, view, moving)
+
+
+async def run_cancel(interaction: discord.Interaction, view: Any, reason: str) -> None:
+    if not await still_organizer(interaction):
+        return
+    if not await opened(interaction):
+        return
+    bot, guild = interaction.client, interaction.guild
+
+    async def calling_off(train: Any) -> Any:
+        cog = raid_cog(bot)
+        if cog is None or not may_move(train["status"], CANCELLED):
+            return refusal(move_refusal(train["status"], CANCELLED), BAD_MOVE_CODE, 409)
+        told = await cog.cancel_train(guild, train, reason, interaction.user)
+        return Outcome(True, CANCELLED_NOW.format(title=train["title"], count=told))
+
+    await run_move(interaction, view, calling_off)
+
+
+async def run_mode(interaction: discord.Interaction, view: Any, wanted: str) -> None:
+    if not await still_staff(interaction):
+        return
+    if not await opened(interaction):
+        return
+    said = await set_mode(interaction.client, interaction.guild, interaction.user, wanted)
+    await render_root(interaction, view)
+    await answer(interaction, said.message)
+
+
+async def run_setup(interaction: discord.Interaction, view: Any, fields: Any) -> None:
+    if not await still_staff(interaction):
+        return
+    if not await opened(interaction):
+        return
+    said = await save_setup(interaction.client, interaction.guild, interaction.user, fields)
+    await render_setup(interaction, view)
+    await answer(interaction, said.message)
+
+
+async def run_create(
+    interaction: discord.Interaction,
+    previous: Any,
+    *,
+    tz_name: str,
+    title: str,
+    description: str,
+    start: str,
+    slot_minutes: str,
+    slot_count: str,
+) -> None:
+    """Everything the modal typed, checked in words before a row is written."""
+    if not await still_organizer(interaction):
+        return
+    starts = parse_start(start, tz_name)
+    if starts is None:
+        await answer(interaction, start_error(start, tz_name, START_EXAMPLE))
+        return
+    if starts <= datetime.now(UTC):
+        await answer(
+            interaction, START_IN_THE_PAST.format(given=clamp(start, 80), tz=tz_name)
+        )
+        return
+    numbers = read_numbers(slot_minutes, slot_count)
+    if isinstance(numbers, str):
+        await answer(interaction, numbers)
+        return
+    minutes, count = numbers
+    if not await opened(interaction):
+        return
+    made = await create_and_publish(
+        interaction.client,
+        interaction.guild,
+        interaction.user,
+        title=title,
+        description=description,
+        starts_at=starts,
+        slot_minutes=minutes,
+        slot_count=count,
+    )
+    await render_root(interaction, previous)
+    await answer(interaction, made.message)
+
+
+def read_numbers(slot_minutes: Any, slot_count: Any) -> tuple[int, int] | str:
+    """A modal has no `app_commands.Range`, so the bounds are re-asked here."""
+    try:
+        minutes = int(str(slot_minutes).strip())
+        count = int(str(slot_count).strip())
+    except ValueError:
+        return BAD_NUMBER.format(
+            given=clamp(f"{slot_minutes} / {slot_count}", 60),
+            min=SLOT_MINUTES_MIN,
+            max=SLOT_MINUTES_MAX,
+            count_min=SLOT_COUNT_MIN,
+            count_max=SLOT_COUNT_MAX,
+        )
+    if not (SLOT_MINUTES_MIN <= minutes <= SLOT_MINUTES_MAX) or not (
+        SLOT_COUNT_MIN <= count <= SLOT_COUNT_MAX
+    ):
+        return OUT_OF_RANGE.format(
+            min=SLOT_MINUTES_MIN,
+            max=SLOT_MINUTES_MAX,
+            count_min=SLOT_COUNT_MIN,
+            count_max=SLOT_COUNT_MAX,
+        )
+    return (minutes, count)
+
+
+# --- the controls --------------------------------------------------------------------------------
+
+
+class MoveButton(discord.ui.Button):
+    def __init__(self, move: Any) -> None:
+        super().__init__(label=move.label, style=STYLES[move.style], row=move.row)
+        self.move = move
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        action = self.move.action
+        if action == rt.REFRESH:
+            await refresh_where(interaction, view)
+        elif action == rt.BACK:
+            await back_from(interaction, view)
+        elif action == rt.LOGS:
+            await send_logs(interaction, "raidtrain")
+        elif action == rt.MINE:
+            await open_mine(interaction, view)
+        elif action == rt.SETUP:
+            await open_setup(interaction, view)
+        elif action == rt.PUT_IN:
+            await open_sub(interaction, view, PUT_IN_VIEW)
+        elif action == rt.SWAP:
+            await open_sub(interaction, view, SWAP_VIEW)
+        elif action == rt.GIVE_BACK_MANY:
+            await open_sub(interaction, view, GIVE_BACK_VIEW)
+        elif action == rt.GIVE_BACK:
+            await run_release(interaction, view, None)
+        elif action == rt.MOVE_TRAIN:
+            await run_lock(interaction, view)
+        elif action == rt.PUT_THEM_IN:
+            await run_assign(interaction, view)
+        elif action == rt.SWAP_THEM:
+            await run_swap(interaction, view)
+        elif action == rt.SAVE:
+            await run_setup(interaction, view, dict(view.setup))
+        else:
+            await self.open_modal(interaction, view, action)
+
+    async def open_modal(self, interaction: discord.Interaction, view: Any, action: str) -> None:
+        bot = interaction.client
+        if not await still_organizer(interaction):
+            return
+        if not await db_up(interaction):
+            return
+        if action == rt.START_TRAIN:
+            tz_name = await get_timezone(bot.db, interaction.user.id)
+            minutes = int(bot.store.get(interaction.guild.id, "raidtrain_slot_minutes"))
+            await interaction.response.send_modal(TrainModal(view, tz_name, minutes))
+            return
+        train = await get_train(bot.db, interaction.guild.id, view.train_id)
+        if train is None:
+            await answer(interaction, NO_SUCH_TRAIN.format(train=str(view.train_id)))
+            return
+        await interaction.response.send_modal(
+            NoteModal(
+                title=clamp(CANCEL_TITLE.format(title=train["title"]), MODAL_TITLE_LIMIT),
+                label=CANCEL_LABEL,
+                max_length=DESCRIPTION_LIMIT,
+                on_submit=lambda one, text: run_cancel(one, view, text),
+            )
+        )
+
+
+class TrainPick(discord.ui.Select):
+    def __init__(self, found: Any, *, placeholder: str, row: int) -> None:
+        rows = tuple(found)
+        shown = rows[:SELECT_CAP]
+        super().__init__(
+            placeholder=capped_placeholder(
+                len(shown), len(rows), pick=placeholder, capped=TRAIN_CAPPED
+            ),
+            options=[
+                discord.SelectOption(label=label[:SELECT_OPTION_LIMIT], value=value)
+                for value, label in shown
+            ],
+            min_values=1,
+            max_values=1,
+            row=row,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_card(interaction, int(self.values[0]), self.view)
+
+
+class ModePick(discord.ui.Select):
+    def __init__(self, current: str, row: int) -> None:
+        super().__init__(
+            placeholder=MODE_PLACEHOLDER,
+            options=[
+                discord.SelectOption(label=one, value=one, default=(one == current))
+                for one in RAIDTRAIN_MODES
+            ],
+            min_values=1,
+            max_values=1,
+            row=row,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_mode(interaction, self.view, self.values[0])
+
+
+class SlotPick(discord.ui.Select):
+    """One select class, five jobs — what it does is the `doing` it was built with."""
+
+    def __init__(
+        self,
+        slots: Any,
+        kind: str,
+        placeholder: str,
+        doing: str,
+        *,
+        row: int,
+        names: Any = None,
+    ) -> None:
+        self.doing = doing
+        super().__init__(
+            placeholder=placeholder,
+            options=[
+                discord.SelectOption(label=label, value=value)
+                for value, label in rt.slot_options(slots, kind, names=names)[:SELECT_CAP]
+            ],
+            min_values=1,
+            max_values=1,
+            row=row,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        position = int(self.values[0])
+        if self.doing == DO_CLAIM:
+            await run_claim(interaction, view, position)
+        elif self.doing == DO_UNASSIGN:
+            await run_unassign(interaction, view, position)
+        elif self.doing == DO_RELEASE:
+            await run_release(interaction, view, position)
+        elif self.doing == DO_FIRST:
+            view.first = position
+            view.second = None
+            await open_sub(interaction, view, SWAP_VIEW)
+        else:
+            await self.remembered(interaction, view, position)
+
+    async def remembered(self, interaction: discord.Interaction, view: Any, position: int) -> None:
+        """A pick that is half a move writes nothing; the confirm re-reads both halves."""
+        if self.doing == DO_SECOND:
+            view.second = position
+        else:
+            view.first = position
+        await interaction.response.defer()
+
+
+class WhoPick(discord.ui.UserSelect):
+    def __init__(self, row: int) -> None:
+        super().__init__(placeholder=WHO_PLACEHOLDER, min_values=1, max_values=1, row=row)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        self.view.member_id = int(self.values[0].id)
+        await interaction.response.defer()
+
+
+class LineupChannelPick(discord.ui.ChannelSelect):
+    def __init__(self, row: int) -> None:
+        super().__init__(
+            placeholder=CHANNEL_PLACEHOLDER,
+            channel_types=[discord.ChannelType.text],
+            min_values=1,
+            max_values=1,
+            row=row,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        self.view.setup["raidtrain_channel_id"] = int(self.values[0].id)
+        await interaction.response.defer()
+
+
+class SetupRolePick(discord.ui.RoleSelect):
+    def __init__(self, key: str, placeholder: str, row: int) -> None:
+        self.key = key
+        super().__init__(placeholder=placeholder, min_values=1, max_values=1, row=row)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        self.view.setup[self.key] = int(self.values[0].id)
+        await interaction.response.defer()
+
+
+class ClearPick(discord.ui.Select):
+    """Clearing is its own control: an empty submit cannot be told from an untouched one."""
+
+    def __init__(self, keys: Any, row: int) -> None:
+        super().__init__(
+            placeholder=CLEAR_PLACEHOLDER,
+            options=[
+                discord.SelectOption(label=SETUP_LABELS[key], value=key) for key in keys
+            ],
+            min_values=1,
+            max_values=1,
+            row=row,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_setup(interaction, self.view, {self.values[0]: None})
+
+
 class RaidTrains(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
@@ -385,13 +1793,6 @@ class RaidTrains(commands.Cog):
         self.last_sweep_error: str | None = None
         self.sweep_failures = 0
         self._locks: dict[int, asyncio.Lock] = {}
-
-    raidtrain = app_commands.Group(
-        name="raidtrain", description="Raid trains: sign up for an hour and pass the raid on"
-    )
-    raidtrains = app_commands.Group(
-        name="raidtrains", description="Run raid trains", default_permissions=STAFF_ONLY
-    )
 
     def loop_health(self, name: str) -> tuple[str | None, str | None]:
         if name != "sweep":
@@ -615,14 +2016,10 @@ class RaidTrains(commands.Cog):
     # --- posting ------------------------------------------------------------------------------
 
     def _channel_id(self, guild_id: int) -> int | None:
-        """D7: blank means the events announcement channel, so one place is set up, not two."""
-        store = self.bot.store
-        return store.get(guild_id, "raidtrain_channel_id") or store.get(
-            guild_id, "events_announce_channel_id"
-        )
+        return lineup_channel(self.bot, guild_id)
 
     def _mode(self, guild_id: int) -> str:
-        return self.bot.store.get(guild_id, "raidtrain_mode")
+        return mode_of(self.bot, guild_id)
 
     def _mentions(self, guild_id: int) -> discord.AllowedMentions:
         """Only the configured ping role; a display name on the lineup can never ping anybody."""
@@ -853,565 +2250,9 @@ class RaidTrains(commands.Cog):
                 },
             )
 
-    # --- gates --------------------------------------------------------------------------------
-
-    async def _ready(self, interaction: discord.Interaction) -> bool:
-        if interaction.guild is None:
-            await interaction.response.send_message(GUILD_ONLY, ephemeral=True)
-            return False
-        if not self.bot.db.is_connected:
-            await interaction.response.send_message(DB_UNAVAILABLE, ephemeral=True)
-            return False
-        mode = self._mode(interaction.guild.id)
-        if mode == "off":
-            await interaction.response.send_message(
-                FEATURE_OFF.format(mode=mode), ephemeral=True
-            )
-            return False
-        return True
-
-    def _organizer_words(self, guild: Any) -> str:
-        role_id = self.bot.store.get(guild.id, "raidtrain_organizer_role_id")
-        return f"staff or <@&{role_id}>" if role_id else "staff"
-
-    def is_organizer(self, member: Any) -> bool:
-        guild = getattr(member, "guild", None)
-        if guild is None:
-            return False
-        role_id = self.bot.store.get(guild.id, "raidtrain_organizer_role_id")
-        if role_id and any(
-            int(getattr(role, "id", 0)) == int(role_id) for role in getattr(member, "roles", ())
-        ):
-            return True
-        return bool(self.bot.store.is_staff(member))
-
-    async def _organizer(self, interaction: discord.Interaction) -> bool:
-        if self.is_organizer(interaction.user):
-            return True
-        await interaction.response.send_message(
-            NOT_AN_ORGANIZER.format(who=self._organizer_words(interaction.guild)),
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-        return False
-
-    async def _train_or_refusal(self, interaction: discord.Interaction, train: str) -> Any:
-        row = None
-        if str(train).strip().isdigit():
-            row = await get_train(self.bot.db, interaction.guild.id, int(train))
-        if row is None:
-            await interaction.response.send_message(
-                NO_SUCH_TRAIN.format(train=str(train)[:40]), ephemeral=True
-            )
-        return row
-
-    # --- autocomplete -------------------------------------------------------------------------
-
-    async def _train_choices(
-        self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[str]]:
-        if interaction.guild is None or not self.bot.db.is_connected:
-            return []
-        typed = str(current or "").lower()
-        found = []
-        for row in await list_trains(self.bot.db, interaction.guild.id, scope="upcoming"):
-            label = f"#{row['id']} {row['title']}"[:100]
-            if typed and typed not in label.lower():
-                continue
-            found.append(app_commands.Choice(name=label, value=str(row["id"])))
-        return found[:CHOICE_LIMIT]
-
-    async def _slot_choices(
-        self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[int]]:
-        if interaction.guild is None or not self.bot.db.is_connected:
-            return []
-        given = (interaction.namespace.train or "") if interaction.namespace else ""
-        if not str(given).strip().isdigit():
-            return []
-        typed = str(current or "").lower()
-        found = []
-        for row in await slots_for(self.bot.db, int(given)):
-            start = parse_ts(row["starts_at"])
-            when = f"<t:{unix(start)}>" if start is None else start.strftime("%H:%M UTC")
-            who = "open" if row["user_id"] is None else (row["twitch_login"] or "taken")
-            label = f"#{row['position']} {when} — {who}"[:100]
-            if typed and typed not in label.lower():
-                continue
-            found.append(app_commands.Choice(name=label, value=int(row["position"])))
-        return found[:CHOICE_LIMIT]
-
-    # --- member commands ----------------------------------------------------------------------
-
-    @raidtrain.command(name="list", description="The raid trains coming up")
-    async def list_command(self, interaction: discord.Interaction) -> None:
-        if not await self._ready(interaction):
-            return
-        rows = await list_trains(self.bot.db, interaction.guild.id, scope="upcoming")
-        if not rows:
-            await interaction.response.send_message(NOTHING_UPCOMING, ephemeral=True)
-            return
-        lines = []
-        for train in rows[:LIST_LIMIT]:
-            slots = await slots_for(self.bot.db, train["id"])
-            start = parse_ts(train["starts_at"])
-            when = f"<t:{unix(start)}:F>" if start is not None else train["starts_at"]
-            taken = len([one for one in slots if one["user_id"] is not None])
-            lines.append(
-                f"**#{train['id']} {train['title']}** — {when} · {taken}/{len(slots)} filled · "
-                f"{STATUS_WORDS.get(str(train['status']), train['status'])} · "
-                f"open: {positions_word(slots)}"
-            )
-        await interaction.response.send_message(
-            "\n".join(lines), ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-        )
-
-    @raidtrain.command(name="status", description="One train's whole lineup")
-    @app_commands.describe(train="Which train")
-    @app_commands.autocomplete(train=_train_choices)
-    async def status_command(self, interaction: discord.Interaction, train: str) -> None:
-        if not await self._ready(interaction):
-            return
-        row = await self._train_or_refusal(interaction, train)
-        if row is None:
-            return
-        slots = await slots_for(self.bot.db, row["id"])
-        await interaction.response.send_message(
-            render_lineup(row, slots),
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-
-    @raidtrain.command(name="claim", description="Take an hour on a raid train")
-    @app_commands.describe(train="Which train", slot="Which slot; the next open one by default")
-    @app_commands.autocomplete(train=_train_choices, slot=_slot_choices)
-    async def claim_command(
-        self, interaction: discord.Interaction, train: str, slot: int | None = None
-    ) -> None:
-        if not await self._ready(interaction):
-            return
-        row = await self._train_or_refusal(interaction, train)
-        if row is None:
-            return
-        login = await twitch_login_of(self.bot.db, interaction.user.id)
-        if not login and self.bot.store.get(interaction.guild.id, "raidtrain_require_link"):
-            await interaction.response.send_message(NEEDS_LINK, ephemeral=True)
-            return
-        await interaction.response.defer(ephemeral=True)
-        async with self._lock(int(row["id"])):
-            said = await self._claim(interaction, row, slot, login)
-        await interaction.followup.send(
-            said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-        )
-
-    async def _claim(
-        self, interaction: discord.Interaction, train: Any, position: Any, login: Any
-    ) -> str:
-        guild = interaction.guild
-        if str(train["status"]) != OPEN:
-            return TRAIN_LOCKED.format(title=train["title"])
-        slots = await slots_for(self.bot.db, train["id"])
-        ceiling = self.bot.store.get(guild.id, "raidtrain_max_slots_per_member")
-        if not caps_ok(slots, interaction.user.id, ceiling):
-            return CAP_REACHED.format(
-                held=len(slots_held(slots, interaction.user.id)), title=train["title"]
-            )
-        if position is None:
-            position = next_open_position(slots)
-            if position is None:
-                return TRAIN_FULL.format(title=train["title"])
-        wanted = slot_at(slots, position)
-        if wanted is None:
-            return SLOT_UNKNOWN.format(position=position, last=len(slots))
-        if not await take_slot(
-            self.bot.db, wanted["id"], interaction.user.id, login, None
-        ):
-            return SLOT_TAKEN.format(position=position)
-        await log_action(
-            self.bot,
-            guild,
-            "raidtrain.claim",
-            actor=interaction.user,
-            target=interaction.user,
-            details={
-                "train_id": train["id"],
-                "position": int(position),
-                "twitch_login": login,
-            },
-        )
-        await self._refresh_lineup(guild, train["id"])
-        start = parse_ts(wanted["starts_at"])
-        note = "" if self._mode(guild.id) == "on" else CLAIMED_SHADOW
-        return (
-            CLAIMED.format(
-                position=position,
-                title=train["title"],
-                when=unix(start) if start is not None else 0,
-            )
-            + note
-        )
-
-    @raidtrain.command(name="release", description="Give an hour back")
-    @app_commands.describe(train="Which train", slot="Which slot; yours by default")
-    @app_commands.autocomplete(train=_train_choices, slot=_slot_choices)
-    async def release_command(
-        self, interaction: discord.Interaction, train: str, slot: int | None = None
-    ) -> None:
-        if not await self._ready(interaction):
-            return
-        row = await self._train_or_refusal(interaction, train)
-        if row is None:
-            return
-        await interaction.response.defer(ephemeral=True)
-        async with self._lock(int(row["id"])):
-            said = await self._release(interaction, row, slot)
-        await interaction.followup.send(
-            said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-        )
-
-    async def _release(self, interaction: discord.Interaction, train: Any, position: Any) -> str:
-        if str(train["status"]) not in (OPEN,):
-            return TRAIN_LOCKED.format(title=train["title"])
-        slots = await slots_for(self.bot.db, train["id"])
-        mine = slots_held(slots, interaction.user.id)
-        wanted = slot_at(slots, position) if position is not None else (mine[0] if mine else None)
-        if wanted is None or wanted["user_id"] != interaction.user.id:
-            return NOT_YOURS.format(position=position if position is not None else "—")
-        await empty_slot(self.bot.db, wanted["id"])
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "raidtrain.release",
-            actor=interaction.user,
-            target=interaction.user,
-            details={"train_id": train["id"], "position": wanted["position"]},
-        )
-        await self._refresh_lineup(interaction.guild, train["id"])
-        return RELEASED.format(position=wanted["position"], title=train["title"])
-
-    @raidtrain.command(name="mine", description="The raid-train slots you hold")
-    async def mine_command(self, interaction: discord.Interaction) -> None:
-        if not await self._ready(interaction):
-            return
-        rows = await slots_of_member(self.bot.db, interaction.guild.id, interaction.user.id)
-        if not rows:
-            await interaction.response.send_message(NOTHING_HELD, ephemeral=True)
-            return
-        lines = []
-        for row in rows[:MINE_LIMIT]:
-            start = parse_ts(row["starts_at"])
-            when = (
-                f"<t:{unix(start)}:F> (<t:{unix(start)}:R>)"
-                if start is not None
-                else row["starts_at"]
-            )
-            lines.append(
-                f"**#{row['train_id']} {row['train_title']}** — slot #{row['position']}, {when}"
-            )
-        await interaction.response.send_message(
-            "\n".join(lines), ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-        )
-
-    # --- organizer commands -------------------------------------------------------------------
-
-    @raidtrain.command(name="create", description="Start a raid train (organizers)")
-    async def create_command(self, interaction: discord.Interaction) -> None:
-        if not await self._ready(interaction):
-            return
-        if not await self._organizer(interaction):
-            return
-        tz_name = await get_timezone(self.bot.db, interaction.user.id)
-        minutes = int(self.bot.store.get(interaction.guild.id, "raidtrain_slot_minutes"))
-        await interaction.response.send_modal(TrainModal(self, tz_name, minutes))
-
-    async def submit_train(
-        self,
-        interaction: discord.Interaction,
-        *,
-        tz_name: str,
-        title: str,
-        description: str,
-        start: str,
-        slot_minutes: str,
-        slot_count: str,
-    ) -> None:
-        """Everything the modal typed, checked in words before a row is written."""
-        starts = parse_start(start, tz_name)
-        if starts is None:
-            await interaction.response.send_message(
-                start_error(start, tz_name, START_EXAMPLE), ephemeral=True
-            )
-            return
-        if starts <= datetime.now(UTC):
-            await interaction.response.send_message(
-                START_IN_THE_PAST.format(given=clamp(start, 80), tz=tz_name), ephemeral=True
-            )
-            return
-        numbers = self._numbers(slot_minutes, slot_count)
-        if isinstance(numbers, str):
-            await interaction.response.send_message(numbers, ephemeral=True)
-            return
-        minutes, count = numbers
-        await interaction.response.defer(ephemeral=True)
-        train_id = await create_train(
-            self.bot.db,
-            interaction.guild.id,
-            interaction.user.id,
-            title=title,
-            description=description,
-            starts_at=starts,
-            slot_minutes=minutes,
-            slot_count=count,
-        )
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "raidtrain.create",
-            actor=interaction.user,
-            details={
-                "train_id": train_id,
-                "title": title,
-                "slot_minutes": minutes,
-                "slot_count": count,
-                "starts_at": starts.isoformat(),
-            },
-        )
-        await self.publish_lineup(interaction.guild, train_id)
-        channel_id = self._channel_id(interaction.guild.id)
-        where = LINEUP_HERE.format(channel_id=channel_id) if channel_id else LINEUP_NOWHERE
-        await interaction.followup.send(
-            CREATED.format(
-                title=title, count=count, minutes=minutes, when=unix(starts), where=where
-            ),
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-
-    def _numbers(self, slot_minutes: Any, slot_count: Any) -> tuple[int, int] | str:
-        try:
-            minutes = int(str(slot_minutes).strip())
-            count = int(str(slot_count).strip())
-        except ValueError:
-            return BAD_NUMBER.format(
-                given=clamp(f"{slot_minutes} / {slot_count}", 60),
-                min=SLOT_MINUTES_MIN,
-                max=SLOT_MINUTES_MAX,
-                count_min=SLOT_COUNT_MIN,
-                count_max=SLOT_COUNT_MAX,
-            )
-        if not (SLOT_MINUTES_MIN <= minutes <= SLOT_MINUTES_MAX):
-            return OUT_OF_RANGE.format(
-                min=SLOT_MINUTES_MIN,
-                max=SLOT_MINUTES_MAX,
-                count_min=SLOT_COUNT_MIN,
-                count_max=SLOT_COUNT_MAX,
-            )
-        if not (SLOT_COUNT_MIN <= count <= SLOT_COUNT_MAX):
-            return OUT_OF_RANGE.format(
-                min=SLOT_MINUTES_MIN,
-                max=SLOT_MINUTES_MAX,
-                count_min=SLOT_COUNT_MIN,
-                count_max=SLOT_COUNT_MAX,
-            )
-        return (minutes, count)
-
-    @raidtrain.command(name="assign", description="Put somebody in a slot (organizers)")
-    @app_commands.describe(train="Which train", slot="Which slot", member="Who takes it")
-    @app_commands.autocomplete(train=_train_choices, slot=_slot_choices)
-    async def assign_command(
-        self,
-        interaction: discord.Interaction,
-        train: str,
-        slot: int,
-        member: discord.Member,
-    ) -> None:
-        if not await self._ready(interaction):
-            return
-        if not await self._organizer(interaction):
-            return
-        row = await self._train_or_refusal(interaction, train)
-        if row is None:
-            return
-        login = await twitch_login_of(self.bot.db, member.id)
-        if not login and self.bot.store.get(interaction.guild.id, "raidtrain_require_link"):
-            await interaction.response.send_message(
-                MEMBER_NOT_LINKED.format(who=member.display_name),
-                ephemeral=True,
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
-            return
-        await interaction.response.defer(ephemeral=True)
-        async with self._lock(int(row["id"])):
-            said = await self._assign(interaction, row, slot, member, login)
-        await interaction.followup.send(
-            said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-        )
-
-    async def _assign(
-        self, interaction: discord.Interaction, train: Any, position: int, member: Any, login: Any
-    ) -> str:
-        slots = await slots_for(self.bot.db, train["id"])
-        wanted = slot_at(slots, position)
-        if wanted is None:
-            return SLOT_UNKNOWN.format(position=position, last=len(slots))
-        if wanted["user_id"] is not None:
-            await empty_slot(self.bot.db, wanted["id"])
-        await take_slot(self.bot.db, wanted["id"], member.id, login, interaction.user.id)
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "raidtrain.assign",
-            actor=interaction.user,
-            target=member,
-            details={"train_id": train["id"], "position": position, "twitch_login": login},
-        )
-        await self._refresh_lineup(interaction.guild, train["id"])
-        return ASSIGNED.format(position=position, title=train["title"], who=member.display_name)
-
-    @raidtrain.command(name="unassign", description="Empty a slot (organizers)")
-    @app_commands.describe(train="Which train", slot="Which slot")
-    @app_commands.autocomplete(train=_train_choices, slot=_slot_choices)
-    async def unassign_command(
-        self, interaction: discord.Interaction, train: str, slot: int
-    ) -> None:
-        if not await self._ready(interaction):
-            return
-        if not await self._organizer(interaction):
-            return
-        row = await self._train_or_refusal(interaction, train)
-        if row is None:
-            return
-        await interaction.response.defer(ephemeral=True)
-        async with self._lock(int(row["id"])):
-            slots = await slots_for(self.bot.db, row["id"])
-            wanted = slot_at(slots, slot)
-            if wanted is None:
-                said = SLOT_UNKNOWN.format(position=slot, last=len(slots))
-            elif not await empty_slot(self.bot.db, wanted["id"]):
-                said = NOBODY_THERE.format(position=slot)
-            else:
-                await log_action(
-                    self.bot,
-                    interaction.guild,
-                    "raidtrain.unassign",
-                    actor=interaction.user,
-                    target=wanted["user_id"],
-                    details={"train_id": row["id"], "position": slot},
-                )
-                await self._refresh_lineup(interaction.guild, row["id"])
-                said = UNASSIGNED.format(position=slot, title=row["title"])
-        await interaction.followup.send(
-            said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-        )
-
-    @raidtrain.command(name="swap", description="Change two slots round (organizers)")
-    @app_commands.describe(train="Which train", first="One slot", second="The other")
-    @app_commands.autocomplete(train=_train_choices)
-    async def swap_command(
-        self, interaction: discord.Interaction, train: str, first: int, second: int
-    ) -> None:
-        if not await self._ready(interaction):
-            return
-        if not await self._organizer(interaction):
-            return
-        row = await self._train_or_refusal(interaction, train)
-        if row is None:
-            return
-        if int(first) == int(second):
-            await interaction.response.send_message(SAME_SLOT, ephemeral=True)
-            return
-        await interaction.response.defer(ephemeral=True)
-        async with self._lock(int(row["id"])):
-            slots = await slots_for(self.bot.db, row["id"])
-            one, other = slot_at(slots, first), slot_at(slots, second)
-            if one is None or other is None:
-                said = SLOT_UNKNOWN.format(
-                    position=first if one is None else second, last=len(slots)
-                )
-            else:
-                await swap_holders(self.bot.db, one, other)
-                await log_action(
-                    self.bot,
-                    interaction.guild,
-                    "raidtrain.swap",
-                    actor=interaction.user,
-                    details={"train_id": row["id"], "a": int(first), "b": int(second)},
-                )
-                await self._refresh_lineup(interaction.guild, row["id"])
-                said = SWAPPED.format(a=first, b=second, title=row["title"])
-        await interaction.followup.send(
-            said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-        )
-
-    @raidtrain.command(name="lock", description="Freeze a lineup (organizers)")
-    @app_commands.describe(train="Which train")
-    @app_commands.autocomplete(train=_train_choices)
-    async def lock_command(self, interaction: discord.Interaction, train: str) -> None:
-        await self._move(interaction, train, LOCKED)
-
-    @raidtrain.command(name="unlock", description="Open a lineup for claims again (organizers)")
-    @app_commands.describe(train="Which train")
-    @app_commands.autocomplete(train=_train_choices)
-    async def unlock_command(self, interaction: discord.Interaction, train: str) -> None:
-        await self._move(interaction, train, OPEN)
-
-    async def _move(self, interaction: discord.Interaction, train: str, to: str) -> None:
-        if not await self._ready(interaction):
-            return
-        if not await self._organizer(interaction):
-            return
-        row = await self._train_or_refusal(interaction, train)
-        if row is None:
-            return
-        if not may_move(row["status"], to):
-            await interaction.response.send_message(
-                move_refusal(row["status"], to), ephemeral=True
-            )
-            return
-        await interaction.response.defer(ephemeral=True)
-        await set_status(self.bot.db, row["id"], to)
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "raidtrain.lock" if to == LOCKED else "raidtrain.unlock",
-            actor=interaction.user,
-            details={"train_id": row["id"], "title": row["title"]},
-        )
-        await self._refresh_lineup(interaction.guild, row["id"])
-        said = LOCKED_NOW if to == LOCKED else UNLOCKED_NOW
-        await interaction.followup.send(
-            said.format(title=row["title"]),
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-
-    @raidtrain.command(name="cancel", description="Call a raid train off (organizers)")
-    @app_commands.describe(train="Which train", reason="What the people who signed up are told")
-    @app_commands.autocomplete(train=_train_choices)
-    async def cancel_command(
-        self, interaction: discord.Interaction, train: str, reason: str
-    ) -> None:
-        if not await self._ready(interaction):
-            return
-        if not await self._organizer(interaction):
-            return
-        row = await self._train_or_refusal(interaction, train)
-        if row is None:
-            return
-        if not may_move(row["status"], CANCELLED):
-            await interaction.response.send_message(
-                move_refusal(row["status"], CANCELLED), ephemeral=True
-            )
-            return
-        await interaction.response.defer(ephemeral=True)
-        told = await self.cancel_train(interaction.guild, row, reason, interaction.user)
-        await interaction.followup.send(
-            CANCELLED_NOW.format(title=row["title"], count=told),
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-
-    async def cancel_train(self, guild: Any, train: Any, reason: str, actor: Any) -> int:
+    async def cancel_train(
+        self, guild: Any, train: Any, reason: str, actor: Any, *, via: str = VIA_DISCORD
+    ) -> int:
         """The state change first, then the DMs, then the cosmetics — the web calls it too."""
         said = clamp(reason, DESCRIPTION_LIMIT)
         await set_status(self.bot.db, train["id"], CANCELLED, reason=said or None)
@@ -1420,10 +2261,15 @@ class RaidTrains(commands.Cog):
         await log_action(
             self.bot,
             guild,
-            "raidtrain.cancel",
+            kind_via("raidtrain.cancel", via),
             actor=actor,
             reason=said or None,
-            details={"train_id": train["id"], "title": train["title"], "holders": len(holders)},
+            details={
+                "train_id": train["id"],
+                "title": train["title"],
+                "holders": len(holders),
+                "via": via,
+            },
         )
         told = 0
         if self._mode(guild.id) == "on":
@@ -1444,91 +2290,30 @@ class RaidTrains(commands.Cog):
         await self._refresh_lineup(guild, train["id"])
         return told
 
-    # --- staff commands -----------------------------------------------------------------------
+    # --- the panel ----------------------------------------------------------------------------
 
-    @raidtrains.command(name="mode", description="Turn raid trains off, shadow or on")
-    @app_commands.describe(mode="off, shadow (log only) or on (post and DM)")
-    @app_commands.choices(
-        mode=[app_commands.Choice(name=name, value=name) for name in RAIDTRAIN_MODES]
-    )
-    async def mode_command(
-        self, interaction: discord.Interaction, mode: app_commands.Choice[str]
-    ) -> None:
-        if not await require_staff(interaction):
-            return
-        await self.bot.store.set(
-            interaction.guild.id, "raidtrain_mode", mode.value, by=interaction.user.id
-        )
-        extra = "" if self._channel_id(interaction.guild.id) else NO_CHANNEL_YET
-        await interaction.response.send_message(
-            MODE_SET.format(mode=mode.value, extra=extra), ephemeral=True
-        )
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "raidtrain.mode",
-            actor=interaction.user,
-            details={"mode": mode.value},
-        )
+    def is_organizer(self, member: Any) -> bool:
+        return is_organizer(self.bot, member)
 
-    @raidtrains.command(name="setup", description="Where lineups go, and who may run them")
-    @app_commands.describe(
-        channel="Where a lineup post lives; leave it out to keep using the events channel",
-        organizer_role="Role that may build a lineup as well as staff",
-        ping_role="Role mentioned in front of a lineup post",
+    @app_commands.command(
+        name="raidtrain", description="Raid trains: sign up for an hour and pass the raid on"
     )
-    async def setup_command(
-        self,
-        interaction: discord.Interaction,
-        channel: discord.TextChannel | None = None,
-        organizer_role: discord.Role | None = None,
-        ping_role: discord.Role | None = None,
-    ) -> None:
-        if not await require_staff(interaction):
+    async def raidtrain_panel_command(self, interaction: discord.Interaction) -> None:
+        if interaction.guild is None:
+            await answer(interaction, GUILD_ONLY)
             return
-        if channel is None and organizer_role is None and ping_role is None:
-            await interaction.response.send_message(SETUP_NOTHING, ephemeral=True)
+        if not self.bot.db.is_connected:
+            log.warning("raidtrain: refused the panel — the database is not connected")
+            await answer(interaction, DB_UNAVAILABLE)
             return
-        store = self.bot.store
-        parts = []
-        for value, key, word in (
-            (channel, "raidtrain_channel_id", "lineups go to {}"),
-            (organizer_role, "raidtrain_organizer_role_id", "organizers are {}"),
-            (ping_role, "raidtrain_ping_role_id", "{} is pinged"),
-        ):
-            if value is None:
-                continue
-            await store.set(interaction.guild.id, key, value.id, by=interaction.user.id)
-            parts.append(word.format(value.mention))
+        embed, view = await build_panel(self.bot, interaction.guild, interaction.user)
         await interaction.response.send_message(
-            SETUP_DONE.format(parts=", ".join(parts)),
+            embed=embed,
+            view=view,
             ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
         )
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "raidtrain.setup",
-            actor=interaction.user,
-            details={
-                "channel_id": getattr(channel, "id", None),
-                "organizer_role_id": getattr(organizer_role, "id", None),
-                "ping_role_id": getattr(ping_role, "id", None),
-            },
-        )
-
-    @raidtrains.command(name="logs", description="The last few raid-train log lines")
-    @app_commands.describe(
-        count="How many lines, 1 to 50 (10 by default)",
-        important_only="True to leave out the dry runs and the housekeeping",
-    )
-    async def logs_command(
-        self,
-        interaction: discord.Interaction,
-        count: app_commands.Range[int, LOGS_MIN, LOGS_MAX] = LOGS_DEFAULT,
-        important_only: bool = False,
-    ) -> None:
-        await send_logs(interaction, "raidtrain", count=count, important_only=important_only)
+        view.message = await interaction.original_response()
 
 
 async def setup(bot: commands.Bot) -> None:

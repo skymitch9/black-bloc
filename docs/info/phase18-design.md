@@ -1,12 +1,17 @@
 # Phase 18 — Raid trains (member request #1)
 
-> ⚠️ **SUPERSEDED IN PART, 2026-09-03 — the slash surface below is gone.** `/golive` and
-> `/twitch` and all eight of their subcommands (`logs`, `optout`, `optin`, `status`, `mode`,
-> `test`, `link`, `unlink`) were replaced by ONE `/golive` command that opens an ephemeral
-> panel; every subcommand is a button, a select or a modal on it. The behaviour this doc
-> describes is unchanged — the announcer, the poller, the sessions, the settings and the log
-> kinds are all exactly what it says. Only the way in moved:
-> [`golive-panel-design.md`](golive-panel-design.md). This doc is NOT rewritten.
+> ⚠️ **SUPERSEDED IN PART, 2026-09-04 — the command surface below is gone.** The `raidtrain`
+> group's twelve subcommands (`list`, `status`, `claim`, `release`, `mine`, `create`, `assign`,
+> `unassign`, `swap`, `lock`, `unlock`, `cancel`) and the whole `raidtrains` staff group
+> (`mode`, `setup`, `logs`) were replaced by ONE member-visible `/raidtrain` command that opens
+> an ephemeral panel; every subcommand is a button, a select or a modal on it. The behaviour
+> this doc describes is unchanged — the lineup post, the thread, the scheduled event, the
+> 5-minute sweep, the reminder DM, the check-in, the settings and the log kinds are all exactly
+> what it says, and §C `:137–166`'s two-group table is the only part that is now historical.
+> Only the way in moved: [`raidtrain-panel-design.md`](raidtrain-panel-design.md). This doc is
+> NOT rewritten.
+> ⚠️ An earlier copy of this banner (2026-09-03) described `/golive` and `/twitch` — the wrong
+> feature entirely. It was written here by mistake and is replaced, not archived.
 
 > **Audience:** the Opus builder first, reviewers second, the owner for the
 > decisions table. **Status:** TRACKED — DESIGN, written 2026-09-02 22:30 by
