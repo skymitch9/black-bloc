@@ -1066,6 +1066,13 @@ async def test_the_pings_panel_stays_up_ten_minutes_by_default(store):
     """Same reason as every other panel: 15 loses Discord's window and the gone-quiet footer."""
     from black_bloc.cogs.core import VALUE_KEYS
 
+    assert store.get(7, "voice_panel_minutes") == 10
+    assert "15" in KEY_HELP["voice_panel_minutes"]
+    assert KEY_TYPES["voice_panel_minutes"] == "int"
+    assert "voice_panel_minutes" in VALUE_KEYS
+    await store.set(7, "voice_panel_minutes", 25)
+    assert store.get(7, "voice_panel_minutes") == 25
+    assert parse_value("voice_panel_minutes", "45") == 45
     assert store.get(7, "pings_panel_minutes") == 10
     assert "15" in KEY_HELP["pings_panel_minutes"]
     assert KEY_TYPES["pings_panel_minutes"] == "int"

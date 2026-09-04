@@ -15,6 +15,7 @@ from ...panels import (
     Panel,
     answer,
     capped_placeholder,
+    clamped,
     db_ready,
     db_up,
     retire,
@@ -114,8 +115,6 @@ NOT_A_NUMBER = (
     "minutes — 1 or more."
 )
 
-DESCRIPTION_LIMIT = 4000
-
 NAMES_MOVE = pings.PanelMove(pings.NAMES, NAMES_BUTTON, row=3)
 DELETE_MOVE = pings.PanelMove(pings.DELETE_TOGGLE, DELETE_OFF, row=3)
 SETTINGS_BACK_MOVE = pings.PanelMove(pings.BACK, "Back", row=3)
@@ -133,17 +132,6 @@ def add_site_button(view: Any, bot: Any, row: int) -> None:
     view.add_item(
         discord.ui.Button(style=discord.ButtonStyle.link, label=SITE_BUTTON, url=url, row=row)
     )
-
-
-def clamped(lines: list[str]) -> str:
-    found: list[str] = []
-    spent = 0
-    for line in lines:
-        if spent + len(line) + 1 > DESCRIPTION_LIMIT:
-            break
-        found.append(line)
-        spent += len(line) + 1
-    return "\n".join(found)
 
 
 async def streams_now(bot: Any, guild: Any, user_id: int) -> bool:

@@ -1,5 +1,12 @@
 # Phase 3 design — temporary voice channels (F8) + honeypot (F9)
 
+> ⚠️ **The temp-voice half's COMMAND SURFACE is superseded by the panel (2026-09-03)** —
+> `/voice` is now ONE member-visible command that opens an ephemeral panel, and the
+> `tempvoice` and `voice` groups and all twenty-two subcommands below are retired. See
+> [`voice-panel-design.md`](voice-panel-design.md). Everything else here — the join-to-create
+> behaviour, the per-channel control post (§ below, unchanged), the remembered preferences, the
+> honeypot half — still describes what is built.
+
 > **Audience:** the Phase 3 build agent and the reviewer. **Status:** LOCAL
 > ONLY. **Last verified: 2026-08-26** — channel IDs from the same-day scan;
 > TempVoice behaviour from `reference-bots.md` (vendor docs via

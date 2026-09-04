@@ -14,6 +14,7 @@ log = logging.getLogger(__name__)
 
 CAPPED_PLACEHOLDER = "{shown} of {total} — the rest are on the site"
 SELECT_OPTION_LIMIT = 100
+DESCRIPTION_LIMIT = 4000
 
 
 async def answer(interaction: discord.Interaction, text: str) -> None:
@@ -80,6 +81,17 @@ def option_label(
     prefix = " · ".join(parts) + " · "
     kept = str(text or "").strip()[: max(0, limit - len(prefix))]
     return (prefix + kept)[:limit]
+
+
+def clamped(lines: list[str]) -> str:
+    found: list[str] = []
+    spent = 0
+    for line in lines:
+        if spent + len(line) + 1 > DESCRIPTION_LIMIT:
+            break
+        found.append(line)
+        spent += len(line) + 1
+    return "\n".join(found)
 
 
 def panel_minutes(store: Any, guild_id: int, key: str) -> int:
@@ -165,11 +177,13 @@ class NoteModal(AnswersErrors, discord.ui.Modal):
 
 __all__ = [
     "CAPPED_PLACEHOLDER",
+    "DESCRIPTION_LIMIT",
     "SELECT_OPTION_LIMIT",
     "NoteModal",
     "Panel",
     "answer",
     "capped_placeholder",
+    "clamped",
     "db_ready",
     "db_up",
     "option_label",

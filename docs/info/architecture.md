@@ -174,7 +174,9 @@ black_bloc/
 │   │                   a 5-second debounce on join/leave), /presence apply
 │   ├── community/    ← one cog per community feature
 │   │   ├── role_menus.py  ← F16: /rolemenu + persistent select panels + staff assign + approvals
-│   │   ├── tempvoice.py   ← F8: join-to-create voice channels, the owner control panel, /voice
+│   │   ├── tempvoice.py   ← F8: join-to-create voice channels, the owner control post, and
+│   │   │                    /voice — ONE command, one panel (both groups retired). The pure
+│   │   │                    state machine and button table live in `black_bloc/tempvoice.py`
 │   │   ├── events.py      ← F4/F5: /event — ONE command, one panel (the `timezone` group is
 │   │   │                    retired); review channels, Approve/Deny, go-live. The shared DB
 │   │   │                    and move layer lives in `black_bloc/events.py`, not here

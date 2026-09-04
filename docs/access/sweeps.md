@@ -1,7 +1,15 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-03** — rows **118–125** added by the YOUTUBE PANEL build (`/youtube` becomes ONE
+> **2026-09-03** — rows **135–143** added by the TEMP-VOICE PANEL build (`/voice` becomes ONE
+> member-visible command that opens a panel; the `tempvoice` and `voice` groups and all
+> twenty-two subcommands are retired, so the top-level count drops by one — **39 → 38, measured**
+> through `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`, since this
+> build has no token to boot with). Rows **19**, **20** and the Phase 3 appendix block below were
+> rewritten IN PLACE for it rather than added. ⚠️ **Nothing in 135–143 has met live Discord** —
+> no panel opened, no channel made, no DM sent. The in-channel control post is deliberately
+> untouched and still works exactly as it did. Same day —
+> rows **118–125** added by the YOUTUBE PANEL build (`/youtube` becomes ONE
 > command that opens a panel; the `youtube` and `uploads` groups and their nine subcommands go,
 > so `commands synced` drops by one — **41, measured** by loading every cog). Rows **43**, **44**
 > and **47** were rewritten IN PLACE for it rather than added. ⚠️ Rows 118–125 have **not** been
@@ -97,8 +105,8 @@ All of this happens in **`#mute-me-bot-test-spam`** (test mode) or on **https://
 | 16 | Via column | change one setting from Discord (`/settings set-value …`) and one from the website | Logs page → Settings audit shows **Discord** and **Website** in the Via column; `/settings logs` says the same |
 | 17 | Cyberpunk look | cog → Cyberpunk | the estate's cyan/yellow palette again (no magenta) — say if it still reads wrong |
 | 18 | `/help` (batch 2) | `/help`, then `/help filter:temp` | command list with `(staff)` marks on staff-only entries |
-| 19 | Round-1 fixes | `/rolemenu showall`; `/golive` → **Link my Twitch channel**; `/tempvoice setup` | showall lists every menu (ephemeral); the modal says **channel**, never *login*; setup says **repaired / took it over** (never a second lobby), lobby named "join to create a channel", Member + staff can connect |
-| 20 | Temp-voice memory (batch 4) | in your temp channel: `/voice permit @someone`, `/voice ban @someone-else`, `/voice region us-west` → leave (channel deletes) → re-join the lobby | the new channel has the same region and the same two people set; `/voice info` shows both halves; `/voice reset` clears it |
+| 19 | Round-1 fixes | `/rolemenu showall`; `/golive` → **Link my Twitch channel**; `/voice` → **Setup** | showall lists every menu (ephemeral); the modal says **channel**, never *login*; Setup says **repaired / took it over** (never a second lobby), lobby named "join to create a channel", Member + staff can connect |
+| 20 | Temp-voice memory (batch 4) | in your temp channel: `/voice` → **People…** → *Let someone in…*, *Keep someone out…*; **Region…** → `us-west`; leave (channel deletes) → re-join the lobby | the new channel has the same region and the same two people set; the panel's **remembered for next time** block shows both halves; **Forget my settings** clears it |
 | 21 | Temp-voice room controls (B4, live 2026-08-31) | with a temp channel open: https://blackbloc.heygabi.ai/tempvoice.html → Open now | each row shows In it / Cap / Access + Rename, Cap, Lock, Hide buttons; press Rename — the channel renames and the reply says "remembered for next time" |
 | 22 | Role-menu Un-post + Seed (B5+B6, live 2026-08-31) | /rolemenus.html → Un-post beside Post on a posted card; the Seed defaults button beside New menu; also `/rolemenu unpost` in Discord | un-post takes the panel down in the channel (in test mode: a `would_unpost` log line instead); seed says created/left-alone in words and never rewrites an existing menu |
 | 23 | Staff assign from the site (B7, live 2026-08-31) | /rolemenus.html → Timed roles → "Hand roles out": pick a member, a menu, roles → Give these | the member's roles change (⚠️ REAL roles even in test mode, same as `/rolemenu assign`); the Logs page shows `web.role_menu.assign` with Via: Website |
@@ -153,14 +161,18 @@ form for a full pass.
   the test channel within seconds (presence) — and nothing in `#live-now`. Stop
   streaming: expect `golive.end` ~2 min later. Try **Stop announcing my streams** then
   **Announce my streams again**. `/settings show` now lists the golive keys.
-- **Phase 3 (live; honeypot `shadow`):** `/tempvoice setup` (expect a "join to
+- **Phase 3 (live; honeypot `shadow`; rewritten 2026-09-03 for the panel — every
+  subcommand below is gone):** `/voice` as a Lead → **Setup** (expect a "join to
   create a channel" voice channel created INSIDE the test channel's category while
   TEST_MODE, and the reply saying so) → join it: expect `<you>'s bloc` to appear next
   to it and you moved in; the control panel goes into `#mute-me-bot-test-spam` with a
   first line naming the voice channel it controls, logged as
-  `tempvoice.panel_elsewhere`, and its buttons work from there; press Rename and
-  Lock → leave: channel deleted within ~60 s. `/tempvoice status`. Also try the new
-  group: `/voice info`, `/voice bitrate`, `/voice region`. Then `/honeypot setup`
+  `tempvoice.panel_elsewhere`, and its buttons work from there (that post is
+  unchanged and is a second door onto the same functions); press Rename and
+  Lock → leave: channel deleted within ~60 s. `/voice` again for the staff block that
+  replaced `/tempvoice status`, and the panel itself for what `/voice info`,
+  `/voice bitrate` and `/voice region` used to say — **Bitrate** and **Region…**.
+  Then `/honeypot setup`
   (trap created in the test category; notice skipped in test mode) → post in it from
   a throwaway account: message deleted, a `honeypot.would_ban` embed with a **Ban
   now** button in the test channel; nobody banned. `/honeypot status` (expect the
@@ -377,6 +389,28 @@ off-state reading. Nothing here has been run against Discord.
 | 132 | Set up, and giving somebody a role | **Set up the Events role** → leave the role picker empty → **Set it up**; then again picking an existing role. Then **Streamers…** → **Give somebody a ping role…** → pick a member → **Make the role**; pick them on **A streamer…** → **Remove their ping role** → **Yes, take it away** | the first makes or reuses **Events** and points both feeds at it, and says "still off" while the mode is off; the second reuses the one you picked. Giving is identical to the old `/pingroles streamer add`, removal deletes the Discord role when `pings_fan_role_delete` is on. ⚠️ **Whether the client will submit an EMPTY role picker is the one thing this build could not check without Discord** — the confirm button does the same write either way, which is the fallback |
 | 133 | A role somebody deleted by hand | delete a streamer's role in Server Settings, then **Streamers…** → pick them | the card says *the role is gone from the server* and shows **Make the role again**; pressing it makes a fresh one and the Streamer pings panel picks it up. Staff-final-say: without it a tidied-away role is a row staff can only delete |
 | 134 | Settings, split feeds, and the quiet footer | **Settings** → flip **Mode…**, flip **Who may start one…** to *staff*, open **Names…** and type `{game} pings`; then point `events_ping_role_id` at a DIFFERENT role from `golive_ping_role_id`; then leave the panel `pings_panel_minutes` (10) minutes | the lines update and each flip leaves ONE `pings.settings` row; **Names…** echoes what the template will ACTUALLY produce and says out loud that a broken one fell back (it never pretends it saved `{game}`); with *staff* set, a member's **Start my own ping role** is gone and the panel says why. Split feeds turn the one toggle into TWO labelled ones (**Turn go-live pings on** / **Turn event pings on**) — owner fork I2. Then every control greys out and the footer reads *This panel has gone quiet — run /pings again* |
+
+## Temp voice — `/voice` is one command that opens a panel (rows 135–143)
+
+Written 2026-09-03 by the temp-voice panel build. ⚠️ **None of it has been run against
+Discord** — no panel opened, no channel made, no DM sent; everything below is what the code
+and its tests say should happen. Twenty-two subcommands over two top-level slots became ONE
+member-visible `/voice`, so the top-level count dropped **39 → 38** (measured through
+`tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`, not a boot). The
+per-channel control post is deliberately UNCHANGED and is still a second door onto the same
+functions.
+
+| # | What | Do this | Expect |
+|---|---|---|---|
+| 135 | The panel with no channel of your own | `/voice` in `#mute-me-bot-test-spam` with no temp channel | ONE ephemeral panel titled *Your voice channel* saying you don't own one and naming the lobby to join — and **no** Rename, **no** Lock, **no** Claim anywhere. Nothing says `/voice rename` or `/tempvoice setup` |
+| 136 | Your own channel's card | join the lobby, then `/voice` | the owner card: **Rename · Limit · Lock · Hide · Bitrate** on the first row, then **People… · Region… · Hand it over… · Refresh** — plus **Forget my settings** once anything has been remembered. The lines above are exactly what `/voice info` used to print, including *remembered for next time* |
+| 137 | The toggles say what they will do | press **Lock**, then **Refresh**; press **Hide**, then **Refresh** | the button now reads **Unlock** / **Show** — never both at once — and the **locked** / **hidden** lines above it agree, because both read the channel's own `@everyone` overwrite |
+| 138 | People, and undoing it | **People…** → *Let someone in…* one member, *Keep someone out…* another; then **Undo for…** | the two names appear on ONE undo select with the right word each (*take their way in back* / *let them back in*); undoing puts the channel's own rules back and it is remembered for next time. *Move someone out…* is only there while somebody else is actually connected |
+| 139 | Region and bitrate | **Region…** → pick one → **Automatic**; **Back**; **Bitrate** → `96` | the select holds **25** regions and no `auto` (that is the button), the region changes and is remembered, **Automatic** says Discord picks; a bitrate above this server's boost level says so out loud rather than silently clamping |
+| 140 | Somebody else's channel | leave your channel, have somebody else join it and run `/voice` | with you gone they see **Claim** and it works; with you still in it there is no Claim at all and the panel tells them to ask you for **Hand it over…** |
+| 141 | The staff half | `/voice` as a Lead | adds the whole status block that `/tempvoice status` used to print, then **Setup · Forget a lobby… · Turn join-to-create off · Logs**, a **A channel…** picker of every open temp channel, and **Open on the site**. **Logs** answers a NEW message and the panel stays. A Lead WITHOUT the Member role still gets all of that, and is told why there is no card of their own |
+| 142 | Setup, forgetting a lobby, and the mode | **Setup** → a name; then **Forget a lobby…** → the lobby; then **Turn join-to-create off** and re-join the lobby; then leave the panel `voice_panel_minutes` (10) minutes | Setup says **repaired / took it over** (never a second lobby); forgetting removes it from the list and joining it makes nothing; with the mode off joining makes no channel and existing ones still work; then every control greys out and the footer reads *This panel has gone quiet — run /voice again*. A lobby Black Bloc is NOT keeping track of is named in the status block with what to do about it — it is not offered on **Forget a lobby…**, because forgetting an id it never stored would do nothing |
+| 143 | Staff reassigning somebody's channel | as a Lead: **A channel…** → somebody else's channel → **Hand it over…** → pick a third member | the row's owner moves, the new owner gets the channel's controls, and the displaced owner is DM'd one line naming who has it now. Staff always get the final say on a stored decision; the member's own **Hand it over…** sends no DM, because they are the person affected |
 
 ## The owner's Twitch Team form — the walk-through
 

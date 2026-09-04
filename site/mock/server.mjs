@@ -303,7 +303,7 @@ const SETTING_SPECS = [
   ['pings_fan_role_on_unlink', 'enum', 'keep', 'keep', 'what happens to a streamer’s ping role when they unlink Twitch or opt out of announcements: keep leaves it alone (nothing is announced, so nobody is pinged), delete takes the role off the server', ['keep', 'delete']],
   ['pings_fan_role_delete', 'bool', true, true, 'true to delete the Discord role itself when a streamer’s ping role is removed; false forgets the role here and leaves it on the server for somebody to tidy by hand'],
   ['tempvoice_mode', 'enum', 'on', 'off', 'off, or on (join-to-create makes a temporary voice channel)', ['off', 'on']],
-  ['tempvoice_creator_ids', 'channels', ['800000000000000009'], [], 'the join-to-create channels; /tempvoice setup fills this in'],
+  ['tempvoice_creator_ids', 'channels', ['800000000000000009'], [], 'the join-to-create channels; Setup on /voice fills this in'],
   ['tempvoice_name_template', 'text', "{user}'s room", "{user}'s room", 'what a spawned channel is called; {user} is the member'],
   ['tempvoice_creator_name', 'text', 'join to create a channel', 'join to create a channel', 'what the join-to-create channel is called'],
   ['tempvoice_allowed_role_id', 'role', null, null, 'only members with this role get a temporary channel'],
@@ -417,6 +417,7 @@ const SETTING_SPECS = [
   ['memory_panel_minutes', 'int', 10, 10, "minutes the /memory panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
   ['youtube_panel_minutes', 'int', 10, 10, "minutes the /youtube panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
   ['pings_panel_minutes', 'int', 10, 10, "minutes the /pings panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
+  ['voice_panel_minutes', 'int', 10, 10, "minutes the /voice panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
   ['youtube_unlink_dms_them', 'bool', true, true, 'true to DM a member the reason when STAFF forget their YouTube channel for them; a member unlinking their own channel is never DMed'],
 ];
 
@@ -3393,7 +3394,7 @@ route('POST', '/api/tempvoice/forget', async (context) => {
   const wanted = String(body.channel_id || '');
   const ids = (state.settings.get('tempvoice_creator_ids') || []).map(String);
   if (!ids.includes(wanted)) {
-    throw new Refused(404, 'not_a_lobby', `**${wanted}** is not one of Black Bloc's join-to-create channels, so nothing was forgotten. \`/tempvoice status\` lists the ones it knows about.`);
+    throw new Refused(404, 'not_a_lobby', `**${wanted}** is not one of Black Bloc's join-to-create channels, so nothing was forgotten. \`/voice\` lists the ones it knows about.`);
   }
   state.settings.set('tempvoice_creator_ids', ids.filter((id) => id !== wanted));
   logAction('web.tempvoice.creator_removed', { target_id: wanted });

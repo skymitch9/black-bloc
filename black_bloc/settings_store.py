@@ -508,7 +508,7 @@ KEY_HELP: dict[str, str] = {
         "forgets the role here and leaves it on the server for somebody to tidy by hand"
     ),
     "tempvoice_mode": "off, or on (join-to-create makes a temporary voice channel)",
-    "tempvoice_creator_ids": "the join-to-create channels; /tempvoice setup fills this in",
+    "tempvoice_creator_ids": "the join-to-create channels; Setup on /voice fills this in",
     "tempvoice_name_template": "what a spawned channel is called; {user} is the member",
     "tempvoice_creator_name": "what the join-to-create channel itself is called",
     "tempvoice_allowed_role_id": "only members with this role get a temporary channel",
@@ -1065,6 +1065,21 @@ KEY_HELP.update(
 )
 
 
+# Temp voice panel (wave 2) — the one decision `/voice`'s panel introduces, in its own block so
+# the parallel wave-2 branches merge textually.
+KEY_TYPES.update({"voice_panel_minutes": "int"})
+KEY_HELP.update(
+    {
+        "voice_panel_minutes": (
+            "minutes the /voice panel stays live before its buttons disable themselves; 10 by "
+            "default. The 'this panel has gone quiet' footer can only be written while "
+            "Discord's 15-minute interaction window is still open, so 15 or more means the "
+            "buttons simply stop working with no footer to explain it"
+        ),
+    }
+)
+
+
 # Operator read token — the token itself is the on/off switch; this is the one decision left.
 KEY_TYPES.update({"operator_read_log": "bool"})
 KEY_HELP.update(
@@ -1588,6 +1603,8 @@ class SettingsStore:
         if key == "youtube_unlink_dms_them":
             return True
         if key == "pings_panel_minutes":
+            return 10
+        if key == "voice_panel_minutes":
             return 10
         if key.endswith("_log_level"):
             return LEVEL_DEFAULT
