@@ -329,9 +329,11 @@ docs bookkeeping lands with the work, not after.
   `251dd14` (five append-shaped conflicts against automod, all resolved HEAD-then-branch; sweeps `C1`–`C8`
   numbered 155–162 at the merge), live in v75 15:58** (4332 → 4402 tests, `commands synced` **38 → 38
   measured at boot**) — landing entry in `DONE.md` 2026-09-04; sweeps 155–162 are the owner's to run.
-  **Raidtrain and role menus are NEXT** — both still to dispatch (Opus, own worktrees off `251dd14`,
-  raidtrain sweeps from 163; if the two run in parallel the second numbers its rows with letters and the
-  conductor assigns digits at the merge, as chat did). If this session dies: `git worktree list` /
+  **DISPATCHED 2026-09-04 16:03 Phoenix: raidtrain AND role menus builds IN PARALLEL** (Opus, own worktrees
+  off `251dd14`; usage at dispatch session 12% / weekly 3% / Fable 3%; raidtrain numbers sweeps from 163 with
+  digits, role menus writes `M1…` and the conductor assigns digits at the merge, as chat did; both pin
+  `tests/test_bot.py` at what THEIR branch measures — 37 each — and the conductor reconciles to 36 at the
+  second merge; role menus carries the owner's §I-amend Grants audit). If this session dies: `git worktree list` /
   `git branch --list 'worktree-agent-*'` finds a branch; merge only one whose FINAL commit is a doc/string
   sweep with a passing full suite.
   Events I2 DECIDED 12:40 (`/timezone` retired).
