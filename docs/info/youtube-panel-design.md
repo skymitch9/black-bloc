@@ -1,7 +1,26 @@
 # YouTube — `/youtube` is ONE command that opens a panel (wave 2)
 
 > **Audience:** the build agent and the reviewer, and the owner for §I. **Status:** TRACKED ·
-> **PLANNING — nothing is built.**
+> ✅ **BUILT** — 2026-09-03, branch `worktree-agent-a74823f4d9293d080` off `main` `ea252bd`
+> (v68 live), commits `7809b57` (code), `7f800cb` (tests) and the docs commit that follows
+> them. **Not merged, not deployed.** Gates: **3820 tests pass** (3744 on the base commit —
+> +76, none lost), ruff clean over the whole tree, `node site/mock/check.mjs` ok (17 pages,
+> 142 routes), `labels.js` and `page-golive.js` both parse, and
+> `import black_bloc.youtube, black_bloc.cogs.content.youtube, black_bloc.api.tools.youtube,
+> black_bloc.personas` succeeds. `commands synced` **41, measured** by loading every cog
+> (`tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`) — a drop of
+> exactly one, as §B predicted. ⚠️ **NOT verified: anything against Discord or YouTube.** The
+> build agent has no token; no panel was opened, no button pressed, no channel resolved, no
+> feed fetched. Its `## Deviations` foot is at the bottom of this file.
+>
+> **§I's two forks are DECIDED (owner, 2026-09-03 16:10–16:15):**
+> **F-Y1 = (a), keep `/youtube` and `/golive` SEPARATE** — the Twitch link is not folded into
+> this panel, and the sibling golive panel keeps its own. Built that way.
+> **F-Y2 = (b), flip `youtube_mode` to `shadow` when the panel lands** — ⚠️ **that is
+> OPERATIONAL, not a build change.** The conductor does it from the Settings page (or
+> **Announcements are…** on the panel itself) after the deploy; the stored value and the
+> registry default are **untouched by this build** and `youtube_mode` still ships `off`.
+>
 > **Last verified: 2026-09-03** — every `path:line` below was READ at `main` `1735ff8` in
 > `black_bloc/cogs/content/youtube.py`, `black_bloc/youtube.py`, `black_bloc/api/tools/youtube.py`,
 > `black_bloc/panels.py`, `black_bloc/settings_store.py`, `black_bloc/command_visibility.py`,
@@ -340,6 +359,12 @@ Settled first, by the two standing rules, so they are NOT put to him:
 
 The two that are genuinely his:
 
+- ✅ **F-Y1 — DECIDED (a), 2026-09-03: leave them separate.** Built that way; nothing in this
+  panel mentions Twitch.
+- ✅ **F-Y2 — DECIDED (b), 2026-09-03: flip to `shadow` when the panel lands** — an
+  OPERATIONAL step for the conductor after the deploy, not a build change. The registry
+  default is still `off` and the build wrote no value.
+
 - **F-Y1 — should `/youtube` also carry the member's TWITCH link?** A member who streams on Twitch
   and uploads to YouTube does one job — "tell the bot where I am" — through two commands, and the
   sibling `/golive` design puts `Link` / `Unlink` for Twitch on its own panel. Options: **(a) leave
@@ -418,4 +443,76 @@ Read at `1735ff8`. None is caused by this design; each is one the builder will w
 
 ## Deviations
 
-<!-- Written by the build agent. Everything not listed here was built as this document says. -->
+Written by the build agent, 2026-09-03. Everything not listed here was built as this
+document says.
+
+1. **`link_channel` RAISES `LinkRefused` for the two refusals and returns a THREE-tuple
+   `(said, row, counted)` on success**, not the `(what to say, the fresh row)` §F specifies.
+   Two things forced it. The refusals: §F says the web route keeps its `Refused(400,
+   "bad_channel")` / `Refused(409, "link_taken")` HTTP shapes, and a 2-tuple whose second
+   element is `None` cannot tell those two apart — the alternative was for the route to
+   re-run `client.resolve` and the owner check itself, which is a second network call to
+   YouTube and exactly the duplication §F exists to delete. The count: the route's `LINKED`
+   sentence carries `{count}` and `tests/api/tools/test_youtube.py` asserts `"5 video(s)"`,
+   so the seeded count has to leave the function. `LinkRefused` carries `status` and `code`,
+   so the route's mapping is one line and its shapes are byte-identical.
+2. **`status_lines` takes the latest video's TITLE, not the row** — `status_lines(row,
+   latest_title, *, where, shorts)`. Reading `latest["title"]` safely needs a `row_value`
+   helper, and there are already **five** near-copies of one in the package
+   (`modcases.py`, `requests.py`, and `_row_value` in birthdays, golive and this cog). A
+   sixth in `black_bloc/youtube.py` is checklist 15; the cog passes the value instead.
+3. **The staff root embed keeps the linked list as LINES beside the picker.** §B's table put
+   `link_lines` nowhere except the empty case. Dropping the list loses what `/uploads list`
+   actually showed staff — a select's options are only visible once it is clicked — and it is
+   not two spellings of one move (P3): the lines are data, the picker is the control, which is
+   exactly the shape `/request` ships (`summary_line` + `RequestPick`). Capped at the same 25.
+4. **`Forget…` opens its own small view rather than adding a select to the Setup rows.** §C
+   put `Forget…` and `Open on the site` on row 3; a select added in place would need a fifth
+   action row and would sit under two pickers that already say the same thing. Pressing it
+   re-renders the Setup embed with a two-option select and a **Back** that returns to Setup.
+   Same writer (`save_setup({key: None})`), proved by a test asserting the sentence it
+   answers is character-for-character the one an empty picker gives.
+5. **`Refresh` on somebody else's card re-renders THAT card, not the root.** §C's table adds
+   `Refresh` to every card without saying what it refreshes; refreshing back to the root
+   would silently throw away the staffer's place.
+6. **The "theirs, not linked" cell is BUILT rather than left unreachable.** §C calls it
+   unreachable because the picker only lists linked rows — but the member can unlink between
+   the render and the click. It renders `Refresh · Back` and the embed says they have no
+   channel linked.
+7. **`YouTubeError` gained a `network` flag** in `black_bloc/youtube.py`, set at the four
+   raise sites (`_aiohttp_request`, `fetch_feed`'s `FEED_REFUSED`, `_api`'s non-200, and
+   `parse_feed`'s unreadable XML). §C asked for `details["network"]` "decided at the raise
+   site, not by string-matching the message", and an attribute on the exception is the only
+   way to carry that. §K finding 3 itself is NOT fixed — both outcomes still share the
+   `youtube.resolve_failed` kind; the row now says which one it was.
+8. **Two new modals were written rather than reusing `panels.NoteModal`** — `LinkModal` (a
+   short single-line field, prefilled on a relink) and `NumbersModal` (two fields).
+   `NoteModal` is hard-wired to one paragraph field with no default. `UnlinkForModal` IS
+   `panels.NoteModal`, exactly as §C says.
+9. **`save_setup` validates every value with `coerce_value` BEFORE writing any of them**, so
+   a `Numbers…` submit with a good panel-minutes and a bad poll-minutes changes nothing at
+   all rather than half of it. The floor's refusal sentence is the settings validator's own
+   (`KEY_MIN_REASON`), which already names the number.
+10. **`SETUP_DONE` is now computed from the store rather than from what was passed**, and
+    says which of three things is true — the upload channel, the go-live channel it falls
+    back to, or nowhere. The old wording could not describe a CLEAR, which §C's row 0
+    requires.
+11. **`tests/test_bot.py`'s `LOGS_GROUPS` entry for `uploads` and `tests/test_logkinds.py`'s
+    `KNOWN_DYNAMIC` entry for `black_bloc/cogs/content/youtube.py::kind` were both deleted.**
+    §E named the first; the second is the cog's old `_log(interaction, kind, …)` helper,
+    which is gone — every kind is now a literal inside `kind_via(...)`, which the AST walk
+    already unwraps, so the entry had become stale and the test said so.
+
+**Findings NOT fixed, per §J** — §K 2 (two numbers for one fact), 3 (one kind for an outage
+and a bad paste — the row now distinguishes them, the kind still does not), 4
+(`ALREADY_LINKED` leaves no log row), 5 (moot: the retired subcommands were the ones missing
+the db check, and the panel checks `db_ready` on every click), 6 (per-guild rows over a global
+table; orphaned `youtube_videos`). §K 1 WAS fixed, because §H item 5 forces it: a link whose
+feed would not answer now says the seed is still to come instead of claiming "the 0 already on
+the channel are counted as seen".
+
+**NOT verified.** No boot, no Discord, no YouTube: no panel opened, no button pressed, no
+modal submitted, no channel resolved, no feed fetched, no DM delivered. Whether a Discord
+client will submit an EMPTY `ChannelSelect`/`RoleSelect` at `min_values=0` is still unproven
+here as it was for events and applications — `Forget…` is the fallback and is built either
+way. The `youtube_mode` flip (F-Y2) has NOT been made; the mode is still `off`.
