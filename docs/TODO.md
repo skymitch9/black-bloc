@@ -12,20 +12,22 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-04 15:59, v75 live, wave 3: automod + chat SHIPPED)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-04 16:58, v76 live, wave 3: automod + chat + raidtrain SHIPPED, role menus LANDED under review)
 
-**`main` = `251dd14`** (chat panel merge; v75 live 15:58, 4402 tests, **38 commands**; `youtube_mode` is
+**`main` = `2dd2689`** (raidtrain panel merge; v76 live 16:56, 4465 tests, **37 commands**; `youtube_mode` is
 **shadow** since 2026-09-03 17:42). Panels waves 1 and 2 are COMPLETE (memory v68, golive v70, youtube v71,
 pings v72, voice v73; landing entries in `DONE.md` 2026-09-03). **Wave 3 is in progress:** all four
 designs landed and all 13 forks are DECIDED (every one (a), plus the role-menus Grants audit amendment —
-see the panels item below); **automod SHIPPED in v74, chat SHIPPED in v75** (both `DONE.md` 2026-09-04;
-sweeps 144–154 and 155–162). **Next:** (1) usage read → dispatch raidtrain (380–450k, sweeps from **163**)
-and role menus (420–500k, brief carries §I-amend, sweeps after raidtrain's — use letters `R1…` if the
-two run in parallel), Opus, own worktrees off `251dd14`, usage read before each and after each lands,
-weekly cut-off 90%; each lands → Fable review → merge → deploy → docs → report; (2) the three sweeps the automod
+see the panels item below); **automod SHIPPED in v74, chat SHIPPED in v75, raidtrain SHIPPED in v76**
+(all `DONE.md` 2026-09-04; sweeps 144–154, 155–162, 163–172). **Role menus LANDED 16:53** (529k against
+420–500k; four commits off `4523118` on `worktree-agent-ace2086f9f7cfa541`; Fable review approve).
+**Next:** (1) merge role menus (expect append-shaped conflicts: `settings_store.py` block + default,
+`tests/test_bot.py` pin 37 → set **36**, `sweeps.md` header + `M1`–`M10` → number **173–182**,
+`code-notes.md` foot, `labels.js`, `tests/test_settings_store.py`; OWNER_GUIDE count → 182) → ruff/pytest →
+v77 → docs → report; then wave 3 is COMPLETE — move the panels item WHOLE to `DONE.md`; (2) the three sweeps the automod
 landing deferred (🔧 below: confirm-helper fold ×5, `LOG_LEVEL_COMMANDS` pass, settings-API gate pass —
 KI-21); (4) the small review findings folded into whatever touches those files; (5) owner by-eye sweeps
-14–15, 58–103, 144–162; (6) Pawpette's Twitch Team form still needs the owner's walk-through
+14–15, 58–103, 144–172; (6) Pawpette's Twitch Team form still needs the owner's walk-through
 (`access/sweeps.md` → "The owner's Twitch Team form") — no form exists on the live site as of 15:54. Merged
 worktrees/branches (`agent-a19bdce15408f8243` birthdays, `agent-a448c7ab780ed3c2b` events,
 `agent-aa735ab092d13477d` polls, `agent-abf063b9177e02f17` applications) can be pruned.
@@ -329,7 +331,16 @@ docs bookkeeping lands with the work, not after.
   `251dd14` (five append-shaped conflicts against automod, all resolved HEAD-then-branch; sweeps `C1`–`C8`
   numbered 155–162 at the merge), live in v75 15:58** (4332 → 4402 tests, `commands synced` **38 → 38
   measured at boot**) — landing entry in `DONE.md` 2026-09-04; sweeps 155–162 are the owner's to run.
-  **DISPATCHED 2026-09-04 16:03 Phoenix: raidtrain AND role menus builds IN PARALLEL** (Opus, own worktrees
+  **Raidtrain LANDED (473k against 380–450k; four commits off `4523118`), Fable-reviewed approve, merged
+  `2dd2689` (clean, no conflicts; sweeps 163–172 numbered on the branch; owner-guide count 162 → 172),
+  live in v76 16:56** (4402 → 4465 tests, `commands synced` **38 → 37 measured at boot**) — landing entry
+  in `DONE.md` 2026-09-04; sweeps 163–172 are the owner's to run; `raidtrain_mode` still off.
+  **Role menus LANDED 16:53 (529k against 420–500k; four commits off `4523118`), Fable-reviewed approve
+  (§I-amend Grants audit built: `active_grants`/`grant_lines` in the pure module, soonest-ending first,
+  no-end-date last, 25-cap; `tests/api/tools/test_roles.py` unchanged is the proof the reconciliation did
+  not move the site; `web.rolemenu.*` → `web.role_menu.*` kinds renamed, `HEADS["rolemenu"]` kept) — merge
+  NEXT.**
+  DISPATCHED 2026-09-04 16:03 Phoenix: raidtrain AND role menus builds IN PARALLEL (Opus, own worktrees
   off `251dd14`; usage at dispatch session 12% / weekly 3% / Fable 3%; raidtrain numbers sweeps from 163 with
   digits, role menus writes `M1…` and the conductor assigns digits at the merge, as chat did; both pin
   `tests/test_bot.py` at what THEIR branch measures — 37 each — and the conductor reconciles to 36 at the
@@ -395,7 +406,10 @@ docs bookkeeping lands with the work, not after.
   `cogs/content/chat.py`). **Same sweep, second helper:** the `still_staff` / `defer` / `db_ready` triplet is
   repeated **14×** in `cogs/content/chat.py` where automod carries a cog-local `opened()` — one
   `panels.opened(...)` beside `panels.confirm(...)`, both callers' copies delegating (chat review finding,
-  non-blocking). Est. 120–180k.
+  non-blocking). **Raidtrain landed 2026-09-04 (v76): a SECOND cog-local `opened()` in
+  `cogs/content/raidtrain.py`, and its `Outcome`/`refusal` fold into `panels.py` is DONE (chat imports
+  them from there now). Role menus adds a SEVENTH confirm (`confirm()` in `cogs/community/role_menus.py`)
+  and a `ready()` that is `opened()` under another name.** Est. 120–180k.
 - 🔧 **`LOG_LEVEL_COMMANDS` is stale for eight features (report from the automod build, 2026-09-04):**
   `settings_store.py` still names `tempvoice` (now `voice`), `events` (now `event`), `poll`, `birthday`,
   `golive`, `request`, `applications` (now `/apply`) and `pings` (`pingroles`, retired) as the command that

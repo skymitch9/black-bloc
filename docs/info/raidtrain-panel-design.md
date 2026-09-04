@@ -1,8 +1,10 @@
 # Raid trains — `/raidtrain` is ONE command that opens a panel (wave 3)
 
 > **Audience:** the build agent and the reviewer (Claude sessions), and the owner for §I.
-> **Status:** TRACKED · **DESIGNED, not built.** The `## Deviations` foot is written by the BUILD
-> agent, not by this document.
+> **Status:** TRACKED · ✅ **SHIPPED in v76** (`2dd2689`, 2026-09-04 16:56; built on
+> `worktree-agent-aba5d44f8e27a8e28` for 473k against the 380–450k estimate, merged clean, 4402 → 4465
+> tests, `commands synced` 38 → 37 measured at boot). The `## Deviations` foot (14 items) is the
+> BUILD agent's; landing entry in `DONE.md` 2026-09-04.
 > **Last verified: 2026-09-04** — every `path:line` below was READ against `main` at `4336a66`
 > (the tree's newest commit; **code-identical to `bf3e447`** — the only commit between them is the
 > docs commit that dispatched these wave-3 designs, `git status` clean). Files read in full:

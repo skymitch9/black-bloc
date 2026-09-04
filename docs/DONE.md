@@ -9,6 +9,57 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-04 — Raid train panel: `/raidtrain` is one window (wave 3 THIRD landing, v76, `2dd2689`)
+
+Release **v76** (`2dd2689`, 16:56; `deploys.log` line 75). Merge `--no-ff` of
+`worktree-agent-aba5d44f8e27a8e28` — **four commits off `4523118`** (`3e54d52` the pure half,
+`f584676` the cog and the shared functions, `4bb059c` the routes and the tests, `656e771` the
+doc sweep). Built by one Opus agent for **473k against a 380–450k estimate** (dispatched 16:03
+in parallel with role menus, landed first), Fable-reviewed **approve**. Design:
+`info/raidtrain-panel-design.md` (header flipped to SHIPPED; its `## Deviations` foot lists 14).
+
+**What it is.** The `raidtrains` staff group and the `raidtrain` member group's fifteen leaf
+subcommands are retired for ONE member-visible `/raidtrain` that opens an ephemeral panel: the
+root lists the upcoming trains (a select picks one; F-R2 (a) — past trains stay on the site), a
+Lead sees **Setup…**, **Logs** and the mode select; a train card shows the lineup with **Take a
+slot** (one claim select, F-R3 (a) — `may_claim` is the ONE place the who-may-take rule lives,
+read by the select's options and by the refusal), **Give back**, **Mine**, and for organizers
+**Put in**, **Take somebody off**, **Swap**, **Lock the lineup** / **Open it for sign-ups** and
+**Call it off** (a reason is required, through `NoteModal`). No lineup-post button (F-R1 (a)).
+Every move is an async shared function in `cogs/content/raidtrain.py` carrying `via`
+(`claim_slot`, `release_slot`, `assign_slot`, `unassign_slot`, `swap_slots`, `move_train`,
+`create_and_publish`, `set_mode`, `save_setup`), each writing ONE `log_action(kind_via(...))`
+row; `api/tools/raidtrain.py` calls the same functions with `via=VIA_WEBSITE` through
+`answered(outcome)` → `Refused(status, code, message)`, so the recorded Via-labelling gap is
+closed and **`web.raidtrain.cancel` is written for the first time**. `Outcome` and `refusal`
+moved UP into `black_bloc/panels.py` (`chat_panel.py` now imports them from there — the fold
+the chat landing asked for, done here). New key `raidtrain_panel_minutes` (int, 10) in its own
+`settings_store` block. `commands synced` **38 → 37, measured at boot**.
+
+**The merge.** Clean — no conflicts (role menus was still on its branch). The branch numbered
+its sweep rows **163–172** with digits (it was told chat's 155–162 were fixed); the conductor
+moved the `OWNER_GUIDE.md` count 162 → 172. `docs/info/code-notes.md`'s `# Raidtrain panel
+(wave 3)` section was re-keyed to the merge. **4402 → 4465 tests.** Deviations worth knowing
+(the foot has all 14): the card's buttons and selects are split into `card_buttons` /
+`card_selects` so the lineup row stays ≤5; **Take somebody off** is gated on open/locked;
+option labels are plain `%H:%M UTC` (no markdown inside a select option); `NOBODY_THERE` stays
+in the cog; `move_train` covers live AND done; `FEATURE_OFF` was deleted; the `phase18-design.md`
+superseded banner (which wrongly described `/golive`/`/twitch`) and `cutover-plan.md:45` were
+fixed in passing; the optional labels/mock rider was skipped.
+
+**Review findings, non-blocking, deferred to the fold sweep:** `opened()` is a SECOND cog-local
+copy (automod has the first; chat inlines the triplet 14×); and
+`tests/test_bot.py::test_every_feature_group_has_a_logs_command` now covers five groups only —
+already on the TODO to re-express against the panels' Logs button.
+
+**Verified:** ruff clean; 4465 passed; boot clean at 23:56:13Z (`database ready` / `synced 37`
+/ `logged in`, no Traceback). **NOT verified:** `/raidtrain` was not opened in Discord — no
+hour claimed, no train cancelled from the site, no DM sent; `raidtrain_mode` is still **off**
+everywhere, so row 163 (the panel with the mode off) is the first thing the owner sees. Sweeps
+**163–172** are the owner's to run, in `#mute-me-bot-test-spam`, as a Lead.
+
+---
+
 ## 2026-09-04 — Chat panel: `/chat` is one window (wave 3 SECOND landing, v75, `251dd14`)
 
 Release **v75** (`251dd14`, 15:58; `deploys.log` line 74). Merge `--no-ff` of
