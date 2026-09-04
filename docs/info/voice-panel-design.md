@@ -1,7 +1,10 @@
 # Temp voice — `/voice` is ONE command that opens a panel (wave 2)
 
 > **Audience:** the build agent and the reviewer, and the owner for §I. **Status:** TRACKED ·
-> **PLANNING — not built.**
+> **BUILT 2026-09-03 on `worktree-agent-a386d425f5527fe95`** — see the `## Deviations` foot for
+> what differs and what was measured. ⚠️ Several numbers in the body below were measured against
+> `main` at `1735ff8` and were already stale at build time; the Deviations foot carries the
+> re-measured ones.
 > **Last verified: 2026-09-03** — every `path:line` below was READ against `main` at `1735ff8`, in
 > `black_bloc/cogs/community/tempvoice.py` (1986 lines), `black_bloc/panels.py`,
 > `black_bloc/api/tools/tempvoice.py`, `black_bloc/settings_store.py`,
@@ -396,3 +399,108 @@ tests, then the cog panel, then the doc/string sweep), so a kill costs the last 
 the build.
 
 ## Deviations
+
+Written by the build agent, 2026-09-03, on `worktree-agent-a386d425f5527fe95`. Everything not
+listed here was built as this document says.
+
+**Measured, before and after** (from the worktree, `.venv` at the main checkout):
+
+| | before | after |
+|---|---|---|
+| top-level commands (`test_the_command_tree_stays_inside_discords_limits`) | **39** | **38** |
+| tests | **4050 pass** | **4262 pass** |
+| `ruff check .` | clean | clean |
+| `node site/mock/check.mjs` | 17 pages, 142 routes | **17 pages, 142 routes** |
+| `node --input-type=module --check < site/public/assets/labels.js` | parses | parses |
+| `tests/api/tools/test_tempvoice.py` | green | **green, not edited** |
+
+⚠️ **NOT verified: anything against live Discord.** No boot (`python -m black_bloc`, invariant
+P17) — this build has no token and must not look for one. No panel opened, no channel created,
+no DM sent, no select submitted by a real client. The substitute is
+`python -c "import black_bloc.tempvoice, black_bloc.cogs.community.tempvoice,
+black_bloc.api.tools.tempvoice, black_bloc.personas"`, which passes, plus the parametrised
+state test. The design's §B claim of "42 → 41" was stale twice over — the tree had already
+dropped to 39 through the other wave-2 merges — which is exactly why §B says to state the
+delta and re-measure. The delta is one, as predicted.
+
+1. **`card_buttons` takes `staff`, `mode_on` and `has_lobbies`, and there is no separate
+   `CARD_BUTTONS(state, …)` signature as §F spelled it.** §F asked for
+   `card_buttons(state, *, locked, hidden, has_prefs, others_here, has_lists)`, but
+   `others_here` and `has_lists` govern the **People sub-panel's** selects, not the card, and
+   the staff row hangs off the same state the card does. Splitting it the way §F spelled it
+   would have let a state exist in the member half and not the staff half, which is precisely
+   what the parametrised test is meant to make impossible. So: **one** `card_buttons` for the
+   whole §B/§C root table including the staff row, and a second tiny
+   `people_controls(*, others_here, has_lists)` for the sub-panel. `CARD_BUTTONS` survives as
+   the flat tuple of every move, which the test uses to prove no button was invented outside
+   the table.
+
+2. **`Forget a lobby…` is a BUTTON that opens a sub-panel, not a `Select` on the staff row.**
+   Discord allows five action rows. The owner card uses rows 0 and 1; the staff row is 2;
+   `A channel…` is a select and needs all of row 3; `Open on the site` is row 4. There is no
+   sixth row for a second select. As a button it also gets a place to explain itself, which a
+   bare select does not.
+
+3. **`Forget a lobby…` lists ONLY the stored `tempvoice_creator_ids` — the strays are NOT on
+   it.** §C says the select covers the ids "plus the strays `lobbies_by_name` found".
+   `forget_creator` returns `False` for anything not in the id list, so a stray on that select
+   would be a control the shared function refuses — the one thing P3 forbids. The strays are
+   still named, in the staff status block, by `STRAY_LOBBIES`, whose sentence was rewritten to
+   point at **Setup** (which adopts and repairs them) or at deleting the channel. Both of those
+   do something.
+
+4. **`voice_gate` refuses only a DM and a database that is down; the allowed-role check became
+   part of the state.** §F describes `voice_gate` as replacing `_voice_allowed` "letting staff
+   through the role check", but §B S0 renders `VOICE_NEEDS_ROLE` **as a panel**, with `Refresh`.
+   Those two cannot both be true of one function, and §B wins: a refusal that also shows you
+   the door is better than one that does not. `may_open` (staff **or** the role) feeds
+   `panel_state`'s `allowed` flag; `has_voice_role` stays separate so a staffer without the role
+   can still be told why they have no card of their own.
+
+5. **`Forget my settings` renders in every state past the role gate, not only S1 and S2.** §B's
+   table lists it on the "owns none" row and §C lists it on the owner card, which would leave a
+   member standing in somebody else's channel unable to forget their own remembered settings —
+   a valid move, hidden. `reset_prefs` touches the member's preferences and never the channel,
+   so nothing about the state can make it invalid. It is still absent in S0, where the caller
+   has no business with the feature at all.
+
+6. **`lobby_choices` and `stray_lobbies` are two functions, not the one `lobby_choices(bot,
+   guild, rows)` §F names.** The staff embed needs the strays; the select needs the stored ids
+   (deviation 3); `status_lines` needs both. Two named functions read better than one that
+   returns a pair and is destructured at three call sites, and `stray_lobbies` is the one that
+   replaced the inline half of `/tempvoice status`.
+
+7. **`RenameModal` and `LimitModal` keep BOTH paths rather than "taking the panel's re-render
+   callback instead of answering".** Fork F1 = (a) says the in-channel control post is left
+   exactly as it is, and that post is these two modals' other caller. With `previous=None` they
+   behave byte-for-byte as they did; with a view they go through `act_on_own`. Rewriting them
+   to only re-render would have changed the post's behaviour, which F1 forbids.
+
+8. **`clamped` was copied into the cog rather than added to `panels.py`.** `cogs/content/pings.py`
+   already carries the identical four lines, so this is knowingly a second copy and a checklist-15
+   smell. Adding it to `panels.py` would edit a file that three other unmerged wave-2 branches are
+   also editing, and a clean textual merge is worth more than one-fact-one-home for four lines.
+   ⚠️ **This is a job for the conductor at merge**: fold `clamped` into `panels.py` and delete both
+   copies. `code-notes.md` carries the same note against the line.
+
+9. **`voice_health` reads the reconcile loop's health off the cog through `bot.get_cog`.** The
+   panel builders are module-level (they are called from the command, from every button and from
+   the tests) while `last_ok_at` / `last_error` live on the cog instance. Every miss degrades to
+   "not yet" / "none" rather than raising, so a bot without the cog loaded still renders.
+
+10. **The staff card has no `Close it` and no `Forget this room`, as §J asks — but it also has no
+    embed of the member's own prefs.** `info_lines` alone, plus `Hand it over…` and `Back`. The
+    remembered-settings block belongs to the person whose settings they are, and a staffer
+    looking at somebody else's room has no business with it.
+
+11. **Row 20 and the Phase 3 appendix block in `sweeps.md` were rewritten in place, as asked;
+    row 19 too. `OWNER_GUIDE.md` gained the "Give people their own voice rooms" row and its
+    sweeps count moved 134 → 143.** The design said the rows start at 104; the file's last row
+    was **134**, so this build's are **135–143** — nine, not eight, because staff reassigning
+    somebody else's channel (the settled §I fork, with its DM) had no row of its own and now
+    has 143.
+
+12. **`tests/cogs/test_core.py:test_help_marks_the_staff_commands_the_real_bot_registers` needed
+    one edit after all.** §E says that file only builds a fake tree — true of two of its three
+    `/tempvoice` mentions, but this third one asserts against the REAL tree and had to move to
+    `/voice`. Measured, not assumed: the other two are fixtures and are untouched.

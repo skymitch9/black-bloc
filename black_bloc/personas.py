@@ -88,7 +88,8 @@ pings* and *Notifications* panels do the same.
 free, `/raidtrain claim` takes one (link Twitch first), `/raidtrain release` gives it back, and
 `/raidtrain mine` says what you hold. Black Bloc DMs you before your slot with who raids into
 you and who you raid next.
-`/voice` — rename, lock, hide and hand over a temporary voice channel somebody made.
+`/voice` — one window for your own temporary voice channel: rename it, cap it, lock it, hide it,
+let people in or keep them out, and hand it to somebody else.
 `/memory` — does the bot remember me? It opens one window with everything Black Bloc has written
 down about you, numbered: drop one line, forget the lot, or stop it remembering you at all.
 `/help` — every command, in a list.
