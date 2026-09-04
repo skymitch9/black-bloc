@@ -189,6 +189,31 @@ async def test_a_demoted_staffer_who_already_deferred_is_refused_as_a_followup()
     assert interaction.followup.sent[0][0] == REFUSAL
 
 
+# --- still_allowed --------------------------------------------------------------------------
+
+
+async def test_still_allowed_says_nothing_when_the_gate_is_open():
+    interaction = FakeInteraction(FakeBot(staff=False))
+
+    assert await panels.still_allowed(interaction, True, "Organizers only.") is True
+    assert interaction.response.sent == []
+    assert interaction.followup.sent == []
+
+
+async def test_still_allowed_refuses_with_the_callers_words_not_the_staff_refusal():
+    interaction = FakeInteraction(FakeBot(staff=True))
+
+    assert await panels.still_allowed(interaction, False, "Organizers only.") is False
+    assert interaction.response.sent[0][0] == "Organizers only."
+
+
+async def test_still_allowed_refuses_a_deferred_move_as_a_followup():
+    interaction = FakeInteraction(FakeBot(staff=True), done=True)
+
+    assert await panels.still_allowed(interaction, False, "Organizers only.") is False
+    assert interaction.followup.sent[0][0] == "Organizers only."
+
+
 # --- db_ready -------------------------------------------------------------------------------
 
 
@@ -442,6 +467,7 @@ def test_the_library_says_what_it_offers_and_knows_nothing_about_requests():
         "Panel",
         "NoteModal",
         "answer",
+        "still_allowed",
         "still_staff",
         "retire",
         "db_ready",

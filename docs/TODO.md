@@ -289,8 +289,9 @@ docs bookkeeping lands with the work, not after.
   ~200k each, read-only on code, no commits). **All four LANDED 09:21–09:33 and Fable-reviewed APPROVE**
   (raidtrain 595 lines / 250k; role menus 622 / 230k; chat 533 / 241k; automod 626 / 209k — see the
   `info/README.md` rows). `commands synced` after all four: 38 → **36** (raidtrain −1, role menus −1, chat and
-  automod 0). **Conductor prep before ANY wave-3 build:** add `still_allowed(interaction, ok, refusal)` to
-  `panels.py` on `main` (raidtrain §F) — one appended function so no branch copies `still_staff`'s body; the
+  automod 0). **Conductor prep DONE 09:50:** `still_allowed(interaction, ok, refusal)` is on `main` in
+  `panels.py` (raidtrain §F), `still_staff` is a two-line call to it, three tests in `tests/test_panels.py`,
+  code-note at `panels.py:31` — wave-3 builds branch from this commit or later and USE it, never copy it; the
   numbers-modal validator (role menus §F) and the confirm helper (automod §F, youtube `open_confirm` + pings
   deviation 8 + automod = three copies) are FOLDED AT MERGE, not pre-built. **13 forks go to the owner ONE AT
   A TIME, in this order:** raidtrain F-R1/F-R2/F-R3 · role menus F-R1/F-R2/F-R3 · chat F-C1/F-C2/F-C3/F-C4 ·

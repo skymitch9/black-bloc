@@ -28,13 +28,19 @@ async def answer(interaction: discord.Interaction, text: str) -> None:
     )
 
 
-async def still_staff(interaction: discord.Interaction) -> bool:
-    """Staff can be demoted while a card is open, so every move re-asks instead of trusting it."""
-    store = interaction.client.store
-    if store.is_staff(interaction.user):
+async def still_allowed(interaction: discord.Interaction, ok: bool, refusal: str) -> bool:
+    """A gate can close while a card is open, so every move re-asks instead of trusting it."""
+    if ok:
         return True
-    await answer(interaction, store.staff_refusal(interaction.guild.id))
+    await answer(interaction, refusal)
     return False
+
+
+async def still_staff(interaction: discord.Interaction) -> bool:
+    store = interaction.client.store
+    return await still_allowed(
+        interaction, store.is_staff(interaction.user), store.staff_refusal(interaction.guild.id)
+    )
 
 
 def retire(previous: Any) -> None:
@@ -190,5 +196,6 @@ __all__ = [
     "panel_minutes",
     "retire",
     "site_page_url",
+    "still_allowed",
     "still_staff",
 ]
