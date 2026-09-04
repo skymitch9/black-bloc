@@ -297,22 +297,22 @@ docs bookkeeping lands with the work, not after.
   A TIME, in this order:** raidtrain F-R1/F-R2/F-R3 · role menus F-R1/F-R2/F-R3 · chat F-C1/F-C2/F-C3/F-C4 ·
   automod F-A1/F-A2/F-A3 (every recommendation is (a); chat F-C3 recommends NO confirm on the money
   switch while automod F-A1 recommends a confirm on arming — different reasons, both stated). Answers are
-  recorded here as they come — **DECIDED 2026-09-04:** raidtrain F-R1 = (a) no lineup-post button ("Leave it",
-  09:55); F-R2 = (a) upcoming trains only in the picker (09:57); F-R3 = (a) one claim select, no
-  next-open-hour button (09:58) — RAIDTRAIN FULLY DECIDED. Role menus F-R1 = (a) build the Waiting-on-staff
-  sub-panel (10:00); F-R2 = (a) `0` days = no end date (10:02) **PLUS an owner amendment to the design
+  recorded here as they come — **DECIDED 2026-09-04 between 09:32 and 15:08 Phoenix (the clock was read at those two ends, not per
+  answer — earlier per-answer stamps here were inferred and have been removed):** raidtrain F-R1 = (a) no lineup-post button ("Leave it"); F-R2 = (a) upcoming trains only in the picker; F-R3 = (a) one claim select, no
+  next-open-hour button — RAIDTRAIN FULLY DECIDED. Role menus F-R1 = (a) build the Waiting-on-staff
+  sub-panel; F-R2 = (a) `0` days = no end date **PLUS an owner amendment to the design
   (verbatim: "let's have an audit menu that shows durations of active roles")** — the `Grants…` sub-panel
   opens as an AUDIT of every active timed role in the guild (member · role · time left / end date, or
   `no end date`; soonest-ending first; 25-capped with `capped_placeholder`), and the "Whose roles?"
   `UserSelect` NARROWS that list rather than being the only way in; the embed body lists them as lines so
   the count is readable even when the select is capped. Goes in the role-menus build brief as §I-amend.
-  F-R3 = (a) every edit re-renders the posted panel in place (10:04) — ROLE MENUS FULLY DECIDED.
-  Chat F-C1 = (a) read-only numbers + one `Limits…` modal for all five (10:05); F-C2 = (a) `Edit…` on the note
-  card (10:06); F-C3 = (a) one click to turn chat on, no confirm — the spend cap is the brake (10:07);
-  F-C4 = (a) both mood-pool guards on both doors, one implementation in `chat_panel.py` (10:08) — CHAT FULLY
-  DECIDED. Automod F-A1 = (a) confirm before arming, `automod_arm_needs_confirm` default true (10:09); F-A2 = (a) one
-  prefilled paragraph field for bad words, over-4000 says use the website (10:10); F-A3 = (a) no controls for
-  `automod_warn_threshold` / `mod_dm_on_action`, read-only lines pointing at the Moderation page (10:11) —
+  F-R3 = (a) every edit re-renders the posted panel in place — ROLE MENUS FULLY DECIDED.
+  Chat F-C1 = (a) read-only numbers + one `Limits…` modal for all five; F-C2 = (a) `Edit…` on the note
+  card; F-C3 = (a) one click to turn chat on, no confirm — the spend cap is the brake;
+  F-C4 = (a) both mood-pool guards on both doors, one implementation in `chat_panel.py` — CHAT FULLY
+  DECIDED. Automod F-A1 = (a) confirm before arming, `automod_arm_needs_confirm` default true; F-A2 = (a) one
+  prefilled paragraph field for bad words, over-4000 says use the website; F-A3 = (a) no controls for
+  `automod_warn_threshold` / `mod_dm_on_action`, read-only lines pointing at the Moderation page —
   **ALL 13 FORKS DECIDED, every one (a), plus the role-menus Grants audit amendment. Builds may start.**
   Then builds in cost order (automod ~300–360k, chat ~300–360k, raidtrain
   380–450k, role menus 420–500k), each Opus in its own worktree off `main`, layer-boundary commits, sweeps
