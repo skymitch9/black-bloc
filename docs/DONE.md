@@ -9,6 +9,19 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-03 — Decision: YouTube lives stay with `/golive`; uploads stay on shadow (no build)
+
+Owner asked at 17:59 to announce a linked channel *going live* on YouTube by default and make
+"every upload" an opt-in switch, off by default. Fable's read: the uploads sweep deliberately skips
+live broadcasts (`cogs/content/youtube.py` `_skipped` → "live") because `/golive` already announces
+YouTube lives from Discord presence (`golive.py` `platform_of`), and without `YOUTUBE_API_KEY` (not
+set on Fly, measured 18:00) the public feed cannot tell a live from an upload (phase 16 D6). Told
+that, the owner withdrew it at 18:05: **do not add live detection to `/youtube`; keep `youtube_mode`
+on shadow for now; going on is a staff decision** — which it already is (Setup on the `/youtube`
+panel and the Go-live page switch are both staff-gated). Nothing changed in code or settings;
+`youtube_mode` is `shadow` since 17:42 (F-Y2). If uploads are ever wanted on, staff flip the switch;
+if YouTube lives ever need catching without presence, that is the withdrawn design plus the API key.
+
 ## 2026-09-03 — YouTube panel: `/youtube` is one window (wave 2, v71, `b764757`)
 
 Release **v71** (`b764757`, 17:37; `deploys.log` line 70). Merge `--no-ff` of

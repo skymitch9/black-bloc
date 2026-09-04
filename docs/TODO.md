@@ -166,17 +166,12 @@ already said go.** Order recommended by the 5.0 session, owner did not reorder:
    and #3 to `hold` at landing. Owner's sweep rows 53–57 open (the Twitch Team form
    walk-through is there).
 
-8. **YouTube: go-live by default, every upload as an opt-in (owner, 2026-09-03 17:59, verbatim:
-   "Can we just grab going live for YouTube and have the option to grab every YouTube be that an
-   option off by default").** Today the sweep SKIPS live broadcasts (`youtube.py` `_skipped` → "live",
-   deferring to `/golive`'s presence watcher) and announces every upload. Wanted: the default posture
-   announces a linked channel going live on YouTube; announcing every upload becomes a bool key,
-   **off** by default (checklist 33: settings registry + Setup toggle on the `/youtube` panel + the
-   Go-live page). Gotchas: without `YOUTUBE_API_KEY` (NOT set on Fly, measured 18:00) the public feed
-   cannot tell a live from a video (D6 in `info/phase16-design.md`); the go-live card must not
-   double-post beside the presence path (`_open_golive_session` is the dedupe). Fork open for the
-   owner (asked 18:01): same `/golive` card with an end-edit, or a one-line youtube-template post.
-   Design doc + Opus build after the pings/voice landings unless the owner reorders.
+8. ~~YouTube go-live by default / every-upload opt-in~~ **WITHDRAWN by the owner 2026-09-03 18:05 —
+   no build.** Asked 17:59 ("grab going live for YouTube… every YouTube… off by default"); on hearing
+   `/golive` already announces YouTube lives from Discord presence, the owner said: don't add live
+   detection to `/youtube`; keep `youtube_mode` on **shadow** for now; turning uploads on stays a
+   staff decision (Setup on the `/youtube` panel and the Go-live page, both already staff-gated).
+   Recorded in `DONE.md` 2026-09-03 so nobody re-derives it.
 
 **Standing context for the new session:** every build = Opus worktree builder
 (Fable plans/reviews/never bulk-codes), brief points at `info/review-checklist.md`
