@@ -408,7 +408,7 @@ listed here was built as this document says.
 | | before | after |
 |---|---|---|
 | top-level commands (`test_the_command_tree_stays_inside_discords_limits`) | **39** | **38** |
-| tests | **4050 pass** | **4262 pass** |
+| tests | **4050 pass** | **4265 pass** |
 | `ruff check .` | clean | clean |
 | `node site/mock/check.mjs` | 17 pages, 142 routes | **17 pages, 142 routes** |
 | `node --input-type=module --check < site/public/assets/labels.js` | parses | parses |
@@ -504,3 +504,10 @@ delta and re-measure. The delta is one, as predicted.
     one edit after all.** §E says that file only builds a fake tree — true of two of its three
     `/tempvoice` mentions, but this third one asserts against the REAL tree and had to move to
     `/voice`. Measured, not assumed: the other two are fixtures and are untouched.
+
+13. **The `Bitrate` modal bounds 8–96 itself, which `/voice bitrate` never had to.** The
+    subcommand carried `app_commands.Range[int, MIN_BITRATE, MAX_BITRATE]` and Discord did the
+    refusing; a modal has no such thing, and `clamp_bitrate` would have taken `500` to 96 and
+    reported it as done — `do_bitrate`'s "as high as your boost level allows" line only fires
+    when the GUILD capped it, not when the clamp did. Checklist 22 in its literal sense: the
+    bound that vanished with the parameter had to be rebuilt where the value now enters.
