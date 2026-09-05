@@ -338,6 +338,9 @@ docs bookkeeping lands with the work, not after.
   F-M3 = (a)** (the site gets the four case moves in this build). **DISPATCHED 07:16: the `/mod` build** (Opus, own
   worktree off `97531cc`; takes schema 29; sweep rows lettered `C1…`; est. 340–420k; usage at dispatch session
   22% / weekly 9% / Fable 10%, read 07:15). THREE builds in flight: honeypot, modmail A, `/mod`.
+  **DISPATCHED 07:18: the `/settings` DESIGN** (Opus, own worktree off `0304c4d` this time so the main tree stays
+  deployable; writes and commits `info/settings-panel-design.md` on its branch; usage at dispatch read 07:15 as
+  above). Modmail Build B's seven forks go to the owner one at a time now, so B can dispatch the moment A merges.
 - **Wave-1 review findings, small, fold into the next build that touches each file (Fable
   review 2026-09-03 13:50–14:05):** `requests.py` re-renders lack `allowed_mentions`;
   `LOG_LEVEL_COMMANDS` help still says "`/birthday logs`" / "`/request logs`"; five form writes
