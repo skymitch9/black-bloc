@@ -12,7 +12,20 @@
 > reconciler job, `modmail_reply_style` and the relay gate, the practice ticket, and the
 > retirement of `/areply` `/note` `/close` (**33 → 30, measured**). ⚠️ **Nothing in either half
 > has met live Discord**; the whole verification of both is `pytest`, `ruff` and `check.mjs`.
-> ⚠️ **Every `path:line` below is Build A's and is now STALE for `modmail.py` — trust the
+> 🔑 **RE-KEYED 2026-09-05 against `63f016c`** on `worktree-agent-ad2fc0f5aad473c19` (the
+> follow-up build's own branch — **NOT merged, NOT deployed**), in
+> `black_bloc/cogs/moderation/modmail.py` (**3166 lines**). **109 bare `` `:N` `` references** to
+> that file now point at the current line; **71 were left exactly as they were**, and here is the
+> rule, so a reader knows which is which:
+> - a reference is re-keyed only where it sits **immediately after the backticked name it
+>   anchors to** (`` `close_ticket` `:1013` ``) — the doc's own convention;
+> - a reference in a table's own **Line column**, one in a run of several (`` `:1274` `:1283` ``),
+>   one on a line naming a **different file**, and one whose anchor is a **retired command** or a
+>   deleted constant were all left alone. ⚠️ Those are still Build A's numbers and are **STALE**;
+> - a reference that pointed **inside** a function's body now points at that function's
+>   **definition** — which is what *"trust the anchor text"* meant anyway.
+>
+> ⚠️ **Every `path:line` into any OTHER file below is still Build A's and may be STALE — trust the
 > anchor text, not the number.**
 > **Last verified: 2026-09-05** — every `path:line` below was READ against `main` at
 > **`46fba16`** (`git rev-parse --short HEAD`; working tree clean at the time of reading), in
@@ -58,32 +71,32 @@
 | Command | Line | Gate | Calls · what is INLINE in the cog |
 |---|---|---|---|
 | `/modmail logs` | `:1381` | `send_logs` carries its own `require_staff` (`actionlog.py:296`) | `send_logs(interaction, "modmail", …)` |
-| `/modmail block` | `:1394` | `_ready` `:1399` → `require_staff` `:1109` | ⚠️ **all inline** `:1401–1415`: `blocked_row` → `add_block` `:349` → answer → `modmail.blocked` (**bare kind**) |
-| `/modmail unblock` | `:1417` | `_ready` `:1422` | ⚠️ **all inline** `:1424–1435`: `remove_block` `:357` + `modmail.unblocked` (**bare**) |
-| `/modmail blocked` | `:1437` | `_ready` `:1439` | `blocked_rows` `:344` + `answer_lines` `:777`; the lines are **inline** `:1446–1452` |
-| `/modmail mode` | `:1454` | `_ready` `:1459` | ⚠️ **inline** `:1463–1479`: `store.set` + `modes_sentence` `:359` + `modmail.settings` (**bare**) |
-| `/modmail forget` | `:1481` | `_ready` `:1487` | ⚠️ **inline** `:1491–1501`: `store.clear` + `modmail.forgotten` (**bare**) |
-| `/modmail status` | `:1503` | `_ready` `:1505` | `_status_lines` `:1510` — the one thing already extracted, because two commands share it (`code-notes.md` `modmail.py:1502`) |
-| `/modmail settings` | `:1540` | `_ready` `:1560` | `_status_lines` + `store.set` per field + `modmail.settings` (**bare**) `:1578` |
-| `/snippet add` | `:1587` | `_ready` `:1600` | `valid_snippet_name` `modmail.py:121` → `save_snippet` `:372` + `modmail.snippet_saved` (**bare**) |
-| `/snippet remove` | `:1622` | `_ready` `:1626` | `remove_snippet` `:380` + `modmail.snippet_removed` (**bare**) |
-| `/snippet list` | `:1641` | `_ready` `:1644` | `all_snippets` `:367`; the lines are **inline** `:1651` |
-| `/reply` | `:1131` | `_reply` → `_ready` `:1172` | `_resolve` `:1111` → `resolve_ticket` `:782` → `_body` `:1119` → `send_reply` `:558` |
-| `/areply` | `:1147` | same, `anonymous=True` | the same `_reply` `:1163` |
-| `/note` | `:1192` | `_ready` `:1200` | ⚠️ **inline** `:1206–1217`: `add_message(NOTE)` `:268` + `relay_embed` + `speak` `:501`. **Writes no log row at all** |
-| `/close` | `:1243` | `_ready` `:1257` | `close_ticket` `:616` — the one shared function that already takes `via` and builds `kind_via` `:646` |
+| `/modmail block` | `:1394` | `_ready` `:1799` → `require_staff` `:1109` | ⚠️ **all inline** `:1401–1415`: `blocked_row` → `add_block` `:481` → answer → `modmail.blocked` (**bare kind**) |
+| `/modmail unblock` | `:1417` | `_ready` `:1799` | ⚠️ **all inline** `:1424–1435`: `remove_block` `:489` + `modmail.unblocked` (**bare**) |
+| `/modmail blocked` | `:1437` | `_ready` `:1799` | `blocked_rows` `:476` + `answer_lines` `:777`; the lines are **inline** `:1446–1452` |
+| `/modmail mode` | `:1454` | `_ready` `:1799` | ⚠️ **inline** `:1463–1479`: `store.set` + `modes_sentence` `:359` + `modmail.settings` (**bare**) |
+| `/modmail forget` | `:1481` | `_ready` `:1799` | ⚠️ **inline** `:1491–1501`: `store.clear` + `modmail.forgotten` (**bare**) |
+| `/modmail status` | `:1503` | `_ready` `:1799` | `_status_lines` `:2013` — the one thing already extracted, because two commands share it (`code-notes.md` `modmail.py:1502`) |
+| `/modmail settings` | `:1540` | `_ready` `:1799` | `_status_lines` + `store.set` per field + `modmail.settings` (**bare**) `:1578` |
+| `/snippet add` | `:1587` | `_ready` `:1799` | `valid_snippet_name` `modmail.py:121` → `save_snippet` `:504` + `modmail.snippet_saved` (**bare**) |
+| `/snippet remove` | `:1622` | `_ready` `:1799` | `remove_snippet` `:512` + `modmail.snippet_removed` (**bare**) |
+| `/snippet list` | `:1641` | `_ready` `:1799` | `all_snippets` `:499`; the lines are **inline** `:1651` |
+| `/reply` | `:1131` | `_reply` → `_ready` `:1799` | `_resolve` `:1809` → `resolve_ticket` `:1177` → `_body` `:1817` → `send_reply` `:937` |
+| `/areply` | `:1147` | same, `anonymous=True` | the same `_reply` `:1839` |
+| `/note` | `:1192` | `_ready` `:1799` | ⚠️ **inline** `:1206–1217`: `add_message(NOTE)` `:268` + `relay_embed` + `speak` `:633`. **Writes no log row at all** |
+| `/close` | `:1243` | `_ready` `:1799` | `close_ticket` `:1013` — the one shared function that already takes `via` and builds `kind_via` `:646` |
 
-**Not a command and NOT moving** (P14, program §7): the DM listener `on_message` `:824` →
-`_inbound` `:837`; ticket creation `_open_or_find` `:898` / `_make_place` `:928`; the header
-card `_post_header` `:984`; `speak` `:501`; `deliver_dm` `:534`; `react` `:548`; the transcript
-path `post_transcript` `:665` and `remove_place` `:739`; the reconciler `:1274` `:1283` `:1298`
-`:1306` `:1316` with `loop_health` `:814`; the three listeners `on_guild_channel_delete` `:1334`,
-`on_member_remove` `:1350`, `on_thread_delete` `:1374`; the per-user lock `user_lock` `:386` and
+**Not a command and NOT moving** (P14, program §7): the DM listener `on_message` `:1516` →
+`_inbound` `:1528`; ticket creation `_open_or_find` `:1589` / `_make_place` `:1619`; the header
+card `_post_header` `:1675`; `speak` `:633`; `deliver_dm` `:668`; `react` `:694`; the transcript
+path `post_transcript` `:1068` and `remove_place` `:1146`; the reconciler `:1274` `:1283` `:1298`
+`:1306` `:1316` with `loop_health` `:1510`; the three listeners `on_guild_channel_delete` `:1947`,
+`on_member_remove` `:1963`, `on_thread_delete` `:1988`; the per-user lock `user_lock` `:518` and
 the partial unique index `modmail_open_ticket` (`storage/db.py:276`).
 
 ### ⚠️ The relay this design "adds" ALREADY EXISTS
 
-`_staff_message` `:1043` is the single most important thing to read before building §E. Today, a
+`_staff_message` `:1735` is the single most important thing to read before building §E. Today, a
 plain message typed by a staff member in a ticket channel **is already relayed to the member**,
 and one starting with `=` is already recorded as a private note. This is the incumbent ModMail
 bot's behaviour, kept deliberately (`code-notes.md` `modmail.py:23` — *"staff already type
@@ -98,10 +111,10 @@ duplicated `_staff_message`.
 
 | Refused | Where | Why |
 |---|---|---|
-| a bot or a webhook | `on_message` `:826` | |
-| a message whose `type` is not `default` or `reply` | `:828`, `RELAY_TYPES` `:77` | checklist 23 — pins and join notices carry a member as author |
+| a bot or a webhook | `on_message` `:1516` | |
+| a message whose `type` is not `default` or `reply` | `:828`, `RELAY_TYPES` `:168` | checklist 23 — pins and join notices carry a member as author |
 | the database being down | `:830` | |
-| a channel with no OPEN ticket, or a ticket in another guild | `:1045–1046` | `ticket_for_channel` `:233` |
+| a channel with no OPEN ticket, or a ticket in another guild | `:1045–1046` | `ticket_for_channel` `:365` |
 | an author `store.is_staff` does not agree is staff | `:1048` | |
 | a message starting with `settings.command_prefix` | `:1050–1052` | |
 | a message starting with a mention of Black Bloc | `:1053–1055` | *"`@Black Bloc what is this ticket` is a question about the bot"* |
@@ -114,7 +127,7 @@ reaches `on_message` and can never be double-relayed. Nothing in this design nee
 
 Measured, not inferred — each is a place the same move leaves two different rows, or one and none:
 
-1. ⚠️ **A successful reply writes NO log row on the Discord side.** `send_reply` `:558` logs only
+1. ⚠️ **A successful reply writes NO log row on the Discord side.** `send_reply` `:937` logs only
    `modmail.dm_failed` `:595` when the DM does not land. The website `note()`s
    `web.modmail.reply` (`api/tools/modmail.py:188`) on every reply, delivered or not. So today the
    dashboard's Logs page shows every website reply and no Discord one — and `modmail.reply` sits
@@ -130,7 +143,7 @@ Measured, not inferred — each is a place the same move leaves two different ro
    (`logkinds.py:142`) while its website twin `web.modmail.unblock` bares to `modmail.unblock`,
    which is **ROUTINE** — the same act is loud from one door and quiet from the other.
 4. **Nine `modmail.*` kinds are bare**, so any route that ever calls the shared path would
-   double-post — checklist 34's exact failure. Only `close_ticket` `:646` builds `kind_via` today.
+   double-post — checklist 34's exact failure. Only `close_ticket` `:1013` builds `kind_via` today.
 
 **One duplicate-code finding:** `cogs/moderation/modmail.py:770 answer()` and `:777 answer_lines()`
 are a second copy of `panels.py:36 answer()` (the modmail one passes `mentions()`
@@ -144,7 +157,7 @@ homes). Same shape as the standing `role_menus.py:392` finding in [`../TODO.md`]
 | `modmail_enabled` | `:205` bool | help `:571` | **`False`** (`:1537`) — *"false leaves them to the old ModMail bot"* |
 | `modmail_mode` | `:206` enum | `MODMAIL_MODES = ("channel","thread")` `:99`, choices `:284`, help `:572` | `CHANNEL_MODE` (`:1540`) |
 | `modmail_category_id` | `:207` channel | help `:573` | `None` under test mode, else `MODMAIL_CATEGORY_ID` (`:1541`) |
-| `modmail_staff_channel_id` | `:208` channel | help `:574` | ⚠️ **no default of its own** — falls back to `staff_channel_id` in ONE place, `staff_parent_id` `:397` (`code-notes.md` `modmail.py:396`) |
+| `modmail_staff_channel_id` | `:208` channel | help `:574` | ⚠️ **no default of its own** — falls back to `staff_channel_id` in ONE place, `staff_parent_id` `:529` (`code-notes.md` `modmail.py:396`) |
 | `modmail_log_channel_id` | `:209` channel | help `:575` | the test channel under test mode, else `MODMAIL_LOG_CHANNEL_ID` (`:1543`) |
 | `modmail_log_level` | generated by the log-level family, `LOG_LEVEL_COMMANDS["modmail"]` `:785` | | `important` |
 
@@ -214,22 +227,22 @@ surface is their DM, and it does not change.
 ### The panel's states
 
 `enabled` = `store.get(guild_id, "modmail_enabled")`; *pointed* = the mode's own place resolves
-(`ticket_category` `:410` in channel mode, `thread_parent` `:428` in thread mode).
+(`ticket_category` `:542` in channel mode, `thread_parent` `:560` in thread mode).
 
 | # | This guild has | The embed says | The row that renders |
 |---|---|---|---|
 | S0 | not in a guild, or `db.is_connected` false | `GUILD_ONLY` / `DB_UNAVAILABLE` (`settings_store`) as words; **no panel at all** | — |
-| S1 | ⚠️ **no staff role resolves** | `NO_STAFF_WARNING` `:176` verbatim, as the first line | Setup… · Blocked… · Snippets… · Logs · Refresh · site link. **Try a fake ticket is ABSENT** — `_make_place` `:931` refuses to open any ticket, real or practice, with no staff role (checklist 21) |
-| S2 | staff resolve, `modmail_enabled` false | today's `status` lines (`_status_lines` `:1510`) + one line saying the incumbent still holds the inbox | the S1 row **plus Try a fake ticket** — practice needs no `modmail_enabled`, because it is not a DM |
-| S3 | enabled, **not pointed** for the current mode | the status lines + `NO_CATEGORY` `:104` or `NO_STAFF_CHANNEL` `:112` reworded as a statement | the same, **plus Forget** only if something IS pointed (it can be pointed at a dead channel) |
+| S1 | ⚠️ **no staff role resolves** | `NO_STAFF_WARNING` `:304` verbatim, as the first line | Setup… · Blocked… · Snippets… · Logs · Refresh · site link. **Try a fake ticket is ABSENT** — `_make_place` `:1619` refuses to open any ticket, real or practice, with no staff role (checklist 21) |
+| S2 | staff resolve, `modmail_enabled` false | today's `status` lines (`_status_lines` `:2013`) + one line saying the incumbent still holds the inbox | the S1 row **plus Try a fake ticket** — practice needs no `modmail_enabled`, because it is not a DM |
+| S3 | enabled, **not pointed** for the current mode | the status lines + `NO_CATEGORY` `:104` or `NO_STAFF_CHANNEL` `:195` reworded as a statement | the same, **plus Forget** only if something IS pointed (it can be pointed at a dead channel) |
 | S4 | enabled and pointed, **no open ticket** | the status lines + "No ticket is open." (`:1535`) | the same |
 | S5 | enabled and pointed, **≥1 open ticket** | + one line per open ticket (`:1529–1533`) | + **A ticket…** select |
 
 **P3 in one line: no state renders a control whose shared function would refuse it.** The three
-refusals that become unreachable from Discord are `NO_TICKET_HERE` `:117`, `MANY_OPEN` `:122` and
-`NOT_A_TICKET_ID` `:125` — a ticket now arrives from a select or from the card it is printed on,
+refusals that become unreachable from Discord are `NO_TICKET_HERE` `:200`, `MANY_OPEN` `:204` and
+`NOT_A_TICKET_ID` `:208` — a ticket now arrives from a select or from the card it is printed on,
 never from typed digits. ⚠️ **All three strings stay in the module**, because `/reply` still types
-`ticket:` (fork **F-M5**) and `resolve_ticket` `:782` still answers with them.
+`ticket:` (fork **F-M5**) and `resolve_ticket` `:1177` still answers with them.
 
 ---
 
@@ -244,11 +257,11 @@ every read**, since this feature is staff-only end to end (the pings deviation-1
 
 | Row | Control | Rendered when | Shared function | Log kind | Refusal, in words |
 |---|---|---|---|---|---|
-| 0 | `A ticket…` `Select` over `open_tickets` `:214`, ≤25 with `capped_placeholder` (`panels.py:88`), label from `panels.option_label` `:96` | S5 | — | — | — |
+| 0 | `A ticket…` `Select` over `open_tickets` `:342`, ≤25 with `capped_placeholder` (`panels.py:88`), label from `panels.option_label` `:96` | S5 | — | — | — |
 | 1 | `Setup…` → sub-panel | always | — | — | — |
 | 1 | `Blocked…` → sub-panel | always | — | — | — |
 | 1 | `Snippets…` → sub-panel | always | — | — | — |
-| 1 | `Forget…` → sub-panel | ⚠️ **only when at least one of the three keys is set** (`FORGETTABLE` `:72`) | `forget_place` (§F) | `modmail.forgotten` | — |
+| 1 | `Forget…` → sub-panel | ⚠️ **only when at least one of the three keys is set** (`FORGETTABLE` `:163`) | `forget_place` (§F) | `modmail.forgotten` | — |
 | 1 | `Try a fake ticket` → confirm | S2–S5, i.e. **not** when no staff role resolves | `open_practice` (§F) | `modmail.opened` (`details.practice = true`) | S1's embed line already says why it is absent |
 | 2 | `Logs` → a NEW ephemeral followup (P11) | always | `send_logs(interaction, "modmail")` `actionlog.py:287` — keeps its own `require_staff` | — | `LOGS_DB_DOWN` from the helper |
 | 2 | `Refresh` | always | — | — | — |
@@ -274,9 +287,9 @@ plus a mode picker will not fit beside anything).
 | `Reply style…` | a `Select` of `MODMAIL_REPLY_STYLES` (§D) | `set_reply_style` (§F) | `modmail.settings` |
 | `Back` · `Refresh` | — | — | — |
 
-⚠️ **`Mode…` keeps today's sentence** (`MODE_SET` `:160`): new tickets take the new mode, the ones
+⚠️ **`Mode…` keeps today's sentence** (`MODE_SET` `:259`): new tickets take the new mode, the ones
 already open keep theirs, *"that is where their channel or thread already is"*. The count comes
-from `open_tickets` `:214`, exactly as `:1470` computes it today.
+from `open_tickets` `:342`, exactly as `:1470` computes it today.
 
 ⚠️ **Two spellings of one move is what P3 kills**, so `Answer DMs` is a button that names its own
 effect, never a two-option select, and the mode picker is a select because it has two *values*,
@@ -286,15 +299,15 @@ not two *directions*.
 
 | Row | Control | Rendered when | Shared function | Log kind |
 |---|---|---|---|---|
-| 0 | the blocked list as embed lines — `<@id> — reason (date)`, exactly `:1449`'s shape, ⚠️ **capped at 25 lines** with a sentence naming the Moderation page for the rest | ≥1 block | `blocked_rows` `:344` | — |
+| 0 | the blocked list as embed lines — `<@id> — reason (date)`, exactly `:1449`'s shape, ⚠️ **capped at 25 lines** with a sentence naming the Moderation page for the rest | ≥1 block | `blocked_rows` `:476` | — |
 | 1 | `Somebody…` `Select` over those rows, ≤25 with `capped_placeholder` | ≥1 block | — | — |
 | 2 | `Unblock them` | a row is picked | `unblock_member` (§F) | `modmail.unblocked` |
 | 2 | `Block someone…` → `UserSelect`, then `Block them…` → a reason modal | always | `block_member` (§F) | `modmail.blocked` |
 | 3 | `Back` · `Refresh` | always | — | — |
 
 ⚠️ **The `UserSelect` is how somebody past the 25 cap is still reachable** — blocking is not
-list-bounded, and the memory panel's "above the cap" precedent applies. `ALREADY_BLOCKED` `:148`
-and `NOT_BLOCKED` `:150` stay in the module and stay reachable, because a `UserSelect` can name
+list-bounded, and the memory panel's "above the cap" precedent applies. `ALREADY_BLOCKED` `:238`
+and `NOT_BLOCKED` `:240` stay in the module and stay reachable, because a `UserSelect` can name
 somebody already blocked and because the website is a second door — the shared function keeps its
 check and the panel prints its sentence.
 
@@ -302,7 +315,7 @@ check and the panel prints its sentence.
 
 | Row | Control | Rendered when | Shared function | Log kind |
 |---|---|---|---|---|
-| 0 | the snippets as lines, `**name** — <content clamped to 120>` (`:1652`'s shape), ⚠️ **capped at 25 lines**, the rest named on the site | ≥1 snippet | `all_snippets` `:367` | — |
+| 0 | the snippets as lines, `**name** — <content clamped to 120>` (`:1652`'s shape), ⚠️ **capped at 25 lines**, the rest named on the site | ≥1 snippet | `all_snippets` `:499` | — |
 | 1 | `A snippet…` `Select`, ≤25 with `capped_placeholder` | ≥1 snippet | — | — |
 | 2 | `Remove it` (danger) → `Yes, remove it` / `Keep it` | a snippet is picked | `drop_snippet` (§F) | `modmail.snippet_removed` |
 | 2 | `Add one…` → `SnippetModal` (name + content) | always | `put_snippet` (§F) | `modmail.snippet_saved` |
@@ -311,9 +324,9 @@ check and the panel prints its sentence.
 
 ⚠️ **`overwrite` stops being an argument and becomes a state.** `/snippet add … overwrite:true`
 `:1598` exists only because a typed command cannot know whether the name is taken. The panel does:
-`Add one…` refuses a name that exists with `SNIPPET_EXISTS` `:169` **reworded** (it currently tells
+`Add one…` refuses a name that exists with `SNIPPET_EXISTS` `:268` **reworded** (it currently tells
 the reader to re-run with `overwrite:true`, which will not exist), and `Change it…` is the
-overwrite. `BAD_SNIPPET_NAME` `:164` stays — `valid_snippet_name` (`modmail.py:121`) still guards
+overwrite. `BAD_SNIPPET_NAME` `:263` stays — `valid_snippet_name` (`modmail.py:121`) still guards
 the modal, and a modal has no pattern validator.
 
 ### The ticket card ON THE PANEL
@@ -321,9 +334,9 @@ the modal, and a modal has no pattern validator.
 Picking `A ticket…` re-renders the panel as the ticket's card: **the same embed the sticky card in
 the channel carries** (`ticket_card_embed`, §F) — one shape, never two. Its buttons are §E's four
 plus `Back`, and they call the same functions. ⚠️ This is a **second door onto a move the channel
-card also offers, and that is safe by construction**: `close_ticket` `:627` re-reads the row inside
+card also offers, and that is safe by construction**: `close_ticket` `:1013` re-reads the row inside
 the per-user lock and returns `(False, None)` to whoever lost, which the panel prints as
-`CLOSE_RACED` `:141`. The panel **never edits the channel card itself** — the sticky refresher
+`CLOSE_RACED` `:228`. The panel **never edits the channel card itself** — the sticky refresher
 (§D) owns that.
 
 ### Modals — all `AnswersErrors` + `discord.ui.Modal`, one shape (P12)
@@ -337,11 +350,11 @@ for both. **Use those, do not re-invent them.**
 
 | Modal | Fields (≤5) | Bounds |
 |---|---|---|
-| `ReplyModal(anonymous: bool)` | `Label("What the member is sent", TextInput paragraph, required=False)` + `Label("Or a saved reply", Select over snippets, required=False)` | text `CONTENT_LIMIT` 3800 (`modmail.py:27`) but ⚠️ a `TextInput` caps at **4000** and Discord's own DM cap is 2000 — clamp with `clamp(…, CONTENT_LIMIT)` as `add_message` `:288` already does; the select is ≤25 with `capped_placeholder` |
+| `ReplyModal(anonymous: bool)` | `Label("What the member is sent", TextInput paragraph, required=False)` + `Label("Or a saved reply", Select over snippets, required=False)` | text `CONTENT_LIMIT` 3800 (`modmail.py:27`) but ⚠️ a `TextInput` caps at **4000** and Discord's own DM cap is 2000 — clamp with `clamp(…, CONTENT_LIMIT)` as `add_message` `:400` already does; the select is ≤25 with `capped_placeholder` |
 | `NoteModal` | `panels.NoteModal` (`panels.py:176`) **reused**, label naming that the member never sees it | `CONTENT_LIMIT` |
-| `CloseModal` | `Label("Why — the member is told this", TextInput, required=False)` + `Label(" ", CheckboxGroup[["Close without telling them"]], required=False)` | reason clamped to 400 (`mark_closed` `:325`) |
+| `CloseModal` | `Label("Why — the member is told this", TextInput, required=False)` + `Label(" ", CheckboxGroup[["Close without telling them"]], required=False)` | reason clamped to 400 (`mark_closed` `:445`) |
 | `SnippetModal` | name `TextInput` + content `TextInput` paragraph | `SNIPPET_NAME_LIMIT` 40 (`modmail.py:30`), `CONTENT_LIMIT` |
-| `BlockReasonModal` | `panels.NoteModal` **reused**, label naming that it is for the log | 400 (`add_block` `:352`) |
+| `BlockReasonModal` | `panels.NoteModal` **reused**, label naming that it is for the log | 400 (`add_block` `:481`) |
 | `SpeakAsMemberModal` | one paragraph `TextInput` | `CONTENT_LIMIT` — practice only (§G) |
 
 ⚠️ **A `UserSelect` inside a modal is NOT built.** `discord.ui.Label` accepts any `Item`, so it may
@@ -350,7 +363,7 @@ Block picks its user on the sub-panel and types only the reason.
 
 ⚠️ **The snippet select COMBINES, it does not pre-fill.** A modal is submitted once and Discord
 cannot re-render it mid-edit, so the select's value is only known at submit. `ReplyModal.on_submit`
-therefore builds the body exactly as `_body` `:1119` does today — the snippet's content, plus the
+therefore builds the body exactly as `_body` `:1817` does today — the snippet's content, plus the
 typed text after a blank line when both are given — which keeps `/reply text: snippet:` and the
 button byte-identical in meaning. The owner asked for "pre-fills"; the two-step shape that would
 literally pre-fill is fork **F-M7**.
@@ -373,7 +386,7 @@ interaction failed"* after every deploy would be the worst possible instance of 
 ticket outlives the process by design.
 
 **So each of the four buttons is a `SafeDynamicItem` (`command_errors.py:52`) whose `custom_id`
-template carries the ticket id**, registered in `cog_load` `:1274` with
+template carries the ticket id**, registered in `cog_load` `:1874` with
 `self.bot.add_dynamic_items(...)`. `timeout=None`; there is no clock to fire.
 
 ⚠️ **This is why the `ui/view.py` gotcha does NOT apply to the card, and DOES apply to the panel.**
@@ -395,7 +408,7 @@ built in the Deviations foot.**
 |---|---|---|
 | `_relay_inbound` | `:1012` | the member's DM arrives |
 | `send_reply` | `:558` | any staff reply — card, `/reply`, typed relay, or website |
-| `add_note` (§F, extracted from `/note` `:1206` and `_staff_message` `:1058`) | | a private note |
+| `add_note` (§F, extracted from `/note` `:1206` and `_staff_message` `:1735`) | | a private note |
 | `on_member_remove`'s note | `:1359` | "they left the server" |
 
 ⚠️ **Never from `on_message`.** Posting the card is itself a message; a listener trigger would have
@@ -438,9 +451,9 @@ have an orphan card nothing can ever delete.
 `http.send_message` `:108`, `http.edit_message` `:118` and `http.delete_channel` `:128` — **not**
 `delete_message`. So step 8 asks `guard.allows_channel` (`:60`) by hand and logs
 `modmail.would_replace_card` when refused, which is checklist 1 exactly, and checklist 2 keeps it a
-distinct kind from `modmail.card_failed`. This is the same reasoning `react` `:548` already uses.
+distinct kind from `modmail.card_failed`. This is the same reasoning `react` `:694` already uses.
 
-⚠️ **`speak` `:501` is the only send path, and it redirects.** While the guard is installed and the
+⚠️ **`speak` `:633` is the only send path, and it redirects.** While the guard is installed and the
 ticket's own channel is not allowed, `speak` `:515–518` sends to the **test channel** instead. So
 under `TEST_MODE` a real ticket's card appears in `#mute-me-bot-test-spam`, not in the ticket — and
 `allows_interaction` `:97` still accepts its buttons, because the test channel is the test channel.
@@ -465,19 +478,19 @@ arithmetic. ⚠️ **Say in the Deviations foot whether these were ever measured
 channel.** They have not been, here.
 
 The debounce task is per-ticket, keyed in a dict on the **bot** (not the cog), for the same reason
-`user_lock` `:386` lives there (`code-notes.md` `modmail.py:385`), and is cancelled in
-`cog_unload` `:1280`.
+`user_lock` `:518` lives there (`code-notes.md` `modmail.py:385`), and is cancelled in
+`cog_unload` `:1881`.
 
 ### Reconciliation
 
-`reconcile_tickets` `:1306` gains one job, beside the two it has: **an open ticket whose
+`reconcile_tickets` `:1908` gains one job, beside the two it has: **an open ticket whose
 `card_message_id` is null, or whose card message has gone, gets one.** That is what makes "exactly
 one card, always last" survive a restart, a deploy and a staffer deleting the card by hand — and it
-is checklist 4 and 25 applied to the new state. It runs at `cog_load`, at `on_ready` `:1298` and on
+is checklist 4 and 25 applied to the new state. It runs at `cog_load`, at `on_ready` `:1901` and on
 the five-minute loop, all of which already exist.
 
-`close_ticket` `:616` deletes the card **before** `post_transcript` `:636`, so the transcript
-carries one card, not two — and `remove_place` `:739` deletes the whole channel afterwards anyway
+`close_ticket` `:1013` deletes the card **before** `post_transcript` `:1068`, so the transcript
+carries one card, not two — and `remove_place` `:1146` deletes the whole channel afterwards anyway
 in channel mode, which makes the delete a no-op there and load-bearing in **thread** mode, where the
 place is archived and locked `:753` rather than deleted.
 
@@ -495,10 +508,10 @@ roles — the card is the *controls*, the header is the *dossier*.
 
 | Row | Control | Rendered when | Shared function | Log kind | Refusal, in words |
 |---|---|---|---|---|---|
-| 0 | `Reply` → `ReplyModal(anonymous=False)` | ticket OPEN | `send_reply` `:558` | `modmail.reply` (`details.anonymous=false`) | `NOTHING_TO_SEND` `:131` when both fields are empty; `DM_FAILED_SAID` `:135` when the DM bounced |
+| 0 | `Reply` → `ReplyModal(anonymous=False)` | ticket OPEN | `send_reply` `:937` | `modmail.reply` (`details.anonymous=false`) | `NOTHING_TO_SEND` `:214` when both fields are empty; `DM_FAILED_SAID` `:222` when the DM bounced |
 | 0 | `Reply as Staff` → `ReplyModal(anonymous=True)` | ticket OPEN | `send_reply(anonymous=True)` | `modmail.reply` (`anonymous=true`) | as above |
-| 0 | `Private note` → `panels.NoteModal` | ticket OPEN | `add_note` (§F) | `modmail.note` (**new kind**) | `NOTE_SAVED` `:134`, or `+ RELAY_FAILED_SAID` `:139` |
-| 0 | `Close…` (danger) → `CloseModal` | ticket OPEN | `close_ticket` `:616` | `modmail.closed` | `CLOSE_RACED` `:141`; `NO_TRANSCRIPT_SAID` `:142`; `SILENT_SAID` `:146` |
+| 0 | `Private note` → `panels.NoteModal` | ticket OPEN | `add_note` (§F) | `modmail.note` (**new kind**) | `NOTE_SAVED` `:221`, or `+ RELAY_FAILED_SAID` `:139` |
+| 0 | `Close…` (danger) → `CloseModal` | ticket OPEN | `close_ticket` `:1013` | `modmail.closed` | `CLOSE_RACED` `:228`; `NO_TRANSCRIPT_SAID` `:229`; `SILENT_SAID` `:233` |
 | 1 | `Speak as the member` → `SpeakAsMemberModal` | ⚠️ **`ticket["practice"]` only** | `practice_message` (§G) | — (it writes an IN row, no action row) | — |
 | 1 | `End the practice` | practice only | `close_ticket(silent=True)` | `modmail.closed` (`practice=true`) | — |
 
@@ -515,7 +528,7 @@ finding F3).
 
 ### The relay, and `modmail_reply_style`
 
-`_staff_message` `:1043` gains **one gate and one log row**, and nothing else:
+`_staff_message` `:1735` gains **one gate and one log row**, and nothing else:
 
 ```
 _staff_message(message):
@@ -543,7 +556,7 @@ _staff_message(message):
    exists to kill, and `=` is the one the incumbent trained them on.
 2. **The relay keeps its echo** (`send_reply(echo=True)` `:611`). It is tempting to drop the bot's
    `OUT` embed for a typed relay, since the staffer's own message is right there — but under
-   `TEST_MODE` the ✅ reaction is **skipped** (`react` `:550` asks the guard) and the ticket's
+   `TEST_MODE` the ✅ reaction is **skipped** (`react` `:694` asks the guard) and the ticket's
    messages are redirected to the test channel, so the echo is the only evidence the relay
    happened. Changing it is fork **F-M3**.
 3. **The `source` is recorded, not a separate kind.** One `modmail.reply` row carries
@@ -580,7 +593,7 @@ takes `via: str = VIA_DISCORD` and builds its kind with `kind_via` (checklist 34
 | `bump_card(bot, guild, ticket)` · `card_view(ticket)` · `set_card_message(db, ticket_id, message_id)` | **new** (§D) |
 | `open_practice(bot, guild, actor)` · `practice_message(bot, guild, ticket, text)` | **new** (§G) |
 
-`close_ticket` `:616` is **unchanged** except for the card delete in §D — it already takes `via`,
+`close_ticket` `:1013` is **unchanged** except for the card delete in §D — it already takes `via`,
 already builds `kind_via` `:646`, and its ordering is a documented contract (`code-notes.md`
 `modmail.py:1213`). ⚠️ **Do not touch the order inside it.**
 
@@ -591,7 +604,7 @@ already builds `kind_via` `:646`, and its ordering is a documented contract (`co
 | `CardMove` + `CARD_MOVES` + `card_buttons(*, practice)` | §E's card table AS DATA, proved by a parametrised test |
 | `root_buttons(*, enabled, pointed, has_staff, has_tickets, has_blocks, has_snippets)` | §B's state table |
 | `ticket_card_lines(ticket, counts, blocked)` | the card embed's body |
-| `status_lines(...)` | ⚠️ **NOT moved.** `_status_lines` `:1510` reads `store.staff_roles(guild)` and the cog's own `last_ok_at` — it stays a method and the panel calls it, exactly as `/modmail settings` does today |
+| `status_lines(...)` | ⚠️ **NOT moved.** `_status_lines` `:2013` reads `store.staff_roles(guild)` and the cog's own `last_ok_at` — it stays a method and the panel calls it, exactly as `/modmail settings` does today |
 | `MODMAIL_REPLY_STYLES = ("buttons", "typing", "both")`, `BUTTONS`/`TYPING`/`BOTH`, `relays_typing(style)` | §E's gate, one home |
 | `SOURCES = ("card", "typed", "command", "web")` | the `details.source` vocabulary |
 | `PANEL_MINUTES_KEY = "modmail_panel_minutes"`, `panel_minutes(store, guild_id)` | one-liners over `panels.panel_minutes` (`panels.py:119`), exactly as `requests.py` does |
@@ -662,14 +675,14 @@ the instrument for a settings decision that would otherwise need a real member a
 `TestModeGuard` (`guard.py:19`) allows a send only where `allows_channel` `:60` says so: the test
 channel, a DM, **or a channel the bot has claimed with `own_channel` `:45`**. Measured, only three
 features claim anything — `polls.py:1461`, `raidtrain.py:2140` (both threads) and `tempvoice.py:438`
-(voice channels). ⚠️ **Modmail claims nothing today**, which is exactly why `speak` `:515` redirects
+(voice channels). ⚠️ **Modmail claims nothing today**, which is exactly why `speak` `:633` redirects
 a real ticket's messages into the test channel and why the sweep (`sweeps.md:241–243`) expects to
 read them there.
 
 **The practice ticket is a PRIVATE THREAD on the test channel, and the build claims it with
 `guard.own_channel(thread)`.** Three reasons, in order:
 
-1. **`thread_parent` `:428` already returns the test channel while a guard is installed**, so
+1. **`thread_parent` `:560` already returns the test channel while a guard is installed**, so
    practice reuses the code path thread-mode tickets take under test mode — no second way of
    deciding where a ticket goes.
 2. **Claiming it is what makes the card actually STICK where the owner can watch it.** Without
@@ -694,7 +707,7 @@ and the sweep row must say so or the owner will report the real ticket as broken
 applies: `open_practice` asks `guard.allows_channel(test_channel.id)` explicitly before creating
 anything, and with no guard installed it creates the thread on `thread_parent`'s answer as normal.
 There is no `would_open_practice` shadow kind, because there is no shadow mode here — either the
-test channel resolves and the thread is made, or `NO_TEST_CHANNEL` `:100` is the refusal.
+test channel resolves and the thread is made, or `NO_TEST_CHANNEL` `:191` is the refusal.
 
 ### What is fake about it
 
@@ -702,10 +715,10 @@ test channel resolves and the thread is made, or `NO_TEST_CHANNEL` `:100` is the
 |---|---|---|
 | the member | a Discord user who DM'd | **the staffer who pressed the button** — `user_id = actor.id`, so the header card and the transcript are real-looking and name somebody who exists |
 | the row | `practice = 0` | `practice = 1` |
-| inbound messages | the DM listener `:837` | the `Speak as the member` modal → `practice_message` → `add_message(IN)` `:268` + `relay_embed(IN)` + `speak` — **the same three calls `_relay_inbound` `:1012` makes** |
-| ⚠️ a DM to the member | `deliver_dm` `:534` | ⚠️ **never.** `send_reply` and `close_ticket` short-circuit the DM when `ticket["practice"]`, and they log **no `modmail.dm_failed`** — a suppressed DM is not a failed one (checklist 2, and checklist 10: do not claim a check that was skipped) |
+| inbound messages | the DM listener `:837` | the `Speak as the member` modal → `practice_message` → `add_message(IN)` `:268` + `relay_embed(IN)` + `speak` — **the same three calls `_relay_inbound` `:1703` makes** |
+| ⚠️ a DM to the member | `deliver_dm` `:668` | ⚠️ **never.** `send_reply` and `close_ticket` short-circuit the DM when `ticket["practice"]`, and they log **no `modmail.dm_failed`** — a suppressed DM is not a failed one (checklist 2, and checklist 10: do not claim a check that was skipped) |
 | the opening DM `opening_dm` | sent `:871` | not sent |
-| the ✅ reaction | `react` `:548` | there is no member message to react to |
+| the ✅ reaction | `react` `:694` | there is no member message to react to |
 | the transcript | filed to `modmail_log_channel_id` | ⚠️ **filed, marked PRACTICE** — fork **F-M4**, recommended (a) |
 | closing | `Close…` on the card | `End the practice`, which is `close_ticket(silent=True, reason="practice")`; the thread is archived and locked `:753` and disowned |
 
@@ -714,7 +727,7 @@ test channel resolves and the thread is made, or `NO_TEST_CHANNEL` `:100` is the
 staffer who already has a real open modmail ticket of their own cannot also have a practice one.
 That is a correct constraint and the button says so in words (`ALREADY_PRACTISING` /
 "you already have a ticket open") rather than raising `sqlite3.IntegrityError` — which
-`_open_or_find` `:905` already catches for the real path.
+`_open_or_find` `:1589` already catches for the real path.
 
 The website's `GET /api/modmail/tickets` `:149` **excludes practice rows by default** and
 `ticket_row` `:80` gains `"practice": bool(row["practice"])`, so the dashboard can show a chip on
@@ -735,7 +748,7 @@ a route change; it is not one, and the field on the row is enough).
 | `/note` | `:1192` | `Private note` on the card |
 | `/close` | `:1243` | `Close…` on the card |
 | `/reply` | `:1131` | ⚠️ **STAYS**, and keeps `text` and `snippet`. `ticket` is fork **F-M5** |
-| `_reply` `:1163` (the `anonymous` fork) | | keeps only the `anonymous=False` caller |
+| `_reply` `:1839` (the `anonymous` fork) | | keeps only the `anonymous=False` caller |
 | `LOGS_GROUPS["modmail"]` | `tests/test_bot.py:13` | **deleted** |
 | `STAFF_COMMANDS` `areply` `close` `note` `snippet` | `tests/test_bot.py:19,25,30,36` | **deleted**; `modmail` `:29` and `reply` `:33` stay |
 | `GATE_IS_TWO_HOPS_AWAY` `"/areply"` | `tests/test_bot.py:58` | **deleted**; `"/reply"` stays |
@@ -805,7 +818,7 @@ a route change; it is not one, and the field on the row is enough).
 6. Checklist sweep before reporting — **1** (deleting the card message is invisible to the guard;
    creating the practice thread is too), **2** (`card_failed` vs `would_replace_card`; a suppressed
    practice DM is neither), **4** and **25** (the card reconciler runs at `cog_load`, `on_ready`
-   and on the loop), **6** (`user_lock` `:386` and the partial index still cover the open ticket;
+   and on the loop), **6** (`user_lock` `:518` and the partial index still cover the open ticket;
    the card debounce is per-ticket and does not need one), **8** and **30** (`AnswersErrors` on
    every modal, select and view; `SafeDynamicItem` on every card button), **10** (a practice run
    that skipped the transcript would be a claimed check that did not run — fork F-M4),
@@ -926,7 +939,7 @@ file's last row and starts after it. The Phase 7 block at `:239–247` is rewrit
   Original question — does the snippet select COMBINE or PRE-FILL? He said *"a snippet select that pre-fills
   the text"*; a modal is submitted once, so a select inside it cannot pre-fill anything.
   - **(a) Combine, in one modal** — `Label(Select)` + `Label(TextInput)`, and on submit the body is
-    the snippet plus the typed text, byte-identical to `_body` `:1119` and to `/reply text: snippet:`
+    the snippet plus the typed text, byte-identical to `_body` `:1817` and to `/reply text: snippet:`
     today. One click, one shape, the `polls.py:2619` precedent. **Recommended.**
   - (b) Truly pre-fill, in two steps — a `Use a snippet…` button on the card opens an ephemeral
     select; picking one opens `ReplyModal` with the snippet's text already in the box, editable
@@ -951,7 +964,7 @@ file's last row and starts after it. The Phase 7 block at `:239–247` is rewrit
 
 - **The DM listener, ticket creation, the header card, `speak`, `deliver_dm`, the transcript path
   and the reconciler** — apart from the one card job §D adds to the reconciler and the one card
-  delete §D adds to `close_ticket`. ⚠️ The order inside `close_ticket` `:616` is a documented
+  delete §D adds to `close_ticket`. ⚠️ The order inside `close_ticket` `:1013` is a documented
   contract (`code-notes.md` `modmail.py:1213`); do not touch it.
 - **Moving the DB/move layer out of the cog** (§F) — thirteen route imports say don't.
 - **Any new API route or site page.** `site/mock/contract.json`'s route list is untouched;
