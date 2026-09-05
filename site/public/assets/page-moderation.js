@@ -53,7 +53,7 @@ const STATS = [
 ];
 
 const COLUMNS = [
-  ['Case', 'The case number. The same number the slash commands use.'],
+  ['Case', 'The case number. The same number `/mod` uses.'],
   ['Member', null],
   ['Type', 'What was done. A "shadow" tag means automod would have done it but did not.'],
   ['Reason', 'What the member was told, word for word.'],
@@ -154,8 +154,11 @@ function caseRow(row) {
       el('span', { class: 'kind-dot', 'data-kind': String(row.kind) }),
       el('span', { text: String(row.kind) }),
       row.applied === false ? el('span', { class: 'pill small', 'data-mode': 'shadow', text: 'shadow' }) : null,
+      row.voided_at ? badge('voided', 'danger') : null,
     ]),
-    cell(row.reason, 'cell-reason'),
+    row.voided_at
+      ? el('s', { class: 'cell-reason', title: `Voided: ${row.void_reason || 'no reason given'}`, text: row.reason || '—' })
+      : cell(row.reason, 'cell-reason'),
     el('span', { class: 'cell-quiet' }, [nameNode(row.moderator_id, row.moderator_name)]),
     el('span', { class: 'cell-quiet', text: shortWhen(row.at).text, title: shortWhen(row.at).title }),
     icon('chevronRight', 16),
@@ -291,10 +294,56 @@ function actionBar() {
   ]);
 }
 
+/** The four corrections go through the same shared functions `/mod` presses. */
+function correct(row, say, path, body, tone) {
+  return run(say, () => send(`/api/mod/cases/${encodeURIComponent(row.id)}/${path}`, 'POST', body),
+    (found) => found?.message || 'Done.').then((done) => {
+    if (done.ok) {
+      state.openCase = row.id;
+      refresh();
+    }
+    return done;
+  }, () => ({ ok: false, tone }));
+}
+
+/** Edit reason and Add/Edit a note: a box holding what is there now, and one button. */
+function editors(row, say) {
+  const reason = el('input', { class: 'input', type: 'text', value: row.reason || '' });
+  const note = el('input', { class: 'input', type: 'text', value: row.note || '' });
+  return [
+    field('Reason', reason, 'What the member was told. Editing it leaves one case.reason_edited line.'),
+    bar([button('Save the reason', () => correct(row, say, 'reason', { reason: reason.value }))]),
+    field('Note', note, 'For the next moderator, not for the member. One note per case, replaced not appended.'),
+    bar([button(row.note ? 'Save the note' : 'Add the note', () => correct(row, say, 'note', { note: note.value }))]),
+  ];
+}
+
+/** Void and Restore: never both, and voiding says out loud what it does not do. */
+function voidControls(row, say) {
+  if (row.voided_at) {
+    return [bar([button('Restore this case', () => correct(row, say, 'restore', {}), { tone: 'warn' })])];
+  }
+  const why = el('input', { class: 'input', type: 'text', placeholder: 'why it was wrong — the member is told this' });
+  const go = button('Void this case', async () => {
+    const sure = await ask({
+      title: `Void case ${row.id}?`,
+      body: [
+        'The case stays on the record marked cancelled, and staff can restore it at any time.',
+        'It does not undo the punishment: a voided ban is still a ban and a voided timeout is still running. Use unban or untimeout for that.',
+        `Reason: ${why.value.trim() || '(none yet — the bot will refuse without one)'}`,
+      ],
+      confirmLabel: 'Void it',
+    });
+    if (!sure) return;
+    await correct(row, say, 'void', { reason: why.value });
+  }, { tone: 'danger' });
+  return [field('Why this case was wrong', why), bar([go])];
+}
+
 async function caseDetail(id) {
   const found = await api(`/api/mod/cases/${encodeURIComponent(id)}`);
   const row = found && found.case ? found.case : found;
-  await names([row.user_id, row.moderator_id]);
+  await names([row.user_id, row.moderator_id, row.note_by, row.voided_by]);
   const say = notice();
   const apply = button('Apply now', async () => {
     const sure = await ask({
@@ -317,12 +366,23 @@ async function caseDetail(id) {
     ]),
     el('p', { text: `${row.kind}${row.duration_s ? ` for ${duration(row.duration_s)}` : ''} · ${when(row.at)} · mode ${row.mode}` }),
     el('p', { text: `Reason: ${row.reason || 'none given'}` }),
+    row.note ? el('p', {}, ['Note: ', el('span', { text: row.note }), ' — ', nameNode(row.note_by, null), ` ${when(row.note_at)}`]) : null,
+    row.voided_at
+      ? el('p', {}, [
+        badge('voided', 'danger'),
+        ' by ',
+        nameNode(row.voided_by, null),
+        ` ${when(row.voided_at)} — ${row.void_reason || 'no reason given'}. Voiding does not undo the punishment.`,
+      ])
+      : null,
     el('p', {}, [
       'Carried out: ',
       row.applied ? badge('yes', 'ok') : badge('no — shadow only', 'warn'),
       ...(Array.isArray(row.failed) && row.failed.length ? [' ', badge(`failed: ${row.failed.join(', ')}`, 'danger')] : []),
     ]),
     row.applied ? null : bar([apply]),
+    ...editors(row, say),
+    ...voidControls(row, say),
     say,
   ]);
 }
