@@ -679,15 +679,6 @@ def reply_style_sentence(style: str) -> str:
     return REPLY_STYLE_SET.format(style=style, what=REPLY_STYLE_WORDS.get(style, ""))
 
 
-def picked_values(picker: Any) -> list[str]:
-    """2.7.1's modal groups answer with `values`; a radio answers with `value`."""
-    values = getattr(picker, "values", None)
-    if values is not None:
-        return [str(one) for one in values]
-    one = getattr(picker, "value", None)
-    return [str(one)] if one else []
-
-
 def is_practice(ticket: Any) -> bool:
     return bool(field_of(ticket, "practice", 0))
 

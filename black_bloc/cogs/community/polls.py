@@ -29,6 +29,7 @@ from ...panels import (
     db_ready,
     option_label,
     panel_minutes,
+    picked_values,
     retire,
     still_staff,
 )
@@ -1090,14 +1091,6 @@ def vote_picker(options: Any, *, multi: bool, standing: Any = ()) -> Any:
         ],
         required=False,
     )
-
-
-def picked_values(picker: Any) -> list[str]:
-    values = getattr(picker, "values", None)
-    if values is not None:
-        return [str(one) for one in values]
-    one = getattr(picker, "value", None)
-    return [str(one)] if one else []
 
 
 class PollVoteModal(AnswersErrors, discord.ui.Modal):

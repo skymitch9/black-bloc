@@ -1,9 +1,10 @@
 import logging
+from types import SimpleNamespace
 
 import discord
 
 from black_bloc import panels
-from black_bloc.panels import NoteModal, Panel
+from black_bloc.panels import NoteModal, Panel, picked_values
 from black_bloc.settings_store import DB_UNAVAILABLE
 
 GUILD = 7
@@ -473,6 +474,7 @@ def test_the_library_says_what_it_offers_and_knows_nothing_about_requests():
         "db_ready",
         "db_up",
         "option_label",
+        "picked_values",
     ):
         assert name in panels.__all__
     for name in ("RequestView", "PANEL_TIMEOUT_FOOTER", "PICK_A_REQUEST"):
@@ -492,3 +494,11 @@ async def test_a_note_modal_can_be_optional_so_dismissing_the_box_still_means_ye
 
     assert needed.note.required is True
     assert spare.note.required is False
+
+
+def test_picked_values_reads_both_spellings_a_modal_group_answers_with():
+    """One home for the reader `polls.py` and `modmail.py` both had a copy of."""
+    assert picked_values(SimpleNamespace(values=["a", "b"])) == ["a", "b"]
+    assert picked_values(SimpleNamespace(value="a")) == ["a"]
+    assert picked_values(SimpleNamespace(value=None)) == []
+    assert picked_values(None) == []

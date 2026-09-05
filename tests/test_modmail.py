@@ -50,7 +50,6 @@ from black_bloc.modmail import (
     note_body,
     panel_minutes,
     parse_topic,
-    picked_values,
     relay_embed,
     root_buttons,
     setup_buttons,
@@ -587,9 +586,3 @@ def test_the_root_row_one_never_passes_discords_five(has_forget):
 
     assert max(rows.values()) <= 5
 
-
-def test_picked_values_reads_both_spellings_a_modal_group_answers_with():
-    assert picked_values(SimpleNamespace(values=["a", "b"])) == ["a", "b"]
-    assert picked_values(SimpleNamespace(value="a")) == ["a"]
-    assert picked_values(SimpleNamespace(value=None)) == []
-    assert picked_values(None) == []
