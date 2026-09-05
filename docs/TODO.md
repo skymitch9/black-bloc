@@ -213,6 +213,27 @@ docs bookkeeping lands with the work, not after.
 
 ## 🔧 Open engineering items
 
+- 🆕 **A feature turned OFF on the web portal hides its /command (owner, 2026-09-04 20:45: "Can we expand
+  the app so if we turn a feature off on the web portal the /command is hidden? Like I want to turn off
+  YouTube videos for now. Can we have that make the /youtube command not appear until it turns back on").**
+  Measured 20:45: the mechanism EXISTS — `black_bloc/command_visibility.py` removes a top-level command
+  from the dev guild's tree whenever a key in `HIDDEN_WHEN_OFF` reads `off`, debounced 5 s / re-synced at
+  most once a minute, and it is wired to `store.on_change`, so the portal's Settings page already
+  triggers it (`api/settings_api.py` writes through `store.set`). The table only names `rolemenu_mode` and
+  `request_mode` (the role-menus build deletes the first). **The build:** the table grows to every mode key
+  whose choices include `off` → its top-level command — golive, youtube, pings, tempvoice → `voice`,
+  honeypot, events → `event`, poll, birthday, automod, rolemenu, request, chat, chat_memory → `memory`,
+  raidtrain, applications → `apply` (modmail has no off; `settings`, `help`, `about` never hide);
+  `shadow` is NOT off (youtube is `shadow` today — the owner sets it `off` on the portal and the command
+  goes). Configurable both ways (33): one new bool key `hide_commands_when_off` (default **true**)
+  that the Settings page and `/settings set-value` reach; `hidden_names` reads it. ⚠️ **Trade-off to
+  say out loud:** with a command hidden, staff turn the feature back on from the portal or
+  `/settings set-value <feature>_mode on`, not from the panel — the panels program's P9 "mode-off panel
+  still opens and says so" survives only for the ≤60 s sync lag. `/help` already follows `hidden_names`.
+  Tests: `tests/test_command_visibility.py` (the role-menus build re-pointed it at `request_mode`),
+  `tests/test_settings_store.py`, `labels.js` row, `feature-list.md`, OWNER_GUIDE, a sweeps row, code-notes.
+  **Order: AFTER the role-menus merge (v77)** — that branch edits `command_visibility.py` and its test.
+  Est. 120–180k Opus, one build, then v78.
 - 🆕 **Panels over slash commands — the rest of the app (owner, 2026-09-03: "then carry it
   through the rest of the app"; confirmed ~11:25: "do the change to all / commands. I like
   how request works").** Audit every command group (44 commands synced; `cogs/core.py:88`
