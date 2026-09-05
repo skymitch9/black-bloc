@@ -46,6 +46,7 @@ from black_bloc.settings_store import (
     display_value,
     is_staff_command,
     member_is_staff,
+    namespace_of,
     parse_value,
     require_staff,
     resolved_staff_roles,
@@ -1116,6 +1117,45 @@ async def test_the_honeypot_panel_stays_up_ten_minutes_by_default(store):
     with pytest.raises(SettingError):
         coerce_value("honeypot_panel_minutes", "15")
     assert parse_value("honeypot_panel_minutes", "45") == 45
+
+
+async def test_the_settings_panel_stays_up_ten_minutes_by_default(store):
+    """Same reason as every other panel: 15 loses Discord's window and the gone-quiet footer."""
+    from black_bloc.cogs.core import VALUE_KEYS
+
+    assert store.get(7, "settings_panel_minutes") == 10
+    assert "15" in KEY_HELP["settings_panel_minutes"]
+    assert KEY_TYPES["settings_panel_minutes"] == "int"
+    assert "settings_panel_minutes" in VALUE_KEYS
+    await store.set(7, "settings_panel_minutes", 25)
+    assert store.get(7, "settings_panel_minutes") == 25
+    with pytest.raises(SettingError):
+        coerce_value("settings_panel_minutes", -1)
+    with pytest.raises(SettingError):
+        coerce_value("settings_panel_minutes", "15")
+    assert parse_value("settings_panel_minutes", "45") == 45
+
+
+async def test_only_manage_server_re_points_the_core_channels_by_default(store):
+    """F-S3 (a): access-REDUCING, so it ships true and the rest of /settings opens either way."""
+    from black_bloc.cogs.core import VALUE_KEYS
+
+    assert store.get(7, "settings_core_keys_admin_only") is True
+    assert KEY_TYPES["settings_core_keys_admin_only"] == "bool"
+    assert "Manage Server" in KEY_HELP["settings_core_keys_admin_only"]
+    assert "settings_core_keys_admin_only" in VALUE_KEYS
+    await store.set(7, "settings_core_keys_admin_only", False)
+    assert store.get(7, "settings_core_keys_admin_only") is False
+    with pytest.raises(SettingError):
+        coerce_value("settings_core_keys_admin_only", "false")
+    assert parse_value("settings_core_keys_admin_only", "off") is False
+
+
+async def test_both_new_settings_keys_file_under_core_not_a_group_of_their_own(store):
+    """Their `settings_` prefix would make a 23rd group; CORE_KEYS is what stops it."""
+    assert namespace_of("settings_panel_minutes") == "core"
+    assert namespace_of("settings_core_keys_admin_only") == "core"
+    assert len({namespace_of(key) for key in KEY_TYPES}) == 22
 
 
 async def test_the_automod_panel_stays_up_ten_minutes_by_default(store):

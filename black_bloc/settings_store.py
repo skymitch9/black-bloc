@@ -1206,6 +1206,32 @@ KEY_HELP.update(
 )
 
 
+# Settings panel (wave 4) — the two decisions `/settings`'s own panel introduces, in their own
+# block so the parallel wave-4 branches merge textually.
+SETTINGS_PANEL_MINUTES = "settings_panel_minutes"
+SETTINGS_CORE_KEYS_ADMIN_ONLY = "settings_core_keys_admin_only"
+SETTINGS_CORE_KEYS_ADMIN_ONLY_DEFAULT = True
+
+KEY_TYPES.update({SETTINGS_PANEL_MINUTES: "int", SETTINGS_CORE_KEYS_ADMIN_ONLY: "bool"})
+KEY_HELP.update(
+    {
+        SETTINGS_PANEL_MINUTES: (
+            "minutes the /settings panel stays live before its buttons disable themselves; 10 by "
+            "default. The 'this panel has gone quiet' footer can only be written while "
+            "Discord's 15-minute interaction window is still open, so 15 or more means the "
+            "buttons simply stop working with no footer to explain it"
+        ),
+        SETTINGS_CORE_KEYS_ADMIN_ONLY: (
+            "true keeps the four settings that decide who counts as staff and where Black Bloc "
+            "talks — the staff channel, the log channel, the moderation log channel and the "
+            "role-menu channel — to somebody with Manage Server; the rest of /settings still "
+            "opens for any staff member, and false lets any staff member re-point them too. The "
+            "dashboard's Settings page stays staff-visible either way"
+        ),
+    }
+)
+
+
 # Operator read token — the token itself is the on/off switch; this is the one decision left.
 KEY_TYPES.update({"operator_read_log": "bool"})
 KEY_HELP.update(
@@ -1244,6 +1270,8 @@ CORE_KEYS = (
     "bot_bio",
     "status_prefix",
     "operator_read_log",
+    SETTINGS_PANEL_MINUTES,
+    SETTINGS_CORE_KEYS_ADMIN_ONLY,
 )
 NAMESPACE_OVERRIDE = {
     "modlog_channel_id": "automod",
@@ -1793,6 +1821,10 @@ class SettingsStore:
             return MODMAIL_BOTH
         if key == "mod_panel_minutes":
             return 10
+        if key == SETTINGS_PANEL_MINUTES:
+            return 10
+        if key == SETTINGS_CORE_KEYS_ADMIN_ONLY:
+            return SETTINGS_CORE_KEYS_ADMIN_ONLY_DEFAULT
         if key == HIDE_COMMANDS_WHEN_OFF:
             return HIDE_COMMANDS_WHEN_OFF_DEFAULT
         if key.endswith("_log_level"):
