@@ -1585,3 +1585,18 @@ async def test_hiding_a_turned_off_features_command_is_on_by_default_and_both_do
     assert parse_value(HIDE_COMMANDS_WHEN_OFF, "false") is False
     with pytest.raises(SettingError):
         coerce_value(HIDE_COMMANDS_WHEN_OFF, "true")
+
+
+async def test_the_modmail_panel_stays_up_ten_minutes_by_default(store):
+    """Same reason as every other panel: 15 loses Discord's window and the gone-quiet footer."""
+    from black_bloc.cogs.core import VALUE_KEYS
+
+    assert store.get(7, "modmail_panel_minutes") == 10
+    assert "15" in KEY_HELP["modmail_panel_minutes"]
+    assert KEY_TYPES["modmail_panel_minutes"] == "int"
+    assert "modmail_panel_minutes" in VALUE_KEYS
+    await store.set(7, "modmail_panel_minutes", 25)
+    assert store.get(7, "modmail_panel_minutes") == 25
+    assert parse_value("modmail_panel_minutes", "45") == 45
+    with pytest.raises(SettingError):
+        coerce_value("modmail_panel_minutes", -1)

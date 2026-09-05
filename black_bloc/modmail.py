@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, NamedTuple
 
 import discord
 
@@ -360,3 +360,207 @@ def modes_sentence(mode: str) -> str:
     if mode == THREAD_MODE:
         return "new tickets are **private threads** in the staff channel"
     return "new tickets are **channels** in the modmail category"
+
+
+PANEL_MINUTES_KEY = "modmail_panel_minutes"
+PANEL_TITLE = "The modmail inbox"
+PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run /modmail again"
+SETUP_TITLE = "Where modmail is set up"
+BLOCKED_TITLE = "Who cannot open modmail tickets"
+SNIPPETS_TITLE = "Saved replies"
+FORGET_TITLE = "Forget where modmail has been pointed"
+
+PANEL_LIST_CAP = 25
+MORE_BLOCKED = "…and {rest} more — the Modmail page on the site lists every one."
+MORE_SNIPPETS = "…and {rest} more — the Modmail page on the site lists every one."
+PICK_A_BLOCK = "Somebody…"
+PICK_A_SNIPPET = "A snippet…"
+PICK_A_PLACE = "Which place to forget…"
+PICK_A_MODE = "How new tickets are made…"
+PICK_A_CHANNEL = "Pick a channel…"
+PICK_A_CATEGORY = "Pick a category…"
+PICK_SOMEBODY = "Who to block…"
+
+SOURCE_CARD = "card"
+SOURCE_TYPED = "typed"
+SOURCE_COMMAND = "command"
+SOURCE_WEB = "web"
+SOURCES = (SOURCE_CARD, SOURCE_TYPED, SOURCE_COMMAND, SOURCE_WEB)
+
+SETUP = "setup"
+BLOCKED_MOVE = "blocked"
+SNIPPETS = "snippets"
+FORGET = "forget"
+LOGS = "logs"
+REFRESH = "refresh"
+SITE = "site"
+BACK = "back"
+CATEGORY = "category"
+STAFF_CHANNEL = "staff_channel"
+TRANSCRIPTS = "transcripts"
+MODE = "mode"
+ENABLE = "enable"
+DISABLE = "disable"
+UNBLOCK = "unblock"
+BLOCK_PICK = "block_pick"
+BLOCK_REASON = "block_reason"
+SNIPPET_ADD = "snippet_add"
+SNIPPET_CHANGE = "snippet_change"
+SNIPPET_REMOVE = "snippet_remove"
+SNIPPET_REMOVE_YES = "snippet_remove_yes"
+SNIPPET_REMOVE_NO = "snippet_remove_no"
+
+
+class ModmailMove(NamedTuple):
+    action: str
+    label: str
+    style: str = "secondary"
+    row: int = 0
+    modal: bool = False
+
+
+SETUP_MOVE = ModmailMove(SETUP, "Setup…", "secondary", 1)
+BLOCKED_MOVE_BUTTON = ModmailMove(BLOCKED_MOVE, "Blocked…", "secondary", 1)
+SNIPPETS_MOVE = ModmailMove(SNIPPETS, "Snippets…", "secondary", 1)
+FORGET_MOVE = ModmailMove(FORGET, "Forget…", "secondary", 1)
+LOGS_MOVE = ModmailMove(LOGS, "Logs", "secondary", 2)
+REFRESH_MOVE = ModmailMove(REFRESH, "Refresh", "secondary", 2)
+SITE_MOVE = ModmailMove(SITE, "Open on the site", "link", 2)
+
+CATEGORY_MOVE = ModmailMove(CATEGORY, "Ticket category…", "secondary", 1)
+STAFF_CHANNEL_MOVE = ModmailMove(STAFF_CHANNEL, "Staff channel…", "secondary", 1)
+TRANSCRIPTS_MOVE = ModmailMove(TRANSCRIPTS, "Transcripts…", "secondary", 1)
+MODE_MOVE = ModmailMove(MODE, "Mode…", "secondary", 1)
+ANSWER_ON_MOVE = ModmailMove(ENABLE, "Answer DMs on", "primary", 1)
+ANSWER_OFF_MOVE = ModmailMove(DISABLE, "Answer DMs off", "secondary", 1)
+SETUP_BACK_MOVE = ModmailMove(BACK, "Back", "secondary", 2)
+SETUP_REFRESH_MOVE = ModmailMove(REFRESH, "Refresh", "secondary", 2)
+
+UNBLOCK_MOVE = ModmailMove(UNBLOCK, "Unblock them", "danger", 2)
+BLOCK_PICK_MOVE = ModmailMove(BLOCK_PICK, "Block someone…", "secondary", 2)
+BLOCK_REASON_MOVE = ModmailMove(BLOCK_REASON, "Block them…", "danger", 2, modal=True)
+BLOCKED_BACK_MOVE = ModmailMove(BACK, "Back", "secondary", 3)
+BLOCKED_REFRESH_MOVE = ModmailMove(REFRESH, "Refresh", "secondary", 3)
+
+SNIPPET_REMOVE_MOVE = ModmailMove(SNIPPET_REMOVE, "Remove it", "danger", 2)
+SNIPPET_ADD_MOVE = ModmailMove(SNIPPET_ADD, "Add one…", "secondary", 2, modal=True)
+SNIPPET_CHANGE_MOVE = ModmailMove(SNIPPET_CHANGE, "Change it…", "secondary", 2, modal=True)
+SNIPPET_YES_MOVE = ModmailMove(SNIPPET_REMOVE_YES, "Yes, remove it", "danger", 2)
+SNIPPET_NO_MOVE = ModmailMove(SNIPPET_REMOVE_NO, "Keep it", "secondary", 2)
+SNIPPETS_BACK_MOVE = ModmailMove(BACK, "Back", "secondary", 3)
+SNIPPETS_REFRESH_MOVE = ModmailMove(REFRESH, "Refresh", "secondary", 3)
+
+FORGET_BACK_MOVE = ModmailMove(BACK, "Back", "secondary", 1)
+FORGET_REFRESH_MOVE = ModmailMove(REFRESH, "Refresh", "secondary", 1)
+
+PANEL_MOVES = (
+    SETUP_MOVE,
+    BLOCKED_MOVE_BUTTON,
+    SNIPPETS_MOVE,
+    FORGET_MOVE,
+    LOGS_MOVE,
+    REFRESH_MOVE,
+    SITE_MOVE,
+    CATEGORY_MOVE,
+    STAFF_CHANNEL_MOVE,
+    TRANSCRIPTS_MOVE,
+    MODE_MOVE,
+    ANSWER_ON_MOVE,
+    ANSWER_OFF_MOVE,
+    SETUP_BACK_MOVE,
+    SETUP_REFRESH_MOVE,
+    UNBLOCK_MOVE,
+    BLOCK_PICK_MOVE,
+    BLOCK_REASON_MOVE,
+    BLOCKED_BACK_MOVE,
+    BLOCKED_REFRESH_MOVE,
+    SNIPPET_REMOVE_MOVE,
+    SNIPPET_ADD_MOVE,
+    SNIPPET_CHANGE_MOVE,
+    SNIPPET_YES_MOVE,
+    SNIPPET_NO_MOVE,
+    SNIPPETS_BACK_MOVE,
+    SNIPPETS_REFRESH_MOVE,
+    FORGET_BACK_MOVE,
+    FORGET_REFRESH_MOVE,
+)
+
+
+def root_buttons(*, has_forget: bool, has_site: bool) -> tuple[ModmailMove, ...]:
+    """Forget… is drawn only where something is pointed, so it can never answer 'nothing to do'."""
+    found = [SETUP_MOVE, BLOCKED_MOVE_BUTTON, SNIPPETS_MOVE]
+    if has_forget:
+        found.append(FORGET_MOVE)
+    found += [LOGS_MOVE, REFRESH_MOVE]
+    if has_site:
+        found.append(SITE_MOVE)
+    return tuple(found)
+
+
+def setup_buttons(*, enabled: bool) -> tuple[ModmailMove, ...]:
+    """One button that names its own effect, never two spellings of the same switch."""
+    return (
+        CATEGORY_MOVE,
+        STAFF_CHANNEL_MOVE,
+        TRANSCRIPTS_MOVE,
+        MODE_MOVE,
+        ANSWER_OFF_MOVE if enabled else ANSWER_ON_MOVE,
+        SETUP_BACK_MOVE,
+        SETUP_REFRESH_MOVE,
+    )
+
+
+def blocked_buttons(*, picked: bool, blocking: bool) -> tuple[ModmailMove, ...]:
+    found: list[ModmailMove] = []
+    if picked:
+        found.append(UNBLOCK_MOVE)
+    found.append(BLOCK_REASON_MOVE if blocking else BLOCK_PICK_MOVE)
+    found += [BLOCKED_BACK_MOVE, BLOCKED_REFRESH_MOVE]
+    return tuple(found)
+
+
+def snippet_buttons(*, picked: bool, confirming: bool) -> tuple[ModmailMove, ...]:
+    if confirming:
+        return (SNIPPET_YES_MOVE, SNIPPET_NO_MOVE, SNIPPETS_BACK_MOVE)
+    found: list[ModmailMove] = []
+    if picked:
+        found += [SNIPPET_REMOVE_MOVE, SNIPPET_CHANGE_MOVE]
+    found.append(SNIPPET_ADD_MOVE)
+    found += [SNIPPETS_BACK_MOVE, SNIPPETS_REFRESH_MOVE]
+    return tuple(found)
+
+
+def forget_buttons() -> tuple[ModmailMove, ...]:
+    return (FORGET_BACK_MOVE, FORGET_REFRESH_MOVE)
+
+
+def block_line(row: Any) -> str:
+    reason = row["reason"] or "no reason given"
+    return f"<@{row['user_id']}> — {reason} ({str(row['at'])[:10]})"
+
+
+def snippet_line(row: Any) -> str:
+    return f"**{row['name']}** — {clamp(row['content'], 120)}"
+
+
+def capped_lines(rows: Any, shape: Any, more: str, cap: int = PANEL_LIST_CAP) -> list[str]:
+    """A panel embed shows a page, and says in words where the rest of the list lives."""
+    found = list(rows or ())
+    lines = [shape(row) for row in found[:cap]]
+    if len(found) > cap:
+        lines.append(more.format(rest=len(found) - cap))
+    return lines
+
+
+def blocked_lines(rows: Any, cap: int = PANEL_LIST_CAP) -> list[str]:
+    return capped_lines(rows, block_line, MORE_BLOCKED, cap)
+
+
+def snippet_lines(rows: Any, cap: int = PANEL_LIST_CAP) -> list[str]:
+    return capped_lines(rows, snippet_line, MORE_SNIPPETS, cap)
+
+
+def panel_minutes(store: Any, guild_id: int) -> int:
+    from .panels import panel_minutes as _minutes
+
+    return _minutes(store, guild_id, PANEL_MINUTES_KEY)
