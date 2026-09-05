@@ -5,7 +5,7 @@ import pytest
 
 from black_bloc.cogs.moderation.modcmds import ModCommands
 from black_bloc.config import load_settings
-from black_bloc.modcases import CASES_PER_PAGE, add_case
+from black_bloc.modcases import add_case
 from black_bloc.settings_store import SettingsStore
 from black_bloc.storage.db import Database
 
@@ -168,15 +168,36 @@ class FakeBot:
         return self.guild.get_channel(channel_id)
 
 
+class FakeSentMessage:
+    def __init__(self, said):
+        self.said = dict(said)
+        self.embeds = [said["embed"]] if said.get("embed") is not None else []
+        self.edits = []
+
+    async def edit(self, **kwargs):
+        self.edits.append(kwargs)
+
+
 class FakeResponse:
     def __init__(self):
         self.messages = []
+        self.modals = []
+        self.done = False
+
+    def is_done(self):
+        return self.done
 
     async def send_message(self, content=None, ephemeral=False, **kwargs):
         self.messages.append({"content": content, "ephemeral": ephemeral, **kwargs})
+        self.done = True
 
     async def defer(self, ephemeral=False):
         self.messages.append({"content": None, "deferred": True})
+        self.done = True
+
+    async def send_modal(self, modal):
+        self.modals.append(modal)
+        self.done = True
 
 
 class FakeFollowup:
@@ -205,6 +226,13 @@ class FakeInteraction:
     @property
     def embed(self):
         return self.response.messages[-1].get("embed")
+
+    async def edit_original_response(self, **kwargs):
+        self.response.messages.append({"content": None, **kwargs})
+        return FakeSentMessage(kwargs)
+
+    async def original_response(self):
+        return FakeSentMessage(self.response.messages[-1])
 
 
 async def action_kinds(db):
@@ -467,8 +495,8 @@ async def test_an_untargeted_purge_is_filed_against_the_channel(cog, bot, lead, 
     assert cards(bot)[-1].kwargs["embed"].fields[0].name == "Channel"
 
     theirs = FakeInteraction(bot, lead)
-    await cog.cases.callback(cog, theirs, lead, 1)
-    assert "no cases" in theirs.sent
+    await cog.mod.callback(cog, theirs, lead)
+    assert "no cases" in theirs.embed.description
 
 
 async def test_a_purge_discord_refuses_says_what_it_needs(cog, bot, lead, db):
@@ -482,58 +510,6 @@ async def test_a_purge_discord_refuses_says_what_it_needs(cog, bot, lead, db):
     assert await cases(db) == []
 
 
-async def test_case_shows_one_card_and_refuses_another_guilds(cog, bot, lead, db):
-    case_id = await add_case(db, GUILD, USER, "warn", moderator_id=lead.id, reason="spam")
-    other = await add_case(db, GUILD + 1, USER, "warn", moderator_id=lead.id)
-    interaction = FakeInteraction(bot, lead)
-
-    await cog.case.callback(cog, interaction, case_id)
-    assert interaction.embed.title == f"Case #{case_id} — warn"
-
-    elsewhere = FakeInteraction(bot, lead)
-    await cog.case.callback(cog, elsewhere, other)
-    assert "no case" in elsewhere.sent
-
-    missing = FakeInteraction(bot, lead)
-    await cog.case.callback(cog, missing, 4242)
-    assert "no case" in missing.sent
-
-
-async def test_cases_pages_and_says_when_there_are_none(cog, bot, lead, target, db):
-    empty = FakeInteraction(bot, lead)
-    await cog.cases.callback(cog, empty, target, 1)
-    assert "no cases" in empty.sent
-
-    for index in range(12):
-        await add_case(db, GUILD, target.id, "warn", moderator_id=lead.id, reason=f"n{index}")
-
-    first = FakeInteraction(bot, lead)
-    await cog.cases.callback(cog, first, target, 1)
-    assert "page 1 of 2" in first.sent and "page:2" in first.sent
-    assert first.sent.count("`warn`") == 10
-
-    second = FakeInteraction(bot, lead)
-    await cog.cases.callback(cog, second, target, 9)
-    assert "page 2 of 2" in second.sent
-    assert second.sent.count("`warn`") == 2
-
-
-async def test_a_page_of_long_reasons_is_cut_and_split_so_discord_takes_it(cog, bot, lead, target,
-                                                                          db):
-    for index in range(CASES_PER_PAGE):
-        await add_case(
-            db, GUILD, target.id, "warn", moderator_id=lead.id, reason=f"{index} " + "x" * 400
-        )
-    interaction = FakeInteraction(bot, lead)
-
-    await cog.cases.callback(cog, interaction, target, 1)
-
-    said = [message["content"] for message in interaction.response.messages]
-    assert all(len(chunk) <= 1900 for chunk in said)
-    assert said[0].count("…") == CASES_PER_PAGE
-    assert "x" * 200 not in said[0]
-
-
 async def test_every_command_is_staff_only(cog, bot, target):
     for call in (
         lambda i: cog.warn.callback(cog, i, target, "x"),
@@ -543,8 +519,7 @@ async def test_every_command_is_staff_only(cog, bot, target):
         lambda i: cog.ban.callback(cog, i, target, "x", 0),
         lambda i: cog.unban.callback(cog, i, "123456789012345678", "x"),
         lambda i: cog.purge.callback(cog, i, 5, None),
-        lambda i: cog.case.callback(cog, i, 1),
-        lambda i: cog.cases.callback(cog, i, target, 1),
+        lambda i: cog.mod.callback(cog, i, None),
     ):
         interaction = FakeInteraction(bot, target)
         await call(interaction)
@@ -565,13 +540,464 @@ async def test_a_staff_role_holder_may_run_them(cog, bot, target):
     assert "Warned" in interaction.sent
 
 
-async def test_mod_logs_reads_the_moderation_lines_a_warn_left_behind(cog, bot, lead, target, db):
-    await cog.warn.callback(cog, FakeInteraction(bot, lead), target, "stop")
-    interaction = FakeInteraction(bot, lead)
+# --- the /mod panel ------------------------------------------------------------------------------
 
-    await cog.mod_logs.callback(cog, interaction)
+SITE_ROOT_LABELS = ["Jump to case #…", "Refresh", "Logs", "Open on the site"]
+
+
+def rendered(interaction):
+    """The last thing the panel drew, ignoring any followup sentence sent after it."""
+    for said in reversed(interaction.response.messages):
+        if said.get("view") is not None:
+            return said
+    return None
+
+
+def labels(interaction):
+    view = rendered(interaction)["view"]
+    return [item.label for item in view.children if getattr(item, "label", None)]
+
+
+def placeholders(interaction):
+    view = rendered(interaction)["view"]
+    return [item.placeholder for item in view.children if getattr(item, "placeholder", None)]
+
+
+def view_of(interaction):
+    return rendered(interaction)["view"]
+
+
+def control(interaction, label):
+    return next(item for item in view_of(interaction).children if
+                getattr(item, "label", None) == label)
+
+
+def select_of(interaction, placeholder):
+    return next(item for item in view_of(interaction).children if
+                getattr(item, "placeholder", None) == placeholder)
+
+
+async def press(bot, who, interaction, label):
+    item = control(interaction, label)
+    pressed = FakeInteraction(bot, who)
+    await item.callback(pressed)
+    return pressed
+
+
+async def open_panel(cog, bot, who, member=None):
+    interaction = FakeInteraction(bot, who)
+    await cog.mod.callback(cog, interaction, member)
+    return interaction
+
+
+async def a_case(db, lead, reason="spam", kind="warn", user_id=USER):
+    return await add_case(db, GUILD, user_id, kind, moderator_id=lead.id, reason=reason)
+
+
+async def test_mod_opens_one_ephemeral_panel_over_the_lines_cases_used_to_print(
+    cog, bot, lead, target, db
+):
+    for index in range(3):
+        await a_case(db, lead, reason=f"n{index}", user_id=target.id)
+
+    interaction = await open_panel(cog, bot, lead)
 
     said = interaction.response.messages[-1]
+    assert said["ephemeral"] is True and said["view"] is not None
+    assert said["embed"].title == "What Black Bloc has done"
+    assert "3** case(s) for this server — page 1 of 1" in said["embed"].description
+    assert said["embed"].description.count("`warn`") == 3
+    assert "/warn" in said["embed"].footer.text
+    assert "`/case" not in said["embed"].description
+    assert labels(interaction) == SITE_ROOT_LABELS
+    assert placeholders(interaction) == ["A case…", "Whose cases?"]
+
+
+async def test_a_guild_with_no_cases_says_so_over_no_select_and_no_pager(cog, bot, lead):
+    interaction = await open_panel(cog, bot, lead)
+
+    assert "no cases for this server" in interaction.embed.description
+    assert placeholders(interaction) == ["Whose cases?"]
+    assert labels(interaction) == SITE_ROOT_LABELS
+
+
+async def test_mod_at_a_member_with_no_cases_says_so_and_offers_the_way_out(
+    cog, bot, lead, target, db
+):
+    await a_case(db, lead, user_id=USER + 5)
+
+    interaction = await open_panel(cog, bot, lead, target)
+
+    assert f"no cases for <@{target.id}>" in interaction.embed.description
+    assert "Everyone's cases" in labels(interaction)
+    assert placeholders(interaction) == ["Whose cases?"]
+
+
+async def test_the_pager_arrows_are_absent_rather_than_there_and_refusing(
+    cog, bot, lead, target, db
+):
+    for index in range(12):
+        await a_case(db, lead, reason=f"n{index}", user_id=target.id)
+
+    first = await open_panel(cog, bot, lead, target)
+    assert "page 1 of 2" in first.embed.description
+    assert "‹ Newer" not in labels(first)
+    assert "Older ›" in labels(first)
+
+    second = await press(bot, lead, first, "Older ›")
+    assert "page 2 of 2" in rendered(second)["embed"].description
+    assert "‹ Newer" in labels(second)
+    assert "Older ›" not in labels(second)
+
+    back = await press(bot, lead, second, "‹ Newer")
+    assert "page 1 of 2" in rendered(back)["embed"].description
+    assert "‹ Newer" not in labels(back)
+
+
+async def test_a_member_filter_is_escapable_and_everyone_only_shows_while_it_is_on(
+    cog, bot, lead, target, db
+):
+    await a_case(db, lead, user_id=target.id)
+    await a_case(db, lead, user_id=USER + 5)
+
+    filtered = await open_panel(cog, bot, lead, target)
+    assert f"1** case(s) for <@{target.id}>" in filtered.embed.description
+    assert "Everyone's cases" in labels(filtered)
+
+    everyone = await press(bot, lead, filtered, "Everyone's cases")
+    assert "for this server" in rendered(everyone)["embed"].description
+    assert "Everyone's cases" not in labels(everyone)
+
+
+async def test_a_case_opens_its_card_over_five_moves_and_says_void_undoes_nothing(
+    cog, bot, lead, target, db
+):
+    case_id = await a_case(db, lead, user_id=target.id)
+    interaction = await open_panel(cog, bot, lead)
+
+    picked = FakeInteraction(bot, lead)
+    select = select_of(interaction, "A case…")
+    select._values = [str(case_id)]
+    await select.callback(picked)
+
+    card = rendered(picked)
+    assert card["embed"].title == f"Case #{case_id} — warn"
+    assert "does not undo the punishment" in card["embed"].description
+    assert labels(picked) == [
+        "Edit reason…", "Add a note…", "Void this case…", "Back", "Refresh"
+    ]
+
+    home = await press(bot, lead, picked, "Back")
+    assert rendered(home)["embed"].title == "What Black Bloc has done"
+
+
+async def a_card(cog, bot, lead, db, case_id):
+    root = await open_panel(cog, bot, lead)
+    picked = FakeInteraction(bot, lead)
+    select = select_of(root, "A case…")
+    select._values = [str(case_id)]
+    await select.callback(picked)
+    return picked
+
+
+async def test_an_empty_reason_is_refused_in_one_sentence_and_saves_nothing(
+    cog, bot, lead, target, db
+):
+    case_id = await a_case(db, lead, reason="spam", user_id=target.id)
+    card = await a_card(cog, bot, lead, db, case_id)
+
+    opener = FakeInteraction(bot, lead)
+    await control(card, "Edit reason…").callback(opener)
+    modal = opener.response.modals[-1]
+    assert modal.note.default == "spam"
+
+    typed = FakeInteraction(bot, lead)
+    modal.note._value = "   "
+    await modal.on_submit(typed)
+
+    assert "nobody can read" in typed.response.messages[-1]["content"]
+    assert rendered(typed) is None
+    assert (await cases(db))[0]["reason"] == "spam"
+    assert await action_kinds(db) == []
+
+
+async def test_a_real_reason_saves_once_and_rewrites_the_card_in_the_modlog(
+    cog, bot, lead, target, db
+):
+    case_id = await a_case(db, lead, reason="spam", user_id=target.id)
+    await db.conn.execute("UPDATE mod_cases SET log_message_id = 1 WHERE id = ?", (case_id,))
+    await db.conn.commit()
+    rewritten = []
+    bot.guild.get_channel(TEST_CHANNEL).get_partial_message = lambda mid: _Partial(rewritten)
+    card = await a_card(cog, bot, lead, db, case_id)
+
+    opener = FakeInteraction(bot, lead)
+    await control(card, "Edit reason…").callback(opener)
+    modal = opener.response.modals[-1]
+    modal.note._value = "posting links"
+    typed = FakeInteraction(bot, lead)
+    await modal.on_submit(typed)
+
+    assert (await cases(db))[0]["reason"] == "posting links"
+    assert await action_kinds(db) == ["case.reason_edited"]
+    assert "reason now reads" in typed.response.messages[-1]["content"]
+    assert "posting links" in str(rendered(typed)["embed"].fields[-1].value)
+    assert len(rewritten) == 1
+    assert "posting links" in str(rewritten[0]["embed"].fields[-1].value)
+
+
+class _Partial:
+    def __init__(self, seen):
+        self.seen = seen
+
+    async def edit(self, **kwargs):
+        self.seen.append(kwargs)
+
+
+async def test_a_modlog_card_that_cannot_be_rewritten_never_aborts_the_void(
+    cog, bot, lead, target, db
+):
+    """Checklist 12: the row, the log and the DM are done before the card is even tried."""
+    case_id = await a_case(db, lead, user_id=target.id)
+    await db.conn.execute("UPDATE mod_cases SET log_message_id = 1 WHERE id = ?", (case_id,))
+    await db.conn.commit()
+
+    bot.guild.get_channel(TEST_CHANNEL).get_partial_message = lambda mid: _Angry()
+    card = await a_card(cog, bot, lead, db, case_id)
+    opener = FakeInteraction(bot, lead)
+    await control(card, "Void this case…").callback(opener)
+    modal = opener.response.modals[-1]
+    modal.note._value = "wrong member"
+    typed = FakeInteraction(bot, lead)
+    await modal.on_submit(typed)
+
+    assert (await cases(db))[0]["voided_at"]
+    assert await action_kinds(db) == ["case.voided"]
+    assert target.dms
+    assert "marked cancelled" in typed.response.messages[-1]["content"]
+
+
+class _Angry:
+    async def edit(self, **kwargs):
+        raise discord.HTTPException(_Response(403), "no")
+
+
+async def test_the_note_button_says_add_then_edit_and_never_both(cog, bot, lead, target, db):
+    case_id = await a_case(db, lead, user_id=target.id)
+    card = await a_card(cog, bot, lead, db, case_id)
+
+    assert "Add a note…" in labels(card) and "Edit the note…" not in labels(card)
+
+    opener = FakeInteraction(bot, lead)
+    await control(card, "Add a note…").callback(opener)
+    modal = opener.response.modals[-1]
+    modal.note._value = "they apologised"
+    typed = FakeInteraction(bot, lead)
+    await modal.on_submit(typed)
+
+    assert labels(typed) == [
+        "Edit reason…", "Edit the note…", "Void this case…", "Back", "Refresh"
+    ]
+    assert "Add a note…" not in labels(typed)
+    assert await action_kinds(db) == ["case.noted"]
+    names = [field.name for field in rendered(typed)["embed"].fields]
+    assert "Note" in names
+
+    blank = FakeInteraction(bot, lead)
+    await control(typed, "Edit the note…").callback(blank)
+    again = blank.response.modals[-1]
+    assert again.note.default == "they apologised"
+
+
+async def test_voiding_dms_the_member_marks_the_case_and_cannot_be_done_twice(
+    cog, bot, lead, target, db
+):
+    case_id = await a_case(db, lead, user_id=target.id)
+    card = await a_card(cog, bot, lead, db, case_id)
+
+    opener = FakeInteraction(bot, lead)
+    await control(card, "Void this case…").callback(opener)
+    modal = opener.response.modals[-1]
+    assert modal.note.default is None
+    modal.note._value = "wrong member"
+    typed = FakeInteraction(bot, lead)
+    await modal.on_submit(typed)
+
+    row = (await cases(db))[0]
+    assert row["voided_at"] and row["void_reason"] == "wrong member"
+    assert await action_kinds(db) == ["case.voided"]
+    assert target.dms and "cancelled" in target.dms[-1]
+    assert "not undone" in target.dms[-1]
+    assert labels(typed) == [
+        "Restore this case", "Edit reason…", "Add a note…", "Back", "Refresh"
+    ]
+    assert "Void this case…" not in labels(typed)
+
+    stale = FakeInteraction(bot, lead)
+    await control(card, "Void this case…").callback(stale)
+    twice = FakeInteraction(bot, lead)
+    second = stale.response.modals[-1]
+    second.note._value = "again"
+    await second.on_submit(twice)
+
+    assert "a moment ago" in twice.response.messages[-1]["content"]
+    assert await action_kinds(db) == ["case.voided"]
+
+
+async def test_a_voided_case_is_struck_through_on_the_list_and_stops_counting(
+    cog, bot, lead, target, db
+):
+    case_id = await a_case(db, lead, reason="spam", user_id=target.id)
+    card = await a_card(cog, bot, lead, db, case_id)
+    opener = FakeInteraction(bot, lead)
+    await control(card, "Void this case…").callback(opener)
+    modal = opener.response.modals[-1]
+    modal.note._value = "wrong member"
+    voided = FakeInteraction(bot, lead)
+    await modal.on_submit(voided)
+
+    home = await press(bot, lead, voided, "Back")
+
+    assert "~~**#" in rendered(home)["embed"].description
+    assert select_of(home, "A case…").options[0].label.startswith(f"#{case_id} · voided")
+
+
+async def test_restore_takes_the_void_back_off_and_no_state_is_terminal(
+    cog, bot, lead, target, db
+):
+    case_id = await a_case(db, lead, user_id=target.id)
+    card = await a_card(cog, bot, lead, db, case_id)
+    opener = FakeInteraction(bot, lead)
+    await control(card, "Void this case…").callback(opener)
+    modal = opener.response.modals[-1]
+    modal.note._value = "wrong member"
+    voided = FakeInteraction(bot, lead)
+    await modal.on_submit(voided)
+
+    back = await press(bot, lead, voided, "Restore this case")
+
+    assert (await cases(db))[0]["voided_at"] is None
+    assert await action_kinds(db) == ["case.voided", "case.restored"]
+    assert labels(back) == [
+        "Edit reason…", "Add a note…", "Void this case…", "Back", "Refresh"
+    ]
+    assert target.dms[-1].startswith("A case against you")
+
+    stale = FakeInteraction(bot, lead)
+    await control(voided, "Restore this case").callback(stale)
+    assert "a moment ago" in stale.response.messages[-1]["content"]
+
+
+async def test_jump_opens_a_case_by_number_and_a_bad_one_leaves_the_panel_alone(
+    cog, bot, lead, target, db
+):
+    case_id = await a_case(db, lead, user_id=target.id)
+    root = await open_panel(cog, bot, lead)
+
+    opener = FakeInteraction(bot, lead)
+    await control(root, "Jump to case #…").callback(opener)
+    modal = opener.response.modals[-1]
+    modal.number._value = str(case_id)
+    jumped = FakeInteraction(bot, lead)
+    await modal.on_submit(jumped)
+
+    assert rendered(jumped)["embed"].title == f"Case #{case_id} — warn"
+
+    missing = FakeInteraction(bot, lead)
+    await control(root, "Jump to case #…").callback(missing)
+    gone = missing.response.modals[-1]
+    gone.number._value = "99999"
+    told = FakeInteraction(bot, lead)
+    await gone.on_submit(told)
+
+    assert "no case **#99999**" in told.response.messages[-1]["content"]
+    assert rendered(told) is None
+
+    words = FakeInteraction(bot, lead)
+    await control(root, "Jump to case #…").callback(words)
+    typed = words.response.modals[-1]
+    typed.number._value = "abc"
+    refused_it = FakeInteraction(bot, lead)
+    await typed.on_submit(refused_it)
+
+    assert "**abc** is not a case number" in refused_it.response.messages[-1]["content"]
+    assert rendered(refused_it) is None
+
+
+async def test_a_case_from_another_guild_is_never_opened(cog, bot, lead, db):
+    other = await add_case(db, GUILD + 1, USER, "warn", moderator_id=lead.id)
+    root = await open_panel(cog, bot, lead)
+
+    opener = FakeInteraction(bot, lead)
+    await control(root, "Jump to case #…").callback(opener)
+    modal = opener.response.modals[-1]
+    modal.number._value = str(other)
+    told = FakeInteraction(bot, lead)
+    await modal.on_submit(told)
+
+    assert "no case" in told.response.messages[-1]["content"]
+    assert rendered(told) is None
+
+
+async def test_a_case_that_belongs_to_a_channel_says_there_is_nobody_to_tell(
+    cog, bot, lead, db
+):
+    case_id = await add_case(
+        db, GUILD, None, "purge", moderator_id=lead.id, channel_id=TEST_CHANNEL
+    )
+    card = await a_card(cog, bot, lead, db, case_id)
+
+    assert "nobody to tell" in rendered(card)["embed"].description
+
+    opener = FakeInteraction(bot, lead)
+    await control(card, "Void this case…").callback(opener)
+    modal = opener.response.modals[-1]
+    modal.note._value = "not needed"
+    typed = FakeInteraction(bot, lead)
+    await modal.on_submit(typed)
+
+    assert (await cases(db))[0]["voided_at"]
+    assert await action_kinds(db) == ["case.voided"]
+
+
+@pytest.mark.parametrize(
+    "label", ["Jump to case #…", "Refresh", "Logs"]
+)
+async def test_a_staffer_demoted_mid_panel_moves_nothing_the_reads_included(
+    cog, bot, lead, target, db, label
+):
+    await a_case(db, lead, user_id=target.id)
+    root = await open_panel(cog, bot, lead)
+
+    demoted = FakeInteraction(bot, target)
+    await control(root, label).callback(demoted)
+
+    assert "staff only" in demoted.sent
+    assert rendered(demoted) is None
+
+
+async def test_a_move_on_the_card_refuses_a_demoted_staffer_before_it_writes(
+    cog, bot, lead, target, db
+):
+    case_id = await a_case(db, lead, user_id=target.id)
+    card = await a_card(cog, bot, lead, db, case_id)
+
+    for label in ("Edit reason…", "Add a note…", "Void this case…", "Back"):
+        demoted = FakeInteraction(bot, target)
+        await control(card, label).callback(demoted)
+        assert "staff only" in demoted.sent, label
+        assert demoted.response.modals == [], label
+
+    assert await action_kinds(db) == []
+
+
+async def test_the_logs_button_reads_the_lines_a_warn_left_behind(cog, bot, lead, target, db):
+    await cog.warn.callback(cog, FakeInteraction(bot, lead), target, "stop")
+    root = await open_panel(cog, bot, lead)
+
+    pressed = await press(bot, lead, root, "Logs")
+
+    said = pressed.response.messages[-1]
     assert said["ephemeral"] is True
     assert said["embed"].title == "Moderation log"
     assert "`mod.warned`" in said["embed"].description
@@ -579,18 +1005,47 @@ async def test_mod_logs_reads_the_moderation_lines_a_warn_left_behind(cog, bot, 
     assert said["embed"].footer.text.endswith("/moderation.html")
 
 
-async def test_mod_logs_refuses_somebody_who_is_not_staff(cog, bot, target):
-    interaction = FakeInteraction(bot, target)
+async def test_the_logs_button_refuses_somebody_who_is_not_staff(cog, bot, lead, target, db):
+    await a_case(db, lead, user_id=target.id)
+    root = await open_panel(cog, bot, lead)
 
-    await cog.mod_logs.callback(cog, interaction)
+    pressed = await press(bot, target, root, "Logs")
 
-    assert "staff only" in interaction.sent
-    assert "embed" not in interaction.response.messages[-1]
+    assert "staff only" in pressed.sent
+    assert "embed" not in pressed.response.messages[-1]
 
 
-async def test_mod_logs_says_so_when_there_is_nothing_yet(cog, bot, lead):
+async def test_a_re_render_retires_the_view_it_replaced(cog, bot, lead, target, db):
+    for index in range(12):
+        await a_case(db, lead, reason=f"n{index}", user_id=target.id)
+    first = await open_panel(cog, bot, lead)
+    old = view_of(first)
+
+    second = await press(bot, lead, first, "Older ›")
+
+    assert old.replaced is True and old.is_finished() is True
+    assert view_of(second).replaced is False
+
+
+async def test_the_timeout_greys_every_control_and_says_to_run_mod_again(cog, bot, lead, db):
+    interaction = await open_panel(cog, bot, lead)
+    view = view_of(interaction)
+    view.message = FakeSentMessage(rendered(interaction))
+
+    await view.on_timeout()
+
+    assert all(item.disabled for item in view.children)
+    footer = view.message.edits[-1]["embeds"][0].footer.text
+    assert "gone quiet" in footer and "/mod again" in footer
+
+
+async def test_the_panel_says_the_database_is_down_rather_than_drawing_a_dead_one(
+    cog, bot, lead, db
+):
+    await db.close()
     interaction = FakeInteraction(bot, lead)
 
-    await cog.mod_logs.callback(cog, interaction, 5, True)
+    await cog.mod.callback(cog, interaction, None)
 
-    assert "Nothing important" in interaction.response.messages[-1]["embed"].description
+    assert "database" in interaction.sent.lower()
+    assert "view" not in interaction.response.messages[-1]

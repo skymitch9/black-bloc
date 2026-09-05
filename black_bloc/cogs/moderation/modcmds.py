@@ -8,38 +8,59 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from ...actionlog import (
-    LOGS_DEFAULT,
-    LOGS_MAX,
-    LOGS_MIN,
-    log_action,
-    send_logs,
-)
+from ...actionlog import log_action, send_logs
 from ...automod import TIMEOUT_MAX_SECONDS
+from ...command_errors import AnswersErrors
 from ...command_visibility import STAFF_ONLY
 from ...logkinds import VIA_DISCORD, kind_via
 from ...modcases import (
     ALREADY_RESTORED,
     ALREADY_VOIDED,
+    BACK,
+    BARE_ACTIONS_FOOTER,
+    CASE_SELECT,
+    CASES_HEADER,
     CASES_PER_PAGE,
+    EDIT_REASON,
+    EVERYONE,
+    JUMP,
+    LINK,
+    LOGS,
+    NEWER,
     NO_CASES,
     NO_SUCH_CASE,
+    NOT_A_CASE_NUMBER,
+    NOTE,
     NOTE_SAVED,
     NOTHING_IN_THE_NOTE,
     NOTHING_TO_SAY,
+    OLDER,
+    PANEL_TIMEOUT_FOOTER,
+    PANEL_TITLE,
+    PICK_A_CASE,
     PURGE_MAX,
+    REASON_LIMIT,
     REASON_SAVED,
+    REFRESH,
+    RESTORE,
     RESTORED_SAID,
+    USER_SELECT,
     VOID_NEEDS_A_REASON,
+    VOID_UNDOES_NOTHING,
     VOIDED_SAID,
+    WHOSE_CASES,
     add_case,
+    card_buttons,
     card_embed_for,
     case_embed,
+    case_is_void,
     case_line,
+    case_status,
     cases_for,
     clamp_purge_days,
     clamp_timeout,
     clear_case_void,
+    count_all_cases,
     count_cases,
     describe_duration,
     dm_member,
@@ -48,17 +69,35 @@ from ...modcases import (
     edit_case_card,
     get_case,
     mark_case_void,
-    pages_under_limit,
+    page_count,
+    panel_minutes,
     parse_duration,
+    recent_cases,
     refusal_in_test_mode,
+    root_buttons,
+    row_value,
     send_modlog,
     set_case_log_message,
     set_case_reason,
+    wanted_page,
     warn_count,
     write_case_note,
 )
-from ...panels import Outcome, refusal
-from ...settings_store import DB_UNAVAILABLE, require_staff
+from ...panels import (
+    NoteModal,
+    Outcome,
+    Panel,
+    answer,
+    clamped,
+    db_ready,
+    db_up,
+    option_label,
+    refusal,
+    retire,
+    site_page_url,
+    still_staff,
+)
+from ...settings_store import DB_UNAVAILABLE, GUILD_ONLY, require_staff
 
 log = logging.getLogger(__name__)
 
@@ -113,6 +152,26 @@ WARN_THRESHOLD_REACHED = (
     " That is warning **{count}** — at or over the threshold of **{threshold}**, which Black Bloc "
     "only logs. Decide what happens next yourself."
 )
+THIS_SERVER = "this server"
+NOBODY_TO_TELL = (
+    "This case belongs to a channel rather than a member, so there is nobody to tell about it."
+)
+REASON_TITLE = "Why this case was opened"
+REASON_LABEL = "The reason — it is on the case card"
+NOTE_TITLE = "A note on this case"
+NOTE_LABEL = "What the next moderator should know"
+VOID_TITLE = "Void this case"
+VOID_LABEL = "Why it was wrong — the member is told this"
+JUMP_TITLE = "Open a case by number"
+JUMP_LABEL = "The case number"
+CASE_ID_LIMIT = 12
+
+STYLES = {
+    "primary": discord.ButtonStyle.primary,
+    "secondary": discord.ButtonStyle.secondary,
+    "success": discord.ButtonStyle.success,
+    "danger": discord.ButtonStyle.danger,
+}
 
 
 def in_test_mode(bot: Any) -> bool:
@@ -561,23 +620,29 @@ class ModCommands(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    mod = app_commands.Group(
-        name="mod", description="What Black Bloc has done to members",
-        default_permissions=STAFF_ONLY,
-    )
-
-    @mod.command(name="logs", description="The last few moderation log lines")
-    @app_commands.describe(
-        count="How many lines, 1 to 50 (10 by default)",
-        important_only="True to leave out the dry runs and the housekeeping",
-    )
-    async def mod_logs(
-        self,
-        interaction: discord.Interaction,
-        count: app_commands.Range[int, LOGS_MIN, LOGS_MAX] = LOGS_DEFAULT,
-        important_only: bool = False,
+    @app_commands.command(name="mod", description="What Black Bloc has done to members")
+    @app_commands.default_permissions(STAFF_ONLY)
+    @app_commands.describe(member="Only this member's cases")
+    async def mod(
+        self, interaction: discord.Interaction, member: discord.Member | None = None
     ) -> None:
-        await send_logs(interaction, "mod", count=count, important_only=important_only)
+        if interaction.guild is None:
+            await answer(interaction, GUILD_ONLY)
+            return
+        if not await require_staff(interaction):
+            return
+        if not await db_up(interaction):
+            return
+        embed, view = await build_root(
+            self.bot, interaction.guild, page=1, user_id=member.id if member else None
+        )
+        await interaction.response.send_message(
+            embed=embed,
+            view=view,
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        view.message = await interaction.original_response()
 
     def _in_test_mode(self) -> bool:
         return in_test_mode(self.bot)
@@ -840,80 +905,276 @@ class ModCommands(commands.Cog):
             f"Deleted {len(deleted)} message(s) — case **#{case_id}**.", ephemeral=True
         )
 
-    @app_commands.command(name="case", description="Show one mod case")
-    @app_commands.default_permissions(STAFF_ONLY)
-    @app_commands.describe(case_id="The case number")
-    async def case(self, interaction: discord.Interaction, case_id: int) -> None:
-        if not await self._ready(interaction):
-            return
-        row = await get_case(self.bot.db, case_id)
-        if row is None or row["guild_id"] != interaction.guild.id:
-            await interaction.response.send_message(
-                NO_SUCH_CASE.format(case_id=case_id), ephemeral=True
-            )
-            return
-        await interaction.response.send_message(
-            embed=case_embed(
-                case_id=row["id"],
-                kind=row["kind"],
-                user_id=row["user_id"],
-                moderator_id=row["moderator_id"],
-                reason=row["reason"],
-                duration_s=row["duration_s"],
-                applied=bool(row["applied"]),
-                mode=row["mode"],
-            ),
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
 
-    @app_commands.command(name="cases", description="List a member's mod cases")
-    @app_commands.default_permissions(STAFF_ONLY)
-    @app_commands.describe(member="Whose cases", page="Which page, starting at 1")
-    async def cases(
-        self, interaction: discord.Interaction, member: discord.Member, page: int = 1
+# --- the panel -----------------------------------------------------------------------------------
+
+
+class ModPanel(Panel):
+    def __init__(
+        self, minutes: int, *, page: int = 1, user_id: Any = None, case_id: Any = None
     ) -> None:
-        if not await self._ready(interaction):
-            return
-        guild = interaction.guild
-        total = await count_cases(self.bot.db, guild.id, member.id)
-        if not total:
-            await interaction.response.send_message(
-                NO_CASES.format(who=f"<@{member.id}>"),
-                ephemeral=True,
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
-            return
-        pages = max(1, -(-total // CASES_PER_PAGE))
-        wanted = max(1, min(int(page or 1), pages))
-        rows = await cases_for(
-            self.bot.db, guild.id, member.id, CASES_PER_PAGE, (wanted - 1) * CASES_PER_PAGE
-        )
-        lines = [f"**{total}** case(s) for <@{member.id}> — page {wanted} of {pages}"]
+        super().__init__(minutes, footer=PANEL_TIMEOUT_FOOTER)
+        self.page = int(page)
+        self.user_id = user_id
+        self.case_id = case_id
+
+
+async def build_root(bot: Any, guild: Any, *, page: Any, user_id: Any) -> tuple[Any, ModPanel]:
+    total = (
+        await count_cases(bot.db, guild.id, user_id)
+        if user_id
+        else await count_all_cases(bot.db, guild.id)
+    )
+    pages = page_count(total)
+    at = wanted_page(page, pages)
+    offset = (at - 1) * CASES_PER_PAGE
+    rows = (
+        await cases_for(bot.db, guild.id, user_id, CASES_PER_PAGE, offset)
+        if user_id
+        else await recent_cases(bot.db, guild.id, CASES_PER_PAGE, offset)
+    )
+    who = f"<@{user_id}>" if user_id else THIS_SERVER
+    if total:
+        lines = [CASES_HEADER.format(total=total, who=who, page=at, pages=pages), ""]
         lines += [case_line(row) for row in rows]
-        if wanted < pages:
-            lines.append(f"`/cases member:{member.display_name} page:{wanted + 1}` for more.")
-        await self._say_in_chunks(interaction, pages_under_limit(lines))
+    else:
+        lines = [NO_CASES.format(who=who)]
+    embed = discord.Embed(title=PANEL_TITLE, description=clamped(lines))
+    embed.set_footer(text=BARE_ACTIONS_FOOTER)
+    view = ModPanel(panel_minutes(bot.store, guild.id), page=at, user_id=user_id)
+    url = site_page_url(getattr(getattr(bot, "settings", None), "origin", ""), "mod")
+    for move in root_buttons(
+        has_rows=bool(rows),
+        page=at,
+        pages=pages,
+        filtered=user_id is not None,
+        has_site=url is not None,
+    ):
+        add_control(view, move, rows=rows, url=url)
+    return (embed, view)
 
-    async def _say_in_chunks(
-        self, interaction: discord.Interaction, chunks: list[str]
-    ) -> None:
-        for index, chunk in enumerate(chunks):
-            answer = interaction.followup.send if index else interaction.response.send_message
-            await answer(
-                chunk, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-            )
 
-    def _audit(self, interaction: discord.Interaction, reason: Any) -> str:
-        return audit_reason(interaction.user, reason)
+def add_control(view: Any, move: Any, *, rows: Any = (), url: Any = None) -> None:
+    if move.kind == CASE_SELECT:
+        view.add_item(CasePick(rows))
+    elif move.kind == USER_SELECT:
+        view.add_item(WhosePick())
+    elif move.kind == LINK:
+        view.add_item(SiteButton(move, url))
+    else:
+        view.add_item(MoveButton(move))
 
-    async def _failed(
-        self, interaction: discord.Interaction, target: Any, kind: str, reason: Any, exc: Exception
-    ) -> None:
-        said = await note_failure(
-            self.bot, interaction.guild, target, kind, interaction.user, reason, exc
+
+async def build_card(
+    bot: Any, guild: Any, case_id: Any, previous: Any
+) -> tuple[Any, ModPanel] | None:
+    row = await wanted_case(bot, guild, case_id)
+    if row is None:
+        return None
+    embed = card_embed_for(row)
+    said = [] if case_is_void(row) else [VOID_UNDOES_NOTHING]
+    if not row["user_id"]:
+        said.append(NOBODY_TO_TELL)
+    embed.description = "\n\n".join(said) or None
+    view = ModPanel(
+        panel_minutes(bot.store, guild.id),
+        page=getattr(previous, "page", 1),
+        user_id=getattr(previous, "user_id", None),
+        case_id=int(row["id"]),
+    )
+    for move in card_buttons(row):
+        view.add_item(MoveButton(move))
+    return (embed, view)
+
+
+async def show(interaction: discord.Interaction, built: Any, previous: Any) -> None:
+    embed, view = built
+    retire(previous)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+async def opened(interaction: discord.Interaction) -> bool:
+    """Staff are re-asked before every move, the reads included, and then the database is."""
+    if not await still_staff(interaction):
+        return False
+    await interaction.response.defer()
+    return await db_ready(interaction)
+
+
+async def render_root(
+    interaction: discord.Interaction, *, page: Any, user_id: Any, previous: Any = None
+) -> None:
+    built = await build_root(interaction.client, interaction.guild, page=page, user_id=user_id)
+    await show(interaction, built, previous)
+
+
+async def open_case(interaction: discord.Interaction, case_id: Any, previous: Any) -> None:
+    """A number that is nothing answers a NEW message and leaves the panel exactly as it was."""
+    built = await build_card(interaction.client, interaction.guild, case_id, previous)
+    if built is None:
+        await answer(interaction, NO_SUCH_CASE.format(case_id=case_id))
+        return
+    await show(interaction, built, previous)
+
+
+async def navigate(interaction: discord.Interaction, action: str, view: Any) -> None:
+    if not await opened(interaction):
+        return
+    if action == BACK:
+        await render_root(interaction, page=view.page, user_id=view.user_id, previous=view)
+    elif action == EVERYONE:
+        await render_root(interaction, page=1, user_id=None, previous=view)
+    elif action == NEWER:
+        await render_root(interaction, page=view.page - 1, user_id=view.user_id, previous=view)
+    elif action == OLDER:
+        await render_root(interaction, page=view.page + 1, user_id=view.user_id, previous=view)
+    elif action == REFRESH and view.case_id is None:
+        await render_root(interaction, page=view.page, user_id=view.user_id, previous=view)
+    else:
+        await open_case(interaction, view.case_id, view)
+
+
+async def run_move(interaction: discord.Interaction, move: Any, rest: Any, view: Any) -> None:
+    """A refused move is answered and the card is NOT re-rendered, so it cannot read as a save."""
+    if not await opened(interaction):
+        return
+    outcome = await move(
+        interaction.client, interaction.guild, view.case_id, *rest, interaction.user
+    )
+    if not outcome.ok:
+        await answer(interaction, outcome.message)
+        return
+    await open_case(interaction, view.case_id, view)
+    await answer(interaction, outcome.message)
+
+
+class MoveButton(discord.ui.Button):
+    def __init__(self, move: Any) -> None:
+        super().__init__(label=move.label, style=STYLES[move.style], row=move.row)
+        self.move = move
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        if self.move.action == LOGS:
+            await send_logs(interaction, "mod")
+            return
+        if self.move.modal:
+            await self.open_modal(interaction, view)
+            return
+        if self.move.action == RESTORE:
+            await run_move(interaction, restore_case, (), view)
+            return
+        await navigate(interaction, self.move.action, view)
+
+    async def open_modal(self, interaction: discord.Interaction, view: Any) -> None:
+        if not await still_staff(interaction):
+            return
+        if not await db_up(interaction):
+            return
+        if self.move.action == JUMP:
+            await interaction.response.send_modal(JumpModal(view))
+            return
+        row = await wanted_case(interaction.client, interaction.guild, view.case_id)
+        if row is None:
+            await answer(interaction, NO_SUCH_CASE.format(case_id=view.case_id))
+            return
+        await interaction.response.send_modal(modal_for(self.move.action, row, view))
+
+
+def modal_for(action: str, row: Any, view: Any) -> Any:
+    if action == EDIT_REASON:
+        return PrefilledModal(
+            title=REASON_TITLE,
+            label=REASON_LABEL,
+            max_length=REASON_LIMIT,
+            default=str(row["reason"] or ""),
+            on_submit=submits(edit_case_reason, view),
         )
-        await interaction.response.send_message(said, ephemeral=True)
+    if action == NOTE:
+        return PrefilledModal(
+            title=NOTE_TITLE,
+            label=NOTE_LABEL,
+            max_length=REASON_LIMIT,
+            default=str(row_value(row, "note") or ""),
+            on_submit=submits(set_case_note, view),
+        )
+    return PrefilledModal(
+        title=VOID_TITLE,
+        label=VOID_LABEL,
+        max_length=REASON_LIMIT,
+        on_submit=submits(void_case, view),
+    )
+
+
+def submits(move: Any, view: Any) -> Any:
+    async def taken(interaction: discord.Interaction, given: str) -> None:
+        await run_move(interaction, move, (given,), view)
+
+    return taken
+
+
+class PrefilledModal(NoteModal):
+    """`panels.NoteModal` cannot prefill; the conductor folds `default=` into it at the merge."""
+
+    def __init__(self, *, default: str = "", **rest: Any) -> None:
+        super().__init__(**rest)
+        self.note.default = default or None
+
+
+class JumpModal(AnswersErrors, discord.ui.Modal):
+    number = discord.ui.TextInput(label=JUMP_LABEL, max_length=CASE_ID_LIMIT)
+
+    def __init__(self, previous: Any = None) -> None:
+        super().__init__(title=JUMP_TITLE)
+        self.previous = previous
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        given = str(self.number).strip()
+        if not given.isdigit():
+            await answer(interaction, NOT_A_CASE_NUMBER.format(given=given[:40] or "nothing"))
+            return
+        if not await opened(interaction):
+            return
+        await open_case(interaction, int(given), self.previous)
+
+
+class SiteButton(discord.ui.Button):
+    def __init__(self, move: Any, url: str) -> None:
+        super().__init__(label=move.label, style=discord.ButtonStyle.link, url=url, row=move.row)
+
+
+class CasePick(discord.ui.Select):
+    def __init__(self, rows: Any) -> None:
+        super().__init__(
+            placeholder=PICK_A_CASE,
+            options=[
+                discord.SelectOption(
+                    label=option_label(row["id"], case_status(row), row["reason"]),
+                    value=str(row["id"]),
+                )
+                for row in rows
+            ],
+            min_values=1,
+            max_values=1,
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await opened(interaction):
+            return
+        await open_case(interaction, int(self.values[0]), self.view)
+
+
+class WhosePick(discord.ui.UserSelect):
+    def __init__(self) -> None:
+        super().__init__(placeholder=WHOSE_CASES, min_values=1, max_values=1, row=1)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await opened(interaction):
+            return
+        await render_root(interaction, page=1, user_id=self.values[0].id, previous=self.view)
 
 
 async def setup(bot: commands.Bot) -> None:
