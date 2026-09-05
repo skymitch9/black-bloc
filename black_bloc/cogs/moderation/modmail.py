@@ -1343,7 +1343,7 @@ class Modmail(commands.Cog):
     @app_commands.default_permissions(STAFF_ONLY)
     @app_commands.describe(
         text="What the member is sent",
-        snippet="A saved reply to send instead — /snippet list has them",
+        snippet="A saved reply to send instead — /modmail then Snippets… has them",
         ticket="The ticket number, when you are not in its channel",
     )
     async def reply(
@@ -1359,7 +1359,7 @@ class Modmail(commands.Cog):
     @app_commands.default_permissions(STAFF_ONLY)
     @app_commands.describe(
         text="What the member is sent",
-        snippet="A saved reply to send instead — /snippet list has them",
+        snippet="A saved reply to send instead — /modmail then Snippets… has them",
         ticket="The ticket number, when you are not in its channel",
     )
     async def areply(
