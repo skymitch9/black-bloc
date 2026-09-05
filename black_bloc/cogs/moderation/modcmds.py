@@ -19,27 +19,45 @@ from ...automod import TIMEOUT_MAX_SECONDS
 from ...command_visibility import STAFF_ONLY
 from ...logkinds import VIA_DISCORD, kind_via
 from ...modcases import (
+    ALREADY_RESTORED,
+    ALREADY_VOIDED,
     CASES_PER_PAGE,
+    NO_CASES,
+    NO_SUCH_CASE,
+    NOTE_SAVED,
+    NOTHING_IN_THE_NOTE,
+    NOTHING_TO_SAY,
     PURGE_MAX,
+    REASON_SAVED,
+    RESTORED_SAID,
+    VOID_NEEDS_A_REASON,
+    VOIDED_SAID,
     add_case,
+    card_embed_for,
     case_embed,
     case_line,
     cases_for,
     clamp_purge_days,
     clamp_timeout,
+    clear_case_void,
     count_cases,
     describe_duration,
     dm_member,
     dm_text,
     duration_error,
+    edit_case_card,
     get_case,
+    mark_case_void,
     pages_under_limit,
     parse_duration,
     refusal_in_test_mode,
     send_modlog,
     set_case_log_message,
+    set_case_reason,
     warn_count,
+    write_case_note,
 )
+from ...panels import Outcome, refusal
 from ...settings_store import DB_UNAVAILABLE, require_staff
 
 log = logging.getLogger(__name__)
@@ -81,21 +99,16 @@ REFUSED = {
 }
 NOT_AN_ID = (
     "**{given}** is not a member id, so nobody was unbanned. Right-click the account in the ban "
-    "list and choose Copy User ID, or read it out of `/case`."
+    "list and choose Copy User ID, or read it off the case in `/mod`."
 )
 NOT_BANNED = (
-    "**{user_id}** is not on this server's ban list, so there was nothing to lift. `/case` and "
-    "`/cases` show what Black Bloc has done."
+    "**{user_id}** is not on this server's ban list, so there was nothing to lift. `/mod` shows "
+    "what Black Bloc has done."
 )
 BAD_COUNT = (
     "**{given}** is not a number of messages Black Bloc can delete, so nothing was deleted. Pick "
     f"a number between 1 and {PURGE_MAX} — Discord will not bulk-delete more than that at once."
 )
-NO_SUCH_CASE = (
-    "Black Bloc has no case **#{case_id}**, so there is nothing to show. `/cases` lists the cases "
-    "it has for one member."
-)
-NO_CASES = "Black Bloc has no cases for <@{user_id}> yet."
 WARN_THRESHOLD_REACHED = (
     " That is warning **{count}** — at or over the threshold of **{threshold}**, which Black Bloc "
     "only logs. Decide what happens next yourself."
@@ -408,6 +421,140 @@ async def unban_member(
         details={"case_id": case_id, "via": via},
     )
     return f"Lifted the ban on **{user_id}** — case **#{case_id}**."
+
+
+# --- correcting the record, one function each, one write and one log row --------------------------
+
+
+async def wanted_case(bot: Any, guild: Any, case_id: Any) -> Any:
+    row = await get_case(bot.db, case_id)
+    return None if row is None or row["guild_id"] != guild.id else row
+
+
+async def rewrite_case_card(bot: Any, guild: Any, case_id: Any) -> None:
+    row = await get_case(bot.db, case_id)
+    if row is not None:
+        await edit_case_card(bot, guild, row, card_embed_for(row))
+
+
+async def tell_them_about_the_case(bot: Any, guild: Any, row: Any, kind: str, reason: Any) -> None:
+    """A case that belongs to a channel has nobody to tell, and a closed DM is never an error."""
+    user_id = row["user_id"]
+    if not user_id:
+        return
+    member = guild.get_member(user_id)
+    if member is None:
+        return
+    await tell_member(bot, guild, member, kind, reason)
+
+
+async def edit_case_reason(
+    bot: Any,
+    guild: Any,
+    case_id: Any,
+    reason: Any,
+    moderator: Any,
+    *,
+    via: str = VIA_DISCORD,
+) -> Outcome:
+    said = str(reason or "").strip()
+    if not said:
+        return refusal(NOTHING_TO_SAY, "bad_reason", 400)
+    row = await wanted_case(bot, guild, case_id)
+    if row is None:
+        return refusal(NO_SUCH_CASE.format(case_id=case_id), "no_such_case", 404)
+    await set_case_reason(bot.db, case_id, said)
+    await log_action(
+        bot,
+        guild,
+        kind_via("case.reason_edited", via),
+        actor=moderator,
+        target=row["user_id"],
+        reason=said,
+        details={"case_id": int(case_id), "via": via, "was": row["reason"]},
+    )
+    await rewrite_case_card(bot, guild, case_id)
+    return Outcome(True, REASON_SAVED.format(case_id=case_id), value=int(case_id))
+
+
+async def set_case_note(
+    bot: Any,
+    guild: Any,
+    case_id: Any,
+    note: Any,
+    moderator: Any,
+    *,
+    via: str = VIA_DISCORD,
+) -> Outcome:
+    said = str(note or "").strip()
+    if not said:
+        return refusal(NOTHING_IN_THE_NOTE, "bad_note", 400)
+    row = await wanted_case(bot, guild, case_id)
+    if row is None:
+        return refusal(NO_SUCH_CASE.format(case_id=case_id), "no_such_case", 404)
+    await write_case_note(bot.db, case_id, said, getattr(moderator, "id", moderator))
+    await log_action(
+        bot,
+        guild,
+        kind_via("case.noted", via),
+        actor=moderator,
+        target=row["user_id"],
+        details={"case_id": int(case_id), "via": via},
+    )
+    await rewrite_case_card(bot, guild, case_id)
+    return Outcome(True, NOTE_SAVED.format(case_id=case_id), value=int(case_id))
+
+
+async def void_case(
+    bot: Any,
+    guild: Any,
+    case_id: Any,
+    reason: Any,
+    moderator: Any,
+    *,
+    via: str = VIA_DISCORD,
+) -> Outcome:
+    said = str(reason or "").strip()
+    if not said:
+        return refusal(VOID_NEEDS_A_REASON, "bad_reason", 400)
+    row = await wanted_case(bot, guild, case_id)
+    if row is None:
+        return refusal(NO_SUCH_CASE.format(case_id=case_id), "no_such_case", 404)
+    if not await mark_case_void(bot.db, case_id, getattr(moderator, "id", moderator), said):
+        return refusal(ALREADY_VOIDED, "already_voided", 409)
+    await log_action(
+        bot,
+        guild,
+        kind_via("case.voided", via),
+        actor=moderator,
+        target=row["user_id"],
+        reason=said,
+        details={"case_id": int(case_id), "via": via, "kind": row["kind"]},
+    )
+    await tell_them_about_the_case(bot, guild, row, "void", said)
+    await rewrite_case_card(bot, guild, case_id)
+    return Outcome(True, VOIDED_SAID.format(case_id=case_id), value=int(case_id))
+
+
+async def restore_case(
+    bot: Any, guild: Any, case_id: Any, moderator: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    row = await wanted_case(bot, guild, case_id)
+    if row is None:
+        return refusal(NO_SUCH_CASE.format(case_id=case_id), "no_such_case", 404)
+    if not await clear_case_void(bot.db, case_id):
+        return refusal(ALREADY_RESTORED, "not_voided", 409)
+    await log_action(
+        bot,
+        guild,
+        kind_via("case.restored", via),
+        actor=moderator,
+        target=row["user_id"],
+        details={"case_id": int(case_id), "via": via, "kind": row["kind"]},
+    )
+    await tell_them_about_the_case(bot, guild, row, "restore", None)
+    await rewrite_case_card(bot, guild, case_id)
+    return Outcome(True, RESTORED_SAID.format(case_id=case_id), value=int(case_id))
 
 
 class ModCommands(commands.Cog):
@@ -732,7 +879,7 @@ class ModCommands(commands.Cog):
         total = await count_cases(self.bot.db, guild.id, member.id)
         if not total:
             await interaction.response.send_message(
-                NO_CASES.format(user_id=member.id),
+                NO_CASES.format(who=f"<@{member.id}>"),
                 ephemeral=True,
                 allowed_mentions=discord.AllowedMentions.none(),
             )

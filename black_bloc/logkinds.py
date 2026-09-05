@@ -132,6 +132,8 @@ IMPORTANT_SUFFIXES = (
 IMPORTANT: frozenset[str] = frozenset(
     {
         "automod.deleted",
+        "case.restored",
+        "case.voided",
         "event.cancelled",
         "event.missed",
         "event.announce_skipped_late",
@@ -170,6 +172,8 @@ ROUTINE: frozenset[str] = frozenset(
         "birthday.remove",
         "birthday.remove_role",
         "birthday.set",
+        "case.noted",
+        "case.reason_edited",
         "chat.insult",
         "chat.intent_created",
         "chat.intent_deleted",

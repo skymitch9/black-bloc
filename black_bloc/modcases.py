@@ -234,11 +234,36 @@ def voided_field(voided: Any) -> str:
     return f"Cancelled by {who}{when}.{why}\n{VOID_UNDOES_NOTHING}"
 
 
-def timestamp_of(at: Any) -> int | None:
+def moment_of(at: Any) -> datetime | None:
     try:
-        return int(datetime.fromisoformat(str(at)).timestamp())
+        return datetime.fromisoformat(str(at))
     except (TypeError, ValueError):
         return None
+
+
+def timestamp_of(at: Any) -> int | None:
+    found = moment_of(at)
+    return int(found.timestamp()) if found is not None else None
+
+
+def card_embed_for(row: Any) -> discord.Embed:
+    """One stored case as the card — the same `case_embed` the modlog and the panel both show."""
+    return case_embed(
+        case_id=row["id"],
+        kind=row["kind"],
+        user_id=row["user_id"],
+        moderator_id=row["moderator_id"],
+        reason=row["reason"],
+        duration_s=row["duration_s"],
+        applied=bool(row["applied"]),
+        mode=row["mode"],
+        at=moment_of(row["at"]),
+        channel_id=row_value(row, "channel_id"),
+        done=from_list_json(row_value(row, "done")),
+        failed=from_list_json(row_value(row, "failed")),
+        note=row_value(row, "note"),
+        voided=voided_of(row),
+    )
 
 
 async def add_case(
