@@ -874,7 +874,9 @@ file's last row and starts after it. The Phase 7 block at `:239–247` is rewrit
   - (b) Member messages only, exactly as the words say. Fewer API calls; the card sits above a
     staff conversation until the member speaks again.
 
-- **F-M3 — does a TYPED reply still echo the bot's embed into the ticket?**
+- ✅ **F-M3 — ANSWERED (a) by the owner 2026-09-05 ("Do a"): the echo stays, unchanged.** If the
+  redundancy grates once test mode is lifted it becomes a settings key, not a rewrite.
+  Original question — does a TYPED reply still echo the bot's embed into the ticket?
   - **(a) Yes, unchanged** — `send_reply(echo=True)` `:611` as today. Slightly redundant in
     production (the staffer's own message is right there), but under test mode the ✅ is skipped and
     the echo is the only proof the relay happened. **Recommended** — it is also a zero-diff answer.
