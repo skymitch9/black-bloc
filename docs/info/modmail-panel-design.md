@@ -892,7 +892,8 @@ file's last row and starts after it. The Phase 7 block at `:239–247` is rewrit
     channel defaults to the test channel anyway (`settings_store.py:1543`), so he sees it. **Recommended.**
   - (b) Never file one. A tidier log channel; a practice run that proves less than it appears to.
 
-- **F-M5 — does `/reply` keep its `ticket:` argument?** The decision list says *"`[ticket]`
+- ✅ **F-M5 — ANSWERED (a) by the owner 2026-09-05 ("A"): `/reply` keeps `ticket:`, optional, last.**
+  Original question — does `/reply` keep its `ticket:` argument? The decision list says *"`[ticket]`
   arguments go away — `/reply` keeps finding the ticket from the channel it is typed in."* ⚠️
   **Measured, that breaks `/reply` under his own test policy.** `tree.interaction_check`
   (`guard.py:147`) only accepts a slash command typed in the test channel or a DM, so `/reply`
