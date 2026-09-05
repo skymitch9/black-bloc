@@ -12,7 +12,7 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 09:06, /mod merged + v81 LIVE, nothing building, modmail B forks 1–7 all = (a), Build B BUILDING since 09:21)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 09:21, /mod merged + v81 LIVE, modmail B forks 1–7 all = (a), modmail Build B BUILDING since 09:21 — the only thing in flight)
 
 **`main` = `43312b9`** (role-menus panel merge; v77 live 20:51, 4529 tests, **36 commands**; `youtube_mode` is
 **shadow** since 2026-09-03 17:42). **The panels program is COMPLETE** — waves 1, 2 and 3 (17 features, one
