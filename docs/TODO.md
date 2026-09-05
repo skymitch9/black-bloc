@@ -12,7 +12,7 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 12:04, v82 LIVE, honeypot forks confirmed + settings forks all (a) by the conductor under "don't wait for me"; `/settings` Build 1 dispatching — the only thing in flight)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 13:45, `/settings` Builds 1+2 merged, v84 LIVE — **29 slots, zero Groups, the panels program's end state**; nothing building; next = modmail leftovers follow-up build, then the `/settings` leftovers)
 
 **`main` = `43312b9`** (role-menus panel merge; v77 live 20:51, 4529 tests, **36 commands**; `youtube_mode` is
 **shadow** since 2026-09-03 17:42). **The panels program is COMPLETE** — waves 1, 2 and 3 (17 features, one
@@ -23,8 +23,8 @@ slash commands — the program"); sweeps 144–182 are the owner's to run.
 commands maybe); (2) the **hide-when-off build** (🆕 below, Opus, 120–180k, then v78); (3) the builds the audit
 decides; (4) the three sweeps the automod landing deferred (🔧 below: confirm-helper fold — now 7 copies —,
 `LOG_LEVEL_COMMANDS` pass, settings-API gate pass — KI-21); (5) the small review findings folded into
-whatever touches those files; (6) owner by-eye sweeps 14–15, 58–103, 144–182; (7) Pawpette's Twitch Team form still needs the owner's walk-through
-(`access/sweeps.md` → "The owner's Twitch Team form") — no form exists on the live site as of 15:54. Merged
+whatever touches those files; (6) owner by-eye sweeps 14–15, 58–103, 144–244; (7) ~~Pawpette's Twitch Team form~~ **exercised by Pawpette and approved
+(owner, 2026-09-05 13:45: "she did a test and approved it") — noted on `access/sweeps.md` → "The owner's Twitch Team form".** Merged
 worktrees/branches (`agent-a19bdce15408f8243` birthdays, `agent-a448c7ab780ed3c2b` events,
 `agent-aa735ab092d13477d` polls, `agent-abf063b9177e02f17` applications, and the wave-2/3 ones —
 `agent-aba5d44f8e27a8e28` raidtrain, `agent-ace2086f9f7cfa541` role menus) can be pruned.
@@ -210,42 +210,23 @@ docs bookkeeping lands with the work, not after.
 
 ## 🔧 Open engineering items
 
-- 🆕 **`/settings` panel — the LAST panel, retires the last two Groups (owner, 2026-09-05 06:46 "Okay ship both with
-  your suggestions"; design `info/settings-panel-design.md`, landed 07:34, keyed against `0304c4d`).** End state
-  **29 slots, ZERO groups**: the `settings` Group and its five subcommands (`show`, `set-value`, `set-channel`,
-  `set-role`, `clear`) become one staff-only panel; the `presence` Group folds in as `How Black Bloc looks…`.
-  Est. 380–450k Opus, SPLIT: Build 1 = `black_bloc/settings_panel.py` + tests, the `namespace_of` move,
-  `set_key`/`clear_key`/`reapply_presence`, the two registry keys (150–190k); Build 2 = the panel, the `/presence`
-  retirement, `tests/cogs/test_core.py`'s settings half, the string + doc sweep (230–280k), off Build 1's merge.
-  **Forks F-S1–F-S5 DECIDED by the conductor on the design's recommendation, all (a), 2026-09-05 12:04, under the
-  owner's standing order (10:31: "Keep going with queue don't wait for me")** — each reverses in one place, the
-  owner may reverse any of them by eye: F-S1 `set-value` does NOT survive (all five go in one commit); F-S2
-  `Put the default back` confirms on `staff_channel_id` only; F-S3 the four core channel/role keys +
-  `operator_read_log` need `manage_guild`, behind new bool `settings_core_keys_admin_only` (default true);
-  F-S4 presence lives on `/settings`, `presence` Group retires; F-S5 a `Log levels…` sub-panel over the 17
-  `<feature>_log_level` keys. The design's five REPORTED defects fold into the build (no subcommand checks the db;
-  `sweeps.md` row 16 names a `/settings logs` that never existed; code-notes says the clearable list is 11 — it is 34;
-  `LOG_LEVEL_COMMANDS` wrong in 11 of 13 rows; `namespace_of`'s six singleton groups — report, one rename pass of
-  its own). ⚠️ The design was keyed against `0304c4d` (tree 36); `main` is now `cad3bbc` (tree **30**, schema 30,
-  4739 tests, sweeps to 230) — the build re-measures every `path:line` and pins **29**, not the doc's numbers.
-  **Honeypot forks F-H1/F-H2/F-H3 (built as (a) at v79, "owner confirmation pending") are CONFIRMED as built by
-  the conductor under the same order, 12:04** — the reversal recipe stays in `info/honeypot-panel-design.md` §K.
-  **Build 1 DISPATCHED 12:08** (Opus, own worktree off `34331ec`; pure module + tests, `namespace_of` move, shared
-  writers, two registry keys; est. 150–190k). Usage before dispatch session 2% / weekly 17% / Fable 17%, read 12:07
-  (the session reset had landed). Build 2 dispatches off Build 1's merge.
-  ⚠️ **BUILD 1 IS BUILT — not merged, not deployed, nothing has met live Discord.**
-  `worktree-agent-a3e6ccbead5a90537`, rebased onto `01c4ed3`, five commits: the `namespace_of` move into
-  `settings_store` (`tests/api/test_settings_api.py` byte-identical and green — the proof); the two registry keys with
-  their `labels.js` + mock rows and store tests; `black_bloc/settings_panel.py` + `tests/test_settings_panel.py`
-  (221 tests); `set_key`/`clear_key`/`reapply_presence` + the new `SettingsStore.is_stored`; docs.
-  **4973 tests pass** (4739 before, +234), ruff clean, mock **17 pages / 146 routes unchanged**, labels.js parses.
-  **Nothing was retired — top-level stays 30, measured.** ⚠️ **The design's counts were stale and are now corrected in
-  its foot:** the registry is **179** keys (the doc says 175) and `tests/test_bot.py` pins **30** (the doc says 36), so
-  Build 2 pins **29** off 30. Thirteen deviations, three MORE reported-not-fixed defects (the mock's phantom
-  `max: 1440` on every `*_panel_minutes` row; the mock's `CORE_KEYS` being three entries where the API has six;
-  `birthdays.py:428` emitting `settings.clear` with no `via`) and two website-only sweep rows (`SB1`, `SB2`) are in
-  `info/settings-panel-design.md` → `## Build 1 deviations`. ⚠️ **All twelve of §H's sweep rows S1–S12 belong to
-  Build 2** — Build 1 changes nothing a person sees in Discord.
+- 🔧 **`/settings` leftovers after Build 2 (handed over at the v84 landing, 2026-09-05):** (1) the operator-read-log
+  toggle on `Panels & commands…` is drawn only for `manage_guild` but `MoveButton.callback` → `run_toggle` does not
+  re-ask it (the core-key picks do, through `core_keys_allowed`) — the panel is ephemeral to its opener so the exposure
+  is a Lead losing the permission mid-panel; one `manages_guild` line + a test; (2) `docs/info/panels-program.md` and
+  `docs/info/feature-list.md` are STALE — panels-program still asks fork F3 as open, says "~120 keys", and its Core
+  row/totals describe a `settings` Group; feature-list has no `/settings` panel row; (3) **KI-21**: the `via` keyword
+  exists now — route `PUT`/`DELETE /api/settings/{key}` through `set_key`/`clear_key` and delete the route's own
+  `note()` (one commit); (4) the mock's `*_panel_minutes` rows claim `max: 1440` with no `KEY_MAX` in the registry
+  (16 rows) and the mock's `CORE_KEYS` is a shorter second copy (3 vs 6) — one home; (5) the six singleton namespaces
+  (`event`, `voice`, `memory`, `hide`, `emoji`, `cost`) now appear on a Discord control, one rename pass for both
+  surfaces; (6) the number modal's bound is a compact label of its own because a `TextInput` label caps at 45 chars —
+  fine, but the `bounds_line` prose and the label can drift; (7) `tests/cogs/test_presence.py` + `tests/test_bot.py`
+  pollute each other in one process (the real bot starts the presence loop) — invisible under `-n auto`, pre-existing;
+  (8) the `birthdays` → `cogs.core` import is the first `cogs/community/* → cogs/core` edge — rule on it before a second
+  feature copies it (a module function, not a cog; acceptable, but `set_key`/`clear_key` may belong in a leaf module);
+  (9) the three hand-rolled confirm copies are still three — Build 2 made the settings confirm a card STATE, so the
+  "fold 7 copies" sweep is now a fold of the other panels, not of this one.
 - 🔧 **Modmail leftovers after Build B (handed over at the v82 landing, 2026-09-05):** (1) **the panel-side `A ticket…`
   select / ticket card** in the `/modmail` panel (`docs/info/modmail-panel-design.md` §B S5, §C) is UNBUILT — it fell between
   Build A and Build B; a small Opus follow-up (est. 80–120k) once `/settings` lands; (2) `picked_values` has two copies

@@ -9,6 +9,72 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-05 — `/settings` panel: the LAST panel; `/settings show|set|set-role|set-value|clear` and the `presence` Group retire — 29 slots, ZERO Groups (Build 1 v83 `57a878d`, Build 2 v84 `ce97de0`)
+
+Moved WHOLE from `TODO.md` at the Build 2 landing (13:45). Build 1 on `worktree-agent-a3e6ccbead5a90537` (Opus, 349k,
+merged `9a7c87e`, v83 12:53); Build 2 on `worktree-agent-a56c7b5137d9a609d` (Opus, 411k, four commits off `57a878d`,
+merged `ce97de0`, v84 13:44, boot 20:44:37Z `synced 29`). Design: `docs/info/settings-panel-design.md`; sweeps
+231–244; forks F-S1–F-S5 all (a), decided by the conductor under the owner's "keep going with queue, don't wait for
+me" (10:31). **This closes the panels program**: every feature is one command opening a panel and the tree holds no
+`app_commands.Group`. Nothing exercised in Discord by a person. Leftovers stayed on `TODO.md` as "`/settings`
+leftovers after Build 2".
+
+Also recorded the same afternoon: **Pawpette exercised the Twitch Team application form and approved it** (owner,
+13:45: "she did a test and approved it") — the first rows of the applications feature run by a person (sweeps 53–57).
+
+- 🆕 **`/settings` panel — the LAST panel, retires the last two Groups (owner, 2026-09-05 06:46 "Okay ship both with
+  your suggestions"; design `info/settings-panel-design.md`, landed 07:34, keyed against `0304c4d`).** End state
+  **29 slots, ZERO groups**: the `settings` Group and its five subcommands (`show`, `set-value`, `set-channel`,
+  `set-role`, `clear`) become one staff-only panel; the `presence` Group folds in as `How Black Bloc looks…`.
+  Est. 380–450k Opus, SPLIT: Build 1 = `black_bloc/settings_panel.py` + tests, the `namespace_of` move,
+  `set_key`/`clear_key`/`reapply_presence`, the two registry keys (150–190k); Build 2 = the panel, the `/presence`
+  retirement, `tests/cogs/test_core.py`'s settings half, the string + doc sweep (230–280k), off Build 1's merge.
+  **Forks F-S1–F-S5 DECIDED by the conductor on the design's recommendation, all (a), 2026-09-05 12:04, under the
+  owner's standing order (10:31: "Keep going with queue don't wait for me")** — each reverses in one place, the
+  owner may reverse any of them by eye: F-S1 `set-value` does NOT survive (all five go in one commit); F-S2
+  `Put the default back` confirms on `staff_channel_id` only; F-S3 the four core channel/role keys +
+  `operator_read_log` need `manage_guild`, behind new bool `settings_core_keys_admin_only` (default true);
+  F-S4 presence lives on `/settings`, `presence` Group retires; F-S5 a `Log levels…` sub-panel over the 17
+  `<feature>_log_level` keys. The design's five REPORTED defects fold into the build (no subcommand checks the db;
+  `sweeps.md` row 16 names a `/settings logs` that never existed; code-notes says the clearable list is 11 — it is 34;
+  `LOG_LEVEL_COMMANDS` wrong in 11 of 13 rows; `namespace_of`'s six singleton groups — report, one rename pass of
+  its own). ⚠️ The design was keyed against `0304c4d` (tree 36); `main` is now `cad3bbc` (tree **30**, schema 30,
+  4739 tests, sweeps to 230) — the build re-measures every `path:line` and pins **29**, not the doc's numbers.
+  **Honeypot forks F-H1/F-H2/F-H3 (built as (a) at v79, "owner confirmation pending") are CONFIRMED as built by
+  the conductor under the same order, 12:04** — the reversal recipe stays in `info/honeypot-panel-design.md` §K.
+  **Build 1 DISPATCHED 12:08** (Opus, own worktree off `34331ec`; pure module + tests, `namespace_of` move, shared
+  writers, two registry keys; est. 150–190k). Usage before dispatch session 2% / weekly 17% / Fable 17%, read 12:07
+  (the session reset had landed). Build 2 dispatches off Build 1's merge.
+  ⚠️ **BUILD 1 IS BUILT — not merged, not deployed, nothing has met live Discord.**
+  `worktree-agent-a3e6ccbead5a90537`, rebased onto `01c4ed3`, five commits: the `namespace_of` move into
+  `settings_store` (`tests/api/test_settings_api.py` byte-identical and green — the proof); the two registry keys with
+  their `labels.js` + mock rows and store tests; `black_bloc/settings_panel.py` + `tests/test_settings_panel.py`
+  (221 tests); `set_key`/`clear_key`/`reapply_presence` + the new `SettingsStore.is_stored`; docs.
+  **4973 tests pass** (4739 before, +234), ruff clean, mock **17 pages / 146 routes unchanged**, labels.js parses.
+  **Nothing was retired — top-level stays 30, measured.** ⚠️ **The design's counts were stale and are now corrected in
+  its foot:** the registry is **179** keys (the doc says 175) and `tests/test_bot.py` pins **30** (the doc says 36), so
+  Build 2 pins **29** off 30. Thirteen deviations, three MORE reported-not-fixed defects (the mock's phantom
+  `max: 1440` on every `*_panel_minutes` row; the mock's `CORE_KEYS` being three entries where the API has six;
+  `birthdays.py:428` emitting `settings.clear` with no `via`) and two website-only sweep rows (`SB1`, `SB2`) are in
+  `info/settings-panel-design.md` → `## Build 1 deviations`. ⚠️ **All twelve of §H's sweep rows S1–S12 belong to
+  Build 2** — Build 1 changes nothing a person sees in Discord.
+  **Build 1 LANDED 12:50 (349k Opus): merged clean as `9a7c87e`; the wall-clock race it surfaced in
+  `tests/api/test_writes.py::drain_reads` fixed on `main` (`57a878d`, drained against a clock a minute ahead);
+  4973 tests; v83 LIVE 12:53 (`57a878d`, boot 19:53:32Z, `synced 30`).** Build 2 DISPATCHED 12:51 off `57a878d`
+  (usage before dispatch session 5% / weekly 18% / Fable 17%, read 12:47).
+  **Build 2 LANDED 13:45 (411k Opus — est. 230–280k, the ~1.5–2× pattern again): four commits, 31 files, +2046/−528;
+  merged clean as `ce97de0` (no conflicts); 5002 tests, ruff clean, mock 17/146; `S1`–`S12` numbered **231–242**
+  and Build 1's `SB1`/`SB2` copied into `sweeps.md` as **243–244**; guide count 230 → 244. Fable review: every write
+  goes through `set_key`/`clear_key` (one write, one row), every move re-asks staff + db, the core-key picks re-ask
+  `manage_guild` at the move, refusals are sentences. Sixteen deviations in the design's `## Build 2 deviations`
+  foot — notably the layer-1/2 split was not expressible (a tree cannot hold a Group and a command both named
+  `settings`), `test_command_visibility.py` needed a real edit (it imported the deleted `VALUE_KEYS`),
+  `LOGS_GROUPS` was already `{}` so `test_every_feature_group_has_a_logs_command` had been asserting nothing, and
+  `panels-program.md` / `feature-list.md` were left stale (own 🔧 item below).
+  **v84 LIVE 13:44 (`ce97de0`)** — boot 20:44:37Z database ready, **`synced 29`**, no traceback; nothing opened in
+  Discord by a person. **The panels program's end state is reached: 29 slots, zero `app_commands.Group`s.**
+  This item moves WHOLE to `DONE.md`.
+
 ## 2026-09-05 — Second slash-command audit: every command listed, six merge proposals decided one at a time
 
 Moved WHOLE from `TODO.md` 12:04. The audit ran in the main loop 2026-09-04 20:50–2026-09-05 06:46; its six

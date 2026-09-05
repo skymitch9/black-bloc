@@ -1,8 +1,9 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-05** — the lettered block **`S1`–`S12`** at the FOOT added by the SETTINGS PANEL
-> build's **Build 2** (`worktree-agent-a56c7b5137d9a609d`, numbered at the merge, after 230).
+> **2026-09-05** — rows **231–244** at the FOOT added by the SETTINGS PANEL build (231–242 written as
+> `S1`–`S12` by **Build 2** on `worktree-agent-a56c7b5137d9a609d`, 243–244 as `SB1`–`SB2` by Build 1;
+> numbered at the merge, after 230; shipped as **v83** (Build 1) and **v84** (Build 2)).
 > `/settings` becomes ONE command that opens a panel; `show` / `set` / `set-role` / `set-value` /
 > `clear` and the whole `/presence` group retire, and the top-level count is **30 → 29 with ZERO
 > `app_commands.Group`s left** — measured through
@@ -11,9 +12,9 @@
 > 103, 108, 130, 156, 174, 184, 185, 186, 197, 199 — plus the Phase 1, Phase 2, Phase 5 and chat
 > memory prose, because every one of them told the owner to run a subcommand that no longer
 > exists. Row **16** also named a **`/settings logs` that had never existed** (design §J defect
-> 2); after this build the button it names is real. ⚠️ **Nothing in `S1`–`S12` has met live
-> Discord** — no boot, no token, no sync, no panel opened; the whole verification is `pytest`
-> (5002), `ruff check` and `node site/mock/check.mjs` (17 pages, 146 routes, unchanged).
+> 2); after this build the button it names is real. ⚠️ **Nothing in 231–244 has met live
+> Discord by a person** — the verification is `pytest` (5002), `ruff check`, `node site/mock/check.mjs`
+> (17 pages, 146 routes, unchanged) and the v84 boot (`synced 29`).
 > Before it, same day — rows **219–230** added by the MODMAIL PANEL build
 > **Build B** (written as `MB1`–`MB12` on `worktree-agent-a4bebd98196e3ca14`, numbered at the merge; shipped as **v82**).
 > Build B adds the sticky ticket card, `modmail_reply_style`, the practice ticket, and retires
@@ -601,6 +602,10 @@ must be run in `#mute-me-bot-test-spam`.
 
 ## The owner's Twitch Team form — the walk-through
 
+✅ **Exercised by a person 2026-09-05 13:42** — the owner: "she did a test and approved it": Pawpette ran the
+form and approved it. Rows 53–57 are the first rows of the applications feature a person has run; this walk-through
+is kept as the reference for the next form.
+
 This is the form Phase 19 was built for (Pawpette's request, 2026-09-02). Nothing
 about the Team is in the code: it is all data you create, and you can make a second
 form the same way for anything else staff hand out.
@@ -787,28 +792,30 @@ practice ticket.
 
 ## Settings — `/settings` is ONE command that opens the panel (wave 4)
 
-Built 2026-09-05 (`info/settings-panel-design.md`, Build 2, on top of Build 1's pure half).
-⚠️ **Lettered `S1`–`S12` on purpose — the conductor numbers them at the merge, after 230.**
+Built 2026-09-05 (`info/settings-panel-design.md`, Build 2, on top of Build 1's pure half). Rows
+231–242 were written as `S1`–`S12` and numbered at the merge; 243–244 are Build 1's two website rows.
 This is the LAST panel of the program: `/settings show|set|set-role|set-value|clear` and the
 whole `/presence` group are gone, and the top-level count drops **30 → 29 with ZERO
 `app_commands.Group`s left in the tree** — measured through
 `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`, not predicted.
-⚠️ **Nothing below has met live Discord** — no boot, no token, no sync, no panel opened.
+⚠️ **Nothing below has met live Discord by a person** — shipped as v84 on 2026-09-05.
 
 | # | Do this | Expect |
 |---|---|---|
-| S1 | `/settings` as a Lead in `#mute-me-bot-test-spam` | ONE ephemeral panel. The top reads every feature's mode — sixteen lines, each naming the command that changes it (`**YouTube uploads** — shadow · /youtube to change`) — and **not one of them is a control here**. Below: **Turn a feature back on… · A setting group… · Roles & channels… · How Black Bloc looks… · Panels & commands… · Logs · Open on the site · Log levels… · Refresh**. Nothing anywhere says `/settings show` or `/settings set-value` |
-| S2 | **A setting group…** → **chat** | the group card lists the chat settings and the picker says **25 of 28 — the rest are on the site**. Press **Find a setting…**, type `memory`, and the ones that were off the end are on the picker. `chat` is the only namespace over 25 — the other 21 groups never draw **Find a setting…** at all |
-| S3 | **A setting group…** → **birthday** → `birthday_color` → **The colour…** → type `blue` | one sentence naming the shape `#4eefff` and **nothing is saved** — re-open the card and the colour is what it was. Type `#4EEFFF` and it saves as `#4eefff`, one `settings.set` row, **Via: Discord** on the Logs page |
-| S4 | the same key card → **Put the default back**, then look for it again | the first press says the default is back and leaves one `settings.clear` row; **the second press is not there** — the button does not render on a key with nothing stored. No state is terminal and no button answers "nothing changed" |
-| S5 | **A setting group…** → **automod** → `automod_rules` | the card has **no editor at all** and says the rule book is edited on `/automod` ▸ **A rule…**. It is the only key in the registry like that — every other one of the 181 has exactly one control |
-| S6 | **A setting group…** → **honeypot** → `honeypot_exempt_role_ids`, with more than 25 roles stored | the role picker is **not drawn**, the card says the list is longer than one Discord picker can edit and names the Settings page, and **Clear the list** is still there. ⚠️ Under 25 the picker IS drawn with the stored roles already ticked, and its minimum is 0 so an empty submit clears the list |
-| S7 | dashboard → Settings → `youtube_mode` → **off**. Wait a minute, `Ctrl+R`, then `/settings` | `/youtube` is gone from the command list, and the panel now carries **Turn a feature back on…** with **YouTube uploads — turn it on** on it. Pick it: within about a minute `/youtube` is back **on**, not shadow. ⚠️ **This row is the whole reason `set-value` could be retired** — it is the most important row in the set |
-| S8 | `/settings set-value` | ⚠️ **there is no such command**, and neither is `/presence`. `/help` says so too: its missing-commands line now names **`/settings` ▸ Turn a feature back on…**. Type `/` and count: **29 commands, no groups** |
-| S9 | **Panels & commands…** → **Leave every command showing**, with two features still off, then **Refresh** | the reply says the change lands within about a minute; every command is back at once; **Turn a feature back on… is absent**, and the embed says hiding is switched off altogether rather than "every command is showing" — the two sentences mean different things and the second would read as a bug |
-| S10 | **How Black Bloc looks…** → **Re-apply presence** | the same sentence `/presence apply` used to print — whether the About Me changed and what the status now reads — and a `presence.bio_set` row when it did change. The card also shows when the status loop last succeeded and its last error. ⚠️ `/presence` itself is **gone from the command list** |
-| S11 | **Roles & channels…** as a staff member who does **not** have Manage Server | the button is **not drawn** and the panel says in one line that re-pointing the staff, log, moderation-log and role-menu channels is for somebody with Manage Server. It is not offered-and-refused; it is not offered. As a Lead it is there, each picker labelled in words (*Where staff talk — and who counts as staff*) and never with the raw key name. ⚠️ Set `settings_core_keys_admin_only` to `false` and plain staff get it. Then open `staff_channel_id`'s own card as a Lead and press **Put the default back**: it asks first — *Are you sure?* naming **#mute-me-bot-test-spam** and saying that automod and the honeypot both stop arming, quietly. **Leave it as it is** changes nothing. It is the ONLY key that asks; every other reset is one press |
-| S12 | **Log levels…** → **Chat** → the two buttons; then **Logs**; then leave the panel `settings_panel_minutes` (10) minutes | the level card offers only the two levels it is **not** on (never three with one greyed out), and the key's help text now says *and in `/chat` ▸ **Logs*** rather than naming a retired `logs` subcommand; **Logs** answers a **NEW** ephemeral message and the panel stays where it is; after ten minutes every control greys out and the footer reads *This panel has gone quiet — run /settings again* |
+| 231 | `/settings` as a Lead in `#mute-me-bot-test-spam` | ONE ephemeral panel. The top reads every feature's mode — sixteen lines, each naming the command that changes it (`**YouTube uploads** — shadow · /youtube to change`) — and **not one of them is a control here**. Below: **Turn a feature back on… · A setting group… · Roles & channels… · How Black Bloc looks… · Panels & commands… · Logs · Open on the site · Log levels… · Refresh**. Nothing anywhere says `/settings show` or `/settings set-value` |
+| 232 | **A setting group…** → **chat** | the group card lists the chat settings and the picker says **25 of 28 — the rest are on the site**. Press **Find a setting…**, type `memory`, and the ones that were off the end are on the picker. `chat` is the only namespace over 25 — the other 21 groups never draw **Find a setting…** at all |
+| 233 | **A setting group…** → **birthday** → `birthday_color` → **The colour…** → type `blue` | one sentence naming the shape `#4eefff` and **nothing is saved** — re-open the card and the colour is what it was. Type `#4EEFFF` and it saves as `#4eefff`, one `settings.set` row, **Via: Discord** on the Logs page |
+| 234 | the same key card → **Put the default back**, then look for it again | the first press says the default is back and leaves one `settings.clear` row; **the second press is not there** — the button does not render on a key with nothing stored. No state is terminal and no button answers "nothing changed" |
+| 235 | **A setting group…** → **automod** → `automod_rules` | the card has **no editor at all** and says the rule book is edited on `/automod` ▸ **A rule…**. It is the only key in the registry like that — every other one of the 181 has exactly one control |
+| 236 | **A setting group…** → **honeypot** → `honeypot_exempt_role_ids`, with more than 25 roles stored | the role picker is **not drawn**, the card says the list is longer than one Discord picker can edit and names the Settings page, and **Clear the list** is still there. ⚠️ Under 25 the picker IS drawn with the stored roles already ticked, and its minimum is 0 so an empty submit clears the list |
+| 237 | dashboard → Settings → `youtube_mode` → **off**. Wait a minute, `Ctrl+R`, then `/settings` | `/youtube` is gone from the command list, and the panel now carries **Turn a feature back on…** with **YouTube uploads — turn it on** on it. Pick it: within about a minute `/youtube` is back **on**, not shadow. ⚠️ **This row is the whole reason `set-value` could be retired** — it is the most important row in the set |
+| 238 | `/settings set-value` | ⚠️ **there is no such command**, and neither is `/presence`. `/help` says so too: its missing-commands line now names **`/settings` ▸ Turn a feature back on…**. Type `/` and count: **29 commands, no groups** |
+| 239 | **Panels & commands…** → **Leave every command showing**, with two features still off, then **Refresh** | the reply says the change lands within about a minute; every command is back at once; **Turn a feature back on… is absent**, and the embed says hiding is switched off altogether rather than "every command is showing" — the two sentences mean different things and the second would read as a bug |
+| 240 | **How Black Bloc looks…** → **Re-apply presence** | the same sentence `/presence apply` used to print — whether the About Me changed and what the status now reads — and a `presence.bio_set` row when it did change. The card also shows when the status loop last succeeded and its last error. ⚠️ `/presence` itself is **gone from the command list** |
+| 241 | **Roles & channels…** as a staff member who does **not** have Manage Server | the button is **not drawn** and the panel says in one line that re-pointing the staff, log, moderation-log and role-menu channels is for somebody with Manage Server. It is not offered-and-refused; it is not offered. As a Lead it is there, each picker labelled in words (*Where staff talk — and who counts as staff*) and never with the raw key name. ⚠️ Set `settings_core_keys_admin_only` to `false` and plain staff get it. Then open `staff_channel_id`'s own card as a Lead and press **Put the default back**: it asks first — *Are you sure?* naming **#mute-me-bot-test-spam** and saying that automod and the honeypot both stop arming, quietly. **Leave it as it is** changes nothing. It is the ONLY key that asks; every other reset is one press |
+| 242 | **Log levels…** → **Chat** → the two buttons; then **Logs**; then leave the panel `settings_panel_minutes` (10) minutes | the level card offers only the two levels it is **not** on (never three with one greyed out), and the key's help text now says *and in `/chat` ▸ **Logs*** rather than naming a retired `logs` subcommand; **Logs** answers a **NEW** ephemeral message and the panel stays where it is; after ten minutes every control greys out and the footer reads *This panel has gone quiet — run /settings again* |
+| 243 | dashboard → **Settings** → the **core** group | two rows at the bottom of it: **How long the /settings panel stays live** (10) and **Whether only a Lead may re-point the staff and log channels** (true). ⚠️ They must be under **core**, not under a group called `settings` — that is what `CORE_KEYS` is for (Build 1, v83) |
+| 244 | set **How long the /settings panel stays live** to `0`, then to `10` again | `0` is refused in words by the same validator every other panel-minutes key uses, and nothing is saved. The Discord door onto the same key is `/settings` ▸ **Panels & commands…** ▸ **How long a panel stays open…** (Build 2, v84) |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that
