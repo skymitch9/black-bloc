@@ -40,6 +40,8 @@ from ...panels import (
     Panel,
     answer,
     capped_placeholder,
+    confirm,
+    confirm_items,
     db_ready,
     db_up,
     option_label,
@@ -109,7 +111,6 @@ PICK_A_LINE = "Forget one of these…"
 PICK_CAPPED = "{shown} of {total} — Forget by words… reaches the rest"
 FORGET_WORDS_TITLE = "Forget by words"
 FORGET_WORDS_LABEL = "A few words from the line you want dropped"
-CONFIRM_TITLE = "Are you sure?"
 FORGET_ALL_QUESTION = (
     "Clear everything Black Bloc has written down about you here? There is no undo."
 )
@@ -411,14 +412,18 @@ async def open_confirm(
         await answer(interaction, NO_SERVER)
         return
     remembered, profile = await panel_state(bot, home, interaction.user)
-    embed = memory_embed(bot, home, remembered, profile)
-    embed.add_field(name=CONFIRM_TITLE, value=move.question, inline=False)
-    view = MemoryPanel(minutes_for(bot, home))
-    view.add_item(ConfirmYesButton(move))
-    view.add_item(KeepItButton())
-    retire(previous)
-    view.message = await interaction.edit_original_response(
-        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    await confirm(
+        interaction,
+        MemoryPanel(minutes_for(bot, home)),
+        memory_embed(bot, home, remembered, profile),
+        confirm_items(
+            yes=move.yes,
+            no=KEEP_IT,
+            on_yes=lambda one, card: run_move(one, move.action, None, card),
+            on_no=back_to_panel,
+        ),
+        previous,
+        question=move.question,
     )
 
 
@@ -514,23 +519,6 @@ class MoveButton(discord.ui.Button):
             await back_to_panel(interaction, self.view)
             return
         await run_move(interaction, self.move.action, None, self.view)
-
-
-class ConfirmYesButton(discord.ui.Button):
-    def __init__(self, move: MemoryMove) -> None:
-        super().__init__(label=move.yes, style=discord.ButtonStyle.danger, row=0)
-        self.move = move
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await run_move(interaction, self.move.action, None, self.view)
-
-
-class KeepItButton(discord.ui.Button):
-    def __init__(self) -> None:
-        super().__init__(label=KEEP_IT, style=discord.ButtonStyle.secondary, row=0)
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await back_to_panel(interaction, self.view)
 
 
 class ForgetWordsModal(NoteModal):
