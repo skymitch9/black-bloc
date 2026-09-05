@@ -12,7 +12,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 28
+        assert SCHEMA_VERSION == 29
         cur = await db.conn.execute("PRAGMA table_info(requests)")
         assert {
             "built",
@@ -59,9 +59,10 @@ async def test_connect_bootstraps_schema(tmp_path):
         assert {"tempvoice_channels", "tempvoice_prefs", "honeypot_hits"} <= tables
         assert {"user_timezones", "events", "mod_cases"} <= tables
         cur = await db.conn.execute("PRAGMA table_info(mod_cases)")
-        assert {"kind", "moderator_id", "duration_s", "mode", "applied", "log_message_id"} <= {
-            row["name"] for row in await cur.fetchall()
-        }
+        columns = {row["name"] for row in await cur.fetchall()}
+        assert {"kind", "moderator_id", "duration_s", "mode", "applied"} <= columns
+        assert "log_message_id" in columns
+        assert {"note", "note_by", "note_at", "voided_at", "voided_by", "void_reason"} <= columns
         assert "birthdays" in tables
         cur = await db.conn.execute("PRAGMA table_info(birthdays)")
         columns = {r["name"] for r in await cur.fetchall()}
@@ -824,6 +825,44 @@ async def test_a_schema_26_file_gains_the_two_check_asked_columns_and_keeps_its_
         cur = await again.conn.execute(
             "SELECT value FROM schema_meta WHERE key='schema_version'"
         )
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await again.close()
+
+
+async def test_a_schema_28_file_gains_the_six_case_columns_and_keeps_its_rows(tmp_path):
+    """Schema 29 is additive: a case written before notes and voiding keeps every value it had
+    and reads all six new columns as nothing."""
+    path = tmp_path / "old28.sqlite3"
+    db = Database(path)
+    await db.connect()
+    for column in ("note", "note_by", "note_at", "voided_at", "voided_by", "void_reason"):
+        await db.conn.execute(f"ALTER TABLE mod_cases DROP COLUMN {column}")
+    await db.conn.execute(
+        "INSERT INTO mod_cases(id, guild_id, user_id, kind, moderator_id, reason, at, mode, "
+        "applied, log_message_id) VALUES (1, 7, 900, 'warn', 3, 'spamming', "
+        "'2026-09-04T00:00:00+00:00', 'on', 1, 55)"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '28')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("PRAGMA table_info(mod_cases)")
+        names = [row["name"] for row in await cur.fetchall()]
+        assert {"note", "note_by", "note_at", "voided_at", "voided_by", "void_reason"} <= set(names)
+        assert names.count("note") == 1 and names.count("voided_at") == 1
+        cur = await again.conn.execute("SELECT * FROM mod_cases WHERE id = 1")
+        row = await cur.fetchone()
+        assert (row["kind"], row["reason"], row["applied"]) == ("warn", "spamming", 1)
+        assert (row["user_id"], row["moderator_id"], row["log_message_id"]) == (900, 3, 55)
+        assert (row["note"], row["note_by"], row["note_at"]) == (None, None, None)
+        assert (row["voided_at"], row["voided_by"], row["void_reason"]) == (None, None, None)
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
     finally:
         await again.close()

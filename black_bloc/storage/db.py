@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 28
+SCHEMA_VERSION = 29
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -314,7 +314,13 @@ CREATE TABLE IF NOT EXISTS mod_cases (
     at             TEXT    NOT NULL,
     mode           TEXT    NOT NULL,
     applied        INTEGER NOT NULL,
-    log_message_id INTEGER
+    log_message_id INTEGER,
+    note           TEXT,
+    note_by        INTEGER,
+    note_at        TEXT,
+    voided_at      TEXT,
+    voided_by      INTEGER,
+    void_reason    TEXT
 );
 
 CREATE INDEX IF NOT EXISTS mod_cases_by_user ON mod_cases(guild_id, user_id, id);
@@ -644,6 +650,12 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("mod_cases", "failed", "TEXT"),
     ("mod_cases", "message_id", "INTEGER"),
     ("mod_cases", "channel_id", "INTEGER"),
+    ("mod_cases", "note", "TEXT"),
+    ("mod_cases", "note_by", "INTEGER"),
+    ("mod_cases", "note_at", "TEXT"),
+    ("mod_cases", "voided_at", "TEXT"),
+    ("mod_cases", "voided_by", "INTEGER"),
+    ("mod_cases", "void_reason", "TEXT"),
     ("tempvoice_channels", "panel_channel_id", "INTEGER"),
     ("tempvoice_prefs", "bitrate", "INTEGER"),
     ("tempvoice_prefs", "region", "TEXT"),
