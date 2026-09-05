@@ -443,11 +443,14 @@ async def test_the_mode_being_off_is_a_line_and_never_a_dead_command(bot, member
     assert not any(getattr(one, "disabled", False) for one in interaction.view.children)
 
 
-def test_memory_is_no_longer_hidden_when_the_mode_is_off():
+def test_memory_is_hidden_with_every_other_off_feature_and_a_lead_can_bring_it_back():
+    """Supersedes the 2026-09-03 fork I-M1 carve-out ("open it"). The 2026-09-04 ask makes
+    hiding the rule for every mode key that has an off; a Lead brings `/memory` back with
+    `/settings set-value chat_memory_mode on`, or with `hide_commands_when_off` false.
+    ⚠️ KI-14 leans on `/memory` being reachable — see docs/info/code-notes.md."""
     from black_bloc import command_visibility as cv
 
-    assert "chat_memory_mode" not in cv.HIDDEN_WHEN_OFF
-    assert all("memory" not in names for names in cv.HIDDEN_WHEN_OFF.values())
+    assert cv.HIDDEN_WHEN_OFF["chat_memory_mode"] == ("memory",)
 
 
 # The picker.

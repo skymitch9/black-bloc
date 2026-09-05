@@ -1566,3 +1566,22 @@ async def test_the_event_panel_keeps_a_members_own_events_to_themselves_until_a_
     assert coerce_value("event_panel_own_list", True) is True
     with pytest.raises(SettingError):
         coerce_value("event_panel_own_list", "true")
+
+
+async def test_hiding_a_turned_off_features_command_is_on_by_default_and_both_doors_reach_it(
+    store,
+):
+    """Owner, 2026-09-04: turning YouTube off on the portal should take `/youtube` away."""
+    from black_bloc.cogs.core import VALUE_KEYS
+    from black_bloc.settings_store import HIDE_COMMANDS_WHEN_OFF
+
+    assert store.get(7, HIDE_COMMANDS_WHEN_OFF) is True
+    assert KEY_TYPES[HIDE_COMMANDS_WHEN_OFF] == "bool"
+    assert HIDE_COMMANDS_WHEN_OFF in VALUE_KEYS
+    assert "shadow does not" in KEY_HELP[HIDE_COMMANDS_WHEN_OFF]
+    await store.set(7, HIDE_COMMANDS_WHEN_OFF, False)
+    assert store.get(7, HIDE_COMMANDS_WHEN_OFF) is False
+    assert coerce_value(HIDE_COMMANDS_WHEN_OFF, True) is True
+    assert parse_value(HIDE_COMMANDS_WHEN_OFF, "false") is False
+    with pytest.raises(SettingError):
+        coerce_value(HIDE_COMMANDS_WHEN_OFF, "true")

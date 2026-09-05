@@ -421,6 +421,44 @@ async def test_help_omits_a_command_a_feature_mode_is_hiding(bot, cog, member):
     assert "**/ping** — Check that Black Bloc is alive" in said
 
 
+async def test_help_says_how_many_commands_are_missing_and_how_to_get_them_back(bot, cog, member):
+    bot.tree = FakeTree([a_plain_command, requests])
+    await bot.store.set(GUILD, "request_mode", "off")
+    interaction = FakeInteraction(bot, member)
+
+    await cog.help_command.callback(cog, interaction, None)
+
+    said = "\n".join(message["content"] for message in interaction.response.messages)
+    assert "not listed because their feature is turned off" in said
+    assert "/settings set-value <feature>_mode on" in said
+
+
+async def test_help_leaves_the_missing_commands_note_off_a_filtered_list(bot, cog, member):
+    bot.tree = FakeTree([a_plain_command, requests])
+    await bot.store.set(GUILD, "request_mode", "off")
+    interaction = FakeInteraction(bot, member)
+
+    await cog.help_command.callback(cog, interaction, "ping")
+
+    said = "\n".join(message["content"] for message in interaction.response.messages)
+    assert "not listed because their feature is turned off" not in said
+
+
+async def test_help_lists_everything_again_once_the_hiding_switch_is_off(bot, cog, member):
+    from black_bloc.settings_store import HIDE_COMMANDS_WHEN_OFF
+
+    bot.tree = FakeTree([a_plain_command, requests])
+    await bot.store.set(GUILD, "request_mode", "off")
+    await bot.store.set(GUILD, HIDE_COMMANDS_WHEN_OFF, False)
+    interaction = FakeInteraction(bot, member)
+
+    await cog.help_command.callback(cog, interaction, None)
+
+    said = "\n".join(message["content"] for message in interaction.response.messages)
+    assert "/request file — File a request" in said
+    assert "not listed because their feature is turned off" not in said
+
+
 async def test_help_lists_the_command_again_once_the_mode_is_on(bot, cog, member):
     bot.tree = FakeTree([a_plain_command, requests])
     await bot.store.set(GUILD, "request_mode", "on")

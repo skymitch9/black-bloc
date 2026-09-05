@@ -8,7 +8,7 @@ import pytest
 from black_bloc import command_visibility as cv
 from black_bloc.bot import COGS, BlackBlocBot
 from black_bloc.config import load_settings
-from black_bloc.settings_store import SettingsStore
+from black_bloc.settings_store import KEY_CHOICES, KEY_TYPES, SettingsStore, parse_value
 from black_bloc.storage.db import Database
 
 GUILD = 4242
@@ -98,6 +98,25 @@ async def bot(db, monkeypatch):
 
 
 @pytest.fixture
+async def real_tree(tmp_path, monkeypatch):
+    """Every top-level command name the bot really registers, from all of `COGS`."""
+    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
+    settings = load_settings(
+        _env_file=None,
+        dev_guild_id=GUILD,
+        test_mode=True,
+        test_channel_id=TEST_CHANNEL,
+        database_path=tmp_path / "tree.sqlite3",
+    )
+    black_bloc = BlackBlocBot(settings)
+    for name in COGS:
+        await black_bloc.load_extension(name)
+    names = {command.name for command in black_bloc.tree.get_commands()}
+    await black_bloc.close()
+    return names
+
+
+@pytest.fixture
 def waits(monkeypatch):
     """Every debounce and rate-limit wait, held open until the test opens the gate."""
     seen = []
@@ -133,6 +152,7 @@ async def test_a_mode_that_is_off_at_startup_hides_its_commands_and_syncs_once(b
     assert json.loads(rows[0]["details"]) == {
         "commands": 2,
         "hidden": ["request"],
+        "shown": [],
         "via": "discord",
     }
 
@@ -188,7 +208,6 @@ async def test_the_settings_group_is_never_hidden(bot, waits, monkeypatch):
     assert bot.tree.get_command("settings", guild=DEV_GUILD) is not None
     assert "settings" not in cv.hidden_names(bot, GUILD)
     assert "request" in cv.hidden_names(bot, GUILD)
-    assert cv.hidden_names(bot, GUILD) == {"request"}
 
 
 async def test_a_second_change_waits_out_the_rate_limit_window(bot, waits):
@@ -223,33 +242,91 @@ async def test_no_dev_guild_means_no_hiding_at_all(bot, waits, monkeypatch):
 
 
 def test_hidden_names_reads_the_store_and_needs_a_guild(bot):
-    assert cv.hidden_names(bot, GUILD) == {"request"}
+    assert "request" in cv.hidden_names(bot, GUILD)
     assert cv.hidden_names(bot, None) == set()
 
 
-async def test_memory_stays_in_the_tree_even_while_the_mode_is_off(bot):
-    """Owner, 2026-09-03 16:12 (fork I-M1) — open it. Turning `chat_memory_mode` off does NOT
-    delete the profiles already stored, so hiding `/memory` left members holding data they
-    could neither read nor clear from Discord, and the site is staff-only and counts-only."""
-    assert "chat_memory_mode" not in cv.HIDDEN_WHEN_OFF
-    assert bot.store.get(GUILD, "chat_memory_mode") == "off"
-    assert "memory" not in cv.hidden_names(bot, GUILD)
-
-    await bot.store.set(GUILD, "chat_memory_mode", "on", by=5)
-
-    assert "memory" not in cv.hidden_names(bot, GUILD)
+async def test_every_key_in_the_table_is_a_registry_key_whose_choices_include_off():
+    for key in cv.HIDDEN_WHEN_OFF:
+        assert KEY_TYPES.get(key) == "enum", key
+        assert cv.OFF in KEY_CHOICES[key], key
 
 
-async def test_apply_stays_in_the_tree_even_while_applications_are_off(bot):
-    """Owner, 2026-09-03 13:47 — "Visible". One command carries both halves, so hiding it
-    would cost staff their only Discord door to form management; the panel says off in words."""
-    assert "applications_mode" not in cv.HIDDEN_WHEN_OFF
-    assert bot.store.get(GUILD, "applications_mode") == "off"
-    assert "apply" not in cv.hidden_names(bot, GUILD)
+async def test_every_command_in_the_table_is_a_real_top_level_command(real_tree):
+    named = {name for names in cv.HIDDEN_WHEN_OFF.values() for name in names}
+    assert named <= real_tree
+    assert cv.NEVER_HIDDEN[0] == "settings"
+    assert set(cv.NEVER_HIDDEN) <= real_tree
+    assert named.isdisjoint(cv.NEVER_HIDDEN)
 
-    await bot.store.set(GUILD, "applications_mode", "on", by=5)
 
-    assert "apply" not in cv.hidden_names(bot, GUILD)
+async def test_the_fifteen_features_the_owner_named_each_map_to_one_command():
+    assert cv.HIDDEN_WHEN_OFF == {
+        "applications_mode": ("apply",),
+        "automod_mode": ("automod",),
+        "birthday_mode": ("birthday",),
+        "chat_memory_mode": ("memory",),
+        "chat_mode": ("chat",),
+        "events_mode": ("event",),
+        "golive_mode": ("golive",),
+        "honeypot_mode": ("honeypot",),
+        "pings_mode": ("pings",),
+        "poll_mode": ("poll",),
+        "raidtrain_mode": ("raidtrain",),
+        "request_mode": ("request",),
+        "rolemenu_mode": ("rolemenu",),
+        "tempvoice_mode": ("voice",),
+        "youtube_mode": ("youtube",),
+    }
+    assert "modmail_mode" not in cv.HIDDEN_WHEN_OFF
+
+
+async def test_shadow_is_not_off_so_a_shadowed_feature_keeps_its_command(bot):
+    """The owner shadows youtube today; only the literal word off takes a command away."""
+    await bot.store.set(GUILD, "youtube_mode", "shadow", by=5)
+
+    assert "youtube" not in cv.hidden_names(bot, GUILD)
+
+    await bot.store.set(GUILD, "youtube_mode", "off", by=5)
+
+    assert "youtube" in cv.hidden_names(bot, GUILD)
+
+
+async def test_the_switch_turns_the_whole_thing_off_and_nothing_is_hidden(bot):
+    assert bot.store.get(GUILD, cv.SWITCH_KEY) is True
+    assert "request" in cv.hidden_names(bot, GUILD)
+
+    await bot.store.set(GUILD, cv.SWITCH_KEY, False, by=5)
+
+    assert cv.hidden_names(bot, GUILD) == set()
+
+
+async def test_flipping_the_switch_puts_every_hidden_command_back_and_syncs(bot, waits):
+    control = cv.install(bot)
+    assert bot.tree.get_command("request", guild=DEV_GUILD) is None
+
+    await bot.store.set(GUILD, cv.SWITCH_KEY, False, by=8)
+
+    assert bot.tree.get_command("request", guild=DEV_GUILD) is not None
+    waits.gate.set()
+    await control.task
+
+    assert bot.tree.syncs == [GUILD]
+    rows = await logged(bot.db)
+    assert json.loads(rows[-1]["details"])["shown"] == ["request"]
+
+
+async def test_turning_the_switch_back_on_hides_the_off_features_again(bot, waits):
+    await bot.store.set(GUILD, cv.SWITCH_KEY, False)
+    control = cv.install(bot)
+    assert bot.tree.get_command("request", guild=DEV_GUILD) is not None
+
+    await bot.store.set(GUILD, cv.SWITCH_KEY, True, by=8)
+
+    assert bot.tree.get_command("request", guild=DEV_GUILD) is None
+    waits.gate.set()
+    await control.task
+    assert bot.tree.syncs == [GUILD]
 
 
 async def test_the_request_group_is_shown_while_requests_are_on_and_hidden_when_they_are_off(bot):
@@ -261,12 +338,31 @@ async def test_the_request_group_is_shown_while_requests_are_on_and_hidden_when_
     assert "request" not in cv.hidden_names(bot, GUILD)
 
 
-async def test_rolemenu_stays_in_the_tree_even_while_role_menus_are_off(bot):
-    """`rolemenu_mode` ships off, so hiding `/rolemenu` would hide the only Discord way to turn
-    it back on — the panel says picking is off as a LINE instead (design B, staff final say)."""
-    assert "rolemenu_mode" not in cv.HIDDEN_WHEN_OFF
-    assert bot.store.get(GUILD, "rolemenu_mode") == "off"
-    assert "rolemenu" not in cv.hidden_names(bot, GUILD)
+async def test_every_hidden_feature_can_still_be_turned_back_on_from_discord():
+    """`/settings set-value <key> on` is the door that survives the command going away."""
+    from black_bloc.cogs.core import VALUE_KEYS
+
+    assert "settings" in cv.NEVER_HIDDEN
+    for key in cv.HIDDEN_WHEN_OFF:
+        assert key in VALUE_KEYS, key
+        assert parse_value(key, "on") == "on", key
+        assert "shadow" not in KEY_CHOICES[key] or parse_value(key, "shadow") == "shadow"
+
+
+async def test_memory_and_apply_and_rolemenu_hide_with_the_rest(bot):
+    """Supersedes three earlier per-feature carve-outs — owner, 2026-09-03: `/memory` "open it"
+    (fork I-M1), `/apply` "Visible", and `/rolemenu` kept because hiding it hid the only way
+    back. The 2026-09-04 ask makes hiding the rule for every mode key that has an off, and
+    `/settings set-value <feature>_mode on` plus `hide_commands_when_off` are the ways back."""
+    for key, name in (
+        ("chat_memory_mode", "memory"),
+        ("applications_mode", "apply"),
+        ("rolemenu_mode", "rolemenu"),
+    ):
+        assert bot.store.get(GUILD, key) == "off"
+        assert name in cv.hidden_names(bot, GUILD)
+        await bot.store.set(GUILD, key, "on", by=5)
+        assert name not in cv.hidden_names(bot, GUILD)
 
 
 async def test_the_real_command_tree_hides_and_gives_back_the_group(tmp_path, monkeypatch, waits):

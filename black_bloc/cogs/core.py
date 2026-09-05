@@ -45,6 +45,11 @@ NO_MATCH = (
     "No command matches **{filter}**, so there is nothing to list. Run `/help` with nothing in "
     "the filter to see all of them."
 )
+HIDDEN_NOTE = (
+    "\n*{count} command(s) are not listed because their feature is turned off. A Lead brings "
+    "one back from the dashboard's Settings page, or with "
+    "`/settings set-value <feature>_mode on`.*"
+)
 
 
 def command_line(command: Any, path: str, *, heading: bool = False) -> str:
@@ -130,6 +135,8 @@ class Core(commands.Cog):
                 allowed_mentions=discord.AllowedMentions.none(),
             )
             return
+        if hidden and not (filter or "").strip():
+            lines.append(HIDDEN_NOTE.format(count=len(hidden)))
         for index, chunk in enumerate(pages_under_limit([HELP_HEADER, *lines])):
             answer = interaction.followup.send if index else interaction.response.send_message
             await answer(

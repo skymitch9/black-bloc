@@ -8,15 +8,31 @@ from typing import Any
 import discord
 
 from .actionlog import log_action
+from .settings_store import HIDE_COMMANDS_WHEN_OFF
 
 log = logging.getLogger(__name__)
 
 STAFF_ONLY = discord.Permissions(manage_messages=True)
 
 HIDDEN_WHEN_OFF: dict[str, tuple[str, ...]] = {
+    "applications_mode": ("apply",),
+    "automod_mode": ("automod",),
+    "birthday_mode": ("birthday",),
+    "chat_memory_mode": ("memory",),
+    "chat_mode": ("chat",),
+    "events_mode": ("event",),
+    "golive_mode": ("golive",),
+    "honeypot_mode": ("honeypot",),
+    "pings_mode": ("pings",),
+    "poll_mode": ("poll",),
+    "raidtrain_mode": ("raidtrain",),
     "request_mode": ("request",),
+    "rolemenu_mode": ("rolemenu",),
+    "tempvoice_mode": ("voice",),
+    "youtube_mode": ("youtube",),
 }
-NEVER_HIDDEN: tuple[str, ...] = ("settings",)
+NEVER_HIDDEN: tuple[str, ...] = ("settings", "help", "about", "ping")
+SWITCH_KEY = HIDE_COMMANDS_WHEN_OFF
 OFF = "off"
 DEBOUNCE_SECONDS = 5.0
 MIN_SYNC_SECONDS = 60.0
@@ -36,9 +52,15 @@ def dev_guild(bot: Any) -> discord.Object | None:
     return discord.Object(id=guild_id) if guild_id else None
 
 
+def hiding_is_on(bot: Any, guild_id: int | None) -> bool:
+    if guild_id is None:
+        return False
+    return bool(bot.store.get(guild_id, SWITCH_KEY))
+
+
 def hidden_names(bot: Any, guild_id: int | None) -> set[str]:
     """Top-level command names that a feature's mode is hiding right now."""
-    if guild_id is None:
+    if not hiding_is_on(bot, guild_id):
         return set()
     found: set[str] = set()
     for key, names in HIDDEN_WHEN_OFF.items():
@@ -51,6 +73,7 @@ class VisibilitySync:
     def __init__(self, bot: Any) -> None:
         self.bot = bot
         self.removed: dict[str, Any] = {}
+        self.restored: set[str] = set()
         self.task: asyncio.Task | None = None
         self.last_sync: float | None = None
         self.actor: Any = None
@@ -92,6 +115,7 @@ class VisibilitySync:
         if command is None:
             return False
         self.removed[name] = command
+        self.restored.discard(name)
         log.info("command visibility: /%s hidden in guild %s", name, guild.id)
         return True
 
@@ -105,6 +129,7 @@ class VisibilitySync:
             log.warning("command visibility: /%s is not in the tree, so it cannot come back", name)
             return False
         self.bot.tree.add_command(command, guild=guild, override=True)
+        self.restored.add(name)
         log.info("command visibility: /%s shown again in guild %s", name, guild.id)
         return True
 
@@ -156,15 +181,17 @@ class VisibilitySync:
             return
         self.last_sync = _now()
         actor, self.actor = self.actor, None
+        shown, self.restored = sorted(self.restored), set()
         log.info(
-            "command visibility: %d command(s) in guild %s; hidden: %s",
+            "command visibility: %d command(s) in guild %s; hidden: %s; shown again: %s",
             len(synced),
             guild.id,
             ", ".join(sorted(self.removed)) or "none",
+            ", ".join(shown) or "none",
         )
-        await self._record(guild, len(synced), actor)
+        await self._record(guild, len(synced), actor, shown)
 
-    async def _record(self, guild: Any, count: int, actor: Any) -> None:
+    async def _record(self, guild: Any, count: int, actor: Any, shown: list[str]) -> None:
         db = getattr(self.bot, "db", None)
         if db is None or not db.is_connected:
             return
@@ -174,7 +201,7 @@ class VisibilitySync:
                 self.bot.get_guild(guild.id) or guild,
                 LOG_KIND,
                 actor=actor,
-                details={"commands": count, "hidden": sorted(self.removed)},
+                details={"commands": count, "hidden": sorted(self.removed), "shown": shown},
             )
         except Exception as exc:
             log.warning("command visibility: not logged — %s: %s", type(exc).__name__, exc)
@@ -207,7 +234,7 @@ def install(bot: Any) -> VisibilitySync:
     found = controller(bot)
     if not found.installed:
         callback = _changed(bot)
-        for key in HIDDEN_WHEN_OFF:
+        for key in (*HIDDEN_WHEN_OFF, SWITCH_KEY):
             bot.store.on_change(key, callback)
         found.installed = True
     found.apply()

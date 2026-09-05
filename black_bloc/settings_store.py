@@ -1157,6 +1157,23 @@ KEY_HELP.update(
 )
 
 
+# Hiding a feature's slash command while its mode is off — the one decision that switch makes.
+HIDE_COMMANDS_WHEN_OFF = "hide_commands_when_off"
+HIDE_COMMANDS_WHEN_OFF_DEFAULT = True
+KEY_TYPES.update({HIDE_COMMANDS_WHEN_OFF: "bool"})
+KEY_HELP.update(
+    {
+        HIDE_COMMANDS_WHEN_OFF: (
+            "true to take a feature's slash command out of this server's command list while "
+            "that feature is turned off, so nobody is offered a command that cannot do "
+            "anything; turning the feature back on brings the command back within about a "
+            "minute. false leaves every command showing all the time and an off feature "
+            "explains itself when it is opened. Only off hides a command — shadow does not"
+        )
+    }
+)
+
+
 GUILD_ONLY = (
     "That command changes settings for a server, so it has to be run in the server itself "
     "rather than in a DM. Run it again from a channel Black Bloc can answer in."
@@ -1680,6 +1697,8 @@ class SettingsStore:
             return 10
         if key == "rolemenu_panel_minutes":
             return 10
+        if key == HIDE_COMMANDS_WHEN_OFF:
+            return HIDE_COMMANDS_WHEN_OFF_DEFAULT
         if key.endswith("_log_level"):
             return LEVEL_DEFAULT
         if KEY_TYPES.get(key) in ("channels", "roles"):

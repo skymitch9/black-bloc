@@ -12,6 +12,7 @@ export const LABELS = {
   bot_bio: 'What the bot’s About Me says',
   status_prefix: 'What the bot’s status says',
   operator_read_log: 'Whether an operator-token read leaves a log line',
+  hide_commands_when_off: 'Whether a turned-off feature’s slash command disappears',
   emoji_skin_tone: 'Which skin tone the bot’s emoji wear',
 
   golive_mode: 'Whether the bot announces streams',
