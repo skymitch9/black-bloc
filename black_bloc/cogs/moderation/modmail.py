@@ -185,14 +185,6 @@ NO_TEST_CHANNEL = (
     "Black Bloc is in test mode and cannot see its test channel, so no ticket was made. Set "
     "TEST_CHANNEL_ID to a channel the bot can read, restart it, then try again."
 )
-NO_CATEGORY = (
-    "Black Bloc has nowhere to put ticket channels, so nothing was opened. A Lead points it at a "
-    "category with `/modmail` → **Setup…** → **Ticket category…**."
-)
-NOT_A_CATEGORY = (
-    "**modmail_category_id** points at something that is not a category, so nothing was opened. A "
-    "Lead fixes it with `/modmail` → **Setup…** → **Ticket category…**."
-)
 NO_STAFF_CHANNEL = (
     "Black Bloc has nowhere to put ticket threads, so nothing was opened. A Lead points it at a "
     "channel with `/modmail` → **Setup…** → **Staff channel…**, or switches back to channel mode "
@@ -1846,16 +1838,6 @@ class Modmail(commands.Cog):
         return await close_ticket(
             self.bot, guild, ticket, by=by, reason=reason, silent=silent
         )
-
-    async def _post_transcript(
-        self, guild: Any, ticket: Any, rows: Any, *, by: Any, reason: Any, closed_at: str
-    ) -> tuple[int | None, str | None]:
-        return await post_transcript(
-            self.bot, guild, ticket, rows, by=by, reason=reason, closed_at=closed_at
-        )
-
-    async def _remove_place(self, guild: Any, ticket: Any) -> None:
-        await remove_place(self.bot, guild, ticket)
 
     async def cog_load(self) -> None:
         self.bot.add_dynamic_items(TicketCardButton)
