@@ -60,7 +60,7 @@ const NOT_SIGNED_IN = 'You are not signed in yet. Sign in with the Discord accou
 const NOT_STAFF = 'This dashboard is for the mods and admins of Black in a Flash!. Your Discord account is signed in, but it does not hold a staff role. Ask a Lead for the role.';
 const STAFF_UNKNOWN = 'Black Bloc could not ask Discord which roles you hold, so it cannot tell whether you are staff. That is a fault at the bot, not a problem with your access. Try again in a minute.';
 const MEMBER_NOT_STAFF = 'The rest of this dashboard is for the mods and admins of Black in a Flash!, but you are a member here, so you can still file a request and follow your own. Ask a Lead for a staff role if you need the rest.';
-const ROLE_MENUS_OFF = 'Role menus are turned off right now, so nothing was changed. A Lead can turn them back on from the dashboard\'s Role menus tab or with `/settings set-value rolemenu_mode on`.';
+const ROLE_MENUS_OFF = 'Role menus are turned off right now, so nothing was changed. A Lead can turn them back on from the dashboard\'s Role menus tab, or with `/settings` ▸ **Turn a feature back on…**.';
 const GUARD = 'TEST MODE is on, so Black Bloc refuses to act outside #mute-me-bot-test-spam. Nothing was done. Ask the owner to lift the test guard first.';
 const UNKNOWN_ROUTE = 'This dashboard asked Black Bloc for something it does not serve. That is a fault in the page, not a problem with your access.';
 
@@ -2703,7 +2703,7 @@ route('POST', '/api/pings/setup', async (context) => {
       : `Used the role **${role.name}** that was already here and pointed both feeds at it.`);
   message += ' Put it on the *notifications* panel — `/rolemenu` ▸ *notifications* ▸ **Post it**.';
   if (state.settings.get('pings_mode') !== 'on') {
-    message += ' Ping roles are still off, so nobody can opt in yet — turn them on with `/settings set-value pings_mode on` or from the dashboard\u2019s Go-live tab.';
+    message += ' Ping roles are still off, so nobody can opt in yet — turn them on with `/settings` ▸ **Turn a feature back on…** or from the dashboard\u2019s Go-live tab.';
   }
   return { role_id: role.id, created, menu: 'notifications', message };
 });
@@ -4305,7 +4305,7 @@ function personalityPayload() {
 
 // Phase 17. Counts always; the notes themselves only where chat_memory_staff_view is `full`.
 const MEMORY_IS_OFF = 'Black Bloc is not remembering anybody on this server, so there is nothing here yet. The Memory switch above turns it on, and profiles start appearing after the next sweep.';
-const MEMORY_IS_PRIVATE = 'This server keeps what Black Bloc remembers about a member private to that member, so the notes were not shown — only the counts on this page. It needs `chat_memory_staff_view` set to `full`, which a Lead can change on the Settings page or with `/settings set chat_memory_staff_view full`. The member can always read their own with `/memory`.';
+const MEMORY_IS_PRIVATE = 'This server keeps what Black Bloc remembers about a member private to that member, so the notes were not shown — only the counts on this page. It needs `chat_memory_staff_view` set to `full`, which a Lead can change on the Settings page, or in Discord with `/settings` and the chat settings group. The member can always read their own with `/memory`.';
 const MEMORY_NO_SUCH = 'Black Bloc remembers nothing about that member on this server, so there was nothing to show or clear.';
 
 function memoryFull() {
@@ -4506,7 +4506,7 @@ const REQUEST_STATUS_WORDS = {
 };
 const REQUEST_PAGE = 20;
 const REQUEST_PRIORITY_MAX = 5;
-const REQUESTS_OFF = 'Requests are turned off on this server, so nothing was filed. A Lead turns them back on with `/settings set request_mode on` — ask one if you have something to ask for.';
+const REQUESTS_OFF = 'Requests are turned off on this server, so nothing was filed. A Lead turns them back on with `/settings` ▸ **Turn a feature back on…** — ask one if you have something to ask for.';
 const REQUEST_STAFF_ONLY = 'Only staff may file a request on this server at the moment, so nothing was filed. Ask a Lead to put it in for you, or to set `request_who_can_file` to everyone.';
 const REQUEST_NEEDS_WHAT = 'A request needs a line saying what you are asking for, so nothing was filed. Fill the What box in and send it again.';
 const REQUEST_NEEDS_WHY = 'A request needs a line saying why it is worth doing, so nothing was filed. That is the part staff read first — fill the Why box in and send it again.';

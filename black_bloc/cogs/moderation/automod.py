@@ -116,7 +116,7 @@ STAFF_CACHE_SECONDS = 60
 NO_STAFF_ROLES = (
     "Black Bloc cannot work out who counts as staff, so automod was left as it was. Nobody but "
     "server admins would be exempt from it, which means a moderator posting five pings would be "
-    "timed out. Point `staff_channel_id` at a channel only staff can see with `/settings set "
+    "timed out. Point `staff_channel_id` at a channel only staff can see with `/settings` ▸ "
     "staff_channel_id`, then check the panel lists the roles you expect and arm it again."
 )
 NO_STAFF_WARNING = (
@@ -143,7 +143,7 @@ UNKNOWN_RULE_CHOICE = (
 )
 STAFF_IS_THE_TEST_CHANNEL = (
     "`staff_channel_id` is still the test channel, so everybody who can see it would count as "
-    "staff and automod would punish nobody. Set a real staff channel first with `/settings set "
+    "staff and automod would punish nobody. Set a real staff channel first with `/settings` ▸ "
     "staff_channel_id`, then check the panel lists the roles you expect and arm it again."
 )
 
@@ -189,7 +189,7 @@ SETTINGS_TITLE = "How the automod panel behaves"
 SITE_ONLY_LINES = (
     "**warn threshold** and **what a punished member is told** belong to moderation as a whole, "
     "not to automod, so they are changed on the Moderation page of the dashboard or with "
-    "`/settings set-value` — not here, where a change would quietly alter `/warn` too."
+    "`/settings` ▸ **A setting group…** — not here, where a change would quietly alter `/warn` too."
 )
 CONFIRM_TITLE = "Are you sure?"
 ARM_QUESTION = (

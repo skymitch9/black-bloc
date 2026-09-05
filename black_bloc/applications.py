@@ -116,7 +116,7 @@ FORM_CLOSED = (
 )
 APPLICATIONS_OFF = (
     "Applications are turned off right now, so nothing was sent. A Lead turns them on from the "
-    "dashboard's Role menus tab or with `/settings set-value applications_mode on`."
+    "dashboard's Role menus tab, or with `/settings` ▸ **Turn a feature back on…**."
 )
 ALREADY_APPLIED = (
     "You already have an application waiting on **{title}**, so nothing was sent twice. "

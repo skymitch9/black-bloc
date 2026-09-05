@@ -352,7 +352,7 @@ NOT_OPEN = "Event #{event_id} is already **{status}**, so there was nothing to c
 NOT_AN_ID = "**{given}** is not an event number, so nothing was cancelled. `/event` has them."
 NO_STAFF_WARNING = (
     "⚠️ **No staff roles resolve**, so nobody but server admins can see a review channel or press "
-    "Approve. Point `staff_channel_id` at a channel only staff can see with `/settings set "
+    "Approve. Point `staff_channel_id` at a channel only staff can see with `/settings` ▸ "
     "staff_channel_id`, then open `/event` again."
 )
 

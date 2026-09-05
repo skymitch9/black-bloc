@@ -120,11 +120,11 @@ ROLE_CLEAR_CONFIRM = (
 )
 ROLE_CLEARED = (
     "No birthday role will be given any more. A role somebody already has for today still "
-    "comes off tomorrow. Set one again with `/settings set-role birthday_role_id`."
+    "comes off tomorrow. Set one again with `/settings` ▸ **A setting group…** ▸ birthday."
 )
 ROLE_NOT_SET = (
-    "There was no birthday role set, so nothing changed. `/settings set-role birthday_role_id` "
-    "is how one is chosen."
+    "There was no birthday role set, so nothing changed. `/settings` ▸ **A setting group…** "
+    "▸ birthday is how one is chosen."
 )
 BUTTON_STYLES: dict[str, discord.ButtonStyle] = {
     "primary": discord.ButtonStyle.primary,

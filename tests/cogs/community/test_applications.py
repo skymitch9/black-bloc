@@ -461,7 +461,7 @@ async def test_the_form_refuses_to_open_while_applications_are_off(bot, db):
     await open_form_modal(interaction, form)
 
     assert "turned off" in interaction.sent
-    assert "applications_mode on" in interaction.sent
+    assert "**Turn a feature back on…**" in interaction.sent
 
 
 async def test_somebody_already_waiting_is_not_offered_the_form_again(bot, db):

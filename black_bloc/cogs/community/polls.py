@@ -187,7 +187,7 @@ REVIEW_NO_CARD = (
 )
 NO_REVIEW_CHANNEL = (
     "Black Bloc has nowhere to send a poll for review, so nothing was posted. A Lead points it at "
-    "one with `/settings set staff_channel_id:<the staff channel>`, or turns the review off with "
+    "one with `/settings` ▸ **Roles & channels…**, or turns the review off with "
     "`/poll settings review:off`."
 )
 NOT_AN_ID = "**{given}** is not a poll number, so nothing was done. This panel lists them."
@@ -233,7 +233,8 @@ DM_APPROVED_NOT_POSTED = (
 )
 NO_STAFF_WARNING = (
     "⚠️ **No staff roles resolve**, so nobody but server admins can press Approve. Point "
-    "`staff_channel_id` at a channel only staff can see with `/settings set staff_channel_id`."
+    "`staff_channel_id` at a channel only staff can see with `/settings` ▸ **Roles & "
+    "channels…**."
 )
 
 COG_NAME = "Polls"

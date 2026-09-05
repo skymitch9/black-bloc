@@ -121,7 +121,7 @@ SEED: tuple[tuple[str, str, str, tuple[tuple[str, str, int], ...]], ...] = (
 
 ROLE_MENUS_OFF = (
     "Role menus are turned off right now, so nothing was changed. A Lead can turn them back on "
-    "from the dashboard's Role menus tab or with `/settings set-value rolemenu_mode on`."
+    "from the dashboard's Role menus tab, or with `/settings` ▸ **Turn a feature back on…**."
 )
 MODE_ON = (
     "Every menu that has a channel is posted there again in a few seconds. `/rolemenu` stays "
@@ -1694,7 +1694,7 @@ WHERE_TITLE = "Where should {name} go?"
 WHERE_PICK = "A channel…"
 WHERE_DEFAULT = "The role menu channel is {where}, so leave it there or pick another."
 WHERE_NOWHERE = (
-    "No role menu channel is set, so pick one here. `/settings set role_menu_channel_id` "
+    "No role menu channel is set, so pick one here. `/settings` ▸ **Roles & channels…** "
     "chooses the one Black Bloc offers next time."
 )
 ROLE_ADD_LINE = "Picked: <@&{role_id}>. Name it after the role itself, or give it your own words."

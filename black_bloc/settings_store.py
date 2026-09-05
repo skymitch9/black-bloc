@@ -788,8 +788,13 @@ LOG_LEVEL_HELP = (
     "on a member, or failed) or all. Every line is kept on the dashboard{extra} either way"
 )
 LOG_LEVEL_COMMANDS: dict[str, str] = {
+    CORE: "settings",
+    "automod": "automod",
+    "honeypot": "honeypot",
+    "mod": "mod",
     "modmail": "modmail",
     "golive": "golive",
+    "youtube": "youtube",
     "events": "event",
     "birthday": "birthday",
     "tempvoice": "voice",
@@ -797,16 +802,18 @@ LOG_LEVEL_COMMANDS: dict[str, str] = {
     "poll": "poll",
     "chat": "chat",
     "request": "request",
-    "pings": "pingroles",
-    "applications": "applications",
+    "pings": "pings",
+    "raidtrain": "raidtrain",
+    "applications": "apply",
 }
 
 
 def log_level_help(feature: str) -> str:
+    """Every feature's Logs is a panel button now; no `/x logs` subcommand is left to name."""
     command = LOG_LEVEL_COMMANDS.get(feature)
     return LOG_LEVEL_HELP.format(
         label=FEATURE_LABELS[feature].lower(),
-        extra=f" and in `/{command} logs`" if command else "",
+        extra=f" and in `/{command}` ▸ **Logs**" if command else "",
     )
 
 

@@ -1026,3 +1026,154 @@ and none of the five `/settings` subcommands checks the database. Three more:
   `settings_core_keys_admin_only` (bool, true), both in `CORE_KEYS`.
 - **The trap**: `tests/api/test_settings_api.py` must stay byte-identical through Build 2 as
   well — it is the only thing proving the web door did not move.
+
+---
+
+## Build 2 deviations — what the build did differently, and why
+
+> Written by the Build 2 agent on `worktree-agent-a56c7b5137d9a609d`, off `main` at `57a878d`
+> (Build 1 merged as `9a7c87e`), 2026-09-05. **Status: BUILT, not merged, not deployed.**
+> `pytest` **5002 passed** (4973 on the base, +29), `ruff check .` clean,
+> `node site/mock/check.mjs` **17 pages / 146 routes** — unchanged before and after — and
+> `node --input-type=module --check` clean on `site/public/assets/labels.js`.
+> ⚠️ **Nothing has met live Discord** — no boot, no token, no sync, no panel opened, nothing
+> deployed. What Build 2 retires: `/settings show|set|set-role|set-value|clear` and the whole
+> `presence` Group. **Top-level 30 → 29 with ZERO `app_commands.Group`s left**, measured
+> through `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`, which now
+> asserts both numbers in one place.
+
+### The numbers, re-measured on `57a878d`
+
+| Build 1 measured | Build 2 measures | Consequence |
+|---|---|---|
+| registry **181** keys after Build 1 | **181**, unchanged — this build adds no key | every "175" in §§A–J is six low; the panel's own tests count `KEY_TYPES` rather than a literal |
+| `tests/test_bot.py` pins **30** | **29**, and there are **0** `app_commands.Group`s | the design's arithmetic table predicted exactly this, and the delta off 30 is exactly 1 |
+| 22 namespaces, `chat` the only one over 25 | **both still true**; `chat` is **28** | `capped_placeholder` fires exactly once in the app, on `chat` |
+| `CLEARABLE_KEYS` was **34** | **all 181** keys are now clearable | §I's settled item; `store.clear` never had a type restriction |
+| `LOG_LEVEL_COMMANDS` wrong in **11 of 13** | **17 of 17 correct**, `core` added | §J defect 4, fixed rather than reported |
+
+### The deviations, numbered
+
+1. **The layer split in the brief is not expressible, and one commit is the honest shape.** The
+   brief asked for (1) "the panel views + the `/settings` command opening it, subcommands still
+   present" and then (2) "retire the five subcommands". ⚠️ **A tree cannot hold an
+   `app_commands.Group` named `settings` and an `app_commands.command` named `settings` at the
+   same time**, so the swap is atomic. It landed as one commit; the top-level count stays 30
+   through it, and the −1 arrives in the next commit with `/presence`, exactly as the brief's
+   pinning instructions expected.
+2. **`tests/test_command_visibility.py` needed a REAL edit, not only the two docstrings.** §G
+   and the brief both say it stays green with no edit as proof the visibility logic did not
+   move. It could not: `test_every_hidden_feature_can_still_be_turned_back_on_from_discord`
+   **imported `cogs.core.VALUE_KEYS`**, which this build deletes. The behaviour assertions are
+   untouched; the membership test became `settings_panel.reachable_on_the_panel(key)`, which is
+   the same claim about the surface that replaced it. **No visibility logic changed**, and the
+   rest of the file is byte-identical.
+3. **The same import forced 31 rewrites in `tests/test_settings_store.py`**, where the design
+   named only `:992`. Every `*_panel_minutes` and every `bool`-key test asserted checklist 33 as
+   `key in VALUE_KEYS`. They are all `reachable_on_the_panel(key)` now, and `:992` itself became
+   the stronger set-equality the design asked for:
+   `test_every_registry_key_is_reachable_from_the_panel_as_well_as_the_dashboard` asserts the
+   panel's reach **equals** `KEY_TYPES` and that the no-editor set is exactly `{automod_rules}`.
+4. **`settings_panel.reachable_on_the_panel` was ADDED to Build 1's `__all__` contract.** It is
+   two lines over `keys_in`/`has_editor` and exists for those 31 assertions; nothing in the
+   panel calls it. Adding rather than importing both halves at 31 sites keeps the claim in one
+   place.
+5. **No confirm helper was built, and nothing goes to the conductor.** §F says fork F-S2 makes a
+   fourth hand-rolled `open_confirm` and asks the build to hand it over. It turned out
+   unnecessary: Build 1 already returns `key_card_buttons(confirming=True)` and `confirm_lines`,
+   so the confirm is the **same card re-rendered in a confirming state** — no new view, no new
+   `panels.py` helper. ⚠️ **The three existing hand-rolled copies (`youtube.open_confirm`,
+   pings deviation 8, automod deviation 12) are still three copies**; this build did not add a
+   fourth and did not fold them in either. Still the conductor's.
+6. **The number modal's bound is a compact label of its own, not `bounds_line`.** §C says the
+   bound is rebuilt where the value enters (checklist 22). `settings_panel.bounds_line` is prose
+   for the embed — *"It takes a whole number no larger than 10000."* — and a Discord `TextInput`
+   label is capped at **45 characters**, so it truncated mid-sentence. `cogs.core.number_label`
+   is the compact spelling (*"A whole number, no more than 10000"*); the embed keeps the
+   sentence, and `coerce_value` is still the backstop answered verbatim.
+7. **`set_key` and `clear_key` gained `via: str = VIA_DISCORD`**, which Build 1 argued against
+   and the brief required. It is not dead weight any more: `birthdays.clear_role` calls
+   `clear_key` (deviation 8) and the website's route can reuse both without a signature change.
+   ⚠️ **The route is NOT wired** — design §J says report, do not start — so `PUT`/`DELETE
+   /api/settings/{key}` still call `store.set`/`store.clear` and `note()` themselves, and
+   **KI-21 is still open**.
+8. **`birthdays.clear_role` now calls `clear_key` and keeps its own words.** The brief allowed
+   reporting instead if a logged shape a test pins would change; the tests pin the KIND
+   (`["settings.clear"]`), not the details, so the fix landed. The row gains `"via": "discord"`,
+   which it never had. The words did NOT move to `CLEARED`/`NOT_SET`: *"a role somebody already
+   has for today still comes off tomorrow"* is birthday-specific and would be lost. ⚠️ This is
+   the first `cogs/community/* → cogs/core` import in the tree; it imports a module-level
+   FUNCTION, not a cog, so the "cogs never import each other" rule (`architecture.md` rule 2) is
+   not what it would be if it reached for a `Cog` instance — **flagged for the reviewer**.
+9. **`LOG_LEVEL_COMMANDS` was FIXED, not reported.** The brief put it in the string sweep. All
+   seventeen `logkinds.FEATURES` now map to the command that exists, `core` included (this build
+   gives `/settings` its **Logs** button), and the help clause reads *and in `/x` ▸ **Logs***.
+   Two rows were wrong independently of the panels program: `pings → pingroles` and
+   `applications → applications`, neither of which has ever been a command name.
+10. **`test_every_feature_group_has_a_logs_command` was re-expressed, not repurposed and not
+    deleted.** ⚠️ `LOGS_GROUPS` was **already `{}`** on the base commit, so the test iterated
+    nothing and its sibling `test_a_logs_command_is_staff_only_and_ephemeral` asserted **nothing
+    at all**. The guarantee is now: zero Groups in the tree, and an AST walk of `black_bloc/`
+    proving every feature in `FEATURES` is the argument of a `send_logs` call. The staff-gate
+    half is a direct check that `send_logs` calls `require_staff`, which is where that gate
+    lives now that no `logs` subcommand exists. `LOGS_GROUPS` is deleted; `RETIRED_GROUPS`
+    replaces it as the list of names that must never come back.
+11. **The design's S1–S12 are 12 rows, and the confirm moved into S11.** §H's S11 covered both
+    the `manage_guild` absence and `staff_channel_id`'s default sentence; the F-S2 confirm is
+    the natural third clause of the same row, so S12 stayed the log-levels/Logs/timeout row and
+    the count is exactly 12 as the brief asked.
+12. **Eighteen numbered `sweeps.md` rows were rewritten in place, not the fifteen §E listed.**
+    §E named 16, 53, 65, 67, 68, 71, 83, 95, 108, 130, 156, 174, 184, 185, 186. Measured today,
+    **103, 197 and 199** also name a retired subcommand, and so do four prose blocks (Phase 1,
+    Phase 2, Phase 5 and the chat-memory preamble). All of them are rewritten. Row 16's
+    `/settings logs` (§J defect 2) is called out in the row itself, because after this build the
+    command it names is real for the first time.
+13. **Three code sites the design did not list, and two it listed at moved line numbers.**
+    Measured by grep on `57a878d`: `black_bloc/honeypot.py` (`MODE_IS_OFF_WAY_BACK`), and
+    `cogs/moderation/modmail.py` at **two** sites (the design predicted one, at a line honeypot's
+    and modmail's own builds have since moved). `cogs/moderation/honeypot.py:81` — which the
+    design flagged as "being rewritten right now" — no longer names `/settings` at all; the
+    string moved to `black_bloc/honeypot.py`. Full list in the report.
+14. **`docs/info/panels-program.md` and `docs/info/feature-list.md` were NOT touched.** §E's doc
+    table asks for four rows in the first and one clause in the second. The brief's scope list
+    ("do this and nothing more") enumerates the sweep targets and names neither. ⚠️ **They are
+    therefore stale**: `panels-program.md` still asks fork F3 as an open question, still says
+    "~120 keys", and its Core row and totals line still describe a `settings` Group. Left for
+    the conductor with `docs/info/README.md`.
+15. **`docs/TODO.md` and `docs/DONE.md` were not touched either**, for the same reason — the
+    brief's scope list does not name them and the conductor moves the item at the merge.
+16. **Nothing was accepted into `docs/KNOWN_ISSUES.md`.** No defect found here is being
+    tolerated: the two that survive (KI-21's route wiring, and the three hand-rolled confirms)
+    are both explicitly *"report, do not start"* work with a named owner, not accepted defects.
+
+### Found while building, REPORTED and not fixed
+
+1. ⚠️ **KI-21 is still open and the keyword to close it now exists.** `set_key`/`clear_key` take
+   `via`; `api/settings_api.py` still writes through `store.set`/`store.clear` and `note()`s
+   `web.settings.set`/`web.settings.clear` itself. Wiring the route through the shared writers
+   with `via=VIA_WEBSITE` and deleting its `note()` is one commit, closes KI-21 (the website can
+   arm automod past both arming refusals, because the generic settings route validates against
+   `KEY_CHOICES` only) and satisfies checklist 34 by function rather than by separation.
+   ⚠️ `tests/api/test_settings_api.py` is byte-identical through both builds and is the thing
+   that will tell you whether the wiring changed the web door's behaviour.
+2. ⚠️ **`tests/api/test_writes.py::test_another_session_is_not_slowed_down_by_this_ones_reads`
+   is still the wall-clock race Build 1 measured.** It did **not** fail on any of the five full
+   `pytest -n auto` runs on this branch, which is luck rather than a fix — the bucket still
+   refills at 5 tokens a second and `drain_reads` still counts to `READ_RATE` in Python. Build
+   1's diagnosis and fix stand.
+3. **The six singleton namespaces are unchanged and now visible on a Discord control.** `event`,
+   `voice`, `memory`, `hide`, `emoji`, `cost` each hold one key, and `A setting group…` lists
+   all six beside `events`, `tempvoice` and `chat`. It reads as a naming bug because it is one
+   (§J defect 1); the panel inherits the dashboard's grouping deliberately, so a rename pass
+   fixes both surfaces at once or neither.
+4. **`tests/cogs/test_presence.py` and `tests/test_bot.py` cannot share a process cleanly.** Run
+   in one `pytest` invocation, `test_bot.py`'s real `BlackBlocBot` starts the presence loop and
+   the fake-bot presence tests then see its `change_presence` calls. It does not bite under
+   `-n auto` (xdist distributes by file) and both files pass alone and in the full run. It is
+   pre-existing — the loop has always started on `load_extension` — and nothing in this build
+   touches it.
+5. **`black_bloc/cogs/community/birthdays.py` importing `black_bloc/cogs/core.py` is the first
+   cog-package-to-cog-package import in the tree.** It is a module-level function and creates no
+   cycle, but `architecture.md` rule 2 says cogs never import each other and a reviewer should
+   decide whether `set_key`/`clear_key` want a home outside `cogs/` before a second feature does
+   the same thing.

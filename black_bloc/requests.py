@@ -86,7 +86,7 @@ STATUS_WORDS: dict[str, str] = {
 
 REQUESTS_OFF = (
     "Requests are turned off on this server, so nothing was filed. A Lead turns them back on "
-    "with `/settings set request_mode on` — ask one if you have something to ask for."
+    "with `/settings` ▸ **Turn a feature back on…** — ask one if you have something to ask for."
 )
 STAFF_ONLY_FILES = (
     "Only staff may file a request on this server at the moment, so nothing was filed. Ask a Lead "
