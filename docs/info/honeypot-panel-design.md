@@ -1,7 +1,7 @@
 # Honeypot — `/honeypot` is ONE command that opens a panel
 
 > **Audience:** the build agent and the reviewer, and the owner for §I.
-> **Status:** TRACKED · ✅ **BUILT 2026-09-05** on `worktree-agent-a7ea6b0dbeac7f753` off `932f34e` — see the `## Build deviations` foot for what changed and what is NOT verified. Not merged, not deployed, and **never run against live Discord**.
+> **Status:** TRACKED · ✅ **SHIPPED 2026-09-05 as v79 (`361eaa2`, merged `fa845a6`)** — see the `## Build deviations` foot for what changed and what is NOT verified. Boot-verified from the Fly log only; **never run against live Discord by eye** (sweeps 188–199 are the owner's). KI-21 covers the generic-route bypass.
 > **Last verified: 2026-09-05** — every `path:line` below was READ against `main` at
 > **`git rev-parse --short HEAD` = `12979c2`** (the two commits since `46fba16` touch
 > `docs/TODO.md` only — `git diff --stat 46fba16 12979c2` = 1 file, 5 insertions — so every code

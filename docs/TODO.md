@@ -12,7 +12,7 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 07:08, v78 live, wave 4 in flight: honeypot + modmail A building)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 07:37, honeypot merged + v79 deploying, modmail A + /mod building)
 
 **`main` = `43312b9`** (role-menus panel merge; v77 live 20:51, 4529 tests, **36 commands**; `youtube_mode` is
 **shadow** since 2026-09-03 17:42). **The panels program is COMPLETE** — waves 1, 2 and 3 (17 features, one
@@ -233,14 +233,6 @@ docs bookkeeping lands with the work, not after.
   collapse into ONE `/mod`; 36 → 34 slots. The seven bare actions (`/warn`, `/timeout`, `/untimeout`,
   `/kick`, `/ban`, `/unban`, `/purge`) STAY bare — typed mid-incident with autocompleted arguments, a
   panel would be three clicks slower at the wrong moment.
-- 🆕 **Honeypot → ONE slash command (owner, 2026-09-04, clock read 20:50 after the ask: "All of honeypot should be 1 slash
-  commands Let's combine").** Today `honeypot.py:417` is a Group (`logs`, `setup`, `status`, `mode`,
-  `forget`) with a nested `exempt` group (`add`, `remove`) — 7 subcommands. Becomes `/honeypot` →
-  panel: status card, Setup…, mode select, Exempt roles (role select), Forget, Logs — the wave-3
-  shape (`info/panels-program.md`). Folds into the second audit; one build, own design doc.
-  **DECIDED (owner, 2026-09-04, audit proposal 1 of 6, "Yes"):** root card = today's `status`; buttons
-  Setup… (name modal), mode select, Exempt roles (role multi-select replaces `exempt add`/`remove`),
-  Forget (renders only when a trap is recorded), Logs. Est. 250–320k Opus. Design doc next, then build.
 - 🆕 **Ticket / modmail commands → maybe one (owner, 2026-09-04, clock read 20:50 after the ask: "All ticket stuff maybe?").**
   Today: the `modmail` Group (`logs`, `block`, `unblock`, `blocked`, `mode`, `forget`) plus FOUR
   top-level ticket commands used INSIDE a ticket — `/reply`, `/areply`, `/note`, `/close`
@@ -341,6 +333,22 @@ docs bookkeeping lands with the work, not after.
   **DISPATCHED 07:18: the `/settings` DESIGN** (Opus, own worktree off `0304c4d` this time so the main tree stays
   deployable; writes and commits `info/settings-panel-design.md` on its branch; usage at dispatch read 07:15 as
   above). Modmail Build B's seven forks go to the owner one at a time now, so B can dispatch the moment A merges.
+  **LANDED 07:33 (314k Opus): the honeypot panel** — merged clean as `fa845a6` (4593 tests, ruff clean, 36 → 36
+  measured); sweep rows `H1`–`H12` numbered **188–199** at the merge, guide count 187 → 199; KI-21 widened to
+  cover the honeypot's generic-route bypass (arming refusal skipped, exempt list rewritten with no
+  `honeypot.exempt_set` row). Forks F-H1/F-H2/F-H3 built as (a) — still to be confirmed with the owner one at
+  a time, after modmail B's seven. Usage after landing session 34% / weekly 12% / Fable 11%, read 07:33.
+  **LANDED 07:34 (264k Opus): `info/settings-panel-design.md` written and committed** (merged `361eaa2`) —
+  `/settings` one staff-only command; the group and five subcommands retire; sixteen read-only mode lines;
+  **Turn a feature back on…** off `hidden_names`; group → key editor over all 175 registry keys (measured;
+  supersedes `panels-program.md`'s "~120"); `Put the default back` widened to every key; `/presence` folds in
+  under F-S4(a) → **29 slots, zero groups**. Est. 380–450k, split Build 1 (150–190k) / Build 2 (230–280k);
+  ⚠️ dispatch only after all three wave-4 builds merge. Five forks F-S1…F-S5 (§ forks) go to the owner one at
+  a time after modmail B's and honeypot's; the five defects reported (no `/settings` subcommand checks the
+  database; `sweeps.md:150` names a `/settings logs` that never existed; `LOG_LEVEL_COMMANDS` wrong in 11 of
+  13 rows after wave 4) fold into the build. **v79 deploy started 07:36** (honeypot panel + the design doc).
+  **v79 LIVE 07:39 (`361eaa2`)** — honeypot panel shipped; boot verified 14:39:15Z, synced 36, no traceback. The
+  honeypot item moved WHOLE to `DONE.md`. Sweeps 188–199 are the owner's.
 - **Wave-1 review findings, small, fold into the next build that touches each file (Fable
   review 2026-09-03 13:50–14:05):** `requests.py` re-renders lack `allowed_mentions`;
   `LOG_LEVEL_COMMANDS` help still says "`/birthday logs`" / "`/request logs`"; five form writes

@@ -9,6 +9,32 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-05 — Honeypot panel: `/honeypot` is one command, seven subcommands become controls (v79, `361eaa2`)
+
+**Landing:** Opus build in its own worktree (314k), merged clean `fa845a6`, landing edits `aebcc02` (sweep rows
+`H1`–`H12` numbered 188–199, guide count 187 → 199, KI-21 widened to the honeypot's generic-route bypass),
+deployed `361eaa2` as v79 at 07:39 together with `info/settings-panel-design.md` (`361eaa2` is the design's
+merge commit). 4593 tests, ruff clean, `check.mjs` 17 pages / 142 routes, `commands synced` 36 → 36 measured (a
+Group was already one slot). Boot verified from the Fly log: database ready 14:39:15Z, synced 36, `/raidtrain`
+hidden, logged in 14:39:19Z, no traceback. **NOT verified:** the panel opened in Discord, a trap created, a role
+picked, a modal submitted, whether a real client submits an EMPTY `min_values=0` RoleSelect (**Exempt nobody** is
+the fallback that makes that safe), the dashboard Settings row for `honeypot_panel_minutes`. Forks F-H1/F-H2/F-H3
+were built on the design's recommendation, all (a), each reversible in one small local change (design doc
+§ Build deviations) — the owner's confirmation is still owed, one at a time. What was built, in full, is the
+design doc's `## Build deviations` foot and `docs/access/sweeps.md` rows 188–199. Review: `/honeypot` in
+`#mute-me-bot-test-spam`; https://blackbloc.heygabi.ai/honeypot.html is unchanged.
+
+**The item, moved whole from `TODO.md`:**
+
+- 🆕 **Honeypot → ONE slash command (owner, 2026-09-04, clock read 20:50 after the ask: "All of honeypot should be 1 slash
+  commands Let's combine").** Today `honeypot.py:417` is a Group (`logs`, `setup`, `status`, `mode`,
+  `forget`) with a nested `exempt` group (`add`, `remove`) — 7 subcommands. Becomes `/honeypot` →
+  panel: status card, Setup…, mode select, Exempt roles (role select), Forget, Logs — the wave-3
+  shape (`info/panels-program.md`). Folds into the second audit; one build, own design doc.
+  **DECIDED (owner, 2026-09-04, audit proposal 1 of 6, "Yes"):** root card = today's `status`; buttons
+  Setup… (name modal), mode select, Exempt roles (role multi-select replaces `exempt add`/`remove`),
+  Forget (renders only when a trap is recorded), Logs. Est. 250–320k Opus. Design doc next, then build.
+
 ## 2026-09-05 — Hide commands when off: a feature turned off on the portal takes its `/command` with it (v78, `baede2a`)
 
 **Landing:** Opus build in its own worktree (185k), merged `0fcbac2`, conductor's carve-out commit `e00c9bf`,
