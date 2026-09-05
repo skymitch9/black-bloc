@@ -10,20 +10,73 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from ...actionlog import (
-    LOGS_DEFAULT,
-    LOGS_MAX,
-    LOGS_MIN,
-    log_action,
-    send_logs,
-)
-from ...command_errors import SafeDynamicItem
+from ...actionlog import log_action, send_logs
+from ...command_errors import AnswersErrors, SafeDynamicItem
 from ...command_visibility import STAFF_ONLY
+from ...honeypot import (
+    ARMED_WITH_NO_TRAP,
+    BACK,
+    CHANNEL_NAME_MAX,
+    CLEAR_EXEMPT,
+    DEAD_TRAP_LINE,
+    EXEMPT_NOTHING_CHANGED,
+    EXEMPT_NOW_NOBODY,
+    EXEMPT_PLACEHOLDER,
+    EXEMPT_SELECT_MAX,
+    EXEMPT_TOO_MANY,
+    FORGET,
+    FORGET_PLACEHOLDER,
+    LOGS,
+    MODE_IS_OFF_WAY_BACK,
+    MODE_PLACEHOLDER,
+    MODE_SET,
+    NOT_A_NUMBER,
+    NUMBERS_TITLE,
+    PANEL_MINUTES_KEY,
+    PANEL_MINUTES_LABEL,
+    PANEL_NUMBERS,
+    PANEL_TIMEOUT_FOOTER,
+    PANEL_TITLE,
+    PURGE_DAYS_LABEL,
+    REFRESH,
+    SETTINGS,
+    SETTINGS_DONE,
+    SETTINGS_NOTHING,
+    SETUP,
+    SITE,
+    TEST_MODE_LINE,
+    TRAP_NAME_LABEL,
+    TRAP_NAME_TITLE,
+    HoneypotMove,
+    exempt_defaults,
+    exempt_diff,
+    exempt_editable,
+    exempt_sentence,
+    forget_buttons,
+    mode_options,
+    panel_minutes,
+    root_buttons,
+    settings_buttons,
+    trap_options,
+)
 from ...logkinds import VIA_DISCORD, kind_via
+from ...panels import (
+    Outcome,
+    Panel,
+    answer,
+    clamped,
+    db_ready,
+    db_up,
+    retire,
+    site_page_url,
+    still_staff,
+)
 from ...settings_store import (
     DB_UNAVAILABLE,
-    HONEYPOT_MODES,
+    GUILD_ONLY,
     HONEYPOT_PURGE_MAX_DAYS,
+    SettingError,
+    coerce_value,
     require_staff,
     staff_roles_sentence,
 )
@@ -46,8 +99,8 @@ DM_BEFORE_BAN = (
     "ask a moderator of that server to review the ban — Black Bloc cannot undo it for you."
 )
 ALREADY_BANNED = (
-    "That account was already banned for this post, so nothing changed. `/honeypot status` shows "
-    "what the trap has caught."
+    "That account was already banned for this post, so nothing changed. `/honeypot` shows what "
+    "the trap has caught."
 )
 NO_SUCH_HIT = (
     "Black Bloc has no record of that trap post any more, so nobody was banned. It may have been "
@@ -79,8 +132,7 @@ NO_STAFF_ROLES = (
     "Black Bloc cannot work out who counts as staff, so the trap was left as it was. Nobody but "
     "server admins would be exempt from it, which means one mistyped message from a moderator "
     "would ban them. Point `staff_channel_id` at a channel only staff can see with `/settings "
-    "set staff_channel_id`, check `/honeypot status` lists the roles you expect, then turn the "
-    "trap on again."
+    "set staff_channel_id`, check the panel lists the roles you expect, then set the mode again."
 )
 NO_STAFF_WARNING = (
     "⚠️ **No staff roles resolve.** Only people with Manage Server are exempt, so a moderator "
@@ -88,16 +140,12 @@ NO_STAFF_WARNING = (
 )
 ALREADY_A_TRAP = (
     "This server already has a trap channel — {where} — so a second one was not made. Two traps "
-    "are two things to remember; delete that channel, or run `/honeypot forget {channel_id}` if "
-    "it is already gone, then run this again."
+    "are two things to remember; delete that channel, or forget it from the honeypot panel or "
+    "this page if it is already gone, then run this again."
 )
 NOT_A_TRAP = (
     "**{channel_id}** is not one of Black Bloc's trap channels, so nothing was forgotten. "
-    "`/honeypot status` lists the ones it knows about."
-)
-NOT_AN_ID = (
-    "**{given}** is not a channel id, so nothing was forgotten. Right-click the channel and "
-    "choose Copy Channel ID, or read the id out of `/honeypot status`."
+    "`/honeypot` lists the ones it knows about."
 )
 FORGOTTEN = (
     "Black Bloc has forgotten **{channel_id}** — it is no longer a trap, and posts there are "
@@ -294,15 +342,24 @@ async def ban_hit(
     return ("banned", f"Banned <@{hit['user_id']}> for that trap post.")
 
 
+def recorded_traps(bot: Any, guild: Any) -> list[int]:
+    return [int(cid) for cid in (bot.store.get(guild.id, "honeypot_channel_ids") or [])]
+
+
+def live_traps(bot: Any, guild: Any) -> list[int]:
+    """The one home for the fact that decides both Setup… and what setup refuses."""
+    return [cid for cid in recorded_traps(bot, guild) if guild.get_channel(cid) is not None]
+
+
+def dead_traps(bot: Any, guild: Any) -> list[int]:
+    return [cid for cid in recorded_traps(bot, guild) if guild.get_channel(cid) is None]
+
+
 async def make_trap_channel(
     bot: Any, guild: Any, actor: Any, name: str | None = None, *, via: str = VIA_DISCORD
 ) -> tuple[str, str]:
     """Create the trap channel, for slash and web alike: (what happened, what to say)."""
-    live = [
-        cid
-        for cid in (bot.store.get(guild.id, "honeypot_channel_ids") or [])
-        if guild.get_channel(cid) is not None
-    ]
+    live = live_traps(bot, guild)
     if live:
         return ("already", ALREADY_A_TRAP.format(where=f"<#{live[0]}>", channel_id=live[0]))
     category = test_category(bot)
@@ -413,14 +470,6 @@ class Honeypot(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self._locks: dict[int, asyncio.Lock] = {}
-
-    honeypot = app_commands.Group(
-        name="honeypot", description="The trap channel that catches spam bots",
-        default_permissions=STAFF_ONLY,
-    )
-    exempt = app_commands.Group(
-        name="exempt", description="Roles the trap ignores", parent=honeypot
-    )
 
     async def cog_load(self) -> None:
         self.bot.add_dynamic_items(BanNowButton)
@@ -595,46 +644,6 @@ class Honeypot(commands.Cog):
             lock = self._locks[user_id] = asyncio.Lock()
         return lock
 
-    async def _database_ready(self, interaction: discord.Interaction) -> bool:
-        if self.bot.db.is_connected:
-            return True
-        log.warning("honeypot: refused a command — the database is not connected")
-        await interaction.response.send_message(DB_UNAVAILABLE, ephemeral=True)
-        return False
-
-    @honeypot.command(name="logs", description="The last few honeypot log lines")
-    @app_commands.describe(
-        count="How many lines, 1 to 50 (10 by default)",
-        important_only="True to leave out the dry runs and the housekeeping",
-    )
-    async def honeypot_logs(
-        self,
-        interaction: discord.Interaction,
-        count: app_commands.Range[int, LOGS_MIN, LOGS_MAX] = LOGS_DEFAULT,
-        important_only: bool = False,
-    ) -> None:
-        await send_logs(interaction, "honeypot", count=count, important_only=important_only)
-
-    @honeypot.command(name="setup", description="Create the trap channel spam bots post in")
-    @app_commands.describe(name="What the trap channel is called")
-    async def setup_channel(
-        self, interaction: discord.Interaction, name: str | None = None
-    ) -> None:
-        if not await require_staff(interaction):
-            return
-        if not await self._database_ready(interaction):
-            return
-        await interaction.response.defer(ephemeral=True)
-        _, said = await make_trap_channel(
-            self.bot, interaction.guild, interaction.user, name
-        )
-        await interaction.followup.send(
-            said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-        )
-
-    async def _post_notice(self, channel: Any) -> bool:
-        return await post_notice(self.bot, channel)
-
     def _may_act_in(self, channel: Any) -> bool:
         guard = getattr(self.bot, "guard", None)
         if guard is None:
@@ -646,156 +655,522 @@ class Honeypot(commands.Cog):
             return False
         return getattr(channel, "category_id", None) == getattr(test_channel, "category_id", None)
 
-    def _test_category(self) -> Any:
-        return test_category(self.bot)
-
-    @honeypot.command(name="status", description="Show what the trap is set to and has caught")
-    async def status(self, interaction: discord.Interaction) -> None:
-        if not await require_staff(interaction):
-            return
-        if not await self._database_ready(interaction):
-            return
-        guild = interaction.guild
-        store = self.bot.store
-        channels = store.get(guild.id, "honeypot_channel_ids") or []
-        roles = store.get(guild.id, "honeypot_exempt_role_ids") or []
-        staff = store.staff_roles(guild)
-        mode = store.get(guild.id, "honeypot_mode")
-        totals = await hit_counts(self.bot.db, guild.id)
-        lines = [
-            f"**mode** — {mode}",
-            f"**staff (always exempt)** — {staff_roles_sentence(staff)}",
-            "**trap channels** — "
-            + (", ".join(f"<#{c}>" for c in channels) if channels else "not set up yet"),
-            f"**purge** — {store.get(guild.id, 'honeypot_purge_days')} day(s) of their messages",
-            "**exempt roles** — "
-            + (", ".join(f"<@&{r}>" for r in roles) if roles else "staff only"),
-            f"**caught** — {totals.get('banned', 0)} banned · "
-            f"{totals.get('would_ban', 0)} logged in shadow · "
-            f"{totals.get('ban_failed', 0)} failed · {totals.get('exempt', 0)} ignored",
-        ]
-        if not staff and mode == "on":
-            lines.append(NO_STAFF_WARNING)
-        await interaction.response.send_message(
-            "\n".join(lines), ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
-        )
-
-    @honeypot.command(name="mode", description="Turn the trap off, to shadow, or on")
-    @app_commands.describe(mode="off, shadow (log only) or on (ban whoever posts)")
-    @app_commands.choices(
-        mode=[app_commands.Choice(name=name, value=name) for name in HONEYPOT_MODES]
-    )
-    async def mode(
-        self, interaction: discord.Interaction, mode: app_commands.Choice[str]
-    ) -> None:
-        if not await require_staff(interaction):
-            return
-        if mode.value == "on" and not self.bot.store.staff_roles(interaction.guild):
-            await interaction.response.send_message(NO_STAFF_ROLES, ephemeral=True)
-            return
-        await self.bot.store.set(
-            interaction.guild.id, "honeypot_mode", mode.value, by=interaction.user.id
-        )
-        await interaction.response.send_message(
-            f"The trap is now **{mode.value}**.", ephemeral=True
-        )
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "honeypot.mode",
-            actor=interaction.user,
-            details={"mode": mode.value},
-        )
-
-    @honeypot.command(name="forget", description="Stop treating a channel id as a trap")
-    @app_commands.describe(channel_id="The id of the trap channel to forget")
-    async def forget(self, interaction: discord.Interaction, channel_id: str) -> None:
-        if not await require_staff(interaction):
-            return
-        guild = interaction.guild
-        digits = channel_id.strip().lstrip("<#").rstrip(">")
-        if not digits.isdigit():
-            await interaction.response.send_message(
-                NOT_AN_ID.format(given=channel_id), ephemeral=True
-            )
-            return
-        removed = await self._forget(guild, int(digits), actor=interaction.user)
-        if not removed:
-            await interaction.response.send_message(
-                NOT_A_TRAP.format(channel_id=digits), ephemeral=True
-            )
-            return
-        await interaction.response.send_message(
-            FORGOTTEN.format(channel_id=digits), ephemeral=True
-        )
-
-    async def _forget(self, guild: Any, channel_id: int, actor: Any = None) -> bool:
-        ids = list(self.bot.store.get(guild.id, "honeypot_channel_ids") or [])
-        if channel_id not in ids:
-            return False
-        ids.remove(channel_id)
-        await self.bot.store.set(
-            guild.id, "honeypot_channel_ids", ids, by=getattr(actor, "id", None)
-        )
-        await log_action(
-            self.bot,
-            guild,
-            "honeypot.trap_removed",
-            actor=actor,
-            details={"channel_id": channel_id},
-        )
-        return True
-
     @commands.Cog.listener()
     async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel) -> None:
         if not self.bot.db.is_connected:
             return
-        await self._forget(channel.guild, channel.id)
+        await forget_trap(self.bot, channel.guild, channel.id)
 
-    @exempt.command(name="add", description="Let a role post in the trap without being banned")
-    async def exempt_add(self, interaction: discord.Interaction, role: discord.Role) -> None:
-        await self._change_exempt(interaction, role, add=True)
-
-    @exempt.command(name="remove", description="Stop exempting a role from the trap")
-    async def exempt_remove(self, interaction: discord.Interaction, role: discord.Role) -> None:
-        await self._change_exempt(interaction, role, add=False)
-
-    async def _change_exempt(
-        self, interaction: discord.Interaction, role: discord.Role, *, add: bool
-    ) -> None:
+    @app_commands.command(
+        name="honeypot", description="The trap channel that catches spam bots"
+    )
+    @app_commands.default_permissions(STAFF_ONLY)
+    async def honeypot(self, interaction: discord.Interaction) -> None:
+        if interaction.guild is None:
+            await answer(interaction, GUILD_ONLY)
+            return
         if not await require_staff(interaction):
             return
-        guild = interaction.guild
-        ids = list(self.bot.store.get(guild.id, "honeypot_exempt_role_ids") or [])
-        if add and role.id not in ids:
-            ids.append(role.id)
-        elif not add and role.id in ids:
-            ids.remove(role.id)
-        else:
-            await interaction.response.send_message(
-                f"**{role.name}** was already "
-                + ("exempt" if add else "not exempt")
-                + ", so nothing changed. `/honeypot status` lists the exempt roles.",
-                ephemeral=True,
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
+        if not await db_up(interaction):
             return
-        await self.bot.store.set(
-            guild.id, "honeypot_exempt_role_ids", ids, by=interaction.user.id
-        )
+        embed, view = await build_root(self.bot, interaction.guild)
         await interaction.response.send_message(
-            f"**{role.name}** is "
-            + ("exempt from the trap now." if add else "no longer exempt from the trap."),
+            embed=embed,
+            view=view,
             ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
         )
-        await log_action(
-            self.bot,
-            guild,
-            "honeypot.exempt_add" if add else "honeypot.exempt_remove",
-            actor=interaction.user,
-            details={"role_id": role.id},
+        view.message = await interaction.original_response()
+
+
+# --- the moves, one function each, one write and one log row -------------------------------------
+
+
+def arming_refusal(bot: Any, guild: Any) -> str | None:
+    """The mode picker and `set_mode` read one answer, so offer and verdict cannot disagree."""
+    if not bot.store.staff_roles(guild):
+        return NO_STAFF_ROLES
+    return None
+
+
+async def set_mode(
+    bot: Any, guild: Any, value: str, actor: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    if value == "on":
+        blocker = arming_refusal(bot, guild)
+        if blocker is not None:
+            return Outcome(False, blocker, "no_staff_roles", 409)
+    await bot.store.set(guild.id, "honeypot_mode", value, by=getattr(actor, "id", actor))
+    await log_action(
+        bot,
+        guild,
+        kind_via("honeypot.mode", via),
+        actor=actor,
+        details={"mode": value, "via": via},
+    )
+    return Outcome(True, MODE_SET.format(mode=value), "set", 200, value)
+
+
+async def set_exempt_roles(
+    bot: Any, guild: Any, role_ids: Any, actor: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """The whole list in one write: the selection IS the list, so add and remove are one move."""
+    before = exempt_defaults(bot.store.get(guild.id, "honeypot_exempt_role_ids") or [])
+    after = exempt_defaults(role_ids)
+    added, removed = exempt_diff(before, after)
+    if not added and not removed:
+        return Outcome(True, EXEMPT_NOTHING_CHANGED, "unchanged", 200, before)
+    await bot.store.set(guild.id, "honeypot_exempt_role_ids", after, by=getattr(actor, "id", actor))
+    await log_action(
+        bot,
+        guild,
+        kind_via("honeypot.exempt_set", via),
+        actor=actor,
+        details={"role_ids": after, "added": added, "removed": removed, "via": via},
+    )
+    said = EXEMPT_NOW_NOBODY if not after else exempt_sentence(added, removed)
+    return Outcome(True, said, "set", 200, after)
+
+
+async def forget_trap(
+    bot: Any, guild: Any, channel_id: int, actor: Any = None, *, via: str = VIA_DISCORD
+) -> Outcome:
+    ids = recorded_traps(bot, guild)
+    if int(channel_id) not in ids:
+        return Outcome(False, NOT_A_TRAP.format(channel_id=channel_id), "not_a_trap", 404)
+    ids.remove(int(channel_id))
+    await bot.store.set(
+        guild.id, "honeypot_channel_ids", ids, by=getattr(actor, "id", None)
+    )
+    await log_action(
+        bot,
+        guild,
+        kind_via("honeypot.trap_removed", via),
+        actor=actor,
+        details={"channel_id": int(channel_id), "via": via},
+    )
+    return Outcome(True, FORGOTTEN.format(channel_id=channel_id), "forgotten", 200, ids)
+
+
+async def save_settings(
+    bot: Any, guild: Any, changes: Any, actor: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """Every value is validated before any of them is written, so a refusal writes nothing."""
+    wanted = {key: value for key, value in (changes or {}).items() if key in SETTINGS_KEYS}
+    if not wanted:
+        return Outcome(True, SETTINGS_NOTHING, "nothing", 200)
+    for key, value in wanted.items():
+        try:
+            coerce_value(key, value)
+        except SettingError as exc:
+            return Outcome(False, str(exc), "refused", 400)
+    for key, value in wanted.items():
+        await bot.store.set(guild.id, key, value, by=getattr(actor, "id", actor))
+    await log_action(
+        bot,
+        guild,
+        kind_via("honeypot.settings", via),
+        actor=actor,
+        details={"changed": wanted, "via": via},
+    )
+    return Outcome(
+        True,
+        SETTINGS_DONE.format(
+            minutes=panel_minutes(bot.store, guild.id),
+            days=bot.store.get(guild.id, "honeypot_purge_days"),
+        ),
+        "saved",
+        200,
+    )
+
+
+def status_lines(bot: Any, guild: Any, totals: dict[str, int]) -> list[str]:
+    """The panel embed and what `/honeypot status` printed are ONE list, never two shapes."""
+    store = bot.store
+    channels = recorded_traps(bot, guild)
+    roles = store.get(guild.id, "honeypot_exempt_role_ids") or []
+    staff = store.staff_roles(guild)
+    mode = store.get(guild.id, "honeypot_mode")
+    lines = [
+        f"**mode** — {mode}",
+        f"**staff (always exempt)** — {staff_roles_sentence(staff)}",
+        "**trap channels** — "
+        + (", ".join(f"<#{c}>" for c in channels) if channels else "not set up yet"),
+        f"**purge** — {store.get(guild.id, 'honeypot_purge_days')} day(s) of their messages",
+        "**exempt roles** — "
+        + (", ".join(f"<@&{r}>" for r in roles) if roles else "staff only"),
+        f"**caught** — {totals.get('banned', 0)} banned · "
+        f"{totals.get('would_ban', 0)} logged in shadow · "
+        f"{totals.get('ban_failed', 0)} failed · {totals.get('exempt', 0)} ignored",
+    ]
+    blocker = arming_refusal(bot, guild)
+    if blocker is not None:
+        lines.append(blocker)
+    gone = dead_traps(bot, guild)
+    if gone:
+        lines.append(
+            DEAD_TRAP_LINE.format(
+                ids=", ".join(str(one) for one in gone),
+                them="it" if len(gone) == 1 else "them",
+            )
         )
+    if mode == "on" and not live_traps(bot, guild):
+        lines.append(ARMED_WITH_NO_TRAP)
+    if not exempt_editable(roles):
+        lines.append(EXEMPT_TOO_MANY.format(count=len(exempt_defaults(roles))))
+    if getattr(bot, "guard", None) is not None:
+        lines.append(TEST_MODE_LINE)
+    if not staff and mode == "on":
+        lines.append(NO_STAFF_WARNING)
+    return lines
+
+
+def settings_lines(bot: Any, guild: Any) -> list[str]:
+    return [
+        f"**this panel stays live** — {panel_minutes(bot.store, guild.id)} minute(s)",
+        f"**a ban deletes** — {bot.store.get(guild.id, 'honeypot_purge_days')} day(s) of their "
+        f"messages, 0 to {HONEYPOT_PURGE_MAX_DAYS}",
+        "",
+        MODE_IS_OFF_WAY_BACK,
+    ]
+
+
+def trap_names(guild: Any, recorded: Any) -> dict[int, str]:
+    found: dict[int, str] = {}
+    for one in recorded or ():
+        channel = guild.get_channel(int(one))
+        if channel is not None:
+            found[int(one)] = str(getattr(channel, "name", one))
+    return found
+
+
+# --- the panel -----------------------------------------------------------------------------------
+
+
+STYLES = {
+    "primary": discord.ButtonStyle.primary,
+    "secondary": discord.ButtonStyle.secondary,
+    "success": discord.ButtonStyle.success,
+    "danger": discord.ButtonStyle.danger,
+}
+SETTINGS_KEYS = (PANEL_MINUTES_KEY, "honeypot_purge_days")
+PURGE_DAYS_LABEL_BOUNDED = f"{PURGE_DAYS_LABEL} (0–{HONEYPOT_PURGE_MAX_DAYS})"
+SETTINGS_TITLE = "How the honeypot panel behaves"
+FORGET_TITLE = "Which trap channel to forget"
+FORGET_INTRO = (
+    "Forgetting a channel only stops Black Bloc treating it as a trap — the channel itself is "
+    "left exactly where it is."
+)
+
+
+class HoneypotPanel(Panel):
+    def __init__(self, minutes: int) -> None:
+        super().__init__(minutes, footer=PANEL_TIMEOUT_FOOTER)
+
+
+def minutes_for(bot: Any, guild_id: int) -> int:
+    return panel_minutes(bot.store, guild_id)
+
+
+def add_root_buttons(view: Any, bot: Any, guild: Any) -> None:
+    url = site_page_url(getattr(getattr(bot, "settings", None), "origin", ""), "honeypot")
+    moves = root_buttons(
+        may_setup=not live_traps(bot, guild),
+        may_forget=bool(recorded_traps(bot, guild)),
+        may_clear=bool(bot.store.get(guild.id, "honeypot_exempt_role_ids") or []),
+        has_site=url is not None,
+    )
+    for move in moves:
+        view.add_item(SiteButton(move, url) if move.action == SITE else MoveButton(move))
+
+
+async def build_root(bot: Any, guild: Any) -> tuple[discord.Embed, HoneypotPanel]:
+    totals = await hit_counts(bot.db, guild.id)
+    embed = discord.Embed(title=PANEL_TITLE, description=clamped(status_lines(bot, guild, totals)))
+    view = HoneypotPanel(minutes_for(bot, guild.id))
+    view.add_item(
+        ModePick(bot.store.get(guild.id, "honeypot_mode"), arming_refusal(bot, guild) is None)
+    )
+    roles = bot.store.get(guild.id, "honeypot_exempt_role_ids") or []
+    if exempt_editable(roles):
+        view.add_item(ExemptPick(exempt_defaults(roles)))
+    add_root_buttons(view, bot, guild)
+    return (embed, view)
+
+
+def build_settings(bot: Any, guild: Any) -> tuple[discord.Embed, HoneypotPanel]:
+    embed = discord.Embed(title=SETTINGS_TITLE, description=clamped(settings_lines(bot, guild)))
+    view = HoneypotPanel(minutes_for(bot, guild.id))
+    for move in settings_buttons():
+        view.add_item(MoveButton(move))
+    return (embed, view)
+
+
+def build_forget(bot: Any, guild: Any) -> tuple[discord.Embed, HoneypotPanel]:
+    recorded = recorded_traps(bot, guild)
+    options = trap_options(recorded, trap_names(guild, recorded))
+    embed = discord.Embed(title=FORGET_TITLE, description=clamped([FORGET_INTRO]))
+    view = HoneypotPanel(minutes_for(bot, guild.id))
+    if options:
+        view.add_item(ForgetPick(options))
+    for move in forget_buttons():
+        view.add_item(MoveButton(move))
+    return (embed, view)
+
+
+async def show(interaction: discord.Interaction, built: Any, previous: Any) -> None:
+    embed, view = built
+    retire(previous)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+async def render_root(interaction: discord.Interaction, previous: Any = None) -> None:
+    await show(interaction, await build_root(interaction.client, interaction.guild), previous)
+
+
+async def render_settings(interaction: discord.Interaction, previous: Any = None) -> None:
+    await show(interaction, build_settings(interaction.client, interaction.guild), previous)
+
+
+async def render_forget(interaction: discord.Interaction, previous: Any = None) -> None:
+    await show(interaction, build_forget(interaction.client, interaction.guild), previous)
+
+
+async def opened(interaction: discord.Interaction) -> bool:
+    """Staff are re-asked before every move, the reads included, and then the database is."""
+    if not await still_staff(interaction):
+        return False
+    await interaction.response.defer()
+    return await db_ready(interaction)
+
+
+async def back_to_root(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await opened(interaction):
+        return
+    await render_root(interaction, previous)
+
+
+async def open_settings(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await opened(interaction):
+        return
+    await render_settings(interaction, previous)
+
+
+async def open_forget(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await opened(interaction):
+        return
+    await render_forget(interaction, previous)
+
+
+async def run_mode(interaction: discord.Interaction, value: str, previous: Any = None) -> None:
+    if not await opened(interaction):
+        return
+    outcome = await set_mode(interaction.client, interaction.guild, value, interaction.user)
+    await render_root(interaction, previous)
+    await answer(interaction, outcome.message)
+
+
+async def run_exempt(
+    interaction: discord.Interaction, role_ids: Any, previous: Any = None
+) -> None:
+    if not await opened(interaction):
+        return
+    outcome = await set_exempt_roles(
+        interaction.client, interaction.guild, role_ids, interaction.user
+    )
+    await render_root(interaction, previous)
+    await answer(interaction, outcome.message)
+
+
+async def run_forget(
+    interaction: discord.Interaction, channel_id: int, previous: Any = None
+) -> None:
+    if not await opened(interaction):
+        return
+    outcome = await forget_trap(
+        interaction.client, interaction.guild, int(channel_id), interaction.user
+    )
+    await render_root(interaction, previous)
+    await answer(interaction, outcome.message)
+
+
+async def run_setup(interaction: discord.Interaction, name: str, previous: Any = None) -> None:
+    if not await opened(interaction):
+        return
+    _, said = await make_trap_channel(
+        interaction.client, interaction.guild, interaction.user, name or None
+    )
+    await render_root(interaction, previous)
+    await answer(interaction, said)
+
+
+async def run_settings(
+    interaction: discord.Interaction, changes: dict[str, Any], previous: Any = None
+) -> None:
+    """A refused value is answered and the card is NOT re-rendered, so it cannot read as a save."""
+    if not await opened(interaction):
+        return
+    outcome = await save_settings(
+        interaction.client, interaction.guild, changes, interaction.user
+    )
+    if not outcome.ok:
+        await answer(interaction, outcome.message)
+        return
+    await render_settings(interaction, previous)
+    await answer(interaction, outcome.message)
+
+
+# --- the controls --------------------------------------------------------------------------------
+
+
+class MoveButton(discord.ui.Button):
+    def __init__(self, move: HoneypotMove) -> None:
+        super().__init__(label=move.label, style=STYLES[move.style], row=move.row)
+        self.move = move
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        action = self.move.action
+        if action == LOGS:
+            await send_logs(interaction, "honeypot")
+            return
+        if action in (REFRESH, BACK):
+            await back_to_root(interaction, view)
+            return
+        if action == SETTINGS:
+            await open_settings(interaction, view)
+            return
+        if action == FORGET:
+            await open_forget(interaction, view)
+            return
+        if action == CLEAR_EXEMPT:
+            await run_exempt(interaction, [], view)
+            return
+        await self.open_modal(interaction, view)
+
+    async def open_modal(self, interaction: discord.Interaction, view: Any) -> None:
+        if not await still_staff(interaction):
+            return
+        if not await db_up(interaction):
+            return
+        bot = interaction.client
+        guild = interaction.guild
+        if self.move.action == SETUP:
+            await interaction.response.send_modal(TrapNameModal(view))
+            return
+        if self.move.action == PANEL_NUMBERS:
+            await interaction.response.send_modal(
+                NumbersModal(
+                    minutes_for(bot, guild.id),
+                    bot.store.get(guild.id, "honeypot_purge_days"),
+                    view,
+                )
+            )
+
+
+class SiteButton(discord.ui.Button):
+    def __init__(self, move: HoneypotMove, url: str) -> None:
+        super().__init__(label=move.label, style=discord.ButtonStyle.link, url=url, row=move.row)
+
+
+class ModePick(discord.ui.Select):
+    def __init__(self, current: Any, may_arm: bool) -> None:
+        super().__init__(
+            placeholder=MODE_PLACEHOLDER,
+            options=[
+                discord.SelectOption(label=label, value=value, default=now)
+                for value, label, now in mode_options(current, may_arm)
+            ],
+            min_values=1,
+            max_values=1,
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_mode(interaction, self.values[0], self.view)
+
+
+class ExemptPick(discord.ui.RoleSelect):
+    """The selection IS the list; **Exempt nobody** is the second door onto the empty case."""
+
+    def __init__(self, stored: list[int]) -> None:
+        super().__init__(
+            placeholder=EXEMPT_PLACEHOLDER,
+            min_values=0,
+            max_values=EXEMPT_SELECT_MAX,
+            default_values=[discord.Object(id=one) for one in stored],
+            row=1,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_exempt(interaction, [one.id for one in self.values], self.view)
+
+
+class ForgetPick(discord.ui.Select):
+    def __init__(self, options: list[tuple[str, int, bool]]) -> None:
+        super().__init__(
+            placeholder=FORGET_PLACEHOLDER,
+            options=[
+                discord.SelectOption(label=label, value=str(ident))
+                for label, ident, _live in options[:EXEMPT_SELECT_MAX]
+            ],
+            min_values=1,
+            max_values=1,
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_forget(interaction, int(self.values[0]), self.view)
+
+
+# --- the modals ----------------------------------------------------------------------------------
+
+
+class TrapNameModal(AnswersErrors, discord.ui.Modal):
+    trap = discord.ui.TextInput(
+        label=TRAP_NAME_LABEL, max_length=CHANNEL_NAME_MAX, required=False
+    )
+
+    def __init__(self, previous: Any = None) -> None:
+        super().__init__(title=TRAP_NAME_TITLE[:45])
+        self.previous = previous
+        self.trap.default = TRAP_NAME
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await run_setup(interaction, str(self.trap).strip(), self.previous)
+
+
+class NumbersModal(AnswersErrors, discord.ui.Modal):
+    stays = discord.ui.TextInput(label=PANEL_MINUTES_LABEL, max_length=5)
+    purge = discord.ui.TextInput(label=PURGE_DAYS_LABEL_BOUNDED, max_length=2)
+
+    def __init__(self, minutes: Any, days: Any, previous: Any = None) -> None:
+        super().__init__(title=NUMBERS_TITLE[:45])
+        self.previous = previous
+        self.stays.default = str(minutes)
+        self.purge.default = str(days)
+
+    def fields(self) -> tuple[tuple[Any, str, str, int], ...]:
+        return (
+            (self.stays, PANEL_MINUTES_KEY, PANEL_MINUTES_LABEL, 1),
+            (self.purge, "honeypot_purge_days", PURGE_DAYS_LABEL_BOUNDED, 0),
+        )
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        """A modal has no Range, so both fields are parsed before either is written."""
+        changes: dict[str, Any] = {}
+        for item, key, label, floor in self.fields():
+            given = str(item).strip()
+            if not given.isdigit() or int(given) < floor:
+                await answer(
+                    interaction,
+                    NOT_A_NUMBER.format(given=given[:40] or "nothing", label=label),
+                )
+                return
+            changes[key] = int(given)
+        await run_settings(interaction, changes, self.previous)
 
 
 async def setup(bot: commands.Bot) -> None:
