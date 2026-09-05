@@ -1,7 +1,19 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-05** — rows **208–218** added by the MOD CASES PANEL build (`/mod [member]` becomes
+> **2026-09-05** — the `MB1`–`MB12` block below was added by the MODMAIL PANEL build
+> **Build B**, on branch `worktree-agent-a4bebd98196e3ca14`, **NOT merged and NOT deployed**.
+> Build B adds the sticky ticket card, `modmail_reply_style`, the practice ticket, and retires
+> `/areply` `/note` `/close` — top-level **33 → 30 on `main`, measured** through
+> `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`. Schema **29 → 30**
+> (`modmail_tickets` gains `card_message_id` and `practice`), and the migration was RUN against
+> a database built by `main`'s own `db.py` at `6e5a550`, not reasoned about. The block is
+> lettered on purpose; the conductor numbers it at the merge. ⚠️ **Nothing in `MB1`–`MB12` has
+> met live Discord** — no boot, no card posted, no practice thread made; the whole verification
+> is `pytest` (4738), `ruff check` and `node site/mock/check.mjs` (17 pages, 146 routes,
+> unchanged). The **Phase 7** block below was rewritten IN PLACE again, because it still told the
+> owner to run `/areply`, `/note` and `/close`. Before that, same day —
+> rows **208–218** added by the MOD CASES PANEL build (`/mod [member]` becomes
 > ONE staff-only command that opens a panel; `/case`, `/cases` and the `mod` group with its `logs`
 > child are all retired, and a case can now be edited, noted, voided and restored from either
 > Discord or the dashboard). ⚠️ **This supersedes the "UNCHANGED at 36" line below**: the
@@ -279,18 +291,18 @@ form for a full pass.
   5 min expect a `birthday.would_announce` line in the test channel (`Wishes are… → on`
   to see the actual embed, colour `#4eefff`). The daily Birthday Bot import runs on its
   own loop; there has been no `/birthday import` since 2026-08-27.
-- **Phase 7 (live, `modmail_enabled` false; rewritten 2026-09-05 for the panel — every
-  `/modmail …` and `/snippet …` subcommand this block used to name is gone):** `/modmail`
-  is ONE command that opens a panel carrying the whole status block (resolved staff, loop
-  health, the open tickets) → **Setup…** → **Answer DMs on** → from a second account DM the
-  bot: expect a ticket channel `<username>` INSIDE the test category, the header card +
-  your DM relayed into the test channel (guarded send), ✅ on the DM → in the test
-  channel `/reply ticket:<n> hello` (relayed to the DM, shows your name) → `/areply`
-  (shows "Staff", default colour) → `/note` or a message starting `=` (never
-  relayed) → `/close reason:done` → transcript `.txt` + summary in the test channel,
-  DM to the member. Try **Snippets…** → **Add one…** and **Blocked…** → **Block someone…**.
+- **Phase 7 (live, `modmail_enabled` false; rewritten 2026-09-05 AGAIN for Build B — every
+  `/modmail …`, `/snippet …`, `/areply`, `/note` and `/close` this block used to name is
+  gone):** `/modmail` is ONE command that opens a panel carrying the whole status block
+  (resolved staff, loop health, the open tickets) → **Setup…** → **Answer DMs on** → from a
+  second account DM the bot: expect a ticket channel `<username>` INSIDE the test category,
+  the header card + your DM relayed into the test channel (guarded send), ✅ on the DM →
+  ⚠️ **the ticket's sticky card appears in the test channel, not in the ticket** — that is
+  `speak`'s redirect under test mode and it is expected → press **Reply**, **Reply as
+  Staff**, **Private note** and **Close…** on that card; `/reply ticket:<n> hello` still
+  works typed. Try **Snippets…** → **Add one…** and **Blocked…** → **Block someone…**.
   Then **Setup…** → **Answer DMs off** again so the incumbent keeps the real tickets.
-  ⚠️ `/reply` `/areply` `/note` `/close` are unchanged and still typed.
+  ⚠️ `/reply` is the only typed modmail command left.
 - **Phase 6 (live, automod `shadow`):** `/automod` — ONE panel carrying everything
   `/automod status` used to print (mode shadow, resolved staff, rules: mention_spam armed,
   others log-only) → from a second account post 5 @mentions within 30 s in the test
@@ -682,8 +694,8 @@ conductor at the merge.
 block, unblock, blocked, mode, forget, status, settings) and the whole `snippet` group (add,
 remove, list) are **gone**, so the top-level command count really moves — **36 → 35, measured**
 through `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`. ⚠️ **`/reply`,
-`/areply`, `/note` and `/close` are UNTOUCHED** by this build; the ticket card that retires
-three of them is the next one. ⚠️ **`/modmail` can never be hidden** by `hide_commands_when_off`
+`/areply`, `/note` and `/close` were UNTOUCHED** by this build; **Build B retires three of them
+into the ticket card — see `MB1`–`MB12` below.** ⚠️ **`/modmail` can never be hidden** by `hide_commands_when_off`
 — `modmail_mode` is `channel`/`thread` with no `off`, and the switch is the bool
 `modmail_enabled` — so it is in the list whatever the posture, which is right, because the panel
 is the Discord door to turning modmail on. `modmail_panel_minutes` (10) decides how long the
@@ -724,6 +736,41 @@ allowed) but the modlog card is NOT rewritten while the modlog is not the test c
 | 216 | On the voided case: **Restore this case** | the strike-through goes, the card is back to C5's five buttons — no state is terminal — the member is DM'd that it was put back, and the Logs carry `case.restored`. ⚠️ Also check `/warn` on that member: a voided warn no longer counts toward `automod_warn_threshold` |
 | 217 | `Jump to case #…` → `99999`; then a case number from another server; then `abc`; then leave the panel `mod_panel_minutes` (10) minutes | each answers in a NEW message — *"Black Bloc has no case **#99999**"*, the same for the other server's, and *"**abc** is not a case number"* — with the panel untouched behind it. After ten minutes every control greys out and the footer reads *this panel has gone quiet — run /mod again* |
 | 218 | dashboard → **Moderation** → a case row → the drawer | the four moves are there beside **Apply now**: a **Reason** box with **Save the reason**, a **Note** box with **Add the note**, and **Void this case** behind a confirm that spells out what voiding does not do. Void one: the row's reason is struck through with a red **voided** pill, and the Logs page shows `web.case.voided` — ONE row, not two. **Restore this case** takes it back off |
+
+### Modmail Build B — the sticky card, the reply style and the practice ticket (rows `MB1`–`MB12`)
+
+Written as `MB1`–`MB12` on `worktree-agent-a4bebd98196e3ca14` (letters on purpose — the
+conductor numbers them at the merge). ⚠️ **NOT merged and NOT deployed as this is written.**
+
+Every open ticket now carries **one card at the bottom** with **Reply · Reply as Staff · Private
+note · Close…**, and it jumps back under the newest message on every write. ⚠️ **`/areply`,
+`/note` and `/close` are GONE** — they are those buttons — so the top-level count moves
+**33 → 30, measured**. `/reply` stays, and keeps its optional `ticket:`. Schema **29 → 30**:
+⚠️ **migrate before deploy.** New setting **`modmail_reply_style`** (`buttons` / `typing` /
+`both`, default `both`) decides whether a plain message typed in a ticket still reaches the
+member — and **`MB5` is the reason the practice ticket exists: it is how that choice is made
+without a real member and a real DM.**
+
+⚠️ **Read this before `MB11` or it will look like a bug:** in a REAL ticket under test mode the
+card appears in **`#mute-me-bot-test-spam`**, not in the ticket channel, because `speak`
+redirects every guarded send there. In the **practice** thread it appears where you would expect,
+because that one thread is claimed with `own_channel`. That difference is the whole point of the
+practice ticket.
+
+| # | Do this | Expect |
+|---|---|---|
+| MB1 | `/modmail` | the panel from rows 200–207 **plus** a new **Try a fake ticket** button on the first row. With no staff role resolving it is absent, and the embed says why |
+| MB2 | **Try a fake ticket** | it asks first: *"Black Bloc makes a private thread for you… nobody is DMed"* over **Yes, open one · No**. **No** opens nothing at all |
+| MB3 | **Yes, open one** | a **private thread on the test channel** appears with the header card, a line saying it is practice, and under it the staff card: **Reply · Reply as Staff · Private note · Close… · Speak as the member · End the practice** |
+| MB4 | **Speak as the member** → "hello?" three times quickly | the message appears each time and the card **moves to the bottom once**, not three times (2-second debounce, 8-second floor). ⚠️ The old card is deleted, so the thread has exactly one |
+| MB5 | **Reply** → type text; **Reply** again → pick the snippet AND add a line; then **Reply as Staff** | all three land in the thread as *Sent to the member* embeds; the anonymous one says **Staff** and carries no role colour; the snippet one reads *snippet, blank line, your words* — byte-identical to `/reply text: snippet:`. ⚠️ **No DM reaches anybody and there is NO `modmail.dm_failed`** — it is practice, and a suppressed DM is not a failed one |
+| MB6 | **Private note** → some text | a *Private note* embed in the thread, **one** `modmail.note` row in the Logs (`/note` never wrote one at all), and no DM |
+| MB7 | `/modmail` → **Setup…** | a new **Reply style…** button and a **reply style — both** line. Pick **typing**; the reply says *"anything staff type in a ticket goes to the member"*. In the practice thread type `hello` as yourself, then `=this is private`: the plain line relays as a *Sent to the member* embed with a ✅, the `=` line does not and gets 📝 |
+| MB8 | now set **Reply style… → buttons** and type in the thread again | ⚠️ **nothing at all happens** — no relay, no ✅, no row. `=note` still becomes a note, and the card's **Reply** and `/reply` still work. This is the choice the setting is for; `both` puts it back |
+| MB9 | `/reply text:hi` typed in the test channel | unchanged: it finds the only open ticket, or `ticket:<n>` names one. It is the **only typed modmail command left** |
+| MB10 | **End the practice** | the transcript `.txt` **and** the summary land in the transcripts channel marked **PRACTICE** — title *Practice ticket #N closed*, file `modmail-practice-ticket-N.txt`, first line of the file says PRACTICE — the thread is archived and locked, the card is gone, and you are **not** DM'd |
+| MB11 | Turn `modmail_enabled` on, DM the bot from a second account, then press **Close…** on the card with a reason | a real ticket channel in the test category; ⚠️ **its card is in the test channel, not in the ticket** (see the warning above); **Close…** DMs the member for real, files the transcript, deletes the channel, and the card goes with it — the transcript carries one card, not two |
+| MB12 | Restart the bot (or wait five minutes) with an open ticket whose card you deleted by hand | the reconciler posts a new one within five minutes. Then check the dashboard's Modmail page: the practice ticket is **not** in the list, and a ticket read by number carries a `practice` field |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that

@@ -61,8 +61,8 @@ CLOSE_RACED = (
 )
 CLOSE_WOULD_DELETE = (
     "Closing that ticket would delete its channel, and Black Bloc is in **test mode** — so "
-    "nothing was closed. Close it with `/close` from the test channel, or wait until the owner "
-    "turns test mode off."
+    "nothing was closed. Press **Close…** on the ticket's card in the test channel instead, or "
+    "wait until the owner turns test mode off."
 )
 SNIPPET_NEEDS_BOTH = (
     "A snippet needs a short name and the text it stands for, so nothing was saved."

@@ -1796,23 +1796,7 @@ class Modmail(commands.Cog):
         snippet: str | None = None,
         ticket: str | None = None,
     ) -> None:
-        await self._reply(interaction, text, snippet, ticket, anonymous=False)
-
-    @app_commands.command(name="areply", description="Reply as Staff, without naming yourself")
-    @app_commands.default_permissions(STAFF_ONLY)
-    @app_commands.describe(
-        text="What the member is sent",
-        snippet="A saved reply to send instead — /modmail then Snippets… has them",
-        ticket="The ticket number, when you are not in its channel",
-    )
-    async def areply(
-        self,
-        interaction: discord.Interaction,
-        text: str | None = None,
-        snippet: str | None = None,
-        ticket: str | None = None,
-    ) -> None:
-        await self._reply(interaction, text, snippet, ticket, anonymous=True)
+        await self._reply(interaction, text, snippet, ticket)
 
     async def _reply(
         self,
@@ -1820,8 +1804,6 @@ class Modmail(commands.Cog):
         text: Any,
         snippet: Any,
         ticket: Any,
-        *,
-        anonymous: bool,
     ) -> None:
         if not await self._ready(interaction):
             return
@@ -1832,34 +1814,11 @@ class Modmail(commands.Cog):
         body = await self._body(interaction, text, snippet)
         if body is None:
             return
-        why_not = await self._send_reply(
-            interaction.guild, row, interaction.user, body, anonymous=anonymous
-        )
+        why_not = await self._send_reply(interaction.guild, row, interaction.user, body)
         if why_not is not None:
             await answer(interaction, DM_FAILED_SAID)
             return
-        await answer(
-            interaction,
-            SENT.format(who="Staff" if anonymous else interaction.user.display_name),
-        )
-
-    @app_commands.command(name="note", description="Leave a private note the member never sees")
-    @app_commands.default_permissions(STAFF_ONLY)
-    @app_commands.describe(
-        text="The note", ticket="The ticket number, when you are not in its channel"
-    )
-    async def note(
-        self, interaction: discord.Interaction, text: str, ticket: str | None = None
-    ) -> None:
-        if not await self._ready(interaction):
-            return
-        await interaction.response.defer(ephemeral=True)
-        row = await self._resolve(interaction, ticket)
-        if row is None:
-            return
-        outcome = await add_note(self.bot, interaction.guild, row, interaction.user, text)
-        await answer(interaction, outcome.message)
-
+        await answer(interaction, SENT.format(who=interaction.user.display_name))
 
     async def _close(
         self,
@@ -1883,37 +1842,6 @@ class Modmail(commands.Cog):
 
     async def _remove_place(self, guild: Any, ticket: Any) -> None:
         await remove_place(self.bot, guild, ticket)
-
-    @app_commands.command(name="close", description="Close a ticket and file its transcript")
-    @app_commands.default_permissions(STAFF_ONLY)
-    @app_commands.describe(
-        reason="What the member is told, and what the transcript records",
-        silent="Close without telling the member",
-        ticket="The ticket number, when you are not in its channel",
-    )
-    async def close(
-        self,
-        interaction: discord.Interaction,
-        reason: str | None = None,
-        silent: bool = False,
-        ticket: str | None = None,
-    ) -> None:
-        if not await self._ready(interaction):
-            return
-        await interaction.response.defer(ephemeral=True)
-        row = await self._resolve(interaction, ticket)
-        if row is None:
-            return
-        closed, why_not = await self._close(
-            interaction.guild, row, by=interaction.user, reason=reason, silent=silent
-        )
-        if not closed:
-            await answer(interaction, CLOSE_RACED.format(ticket_id=row["id"]))
-            return
-        extra = "" if why_not is None else NO_TRANSCRIPT_SAID
-        if silent:
-            extra += SILENT_SAID
-        await answer(interaction, CLOSED_SAID.format(ticket_id=row["id"], extra=extra))
 
     async def cog_load(self) -> None:
         self.bot.add_dynamic_items(TicketCardButton)

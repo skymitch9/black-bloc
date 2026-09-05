@@ -754,10 +754,15 @@ async def test_reply_from_the_test_channel_finds_the_only_open_ticket(cog, bot, 
 
 
 async def test_an_anonymous_reply_never_names_the_staff_member(cog, bot, member, lead, db):
+    """`/areply` retired into the card's **Reply as Staff**; the embed is byte-identical."""
     ticket = await open_one(cog, bot, member)
-    interaction = FakeInteraction(bot, lead)
+    lead.roles = [FakeRole(STAFF_ROLE)]
+    card = await card_for(cog, bot, ticket)
 
-    await cog.areply.callback(cog, interaction, text="from the team")
+    opened = await press_card(bot, lead, card, "Reply as Staff")
+    modal = opened.response.modals[-1]
+    modal.text._value = "from the team"
+    await modal.on_submit(FakeInteraction(bot, lead))
 
     embed = member.dms[-1]["embed"]
     assert embed.author.name == "Staff" and embed.footer.text is None
@@ -805,19 +810,6 @@ async def test_an_unknown_snippet_sends_nothing(cog, bot, member, lead):
     await cog.reply.callback(cog, interaction, snippet="nope")
 
     assert "no snippet called" in interaction.sent
-
-
-async def test_the_note_command_records_a_note_and_never_dms(cog, bot, member, lead, db):
-    ticket = await open_one(cog, bot, member)
-    before = len(member.dms)
-    interaction = FakeInteraction(bot, lead)
-
-    await cog.note.callback(cog, interaction, text="prior warnings", ticket=str(ticket["id"]))
-
-    rows = await ticket_messages(db, ticket["id"])
-    assert rows[-1]["direction"] == NOTE and rows[-1]["content"] == "prior warnings"
-    assert len(member.dms) == before
-    assert "never sees it" in interaction.sent
 
 
 async def test_naming_a_ticket_that_is_not_a_number_is_refused(cog, bot, member, lead):
@@ -882,9 +874,8 @@ async def test_closing_files_a_transcript_deletes_the_channel_and_tells_the_memb
     channel = bot.guild.get_channel(ticket["channel_id"])
     lead.roles = [FakeRole(STAFF_ROLE)]
     await cog.on_message(guild_message(channel, lead, "sorted for you"))
-    interaction = FakeInteraction(bot, lead)
 
-    await cog.close.callback(cog, interaction, reason="sorted")
+    interaction = await close_from_card(cog, bot, lead, ticket, reason="sorted")
 
     row = await get_ticket(db, ticket["id"])
     assert row["status"] == "closed" and row["close_reason"] == "sorted"
@@ -906,7 +897,7 @@ async def test_a_silent_close_files_the_transcript_without_dming_anybody(
     ticket = await open_one(cog, bot, member)
     before = len(member.dms)
 
-    await cog.close.callback(cog, FakeInteraction(bot, lead), reason="spam", silent=True)
+    await close_from_card(cog, bot, lead, ticket, reason="spam", silent=True)
 
     assert (await get_ticket(db, ticket["id"]))["status"] == "closed"
     assert len(member.dms) == before
@@ -916,18 +907,18 @@ async def test_closing_a_ticket_twice_tells_the_second_staffer_rather_than_closi
     cog, bot, member, lead, db
 ):
     ticket = await open_one(cog, bot, member)
-    await cog.close.callback(cog, FakeInteraction(bot, lead), reason="one")
-    second = FakeInteraction(bot, lead)
+    card = await card_for(cog, bot, ticket)
+    await close_from_card(cog, bot, lead, ticket, reason="one", card=card)
 
-    await cog.close.callback(cog, second, ticket=str(ticket["id"]))
+    second = await press_card(bot, lead, card, "Close…")
 
-    assert "already closed" in second.sent
+    assert second.response.modals == [] and "already closed" in second.sent
     assert (await get_ticket(db, ticket["id"]))["close_reason"] == "one"
 
 
 async def test_a_closed_ticket_frees_the_member_to_open_another(cog, bot, member, lead, db):
     first = await open_one(cog, bot, member)
-    await cog.close.callback(cog, FakeInteraction(bot, lead), reason="done")
+    await close_from_card(cog, bot, lead, first, reason="done")
 
     await cog.on_message(dm_from(member, "hello again"))
 
@@ -941,9 +932,8 @@ async def test_a_transcript_the_guard_would_refuse_is_a_would_not_a_failure(
 ):
     ticket = await open_one(cog, bot, member)
     await bot.store.set(GUILD, "modmail_log_channel_id", LOG_CHANNEL)
-    interaction = FakeInteraction(bot, lead)
 
-    await cog.close.callback(cog, interaction, reason="sorted")
+    interaction = await close_from_card(cog, bot, lead, ticket, reason="sorted")
 
     kinds = await action_kinds(db)
     assert "modmail.would_post_transcript" in kinds
@@ -959,7 +949,7 @@ async def test_a_thread_ticket_is_archived_and_locked_not_deleted(cog, bot, memb
     ticket = await open_ticket_for(db, GUILD, member.id)
     thread = bot.guild.threads[ticket["thread_id"]]
 
-    await cog.close.callback(cog, FakeInteraction(bot, lead), reason="done")
+    await close_from_card(cog, bot, lead, ticket, reason="done")
 
     assert thread.archived is True and thread.locked is True and thread.deleted is False
 
@@ -1328,7 +1318,7 @@ async def test_a_reply_the_member_never_got_is_marked_undelivered_in_the_transcr
     assert rows[-1]["delivered"] == 0
 
     member.dm_raises = None
-    await cog.close.callback(cog, FakeInteraction(bot, lead), reason="no answer")
+    await close_from_card(cog, bot, lead, ticket, reason="no answer")
 
     body = bot.guild.channels[TEST_CHANNEL].messages[-1].kwargs["file"].fp.getvalue().decode()
     assert UNDELIVERED_MARK in body
@@ -1340,9 +1330,8 @@ async def test_a_transcript_that_could_not_be_filed_keeps_the_ticket_channel(
     ticket = await open_one(cog, bot, member)
     channel = bot.guild.get_channel(ticket["channel_id"])
     await bot.store.set(GUILD, "modmail_log_channel_id", LOG_CHANNEL)
-    interaction = FakeInteraction(bot, lead)
 
-    await cog.close.callback(cog, interaction, reason="sorted")
+    interaction = await close_from_card(cog, bot, lead, ticket, reason="sorted")
 
     assert channel.deleted is False
     assert (await get_ticket(db, ticket["id"]))["status"] == "closed"
@@ -1605,6 +1594,20 @@ async def quick_cards(monkeypatch, debounce=0.05):
     monkeypatch.setattr(modmail_cog, "CARD_MIN_GAP_SECONDS", 0.0)
 
 
+async def close_from_card(cog, bot, lead, ticket, reason=None, silent=False, card=None):
+    """`/close` retired into the card, so every close test presses the button instead."""
+    lead.roles = [FakeRole(STAFF_ROLE)]
+    on = card if card is not None else await card_for(cog, bot, ticket)
+    opened = await press_card(bot, lead, on, "Close…")
+    modal = opened.response.modals[-1]
+    modal.reason._value = reason or ""
+    if silent:
+        modal.quiet._values = ["silent"]
+    closed = FakeInteraction(bot, lead)
+    await modal.on_submit(closed)
+    return closed
+
+
 async def press_card(bot, who, message, label, channel=None):
     view = message.kwargs["view"]
     item = next(one for one in view.children if one.item.label == label)
@@ -1764,7 +1767,7 @@ async def test_closing_a_ticket_takes_its_card_with_it(cog, bot, member, lead, d
     channel = bot.guild.get_channel(ticket["channel_id"])
     first = await card_for(cog, bot, ticket)
 
-    await cog.close.callback(cog, FakeInteraction(bot, lead), reason="done")
+    await close_from_card(cog, bot, lead, ticket, reason="done", card=first)
 
     assert first.id in channel.deleted_messages
     assert (await get_ticket(db, ticket["id"]))["card_message_id"] is None
@@ -1787,20 +1790,6 @@ async def test_the_card_reply_button_sends_what_the_modal_carries(cog, bot, memb
     assert rows[-1]["direction"] == OUT and rows[-1]["anonymous"] == 0
     kinds = await action_kinds(db)
     assert kinds.count("modmail.reply") == 1
-
-
-async def test_the_cards_staff_reply_never_names_the_staffer(cog, bot, member, lead, db):
-    ticket = await open_one(cog, bot, member)
-    lead.roles = [FakeRole(STAFF_ROLE)]
-    card = await card_for(cog, bot, ticket)
-
-    opened = await press_card(bot, lead, card, "Reply as Staff")
-    modal = opened.response.modals[-1]
-    modal.text._value = "from the team"
-    await modal.on_submit(FakeInteraction(bot, lead))
-
-    assert member.dms[-1]["embed"].author.name == "Staff"
-    assert (await ticket_messages(db, ticket["id"]))[-1]["anonymous"] == 1
 
 
 async def test_the_cards_reply_modal_combines_the_snippet_and_the_typed_text(

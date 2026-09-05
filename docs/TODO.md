@@ -360,6 +360,22 @@ docs bookkeeping lands with the work, not after.
   three other modals want it); `CASE_KINDS` is imported by nothing; the site's Notes chip matches zero rows.
   ALL THREE wave-4 builds are merged — the `/settings` build may dispatch once its forks F-S1–F-S5 are
   answered. Usage after landing session 44% / weekly 14% / Fable 13%, read 08:00.
+  **BUILD B BUILT 2026-09-05 on `worktree-agent-a4bebd98196e3ca14` off `6e5a550` — NOT MERGED, NOT
+  DEPLOYED, awaiting the conductor's review.** Five commits, one per layer: (1) schema **29 → 30**
+  (`modmail_tickets.card_message_id`, `.practice`) — ⚠️ **migrate before deploy**, and the migration was
+  RUN against a real schema-29 file built by `main`'s own `db.py`, not reasoned about; (2) the sticky
+  ticket card (a persistent `DynamicItem` with **Reply · Reply as Staff · Private note · Close…**),
+  `bump_card` with its 2 s/8 s debounce on the bot, the reconciler's third job, and the `add_note` /
+  `reply_body` extractions; (3) `modmail_reply_style` (`buttons`/`typing`/`both`, default `both`) gating
+  the relay that `_staff_message` already had; (4) the practice ticket — a claimed private thread on the
+  test channel where nobody is ever DMed, which is how F-M8's reply-style choice gets made; (5) the
+  retirement of `/areply` `/note` `/close` into the card — **33 → 30, measured** — with the doc, string and
+  site sweep. `/reply` keeps `ticket:` (F-M5). Verified: `pytest` **4738**, `ruff` clean,
+  `node site/mock/check.mjs` **17 pages / 146 routes, unchanged**. ⚠️ **NOT verified: anything against live
+  Discord** — no boot, no card posted, no practice thread made, no DM seen. Sweep rows lettered
+  `MB1`–`MB12` for the conductor to number. Handed to the conductor: `picked_values` is now a second copy
+  (`polls.py` and `modmail.py`) and wants hoisting into `panels.py`; the card's debounce numbers have never
+  been measured against a real channel.
 - **Wave-1 review findings, small, fold into the next build that touches each file (Fable
   review 2026-09-03 13:50–14:05):** `requests.py` re-renders lack `allowed_mentions`;
   `LOG_LEVEL_COMMANDS` help still says "`/birthday logs`" / "`/request logs`"; five form writes

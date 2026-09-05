@@ -8,13 +8,17 @@
 > (Modmail `cogs/modmail.py`). Depends on Phase 1.
 >
 > ⚠️ **SUPERSEDED IN PART, 2026-09-05, by
-> [`modmail-panel-design.md`](modmail-panel-design.md) (Build A).** Everything §4
+> [`modmail-panel-design.md`](modmail-panel-design.md) (Builds A and B).** Everything §4
 > *Management* names below — `/modmail block|unblock|blocked|mode|forget|status|settings`
-> and the whole `/snippet` group — is **gone**; `/modmail` is one command that opens a
-> panel, and those moves are its buttons, selects and modals. The DM listener, ticket
-> creation, the relay, the transcript and the reconciler are unchanged, and `/reply`
-> `/areply` `/note` `/close` are still typed commands. This document is kept as the record
-> of WHY modmail works the way it does, not of which commands exist.
+> and the whole `/snippet` group — is **gone** (Build A); `/modmail` is one command that
+> opens a panel, and those moves are its buttons, selects and modals. **Build B then
+> retired `/areply`, `/note` and `/close`** into a sticky card at the bottom of every open
+> ticket (**Reply · Reply as Staff · Private note · Close…**), added `modmail_reply_style`
+> (`buttons`/`typing`/`both`) which decides whether a plain message typed in a ticket is
+> still relayed, and added a practice ticket. **Only `/reply` is still typed.** The DM
+> listener, ticket creation, the relay itself, the transcript and the reconciler are
+> unchanged — the relay is GATED, not replaced. This document is kept as the record of WHY
+> modmail works the way it does, not of which commands exist.
 
 ## Owner decisions this implements
 
