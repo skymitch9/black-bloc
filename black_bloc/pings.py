@@ -98,7 +98,7 @@ NO_FAN_ROLE = (
 CREATED = (
     "Made **{role}** and put it on the *{menu}* panel. People pick it there, or with **Follow a "
     "streamer…** on `/pings`, and Black Bloc mentions it in front of their go-live announcement. "
-    "Post the panel with `/rolemenu post {menu}` if it is not up yet."
+    "Open `/rolemenu`, pick *{menu}* and press **Post it** if it is not up yet."
 )
 REUSED = (
     "Used the role **{role}** for **{name}** and put it on the *{menu}* panel. People pick it "
@@ -119,7 +119,7 @@ REMOVED_ALREADY_GONE = (
 SETUP_CREATED = "Made the role **{role}** and pointed go-live and event pings at it."
 SETUP_REUSED = "Used the role **{role}** that was already here and pointed both feeds at it."
 SETUP_UNCHANGED = "Both feeds already pointed at **{role}**, so nothing was changed."
-SETUP_MENU_ADDED = " Put it on the *{menu}* panel — post that with `/rolemenu post {menu}`."
+SETUP_MENU_ADDED = " Put it on the *{menu}* panel — `/rolemenu` ▸ *{menu}* ▸ **Post it**."
 SETUP_MENU_THERE = " It is already on the *{menu}* panel."
 SETUP_STILL_OFF = (
     " Ping roles are still off, so nobody can opt in yet — turn them on with `/settings set-value "

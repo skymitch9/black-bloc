@@ -442,7 +442,7 @@ KEY_MAX_REASON: dict[str, str] = {
 KEY_HELP: dict[str, str] = {
     "log_channel_id": "where Black Bloc posts what it did",
     "staff_channel_id": "the channel whose viewers count as staff",
-    "role_menu_channel_id": "where /rolemenu post goes by default",
+    "role_menu_channel_id": "the channel /rolemenu offers first when a menu is posted",
     "golive_mode": "off, shadow (log only) or on (post go-live announcements)",
     "golive_channel_id": "where go-live announcements are posted",
     "golive_template": "the announcement wording; {name} {game} {title} {url} {platform}",
@@ -584,7 +584,7 @@ KEY_HELP: dict[str, str] = {
     "status_prefix": "what goes in front of the member count in Black Bloc's status",
     "rolemenu_mode": (
         "whether members can pick roles from the panels; off takes them down and hides the "
-        "/rolemenu commands, on posts them again"
+        "posted panels, on posts them again; /rolemenu itself stays either way"
     ),
     "request_mode": (
         "off, or on (members can ask for things with /request and staff decide on the site)"
@@ -1129,6 +1129,21 @@ KEY_HELP.update(
 )
 
 
+# Role menus panel (wave 3) — the one decision `/rolemenu`'s panel introduces, in its own block
+# so the parallel wave-3 branches merge textually.
+KEY_TYPES.update({"rolemenu_panel_minutes": "int"})
+KEY_HELP.update(
+    {
+        "rolemenu_panel_minutes": (
+            "minutes the /rolemenu panel stays live before its buttons disable themselves; 10 by "
+            "default. The 'this panel has gone quiet' footer can only be written while "
+            "Discord's 15-minute interaction window is still open, so 15 or more means the "
+            "buttons simply stop working with no footer to explain it"
+        ),
+    }
+)
+
+
 # Operator read token — the token itself is the on/off switch; this is the one decision left.
 KEY_TYPES.update({"operator_read_log": "bool"})
 KEY_HELP.update(
@@ -1662,6 +1677,8 @@ class SettingsStore:
         if key == "chat_panel_minutes":
             return 10
         if key == "raidtrain_panel_minutes":
+            return 10
+        if key == "rolemenu_panel_minutes":
             return 10
         if key.endswith("_log_level"):
             return LEVEL_DEFAULT

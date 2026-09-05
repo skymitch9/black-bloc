@@ -17,26 +17,26 @@ from ...cogs.community.role_menus import (
     MenuLimitError,
     add_option,
     apply_request_decision,
+    change_menu,
     check_description,
     check_label,
     check_option_count,
     check_title,
-    create_menu,
-    delete_menu,
+    drop_menu,
     expires_days_of,
     get_menu,
     get_menu_by_id,
     get_options,
     list_menus,
+    make_menu,
     needs_approval,
     picking_is_on,
-    post_panel,
+    post_menu,
     remove_option,
     retry_days_of,
-    seed_default_menus,
+    seed_menus,
     seed_summary,
     staff_assign,
-    update_menu,
 )
 from ...logkinds import VIA_WEBSITE
 from ..auth import Refused, staff_dependency
@@ -44,7 +44,6 @@ from ..names import as_id, avatar_url, resolve_one
 from ..writes import (
     actor_for,
     guard_of,
-    note,
     refuse_guarded,
     require_db,
     require_guild,
@@ -308,10 +307,11 @@ async def move_panel(bot: Any, guild: Any, name: str, channel_id: int, who: Any)
     menu, options = await read_menu(bot, guild, name)
     await can_move(bot, guild, menu, options, channel_id)
     target = await wanted_target(bot, guild, menu, options, channel_id)
-    if not await panels.unpost(bot, menu, actor_for(bot, who, guild), via=VIA_WEBSITE):
+    actor = actor_for(bot, who, guild)
+    if not await panels.unpost(bot, menu, actor, via=VIA_WEBSITE):
         raise Refused(409, "panel_stuck", PANEL_NOT_MOVED.format(name=name))
     fresh, options = await read_menu(bot, guild, name)
-    return await post_panel(bot, fresh, options, target)
+    return await post_menu(bot, guild, actor, fresh, options, target, via=VIA_WEBSITE)
 
 
 def build_router(bot: Any) -> APIRouter:
@@ -334,13 +334,8 @@ def build_router(bot: Any) -> APIRouter:
         who = await writer(request)
         guild = require_guild(bot)
         require_db(bot)
-        created, skipped = await seed_default_menus(bot.db, guild.id)
-        await note(
-            bot,
-            guild,
-            "web.role_menu.seeded",
-            who,
-            details={"created": created, "skipped": skipped},
+        created, skipped = await seed_menus(
+            bot, guild, actor_for(bot, who, guild), via=VIA_WEBSITE
         )
         return {
             "created": created,
@@ -407,9 +402,10 @@ def build_router(bot: Any) -> APIRouter:
             raise Refused(400, "bad_request", NEEDS_A_NAME)
         mode = checked_mode(payload.get("mode")) or "multiple"
         description = wanted_description(payload.get("description"))
-        menu_id = await create_menu(
-            bot.db,
-            guild.id,
+        menu_id = await make_menu(
+            bot,
+            guild,
+            actor_for(bot, who, guild),
             name,
             title,
             description or None,
@@ -417,10 +413,10 @@ def build_router(bot: Any) -> APIRouter:
             approval=wanted_approval(payload.get("approval")),
             expires_days=wanted_days(payload.get("expires_days"), blank=None),
             retry_days=wanted_days(payload.get("retry_days"), blank=None),
+            via=VIA_WEBSITE,
         )
         if menu_id is None:
             raise Refused(400, "name_taken", NAME_TAKEN.format(name=name))
-        await note(bot, guild, "web.rolemenu.create", who, details={"menu": name, "mode": mode})
         menu, options = await read_menu(bot, guild, name)
         return menu_row(menu, options)
 
@@ -441,9 +437,10 @@ def build_router(bot: Any) -> APIRouter:
         description = wanted_description(payload.get("description"))
         wanted = payload.get("options")
         options = wanted_options(guild, wanted) if isinstance(wanted, list) else None
-        await update_menu(
-            bot.db,
-            guild.id,
+        await change_menu(
+            bot,
+            guild,
+            actor_for(bot, who, guild),
             name,
             title=title,
             description=description,
@@ -451,19 +448,12 @@ def build_router(bot: Any) -> APIRouter:
             approval=wanted_approval(payload.get("approval")),
             expires_days=wanted_days(payload.get("expires_days"), blank=UNSET),
             retry_days=wanted_days(payload.get("retry_days"), blank=None),
+            via=VIA_WEBSITE,
         )
         if options is not None:
             await sync_options(bot, menu, options)
-        await note(bot, guild, "web.rolemenu.edit", who, details={"menu": name})
         if moving is not None and moving != menu["channel_id"]:
-            message = await move_panel(bot, guild, name, moving, who)
-            await note(
-                bot,
-                guild,
-                "web.rolemenu.post",
-                who,
-                details={"menu": name, "channel_id": moving, "message_id": message.id},
-            )
+            await move_panel(bot, guild, name, moving, who)
         fresh, options = await read_menu(bot, guild, name)
         return menu_row(fresh, options)
 
@@ -472,9 +462,8 @@ def build_router(bot: Any) -> APIRouter:
         who = await writer(request)
         guild = require_guild(bot)
         require_db(bot)
-        if not await delete_menu(bot.db, guild.id, name):
+        if not await drop_menu(bot, guild, actor_for(bot, who, guild), name, via=VIA_WEBSITE):
             raise Refused(404, "no_such_menu", NO_SUCH_MENU.format(name=name))
-        await note(bot, guild, "web.rolemenu.delete", who, details={"menu": name})
         return {"deleted": True, "name": name}
 
     @router.post("/{name}/post")
@@ -489,13 +478,8 @@ def build_router(bot: Any) -> APIRouter:
             guild.id, "role_menu_channel_id"
         )
         target = await wanted_target(bot, guild, menu, options, channel_id)
-        message = await post_panel(bot, menu, options, target)
-        await note(
-            bot,
-            guild,
-            "web.rolemenu.post",
-            who,
-            details={"menu": name, "channel_id": target.id, "message_id": message.id},
+        message = await post_menu(
+            bot, guild, actor_for(bot, who, guild), menu, options, target, via=VIA_WEBSITE
         )
         return {
             "posted": True,

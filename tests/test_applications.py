@@ -401,7 +401,7 @@ async def test_a_role_that_could_not_be_added_says_so_on_the_card(db):
     card, _ = decision_lines(form, row, member_name="Ada", granted=False)
 
     assert "Discord refused to add the role" in card
-    assert "/role grant" in card
+    assert "**Grants…**" in card
 
 
 async def test_an_expiry_is_said_out_loud_in_both_the_card_and_the_dm(db):

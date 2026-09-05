@@ -53,6 +53,7 @@ export const LABELS = {
   automod_arm_needs_confirm: 'Whether arming automod asks twice',
   chat_panel_minutes: 'How long the /chat panel stays live',
   raidtrain_panel_minutes: 'How long the /raidtrain panel stays live',
+  rolemenu_panel_minutes: 'How long the /rolemenu panel stays live',
 
   tempvoice_mode: 'Whether people can make their own voice rooms',
   tempvoice_creator_ids: 'Which channels people join to get a room',

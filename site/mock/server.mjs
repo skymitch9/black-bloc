@@ -60,7 +60,7 @@ const NOT_SIGNED_IN = 'You are not signed in yet. Sign in with the Discord accou
 const NOT_STAFF = 'This dashboard is for the mods and admins of Black in a Flash!. Your Discord account is signed in, but it does not hold a staff role. Ask a Lead for the role.';
 const STAFF_UNKNOWN = 'Black Bloc could not ask Discord which roles you hold, so it cannot tell whether you are staff. That is a fault at the bot, not a problem with your access. Try again in a minute.';
 const MEMBER_NOT_STAFF = 'The rest of this dashboard is for the mods and admins of Black in a Flash!, but you are a member here, so you can still file a request and follow your own. Ask a Lead for a staff role if you need the rest.';
-const ROLE_MENUS_OFF = 'Role menus are turned off right now, so nothing was changed. A Lead can turn them back on from the dashboard\'s Role menus tab or with `/rolemenu mode on`.';
+const ROLE_MENUS_OFF = 'Role menus are turned off right now, so nothing was changed. A Lead can turn them back on from the dashboard\'s Role menus tab or with `/settings set-value rolemenu_mode on`.';
 const GUARD = 'TEST MODE is on, so Black Bloc refuses to act outside #mute-me-bot-test-spam. Nothing was done. Ask the owner to lift the test guard first.';
 const UNKNOWN_ROUTE = 'This dashboard asked Black Bloc for something it does not serve. That is a fault in the page, not a problem with your access.';
 
@@ -276,7 +276,7 @@ const LOG_LEVEL_FEATURES = [
 const SETTING_SPECS = [
   ['log_channel_id', 'channel', '800000000000000004', null, 'where Black Bloc posts what it did'],
   ['staff_channel_id', 'channel', '800000000000000005', null, 'the channel whose viewers count as staff'],
-  ['role_menu_channel_id', 'channel', '800000000000000002', null, 'where /rolemenu post goes by default'],
+  ['role_menu_channel_id', 'channel', '800000000000000002', null, 'the channel /rolemenu offers first when a menu is posted'],
   ['golive_mode', 'enum', 'shadow', 'off', 'off, shadow (log only) or on (post go-live announcements)', ['off', 'shadow', 'on']],
   ['golive_channel_id', 'channel', '800000000000000006', null, 'where go-live announcements are posted'],
   ['golive_template', 'text', '{name} is live playing {game} — {title} {url}', '{name} is live: {url}', 'the announcement wording; {name} {game} {title} {url} {platform}'],
@@ -349,7 +349,7 @@ const SETTING_SPECS = [
   ['mod_dm_on_action', 'enum', 'server_action_reason', 'server_action', 'what a punished member is told', ['none', 'server_action', 'server_action_reason']],
   ['rolemenu_approval_channel_id', 'channel', '800000000000000005', null, 'where a role request card is posted for staff to answer; defaults to staff_channel_id'],
   ['rolemenu_approver_role_id', 'role', null, null, 'role mentioned when a role request needs answering'],
-  ['rolemenu_mode', 'enum', 'off', 'off', 'whether members can pick roles from the panels; off takes them down and hides the /rolemenu commands, on posts them again', ['off', 'on']],
+  ['rolemenu_mode', 'enum', 'off', 'off', 'whether members can pick roles from the panels; off takes them down, on posts them again; /rolemenu itself stays either way', ['off', 'on']],
   ['chat_mode', 'enum', 'on', 'on', 'off, or on (Black Bloc answers when somebody @-mentions it)', ['off', 'on']],
   ['chat_cooldown_seconds', 'int', 20, 20, 'seconds before the same person gets another @-mention reply, 5 to 600', null, 600, 5],
   ['chat_ignore_channels', 'channels', [], [], 'channels Black Bloc never answers an @-mention in'],
@@ -423,6 +423,7 @@ const SETTING_SPECS = [
   ['automod_panel_minutes', 'int', 10, 10, "minutes the /automod panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
   ['automod_arm_needs_confirm', 'bool', true, true, 'true to ask a second time before automod is turned on from the panel, naming what will start happening; turning it off or back to shadow is always one press'],
   ['raidtrain_panel_minutes', 'int', 10, 10, "minutes the /raidtrain panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
+  ['rolemenu_panel_minutes', 'int', 10, 10, "minutes the /rolemenu panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
 ];
 
 const RULES = {
@@ -1719,7 +1720,7 @@ function movePanel(menu, channelId) {
   checkMove(menu, channelId);
   menu.channel_id = channelId;
   menu.message_id = String(Date.now());
-  logAction('web.rolemenu.post', { reason: menu.name, target_id: menu.channel_id, details: { menu: menu.name, channel_id: menu.channel_id, message_id: menu.message_id } });
+  logAction('web.role_menu.post', { reason: menu.name, target_id: menu.channel_id, details: { menu: menu.name, channel_id: menu.channel_id, message_id: menu.message_id } });
 }
 
 function menuNameOf(menuId) {
@@ -1819,7 +1820,7 @@ route('POST', '/api/rolemenus', async (context) => {
     options: Array.isArray(body.options) ? body.options : [],
   };
   state.menus.unshift(menu);
-  logAction('web.rolemenu.create', { reason: name, details: { menu: name, mode: menu.mode } });
+  logAction('web.role_menu.create', { reason: name, details: { menu: name, mode: menu.mode } });
   return menuRow(menu);
 });
 
@@ -1841,7 +1842,7 @@ route('PUT', '/api/rolemenus/:name', async (context) => {
   if (body.expires_days !== undefined) menu.expires_days = wantedDays(body.expires_days, 'expires_days') || null;
   if (body.retry_days !== undefined) menu.retry_days = wantedDays(body.retry_days, 'retry_days') ?? menu.retry_days;
   if (Array.isArray(body.options)) menu.options = body.options;
-  logAction('web.rolemenu.edit', { reason: menu.name, details: { menu: menu.name } });
+  logAction('web.role_menu.edit', { reason: menu.name, details: { menu: menu.name } });
   if (moving !== null && moving !== menu.channel_id) movePanel(menu, moving);
   return menuRow(menu);
 });
@@ -1851,7 +1852,7 @@ route('DELETE', '/api/rolemenus/:name', (context) => {
   const at = state.menus.findIndex((entry) => entry.name === context.params.name);
   if (at < 0) throw new Refused(404, 'no_menu', `There is no role menu called ${context.params.name}.`);
   state.menus.splice(at, 1);
-  logAction('web.rolemenu.delete', { reason: context.params.name, details: { menu: context.params.name } });
+  logAction('web.role_menu.delete', { reason: context.params.name, details: { menu: context.params.name } });
   return { deleted: true, name: context.params.name };
 });
 
@@ -1865,7 +1866,7 @@ route('POST', '/api/rolemenus/:name/post', async (context) => {
   guard('posting a role menu');
   menu.channel_id = String(body.channel_id);
   menu.message_id = String(Date.now());
-  logAction('web.rolemenu.post', { reason: menu.name, target_id: menu.channel_id, details: { menu: menu.name, channel_id: menu.channel_id, message_id: menu.message_id } });
+  logAction('web.role_menu.post', { reason: menu.name, target_id: menu.channel_id, details: { menu: menu.name, channel_id: menu.channel_id, message_id: menu.message_id } });
   return { posted: true, name: menu.name, channel_id: menu.channel_id, message_id: menu.message_id };
 });
 
@@ -1903,7 +1904,7 @@ route('POST', '/api/rolemenus/seed', (context) => {
     parts.push(`Already there, left alone: ${skipped.join(', ')}`);
     parts.push('A menu that already exists is left exactly as it is, options and all.');
   }
-  parts.push('Post each one with `/rolemenu post <name>` — except `runner-status`, which staff hand out with `/rolemenu assign`.');
+  parts.push('Pick each one on `/rolemenu` and press **Post it** — except `runner-status`, which staff hand out with **Hand roles out…**.');
   logAction('web.role_menu.seeded', { details: { created, skipped } });
   return { created, skipped, message: parts.join(' · ') };
 });
@@ -2691,7 +2692,7 @@ route('POST', '/api/pings/setup', async (context) => {
     : (before === role.id
       ? `Both feeds already pointed at **${role.name}**, so nothing was changed.`
       : `Used the role **${role.name}** that was already here and pointed both feeds at it.`);
-  message += ' Put it on the *notifications* panel — post that with `/rolemenu post notifications`.';
+  message += ' Put it on the *notifications* panel — `/rolemenu` ▸ *notifications* ▸ **Post it**.';
   if (state.settings.get('pings_mode') !== 'on') {
     message += ' Ping roles are still off, so nobody can opt in yet — turn them on with `/settings set-value pings_mode on` or from the dashboard\u2019s Go-live tab.';
   }
@@ -4940,7 +4941,7 @@ const QUESTIONS_MAX = 5;
 const GONE_FROM_GUILD = new Set([MEMBERS[7].id]);
 const NO_ROSTER_FORM = 'Black Bloc has no application form with that number, so there is no list to show. Reload the Role menus page — somebody may have deleted it.';
 const REMOVE_NEEDS_A_REASON = 'Taking somebody off the list needs one line they are sent, so nothing was done. Say why and send it again.';
-const REMOVE_IS_FOR_LISTS = (name, role) => `**${name}** hands over <@&${role}>, so there is no list to take them off; \`/role revoke\` takes the role back and ends the grant — the approval stays on record.`;
+const REMOVE_IS_FOR_LISTS = (name, role) => `**${name}** hands over <@&${role}>, so there is no list to take them off; \`/rolemenu\` ▸ **Grants…** ▸ the grant ▸ **End it now** takes the role back and ends the grant — the approval stays on record.`;
 const REMOVE_NOT_APPROVED = (status) => `That application is **${status}**, not approved, so there was nobody to take off the list. \`/applications list status:approved\` says who is on it.`;
 const NO_SUCH_FORM = 'Black Bloc has no application form with that number any more, so nothing was changed. Reload the Role menus page — somebody may have deleted it.';
 const NO_SUCH_APPLICATION = 'Black Bloc has no application with that number any more, so nothing was changed. Reload the Role menus page.';

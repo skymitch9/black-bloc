@@ -127,7 +127,7 @@ apply (P3):
 |---|---|---|
 | `pending` | `Approve` (success) · `Deny` (danger, `NoteModal`) | `apply_decision` `:408` (APPROVED / DENIED) |
 | `approved`, form keeps a LIST | `Take off the list` (danger, `NoteModal`) | `remove` `:560` — the existing `TakeOffButton` `:793` moves onto this card |
-| `approved`, form hands a ROLE over | none — the embed says `/role revoke` is the way off, in the words `REMOVE_IS_FOR_LISTS` `:92` already uses | — |
+| `approved`, form hands a ROLE over | none — the embed sends staff to `/rolemenu` ▸ **Grants…** ▸ the grant ▸ **End it now**, in the words `REMOVE_IS_FOR_LISTS` `:92` already uses (rewritten 2026-09-04 by the role-menus panel build; `/role revoke` never existed) | — |
 | `denied` | `Approve after all` (success) — §I, settled | `reinstate` (§F) |
 | `removed` | `Put them back on the list` (success) — §I, settled | `reinstate` (§F) |
 | `withdrawn` | none — the member took it back and may apply again straight away (`last_decision` `applications.py:777` counts only approved/denied/removed, so no cooling-off applies). The embed says so | — |

@@ -73,7 +73,7 @@ async def test_a_menu_is_created_listed_and_logged(client, sign_in, web, wf):
     assert created["name"] == "colours" and created["options"] == []
     listed = client.get("/api/rolemenus").json()
     assert [row["name"] for row in listed] == ["colours"]
-    assert "web.rolemenu.create" in await wf.kinds_in(web.db)
+    assert "web.role_menu.create" in await wf.kinds_in(web.db)
 
 
 async def test_a_second_menu_with_the_same_name_is_refused_with_a_sentence(client, sign_in, wf):
@@ -168,7 +168,7 @@ async def test_deleting_a_menu_says_so_and_logs_it(client, sign_in, web, wf):
 
     assert response.json() == {"deleted": True, "name": "colours"}
     assert client.get("/api/rolemenus").json() == []
-    assert "web.rolemenu.delete" in await wf.kinds_in(web.db)
+    assert "web.role_menu.delete" in await wf.kinds_in(web.db)
 
 
 async def test_posting_a_panel_puts_it_in_the_channel_and_remembers_the_message(
@@ -192,7 +192,7 @@ async def test_posting_a_panel_puts_it_in_the_channel_and_remembers_the_message(
     assert response.json()["message_id"] == str(channel.messages[0].id)
     menu = await get_menu(web.db, wf.GUILD_ID, "colours")
     assert menu["message_id"] == channel.messages[0].id
-    assert "web.rolemenu.post" in await wf.kinds_in(web.db)
+    assert "web.role_menu.post" in await wf.kinds_in(web.db)
 
 
 async def test_unpost_deletes_the_message_and_forgets_it(client, sign_in, web, guild, wf):
@@ -446,7 +446,7 @@ async def test_posting_outside_the_test_channel_is_refused_while_the_guard_is_on
     assert response.json()["error"] == "test_mode"
     assert "test mode" in response.json()["message"]
     assert guild.get_channel(wf.OTHER_CHANNEL_ID).messages == []
-    assert "web.rolemenu.post" not in await wf.kinds_in(web.db)
+    assert "web.role_menu.post" not in await wf.kinds_in(web.db)
 
     allowed = client.post(
         "/api/rolemenus/colours/post", json={"channel_id": str(wf.TEST_CHANNEL_ID)}
@@ -472,7 +472,7 @@ async def test_posting_is_refused_while_role_menus_are_turned_off(
     assert response.json()["error"] == "rolemenu_off"
     assert "turned off" in response.json()["message"]
     assert guild.get_channel(wf.TEST_CHANNEL_ID).messages == []
-    assert "web.rolemenu.post" not in await wf.kinds_in(web.db)
+    assert "web.role_menu.post" not in await wf.kinds_in(web.db)
 
     await menus_on(web, wf)
     allowed = client.post(
@@ -816,7 +816,7 @@ async def test_saving_a_different_channel_moves_the_panel_rather_than_cloning_it
     assert body["message_id"] == str(landed[0].id)
     menu = await get_menu(web.db, wf.GUILD_ID, "colours")
     assert (menu["channel_id"], menu["message_id"]) == (wf.TEST_CHANNEL_ID, landed[0].id)
-    assert (await wf.kinds_in(web.db)).count("web.rolemenu.post") == 2
+    assert (await wf.kinds_in(web.db)).count("web.role_menu.post") == 2
 
 
 async def test_saving_the_channel_it_is_already_in_posts_nothing_again(

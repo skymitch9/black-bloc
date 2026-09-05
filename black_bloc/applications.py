@@ -176,7 +176,7 @@ REMOVE_NOT_APPROVED = (
 ROLE_REFUSED_AFTER_DECISION = (
     "The application is marked approved, but Discord refused to add **{role}** — Black Bloc "
     "needs Manage Roles and its own role has to sit above it in Server Settings → Roles. Fix "
-    "that, then hand it over with `/role grant`."
+    "that, then hand it over from `/rolemenu` ▸ **Grants…** ▸ **Give somebody a role…**."
 )
 NO_REVIEW_CHANNEL = "no_review_channel"
 NOTHING_PENDING = "Nobody is waiting on staff right now."
@@ -217,7 +217,8 @@ DM_RECEIVED = (
 )
 EXPIRES_EXTRA = " The role runs out {stamp}."
 GRANT_FAILED_ON_CARD = (
-    "Discord refused to add the role, so it is still off them — hand it over with `/role grant`."
+    "Discord refused to add the role, so it is still off them — hand it over from "
+    "`/rolemenu` ▸ **Grants…** ▸ **Give somebody a role…**."
 )
 
 PANEL_TITLE = "Applications"

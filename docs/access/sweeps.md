@@ -1,7 +1,16 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-04** — rows **163–172** added by the RAID-TRAIN PANEL build (`/raidtrain` becomes ONE
+> **2026-09-04** — rows **173–182** added by the ROLE MENUS PANEL build (`/rolemenu` becomes ONE
+> staff-only command that opens a panel; BOTH the `rolemenu` and `role` groups and all eighteen
+> leaf subcommands are retired, so the top-level count really does move — **38 → 37, measured**
+> through `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`). ⚠️ The build
+> wrote its block as `M1`–`M10`, letters on purpose — a half-renumbered table cannot look
+> finished — and the conductor numbered them **173–182** at the merge, after raidtrain's
+> 163–172. Rows **1, 19, 22, 23, 38, 53, 72** and the **Phase 1 and Phase 3 appendix scripts**
+> were rewritten IN PLACE for it rather than added to. ⚠️ **Nothing in 173–182 has met live
+> Discord** — no panel opened, no menu posted, no role handed over, no request decided. Same day —
+> rows **163–172** added by the RAID-TRAIN PANEL build (`/raidtrain` becomes ONE
 > member-visible command that opens a panel; **both** groups go — `/raidtrain`'s twelve
 > subcommands and the whole `/raidtrains` staff group — so the top-level count drops by one,
 > **38 → 37, measured** through
@@ -112,7 +121,7 @@ All of this happens in **`#mute-me-bot-test-spam`** (test mode) or on **https://
 ## Not yet verified — in the order that matters
 | # | Feature | Do this | Expect |
 |---|---|---|---|
-| 1 | Role approval (Phase 9) | Dashboard → Role menus → Edit `runner-status` → Approval on, Expires after 7, Retry after 7, Channel → Save; post it; pick the role as a member | ephemeral "Sent to staff…"; a card with Approve/Deny in the staff (or set) channel; Approve → DM + role; Members chip shows "· 7 d"; Timed roles section lists it; `/role extend` moves it; End now removes it |
+| 1 | Role approval (Phase 9) | Dashboard → Role menus → Edit `runner-status` → Approval on, Expires after 7, Retry after 7, Channel → Save; post it; pick the role as a member | ephemeral "Sent to staff…"; a card with Approve/Deny in the staff (or set) channel; Approve → DM + role; Members chip shows "· 7 d"; Timed roles section lists it; `/rolemenu` ▸ **Grants…** ▸ the grant ▸ **Push it back…** moves it and **End it now** removes it |
 | 2 | Reconciliation | give someone a menu role by hand | Logs shows `role.changed_by_hand` (actor blank until the Bots role has **View Audit Log**) |
 | 3 | Temp voice panel | join **join** | your channel's own text chat holds the control panel; buttons work; the log has no `panel_failed` (if it does: Bots role needs Send Messages in voice channels) |
 | 4 | YouTube go-live | go live on YouTube with the Discord connection showing "Streaming on YouTube" (`golive_mode` shadow or on) | a card "… is now live on YouTube!" (or a `would_announce` line in shadow) |
@@ -130,11 +139,11 @@ All of this happens in **`#mute-me-bot-test-spam`** (test mode) or on **https://
 | 16 | Via column | change one setting from Discord (`/settings set-value …`) and one from the website | Logs page → Settings audit shows **Discord** and **Website** in the Via column; `/settings logs` says the same |
 | 17 | Cyberpunk look | cog → Cyberpunk | the estate's cyan/yellow palette again (no magenta) — say if it still reads wrong |
 | 18 | `/help` (batch 2) | `/help`, then `/help filter:temp` | command list with `(staff)` marks on staff-only entries |
-| 19 | Round-1 fixes | `/rolemenu showall`; `/golive` → **Link my Twitch channel**; `/voice` → **Setup** | showall lists every menu (ephemeral); the modal says **channel**, never *login*; Setup says **repaired / took it over** (never a second lobby), lobby named "join to create a channel", Member + staff can connect |
+| 19 | Round-1 fixes | `/rolemenu` (the root panel lists every menu — `showall` was retired 2026-09-04); `/golive` → **Link my Twitch channel**; `/voice` → **Setup** | the panel lists every menu with its option count, mode and posted state (ephemeral); the modal says **channel**, never *login*; Setup says **repaired / took it over** (never a second lobby), lobby named "join to create a channel", Member + staff can connect |
 | 20 | Temp-voice memory (batch 4) | in your temp channel: `/voice` → **People…** → *Let someone in…*, *Keep someone out…*; **Region…** → `us-west`; leave (channel deletes) → re-join the lobby | the new channel has the same region and the same two people set; the panel's **remembered for next time** block shows both halves; **Forget my settings** clears it |
 | 21 | Temp-voice room controls (B4, live 2026-08-31) | with a temp channel open: https://blackbloc.heygabi.ai/tempvoice.html → Open now | each row shows In it / Cap / Access + Rename, Cap, Lock, Hide buttons; press Rename — the channel renames and the reply says "remembered for next time" |
-| 22 | Role-menu Un-post + Seed (B5+B6, live 2026-08-31) | /rolemenus.html → Un-post beside Post on a posted card; the Seed defaults button beside New menu; also `/rolemenu unpost` in Discord | un-post takes the panel down in the channel (in test mode: a `would_unpost` log line instead); seed says created/left-alone in words and never rewrites an existing menu |
-| 23 | Staff assign from the site (B7, live 2026-08-31) | /rolemenus.html → Timed roles → "Hand roles out": pick a member, a menu, roles → Give these | the member's roles change (⚠️ REAL roles even in test mode, same as `/rolemenu assign`); the Logs page shows `web.role_menu.assign` with Via: Website |
+| 22 | Role-menu Un-post + Seed (B5+B6, live 2026-08-31) | /rolemenus.html → Un-post beside Post on a posted card; the Seed defaults button beside New menu; also `/rolemenu` ▸ the menu ▸ **Take it down** in Discord | un-post takes the panel down in the channel (in test mode: a `would_unpost` log line instead); seed says created/left-alone in words and never rewrites an existing menu |
+| 23 | Staff assign from the site (B7, live 2026-08-31) | /rolemenus.html → Timed roles → "Hand roles out": pick a member, a menu, roles → Give these | the member's roles change (⚠️ REAL roles even in test mode, same as `/rolemenu` ▸ the menu ▸ **Hand roles out…**); the Logs page shows `web.role_menu.assign` with Via: Website |
 | 24 | Event detail + edit (B8, live 2026-08-31) | /events.html → Queue → Open on a pending event → change the title or start in "Change it" | detail card shows every field; the review channel renames to match the new title; an already-posted announcement keeps its old text and the reply says so |
 | 25 | One-time sign-out (sessions, live 2026-08-31 ~12:20) | open https://blackbloc.heygabi.ai | you are signed OUT once (old cookies have no session id) — sign in and everything is back; sign out and reload: signed out for real now (revoked server-side, not just cleared) |
 | 26 | R1 shell (live 2026-08-31 ~12:20) | https://blackbloc.heygabi.ai/automod.html then /settings.html then any page | automod: two columns, no dead right half; type in a setting → a docked "N changes pending · Save Changes" bar (per-field Save/Clear gone); Settings: human labels with small mono keys, hover a row for ⌫ reset; rail has an icon per item; ⚙ walks all 6 themes × light/dark and the docked bar stays on-screen in every one |
@@ -148,7 +157,7 @@ All of this happens in **`#mute-me-bot-test-spam`** (test mode) or on **https://
 | 34 | Knowledge grounding (Phase 14) | `/chat` → **Knowledge…** → **Write one down…** (title `Cookout hours`, body `The cookout runs Friday evenings.`) → `@Black Bloc when is the cookout?`; then **A note…** on a server-written row | the answer quotes your note; the list shows yours + the server-written ones once the daily loop runs; a `server` note's card has **neither** Remove nor Edit and says the daily read owns it |
 | 36 | The chat-hardening wave (live 2026-09-01 19:01) | the 6-line list Claude posted in chat (role lookups, member-trust, hidden commands from a non-staff account, DBZ retest, Groq routing read off the `/chat` status block, event-hosting answer) | each line names its expected answer; `/chat` → **Logs** shows `chat.reply_reference_fixed` when the guard catches an invention |
 | 37 | Costs card (live 2026-09-01 19:01) | https://blackbloc.heygabi.ai/health.html#sect-costs then Settings → Costs → `cost_hosting_usd` = your Fly invoice figure | per-model spend matches the `/chat` status block; the hosting row stops saying "fill it in"; the Chat page's dollar figure links here |
-| 38 | Ping roles — set-up (F14, `pings_mode` ships **off**) | `/pings` as staff → **Set up the Events role** → leave the role picker empty → **Set it up**; then **Settings** → **Mode…** → on; `/rolemenu post notifications` | the reply names the role it made or reused and says both feeds now point at it, plus "still off" until you flip the mode; a **Notifications** panel with one 🔔 option; **Turn event pings on** as a member puts the role on. Rows **126–134** walk the whole panel |
+| 38 | Ping roles — set-up (F14, `pings_mode` ships **off**) | `/pings` as staff → **Set up the Events role** → leave the role picker empty → **Set it up**; then **Settings** → **Mode…** → on; `/rolemenu` ▸ *notifications* ▸ **Post it** | the reply names the role it made or reused and says both feeds now point at it, plus "still off" until you flip the mode; a **Notifications** panel with one 🔔 option; **Turn event pings on** as a member puts the role on. Rows **126–134** walk the whole panel |
 | 39 | Ping roles — a streamer's own role | as a linked streamer: `/pings` → **Start my own ping role**; as staff for somebody else: `/pings` → **Streamers…** → **Give somebody a ping role…**; then **Follow a streamer…** from a second account | the role is made (named from `pings_fan_role_template`), a **Streamer pings** menu appears, following puts it on and the panel names both halves. ⚠️ If Discord refuses, the reply says the Bots role has to sit ABOVE the new role and **Logs** has `pings.forbidden` |
 | 40 | Ping roles — the announcement prefix | with `golive_mode` on (or shadow, and read the `would_announce` line) and a fan role on the streamer: go live | the line starts `<@&Events> <@&… pings>` — both roles, never twice, the shared one first; end the stream with `golive_end_mode edit` and the edit adds the suffix without adding a mention |
 | 41 | Ping roles — 26 streamers (paging) | only if you ever have more than 25: `/pings` → **Streamers…** | there are TWO panels, `streamers` and `streamers-2`; post the second one too. The member's **Follow a streamer…** select caps at 25 and says *"25 of N — the rest are on the *Streamer pings* panels"*, NOT "on the site" — a member cannot open the site. ⚠️ Never exercised in the server; the 25-per-select cap is Discord's documented limit, tested with 26 rows in the suite |
@@ -171,12 +180,15 @@ The step-by-step click scripts for the seven core phases + 8a, as accumulated
 while each landed. Rows 1–20 above are the priority order; these are the long
 form for a full pass.
 
-- **Phase 1 (live):** in `#mute-me-bot-test-spam` run `/settings show` (expect the
-  three keys with the test channel as default) → `/rolemenu seed-defaults` →
-  `/rolemenu list` → `/rolemenu post pronouns` → pick roles on the panel (expect an
-  ephemeral "Added: …/Removed: …" and your roles change) → `/rolemenu show
-  interests`. Try `/rolemenu list` from a non-staff account: expect the staff
-  sentence. Check the action-log embeds landed in the same channel.
+- **Phase 1 (live; rewritten 2026-09-04 for the panel — every subcommand below is
+  gone):** in `#mute-me-bot-test-spam` run `/settings show` (expect the three keys with
+  the test channel as default) → `/rolemenu` → **Seed the defaults** → **Yes, make
+  them** (the root list is what `/rolemenu list` printed) → **A menu…** → `pronouns`
+  → **Post it** → the test channel; pick roles on the posted panel (expect an
+  ephemeral "Added: …/Removed: …" and your roles change) → **Back** → **A menu…**
+  → `interests` (the card is what `/rolemenu show` printed). Try `/rolemenu` from a
+  non-staff account: expect the staff sentence and NO panel. Check the action-log embeds
+  landed in the same channel.
 - **Phase 2 (live, mode `shadow`; ONE command since 2026-09-03):** `/golive` as staff —
   the embed carries the status lines (expect mode shadow, channel = test channel, Twitch
   polling running with a last-ok time) → **Preview an announcement…** → *Twitch*
@@ -201,10 +213,11 @@ form for a full pass.
   (trap created in the test category; notice skipped in test mode) → post in it from
   a throwaway account: message deleted, a `honeypot.would_ban` embed with a **Ban
   now** button in the test channel; nobody banned. `/honeypot status` (expect the
-  resolved staff-role count > 0). Role rider: `/rolemenu seed-defaults` again
-  (expect "already there" for the five, created `runner-status`) → `/rolemenu assign
-  runner-status @someone` (staff picker) → `/rolemenu post event-alerts` shows the
-  real `:JoyGAMING:` emoji only if you delete and re-seed that menu (the seed never
+  resolved staff-role count > 0). Role rider: `/rolemenu` → **Seed the defaults** again
+  (expect "already there" for the five, created `runner-status`) → **A menu…** →
+  `runner-status` → **Hand roles out…** → pick a member → **Give them roles…** → the
+  staff picker → **A menu…** → `event-alerts` → **Post it** shows the real
+  `:JoyGAMING:` emoji only if you delete and re-seed that menu (the seed never
   rewrites existing options).
 - **Phase 4 (live; rewritten 2026-09-03 for the panel — every subcommand below is gone):**
   `/event` → **My time zone** → type `America/Phoenix` (expect the current local time
@@ -254,7 +267,7 @@ form for a full pass.
 
 | # | Feature | Do this | Expect |
 |---|---|---|---|
-| 53 | Applications — the switch, and the command that does NOT vanish | /rolemenus.html → **Applications** → set it to **shadow**, then **on**, then back to **off**; or `/settings set-value applications_mode off` | the segment saves in place and says so. ⚠️ **With it off `/apply` is STILL in Discord** (owner, 2026-09-03: "Visible") — open it and the panel says *"Applications are turned off right now…"* in words and offers **no** form to apply for, while staff still get **A form…**, **New form**, **Settings** and **Logs**. The posted Apply buttons stop working. This is the opposite of what row 53 tested before the panel, when the whole member command disappeared within five seconds |
+| 53 | Applications — the switch, and the command that does NOT vanish | /rolemenus.html → **Applications** → set it to **shadow**, then **on**, then back to **off**; or `/settings set-value applications_mode off` | the segment saves in place and says so. ⚠️ **With it off `/apply` is STILL in Discord** (owner, 2026-09-03: "Visible") — open it and the panel says *"Applications are turned off right now…"* in words and offers **no** form to apply for, while staff still get **A form…**, **New form**, **Settings** and **Logs**. The posted Apply buttons stop working. This is the opposite of what row 53 tested before the panel, when the whole member command disappeared within five seconds. ⚠️ `/rolemenu` behaves the same way since 2026-09-04 — `rolemenu_mode` off leaves the command in the tree and the panel says picking is off as a line |
 | 54 | Applications — the form | follow the Twitch Team walk-through below (either the Discord panel or the dashboard editor) | `/apply` → **A form…** → **Questions…** shows five questions in order; the dashboard's form editor shows the same five, and Up/Down really reorders them (reorder is site-only — the sub-panel says so and links there) |
 | 55 | Applications — applying | in `#mute-me-bot-test-spam`: `/apply` → **Apply for…** → **Twitch Team** (or press **Apply** on the posted panel) | a modal with your five questions; on submit an ephemeral "Sent to staff…", a DM "…is with staff now", and a card with **Approve** / **Deny** in the test channel (test mode redirects it there and the reply says so) |
 | 56 | Applications — deciding | press **Approve** on that card | the applicant gets the role; the card is edited to say who has it and carries `@<owner> — next step: the Team owner sends your twitch.tv invite…`; the applicant is DMed the same thing; /rolemenus.html → Applications shows it under Decided and the Timed roles table has a clock on it if the form set one. Then apply again as somebody else and press **Deny** with a reason: the DM carries the reason AND the date they may apply again |
@@ -278,7 +291,7 @@ form for a full pass.
 | 69 | A form with no role at all | on **https://blackbloc.heygabi.ai/rolemenus.html#applications** press **New form**, fill Name + Heading, leave **Role it hands over** on **No role — keep a list**, save. (In Discord: `/apply` → **New form**, then on its card **Edit…** and leave the role picker alone) | the form saves; the **Role lasts, days** box disappears while the role is blank; the forms table shows a grey **list** badge in the Role column instead of a role chip. An existing form is switched over by submitting **Edit…**'s role picker EMPTY, or by picking the blank option in the editor |
 | 70 | Applying and being approved with nothing to hand over | put the Apply button up, apply as a member, press **Approve** on the card | the card and the ephemeral reply say "Approved — **<name>** is on the **<heading>** list now." — no role is mentioned and none is given. The DM is the form's approved text with no "the role runs out" line. `/apply` → **Logs** shows `application.approved` with `granted: null` and NO `application.granted` line |
 | 71 | The roster, and Copy as text | on the Role menus page open **Approved for <form>** under that form; in Discord, `/apply` → **A form…** → **Roster** | one row per approved member: their name, **twitch.tv/<login>** as a link (or a quiet "not linked"), how long since staff said yes, and who decided. Somebody who has left the server is still listed with "left the server" beside them — `/settings set-value key:applications_roster_shows_left value:false` hides them instead, on both surfaces. **Copy as text** (site only) puts one line per member on the clipboard |
-| 72 | Taking somebody off the list | on the roster press **Take off the list**, type a reason, confirm. (In Discord: `/apply` → **A form…** → **Roster** → **Take somebody off…**, or **Find #…** the application and press **Take off the list** on its card) | they are DMed the reason and when they may apply again; the Decided table shows the row as **removed**; the roster is one shorter. On a form that DOES hand a role over the button is not offered at all and the card says so in words, pointing at `/role revoke` |
+| 72 | Taking somebody off the list | on the roster press **Take off the list**, type a reason, confirm. (In Discord: `/apply` → **A form…** → **Roster** → **Take somebody off…**, or **Find #…** the application and press **Take off the list** on its card) | they are DMed the reason and when they may apply again; the Decided table shows the row as **removed**; the roster is one shorter. On a form that DOES hand a role over the button is not offered at all and the card says so in words, pointing at `/rolemenu` ▸ **Grants…** ▸ the grant ▸ **End it now** |
 | 80 | Polls — the panel opens | `/poll` in #mute-me-bot-test-spam, first as a Lead and then as a plain member | ONE ephemeral panel, not a list of subcommands: **Create · Find #… · Refresh** on the top row for everybody, **Settings · Logs** added for a Lead only; a "Pick a poll…" select under it once something is running; a Lead also sees the counts line (**N** running · **N** waiting on a decision · **N** repeating) and, with a repeating poll saved, a second "Repeating polls…" select; **Open on the site** links to https://blackbloc.heygabi.ai/polls.html. A member sees no Settings and no Logs at all rather than buttons that refuse |
 | 81 | Polls — Create through the two-step modal | on the panel press **Create**: type the question, `Pizza \| Tacos \| Neither`, leave hours blank, pick a kind on the radio, tick nothing; submit; on the preview pick a channel, a ping role, flip **Thread: off**; press **Post it** | the modal carries exactly five things (question, options, hours, the kind radio, the two switches) — Discord's cap; the preview is a card of what you typed with **Post it · Repeat… · Start over · Cancel**, and NOTHING is written until Post it (press **Cancel** on a preview and `/poll` shows no new poll). After Post it: the poll is up in the channel you picked, and `/poll` → **Logs** shows one `poll.created` and one `poll.opened` — never two of either |
 | 82 | Polls — a date poll through the extra step | **Create** with kind **date**, no options; on the preview press **Date slots…**, start `2026-09-05`, 4 slots, step 1, unit **days**; **Post it** | before the slots are given there is no **Post it** button at all and the preview says the poll needs its slots; after them, four dated answers in the order you asked for. `poll_date_labels` still decides whether they read as `Sat 05 Sep` or as each reader's own clock |
@@ -550,6 +563,24 @@ role and the DMs; a human still clicks *invite* on twitch.tv. That click is what
 
 **To close it for a while** (applications in progress are untouched): `/apply` →
 **A form…** → **Close it**. **Open it** puts it back.
+
+### Role menus panel (wave 3) — rows 173–182
+
+Written as `M1`–`M10` on the build's branch (letters on purpose, so a half-renumbered table could
+not look finished) and numbered **173–182** by the conductor at the merge, after raidtrain's 163–172.
+
+| # | Do this | Expect |
+|---|---|---|
+| 173 | `/rolemenu` on a server that has menus | one ephemeral panel: the menu list as lines (name, option count, mode, posted or not), **A menu…**, **New menu**, **Seed the defaults**, **Grants…**, the mode button, **Logs**, **Refresh** — and nothing that asks you to type a menu name anywhere |
+| 174 | press the mode button (**Turn role menus off**), then run `/rolemenu` again | ⚠️ **the command is still there** — that is the change. The panel says picking is off in a line, the posted panels come down within a few seconds, and **Post it** / **Hand roles out…** are gone from every menu card while **Words…**, **Rules…**, **Delete it** and the rest stay. Press **Turn role menus on** to put it back |
+| 175 | mode back on → **A menu…** → `pronouns` | the card: **Add a role…** · a **Take a role off this menu…** select · **Words…** · **Rules…** · **Ask staff first** · **Post it** · **Hand roles out…** · **Delete it** · **Back** · **Refresh** — and the lines above are exactly what `/rolemenu show` used to print |
+| 176 | **Back** → **A menu…** → `runner-status` (a `staff`-mode menu) | **no Post it at all** — the card says in words that nobody gives themselves these roles, and **Hand roles out…** is how they are handed over |
+| 177 | **Add a role…** → pick a role that sits ABOVE Black Bloc in Server Settings → Roles → **Use the role's own name** | refused **in words** naming the fix, and nothing is added. Then pick a real one and press **Give it a label…** for a label and an emoji; the **Take a role off this menu…** select takes it back off and says nobody loses the role they have |
+| 178 | on `pronouns`: **Post it** → the test channel; then **Move it…** → the same channel; then **Take it down** | one panel, moved not duplicated (it edits the message it already has); taking it down leaves the menu and everybody's roles alone and **Post it** comes back on the card. ⚠️ Any channel but `#mute-me-bot-test-spam` is refused in words while test mode is on |
+| 179 | **Rules…** → 7 days, retry 7; then **Ask staff first**; then pick the role as a member on the posted panel | the posted panel refreshes ITSELF (fork F-R3) so its "Before you pick" block says both things without you posting again; picking sends a request and DMs you; a card with Approve / Deny appears in the approval channel (⚠️ in the test channel while test mode is on, and the reply says so) |
+| 180 | `/rolemenu` → **Waiting on staff (1)…** → the request → **Approve for a while…** → 3 | the same card the channel shows; approving DMs the member, adds the role and edits the channel card — and pressing **Approve** on the channel card afterwards says it was already decided rather than acting twice |
+| 181 | `/rolemenu` → **Grants…** | ⚠️ **an AUDIT, not an empty box** — every timed role running in the server, soonest to end first, one line each: member · role · time left · the end date (or `no end date`), capped at 25 with a line pointing at the site's Timed roles table. Then **Whose roles?** → that member: the same list narrowed to them, and **A timed role…** picks from what is shown |
+| 182 | on that grant: **Push it back…** 3, then **End it now** → **Yes, take it back**; then **Back** → **Give somebody a role…** → a member, a role, **How long for…** 0; then leave the panel `rolemenu_panel_minutes` minutes | the end date moves; ending takes the role back, DMs nobody (it is a staff move) and the Timed roles table on the site agrees — ⚠️ **this is the `/role revoke` four docs promised**; a 0-day grant lands with **no end date** at all (fork F-R2) and still writes its `role_grants` row; the panel goes quiet with its footer. ⚠️ Handing roles out and ending grants change REAL roles, test mode or not |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that

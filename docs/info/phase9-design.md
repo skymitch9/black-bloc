@@ -1,5 +1,9 @@
 ﻿# Phase 9 — Role menus 2: approval, time limits, reconciliation
 
+> ⚠️ **SUPERSEDED IN PART, 2026-09-04:** every `/rolemenu …` and `/role …` subcommand named below is retired — `/rolemenu` is now ONE staff command that opens a panel. The behaviour is unchanged; only the door is. See
+> [`role-menus-panel-design.md`](role-menus-panel-design.md) and
+> [`panels-program.md`](panels-program.md).
+>
 > **9a built 2026-08-27** in `341757a` (storage, schema 13), `940927c` (the cog:
 > approval flow, `/rolemenu edit`, `/role grant`, `/role extend`, the hourly
 > `_expiry` loop, `on_member_update` and the record sweep) and `7605730` (the

@@ -343,12 +343,12 @@ async def a_nested_subcommand(interaction):
     await interaction.response.send_message("fed")
 
 
-rolemenu = app_commands.Group(name="rolemenu", description="Self-serve role panels")
+requests = app_commands.Group(name="request", description="Ask staff for something")
 
 
-@rolemenu.command(name="post", description="Post or refresh a role menu panel")
-async def a_rolemenu_subcommand(interaction):
-    await interaction.response.send_message("posted")
+@requests.command(name="file", description="File a request")
+async def a_request_subcommand(interaction):
+    await interaction.response.send_message("filed")
 
 
 @app_commands.command(name="here", description="Only this guild has it")
@@ -410,25 +410,26 @@ async def test_help_answers_with_every_command_including_the_guild_s_own(helpful
 
 
 async def test_help_omits_a_command_a_feature_mode_is_hiding(bot, cog, member):
-    bot.tree = FakeTree([a_plain_command, rolemenu])
+    bot.tree = FakeTree([a_plain_command, requests])
+    await bot.store.set(GUILD, "request_mode", "off")
     interaction = FakeInteraction(bot, member)
 
     await cog.help_command.callback(cog, interaction, None)
 
     said = "\n".join(message["content"] for message in interaction.response.messages)
-    assert "/rolemenu" not in said
+    assert "/request" not in said
     assert "**/ping** — Check that Black Bloc is alive" in said
 
 
 async def test_help_lists_the_command_again_once_the_mode_is_on(bot, cog, member):
-    bot.tree = FakeTree([a_plain_command, rolemenu])
-    await bot.store.set(GUILD, "rolemenu_mode", "on")
+    bot.tree = FakeTree([a_plain_command, requests])
+    await bot.store.set(GUILD, "request_mode", "on")
     interaction = FakeInteraction(bot, member)
 
     await cog.help_command.callback(cog, interaction, None)
 
     said = "\n".join(message["content"] for message in interaction.response.messages)
-    assert "/rolemenu post — Post or refresh a role menu panel" in said
+    assert "/request file — File a request" in said
 
 
 async def test_help_says_so_when_the_filter_matches_nothing(helpful, cog, member):
