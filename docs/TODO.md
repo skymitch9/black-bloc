@@ -312,6 +312,19 @@ docs bookkeeping lands with the work, not after.
   owner one at a time, then builds in wave order.
   **DISPATCHED 06:36:** the hide-when-off build (Opus, own worktree off `cc18993`; usage at dispatch session 1% /
   weekly 5% / Fable 6%, read 06:25). Honeypot / `/mod` / modmail designs follow.
+  **LANDED 06:55 (185k Opus): hide-when-off MERGED to `main` as `0fcbac2` + `e00c9bf`** — 14 features hide,
+  not 15: Fable kept `/memory`'s carve-out (fork I-M1 "open it"; memory off deletes nothing and the site is
+  staff-only, so the panel is a member's only door to their own notes, KI-14). Owner can flip it back with one
+  line. 4539 tests, ruff clean. ⚠️ **v78 NOT YET DEPLOYED** — `deploy.ps1` refuses untracked files and the
+  design agents write into the main tree; deploy the moment their docs are committed. Usage after landing
+  session 12% / weekly 8% / Fable 8%, read 06:55.
+  **LANDED 06:59 (287k Opus): `info/mod-panel-design.md` written and committed** — `/mod [member]`, staff
+  only, list → case card with Edit reason / Add a note / Void (Restore) / Jump to case # / Logs; `/case`,
+  `/cases`, `mod` group retire (36 → 34); migration schema 28 → 29 (six nullable `mod_cases` columns);
+  est. 340–420k Opus (280–340k if the site's four moves wait). Five defects REPORTED not fixed (bare
+  `mod.purged`/`mod.purge_failed` kinds, dead `CASE_KINDS`, dead `_audit`/`_failed`, site Notes chip matches
+  nothing, a code-notes claim about `/untimeout`/`/unban` gating that a test disproves). Forks F-M1/F-M2/F-M3
+  go to the owner one at a time (§J). Usage after landing session 13% / weekly 8% / Fable 9%, read 06:59.
 - **Wave-1 review findings, small, fold into the next build that touches each file (Fable
   review 2026-09-03 13:50–14:05):** `requests.py` re-renders lack `allowed_mentions`;
   `LOG_LEVEL_COMMANDS` help still says "`/birthday logs`" / "`/request logs`"; five form writes
