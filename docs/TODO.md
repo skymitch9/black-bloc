@@ -332,7 +332,18 @@ docs bookkeeping lands with the work, not after.
   `honeypot_mode` STAYS in `HIDDEN_WHEN_OFF` (defaults to shadow, not off). Reported not fixed: the site writes
   `honeypot_mode`/`honeypot_exempt_role_ids` through the generic settings API, bypassing the arming refusal. Est.
   320–380k Opus. Forks F-H1/F-H2/F-H3 (§I) go to the owner one at a time after `/mod`'s. Usage after landing
-  session 14% / weekly 8% / Fable 9%, read 07:00. Still writing: the modmail design.
+  session 14% / weekly 8% / Fable 9%, read 07:00.
+  **LANDED 07:02 (252k Opus): `info/modmail-panel-design.md` written and committed** — 1017 lines. Sticky
+  card jumps on every write into the ticket; `modmail_reply_style` gate already exists at `_staff_message`
+  (`buttons` is the only new value); practice ticket = private thread on the test channel claimed with
+  `guard.own_channel`, real tickets never claimed; migration schema → +1 (`card_message_id`, `practice` on
+  `modmail_tickets`) — ⚠️ the `/mod` design ALSO claims 28 → 29, so whichever builds second takes 30.
+  Findings: a successful reply and `/note` write NO log row today; four kinds spelled differently by the two
+  doors (`modmail.unblocked` IMPORTANT vs web `modmail.unblock` ROUTINE). Est. 480–600k as one agent —
+  SPLIT recommended: A = panel + extractions + kind rename (230–290k, 36 → 35), B = migration + sticky card +
+  ticket card + practice ticket + retire `/areply` `/note` `/close` (270–330k, 35 → 32). Seven forks (§I)
+  go to the owner one at a time after `/mod`'s and honeypot's. Usage after landing session 15% / weekly 8% /
+  Fable 9%, read 07:02. **All four agents landed; v78 deploy next.**
 - **Wave-1 review findings, small, fold into the next build that touches each file (Fable
   review 2026-09-03 13:50–14:05):** `requests.py` re-renders lack `allowed_mentions`;
   `LOG_LEVEL_COMMANDS` help still says "`/birthday logs`" / "`/request logs`"; five form writes
