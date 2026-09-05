@@ -9,6 +9,50 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-05 — The self-test (wave 5): the bot proving itself at every boot, and cleaning up after itself (v86, merge of `worktree-agent-a4aa5efd43f249ba6` + `abac65d` + `ad5b614`)
+
+**Outcome (Fable review + merge 2026-09-05 15:15, deployed ~15:35):** `black_bloc/selftest.py` — a `Check` registry
+(`config.<key>` 35 · `panel.<command>` 18 · `read.<path>` 47 · `send.<feature>` 6 = **106 checks, 24 real messages**)
+on ONE `run()` = `begin()` + `finish()`, three doors (boot line `selftest: N ok, M failed, K messages posted (purge in
+5 min)`; `/settings` ▸ **Self-test…** with Run / Purge now / Logs; `POST /api/selftest` staff-only + `GET` list/one +
+`POST …/purge`), tables `selftest_runs` + `selftest_messages` (schema 30 → 31, additive), `purge_loop` every 60 s
+deleting every posted message after `selftest_purge_minutes` (5; boot purges leftovers FIRST), log feature **Test**
+(`selftest.*`, level `off`, excluded from the Logs page's default view via `default_view_clause`, shown under the
+**Test** chip), Health-page card, four `core` keys (`selftest_on_boot` true · `selftest_channel_id` = the test channel ·
+`selftest_purge_minutes` 1–1440 · `selftest_log_level`), `tests/live/` (`-m live`, env NAMES `BLACK_BLOC_LIVE_URL` /
+`BLACK_BLOC_LIVE_TOKEN` / `BLACK_BLOC_LIVE_SESSION`), `docs/access/testing.md`. Tree stays 29 / zero Groups.
+Deviations, all recorded in the design's `## Build deviations` foot: 18 panels not 29 (eleven commands open no
+panel); `read.*` walks the app's own route table because `contract.json` is not in the Docker image; the operator
+token reads the door but cannot start a run; and a real defect fixed on the way — an unknown `/api` path answered
+Starlette's bare `{"detail": "Not Found"}`, now a sentence. `guard.py` RAISES on a non-test channel, so a mis-pointed
+`selftest_channel_id` fails its check in words and nothing is misrecorded. **One defect the deploy's own suite run
+caught** (1 in ~2 full runs): `finish()` cleared the busy flag only in its `finally`, after the `selftest.finished`
+row was logged, so a `GET` in that gap saw `finished_at` set and `running: true` — the flag now clears in the same
+breath as `close_run` (`ad5b614`). Rides along: pings fork (a) (`fcc4523` — **Take my ping role away** renders
+whenever the member holds a role, mode on or off). Sweep rows **252–261** (`ST1`–`ST10`); owner-guide row **Make the
+bot test itself**. Agent cost **515k** (est. 300–450k). 5109 tests. Also landed in this entry: the owner walked
+sweeps **232–251** by eye and the Logs page on a phone 2026-09-05 15:19 (verbatim "1 and 2 are good"), nothing
+reported wrong. **NOT verified:** no person has run it; `tests/live/` has never hit the deployed host
+(`OPERATOR_READ_TOKEN` is not set on Fly); the boot line is the one live measurement, in `deploys.log`: **the first live run said `104 ok, 2 failed, 24 messages posted`** — both failures were the READ CHECK being wrong about lookups (`/api/ref/names` answers `{}` for no ids; `/api/applications/roster` refuses in words for no form), fixed the same hour as **v87** (`_takes_a_query`: a lookup answering nothing, or refusing in words, for nothing picked passes). Review:
+https://blackbloc.heygabi.ai/health.html#sect-selftest · https://blackbloc.heygabi.ai/audit.html#logs (**Test** chip) ·
+`/settings` ▸ **Self-test…** in `#mute-me-bot-test-spam`. The two items, moved WHOLE:
+
+- ✅ **DECIDED 2026-09-05 14:02 — owner: "do a but after 5 minutes purge the discord chat of all test,
+  keep the logs on the website tho under test"** → option (a) + a five-minute purge of every message the
+  test posts + a **Test** view on the website's Logs page. Design: [`info/selftest-design.md`](info/selftest-design.md).
+  **BUILDING** — see the engineering item below. Original: **Owner 2026-09-05 13:52, verbatim: "test it all, can we build api test and endpoints"** — logged the
+  moment it was said; ONE clarifying question asked 13:56. Conductor's reading, proposed
+  as the recommended option: a **self-test door** (`POST /api/selftest` for staff + `/settings` ▸ **Run
+  the self-test**, and the same check at every boot logging one line) that, inside the running bot and
+  against the REAL guild, renders every panel's root card, runs every dashboard read, and checks every
+  configured channel/role still resolves with the permissions each feature needs — sending nothing; plus
+  a **`tests/live/`** pytest suite against the deployed API (skipped unless `BLACK_BLOC_LIVE_URL` and the
+  operator token's env NAME are set) that round-trips every route on marked test records. What no API
+  can do: synthesise a Discord click — button/modal handlers stay under the 5002 pytest fakes; only the
+  layout in the Discord client needs a person. Waiting on the owner's answer before designing.
+
+- 🔧 **Self-test + `tests/live/` (owner 2026-09-05 13:52 → decided 14:02, design `info/selftest-design.md`):** `black_bloc/selftest.py` registry of checks (config keys resolve with permissions · every one of the 29 panels' root cards posted live · every website GET in-process · scheduled senders' embeds), three doors on ONE `run()` (boot log line `selftest: N ok, M failed`, `/settings` ▸ **Run the self-test**, `POST /api/selftest` + `GET` list/one + `POST …/purge`), `selftest_runs` + `selftest_messages` tables (schema 30 → 31), `purge_loop` deleting every posted message after `selftest_purge_minutes` (default 5; boot tick purges leftovers first), log feature **Test** (`selftest.*` kinds, level default off, EXCLUDED from the Logs page's default view, shown under the **Test** filter), Health-page Self-test card with a Run button, settings keys `selftest_on_boot` / `selftest_channel_id` / `selftest_purge_minutes` (core group, both doors), mock routes + check.mjs, `tests/live/` (`-m live`, skipped without `BLACK_BLOC_LIVE_URL` + `BLACK_BLOC_LIVE_TOKEN`), `docs/access/testing.md`. No new command — tree stays 29 / zero Groups. Sweep rows `ST1`–`STn`, numbered at the merge after the `ML` rows. **DISPATCHED 14:03 2026-09-05** (Opus, own worktree off `main`; est. 300–450k — a multi-layer build; commit at clean boundaries in the order engine → doors → website → panel wiring → live suite). Usage before dispatch session 32% / weekly 23% / Fable 21%, read 14:02.
+
 ## 2026-09-05 — Modmail follow-up: **A ticket…** and the ticket card ON the panel, plus the Logs page on a phone (v85, merge of `worktree-agent-ad2fc0f5aad473c19` + `430114c`)
 
 **Outcome (Fable review + merge 2026-09-05 ~14:40):** all seven leftovers landed — `picked_values` has ONE home

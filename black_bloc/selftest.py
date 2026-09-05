@@ -10,6 +10,7 @@ from typing import Any
 import discord
 
 from .actionlog import as_details, log_action
+from .api.auth import Refused
 from .logkinds import (
     SELFTEST,
     SELFTEST_CHECK,
@@ -269,12 +270,28 @@ def shape_of(payload: Any) -> str:
     return type(payload).__name__
 
 
+def _takes_a_query(endpoint: Any) -> bool:
+    try:
+        return bool(inspect.signature(endpoint).parameters)
+    except (TypeError, ValueError):
+        return False
+
+
 def read_check(path: str, endpoint: Any) -> Check:
+    lookup = _takes_a_query(endpoint)
+
     async def run(one: Run) -> str:
-        payload = await endpoint()
+        try:
+            payload = await endpoint()
+        except Refused as refusal:
+            if lookup:
+                return f"refused in words with nothing picked: {refusal.error}"
+            raise
         if payload is None:
             raise CheckFailed("answered nothing at all, so the page has nothing to render")
         if isinstance(payload, dict) and not payload:
+            if lookup:
+                return "200; nothing picked, nothing answered"
             raise CheckFailed("answered an object with no keys at all")
         return f"200; {shape_of(payload)}"
 

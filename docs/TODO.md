@@ -12,7 +12,7 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 14:25, v85 LIVE — **29 slots, zero Groups**; modmail follow-up + the mobile Logs page landed; the SELF-TEST build (Opus, `worktree-agent-a4aa5efd43f249ba6`, design `info/selftest-design.md`) BUILDING since 14:03 — the only thing in flight, lands as v86 (schema 30 → 31, sweep rows `ST1`–`STn` numbered after 251); next = the `/settings` leftovers)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 15:40, v86 LIVE — **29 slots, zero Groups**; the SELF-TEST (wave 5, `info/selftest-design.md`, sweeps 252–261) + pings fork (a) landed; owner walked sweeps 232–251 and the mobile Logs page 15:19; NOTHING in flight; next = the `/settings` leftovers (engineering items below), then the small self-test findings filed under Open engineering items)
 
 **`main` = `43312b9`** (role-menus panel merge; v77 live 20:51, 4529 tests, **36 commands**; `youtube_mode` is
 **shadow** since 2026-09-03 17:42). **The panels program is COMPLETE** — waves 1, 2 and 3 (17 features, one
@@ -183,19 +183,6 @@ docs bookkeeping lands with the work, not after.
 
 ## ⏳ Waiting on the owner
 
-- ✅ **DECIDED 2026-09-05 14:02 — owner: "do a but after 5 minutes purge the discord chat of all test,
-  keep the logs on the website tho under test"** → option (a) + a five-minute purge of every message the
-  test posts + a **Test** view on the website's Logs page. Design: [`info/selftest-design.md`](info/selftest-design.md).
-  **BUILDING** — see the engineering item below. Original: **Owner 2026-09-05 13:52, verbatim: "test it all, can we build api test and endpoints"** — logged the
-  moment it was said; ONE clarifying question asked 13:56. Conductor's reading, proposed
-  as the recommended option: a **self-test door** (`POST /api/selftest` for staff + `/settings` ▸ **Run
-  the self-test**, and the same check at every boot logging one line) that, inside the running bot and
-  against the REAL guild, renders every panel's root card, runs every dashboard read, and checks every
-  configured channel/role still resolves with the permissions each feature needs — sending nothing; plus
-  a **`tests/live/`** pytest suite against the deployed API (skipped unless `BLACK_BLOC_LIVE_URL` and the
-  operator token's env NAME are set) that round-trips every route on marked test records. What no API
-  can do: synthesise a Discord click — button/modal handlers stay under the 5002 pytest fakes; only the
-  layout in the Discord client needs a person. Waiting on the owner's answer before designing.
 - **Cutover, at your pace** — [`info/cutover-plan.md`](info/cutover-plan.md): prerequisites P1–P5 (channel rename, staff channel, TEST_MODE lift — the lift is yours alone), then the per-feature ladder.
 - **Test sweep — the whole list lives in [`access/sweeps.md`](access/sweeps.md)** (37 rows in priority order + the detailed phase 1–8a scripts; it is the ONE home for what a person has not yet exercised).
 - ~~Twitch developer app~~ **ALREADY DONE — stale line caught by the owner
@@ -223,6 +210,16 @@ docs bookkeeping lands with the work, not after.
 
 ## 🔧 Open engineering items
 
+- 🔧 **Self-test leftovers after wave 5 (handed over at the v86 landing, 2026-09-05 — Fable review findings, none
+  blocking):** (1) `api/selftest_api.py:start` hands `selftest.finish(one)` to `asyncio.create_task` and nothing awaits
+  it, so a check-runner that RAISES (not a check that fails — those are recorded) dies with only asyncio's GC warning;
+  wrap it so the exception lands as a `selftest.finished` row with `failed` counted and the busy flag cleared (the
+  `finally` already clears it — the row is what is missing); (2) `selftest.py:checks_of` scans every `selftest.check`
+  row for the guild and filters by `run_id` in Python — grows one run's worth per run; index or `WHERE json_extract`
+  on `details.run_id`, measure at ~50 runs; (3) `OPERATOR_READ_TOKEN` is not set on Fly, so `tests/live/` has never
+  hit the deployed host — mint one (Fly secret, NAME only in docs) and run `pytest -m live` once from a laptop, then
+  record the measured count in `access/testing.md`; (4) the boot line is the ONLY live measurement of the self-test so
+  far — a person pressing **Run the self-test** and watching the purge is sweep row 252/259.
 - 🔧 **`/settings` leftovers after Build 2 (handed over at the v84 landing, 2026-09-05):** (1) the operator-read-log
   toggle on `Panels & commands…` is drawn only for `manage_guild` but `MoveButton.callback` → `run_toggle` does not
   re-ask it (the core-key picks do, through `core_keys_allowed`) — the panel is ephemeral to its opener so the exposure
@@ -240,7 +237,6 @@ docs bookkeeping lands with the work, not after.
   feature copies it (a module function, not a cog; acceptable, but `set_key`/`clear_key` may belong in a leaf module);
   (9) the three hand-rolled confirm copies are still three — Build 2 made the settings confirm a card STATE, so the
   "fold 7 copies" sweep is now a fold of the other panels, not of this one.
-- 🔧 **Self-test + `tests/live/` (owner 2026-09-05 13:52 → decided 14:02, design `info/selftest-design.md`):** `black_bloc/selftest.py` registry of checks (config keys resolve with permissions · every one of the 29 panels' root cards posted live · every website GET in-process · scheduled senders' embeds), three doors on ONE `run()` (boot log line `selftest: N ok, M failed`, `/settings` ▸ **Run the self-test**, `POST /api/selftest` + `GET` list/one + `POST …/purge`), `selftest_runs` + `selftest_messages` tables (schema 30 → 31), `purge_loop` deleting every posted message after `selftest_purge_minutes` (default 5; boot tick purges leftovers first), log feature **Test** (`selftest.*` kinds, level default off, EXCLUDED from the Logs page's default view, shown under the **Test** filter), Health-page Self-test card with a Run button, settings keys `selftest_on_boot` / `selftest_channel_id` / `selftest_purge_minutes` (core group, both doors), mock routes + check.mjs, `tests/live/` (`-m live`, skipped without `BLACK_BLOC_LIVE_URL` + `BLACK_BLOC_LIVE_TOKEN`), `docs/access/testing.md`. No new command — tree stays 29 / zero Groups. Sweep rows `ST1`–`STn`, numbered at the merge after the `ML` rows. **DISPATCHED 14:03 2026-09-05** (Opus, own worktree off `main`; est. 300–450k — a multi-layer build; commit at clean boundaries in the order engine → doors → website → panel wiring → live suite). Usage before dispatch session 32% / weekly 23% / Fable 21%, read 14:02.
 - **Wave-1 review findings, small, fold into the next build that touches each file (Fable
   review 2026-09-03 13:50–14:05):** `requests.py` re-renders lack `allowed_mentions`;
   `LOG_LEVEL_COMMANDS` help still says "`/birthday logs`" / "`/request logs`"; five form writes

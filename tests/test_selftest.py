@@ -236,6 +236,26 @@ def test_the_read_family_is_the_apps_own_route_table_and_skips_what_needs_fillin
     assert len(found) > 30
 
 
+async def test_a_lookup_answering_nothing_for_nothing_picked_is_not_a_fault(bot):
+    from black_bloc.api.auth import Refused
+
+    async def names(ids: str = ""):
+        return {}
+
+    async def roster(form: str = ""):
+        raise Refused(404, "no_such_form", "no form with that number")
+
+    async def status():
+        return {}
+
+    run = selftest.Run(bot, bot.guilds[0])
+    assert "nothing picked" in await selftest.read_check("/api/ref/names", names).run(run)
+    assert "no_such_form" in await selftest.read_check("/api/applications/roster", roster).run(run)
+    # A page read that takes NOTHING and answers nothing is still the fault it always was.
+    with pytest.raises(selftest.CheckFailed):
+        await selftest.read_check("/api/status", status).run(run)
+
+
 # --- the run --------------------------------------------------------------------------------------
 
 
