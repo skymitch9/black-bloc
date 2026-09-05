@@ -12,7 +12,7 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 09:06, /mod merged + v81 LIVE, nothing building, modmail B forks 1–7 all = (a), Build B dispatching)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 09:06, /mod merged + v81 LIVE, nothing building, modmail B forks 1–7 all = (a), Build B BUILDING since 09:21)
 
 **`main` = `43312b9`** (role-menus panel merge; v77 live 20:51, 4529 tests, **36 commands**; `youtube_mode` is
 **shadow** since 2026-09-03 17:42). **The panels program is COMPLETE** — waves 1, 2 and 3 (17 features, one
@@ -346,7 +346,7 @@ docs bookkeeping lands with the work, not after.
   **Forks, one at a time (owner 2026-09-05 09:06):** F-M1 card-jump = **(a) every write** ✅; F-M3 typed-reply
   echo = **(a) unchanged** ✅; F-M4 practice transcript = **(a) filed, marked PRACTICE** ✅; F-M5 `/reply`
   keeps `ticket:` = **(a)** ✅; F-M6 real tickets not claimed = **(a)** ✅; F-M7 snippet combines in one modal = **(a)** ✅; F-M8 Reply as Staff
-  stays a button = **(a)** ✅. **All seven answered (a) — Build B dispatching.** Each fork got a push
+  stays a button = **(a)** ✅. **All seven answered (a). Build B DISPATCHED 09:21** (Opus, own worktree off `6e5a550`, est. 270–330k; five commit layers, migration 29 → 30, tree 33 → 30 expected, sweep rows lettered `MB1`–`MBn`). Usage before dispatch session 53% / weekly 16% / Fable 15%, read 09:15. Each fork got a push
   notification (global rule, same day).
   **LANDED 08:00 (429k Opus): the `/mod` cases panel** — reviewed sound (atomic void/restore with a 409 each way,
   one write one row through four shared extractions, website routes gated by `writer()`); merged as `a90f416`
