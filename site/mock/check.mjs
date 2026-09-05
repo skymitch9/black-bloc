@@ -21,6 +21,9 @@ const contract = JSON.parse(await readFile(new URL('./contract.json', import.met
 const IDS = {
   member_id: '700000000000000002',
   case_id: '9',
+  // A case the seed already has VOIDED, because /restore is only legal from there and every
+  // contract entry runs against a fresh seed.
+  voided_case_id: '8',
   event_id: '3',
   ticket_id: '5',
   hit_id: '7',

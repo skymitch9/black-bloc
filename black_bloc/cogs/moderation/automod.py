@@ -123,12 +123,12 @@ NO_STAFF_WARNING = (
     "⚠️ **No staff roles resolve.** Only people with Manage Server are exempt, so a moderator "
     "who trips a rule would be punished. Fix `staff_channel_id` before leaving automod on."
 )
-NO_SUCH_CASE = (
+NO_SUCH_VERDICT = (
     "Black Bloc has no record of that automod verdict any more, so nothing was applied. It may "
     "have been cleared from the database; punish by hand if it is still a problem."
 )
 ALREADY_APPLIED = (
-    "That verdict has already been applied, so nothing changed. `/case {case_id}` shows what "
+    "That verdict has already been applied, so nothing changed. Open case #{case_id} to see what "
     "happened."
 )
 MEMBER_GONE = "That member has left the server, so there is nothing to apply."
@@ -477,7 +477,7 @@ async def apply_case(
     async with case_lock(bot, case_id):
         case = await get_case(bot.db, case_id)
         if case is None:
-            return ("no_such_case", NO_SUCH_CASE)
+            return ("no_such_case", NO_SUCH_VERDICT)
         if case["applied"]:
             return ("already", ALREADY_APPLIED.format(case_id=case_id))
         member = guild.get_member(case["user_id"])

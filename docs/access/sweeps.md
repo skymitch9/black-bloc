@@ -1,7 +1,20 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-05** — rows **200–207** added by the MODMAIL PANEL build (Build A: `/modmail`
+> **2026-09-05** — rows **208–218** added by the MOD CASES PANEL build (`/mod [member]` becomes
+> ONE staff-only command that opens a panel; `/case`, `/cases` and the `mod` group with its `logs`
+> child are all retired, and a case can now be edited, noted, voided and restored from either
+> Discord or the dashboard). ⚠️ **This supersedes the "UNCHANGED at 36" line below**: the
+> top-level count really does move — **36 → 34 on the branch, 35 → 33 on `main`** (modmail A had already taken one), **measured** through
+> `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`. Schema **28 → 29**
+> (`mod_cases` gains six nullable columns), and the migration was RUN against a database built by
+> the code at `97531cc`, not reasoned about. The build wrote its block as `C1`–`C11`, letters
+> on purpose, and the conductor numbered them **208–218** at the merge, after modmail A's 200–207. ⚠️ **Nothing in 208–218 has met live
+> Discord** — no boot, no panel opened, no DM seen; the whole verification is `pytest` (4600),
+> `ruff check` and `node site/mock/check.mjs` (17 pages, 146 routes). The **Phase 6 appendix**
+> block was rewritten IN PLACE, because it told the owner to run `/cases` and `/case`.
+> Before that, same day —
+> rows **200–207** added by the MODMAIL PANEL build (Build A: `/modmail`
 > becomes ONE staff-only command that opens a panel; the whole `modmail` group and the whole
 > `snippet` group are retired, so the top-level count moves — **36 → 35, measured** through
 > `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`). The build wrote its block
@@ -284,7 +297,8 @@ form for a full pass.
   channel: expect ONE `automod.would_*` case card with an **Apply now** button (nothing
   deleted/timed out), and a following "sorry" message does NOT re-fire → `/warn @second
   reason` (allowed) → `/timeout @second 5m x` (expect the test-mode refusal +
-  `mod.would_timeout`) → `/cases @second`, `/case 1` → `/settings show` (chunked, no 400).
+  `mod.would_timeout`) → `/mod @second` (ONE panel, narrowed to them), then **A case…** → the
+  card, then **Back** → `/settings show` (chunked, no 400).
   Arming is not offered-and-refused any more: **on** is simply NOT on the *What automod
   does…* picker while the staff channel is still the test channel, and the panel says so
   in words.
@@ -685,6 +699,31 @@ panel stays live.
 | 205 | **Blocked…** → **Block someone…** → pick yourself → **Block them…** → a reason; then **Refresh**, pick yourself from **Somebody…** → **Unblock them** | both land. Dashboard → **Logs**: **ONE line each**, not two — `modmail.blocked` then `modmail.unblocked`, and both read as **important**. ⚠️ Block yourself twice and the second says *"was already blocked, so nothing changed"* and writes **no** second row |
 | 206 | Block somebody from the **dashboard's Modmail page**, then unblock them there | the Logs page shows `web.modmail.blocked` and `web.modmail.unblocked` — **one row each**, where before this build the website wrote a `web.modmail.block` line on top of nothing at all from Discord. Same for a website snippet save (`web.modmail.snippet_saved`) and a website reply (`web.modmail.reply`) |
 | 207 | **Forget…** → clear the ticket category → **Forget…** again | the select only ever lists the places that are actually pointed, and once nothing is pointed the **Forget…** button is not drawn at all. Leave the panel `modmail_panel_minutes` minutes and it goes quiet with its footer, every button disabled |
+
+### `/mod` — one panel over the case record, and the four corrections (rows 208–218)
+
+`/mod [member]` is now ONE staff-only command that opens a panel. ⚠️ **`/case`, `/cases` and
+`/mod logs` are gone** — the list, the card and the logs are all controls on it. The seven bare
+actions (`/warn`, `/timeout`, `/untimeout`, `/kick`, `/ban`, `/unban`, `/purge`) are unchanged and
+the panel's footer says so. ⚠️ **Voiding a case does not undo the punishment** — a voided ban is
+still a ban — and the card says that in a sentence. ⚠️ Under test mode the void DM goes (a DM is
+allowed) but the modlog card is NOT rewritten while the modlog is not the test channel; that is
+`edit_case_card`'s existing behaviour, not a fault of this build. Written as `C1`–`C11` on the build's branch
+(letters on purpose) and numbered **208–218** by the conductor at the merge.
+
+| # | Do this | Expect |
+|---|---|---|
+| 208 | `/mod` as a Lead in `#mute-me-bot-test-spam` | ONE ephemeral panel titled *What Black Bloc has done*: the newest ten cases as the lines `/cases` used to print, newest first, *page 1 of N*, over **A case… · Whose cases? · Jump to case #… · Refresh · Logs · Open on the site**. The footer names the seven bare actions. Nothing anywhere says `/case` or `/cases` |
+| 209 | `Older ›`, then `‹ Newer` | the page changes in place and the header's page number agrees. `‹ Newer` is simply **not there** on page 1 and `Older ›` is not there on the last — not there and refusing |
+| 210 | `Whose cases?` → a member with cases, then **Everyone's cases** | the list narrows and the first line reads *"**N** case(s) for @them — page 1 of M"*; **Everyone's cases** appears only while the filter is on and takes it back off |
+| 211 | `/mod @somebody-with-no-cases` | *"Black Bloc has no cases for @them yet"* over **Everyone's cases** and nothing else — no empty select, no dead page buttons |
+| 212 | `A case…` → a warn | the card `/case` used to show — kind, member, moderator, when, reason — over **Edit reason… · Add a note… · Void this case… · Back · Refresh**, and a line saying voiding does not undo anything |
+| 213 | `Edit reason…` — the box arrives holding the current reason. Clear it and submit; then reopen it and type a real one | the empty one is refused in one sentence and **nothing is saved** (reopen the card: the old reason is still there, and the Logs have no new row); the real one saves, leaves ONE `case.reason_edited` line, and the card in the modlog is rewritten to match |
+| 214 | `Add a note…`, then look at the card again | the button now reads **Edit the note…** — never both — the note is a *Note* field on the card, and the Logs carry one `case.noted`. Reopening it shows the note you wrote |
+| 215 | `Void this case…` → a reason → submit | the member is DM'd (or not, per `mod_dm_on_action`) that a case was cancelled and that it undoes nothing; the card shows **Voided** with who, when and why; the Logs carry ONE `case.voided`; **the timeout or ban is still in force**. Press **Back**: the line is struck through and the select says `voided`. Now open a SECOND `/mod` panel from before the void and press **Void this case…** there: it says somebody just voided it and does nothing twice |
+| 216 | On the voided case: **Restore this case** | the strike-through goes, the card is back to C5's five buttons — no state is terminal — the member is DM'd that it was put back, and the Logs carry `case.restored`. ⚠️ Also check `/warn` on that member: a voided warn no longer counts toward `automod_warn_threshold` |
+| 217 | `Jump to case #…` → `99999`; then a case number from another server; then `abc`; then leave the panel `mod_panel_minutes` (10) minutes | each answers in a NEW message — *"Black Bloc has no case **#99999**"*, the same for the other server's, and *"**abc** is not a case number"* — with the panel untouched behind it. After ten minutes every control greys out and the footer reads *this panel has gone quiet — run /mod again* |
+| 218 | dashboard → **Moderation** → a case row → the drawer | the four moves are there beside **Apply now**: a **Reason** box with **Save the reason**, a **Note** box with **Add the note**, and **Void this case** behind a confirm that spells out what voiding does not do. Void one: the row's reason is struck through with a red **voided** pill, and the Logs page shows `web.case.voided` — ONE row, not two. **Restore this case** takes it back off |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that

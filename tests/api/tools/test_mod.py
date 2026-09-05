@@ -5,12 +5,16 @@ from datetime import timedelta
 import discord
 import pytest
 
-from black_bloc.modcases import add_case, get_case
+from black_bloc.modcases import add_case, get_case, warn_count
 
 ROUTES = [
     ("GET", "/api/mod/cases", None),
     ("GET", "/api/mod/cases/1", None),
     ("POST", "/api/mod/cases/1/apply", None),
+    ("POST", "/api/mod/cases/1/reason", {"reason": "no"}),
+    ("POST", "/api/mod/cases/1/note", {"note": "no"}),
+    ("POST", "/api/mod/cases/1/void", {"reason": "no"}),
+    ("POST", "/api/mod/cases/1/restore", None),
     ("POST", "/api/mod/warn", {"user_id": "21", "reason": "no"}),
     ("POST", "/api/mod/timeout", {"user_id": "21", "duration": "10m"}),
     ("POST", "/api/mod/untimeout", {"user_id": "21"}),
@@ -300,3 +304,159 @@ async def test_purge_days_takes_the_numbers_discord_takes(
     body = {"user_id": "21"} if given is None else {"user_id": "21", "purge_days": given}
     assert client.post("/api/mod/ban", json=body).status_code == 200
     assert guild.bans[0][2] == seconds
+
+
+# --- correcting the record from the dashboard ----------------------------------------------------
+
+
+async def a_warn(web, wf, guild, user_id=21):
+    wf.member(guild, user_id, name="spammer")
+    wf.member(guild, 7, name="lead", staff=True)
+    return await add_case(
+        web.db, wf.GUILD_ID, user_id, "warn", moderator_id=7, reason="spamming"
+    )
+
+
+async def test_the_website_edits_a_reason_through_the_same_function_discord_uses(
+    client, sign_in, web, guild, wf
+):
+    case_id = await a_warn(web, wf, guild)
+    sign_in(client)
+
+    response = client.post(f"/api/mod/cases/{case_id}/reason", json={"reason": "posting links"})
+
+    assert response.status_code == 200
+    assert (await get_case(web.db, case_id))["reason"] == "posting links"
+    details = await wf.one_web_row(web.db, "web.case.reason_edited")
+    assert details["case_id"] == case_id and details["was"] == "spamming"
+
+
+async def test_a_reason_that_is_only_whitespace_is_refused_and_nothing_is_written(
+    client, sign_in, web, guild, wf
+):
+    case_id = await a_warn(web, wf, guild)
+    sign_in(client)
+
+    response = client.post(f"/api/mod/cases/{case_id}/reason", json={"reason": "   "})
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "bad_reason"
+    assert "nobody can read" in response.json()["message"]
+    assert (await get_case(web.db, case_id))["reason"] == "spamming"
+    assert await wf.kinds_in(web.db) == []
+
+
+async def test_the_website_writes_one_note_per_case_and_replaces_it(
+    client, sign_in, web, guild, wf
+):
+    case_id = await a_warn(web, wf, guild)
+    sign_in(client)
+
+    assert client.post(f"/api/mod/cases/{case_id}/note", json={"note": "first"}).status_code == 200
+    row = await get_case(web.db, case_id)
+    assert row["note"] == "first" and row["note_by"] and row["note_at"]
+
+    assert client.post(f"/api/mod/cases/{case_id}/note", json={"note": "2nd"}).status_code == 200
+    assert (await get_case(web.db, case_id))["note"] == "2nd"
+
+    blank = client.post(f"/api/mod/cases/{case_id}/note", json={"note": ""})
+    assert blank.status_code == 400 and blank.json()["error"] == "bad_note"
+    assert (await get_case(web.db, case_id))["note"] == "2nd"
+
+
+async def test_voiding_twice_from_the_website_is_a_409_and_leaves_one_log_row(
+    client, sign_in, web, guild, wf
+):
+    case_id = await a_warn(web, wf, guild)
+    sign_in(client)
+
+    first = client.post(f"/api/mod/cases/{case_id}/void", json={"reason": "wrong member"})
+    second = client.post(f"/api/mod/cases/{case_id}/void", json={"reason": "wrong member"})
+
+    assert first.status_code == 200 and second.status_code == 409
+    assert second.json()["error"] == "already_voided"
+    assert "a moment ago" in second.json()["message"]
+    row = await get_case(web.db, case_id)
+    assert row["voided_at"] and row["void_reason"] == "wrong member"
+    details = await wf.one_web_row(web.db, "web.case.voided")
+    assert details["case_id"] == case_id
+
+
+async def test_voiding_needs_a_reason_and_restoring_does_not(client, sign_in, web, guild, wf):
+    case_id = await a_warn(web, wf, guild)
+    sign_in(client)
+
+    bare = client.post(f"/api/mod/cases/{case_id}/void", json={})
+
+    assert bare.status_code == 400 and bare.json()["error"] == "bad_reason"
+    assert (await get_case(web.db, case_id))["voided_at"] is None
+
+    client.post(f"/api/mod/cases/{case_id}/void", json={"reason": "wrong member"})
+    back = client.post(f"/api/mod/cases/{case_id}/restore")
+
+    assert back.status_code == 200
+    assert (await get_case(web.db, case_id))["voided_at"] is None
+
+
+async def test_restoring_a_case_nobody_voided_is_a_409_in_words(client, sign_in, web, guild, wf):
+    case_id = await a_warn(web, wf, guild)
+    sign_in(client)
+
+    response = client.post(f"/api/mod/cases/{case_id}/restore")
+
+    assert response.status_code == 409
+    assert response.json()["error"] == "not_voided"
+    assert await wf.kinds_in(web.db) == []
+
+
+@pytest.mark.parametrize(
+    ("route", "payload"),
+    [
+        ("reason", {"reason": "x"}),
+        ("note", {"note": "x"}),
+        ("void", {"reason": "x"}),
+        ("restore", None),
+    ],
+)
+def test_a_case_that_is_not_there_is_404_in_words_not_a_bare_status(
+    client, sign_in, route, payload
+):
+    sign_in(client)
+
+    response = client.post(f"/api/mod/cases/4242/{route}", json=payload)
+
+    assert response.status_code == 404
+    assert response.json()["error"] == "no_such_case"
+    assert "4242" in response.json()["message"] and "/mod" in response.json()["message"]
+
+
+async def test_the_case_a_route_returns_carries_the_note_and_the_void(
+    client, sign_in, web, guild, wf
+):
+    case_id = await a_warn(web, wf, guild)
+    sign_in(client)
+
+    plain = client.get(f"/api/mod/cases/{case_id}").json()
+
+    assert plain["note"] is None and plain["voided_at"] is None
+    assert plain["note_by"] is None and plain["void_reason"] is None
+
+    client.post(f"/api/mod/cases/{case_id}/note", json={"note": "they apologised"})
+    client.post(f"/api/mod/cases/{case_id}/void", json={"reason": "wrong member"})
+    marked = client.get(f"/api/mod/cases/{case_id}").json()
+
+    assert marked["note"] == "they apologised" and marked["note_by"]
+    assert marked["voided_at"] and marked["voided_by"]
+    assert marked["void_reason"] == "wrong member"
+
+
+async def test_voiding_a_warn_from_the_website_stops_it_counting(client, sign_in, web, guild, wf):
+    """F-M2 (a) reaches the dashboard too, because both doors call the one function."""
+    case_id = await a_warn(web, wf, guild)
+    sign_in(client)
+
+    assert await warn_count(web.db, wf.GUILD_ID, 21) == 1
+
+    client.post(f"/api/mod/cases/{case_id}/void", json={"reason": "wrong member"})
+
+    assert await warn_count(web.db, wf.GUILD_ID, 21) == 0

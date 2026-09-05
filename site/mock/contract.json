@@ -1719,7 +1719,13 @@
           "actions",
           "done",
           "failed",
-          "channel_id"
+          "channel_id",
+          "note",
+          "note_by",
+          "note_at",
+          "voided_at",
+          "voided_by",
+          "void_reason"
         ]
       }
     },
@@ -1745,7 +1751,75 @@
         "actions",
         "done",
         "failed",
-        "channel_id"
+        "channel_id",
+        "note",
+        "note_by",
+        "note_at",
+        "voided_at",
+        "voided_by",
+        "void_reason"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mod/cases/{case_id}/reason",
+      "body": {
+        "reason": "contract check"
+      },
+      "read_by": [
+        "page-moderation.js caseDetail"
+      ],
+      "shape": "object",
+      "keys": [
+        "done",
+        "case_id",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mod/cases/{case_id}/note",
+      "body": {
+        "note": "contract check"
+      },
+      "read_by": [
+        "page-moderation.js caseDetail"
+      ],
+      "shape": "object",
+      "keys": [
+        "done",
+        "case_id",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mod/cases/{case_id}/void",
+      "body": {
+        "reason": "contract check"
+      },
+      "read_by": [
+        "page-moderation.js caseDetail"
+      ],
+      "shape": "object",
+      "keys": [
+        "done",
+        "case_id",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mod/cases/{voided_case_id}/restore",
+      "body": {},
+      "read_by": [
+        "page-moderation.js caseDetail"
+      ],
+      "shape": "object",
+      "keys": [
+        "done",
+        "case_id",
+        "message"
       ]
     },
     {
@@ -3443,6 +3517,10 @@
     "web.mod.kicked",
     "web.mod.banned",
     "web.mod.unbanned",
+    "web.case.reason_edited",
+    "web.case.noted",
+    "web.case.voided",
+    "web.case.restored",
     "web.automod.warned",
     "web.automod.timed_out",
     "web.automod.rule",

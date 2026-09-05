@@ -41,6 +41,27 @@
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
 
+## KI-22 — `/purge`'s two log kinds cannot say which door made them — `ACCEPTED`
+
+**Symptom.** Every other moderation kind is built with `kind_via` (`logkinds.py`), so the same
+action taken from the dashboard is written `web.mod.<kind>` and the Logs page can label it
+Via=Website. `mod.purged` and `mod.purge_failed` are built as bare string literals inside
+`ModCommands.purge` and cannot. They are the last two mod kinds without it — measured while
+writing `mod-panel-design.md`, and unchanged by the wave-4 build, which was scoped to how the
+case record is READ and CORRECTED.
+
+**Status:** `ACCEPTED`.
+
+**Why tolerated.** `/purge` has **no web door**: there is no `POST /api/mod/purge`, so nothing
+can currently write a `web.mod.purged` row, and nothing double-posts. The defect is latent, not
+live. Adding `kind_via` now would be an edit inside the punishment path, which the panel build
+deliberately left with a zero-line diff — that zero diff is the evidence the punishment path did
+not move, and spending it on a kind nobody can emit twice is a poor trade.
+
+**What would change it.** **One** — the moment a `POST /api/mod/purge` route is proposed. At that
+point the two kinds get `kind_via` and a `via` parameter in the same commit as the route, and
+`tests/test_logkinds.py`'s AST guard is what catches it if they do not.
+
 ## KI-21 — The website can arm automod (and the honeypot) past the arming refusals — `ACCEPTED`
 
 **Symptom.** `/automod` (the wave-3 panel, v74) never offers `on` while `staff_channel_id` is

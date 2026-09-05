@@ -781,7 +781,6 @@ LOG_LEVEL_HELP = (
     "on a member, or failed) or all. Every line is kept on the dashboard{extra} either way"
 )
 LOG_LEVEL_COMMANDS: dict[str, str] = {
-    "mod": "mod",
     "modmail": "modmail",
     "golive": "golive",
     "events": "event",
@@ -1165,6 +1164,21 @@ KEY_HELP.update(
     {
         "modmail_panel_minutes": (
             "minutes the /modmail panel stays live before its buttons disable themselves; 10 by "
+            "default. The 'this panel has gone quiet' footer can only be written while "
+            "Discord's 15-minute interaction window is still open, so 15 or more means the "
+            "buttons simply stop working with no footer to explain it"
+        ),
+    }
+)
+
+
+# Mod cases panel (wave 4) — the one decision `/mod`'s panel introduces, in its own block
+# so the parallel wave-4 branches merge textually.
+KEY_TYPES.update({"mod_panel_minutes": "int"})
+KEY_HELP.update(
+    {
+        "mod_panel_minutes": (
+            "minutes the /mod panel stays live before its buttons disable themselves; 10 by "
             "default. The 'this panel has gone quiet' footer can only be written while "
             "Discord's 15-minute interaction window is still open, so 15 or more means the "
             "buttons simply stop working with no footer to explain it"
@@ -1729,6 +1743,8 @@ class SettingsStore:
         if key == "honeypot_panel_minutes":
             return 10
         if key == "modmail_panel_minutes":
+            return 10
+        if key == "mod_panel_minutes":
             return 10
         if key == HIDE_COMMANDS_WHEN_OFF:
             return HIDE_COMMANDS_WHEN_OFF_DEFAULT

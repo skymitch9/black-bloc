@@ -121,7 +121,7 @@ prefix, 2026-09-03.
 | `/api/polls` · `/api/polls/requests` · `/api/polls/recurrences` · `/api/polls/{id}` | Polls, the review queue, recurrences, one poll |
 | `/api/applications` · `/api/applications/forms` · `/api/applications/roster` · `/api/applications/status` | Applications, the forms, a form's roster, the feature's state |
 | `/api/raidtrains` · `/api/raidtrains/{id}` · `/api/raidtrains/status` | Raid trains |
-| `/api/mod/cases` · `/api/mod/cases/{id}` · `/api/mod/rules` | Moderation cases and the automod rules |
+| `/api/mod/cases` · `/api/mod/cases/{id}` · `/api/mod/rules` | Moderation cases (each now carrying its note and, when it has one, who voided it, when and why) and the automod rules. The four correction routes under `/api/mod/cases/{id}/` are `POST`s and so are not reachable this way |
 | `/api/modmail/tickets` · `/api/modmail/tickets/{id}` · `/api/modmail/snippets` · `/api/modmail/blocks` | Modmail |
 | `/api/golive/links` · `/api/golive/sessions` · `/api/golive/optouts` | Go-live links, open sessions, opt-outs |
 | `/api/youtube/links` · `/api/youtube/videos` · `/api/youtube/status` | Uploads |

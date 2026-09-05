@@ -187,7 +187,7 @@ black_bloc/
 │   │   ├── honeypot.py    ← F9: the trap channel, delete + ban, shadow first
 │   │   ├── modmail.py     ← F11: inbound DM → ticket channel or private thread, the /modmail panel, /reply, /close, transcript
 │   │   ├── automod.py     ← F7: the message listener, the Apply-now button, /automod
-│   │   └── modcmds.py     ← F7: /warn /timeout /untimeout /kick /ban /unban /purge /case /cases
+│   │   └── modcmds.py     ← F7: /warn /timeout /untimeout /kick /ban /unban /purge + the /mod panel
 │   └── content/      ← one cog per content feature
 │       ├── golive.py ← F1/F2: presence listener, Twitch poller, the /golive panel
 │       ├── chat.py   ← F10: the @-mention listener, cooldown, modmail routing, /chat

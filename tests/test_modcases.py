@@ -3,27 +3,58 @@ import pytest
 
 from black_bloc.automod import TIMEOUT_MAX_SECONDS
 from black_bloc.modcases import (
+    ADD_NOTE_MOVE,
+    BACK_MOVE,
     BAN_PURGE_MAX_DAYS,
+    CARD_REFRESH_MOVE,
+    CASES_PER_PAGE,
+    EDIT_NOTE_MOVE,
+    EDIT_REASON_MOVE,
+    EVERYONE_MOVE,
+    JUMP_MOVE,
     LINE_REASON_LIMIT,
+    LOGS_MOVE,
+    NEWER_MOVE,
+    OLDER_MOVE,
+    PANEL_MINUTES_KEY,
+    PICK_CASE_MOVE,
+    RESTORE_MOVE,
+    ROOT_REFRESH_MOVE,
+    SITE_MOVE,
+    VOID_MOVE,
+    WHOSE_MOVE,
+    Voided,
     add_case,
+    card_buttons,
     case_embed,
+    case_is_void,
     case_line,
+    case_status,
     cases_for,
     claim_case,
     clamp_purge_days,
     clamp_timeout,
+    clear_case_void,
     count_cases,
     describe_duration,
     dm_member,
     dm_text,
     duration_error,
     get_case,
+    mark_case_void,
+    page_count,
     pages_under_limit,
+    panel_minutes,
     parse_duration,
     refusal_in_test_mode,
+    root_buttons,
     set_case_log_message,
     set_case_outcome,
+    set_case_reason,
+    voided_of,
+    wanted_page,
     warn_count,
+    write_case_note,
 )
 from black_bloc.storage.db import Database
 
@@ -227,3 +258,205 @@ def test_the_refusals_are_sentences_not_status_codes():
     assert "time out" in refusal_in_test_mode("time out")
     assert "28 days" in duration_error("forever")
     assert "forever" in duration_error("forever")
+
+
+# --- the /mod panel ------------------------------------------------------------------------------
+
+
+class FakeStore:
+    def __init__(self, minutes=10):
+        self.minutes = minutes
+
+    def get(self, guild_id, key):
+        assert key == PANEL_MINUTES_KEY
+        return self.minutes
+
+
+async def a_case(db, **rest):
+    return await add_case(db, GUILD, USER, rest.pop("kind", "warn"), moderator_id=MOD, **rest)
+
+
+async def test_only_one_press_ever_voids_a_case_and_only_one_ever_restores_it(db):
+    case_id = await a_case(db, reason="spam")
+
+    assert case_is_void(await get_case(db, case_id)) is False
+    assert await mark_case_void(db, case_id, MOD, "wrong member") is True
+    assert await mark_case_void(db, case_id, MOD + 1, "again") is False
+
+    row = await get_case(db, case_id)
+    assert case_is_void(row) is True
+    assert (row["voided_by"], row["void_reason"]) == (MOD, "wrong member")
+    assert voided_of(row) == Voided(MOD, row["voided_at"], "wrong member")
+
+    assert await clear_case_void(db, case_id) is True
+    assert await clear_case_void(db, case_id) is False
+
+    row = await get_case(db, case_id)
+    assert case_is_void(row) is False
+    assert voided_of(row) is None
+    assert (row["voided_by"], row["void_reason"]) == (None, None)
+
+
+async def test_a_voided_warn_stops_counting_toward_the_threshold(db):
+    """F-M2 (a): a warn staff have said was wrong must not still say the member is at three."""
+    first = await a_case(db, reason="spam")
+    await a_case(db, reason="spam again")
+
+    assert await warn_count(db, GUILD, USER) == 2
+
+    await mark_case_void(db, first, MOD, "wrong member")
+
+    assert await warn_count(db, GUILD, USER) == 1
+
+    await clear_case_void(db, first)
+
+    assert await warn_count(db, GUILD, USER) == 2
+
+
+async def test_a_reason_and_a_note_are_written_where_the_card_reads_them(db):
+    case_id = await a_case(db, reason="spam")
+
+    await set_case_reason(db, case_id, "y" * (500 + 40))
+    await write_case_note(db, case_id, "n" * (500 + 40), MOD)
+
+    row = await get_case(db, case_id)
+    assert len(row["reason"]) == 500 and len(row["note"]) == 500
+    assert row["note_by"] == MOD and row["note_at"]
+
+    await write_case_note(db, case_id, "they apologised", None)
+
+    row = await get_case(db, case_id)
+    assert row["note"] == "they apologised" and row["note_by"] is None
+
+
+async def test_a_voided_line_is_struck_through_and_a_live_one_is_byte_identical(db):
+    case_id = await a_case(db, reason="spam")
+    row = await get_case(db, case_id)
+    before = case_line(row)
+
+    assert not before.startswith("~~")
+
+    await mark_case_void(db, case_id, MOD, "wrong member")
+    after = case_line(await get_case(db, case_id))
+
+    assert after == f"~~{before}~~"
+
+
+async def test_the_status_word_says_voided_before_it_says_anything_else(db):
+    case_id = await a_case(db, reason="spam")
+    shadow = await add_case(db, GUILD, USER, "automod", mode="shadow", applied=False)
+
+    assert case_status(await get_case(db, case_id)) == "warn"
+    assert case_status(await get_case(db, shadow)) == "not done"
+
+    await mark_case_void(db, shadow, MOD, "wrong")
+
+    assert case_status(await get_case(db, shadow)) == "voided"
+
+
+def test_the_card_gains_a_note_and_a_voided_field_and_is_unchanged_without_them():
+    plain = case_embed(case_id=4, kind="ban", user_id=USER, moderator_id=MOD)
+
+    assert [field.name for field in plain.fields] == ["Member", "Moderator"]
+
+    marked = case_embed(
+        case_id=4,
+        kind="ban",
+        user_id=USER,
+        moderator_id=MOD,
+        note="they apologised",
+        voided=Voided(MOD, "2026-09-05T00:00:00+00:00", "wrong member"),
+    )
+    names = [field.name for field in marked.fields]
+
+    assert names == ["Member", "Moderator", "Note", "Voided"]
+    said = marked.fields[names.index("Voided")].value
+    assert f"<@{MOD}>" in said and "wrong member" in said
+    assert "does not undo" in said and "<t:" in said
+    assert marked.colour.value == 0x99AAB5 and plain.colour.value != 0x99AAB5
+
+
+def test_a_voided_field_survives_a_stamp_it_cannot_read():
+    said = case_embed(
+        case_id=4, kind="ban", user_id=USER, voided=Voided(None, "not a date", None)
+    ).fields[-1].value
+
+    assert "Black Bloc" in said and "<t:" not in said
+
+
+async def test_the_card_row_never_offers_void_and_restore_at_once(db):
+    case_id = await a_case(db, reason="spam")
+    row = await get_case(db, case_id)
+
+    assert card_buttons(row) == (
+        EDIT_REASON_MOVE, ADD_NOTE_MOVE, VOID_MOVE, BACK_MOVE, CARD_REFRESH_MOVE
+    )
+
+    await write_case_note(db, case_id, "they apologised", MOD)
+    row = await get_case(db, case_id)
+
+    assert card_buttons(row) == (
+        EDIT_REASON_MOVE, EDIT_NOTE_MOVE, VOID_MOVE, BACK_MOVE, CARD_REFRESH_MOVE
+    )
+    assert ADD_NOTE_MOVE not in card_buttons(row)
+
+    await mark_case_void(db, case_id, MOD, "wrong")
+    row = await get_case(db, case_id)
+
+    assert card_buttons(row) == (
+        RESTORE_MOVE, EDIT_REASON_MOVE, EDIT_NOTE_MOVE, BACK_MOVE, CARD_REFRESH_MOVE
+    )
+    assert VOID_MOVE not in card_buttons(row)
+    assert len(card_buttons(row)) == 5
+
+
+@pytest.mark.parametrize(
+    ("has_rows", "page", "pages", "filtered", "has_site", "wanted"),
+    [
+        (False, 1, 1, False, False, (WHOSE_MOVE, JUMP_MOVE, ROOT_REFRESH_MOVE, LOGS_MOVE)),
+        (
+            True, 1, 1, False, True,
+            (PICK_CASE_MOVE, WHOSE_MOVE, JUMP_MOVE, ROOT_REFRESH_MOVE, LOGS_MOVE, SITE_MOVE),
+        ),
+        (
+            True, 1, 3, False, False,
+            (PICK_CASE_MOVE, WHOSE_MOVE, OLDER_MOVE, JUMP_MOVE, ROOT_REFRESH_MOVE, LOGS_MOVE),
+        ),
+        (
+            True, 3, 3, False, False,
+            (PICK_CASE_MOVE, WHOSE_MOVE, NEWER_MOVE, JUMP_MOVE, ROOT_REFRESH_MOVE, LOGS_MOVE),
+        ),
+        (
+            True, 2, 3, True, False,
+            (
+                PICK_CASE_MOVE, WHOSE_MOVE, NEWER_MOVE, OLDER_MOVE, EVERYONE_MOVE, JUMP_MOVE,
+                ROOT_REFRESH_MOVE, LOGS_MOVE,
+            ),
+        ),
+        (
+            False, 1, 1, True, False,
+            (WHOSE_MOVE, EVERYONE_MOVE, JUMP_MOVE, ROOT_REFRESH_MOVE, LOGS_MOVE),
+        ),
+    ],
+)
+def test_the_root_renders_only_the_moves_its_state_allows(
+    has_rows, page, pages, filtered, has_site, wanted
+):
+    found = root_buttons(
+        has_rows=has_rows, page=page, pages=pages, filtered=filtered, has_site=has_site
+    )
+
+    assert found == wanted
+    assert len([move for move in found if move.row == 2]) <= 5
+
+
+def test_a_page_is_the_same_ten_the_website_already_pages_by():
+    assert CASES_PER_PAGE == 10
+    assert page_count(0) == 1 and page_count(10) == 1 and page_count(11) == 2
+    assert wanted_page(0, 3) == 1 and wanted_page(9, 3) == 3 and wanted_page("x", 3) == 1
+    assert wanted_page(2, 3) == 2
+
+
+def test_the_panel_reads_its_minutes_from_the_settings_key():
+    assert PANEL_MINUTES_KEY == "mod_panel_minutes"
+    assert panel_minutes(FakeStore(25), GUILD) == 25

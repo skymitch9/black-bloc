@@ -39,7 +39,7 @@ from black_bloc.golive import StreamInfo
 from black_bloc.llm import ANTHROPIC, GROQ, Usage
 from black_bloc.llm import MODEL as HAIKU
 from black_bloc.llm import record as llm_record
-from black_bloc.modcases import add_case
+from black_bloc.modcases import add_case, mark_case_void
 from black_bloc.modmail import IN
 from black_bloc.polls import next_occurrence
 from black_bloc.requests import HOLD, IN_PROGRESS, OPEN, REVIEW, create_request
@@ -235,6 +235,12 @@ async def seeded(client, sign_in, web, guild, wf):
         applied=False,
         actions=["warn"],
     )
+    # A case already VOIDED, because /restore is only legal from there and every contract entry
+    # runs against a fresh seed.
+    voided_case_id = await add_case(
+        db, guild_id, MEMBER_ID, "warn", moderator_id=7, reason="contract seed, voided"
+    )
+    await mark_case_void(db, voided_case_id, 7, "wrong member")
     starts = datetime.now(UTC) + timedelta(days=1)
     event_id = await create_event(
         db,
@@ -491,6 +497,7 @@ async def seeded(client, sign_in, web, guild, wf):
     return {
         "member_id": str(MEMBER_ID),
         "case_id": str(case_id),
+        "voided_case_id": str(voided_case_id),
         "event_id": str(event_id),
         "ticket_id": str(ticket_id),
         "hit_id": str(hit_id),

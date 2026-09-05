@@ -257,7 +257,7 @@ const LOG_LEVEL_FEATURES = [
   ['core', 'core', null],
   ['automod', 'automod', 'automod'],
   ['honeypot', 'honeypot', 'honeypot'],
-  ['mod', 'moderation', 'mod'],
+  ['mod', 'moderation', null],
   ['modmail', 'modmail', 'modmail'],
   ['golive', 'go-live', 'golive'],
   ['youtube', 'youtube uploads', 'uploads'],
@@ -426,6 +426,7 @@ const SETTING_SPECS = [
   ['rolemenu_panel_minutes', 'int', 10, 10, "minutes the /rolemenu panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
   ['honeypot_panel_minutes', 'int', 10, 10, "minutes the /honeypot panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
   ['modmail_panel_minutes', 'int', 10, 10, "minutes the /modmail panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
+  ['mod_panel_minutes', 'int', 10, 10, "minutes the /mod panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
 ];
 
 const RULES = {
@@ -798,7 +799,9 @@ function seedState() {
   ],
   cases: [
     { id: 9, user_id: MEMBERS[4].id, kind: 'timeout', moderator_id: STAFF.id, reason: 'mention spam', duration_s: 300, at: minutesAgo(20), mode: 'shadow', applied: false, actions: ['delete', 'warn', 'timeout'], done: [], failed: [] },
-    { id: 8, user_id: MEMBERS[5].id, kind: 'warn', moderator_id: MEMBERS[1].id, reason: 'link spam', duration_s: null, at: minutesAgo(400), mode: 'on', applied: true, actions: ['warn'], done: ['warn'], failed: [] },
+    // Already voided in the seed, because /restore is only legal from there and every contract
+    // entry runs against a fresh seed.
+    { id: 8, user_id: MEMBERS[5].id, kind: 'warn', moderator_id: MEMBERS[1].id, reason: 'link spam', duration_s: null, at: minutesAgo(400), mode: 'on', applied: true, actions: ['warn'], done: ['warn'], failed: [], voided_at: minutesAgo(300), voided_by: STAFF.id, void_reason: 'wrong member' },
     { id: 7, user_id: MEMBERS[4].id, kind: 'warn', moderator_id: STAFF.id, reason: 'told to stop', duration_s: null, at: minutesAgo(800), mode: 'on', applied: true, actions: ['warn'], done: ['warn'], failed: [] },
     { id: 6, user_id: MEMBERS[7].id, kind: 'ban', moderator_id: STAFF.id, reason: 'scam links', duration_s: null, at: minutesAgo(5000), mode: 'on', applied: true, actions: ['ban'], done: ['ban'], failed: [] },
     { id: 5, user_id: MEMBERS[5].id, kind: 'timeout', moderator_id: MEMBERS[1].id, reason: 'shouting in caps', duration_s: 600, at: minutesAgo(6200), mode: 'on', applied: true, actions: ['delete', 'timeout'], done: ['delete', 'timeout'], failed: [] },
@@ -1012,6 +1015,7 @@ const NAMESPACE_OVERRIDE = {
   modlog_channel_id: 'automod',
   mod_dm_on_action: 'automod',
   mod_log_level: 'automod',
+  mod_panel_minutes: 'automod',
 };
 
 function namespaceOf(key) {
@@ -3463,7 +3467,19 @@ function caseRow(row) {
     done: row.done || [],
     failed: row.failed || [],
     channel_id: row.channel_id === undefined || row.channel_id === null ? null : String(row.channel_id),
+    note: row.note ?? null,
+    note_by: row.note_by === undefined || row.note_by === null ? null : String(row.note_by),
+    note_at: row.note_at ?? null,
+    voided_at: row.voided_at ?? null,
+    voided_by: row.voided_by === undefined || row.voided_by === null ? null : String(row.voided_by),
+    void_reason: row.void_reason ?? null,
   };
+}
+
+function wantedCase(context) {
+  const found = state.cases.find((row) => String(row.id) === String(context.params.id));
+  if (!found) throw new Refused(404, 'no_case', 'There is no case with that number.');
+  return found;
 }
 
 route('GET', '/api/mod/cases', (context) => {
@@ -3499,6 +3515,55 @@ route('POST', '/api/mod/cases/:id/apply', (context) => {
   found.done = found.actions;
   logAction('web.automod.warned', { target_id: found.user_id, details: { case_id: found.id } });
   return { applied: true, case_id: found.id, message: `Case ${found.id} was carried out: ${found.done.join(', ')}.` };
+});
+
+route('POST', '/api/mod/cases/:id/reason', async (context) => {
+  requireStaff(context.session);
+  const found = wantedCase(context);
+  const body = await context.body();
+  const said = String(body.reason || '').trim();
+  if (!said) throw new Refused(400, 'bad_reason', 'A case with no reason is a case nobody can read later, so nothing was changed.');
+  found.reason = said;
+  logAction('web.case.reason_edited', { target_id: found.user_id, details: { case_id: found.id } });
+  return { done: true, case_id: found.id, message: `Case **#${found.id}**'s reason now reads what you wrote.` };
+});
+
+route('POST', '/api/mod/cases/:id/note', async (context) => {
+  requireStaff(context.session);
+  const found = wantedCase(context);
+  const body = await context.body();
+  const said = String(body.note || '').trim();
+  if (!said) throw new Refused(400, 'bad_note', 'An empty note is a note nobody can read later, so nothing was changed.');
+  found.note = said;
+  found.note_by = context.session.id;
+  found.note_at = new Date().toISOString();
+  logAction('web.case.noted', { target_id: found.user_id, details: { case_id: found.id } });
+  return { done: true, case_id: found.id, message: `Case **#${found.id}** carries your note.` };
+});
+
+route('POST', '/api/mod/cases/:id/void', async (context) => {
+  requireStaff(context.session);
+  const found = wantedCase(context);
+  const body = await context.body();
+  const said = String(body.reason || '').trim();
+  if (!said) throw new Refused(400, 'bad_reason', 'Cancelling a case with no reason leaves the next moderator guessing, so nothing was changed.');
+  if (found.voided_at) throw new Refused(409, 'already_voided', 'Somebody voided this case a moment ago, so nothing was done twice.');
+  found.voided_at = new Date().toISOString();
+  found.voided_by = context.session.id;
+  found.void_reason = said;
+  logAction('web.case.voided', { target_id: found.user_id, details: { case_id: found.id } });
+  return { done: true, case_id: found.id, message: `Case **#${found.id}** is marked cancelled. It is still on the record.` };
+});
+
+route('POST', '/api/mod/cases/:id/restore', (context) => {
+  requireStaff(context.session);
+  const found = wantedCase(context);
+  if (!found.voided_at) throw new Refused(409, 'not_voided', 'Somebody restored this case a moment ago, so nothing was done twice.');
+  found.voided_at = null;
+  found.voided_by = null;
+  found.void_reason = null;
+  logAction('web.case.restored', { target_id: found.user_id, details: { case_id: found.id } });
+  return { done: true, case_id: found.id, message: `Case **#${found.id}** is back on the record as it was.` };
 });
 
 const MOD_ACTIONS = ['warn', 'timeout', 'untimeout', 'kick', 'ban', 'unban'];

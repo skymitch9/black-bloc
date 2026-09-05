@@ -19,16 +19,21 @@ from ...cogs.moderation.modcmds import (
     REFUSED,
     TIMEOUT_TOO_LONG,
     ban_member,
+    edit_case_reason,
     kick_member,
     refuse_in_test_mode,
+    restore_case,
+    set_case_note,
     timeout_member,
     unban_member,
     untimeout_member,
+    void_case,
     warn_member,
 )
 from ...logkinds import VIA_WEBSITE
 from ...modcases import (
     CASES_PER_PAGE,
+    NO_SUCH_CASE,
     cases_for,
     count_all_cases,
     count_cases,
@@ -67,10 +72,6 @@ WORDING = {
 NOT_A_MEMBER = (
     "**{user_id}** is not a member of this server, so nothing was done. Pick somebody from the "
     "member list, or use their id if they have left and you are lifting a ban."
-)
-NO_SUCH_CASE = (
-    "Black Bloc has no case **#{case_id}**, so there is nothing to show. The cases table lists "
-    "the ones it has."
 )
 APPLY_REFUSED = {
     "no_such_case": (404, "no_such_case"),
@@ -123,6 +124,12 @@ def case_row(guild: Any, row: Any) -> dict[str, Any]:
         "channel_id": (
             str(row_value(row, "channel_id")) if row_value(row, "channel_id") else None
         ),
+        "note": row_value(row, "note"),
+        "note_by": str(row_value(row, "note_by")) if row_value(row, "note_by") else None,
+        "note_at": row_value(row, "note_at"),
+        "voided_at": row_value(row, "voided_at"),
+        "voided_by": str(row_value(row, "voided_by")) if row_value(row, "voided_by") else None,
+        "void_reason": row_value(row, "void_reason"),
     }
 
 
@@ -246,6 +253,40 @@ def build_router(bot: Any) -> APIRouter:
             status, error = APPLY_REFUSED.get(outcome, (409, "apply_refused"))
             raise Refused(status, error, said)
         return {"applied": True, "case_id": case_id, "message": said}
+
+    async def _correct(request: Request, case_id: int, move: Any, *rest: Any) -> dict[str, Any]:
+        """The four corrections share one door: the shared function logs, the route never does."""
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        outcome = await move(
+            bot, guild, case_id, *rest, actor_for(bot, who, guild), via=VIA_WEBSITE
+        )
+        if not outcome.ok:
+            raise Refused(outcome.status, outcome.code, outcome.message)
+        return {"done": True, "case_id": case_id, "message": outcome.message}
+
+    @router.post("/cases/{case_id}/reason")
+    async def mod_case_reason(
+        request: Request, case_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        return await _correct(request, case_id, edit_case_reason, payload.get("reason"))
+
+    @router.post("/cases/{case_id}/note")
+    async def mod_case_note(
+        request: Request, case_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        return await _correct(request, case_id, set_case_note, payload.get("note"))
+
+    @router.post("/cases/{case_id}/void")
+    async def mod_case_void(
+        request: Request, case_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        return await _correct(request, case_id, void_case, payload.get("reason"))
+
+    @router.post("/cases/{case_id}/restore")
+    async def mod_case_restore(request: Request, case_id: int) -> dict[str, Any]:
+        return await _correct(request, case_id, restore_case)
 
     @router.post("/warn")
     async def mod_warn(request: Request, payload: dict[str, Any]) -> dict[str, Any]:

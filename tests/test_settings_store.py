@@ -1030,6 +1030,23 @@ async def test_the_poll_panel_stays_up_ten_minutes_by_default(store):
     assert parse_value("poll_panel_minutes", "45") == 45
 
 
+async def test_the_mod_panel_stays_up_ten_minutes_by_default(store):
+    """Same reason as every other panel: 15 loses Discord's window and the gone-quiet footer."""
+    from black_bloc.cogs.core import VALUE_KEYS
+
+    assert store.get(7, "mod_panel_minutes") == 10
+    assert "15" in KEY_HELP["mod_panel_minutes"]
+    assert KEY_TYPES["mod_panel_minutes"] == "int"
+    assert "mod_panel_minutes" in VALUE_KEYS
+    await store.set(7, "mod_panel_minutes", 20)
+    assert store.get(7, "mod_panel_minutes") == 20
+    with pytest.raises(SettingError):
+        coerce_value("mod_panel_minutes", -1)
+    with pytest.raises(SettingError):
+        coerce_value("mod_panel_minutes", "15")
+    assert parse_value("mod_panel_minutes", "45") == 45
+
+
 async def test_the_memory_panel_stays_up_ten_minutes_by_default(store):
     """Same reason as every other panel: 15 loses Discord's window and the gone-quiet footer."""
     from black_bloc.cogs.core import VALUE_KEYS
