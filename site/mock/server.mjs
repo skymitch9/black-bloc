@@ -3678,7 +3678,7 @@ route('POST', '/api/modmail/snippets', async (context) => {
   const existing = state.snippets.find((row) => row.name === name);
   if (existing) existing.content = body.content;
   else state.snippets.unshift({ name, content: body.content, by: STAFF.id, at: now() });
-  logAction('web.modmail.snippet', { reason: name, details: { name } });
+  logAction('web.modmail.snippet_saved', { reason: name, details: { name } });
   return { saved: true, name, content: body.content };
 });
 
@@ -3687,7 +3687,7 @@ route('DELETE', '/api/modmail/snippets/:name', (context) => {
   const at = state.snippets.findIndex((row) => row.name === context.params.name);
   if (at < 0) throw new Refused(404, 'no_snippet', `There is no snippet called ${context.params.name}.`);
   state.snippets.splice(at, 1);
-  logAction('web.modmail.snippet_remove', { reason: context.params.name, details: { name: context.params.name } });
+  logAction('web.modmail.snippet_removed', { reason: context.params.name, details: { name: context.params.name } });
   return { removed: true, name: context.params.name };
 });
 
@@ -3711,7 +3711,7 @@ route('POST', '/api/modmail/blocks', async (context) => {
   const at = state.blocks.findIndex((entry) => entry.user_id === row.user_id);
   if (at >= 0) state.blocks[at] = row;
   else state.blocks.unshift(row);
-  logAction('web.modmail.block', { target_id: row.user_id, reason: row.reason });
+  logAction('web.modmail.blocked', { target_id: row.user_id, reason: row.reason });
   return { blocked: true, user_id: row.user_id };
 });
 
@@ -3719,7 +3719,7 @@ route('DELETE', '/api/modmail/blocks/:user_id', (context) => {
   requireStaff(context.session);
   const at = state.blocks.findIndex((row) => row.user_id === context.params.user_id);
   if (at >= 0) state.blocks.splice(at, 1);
-  logAction('web.modmail.unblock', { target_id: context.params.user_id });
+  logAction('web.modmail.unblocked', { target_id: context.params.user_id });
   return { unblocked: true, user_id: context.params.user_id };
 });
 

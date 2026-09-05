@@ -31,6 +31,8 @@ from ...modmail import (
     OPEN,
     OUT,
     SNIPPET_NAME_LIMIT,
+    SOURCE_COMMAND,
+    SOURCE_TYPED,
     attachment_urls,
     chunk_lines,
     closing_dm,
@@ -52,6 +54,7 @@ from ...modmail import (
     transcript_text,
     valid_snippet_name,
 )
+from ...panels import Outcome, refusal
 from ...settings_store import (
     CHANNEL_MODE,
     DB_UNAVAILABLE,
@@ -103,20 +106,20 @@ NO_TEST_CHANNEL = (
 )
 NO_CATEGORY = (
     "Black Bloc has nowhere to put ticket channels, so nothing was opened. A Lead points it at a "
-    "category with `/modmail settings category:<the ModMail category>`."
+    "category with `/modmail` → **Setup…** → **Ticket category…**."
 )
 NOT_A_CATEGORY = (
     "**modmail_category_id** points at something that is not a category, so nothing was opened. A "
-    "Lead fixes it with `/modmail settings category:<the ModMail category>`."
+    "Lead fixes it with `/modmail` → **Setup…** → **Ticket category…**."
 )
 NO_STAFF_CHANNEL = (
     "Black Bloc has nowhere to put ticket threads, so nothing was opened. A Lead points it at a "
-    "channel with `/modmail settings staff_channel:<the staff channel>`, or switches back to "
-    "channel mode with `/modmail mode channel`."
+    "channel with `/modmail` → **Setup…** → **Staff channel…**, or switches back to channel mode "
+    "with **Setup…** → **Mode…**."
 )
 NO_TICKET_HERE = (
     "This channel is not a modmail ticket, so nothing was sent. Run the command inside a ticket, "
-    "or name one with `ticket:<number>` — `/modmail status` lists the open ones."
+    "or name one with `ticket:<number>` — `/modmail` lists the open ones."
 )
 MANY_OPEN = (
     "Black Bloc cannot tell which ticket you mean — {count} are open, so nothing was sent. Name "
@@ -125,11 +128,14 @@ MANY_OPEN = (
 NOT_A_TICKET_ID = "**{given}** is not a ticket number, so nothing was sent."
 NO_SUCH_TICKET = (
     "Black Bloc has no record of ticket #{ticket_id} on this server, so nothing was sent. "
-    "`/modmail status` lists the open ones."
+    "`/modmail` lists the open ones."
 )
 TICKET_CLOSED = "Ticket #{ticket_id} is already closed, so nothing was sent."
 NOTHING_TO_SEND = "Type some text or name a snippet — nothing was sent."
-NO_SNIPPET = "There is no snippet called **{name}**, so nothing was sent. `/snippet list` has them."
+NO_SNIPPET = (
+    "There is no snippet called **{name}**, so nothing was sent. `/modmail` → **Snippets…** has "
+    "them."
+)
 SENT = "Sent to the member as **{who}**."
 NOTE_SAVED = "Noted on ticket #{ticket_id} — the member never sees it."
 DM_FAILED_SAID = (
@@ -144,7 +150,10 @@ NO_TRANSCRIPT_SAID = (
     "deleted and the messages are still in the database; the log says why."
 )
 SILENT_SAID = " The member was not told, because you asked for a silent close."
-BLOCKED_SAID = "**{who}** can no longer open modmail tickets. `/modmail unblock` undoes it."
+BLOCKED_SAID = (
+    "**{who}** can no longer open modmail tickets. **Unblock them** on `/modmail` → **Blocked…** "
+    "undoes it."
+)
 ALREADY_BLOCKED = "**{who}** was already blocked, so nothing changed."
 UNBLOCKED_SAID = "**{who}** can open modmail tickets again."
 NOT_BLOCKED = "**{who}** was not blocked, so nothing changed."
@@ -154,8 +163,17 @@ LEFT_NOTE = (
     "while they allow it."
 )
 FORGOTTEN = (
-    "**{key}** is forgotten, so modmail falls back to its default. `/modmail settings` points it "
-    "somewhere new."
+    "**{key}** is forgotten, so modmail falls back to its default. **Setup…** on `/modmail` "
+    "points it somewhere new."
+)
+POINTED = "**{key}** is now {place}."
+ANSWERING = (
+    "Black Bloc answers modmail DMs on this server from now on. A member who DMs it gets a "
+    "ticket here rather than nothing."
+)
+NOT_ANSWERING = (
+    "Black Bloc has stopped answering modmail DMs here, so the old ModMail bot keeps them. "
+    "Tickets already open stay open."
 )
 MODE_SET = (
     "New tickets from now on: {what}. The {count} ticket(s) already open keep the mode they were "
@@ -167,12 +185,12 @@ BAD_SNIPPET_NAME = (
 )
 SNIPPET_SAVED = "Snippet **{name}** saved. `/reply snippet:{name}` sends it."
 SNIPPET_EXISTS = (
-    "There is already a snippet called **{name}**, so nothing was changed. Run it again with "
-    "`overwrite:true` to replace what it says, or pick another name."
+    "There is already a snippet called **{name}**, so nothing was changed. Pick it on "
+    "**Snippets…** and press **Change it…** to replace what it says, or use another name."
 )
 SNIPPET_GONE = "Snippet **{name}** is gone."
 NO_SUCH_SNIPPET = "There is no snippet called **{name}**, so nothing was removed."
-NO_SNIPPETS = "There are no snippets yet — `/snippet add` makes one."
+NO_SNIPPETS = "There are no snippets yet — **Add one…** makes the first."
 NO_STAFF_WARNING = (
     "⚠️ **No staff roles resolve**, so a ticket channel would be visible to server admins only "
     "and a ticket thread would have nobody in it. Point `staff_channel_id` at a channel only "
@@ -565,6 +583,8 @@ async def send_reply(
     anonymous: bool = False,
     attachments: Any = (),
     echo: bool = True,
+    via: str = VIA_DISCORD,
+    source: str = SOURCE_COMMAND,
 ) -> str | None:
     """One path for every staff reply, whether it came from a message, a command or the site."""
     user = bot.get_user(ticket["user_id"]) or guild.get_member(ticket["user_id"])
@@ -590,6 +610,20 @@ async def send_reply(
         anonymous=anonymous,
     )
     why_not = await deliver_dm(user, embed=embed) if user is not None else "member_not_visible"
+    await log_action(
+        bot,
+        guild,
+        kind_via("modmail.reply", via),
+        actor=author,
+        target=ticket["user_id"],
+        details={
+            "ticket_id": ticket["id"],
+            "anonymous": anonymous,
+            "delivered": why_not is None,
+            "source": source,
+            "via": via,
+        },
+    )
     if why_not is not None:
         await mark_undelivered(bot.db, row_id)
         await log_action(
@@ -801,6 +835,147 @@ async def resolve_ticket(bot: Any, guild: Any, channel_id: Any, given: Any) -> t
         return None, NO_TICKET_HERE
     ids = ", ".join(f"#{row['id']}" for row in rows)
     return None, MANY_OPEN.format(count=len(rows), ids=ids)
+
+
+def who_said(user: Any, user_id: int) -> str:
+    return getattr(user, "display_name", None) or f"<@{int(user_id)}>"
+
+
+async def block_member(
+    bot: Any, guild: Any, actor: Any, user: Any, reason: Any = None, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """One block, one log row, whichever door asked for it."""
+    user_id = int(getattr(user, "id", user))
+    who = who_said(user, user_id)
+    if await blocked_row(bot.db, user_id) is not None:
+        return refusal(ALREADY_BLOCKED.format(who=who), "already_blocked", 409)
+    await add_block(bot.db, user_id, getattr(actor, "id", actor), reason)
+    await log_action(
+        bot,
+        guild,
+        kind_via("modmail.blocked", via),
+        actor=actor,
+        target=user,
+        reason=clamp(reason, 400) or None,
+        details={"user_id": user_id, "via": via},
+    )
+    return Outcome(True, BLOCKED_SAID.format(who=who), value=user_id)
+
+
+async def unblock_member(
+    bot: Any, guild: Any, actor: Any, user: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    user_id = int(getattr(user, "id", user))
+    who = who_said(user, user_id)
+    if await blocked_row(bot.db, user_id) is None:
+        return refusal(NOT_BLOCKED.format(who=who), "not_blocked", 404)
+    await remove_block(bot.db, user_id)
+    await log_action(
+        bot,
+        guild,
+        kind_via("modmail.unblocked", via),
+        actor=actor,
+        target=user,
+        details={"user_id": user_id, "via": via},
+    )
+    return Outcome(True, UNBLOCKED_SAID.format(who=who), value=user_id)
+
+
+async def put_snippet(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    name: Any,
+    content: Any,
+    *,
+    overwrite: bool = False,
+    via: str = VIA_DISCORD,
+) -> Outcome:
+    key = str(name or "").strip().lower()
+    if not valid_snippet_name(key):
+        return refusal(BAD_SNIPPET_NAME.format(given=clamp(name, 40)), "bad_name", 400)
+    if not overwrite and await get_snippet(bot.db, key) is not None:
+        return refusal(SNIPPET_EXISTS.format(name=key), "snippet_exists", 409)
+    await save_snippet(bot.db, key, clamp(content, CONTENT_LIMIT), getattr(actor, "id", actor))
+    await log_action(
+        bot,
+        guild,
+        kind_via("modmail.snippet_saved", via),
+        actor=actor,
+        details={"name": key, "via": via},
+    )
+    return Outcome(True, SNIPPET_SAVED.format(name=key), value=key)
+
+
+async def drop_snippet(
+    bot: Any, guild: Any, actor: Any, name: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    key = str(name or "").strip().lower()
+    if not await remove_snippet(bot.db, key):
+        return refusal(NO_SUCH_SNIPPET.format(name=clamp(name, 40)), "no_such_snippet", 404)
+    await log_action(
+        bot,
+        guild,
+        kind_via("modmail.snippet_removed", via),
+        actor=actor,
+        details={"name": key, "via": via},
+    )
+    return Outcome(True, SNIPPET_GONE.format(name=key), value=key)
+
+
+async def settings_written(
+    bot: Any, guild: Any, actor: Any, changed: dict[str, Any], via: str
+) -> None:
+    await log_action(
+        bot,
+        guild,
+        kind_via("modmail.settings", via),
+        actor=actor,
+        details=changed | {"via": via},
+    )
+
+
+async def point_at(
+    bot: Any, guild: Any, actor: Any, key: str, value: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """One of the three places modmail is pointed at, set and recorded once."""
+    stored = await bot.store.set(guild.id, key, value, by=getattr(actor, "id", actor))
+    await settings_written(bot, guild, actor, {key: stored}, via)
+    return Outcome(True, POINTED.format(key=key, place=f"<#{int(stored)}>"), value=stored)
+
+
+async def forget_place(
+    bot: Any, guild: Any, actor: Any, key: str, *, via: str = VIA_DISCORD
+) -> Outcome:
+    await bot.store.clear(guild.id, key)
+    await log_action(
+        bot,
+        guild,
+        kind_via("modmail.forgotten", via),
+        actor=actor,
+        details={"key": key, "via": via},
+    )
+    return Outcome(True, FORGOTTEN.format(key=key), value=key)
+
+
+async def set_mode(
+    bot: Any, guild: Any, actor: Any, mode: str, *, via: str = VIA_DISCORD
+) -> Outcome:
+    await bot.store.set(guild.id, "modmail_mode", mode, by=getattr(actor, "id", actor))
+    await settings_written(bot, guild, actor, {"modmail_mode": mode}, via)
+    said = MODE_SET.format(
+        what=modes_sentence(mode), count=len(await open_tickets(bot.db, guild.id))
+    )
+    return Outcome(True, said, value=mode)
+
+
+async def set_enabled(
+    bot: Any, guild: Any, actor: Any, value: bool, *, via: str = VIA_DISCORD
+) -> Outcome:
+    wanted = bool(value)
+    await bot.store.set(guild.id, "modmail_enabled", wanted, by=getattr(actor, "id", actor))
+    await settings_written(bot, guild, actor, {"modmail_enabled": wanted}, via)
+    return Outcome(True, ANSWERING if wanted else NOT_ANSWERING, value=wanted)
 
 
 class Modmail(commands.Cog):
@@ -1071,6 +1246,7 @@ class Modmail(commands.Cog):
             message.author,
             message.content,
             attachments=attachment_urls(message.attachments),
+            source=SOURCE_TYPED,
         )
         await react(
             self.bot, message, TICKET_REACTION if why_not is None else FAILED_REACTION
@@ -1086,6 +1262,7 @@ class Modmail(commands.Cog):
         anonymous: bool = False,
         attachments: Any = (),
         echo: bool = True,
+        source: str = SOURCE_COMMAND,
     ) -> str | None:
         return await send_reply(
             self.bot,
@@ -1096,6 +1273,7 @@ class Modmail(commands.Cog):
             anonymous=anonymous,
             attachments=attachments,
             echo=echo,
+            source=source,
         )
 
     async def _ready(self, interaction: discord.Interaction) -> bool:
@@ -1399,20 +1577,10 @@ class Modmail(commands.Cog):
         if not await self._ready(interaction):
             return
         await interaction.response.defer(ephemeral=True)
-        who = getattr(user, "display_name", str(user))
-        if await blocked_row(self.bot.db, user.id) is not None:
-            await answer(interaction, ALREADY_BLOCKED.format(who=who))
-            return
-        await add_block(self.bot.db, user.id, interaction.user.id, reason)
-        await answer(interaction, BLOCKED_SAID.format(who=who))
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "modmail.blocked",
-            actor=interaction.user,
-            target=user,
-            reason=clamp(reason, 400) or None,
+        outcome = await block_member(
+            self.bot, interaction.guild, interaction.user, user, reason
         )
+        await answer(interaction, outcome.message)
 
     @modmail.command(name="unblock", description="Let someone open modmail tickets again")
     @app_commands.describe(user="Who to unblock")
@@ -1420,19 +1588,8 @@ class Modmail(commands.Cog):
         if not await self._ready(interaction):
             return
         await interaction.response.defer(ephemeral=True)
-        who = getattr(user, "display_name", str(user))
-        if await blocked_row(self.bot.db, user.id) is None:
-            await answer(interaction, NOT_BLOCKED.format(who=who))
-            return
-        await remove_block(self.bot.db, user.id)
-        await answer(interaction, UNBLOCKED_SAID.format(who=who))
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "modmail.unblocked",
-            actor=interaction.user,
-            target=user,
-        )
+        outcome = await unblock_member(self.bot, interaction.guild, interaction.user, user)
+        await answer(interaction, outcome.message)
 
     @modmail.command(name="blocked", description="Who cannot open modmail tickets")
     async def modmail_blocked(self, interaction: discord.Interaction) -> None:
@@ -1461,22 +1618,10 @@ class Modmail(commands.Cog):
         if not await self._ready(interaction):
             return
         await interaction.response.defer(ephemeral=True)
-        guild = interaction.guild
-        await self.bot.store.set(guild.id, "modmail_mode", mode.value, by=interaction.user.id)
-        await answer(
-            interaction,
-            MODE_SET.format(
-                what=modes_sentence(mode.value),
-                count=len(await open_tickets(self.bot.db, guild.id)),
-            ),
+        outcome = await set_mode(
+            self.bot, interaction.guild, interaction.user, mode.value
         )
-        await log_action(
-            self.bot,
-            guild,
-            "modmail.settings",
-            actor=interaction.user,
-            details={"modmail_mode": mode.value},
-        )
+        await answer(interaction, outcome.message)
 
     @modmail.command(name="forget", description="Forget where modmail has been pointed")
     @app_commands.describe(setting="Which of the three places to clear")
@@ -1489,16 +1634,10 @@ class Modmail(commands.Cog):
         if not await self._ready(interaction):
             return
         await interaction.response.defer(ephemeral=True)
-        key = FORGETTABLE[setting.value]
-        await self.bot.store.clear(interaction.guild.id, key)
-        await answer(interaction, FORGOTTEN.format(key=key))
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "modmail.forgotten",
-            actor=interaction.user,
-            details={"key": key},
+        outcome = await forget_place(
+            self.bot, interaction.guild, interaction.user, FORGETTABLE[setting.value]
         )
+        await answer(interaction, outcome.message)
 
     @modmail.command(name="status", description="What modmail is doing and where it is set up")
     async def modmail_status(self, interaction: discord.Interaction) -> None:
@@ -1600,24 +1739,15 @@ class Modmail(commands.Cog):
         if not await self._ready(interaction):
             return
         await interaction.response.defer(ephemeral=True)
-        key = str(name).strip().lower()
-        if not valid_snippet_name(key):
-            await answer(interaction, BAD_SNIPPET_NAME.format(given=clamp(name, 40)))
-            return
-        if not overwrite and await get_snippet(self.bot.db, key) is not None:
-            await answer(interaction, SNIPPET_EXISTS.format(name=key))
-            return
-        await save_snippet(
-            self.bot.db, key, clamp(content, CONTENT_LIMIT), interaction.user.id
-        )
-        await answer(interaction, SNIPPET_SAVED.format(name=key))
-        await log_action(
+        outcome = await put_snippet(
             self.bot,
             interaction.guild,
-            "modmail.snippet_saved",
-            actor=interaction.user,
-            details={"name": key},
+            interaction.user,
+            name,
+            content,
+            overwrite=overwrite,
         )
+        await answer(interaction, outcome.message)
 
     @snippet.command(name="remove", description="Delete a saved reply")
     @app_commands.describe(name="Which one")
@@ -1625,18 +1755,8 @@ class Modmail(commands.Cog):
         if not await self._ready(interaction):
             return
         await interaction.response.defer(ephemeral=True)
-        key = str(name).strip().lower()
-        if not await remove_snippet(self.bot.db, key):
-            await answer(interaction, NO_SUCH_SNIPPET.format(name=clamp(name, 40)))
-            return
-        await answer(interaction, SNIPPET_GONE.format(name=key))
-        await log_action(
-            self.bot,
-            interaction.guild,
-            "modmail.snippet_removed",
-            actor=interaction.user,
-            details={"name": key},
-        )
+        outcome = await drop_snippet(self.bot, interaction.guild, interaction.user, name)
+        await answer(interaction, outcome.message)
 
     @snippet.command(name="list", description="Show the saved replies")
     async def snippet_list(self, interaction: discord.Interaction) -> None:
