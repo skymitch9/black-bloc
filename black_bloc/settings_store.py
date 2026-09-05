@@ -513,7 +513,7 @@ KEY_HELP: dict[str, str] = {
     "tempvoice_creator_name": "what the join-to-create channel itself is called",
     "tempvoice_allowed_role_id": "only members with this role get a temporary channel",
     "honeypot_mode": "off, shadow (log only) or on (ban whoever posts in the trap)",
-    "honeypot_channel_ids": "the trap channels; /honeypot setup fills this in",
+    "honeypot_channel_ids": "the trap channels; Setup… on /honeypot fills this in",
     "honeypot_purge_days": (
         f"days of the banned account's messages to delete with it, 0 to "
         f"{HONEYPOT_PURGE_MAX_DAYS}"
@@ -781,7 +781,6 @@ LOG_LEVEL_HELP = (
     "on a member, or failed) or all. Every line is kept on the dashboard{extra} either way"
 )
 LOG_LEVEL_COMMANDS: dict[str, str] = {
-    "honeypot": "honeypot",
     "mod": "mod",
     "modmail": "modmail",
     "golive": "golive",
@@ -1136,6 +1135,21 @@ KEY_HELP.update(
     {
         "rolemenu_panel_minutes": (
             "minutes the /rolemenu panel stays live before its buttons disable themselves; 10 by "
+            "default. The 'this panel has gone quiet' footer can only be written while "
+            "Discord's 15-minute interaction window is still open, so 15 or more means the "
+            "buttons simply stop working with no footer to explain it"
+        ),
+    }
+)
+
+
+# Honeypot panel (wave 3) — the one decision `/honeypot`'s panel introduces, in its own block
+# so the parallel wave-3 branches merge textually.
+KEY_TYPES.update({"honeypot_panel_minutes": "int"})
+KEY_HELP.update(
+    {
+        "honeypot_panel_minutes": (
+            "minutes the /honeypot panel stays live before its buttons disable themselves; 10 by "
             "default. The 'this panel has gone quiet' footer can only be written while "
             "Discord's 15-minute interaction window is still open, so 15 or more means the "
             "buttons simply stop working with no footer to explain it"
@@ -1696,6 +1710,8 @@ class SettingsStore:
         if key == "raidtrain_panel_minutes":
             return 10
         if key == "rolemenu_panel_minutes":
+            return 10
+        if key == "honeypot_panel_minutes":
             return 10
         if key == HIDE_COMMANDS_WHEN_OFF:
             return HIDE_COMMANDS_WHEN_OFF_DEFAULT

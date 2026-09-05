@@ -1084,6 +1084,23 @@ async def test_the_pings_panel_stays_up_ten_minutes_by_default(store):
     assert parse_value("pings_panel_minutes", "45") == 45
 
 
+async def test_the_honeypot_panel_stays_up_ten_minutes_by_default(store):
+    """Same reason as every other panel: 15 loses Discord's window and the gone-quiet footer."""
+    from black_bloc.cogs.core import VALUE_KEYS
+
+    assert store.get(7, "honeypot_panel_minutes") == 10
+    assert "15" in KEY_HELP["honeypot_panel_minutes"]
+    assert KEY_TYPES["honeypot_panel_minutes"] == "int"
+    assert "honeypot_panel_minutes" in VALUE_KEYS
+    await store.set(7, "honeypot_panel_minutes", 25)
+    assert store.get(7, "honeypot_panel_minutes") == 25
+    with pytest.raises(SettingError):
+        coerce_value("honeypot_panel_minutes", -1)
+    with pytest.raises(SettingError):
+        coerce_value("honeypot_panel_minutes", "15")
+    assert parse_value("honeypot_panel_minutes", "45") == 45
+
+
 async def test_the_automod_panel_stays_up_ten_minutes_by_default(store):
     """Same reason as every other panel: 15 loses Discord's window and the gone-quiet footer."""
     from black_bloc.cogs.core import VALUE_KEYS

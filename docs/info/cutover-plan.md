@@ -50,7 +50,7 @@ bot never stopped running until its retirement step.
 | 7 | **Modmail** | `modmail_enabled true`; owner disables the incumbent Modmail bot the same hour (two ticket systems = lost DMs) | first real ticket relayed both directions | Modmail bot |
 | 8 | **Automod** | `automod_mode shadow` for ~1 week against real traffic → read the would-lines together → `on` | false `would_*` hits on innocent messages — tune exemptions BEFORE `on` | Carl automod (turn Carl's mention-spam off when ours goes `on`, not before) |
 | 9 | **Moderation commands** | nothing to flip — live once TEST_MODE lifts; staff just start using `/warn` etc. | case log correctness | Carl mod commands (habit change, not a switch) |
-| 10 | **Honeypot** | `/honeypot setup` in the real channel list, bottom; `honeypot_mode shadow` for 1 week (owner decision 2026-08-26) → `on` | any would-ban of a real member who isn't a bot — that's a tuning failure, stop | (new capability) |
+| 10 | **Honeypot** | `/honeypot` → **Setup…** in the real channel list, bottom; `honeypot_mode shadow` for 1 week (owner decision 2026-08-26) → `on` from the panel's mode picker | any would-ban of a real member who isn't a bot — that's a tuning failure, stop | (new capability) |
 
 ## 3. Retire the incumbents
 

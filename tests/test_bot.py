@@ -9,7 +9,6 @@ from black_bloc.logkinds import FEATURES
 TOP_LEVEL_MAX = 100
 CHILDREN_MAX = 25
 LOGS_GROUPS = {
-    "honeypot": "honeypot",
     "modmail": "modmail",
     "mod": "mod",
 }
