@@ -564,3 +564,89 @@ def panel_minutes(store: Any, guild_id: int) -> int:
     from .panels import panel_minutes as _minutes
 
     return _minutes(store, guild_id, PANEL_MINUTES_KEY)
+
+
+CARD_REPLY = "card_reply"
+CARD_ANON = "card_areply"
+CARD_NOTE = "card_note"
+CARD_CLOSE = "card_close"
+CARD_SPEAK = "card_speak"
+CARD_END = "card_end"
+
+CARD_TITLE = "Ticket #{ticket_id}"
+CARD_PRACTICE_TITLE = "Practice ticket #{ticket_id}"
+CARD_BLOCKED_LINE = "⚠️ **They are blocked** — a new ticket cannot be opened after this one."
+CARD_PRACTICE_LINE = (
+    "This ticket is **practice**. Nothing here reaches a member: no DM is sent and no reply "
+    "leaves Discord. **End the practice** closes it and files a transcript marked PRACTICE."
+)
+CARD_COUNTS = "**messages** — {inbound} from them · {outbound} sent · {notes} note(s)"
+
+
+class CardMove(NamedTuple):
+    action: str
+    label: str
+    style: str = "secondary"
+    row: int = 0
+
+
+REPLY_MOVE = CardMove(CARD_REPLY, "Reply", "primary", 0)
+ANON_MOVE = CardMove(CARD_ANON, "Reply as Staff", "secondary", 0)
+CARD_NOTE_MOVE = CardMove(CARD_NOTE, "Private note", "secondary", 0)
+CARD_CLOSE_MOVE = CardMove(CARD_CLOSE, "Close…", "danger", 0)
+SPEAK_MOVE = CardMove(CARD_SPEAK, "Speak as the member", "secondary", 1)
+END_MOVE = CardMove(CARD_END, "End the practice", "danger", 1)
+
+CARD_MOVES = (REPLY_MOVE, ANON_MOVE, CARD_NOTE_MOVE, CARD_CLOSE_MOVE, SPEAK_MOVE, END_MOVE)
+CARD_ROW_LIMIT = 5
+
+
+def card_buttons(*, practice: bool) -> tuple[CardMove, ...]:
+    """The four moves every open ticket has, plus the two only a practice ticket can offer."""
+    found = [REPLY_MOVE, ANON_MOVE, CARD_NOTE_MOVE, CARD_CLOSE_MOVE]
+    if practice:
+        found += [SPEAK_MOVE, END_MOVE]
+    return tuple(found)
+
+
+def picked_values(picker: Any) -> list[str]:
+    """2.7.1's modal groups answer with `values`; a radio answers with `value`."""
+    values = getattr(picker, "values", None)
+    if values is not None:
+        return [str(one) for one in values]
+    one = getattr(picker, "value", None)
+    return [str(one)] if one else []
+
+
+def is_practice(ticket: Any) -> bool:
+    return bool(field_of(ticket, "practice", 0))
+
+
+def ticket_card_lines(ticket: Any, counts: Any = None, *, label: Any = None, blocked: bool = False):
+    tally = counts or dict.fromkeys(DIRECTIONS, 0)
+    lines = [
+        f"<@{int(ticket['user_id'])}> — {clamp(label or ticket['user_id'], NAME_LIMIT)}",
+        f"**opened** — {ticket['opened_at']}",
+        f"**mode** — {ticket['mode']}",
+        CARD_COUNTS.format(
+            inbound=tally.get(IN, 0), outbound=tally.get(OUT, 0), notes=tally.get(NOTE, 0)
+        ),
+    ]
+    if blocked:
+        lines.append(CARD_BLOCKED_LINE)
+    if is_practice(ticket):
+        lines.append(CARD_PRACTICE_LINE)
+    return lines
+
+
+def ticket_card_embed(
+    ticket: Any, counts: Any = None, *, label: Any = None, blocked: bool = False
+) -> discord.Embed:
+    """The controls' own embed — the header card upstairs is the dossier, this is the state."""
+    practice = is_practice(ticket)
+    title = (CARD_PRACTICE_TITLE if practice else CARD_TITLE).format(ticket_id=ticket["id"])
+    return discord.Embed(
+        title=title,
+        description="\n".join(ticket_card_lines(ticket, counts, label=label, blocked=blocked)),
+        colour=COLOURS[NOTE] if practice else COLOURS[IN],
+    )

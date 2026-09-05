@@ -7,6 +7,8 @@ from black_bloc.modmail import (
     ANONYMOUS_NAME,
     BLOCK_PICK,
     BLOCK_REASON,
+    CARD_MOVES,
+    CARD_ROW_LIMIT,
     COLOURS,
     DISABLE,
     ENABLE,
@@ -31,6 +33,7 @@ from black_bloc.modmail import (
     attachment_urls,
     blocked_buttons,
     blocked_lines,
+    card_buttons,
     chunk_lines,
     clamp_bytes,
     closing_dm,
@@ -39,12 +42,14 @@ from black_bloc.modmail import (
     forget_buttons,
     header_embed,
     is_note,
+    is_practice,
     load_attachments,
     mentions,
     modes_sentence,
     note_body,
     panel_minutes,
     parse_topic,
+    picked_values,
     relay_embed,
     root_buttons,
     setup_buttons,
@@ -53,6 +58,8 @@ from black_bloc.modmail import (
     staff_ping,
     thread_invite,
     thread_name,
+    ticket_card_embed,
+    ticket_card_lines,
     ticket_channel_name,
     ticket_topic,
     transcript_embed,
@@ -453,3 +460,79 @@ def test_the_panel_minutes_key_is_read_through_the_shared_helper():
 
 def test_the_four_sources_a_reply_can_come_from_are_named_once():
     assert SOURCES == ("card", "typed", "command", "web")
+
+
+def a_ticket(**over):
+    row = {
+        "id": 4,
+        "user_id": 900,
+        "mode": "channel",
+        "opened_at": "2026-09-05T10:00:00+00:00",
+        "practice": 0,
+    }
+    row.update(over)
+    return row
+
+
+def test_the_card_carries_the_four_moves_and_only_practice_gets_the_other_two():
+    plain = card_buttons(practice=False)
+    practising = card_buttons(practice=True)
+
+    assert [move.label for move in plain] == [
+        "Reply",
+        "Reply as Staff",
+        "Private note",
+        "Close…",
+    ]
+    assert [move.label for move in practising[4:]] == [
+        "Speak as the member",
+        "End the practice",
+    ]
+    assert set(plain) <= set(CARD_MOVES) and set(practising) <= set(CARD_MOVES)
+
+
+@pytest.mark.parametrize("practice", [False, True])
+def test_every_card_row_fits_inside_discords_five(practice):
+    rows: dict[int, int] = {}
+    for move in card_buttons(practice=practice):
+        rows[move.row] = rows.get(move.row, 0) + 1
+
+    assert max(rows.values()) <= CARD_ROW_LIMIT
+    assert len(rows) <= CARD_ROW_LIMIT
+
+
+def test_every_card_move_has_its_own_action_so_a_custom_id_can_never_be_ambiguous():
+    actions = [move.action for move in CARD_MOVES]
+
+    assert len(set(actions)) == len(actions)
+
+
+def test_the_card_says_who_it_is_when_it_opened_and_how_much_has_been_said():
+    lines = ticket_card_lines(a_ticket(), {IN: 3, OUT: 2, NOTE: 1}, label="Alice")
+
+    assert lines[0] == "<@900> — Alice"
+    assert lines[1] == "**opened** — 2026-09-05T10:00:00+00:00"
+    assert lines[2] == "**mode** — channel"
+    assert lines[3] == "**messages** — 3 from them · 2 sent · 1 note(s)"
+    assert len(lines) == 4
+
+
+def test_a_blocked_member_is_said_on_the_card_and_a_practice_ticket_says_it_is_fake():
+    blocked = ticket_card_lines(a_ticket(), None, label="Alice", blocked=True)
+    practice = ticket_card_lines(a_ticket(practice=1), None, label="Alice")
+
+    assert "blocked" in blocked[-1]
+    assert "practice" in practice[-1]
+    assert is_practice(a_ticket(practice=1)) and not is_practice(a_ticket())
+
+
+def test_the_card_embed_titles_a_practice_ticket_as_practice():
+    assert ticket_card_embed(a_ticket()).title == "Ticket #4"
+    assert ticket_card_embed(a_ticket(practice=1)).title == "Practice ticket #4"
+
+
+def test_picked_values_reads_both_spellings_a_modal_group_answers_with():
+    assert picked_values(SimpleNamespace(values=["a", "b"])) == ["a", "b"]
+    assert picked_values(SimpleNamespace(value="a")) == ["a"]
+    assert picked_values(SimpleNamespace(value=None)) == []
+    assert picked_values(None) == []

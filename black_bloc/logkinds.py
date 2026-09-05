@@ -243,6 +243,7 @@ ROUTINE: frozenset[str] = frozenset(
         "modmail.forgotten",
         "modmail.log_channel_forgotten",
         "modmail.member_left",
+        "modmail.note",
         "modmail.opened",
         "modmail.place_kept",
         "modmail.reply",
