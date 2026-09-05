@@ -995,6 +995,18 @@ and none of the five `/settings` subcommands checks the database. Three more:
    `via` at all — so a birthday role cleared by that path records neither Discord nor the website.
    It is outside the panel's door and outside this build's scope; it should call `clear_key` when
    Build 2 has landed it.
+4. ⚠️ **`tests/api/test_writes.py::test_another_session_is_not_slowed_down_by_this_ones_reads` is a
+   WALL-CLOCK RACE, and this build's extra load is what surfaces it.** Measured: it failed **2 of
+   4** full `pytest -n auto` runs on this branch and **0 of 2** on the base `01c4ed3`, and passes
+   every time `tests/api/test_writes.py` runs alone. Root cause, read out of
+   `api/auth.py:TokenBucket.take`: the bucket refills **continuously** at `limit / window` = 300/60
+   = **5 tokens a second**, and `drain_reads` empties it with a 300-iteration Python loop. Any
+   loaded machine where that loop plus the assertion takes more than **0.2 s** regains a token, so
+   the `== 429` assertion sees a 200. Nothing in this build touches the rate-limit path; +234 tests
+   only made the box busier. The fix is in the test, not the code — drain until `take` returns
+   `False` (or pass the frozen `now=` the method already accepts) instead of counting to
+   `READ_RATE`. **Not fixed here**: it is another build's file and the deploy gate is the
+   conductor's. ⚠️ It WILL flake `scripts/deploy.ps1`, so a retry there is expected, not a signal.
 
 ### What Build 2 inherits
 
