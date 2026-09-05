@@ -305,7 +305,7 @@ docs bookkeeping lands with the work, not after.
   cards for the keys with no feature panel (staff/lead roles, log channel, `hide_commands_when_off`,
   panel-minutes, presence + Re-apply presence), Logs; `show`/`set`/`set-role`/`set-value`/`clear` retire —
   29 slots, ZERO groups. Sequence: hide-when-off (in flight) → honeypot → `/mod` → modmail → `/settings`.
-  **DISPATCHED 06:49: three Opus DESIGN agents in parallel** (read-only on code, one file each in the main
+  **DISPATCHED 06:48: three Opus DESIGN agents in parallel** (read-only on code, one file each in the main
   tree, no commits): `info/honeypot-panel-design.md`, `info/mod-panel-design.md`,
   `info/modmail-panel-design.md`; usage at dispatch session 8% / weekly 7% / Fable 8%, read 06:46. The
   `/settings` design waits for modmail's keys to settle. Fable reviews each against §2, then forks to the
