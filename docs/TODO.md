@@ -284,6 +284,11 @@ docs bookkeeping lands with the work, not after.
   panel design comes AFTER the hide-when-off build, which adds a key. **Audit result: 36 → 29 slots;
   the only group left is `/settings`.** Build sequence: honeypot → `/mod` → modmail (+ snippets + ticket
   card) → presence-into-settings (folds into whichever build touches `cogs/core.py` first).
+  **Owner, 2026-09-05 06:36: "Maybe /reply could be a menu. Walk me through that one again and through
+  /settings. Start the rest in the meantime"** — proposal 5 reopened (`/reply` as a button/menu too) and a
+  `/settings` panel walk-through requested; both answered one at a time, decisions land here.
+  **DISPATCHED 06:36:** the hide-when-off build (Opus, own worktree off `cc18993`; usage at dispatch session 1% /
+  weekly 5% / Fable 6%, read 06:25). Honeypot / `/mod` / modmail designs follow.
 - **Wave-1 review findings, small, fold into the next build that touches each file (Fable
   review 2026-09-03 13:50–14:05):** `requests.py` re-renders lack `allowed_mentions`;
   `LOG_LEVEL_COMMANDS` help still says "`/birthday logs`" / "`/request logs`"; five form writes
