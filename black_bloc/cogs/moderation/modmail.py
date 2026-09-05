@@ -130,6 +130,7 @@ from ...panels import (
     clamped,
     db_ready,
     db_up,
+    opened,
     picked_values,
     refusal,
     retire,
@@ -2252,14 +2253,6 @@ async def show(interaction: discord.Interaction, built: Any, previous: Any) -> N
     view.message = await interaction.edit_original_response(
         embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
     )
-
-
-async def opened(interaction: discord.Interaction) -> bool:
-    """Staff are re-asked before every move, the reads included, and then the database is."""
-    if not await still_staff(interaction):
-        return False
-    await interaction.response.defer()
-    return await db_ready(interaction)
 
 
 def cog_of(view: Any) -> Any:

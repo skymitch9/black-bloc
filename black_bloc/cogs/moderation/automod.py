@@ -92,8 +92,8 @@ from ...panels import (
     answer,
     capped_placeholder,
     clamped,
-    db_ready,
     db_up,
+    opened,
     retire,
     site_page_url,
     still_staff,
@@ -1010,14 +1010,6 @@ async def render_exemptions(interaction: discord.Interaction, previous: Any = No
 
 async def render_settings(interaction: discord.Interaction, previous: Any = None) -> None:
     await show(interaction, build_settings(interaction.client, interaction.guild), previous)
-
-
-async def opened(interaction: discord.Interaction) -> bool:
-    """Staff are re-asked before every move, the reads included, and then the database is."""
-    if not await still_staff(interaction):
-        return False
-    await interaction.response.defer()
-    return await db_ready(interaction)
 
 
 async def back_to_root(interaction: discord.Interaction, previous: Any = None) -> None:
