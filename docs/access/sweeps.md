@@ -1,7 +1,9 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-05** — rows **231–244** at the FOOT added by the SETTINGS PANEL build (231–242 written as
+> **2026-09-05** — rows **245–251** at the FOOT added by the MODMAIL follow-up (the ticket card ON the
+> panel; written as `ML1`–`ML7`, numbered at the merge, shipped as **v85**); before them rows
+> **231–244** added by the SETTINGS PANEL build (231–242 written as
 > `S1`–`S12` by **Build 2** on `worktree-agent-a56c7b5137d9a609d`, 243–244 as `SB1`–`SB2` by Build 1;
 > numbered at the merge, after 230; shipped as **v83** (Build 1) and **v84** (Build 2)).
 > `/settings` becomes ONE command that opens a panel; `show` / `set` / `set-role` / `set-value` /
@@ -819,9 +821,8 @@ whole `/presence` group are gone, and the top-level count drops **30 → 29 with
 
 ## Modmail leftovers — the ticket card ON the panel (wave 4 follow-up)
 
-Written as `ML1`–`ML7` and numbered by the conductor at the merge, after 244. Built
-2026-09-05 on `worktree-agent-ad2fc0f5aad473c19`; ⚠️ **NOT merged and NOT deployed as this is
-written, and nothing below has met live Discord.** The design is
+Rows 245–251, written as `ML1`–`ML7` on `worktree-agent-ad2fc0f5aad473c19` and numbered at the
+merge 2026-09-05; shipped as **v85**. ⚠️ Not yet run against live Discord by eye. The design is
 [`../info/modmail-panel-design.md`](../info/modmail-panel-design.md) §B row S5 and §C *"The ticket
 card ON THE PANEL"*. Everything here is a second door onto moves rows 219–230 already cover from
 the card in the channel — the point of walking it is that the SAME move, pressed here, leaves the
@@ -829,13 +830,13 @@ same one row and the same one DM.
 
 | # | Do this | Expect |
 |---|---|---|
-| ML1 | `/modmail` with **no** ticket open, then DM the bot from a second account and run `/modmail` again | the first panel has no picker at all; the second carries **A ticket…** on its own row above **Setup…**, reading `#N · channel · <their name>` with the date it opened underneath |
-| ML2 | pick the ticket on **A ticket…** | the panel becomes that ticket's card — the **same** embed the sticky card in the test channel carries (number, who, when, mode, the in/out/note counts, and the blocked line if they are blocked) — over **Reply · Reply as Staff · Private note · Close… · Back** |
-| ML3 | **Reply** → type something; then **Reply as Staff** | both DM the member for real (test mode does not stop a DM), both leave **one** `modmail.reply` row on the Logs page, the anonymous one says **Staff** and carries no role colour, and the panel redraws the card with the counts one higher each time |
-| ML4 | **Private note** → some text | one *Private note* embed in the ticket, **one** `modmail.note` row, **no** DM, and the card's note count goes up |
-| ML5 | **Back** | the inbox again, with **A ticket…** still on it |
-| ML6 | **Close…** with a reason | the member is DM'd, the transcript is filed, the channel goes — and the panel is left showing the card with **only Back** on it and a footer saying the ticket is closed. Press **Back**: the ticket is gone from **A ticket…** |
-| ML7 | with **26** tickets open (or just read the picker with more than 25), and separately: pick a ticket, have somebody else close it, then press **Close…** | the picker shows 25 options and its placeholder reads **25 of 26 — the rest are on the site**; the raced close answers *"was closed by somebody else while you were typing"* in words and never a bare error. ⚠️ A `modmail.card_failed` row on the Logs page is now also written when the sticky card's own background move **raises** — before this it was a log line nobody could see |
+| 245 | `/modmail` with **no** ticket open, then DM the bot from a second account and run `/modmail` again | the first panel has no picker at all; the second carries **A ticket…** on its own row above **Setup…**, reading `#N · channel · <their name>` with the date it opened underneath |
+| 246 | pick the ticket on **A ticket…** | the panel becomes that ticket's card — the **same** embed the sticky card in the test channel carries (number, who, when, mode, the in/out/note counts, and the blocked line if they are blocked) — over **Reply · Reply as Staff · Private note · Close… · Back** |
+| 247 | **Reply** → type something; then **Reply as Staff** | both DM the member for real (test mode does not stop a DM), both leave **one** `modmail.reply` row on the Logs page, the anonymous one says **Staff** and carries no role colour, and the panel redraws the card with the counts one higher each time |
+| 248 | **Private note** → some text | one *Private note* embed in the ticket, **one** `modmail.note` row, **no** DM, and the card's note count goes up |
+| 249 | **Back** | the inbox again, with **A ticket…** still on it |
+| 250 | **Close…** with a reason | the member is DM'd, the transcript is filed, the channel goes — and the panel is left showing the card with **only Back** on it and a footer saying the ticket is closed. Press **Back**: the ticket is gone from **A ticket…** |
+| 251 | with **26** tickets open (or just read the picker with more than 25), and separately: pick a ticket, have somebody else close it, then press **Close…** | the picker shows 25 options and its placeholder reads **25 of 26 — the rest are on the site**; the raced close answers *"was closed by somebody else while you were typing"* in words and never a bare error. ⚠️ A `modmail.card_failed` row on the Logs page is now also written when the sticky card's own background move **raises** — before this it was a log line nobody could see |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that
