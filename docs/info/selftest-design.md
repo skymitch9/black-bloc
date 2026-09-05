@@ -175,3 +175,37 @@ testing runbook; check `access/README.md` first).
 - **F-ST3 — `panel.*` checks post with live views?** (a) yes, buttons are real and work for the 5
   minutes — chosen; a card with a dead view is not the card a person sees. Panels time out on their own
   `*_panel_minutes` as usual. (b) strip the view. Rejected.
+
+## Build deviations
+
+> Written by the build on `worktree-agent-a4aa5efd43f249ba6`, 2026-09-05, off `main` at `374b498`.
+> All three forks were built as chosen. Measured, not predicted: **5090** tests pass (`pytest -q -n
+> auto`), `ruff check .` is clean, `node site/mock/check.mjs` reports **17 pages / 149 routes**,
+> the tree is **29 top-level commands with ZERO Groups**, and `SCHEMA_VERSION` is **31**.
+> ⚠️ **NOT verified:** no boot, no token, no Discord — nothing here has run against the live bot.
+
+| § | The design said | The build did, and why |
+|---|---|---|
+| C | `Check(name, feature, run)` where `run(bot, guild, actor) -> str` | `run(one: Run) -> str`. A check has to write a posted message id down against the RUN before the next check goes (§D), so it needs the run id and the poster, not three loose arguments. `Run` carries bot, guild, actor, via, run_id and `post()`. |
+| C.1 | "for every settings key of type channel/role" | Exactly that — **35 checks**, read off `KEY_TYPES` with no hand-listing. `manage_messages` is added for keys whose namespace is `honeypot` or `automod` (which is where `modlog_channel_id` lands, by `NAMESPACE_OVERRIDE`). |
+| C.2 | "every one of the **29** commands that opens a panel" | **18.** The tree is 29 commands; 18 open a panel and 11 take an argument and act or answer one line. ⚠️ **No `root_card` extraction was needed** — all 18 already had a module-level builder, and an AST test proves each command's own module calls the one the table names. |
+| C.3 | "the contract test knows the list; reuse its route inventory" | ⚠️ **Could not be done, and should not be.** `site/mock/contract.json` **is not in the Docker image** (`Dockerfile` copies `black_bloc` and `site/public` only), so a runtime read of it would pass locally and fail on Fly. The family walks the running FastAPI app's own route table instead — **47 checks** — which is also the better single home. The contract inventory IS used by `tests/live/test_reads.py`, which runs from the repo. |
+| C.3 | "require 200 and the documented shape (top-level keys)" | 200 and a body that is not `None` and not an empty object. With `contract.json` out of reach there is nothing to check keys against; the detail records the top-level keys it found, so a changed shape is visible in the log even though it does not fail. An empty LIST passes — a guild with no birthdays is not a fault. |
+| C.4 | six `send.<feature>` checks | Built, all six, each through the feature's OWN renderer. ⚠️ `send.pings` posts a ping **prefix**, not a card: ping roles never post anything of their own, and the prefix is the honest shape of what that feature contributes. |
+| B/G | **Run the self-test** and **Purge now** on the settings ROOT card | On a **Self-test…** CARD one press in. Row 2 of the root is already at Discord's five-control limit, and the feature needed a **Logs** button anyway (adding `selftest` to `FEATURES` makes `tests/test_bot.py` demand a `send_logs` call site). Same moves, plus room for the state the card has to show. |
+| B | "Operator token allowed (it is a staff read/write)" | ⚠️ **Half true, and the design could not have known.** `auth.py:operator_session` refuses every method but `GET`/`HEAD` in words, so the token reads the three GETs and **cannot start a run**. `tests/live/test_selftest.py` asserts that refusal, and the start → poll → purge test takes an optional staff session cookie (`BLACK_BLOC_LIVE_SESSION`) instead. Recorded in `docs/access/testing.md`. |
+| E | `HEADS` gains `"selftest": "selftest"`, shown as **Test** | Done, plus `FEATURE_PAGES["selftest"] = "health.html"` and all four kinds added to `ROUTINE` — without that, `selftest.purged` matches an `IMPORTANT_SUFFIXES` entry and the Logs page's Important switch fills with test rows. |
+| F | three `/api/selftest` routes in the mock | **Four** (the purge is a fourth), and **three** contract entries. ⚠️ `POST /api/selftest` is deliberately NOT in `contract.json`: it starts a real run against the live guild, which is the one route neither fixture can exercise without posting into Discord. `tests/live` proves that one. |
+| — | not in the design | ⚠️ **A defect found and fixed:** an `/api` path nothing served answered Starlette's bare `{"detail": "Not Found"}`. The global no-bare-status rule forbids it and the MOCK had been answering it in words for months. `server.py:unknown_route` now answers a sentence; a route's own `Refused(404, …)` keeps its own words. |
+
+### What the run actually costs, measured
+
+| Family | Checks | Messages posted |
+|---|---|---|
+| `config.*` | 35 | 0 |
+| `panel.*` | 18 | 18 |
+| `read.*` | 47 | 0 |
+| `send.*` | 6 | 6 |
+| **total** | **106** | **24** |
+
+⚠️ The `read.*` count moves with the API: it is derived, so adding a GET route adds a check.

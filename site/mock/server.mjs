@@ -1585,7 +1585,7 @@ route('POST', '/api/selftest', (context) => {
   requireStaff(context.session);
   const going = state.selftestRuns.find((row) => !row.finished_at);
   if (going) {
-    throw new Refused(409, 'selftest_running', `A self-test is already running (started ${going.started_at}, 0 of 81 checks done). Nothing was started a second time — wait for it to finish, or watch it on the dashboard's Health page.`);
+    throw new Refused(409, 'selftest_running', `A self-test is already running (started ${going.started_at}, 0 of 106 checks done). Nothing was started a second time — wait for it to finish, or watch it on the dashboard's Health page.`);
   }
   const row = {
     id: state.nextSelftestRun++,
@@ -1604,9 +1604,9 @@ route('POST', '/api/selftest', (context) => {
     { name: 'config.log_channel_id', feature: 'core', ok: true, detail: '#bot-log (800000000000000002); view_channel, send_messages, embed_links', at: now() },
     { name: 'panel.settings', feature: 'core', ok: true, detail: 'posted; 7 buttons, 2 selects', at: now() },
   ];
-  logAction('web.selftest.started', { details: { run_id: row.id, checks: 81, via: 'website' } });
+  logAction('web.selftest.started', { details: { run_id: row.id, checks: 106, via: 'website' } });
   logAction('web.selftest.finished', { details: { run_id: row.id, ok: row.ok, failed: row.failed, posted: row.posted, via: 'website' } });
-  return { run_id: row.id, started_at: row.started_at, checks: 81 };
+  return { run_id: row.id, started_at: row.started_at, checks: 106 };
 });
 
 route('GET', '/api/selftest', (context) => {

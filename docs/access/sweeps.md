@@ -817,6 +817,28 @@ whole `/presence` group are gone, and the top-level count drops **30 → 29 with
 | 243 | dashboard → **Settings** → the **core** group | two rows at the bottom of it: **How long the /settings panel stays live** (10) and **Whether only a Lead may re-point the staff and log channels** (true). ⚠️ They must be under **core**, not under a group called `settings` — that is what `CORE_KEYS` is for (Build 1, v83) |
 | 244 | set **How long the /settings panel stays live** to `0`, then to `10` again | `0` is refused in words by the same validator every other panel-minutes key uses, and nothing is saved. The Discord door onto the same key is `/settings` ▸ **Panels & commands…** ▸ **How long a panel stays open…** (Build 2, v84) |
 
+## The self-test (wave 5) — rows `ST1`–`ST10`, numbered at the merge
+
+Built 2026-09-05 (`info/selftest-design.md`) on `worktree-agent-a4aa5efd43f249ba6`. The bot
+exercises itself against the real guild — every settings channel and role, every read the pages
+make, all 18 panel cards posted as real messages, and six announcements rendered through their own
+templates — then deletes every message it posted five minutes later. The log lines stay on the
+dashboard's Logs page under **Test**. ⚠️ **Nothing below has met live Discord by a person**, and
+nothing under `tests/live/` has been run against the deployed host.
+
+| # | Do this | Expect |
+|---|---|---|
+| ST1 | `/settings` as a Lead in `#mute-me-bot-test-spam` → **Self-test…** | a card titled **The self-test** saying what it will do, that it runs at every boot, where the cards go (`#mute-me-bot-test-spam`) and that they are deleted again after 5 minute(s). Buttons: **Run the self-test · Logs · Back**. ⚠️ **Purge now is NOT there** — nothing has been posted yet, so there is nothing to purge, and a button that answers "nothing to do" is not drawn |
+| ST2 | press **Run the self-test** and watch `#mute-me-bot-test-spam` | ~24 messages arrive: one root card per panel (`/settings`, `/automod`, `/honeypot`, `/mod`, `/modmail`, `/event`, `/poll`, `/birthday`, `/rolemenu`, `/voice`, `/request`, `/apply`, `/chat`, `/memory`, `/golive`, `/youtube`, `/pings`, `/raidtrain`) and six announcements (go-live, upload, birthday, event, ping prefix, raid-train lineup). The ephemeral answer says **N ok, M failed** and names every failure. ⚠️ **The buttons on those cards are REAL** — press one and it works, for as long as the card lives (fork F-ST3) |
+| ST3 | look at the card again, then press **Purge now** | **Purge now** is there now, and the embed says how many messages are still waiting. Pressing it answers *N self-test message(s) deleted.* and the channel is clean. Press it a second time: it is gone, because there is nothing left to purge |
+| ST4 | run it again and leave it alone for five minutes | every message the run posted disappears on its own, within about a minute of the fifth minute. The `/settings` ▸ **Self-test…** card then says its messages were deleted |
+| ST5 | dashboard → **Logs** | ⚠️ **not one `selftest.*` line is in the default view** — that is the point. The chip bar has a **Test** chip at the end; press it and only the test rows show: `selftest.started`, one `selftest.check` per check, `selftest.finished`, `selftest.purged`, each **via Discord** or **By the bot at boot**. Press **Everything** again and they vanish. The CSV export follows the same rule |
+| ST6 | `/settings` ▸ **Self-test…** ▸ **Logs** | a NEW ephemeral message titled **Test log** with the same rows. This is the ONLY door in Discord onto them, because the dashboard's default view leaves them out |
+| ST7 | dashboard → **Health** → the **Self-test** card | the last run: when, `ok`/`failed`/`posted`, whether its cards are still in Discord, and every failure by name with its sentence. **Run the self-test** starts one; while it is going the card refreshes itself every 15 seconds and the button is disabled. Older runs are in a **Runs before this one** foldout |
+| ST8 | press **Run the self-test** on the website twice, quickly | the second press is refused **in words** — *"A self-test is already running (started 14:03, 12 of 106 checks done)…"* — never a bare 409. The same sentence comes back from the `/settings` card if you press its button while a website run is going |
+| ST9 | dashboard → **Settings** → the **core** group | four new rows: **Whether the bot tests itself at every boot** (true), **Where the self-test posts the cards it is proving** (`#mute-me-bot-test-spam`), **How long the self-test's cards stay before the bot deletes them** (5), and **How much of the self-test is repeated into Discord** (**off** — the only feature that ships at off, on purpose). Set the minutes to `0`: refused in words. The Discord door onto all four is `/settings` ▸ **A setting group…** ▸ **core** |
+| ST10 | after the next deploy, `flyctl logs` | one line — `selftest: 106 ok, 0 failed, 24 messages posted (purge in 5 min)` — and one `selftest: FAILED <check> — <sentence>` line per failure. ⚠️ **This is the line that verifies a deploy**, without opening Discord at all. Turn `selftest_on_boot` off and the line stops; the boot purge of any leftovers still happens |
+
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that
 minute plus the dashboard Logs page are enough to diagnose. Nothing here is destructive; the worst case is
