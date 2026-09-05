@@ -64,10 +64,11 @@ scoped.
 - **A feature turned off takes its `/command` with it** (owner, 2026-09-04) —
   set `<feature>_mode` to `off` on the dashboard or with
   `/settings set-value`, and within about a minute that feature's one
-  top-level command disappears from Discord. Fifteen features do this:
+  top-level command disappears from Discord. Fourteen features do this:
   `/golive`, `/youtube`, `/pings`, `/voice`, `/honeypot`, `/event`, `/poll`,
-  `/birthday`, `/automod`, `/rolemenu`, `/request`, `/chat`, `/memory`,
-  `/raidtrain`, `/apply`. ⚠️ **`shadow` is not `off`** and hides nothing.
+  `/birthday`, `/automod`, `/rolemenu`, `/request`, `/chat`, `/raidtrain`,
+  `/apply`. `/memory` is the one exception (fork I-M1, "open it"): memory off
+  deletes nothing, so the panel stays as a member's door to their own notes. ⚠️ **`shadow` is not `off`** and hides nothing.
   The ways back: `<feature>_mode` → `on` (the dashboard, or
   `/settings set-value <feature>_mode on` — `/settings` can never be hidden),
   or `hide_commands_when_off` → `false`, which returns every command while the

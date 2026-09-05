@@ -2,7 +2,8 @@
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
 > **2026-09-05** — rows **183–187** added by the HIDE COMMANDS WHEN OFF build (a feature whose
-> mode reads `off` has its one top-level command removed from the guild's tree; fifteen features,
+> mode reads `off` has its one top-level command removed from the guild's tree; fourteen features
+> — every mode key with an `off` except `chat_memory_mode`, whose `/memory` stays (fork I-M1) —
 > one new bool key `hide_commands_when_off` defaulting **true**). ⚠️ The top-level count in
 > `tests/test_bot.py` is UNCHANGED at **36** — hiding happens at guild-sync time, not in the tree
 > that test counts, so `commands synced` in the live log is what moves. ⚠️ **Nothing in 183–187
@@ -374,7 +375,7 @@ ephemeral and visible to nobody but you — there is no staff row on this panel 
 | 105 | Dropping one line | **Forget one of these…** → pick `#2` | the panel re-renders in place with that line gone and the rest renumbered; the reply says *Dropped **1** line(s)*. Open the **Chat** log (dashboard Logs page, or `/chat logs`): ONE `chat.memory_forgot` row, details `who_asked: self · lines: 1 · via: discord`, and **no trace of what the line said** — the text of a note never reaches the action log |
 | 106 | Forgetting the lot, and changing your mind | **Forget everything** → **Keep it**; then **Forget everything** → **Yes, forget it all** | Keep it changes nothing and puts you back on the panel with every line still there and no new log row. Yes clears it: the panel re-renders saying Black Bloc has not written anything down about you yet, the picker is gone, and only **Stop remembering me · Refresh** are left. One `chat.memory_forgot` row |
 | 107 | Stopping it, and starting again | **Stop remembering me** → **Yes, stop**; then **Remember me again** | the first wipes AND opts you out in that order — one `chat.memory_optout` row — and the panel then offers **Remember me again · Refresh** only. The second brings the writing back with one `chat.memory_optin` row. ⚠️ Neither one asks staff for anything: this is your own data and the panel never refuses you |
-| 108 | Memory switched off, and the quiet footer | leave the panel alone for `memory_panel_minutes` (10) minutes; then `/settings set-value key:chat_memory_mode value:off` and run `/memory` again | after ten minutes every control on the old panel is greyed out and the embed footer reads *This panel has gone quiet — run /memory again*. With the mode off `/memory` opens for about a minute and then ⚠️ **disappears from the command list** — rewritten 2026-09-04, reversing fork I-M1 (owner, 2026-09-03 16:12, "open it"): the hide-commands-when-off build (rows 183–187) puts `chat_memory_mode` in the table. While it is still reachable the panel says Black Bloc is not remembering anybody here as a LINE, whatever it already stored is still listed, and **Forget everything** and the picker still work. ⚠️ **Turning memory off does not delete profiles, and once `/memory` is hidden a MEMBER has no door to their own — the site is staff-only and counts-only.** If that matters to you, set `hide_commands_when_off` to `false`, or ask Claude to take `chat_memory_mode` back out of the table |
+| 108 | Memory switched off, and the quiet footer | leave the panel alone for `memory_panel_minutes` (10) minutes; then `/settings set-value key:chat_memory_mode value:off` and run `/memory` again | after ten minutes every control on the old panel is greyed out and the embed footer reads *This panel has gone quiet — run /memory again*. With the mode off `/memory` ⚠️ **STAYS in the command list** — the one feature the hide-commands-when-off build (rows 183–187) leaves out, because fork I-M1 (owner, 2026-09-03 16:12, "open it") stands: turning memory off does not delete profiles and the site is staff-only and counts-only, so the panel is a MEMBER's only door to their own notes (KI-14). It opens, says Black Bloc is not remembering anybody here as a LINE, whatever it already stored is still listed, and **Forget everything** and the picker still work |
 
 ## Go-live — `/golive` is ONE command that opens a panel (wave 2)
 
@@ -595,7 +596,8 @@ not look finished) and numbered **173–182** by the conductor at the merge, aft
 ### Hide commands when off — rows 183–187
 
 The 2026-09-04 ask: *"if we turn a feature off on the web portal … make the `/youtube` command not
-appear until it turns back on"*. Fifteen features do this now, not just YouTube. ⚠️ **Discord takes
+appear until it turns back on"*. Fourteen features do this now, not just YouTube; `/memory` is
+the one deliberate exception (it is a member's only door to their own notes, KI-14). ⚠️ **Discord takes
 up to a minute** — the bot waits 5 s for you to stop clicking and syncs at most once a minute — and
 your own client may need a `Ctrl+R` to redraw the list. ⚠️ **`shadow` is not `off`**: only the word
 `off` takes a command away. ⚠️ **`/settings` can never be hidden**, so there is always a way back.

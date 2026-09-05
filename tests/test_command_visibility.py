@@ -260,12 +260,11 @@ async def test_every_command_in_the_table_is_a_real_top_level_command(real_tree)
     assert named.isdisjoint(cv.NEVER_HIDDEN)
 
 
-async def test_the_fifteen_features_the_owner_named_each_map_to_one_command():
+async def test_the_fourteen_features_that_hide_each_map_to_one_command():
     assert cv.HIDDEN_WHEN_OFF == {
         "applications_mode": ("apply",),
         "automod_mode": ("automod",),
         "birthday_mode": ("birthday",),
-        "chat_memory_mode": ("memory",),
         "chat_mode": ("chat",),
         "events_mode": ("event",),
         "golive_mode": ("golive",),
@@ -349,13 +348,15 @@ async def test_every_hidden_feature_can_still_be_turned_back_on_from_discord():
         assert "shadow" not in KEY_CHOICES[key] or parse_value(key, "shadow") == "shadow"
 
 
-async def test_memory_and_apply_and_rolemenu_hide_with_the_rest(bot):
-    """Supersedes three earlier per-feature carve-outs — owner, 2026-09-03: `/memory` "open it"
-    (fork I-M1), `/apply` "Visible", and `/rolemenu` kept because hiding it hid the only way
-    back. The 2026-09-04 ask makes hiding the rule for every mode key that has an off, and
-    `/settings set-value <feature>_mode on` plus `hide_commands_when_off` are the ways back."""
+async def test_apply_and_rolemenu_hide_with_the_rest_but_memory_stays(bot):
+    """Supersedes two earlier per-feature carve-outs — owner, 2026-09-03: `/apply` "Visible",
+    and `/rolemenu` kept because hiding it hid the only way back; `/settings set-value
+    <feature>_mode on` plus `hide_commands_when_off` are the ways back now. `/memory` KEEPS its
+    carve-out (fork I-M1, "open it"): turning memory off deletes nothing, the site is
+    staff-only, so the panel is a member's only door to notes held about them (KI-14)."""
+    assert "chat_memory_mode" not in cv.HIDDEN_WHEN_OFF
+    assert all("memory" not in names for names in cv.HIDDEN_WHEN_OFF.values())
     for key, name in (
-        ("chat_memory_mode", "memory"),
         ("applications_mode", "apply"),
         ("rolemenu_mode", "rolemenu"),
     ):
