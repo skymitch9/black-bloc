@@ -917,7 +917,9 @@ file's last row and starts after it. The Phase 7 block at `:239–247` is rewrit
     mode. Much more realistic; it also silently makes `TEST_MODE` weaker for one feature, and
     rewrites `test_modmail.py:377`, the test `code-notes.md` calls *"the test-policy proof"*.
 
-- **F-M7 — does the snippet select COMBINE or PRE-FILL?** He said *"a snippet select that pre-fills
+- ✅ **F-M7 — ANSWERED (a) by the owner 2026-09-05 ("A"): combine, in one modal.** (b) stays a
+  clean follow-up if editing canned replies before sending turns out to be wanted.
+  Original question — does the snippet select COMBINE or PRE-FILL? He said *"a snippet select that pre-fills
   the text"*; a modal is submitted once, so a select inside it cannot pre-fill anything.
   - **(a) Combine, in one modal** — `Label(Select)` + `Label(TextInput)`, and on submit the body is
     the snippet plus the typed text, byte-identical to `_body` `:1119` and to `/reply text: snippet:`
