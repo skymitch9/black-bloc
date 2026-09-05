@@ -183,6 +183,16 @@ docs bookkeeping lands with the work, not after.
 
 ## ⏳ Waiting on the owner
 
+- ❓ **Owner 2026-09-05 13:52, verbatim: "test it all, can we build api test and endpoints"** — logged the
+  moment it was said; ONE clarifying question asked 13:56 (push-notified). Conductor's reading, proposed
+  as the recommended option: a **self-test door** (`POST /api/selftest` for staff + `/settings` ▸ **Run
+  the self-test**, and the same check at every boot logging one line) that, inside the running bot and
+  against the REAL guild, renders every panel's root card, runs every dashboard read, and checks every
+  configured channel/role still resolves with the permissions each feature needs — sending nothing; plus
+  a **`tests/live/`** pytest suite against the deployed API (skipped unless `BLACK_BLOC_LIVE_URL` and the
+  operator token's env NAME are set) that round-trips every route on marked test records. What no API
+  can do: synthesise a Discord click — button/modal handlers stay under the 5002 pytest fakes; only the
+  layout in the Discord client needs a person. Waiting on the owner's answer before designing.
 - **Cutover, at your pace** — [`info/cutover-plan.md`](info/cutover-plan.md): prerequisites P1–P5 (channel rename, staff channel, TEST_MODE lift — the lift is yours alone), then the per-feature ladder.
 - **Test sweep — the whole list lives in [`access/sweeps.md`](access/sweeps.md)** (37 rows in priority order + the detailed phase 1–8a scripts; it is the ONE home for what a person has not yet exercised).
 - ~~Twitch developer app~~ **ALREADY DONE — stale line caught by the owner
