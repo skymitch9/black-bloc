@@ -9,7 +9,13 @@ import discord
 
 from .events import clamp, slugify
 from .golive import parse_ts
-from .settings_store import CHANNEL_MODE, THREAD_MODE
+from .settings_store import (
+    CHANNEL_MODE,
+    MODMAIL_BOTH,
+    MODMAIL_BUTTONS,
+    MODMAIL_TYPING,
+    THREAD_MODE,
+)
 from .timezones import stamp
 
 IN = "in"
@@ -46,6 +52,8 @@ TOPIC_TEMPLATE = "Black Bloc modmail | user {user_id} | ticket {ticket_id}"
 TOPIC_PATTERN = re.compile(r"Black Bloc modmail \| user (\d+) \| ticket (\d+)")
 THREAD_NAME_TEMPLATE = "{name} · #{ticket_id}"
 TRANSCRIPT_NAME = "modmail-ticket-{ticket_id}.txt"
+PRACTICE_TRANSCRIPT_NAME = "modmail-practice-ticket-{ticket_id}.txt"
+PRACTICE_MARK = "PRACTICE — a fake ticket. Nothing in it reached a member and no DM was sent."
 NO_TEXT = "(no text)"
 
 SNIPPET_NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,39}$")
@@ -267,10 +275,12 @@ def transcript_text(
     closed_at: Any = None,
     closed_by: Any = None,
     reason: Any = None,
+    practice: bool = False,
 ) -> str:
     """The whole ticket as plain text, chronological, notes marked, attachments as links."""
     counts = count_directions(rows)
-    head = [
+    head = [PRACTICE_MARK] if practice else []
+    head += [
         f"Black Bloc modmail transcript — ticket #{ticket_id}",
         f"Server: {guild_name}",
         f"Member: {user_label} ({user_id})",
@@ -290,8 +300,9 @@ def transcript_text(
     return clamp_bytes("\n".join(head + body) + "\n")
 
 
-def transcript_filename(ticket_id: Any) -> str:
-    return TRANSCRIPT_NAME.format(ticket_id=ticket_id)
+def transcript_filename(ticket_id: Any, *, practice: bool = False) -> str:
+    name = PRACTICE_TRANSCRIPT_NAME if practice else TRANSCRIPT_NAME
+    return name.format(ticket_id=ticket_id)
 
 
 def transcript_embed(
@@ -305,11 +316,12 @@ def transcript_embed(
     closed_at: Any = None,
     closed_by: Any = None,
     reason: Any = None,
+    practice: bool = False,
 ) -> discord.Embed:
     """The summary that sits next to the transcript file in the log channel."""
     tally = counts or dict.fromkeys(DIRECTIONS, 0)
     embed = discord.Embed(
-        title=f"Ticket #{ticket_id} closed",
+        title=f"{'Practice ticket' if practice else 'Ticket'} #{ticket_id} closed",
         description=f"<@{int(user_id)}> — {clamp(user_label, NAME_LIMIT)}",
         colour=COLOURS[NOTE],
     )
@@ -326,6 +338,8 @@ def transcript_embed(
         value=f"{tally.get(IN, 0)} in · {tally.get(OUT, 0)} out · {tally.get(NOTE, 0)} note(s)",
         inline=False,
     )
+    if practice:
+        embed.add_field(name="Practice", value=PRACTICE_MARK, inline=False)
     if reason:
         embed.add_field(name="Reason", value=clamp(reason, FIELD_LIMIT), inline=False)
     embed.set_footer(text=f"user {int(user_id)}")
@@ -377,6 +391,7 @@ PICK_A_BLOCK = "Somebody…"
 PICK_A_SNIPPET = "A snippet…"
 PICK_A_PLACE = "Which place to forget…"
 PICK_A_MODE = "How new tickets are made…"
+PICK_A_REPLY_STYLE = "How staff answer a ticket…"
 PICK_A_CHANNEL = "Pick a channel…"
 PICK_A_CATEGORY = "Pick a category…"
 PICK_SOMEBODY = "Who to block…"
@@ -392,6 +407,9 @@ BLOCKED_MOVE = "blocked"
 SNIPPETS = "snippets"
 FORGET = "forget"
 LOGS = "logs"
+PRACTICE = "practice"
+PRACTICE_YES = "practice_yes"
+PRACTICE_NO = "practice_no"
 REFRESH = "refresh"
 SITE = "site"
 BACK = "back"
@@ -399,6 +417,7 @@ CATEGORY = "category"
 STAFF_CHANNEL = "staff_channel"
 TRANSCRIPTS = "transcripts"
 MODE = "mode"
+REPLY_STYLE = "reply_style"
 ENABLE = "enable"
 DISABLE = "disable"
 UNBLOCK = "unblock"
@@ -423,6 +442,9 @@ SETUP_MOVE = ModmailMove(SETUP, "Setup…", "secondary", 1)
 BLOCKED_MOVE_BUTTON = ModmailMove(BLOCKED_MOVE, "Blocked…", "secondary", 1)
 SNIPPETS_MOVE = ModmailMove(SNIPPETS, "Snippets…", "secondary", 1)
 FORGET_MOVE = ModmailMove(FORGET, "Forget…", "secondary", 1)
+PRACTICE_MOVE = ModmailMove(PRACTICE, "Try a fake ticket", "secondary", 1)
+PRACTICE_YES_MOVE = ModmailMove(PRACTICE_YES, "Yes, open one", "primary", 1)
+PRACTICE_NO_MOVE = ModmailMove(PRACTICE_NO, "No", "secondary", 1)
 LOGS_MOVE = ModmailMove(LOGS, "Logs", "secondary", 2)
 REFRESH_MOVE = ModmailMove(REFRESH, "Refresh", "secondary", 2)
 SITE_MOVE = ModmailMove(SITE, "Open on the site", "link", 2)
@@ -433,6 +455,7 @@ TRANSCRIPTS_MOVE = ModmailMove(TRANSCRIPTS, "Transcripts…", "secondary", 1)
 MODE_MOVE = ModmailMove(MODE, "Mode…", "secondary", 1)
 ANSWER_ON_MOVE = ModmailMove(ENABLE, "Answer DMs on", "primary", 1)
 ANSWER_OFF_MOVE = ModmailMove(DISABLE, "Answer DMs off", "secondary", 1)
+REPLY_STYLE_MOVE = ModmailMove(REPLY_STYLE, "Reply style…", "secondary", 2)
 SETUP_BACK_MOVE = ModmailMove(BACK, "Back", "secondary", 2)
 SETUP_REFRESH_MOVE = ModmailMove(REFRESH, "Refresh", "secondary", 2)
 
@@ -458,6 +481,9 @@ PANEL_MOVES = (
     BLOCKED_MOVE_BUTTON,
     SNIPPETS_MOVE,
     FORGET_MOVE,
+    PRACTICE_MOVE,
+    PRACTICE_YES_MOVE,
+    PRACTICE_NO_MOVE,
     LOGS_MOVE,
     REFRESH_MOVE,
     SITE_MOVE,
@@ -467,6 +493,7 @@ PANEL_MOVES = (
     MODE_MOVE,
     ANSWER_ON_MOVE,
     ANSWER_OFF_MOVE,
+    REPLY_STYLE_MOVE,
     SETUP_BACK_MOVE,
     SETUP_REFRESH_MOVE,
     UNBLOCK_MOVE,
@@ -486,11 +513,21 @@ PANEL_MOVES = (
 )
 
 
-def root_buttons(*, has_forget: bool, has_site: bool) -> tuple[ModmailMove, ...]:
+def root_buttons(
+    *,
+    has_forget: bool,
+    has_site: bool,
+    has_practice: bool = False,
+    confirming: bool = False,
+) -> tuple[ModmailMove, ...]:
     """Forget… is drawn only where something is pointed, so it can never answer 'nothing to do'."""
+    if confirming:
+        return (PRACTICE_YES_MOVE, PRACTICE_NO_MOVE)
     found = [SETUP_MOVE, BLOCKED_MOVE_BUTTON, SNIPPETS_MOVE]
     if has_forget:
         found.append(FORGET_MOVE)
+    if has_practice:
+        found.append(PRACTICE_MOVE)
     found += [LOGS_MOVE, REFRESH_MOVE]
     if has_site:
         found.append(SITE_MOVE)
@@ -505,6 +542,7 @@ def setup_buttons(*, enabled: bool) -> tuple[ModmailMove, ...]:
         TRANSCRIPTS_MOVE,
         MODE_MOVE,
         ANSWER_OFF_MOVE if enabled else ANSWER_ON_MOVE,
+        REPLY_STYLE_MOVE,
         SETUP_BACK_MOVE,
         SETUP_REFRESH_MOVE,
     )
@@ -564,3 +602,121 @@ def panel_minutes(store: Any, guild_id: int) -> int:
     from .panels import panel_minutes as _minutes
 
     return _minutes(store, guild_id, PANEL_MINUTES_KEY)
+
+
+CARD_REPLY = "card_reply"
+CARD_ANON = "card_areply"
+CARD_NOTE = "card_note"
+CARD_CLOSE = "card_close"
+CARD_SPEAK = "card_speak"
+CARD_END = "card_end"
+
+CARD_TITLE = "Ticket #{ticket_id}"
+CARD_PRACTICE_TITLE = "Practice ticket #{ticket_id}"
+CARD_BLOCKED_LINE = "⚠️ **They are blocked** — a new ticket cannot be opened after this one."
+CARD_PRACTICE_LINE = (
+    "This ticket is **practice**. Nothing here reaches a member: no DM is sent and no reply "
+    "leaves Discord. **End the practice** closes it and files a transcript marked PRACTICE."
+)
+CARD_COUNTS = "**messages** — {inbound} from them · {outbound} sent · {notes} note(s)"
+
+
+class CardMove(NamedTuple):
+    action: str
+    label: str
+    style: str = "secondary"
+    row: int = 0
+
+
+REPLY_MOVE = CardMove(CARD_REPLY, "Reply", "primary", 0)
+ANON_MOVE = CardMove(CARD_ANON, "Reply as Staff", "secondary", 0)
+CARD_NOTE_MOVE = CardMove(CARD_NOTE, "Private note", "secondary", 0)
+CARD_CLOSE_MOVE = CardMove(CARD_CLOSE, "Close…", "danger", 0)
+SPEAK_MOVE = CardMove(CARD_SPEAK, "Speak as the member", "secondary", 1)
+END_MOVE = CardMove(CARD_END, "End the practice", "danger", 1)
+
+CARD_MOVES = (REPLY_MOVE, ANON_MOVE, CARD_NOTE_MOVE, CARD_CLOSE_MOVE, SPEAK_MOVE, END_MOVE)
+CARD_ROW_LIMIT = 5
+
+
+def card_buttons(*, practice: bool) -> tuple[CardMove, ...]:
+    """The four moves every open ticket has, plus the two only a practice ticket can offer."""
+    found = [REPLY_MOVE, ANON_MOVE, CARD_NOTE_MOVE, CARD_CLOSE_MOVE]
+    if practice:
+        found += [SPEAK_MOVE, END_MOVE]
+    return tuple(found)
+
+
+REPLY_STYLE_KEY = "modmail_reply_style"
+REPLY_STYLE_OPTIONS = {
+    MODMAIL_BUTTONS: "only the card's Reply and /reply reach the member",
+    MODMAIL_TYPING: "a plain message in a ticket is relayed, as it always has been",
+    MODMAIL_BOTH: "both — today's behaviour, with the card added",
+}
+REPLY_STYLE_SET = "Staff answer tickets by **{style}** from now on. {what}"
+REPLY_STYLE_WORDS = {
+    MODMAIL_BUTTONS: (
+        "A message typed in a ticket now stays in the ticket — only the card's **Reply** and "
+        "`/reply` reach the member."
+    ),
+    MODMAIL_TYPING: (
+        "⚠️ From now on, anything staff type in a ticket goes to the member. The card's buttons "
+        "still work."
+    ),
+    MODMAIL_BOTH: (
+        "⚠️ From now on, anything staff type in a ticket goes to the member, and the card's "
+        "buttons work too."
+    ),
+}
+
+
+def relays_typing(style: Any) -> bool:
+    """`buttons` is the only style that stops a typed message reaching the member."""
+    return str(style or MODMAIL_BOTH) != MODMAIL_BUTTONS
+
+
+def reply_style_sentence(style: str) -> str:
+    return REPLY_STYLE_SET.format(style=style, what=REPLY_STYLE_WORDS.get(style, ""))
+
+
+def picked_values(picker: Any) -> list[str]:
+    """2.7.1's modal groups answer with `values`; a radio answers with `value`."""
+    values = getattr(picker, "values", None)
+    if values is not None:
+        return [str(one) for one in values]
+    one = getattr(picker, "value", None)
+    return [str(one)] if one else []
+
+
+def is_practice(ticket: Any) -> bool:
+    return bool(field_of(ticket, "practice", 0))
+
+
+def ticket_card_lines(ticket: Any, counts: Any = None, *, label: Any = None, blocked: bool = False):
+    tally = counts or dict.fromkeys(DIRECTIONS, 0)
+    lines = [
+        f"<@{int(ticket['user_id'])}> — {clamp(label or ticket['user_id'], NAME_LIMIT)}",
+        f"**opened** — {ticket['opened_at']}",
+        f"**mode** — {ticket['mode']}",
+        CARD_COUNTS.format(
+            inbound=tally.get(IN, 0), outbound=tally.get(OUT, 0), notes=tally.get(NOTE, 0)
+        ),
+    ]
+    if blocked:
+        lines.append(CARD_BLOCKED_LINE)
+    if is_practice(ticket):
+        lines.append(CARD_PRACTICE_LINE)
+    return lines
+
+
+def ticket_card_embed(
+    ticket: Any, counts: Any = None, *, label: Any = None, blocked: bool = False
+) -> discord.Embed:
+    """The controls' own embed — the header card upstairs is the dossier, this is the state."""
+    practice = is_practice(ticket)
+    title = (CARD_PRACTICE_TITLE if practice else CARD_TITLE).format(ticket_id=ticket["id"])
+    return discord.Embed(
+        title=title,
+        description="\n".join(ticket_card_lines(ticket, counts, label=label, blocked=blocked)),
+        colour=COLOURS[NOTE] if practice else COLOURS[IN],
+    )

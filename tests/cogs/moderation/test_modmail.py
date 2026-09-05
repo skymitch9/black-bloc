@@ -76,7 +76,37 @@ class FakeMessage:
         self.reactions.append(emoji)
 
 
-class FakeThread:
+class FakePartialMessage:
+    def __init__(self, channel, message_id):
+        self.channel = channel
+        self.id = message_id
+
+    async def delete(self):
+        found = [one for one in self.channel.messages if one.id == self.id]
+        if not found:
+            raise discord.NotFound(_Response(404), "gone")
+        self.channel.messages.remove(found[0])
+        self.channel.deleted_messages.append(self.id)
+
+
+class Speaks:
+    """The half of a channel or thread the card exercises: send, look up, delete by id."""
+
+    def get_partial_message(self, message_id):
+        return FakePartialMessage(self, message_id)
+
+    async def fetch_message(self, message_id):
+        for one in self.messages:
+            if one.id == message_id:
+                return one
+        raise discord.NotFound(_Response(404), "gone")
+
+    def next_message_id(self):
+        self._last_message_id = getattr(self, "_last_message_id", 0) + 1
+        return self._last_message_id
+
+
+class FakeThread(Speaks):
     def __init__(self, thread_id, parent, name, **kwargs):
         self.id = thread_id
         self.parent = parent
@@ -85,12 +115,13 @@ class FakeThread:
         self.name = name
         self.kwargs = kwargs
         self.messages = []
+        self.deleted_messages = []
         self.archived = False
         self.locked = False
         self.deleted = False
 
     async def send(self, content=None, **kwargs):
-        message = FakeMessage(len(self.messages) + 1, content or "", self, **kwargs)
+        message = FakeMessage(self.next_message_id(), content or "", self, **kwargs)
         self.messages.append(message)
         return message
 
@@ -102,7 +133,7 @@ class FakeThread:
         self.deleted = True
 
 
-class FakeText:
+class FakeText(Speaks):
     def __init__(self, channel_id, guild=None, category=None, name="channel", topic=None):
         self.id = channel_id
         self.guild = guild
@@ -113,6 +144,7 @@ class FakeText:
         self.category_id = category.id if category else None
         self.visible_to = set()
         self.messages = []
+        self.deleted_messages = []
         self.threads = []
         self.deleted = False
         self.send_raises = None
@@ -124,7 +156,7 @@ class FakeText:
     async def send(self, content=None, **kwargs):
         if self.send_raises is not None:
             raise self.send_raises
-        message = FakeMessage(len(self.messages) + 1, content or "", self, **kwargs)
+        message = FakeMessage(self.next_message_id(), content or "", self, **kwargs)
         self.messages.append(message)
         return message
 
@@ -219,8 +251,20 @@ class FakeGuard:
     def __init__(self, test_channel_id=TEST_CHANNEL, dm_ids=(8000,)):
         self.test_channel_id = test_channel_id
         self.dm_ids = set(dm_ids)
+        self.owned_channel_ids = set()
+
+    def own_channel(self, channel):
+        self.owned_channel_ids.add(getattr(channel, "id", channel))
+
+    def disown_channel(self, channel):
+        self.owned_channel_ids.discard(getattr(channel, "id", channel))
+
+    def owns_channel(self, channel):
+        return getattr(channel, "id", channel) in self.owned_channel_ids
 
     def allows_channel(self, channel_id):
+        if channel_id in self.owned_channel_ids:
+            return True
         return channel_id == self.test_channel_id or channel_id in self.dm_ids
 
     def refusal_message(self):
@@ -236,6 +280,10 @@ class FakeBot:
         self.guilds = [guild]
         self.guild = guild
         self.users = {}
+        self.dynamic = []
+
+    def add_dynamic_items(self, *items):
+        self.dynamic.extend(items)
 
     def get_channel(self, channel_id):
         return self.guild.channels.get(channel_id) or self.guild.threads.get(channel_id)
@@ -397,7 +445,11 @@ async def bot(db, monkeypatch):
     guild.add(FakeText(LOG_CHANNEL, name="log"))
     test_channel = guild.add(FakeText(TEST_CHANNEL, category=category, name="test"))
     test_channel.visible_to = {STAFF_ROLE}
-    return FakeBot(db, store, settings, guild)
+    made = FakeBot(db, store, settings, guild)
+    try:
+        yield made
+    finally:
+        modmail_cog.cancel_cards(made)
 
 
 @pytest.fixture
@@ -702,10 +754,15 @@ async def test_reply_from_the_test_channel_finds_the_only_open_ticket(cog, bot, 
 
 
 async def test_an_anonymous_reply_never_names_the_staff_member(cog, bot, member, lead, db):
+    """`/areply` retired into the card's **Reply as Staff**; the embed is byte-identical."""
     ticket = await open_one(cog, bot, member)
-    interaction = FakeInteraction(bot, lead)
+    lead.roles = [FakeRole(STAFF_ROLE)]
+    card = await card_for(cog, bot, ticket)
 
-    await cog.areply.callback(cog, interaction, text="from the team")
+    opened = await press_card(bot, lead, card, "Reply as Staff")
+    modal = opened.response.modals[-1]
+    modal.text._value = "from the team"
+    await modal.on_submit(FakeInteraction(bot, lead))
 
     embed = member.dms[-1]["embed"]
     assert embed.author.name == "Staff" and embed.footer.text is None
@@ -753,19 +810,6 @@ async def test_an_unknown_snippet_sends_nothing(cog, bot, member, lead):
     await cog.reply.callback(cog, interaction, snippet="nope")
 
     assert "no snippet called" in interaction.sent
-
-
-async def test_the_note_command_records_a_note_and_never_dms(cog, bot, member, lead, db):
-    ticket = await open_one(cog, bot, member)
-    before = len(member.dms)
-    interaction = FakeInteraction(bot, lead)
-
-    await cog.note.callback(cog, interaction, text="prior warnings", ticket=str(ticket["id"]))
-
-    rows = await ticket_messages(db, ticket["id"])
-    assert rows[-1]["direction"] == NOTE and rows[-1]["content"] == "prior warnings"
-    assert len(member.dms) == before
-    assert "never sees it" in interaction.sent
 
 
 async def test_naming_a_ticket_that_is_not_a_number_is_refused(cog, bot, member, lead):
@@ -830,9 +874,8 @@ async def test_closing_files_a_transcript_deletes_the_channel_and_tells_the_memb
     channel = bot.guild.get_channel(ticket["channel_id"])
     lead.roles = [FakeRole(STAFF_ROLE)]
     await cog.on_message(guild_message(channel, lead, "sorted for you"))
-    interaction = FakeInteraction(bot, lead)
 
-    await cog.close.callback(cog, interaction, reason="sorted")
+    interaction = await close_from_card(cog, bot, lead, ticket, reason="sorted")
 
     row = await get_ticket(db, ticket["id"])
     assert row["status"] == "closed" and row["close_reason"] == "sorted"
@@ -854,7 +897,7 @@ async def test_a_silent_close_files_the_transcript_without_dming_anybody(
     ticket = await open_one(cog, bot, member)
     before = len(member.dms)
 
-    await cog.close.callback(cog, FakeInteraction(bot, lead), reason="spam", silent=True)
+    await close_from_card(cog, bot, lead, ticket, reason="spam", silent=True)
 
     assert (await get_ticket(db, ticket["id"]))["status"] == "closed"
     assert len(member.dms) == before
@@ -864,18 +907,18 @@ async def test_closing_a_ticket_twice_tells_the_second_staffer_rather_than_closi
     cog, bot, member, lead, db
 ):
     ticket = await open_one(cog, bot, member)
-    await cog.close.callback(cog, FakeInteraction(bot, lead), reason="one")
-    second = FakeInteraction(bot, lead)
+    card = await card_for(cog, bot, ticket)
+    await close_from_card(cog, bot, lead, ticket, reason="one", card=card)
 
-    await cog.close.callback(cog, second, ticket=str(ticket["id"]))
+    second = await press_card(bot, lead, card, "Close…")
 
-    assert "already closed" in second.sent
+    assert second.response.modals == [] and "already closed" in second.sent
     assert (await get_ticket(db, ticket["id"]))["close_reason"] == "one"
 
 
 async def test_a_closed_ticket_frees_the_member_to_open_another(cog, bot, member, lead, db):
     first = await open_one(cog, bot, member)
-    await cog.close.callback(cog, FakeInteraction(bot, lead), reason="done")
+    await close_from_card(cog, bot, lead, first, reason="done")
 
     await cog.on_message(dm_from(member, "hello again"))
 
@@ -889,9 +932,8 @@ async def test_a_transcript_the_guard_would_refuse_is_a_would_not_a_failure(
 ):
     ticket = await open_one(cog, bot, member)
     await bot.store.set(GUILD, "modmail_log_channel_id", LOG_CHANNEL)
-    interaction = FakeInteraction(bot, lead)
 
-    await cog.close.callback(cog, interaction, reason="sorted")
+    interaction = await close_from_card(cog, bot, lead, ticket, reason="sorted")
 
     kinds = await action_kinds(db)
     assert "modmail.would_post_transcript" in kinds
@@ -907,7 +949,7 @@ async def test_a_thread_ticket_is_archived_and_locked_not_deleted(cog, bot, memb
     ticket = await open_ticket_for(db, GUILD, member.id)
     thread = bot.guild.threads[ticket["thread_id"]]
 
-    await cog.close.callback(cog, FakeInteraction(bot, lead), reason="done")
+    await close_from_card(cog, bot, lead, ticket, reason="done")
 
     assert thread.archived is True and thread.locked is True and thread.deleted is False
 
@@ -1276,7 +1318,7 @@ async def test_a_reply_the_member_never_got_is_marked_undelivered_in_the_transcr
     assert rows[-1]["delivered"] == 0
 
     member.dm_raises = None
-    await cog.close.callback(cog, FakeInteraction(bot, lead), reason="no answer")
+    await close_from_card(cog, bot, lead, ticket, reason="no answer")
 
     body = bot.guild.channels[TEST_CHANNEL].messages[-1].kwargs["file"].fp.getvalue().decode()
     assert UNDELIVERED_MARK in body
@@ -1288,9 +1330,8 @@ async def test_a_transcript_that_could_not_be_filed_keeps_the_ticket_channel(
     ticket = await open_one(cog, bot, member)
     channel = bot.guild.get_channel(ticket["channel_id"])
     await bot.store.set(GUILD, "modmail_log_channel_id", LOG_CHANNEL)
-    interaction = FakeInteraction(bot, lead)
 
-    await cog.close.callback(cog, interaction, reason="sorted")
+    interaction = await close_from_card(cog, bot, lead, ticket, reason="sorted")
 
     assert channel.deleted is False
     assert (await get_ticket(db, ticket["id"]))["status"] == "closed"
@@ -1522,6 +1563,637 @@ async def test_a_message_that_starts_by_mentioning_the_bot_is_not_a_reply(
 
     assert len(await ticket_messages(db, ticket["id"])) == 1
     assert len(member.dms) == before
+
+
+# --- the sticky ticket card ------------------------------------------------------------------
+
+
+CARD_LABELS = ["Reply", "Reply as Staff", "Private note", "Close…"]
+
+
+def cards_in(channel):
+    return [one for one in channel.messages if one.kwargs.get("view") is not None]
+
+
+async def card_for(cog, bot, ticket):
+    modmail_cog.cancel_cards(bot)
+    return await modmail_cog.refresh_card(bot, bot.guild, ticket["id"])
+
+
+def choose_snippet(picker, name):
+    """A RadioGroup answers with `value`; a Select answers with `values`."""
+    if hasattr(picker, "values"):
+        picker._values = [name]
+    else:
+        picker._value = name
+
+
+async def quick_cards(monkeypatch, debounce=0.05):
+    """The real debounce with the clock wound down — the coalescing is what is under test."""
+    monkeypatch.setattr(modmail_cog, "CARD_DEBOUNCE_SECONDS", debounce)
+    monkeypatch.setattr(modmail_cog, "CARD_MIN_GAP_SECONDS", 0.0)
+
+
+async def close_from_card(cog, bot, lead, ticket, reason=None, silent=False, card=None):
+    """`/close` retired into the card, so every close test presses the button instead."""
+    lead.roles = [FakeRole(STAFF_ROLE)]
+    on = card if card is not None else await card_for(cog, bot, ticket)
+    opened = await press_card(bot, lead, on, "Close…")
+    modal = opened.response.modals[-1]
+    modal.reason._value = reason or ""
+    if silent:
+        modal.quiet._values = ["silent"]
+    closed = FakeInteraction(bot, lead)
+    await modal.on_submit(closed)
+    return closed
+
+
+async def press_card(bot, who, message, label, channel=None):
+    view = message.kwargs["view"]
+    item = next(one for one in view.children if one.item.label == label)
+    interaction = FakeInteraction(bot, who, channel=channel)
+    await item.callback(interaction)
+    return interaction
+
+
+async def test_the_card_carries_the_four_moves_and_lands_last(cog, bot, member, db):
+    ticket = await open_one(cog, bot, member)
+
+    message = await card_for(cog, bot, ticket)
+
+    assert message is bot.guild.channels[TEST_CHANNEL].messages[-1]
+    labels_on = [one.item.label for one in message.kwargs["view"].children]
+    assert labels_on == CARD_LABELS
+    assert message.kwargs["embed"].title == "Ticket #1"
+    assert (await get_ticket(db, ticket["id"]))["card_message_id"] == message.id
+
+
+async def test_a_member_message_moves_the_card_to_the_bottom(
+    cog, bot, member, db, monkeypatch
+):
+    await quick_cards(monkeypatch)
+    ticket = await open_one(cog, bot, member)
+    first = await card_for(cog, bot, ticket)
+    channel = bot.guild.channels[TEST_CHANNEL]
+
+    await cog.on_message(dm_from(member, "still waiting"))
+    await modmail_cog.settle_cards(bot)
+
+    assert first.id in channel.deleted_messages
+    assert len(cards_in(channel)) == 1
+    assert channel.messages[-1] is cards_in(channel)[0]
+    assert (await get_ticket(db, ticket["id"]))["card_message_id"] == channel.messages[-1].id
+
+
+async def test_the_new_card_id_is_written_before_the_old_card_is_deleted(
+    cog, bot, member, db, monkeypatch
+):
+    """Checklist 12: a failed delete leaves two working cards; a failed write leaves an orphan."""
+    ticket = await open_one(cog, bot, member)
+    first = await card_for(cog, bot, ticket)
+    seen = []
+    real = modmail_cog.drop_old_card
+
+    async def watched(bot_, guild, row, channel, old_id):
+        seen.append((await get_ticket(db, row["id"]))["card_message_id"])
+        await real(bot_, guild, row, channel, old_id)
+
+    monkeypatch.setattr(modmail_cog, "drop_old_card", watched)
+
+    second = await card_for(cog, bot, ticket)
+
+    assert seen == [second.id] and second.id != first.id
+
+
+async def test_a_delete_the_guard_refuses_is_a_shadow_row_and_not_a_failure(
+    cog, bot, member, db, monkeypatch
+):
+    ticket = await open_one(cog, bot, member)
+    first = await card_for(cog, bot, ticket)
+    bot.guard = FakeGuard(test_channel_id=0)
+    monkeypatch.setattr(modmail_cog, "test_channel", lambda _bot: None)
+
+    await modmail_cog.drop_old_card(
+        bot, bot.guild, ticket, bot.guild.channels[TEST_CHANNEL], first.id
+    )
+
+    kinds = await action_kinds(db)
+    assert "modmail.would_replace_card" in kinds
+    assert "modmail.card_failed" not in kinds
+    assert first.id not in bot.guild.channels[TEST_CHANNEL].deleted_messages
+
+
+async def test_a_card_that_cannot_be_posted_says_so_once(cog, bot, member, db):
+    ticket = await open_one(cog, bot, member)
+    bot.guild.channels[TEST_CHANNEL].send_raises = refused()
+
+    assert await modmail_cog.refresh_card(bot, bot.guild, ticket["id"]) is None
+    kinds = await action_kinds(db)
+    assert kinds.count("modmail.card_failed") == 1
+    assert (await get_ticket(db, ticket["id"]))["card_message_id"] is None
+
+
+async def test_a_burst_of_messages_coalesces_into_one_card_move(
+    cog, bot, member, db, monkeypatch
+):
+    """The debounce is what stops five DMs costing fifteen calls; the clock is not waited on."""
+    monkeypatch.setattr(modmail_cog, "CARD_DEBOUNCE_SECONDS", 30.0)
+    ticket = await open_one(cog, bot, member)
+    await card_for(cog, bot, ticket)
+    channel = bot.guild.channels[TEST_CHANNEL]
+    before = len(channel.deleted_messages)
+
+    for _ in range(5):
+        await cog.on_message(dm_from(member, "hello?"))
+
+    assert list(modmail_cog.card_clock(bot)["tasks"]) == [ticket["id"]]
+    assert len(channel.deleted_messages) == before
+
+    modmail_cog.cancel_cards(bot)
+    await modmail_cog.refresh_card(bot, bot.guild, ticket["id"])
+
+    assert len(cards_in(channel)) == 1
+    assert len(channel.deleted_messages) == before + 1
+
+
+async def test_a_write_that_lands_mid_post_is_not_dropped(cog, bot, member, db, monkeypatch):
+    """F-M1 (a) promises the card is LAST. A bump arriving while the post is in flight used to
+    hit the pending-task guard and vanish; it now marks the ticket dirty and goes round again."""
+    monkeypatch.setattr(modmail_cog, "CARD_DEBOUNCE_SECONDS", 0.0)
+    monkeypatch.setattr(modmail_cog, "CARD_MIN_GAP_SECONDS", 0.0)
+    ticket = await open_one(cog, bot, member)
+    await card_for(cog, bot, ticket)
+    channel = bot.guild.channels[TEST_CHANNEL]
+    before = len(channel.deleted_messages)
+    real = modmail_cog.refresh_card
+    interrupted = []
+
+    async def bumps_while_posting(client, guild, ticket_id):
+        if not interrupted:
+            await modmail_cog.bump_card(client, guild, await get_ticket(db, ticket_id))
+            interrupted.append(sorted(modmail_cog.card_clock(client)["dirty"]))
+        return await real(client, guild, ticket_id)
+
+    monkeypatch.setattr(modmail_cog, "refresh_card", bumps_while_posting)
+
+    await modmail_cog.bump_card(bot, bot.guild, ticket)
+    await modmail_cog.settle_cards(bot)
+
+    assert interrupted == [[ticket["id"]]]
+    assert len(channel.deleted_messages) == before + 2
+    assert len(cards_in(channel)) == 1
+    assert channel.messages[-1] is cards_in(channel)[0]
+    assert (await get_ticket(db, ticket["id"]))["card_message_id"] == channel.messages[-1].id
+    assert modmail_cog.card_clock(bot)["dirty"] == set()
+    assert modmail_cog.card_clock(bot)["tasks"] == {}
+
+
+def test_the_card_clock_holds_a_ticket_to_its_floor_between_two_posts():
+    clock = {"tasks": {}, "last": {}}
+
+    assert modmail_cog.card_wait(clock, 1, 100.0) == modmail_cog.CARD_DEBOUNCE_SECONDS
+    clock["last"][1] = 100.0
+    assert modmail_cog.card_wait(clock, 1, 101.0) == modmail_cog.CARD_MIN_GAP_SECONDS - 1.0
+    assert modmail_cog.card_wait(clock, 1, 140.0) == modmail_cog.CARD_DEBOUNCE_SECONDS
+
+
+async def test_the_reconciler_gives_an_open_ticket_a_card_after_a_restart(cog, bot, member, db):
+    ticket = await open_one(cog, bot, member)
+    assert (await get_ticket(db, ticket["id"]))["card_message_id"] is None
+
+    await cog.reconcile_tickets()
+
+    card_id = (await get_ticket(db, ticket["id"]))["card_message_id"]
+    assert card_id is not None
+    channel = bot.guild.channels[TEST_CHANNEL]
+    assert [one.id for one in cards_in(channel)] == [card_id]
+
+
+async def test_the_reconciler_replaces_a_card_a_staffer_deleted_by_hand(cog, bot, member, db):
+    ticket = await open_one(cog, bot, member)
+    first = await card_for(cog, bot, ticket)
+    channel = bot.guild.channels[TEST_CHANNEL]
+    channel.messages.remove(first)
+
+    await cog.reconcile_tickets()
+
+    fresh = (await get_ticket(db, ticket["id"]))["card_message_id"]
+    assert fresh is not None and fresh != first.id
+
+
+async def test_the_reconciler_leaves_a_card_that_is_still_there_alone(cog, bot, member, db):
+    ticket = await open_one(cog, bot, member)
+    first = await card_for(cog, bot, ticket)
+
+    await cog.reconcile_tickets()
+
+    assert (await get_ticket(db, ticket["id"]))["card_message_id"] == first.id
+    assert len(cards_in(bot.guild.channels[TEST_CHANNEL])) == 1
+
+
+async def test_closing_a_ticket_takes_its_card_with_it(cog, bot, member, lead, db):
+    await live(bot)
+    await cog.on_message(dm_from(member))
+    ticket = await open_ticket_for(db, GUILD, member.id)
+    await bot.store.set(GUILD, "modmail_mode", THREAD_MODE)
+    channel = bot.guild.get_channel(ticket["channel_id"])
+    first = await card_for(cog, bot, ticket)
+
+    await close_from_card(cog, bot, lead, ticket, reason="done", card=first)
+
+    assert first.id in channel.deleted_messages
+    assert (await get_ticket(db, ticket["id"]))["card_message_id"] is None
+
+
+async def test_the_card_reply_button_sends_what_the_modal_carries(cog, bot, member, lead, db):
+    ticket = await open_one(cog, bot, member)
+    lead.roles = [FakeRole(STAFF_ROLE)]
+    card = await card_for(cog, bot, ticket)
+
+    opened = await press_card(bot, lead, card, "Reply")
+    modal = opened.response.modals[-1]
+    modal.text._value = "we are on it"
+    sent = FakeInteraction(bot, lead)
+    await modal.on_submit(sent)
+
+    assert member.dms[-1]["embed"].description == "we are on it"
+    assert "Sent to the member" in sent.sent
+    rows = await ticket_messages(db, ticket["id"])
+    assert rows[-1]["direction"] == OUT and rows[-1]["anonymous"] == 0
+    kinds = await action_kinds(db)
+    assert kinds.count("modmail.reply") == 1
+
+
+async def test_the_cards_reply_modal_combines_the_snippet_and_the_typed_text(
+    cog, bot, member, lead, db
+):
+    """F-M7 (a): byte-identical to `/reply text: snippet:` — the snippet first, then the words."""
+    ticket = await open_one(cog, bot, member)
+    lead.roles = [FakeRole(STAFF_ROLE)]
+    await modmail_cog.put_snippet(bot, bot.guild, lead, "appeal", "Appeals go to a Lead.")
+    card = await card_for(cog, bot, ticket)
+
+    opened = await press_card(bot, lead, card, "Reply")
+    modal = opened.response.modals[-1]
+    modal.text._value = "and here is why"
+    choose_snippet(modal.picker, "appeal")
+    await modal.on_submit(FakeInteraction(bot, lead))
+
+    assert member.dms[-1]["embed"].description == "Appeals go to a Lead.\n\nand here is why"
+
+
+async def test_an_empty_card_reply_sends_nothing(cog, bot, member, lead):
+    ticket = await open_one(cog, bot, member)
+    lead.roles = [FakeRole(STAFF_ROLE)]
+    card = await card_for(cog, bot, ticket)
+    before = len(member.dms)
+
+    opened = await press_card(bot, lead, card, "Reply")
+    modal = opened.response.modals[-1]
+    modal.text._value = ""
+    sent = FakeInteraction(bot, lead)
+    await modal.on_submit(sent)
+
+    assert "nothing was sent" in sent.sent
+    assert len(member.dms) == before
+
+
+async def test_the_card_note_is_one_row_one_log_line_and_no_dm(cog, bot, member, lead, db):
+    ticket = await open_one(cog, bot, member)
+    lead.roles = [FakeRole(STAFF_ROLE)]
+    card = await card_for(cog, bot, ticket)
+    before = len(member.dms)
+
+    opened = await press_card(bot, lead, card, "Private note")
+    modal = opened.response.modals[-1]
+    modal.note._value = "prior warnings"
+    noted = FakeInteraction(bot, lead)
+    await modal.on_submit(noted)
+
+    rows = await ticket_messages(db, ticket["id"])
+    assert rows[-1]["direction"] == NOTE and rows[-1]["content"] == "prior warnings"
+    assert len(member.dms) == before
+    assert (await action_kinds(db)).count("modmail.note") == 1
+    assert "never sees it" in noted.sent
+
+
+async def test_the_card_close_button_closes_quietly_when_the_box_is_ticked(
+    cog, bot, member, lead, db
+):
+    ticket = await open_one(cog, bot, member)
+    lead.roles = [FakeRole(STAFF_ROLE)]
+    card = await card_for(cog, bot, ticket)
+    before = len(member.dms)
+
+    opened = await press_card(bot, lead, card, "Close…")
+    modal = opened.response.modals[-1]
+    modal.reason._value = "sorted"
+    modal.quiet._values = ["silent"]
+    closed = FakeInteraction(bot, lead)
+    await modal.on_submit(closed)
+
+    assert (await get_ticket(db, ticket["id"]))["status"] == "closed"
+    assert len(member.dms) == before
+    assert "not told" in closed.sent
+    assert (await action_kinds(db)).count("modmail.closed") == 1
+
+
+async def test_a_demoted_staffer_moves_nothing_from_the_card(cog, bot, member, lead, db):
+    ticket = await open_one(cog, bot, member)
+    card = await card_for(cog, bot, ticket)
+    lead.roles = []
+    lead.guild_permissions = FakePerms()
+
+    refused_at = await press_card(bot, lead, card, "Reply")
+
+    assert refused_at.response.modals == []
+    assert refused_at.sent is not None
+    assert (await get_ticket(db, ticket["id"]))["status"] == "open"
+
+
+async def test_a_card_whose_ticket_has_closed_says_so_rather_than_dying(cog, bot, member, lead, db):
+    ticket = await open_one(cog, bot, member)
+    lead.roles = [FakeRole(STAFF_ROLE)]
+    card = await card_for(cog, bot, ticket)
+    await modmail_cog.close_ticket(bot, bot.guild, ticket, by=lead)
+
+    pressed = await press_card(bot, lead, card, "Reply")
+
+    assert pressed.response.modals == []
+    assert "already closed" in pressed.sent
+
+
+# --- the relay gate ----------------------------------------------------------------------------
+
+
+async def typed_in_ticket(cog, bot, lead, ticket, text):
+    channel = bot.guild.get_channel(ticket["channel_id"])
+    lead.roles = [FakeRole(STAFF_ROLE)]
+    message = guild_message(channel, lead, text)
+    await cog.on_message(message)
+    return message
+
+
+@pytest.mark.parametrize("style", ["typing", "both"])
+async def test_a_typed_message_still_relays_under_typing_and_both(
+    cog, bot, member, lead, db, style
+):
+    ticket = await open_one(cog, bot, member)
+    await bot.store.set(GUILD, "modmail_reply_style", style)
+    before = len(member.dms)
+
+    await typed_in_ticket(cog, bot, lead, ticket, "we are looking into it")
+
+    assert len(member.dms) == before + 1
+    assert member.dms[-1]["embed"].description == "we are looking into it"
+    assert (await ticket_messages(db, ticket["id"]))[-1]["direction"] == OUT
+
+
+async def test_buttons_stops_the_typed_relay_dead(cog, bot, member, lead, db):
+    """The one thing `modmail_reply_style` is for: a ticket channel staff can talk in."""
+    ticket = await open_one(cog, bot, member)
+    await bot.store.set(GUILD, "modmail_reply_style", "buttons")
+    before = len(member.dms)
+
+    message = await typed_in_ticket(cog, bot, lead, ticket, "we are looking into it")
+
+    assert len(member.dms) == before
+    assert message.reactions == []
+    assert [row["direction"] for row in await ticket_messages(db, ticket["id"])] == [IN]
+    assert "modmail.reply" not in await action_kinds(db)
+
+
+@pytest.mark.parametrize("style", ["buttons", "typing", "both"])
+async def test_an_equals_note_is_a_note_in_every_style(cog, bot, member, lead, db, style):
+    """Guard lifted, so the reactions are visible: 📝 for the note whatever the style is."""
+    await live(bot)
+    await cog.on_message(dm_from(member))
+    ticket = await open_ticket_for(db, GUILD, member.id)
+    await bot.store.set(GUILD, "modmail_reply_style", style)
+    before = len(member.dms)
+
+    message = await typed_in_ticket(cog, bot, lead, ticket, "= watch this one")
+
+    rows = await ticket_messages(db, ticket["id"])
+    assert rows[-1]["direction"] == NOTE and rows[-1]["content"] == "watch this one"
+    assert message.reactions == ["\N{MEMO}"]
+    assert len(member.dms) == before
+    assert (await action_kinds(db)).count("modmail.note") == 1
+
+
+async def test_the_card_and_the_command_both_work_while_buttons_is_on(
+    cog, bot, member, lead, db
+):
+    ticket = await open_one(cog, bot, member)
+    await bot.store.set(GUILD, "modmail_reply_style", "buttons")
+    lead.roles = [FakeRole(STAFF_ROLE)]
+
+    await cog.reply.callback(cog, FakeInteraction(bot, lead), text="typed door")
+    card = await card_for(cog, bot, ticket)
+    opened = await press_card(bot, lead, card, "Reply")
+    modal = opened.response.modals[-1]
+    modal.text._value = "button door"
+    await modal.on_submit(FakeInteraction(bot, lead))
+
+    said = [one["embed"].description for one in member.dms if one.get("embed")]
+    assert said[-2:] == ["typed door", "button door"]
+
+
+async def test_the_reply_style_is_set_from_the_setup_panel_and_says_what_changed(
+    cog, bot, lead, db
+):
+    root = await open_panel(cog, bot, lead)
+    setup = await press(root.view, "Setup…", bot, lead)
+    picker = await press(setup.view, "Reply style…", bot, lead)
+
+    chosen = await choose(picker.view, modmail_cog.PICK_A_REPLY_STYLE, ["buttons"], bot, lead)
+
+    assert bot.store.get(GUILD, "modmail_reply_style") == "buttons"
+    assert "buttons" in chosen.sent
+    assert (await action_kinds(db)).count("modmail.settings") == 1
+    assert "**reply style** — buttons" in chosen.embed.description
+
+
+# --- the practice ticket -------------------------------------------------------------------------
+
+
+async def practise(cog, bot, lead):
+    bot.guard = bot.guard or FakeGuard()
+    lead.roles = [FakeRole(STAFF_ROLE)]
+    return await modmail_cog.open_practice(bot, bot.guild, lead)
+
+
+async def practice_ticket(bot, outcome):
+    return await get_ticket(bot.db, outcome.value)
+
+
+async def test_a_practice_ticket_is_a_claimed_private_thread_on_the_test_channel(
+    cog, bot, lead, db
+):
+    outcome = await practise(cog, bot, lead)
+
+    assert outcome.ok
+    ticket = await practice_ticket(bot, outcome)
+    assert ticket["practice"] == 1 and ticket["user_id"] == lead.id
+    thread = bot.guild.threads[ticket["thread_id"]]
+    assert thread.parent_id == TEST_CHANNEL
+    assert thread.kwargs["type"] is discord.ChannelType.private_thread
+    assert bot.guard.owns_channel(thread)
+    titles = [one.kwargs["embed"].title for one in thread.messages]
+    assert titles == [f"Ticket #{ticket['id']}", f"Practice ticket #{ticket['id']}"]
+    assert thread.messages[-1].kwargs.get("view") is not None
+
+
+async def test_the_practice_card_carries_the_two_extra_moves(cog, bot, lead):
+    outcome = await practise(cog, bot, lead)
+    ticket = await practice_ticket(bot, outcome)
+    thread = bot.guild.threads[ticket["thread_id"]]
+
+    labels_on = [one.item.label for one in thread.messages[-1].kwargs["view"].children]
+
+    assert labels_on == [*CARD_LABELS, "Speak as the member", "End the practice"]
+
+
+async def test_speaking_as_the_member_writes_an_inbound_row_and_moves_the_card(
+    cog, bot, lead, db
+):
+    outcome = await practise(cog, bot, lead)
+    ticket = await practice_ticket(bot, outcome)
+    thread = bot.guild.threads[ticket["thread_id"]]
+    first = thread.messages[-1]
+
+    opened = await press_card(bot, lead, first, "Speak as the member", channel=thread)
+    modal = opened.response.modals[-1]
+    modal.text._value = "hello?"
+    said = FakeInteraction(bot, lead, channel=thread)
+    await modal.on_submit(said)
+    modmail_cog.cancel_cards(bot)
+    await modmail_cog.refresh_card(bot, bot.guild, ticket["id"])
+
+    rows = await ticket_messages(db, ticket["id"])
+    assert [row["direction"] for row in rows] == [IN]
+    assert rows[0]["author_id"] == lead.id
+    assert first.id in thread.deleted_messages
+    assert len(cards_in(thread)) == 1
+    assert thread.messages[-1] is cards_in(thread)[0]
+
+
+async def test_a_practice_reply_never_dms_anybody_and_never_says_a_dm_failed(
+    cog, bot, lead, db
+):
+    """Checklist 2 and 10: a suppressed DM is not a failed one, and neither is a claimed check."""
+    outcome = await practise(cog, bot, lead)
+    ticket = await practice_ticket(bot, outcome)
+    thread = bot.guild.threads[ticket["thread_id"]]
+    before = len(lead.dms)
+
+    card = thread.messages[-1]
+    opened = await press_card(bot, lead, card, "Reply", channel=thread)
+    modal = opened.response.modals[-1]
+    modal.text._value = "we are on it"
+    sent = FakeInteraction(bot, lead, channel=thread)
+    await modal.on_submit(sent)
+
+    assert len(lead.dms) == before
+    kinds = await action_kinds(db)
+    assert "modmail.dm_failed" not in kinds
+    assert kinds.count("modmail.reply") == 1
+    assert (await ticket_messages(db, ticket["id"]))[-1]["delivered"] == 1
+    assert "Sent to the member" in sent.sent
+
+
+async def test_ending_the_practice_files_a_transcript_marked_practice_and_disowns_the_thread(
+    cog, bot, lead, db
+):
+    outcome = await practise(cog, bot, lead)
+    ticket = await practice_ticket(bot, outcome)
+    thread = bot.guild.threads[ticket["thread_id"]]
+    before = len(lead.dms)
+
+    ended = await press_card(bot, lead, thread.messages[-1], "End the practice", channel=thread)
+
+    assert (await get_ticket(db, ticket["id"]))["status"] == "closed"
+    assert "PRACTICE" in ended.sent
+    assert len(lead.dms) == before
+    assert thread.archived and thread.locked
+    assert not bot.guard.owns_channel(thread)
+    filed = [
+        one for one in bot.guild.channels[TEST_CHANNEL].messages if one.kwargs.get("file")
+    ]
+    assert len(filed) == 1
+    assert filed[0].kwargs["embed"].title == f"Practice ticket #{ticket['id']} closed"
+    assert filed[0].kwargs["file"].filename == f"modmail-practice-ticket-{ticket['id']}.txt"
+    assert "modmail.transcript" in await action_kinds(db)
+
+
+async def test_a_staffer_with_a_real_open_ticket_is_refused_in_words(cog, bot, lead, db):
+    bot.guard = FakeGuard()
+    bot.users[lead.id] = lead
+    await cog.on_message(dm_from(lead))
+    assert await open_ticket_for(db, GUILD, lead.id) is not None
+
+    outcome = await practise(cog, bot, lead)
+
+    assert not outcome.ok and "already have a modmail ticket" in outcome.message
+    cur = await db.conn.execute("SELECT COUNT(*) AS n FROM modmail_tickets WHERE practice = 1")
+    assert (await cur.fetchone())["n"] == 0
+
+
+async def test_practice_is_refused_when_no_staff_role_resolves(cog, bot, lead):
+    bot.guard = FakeGuard()
+    bot.guild.roles = []
+
+    outcome = await modmail_cog.open_practice(bot, bot.guild, lead)
+
+    assert not outcome.ok and "No staff role" in outcome.message
+    assert bot.guild.threads == {}
+
+
+async def test_the_panel_asks_before_it_opens_a_practice_ticket(cog, bot, lead, db):
+    root = await open_panel(cog, bot, lead)
+    assert has(root.view, "Try a fake ticket")
+
+    asked = await press(root.view, "Try a fake ticket", bot, lead)
+
+    assert labels(asked.view) == ["Yes, open one", "No"]
+    assert "fake ticket" in asked.embed.description
+    cur = await db.conn.execute("SELECT COUNT(*) AS n FROM modmail_tickets")
+    assert (await cur.fetchone())["n"] == 0
+
+    made = await press(asked.view, "Yes, open one", bot, lead)
+
+    assert "Practice ticket #1 is open" in made.sent
+    assert (await get_ticket(db, 1))["practice"] == 1
+    assert has(made.view, "Try a fake ticket")
+
+
+async def test_saying_no_to_the_practice_confirm_opens_nothing(cog, bot, lead, db):
+    root = await open_panel(cog, bot, lead)
+    asked = await press(root.view, "Try a fake ticket", bot, lead)
+
+    kept = await press(asked.view, "No", bot, lead)
+
+    cur = await db.conn.execute("SELECT COUNT(*) AS n FROM modmail_tickets")
+    assert (await cur.fetchone())["n"] == 0
+    assert has(kept.view, "Try a fake ticket")
+
+
+async def test_the_practice_button_is_absent_when_no_staff_role_resolves(cog, bot, lead):
+    bot.guild.roles = []
+
+    root = await open_panel(cog, bot, lead)
+
+    assert not has(root.view, "Try a fake ticket")
+    assert "No staff roles" in root.embed.description
+
+
+async def test_speaking_for_a_real_member_is_refused(cog, bot, member, lead, db):
+    ticket = await open_one(cog, bot, member)
+
+    outcome = await modmail_cog.practice_message(bot, bot.guild, ticket, lead, "hello")
+
+    assert not outcome.ok and "real ticket" in outcome.message
+    assert len(await ticket_messages(db, ticket["id"])) == 1
 
 
 async def test_a_stored_message_keeps_its_direction_and_anonymity(db):

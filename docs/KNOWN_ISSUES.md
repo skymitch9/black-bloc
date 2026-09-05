@@ -430,6 +430,13 @@ not a wider door; channel creation is place-gated to the test category.
 **What would change it:** the first time a real member receives a test DM by
 mistake — then add a `TEST_DM_ALLOWLIST` of user ids the guard permits.
 Number: **1 incident**.
+⚠️ **The modmail PRACTICE ticket is the one modmail DM test mode does stop**
+(2026-09-05, Build B): a practice reply and a practice close send nothing at
+all, and log **no** `modmail.dm_failed` — a suppressed DM is not a failed one.
+That is deliberate and is why the practice ticket is the safe place to try the
+card. A REAL ticket's **Reply** button reaches a real member exactly as
+`/reply` does, test mode or not — nothing in modmail may be read as "safe
+because test mode is on".
 
 ## KI-6 — (SUPERSEDED 2026-08-31) A stolen session cookie stays valid after sign-out — `CLOSED`
 

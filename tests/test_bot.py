@@ -13,16 +13,13 @@ LOGS_GROUPS = {
 
 
 STAFF_COMMANDS = {
-    "areply",
     "automod",
     "ban",
     "chat",
-    "close",
     "honeypot",
     "kick",
     "mod",
     "modmail",
-    "note",
     "presence",
     "purge",
     "reply",
@@ -49,7 +46,7 @@ MEMBER_COMMANDS = {
     "voice",
     "youtube",
 }
-GATE_IS_TWO_HOPS_AWAY = {"/reply", "/areply"}
+GATE_IS_TWO_HOPS_AWAY = {"/reply"}
 
 
 def leaves(command, path):
@@ -173,7 +170,7 @@ async def test_the_command_tree_stays_inside_discords_limits(settings):
 
     top = bot.tree.get_commands()
     assert len(top) <= TOP_LEVEL_MAX
-    assert len(top) == 33
+    assert len(top) == 30
     for command in top:
         if isinstance(command, app_commands.Group):
             assert len(command.commands) <= CHILDREN_MAX, command.name

@@ -1634,3 +1634,20 @@ async def test_the_modmail_panel_stays_up_ten_minutes_by_default(store):
     assert parse_value("modmail_panel_minutes", "45") == 45
     with pytest.raises(SettingError):
         coerce_value("modmail_panel_minutes", -1)
+
+
+async def test_the_reply_style_defaults_to_both_and_refuses_a_fourth_word(store):
+    """Checklist 33: the Settings page and /settings set-value reach it because the key exists."""
+    from black_bloc.cogs.core import VALUE_KEYS
+    from black_bloc.settings_store import MODMAIL_REPLY_STYLES
+
+    assert MODMAIL_REPLY_STYLES == ("buttons", "typing", "both")
+    assert store.get(7, "modmail_reply_style") == "both"
+    assert KEY_TYPES["modmail_reply_style"] == "enum"
+    assert KEY_CHOICES["modmail_reply_style"] == MODMAIL_REPLY_STYLES
+    assert "modmail_reply_style" in VALUE_KEYS
+    for style in MODMAIL_REPLY_STYLES:
+        await store.set(7, "modmail_reply_style", style)
+        assert store.get(7, "modmail_reply_style") == style
+    with pytest.raises(SettingError):
+        coerce_value("modmail_reply_style", "shouting")

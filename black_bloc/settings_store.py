@@ -1157,9 +1157,15 @@ KEY_HELP.update(
 )
 
 
-# Modmail panel (wave 4) — the one decision `/modmail`'s panel introduces, in its own block
+# Modmail panel (wave 4) — the two decisions `/modmail`'s panel introduces, in their own block
 # so the parallel wave-4 branches merge textually.
-KEY_TYPES.update({"modmail_panel_minutes": "int"})
+MODMAIL_BUTTONS = "buttons"
+MODMAIL_TYPING = "typing"
+MODMAIL_BOTH = "both"
+MODMAIL_REPLY_STYLES = (MODMAIL_BUTTONS, MODMAIL_TYPING, MODMAIL_BOTH)
+
+KEY_TYPES.update({"modmail_panel_minutes": "int", "modmail_reply_style": "enum"})
+KEY_CHOICES.update({"modmail_reply_style": MODMAIL_REPLY_STYLES})
 KEY_HELP.update(
     {
         "modmail_panel_minutes": (
@@ -1167,6 +1173,12 @@ KEY_HELP.update(
             "default. The 'this panel has gone quiet' footer can only be written while "
             "Discord's 15-minute interaction window is still open, so 15 or more means the "
             "buttons simply stop working with no footer to explain it"
+        ),
+        "modmail_reply_style": (
+            "how staff answer a ticket. typing: a plain message in the ticket is relayed to the "
+            "member, as it always has been. buttons: it is not — only the ticket card's Reply "
+            "and /reply reach them, so a ticket channel can be talked in safely. both is the "
+            "default and is today's behaviour with the card added"
         ),
     }
 )
@@ -1744,6 +1756,8 @@ class SettingsStore:
             return 10
         if key == "modmail_panel_minutes":
             return 10
+        if key == "modmail_reply_style":
+            return MODMAIL_BOTH
         if key == "mod_panel_minutes":
             return 10
         if key == HIDE_COMMANDS_WHEN_OFF:
