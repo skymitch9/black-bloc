@@ -1859,6 +1859,12 @@ class SettingsStore:
     def all(self, guild_id: int) -> dict[str, Any]:
         return {key: self.get(guild_id, key) for key in KEY_TYPES}
 
+    def is_stored(self, guild_id: int, key: str) -> bool:
+        """What `clear` would find, asked without deleting it."""
+        if key not in KEY_TYPES:
+            raise SettingError(f"{key!r} is not a Black Bloc setting.")
+        return (guild_id, key) in self._cache
+
     async def set(self, guild_id: int, key: str, value: Any, *, by: int | None = None) -> Any:
         stored = coerce_value(key, value)
         await self.db.conn.execute(

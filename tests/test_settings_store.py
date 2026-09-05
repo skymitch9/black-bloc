@@ -1151,6 +1151,25 @@ async def test_only_manage_server_re_points_the_core_channels_by_default(store):
     assert parse_value("settings_core_keys_admin_only", "off") is False
 
 
+async def test_is_stored_answers_what_clear_would_find_without_deleting_it(store):
+    """`Put the default back` renders only on a key with a row, so it must be askable."""
+    assert store.get(7, "birthday_role_id") is None
+    assert store.is_stored(7, "birthday_role_id") is False
+
+    await store.set(7, "birthday_role_id", 555)
+    assert store.is_stored(7, "birthday_role_id") is True
+    assert store.is_stored(8, "birthday_role_id") is False
+
+    await store.set(7, "poll_panel_minutes", 10)
+    assert store.get(7, "poll_panel_minutes") == store.default("poll_panel_minutes")
+    assert store.is_stored(7, "poll_panel_minutes") is True
+
+    assert await store.clear(7, "birthday_role_id") is True
+    assert store.is_stored(7, "birthday_role_id") is False
+    with pytest.raises(SettingError):
+        store.is_stored(7, "not_a_setting")
+
+
 async def test_both_new_settings_keys_file_under_core_not_a_group_of_their_own(store):
     """Their `settings_` prefix would make a 23rd group; CORE_KEYS is what stops it."""
     assert namespace_of("settings_panel_minutes") == "core"

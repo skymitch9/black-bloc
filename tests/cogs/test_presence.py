@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import discord
 import pytest
 
-from black_bloc.cogs.presence import Presence, apply_sentence
+from black_bloc.cogs.presence import Presence, apply_sentence, reapply_presence
 from black_bloc.config import load_settings
 from black_bloc.settings_store import SettingsStore
 from black_bloc.storage.db import Database
@@ -83,6 +83,10 @@ class FakeBot:
         self.presences = []
         self.refuse_presence = None
         self.ready = asyncio.Event()
+        self.cog = None
+
+    def get_cog(self, name):
+        return self.cog if name == "Presence" else None
 
     def get_guild(self, guild_id):
         return self.guild if self.guild is not None and self.guild.id == guild_id else None
@@ -161,9 +165,11 @@ async def bot(db, monkeypatch):
 @pytest.fixture
 async def cog(bot):
     made = Presence(bot)
+    bot.cog = made
     try:
         yield made
     finally:
+        bot.cog = None
         await made.cog_unload()
         await asyncio.sleep(0)
 
@@ -271,3 +277,18 @@ async def test_applying_by_hand_says_what_it_did(bot, cog, member):
 
     assert "left alone" in again.sent
     assert len(bot.app.edits) == 1
+
+
+async def test_reapply_presence_is_the_one_implementation_both_doors_call(bot, cog):
+    said = await reapply_presence(bot)
+
+    assert "now says" in said and "`Cookout attendees: 10`" in said
+    assert isinstance(bot.presences[-1], discord.CustomActivity)
+    assert "left alone" in await reapply_presence(bot)
+
+
+async def test_reapply_presence_answers_nothing_at_all_when_the_cog_is_not_loaded(bot):
+    """S8 — the panel does not draw the button, and a cog unloaded mid-card still cannot lie."""
+    assert bot.get_cog("Presence") is None
+    assert await reapply_presence(bot) is None
+    assert bot.presences == [] and bot.app.edits == []
