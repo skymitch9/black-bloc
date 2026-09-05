@@ -233,6 +233,19 @@ docs bookkeeping lands with the work, not after.
   **Build 1 DISPATCHED 12:08** (Opus, own worktree off `34331ec`; pure module + tests, `namespace_of` move, shared
   writers, two registry keys; est. 150–190k). Usage before dispatch session 2% / weekly 17% / Fable 17%, read 12:07
   (the session reset had landed). Build 2 dispatches off Build 1's merge.
+  ⚠️ **BUILD 1 IS BUILT — not merged, not deployed, nothing has met live Discord.**
+  `worktree-agent-a3e6ccbead5a90537`, rebased onto `01c4ed3`, five commits: the `namespace_of` move into
+  `settings_store` (`tests/api/test_settings_api.py` byte-identical and green — the proof); the two registry keys with
+  their `labels.js` + mock rows and store tests; `black_bloc/settings_panel.py` + `tests/test_settings_panel.py`
+  (221 tests); `set_key`/`clear_key`/`reapply_presence` + the new `SettingsStore.is_stored`; docs.
+  **4973 tests pass** (4739 before, +234), ruff clean, mock **17 pages / 146 routes unchanged**, labels.js parses.
+  **Nothing was retired — top-level stays 30, measured.** ⚠️ **The design's counts were stale and are now corrected in
+  its foot:** the registry is **179** keys (the doc says 175) and `tests/test_bot.py` pins **30** (the doc says 36), so
+  Build 2 pins **29** off 30. Thirteen deviations, three MORE reported-not-fixed defects (the mock's phantom
+  `max: 1440` on every `*_panel_minutes` row; the mock's `CORE_KEYS` being three entries where the API has six;
+  `birthdays.py:428` emitting `settings.clear` with no `via`) and two website-only sweep rows (`SB1`, `SB2`) are in
+  `info/settings-panel-design.md` → `## Build 1 deviations`. ⚠️ **All twelve of §H's sweep rows S1–S12 belong to
+  Build 2** — Build 1 changes nothing a person sees in Discord.
 - 🔧 **Modmail leftovers after Build B (handed over at the v82 landing, 2026-09-05):** (1) **the panel-side `A ticket…`
   select / ticket card** in the `/modmail` panel (`docs/info/modmail-panel-design.md` §B S5, §C) is UNBUILT — it fell between
   Build A and Build B; a small Opus follow-up (est. 80–120k) once `/settings` lands; (2) `picked_values` has two copies
