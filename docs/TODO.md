@@ -12,7 +12,7 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 15:38, v87 LIVE — **29 slots, zero Groups**; the SELF-TEST (wave 5, `info/selftest-design.md`, sweeps 252–261) + pings fork (a) landed; owner walked sweeps 232–251 and the mobile Logs page 15:19; NOTHING in flight; next = the `/settings` leftovers (engineering items below), then the small self-test findings filed under Open engineering items)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 16:25, v87 LIVE — **29 slots, zero Groups**; self-test live and run by the owner (sweep 252); the ENGINEERING SWEEP (Opus, own worktree, brief = the `/settings` leftovers B1–B5 + self-test leftovers A1–A2 + `LOG_LEVEL_COMMANDS` + KI-21, sweep rows `ES1`–`ESn`) DISPATCHED 16:23 — the only thing in flight, lands as v88; next after it = the confirm-helper fold, then the global personality pool design (next-wave #4))
 
 **`main` = `43312b9`** (role-menus panel merge; v77 live 20:51, 4529 tests, **36 commands**; `youtube_mode` is
 **shadow** since 2026-09-03 17:42). **The panels program is COMPLETE** — waves 1, 2 and 3 (17 features, one
