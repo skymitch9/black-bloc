@@ -1716,6 +1716,38 @@ async def test_a_burst_of_messages_coalesces_into_one_card_move(
     assert len(channel.deleted_messages) == before + 1
 
 
+async def test_a_write_that_lands_mid_post_is_not_dropped(cog, bot, member, db, monkeypatch):
+    """F-M1 (a) promises the card is LAST. A bump arriving while the post is in flight used to
+    hit the pending-task guard and vanish; it now marks the ticket dirty and goes round again."""
+    monkeypatch.setattr(modmail_cog, "CARD_DEBOUNCE_SECONDS", 0.0)
+    monkeypatch.setattr(modmail_cog, "CARD_MIN_GAP_SECONDS", 0.0)
+    ticket = await open_one(cog, bot, member)
+    await card_for(cog, bot, ticket)
+    channel = bot.guild.channels[TEST_CHANNEL]
+    before = len(channel.deleted_messages)
+    real = modmail_cog.refresh_card
+    interrupted = []
+
+    async def bumps_while_posting(client, guild, ticket_id):
+        if not interrupted:
+            await modmail_cog.bump_card(client, guild, await get_ticket(db, ticket_id))
+            interrupted.append(sorted(modmail_cog.card_clock(client)["dirty"]))
+        return await real(client, guild, ticket_id)
+
+    monkeypatch.setattr(modmail_cog, "refresh_card", bumps_while_posting)
+
+    await modmail_cog.bump_card(bot, bot.guild, ticket)
+    await modmail_cog.settle_cards(bot)
+
+    assert interrupted == [[ticket["id"]]]
+    assert len(channel.deleted_messages) == before + 2
+    assert len(cards_in(channel)) == 1
+    assert channel.messages[-1] is cards_in(channel)[0]
+    assert (await get_ticket(db, ticket["id"]))["card_message_id"] == channel.messages[-1].id
+    assert modmail_cog.card_clock(bot)["dirty"] == set()
+    assert modmail_cog.card_clock(bot)["tasks"] == {}
+
+
 def test_the_card_clock_holds_a_ticket_to_its_floor_between_two_posts():
     clock = {"tasks": {}, "last": {}}
 

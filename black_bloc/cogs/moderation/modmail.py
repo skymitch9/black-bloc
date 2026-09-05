@@ -712,9 +712,13 @@ def card_clock(bot: Any) -> dict[str, dict[int, Any]]:
     """Per-ticket debounce state, kept on the BOT so every door coalesces onto one refresh."""
     clock = getattr(bot, CARDS_ATTR, None)
     if clock is None:
-        clock = {"tasks": {}, "last": {}}
+        clock = {"tasks": {}, "last": {}, "dirty": set()}
         setattr(bot, CARDS_ATTR, clock)
     return clock
+
+
+def card_dirty(clock: Any) -> set[int]:
+    return clock.setdefault("dirty", set())
 
 
 def card_wait(clock: Any, ticket_id: int, now: float) -> float:
@@ -730,20 +734,28 @@ async def bump_card(bot: Any, guild: Any, ticket: Any) -> None:
     clock = card_clock(bot)
     ticket_id = int(ticket["id"])
     if ticket_id in clock["tasks"]:
+        card_dirty(clock).add(ticket_id)
         return
     clock["tasks"][ticket_id] = asyncio.ensure_future(_card_later(bot, guild, ticket_id))
 
 
 async def _card_later(bot: Any, guild: Any, ticket_id: int) -> None:
+    """A write that lands while the card is in flight marks it dirty and goes round again."""
     clock = card_clock(bot)
+    dirty = card_dirty(clock)
     try:
-        await asyncio.sleep(card_wait(clock, ticket_id, monotonic()))
-        await refresh_card(bot, guild, ticket_id)
+        while True:
+            await asyncio.sleep(card_wait(clock, ticket_id, monotonic()))
+            dirty.discard(ticket_id)
+            await refresh_card(bot, guild, ticket_id)
+            if ticket_id not in dirty:
+                return
     except asyncio.CancelledError:
         raise
     except Exception as exc:
         log.warning("modmail: the card for ticket %s could not be moved: %s", ticket_id, exc)
     finally:
+        dirty.discard(ticket_id)
         clock["tasks"].pop(ticket_id, None)
 
 
@@ -759,6 +771,7 @@ def cancel_cards(bot: Any) -> None:
     for task in list(clock["tasks"].values()):
         task.cancel()
     clock["tasks"].clear()
+    card_dirty(clock).clear()
 
 
 async def refresh_card(bot: Any, guild: Any, ticket_id: int) -> Any:
