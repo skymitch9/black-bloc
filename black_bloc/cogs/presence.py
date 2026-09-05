@@ -26,9 +26,21 @@ STATUS_FAILED = (
 )
 
 
+COG_NAME = "Presence"
+
+
 def apply_sentence(bio_changed: bool, status: str | None) -> str:
     said = STATUS_SET.format(text=status) if status else STATUS_FAILED
     return f"{BIO_CHANGED if bio_changed else BIO_SAME} {said}"
+
+
+async def reapply_presence(bot: commands.Bot) -> str | None:
+    """The About Me and the status put back; None means the cog is not loaded in this process."""
+    cog = bot.get_cog(COG_NAME)
+    if cog is None:
+        return None
+    changed = await ensure_bio(bot)
+    return apply_sentence(changed, await cog.apply_status())
 
 
 class Presence(commands.Cog):
@@ -119,10 +131,8 @@ class Presence(commands.Cog):
         if not await require_staff(interaction):
             return
         await interaction.response.defer(ephemeral=True)
-        changed = await ensure_bio(self.bot)
-        text = await self.apply_status()
         await interaction.followup.send(
-            apply_sentence(changed, text),
+            await reapply_presence(self.bot) or STATUS_FAILED,
             ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
         )

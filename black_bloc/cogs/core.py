@@ -11,6 +11,7 @@ from ..actionlog import log_action
 from ..command_visibility import STAFF_ONLY, hidden_names
 from ..logkinds import VIA_DISCORD
 from ..modcases import pages_under_limit
+from ..panels import Outcome, refusal
 from ..settings_store import (
     KEY_HELP,
     KEY_TYPES,
@@ -50,6 +51,49 @@ HIDDEN_NOTE = (
     "one back from the dashboard's Settings page, or with "
     "`/settings set-value <feature>_mode on`.*"
 )
+
+
+SAVED = "**{key}** is now {value}."
+BAD_VALUE = "bad_value"
+NOTHING_STORED = "nothing_stored"
+
+
+def actor_id(actor: Any) -> int | None:
+    return int(getattr(actor, "id", actor) or 0) or None
+
+
+async def set_key(bot: Any, guild: Any, key: str, value: Any, actor: Any) -> Outcome:
+    """One write and one `settings.set` row, whatever control on the panel made the change."""
+    try:
+        stored = await bot.store.set(guild.id, key, value, by=actor_id(actor))
+    except SettingError as exc:
+        return refusal(str(exc), BAD_VALUE, 400)
+    await log_action(
+        bot,
+        guild,
+        "settings.set",
+        actor=actor,
+        details={"key": key, "value": stored, "via": VIA_DISCORD},
+    )
+    return Outcome(True, SAVED.format(key=key, value=display_value(key, stored)), value=stored)
+
+
+async def clear_key(bot: Any, guild: Any, key: str, actor: Any) -> Outcome:
+    """One delete and one `settings.clear` row; `value` is whether a row was actually there."""
+    try:
+        cleared = await bot.store.clear(guild.id, key, by=actor_id(actor))
+    except SettingError as exc:
+        return refusal(str(exc), BAD_VALUE, 400)
+    if not cleared:
+        return refusal(NOT_SET.format(key=key), NOTHING_STORED, 409)
+    await log_action(
+        bot,
+        guild,
+        "settings.clear",
+        actor=actor,
+        details={"key": key, "via": VIA_DISCORD},
+    )
+    return Outcome(True, CLEARED.format(key=key), value=True)
 
 
 def command_line(command: Any, path: str, *, heading: bool = False) -> str:

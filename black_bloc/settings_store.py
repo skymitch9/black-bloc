@@ -30,7 +30,14 @@ from .chat_memory import (
 from .config import Settings
 from .emoji import SKIN_TONE_DEFAULT, SKIN_TONE_NAMES
 from .groq import DEFAULT_MODEL as GROQ_DEFAULT_MODEL
-from .logkinds import FEATURE_LABELS, FEATURES, LEVEL_DEFAULT, LEVELS, log_level_key
+from .logkinds import (
+    CORE,
+    FEATURE_LABELS,
+    FEATURES,
+    LEVEL_DEFAULT,
+    LEVELS,
+    log_level_key,
+)
 from .personas import COOKOUT, PERSONALITY_CHOICES
 from .polls import DATE_LABEL_FORMS as POLL_DATE_LABEL_FORMS
 from .polls import MAX_HOURS as POLL_MAX_HOURS
@@ -1199,6 +1206,32 @@ KEY_HELP.update(
 )
 
 
+# Settings panel (wave 4) — the two decisions `/settings`'s own panel introduces, in their own
+# block so the parallel wave-4 branches merge textually.
+SETTINGS_PANEL_MINUTES = "settings_panel_minutes"
+SETTINGS_CORE_KEYS_ADMIN_ONLY = "settings_core_keys_admin_only"
+SETTINGS_CORE_KEYS_ADMIN_ONLY_DEFAULT = True
+
+KEY_TYPES.update({SETTINGS_PANEL_MINUTES: "int", SETTINGS_CORE_KEYS_ADMIN_ONLY: "bool"})
+KEY_HELP.update(
+    {
+        SETTINGS_PANEL_MINUTES: (
+            "minutes the /settings panel stays live before its buttons disable themselves; 10 by "
+            "default. The 'this panel has gone quiet' footer can only be written while "
+            "Discord's 15-minute interaction window is still open, so 15 or more means the "
+            "buttons simply stop working with no footer to explain it"
+        ),
+        SETTINGS_CORE_KEYS_ADMIN_ONLY: (
+            "true keeps the four settings that decide who counts as staff and where Black Bloc "
+            "talks — the staff channel, the log channel, the moderation log channel and the "
+            "role-menu channel — to somebody with Manage Server; the rest of /settings still "
+            "opens for any staff member, and false lets any staff member re-point them too. The "
+            "dashboard's Settings page stays staff-visible either way"
+        ),
+    }
+)
+
+
 # Operator read token — the token itself is the on/off switch; this is the one decision left.
 KEY_TYPES.update({"operator_read_log": "bool"})
 KEY_HELP.update(
@@ -1227,6 +1260,34 @@ KEY_HELP.update(
         )
     }
 )
+
+
+# The one grouping of the registry, read by the dashboard's Settings page and by /settings.
+CORE_KEYS = (
+    "log_channel_id",
+    "staff_channel_id",
+    "role_menu_channel_id",
+    "bot_bio",
+    "status_prefix",
+    "operator_read_log",
+    SETTINGS_PANEL_MINUTES,
+    SETTINGS_CORE_KEYS_ADMIN_ONLY,
+)
+NAMESPACE_OVERRIDE = {
+    "modlog_channel_id": "automod",
+    "mod_dm_on_action": "automod",
+    "mod_log_level": "automod",
+    "mod_panel_minutes": "automod",
+}
+
+
+def namespace_of(key: str) -> str:
+    if key in NAMESPACE_OVERRIDE:
+        return NAMESPACE_OVERRIDE[key]
+    if key in CORE_KEYS:
+        return CORE
+    head, _, rest = key.partition("_")
+    return head if rest else CORE
 
 
 GUILD_ONLY = (
@@ -1760,6 +1821,10 @@ class SettingsStore:
             return MODMAIL_BOTH
         if key == "mod_panel_minutes":
             return 10
+        if key == SETTINGS_PANEL_MINUTES:
+            return 10
+        if key == SETTINGS_CORE_KEYS_ADMIN_ONLY:
+            return SETTINGS_CORE_KEYS_ADMIN_ONLY_DEFAULT
         if key == HIDE_COMMANDS_WHEN_OFF:
             return HIDE_COMMANDS_WHEN_OFF_DEFAULT
         if key.endswith("_log_level"):
@@ -1793,6 +1858,12 @@ class SettingsStore:
 
     def all(self, guild_id: int) -> dict[str, Any]:
         return {key: self.get(guild_id, key) for key in KEY_TYPES}
+
+    def is_stored(self, guild_id: int, key: str) -> bool:
+        """What `clear` would find, asked without deleting it."""
+        if key not in KEY_TYPES:
+            raise SettingError(f"{key!r} is not a Black Bloc setting.")
+        return (guild_id, key) in self._cache
 
     async def set(self, guild_id: int, key: str, value: Any, *, by: int | None = None) -> Any:
         stored = coerce_value(key, value)

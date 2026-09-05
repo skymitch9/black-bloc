@@ -6,7 +6,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
-from ..logkinds import VIA_WEBSITE, via_of
+from ..logkinds import CORE, VIA_WEBSITE, via_of
+from ..settings_store import CORE_KEYS as CORE_KEYS
 from ..settings_store import (
     KEY_CHOICES,
     KEY_HELP,
@@ -14,28 +15,15 @@ from ..settings_store import (
     KEY_MIN,
     KEY_TYPES,
     SettingError,
+    namespace_of,
 )
+from ..settings_store import NAMESPACE_OVERRIDE as NAMESPACE_OVERRIDE
 from .auth import Refused, staff_dependency
 from .names import resolve_one
 from .writes import note, require_db, require_guild, writer_dependency
 
 log = logging.getLogger(__name__)
 
-CORE_KEYS = (
-    "log_channel_id",
-    "staff_channel_id",
-    "role_menu_channel_id",
-    "bot_bio",
-    "status_prefix",
-    "operator_read_log",
-)
-CORE = "core"
-NAMESPACE_OVERRIDE = {
-    "modlog_channel_id": "automod",
-    "mod_dm_on_action": "automod",
-    "mod_log_level": "automod",
-    "mod_panel_minutes": "automod",
-}
 AUDIT_DEFAULT_LIMIT = 100
 AUDIT_MAX_LIMIT = 500
 AUDIT_SCAN_LIMIT = 2000
@@ -49,15 +37,6 @@ UNKNOWN_KEY = (
     "**{key}** is not a Black Bloc setting, so nothing was changed. The settings page lists every "
     "one it has."
 )
-
-
-def namespace_of(key: str) -> str:
-    if key in NAMESPACE_OVERRIDE:
-        return NAMESPACE_OVERRIDE[key]
-    if key in CORE_KEYS:
-        return CORE
-    head, _, rest = key.partition("_")
-    return head if rest else CORE
 
 
 def from_json(key: str, value: Any) -> Any:

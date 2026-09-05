@@ -10,7 +10,9 @@ from black_bloc.cogs.core import (
     ROLE_KEYS,
     VALUE_KEYS,
     Core,
+    clear_key,
     help_lines,
+    set_key,
     tree_commands,
 )
 from black_bloc.config import load_settings
@@ -316,6 +318,69 @@ async def test_a_slash_clear_records_discord_too(bot, cog, member):
     )
 
     assert (await details(bot.db))[0] == {"key": "birthday_role_id", "via": "discord"}
+
+
+async def test_set_key_writes_once_logs_once_and_answers_in_words(bot, db, member):
+    """Checklist 34 — the panel's every editor goes through this one function."""
+    found = await set_key(bot, bot.guild, "golive_embed", False, member)
+
+    assert found.ok and found.value is False
+    assert found.message == "**golive_embed** is now False."
+    assert bot.store.get(GUILD, "golive_embed") is False
+    assert await kinds(db) == ["settings.set"]
+    assert (await details(db))[0] == {"key": "golive_embed", "value": False, "via": "discord"}
+
+
+async def test_set_key_refuses_a_bad_value_in_words_and_writes_nothing(bot, db, member):
+    found = await set_key(bot, bot.guild, "golive_mode", "sideways", member)
+
+    assert not found.ok and found.status == 400
+    assert "off, shadow, on" in found.message
+    assert bot.store.get(GUILD, "golive_mode") == "shadow"
+    assert await kinds(db) == []
+
+
+async def test_set_key_refuses_a_key_the_registry_does_not_have(bot, db, member):
+    found = await set_key(bot, bot.guild, "not_a_setting", 1, member)
+
+    assert not found.ok and "not a Black Bloc setting" in found.message
+    assert await kinds(db) == []
+
+
+async def test_set_key_names_a_channel_the_way_the_card_reads_it(bot, db, member):
+    found = await set_key(bot, bot.guild, "staff_channel_id", TEST_CHANNEL, member)
+
+    assert found.message == f"**staff_channel_id** is now <#{TEST_CHANNEL}>."
+    assert (await details(db))[0]["value"] == TEST_CHANNEL
+
+
+async def test_clear_key_puts_the_default_back_and_leaves_one_row(bot, db, member):
+    await bot.store.set(GUILD, "birthday_role_id", CAKE_ROLE)
+    assert bot.store.is_stored(GUILD, "birthday_role_id")
+
+    found = await clear_key(bot, bot.guild, "birthday_role_id", member)
+
+    assert found.ok and found.value is True
+    assert "no longer set" in found.message
+    assert not bot.store.is_stored(GUILD, "birthday_role_id")
+    assert await kinds(db) == ["settings.clear"]
+    assert (await details(db))[0] == {"key": "birthday_role_id", "via": "discord"}
+
+
+async def test_clear_key_on_a_key_with_nothing_stored_says_so_and_logs_nothing(bot, db, member):
+    """The panel never renders the button in this state; a second click racing one still answers."""
+    found = await clear_key(bot, bot.guild, "birthday_role_id", member)
+
+    assert not found.ok and found.status == 409
+    assert "was not set" in found.message
+    assert await kinds(db) == []
+
+
+async def test_clear_key_refuses_a_key_the_registry_does_not_have(bot, db, member):
+    found = await clear_key(bot, bot.guild, "not_a_setting", member)
+
+    assert not found.ok and "not a Black Bloc setting" in found.message
+    assert await kinds(db) == []
 
 
 tempvoice = app_commands.Group(name="tempvoice", description="Temporary voice channels")

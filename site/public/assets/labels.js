@@ -59,6 +59,8 @@ export const LABELS = {
   modmail_panel_minutes: 'How long the /modmail panel stays live',
   modmail_reply_style: 'Whether typing in a ticket reaches the member',
   mod_panel_minutes: 'How long the /mod panel stays live',
+  settings_panel_minutes: 'How long the /settings panel stays live',
+  settings_core_keys_admin_only: 'Whether only a Lead may re-point the staff and log channels',
 
   tempvoice_mode: 'Whether people can make their own voice rooms',
   tempvoice_creator_ids: 'Which channels people join to get a room',
