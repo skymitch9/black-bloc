@@ -183,8 +183,11 @@ docs bookkeeping lands with the work, not after.
 
 ## ⏳ Waiting on the owner
 
-- ❓ **Owner 2026-09-05 13:52, verbatim: "test it all, can we build api test and endpoints"** — logged the
-  moment it was said; ONE clarifying question asked 13:56 (push-notified). Conductor's reading, proposed
+- ✅ **DECIDED 2026-09-05 14:02 — owner: "do a but after 5 minutes purge the discord chat of all test,
+  keep the logs on the website tho under test"** → option (a) + a five-minute purge of every message the
+  test posts + a **Test** view on the website's Logs page. Design: [`info/selftest-design.md`](info/selftest-design.md).
+  **BUILDING** — see the engineering item below. Original: **Owner 2026-09-05 13:52, verbatim: "test it all, can we build api test and endpoints"** — logged the
+  moment it was said; ONE clarifying question asked 13:56. Conductor's reading, proposed
   as the recommended option: a **self-test door** (`POST /api/selftest` for staff + `/settings` ▸ **Run
   the self-test**, and the same check at every boot logging one line) that, inside the running bot and
   against the REAL guild, renders every panel's root card, runs every dashboard read, and checks every
@@ -237,6 +240,7 @@ docs bookkeeping lands with the work, not after.
   feature copies it (a module function, not a cog; acceptable, but `set_key`/`clear_key` may belong in a leaf module);
   (9) the three hand-rolled confirm copies are still three — Build 2 made the settings confirm a card STATE, so the
   "fold 7 copies" sweep is now a fold of the other panels, not of this one.
+- 🔧 **Self-test + `tests/live/` (owner 2026-09-05 13:52 → decided 14:02, design `info/selftest-design.md`):** `black_bloc/selftest.py` registry of checks (config keys resolve with permissions · every one of the 29 panels' root cards posted live · every website GET in-process · scheduled senders' embeds), three doors on ONE `run()` (boot log line `selftest: N ok, M failed`, `/settings` ▸ **Run the self-test**, `POST /api/selftest` + `GET` list/one + `POST …/purge`), `selftest_runs` + `selftest_messages` tables (schema 30 → 31), `purge_loop` deleting every posted message after `selftest_purge_minutes` (default 5; boot tick purges leftovers first), log feature **Test** (`selftest.*` kinds, level default off, EXCLUDED from the Logs page's default view, shown under the **Test** filter), Health-page Self-test card with a Run button, settings keys `selftest_on_boot` / `selftest_channel_id` / `selftest_purge_minutes` (core group, both doors), mock routes + check.mjs, `tests/live/` (`-m live`, skipped without `BLACK_BLOC_LIVE_URL` + `BLACK_BLOC_LIVE_TOKEN`), `docs/access/testing.md`. No new command — tree stays 29 / zero Groups. Sweep rows `ST1`–`STn`, numbered at the merge after the `ML` rows. **DISPATCHED 14:03 2026-09-05** (Opus, own worktree off `main`; est. 300–450k — a multi-layer build; commit at clean boundaries in the order engine → doors → website → panel wiring → live suite). Usage before dispatch session 32% / weekly 23% / Fable 21%, read 14:02.
 - 🔧 **Modmail leftovers after Build B (handed over at the v82 landing, 2026-09-05):** (1) **the panel-side `A ticket…`
   select / ticket card** in the `/modmail` panel (`docs/info/modmail-panel-design.md` §B S5, §C) is UNBUILT — it fell between
   Build A and Build B; a small Opus follow-up (est. 80–120k) once `/settings` lands; (2) `picked_values` has two copies
