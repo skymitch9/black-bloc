@@ -4,7 +4,7 @@ import json
 import logging
 import re
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, NamedTuple
 
 import discord
 
@@ -57,9 +57,20 @@ DM_ACTIONS: dict[str, str] = {
     "automod_timeout": "timed out by the automatic filter",
 }
 
+DM_SENTENCES: dict[str, str] = {
+    "void": (
+        "A case against you in **{guild_name}** has been **cancelled** by staff. It stays on the "
+        "record marked cancelled, and anything already done to you is not undone by it."
+    ),
+    "restore": (
+        "A case against you in **{guild_name}** has been **put back** by staff after being "
+        "cancelled."
+    ),
+}
+
 APPLIED_BY = "\n\nApplied by <@{moderator_id}> at <t:{when}:f>."
 ALREADY_APPLIED_BY_SOMEBODY = (
-    "Someone just applied this case, so nothing was done twice. `/case {case_id}` shows what "
+    "Someone just applied this case, so nothing was done twice. Open case #{case_id} to see what "
     "happened to them."
 )
 
@@ -74,8 +85,8 @@ TEST_MODE_REFUSAL = (
     "then, do this one by hand if it is real."
 )
 NO_SUCH_CASE = (
-    "Black Bloc has no case **#{case_id}**, so there is nothing to show. `/cases` lists the cases "
-    "it has for one member."
+    "Black Bloc has no case **#{case_id}**, so there is nothing to show. `/mod` lists the cases "
+    "it does have."
 )
 NO_CASES = "Black Bloc has no cases for {who} yet."
 
@@ -126,11 +137,14 @@ def dm_text(
     style: Any, guild_name: Any, kind: str, reason: Any = None, duration_s: Any = None
 ) -> str | None:
     """What the member is told, per `mod_dm_on_action`; None when they are told nothing."""
-    if style == "none" or kind not in DM_ACTIONS:
+    if style == "none" or (kind not in DM_ACTIONS and kind not in DM_SENTENCES):
         return None
-    action = DM_ACTIONS[kind]
-    for_how_long = f" for {describe_duration(duration_s)}" if duration_s else ""
-    line = f"You have been **{action}**{for_how_long} in **{guild_name}**."
+    if kind in DM_SENTENCES:
+        line = DM_SENTENCES[kind].format(guild_name=guild_name)
+    else:
+        action = DM_ACTIONS[kind]
+        for_how_long = f" for {describe_duration(duration_s)}" if duration_s else ""
+        line = f"You have been **{action}**{for_how_long} in **{guild_name}**."
     if style == "server_action_reason" and str(reason or "").strip():
         line += f"\nReason: {str(reason).strip()[:REASON_LIMIT]}"
     return line
@@ -166,12 +180,13 @@ def case_embed(
     channel_id: int | None = None,
     done: Any = None,
     failed: Any = None,
+    note: Any = None,
+    voided: Any = None,
 ) -> discord.Embed:
     """The one modlog card every mod action and every automod verdict posts."""
     title = f"Case #{case_id} — {kind}" if case_id else f"{kind} (no case)"
-    embed = discord.Embed(
-        title=title, colour=COLOURS.get(kind, COLOURS["automod"]), timestamp=at or datetime.now(UTC)
-    )
+    colour = COLOURS["purge"] if voided else COLOURS.get(kind, COLOURS["automod"])
+    embed = discord.Embed(title=title, colour=colour, timestamp=at or datetime.now(UTC))
     if user_id:
         embed.add_field(name="Member", value=f"<@{user_id}>", inline=True)
     else:
@@ -201,7 +216,29 @@ def case_embed(
             value=f"Black Bloc is in **{mode or 'shadow'}**, so nothing was done to them.",
             inline=False,
         )
+    if str(note or "").strip():
+        embed.add_field(name="Note", value=str(note).strip()[:1024], inline=False)
+    if voided:
+        embed.add_field(name="Voided", value=voided_field(voided)[:1024], inline=False)
     return embed
+
+
+def voided_field(voided: Any) -> str:
+    """Who cancelled the case, when, and why — and that cancelling undid none of it."""
+    by, at, reason = Voided(*voided)
+    who = f"<@{by}>" if by else "Black Bloc"
+    stamp = timestamp_of(at)
+    when = f" at <t:{stamp}:f>" if stamp else ""
+    said = str(reason or "").strip()
+    why = f"\nReason: {said[:REASON_LIMIT]}" if said else ""
+    return f"Cancelled by {who}{when}.{why}\n{VOID_UNDOES_NOTHING}"
+
+
+def timestamp_of(at: Any) -> int | None:
+    try:
+        return int(datetime.fromisoformat(str(at)).timestamp())
+    except (TypeError, ValueError):
+        return None
 
 
 async def add_case(
@@ -350,7 +387,8 @@ async def count_cases_for(db: Any, guild_id: int, user_ids: Any) -> dict[int, in
 
 async def warn_count(db: Any, guild_id: int, user_id: int) -> int:
     cur = await db.conn.execute(
-        "SELECT COUNT(*) AS n FROM mod_cases WHERE guild_id = ? AND user_id = ? AND ("
+        "SELECT COUNT(*) AS n FROM mod_cases WHERE guild_id = ? AND user_id = ? "
+        "AND voided_at IS NULL AND ("
         "(kind = 'warn' AND applied = 1) OR (kind = 'automod' AND done LIKE '%\"warn\"%'))",
         (int(guild_id), int(user_id)),
     )
@@ -426,7 +464,8 @@ def case_line(row: Any) -> str:
     if len(said) > LINE_REASON_LIMIT:
         said = said[: LINE_REASON_LIMIT - 1].rstrip() + "…"
     reason = f" — {said}" if said else ""
-    return f"**#{row['id']}** `{row['kind']}` {when} by {who}{reason}{tail}"
+    line = f"**#{row['id']}** `{row['kind']}` {when} by {who}{reason}{tail}"
+    return f"~~{line}~~" if case_is_void(row) else line
 
 
 def pages_under_limit(lines: list[str], limit: int = PAGE_LIMIT) -> list[str]:
@@ -452,3 +491,237 @@ def duration_error(given: Any) -> str:
 
 def refusal_in_test_mode(action: str) -> str:
     return TEST_MODE_REFUSAL.format(action=action)
+
+
+# --- the /mod panel (wave 4) — its own block at the foot so the parallel branches merge -----------
+
+PANEL_MINUTES_KEY = "mod_panel_minutes"
+PANEL_TITLE = "What Black Bloc has done"
+PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run /mod again"
+
+VOID_UNDOES_NOTHING = (
+    "Cancelling a case does not undo the punishment: a cancelled ban is still a ban and a "
+    "cancelled timeout is still running. `/untimeout` and `/unban` are what lift them."
+)
+WHOSE_CASES = "Whose cases?"
+PICK_A_CASE = "A case…"
+EVERYONE_LABEL = "Everyone's cases"
+BARE_ACTIONS_FOOTER = (
+    "Punishing somebody is still `/warn`, `/timeout`, `/untimeout`, `/kick`, `/ban`, `/unban` "
+    "and `/purge` — this panel reads and corrects the record they write."
+)
+CASES_HEADER = "**{total}** case(s) for {who} — page {page} of {pages}"
+NOTHING_TO_SAY = (
+    "A case with no reason is a case nobody can read later, so nothing was changed. Say what it "
+    "was for, even briefly."
+)
+NOTHING_IN_THE_NOTE = (
+    "An empty note is a note nobody can read later, so nothing was changed. Say what you wanted "
+    "the next moderator to know, even briefly."
+)
+VOID_NEEDS_A_REASON = (
+    "Cancelling a case with no reason leaves the next moderator guessing, so nothing was "
+    "changed. Say why it was wrong, even briefly."
+)
+ALREADY_VOIDED = "Somebody voided this case a moment ago, so nothing was done twice."
+ALREADY_RESTORED = "Somebody restored this case a moment ago, so nothing was done twice."
+NOT_A_CASE_NUMBER = (
+    "**{given}** is not a case number, so nothing was opened. A case number is the digits after "
+    "the # on a case card."
+)
+REASON_SAVED = "Case **#{case_id}**'s reason now reads what you wrote."
+NOTE_SAVED = "Case **#{case_id}** carries your note."
+VOIDED_SAID = "Case **#{case_id}** is marked cancelled. It is still on the record."
+RESTORED_SAID = "Case **#{case_id}** is back on the record as it was."
+
+EDIT_REASON = "edit_reason"
+NOTE = "note"
+VOID = "void"
+RESTORE = "restore"
+BACK = "back"
+REFRESH = "refresh"
+LOGS = "logs"
+SITE = "site"
+PICK_CASE = "pick_case"
+WHOSE = "whose"
+NEWER = "newer"
+OLDER = "older"
+EVERYONE = "everyone"
+JUMP = "jump"
+
+BUTTON = "button"
+LINK = "link"
+CASE_SELECT = "case_select"
+USER_SELECT = "user_select"
+
+
+class CaseMove(NamedTuple):
+    action: str
+    label: str
+    style: str = "secondary"
+    row: int = 0
+    modal: bool = False
+    kind: str = BUTTON
+
+
+class Voided(NamedTuple):
+    by: Any
+    at: Any
+    reason: Any
+
+
+EDIT_REASON_MOVE = CaseMove(EDIT_REASON, "Edit reason…", modal=True)
+ADD_NOTE_MOVE = CaseMove(NOTE, "Add a note…", modal=True)
+EDIT_NOTE_MOVE = CaseMove(NOTE, "Edit the note…", modal=True)
+VOID_MOVE = CaseMove(VOID, "Void this case…", "danger", modal=True)
+RESTORE_MOVE = CaseMove(RESTORE, "Restore this case", "primary")
+BACK_MOVE = CaseMove(BACK, "Back")
+CARD_REFRESH_MOVE = CaseMove(REFRESH, "Refresh")
+
+PICK_CASE_MOVE = CaseMove(PICK_CASE, PICK_A_CASE, row=0, kind=CASE_SELECT)
+WHOSE_MOVE = CaseMove(WHOSE, WHOSE_CASES, row=1, kind=USER_SELECT)
+NEWER_MOVE = CaseMove(NEWER, "‹ Newer", row=2)
+OLDER_MOVE = CaseMove(OLDER, "Older ›", row=2)
+EVERYONE_MOVE = CaseMove(EVERYONE, EVERYONE_LABEL, row=2)
+JUMP_MOVE = CaseMove(JUMP, "Jump to case #…", row=2, modal=True)
+ROOT_REFRESH_MOVE = CaseMove(REFRESH, "Refresh", row=2)
+LOGS_MOVE = CaseMove(LOGS, "Logs", row=3)
+SITE_MOVE = CaseMove(SITE, "Open on the site", "link", row=3, kind=LINK)
+
+CARD_MOVES = (
+    EDIT_REASON_MOVE,
+    ADD_NOTE_MOVE,
+    EDIT_NOTE_MOVE,
+    VOID_MOVE,
+    RESTORE_MOVE,
+    BACK_MOVE,
+    CARD_REFRESH_MOVE,
+)
+ROOT_MOVES = (
+    PICK_CASE_MOVE,
+    WHOSE_MOVE,
+    NEWER_MOVE,
+    OLDER_MOVE,
+    EVERYONE_MOVE,
+    JUMP_MOVE,
+    ROOT_REFRESH_MOVE,
+    LOGS_MOVE,
+    SITE_MOVE,
+)
+
+
+def case_is_void(row: Any) -> bool:
+    return bool(row_value(row, "voided_at"))
+
+
+def case_status(row: Any) -> str:
+    """The select label's status word — what a moderator needs before they open the card."""
+    if case_is_void(row):
+        return "voided"
+    if not row_value(row, "applied", 1):
+        return "not done"
+    return str(row_value(row, "kind", ""))
+
+
+def voided_of(row: Any) -> Voided | None:
+    if not case_is_void(row):
+        return None
+    return Voided(
+        row_value(row, "voided_by"), row_value(row, "voided_at"), row_value(row, "void_reason")
+    )
+
+
+def card_buttons(row: Any) -> tuple[CaseMove, ...]:
+    """One card's row: Void and Restore are never both there, and the note button says which."""
+    note = EDIT_NOTE_MOVE if str(row_value(row, "note") or "").strip() else ADD_NOTE_MOVE
+    if case_is_void(row):
+        return (RESTORE_MOVE, EDIT_REASON_MOVE, note, BACK_MOVE, CARD_REFRESH_MOVE)
+    return (EDIT_REASON_MOVE, note, VOID_MOVE, BACK_MOVE, CARD_REFRESH_MOVE)
+
+
+def root_buttons(
+    *, has_rows: bool, page: int, pages: int, filtered: bool, has_site: bool
+) -> tuple[CaseMove, ...]:
+    """P3 as data: a pager arrow is absent rather than there and refusing, and row 2 holds five."""
+    found: list[CaseMove] = []
+    if has_rows:
+        found.append(PICK_CASE_MOVE)
+    found.append(WHOSE_MOVE)
+    if int(page) > 1:
+        found.append(NEWER_MOVE)
+    if int(page) < int(pages):
+        found.append(OLDER_MOVE)
+    if filtered:
+        found.append(EVERYONE_MOVE)
+    found.append(JUMP_MOVE)
+    found.append(ROOT_REFRESH_MOVE)
+    found.append(LOGS_MOVE)
+    if has_site:
+        found.append(SITE_MOVE)
+    return tuple(found)
+
+
+def page_count(total: Any) -> int:
+    return max(1, -(-int(total or 0) // CASES_PER_PAGE))
+
+
+def wanted_page(page: Any, pages: int) -> int:
+    try:
+        asked = int(page or 1)
+    except (TypeError, ValueError):
+        asked = 1
+    return max(1, min(asked, pages))
+
+
+def panel_minutes(store: Any, guild_id: int) -> int:
+    from .panels import panel_minutes as _minutes
+
+    return _minutes(store, guild_id, PANEL_MINUTES_KEY)
+
+
+async def set_case_reason(db: Any, case_id: int, reason: Any) -> None:
+    await db.conn.execute(
+        "UPDATE mod_cases SET reason = ? WHERE id = ?",
+        (str(reason)[:REASON_LIMIT], int(case_id)),
+    )
+    await db.conn.commit()
+
+
+async def write_case_note(db: Any, case_id: int, note: Any, by: Any) -> None:
+    await db.conn.execute(
+        "UPDATE mod_cases SET note = ?, note_by = ?, note_at = ? WHERE id = ?",
+        (
+            str(note)[:REASON_LIMIT],
+            int(by) if by else None,
+            datetime.now(UTC).isoformat(),
+            int(case_id),
+        ),
+    )
+    await db.conn.commit()
+
+
+async def mark_case_void(db: Any, case_id: int, by: Any, reason: Any) -> bool:
+    """True for the one caller that turned this case from live to voided."""
+    cur = await db.conn.execute(
+        "UPDATE mod_cases SET voided_at = ?, voided_by = ?, void_reason = ? "
+        "WHERE id = ? AND voided_at IS NULL",
+        (
+            datetime.now(UTC).isoformat(),
+            int(by) if by else None,
+            str(reason)[:REASON_LIMIT] if reason else None,
+            int(case_id),
+        ),
+    )
+    await db.conn.commit()
+    return bool(cur.rowcount == 1)
+
+
+async def clear_case_void(db: Any, case_id: int) -> bool:
+    """True for the one caller that took the void back off."""
+    cur = await db.conn.execute(
+        "UPDATE mod_cases SET voided_at = NULL, voided_by = NULL, void_reason = NULL "
+        "WHERE id = ? AND voided_at IS NOT NULL",
+        (int(case_id),),
+    )
+    await db.conn.commit()
+    return bool(cur.rowcount == 1)
