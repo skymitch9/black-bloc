@@ -930,7 +930,9 @@ file's last row and starts after it. The Phase 7 block at `:239–247` is rewrit
     workflow — at one extra click and one extra surface per reply, and the card's row 0 goes to five
     buttons exactly.
 
-- **F-M8 — does `Reply as Staff` stay a separate button, or become a checkbox in one modal?**
+- ✅ **F-M8 — ANSWERED (a) by the owner 2026-09-05 ("A"): two buttons.** All seven forks are now
+  (a), the recommended answer each time; Build B may dispatch.
+  Original question — does `Reply as Staff` stay a separate button, or become a checkbox in one modal?
   discord.py 2.7.1 puts a `CheckboxGroup` in a modal (`polls.py:2641`), so *"send this without my
   name on it"* could be a tick inside `ReplyModal` and the card would drop to three buttons.
   - **(a) Two buttons, as decided.** Anonymity is a decision made **before** typing, and a tick
