@@ -5,6 +5,7 @@ import pytest
 from black_bloc.cogs.moderation.modmail import (
     add_message,
     blocked_row,
+    create_practice_ticket,
     create_ticket,
     get_snippet,
     get_ticket,
@@ -57,7 +58,23 @@ async def test_tickets_list_by_status_with_the_member_resolved(client, sign_in, 
 
     assert len(everything) == 1 and everything[0]["user_name"] == "Ada"
     assert everything[0]["status"] == OPEN
+    assert everything[0]["practice"] is False
     assert len(open_only) == 1 and closed == []
+
+
+async def test_a_practice_ticket_is_kept_off_the_list_but_readable_by_number(
+    client, sign_in, web, guild, wf
+):
+    wf.member(guild, 21, name="ada")
+    real = await a_ticket(web, wf)
+    practice = await create_practice_ticket(web.db, wf.GUILD_ID, 22)
+    sign_in(client)
+
+    listed = client.get("/api/modmail/tickets").json()
+    named = client.get(f"/api/modmail/tickets/{practice}").json()
+
+    assert [row["id"] for row in listed] == [real]
+    assert named["id"] == practice and named["practice"] is True
     assert client.get("/api/modmail/tickets", params={"status": "sideways"}).status_code == 400
 
 

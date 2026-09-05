@@ -52,6 +52,8 @@ TOPIC_TEMPLATE = "Black Bloc modmail | user {user_id} | ticket {ticket_id}"
 TOPIC_PATTERN = re.compile(r"Black Bloc modmail \| user (\d+) \| ticket (\d+)")
 THREAD_NAME_TEMPLATE = "{name} · #{ticket_id}"
 TRANSCRIPT_NAME = "modmail-ticket-{ticket_id}.txt"
+PRACTICE_TRANSCRIPT_NAME = "modmail-practice-ticket-{ticket_id}.txt"
+PRACTICE_MARK = "PRACTICE — a fake ticket. Nothing in it reached a member and no DM was sent."
 NO_TEXT = "(no text)"
 
 SNIPPET_NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,39}$")
@@ -273,10 +275,12 @@ def transcript_text(
     closed_at: Any = None,
     closed_by: Any = None,
     reason: Any = None,
+    practice: bool = False,
 ) -> str:
     """The whole ticket as plain text, chronological, notes marked, attachments as links."""
     counts = count_directions(rows)
-    head = [
+    head = [PRACTICE_MARK] if practice else []
+    head += [
         f"Black Bloc modmail transcript — ticket #{ticket_id}",
         f"Server: {guild_name}",
         f"Member: {user_label} ({user_id})",
@@ -296,8 +300,9 @@ def transcript_text(
     return clamp_bytes("\n".join(head + body) + "\n")
 
 
-def transcript_filename(ticket_id: Any) -> str:
-    return TRANSCRIPT_NAME.format(ticket_id=ticket_id)
+def transcript_filename(ticket_id: Any, *, practice: bool = False) -> str:
+    name = PRACTICE_TRANSCRIPT_NAME if practice else TRANSCRIPT_NAME
+    return name.format(ticket_id=ticket_id)
 
 
 def transcript_embed(
@@ -311,11 +316,12 @@ def transcript_embed(
     closed_at: Any = None,
     closed_by: Any = None,
     reason: Any = None,
+    practice: bool = False,
 ) -> discord.Embed:
     """The summary that sits next to the transcript file in the log channel."""
     tally = counts or dict.fromkeys(DIRECTIONS, 0)
     embed = discord.Embed(
-        title=f"Ticket #{ticket_id} closed",
+        title=f"{'Practice ticket' if practice else 'Ticket'} #{ticket_id} closed",
         description=f"<@{int(user_id)}> — {clamp(user_label, NAME_LIMIT)}",
         colour=COLOURS[NOTE],
     )
@@ -332,6 +338,8 @@ def transcript_embed(
         value=f"{tally.get(IN, 0)} in · {tally.get(OUT, 0)} out · {tally.get(NOTE, 0)} note(s)",
         inline=False,
     )
+    if practice:
+        embed.add_field(name="Practice", value=PRACTICE_MARK, inline=False)
     if reason:
         embed.add_field(name="Reason", value=clamp(reason, FIELD_LIMIT), inline=False)
     embed.set_footer(text=f"user {int(user_id)}")
@@ -399,6 +407,9 @@ BLOCKED_MOVE = "blocked"
 SNIPPETS = "snippets"
 FORGET = "forget"
 LOGS = "logs"
+PRACTICE = "practice"
+PRACTICE_YES = "practice_yes"
+PRACTICE_NO = "practice_no"
 REFRESH = "refresh"
 SITE = "site"
 BACK = "back"
@@ -431,6 +442,9 @@ SETUP_MOVE = ModmailMove(SETUP, "Setup…", "secondary", 1)
 BLOCKED_MOVE_BUTTON = ModmailMove(BLOCKED_MOVE, "Blocked…", "secondary", 1)
 SNIPPETS_MOVE = ModmailMove(SNIPPETS, "Snippets…", "secondary", 1)
 FORGET_MOVE = ModmailMove(FORGET, "Forget…", "secondary", 1)
+PRACTICE_MOVE = ModmailMove(PRACTICE, "Try a fake ticket", "secondary", 1)
+PRACTICE_YES_MOVE = ModmailMove(PRACTICE_YES, "Yes, open one", "primary", 1)
+PRACTICE_NO_MOVE = ModmailMove(PRACTICE_NO, "No", "secondary", 1)
 LOGS_MOVE = ModmailMove(LOGS, "Logs", "secondary", 2)
 REFRESH_MOVE = ModmailMove(REFRESH, "Refresh", "secondary", 2)
 SITE_MOVE = ModmailMove(SITE, "Open on the site", "link", 2)
@@ -467,6 +481,9 @@ PANEL_MOVES = (
     BLOCKED_MOVE_BUTTON,
     SNIPPETS_MOVE,
     FORGET_MOVE,
+    PRACTICE_MOVE,
+    PRACTICE_YES_MOVE,
+    PRACTICE_NO_MOVE,
     LOGS_MOVE,
     REFRESH_MOVE,
     SITE_MOVE,
@@ -496,11 +513,21 @@ PANEL_MOVES = (
 )
 
 
-def root_buttons(*, has_forget: bool, has_site: bool) -> tuple[ModmailMove, ...]:
+def root_buttons(
+    *,
+    has_forget: bool,
+    has_site: bool,
+    has_practice: bool = False,
+    confirming: bool = False,
+) -> tuple[ModmailMove, ...]:
     """Forget… is drawn only where something is pointed, so it can never answer 'nothing to do'."""
+    if confirming:
+        return (PRACTICE_YES_MOVE, PRACTICE_NO_MOVE)
     found = [SETUP_MOVE, BLOCKED_MOVE_BUTTON, SNIPPETS_MOVE]
     if has_forget:
         found.append(FORGET_MOVE)
+    if has_practice:
+        found.append(PRACTICE_MOVE)
     found += [LOGS_MOVE, REFRESH_MOVE]
     if has_site:
         found.append(SITE_MOVE)

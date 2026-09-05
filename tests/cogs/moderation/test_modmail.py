@@ -251,8 +251,20 @@ class FakeGuard:
     def __init__(self, test_channel_id=TEST_CHANNEL, dm_ids=(8000,)):
         self.test_channel_id = test_channel_id
         self.dm_ids = set(dm_ids)
+        self.owned_channel_ids = set()
+
+    def own_channel(self, channel):
+        self.owned_channel_ids.add(getattr(channel, "id", channel))
+
+    def disown_channel(self, channel):
+        self.owned_channel_ids.discard(getattr(channel, "id", channel))
+
+    def owns_channel(self, channel):
+        return getattr(channel, "id", channel) in self.owned_channel_ids
 
     def allows_channel(self, channel_id):
+        if channel_id in self.owned_channel_ids:
+            return True
         return channel_id == self.test_channel_id or channel_id in self.dm_ids
 
     def refusal_message(self):
@@ -1979,6 +1991,188 @@ async def test_the_reply_style_is_set_from_the_setup_panel_and_says_what_changed
     assert "buttons" in chosen.sent
     assert (await action_kinds(db)).count("modmail.settings") == 1
     assert "**reply style** — buttons" in chosen.embed.description
+
+
+# --- the practice ticket -------------------------------------------------------------------------
+
+
+async def practise(cog, bot, lead):
+    bot.guard = bot.guard or FakeGuard()
+    lead.roles = [FakeRole(STAFF_ROLE)]
+    return await modmail_cog.open_practice(bot, bot.guild, lead)
+
+
+async def practice_ticket(bot, outcome):
+    return await get_ticket(bot.db, outcome.value)
+
+
+async def test_a_practice_ticket_is_a_claimed_private_thread_on_the_test_channel(
+    cog, bot, lead, db
+):
+    outcome = await practise(cog, bot, lead)
+
+    assert outcome.ok
+    ticket = await practice_ticket(bot, outcome)
+    assert ticket["practice"] == 1 and ticket["user_id"] == lead.id
+    thread = bot.guild.threads[ticket["thread_id"]]
+    assert thread.parent_id == TEST_CHANNEL
+    assert thread.kwargs["type"] is discord.ChannelType.private_thread
+    assert bot.guard.owns_channel(thread)
+    titles = [one.kwargs["embed"].title for one in thread.messages]
+    assert titles == [f"Ticket #{ticket['id']}", f"Practice ticket #{ticket['id']}"]
+    assert thread.messages[-1].kwargs.get("view") is not None
+
+
+async def test_the_practice_card_carries_the_two_extra_moves(cog, bot, lead):
+    outcome = await practise(cog, bot, lead)
+    ticket = await practice_ticket(bot, outcome)
+    thread = bot.guild.threads[ticket["thread_id"]]
+
+    labels_on = [one.item.label for one in thread.messages[-1].kwargs["view"].children]
+
+    assert labels_on == [*CARD_LABELS, "Speak as the member", "End the practice"]
+
+
+async def test_speaking_as_the_member_writes_an_inbound_row_and_moves_the_card(
+    cog, bot, lead, db
+):
+    outcome = await practise(cog, bot, lead)
+    ticket = await practice_ticket(bot, outcome)
+    thread = bot.guild.threads[ticket["thread_id"]]
+    first = thread.messages[-1]
+
+    opened = await press_card(bot, lead, first, "Speak as the member", channel=thread)
+    modal = opened.response.modals[-1]
+    modal.text._value = "hello?"
+    said = FakeInteraction(bot, lead, channel=thread)
+    await modal.on_submit(said)
+    modmail_cog.cancel_cards(bot)
+    await modmail_cog.refresh_card(bot, bot.guild, ticket["id"])
+
+    rows = await ticket_messages(db, ticket["id"])
+    assert [row["direction"] for row in rows] == [IN]
+    assert rows[0]["author_id"] == lead.id
+    assert first.id in thread.deleted_messages
+    assert len(cards_in(thread)) == 1
+    assert thread.messages[-1] is cards_in(thread)[0]
+
+
+async def test_a_practice_reply_never_dms_anybody_and_never_says_a_dm_failed(
+    cog, bot, lead, db
+):
+    """Checklist 2 and 10: a suppressed DM is not a failed one, and neither is a claimed check."""
+    outcome = await practise(cog, bot, lead)
+    ticket = await practice_ticket(bot, outcome)
+    thread = bot.guild.threads[ticket["thread_id"]]
+    before = len(lead.dms)
+
+    card = thread.messages[-1]
+    opened = await press_card(bot, lead, card, "Reply", channel=thread)
+    modal = opened.response.modals[-1]
+    modal.text._value = "we are on it"
+    sent = FakeInteraction(bot, lead, channel=thread)
+    await modal.on_submit(sent)
+
+    assert len(lead.dms) == before
+    kinds = await action_kinds(db)
+    assert "modmail.dm_failed" not in kinds
+    assert kinds.count("modmail.reply") == 1
+    assert (await ticket_messages(db, ticket["id"]))[-1]["delivered"] == 1
+    assert "Sent to the member" in sent.sent
+
+
+async def test_ending_the_practice_files_a_transcript_marked_practice_and_disowns_the_thread(
+    cog, bot, lead, db
+):
+    outcome = await practise(cog, bot, lead)
+    ticket = await practice_ticket(bot, outcome)
+    thread = bot.guild.threads[ticket["thread_id"]]
+    before = len(lead.dms)
+
+    ended = await press_card(bot, lead, thread.messages[-1], "End the practice", channel=thread)
+
+    assert (await get_ticket(db, ticket["id"]))["status"] == "closed"
+    assert "PRACTICE" in ended.sent
+    assert len(lead.dms) == before
+    assert thread.archived and thread.locked
+    assert not bot.guard.owns_channel(thread)
+    filed = [
+        one for one in bot.guild.channels[TEST_CHANNEL].messages if one.kwargs.get("file")
+    ]
+    assert len(filed) == 1
+    assert filed[0].kwargs["embed"].title == f"Practice ticket #{ticket['id']} closed"
+    assert filed[0].kwargs["file"].filename == f"modmail-practice-ticket-{ticket['id']}.txt"
+    assert "modmail.transcript" in await action_kinds(db)
+
+
+async def test_a_staffer_with_a_real_open_ticket_is_refused_in_words(cog, bot, lead, db):
+    bot.guard = FakeGuard()
+    bot.users[lead.id] = lead
+    await cog.on_message(dm_from(lead))
+    assert await open_ticket_for(db, GUILD, lead.id) is not None
+
+    outcome = await practise(cog, bot, lead)
+
+    assert not outcome.ok and "already have a modmail ticket" in outcome.message
+    cur = await db.conn.execute("SELECT COUNT(*) AS n FROM modmail_tickets WHERE practice = 1")
+    assert (await cur.fetchone())["n"] == 0
+
+
+async def test_practice_is_refused_when_no_staff_role_resolves(cog, bot, lead):
+    bot.guard = FakeGuard()
+    bot.guild.roles = []
+
+    outcome = await modmail_cog.open_practice(bot, bot.guild, lead)
+
+    assert not outcome.ok and "No staff role" in outcome.message
+    assert bot.guild.threads == {}
+
+
+async def test_the_panel_asks_before_it_opens_a_practice_ticket(cog, bot, lead, db):
+    root = await open_panel(cog, bot, lead)
+    assert has(root.view, "Try a fake ticket")
+
+    asked = await press(root.view, "Try a fake ticket", bot, lead)
+
+    assert labels(asked.view) == ["Yes, open one", "No"]
+    assert "fake ticket" in asked.embed.description
+    cur = await db.conn.execute("SELECT COUNT(*) AS n FROM modmail_tickets")
+    assert (await cur.fetchone())["n"] == 0
+
+    made = await press(asked.view, "Yes, open one", bot, lead)
+
+    assert "Practice ticket #1 is open" in made.sent
+    assert (await get_ticket(db, 1))["practice"] == 1
+    assert has(made.view, "Try a fake ticket")
+
+
+async def test_saying_no_to_the_practice_confirm_opens_nothing(cog, bot, lead, db):
+    root = await open_panel(cog, bot, lead)
+    asked = await press(root.view, "Try a fake ticket", bot, lead)
+
+    kept = await press(asked.view, "No", bot, lead)
+
+    cur = await db.conn.execute("SELECT COUNT(*) AS n FROM modmail_tickets")
+    assert (await cur.fetchone())["n"] == 0
+    assert has(kept.view, "Try a fake ticket")
+
+
+async def test_the_practice_button_is_absent_when_no_staff_role_resolves(cog, bot, lead):
+    bot.guild.roles = []
+
+    root = await open_panel(cog, bot, lead)
+
+    assert not has(root.view, "Try a fake ticket")
+    assert "No staff roles" in root.embed.description
+
+
+async def test_speaking_for_a_real_member_is_refused(cog, bot, member, lead, db):
+    ticket = await open_one(cog, bot, member)
+
+    outcome = await modmail_cog.practice_message(bot, bot.guild, ticket, lead, "hello")
+
+    assert not outcome.ok and "real ticket" in outcome.message
+    assert len(await ticket_messages(db, ticket["id"])) == 1
 
 
 async def test_a_stored_message_keeps_its_direction_and_anonymity(db):

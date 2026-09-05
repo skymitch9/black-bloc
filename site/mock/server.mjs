@@ -3653,6 +3653,7 @@ function ticketRow(ticket) {
     closed_by_id: ticket.closed_by === null || ticket.closed_by === undefined ? null : String(ticket.closed_by),
     closed_by_name: memberName(ticket.closed_by),
     close_reason: ticket.close_reason,
+    practice: Boolean(ticket.practice),
   };
 }
 

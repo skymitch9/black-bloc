@@ -22,7 +22,7 @@ from ...cogs.moderation.modmail import (
 )
 from ...events import clamp
 from ...logkinds import VIA_WEBSITE
-from ...modmail import CLOSED, OPEN, SOURCE_WEB, load_attachments
+from ...modmail import CLOSED, OPEN, SOURCE_WEB, field_of, load_attachments
 from ..auth import Refused, staff_dependency
 from ..names import resolve_one
 from ..writes import (
@@ -92,6 +92,7 @@ def ticket_row(guild: Any, row: Any) -> dict[str, Any]:
             resolve_one(guild, row["closed_by"])["display_name"] if row["closed_by"] else None
         ),
         "close_reason": row["close_reason"],
+        "practice": bool(field_of(row, "practice", 0)),
     }
 
 

@@ -19,6 +19,7 @@ from black_bloc.modmail import (
     OUT,
     PANEL_MINUTES_KEY,
     PANEL_MOVES,
+    PRACTICE_MARK,
     REFRESH,
     SITE,
     SNIPPET_ADD,
@@ -529,6 +530,62 @@ def test_a_blocked_member_is_said_on_the_card_and_a_practice_ticket_says_it_is_f
 def test_the_card_embed_titles_a_practice_ticket_as_practice():
     assert ticket_card_embed(a_ticket()).title == "Ticket #4"
     assert ticket_card_embed(a_ticket(practice=1)).title == "Practice ticket #4"
+
+
+def test_a_practice_transcript_says_practice_in_the_name_the_title_and_the_header():
+    """F-M4 (a): the close path is a third of the risk, so practice practises it."""
+    rows = [
+        {
+            "at": "2026-09-05T10:00:00+00:00",
+            "author_id": 1,
+            "direction": IN,
+            "anonymous": 0,
+            "content": "hello?",
+            "attachments": None,
+            "delivered": 1,
+        }
+    ]
+
+    text = transcript_text(
+        rows,
+        ticket_id=4,
+        user_id=900,
+        user_label="Meg",
+        guild_name="Black in a Flash!",
+        practice=True,
+    )
+
+    assert text.splitlines()[0] == PRACTICE_MARK
+    assert transcript_filename(4, practice=True) == "modmail-practice-ticket-4.txt"
+    assert transcript_filename(4) == "modmail-ticket-4.txt"
+    assert transcript_embed(ticket_id=4, user_id=900, user_label="Meg", practice=True).title == (
+        "Practice ticket #4 closed"
+    )
+    assert transcript_embed(ticket_id=4, user_id=900, user_label="Meg").title == "Ticket #4 closed"
+    assert PRACTICE_MARK not in transcript_text(
+        rows, ticket_id=4, user_id=900, user_label="Meg", guild_name="x"
+    )
+
+
+def test_the_practice_button_and_its_confirm_replace_the_root_row():
+    plain = root_buttons(has_forget=False, has_site=False)
+    offered = root_buttons(has_forget=False, has_site=False, has_practice=True)
+    asking = root_buttons(has_forget=True, has_site=True, has_practice=True, confirming=True)
+
+    assert "Try a fake ticket" not in [move.label for move in plain]
+    assert "Try a fake ticket" in [move.label for move in offered]
+    assert [move.label for move in asking] == ["Yes, open one", "No"]
+
+
+@pytest.mark.parametrize("has_forget", [False, True])
+def test_the_root_row_one_never_passes_discords_five(has_forget):
+    """Setup·Blocked·Snippets·Forget·Try a fake ticket is exactly the cap, and no more."""
+    moves = root_buttons(has_forget=has_forget, has_site=True, has_practice=True)
+    rows: dict[int, int] = {}
+    for move in moves:
+        rows[move.row] = rows.get(move.row, 0) + 1
+
+    assert max(rows.values()) <= 5
 
 
 def test_picked_values_reads_both_spellings_a_modal_group_answers_with():

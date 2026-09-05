@@ -1910,7 +1910,8 @@
         "closed_at",
         "closed_by_id",
         "closed_by_name",
-        "close_reason"
+        "close_reason",
+        "practice"
       ]
     },
     {

@@ -30,8 +30,10 @@ from ...modmail import (
     BLOCKED_TITLE,
     CARD_ANON,
     CARD_CLOSE,
+    CARD_END,
     CARD_MOVES,
     CARD_NOTE,
+    CARD_SPEAK,
     CATEGORY,
     CLOSED,
     CONTENT_LIMIT,
@@ -55,6 +57,9 @@ from ...modmail import (
     PICK_A_REPLY_STYLE,
     PICK_A_SNIPPET,
     PICK_SOMEBODY,
+    PRACTICE,
+    PRACTICE_NO,
+    PRACTICE_YES,
     REFRESH,
     REPLY_STYLE,
     REPLY_STYLE_KEY,
@@ -268,6 +273,34 @@ SNIPPET_EXISTS = (
 SNIPPET_GONE = "Snippet **{name}** is gone."
 NO_SUCH_SNIPPET = "There is no snippet called **{name}**, so nothing was removed."
 NO_SNIPPETS = "There are no snippets yet — **Add one…** makes the first."
+PRACTICE_OPENED = (
+    "Practice ticket #{ticket_id} is open in <#{where}>. **Speak as the member** puts a message "
+    "in it, the card moves to the bottom, and **End the practice** files the transcript. Nothing "
+    "here reaches anybody."
+)
+PRACTICE_HEADER = (
+    "**This is a practice ticket.** It behaves like a real one except that no DM is ever sent — "
+    "it is here so a Lead can try the card, the typed relay and `/reply` before choosing a reply "
+    "style."
+)
+PRACTICE_SAID = "Said it — the card should now be under it."
+PRACTICE_ENDED = "Practice ticket #{ticket_id} is over. The transcript is marked PRACTICE."
+PRACTICE_REASON = "practice"
+PRACTICE_FAILED = (
+    "Black Bloc could not make the practice thread, so nothing was opened. The log says why; try "
+    "again, and check it can make private threads in the test channel."
+)
+ALREADY_PRACTISING = (
+    "You already have a modmail ticket open, and Black Bloc allows one per person — so no "
+    "practice ticket was made. Close that one first."
+)
+NO_STAFF_TO_PRACTISE = (
+    "No staff role resolves, so a practice ticket would have nobody in it and none was made. "
+    "Point `staff_channel_id` at a staff-only channel with `/settings set staff_channel_id` "
+    "first."
+)
+NOT_PRACTICE = "That is a real ticket with a real member, so nobody can be spoken for."
+NOTHING_TO_SAY = "Type something for the pretend member to say — nothing was added."
 NO_STAFF_WARNING = (
     "⚠️ **No staff roles resolve**, so a ticket channel would be visible to server admins only "
     "and a ticket thread would have nobody in it. Point `staff_channel_id` at a channel only "
@@ -314,10 +347,14 @@ async def open_tickets(db: Any, guild_id: int) -> list[Any]:
     return list(await cur.fetchall())
 
 
-async def tickets_by_status(db: Any, guild_id: int, status: Any = None, limit: int = 100) -> list:
+async def tickets_by_status(
+    db: Any, guild_id: int, status: Any = None, limit: int = 100, *, practice: bool = False
+) -> list:
     """Every ticket, or only those in one state; newest first for the web's tables."""
     sql = "SELECT * FROM modmail_tickets WHERE guild_id = ?"
     params: tuple[Any, ...] = (guild_id,)
+    if not practice:
+        sql += " AND practice = 0"
     if status:
         sql += " AND status = ?"
         params += (status,)
@@ -642,6 +679,18 @@ async def deliver_dm(
     return None
 
 
+async def ticket_dm(
+    bot: Any, guild: Any, ticket: Any, content: Any = None, embed: discord.Embed | None = None
+) -> str | None:
+    """A practice ticket DMs nobody, and a DM that was never sent is not one that failed."""
+    if is_practice(ticket):
+        return None
+    user = bot.get_user(ticket["user_id"]) or guild.get_member(ticket["user_id"])
+    if user is None:
+        return "member_not_visible"
+    return await deliver_dm(user, content, embed=embed)
+
+
 async def react(bot: Any, message: Any, emoji: str) -> None:
     guard = getattr(bot, "guard", None)
     if guard is not None and not guard.allows_channel(message.channel.id):
@@ -861,7 +910,6 @@ async def send_reply(
     source: str = SOURCE_COMMAND,
 ) -> str | None:
     """One path for every staff reply, whether it came from a message, a command or the site."""
-    user = bot.get_user(ticket["user_id"]) or guild.get_member(ticket["user_id"])
     embed = relay_embed(
         OUT,
         author_name=getattr(author, "display_name", str(author)),
@@ -883,7 +931,7 @@ async def send_reply(
         attachments=attachments,
         anonymous=anonymous,
     )
-    why_not = await deliver_dm(user, embed=embed) if user is not None else "member_not_visible"
+    why_not = await ticket_dm(bot, guild, ticket, embed=embed)
     await log_action(
         bot,
         guild,
@@ -894,6 +942,7 @@ async def send_reply(
             "ticket_id": ticket["id"],
             "anonymous": anonymous,
             "delivered": why_not is None,
+            "practice": is_practice(ticket),
             "source": source,
             "via": via,
         },
@@ -955,12 +1004,15 @@ async def close_ticket(
             actor=by,
             target=fresh["user_id"],
             reason=clamp(reason, 400) or None,
-            details={"ticket_id": fresh["id"], "messages": len(rows), "via": via},
+            details={
+                "ticket_id": fresh["id"],
+                "messages": len(rows),
+                "practice": is_practice(fresh),
+                "via": via,
+            },
         )
         if not silent:
-            user = bot.get_user(fresh["user_id"]) or guild.get_member(fresh["user_id"])
-            if user is not None:
-                await deliver_dm(user, closing_dm(guild.name, reason))
+            await ticket_dm(bot, guild, fresh, closing_dm(guild.name, reason))
         if why_not is None:
             await remove_place(bot, guild, fresh)
         else:
@@ -970,6 +1022,8 @@ async def close_ticket(
                 "modmail.place_kept",
                 details={"ticket_id": fresh["id"], "reason": why_not},
             )
+        if is_practice(fresh):
+            await disown_place(bot, guild, fresh)
         return True, why_not
 
 
@@ -1000,6 +1054,7 @@ async def post_transcript(
             details=details | {"reason": "test_mode", "channel_id": channel.id},
         )
         return None, "test_mode"
+    practice = is_practice(ticket)
     text = transcript_text(
         rows,
         ticket_id=ticket["id"],
@@ -1011,6 +1066,7 @@ async def post_transcript(
         closed_at=closed_at,
         closed_by=getattr(by, "id", by),
         reason=reason,
+        practice=practice,
     )
     embed = transcript_embed(
         ticket_id=ticket["id"],
@@ -1022,9 +1078,11 @@ async def post_transcript(
         closed_at=closed_at,
         closed_by=getattr(by, "id", by),
         reason=reason,
+        practice=practice,
     )
     file = discord.File(
-        io.BytesIO(text.encode("utf-8")), filename=transcript_filename(ticket["id"])
+        io.BytesIO(text.encode("utf-8")),
+        filename=transcript_filename(ticket["id"], practice=practice),
     )
     try:
         message = await channel.send(embed=embed, file=file, allowed_mentions=mentions())
@@ -1100,6 +1158,145 @@ async def resolve_ticket(bot: Any, guild: Any, channel_id: Any, given: Any) -> t
         return None, NO_TICKET_HERE
     ids = ", ".join(f"#{row['id']}" for row in rows)
     return None, MANY_OPEN.format(count=len(rows), ids=ids)
+
+
+async def disown_place(bot: Any, guild: Any, ticket: Any) -> None:
+    """The practice thread is claimed for the life of the practice and no longer."""
+    guard = getattr(bot, "guard", None)
+    if guard is None:
+        return
+    place, _ = await resolve_place(bot, guild, ticket)
+    if place is not None:
+        guard.disown_channel(place)
+
+
+def practice_parent(bot: Any, guild: Any) -> tuple[Any, str]:
+    """Checklist 1: making a thread is invisible to the guard, so it is asked by hand first."""
+    parent, where = thread_parent(bot, guild)
+    if parent is None:
+        return None, where
+    guard = getattr(bot, "guard", None)
+    if guard is not None and not guard.allows_channel(parent.id):
+        return None, "no_test_channel"
+    return parent, where
+
+
+async def create_practice_ticket(db: Any, guild_id: int, user_id: int) -> int | None:
+    cur = await db.conn.execute(
+        "INSERT INTO modmail_tickets(guild_id, user_id, mode, channel_id, status, opened_at, "
+        "practice) VALUES (?, ?, ?, 0, ?, ?, 1)",
+        (guild_id, user_id, THREAD_MODE, OPEN, now_iso()),
+    )
+    await db.conn.commit()
+    return cur.lastrowid
+
+
+async def open_practice(bot: Any, guild: Any, actor: Any, *, via: str = VIA_DISCORD) -> Outcome:
+    """The instrument the owner decides `modmail_reply_style` with: a real ticket, no member."""
+    if not bot.store.staff_roles(guild):
+        return refusal(NO_STAFF_TO_PRACTISE, "no_staff_roles", 409)
+    if await open_ticket_for(bot.db, guild.id, actor.id) is not None:
+        return refusal(ALREADY_PRACTISING, "already_open", 409)
+    parent, where = practice_parent(bot, guild)
+    if parent is None:
+        return refusal(
+            NO_TEST_CHANNEL if where == "no_test_channel" else NO_STAFF_CHANNEL, where, 409
+        )
+    try:
+        ticket_id = await create_practice_ticket(bot.db, guild.id, actor.id)
+    except sqlite3.IntegrityError:
+        return refusal(ALREADY_PRACTISING, "already_open", 409)
+    label = getattr(actor, "display_name", getattr(actor, "name", actor))
+    try:
+        thread = await parent.create_thread(
+            name=thread_name(f"practice · {label}", ticket_id),
+            type=discord.ChannelType.private_thread,
+            invitable=False,
+            auto_archive_duration=AUTO_ARCHIVE_MINUTES,
+            reason=f"Black Bloc modmail practice ticket {ticket_id}",
+        )
+    except Exception as exc:
+        await abandon_practice(bot, guild, actor, ticket_id, exc)
+        return refusal(PRACTICE_FAILED, "practice_failed", 500)
+    guard = getattr(bot, "guard", None)
+    if guard is not None:
+        guard.own_channel(thread)
+    await set_ticket_place(
+        bot.db, ticket_id, getattr(thread, "parent_id", parent.id), thread.id
+    )
+    ticket = await get_ticket(bot.db, ticket_id)
+    await log_action(
+        bot,
+        guild,
+        kind_via("modmail.opened", via),
+        actor=actor,
+        target=actor,
+        details={
+            "ticket_id": ticket_id,
+            "mode": THREAD_MODE,
+            "channel_id": thread.id,
+            "practice": True,
+            "via": via,
+        },
+    )
+    await post_practice_header(bot, guild, ticket, actor)
+    await refresh_card(bot, guild, ticket_id)
+    return Outcome(
+        True, PRACTICE_OPENED.format(ticket_id=ticket_id, where=thread.id), value=ticket_id
+    )
+
+
+async def abandon_practice(bot: Any, guild: Any, actor: Any, ticket_id: int, why: Any) -> None:
+    await bot.db.conn.execute(
+        "UPDATE modmail_tickets SET status = 'closed', closed_at = ?, close_reason = ? "
+        "WHERE id = ?",
+        (now_iso(), f"practice_never_got_a_place: {why}", ticket_id),
+    )
+    await bot.db.conn.commit()
+    await log_action(
+        bot,
+        guild,
+        "modmail.open_failed",
+        target=actor,
+        details={"ticket_id": ticket_id, "practice": True, "reason": str(why)},
+    )
+
+
+async def post_practice_header(bot: Any, guild: Any, ticket: Any, actor: Any) -> None:
+    member = guild.get_member(actor.id)
+    embed = header_embed(
+        ticket_id=ticket["id"],
+        user_id=actor.id,
+        user_label=getattr(actor, "display_name", str(actor)),
+        mode=THREAD_MODE,
+        created_at=getattr(actor, "created_at", None),
+        joined_at=getattr(member, "joined_at", None),
+        roles=[r for r in getattr(member, "roles", ()) if getattr(r, "id", 0) != guild.id],
+        prior_tickets=max(await count_tickets(bot.db, guild.id, actor.id) - 1, 0),
+    )
+    await speak(bot, guild, ticket, content=PRACTICE_HEADER, embed=embed)
+
+
+async def practice_message(bot: Any, guild: Any, ticket: Any, actor: Any, text: Any) -> Outcome:
+    """The three calls `_relay_inbound` makes, with the DM listener replaced by a modal."""
+    if not is_practice(ticket):
+        return refusal(NOT_PRACTICE, "not_practice", 409)
+    if not str(text or "").strip():
+        return refusal(NOTHING_TO_SAY, "nothing_to_say", 400)
+    body = str(text).strip()
+    await add_message(bot.db, ticket["id"], ticket["user_id"], IN, content=body)
+    embed = relay_embed(
+        IN,
+        author_name=getattr(actor, "display_name", str(actor)),
+        author_id=ticket["user_id"],
+        content=body,
+        icon_url=getattr(getattr(actor, "display_avatar", None), "url", None),
+    )
+    _, why_not = await speak(bot, guild, ticket, embed=embed)
+    await bump_card(bot, guild, ticket)
+    return Outcome(
+        True, PRACTICE_SAID if why_not is None else PRACTICE_SAID + RELAY_FAILED_SAID
+    )
 
 
 async def reply_body(db: Any, text: Any, snippet: Any) -> tuple[Any, str | None]:
@@ -1907,6 +2104,10 @@ INCUMBENT_LINE = (
     "**Setup…** → **Answer DMs on** hands it over."
 )
 NOTHING_BLOCKED_HERE = "Nobody is blocked, so there is nobody to let back in."
+REALLY_PRACTISE = (
+    "**Try a fake ticket?** Black Bloc makes a private thread for you, with the ticket card in "
+    "it. Nobody is DMed and no real member is involved."
+)
 PICKED_BLOCK = "Picked: <@{user_id}>."
 PICKED_TO_BLOCK = "About to block <@{user_id}> — **Block them…** asks for the reason."
 PICKED_SNIPPET = "Picked: **{name}**."
@@ -1930,6 +2131,7 @@ class ModmailPanel(Panel):
         self.picked_block: int | None = None
         self.blocking: int | None = None
         self.picked_snippet: str | None = None
+        self.confirming = False
 
 
 def minutes_for(bot: Any, guild_id: int) -> int:
@@ -1961,15 +2163,23 @@ def setup_lines(bot: Any, guild: Any) -> list[str]:
     ]
 
 
-async def build_root(bot: Any, guild: Any, cog: Any) -> tuple[discord.Embed, ModmailPanel]:
+async def build_root(
+    bot: Any, guild: Any, cog: Any, *, confirming: bool = False
+) -> tuple[discord.Embed, ModmailPanel]:
     lines = await cog._status_lines(guild)
     if not bot.store.get(guild.id, "modmail_enabled"):
         lines.append(INCUMBENT_LINE)
+    if confirming:
+        lines.append(REALLY_PRACTISE)
     embed = discord.Embed(title=PANEL_TITLE, description=clamped(lines))
     view = new_panel(bot, guild, cog)
+    view.confirming = confirming
     url = site_page_url(getattr(getattr(bot, "settings", None), "origin", ""), "modmail")
     for move in root_buttons(
-        has_forget=bool(pointed_keys(bot.store, guild)), has_site=url is not None
+        has_forget=bool(pointed_keys(bot.store, guild)),
+        has_site=url is not None,
+        has_practice=bool(bot.store.staff_roles(guild)),
+        confirming=confirming,
     ):
         view.add_item(SiteButton(move, url) if move.action == SITE else MoveButton(move))
     return (embed, view)
@@ -2077,15 +2287,29 @@ def cog_of(view: Any) -> Any:
     return getattr(view, "cog", None)
 
 
-async def render_root(interaction: discord.Interaction, previous: Any = None) -> None:
-    built = await build_root(interaction.client, interaction.guild, cog_of(previous))
+async def render_root(
+    interaction: discord.Interaction, previous: Any = None, *, confirming: bool = False
+) -> None:
+    built = await build_root(
+        interaction.client, interaction.guild, cog_of(previous), confirming=confirming
+    )
     await show(interaction, built, previous)
 
 
-async def open_root(interaction: discord.Interaction, previous: Any = None) -> None:
+async def open_root(
+    interaction: discord.Interaction, previous: Any = None, *, confirming: bool = False
+) -> None:
     if not await opened(interaction):
         return
+    await render_root(interaction, previous, confirming=confirming)
+
+
+async def run_practice(interaction: discord.Interaction, previous: Any) -> None:
+    if not await opened(interaction):
+        return
+    outcome = await open_practice(interaction.client, interaction.guild, interaction.user)
     await render_root(interaction, previous)
+    await answer(interaction, outcome.message)
 
 
 async def open_setup(
@@ -2289,6 +2513,15 @@ class MoveButton(discord.ui.Button):
             return
         if action == FORGET:
             await open_forget(interaction, view)
+            return
+        if action == PRACTICE:
+            await open_root(interaction, view, confirming=True)
+            return
+        if action == PRACTICE_YES:
+            await run_practice(interaction, view)
+            return
+        if action == PRACTICE_NO:
+            await open_root(interaction, view)
             return
         if action in (CATEGORY, STAFF_CHANNEL, TRANSCRIPTS, MODE, REPLY_STYLE):
             await open_setup(interaction, view, action)
@@ -2553,6 +2786,8 @@ CLOSE_TITLE = "Close this ticket"
 CLOSE_REASON_LABEL = "Why — the member is told this"
 CLOSE_SILENT_LABEL = "Or close it quietly"
 CLOSE_SILENT_OPTION = "Close without telling them"
+SPEAK_TITLE = "Say it as the member"
+SPEAK_LABEL = "What the pretend member says — nobody is DMed"
 CARD_MOVE_BY_ACTION = {move.action: move for move in CARD_MOVES}
 
 
@@ -2682,6 +2917,53 @@ async def run_card_close(
     await answer(interaction, CLOSED_SAID.format(ticket_id=ticket_id, extra=extra))
 
 
+async def run_practice_message(
+    interaction: discord.Interaction, ticket_id: int, text: Any
+) -> None:
+    ticket = await card_opened(interaction, ticket_id)
+    if ticket is None:
+        return
+    outcome = await practice_message(
+        interaction.client, interaction.guild, ticket, interaction.user, text
+    )
+    await answer(interaction, outcome.message)
+
+
+async def run_card_end(interaction: discord.Interaction, ticket_id: int) -> None:
+    ticket = await card_opened(interaction, ticket_id)
+    if ticket is None:
+        return
+    closed, _ = await close_ticket(
+        interaction.client,
+        interaction.guild,
+        ticket,
+        by=interaction.user,
+        reason=PRACTICE_REASON,
+        silent=True,
+    )
+    if not closed:
+        await answer(interaction, CLOSE_RACED.format(ticket_id=ticket_id))
+        return
+    await answer(interaction, PRACTICE_ENDED.format(ticket_id=ticket_id))
+
+
+class SpeakAsMemberModal(AnswersErrors, discord.ui.Modal):
+    """Practice only — the modal that stands in for the DM listener a real ticket has."""
+
+    def __init__(self, ticket_id: int) -> None:
+        super().__init__(title=SPEAK_TITLE)
+        self.ticket_id = int(ticket_id)
+        self.text = discord.ui.TextInput(
+            style=discord.TextStyle.paragraph, max_length=CONTENT_LIMIT
+        )
+        self.add_item(discord.ui.Label(text=SPEAK_LABEL, component=self.text))
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await run_practice_message(
+            interaction, self.ticket_id, clamp(str(self.text), CONTENT_LIMIT)
+        )
+
+
 class ReplyModal(AnswersErrors, discord.ui.Modal):
     """F-M7: one modal — the snippet and the text COMBINE, exactly as `_body` combines them."""
 
@@ -2761,6 +3043,12 @@ async def card_pressed(interaction: discord.Interaction, move: Any, ticket_id: i
         return
     if move.action == CARD_CLOSE:
         await interaction.response.send_modal(CloseModal(ticket_id))
+        return
+    if move.action == CARD_SPEAK:
+        await interaction.response.send_modal(SpeakAsMemberModal(ticket_id))
+        return
+    if move.action == CARD_END:
+        await run_card_end(interaction, ticket_id)
         return
     rows = await all_snippets(interaction.client.db)
     await interaction.response.send_modal(
