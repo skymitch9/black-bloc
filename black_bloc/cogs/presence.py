@@ -5,12 +5,9 @@ import logging
 from datetime import UTC, datetime
 
 import discord
-from discord import app_commands
 from discord.ext import commands, tasks
 
-from ..command_visibility import STAFF_ONLY
 from ..presence import ensure_bio, update_status
-from ..settings_store import require_staff
 
 log = logging.getLogger(__name__)
 
@@ -50,11 +47,6 @@ class Presence(commands.Cog):
         self._debounce: asyncio.Task | None = None
         self.last_ok_at: str | None = None
         self.last_error: str | None = None
-
-    presence = app_commands.Group(
-        name="presence", description="Black Bloc's own status and About Me",
-        default_permissions=STAFF_ONLY,
-    )
 
     def loop_health(self, name: str) -> tuple[str | None, str | None]:
         if name != "status":
@@ -123,19 +115,6 @@ class Presence(commands.Cog):
     async def _settle(self) -> None:
         await asyncio.sleep(DEBOUNCE_SECONDS)
         await self.apply_status()
-
-    @presence.command(
-        name="apply", description="Put Black Bloc's About Me and status back as the settings say"
-    )
-    async def presence_apply(self, interaction: discord.Interaction) -> None:
-        if not await require_staff(interaction):
-            return
-        await interaction.response.defer(ephemeral=True)
-        await interaction.followup.send(
-            await reapply_presence(self.bot) or STATUS_FAILED,
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
 
 
 async def setup(bot: commands.Bot) -> None:

@@ -8,8 +8,17 @@ from black_bloc.logkinds import FEATURES
 
 TOP_LEVEL_MAX = 100
 CHILDREN_MAX = 25
-LOGS_GROUPS = {
-}
+TOP_LEVEL_NOW = 29
+RETIRED_GROUPS = (
+    "chat",
+    "mod",
+    "modmail",
+    "presence",
+    "raidtrains",
+    "rolemenu",
+    "settings",
+    "snippet",
+)
 
 
 STAFF_COMMANDS = {
@@ -20,7 +29,6 @@ STAFF_COMMANDS = {
     "kick",
     "mod",
     "modmail",
-    "presence",
     "purge",
     "reply",
     "rolemenu",
@@ -138,65 +146,72 @@ async def test_the_bot_has_no_prefix_commands_to_dispatch(settings):
     await bot.close()
 
 
-async def test_every_feature_group_has_a_logs_command(settings):
+async def test_every_features_logs_is_a_panel_button_and_no_group_is_left_to_hold_one(settings):
+    """The guarantee this once made — every feature group carries a `logs` child — could not
+    survive the panels program, which retired every group. It is re-expressed against what
+    replaced it: no group is left at all, and every feature in `FEATURES` has a panel whose
+    Logs button calls `send_logs` with that feature's name."""
+    import ast
+    import pathlib
+
     bot = BlackBlocBot(settings)
     for name in COGS:
         await bot.load_extension(name)
-
-    groups = {
-        command.name: command
+    groups = [
+        command.name
         for command in bot.tree.get_commands()
         if isinstance(command, app_commands.Group)
-    }
-    for group_name, feature in LOGS_GROUPS.items():
-        group = groups[group_name]
-        logs = next(child for child in group.commands if child.name == "logs")
-        assert [option.name for option in logs.parameters] == ["count", "important_only"]
-        assert feature in FEATURES
-    assert "chat" not in groups
-    assert "mod" not in groups
-    assert "raidtrains" not in groups
-    assert "rolemenu" not in groups
-    assert "modmail" not in groups
-    assert "snippet" not in groups
+    ]
     await bot.close()
+
+    def strings(tree):
+        found = {}
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and isinstance(node.value.value, str):
+                        found[target.id] = node.value.value
+        return found
+
+    root = pathlib.Path("black_bloc")
+    shared = strings(ast.parse((root / "logkinds.py").read_text(encoding="utf-8")))
+    logged = set()
+    for path in root.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        known = {**shared, **strings(tree)}
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call) and getattr(node.func, "id", "") == "send_logs"):
+                continue
+            feature = node.args[1] if len(node.args) > 1 else None
+            if isinstance(feature, ast.Constant):
+                logged.add(feature.value)
+            elif isinstance(feature, ast.Name):
+                logged.add(known.get(feature.id, feature.id))
+
+    assert groups == []
+    assert not [name for name in RETIRED_GROUPS if name in groups]
+    assert set(FEATURES) <= logged
 
 
 async def test_the_command_tree_stays_inside_discords_limits(settings):
-    """One `logs` per group; two new top-level groups. Neither ceiling is near."""
+    """29 top-level slots and ZERO groups — the panels program's finish line, measured."""
     bot = BlackBlocBot(settings)
     for name in COGS:
         await bot.load_extension(name)
 
     top = bot.tree.get_commands()
     assert len(top) <= TOP_LEVEL_MAX
-    assert len(top) == 30
-    for command in top:
-        if isinstance(command, app_commands.Group):
-            assert len(command.commands) <= CHILDREN_MAX, command.name
-            for child in command.commands:
-                if isinstance(child, app_commands.Group):
-                    assert len(child.commands) <= CHILDREN_MAX, child.name
+    assert len(top) == TOP_LEVEL_NOW
+    assert [one.name for one in top if isinstance(one, app_commands.Group)] == []
     await bot.close()
 
 
-async def test_a_logs_command_is_staff_only_and_ephemeral(settings):
-    """`is_staff_command` reads the callback's helpers, so send_logs' gate is what it finds."""
-    from black_bloc.settings_store import is_staff_command
+async def test_a_features_logs_is_staff_only_wherever_the_panel_button_reaches_it(settings):
+    """`send_logs` is the whole body every Logs button calls, and it gates itself."""
+    from black_bloc.actionlog import send_logs
+    from black_bloc.settings_store import called_names, require_staff
 
-    bot = BlackBlocBot(settings)
-    for name in COGS:
-        await bot.load_extension(name)
-
-    groups = {
-        command.name: command
-        for command in bot.tree.get_commands()
-        if isinstance(command, app_commands.Group)
-    }
-    for group_name in LOGS_GROUPS:
-        logs = next(c for c in groups[group_name].commands if c.name == "logs")
-        assert is_staff_command(logs), group_name
-    await bot.close()
+    assert require_staff.__name__ in called_names(send_logs)
 
 
 async def test_on_ready_reconciles_the_role_menu_panels(monkeypatch):
