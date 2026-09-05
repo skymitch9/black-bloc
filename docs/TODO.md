@@ -294,7 +294,7 @@ docs bookkeeping lands with the work, not after.
   previous card's view is stopped, `ui/view.py` gotcha), AND `/reply` stays a bare command. `/areply`,
   `/note`, `/close` still retire into the card. Tickets are one channel each by default (`modmail_mode`
   `channel`; `thread` is the other choice) — the card works the same in a thread.
-  **AMENDED + `/settings` DECIDED (owner, 2026-09-05 06:47: "Okay ship both with your suggestions"):**
+  **AMENDED + `/settings` DECIDED (owner, 2026-09-05 06:46: "Okay ship both with your suggestions"):**
   (1) the card is a STICKY message — on each member message the old card is deleted and a fresh one posted,
   so exactly one card exists, always last, one in the transcript; (2) the reply style is a SETTING
   `modmail_reply_style` (`buttons` / `typing relays` / `both`, default `both`) — in `both`/`typing`,
