@@ -17,6 +17,8 @@ from ...panels import (
     Panel,
     answer,
     capped_placeholder,
+    confirm,
+    confirm_items,
     db_ready,
     db_up,
     option_label,
@@ -151,7 +153,6 @@ MODE_LABELS = {
 }
 WHOSE_CHANNEL = "Whose channel is it?"
 THEIR_CARD = "**{who}**'s YouTube channel"
-CONFIRM_TITLE = "Are you sure?"
 LINK_TITLE = "Link your YouTube channel"
 LINK_FOR_TITLE = "Link a channel for {who}"
 LINK_LABEL = "Your channel address, @handle, or UC… id"
@@ -1223,14 +1224,20 @@ async def open_confirm(
         return
     bot = interaction.client
     embed, _row, _rows = await panel_embed(bot, interaction.guild, interaction.user)
-    embed.add_field(name=CONFIRM_TITLE, value=move.question, inline=False)
     view = YouTubePanel(minutes_for(bot, interaction.guild.id))
     view.member_id = id_of(interaction.user)
-    view.add_item(ConfirmYesButton(move))
-    view.add_item(KeepItButton())
-    retire(previous)
-    view.message = await interaction.edit_original_response(
-        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    await confirm(
+        interaction,
+        view,
+        embed,
+        confirm_items(
+            yes=move.yes,
+            no=KEEP_IT,
+            on_yes=lambda one, card: run_unlink(one, one.user, mine=True, previous=card),
+            on_no=back_to_panel,
+        ),
+        previous,
+        question=move.question,
     )
 
 
@@ -1386,23 +1393,6 @@ class MoveButton(discord.ui.Button):
 def given_of(row: Any) -> str | None:
     handle = _row_value(row, "handle")
     return str(handle) if handle else (_row_value(row, "channel_id") or None)
-
-
-class ConfirmYesButton(discord.ui.Button):
-    def __init__(self, move: PanelMove) -> None:
-        super().__init__(label=move.yes, style=discord.ButtonStyle.danger, row=0)
-        self.move = move
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await run_unlink(interaction, interaction.user, mine=True, previous=self.view)
-
-
-class KeepItButton(discord.ui.Button):
-    def __init__(self) -> None:
-        super().__init__(label=KEEP_IT, style=discord.ButtonStyle.secondary, row=0)
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await back_to_panel(interaction, self.view)
 
 
 class LinkedPick(discord.ui.Select):
@@ -1664,9 +1654,7 @@ __all__ = [
     "SETUP_NOTHING",
     "UNLINKED",
     "UNLINKED_FOR",
-    "ConfirmYesButton",
     "ForgetPick",
-    "KeepItButton",
     "LinkModal",
     "LinkRefused",
     "LinkedPick",
