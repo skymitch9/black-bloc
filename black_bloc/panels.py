@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -14,8 +14,11 @@ from .settings_store import DB_UNAVAILABLE
 log = logging.getLogger(__name__)
 
 CAPPED_PLACEHOLDER = "{shown} of {total} — the rest are on the site"
+CONFIRM_TITLE = "Are you sure?"
 SELECT_OPTION_LIMIT = 100
 DESCRIPTION_LIMIT = 4000
+
+Move = Callable[[discord.Interaction, Any], Awaitable[None]]
 
 
 @dataclass(frozen=True)
@@ -83,6 +86,64 @@ async def db_up(interaction: discord.Interaction) -> bool:
         return True
     await answer(interaction, DB_UNAVAILABLE)
     return False
+
+
+async def opened(interaction: discord.Interaction, *, staff: bool = True) -> bool:
+    """Staff are re-asked before every move, the reads included, and then the database is."""
+    if staff and not await still_staff(interaction):
+        return False
+    await interaction.response.defer()
+    return await db_ready(interaction)
+
+
+class ConfirmButton(discord.ui.Button):
+    """One button of a confirm card; what it does is handed in, not subclassed per feature."""
+
+    def __init__(
+        self, label: str, style: discord.ButtonStyle, run: Move, row: int = 0
+    ) -> None:
+        super().__init__(label=label, style=style, row=row)
+        self.run = run
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await self.run(interaction, self.view)
+
+
+def confirm_items(
+    *,
+    yes: str,
+    no: str,
+    on_yes: Move,
+    on_no: Move,
+    yes_style: discord.ButtonStyle = discord.ButtonStyle.danger,
+    row: int = 0,
+) -> list[discord.ui.Button]:
+    """The two buttons in the order every card wears them: the move first, the way back second."""
+    return [
+        ConfirmButton(yes, yes_style, on_yes, row),
+        ConfirmButton(no, discord.ButtonStyle.secondary, on_no, row),
+    ]
+
+
+async def confirm(
+    interaction: discord.Interaction,
+    view: Any,
+    embed: discord.Embed,
+    items: Iterable[Any],
+    previous: Any = None,
+    *,
+    question: str = "",
+    title: str = CONFIRM_TITLE,
+) -> None:
+    """The one Keep it / Yes card: the question on the card that raised it, and the way back."""
+    if question:
+        embed.add_field(name=title, value=question, inline=False)
+    for item in items:
+        view.add_item(item)
+    retire(previous)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    )
 
 
 def capped_placeholder(
@@ -208,16 +269,22 @@ class NoteModal(AnswersErrors, discord.ui.Modal):
 
 __all__ = [
     "CAPPED_PLACEHOLDER",
+    "CONFIRM_TITLE",
     "DESCRIPTION_LIMIT",
     "SELECT_OPTION_LIMIT",
+    "ConfirmButton",
+    "Move",
     "NoteModal",
     "Outcome",
     "Panel",
     "answer",
     "capped_placeholder",
     "clamped",
+    "confirm",
+    "confirm_items",
     "db_ready",
     "db_up",
+    "opened",
     "option_label",
     "panel_minutes",
     "picked_values",
