@@ -16,3 +16,4 @@
 | [`sweeps.md`](sweeps.md) | **What the owner has not yet exercised by hand**, in priority order, with what to expect — the verification checklist |
 | [`operator-read.md`](operator-read.md) | **`OPERATOR_READ_TOKEN`**: the one command the OWNER runs to mint it (it never prints the value), how a session reads live state with `scripts/read.ps1`, the table of readable paths, and how to rotate or revoke. Unset = the door does not exist |
 | [`site.md`](site.md) | The config website: Pages deploy, the custom domain, and the EXACT Discord OAuth redirect URI to register. Verified live 2026-08-26/27 (single hostname on the Fly app) |
+| [`testing.md`](testing.md) | **How to run the tests:** the hermetic suite, the mock's contract check, and `tests/live/` against the DEPLOYED api (the two env NAMES it needs, and why the operator token cannot start a self-test). Added 2026-09-05 by the self-test build |
