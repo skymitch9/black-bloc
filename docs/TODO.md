@@ -245,11 +245,23 @@ docs bookkeeping lands with the work, not after.
   `modcmds.py:723` `/cases` lists a member's; the panel shape is `/cases [member]` → list with a
   select that opens the one-case card (moves on the card per the moderation panel design, staff
   final say). Folds into the second audit's proposals; one build, own design doc.
+  **DECIDED (owner, 2026-09-04, audit proposal 2 of 6, "Yes"):** `/cases [member]` — no member = the
+  server's newest cases, paged ‹ ›; a select opens the one-case card (kind, who, when, reason, note) with
+  Edit reason, Add note, Void this case (reason required, DM'd); a Jump to case #… button (id modal)
+  replaces `/case <id>`, which retires. 36 → 35 slots. Est. 200–260k Opus.
+  **Proposal 3 of 6 DECIDED (owner, 2026-09-04, "Yes"):** the panel is spelled **`/mod [member]`** —
+  the `/mod` group (only `logs`) folds in as a Logs button, so `/case`, `/cases` and the `/mod` group
+  collapse into ONE `/mod`; 36 → 34 slots. The seven bare actions (`/warn`, `/timeout`, `/untimeout`,
+  `/kick`, `/ban`, `/unban`, `/purge`) STAY bare — typed mid-incident with autocompleted arguments, a
+  panel would be three clicks slower at the wrong moment.
 - 🆕 **Honeypot → ONE slash command (owner, 2026-09-04, clock read 20:50 after the ask: "All of honeypot should be 1 slash
   commands Let's combine").** Today `honeypot.py:417` is a Group (`logs`, `setup`, `status`, `mode`,
   `forget`) with a nested `exempt` group (`add`, `remove`) — 7 subcommands. Becomes `/honeypot` →
   panel: status card, Setup…, mode select, Exempt roles (role select), Forget, Logs — the wave-3
   shape (`info/panels-program.md`). Folds into the second audit; one build, own design doc.
+  **DECIDED (owner, 2026-09-04, audit proposal 1 of 6, "Yes"):** root card = today's `status`; buttons
+  Setup… (name modal), mode select, Exempt roles (role multi-select replaces `exempt add`/`remove`),
+  Forget (renders only when a trap is recorded), Logs. Est. 250–320k Opus. Design doc next, then build.
 - 🆕 **Ticket / modmail commands → maybe one (owner, 2026-09-04, clock read 20:50 after the ask: "All ticket stuff maybe?").**
   Today: the `modmail` Group (`logs`, `block`, `unblock`, `blocked`, `mode`, `forget`) plus FOUR
   top-level ticket commands used INSIDE a ticket — `/reply`, `/areply`, `/note`, `/close`
@@ -257,6 +269,21 @@ docs bookkeeping lands with the work, not after.
   with text arguments, which a panel handles with modals but costs a click. The audit proposes the
   split (a `/modmail` panel for the Group; the in-ticket four either stay, or become buttons on a
   pinned ticket card) and the owner decides.
+  **Proposal 4 of 6 DECIDED (owner, 2026-09-04, "Yes"):** the `/modmail` group becomes ONE panel — root
+  card = `status`; Setup… (channel selects + channels/threads mode select, replaces `settings`/`mode`),
+  Blocked… (list, user select → Unblock, Block someone = user select + reason modal), Snippets… (list,
+  Add modal, select → Remove — the whole `/snippet` group folds in), Forget (renders only when pointed),
+  Logs. 11 subcommands over two slots → one; 36 → 33 with proposals 2–3. Est. 300–380k Opus.
+  **Proposal 5 of 6 DECIDED (owner, 2026-09-05 06:25, "B"):** every ticket
+  gets a PINNED staff card (member, opened-when, block state) with Reply (modal: text + snippet select),
+  Reply as Staff, Private note, Close… (reason modal + silent toggle). **`/reply` stays bare** (the one
+  typed constantly); `/areply`, `/note`, `/close` retire into the card. 36 → 30 with everything so far.
+  **Proposal 6 of 6 DECIDED (owner, 2026-09-05 06:27, "Yes that's fine"):** `/presence apply`
+  folds into the `/settings` panel as a Re-apply presence button (one slot freed); **`/settings` stays a
+  group for now** (the escape hatch every panel points at; `<key>` autocompletes ~80 keys) — its own
+  panel design comes AFTER the hide-when-off build, which adds a key. **Audit result: 36 → 29 slots;
+  the only group left is `/settings`.** Build sequence: honeypot → `/mod` → modmail (+ snippets + ticket
+  card) → presence-into-settings (folds into whichever build touches `cogs/core.py` first).
 - **Wave-1 review findings, small, fold into the next build that touches each file (Fable
   review 2026-09-03 13:50–14:05):** `requests.py` re-renders lack `allowed_mentions`;
   `LOG_LEVEL_COMMANDS` help still says "`/birthday logs`" / "`/request logs`"; five form writes
