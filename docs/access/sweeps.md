@@ -1,7 +1,16 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-05** — rows **183–187** added by the HIDE COMMANDS WHEN OFF build (a feature whose
+> **2026-09-05** — rows **`MA1`–`MA8`** added by the MODMAIL PANEL build (Build A: `/modmail`
+> becomes ONE staff-only command that opens a panel; the whole `modmail` group and the whole
+> `snippet` group are retired, so the top-level count moves — **36 → 35, measured** through
+> `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`). ⚠️ **Lettered on
+> purpose** — a sibling wave-4 build was running beside it, and the conductor numbers both at the
+> merge. The **Phase 7** block above was rewritten IN PLACE for it rather than added to. ⚠️ **`/reply`
+> `/areply` `/note` `/close` are untouched** by Build A. ⚠️ **Nothing in `MA1`–`MA8` has met live
+> Discord** — no panel opened, no snippet saved, no member blocked; the whole verification is
+> `pytest` (4571) and `ruff check`. Before that, same day —
+> rows **183–187** added by the HIDE COMMANDS WHEN OFF build (a feature whose
 > mode reads `off` has its one top-level command removed from the guild's tree; fourteen features
 > — every mode key with an `off` except `chat_memory_mode`, whose `/memory` stays (fork I-M1) —
 > one new bool key `hide_commands_when_off` defaulting **true**). ⚠️ The top-level count in
@@ -247,15 +256,18 @@ form for a full pass.
   5 min expect a `birthday.would_announce` line in the test channel (`Wishes are… → on`
   to see the actual embed, colour `#4eefff`). The daily Birthday Bot import runs on its
   own loop; there has been no `/birthday import` since 2026-08-27.
-- **Phase 7 (live, `modmail_enabled` false):** `/modmail status` (resolved staff,
-  loop health) → `/modmail settings enabled:true` → from a second account DM the bot:
-  expect a ticket channel `<username>` INSIDE the test category, the header card +
+- **Phase 7 (live, `modmail_enabled` false; rewritten 2026-09-05 for the panel — every
+  `/modmail …` and `/snippet …` subcommand this block used to name is gone):** `/modmail`
+  is ONE command that opens a panel carrying the whole status block (resolved staff, loop
+  health, the open tickets) → **Setup…** → **Answer DMs on** → from a second account DM the
+  bot: expect a ticket channel `<username>` INSIDE the test category, the header card +
   your DM relayed into the test channel (guarded send), ✅ on the DM → in the test
   channel `/reply ticket:<n> hello` (relayed to the DM, shows your name) → `/areply`
   (shows "Staff", default colour) → `/note` or a message starting `=` (never
   relayed) → `/close reason:done` → transcript `.txt` + summary in the test channel,
-  DM to the member. Try `/snippet add`, `/modmail block`. Then `/modmail settings
-  enabled:false` again so the incumbent keeps the real tickets.
+  DM to the member. Try **Snippets…** → **Add one…** and **Blocked…** → **Block someone…**.
+  Then **Setup…** → **Answer DMs off** again so the incumbent keeps the real tickets.
+  ⚠️ `/reply` `/areply` `/note` `/close` are unchanged and still typed.
 - **Phase 6 (live, automod `shadow`):** `/automod` — ONE panel carrying everything
   `/automod status` used to print (mode shadow, resolved staff, rules: mention_spam armed,
   others log-only) → from a second account post 5 @mentions within 30 s in the test
@@ -609,6 +621,33 @@ your own client may need a `Ctrl+R` to redraw the list. ⚠️ **`shadow` is not
 | 185 | `/settings set-value` → key `youtube_mode` → value `shadow`. Wait a minute, `Ctrl+R` | **`/youtube` is back**, because shadow is not off. Set it to `on` and it stays. This is the trap worth checking by eye — your posture for YouTube is `shadow` today, so nothing was hidden until you chose `off` |
 | 186 | turn two or three features off (`poll_mode`, `birthday_mode`, `tempvoice_mode`), wait a minute, then `/settings set-value` → `hide_commands_when_off` → `false`. Wait a minute, `Ctrl+R` | **every command is back at once** — `/poll`, `/birthday`, `/voice` — while the three features stay off, and opening one says in words that it is off. `/help` stops saying anything about missing commands. Set it back to `true` and they vanish again |
 | 187 | dashboard → **Logs** → filter `commands.visibility`, after doing 183 and 186 | **one row per sync, not one per command** — each naming how many commands are in the guild, which are `hidden` and which were `shown` again, and whether Discord or the website set it off. ⚠️ A burst of changes inside a minute leaves ONE row, which is correct |
+
+## Modmail — `/modmail` is one command that opens a panel (rows `MA1`–`MA8`)
+
+⚠️ **These rows are lettered on purpose.** Two wave-4 builds were written side by side, so the
+conductor numbers them at the merge; a half-renumbered table cannot look finished.
+
+`/modmail` is now ONE staff-only command that opens a panel. The whole `modmail` group (logs,
+block, unblock, blocked, mode, forget, status, settings) and the whole `snippet` group (add,
+remove, list) are **gone**, so the top-level command count really moves — **36 → 35, measured**
+through `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`. ⚠️ **`/reply`,
+`/areply`, `/note` and `/close` are UNTOUCHED** by this build; the ticket card that retires
+three of them is the next one. ⚠️ **`/modmail` can never be hidden** by `hide_commands_when_off`
+— `modmail_mode` is `channel`/`thread` with no `off`, and the switch is the bool
+`modmail_enabled` — so it is in the list whatever the posture, which is right, because the panel
+is the Discord door to turning modmail on. `modmail_panel_minutes` (10) decides how long the
+panel stays live.
+
+| # | Do this | Expect |
+|---|---|---|
+| MA1 | `/modmail` with `modmail_enabled` **false** | ONE ephemeral panel: everything `/modmail status` used to print (answering DMs, mode, the three places, resolved staff, how many are blocked, the reconciler's last ok/last error, the open tickets or "No ticket is open"), then a line saying the old ModMail bot still holds the inbox. Buttons: **Setup… · Blocked… · Snippets… · Forget… · Logs · Refresh · Open on the site** |
+| MA2 | **Setup…** → **Transcripts…** → pick the test channel; then **Mode…** → `thread`; then **Answer DMs on** | each re-renders the same card in place with the new value on it. The mode reply says the tickets already open keep the mode they were opened in. Dashboard → **Logs**: **one `modmail.settings` row per change**, and — this is the point — **no second `web.modmail.*` row** beside it |
+| MA3 | **Setup…** again | the button now reads **Answer DMs off**, never both spellings at once. Press it and modmail is back where it was |
+| MA4 | **Snippets…** → **Add one…** (name `ban-appeal`, some text) → **Add one…** again with the SAME name → then pick it and **Change it…** | the first saves; the second is refused **in words naming Change it…** (there is no `overwrite:true` any more); **Change it…** opens the modal already filled in and replaces the text. ⚠️ `/reply snippet:ban-appeal` still sends it — that is the one typed command this build keeps |
+| MA5 | **Snippets…** → pick one → **Remove it** → **Keep it**; then **Remove it** → **Yes, remove it** | **Keep it** changes nothing and leaves no log row; **Yes, remove it** removes it and leaves ONE `modmail.snippet_removed` row |
+| MA6 | **Blocked…** → **Block someone…** → pick yourself → **Block them…** → a reason; then **Refresh**, pick yourself from **Somebody…** → **Unblock them** | both land. Dashboard → **Logs**: **ONE line each**, not two — `modmail.blocked` then `modmail.unblocked`, and both read as **important**. ⚠️ Block yourself twice and the second says *"was already blocked, so nothing changed"* and writes **no** second row |
+| MA7 | Block somebody from the **dashboard's Modmail page**, then unblock them there | the Logs page shows `web.modmail.blocked` and `web.modmail.unblocked` — **one row each**, where before this build the website wrote a `web.modmail.block` line on top of nothing at all from Discord. Same for a website snippet save (`web.modmail.snippet_saved`) and a website reply (`web.modmail.reply`) |
+| MA8 | **Forget…** → clear the ticket category → **Forget…** again | the select only ever lists the places that are actually pointed, and once nothing is pointed the **Forget…** button is not drawn at all. Leave the panel `modmail_panel_minutes` minutes and it goes quiet with its footer, every button disabled |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that

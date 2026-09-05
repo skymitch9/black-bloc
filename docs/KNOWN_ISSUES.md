@@ -146,6 +146,20 @@ routine — with **one exception**: `honeypot.ban` was removed from `ROUTINE`, a
 `.ban` is an `IMPORTANT_SUFFIXES` entry, so historical `web.honeypot.ban` rows
 now read as *important* rather than routine.
 
+⚠️ **Four more joined them on 2026-09-05** (the modmail panel, Build A): the website's
+`web.modmail.block`, `web.modmail.unblock`, `web.modmail.snippet` and
+`web.modmail.snippet_remove` are now written as `web.modmail.blocked`, `.unblocked`,
+`.snippet_saved` and `.snippet_removed`, so both doors spell the same act the same way.
+The four old spellings were deleted from `logkinds.ROUTINE` in the same commit, because a
+classification entry nothing emits is a table nobody maintains
+(`tests/test_logkinds.py::test_no_classification_entry_is_dead`). Rows already in
+`action_log` keep the old kinds and are now **unclassified**, which `is_important` reads as
+*not important* — the same quiet they had as `ROUTINE` entries, so nothing on the Logs page
+moves. ⚠️ The reverse is worth knowing: the NEW `web.modmail.blocked` and `.unblocked` are
+**important**, where `web.modmail.block`/`.unblock` were routine — that is the
+classification bug this rename fixes (blocking somebody was loud from Discord and quiet
+from the website).
+
 **Why tolerated.** Rewriting history in `action_log` is worse than a handful of
 retired kind strings: the log is the audit trail, and a migration that edits it
 destroys the thing it exists to prove. The one classification change moves a

@@ -6,6 +6,15 @@
 > `ModMail Channel <user-id> <channel-id> (Please do not change this)`, staff
 > private notes by prefixing `=`); command table from `reference-bots.md`
 > (Modmail `cogs/modmail.py`). Depends on Phase 1.
+>
+> ⚠️ **SUPERSEDED IN PART, 2026-09-05, by
+> [`modmail-panel-design.md`](modmail-panel-design.md) (Build A).** Everything §4
+> *Management* names below — `/modmail block|unblock|blocked|mode|forget|status|settings`
+> and the whole `/snippet` group — is **gone**; `/modmail` is one command that opens a
+> panel, and those moves are its buttons, selects and modals. The DM listener, ticket
+> creation, the relay, the transcript and the reconciler are unchanged, and `/reply`
+> `/areply` `/note` `/close` are still typed commands. This document is kept as the record
+> of WHY modmail works the way it does, not of which commands exist.
 
 ## Owner decisions this implements
 
@@ -78,10 +87,12 @@ gets one sentence pointing at the existing ModMail bot).
    the channel / archive+lock the thread. `/close` with `silent:true` skips
    the DM. Auto-close: none in v1 (setting `modmail_autoclose_hours`
    reserved).
-4. **Management.** `/modmail block @user [reason]` / `unblock`; `/snippet
-   add|remove|list` and `/reply snippet:<name>`; `/modmail status`;
-   `/modmail mode <channel|thread>` (applies to new tickets only — open ones
-   keep their mode; say so in the reply); `/modmail settings …`.
+4. **Management.** ⚠️ **Superseded 2026-09-05 — every command in this item is
+   retired; the moves are now controls on the `/modmail` panel.** As built:
+   block/unblock a member, save/change/remove snippets, point the three places,
+   pick the mode (applies to new tickets only — open ones keep their mode, and the
+   panel still says so) and turn answering DMs on or off. `/reply snippet:<name>`
+   survives. See [`modmail-panel-design.md`](modmail-panel-design.md).
 5. **Edge cases.** User leaves the guild → note in ticket, keep it open;
    user DMs while blocked → one sentence, logged; bot restart → open
    tickets re-derived from DB (persistent views not needed — commands only).
