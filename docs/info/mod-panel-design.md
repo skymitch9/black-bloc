@@ -1,13 +1,15 @@
 # Mod cases — `/mod [member]` is ONE command that opens a panel (wave 4)
 
 > **Audience:** the build agent and the reviewer, and the owner for §I. **Status:** TRACKED ·
-> ✅ **BUILT 2026-09-05** on `worktree-agent-ab5740f777a3dfd80`, six commits off `97531cc`. The
+> ✅ **SHIPPED 2026-09-05 as v81 (`a90f416`, the merge commit)**, built on
+> `worktree-agent-ab5740f777a3dfd80`, six commits off `97531cc`. The
 > three forks were answered by the owner and all three took (a). Measured at the landing:
 > **pytest 4600** (4539 on `main`), `ruff` clean, `node site/mock/check.mjs` **17 pages, 146
 > routes** (142 before), top-level tree **34** (36 before — a drop of exactly two). Schema
 > **28 → 29**, and the migration was RUN against a database built by the code at `97531cc`.
 > ⚠️ **Nothing has met live Discord** — no boot, no panel opened, no DM seen; the sweep rows
-> `C1`–`C11` in `docs/access/sweeps.md` are the owner's by-eye checks and are all still owed.
+> `C1`–`C11` in `docs/access/sweeps.md` (numbered **208–218** at the merge) are the owner's by-eye
+> checks and are all still owed. On `main` the tree is **33**, not 34: modmail A had taken one first.
 > The build's departures are in the `# Mod cases panel (wave 4)` section of
 > [`code-notes.md`](code-notes.md), keyed by `path:name`. **The body below is the design as
 > written and is deliberately NOT rewritten.**

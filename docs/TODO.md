@@ -12,7 +12,7 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 07:56, modmail A merged + v80 LIVE, /mod building, modmail B fork 1 open with the owner)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 08:12, /mod merged + v81 LIVE, nothing building, modmail B fork 1 open with the owner)
 
 **`main` = `43312b9`** (role-menus panel merge; v77 live 20:51, 4529 tests, **36 commands**; `youtube_mode` is
 **shadow** since 2026-09-03 17:42). **The panels program is COMPLETE** — waves 1, 2 and 3 (17 features, one
@@ -219,20 +219,6 @@ docs bookkeeping lands with the work, not after.
   complete list — 36 top-level (pinned in `tests/test_bot.py`) and every subcommand — before any
   proposal. Then propose merges one decision at a time (owner rule), with a count of how many
   remain. Candidates already named by the owner, below; the audit adds the rest.
-- 🆕 **`/case` + `/cases` → one panel (owner, 2026-09-04, clock read 20:50 after the ask: "Also we have case and cases for slash
-  commands Let's combine those menus too").** Today `modcmds.py:696` `/case` shows one case and
-  `modcmds.py:723` `/cases` lists a member's; the panel shape is `/cases [member]` → list with a
-  select that opens the one-case card (moves on the card per the moderation panel design, staff
-  final say). Folds into the second audit's proposals; one build, own design doc.
-  **DECIDED (owner, 2026-09-04, audit proposal 2 of 6, "Yes"):** `/cases [member]` — no member = the
-  server's newest cases, paged ‹ ›; a select opens the one-case card (kind, who, when, reason, note) with
-  Edit reason, Add note, Void this case (reason required, DM'd); a Jump to case #… button (id modal)
-  replaces `/case <id>`, which retires. 36 → 35 slots. Est. 200–260k Opus.
-  **Proposal 3 of 6 DECIDED (owner, 2026-09-04, "Yes"):** the panel is spelled **`/mod [member]`** —
-  the `/mod` group (only `logs`) folds in as a Logs button, so `/case`, `/cases` and the `/mod` group
-  collapse into ONE `/mod`; 36 → 34 slots. The seven bare actions (`/warn`, `/timeout`, `/untimeout`,
-  `/kick`, `/ban`, `/unban`, `/purge`) STAY bare — typed mid-incident with autocompleted arguments, a
-  panel would be three clicks slower at the wrong moment.
 - 🆕 **Ticket / modmail commands → maybe one (owner, 2026-09-04, clock read 20:50 after the ask: "All ticket stuff maybe?").**
   Today: the `modmail` Group (`logs`, `block`, `unblock`, `blocked`, `mode`, `forget`) plus FOUR
   top-level ticket commands used INSIDE a ticket — `/reply`, `/areply`, `/note`, `/close`
@@ -357,6 +343,18 @@ docs bookkeeping lands with the work, not after.
   Discord. This item STAYS until Build B (sticky card, migration, `modmail_reply_style`, practice ticket,
   `/areply` `/note` `/close` retire) — B dispatches once fork 1 of 7 (card-jump trigger) is answered. Usage
   after landing session 42% / weekly 14% / Fable 13%, read 07:54.
+  **LANDED 08:00 (429k Opus): the `/mod` cases panel** — reviewed sound (atomic void/restore with a 409 each way,
+  one write one row through four shared extractions, website routes gated by `writer()`); merged as `a90f416`
+  beside the two earlier merges (nine conflicts; `LOG_LEVEL_COMMANDS` loses `mod` and `honeypot`, `LOGS_GROUPS`
+  is empty, the tree pin is **33** — the branch measured 34 off a 36 base and `main` already had modmail A's
+  −1); 4686 tests, ruff clean, mock check 17 pages / 146 routes; sweep rows `C1`–`C11` numbered **208–218**,
+  guide count 207 → 218; KI-22 (bare `mod.purged` kinds) kept above KI-21. **v81 LIVE 08:09 (`a90f416`)** —
+  boot 15:08:59Z database ready (schema 29 — no migration line is logged, so the only evidence it ran is that
+  the bot came up), `synced 33`, no traceback; nothing opened in Discord. The `/case` + `/cases` item moved
+  WHOLE to `DONE.md`. Handed to the conductor by the build: `panels.NoteModal` cannot prefill (one line,
+  three other modals want it); `CASE_KINDS` is imported by nothing; the site's Notes chip matches zero rows.
+  ALL THREE wave-4 builds are merged — the `/settings` build may dispatch once its forks F-S1–F-S5 are
+  answered. Usage after landing session 44% / weekly 14% / Fable 13%, read 08:00.
 - **Wave-1 review findings, small, fold into the next build that touches each file (Fable
   review 2026-09-03 13:50–14:05):** `requests.py` re-renders lack `allowed_mentions`;
   `LOG_LEVEL_COMMANDS` help still says "`/birthday logs`" / "`/request logs`"; five form writes

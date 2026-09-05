@@ -9,6 +9,28 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-05 — Mod cases panel: `/mod [member]` is one command over the case record; `/case`, `/cases` and `/mod logs` retire (v81, `a90f416`)
+
+Moved WHOLE from `TODO.md` at the landing (08:12). Built on `worktree-agent-ab5740f777a3dfd80`
+(Opus, 429k, six commits off `97531cc`), reviewed by Fable, merged `a90f416`, deployed v81 08:09
+(boot 15:08:59Z, `synced 33`, schema 28 → 29). Design: `docs/info/mod-panel-design.md`; sweeps 208–218;
+forks F-M1/F-M2/F-M3 all (a). Nothing exercised in Discord by a person.
+
+- 🆕 **`/case` + `/cases` → one panel (owner, 2026-09-04, clock read 20:50 after the ask: "Also we have case and cases for slash
+  commands Let's combine those menus too").** Today `modcmds.py:696` `/case` shows one case and
+  `modcmds.py:723` `/cases` lists a member's; the panel shape is `/cases [member]` → list with a
+  select that opens the one-case card (moves on the card per the moderation panel design, staff
+  final say). Folds into the second audit's proposals; one build, own design doc.
+  **DECIDED (owner, 2026-09-04, audit proposal 2 of 6, "Yes"):** `/cases [member]` — no member = the
+  server's newest cases, paged ‹ ›; a select opens the one-case card (kind, who, when, reason, note) with
+  Edit reason, Add note, Void this case (reason required, DM'd); a Jump to case #… button (id modal)
+  replaces `/case <id>`, which retires. 36 → 35 slots. Est. 200–260k Opus.
+  **Proposal 3 of 6 DECIDED (owner, 2026-09-04, "Yes"):** the panel is spelled **`/mod [member]`** —
+  the `/mod` group (only `logs`) folds in as a Logs button, so `/case`, `/cases` and the `/mod` group
+  collapse into ONE `/mod`; 36 → 34 slots. The seven bare actions (`/warn`, `/timeout`, `/untimeout`,
+  `/kick`, `/ban`, `/unban`, `/purge`) STAY bare — typed mid-incident with autocompleted arguments, a
+  panel would be three clicks slower at the wrong moment.
+
 ## 2026-09-05 — Honeypot panel: `/honeypot` is one command, seven subcommands become controls (v79, `361eaa2`)
 
 **Landing:** Opus build in its own worktree (314k), merged clean `fa845a6`, landing edits `aebcc02` (sweep rows
