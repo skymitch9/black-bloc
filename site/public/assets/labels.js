@@ -61,6 +61,10 @@ export const LABELS = {
   mod_panel_minutes: 'How long the /mod panel stays live',
   settings_panel_minutes: 'How long the /settings panel stays live',
   settings_core_keys_admin_only: 'Whether only a Lead may re-point the staff and log channels',
+  selftest_on_boot: 'Whether the bot tests itself at every boot',
+  selftest_channel_id: 'Where the self-test posts the cards it is proving',
+  selftest_purge_minutes: 'How long the self-test’s cards stay before the bot deletes them',
+  selftest_log_level: 'How much of the self-test is repeated into Discord',
 
   tempvoice_mode: 'Whether people can make their own voice rooms',
   tempvoice_creator_ids: 'Which channels people join to get a room',

@@ -485,6 +485,9 @@ async def seeded(client, sign_in, web, guild, wf):
     await applications.decide_application(
         db, listed_application_id, grants.APPROVED, decided_by=7
     )
+    # Wave 5: one finished self-test run with a check row and a card still waiting to be
+    # deleted, so GET /api/selftest/{id} has a shape and the purge entry has something to do.
+    selftest_run_id = await seed_selftest_run(db, guild_id, wf.TEST_CHANNEL_ID)
     grant_id = await grants.add_grant(
         db,
         guild_id,
@@ -525,7 +528,44 @@ async def seeded(client, sign_in, web, guild, wf):
         "application_id": str(application_id),
         "listed_form_id": str(listed_form_id),
         "listed_application_id": str(listed_application_id),
+        "selftest_run_id": str(selftest_run_id),
     }
+
+
+async def seed_selftest_run(db, guild_id: int, channel_id: int) -> int:
+    """One finished run, one check row in the log, one card still waiting to be deleted."""
+    at = datetime.now(UTC).isoformat()
+    cur = await db.conn.execute(
+        "INSERT INTO selftest_runs(guild_id, started_at, finished_at, ok, failed, posted, via, "
+        "actor_id) VALUES (?, ?, ?, 1, 0, 1, 'website', 7)",
+        (guild_id, at, at),
+    )
+    run_id = int(cur.lastrowid)
+    await db.conn.execute(
+        "INSERT INTO action_log(guild_id, at, kind, details) VALUES (?, ?, ?, ?)",
+        (
+            guild_id,
+            at,
+            "web.selftest.check",
+            json.dumps(
+                {
+                    "run_id": run_id,
+                    "name": "config.log_channel_id",
+                    "feature": "core",
+                    "ok": True,
+                    "detail": "#mute-me-bot-test-spam (500); view_channel",
+                    "via": "website",
+                }
+            ),
+        ),
+    )
+    await db.conn.execute(
+        "INSERT INTO selftest_messages(run_id, guild_id, channel_id, message_id, posted_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (run_id, guild_id, channel_id, 830042, at),
+    )
+    await db.conn.commit()
+    return run_id
 
 
 async def uploads_link(db):

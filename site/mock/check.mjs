@@ -66,6 +66,9 @@ const IDS = {
   // rows are the roster and row 2 is the one the remove entry takes off it.
   listed_form_id: '1',
   listed_application_id: '2',
+  // Wave 5: run 2 is the recent one whose cards are still in Discord, so the purge entry has
+  // something to take down. Run 1 is already cleaned up.
+  selftest_run_id: '2',
 };
 
 const failures = [];
