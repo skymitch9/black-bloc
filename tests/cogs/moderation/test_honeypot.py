@@ -21,13 +21,13 @@ from black_bloc.cogs.moderation.honeypot import (
     set_hit_action,
     trimmed,
 )
+from black_bloc.config import load_settings
 from black_bloc.honeypot import (
     EXEMPT_PLACEHOLDER,
     FORGET_PLACEHOLDER,
     MODE_PLACEHOLDER,
     PANEL_TITLE,
 )
-from black_bloc.config import load_settings
 from black_bloc.settings_store import SettingsStore
 from black_bloc.storage.db import Database
 

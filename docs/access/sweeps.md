@@ -1,7 +1,16 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-05** — rows **183–187** added by the HIDE COMMANDS WHEN OFF build (a feature whose
+> **2026-09-05** — rows **`H1`–`H12`** added by the HONEYPOT PANEL build (`/honeypot` becomes ONE
+> staff-only command that opens a panel; the `honeypot` and `exempt` groups and all seven leaf
+> subcommands are retired, and the top-level count is **UNCHANGED at 36, measured** through
+> `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits` — a group was already
+> one slot). ⚠️ The build wrote its block as `H1`–`H12`, letters on purpose, and the conductor
+> numbers them at the merge. The **Phase 3 appendix** honeypot lines were rewritten IN PLACE
+> rather than added to. ⚠️ **Nothing in `H1`–`H12` has met live Discord** — no boot, no sync, no
+> panel opened, no trap created; the whole verification is `pytest` (4593) and `ruff check`.
+> Same day —
+> rows **183–187** added by the HIDE COMMANDS WHEN OFF build (a feature whose
 > mode reads `off` has its one top-level command removed from the guild's tree; fourteen features
 > — every mode key with an `off` except `chat_memory_mode`, whose `/memory` stays (fork I-M1) —
 > one new bool key `hide_commands_when_off` defaulting **true**). ⚠️ The top-level count in
@@ -220,11 +229,12 @@ form for a full pass.
   Lock → leave: channel deleted within ~60 s. `/voice` again for the staff block that
   replaced `/tempvoice status`, and the panel itself for what `/voice info`,
   `/voice bitrate` and `/voice region` used to say — **Bitrate** and **Region…**.
-  Then `/honeypot setup`
+  Then `/honeypot` → **Setup…**
   (trap created in the test category; notice skipped in test mode) → post in it from
   a throwaway account: message deleted, a `honeypot.would_ban` embed with a **Ban
-  now** button in the test channel; nobody banned. `/honeypot status` (expect the
-  resolved staff-role count > 0). Role rider: `/rolemenu` → **Seed the defaults** again
+  now** button in the test channel; nobody banned. `/honeypot` again for what
+  `/honeypot status` used to print (expect the resolved staff-role count > 0), and
+  the mode picker for what `/honeypot mode` used to set. Role rider: `/rolemenu` → **Seed the defaults** again
   (expect "already there" for the five, created `runner-status`) → **A menu…** →
   `runner-status` → **Hand roles out…** → pick a member → **Give them roles…** → the
   staff picker → **A menu…** → `event-alerts` → **Post it** shows the real
@@ -609,6 +619,31 @@ your own client may need a `Ctrl+R` to redraw the list. ⚠️ **`shadow` is not
 | 185 | `/settings set-value` → key `youtube_mode` → value `shadow`. Wait a minute, `Ctrl+R` | **`/youtube` is back**, because shadow is not off. Set it to `on` and it stays. This is the trap worth checking by eye — your posture for YouTube is `shadow` today, so nothing was hidden until you chose `off` |
 | 186 | turn two or three features off (`poll_mode`, `birthday_mode`, `tempvoice_mode`), wait a minute, then `/settings set-value` → `hide_commands_when_off` → `false`. Wait a minute, `Ctrl+R` | **every command is back at once** — `/poll`, `/birthday`, `/voice` — while the three features stay off, and opening one says in words that it is off. `/help` stops saying anything about missing commands. Set it back to `true` and they vanish again |
 | 187 | dashboard → **Logs** → filter `commands.visibility`, after doing 183 and 186 | **one row per sync, not one per command** — each naming how many commands are in the guild, which are `hidden` and which were `shown` again, and whether Discord or the website set it off. ⚠️ A burst of changes inside a minute leaves ONE row, which is correct |
+
+### The honeypot panel — rows H1–H12
+
+⚠️ **Lettered on purpose — the conductor numbers them at the merge.** `/honeypot` is now ONE
+staff-only command that opens a panel; `/honeypot status`, `/honeypot setup`, `/honeypot mode`,
+`/honeypot forget`, `/honeypot exempt add|remove` and `/honeypot logs` are all **gone**
+(2026-09-05). ⚠️ **Nothing below has met live Discord** — no boot, no sync, no panel opened.
+⚠️ Every row runs in `#mute-me-bot-test-spam`; while test mode is on the trap is created inside
+that channel's category, its pinned notice is not posted, and **nobody is ever banned**, so a row
+that flips the mode to `on` proves the CONTROL works and proves nothing about enforcement.
+
+| # | Do this | Expect |
+|---|---|---|
+| H1 | `/honeypot` as a Lead in `#mute-me-bot-test-spam` | ONE ephemeral panel: the whole block `/honeypot status` used to print — mode, resolved staff roles by name, trap channels, purge days, exempt roles, and the banned/shadow/failed/ignored tally — over **What the trap does… · Roles the trap ignores… · Setup… · Settings… · Refresh · Logs · Open on the site**. Nothing says `/honeypot status`, `/honeypot setup` or `/honeypot exempt` anywhere. ⚠️ One line says test mode contains the trap and nobody will be banned |
+| H2 | look at the mode picker while at least one staff role resolves | it offers **off · shadow · on**, with the current one already ticked. Then point `staff_channel_id` at a channel no role can see and re-open: it offers **off** and **shadow** and **NOT on**, and the panel says in words that no staff role resolves and what to set. Arming is not offered-and-refused; it is not offered |
+| H3 | **Setup…** → leave the name box as it arrives → submit | the trap is created **inside the test channel's category**, the reply names it and says the notice was not posted because of test mode, and the panel's **trap channels** line now names it. Re-open `/honeypot`: **Setup… is gone** — a second trap is not offered rather than offered-and-refused |
+| H4 | **Setup…** again after typing a name of 101 characters | ⚠️ it cannot be typed: the box stops at 100. This is the bound the `name` parameter used to carry |
+| H5 | post in the trap from a throwaway account, in `shadow` | ⚠️ unchanged from today: the message is deleted, a `honeypot.would_ban` card with a **Ban now** button appears in the test channel, nobody is banned, and a second post from the same account inside 10 minutes gets no second button. **This row is the proof the panel changed nothing about catching** and it is the most important row in the set |
+| H6 | **Roles the trap ignores…** → pick two roles | the reply names what changed, the **exempt roles** line above lists both, and the log holds exactly ONE `honeypot.exempt_set` row naming both. Open the picker again: **both are already ticked** |
+| H7 | **Roles the trap ignores…** → untick one and submit | the reply says which was removed and ONE more row is logged. Submitting again with no change says nothing changed and writes **no** row at all |
+| H8 | press **Exempt nobody** | the list empties, ONE row is logged, and the button disappears because there is nothing left to clear. ⚠️ If your client refuses to submit an EMPTY picker, this button is the reversal path — that is why it exists (fork F-H1) |
+| H9 | delete the trap channel in Server Settings, then `/honeypot` | the id is already forgotten (the channel-delete listener, unchanged) and **Setup…** is back. Then add a stale id by hand from the site's Settings page and re-open: the panel names it as *a channel Discord no longer has* and **Forget…** → the picker removes it with no id typed anywhere |
+| H10 | **Settings…** → **Numbers…** → purge days `9`, then `3` | `9` is refused in one sentence naming the 7-day ceiling and **nothing is saved** — not even the panel-minutes box that parsed; `3` saves both and leaves ONE `honeypot.settings` row. The card also names `/settings set-value honeypot_mode` as the way back when the mode is off |
+| H11 | **Logs**; then leave the panel `honeypot_panel_minutes` (10) minutes | Logs answers a **NEW** ephemeral message and the panel stays where it is; after the wait the panel greys out with the *this panel has gone quiet* footer |
+| H12 | turn `honeypot_mode` to `off` on the dashboard, wait ~60 s, then look for `/honeypot` | ⚠️ **the command is gone** — that is the hide-commands-when-off behaviour doing its job, and honeypot keeps it deliberately because the mode ships `shadow`, so `off` is a real "I do not want this" choice. `/settings set-value honeypot_mode shadow`, or the portal, brings it back within ~60 s |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that

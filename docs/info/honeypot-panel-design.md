@@ -1,8 +1,7 @@
 # Honeypot — `/honeypot` is ONE command that opens a panel
 
 > **Audience:** the build agent and the reviewer, and the owner for §I.
-> **Status:** TRACKED · **PLANNING — unbuilt.** Nothing in this document exists yet; no branch,
-> no commit, no deploy.
+> **Status:** TRACKED · ✅ **BUILT 2026-09-05** on `worktree-agent-a7ea6b0dbeac7f753` off `932f34e` — see the `## Build deviations` foot for what changed and what is NOT verified. Not merged, not deployed, and **never run against live Discord**.
 > **Last verified: 2026-09-05** — every `path:line` below was READ against `main` at
 > **`git rev-parse --short HEAD` = `12979c2`** (the two commits since `46fba16` touch
 > `docs/TODO.md` only — `git diff --stat 46fba16 12979c2` = 1 file, 5 insertions — so every code
@@ -706,3 +705,91 @@ tree** and **TEST_MODE is never flipped**.
 `/honeypot` in `#mute-me-bot-test-spam` and the dashboard page it links to:
 `https://<dashboard-origin>/honeypot.html` (the origin is the deployment's own; `site_page_url`
 builds it from `panels.py:123`). The report names both, plus the `H1`–`H12` rows above.
+
+## Build deviations — what the build did differently, and why
+
+> Written by the build agent on `worktree-agent-a7ea6b0dbeac7f753`, off `932f34e`, 2026-09-05.
+> **Status: BUILT, not shipped.** `pytest` **4593 passed** (4539 on `main` before), `ruff check`
+> clean over `black_bloc` and `tests`, `node --input-type=module --check` clean on
+> `site/public/assets/labels.js`. ⚠️ **Nothing has met live Discord** — no boot, no token, no
+> sync, no panel opened, no trap created, nothing deployed.
+
+**The three forks, as BUILT** (decided by the conductor on this document's recommendation;
+owner confirmation pending — each reverses in one place):
+
+- **F-H1 = (a)** — a `RoleSelect` at `min_values=0` whose selection IS the exempt list, PLUS an
+  **Exempt nobody** button that renders only when the stored list is non-empty. **To reverse to
+  (b)**: drop `CLEAR_EXEMPT_MOVE` from `black_bloc/honeypot.py`'s `PANEL_MOVES` and the
+  `may_clear` branch of `root_buttons`, and drop the `CLEAR_EXEMPT` arm of `MoveButton.callback`.
+  Both doors already call the same `set_exempt_roles(…, [])`, so nothing else moves.
+- **F-H2 = (a)** — **Forget…** is a button opening a card with a picker over every recorded id,
+  dead ones labelled *a channel Discord no longer has (id)*. **To reverse to (c)** (the picker on
+  the root): move `ForgetPick` into `build_root` and delete `build_forget` / `render_forget` /
+  `open_forget` and the `FORGET` arm of `MoveButton.callback`.
+- **F-H3 = (a)** — `honeypot_purge_days` is a second field on the Settings `Numbers…` modal.
+  **To reverse to (b)**: drop the `purge` field from `NumbersModal` and the
+  `"honeypot_purge_days"` entry from `SETTINGS_KEYS`; the number stays a read-only line on the
+  Settings card and on the root embed, and `/settings set-value` still reaches it.
+
+**Numbered deviations from this document:**
+
+1. **`arming_refusal` and the move functions live in the COG, not in `black_bloc/honeypot.py`** —
+   as §F says for the DB layer, and for the same reason: `api/tools/honeypot.py` imports three
+   names from the cog by name, and keeping every existing import byte-identical is what makes
+   `tests/api/tools/test_honeypot.py` passing **with no edit** the proof the refactor changed
+   nothing. The pure module holds only what a test can read without a bot.
+2. **`live_traps`/`dead_traps` are built on a third helper, `recorded_traps`** — the raw list is
+   read in five places (`status_lines`, `build_forget`, `forget_trap`, `root_buttons`,
+   `trap_names`) and three of them wanted the ids rather than the live/dead split.
+3. **`exempt_editable(role_ids)` is the cap predicate, not a bare `len(...) <= 25` at each call
+   site.** §F named `EXEMPT_SELECT_MAX` and `exempt_defaults`; the panel needs the *question*
+   ("may this be edited here?") in one place, because `build_root` and `status_lines` must agree
+   or the picker vanishes with nothing said.
+4. **`exempt_sentence(added, removed)` is in the pure module** rather than assembled in
+   `set_exempt_roles`. It is the half of the move a test can check without a database, and it
+   keeps the cog function to one write and one log row.
+5. **The Settings card carries `MODE_IS_OFF_WAY_BACK`.** §I asked for this line and did not put
+   it in a table; it renders on the Settings sub-panel, where a staffer changing the panel's
+   behaviour will read it.
+6. **The purge-days bound is enforced by the REGISTRY, not re-parsed in the modal.** The modal
+   rebuilds the *floor* (a whole number, ≥ 0) and states the ceiling in its field label; the
+   ceiling itself is `KEY_MAX["honeypot_purge_days"]`, raised by `coerce_value` inside
+   `save_settings` before anything is written. One home for the number, and the refusal sentence
+   is the registry's own (*"cannot be more than 7"*), which is what the dashboard says too.
+7. **The `Numbers…` field labels are class-level constants** rather than assigned per instance —
+   `discord.ui.TextInput.label`'s setter is deprecated in discord.py 2.7.1 (`use discord.ui.Label
+   instead`) and every assignment logs a `DeprecationWarning`. Automod and youtube still do it;
+   this build declined to add two more.
+8. **`ARMED_WITH_NO_TRAP` renders whenever the mode is `on` and no LIVE trap exists** — §B put it
+   in S2 (nothing recorded) only, but S4 (a recorded id Discord no longer has) is the same
+   condition for the person reading it: the trap is armed and there is nothing to fall into.
+9. **The panel's state test parametrises four conditions, not seven.** S5 (a non-empty exempt
+   list), S6 (more than 25 roles) and S7 (test mode) are each proved by their own focused test
+   instead of crossing them with the mode, because none of the three interacts with the mode at
+   all and the crossing would assert the same thing twelve times.
+
+**Reported, not fixed — measured while building:**
+
+- ⚠️ **The website can still write `honeypot_mode` and `honeypot_exempt_role_ids` through the
+  GENERIC settings API**, which validates against `KEY_CHOICES` only. So `set_mode`'s arming
+  refusal does **not** apply on that path — a guild with no resolved staff role can arm the trap
+  from the dashboard, where one mistyped moderator message is a real ban — and the exempt list
+  can be rewritten with **no `honeypot.exempt_set` row at all**. Wiring the shared functions into
+  the settings route is a settings-API change, not a panel change. Same defect automod reported
+  (`automod-panel-design.md` §J item 1); a `KNOWN_ISSUES.md` candidate.
+- ⚠️ **`LOG_LEVEL_COMMANDS` (`settings_store.py`) now holds 12 rows and TEN of them name a
+  subcommand that no longer exists** — `pings`→`pingroles`, `tempvoice`→`voice`,
+  `events`→`event`, `poll`, `birthday`, `golive`, `request`, `applications`, `rolemenu`, `chat`.
+  Only `mod` and `modmail` are correct. This build removed an eleventh (`honeypot`), which does
+  not improve the ten. One pass of its own.
+- ⚠️ **`NO_STAFF_ROLES` tells the reader to run `/settings set staff_channel_id`** — right today,
+  wrong the moment the `/settings` panel lands and `show`/`set`/`set-role`/`set-value`/`clear`
+  retire. Flagged for the `/settings` build to sweep rather than guessed at here.
+
+**NOT verified:** no boot, so `commands synced` was measured only through
+`tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits` (**36 before, 36 after**);
+no live Discord, so whether a client submits an empty `min_values=0` select is **still unproven**
+(F-H1's fallback is what makes that safe); `node site/mock/check.mjs` was not run — a concurrent
+worktree held 127.0.0.1:8788 — so the 17 pages / 142 routes figure is quoted from 2026-09-04 as an
+OLD reading. No route was added, removed or renamed and `contract.json` / `check.mjs` are
+untouched, so the counts cannot have moved.

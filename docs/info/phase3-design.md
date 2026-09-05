@@ -7,6 +7,14 @@
 > behaviour, the per-channel control post (§ below, unchanged), the remembered preferences, the
 > honeypot half — still describes what is built.
 
+> ⚠️ **The honeypot half's COMMAND SURFACE is superseded by the panel (2026-09-05)** —
+> `/honeypot` is now ONE staff-only command that opens an ephemeral panel, and the `honeypot`
+> and `exempt` groups and all seven leaf subcommands named below (`setup`, `status`, `mode`,
+> `forget`, `exempt add|remove`, `logs`) are retired. See
+> [`honeypot-panel-design.md`](honeypot-panel-design.md). Everything else here — what the trap
+> catches, the shadow-first rollout, the exemption matrix, the test-mode containment — still
+> describes what is built, and this build changed none of it.
+
 > **Audience:** the Phase 3 build agent and the reviewer. **Status:** LOCAL
 > ONLY. **Last verified: 2026-08-26** — channel IDs from the same-day scan;
 > TempVoice behaviour from `reference-bots.md` (vendor docs via
