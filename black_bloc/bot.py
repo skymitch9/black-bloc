@@ -16,6 +16,7 @@ from .invite import invite_url
 from .prefix import no_prefix_commands
 from .rolemenu_panels import install as install_panels
 from .rolemenu_panels import panels_on_boot
+from .selftest import on_boot as selftest_on_boot
 from .settings_store import SettingsStore
 from .storage.db import Database
 
@@ -89,6 +90,7 @@ class BlackBlocBot(commands.Bot):
         assert self.user is not None
         log.info("logged in as %s (%s); %d guild(s)", self.user, self.user.id, len(self.guilds))
         await panels_on_boot(self)
+        await selftest_on_boot(self)
 
     async def close(self) -> None:
         visibility = getattr(self, "command_visibility", None)

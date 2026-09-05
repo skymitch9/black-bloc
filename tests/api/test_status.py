@@ -549,6 +549,54 @@ async def test_actions_can_be_filtered_by_feature(bot, db, sign_in, wf):
     assert all(row["feature"] == "rolemenu" for row in body["actions"])
 
 
+async def test_the_default_view_leaves_the_test_rows_out_and_the_test_filter_shows_only_them(
+    bot, db, sign_in, wf
+):
+    """Owner, 2026-09-05: 'keep the logs on the website tho under test' — kept, and out of the
+    way of the real ones. The chips follow, or the Logs page would offer a dead filter."""
+    for kind in ("poll.created", "selftest.started", "selftest.check", "web.selftest.finished"):
+        await _log(db, wf.GUILD_ID, kind)
+    bot.db = db
+
+    client = client_for(bot)
+    sign_in(client)
+    default = client.get("/api/actions").json()
+
+    assert {row["kind"] for row in default["actions"]} == {"poll.created"}
+    assert default["total"] == 1
+    assert default["kinds"] == ["poll.created"]
+
+    only_test = client.get("/api/actions", params={"feature": "selftest"}).json()
+
+    assert {row["kind"] for row in only_test["actions"]} == {
+        "selftest.started",
+        "selftest.check",
+        "web.selftest.finished",
+    }
+    assert all(row["feature"] == "selftest" for row in only_test["actions"])
+    # Asking for the kind by name reaches them too, so a deep link is never a dead end.
+    by_kind = client.get("/api/actions", params={"kind": "selftest."}).json()
+    assert by_kind["total"] == 2
+
+
+async def test_the_csv_export_leaves_the_test_rows_out_the_same_way_the_page_does(
+    bot, db, sign_in, wf
+):
+    for kind in ("poll.created", "selftest.check"):
+        await _log(db, wf.GUILD_ID, kind)
+    bot.db = db
+
+    client = client_for(bot)
+    sign_in(client)
+    body = client.get("/api/actions/export.csv").text
+
+    assert "poll.created" in body
+    assert "selftest.check" not in body
+    assert "selftest.check" in client.get(
+        "/api/actions/export.csv", params={"feature": "selftest"}
+    ).text
+
+
 async def test_a_feature_nobody_has_is_a_sentence_that_names_the_ones_there_are(bot, db, sign_in):
     bot.db = db
     client = client_for(bot)

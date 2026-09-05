@@ -36,6 +36,7 @@ from .logkinds import (
     FEATURES,
     LEVEL_DEFAULT,
     LEVELS,
+    OFF,
     log_level_key,
 )
 from .personas import COOKOUT, PERSONALITY_CHOICES
@@ -805,6 +806,7 @@ LOG_LEVEL_COMMANDS: dict[str, str] = {
     "pings": "pings",
     "raidtrain": "raidtrain",
     "applications": "apply",
+    "selftest": "settings",
 }
 
 
@@ -1269,6 +1271,64 @@ KEY_HELP.update(
 )
 
 
+# Self-test (wave 5) — the three decisions the self-test introduces, in their own block.
+SELFTEST_ON_BOOT = "selftest_on_boot"
+SELFTEST_CHANNEL_ID = "selftest_channel_id"
+SELFTEST_PURGE_MINUTES = "selftest_purge_minutes"
+SELFTEST_LOG_LEVEL = log_level_key("selftest")
+SELFTEST_ON_BOOT_DEFAULT = True
+SELFTEST_PURGE_MINUTES_DEFAULT = 5
+SELFTEST_PURGE_MIN_MINUTES = 1
+SELFTEST_PURGE_MAX_MINUTES = 24 * 60
+
+KEY_TYPES.update(
+    {
+        SELFTEST_ON_BOOT: "bool",
+        SELFTEST_CHANNEL_ID: "channel",
+        SELFTEST_PURGE_MINUTES: "int",
+    }
+)
+KEY_MIN.update({SELFTEST_PURGE_MINUTES: SELFTEST_PURGE_MIN_MINUTES})
+KEY_MAX.update({SELFTEST_PURGE_MINUTES: SELFTEST_PURGE_MAX_MINUTES})
+KEY_MIN_REASON.update(
+    {
+        SELFTEST_PURGE_MINUTES: (
+            "A self-test's cards would be gone before anybody could look at them, so the "
+            "shortest Black Bloc will keep them is {limit} minute."
+        )
+    }
+)
+KEY_MAX_REASON.update(
+    {
+        SELFTEST_PURGE_MINUTES: (
+            "The self-test's cards are throwaway proof, not a record — anything past {limit} "
+            "minutes is a day of test spam nobody asked for. The log lines are kept forever "
+            "on the dashboard's Logs page under Test either way."
+        )
+    }
+)
+KEY_HELP.update(
+    {
+        SELFTEST_ON_BOOT: (
+            "true to run the self-test at every boot, so a deploy proves itself in the hosting "
+            "log without anybody opening Discord; false to run it only when staff ask. It posts "
+            "a card per panel into the self-test channel and deletes them again a few minutes "
+            "later"
+        ),
+        SELFTEST_CHANNEL_ID: (
+            "where the self-test posts the cards it is proving; every one of them is deleted "
+            "again once selftest_purge_minutes has passed. Unset means the test channel. While "
+            "test mode is on, the guard refuses any other channel anyway"
+        ),
+        SELFTEST_PURGE_MINUTES: (
+            "how long a self-test's messages stay in the self-test channel before Black Bloc "
+            "deletes them; 5 by default. The log lines stay on the dashboard's Logs page under "
+            "Test whatever this says"
+        ),
+    }
+)
+
+
 # The one grouping of the registry, read by the dashboard's Settings page and by /settings.
 CORE_KEYS = (
     "log_channel_id",
@@ -1279,6 +1339,10 @@ CORE_KEYS = (
     "operator_read_log",
     SETTINGS_PANEL_MINUTES,
     SETTINGS_CORE_KEYS_ADMIN_ONLY,
+    SELFTEST_ON_BOOT,
+    SELFTEST_CHANNEL_ID,
+    SELFTEST_PURGE_MINUTES,
+    SELFTEST_LOG_LEVEL,
 )
 NAMESPACE_OVERRIDE = {
     "modlog_channel_id": "automod",
@@ -1834,6 +1898,14 @@ class SettingsStore:
             return SETTINGS_CORE_KEYS_ADMIN_ONLY_DEFAULT
         if key == HIDE_COMMANDS_WHEN_OFF:
             return HIDE_COMMANDS_WHEN_OFF_DEFAULT
+        if key == SELFTEST_ON_BOOT:
+            return SELFTEST_ON_BOOT_DEFAULT
+        if key == SELFTEST_CHANNEL_ID:
+            return self.settings.test_channel_id
+        if key == SELFTEST_PURGE_MINUTES:
+            return SELFTEST_PURGE_MINUTES_DEFAULT
+        if key == SELFTEST_LOG_LEVEL:
+            return OFF
         if key.endswith("_log_level"):
             return LEVEL_DEFAULT
         if KEY_TYPES.get(key) in ("channels", "roles"):

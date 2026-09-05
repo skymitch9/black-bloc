@@ -214,16 +214,21 @@ async def test_a_features_logs_is_staff_only_wherever_the_panel_button_reaches_i
     assert require_staff.__name__ in called_names(send_logs)
 
 
-async def test_on_ready_reconciles_the_role_menu_panels(monkeypatch):
-    """A restart mid-flip converges — the one thing `on_ready` does beyond logging."""
+async def test_on_ready_reconciles_the_role_menu_panels_and_runs_the_self_test(monkeypatch):
+    """A restart mid-flip converges, and the deploy proves itself — the two things
+    `on_ready` does beyond logging, in that order."""
     seen = []
 
-    async def fake_boot(bot):
-        seen.append(bot)
+    async def fake_panels(bot):
+        seen.append(("panels", bot))
 
-    monkeypatch.setattr(bot_module, "panels_on_boot", fake_boot)
+    async def fake_selftest(bot):
+        seen.append(("selftest", bot))
+
+    monkeypatch.setattr(bot_module, "panels_on_boot", fake_panels)
+    monkeypatch.setattr(bot_module, "selftest_on_boot", fake_selftest)
     stand_in = SimpleNamespace(user=SimpleNamespace(id=1), guilds=[])
 
     await BlackBlocBot.on_ready(stand_in)
 
-    assert seen == [stand_in]
+    assert seen == [("panels", stand_in), ("selftest", stand_in)]

@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 30
+        assert SCHEMA_VERSION == 31
         cur = await db.conn.execute("PRAGMA table_info(requests)")
         assert {
             "built",
@@ -430,7 +430,47 @@ async def test_the_sticky_card_and_practice_columns_arrive_on_a_schema_29_databa
         assert row["card_message_id"] is None
         assert row["practice"] == 0
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == "30"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await db.close()
+
+
+async def test_the_self_test_tables_arrive_on_a_database_that_never_had_them(tmp_path):
+    """30 → 31: two CREATE-IF-NOT-EXISTS tables, so an old database gains them on connect."""
+    path = tmp_path / "old31.sqlite3"
+    old = await aiosqlite.connect(path)
+    await old.execute("CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    await old.execute("INSERT INTO schema_meta(key, value) VALUES ('schema_version', '30')")
+    await old.commit()
+    await old.close()
+
+    db = Database(path)
+    await db.connect()
+    try:
+        cur = await db.conn.execute("PRAGMA table_info(selftest_runs)")
+        assert {row["name"] for row in await cur.fetchall()} == {
+            "id",
+            "guild_id",
+            "started_at",
+            "finished_at",
+            "ok",
+            "failed",
+            "posted",
+            "purged_at",
+            "via",
+            "actor_id",
+        }
+        cur = await db.conn.execute("PRAGMA table_info(selftest_messages)")
+        assert {row["name"] for row in await cur.fetchall()} == {
+            "id",
+            "run_id",
+            "guild_id",
+            "channel_id",
+            "message_id",
+            "posted_at",
+        }
+        cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == "31"
     finally:
         await db.close()
 

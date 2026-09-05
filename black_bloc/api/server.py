@@ -174,10 +174,19 @@ def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
     return app
 
 
+def api_app(bot: Any) -> FastAPI:
+    """One app per bot, kept so the self-test reads the same route table the site is served by."""
+    found = getattr(bot, "_api_app", None)
+    if found is None:
+        found = create_app(bot)
+        bot._api_app = found
+    return found
+
+
 async def start_api(bot: Any) -> None:
     settings = bot.settings
     config = uvicorn.Config(
-        create_app(bot),
+        api_app(bot),
         host=settings.api_host,
         port=settings.api_port,
         log_level=settings.log_level.lower(),
