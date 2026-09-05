@@ -4,9 +4,11 @@ from datetime import UTC, datetime, timedelta
 import discord
 import pytest
 
+from black_bloc.cogs.moderation import modmail as modmail_cog
 from black_bloc.cogs.moderation.modmail import (
     Modmail,
     add_message,
+    block_member,
     blocked_row,
     get_ticket,
     open_ticket_for,
@@ -67,6 +69,8 @@ class FakeMessage:
         self.author = author
         self.kwargs = kwargs
         self.reactions = []
+        embed = kwargs.get("embed")
+        self.embeds = kwargs.get("embeds") or ([embed] if embed is not None else [])
 
     async def add_reaction(self, emoji):
         self.reactions.append(emoji)
@@ -249,6 +253,7 @@ class FakeBot:
 class FakeResponse:
     def __init__(self):
         self.messages = []
+        self.modals = []
         self.done = False
 
     def is_done(self):
@@ -257,6 +262,10 @@ class FakeResponse:
     async def send_message(self, content=None, ephemeral=False, **kwargs):
         self.done = True
         self.messages.append({"content": content, "ephemeral": ephemeral, **kwargs})
+
+    async def send_modal(self, modal):
+        self.done = True
+        self.modals.append(modal)
 
     async def defer(self, ephemeral=False, **kwargs):
         self.done = True
@@ -281,11 +290,81 @@ class FakeInteraction:
         self.channel_id = channel.id if channel is not None else TEST_CHANNEL
         self.response = FakeResponse()
         self.followup = FakeFollowup(self.response)
+        self.edits = []
+
+    async def original_response(self):
+        kept = {k: v for k, v in self.rendered.items() if k in ("embed", "view")}
+        return FakeMessage(1, "", self.channel, **kept)
+
+    async def edit_original_response(self, **kwargs):
+        self.edits.append(kwargs)
+        return FakeMessage(9500, "", self.channel, **kwargs)
+
+    @property
+    def rendered(self):
+        if self.edits:
+            return self.edits[-1]
+        return self.response.messages[-1] if self.response.messages else {}
+
+    @property
+    def view(self):
+        return self.rendered.get("view")
+
+    @property
+    def embed(self):
+        return self.rendered.get("embed")
 
     @property
     def sent(self):
         said = [m["content"] for m in self.response.messages if m["content"] is not None]
         return said[-1] if said else None
+
+
+def labels(view):
+    return [one.label for one in view.children if getattr(one, "label", None) is not None]
+
+
+def button(view, label):
+    return next(one for one in view.children if getattr(one, "label", None) == label)
+
+
+def has(view, label):
+    return any(getattr(one, "label", None) == label for one in view.children)
+
+
+def control(view, placeholder):
+    return next(
+        one for one in view.children if getattr(one, "placeholder", None) == placeholder
+    )
+
+
+def placeholders(view):
+    return [
+        one.placeholder for one in view.children if getattr(one, "placeholder", None) is not None
+    ]
+
+
+async def pick(picker, values, interaction):
+    picker._values = list(values)
+    await picker.callback(interaction)
+
+
+async def press(view, label, bot, who):
+    interaction = FakeInteraction(bot, who)
+    await button(view, label).callback(interaction)
+    return interaction
+
+
+async def choose(view, placeholder, values, bot, who):
+    interaction = FakeInteraction(bot, who)
+    await pick(control(view, placeholder), values, interaction)
+    return interaction
+
+
+async def open_panel(cog, bot, who):
+    interaction = FakeInteraction(bot, who)
+    await cog.modmail.callback(cog, interaction)
+    return interaction
 
 
 async def action_kinds(db):
@@ -925,83 +1004,197 @@ async def test_a_deleted_category_or_staff_channel_is_forgotten(cog, bot, db):
     assert "modmail.staff_channel_forgotten" in kinds
 
 
+async def open_blocked_panel(cog, bot, lead):
+    root = await open_panel(cog, bot, lead)
+    return await press(root.view, "Blocked…", bot, lead)
+
+
+async def open_snippets_panel(cog, bot, lead):
+    root = await open_panel(cog, bot, lead)
+    return await press(root.view, "Snippets…", bot, lead)
+
+
+async def add_snippet(cog, bot, lead, name, content, *, view=None):
+    panel = view or (await open_snippets_panel(cog, bot, lead)).view
+    opened = await press(panel, "Add one…", bot, lead)
+    modal = opened.response.modals[-1]
+    modal.name._value = name
+    modal.content._value = content
+    submitted = FakeInteraction(bot, lead)
+    await modal.on_submit(submitted)
+    return submitted
+
+
 async def test_blocking_and_unblocking_are_both_recorded(cog, bot, member, lead, db):
-    first = FakeInteraction(bot, lead)
-    await cog.modmail_block.callback(cog, first, user=member, reason="abuse")
-    again = FakeInteraction(bot, lead)
-    await cog.modmail_block.callback(cog, again, user=member)
-    freed = FakeInteraction(bot, lead)
-    await cog.modmail_unblock.callback(cog, freed, user=member)
+    panel = await open_blocked_panel(cog, bot, lead)
+    chosen = await press(panel.view, "Block someone…", bot, lead)
+    picked = await choose(chosen.view, modmail_cog.PICK_SOMEBODY, [member], bot, lead)
+    asked = await press(picked.view, "Block them…", bot, lead)
+    modal = asked.response.modals[-1]
+    modal.note._value = "abuse"
+    blocked = FakeInteraction(bot, lead)
+    await modal.on_submit(blocked)
 
-    assert "already blocked" in again.sent
-    assert await blocked_row(db, member.id) is None
-    kinds = await action_kinds(db)
-    assert kinds.count("modmail.blocked") == 1 and "modmail.unblocked" in kinds
-    assert "was not blocked" in (
-        await unblock_again(cog, bot, lead, member)
+    assert (await blocked_row(db, member.id))["reason"] == "abuse"
+    assert "can no longer open modmail tickets" in blocked.sent
+    listed = await press(blocked.view, "Refresh", bot, lead)
+    chosen_again = await choose(
+        listed.view, modmail_cog.PICK_A_BLOCK, [str(member.id)], bot, lead
     )
+    freed = await press(chosen_again.view, "Unblock them", bot, lead)
+
+    assert await blocked_row(db, member.id) is None
+    assert "can open modmail tickets again" in freed.sent
+    kinds = await action_kinds(db)
+    assert kinds.count("modmail.blocked") == 1 and kinds.count("modmail.unblocked") == 1
 
 
-async def unblock_again(cog, bot, lead, member):
-    interaction = FakeInteraction(bot, lead)
-    await cog.modmail_unblock.callback(cog, interaction, user=member)
-    return interaction.sent
+async def test_blocking_somebody_already_blocked_changes_nothing_and_says_so(
+    cog, bot, member, lead, db
+):
+    await block_member(bot, bot.guild, lead, member, "abuse")
+    panel = await open_blocked_panel(cog, bot, lead)
+    chosen = await press(panel.view, "Block someone…", bot, lead)
+    picked = await choose(chosen.view, modmail_cog.PICK_SOMEBODY, [member], bot, lead)
+    asked = await press(picked.view, "Block them…", bot, lead)
+    modal = asked.response.modals[-1]
+    modal.note._value = "again"
+    again = FakeInteraction(bot, lead)
+    await modal.on_submit(again)
+
+    assert "was already blocked" in again.sent
+    assert (await blocked_row(db, member.id))["reason"] == "abuse"
+    assert (await action_kinds(db)).count("modmail.blocked") == 1
+
+
+async def test_unblock_is_not_drawn_until_somebody_is_picked(cog, bot, member, lead):
+    await block_member(bot, bot.guild, lead, member, None)
+    panel = await open_blocked_panel(cog, bot, lead)
+
+    assert not has(panel.view, "Unblock them")
+    picked = await choose(panel.view, modmail_cog.PICK_A_BLOCK, [str(member.id)], bot, lead)
+    assert has(picked.view, "Unblock them")
 
 
 async def test_changing_the_mode_says_open_tickets_keep_theirs(cog, bot, member, lead):
     await open_one(cog, bot, member)
-    interaction = FakeInteraction(bot, lead)
+    root = await open_panel(cog, bot, lead)
+    setup = await press(root.view, "Setup…", bot, lead)
+    picker = await press(setup.view, "Mode…", bot, lead)
 
-    await cog.modmail_mode.callback(
-        cog, interaction, mode=discord.app_commands.Choice(name="thread", value="thread")
-    )
+    changed = await choose(picker.view, modmail_cog.PICK_A_MODE, [THREAD_MODE], bot, lead)
 
     assert bot.store.get(GUILD, "modmail_mode") == THREAD_MODE
-    assert "1 ticket(s) already open keep the mode" in interaction.sent
+    assert "1 ticket(s) already open keep the mode" in changed.sent
+    assert "**mode** — thread" in changed.embed.description
 
 
-async def test_status_lists_the_open_tickets_and_the_resolved_staff(cog, bot, member, lead):
+async def test_answer_dms_is_one_button_that_names_what_it_will_do(cog, bot, lead, db):
+    root = await open_panel(cog, bot, lead)
+    setup = await press(root.view, "Setup…", bot, lead)
+
+    assert has(setup.view, "Answer DMs off") and not has(setup.view, "Answer DMs on")
+    turned = await press(setup.view, "Answer DMs off", bot, lead)
+
+    assert bot.store.get(GUILD, "modmail_enabled") is False
+    assert "stopped answering modmail DMs" in turned.sent
+    assert has(turned.view, "Answer DMs on")
+    assert "modmail.settings" in await action_kinds(db)
+
+
+async def test_pointing_the_transcripts_channel_re_renders_setup_with_the_new_value(
+    cog, bot, lead, db
+):
+    root = await open_panel(cog, bot, lead)
+    setup = await press(root.view, "Setup…", bot, lead)
+    picker = await press(setup.view, "Transcripts…", bot, lead)
+
+    done = await choose(
+        picker.view,
+        modmail_cog.PICK_A_CHANNEL,
+        [bot.guild.channels[LOG_CHANNEL]],
+        bot,
+        lead,
+    )
+
+    assert bot.store.get(GUILD, "modmail_log_channel_id") == LOG_CHANNEL
+    assert f"**transcripts** — <#{LOG_CHANNEL}>" in done.embed.description
+    assert (await action_kinds(db)).count("modmail.settings") == 1
+
+
+async def test_the_panel_lists_the_open_tickets_and_the_resolved_staff(cog, bot, member, lead):
     ticket = await open_one(cog, bot, member)
-    interaction = FakeInteraction(bot, lead)
 
-    await cog.modmail_status.callback(cog, interaction)
+    interaction = await open_panel(cog, bot, lead)
 
-    assert f"**#{ticket['id']}**" in interaction.sent
-    assert "Lead" in interaction.sent
-    assert interaction.response.messages[-1]["allowed_mentions"].everyone is False
+    said = interaction.response.messages[0]
+    assert said["ephemeral"] is True and said["allowed_mentions"].everyone is False
+    assert said["embed"].title == modmail_cog.PANEL_TITLE
+    assert f"**#{ticket['id']}**" in said["embed"].description
+    assert "Lead" in said["embed"].description
+    assert labels(said["view"])[:3] == ["Setup…", "Blocked…", "Snippets…"]
+    assert {"Logs", "Refresh"} <= set(labels(said["view"]))
+    assert "/modmail status" not in said["embed"].description
 
 
-async def test_status_warns_loudly_when_no_staff_role_resolves(cog, bot, lead):
+async def test_the_panel_warns_loudly_when_no_staff_role_resolves(cog, bot, lead):
     bot.guild.channels[TEST_CHANNEL].visible_to = set()
-    interaction = FakeInteraction(bot, lead)
 
-    await cog.modmail_status.callback(cog, interaction)
+    interaction = await open_panel(cog, bot, lead)
 
-    assert "No staff roles resolve" in interaction.sent
+    assert "No staff roles resolve" in interaction.embed.description
+
+
+async def test_forget_only_ever_offers_the_places_that_are_pointed(cog, bot, lead):
+    root = await open_panel(cog, bot, lead)
+    one = await press(root.view, "Forget…", bot, lead)
+    assert [o.value for o in control(one.view, modmail_cog.PICK_A_PLACE).options] == [
+        "modmail_log_channel_id"
+    ]
+
+    await live(bot)
+    pointed = await open_panel(cog, bot, lead)
+    two = await press(pointed.view, "Forget…", bot, lead)
+
+    assert [o.value for o in control(two.view, modmail_cog.PICK_A_PLACE).options] == [
+        "modmail_category_id",
+        "modmail_log_channel_id",
+    ]
 
 
 async def test_snippets_are_saved_listed_and_removed(cog, bot, lead, db):
-    saved = FakeInteraction(bot, lead)
-    await cog.snippet_add.callback(cog, saved, name="Appeal", content="Appeals go to a Lead.")
-    listed = FakeInteraction(bot, lead)
-    await cog.snippet_list.callback(cog, listed)
-    gone = FakeInteraction(bot, lead)
-    await cog.snippet_remove.callback(cog, gone, name="appeal")
-    missing = FakeInteraction(bot, lead)
-    await cog.snippet_remove.callback(cog, missing, name="appeal")
+    saved = await add_snippet(cog, bot, lead, "Appeal", "Appeals go to a Lead.")
 
-    assert "appeal" in saved.sent and "appeal" in listed.sent
-    assert "is gone" in gone.sent and "no snippet called" in missing.sent
+    assert "appeal" in saved.sent
+    assert "**appeal** — Appeals go to a Lead." in saved.embed.description
+    asked = await press(saved.view, "Remove it", bot, lead)
+    assert "Remove the snippet **appeal**?" in asked.embed.description
+    gone = await press(asked.view, "Yes, remove it", bot, lead)
+
+    assert "is gone" in gone.sent
     cur = await db.conn.execute("SELECT COUNT(*) AS n FROM modmail_snippets")
     assert (await cur.fetchone())["n"] == 0
+    assert "modmail.snippet_removed" in await action_kinds(db)
 
 
-async def test_a_snippet_name_with_spaces_is_refused(cog, bot, lead):
-    interaction = FakeInteraction(bot, lead)
+async def test_keeping_a_snippet_leaves_it_where_it_was(cog, bot, lead, db):
+    saved = await add_snippet(cog, bot, lead, "appeal", "one")
+    asked = await press(saved.view, "Remove it", bot, lead)
 
-    await cog.snippet_add.callback(cog, interaction, name="ban appeal", content="no")
+    kept = await press(asked.view, "Keep it", bot, lead)
 
-    assert "is not a snippet name" in interaction.sent
+    assert has(kept.view, "Remove it")
+    cur = await db.conn.execute("SELECT COUNT(*) AS n FROM modmail_snippets")
+    assert (await cur.fetchone())["n"] == 1
+    assert "modmail.snippet_removed" not in await action_kinds(db)
+
+
+async def test_a_snippet_name_with_spaces_is_refused(cog, bot, lead, db):
+    refused = await add_snippet(cog, bot, lead, "ban appeal", "no")
+
+    assert "is not a snippet name" in refused.sent
+    cur = await db.conn.execute("SELECT COUNT(*) AS n FROM modmail_snippets")
+    assert (await cur.fetchone())["n"] == 0
 
 
 async def test_a_stranger_is_told_nothing_at_all_while_no_guild_has_modmail_on(cog, bot, db):
@@ -1106,28 +1299,103 @@ async def test_a_transcript_that_could_not_be_filed_keeps_the_ticket_channel(
     assert len(await ticket_messages(db, ticket["id"])) == 1
 
 
-async def test_every_management_command_defers_before_it_answers(cog, bot, member, lead):
+async def test_every_panel_move_defers_before_it_edits(cog, bot, member, lead):
     await open_one(cog, bot, member)
-    calls = [
-        (cog.modmail_status.callback, {}),
-        (cog.modmail_blocked.callback, {}),
-        (cog.snippet_list.callback, {}),
-        (cog.modmail_block.callback, {"user": member}),
-        (cog.modmail_unblock.callback, {"user": member}),
-        (cog.snippet_add.callback, {"name": "appeal", "content": "hello"}),
-        (cog.snippet_remove.callback, {"name": "appeal"}),
-        (cog.modmail_settings.callback, {"enabled": True}),
-        (
-            cog.modmail_mode.callback,
-            {"mode": discord.app_commands.Choice(name="channel", value="channel")},
-        ),
-    ]
+    await live(bot)
+    root = await open_panel(cog, bot, lead)
 
-    for callback, kwargs in calls:
-        interaction = FakeInteraction(bot, lead)
-        await callback(cog, interaction, **kwargs)
-        assert interaction.response.messages[0].get("deferred") is True, callback
-        assert interaction.sent is not None, callback
+    for label in ("Setup…", "Blocked…", "Snippets…", "Forget…", "Refresh"):
+        interaction = await press(root.view, label, bot, lead)
+        assert interaction.response.messages[0].get("deferred") is True, label
+        assert interaction.edits, label
+
+
+async def test_a_demoted_staffer_moves_nothing_from_a_panel_already_open(cog, bot, lead, db):
+    root = await open_panel(cog, bot, lead)
+    setup = await press(root.view, "Setup…", bot, lead)
+    lead.guild_permissions = FakePerms(manage_guild=False)
+    lead.roles = []
+
+    refused = await press(setup.view, "Answer DMs off", bot, lead)
+
+    assert bot.store.get(GUILD, "modmail_enabled") is True
+    assert refused.edits == []
+    assert refused.sent is not None
+    assert "modmail.settings" not in await action_kinds(db)
+
+
+async def test_a_panel_that_goes_quiet_disables_every_button_and_writes_the_footer(
+    cog, bot, lead
+):
+    interaction = await open_panel(cog, bot, lead)
+    view = interaction.view
+    view.message = await interaction.original_response()
+    view.last_interaction = interaction
+
+    await view.on_timeout()
+
+    assert all(item.disabled for item in view.children)
+    assert interaction.edits[-1]["embeds"][0].footer.text == modmail_cog.PANEL_TIMEOUT_FOOTER
+
+
+async def test_a_non_staff_caller_gets_the_sentence_and_no_panel_at_all(cog, bot, member):
+    interaction = await open_panel(cog, bot, member)
+
+    assert interaction.view is None
+    assert interaction.sent is not None
+
+
+async def test_logs_answers_a_new_followup_and_leaves_the_panel_where_it_was(cog, bot, lead):
+    root = await open_panel(cog, bot, lead)
+
+    logs = await press(root.view, "Logs", bot, lead)
+
+    assert logs.edits == []
+    assert logs.response.messages and logs.response.messages[-1]["ephemeral"] is True
+    assert root.view.replaced is False
+
+
+async def test_the_blocked_list_stops_at_the_cap_and_names_the_site_for_the_rest(
+    cog, bot, lead, db
+):
+    for user_id in range(500, 530):
+        await block_member(bot, bot.guild, lead, user_id, None)
+
+    panel = await open_blocked_panel(cog, bot, lead)
+
+    picker = next(one for one in panel.view.children if getattr(one, "options", None))
+    assert len(picker.options) == 25
+    assert "25 of 30" in picker.placeholder
+    assert "Modmail page" in panel.embed.description
+
+
+async def test_somebody_past_the_cap_is_still_blockable_through_the_user_picker(
+    cog, bot, member, lead, db
+):
+    for user_id in range(500, 530):
+        await block_member(bot, bot.guild, lead, user_id, None)
+    panel = await open_blocked_panel(cog, bot, lead)
+
+    chosen = await press(panel.view, "Block someone…", bot, lead)
+
+    assert modmail_cog.PICK_SOMEBODY in placeholders(chosen.view)
+    assert modmail_cog.PICK_A_BLOCK not in placeholders(chosen.view)
+    picked = await choose(chosen.view, modmail_cog.PICK_SOMEBODY, [member], bot, lead)
+    asked = await press(picked.view, "Block them…", bot, lead)
+    modal = asked.response.modals[-1]
+    modal.note._value = ""
+    await modal.on_submit(FakeInteraction(bot, lead))
+
+    assert await blocked_row(db, member.id) is not None
+
+
+async def test_a_re_render_retires_the_view_it_replaced(cog, bot, lead):
+    root = await open_panel(cog, bot, lead)
+    first = root.view
+
+    await press(first, "Setup…", bot, lead)
+
+    assert first.replaced is True and first.is_finished()
 
 
 async def test_an_unavailable_guild_is_never_reconciled(cog, bot, member, db):
@@ -1158,14 +1426,13 @@ async def test_on_ready_starts_the_loop_when_cog_load_never_did(cog, bot):
         await cog.cog_unload()
 
 
-async def test_status_shows_the_reconcilers_health_not_just_its_liveness(cog, bot, lead):
+async def test_the_panel_shows_the_reconcilers_health_not_just_its_liveness(cog, bot, lead):
     await cog.reconcile_tickets()
     cog.last_error = "HTTPException: 500"
-    interaction = FakeInteraction(bot, lead)
 
-    await cog.modmail_status.callback(cog, interaction)
+    interaction = await open_panel(cog, bot, lead)
 
-    said = " ".join(m["content"] or "" for m in interaction.response.messages)
+    said = interaction.embed.description
     assert "last ok" in said and cog.last_ok_at in said
     assert "HTTPException: 500" in said
 
@@ -1197,15 +1464,17 @@ async def test_a_ticket_number_written_in_exotic_digits_is_refused(cog, bot, mem
 
 async def test_forget_clears_one_place_and_says_which(cog, bot, lead, db):
     await live(bot)
-    interaction = FakeInteraction(bot, lead)
+    root = await open_panel(cog, bot, lead)
+    panel = await press(root.view, "Forget…", bot, lead)
 
-    await cog.modmail_forget.callback(
-        cog, interaction, setting=discord.app_commands.Choice(name="category", value="category")
+    cleared = await choose(
+        panel.view, modmail_cog.PICK_A_PLACE, ["modmail_category_id"], bot, lead
     )
 
     assert bot.store.get(GUILD, "modmail_category_id") is None
-    assert "modmail_category_id" in interaction.sent
+    assert "modmail_category_id" in cleared.sent
     assert "modmail.forgotten" in await action_kinds(db)
+    assert not has(cleared.view, "Forget…")
 
 
 async def test_a_member_who_leaves_is_noted_in_the_ticket_which_stays_open(cog, bot, member, db):
@@ -1220,16 +1489,22 @@ async def test_a_member_who_leaves_is_noted_in_the_ticket_which_stays_open(cog, 
 
 
 async def test_a_snippet_is_never_overwritten_by_accident(cog, bot, lead, db):
-    await cog.snippet_add.callback(cog, FakeInteraction(bot, lead), name="appeal", content="one")
-    clash = FakeInteraction(bot, lead)
+    """`Add one…` refuses a name that is taken and names `Change it…`, which is the overwrite."""
+    saved = await add_snippet(cog, bot, lead, "appeal", "one")
 
-    await cog.snippet_add.callback(cog, clash, name="appeal", content="two")
-    forced = FakeInteraction(bot, lead)
-    await cog.snippet_add.callback(
-        cog, forced, name="appeal", content="two", overwrite=True
-    )
+    clash = await add_snippet(cog, bot, lead, "appeal", "two", view=saved.view)
 
-    assert "already a snippet" in clash.sent and "saved" in forced.sent
+    assert "already a snippet" in clash.sent and "Change it…" in clash.sent
+    picked = await choose(clash.view, modmail_cog.PICK_A_SNIPPET, ["appeal"], bot, lead)
+    opened = await press(picked.view, "Change it…", bot, lead)
+    modal = opened.response.modals[-1]
+    assert modal.name.default == "appeal" and modal.content.default == "one"
+    modal.name._value = "appeal"
+    modal.content._value = "two"
+    changed = FakeInteraction(bot, lead)
+    await modal.on_submit(changed)
+
+    assert "saved" in changed.sent
     cur = await db.conn.execute("SELECT content FROM modmail_snippets WHERE name = 'appeal'")
     assert (await cur.fetchone())["content"] == "two"
 

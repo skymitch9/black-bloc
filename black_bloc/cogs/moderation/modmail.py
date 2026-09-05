@@ -11,40 +11,76 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from ...actionlog import (
-    LOGS_DEFAULT,
-    LOGS_MAX,
-    LOGS_MIN,
-    log_action,
-    send_logs,
-)
+from ...actionlog import log_action, send_logs
+from ...command_errors import AnswersErrors
 from ...command_visibility import STAFF_ONLY
 from ...events import clamp
 from ...golive import now_iso, parse_ts
 from ...logkinds import VIA_DISCORD, kind_via
 from ...modmail import (
     AUTO_ARCHIVE_MINUTES,
+    BACK,
+    BLOCK_PICK,
+    BLOCK_REASON,
+    BLOCKED_MOVE,
+    BLOCKED_TITLE,
+    CATEGORY,
     CLOSED,
     CONTENT_LIMIT,
+    DISABLE,
+    ENABLE,
+    FORGET,
+    FORGET_TITLE,
     IN,
+    LOGS,
+    MODE,
     NOTE,
     OPEN,
     OUT,
+    PANEL_TIMEOUT_FOOTER,
+    PANEL_TITLE,
+    PICK_A_BLOCK,
+    PICK_A_CATEGORY,
+    PICK_A_CHANNEL,
+    PICK_A_MODE,
+    PICK_A_PLACE,
+    PICK_A_SNIPPET,
+    PICK_SOMEBODY,
+    REFRESH,
+    SETUP,
+    SETUP_TITLE,
+    SITE,
+    SNIPPET_CHANGE,
     SNIPPET_NAME_LIMIT,
+    SNIPPET_REMOVE,
+    SNIPPET_REMOVE_NO,
+    SNIPPET_REMOVE_YES,
+    SNIPPETS,
+    SNIPPETS_TITLE,
     SOURCE_COMMAND,
     SOURCE_TYPED,
+    STAFF_CHANNEL,
+    TRANSCRIPTS,
+    UNBLOCK,
     attachment_urls,
-    chunk_lines,
+    blocked_buttons,
+    blocked_lines,
     closing_dm,
     count_directions,
     dump_attachments,
+    forget_buttons,
     header_embed,
     is_note,
     mentions,
     modes_sentence,
     note_body,
     opening_dm,
+    panel_minutes,
     relay_embed,
+    root_buttons,
+    setup_buttons,
+    snippet_buttons,
+    snippet_lines,
     thread_invite,
     thread_name,
     ticket_channel_name,
@@ -54,7 +90,21 @@ from ...modmail import (
     transcript_text,
     valid_snippet_name,
 )
-from ...panels import Outcome, refusal
+from ...panels import (
+    SELECT_OPTION_LIMIT,
+    NoteModal,
+    Outcome,
+    Panel,
+    answer,
+    capped_placeholder,
+    clamped,
+    db_ready,
+    db_up,
+    refusal,
+    retire,
+    site_page_url,
+    still_staff,
+)
 from ...settings_store import (
     CHANNEL_MODE,
     DB_UNAVAILABLE,
@@ -801,18 +851,6 @@ async def remove_place(bot: Any, guild: Any, ticket: Any) -> None:
         )
 
 
-async def answer(interaction: discord.Interaction, text: str) -> None:
-    if interaction.response.is_done():
-        await interaction.followup.send(text, ephemeral=True, allowed_mentions=mentions())
-        return
-    await interaction.response.send_message(text, ephemeral=True, allowed_mentions=mentions())
-
-
-async def answer_lines(interaction: discord.Interaction, lines: Any) -> None:
-    for chunk in chunk_lines(lines) or [""]:
-        await answer(interaction, chunk)
-
-
 async def resolve_ticket(bot: Any, guild: Any, channel_id: Any, given: Any) -> tuple[Any, str]:
     """The ticket a staff command means: the one named, the one here, or the only one open."""
     if given:
@@ -990,11 +1028,6 @@ class Modmail(commands.Cog):
         if name != "_reconcile_loop":
             return (None, None)
         return (self.last_ok_at, self.last_error)
-
-    modmail = app_commands.Group(
-        name="modmail", description="Run the modmail inbox",
-        default_permissions=STAFF_ONLY,
-    )
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
@@ -1556,95 +1589,24 @@ class Modmail(commands.Cog):
         for row in await tickets_in_channel(self.bot.db, thread.id):
             await self._close(thread.guild, row, reason="ticket_thread_deleted", silent=True)
 
-    @modmail.command(name="logs", description="The last few modmail log lines")
-    @app_commands.describe(
-        count="How many lines, 1 to 50 (10 by default)",
-        important_only="True to leave out the dry runs and the housekeeping",
-    )
-    async def modmail_logs(
-        self,
-        interaction: discord.Interaction,
-        count: app_commands.Range[int, LOGS_MIN, LOGS_MAX] = LOGS_DEFAULT,
-        important_only: bool = False,
-    ) -> None:
-        await send_logs(interaction, "modmail", count=count, important_only=important_only)
-
-    @modmail.command(name="block", description="Stop someone opening modmail tickets")
-    @app_commands.describe(user="Who to block", reason="Why, for the log")
-    async def modmail_block(
-        self, interaction: discord.Interaction, user: discord.User, reason: str | None = None
-    ) -> None:
-        if not await self._ready(interaction):
+    @app_commands.command(name="modmail", description="Run the modmail inbox")
+    @app_commands.default_permissions(STAFF_ONLY)
+    async def modmail(self, interaction: discord.Interaction) -> None:
+        if interaction.guild is None:
+            await answer(interaction, GUILD_ONLY)
             return
-        await interaction.response.defer(ephemeral=True)
-        outcome = await block_member(
-            self.bot, interaction.guild, interaction.user, user, reason
+        if not await require_staff(interaction):
+            return
+        if not await db_up(interaction):
+            return
+        embed, view = await build_root(self.bot, interaction.guild, self)
+        await interaction.response.send_message(
+            embed=embed,
+            view=view,
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
         )
-        await answer(interaction, outcome.message)
-
-    @modmail.command(name="unblock", description="Let someone open modmail tickets again")
-    @app_commands.describe(user="Who to unblock")
-    async def modmail_unblock(self, interaction: discord.Interaction, user: discord.User) -> None:
-        if not await self._ready(interaction):
-            return
-        await interaction.response.defer(ephemeral=True)
-        outcome = await unblock_member(self.bot, interaction.guild, interaction.user, user)
-        await answer(interaction, outcome.message)
-
-    @modmail.command(name="blocked", description="Who cannot open modmail tickets")
-    async def modmail_blocked(self, interaction: discord.Interaction) -> None:
-        if not await self._ready(interaction):
-            return
-        await interaction.response.defer(ephemeral=True)
-        rows = await blocked_rows(self.bot.db)
-        if not rows:
-            await answer(interaction, NO_BLOCKS)
-            return
-        await answer_lines(
-            interaction,
-            [
-                f"<@{row['user_id']}> — {row['reason'] or 'no reason given'} ({row['at'][:10]})"
-                for row in rows
-            ],
-        )
-
-    @modmail.command(name="mode", description="Whether new tickets are channels or threads")
-    @app_commands.choices(
-        mode=[app_commands.Choice(name=name, value=name) for name in MODMAIL_MODES]
-    )
-    async def modmail_mode(
-        self, interaction: discord.Interaction, mode: app_commands.Choice[str]
-    ) -> None:
-        if not await self._ready(interaction):
-            return
-        await interaction.response.defer(ephemeral=True)
-        outcome = await set_mode(
-            self.bot, interaction.guild, interaction.user, mode.value
-        )
-        await answer(interaction, outcome.message)
-
-    @modmail.command(name="forget", description="Forget where modmail has been pointed")
-    @app_commands.describe(setting="Which of the three places to clear")
-    @app_commands.choices(
-        setting=[app_commands.Choice(name=name, value=name) for name in FORGETTABLE]
-    )
-    async def modmail_forget(
-        self, interaction: discord.Interaction, setting: app_commands.Choice[str]
-    ) -> None:
-        if not await self._ready(interaction):
-            return
-        await interaction.response.defer(ephemeral=True)
-        outcome = await forget_place(
-            self.bot, interaction.guild, interaction.user, FORGETTABLE[setting.value]
-        )
-        await answer(interaction, outcome.message)
-
-    @modmail.command(name="status", description="What modmail is doing and where it is set up")
-    async def modmail_status(self, interaction: discord.Interaction) -> None:
-        if not await self._ready(interaction):
-            return
-        await interaction.response.defer(ephemeral=True)
-        await answer_lines(interaction, await self._status_lines(interaction.guild))
+        view.message = await interaction.original_response()
 
     async def _status_lines(self, guild: Any) -> list[str]:
         store = self.bot.store
@@ -1676,100 +1638,617 @@ class Modmail(commands.Cog):
             lines.append(NO_STAFF_WARNING)
         return lines
 
-    @modmail.command(name="settings", description="Show or change how modmail is set up")
-    @app_commands.describe(
-        category="Where ticket channels are made",
-        staff_channel="Where ticket threads are made",
-        log_channel="Where a closed ticket's transcript is posted",
-        enabled="True when Black Bloc answers DMs itself",
-        mode="channel (one per ticket) or thread (private threads)",
-    )
-    @app_commands.choices(
-        mode=[app_commands.Choice(name=name, value=name) for name in MODMAIL_MODES]
-    )
-    async def modmail_settings(
-        self,
-        interaction: discord.Interaction,
-        category: discord.CategoryChannel | None = None,
-        staff_channel: discord.TextChannel | None = None,
-        log_channel: discord.TextChannel | None = None,
-        enabled: bool | None = None,
-        mode: app_commands.Choice[str] | None = None,
-    ) -> None:
-        if not await self._ready(interaction):
-            return
-        await interaction.response.defer(ephemeral=True)
-        guild = interaction.guild
-        changed: dict[str, Any] = {}
-        for key, value in (
-            ("modmail_category_id", category),
-            ("modmail_staff_channel_id", staff_channel),
-            ("modmail_log_channel_id", log_channel),
-            ("modmail_enabled", enabled),
-            ("modmail_mode", mode.value if mode is not None else None),
-        ):
-            if value is not None:
-                changed[key] = await self.bot.store.set(
-                    guild.id, key, value, by=interaction.user.id
-                )
-        await answer_lines(interaction, await self._status_lines(guild))
-        if changed:
-            await log_action(
-                self.bot, guild, "modmail.settings", actor=interaction.user, details=changed
-            )
 
-    snippet = app_commands.Group(
-        name="snippet", description="Saved modmail replies",
-        default_permissions=STAFF_ONLY,
+# --- the panel -----------------------------------------------------------------------------------
+
+
+STYLES = {
+    "primary": discord.ButtonStyle.primary,
+    "secondary": discord.ButtonStyle.secondary,
+    "danger": discord.ButtonStyle.danger,
+}
+SELECT_CAP = 25
+FORGET_LABELS = {
+    "modmail_category_id": "The ticket category",
+    "modmail_staff_channel_id": "The staff channel",
+    "modmail_log_channel_id": "The transcripts channel",
+}
+INCUMBENT_LINE = (
+    "Black Bloc is **not** answering DMs here, so the old ModMail bot still holds the inbox. "
+    "**Setup…** → **Answer DMs on** hands it over."
+)
+NOTHING_BLOCKED_HERE = "Nobody is blocked, so there is nobody to let back in."
+PICKED_BLOCK = "Picked: <@{user_id}>."
+PICKED_TO_BLOCK = "About to block <@{user_id}> — **Block them…** asks for the reason."
+PICKED_SNIPPET = "Picked: **{name}**."
+REALLY_REMOVE = "Remove the snippet **{name}**? Nothing that already went out changes."
+BLOCK_REASON_TITLE = "Why they are blocked"
+BLOCK_REASON_LABEL = "Why — the log records this, the member is not told"
+SNIPPET_TITLE_NEW = "A new saved reply"
+SNIPPET_TITLE_EDIT = "Change a saved reply"
+SNIPPET_NAME_LABEL = "What to call it — lowercase, dashes, no spaces"
+SNIPPET_CONTENT_LABEL = "What it says"
+
+
+ROOT = "root"
+
+
+class ModmailPanel(Panel):
+    def __init__(self, minutes: int, cog: Any) -> None:
+        super().__init__(minutes, footer=PANEL_TIMEOUT_FOOTER)
+        self.cog = cog
+        self.surface = ROOT
+        self.picked_block: int | None = None
+        self.blocking: int | None = None
+        self.picked_snippet: str | None = None
+
+
+def minutes_for(bot: Any, guild_id: int) -> int:
+    return panel_minutes(bot.store, guild_id)
+
+
+def pointed_keys(store: Any, guild: Any) -> list[str]:
+    return [key for key in FORGETTABLE.values() if store.get(guild.id, key)]
+
+
+def new_panel(bot: Any, guild: Any, cog: Any) -> ModmailPanel:
+    return ModmailPanel(minutes_for(bot, guild.id), cog)
+
+
+def setup_lines(bot: Any, guild: Any) -> list[str]:
+    store = bot.store
+    mode = store.get(guild.id, "modmail_mode")
+    category_id = store.get(guild.id, "modmail_category_id")
+    log_id = store.get(guild.id, "modmail_log_channel_id")
+    parent_id = staff_parent_id(store, guild.id)
+    return [
+        f"**answering DMs** — {store.get(guild.id, 'modmail_enabled')}",
+        f"**mode** — {mode} · {modes_sentence(mode)}",
+        "**ticket category** — " + (f"<#{category_id}>" if category_id else "not set"),
+        "**staff channel** — " + (f"<#{parent_id}>" if parent_id else "not set"),
+        "**transcripts** — " + (f"<#{log_id}>" if log_id else "not set"),
+        f"**this panel stays live** — {minutes_for(bot, guild.id)} minute(s)",
+    ]
+
+
+async def build_root(bot: Any, guild: Any, cog: Any) -> tuple[discord.Embed, ModmailPanel]:
+    lines = await cog._status_lines(guild)
+    if not bot.store.get(guild.id, "modmail_enabled"):
+        lines.append(INCUMBENT_LINE)
+    embed = discord.Embed(title=PANEL_TITLE, description=clamped(lines))
+    view = new_panel(bot, guild, cog)
+    url = site_page_url(getattr(getattr(bot, "settings", None), "origin", ""), "modmail")
+    for move in root_buttons(
+        has_forget=bool(pointed_keys(bot.store, guild)), has_site=url is not None
+    ):
+        view.add_item(SiteButton(move, url) if move.action == SITE else MoveButton(move))
+    return (embed, view)
+
+
+def build_setup(
+    bot: Any, guild: Any, cog: Any, picker: str | None = None
+) -> tuple[discord.Embed, ModmailPanel]:
+    embed = discord.Embed(title=SETUP_TITLE, description=clamped(setup_lines(bot, guild)))
+    view = new_panel(bot, guild, cog)
+    view.surface = SETUP
+    if picker == CATEGORY:
+        view.add_item(PlacePick(CATEGORY, "modmail_category_id"))
+    elif picker == STAFF_CHANNEL:
+        view.add_item(PlacePick(STAFF_CHANNEL, "modmail_staff_channel_id"))
+    elif picker == TRANSCRIPTS:
+        view.add_item(PlacePick(TRANSCRIPTS, "modmail_log_channel_id"))
+    elif picker == MODE:
+        view.add_item(ModePick(bot.store.get(guild.id, "modmail_mode")))
+    for move in setup_buttons(enabled=bool(bot.store.get(guild.id, "modmail_enabled"))):
+        view.add_item(MoveButton(move))
+    return (embed, view)
+
+
+async def build_blocked(
+    bot: Any, guild: Any, cog: Any, *, picked: int | None = None, blocking: int | None = None
+) -> tuple[discord.Embed, ModmailPanel]:
+    rows = await blocked_rows(bot.db)
+    known = {int(row["user_id"]) for row in rows}
+    picked = picked if picked in known else None
+    lines = blocked_lines(rows) or [NO_BLOCKS]
+    if blocking:
+        lines.append(PICKED_TO_BLOCK.format(user_id=blocking))
+    elif picked is not None:
+        lines.append(PICKED_BLOCK.format(user_id=picked))
+    embed = discord.Embed(title=BLOCKED_TITLE, description=clamped(lines))
+    view = new_panel(bot, guild, cog)
+    view.surface = BLOCKED_MOVE
+    view.picked_block = picked
+    view.blocking = blocking
+    if blocking is not None:
+        view.add_item(SomebodyPick())
+    elif rows:
+        view.add_item(BlockedPick(rows, picked))
+    for move in blocked_buttons(picked=picked is not None, blocking=bool(blocking)):
+        view.add_item(MoveButton(move))
+    return (embed, view)
+
+
+async def build_snippets(
+    bot: Any, guild: Any, cog: Any, *, picked: str | None = None, confirming: bool = False
+) -> tuple[discord.Embed, ModmailPanel]:
+    rows = await all_snippets(bot.db)
+    names = {row["name"] for row in rows}
+    picked = picked if picked in names else None
+    lines = snippet_lines(rows) or [NO_SNIPPETS]
+    if confirming and picked is not None:
+        lines.append(REALLY_REMOVE.format(name=picked))
+    elif picked is not None:
+        lines.append(PICKED_SNIPPET.format(name=picked))
+    embed = discord.Embed(title=SNIPPETS_TITLE, description=clamped(lines))
+    view = new_panel(bot, guild, cog)
+    view.surface = SNIPPETS
+    view.picked_snippet = picked
+    if rows and not confirming:
+        view.add_item(SnippetPick(rows, picked))
+    for move in snippet_buttons(
+        picked=picked is not None, confirming=confirming and picked is not None
+    ):
+        view.add_item(MoveButton(move))
+    return (embed, view)
+
+
+def build_forget(bot: Any, guild: Any, cog: Any) -> tuple[discord.Embed, ModmailPanel]:
+    embed = discord.Embed(title=FORGET_TITLE, description=clamped(setup_lines(bot, guild)))
+    view = new_panel(bot, guild, cog)
+    view.surface = FORGET
+    keys = pointed_keys(bot.store, guild)
+    if keys:
+        view.add_item(ForgetPick(keys))
+    for move in forget_buttons():
+        view.add_item(MoveButton(move))
+    return (embed, view)
+
+
+async def show(interaction: discord.Interaction, built: Any, previous: Any) -> None:
+    embed, view = built
+    retire(previous)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
     )
 
-    @snippet.command(name="add", description="Save a reply you send often")
-    @app_commands.describe(
-        name="What to call it",
-        content="What it says",
-        overwrite="True to replace a snippet of that name that already exists",
+
+async def opened(interaction: discord.Interaction) -> bool:
+    """Staff are re-asked before every move, the reads included, and then the database is."""
+    if not await still_staff(interaction):
+        return False
+    await interaction.response.defer()
+    return await db_ready(interaction)
+
+
+def cog_of(view: Any) -> Any:
+    return getattr(view, "cog", None)
+
+
+async def render_root(interaction: discord.Interaction, previous: Any = None) -> None:
+    built = await build_root(interaction.client, interaction.guild, cog_of(previous))
+    await show(interaction, built, previous)
+
+
+async def open_root(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await opened(interaction):
+        return
+    await render_root(interaction, previous)
+
+
+async def open_setup(
+    interaction: discord.Interaction, previous: Any = None, picker: str | None = None
+) -> None:
+    if not await opened(interaction):
+        return
+    built = build_setup(interaction.client, interaction.guild, cog_of(previous), picker)
+    await show(interaction, built, previous)
+
+
+async def open_blocked(
+    interaction: discord.Interaction,
+    previous: Any = None,
+    *,
+    picked: int | None = None,
+    blocking: int | None = None,
+) -> None:
+    if not await opened(interaction):
+        return
+    built = await build_blocked(
+        interaction.client, interaction.guild, cog_of(previous), picked=picked, blocking=blocking
     )
-    async def snippet_add(
-        self,
-        interaction: discord.Interaction,
-        name: str,
-        content: str,
-        overwrite: bool = False,
-    ) -> None:
-        if not await self._ready(interaction):
-            return
-        await interaction.response.defer(ephemeral=True)
-        outcome = await put_snippet(
-            self.bot,
-            interaction.guild,
-            interaction.user,
-            name,
-            content,
-            overwrite=overwrite,
-        )
-        await answer(interaction, outcome.message)
+    await show(interaction, built, previous)
 
-    @snippet.command(name="remove", description="Delete a saved reply")
-    @app_commands.describe(name="Which one")
-    async def snippet_remove(self, interaction: discord.Interaction, name: str) -> None:
-        if not await self._ready(interaction):
-            return
-        await interaction.response.defer(ephemeral=True)
-        outcome = await drop_snippet(self.bot, interaction.guild, interaction.user, name)
-        await answer(interaction, outcome.message)
 
-    @snippet.command(name="list", description="Show the saved replies")
-    async def snippet_list(self, interaction: discord.Interaction) -> None:
-        if not await self._ready(interaction):
-            return
-        await interaction.response.defer(ephemeral=True)
-        rows = await all_snippets(self.bot.db)
-        if not rows:
-            await answer(interaction, NO_SNIPPETS)
-            return
-        await answer_lines(
+async def open_snippets(
+    interaction: discord.Interaction,
+    previous: Any = None,
+    *,
+    picked: str | None = None,
+    confirming: bool = False,
+) -> None:
+    if not await opened(interaction):
+        return
+    built = await build_snippets(
+        interaction.client,
+        interaction.guild,
+        cog_of(previous),
+        picked=picked,
+        confirming=confirming,
+    )
+    await show(interaction, built, previous)
+
+
+async def open_forget(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await opened(interaction):
+        return
+    built = build_forget(interaction.client, interaction.guild, cog_of(previous))
+    await show(interaction, built, previous)
+
+
+async def run_place(
+    interaction: discord.Interaction, key: str, value: Any, previous: Any = None
+) -> None:
+    if not await opened(interaction):
+        return
+    outcome = await point_at(
+        interaction.client, interaction.guild, interaction.user, key, value
+    )
+    await open_setup_again(interaction, previous, outcome)
+
+
+async def open_setup_again(
+    interaction: discord.Interaction, previous: Any, outcome: Outcome
+) -> None:
+    built = build_setup(interaction.client, interaction.guild, cog_of(previous))
+    await show(interaction, built, previous)
+    await answer(interaction, outcome.message)
+
+
+async def run_mode(interaction: discord.Interaction, value: str, previous: Any = None) -> None:
+    if not await opened(interaction):
+        return
+    outcome = await set_mode(interaction.client, interaction.guild, interaction.user, value)
+    await open_setup_again(interaction, previous, outcome)
+
+
+async def run_enabled(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await opened(interaction):
+        return
+    bot = interaction.client
+    wanted = not bot.store.get(interaction.guild.id, "modmail_enabled")
+    outcome = await set_enabled(bot, interaction.guild, interaction.user, wanted)
+    await open_setup_again(interaction, previous, outcome)
+
+
+async def run_forget(interaction: discord.Interaction, key: str, previous: Any = None) -> None:
+    if not await opened(interaction):
+        return
+    outcome = await forget_place(
+        interaction.client, interaction.guild, interaction.user, key
+    )
+    if pointed_keys(interaction.client.store, interaction.guild):
+        await show(
             interaction,
-            [f"**{row['name']}** — {clamp(row['content'], 120)}" for row in rows],
+            build_forget(interaction.client, interaction.guild, cog_of(previous)),
+            previous,
+        )
+    else:
+        await render_root(interaction, previous)
+    await answer(interaction, outcome.message)
+
+
+async def run_unblock(interaction: discord.Interaction, previous: Any) -> None:
+    if not await opened(interaction):
+        return
+    picked = getattr(previous, "picked_block", None)
+    if picked is None:
+        await answer(interaction, NOTHING_BLOCKED_HERE)
+        return
+    outcome = await unblock_member(
+        interaction.client, interaction.guild, interaction.user, picked
+    )
+    built = await build_blocked(interaction.client, interaction.guild, cog_of(previous))
+    await show(interaction, built, previous)
+    await answer(interaction, outcome.message)
+
+
+async def run_block(
+    interaction: discord.Interaction, user_id: int, reason: Any, previous: Any
+) -> None:
+    if not await opened(interaction):
+        return
+    outcome = await block_member(
+        interaction.client, interaction.guild, interaction.user, user_id, reason
+    )
+    built = await build_blocked(interaction.client, interaction.guild, cog_of(previous))
+    await show(interaction, built, previous)
+    await answer(interaction, outcome.message)
+
+
+async def run_put_snippet(
+    interaction: discord.Interaction, name: Any, content: Any, previous: Any, *, overwrite: bool
+) -> None:
+    if not await opened(interaction):
+        return
+    outcome = await put_snippet(
+        interaction.client,
+        interaction.guild,
+        interaction.user,
+        name,
+        content,
+        overwrite=overwrite,
+    )
+    built = await build_snippets(
+        interaction.client, interaction.guild, cog_of(previous), picked=outcome.value
+    )
+    await show(interaction, built, previous)
+    await answer(interaction, outcome.message)
+
+
+async def run_drop_snippet(interaction: discord.Interaction, previous: Any) -> None:
+    if not await opened(interaction):
+        return
+    picked = getattr(previous, "picked_snippet", None)
+    if picked is None:
+        await answer(interaction, NO_SNIPPETS)
+        return
+    outcome = await drop_snippet(
+        interaction.client, interaction.guild, interaction.user, picked
+    )
+    built = await build_snippets(interaction.client, interaction.guild, cog_of(previous))
+    await show(interaction, built, previous)
+    await answer(interaction, outcome.message)
+
+
+# --- the controls --------------------------------------------------------------------------------
+
+
+class MoveButton(discord.ui.Button):
+    def __init__(self, move: Any) -> None:
+        super().__init__(label=move.label, style=STYLES[move.style], row=move.row)
+        self.move = move
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        action = self.move.action
+        if action == LOGS:
+            await send_logs(interaction, "modmail")
+            return
+        if action == SETUP:
+            await open_setup(interaction, view)
+            return
+        if action == BLOCKED_MOVE:
+            await open_blocked(interaction, view)
+            return
+        if action == SNIPPETS:
+            await open_snippets(interaction, view)
+            return
+        if action == FORGET:
+            await open_forget(interaction, view)
+            return
+        if action in (CATEGORY, STAFF_CHANNEL, TRANSCRIPTS, MODE):
+            await open_setup(interaction, view, action)
+            return
+        if action in (ENABLE, DISABLE):
+            await run_enabled(interaction, view)
+            return
+        if action == BLOCK_PICK:
+            await open_blocked(interaction, view, picked=view.picked_block, blocking=0)
+            return
+        if action == UNBLOCK:
+            await run_unblock(interaction, view)
+            return
+        if action == SNIPPET_REMOVE:
+            await open_snippets(
+                interaction, view, picked=view.picked_snippet, confirming=True
+            )
+            return
+        if action == SNIPPET_REMOVE_YES:
+            await run_drop_snippet(interaction, view)
+            return
+        if action == SNIPPET_REMOVE_NO:
+            await open_snippets(interaction, view, picked=view.picked_snippet)
+            return
+        if action in (BACK, REFRESH):
+            await self.go_back(interaction, view)
+            return
+        await self.open_modal(interaction, view)
+
+    async def go_back(self, interaction: discord.Interaction, view: Any) -> None:
+        """Back is always the root; Refresh redraws the surface the button is sitting on."""
+        surface = ROOT if self.move.action == BACK else getattr(view, "surface", ROOT)
+        if surface == SETUP:
+            await open_setup(interaction, view)
+        elif surface == BLOCKED_MOVE:
+            await open_blocked(interaction, view, picked=view.picked_block)
+        elif surface == SNIPPETS:
+            await open_snippets(interaction, view, picked=view.picked_snippet)
+        elif surface == FORGET:
+            await open_forget(interaction, view)
+        else:
+            await open_root(interaction, view)
+
+    async def open_modal(self, interaction: discord.Interaction, view: Any) -> None:
+        if not await still_staff(interaction):
+            return
+        if not await db_up(interaction):
+            return
+        if self.move.action == BLOCK_REASON:
+            await interaction.response.send_modal(BlockReasonModal(view.blocking, view))
+            return
+        if self.move.action == SNIPPET_CHANGE:
+            row = await get_snippet(interaction.client.db, str(view.picked_snippet))
+            await interaction.response.send_modal(
+                SnippetModal(view, name=view.picked_snippet, content=row["content"] if row else "")
+            )
+            return
+        await interaction.response.send_modal(SnippetModal(view))
+
+
+class SiteButton(discord.ui.Button):
+    def __init__(self, move: Any, url: str) -> None:
+        super().__init__(label=move.label, style=discord.ButtonStyle.link, url=url, row=move.row)
+
+
+class PlacePick(discord.ui.ChannelSelect):
+    def __init__(self, action: str, key: str) -> None:
+        kinds = (
+            [discord.ChannelType.category]
+            if action == CATEGORY
+            else [discord.ChannelType.text]
+        )
+        super().__init__(
+            placeholder=PICK_A_CATEGORY if action == CATEGORY else PICK_A_CHANNEL,
+            channel_types=kinds,
+            min_values=1,
+            max_values=1,
+            row=0,
+        )
+        self.key = key
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_place(interaction, self.key, self.values[0].id, self.view)
+
+
+class ModePick(discord.ui.Select):
+    def __init__(self, current: str) -> None:
+        super().__init__(
+            placeholder=PICK_A_MODE,
+            options=[
+                discord.SelectOption(
+                    label=name,
+                    value=name,
+                    description=modes_sentence(name)[:100],
+                    default=name == current,
+                )
+                for name in MODMAIL_MODES
+            ],
+            min_values=1,
+            max_values=1,
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_mode(interaction, self.values[0], self.view)
+
+
+class BlockedPick(discord.ui.Select):
+    def __init__(self, rows: Any, picked: int | None) -> None:
+        shown = list(rows)[:SELECT_CAP]
+        super().__init__(
+            placeholder=capped_placeholder(len(shown), len(rows), pick=PICK_A_BLOCK),
+            options=[
+                discord.SelectOption(
+                    label=str(row["user_id"])[:SELECT_OPTION_LIMIT],
+                    value=str(row["user_id"]),
+                    description=clamp(row["reason"] or "no reason given", 100),
+                    default=int(row["user_id"]) == picked,
+                )
+                for row in shown
+            ],
+            min_values=1,
+            max_values=1,
+            row=1,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_blocked(interaction, self.view, picked=int(self.values[0]))
+
+
+class SomebodyPick(discord.ui.UserSelect):
+    """Somebody past the 25-row cap is still reachable, because blocking is not list-bounded."""
+
+    def __init__(self) -> None:
+        super().__init__(placeholder=PICK_SOMEBODY, min_values=1, max_values=1, row=0)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_blocked(interaction, self.view, blocking=self.values[0].id)
+
+
+class SnippetPick(discord.ui.Select):
+    def __init__(self, rows: Any, picked: str | None) -> None:
+        shown = list(rows)[:SELECT_CAP]
+        super().__init__(
+            placeholder=capped_placeholder(len(shown), len(rows), pick=PICK_A_SNIPPET),
+            options=[
+                discord.SelectOption(
+                    label=str(row["name"])[:SELECT_OPTION_LIMIT],
+                    value=str(row["name"]),
+                    description=clamp(row["content"], 100),
+                    default=row["name"] == picked,
+                )
+                for row in shown
+            ],
+            min_values=1,
+            max_values=1,
+            row=1,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_snippets(interaction, self.view, picked=self.values[0])
+
+
+class ForgetPick(discord.ui.Select):
+    def __init__(self, keys: list[str]) -> None:
+        super().__init__(
+            placeholder=PICK_A_PLACE,
+            options=[
+                discord.SelectOption(label=FORGET_LABELS[key], value=key, description=key)
+                for key in keys
+            ],
+            min_values=1,
+            max_values=1,
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_forget(interaction, self.values[0], self.view)
+
+
+# --- the modals ----------------------------------------------------------------------------------
+
+
+class BlockReasonModal(NoteModal):
+    def __init__(self, user_id: int, previous: Any) -> None:
+        super().__init__(
+            title=BLOCK_REASON_TITLE,
+            label=BLOCK_REASON_LABEL,
+            max_length=400,
+            on_submit=self.taken,
+            required=False,
+        )
+        self.user_id = int(user_id)
+        self.previous = previous
+
+    async def taken(self, interaction: discord.Interaction, text: str) -> None:
+        await run_block(interaction, self.user_id, text.strip() or None, self.previous)
+
+
+class SnippetModal(AnswersErrors, discord.ui.Modal):
+    name = discord.ui.TextInput(label=SNIPPET_NAME_LABEL, max_length=SNIPPET_NAME_LIMIT)
+    content = discord.ui.TextInput(
+        label=SNIPPET_CONTENT_LABEL,
+        style=discord.TextStyle.paragraph,
+        max_length=CONTENT_LIMIT,
+    )
+
+    def __init__(self, previous: Any, *, name: Any = None, content: Any = None) -> None:
+        super().__init__(title=(SNIPPET_TITLE_EDIT if name else SNIPPET_TITLE_NEW)[:45])
+        self.previous = previous
+        self.overwrite = bool(name)
+        if name:
+            self.name.default = str(name)
+        if content:
+            self.content.default = clamp(content, CONTENT_LIMIT)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await run_put_snippet(
+            interaction,
+            str(self.name),
+            clamp(str(self.content), CONTENT_LIMIT),
+            self.previous,
+            overwrite=self.overwrite,
         )
 
 
