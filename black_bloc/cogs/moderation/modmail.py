@@ -149,6 +149,7 @@ CARD_ACTIONS = "|".join(re.escape(move.action) for move in CARD_MOVES)
 CARD_TEMPLATE = rf"modmail:card:(?P<action>{CARD_ACTIONS}):(?P<ticket_id>[0-9]+)"
 CARD_DEBOUNCE_SECONDS = 2.0
 CARD_MIN_GAP_SECONDS = 8.0
+CARD_REASON_LIMIT = 200
 RECONCILE_MINUTES = 5
 ORPHAN_GRACE_MINUTES = 5
 REFUSAL_COOLDOWN_MINUTES = 10
@@ -747,9 +748,26 @@ async def _card_later(bot: Any, guild: Any, ticket_id: int) -> None:
         raise
     except Exception as exc:
         log.warning("modmail: the card for ticket %s could not be moved: %s", ticket_id, exc)
+        await card_move_failed(bot, guild, ticket_id, exc)
     finally:
         dirty.discard(ticket_id)
         clock["tasks"].pop(ticket_id, None)
+
+
+async def card_move_failed(bot: Any, guild: Any, ticket_id: int, exc: BaseException) -> None:
+    """Nothing awaits this task, so a silent failure would read exactly like a success."""
+    try:
+        await log_action(
+            bot,
+            guild,
+            "modmail.card_failed",
+            details={
+                "ticket_id": ticket_id,
+                "reason": clamp(f"{type(exc).__name__}: {exc}", CARD_REASON_LIMIT),
+            },
+        )
+    except Exception as why:
+        log.warning("modmail: the failed card for ticket %s went unlogged: %s", ticket_id, why)
 
 
 async def settle_cards(bot: Any) -> None:

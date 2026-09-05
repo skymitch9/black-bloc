@@ -1693,6 +1693,30 @@ async def test_a_card_that_cannot_be_posted_says_so_once(cog, bot, member, db):
     assert (await get_ticket(db, ticket["id"]))["card_message_id"] is None
 
 
+async def test_a_card_move_that_raised_inside_its_task_leaves_a_row_not_just_a_warning(
+    cog, bot, member, db, monkeypatch
+):
+    """Nothing awaits the debounced task, so a raise there used to be invisible on the Logs page."""
+    await quick_cards(monkeypatch)
+    ticket = await open_one(cog, bot, member)
+
+    async def blows_up(*_args, **_kwargs):
+        raise RuntimeError("the card went nowhere")
+
+    monkeypatch.setattr(modmail_cog, "refresh_card", blows_up)
+    await modmail_cog.bump_card(bot, bot.guild, ticket)
+    await modmail_cog.settle_cards(bot)
+
+    rows = await db.conn.execute(
+        "SELECT kind, details FROM action_log WHERE kind = 'modmail.card_failed'"
+    )
+    found = await rows.fetchall()
+    assert len(found) == 1
+    assert str(ticket["id"]) in found[0]["details"]
+    assert "the card went nowhere" in found[0]["details"]
+    assert modmail_cog.card_clock(bot)["tasks"] == {}
+
+
 async def test_a_burst_of_messages_coalesces_into_one_card_move(
     cog, bot, member, db, monkeypatch
 ):
