@@ -514,7 +514,7 @@ export function table(columns, rows, {
   const head = el('tr', {}, columns.map(headCell));
   const body = rows.map((row, index) => el('tr', {}, columns.map((column) => {
     const made = column.cell ? column.cell(row, index) : row[column.key];
-    const cell = el('td', { class: column.className || undefined });
+    const cell = el('td', { class: column.className || undefined, 'data-label': column.label || '' });
     if (made === null || made === undefined || made === '') cell.textContent = '—';
     else if (made instanceof Node) cell.append(made);
     else cell.textContent = String(made);

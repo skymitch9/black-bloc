@@ -370,7 +370,10 @@ body { overflow: hidden; }
   }
   .side[data-open="true"] { transform: none; }
   .topbar-menu { display: inline-flex; }
-  .topbar { padding: 0 12px; }
+  .topbar { padding: 0 12px; gap: 8px; }
+  .topbar-guild { flex: 0 1 auto; min-width: 0; }
+  .user-chip { min-width: 0; }
+  .user-name { max-width: 7rem; }
   .content { padding: 16px; }
   .savebar { margin: 0 16px 16px; }
   .scrim {
@@ -382,6 +385,10 @@ body { overflow: hidden; }
   }
   .scrim[hidden] { display: none; }
   .user-menu { right: 12px; }
+}
+@media (max-width: 700px) {
+  .topbar .kbd-hint,
+  .topbar .user-name { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .side { transition: none; }
@@ -831,6 +838,40 @@ th[title] { cursor: help; }
 .log-table .kind[data-tone="would"] { color: var(--et-warn); }
 .log-table .kind[data-tone="failed"] { color: var(--et-danger); }
 .log-table td .bar { margin: 0; gap: .4rem; flex-wrap: nowrap; }
+@media (max-width: 900px) {
+  .log-table,
+  .log-table tbody,
+  .log-table tr { display: block; }
+  .log-table thead { display: none; }
+  .log-table tbody tr {
+    padding: 8px 12px;
+    border-bottom: var(--et-hairline-w) solid var(--et-hairline);
+  }
+  .log-table tbody tr:last-child { border-bottom: 0; }
+  .log-table td {
+    display: grid;
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+    align-items: start;
+    justify-items: start;
+    column-gap: 10px;
+    padding: 3px 0;
+    border-bottom: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .log-table td::before {
+    content: attr(data-label);
+    color: var(--et-muted);
+    font-size: var(--et-ui-xs);
+    font-weight: var(--et-weight-strong);
+    line-height: 1.6;
+  }
+  .log-table td[data-label=""] { grid-template-columns: minmax(0, 1fr); }
+  .log-table td[data-label=""]::before { display: none; }
+  .log-table td.wrap { min-width: 0; }
+  .log-table td .bar { flex-wrap: wrap; }
+  .table-scroll[data-long="true"] { max-height: none; }
+}
 
 /* The cases grid — the mock's own column template, verbatim. It scrolls
    inside its own box so the page body never scrolls sideways. */
