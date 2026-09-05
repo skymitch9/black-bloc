@@ -334,6 +334,10 @@ docs bookkeeping lands with the work, not after.
   NO sticky card, none of F-M1–F-M8); sweep rows lettered `MA1…`. Next: F-M2 and F-M3 to the owner, then the
   `/mod` build; modmail Build B (after A merges) carries the migration — takes schema 30 if `/mod` takes 29;
   its seven forks go to the owner one at a time before it starts.
+  **Owner 07:10 "A" → F-M2 = (a)** (voided warns stop counting toward the threshold). **Owner 07:14 "A" →
+  F-M3 = (a)** (the site gets the four case moves in this build). **DISPATCHED 07:16: the `/mod` build** (Opus, own
+  worktree off `97531cc`; takes schema 29; sweep rows lettered `C1…`; est. 340–420k; usage at dispatch session
+  22% / weekly 9% / Fable 10%, read 07:15). THREE builds in flight: honeypot, modmail A, `/mod`.
 - **Wave-1 review findings, small, fold into the next build that touches each file (Fable
   review 2026-09-03 13:50–14:05):** `requests.py` re-renders lack `allowed_mentions`;
   `LOG_LEVEL_COMMANDS` help still says "`/birthday logs`" / "`/request logs`"; five form writes
