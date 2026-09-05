@@ -12,8 +12,12 @@
 > reconciler job, `modmail_reply_style` and the relay gate, the practice ticket, and the
 > retirement of `/areply` `/note` `/close` (**33 → 30, measured**). ⚠️ **Nothing in either half
 > has met live Discord**; the whole verification of both is `pytest`, `ruff` and `check.mjs`.
+> ✅ **FOLLOW-UP SHIPPED 2026-09-05 as v85** (merge of `worktree-agent-ad2fc0f5aad473c19`; sweeps
+> 245–251): **A ticket…** and the ticket card ON the panel (§B S5, §C), `picked_values` one home,
+> the dead leftovers gone, the `modmail.card_failed` row — deviations in the `## Follow-up
+> deviations` foot. Not run against Discord by eye.
 > 🔑 **RE-KEYED 2026-09-05 against `63f016c`** on `worktree-agent-ad2fc0f5aad473c19` (the
-> follow-up build's own branch — **NOT merged, NOT deployed**), in
+> follow-up build's own branch, since merged as v85), in
 > `black_bloc/cogs/moderation/modmail.py` (**3166 lines**). **109 bare `` `:N` `` references** to
 > that file now point at the current line; **71 were left exactly as they were**, and here is the
 > rule, so a reader knows which is which:

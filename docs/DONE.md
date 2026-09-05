@@ -9,6 +9,33 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-05 — Modmail follow-up: **A ticket…** and the ticket card ON the panel, plus the Logs page on a phone (v85, merge of `worktree-agent-ad2fc0f5aad473c19` + `430114c`)
+
+**Outcome (Fable review + merge 2026-09-05 ~14:40):** all seven leftovers landed — `picked_values` has ONE home
+(`panels.py`), the four dead leftovers are gone, `_card_later` writes a `modmail.card_failed` row when the sticky
+card's background move raises, and the `/modmail` root carries **A ticket…** (row 0, only with ≥1 open ticket) whose
+card is the SAME `card_embed()` the sticky card uses over **Reply · Reply as Staff · Private note · Close… · Back**.
+The four card moves take an optional `previous` so the panel's copy redraws in place and the channel card stays the
+refresher's. Sweep rows 245–251 (`ML1`–`ML7`); design doc re-keyed. Agent cost 316k (est. 80–120k). 5020 tests.
+The Logs page fix (`430114c`) rides along: at ≤900px each `.log-table` row becomes a labelled card via
+`td::before { content: attr(data-label) }` (label written by the shared `table()` builder in `ui.js`), the topbar
+sheds the kbd hint and user name at ≤700px; desktop untouched (verified in an emulated 390px iframe against the
+mock, desktop pixel-identical). Review: `/modmail` → **A ticket…** in `#mute-me-bot-test-spam`;
+https://blackbloc.heygabi.ai/audit.html on a phone. The two items, moved WHOLE:
+
+- 🔧 **Logs page on mobile (owner 2026-09-05 14:10, verbatim: "check the audit page, it doesn't line up well on mobile but make sure it lines up well on web"):** `site/public/audit.html` + `assets/logs.js` / `site.css` — measure at a phone width, fix the mobile layout without moving the desktop one. Fable, main loop (CSS only; the self-test build touches `audit.html` for the Test filter, so keep the change in `site.css` to avoid a conflict).
+- 🔧 **Modmail leftovers after Build B (handed over at the v82 landing, 2026-09-05):** (1) **the panel-side `A ticket…`
+  select / ticket card** in the `/modmail` panel (`docs/info/modmail-panel-design.md` §B S5, §C) is UNBUILT — it fell between
+  Build A and Build B; a small Opus follow-up (est. 80–120k) once `/settings` lands; (2) `picked_values` has two copies
+  (`polls.py`, `black_bloc/modmail.py`) — one home in `panels.py`; (3) `NO_CATEGORY`/`NOT_A_CATEGORY` are dead strings in
+  `cogs/moderation/modmail.py`; (4) `Modmail._post_transcript` / `_remove_place` are unreferenced Build-A wrappers;
+  (5) an exception inside `refresh_card` is WARNING-logged with no `modmail.card_failed` row (silent failure ≠ success,
+  checklist); (6) re-key the design doc's `path:line` anchors for `modmail.py`; (7) the card's 2 s/8 s debounce has never
+  been measured against a real channel — sweep 222 is the measurement.
+  **DISPATCHED 13:50 2026-09-05** (Opus, own worktree off `6212380`; all seven items in scope, sweep rows lettered
+  `ML1`–`MLn`, numbered after 244 at the merge; est. 80–120k, expect ~200k). Usage before dispatch session 24% /
+  weekly 22% / Fable 20%, read 13:48.
+
 ## 2026-09-05 — `/settings` panel: the LAST panel; `/settings show|set|set-role|set-value|clear` and the `presence` Group retire — 29 slots, ZERO Groups (Build 1 v83 `57a878d`, Build 2 v84 `ce97de0`)
 
 Moved WHOLE from `TODO.md` at the Build 2 landing (13:45). Build 1 on `worktree-agent-a3e6ccbead5a90537` (Opus, 349k,

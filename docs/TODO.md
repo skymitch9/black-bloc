@@ -12,7 +12,7 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 13:50, v84 LIVE — **29 slots, zero Groups, the panels program's end state**; modmail leftovers follow-up BUILDING since 13:50 — the only thing in flight; next = the `/settings` leftovers)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 14:25, v85 LIVE — **29 slots, zero Groups**; modmail follow-up + the mobile Logs page landed; the SELF-TEST build (Opus, `worktree-agent-a4aa5efd43f249ba6`, design `info/selftest-design.md`) BUILDING since 14:03 — the only thing in flight, lands as v86 (schema 30 → 31, sweep rows `ST1`–`STn` numbered after 251); next = the `/settings` leftovers)
 
 **`main` = `43312b9`** (role-menus panel merge; v77 live 20:51, 4529 tests, **36 commands**; `youtube_mode` is
 **shadow** since 2026-09-03 17:42). **The panels program is COMPLETE** — waves 1, 2 and 3 (17 features, one
@@ -240,19 +240,7 @@ docs bookkeeping lands with the work, not after.
   feature copies it (a module function, not a cog; acceptable, but `set_key`/`clear_key` may belong in a leaf module);
   (9) the three hand-rolled confirm copies are still three — Build 2 made the settings confirm a card STATE, so the
   "fold 7 copies" sweep is now a fold of the other panels, not of this one.
-- 🔧 **Logs page on mobile (owner 2026-09-05 14:10, verbatim: "check the audit page, it doesn't line up well on mobile but make sure it lines up well on web"):** `site/public/audit.html` + `assets/logs.js` / `site.css` — measure at a phone width, fix the mobile layout without moving the desktop one. Fable, main loop (CSS only; the self-test build touches `audit.html` for the Test filter, so keep the change in `site.css` to avoid a conflict).
 - 🔧 **Self-test + `tests/live/` (owner 2026-09-05 13:52 → decided 14:02, design `info/selftest-design.md`):** `black_bloc/selftest.py` registry of checks (config keys resolve with permissions · every one of the 29 panels' root cards posted live · every website GET in-process · scheduled senders' embeds), three doors on ONE `run()` (boot log line `selftest: N ok, M failed`, `/settings` ▸ **Run the self-test**, `POST /api/selftest` + `GET` list/one + `POST …/purge`), `selftest_runs` + `selftest_messages` tables (schema 30 → 31), `purge_loop` deleting every posted message after `selftest_purge_minutes` (default 5; boot tick purges leftovers first), log feature **Test** (`selftest.*` kinds, level default off, EXCLUDED from the Logs page's default view, shown under the **Test** filter), Health-page Self-test card with a Run button, settings keys `selftest_on_boot` / `selftest_channel_id` / `selftest_purge_minutes` (core group, both doors), mock routes + check.mjs, `tests/live/` (`-m live`, skipped without `BLACK_BLOC_LIVE_URL` + `BLACK_BLOC_LIVE_TOKEN`), `docs/access/testing.md`. No new command — tree stays 29 / zero Groups. Sweep rows `ST1`–`STn`, numbered at the merge after the `ML` rows. **DISPATCHED 14:03 2026-09-05** (Opus, own worktree off `main`; est. 300–450k — a multi-layer build; commit at clean boundaries in the order engine → doors → website → panel wiring → live suite). Usage before dispatch session 32% / weekly 23% / Fable 21%, read 14:02.
-- 🔧 **Modmail leftovers after Build B (handed over at the v82 landing, 2026-09-05):** (1) **the panel-side `A ticket…`
-  select / ticket card** in the `/modmail` panel (`docs/info/modmail-panel-design.md` §B S5, §C) is UNBUILT — it fell between
-  Build A and Build B; a small Opus follow-up (est. 80–120k) once `/settings` lands; (2) `picked_values` has two copies
-  (`polls.py`, `black_bloc/modmail.py`) — one home in `panels.py`; (3) `NO_CATEGORY`/`NOT_A_CATEGORY` are dead strings in
-  `cogs/moderation/modmail.py`; (4) `Modmail._post_transcript` / `_remove_place` are unreferenced Build-A wrappers;
-  (5) an exception inside `refresh_card` is WARNING-logged with no `modmail.card_failed` row (silent failure ≠ success,
-  checklist); (6) re-key the design doc's `path:line` anchors for `modmail.py`; (7) the card's 2 s/8 s debounce has never
-  been measured against a real channel — sweep 222 is the measurement.
-  **DISPATCHED 13:50 2026-09-05** (Opus, own worktree off `6212380`; all seven items in scope, sweep rows lettered
-  `ML1`–`MLn`, numbered after 244 at the merge; est. 80–120k, expect ~200k). Usage before dispatch session 24% /
-  weekly 22% / Fable 20%, read 13:48.
 - **Wave-1 review findings, small, fold into the next build that touches each file (Fable
   review 2026-09-03 13:50–14:05):** `requests.py` re-renders lack `allowed_mentions`;
   `LOG_LEVEL_COMMANDS` help still says "`/birthday logs`" / "`/request logs`"; five form writes
