@@ -1,5 +1,6 @@
 import sqlite3
 
+import aiosqlite
 import pytest
 
 from black_bloc.storage.db import SCHEMA_VERSION, Database
@@ -12,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 29
+        assert SCHEMA_VERSION == 30
         cur = await db.conn.execute("PRAGMA table_info(requests)")
         assert {
             "built",
@@ -385,6 +386,72 @@ async def test_only_one_modmail_ticket_per_member_may_be_open(tmp_path):
         await db.conn.execute("UPDATE modmail_tickets SET status = 'closed'")
         await db.conn.commit()
         await open_ticket(db, 900, 12)
+    finally:
+        await db.close()
+
+
+SCHEMA_29_TICKETS = """CREATE TABLE modmail_tickets (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id       INTEGER NOT NULL,
+    user_id        INTEGER NOT NULL,
+    mode           TEXT    NOT NULL,
+    channel_id     INTEGER NOT NULL,
+    thread_id      INTEGER,
+    status         TEXT    NOT NULL DEFAULT 'open',
+    opened_at      TEXT    NOT NULL,
+    closed_at      TEXT,
+    closed_by      INTEGER,
+    close_reason   TEXT,
+    log_message_id INTEGER
+)"""
+
+
+async def test_the_sticky_card_and_practice_columns_arrive_on_a_schema_29_database(tmp_path):
+    """29 → 30: both columns are added by ALTER, and a row written before them still reads."""
+    path = tmp_path / "old.sqlite3"
+    old = await aiosqlite.connect(path)
+    old.row_factory = aiosqlite.Row
+    await old.execute(SCHEMA_29_TICKETS)
+    await old.execute(
+        "INSERT INTO modmail_tickets(guild_id, user_id, mode, channel_id, status, opened_at) "
+        "VALUES (1, 900, 'channel', 10, 'open', '2026-08-26T00:00:00+00:00')"
+    )
+    await old.commit()
+    await old.close()
+
+    db = Database(path)
+    await db.connect()
+    try:
+        cur = await db.conn.execute("PRAGMA table_info(modmail_tickets)")
+        columns = {row["name"] for row in await cur.fetchall()}
+        assert {"card_message_id", "practice"} <= columns
+        cur = await db.conn.execute("SELECT * FROM modmail_tickets WHERE id = 1")
+        row = await cur.fetchone()
+        assert row["card_message_id"] is None
+        assert row["practice"] == 0
+        cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == "30"
+    finally:
+        await db.close()
+
+
+async def test_a_fresh_database_carries_the_sticky_card_and_practice_columns(tmp_path):
+    db = Database(tmp_path / "fresh.sqlite3")
+    await db.connect()
+    try:
+        await open_ticket(db, 901, 20)
+        cur = await db.conn.execute("SELECT * FROM modmail_tickets WHERE user_id = 901")
+        row = await cur.fetchone()
+        assert row["card_message_id"] is None
+        assert row["practice"] == 0
+        await db.conn.execute(
+            "UPDATE modmail_tickets SET card_message_id = 55, practice = 1 WHERE user_id = 901"
+        )
+        await db.conn.commit()
+        cur = await db.conn.execute("SELECT * FROM modmail_tickets WHERE user_id = 901")
+        row = await cur.fetchone()
+        assert row["card_message_id"] == 55
+        assert row["practice"] == 1
     finally:
         await db.close()
 
