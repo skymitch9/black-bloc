@@ -12,7 +12,7 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 07:37, honeypot merged + v79 deploying, modmail A + /mod building)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 07:56, modmail A merged + v80 LIVE, /mod building, modmail B fork 1 open with the owner)
 
 **`main` = `43312b9`** (role-menus panel merge; v77 live 20:51, 4529 tests, **36 commands**; `youtube_mode` is
 **shadow** since 2026-09-03 17:42). **The panels program is COMPLETE** — waves 1, 2 and 3 (17 features, one
@@ -349,6 +349,14 @@ docs bookkeeping lands with the work, not after.
   13 rows after wave 4) fold into the build. **v79 deploy started 07:36** (honeypot panel + the design doc).
   **v79 LIVE 07:39 (`361eaa2`)** — honeypot panel shipped; boot verified 14:39:15Z, synced 36, no traceback. The
   honeypot item moved WHOLE to `DONE.md`. Sweeps 188–199 are the owner's.
+  **LANDED 07:46 (392k Opus): modmail Build A** — reviewed sound; merged as `b926d9d` beside the honeypot merge
+  (eight conflicts: both `panel_minutes` blocks kept in `settings_store`, `LOGS_GROUPS` down to `mod`, both
+  labels/mock rows, both program rows, both guide rows, both code-notes sections); 4625 tests, ruff clean,
+  **36 → 35 measured**; sweep rows `MA1`–`MA8` numbered **200–207** at the merge, guide count 199 → 207.
+  **v80 LIVE 07:54 (`b926d9d`)** — boot verified 14:54:28Z, `synced 35`, no traceback; nothing opened in
+  Discord. This item STAYS until Build B (sticky card, migration, `modmail_reply_style`, practice ticket,
+  `/areply` `/note` `/close` retire) — B dispatches once fork 1 of 7 (card-jump trigger) is answered. Usage
+  after landing session 42% / weekly 14% / Fable 13%, read 07:54.
 - **Wave-1 review findings, small, fold into the next build that touches each file (Fable
   review 2026-09-03 13:50–14:05):** `requests.py` re-renders lack `allowed_mentions`;
   `LOG_LEVEL_COMMANDS` help still says "`/birthday logs`" / "`/request logs`"; five form writes

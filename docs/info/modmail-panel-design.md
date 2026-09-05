@@ -1,7 +1,8 @@
 # Modmail — `/modmail` is ONE staff panel, and every ticket carries a sticky staff card
 
 > **Audience:** the build agent and the reviewer; the owner for §I (the forks) and §H (the sweep).
-> **Status:** TRACKED · **BUILD A BUILT 2026-09-05** on `worktree-agent-afdd9e23bbaf59be8`
+> **Status:** TRACKED · ✅ **BUILD A SHIPPED 2026-09-05 as v80 (`b926d9d`, the merge commit)**, built on
+> `worktree-agent-afdd9e23bbaf59be8`
 > (the `/modmail` root panel, `Setup…`, `Blocked…`, `Snippets…`, `Forget…`, `Logs`; the six §F
 > extractions for block/unblock/snippets/settings; the log-kind rename and the five route
 > `note()` deletions; `modmail_panel_minutes`; the doc/string sweep — `commands synced`
