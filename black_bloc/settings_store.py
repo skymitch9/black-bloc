@@ -30,7 +30,14 @@ from .chat_memory import (
 from .config import Settings
 from .emoji import SKIN_TONE_DEFAULT, SKIN_TONE_NAMES
 from .groq import DEFAULT_MODEL as GROQ_DEFAULT_MODEL
-from .logkinds import FEATURE_LABELS, FEATURES, LEVEL_DEFAULT, LEVELS, log_level_key
+from .logkinds import (
+    CORE,
+    FEATURE_LABELS,
+    FEATURES,
+    LEVEL_DEFAULT,
+    LEVELS,
+    log_level_key,
+)
 from .personas import COOKOUT, PERSONALITY_CHOICES
 from .polls import DATE_LABEL_FORMS as POLL_DATE_LABEL_FORMS
 from .polls import MAX_HOURS as POLL_MAX_HOURS
@@ -1227,6 +1234,32 @@ KEY_HELP.update(
         )
     }
 )
+
+
+# The one grouping of the registry, read by the dashboard's Settings page and by /settings.
+CORE_KEYS = (
+    "log_channel_id",
+    "staff_channel_id",
+    "role_menu_channel_id",
+    "bot_bio",
+    "status_prefix",
+    "operator_read_log",
+)
+NAMESPACE_OVERRIDE = {
+    "modlog_channel_id": "automod",
+    "mod_dm_on_action": "automod",
+    "mod_log_level": "automod",
+    "mod_panel_minutes": "automod",
+}
+
+
+def namespace_of(key: str) -> str:
+    if key in NAMESPACE_OVERRIDE:
+        return NAMESPACE_OVERRIDE[key]
+    if key in CORE_KEYS:
+        return CORE
+    head, _, rest = key.partition("_")
+    return head if rest else CORE
 
 
 GUILD_ONLY = (
