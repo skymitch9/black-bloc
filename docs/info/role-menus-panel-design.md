@@ -1,7 +1,10 @@
 # Role menus — `/rolemenu` is ONE command that opens a panel (wave 3)
 
 > **Audience:** the build agent and the reviewer, and the owner for §I. **Status:** TRACKED ·
-> **PLANNING** — unbuilt. The `## Deviations` foot is written by the BUILD agent; there is none yet.
+> ✅ **SHIPPED in v77** (`43312b9`, 2026-09-04 20:51) — built on `worktree-agent-ace2086f9f7cfa541` for 529k
+> against a 420–500k estimate, four commits off `4523118`, eight append-shaped merge conflicts, sweeps
+> **173–182**; the `## Deviations` foot (14 items) is the build agent's. Boot-verified only
+> (`synced 36`); nothing below has met live Discord.
 > **Last verified: 2026-09-04** — every `path:line` below was READ against `main` at `bf3e447`
 > (the working tree is `4336a66`, one docs-only commit on top of it; no source file differs), in
 > `black_bloc/cogs/community/role_menus.py` (**2164 lines**), `black_bloc/rolegrants.py` (467),

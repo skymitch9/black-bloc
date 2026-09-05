@@ -9,6 +9,210 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-04 — Role menus panel: `/rolemenu` is one window (wave 3 FOURTH and LAST landing, v77, `43312b9`)
+
+Release **v77** (`43312b9`, 20:51; `deploys.log` line 76). Merge `--no-ff` of
+`worktree-agent-ace2086f9f7cfa541` — **four commits off `4523118`** (`8cdbdd3`, `12b296b`,
+`18b132c`, `05a9a87`). Built by one Opus agent for **529k against a 420–500k estimate** (dispatched
+16:03 in parallel with raidtrain, landed second at 16:53), Fable-reviewed **approve**. Design:
+`info/role-menus-panel-design.md` (header flipped to SHIPPED; its `## Deviations` foot lists 14).
+
+**What it is.** The `rolemenu` and `role` staff groups' eighteen leaf subcommands are retired for
+ONE staff `/rolemenu` that opens an ephemeral panel: the root lists the menus (a select picks one)
+and a Lead sees **Setup…**, **Grants…** and **Logs** plus the mode select; a menu card (row 0
+exactly five) carries **Add a role**, **Hand roles out**, **Post it**, **Edit** (F-R3 (a) — an edit
+re-posts a posted menu) and the waiting-on-staff sub-panel (F-R1 (a) — the pending-requests queue
+lives in the panel); the grant card carries **Extend** and **End it now**, which makes the phantom
+`/role revoke` (named in four docs, never built) real; F-R2 (a) — a grant with no end date is `0 =
+never`. **The owner's §I-amend Grants audit** is built: `active_grants`, `grant_order`, `time_left`
+and `grant_lines` in the pure `black_bloc/rolemenus.py`, soonest-ending first, no-end-date LAST,
+`AUDIT_MAX` 25. Grant/extend were reconciled from two divergent implementations (cog inline vs
+`roles.py`) into one — and `tests/api/tools/test_roles.py` is UNCHANGED, which is the proof the
+reconciliation did not move the site. Seven bare log kinds gained `kind_via`; `web.rolemenu.*` was
+renamed `web.role_menu.*` with `HEADS["rolemenu"]` kept so old rows still label. `guarded()` keeps
+`guard.allows_channel` on every role-changing move (TEST_MODE holds). `role_menus.option_label`
+collides by name with `panels.option_label` — import aliased. New key `rolemenu_panel_minutes`
+(int, 10). `HIDDEN_WHEN_OFF["rolemenu_mode"]` deleted (hiding the command hid the only way on; the
+table now names `request_mode` alone — the hide-when-off item on the TODO grows it back on purpose,
+behind a bool). `commands synced` **37 → 36, measured at boot**.
+
+**The merge.** **Eight append-shaped conflicts**, every one resolved both-sides HEAD-then-branch
+(`settings_store.py` block + default, `tests/test_settings_store.py`, `tests/test_bot.py` — three
+group asserts kept and the pin set 37 → **36** —, `OWNER_GUIDE.md` — the branch's `/rolemenu` row
+added above "Test something", count 172 → **182** —, `site/mock/server.mjs`, `labels.js`,
+`code-notes.md` foot, `sweeps.md` — branch header first, newest first). The branch wrote its sweep
+rows as **`M1`–`M10`, letters on purpose**, and the conductor numbered them **173–182** at the merge,
+after raidtrain's 163–172. The design doc's deviation 13 was updated to say so. `docs/info/code-notes.md`'s
+`# Role menus panel (wave 3)` section was re-keyed to the merge. **4465 → 4529 tests.**
+
+**Review findings, non-blocking, deferred to the fold sweep:** `ready()` is another cog-local copy
+of the opened/confirm triplet (seventh confirm copy overall); the `test_every_feature_group_has_a_logs_command`
+re-expression is still on the TODO.
+
+**Verified:** ruff clean; 4529 passed; boot clean at 03:51:09Z (`database ready` / `synced 36` /
+`logged in`, no Traceback). **NOT verified:** `/rolemenu` was not opened in Discord — no menu posted,
+no role handed out or ended, the Grants audit was not opened, `rolemenu_mode`'s state was not read.
+Sweeps **173–182** are the owner's to run, in `#mute-me-bot-test-spam`, as a Lead.
+
+**With this landing WAVE 3 is COMPLETE and the panels program is DONE** — the program item follows,
+moved whole from `TODO.md`.
+
+---
+
+## 2026-09-04 — Panels over slash commands — the program (waves 1–3 COMPLETE with v77; moved whole from `TODO.md`)
+
+Moved WHOLE, unedited, from `docs/TODO.md` at the v77 landing (20:54). The status paragraphs inside it
+are the running record, newest at the bottom of each wave; every landing it names has its own entry above.
+
+- 🆕 **Panels over slash commands — the rest of the app (owner, 2026-09-03: "then carry it
+  through the rest of the app"; confirmed ~11:25: "do the change to all / commands. I like
+  how request works").** Audit every command group (44 commands synced; `cogs/core.py:88`
+  lists them) and convert each feature to one command + panel the same way: `/event`,
+  `/poll`, `/raidtrain(s)`, `/applications`, `/voice`, `/twitch`, `/birthday`, `/memory`,
+  `/settings`, the moderation set. One feature per build, requests as the template
+  (`info/requests-panel-design.md`); each gets its own design doc with the button table per
+  state. Scope is now ALL commands — the sequence is the conductor's to plan, the design
+  calls still go to the owner one at a time. Status: **PLANNED** (2026-09-03 11:10) — the
+  program is written: [`info/panels-program.md`](info/panels-program.md) (§2 the 17
+  invariants every panel inherits from `/request`, §3 the measured inventory — ~177
+  subcommands over 44 top-level commands → ~21 commands, §4 **wave 0 = extract
+  `black_bloc/panels.py` from the requests cog** so the three review defects cannot recur
+  seventeen times, §5 four waves, §6 the three owner forks: F1 mod commands, F2 modmail's
+  in-thread `/reply` set, F3 `/settings`). **Wave 0 is MERGED** (`1861923`, 2026-09-03 ~11:50:
+  `black_bloc/panels.py` + `tests/test_panels.py`, 26 tests, the requests cog now inherits
+  `Panel`; 160k Opus / 20 min; `code-notes.md` re-keyed at the merge) **and LIVE in v60**
+  (2026-09-03 11:39; the wave-0 record itself is in `DONE.md` that date). **Wave 1 design
+  docs IN FLIGHT** (owner "Build all, keep going", 2026-09-03 ~12:40): three Opus design
+  agents writing `info/events-panel-design.md`, `info/polls-panel-design.md`,
+  `info/birthdays-panel-design.md` (sweep rows reserved: events from 73, polls from 80,
+  birthdays from 87; 66–72 belong to the two feature builds). `applications-panel-design.md`
+  waits until `feat/applications-no-role` lands — its cog is being rewritten. **All three
+  LANDED and REVIEWED against §2** (2026-09-03 ~12:15; 171k / 185k / 197k Opus). The
+  staff-final-say rule settled three of five forks in-doc (polls `denied → open`, events
+  `denied → approved` + a DM'd cancel note, no draft rows). F-B1 DECIDED 12:20 (keep today's behaviour: member lookup on, creator may end own poll).
+  **The fourth wave-1 design exists:** [`info/applications-panel-design.md`](info/applications-panel-design.md)
+  (2026-09-03, written against `9891f71` after the no-role merge — 17 subcommands over two groups
+  collapse into one member-visible command; sweep rows 94–102; `denied`/`removed` → `approved`
+  and the member's own list settled by the standing rules). Forks: **I-A1 DECIDED 13:35 — the
+  command is `/apply`** ("it's gamer lingo"; the `applications` Group goes); **I-A2 DECIDED 13:47 —
+  "Visible"** (`/apply` stays when the mode is off; the `HIDDEN_WHEN_OFF` entry goes); **I-A3 DECIDED
+  14:12 — "Build the question sub panel"** (§C's Questions sub-panel as designed). Applications
+  build landed 14:55 (401k), merged `853776c`, **live in v66 15:00** (43 → 42 commands). **WAVE 1
+  COMPLETE** — four landings in `DONE.md` 2026-09-03. Waves 2–4 remain (§5 of the program).
+  **Wave 2 design docs ALL LANDED 15:50–15:54** (five Opus design agents, one file each:
+  `info/golive-panel-design.md` 205k, `info/voice-panel-design.md` 210k, `info/youtube-panel-design.md`
+  192k, `info/pings-panel-design.md` 199k, `info/memory-panel-design.md` 204k — ⚠️ the 60k estimate was
+  off 3×; calibrate design docs at ~200k). Golive REVIEWED against §2 15:52 (consistent: 4 rows in caps,
+  member/staff split, one function per move with `via`, one key, no Settings sub-panel with the reason).
+  The other four await Fable review. **All eight owner forks DECIDED 16:10–16:15 (owner asked for them
+  rapid-fire in one form, 16:05 — a one-time exception to one-at-a-time):** golive I1 = **`/golive`**;
+  golive I2 = **build the staff `Streamers…` sub-panel**; voice F1 = **leave the in-channel control post
+  as it is**; pings I1 = **keep today's — a streamer may always take their own ping role away**; pings
+  I2 = **two Events toggles when the two keys differ, one when they agree**; youtube F-Y1 = **keep
+  `/youtube` and `/golive` separate**; youtube F-Y2 = **flip `youtube_mode` to shadow at the panel's
+  landing** (operational, the conductor does it via the site); memory I-M1 = **open it — `/memory`
+  stays visible with the mode off, the Forget controls keep working**. Builds in worktrees in cost
+  order: memory → golive → youtube (230–300k) → pings (300–360k) → voice (420–480k); each brief
+  carries its decided forks. **Memory LANDED 16:42 (329k — the 120–180k estimate was 2× off; a
+  wave-2 build is ~2× its estimate, calibrate the rest up), merged `cb941d9`, live in v68 `cb941d9`
+  16:48** (3710 → 3744 tests, 42 commands) — landing entry in `DONE.md` 2026-09-03; sweeps
+  104–108 are the owner's to run (`chat_memory_mode` is still off live, so 104–107 need it on plus
+  a conversation first). **Golive LANDED 17:05 (464k against a 230–300k estimate — again ~2×; four commits off `8cbe453`),
+  Fable-reviewed approve, merged `0aeed72` (four append-only conflicts with the memory merge), live in
+  v70 17:25** (3750 → 3796 tests, `commands synced` **42 → 41 measured at boot**) — landing entry in
+  `DONE.md` 2026-09-03; sweeps 109–117 are the owner's to run. **Youtube LANDED 17:10 (371k against a
+  180–250k estimate — ~2× again; three commits off `ea252bd`), Fable-reviewed approve, merged `b764757`
+  (six append-only conflicts with the golive merge; its sweeps rows renumbered 130–137 → 118–125), live in
+  v71 17:37** (3796 → 3872 tests, `commands synced` **41 → 40 measured at boot**), **F-Y2 done 17:42**
+  (`youtube_mode` off → shadow on the Go-live page, PUT logged 00:42:53Z) — landing entry in `DONE.md`
+  2026-09-03; sweeps 118–125 are the owner's to run. **Pings LANDED 18:25 (379k against a 300–360k
+  estimate; four commits off `85e14c4`), Fable-reviewed approve with one merge-time fix, merged `a5ad521`
+  (clean, no conflicts), live in v72 18:30** (3872 → 4050 tests, `commands synced` **40 → 39 measured at
+  boot**) — landing entry in `DONE.md` 2026-09-03; sweeps 126–134 and the rewritten 38–42 are the owner's
+  to run. **Voice is the last wave-2 panel** — F1 RE-CONFIRMED by the owner 21:20 ("Leave it as is" = (a),
+  the in-channel control post stays untouched); design Fable-reviewed against §2 21:25 (consistent on
+  P1–P17; drift since it was measured, carried in the brief: 39 → 38 commands not 42 → 41, sweeps start
+  at **135** not 104, `panels.site_page_url(origin, "tempvoice")` now exists so no copy, `panel_minutes`
+  takes a key, `voice_panel_minutes` also gets its `labels.js` + `server.mjs` label like golive/pings).
+  **Voice LANDED 21:55 (385k against a 420–480k estimate — the first to land UNDER; five commits off
+  `2854d74`), Fable-reviewed approve with one merge-time fold (`clamped` into `panels.py`), merged
+  `4d64b36` (clean, no conflicts), live in v73 22:08** (4050 → 4265 tests, `commands synced` **39 → 38
+  measured at boot**) — landing entry in `DONE.md` 2026-09-03; sweeps 135–143 are the owner's to run.
+  **WAVE 2 COMPLETE.** Owner 2026-09-04 09:05 "Keep going" → **wave-3 design docs DISPATCHED 09:15**
+  (four Opus agents in parallel, one doc each — `info/raidtrain-panel-design.md`,
+  `info/role-menus-panel-design.md`, `info/chat-panel-design.md`, `info/automod-panel-design.md` —
+  ~200k each, read-only on code, no commits). **All four LANDED 09:21–09:33 and Fable-reviewed APPROVE**
+  (raidtrain 595 lines / 250k; role menus 622 / 230k; chat 533 / 241k; automod 626 / 209k — see the
+  `info/README.md` rows). `commands synced` after all four: 38 → **36** (raidtrain −1, role menus −1, chat and
+  automod 0). **Conductor prep DONE 09:50:** `still_allowed(interaction, ok, refusal)` is on `main` in
+  `panels.py` (raidtrain §F), `still_staff` is a two-line call to it, three tests in `tests/test_panels.py`,
+  code-note at `panels.py:31` — wave-3 builds branch from this commit or later and USE it, never copy it; the
+  numbers-modal validator (role menus §F) and the confirm helper (automod §F, youtube `open_confirm` + pings
+  deviation 8 + automod = three copies) are FOLDED AT MERGE, not pre-built. **13 forks go to the owner ONE AT
+  A TIME, in this order:** raidtrain F-R1/F-R2/F-R3 · role menus F-R1/F-R2/F-R3 · chat F-C1/F-C2/F-C3/F-C4 ·
+  automod F-A1/F-A2/F-A3 (every recommendation is (a); chat F-C3 recommends NO confirm on the money
+  switch while automod F-A1 recommends a confirm on arming — different reasons, both stated). Answers are
+  recorded here as they come — **DECIDED 2026-09-04 between 09:32 and 15:08 Phoenix (the clock was read at those two ends, not per
+  answer — earlier per-answer stamps here were inferred and have been removed):** raidtrain F-R1 = (a) no lineup-post button ("Leave it"); F-R2 = (a) upcoming trains only in the picker; F-R3 = (a) one claim select, no
+  next-open-hour button — RAIDTRAIN FULLY DECIDED. Role menus F-R1 = (a) build the Waiting-on-staff
+  sub-panel; F-R2 = (a) `0` days = no end date **PLUS an owner amendment to the design
+  (verbatim: "let's have an audit menu that shows durations of active roles")** — the `Grants…` sub-panel
+  opens as an AUDIT of every active timed role in the guild (member · role · time left / end date, or
+  `no end date`; soonest-ending first; 25-capped with `capped_placeholder`), and the "Whose roles?"
+  `UserSelect` NARROWS that list rather than being the only way in; the embed body lists them as lines so
+  the count is readable even when the select is capped. Goes in the role-menus build brief as §I-amend.
+  F-R3 = (a) every edit re-renders the posted panel in place — ROLE MENUS FULLY DECIDED.
+  Chat F-C1 = (a) read-only numbers + one `Limits…` modal for all five; F-C2 = (a) `Edit…` on the note
+  card; F-C3 = (a) one click to turn chat on, no confirm — the spend cap is the brake;
+  F-C4 = (a) both mood-pool guards on both doors, one implementation in `chat_panel.py` — CHAT FULLY
+  DECIDED. Automod F-A1 = (a) confirm before arming, `automod_arm_needs_confirm` default true; F-A2 = (a) one
+  prefilled paragraph field for bad words, over-4000 says use the website; F-A3 = (a) no controls for
+  `automod_warn_threshold` / `mod_dm_on_action`, read-only lines pointing at the Moderation page —
+  **ALL 13 FORKS DECIDED, every one (a), plus the role-menus Grants audit amendment. Builds may start.**
+  Then builds in cost order (automod ~300–360k, chat ~300–360k, raidtrain
+  380–450k, role menus 420–500k), each Opus in its own worktree off `main`, layer-boundary commits, sweeps
+  numbered from 144 at build time; usage read before each dispatch; weekly cut-off 90%.
+  **DISPATCHED 2026-09-04 15:10 Phoenix: automod AND chat builds IN PARALLEL** (Opus, own worktrees
+  off `5db58fb`; usage at dispatch session 2% / weekly 0% / Fable 1% — the weekly had reset with a "50% higher
+  through September 13" boost on the page). **Automod LANDED (370k against a 300–360k estimate; three
+  commits off `5db58fb`), Fable-reviewed approve with one merge-time relabel (the Settings toggle says what it
+  will do), merged `0b1b2bf` (clean, no conflicts), live in v74 15:45** (4265 → 4332 tests, `commands synced`
+  **38 → 38 measured at boot**) — landing entry in `DONE.md` 2026-09-04; sweeps 144–154 are the owner's to run.
+  **Chat LANDED (441k against 300–360k; five commits off `5db58fb`), Fable-reviewed approve, merged
+  `251dd14` (five append-shaped conflicts against automod, all resolved HEAD-then-branch; sweeps `C1`–`C8`
+  numbered 155–162 at the merge), live in v75 15:58** (4332 → 4402 tests, `commands synced` **38 → 38
+  measured at boot**) — landing entry in `DONE.md` 2026-09-04; sweeps 155–162 are the owner's to run.
+  **Raidtrain LANDED (473k against 380–450k; four commits off `4523118`), Fable-reviewed approve, merged
+  `2dd2689` (clean, no conflicts; sweeps 163–172 numbered on the branch; owner-guide count 162 → 172),
+  live in v76 16:56** (4402 → 4465 tests, `commands synced` **38 → 37 measured at boot**) — landing entry
+  in `DONE.md` 2026-09-04; sweeps 163–172 are the owner's to run; `raidtrain_mode` still off.
+  **Role menus LANDED 16:53 (529k against 420–500k; four commits off `4523118`), Fable-reviewed approve
+  (§I-amend Grants audit built: `active_grants`/`grant_lines` in the pure module, soonest-ending first,
+  no-end-date last, 25-cap; `tests/api/tools/test_roles.py` unchanged is the proof the reconciliation did
+  not move the site; `web.rolemenu.*` → `web.role_menu.*` kinds renamed, `HEADS["rolemenu"]` kept), merged
+  `43312b9` (eight append-shaped conflicts, all resolved both-sides; `M1`–`M10` → sweeps 173–182;
+  owner-guide count 172 → 182; `tests/test_bot.py` pin 37 → 36), live in v77 20:51** (4465 → 4529 tests,
+  `commands synced` **37 → 36 measured at boot**) — landing entry in `DONE.md` 2026-09-04; sweeps 173–182 are
+  the owner's to run. **WAVE 3 COMPLETE — the panels program's 17 features are all one command + panel.**
+  DISPATCHED 2026-09-04 16:03 Phoenix: raidtrain AND role menus builds IN PARALLEL (Opus, own worktrees
+  off `251dd14`; usage at dispatch session 12% / weekly 3% / Fable 3%; raidtrain numbers sweeps from 163 with
+  digits, role menus writes `M1…` and the conductor assigns digits at the merge, as chat did; both pin
+  `tests/test_bot.py` at what THEIR branch measures — 37 each — and the conductor reconciles to 36 at the
+  second merge; role menus carries the owner's §I-amend Grants audit). If this session dies: `git worktree list` /
+  `git branch --list 'worktree-agent-*'` finds a branch; merge only one whose FINAL commit is a doc/string
+  sweep with a passing full suite.
+  Events I2 DECIDED 12:40 (`/timezone` retired).
+  **Wave-1 builds all landed 13:40–13:50** (birthdays merged `58974e1`; events on
+  `worktree-agent-a448c7ab780ed3c2b`, polls on `worktree-agent-aa735ab092d13477d`, both under Fable
+  review); the applications build follows once I-A3 is answered. Merge in wave order, re-key
+  `code-notes.md` per merge, deploy per landing. ⚠️ The v63 deploy REFUSED at the gate 13:52 on the
+  rate-limit flake — fixed by freezing the clock in the test (`code-notes.md` →
+  `tests/api/test_settings_api.py:221`), three `-n auto` runs green; **v63 live 13:58, v64
+  (events, `e670542`) live 14:05** — both landings recorded in `DONE.md` 2026-09-03. Polls merged
+  `27452ac` (3644 tests), **live in v65** (`d13e1a4`, 14:14) — landing entry in `DONE.md`.
+
+---
+
 ## 2026-09-04 — Raid train panel: `/raidtrain` is one window (wave 3 THIRD landing, v76, `2dd2689`)
 
 Release **v76** (`2dd2689`, 16:56; `deploys.log` line 75). Merge `--no-ff` of
