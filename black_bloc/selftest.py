@@ -285,9 +285,21 @@ def read_checks(bot: Any) -> tuple[Check, ...]:
     return tuple(read_check(path, endpoint) for path, endpoint in readable_routes(bot))
 
 
+def panel_checks() -> tuple[Check, ...]:
+    from .selftest_panels import panel_checks as built
+
+    return built()
+
+
+def send_checks() -> tuple[Check, ...]:
+    from .selftest_panels import send_checks as built
+
+    return built()
+
+
 def checks_for(bot: Any) -> tuple[Check, ...]:
-    """The registry, in the design's order: config, reads."""
-    return (*config_checks(), *read_checks(bot))
+    """The registry, in the design's order: config, panels, reads, sends."""
+    return (*config_checks(), *panel_checks(), *read_checks(bot), *send_checks())
 
 
 CHECKS = config_checks()
