@@ -294,6 +294,17 @@ docs bookkeeping lands with the work, not after.
   previous card's view is stopped, `ui/view.py` gotcha), AND `/reply` stays a bare command. `/areply`,
   `/note`, `/close` still retire into the card. Tickets are one channel each by default (`modmail_mode`
   `channel`; `thread` is the other choice) — the card works the same in a thread.
+  **AMENDED + `/settings` DECIDED (owner, 2026-09-05 06:47: "Okay ship both with your suggestions"):**
+  (1) the card is a STICKY message — on each member message the old card is deleted and a fresh one posted,
+  so exactly one card exists, always last, one in the transcript; (2) the reply style is a SETTING
+  `modmail_reply_style` (`buttons` / `typing relays` / `both`, default `both`) — in `both`/`typing`,
+  a plain message typed by staff in the ticket relays to the member; (3) the staff panel carries **Try a
+  fake ticket** — a practice ticket in the test channel with a fake member the owner "speaks as" from a
+  button, so all three styles get tried under test mode, no throwaway mock; (4) `/settings` becomes the
+  cross-cutting panel (option (a)): root shows every feature's mode read-only with "open `/x` to change",
+  cards for the keys with no feature panel (staff/lead roles, log channel, `hide_commands_when_off`,
+  panel-minutes, presence + Re-apply presence), Logs; `show`/`set`/`set-role`/`set-value`/`clear` retire —
+  29 slots, ZERO groups. Sequence: hide-when-off (in flight) → honeypot → `/mod` → modmail → `/settings`.
   **DISPATCHED 06:36:** the hide-when-off build (Opus, own worktree off `cc18993`; usage at dispatch session 1% /
   weekly 5% / Fable 6%, read 06:25). Honeypot / `/mod` / modmail designs follow.
 - **Wave-1 review findings, small, fold into the next build that touches each file (Fable
