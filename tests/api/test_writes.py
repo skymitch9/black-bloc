@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from black_bloc.api.auth import Refused
@@ -104,10 +106,11 @@ def test_reads_and_writes_have_separate_buckets(web):
 
 
 def drain_reads(web, uid: str = "7") -> None:
-    """The bucket refills as the clock runs, so 300 real requests never quite empty it."""
+    """Drained against a clock a minute ahead, so the real request that follows finds no refill."""
     bucket = read_bucket_for(web)
+    ahead = time.time() + 60
     for _ in range(READ_RATE):
-        bucket.take(uid)
+        bucket.take(uid, now=ahead)
 
 
 @pytest.mark.parametrize(
