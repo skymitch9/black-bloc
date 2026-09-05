@@ -12,7 +12,7 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 08:12, /mod merged + v81 LIVE, nothing building, modmail B fork 1 open with the owner)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 09:06, /mod merged + v81 LIVE, nothing building, modmail B fork 1 = (a), fork 2 of 7 (F-M3) open with the owner)
 
 **`main` = `43312b9`** (role-menus panel merge; v77 live 20:51, 4529 tests, **36 commands**; `youtube_mode` is
 **shadow** since 2026-09-03 17:42). **The panels program is COMPLETE** — waves 1, 2 and 3 (17 features, one
@@ -341,8 +341,12 @@ docs bookkeeping lands with the work, not after.
   **36 → 35 measured**; sweep rows `MA1`–`MA8` numbered **200–207** at the merge, guide count 199 → 207.
   **v80 LIVE 07:54 (`b926d9d`)** — boot verified 14:54:28Z, `synced 35`, no traceback; nothing opened in
   Discord. This item STAYS until Build B (sticky card, migration, `modmail_reply_style`, practice ticket,
-  `/areply` `/note` `/close` retire) — B dispatches once fork 1 of 7 (card-jump trigger) is answered. Usage
+  `/areply` `/note` `/close` retire) — B dispatches once forks 1–7 are answered. Usage
   after landing session 42% / weekly 14% / Fable 13%, read 07:54.
+  **Forks, one at a time (owner 2026-09-05 09:06):** F-M1 card-jump = **(a) every write** ✅. Open next, in
+  order: F-M3 typed-reply echo (rec. a) → F-M4 practice transcript (rec. a) → F-M5 `/reply` keeps `ticket:`
+  (rec. a) → F-M6 real tickets not claimed (rec. a) → F-M7 snippet combines in one modal (rec. a) → F-M8
+  Reply as Staff stays a button (rec. a). Each fork gets a push notification (global rule, same day).
   **LANDED 08:00 (429k Opus): the `/mod` cases panel** — reviewed sound (atomic void/restore with a 409 each way,
   one write one row through four shared extractions, website routes gated by `writer()`); merged as `a90f416`
   beside the two earlier merges (nine conflicts; `LOG_LEVEL_COMMANDS` loses `mod` and `honeypot`, `LOGS_GROUPS`

@@ -863,7 +863,8 @@ file's last row and starts after it. The Phase 7 block at `:239–247` is rewrit
 
 **Seven questions are genuinely his.** Each has a recommendation; none is a coin-flip.
 
-- **F-M1 — what makes the card jump to the bottom.** The owner said *"whenever the member writes"*
+- ✅ **F-M1 — ANSWERED (a) by the owner 2026-09-05 ("A"): every write into the ticket.**
+  Original question kept for the record — what makes the card jump to the bottom. The owner said *"whenever the member writes"*
   and also *"always appear … at the bottom of a channel"*, and after a run of staff replies those
   two differ.
   - **(a) Every write into the ticket** — a member message, a staff reply (from any door), a private
