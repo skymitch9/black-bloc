@@ -12,7 +12,7 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 16:25, v87 LIVE — **29 slots, zero Groups**; self-test live and run by the owner (sweep 252); the ENGINEERING SWEEP (Opus, own worktree, brief = the `/settings` leftovers B1–B5 + self-test leftovers A1–A2 + `LOG_LEVEL_COMMANDS` + KI-21, sweep rows `ES1`–`ESn`) DISPATCHED 16:23 — the only thing in flight, lands as v88; next after it = the confirm-helper fold, then the global personality pool design (next-wave #4))
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 16:25, v87 LIVE — **29 slots, zero Groups**; self-test live and run by the owner (sweep 252); the ENGINEERING SWEEP (Opus, own worktree, brief = the `/settings` leftovers B1–B5 + self-test leftovers A1–A2 + `LOG_LEVEL_COMMANDS` + KI-21, sweep rows `ES1`–`ESn`) DISPATCHED 16:23, lands as v88; the CONFIRM/OPENED FOLD (Opus, own worktree, rows `CF1`–`CFn`) DISPATCHED 16:36, lands as v89 — two in flight (owner 16:33: "Keep running stuff, don't pause"); Fable meanwhile designs the global personality pool (next-wave #4) in the main loop)
 
 **`main` = `43312b9`** (role-menus panel merge; v77 live 20:51, 4529 tests, **36 commands**; `youtube_mode` is
 **shadow** since 2026-09-03 17:42). **The panels program is COMPLETE** — waves 1, 2 and 3 (17 features, one
