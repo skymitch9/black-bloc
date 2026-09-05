@@ -389,6 +389,7 @@ MORE_BLOCKED = "…and {rest} more — the Modmail page on the site lists every 
 MORE_SNIPPETS = "…and {rest} more — the Modmail page on the site lists every one."
 PICK_A_BLOCK = "Somebody…"
 PICK_A_SNIPPET = "A snippet…"
+PICK_A_TICKET = "A ticket…"
 PICK_A_PLACE = "Which place to forget…"
 PICK_A_MODE = "How new tickets are made…"
 PICK_A_REPLY_STYLE = "How staff answer a ticket…"
@@ -645,6 +646,29 @@ def card_buttons(*, practice: bool) -> tuple[CardMove, ...]:
     if practice:
         found += [SPEAK_MOVE, END_MOVE]
     return tuple(found)
+
+
+TICKET_SURFACE = "ticket"
+TICKET_BACK_MOVE = ModmailMove(BACK, "Back", "secondary", 2)
+CARD_CLOSED_FOOTER = "This ticket is closed — Back goes to the inbox."
+CARD_ROW = 1
+
+
+def panel_card_buttons(*, open_ticket: bool) -> tuple[ModmailMove, ...]:
+    """The panel redraws the card's own moves, so there is one label table and never two."""
+    found = [
+        ModmailMove(move.action, move.label, move.style, CARD_ROW, modal=True)
+        for move in (card_buttons(practice=False) if open_ticket else ())
+    ]
+    found.append(TICKET_BACK_MOVE)
+    return tuple(found)
+
+
+def ticket_label(ticket: Any, label: Any = None) -> str:
+    """One open ticket as one select option: its number, its mode, then whose it is."""
+    from .panels import option_label
+
+    return option_label(ticket["id"], ticket["mode"], label or ticket["user_id"])
 
 
 REPLY_STYLE_KEY = "modmail_reply_style"

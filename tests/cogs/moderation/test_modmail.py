@@ -1947,6 +1947,210 @@ async def test_a_card_whose_ticket_has_closed_says_so_rather_than_dying(cog, bot
     assert "already closed" in pressed.sent
 
 
+# --- the ticket card ON the panel ----------------------------------------------------------------
+
+
+PANEL_CARD_LABELS = [*CARD_LABELS, "Back"]
+
+
+async def ticket_card_panel(cog, bot, lead, ticket):
+    root = await open_panel(cog, bot, lead)
+    return await choose(
+        root.view, modmail_cog.PICK_A_TICKET, [str(ticket["id"])], bot, lead
+    )
+
+
+async def card_modal_on(panel, label, bot, lead):
+    opened = await press(panel.view, label, bot, lead)
+    return opened.response.modals[-1]
+
+
+async def test_a_ticket_select_is_drawn_only_once_something_is_open(cog, bot, member, lead):
+    empty = await open_panel(cog, bot, lead)
+    assert modmail_cog.PICK_A_TICKET not in placeholders(empty.view)
+
+    ticket = await open_one(cog, bot, member)
+    listed = await open_panel(cog, bot, lead)
+
+    picker = control(listed.view, modmail_cog.PICK_A_TICKET)
+    assert picker.row == 0
+    assert [one.value for one in picker.options] == [str(ticket["id"])]
+    assert picker.options[0].label == f"#{ticket['id']} · channel · Alice"
+
+
+async def test_the_ticket_select_stops_at_the_cap_and_says_where_the_rest_are(
+    cog, bot, lead, db
+):
+    for user_id in range(600, 626):
+        await modmail_cog.create_ticket(db, GUILD, user_id, CHANNEL_MODE)
+
+    root = await open_panel(cog, bot, lead)
+
+    picker = next(one for one in root.view.children if getattr(one, "options", None))
+    assert len(picker.options) == 25
+    assert "25 of 26" in picker.placeholder
+    assert modmail_cog.PICK_A_TICKET not in picker.placeholder
+
+
+async def test_picking_a_ticket_draws_the_card_the_channel_carries(cog, bot, member, lead, db):
+    """One embed shape, never two: the panel's copy is `ticket_card_embed`, as the sticky is."""
+    ticket = await open_one(cog, bot, member)
+    sticky = await card_for(cog, bot, ticket)
+
+    panel = await ticket_card_panel(cog, bot, lead, ticket)
+
+    assert labels(panel.view) == PANEL_CARD_LABELS
+    assert panel.embed.title == sticky.kwargs["embed"].title == f"Ticket #{ticket['id']}"
+    assert panel.embed.description == sticky.kwargs["embed"].description
+    assert panel.view.picked_ticket == ticket["id"]
+    assert panel.response.messages[0].get("deferred") is True
+
+
+async def test_back_from_the_ticket_card_is_the_inbox_again(cog, bot, member, lead):
+    ticket = await open_one(cog, bot, member)
+    panel = await ticket_card_panel(cog, bot, lead, ticket)
+
+    root = await press(panel.view, "Back", bot, lead)
+
+    assert root.embed.title == modmail_cog.PANEL_TITLE
+    assert modmail_cog.PICK_A_TICKET in placeholders(root.view)
+
+
+async def test_the_panels_reply_sends_through_the_same_function_the_card_calls(
+    cog, bot, member, lead, db
+):
+    ticket = await open_one(cog, bot, member)
+    panel = await ticket_card_panel(cog, bot, lead, ticket)
+
+    modal = await card_modal_on(panel, "Reply", bot, lead)
+    modal.text._value = "we are on it"
+    sent = FakeInteraction(bot, lead)
+    await modal.on_submit(sent)
+
+    assert member.dms[-1]["embed"].description == "we are on it"
+    assert "Sent to the member" in sent.sent
+    rows = await ticket_messages(db, ticket["id"])
+    assert rows[-1]["direction"] == OUT and rows[-1]["anonymous"] == 0
+    assert (await action_kinds(db)).count("modmail.reply") == 1
+    assert labels(sent.view) == PANEL_CARD_LABELS
+
+
+async def test_the_panels_anonymous_reply_never_names_the_staffer(cog, bot, member, lead):
+    ticket = await open_one(cog, bot, member)
+    panel = await ticket_card_panel(cog, bot, lead, ticket)
+
+    modal = await card_modal_on(panel, "Reply as Staff", bot, lead)
+    modal.text._value = "no names"
+    sent = FakeInteraction(bot, lead)
+    await modal.on_submit(sent)
+
+    assert member.dms[-1]["embed"].author.name == "Staff"
+    assert "Staff" in sent.sent
+
+
+async def test_the_panels_private_note_is_one_row_one_log_line_and_no_dm(
+    cog, bot, member, lead, db
+):
+    ticket = await open_one(cog, bot, member)
+    panel = await ticket_card_panel(cog, bot, lead, ticket)
+    before = len(member.dms)
+
+    modal = await card_modal_on(panel, "Private note", bot, lead)
+    modal.note._value = "prior warnings"
+    noted = FakeInteraction(bot, lead)
+    await modal.on_submit(noted)
+
+    rows = await ticket_messages(db, ticket["id"])
+    assert rows[-1]["direction"] == NOTE and rows[-1]["content"] == "prior warnings"
+    assert len(member.dms) == before
+    assert (await action_kinds(db)).count("modmail.note") == 1
+    assert "never sees it" in noted.sent
+
+
+async def test_closing_from_the_panel_leaves_a_card_that_offers_only_back(
+    cog, bot, member, lead, db
+):
+    ticket = await open_one(cog, bot, member)
+    panel = await ticket_card_panel(cog, bot, lead, ticket)
+
+    modal = await card_modal_on(panel, "Close…", bot, lead)
+    modal.reason._value = "sorted"
+    closed = FakeInteraction(bot, lead)
+    await modal.on_submit(closed)
+
+    assert (await get_ticket(db, ticket["id"]))["status"] == "closed"
+    assert "is closed" in closed.sent
+    assert labels(closed.view) == ["Back"]
+    assert closed.embed.footer.text == modmail_cog.CARD_CLOSED_FOOTER
+    assert (await action_kinds(db)).count("modmail.closed") == 1
+
+
+async def test_a_close_somebody_else_won_says_the_ticket_was_raced(
+    cog, bot, member, lead, db, monkeypatch
+):
+    ticket = await open_one(cog, bot, member)
+    panel = await ticket_card_panel(cog, bot, lead, ticket)
+    modal = await card_modal_on(panel, "Close…", bot, lead)
+
+    async def lost(*_args, **_kwargs):
+        return False, None
+
+    monkeypatch.setattr(modmail_cog, "close_ticket", lost)
+    raced = FakeInteraction(bot, lead)
+    await modal.on_submit(raced)
+
+    assert "closed by somebody else" in raced.sent
+    assert (await get_ticket(db, ticket["id"]))["status"] == "open"
+
+
+async def test_a_ticket_closed_under_the_panel_says_so_rather_than_opening_a_modal(
+    cog, bot, member, lead, db
+):
+    ticket = await open_one(cog, bot, member)
+    panel = await ticket_card_panel(cog, bot, lead, ticket)
+    await modmail_cog.close_ticket(bot, bot.guild, ticket, by=lead)
+
+    pressed = await press(panel.view, "Reply", bot, lead)
+
+    assert pressed.response.modals == []
+    assert "already closed" in pressed.sent
+
+
+async def test_a_demoted_staffer_moves_nothing_from_the_panels_ticket_card(
+    cog, bot, member, lead, db
+):
+    ticket = await open_one(cog, bot, member)
+    panel = await ticket_card_panel(cog, bot, lead, ticket)
+    lead.roles = []
+    lead.guild_permissions = FakePerms()
+
+    refused_at = await press(panel.view, "Close…", bot, lead)
+
+    assert refused_at.response.modals == [] and refused_at.edits == []
+    assert refused_at.sent is not None
+    assert (await get_ticket(db, ticket["id"]))["status"] == "open"
+
+
+async def test_the_panels_card_retires_the_view_it_replaced(cog, bot, member, lead):
+    ticket = await open_one(cog, bot, member)
+    root = await open_panel(cog, bot, lead)
+    first = root.view
+
+    await choose(first, modmail_cog.PICK_A_TICKET, [str(ticket["id"])], bot, lead)
+
+    assert first.replaced is True and first.is_finished()
+
+
+async def test_a_ticket_that_has_gone_falls_back_to_the_inbox_in_words(cog, bot, member, lead):
+    await open_one(cog, bot, member)
+    root = await open_panel(cog, bot, lead)
+
+    picked = await choose(root.view, modmail_cog.PICK_A_TICKET, ["4242"], bot, lead)
+
+    assert picked.embed.title == modmail_cog.PANEL_TITLE
+    assert "no record of ticket #4242" in picked.sent
+
+
 # --- the relay gate ----------------------------------------------------------------------------
 
 

@@ -48,6 +48,7 @@ from black_bloc.modmail import (
     mentions,
     modes_sentence,
     note_body,
+    panel_card_buttons,
     panel_minutes,
     parse_topic,
     relay_embed,
@@ -61,6 +62,7 @@ from black_bloc.modmail import (
     ticket_card_embed,
     ticket_card_lines,
     ticket_channel_name,
+    ticket_label,
     ticket_topic,
     transcript_embed,
     transcript_filename,
@@ -402,6 +404,8 @@ def test_a_snippet_card_offers_change_and_remove_only_once_one_is_picked():
         snippet_buttons(picked=True, confirming=False),
         snippet_buttons(picked=True, confirming=True),
         forget_buttons(),
+        panel_card_buttons(open_ticket=True),
+        panel_card_buttons(open_ticket=False),
     ],
 )
 def test_every_state_fits_inside_discords_five_by_five(built):
@@ -415,7 +419,7 @@ def test_every_state_fits_inside_discords_five_by_five(built):
 
 
 def test_every_move_the_panel_can_draw_is_in_one_table():
-    known = {move.action for move in PANEL_MOVES}
+    known = {move.action for move in PANEL_MOVES} | {move.action for move in CARD_MOVES}
     drawn: set[str] = set()
     for built in (
         root_buttons(has_forget=True, has_site=True),
@@ -425,6 +429,8 @@ def test_every_move_the_panel_can_draw_is_in_one_table():
         snippet_buttons(picked=True, confirming=False),
         snippet_buttons(picked=True, confirming=True),
         forget_buttons(),
+        panel_card_buttons(open_ticket=True),
+        panel_card_buttons(open_ticket=False),
     ):
         drawn |= {move.action for move in built}
     assert drawn <= known
@@ -586,3 +592,26 @@ def test_the_root_row_one_never_passes_discords_five(has_forget):
 
     assert max(rows.values()) <= 5
 
+
+def test_the_panels_copy_of_the_card_draws_the_cards_own_four_moves_and_a_back():
+    """One label table: the panel redraws CARD_MOVES rather than spelling them a second time."""
+    live = panel_card_buttons(open_ticket=True)
+    closed = panel_card_buttons(open_ticket=False)
+
+    assert [move.label for move in live] == [
+        "Reply",
+        "Reply as Staff",
+        "Private note",
+        "Close…",
+        "Back",
+    ]
+    assert [move.label for move in live[:4]] == [
+        move.label for move in card_buttons(practice=False)
+    ]
+    assert [move.label for move in closed] == ["Back"]
+    assert all(move.modal for move in live[:4]) and not closed[0].modal
+
+
+def test_a_ticket_reads_as_one_select_option_with_its_number_mode_and_member():
+    assert ticket_label(a_ticket(), "Alice") == "#4 · channel · Alice"
+    assert ticket_label(a_ticket()) == "#4 · channel · 900"

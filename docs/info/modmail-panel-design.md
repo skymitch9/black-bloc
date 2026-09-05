@@ -1036,3 +1036,58 @@ discovering them at review:
 5. **`answer_lines` `:777` may not survive at all** — the panel renders lines into an embed, and
    `clamped` (`panels.py:108`) is the embed-side equivalent of `chunk_lines`
    (`modmail.py:54`). Do not delete `chunk_lines`; `/reply`'s refusals still use it.
+
+---
+
+## Follow-up deviations
+
+The wave-4 **follow-up** build (the seven `TODO.md` leftovers, 2026-09-05, on
+`worktree-agent-ad2fc0f5aad473c19`) against §B row S5 and §C *"The ticket card ON THE PANEL"*.
+⚠️ **NOT merged, NOT deployed, and nothing here has met live Discord** — the whole verification is
+`ruff`, `pytest` (**5020**) and `node site/mock/check.mjs` (**17 pages / 146 routes**, unchanged).
+
+1. **`A ticket…` is drawn whenever ≥1 ticket is open, not only in S5.** §B's table hangs it off
+   S5 (enabled **and** pointed **and** ≥1 open), but `_status_lines` already lists every open
+   ticket in S2 and S3 too, so obeying the table literally would print a list of tickets over a
+   panel that offers no way to name them. None of the four moves needs `modmail_enabled` or a
+   pointed place — a reply is a DM — so P3 is satisfied either way, and the superset never hides
+   a ticket staff must answer. The absence rule the design actually turns on is unchanged:
+   **nothing open, no picker.**
+2. **The picker is hidden while the practice confirm is up.** `root_buttons(confirming=True)`
+   returns Yes/No and nothing else; a select left on that surface would be a third answer to a
+   two-answer question.
+3. **The panel's card draws §C's four moves plus `Back` even on a PRACTICE ticket.** §C says four
+   plus Back and §E puts `Speak as the member` / `End the practice` on the card in the channel;
+   the practice thread is where that rehearsal happens, so the panel does not grow two more
+   buttons for it. A practice ticket picked from `A ticket…` can still be replied to, noted and
+   closed.
+4. **A ticket closed under the panel renders its card with `Back` alone and an embed FOOTER
+   saying so.** §E says *"the panel's own ticket card is where a closed ticket is read, and it
+   renders no move buttons"* but names no words for it; a card with one button and no explanation
+   reads as a bug, so `CARD_CLOSED_FOOTER` is added — the only difference between the panel's
+   embed and the sticky card's.
+5. **The moves are the card's own functions, reached through the card's own runners.**
+   `run_card_reply` / `run_card_note` / `run_card_close` each took an optional `previous` view
+   instead of being copied: with `previous is None` they are the channel card exactly as before
+   (`card_opened`, an ephemeral defer, one sentence), and with a view they defer into the panel's
+   own edit, redraw the card and then say the same sentence. `send_reply`, `add_note` and
+   `close_ticket` are untouched. `source` stays `card` from both doors — the panel's copy IS the
+   card, and a fifth `SOURCES` value would be a new vocabulary for one surface.
+   ⚠️ The brief called these *"the reply/note functions in `black_bloc/modmail.py`"*; measured,
+   they live at module level in `cogs/moderation/modmail.py` (§F put the DB/move layer there on
+   purpose) and that is what the panel calls.
+6. **`card_modal` is one factory both doors call**, so which move opens which modal is stated
+   once; `ReplyModal`, `CardNoteModal` and `CloseModal` gained an optional `previous` and nothing
+   else. `SpeakAsMemberModal` is unreachable from the panel by deviation 3.
+7. **The panel never edits the sticky card**, as §C requires — it is not asserted by a test,
+   because the only honest assertion is a negative over every send path; what is tested is that
+   the panel's own re-render is the thing that changes, and the writers still call `bump_card`.
+8. **§B's `NO_CATEGORY` / `NOT_A_CATEGORY` (S3's reworded refusal) were never built by Build A
+   and are now DELETED**, unreferenced anywhere in the repo. S3's embed still names the missing
+   place through `_status_lines` (*"ticket category — not set"*), which is the statement §B asked
+   for; the two constants were the command-era spellings. `events.py` keeps its own pair — those
+   are live.
+9. **The debounce is still unmeasured.** §D asked the build to say whether `CARD_DEBOUNCE_SECONDS`
+   / `CARD_MIN_GAP_SECONDS` were ever timed against a real channel: **they have not been, here
+   either** — there is no Discord in this environment. Sweep row 222 now says what to time and
+   what number to write down.

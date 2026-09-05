@@ -30,9 +30,11 @@ from ...modmail import (
     BLOCKED_TITLE,
     CARD_ANON,
     CARD_CLOSE,
+    CARD_CLOSED_FOOTER,
     CARD_END,
     CARD_MOVES,
     CARD_NOTE,
+    CARD_REPLY,
     CARD_SPEAK,
     CATEGORY,
     CLOSED,
@@ -56,6 +58,7 @@ from ...modmail import (
     PICK_A_PLACE,
     PICK_A_REPLY_STYLE,
     PICK_A_SNIPPET,
+    PICK_A_TICKET,
     PICK_SOMEBODY,
     PRACTICE,
     PRACTICE_NO,
@@ -78,6 +81,7 @@ from ...modmail import (
     SOURCE_COMMAND,
     SOURCE_TYPED,
     STAFF_CHANNEL,
+    TICKET_SURFACE,
     TRANSCRIPTS,
     UNBLOCK,
     attachment_urls,
@@ -96,6 +100,7 @@ from ...modmail import (
     modes_sentence,
     note_body,
     opening_dm,
+    panel_card_buttons,
     panel_minutes,
     relay_embed,
     relays_typing,
@@ -108,6 +113,7 @@ from ...modmail import (
     thread_name,
     ticket_card_embed,
     ticket_channel_name,
+    ticket_label,
     ticket_topic,
     transcript_embed,
     transcript_filename,
@@ -794,21 +800,29 @@ async def refresh_card(bot: Any, guild: Any, ticket_id: int) -> Any:
         return await post_card(bot, guild, ticket_id)
 
 
+def ticket_member(bot: Any, guild: Any, ticket: Any) -> Any:
+    return guild.get_member(ticket["user_id"]) or bot.get_user(ticket["user_id"])
+
+
+async def card_embed(bot: Any, guild: Any, ticket: Any) -> discord.Embed:
+    """One embed for the sticky card and for the panel's copy of it — never two shapes."""
+    rows = await ticket_messages(bot.db, ticket["id"])
+    blocked = await blocked_row(bot.db, ticket["user_id"]) is not None
+    return ticket_card_embed(
+        ticket,
+        count_directions(rows),
+        label=getattr(ticket_member(bot, guild, ticket), "display_name", None),
+        blocked=blocked,
+    )
+
+
 async def post_card(bot: Any, guild: Any, ticket_id: int) -> Any:
     """Post the card at the bottom, write its id, and only then delete the one it replaced."""
     fresh = await get_ticket(bot.db, ticket_id)
     if fresh is None or fresh["status"] != OPEN:
         return None
     old_id = field_of(fresh, "card_message_id")
-    rows = await ticket_messages(bot.db, ticket_id)
-    blocked = await blocked_row(bot.db, fresh["user_id"]) is not None
-    member = guild.get_member(fresh["user_id"]) or bot.get_user(fresh["user_id"])
-    embed = ticket_card_embed(
-        fresh,
-        count_directions(rows),
-        label=getattr(member, "display_name", None),
-        blocked=blocked,
-    )
+    embed = await card_embed(bot, guild, fresh)
     message, why_not = await speak(bot, guild, fresh, embed=embed, view=card_view(fresh))
     if message is None:
         await log_action(
@@ -2073,6 +2087,7 @@ class ModmailPanel(Panel):
         self.picked_block: int | None = None
         self.blocking: int | None = None
         self.picked_snippet: str | None = None
+        self.picked_ticket: int | None = None
         self.confirming = False
 
 
@@ -2116,6 +2131,9 @@ async def build_root(
     embed = discord.Embed(title=PANEL_TITLE, description=clamped(lines))
     view = new_panel(bot, guild, cog)
     view.confirming = confirming
+    tickets = [] if confirming else await open_tickets(bot.db, guild.id)
+    if tickets:
+        view.add_item(TicketPick(bot, guild, tickets))
     url = site_page_url(getattr(getattr(bot, "settings", None), "origin", ""), "modmail")
     for move in root_buttons(
         has_forget=bool(pointed_keys(bot.store, guild)),
@@ -2209,6 +2227,25 @@ def build_forget(bot: Any, guild: Any, cog: Any) -> tuple[discord.Embed, Modmail
     return (embed, view)
 
 
+async def build_ticket(
+    bot: Any, guild: Any, cog: Any, ticket_id: int
+) -> tuple[discord.Embed, ModmailPanel] | None:
+    """The sticky card's own embed, on the panel, with the same four moves plus Back."""
+    row = await get_ticket(bot.db, ticket_id)
+    if row is None or row["guild_id"] != guild.id:
+        return None
+    embed = await card_embed(bot, guild, row)
+    still_open = row["status"] == OPEN
+    if not still_open:
+        embed.set_footer(text=CARD_CLOSED_FOOTER)
+    view = new_panel(bot, guild, cog)
+    view.surface = TICKET_SURFACE
+    view.picked_ticket = int(row["id"])
+    for move in panel_card_buttons(open_ticket=still_open):
+        view.add_item(MoveButton(move))
+    return (embed, view)
+
+
 async def show(interaction: discord.Interaction, built: Any, previous: Any) -> None:
     embed, view = built
     retire(previous)
@@ -2295,6 +2332,27 @@ async def open_snippets(
         confirming=confirming,
     )
     await show(interaction, built, previous)
+
+
+async def show_ticket(interaction: discord.Interaction, previous: Any, ticket_id: int) -> bool:
+    """A ticket the panel can no longer read falls back to the root rather than a dead card."""
+    built = await build_ticket(
+        interaction.client, interaction.guild, cog_of(previous), ticket_id
+    )
+    if built is None:
+        await render_root(interaction, previous)
+        return False
+    await show(interaction, built, previous)
+    return True
+
+
+async def open_ticket_card(
+    interaction: discord.Interaction, previous: Any, ticket_id: int
+) -> None:
+    if not await opened(interaction):
+        return
+    if not await show_ticket(interaction, previous, ticket_id):
+        await answer(interaction, NO_SUCH_TICKET.format(ticket_id=ticket_id))
 
 
 async def open_forget(interaction: discord.Interaction, previous: Any = None) -> None:
@@ -2512,6 +2570,9 @@ class MoveButton(discord.ui.Button):
             return
         if not await db_up(interaction):
             return
+        if self.move.action in CARD_ACTIONS_ON_THE_PANEL:
+            await self.open_card_modal(interaction, view)
+            return
         if self.move.action == BLOCK_REASON:
             await interaction.response.send_modal(BlockReasonModal(view.blocking, view))
             return
@@ -2522,6 +2583,15 @@ class MoveButton(discord.ui.Button):
             )
             return
         await interaction.response.send_modal(SnippetModal(view))
+
+    async def open_card_modal(self, interaction: discord.Interaction, view: Any) -> None:
+        """The panel's copy of a card move opens the SAME modal the card in the channel does."""
+        ticket_id = int(getattr(view, "picked_ticket", None) or 0)
+        if await card_ticket(interaction, ticket_id) is None:
+            return
+        await interaction.response.send_modal(
+            await card_modal(interaction, self.move.action, ticket_id, previous=view)
+        )
 
 
 class SiteButton(discord.ui.Button):
@@ -2649,6 +2719,33 @@ class SnippetPick(discord.ui.Select):
         await open_snippets(interaction, self.view, picked=self.values[0])
 
 
+class TicketPick(discord.ui.Select):
+    """Row 0 of the root: the open tickets, and picking one draws its card on the panel."""
+
+    def __init__(self, bot: Any, guild: Any, rows: Any) -> None:
+        found = list(rows)
+        shown = found[:SELECT_CAP]
+        super().__init__(
+            placeholder=capped_placeholder(len(shown), len(found), pick=PICK_A_TICKET),
+            options=[
+                discord.SelectOption(
+                    label=ticket_label(
+                        row, getattr(ticket_member(bot, guild, row), "display_name", None)
+                    ),
+                    value=str(row["id"]),
+                    description=clamp(str(row["opened_at"]), 100),
+                )
+                for row in shown
+            ],
+            min_values=1,
+            max_values=1,
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_ticket_card(interaction, self.view, int(self.values[0]))
+
+
 class ForgetPick(discord.ui.Select):
     def __init__(self, keys: list[str]) -> None:
         super().__init__(
@@ -2731,6 +2828,8 @@ CLOSE_SILENT_OPTION = "Close without telling them"
 SPEAK_TITLE = "Say it as the member"
 SPEAK_LABEL = "What the pretend member says — nobody is DMed"
 CARD_MOVE_BY_ACTION = {move.action: move for move in CARD_MOVES}
+CARD_ACTIONS_ON_THE_PANEL = (CARD_REPLY, CARD_ANON, CARD_NOTE, CARD_CLOSE)
+REPLY_ACTIONS = (CARD_REPLY, CARD_ANON)
 
 
 def card_custom_id(action: str, ticket_id: Any) -> str:
@@ -2792,10 +2891,34 @@ async def card_opened(interaction: discord.Interaction, ticket_id: int) -> Any:
     return await card_ticket(interaction, ticket_id)
 
 
-async def run_card_reply(
-    interaction: discord.Interaction, ticket_id: int, text: Any, snippet: Any, *, anonymous: bool
+async def opened_card(interaction: discord.Interaction, ticket_id: int, previous: Any) -> Any:
+    """The card in the channel answers ephemerally; the panel's copy defers into its own edit."""
+    if previous is None:
+        return await card_opened(interaction, ticket_id)
+    if not await opened(interaction):
+        return None
+    return await card_ticket(interaction, ticket_id)
+
+
+async def card_moved(
+    interaction: discord.Interaction, ticket_id: int, previous: Any, said: str
 ) -> None:
-    ticket = await card_opened(interaction, ticket_id)
+    """The sticky card is the refresher's to move; only the panel's copy is redrawn here."""
+    if previous is not None:
+        await show_ticket(interaction, previous, ticket_id)
+    await answer(interaction, said)
+
+
+async def run_card_reply(
+    interaction: discord.Interaction,
+    ticket_id: int,
+    text: Any,
+    snippet: Any,
+    *,
+    anonymous: bool,
+    previous: Any = None,
+) -> None:
+    ticket = await opened_card(interaction, ticket_id, previous)
     if ticket is None:
         return
     body, why_none = await reply_body(interaction.client.db, text, snippet)
@@ -2811,15 +2934,15 @@ async def run_card_reply(
         anonymous=anonymous,
         source=SOURCE_CARD,
     )
-    if why_not is not None:
-        await answer(interaction, DM_FAILED_SAID)
-        return
     who = ANONYMOUS_NAME if anonymous else interaction.user.display_name
-    await answer(interaction, SENT.format(who=who))
+    said = DM_FAILED_SAID if why_not is not None else SENT.format(who=who)
+    await card_moved(interaction, ticket_id, previous, said)
 
 
-async def run_card_note(interaction: discord.Interaction, ticket_id: int, text: Any) -> None:
-    ticket = await card_opened(interaction, ticket_id)
+async def run_card_note(
+    interaction: discord.Interaction, ticket_id: int, text: Any, previous: Any = None
+) -> None:
+    ticket = await opened_card(interaction, ticket_id, previous)
     if ticket is None:
         return
     if not str(text or "").strip():
@@ -2833,13 +2956,17 @@ async def run_card_note(interaction: discord.Interaction, ticket_id: int, text: 
         str(text).strip(),
         source=SOURCE_CARD,
     )
-    await answer(interaction, outcome.message)
+    await card_moved(interaction, ticket_id, previous, outcome.message)
 
 
 async def run_card_close(
-    interaction: discord.Interaction, ticket_id: int, reason: Any, silent: bool
+    interaction: discord.Interaction,
+    ticket_id: int,
+    reason: Any,
+    silent: bool,
+    previous: Any = None,
 ) -> None:
-    ticket = await card_opened(interaction, ticket_id)
+    ticket = await opened_card(interaction, ticket_id, previous)
     if ticket is None:
         return
     closed, why_not = await close_ticket(
@@ -2851,12 +2978,16 @@ async def run_card_close(
         silent=silent,
     )
     if not closed:
-        await answer(interaction, CLOSE_RACED.format(ticket_id=ticket_id))
+        await card_moved(
+            interaction, ticket_id, previous, CLOSE_RACED.format(ticket_id=ticket_id)
+        )
         return
     extra = "" if why_not is None else NO_TRANSCRIPT_SAID
     if silent:
         extra += SILENT_SAID
-    await answer(interaction, CLOSED_SAID.format(ticket_id=ticket_id, extra=extra))
+    await card_moved(
+        interaction, ticket_id, previous, CLOSED_SAID.format(ticket_id=ticket_id, extra=extra)
+    )
 
 
 async def run_practice_message(
@@ -2909,10 +3040,13 @@ class SpeakAsMemberModal(AnswersErrors, discord.ui.Modal):
 class ReplyModal(AnswersErrors, discord.ui.Modal):
     """F-M7: one modal — the snippet and the text COMBINE, exactly as `_body` combines them."""
 
-    def __init__(self, ticket_id: int, rows: Any, *, anonymous: bool) -> None:
+    def __init__(
+        self, ticket_id: int, rows: Any, *, anonymous: bool, previous: Any = None
+    ) -> None:
         super().__init__(title=ANON_REPLY_TITLE if anonymous else REPLY_TITLE)
         self.ticket_id = int(ticket_id)
         self.anonymous = anonymous
+        self.previous = previous
         self.text = discord.ui.TextInput(
             style=discord.TextStyle.paragraph, max_length=CONTENT_LIMIT, required=False
         )
@@ -2929,11 +3063,12 @@ class ReplyModal(AnswersErrors, discord.ui.Modal):
             clamp(str(self.text), CONTENT_LIMIT),
             picked[0] if picked else None,
             anonymous=self.anonymous,
+            previous=self.previous,
         )
 
 
 class CardNoteModal(NoteModal):
-    def __init__(self, ticket_id: int) -> None:
+    def __init__(self, ticket_id: int, previous: Any = None) -> None:
         super().__init__(
             title=CARD_NOTE_TITLE,
             label=CARD_NOTE_LABEL,
@@ -2941,15 +3076,17 @@ class CardNoteModal(NoteModal):
             on_submit=self.taken,
         )
         self.ticket_id = int(ticket_id)
+        self.previous = previous
 
     async def taken(self, interaction: discord.Interaction, text: str) -> None:
-        await run_card_note(interaction, self.ticket_id, text)
+        await run_card_note(interaction, self.ticket_id, text, self.previous)
 
 
 class CloseModal(AnswersErrors, discord.ui.Modal):
-    def __init__(self, ticket_id: int) -> None:
+    def __init__(self, ticket_id: int, previous: Any = None) -> None:
         super().__init__(title=CLOSE_TITLE)
         self.ticket_id = int(ticket_id)
+        self.previous = previous
         self.reason = discord.ui.TextInput(
             style=discord.TextStyle.paragraph, max_length=CLOSE_REASON_LIMIT, required=False
         )
@@ -2968,7 +3105,22 @@ class CloseModal(AnswersErrors, discord.ui.Modal):
             self.ticket_id,
             clamp(str(self.reason), CLOSE_REASON_LIMIT).strip() or None,
             bool(picked_values(self.quiet)),
+            self.previous,
         )
+
+
+async def card_modal(
+    interaction: discord.Interaction, action: str, ticket_id: int, *, previous: Any = None
+) -> Any:
+    """One table of which move opens which modal, whichever door the move was pressed on."""
+    if action == CARD_NOTE:
+        return CardNoteModal(ticket_id, previous)
+    if action == CARD_CLOSE:
+        return CloseModal(ticket_id, previous)
+    if action == CARD_SPEAK:
+        return SpeakAsMemberModal(ticket_id)
+    rows = await all_snippets(interaction.client.db)
+    return ReplyModal(ticket_id, rows, anonymous=action == CARD_ANON, previous=previous)
 
 
 async def card_pressed(interaction: discord.Interaction, move: Any, ticket_id: int) -> None:
@@ -2977,24 +3129,13 @@ async def card_pressed(interaction: discord.Interaction, move: Any, ticket_id: i
         return
     if not await db_up(interaction):
         return
-    ticket = await card_ticket(interaction, ticket_id)
-    if ticket is None:
-        return
-    if move.action == CARD_NOTE:
-        await interaction.response.send_modal(CardNoteModal(ticket_id))
-        return
-    if move.action == CARD_CLOSE:
-        await interaction.response.send_modal(CloseModal(ticket_id))
-        return
-    if move.action == CARD_SPEAK:
-        await interaction.response.send_modal(SpeakAsMemberModal(ticket_id))
+    if await card_ticket(interaction, ticket_id) is None:
         return
     if move.action == CARD_END:
         await run_card_end(interaction, ticket_id)
         return
-    rows = await all_snippets(interaction.client.db)
     await interaction.response.send_modal(
-        ReplyModal(ticket_id, rows, anonymous=move.action == CARD_ANON)
+        await card_modal(interaction, move.action, ticket_id)
     )
 
 
