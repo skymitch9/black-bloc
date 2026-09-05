@@ -230,6 +230,9 @@ docs bookkeeping lands with the work, not after.
   4739 tests, sweeps to 230) — the build re-measures every `path:line` and pins **29**, not the doc's numbers.
   **Honeypot forks F-H1/F-H2/F-H3 (built as (a) at v79, "owner confirmation pending") are CONFIRMED as built by
   the conductor under the same order, 12:04** — the reversal recipe stays in `info/honeypot-panel-design.md` §K.
+  **Build 1 DISPATCHED 12:08** (Opus, own worktree off `34331ec`; pure module + tests, `namespace_of` move, shared
+  writers, two registry keys; est. 150–190k). Usage before dispatch session 2% / weekly 17% / Fable 17%, read 12:07
+  (the session reset had landed). Build 2 dispatches off Build 1's merge.
 - 🔧 **Modmail leftovers after Build B (handed over at the v82 landing, 2026-09-05):** (1) **the panel-side `A ticket…`
   select / ticket card** in the `/modmail` panel (`docs/info/modmail-panel-design.md` §B S5, §C) is UNBUILT — it fell between
   Build A and Build B; a small Opus follow-up (est. 80–120k) once `/settings` lands; (2) `picked_values` has two copies
