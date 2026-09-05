@@ -12,7 +12,7 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 13:45, `/settings` Builds 1+2 merged, v84 LIVE — **29 slots, zero Groups, the panels program's end state**; nothing building; next = modmail leftovers follow-up build, then the `/settings` leftovers)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 13:50, v84 LIVE — **29 slots, zero Groups, the panels program's end state**; modmail leftovers follow-up BUILDING since 13:50 — the only thing in flight; next = the `/settings` leftovers)
 
 **`main` = `43312b9`** (role-menus panel merge; v77 live 20:51, 4529 tests, **36 commands**; `youtube_mode` is
 **shadow** since 2026-09-03 17:42). **The panels program is COMPLETE** — waves 1, 2 and 3 (17 features, one
@@ -235,6 +235,9 @@ docs bookkeeping lands with the work, not after.
   (5) an exception inside `refresh_card` is WARNING-logged with no `modmail.card_failed` row (silent failure ≠ success,
   checklist); (6) re-key the design doc's `path:line` anchors for `modmail.py`; (7) the card's 2 s/8 s debounce has never
   been measured against a real channel — sweep 222 is the measurement.
+  **DISPATCHED 13:50 2026-09-05** (Opus, own worktree off `6212380`; all seven items in scope, sweep rows lettered
+  `ML1`–`MLn`, numbered after 244 at the merge; est. 80–120k, expect ~200k). Usage before dispatch session 24% /
+  weekly 22% / Fable 20%, read 13:48.
 - **Wave-1 review findings, small, fold into the next build that touches each file (Fable
   review 2026-09-03 13:50–14:05):** `requests.py` re-renders lack `allowed_mentions`;
   `LOG_LEVEL_COMMANDS` help still says "`/birthday logs`" / "`/request logs`"; five form writes
