@@ -287,6 +287,13 @@ docs bookkeeping lands with the work, not after.
   **Owner, 2026-09-05 06:36: "Maybe /reply could be a menu. Walk me through that one again and through
   /settings. Start the rest in the meantime"** — proposal 5 reopened (`/reply` as a button/menu too) and a
   `/settings` panel walk-through requested; both answered one at a time, decisions land here.
+  **`/reply` DECIDED (owner, 2026-09-05 06:41: "I think we do the both… We should have the buttons always
+  appear to click reply at the bottom of a channel but also a /reply so they can just start typing a
+  response"):** the staff card (Reply / Reply as Staff / Private note / Close…) is RE-POSTED at the bottom
+  of the ticket after every member message so the buttons are always the last thing in the channel (the
+  previous card's view is stopped, `ui/view.py` gotcha), AND `/reply` stays a bare command. `/areply`,
+  `/note`, `/close` still retire into the card. Tickets are one channel each by default (`modmail_mode`
+  `channel`; `thread` is the other choice) — the card works the same in a thread.
   **DISPATCHED 06:36:** the hide-when-off build (Opus, own worktree off `cc18993`; usage at dispatch session 1% /
   weekly 5% / Fable 6%, read 06:25). Honeypot / `/mod` / modmail designs follow.
 - **Wave-1 review findings, small, fold into the next build that touches each file (Fable
