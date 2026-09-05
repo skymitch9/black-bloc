@@ -156,6 +156,18 @@ already said go.** Order recommended by the 5.0 session, owner did not reorder:
    (Black Bloc's `personality_tropes` + GABI's `personality.ts` unify). This is
    an ESTATE design spanning two repos: design doc first, likely a small shared
    store + sync convention; coordinate with catalog-platform docs.
+   **DESIGN WRITTEN 2026-09-05 16:5x** → [`info/personality-pool-design.md`](info/personality-pool-design.md):
+   share the SKELETON (roster, graph, drift constants, clause templates in one
+   canonical `personality-pool.json` in catalog-platform), keep the SKIN (each
+   bot's voice bodies); Black Bloc boot SYNC (never touches staff's `enabled`),
+   two settings, health field, one self-test check that reads GABI's health
+   route so drift is visible. Measured today: roster + graph identical, voices
+   deliberately different, `personality.ts` untouched since the port. Forks
+   F-P1–F-P3 to the owner one at a time (recommend (a) each). Two Opus builds:
+   Black Bloc half (est. 150–220k) THEN GABI half (80–120k). ⚠️ The
+   catalog-platform TODO pointer is NOT yet written — that tree was in use by
+   another session at 16:37 (`821cd26` + a dirty `deploys.log`); the GABI-half
+   brief carries it.
 5. **Restyle overrides** — the three cheap look-and-feel flips below stay
    available; fold into any site-touching build.
 6. ~~Raid trains (member request #1, Pawpette)~~ **SHIPPED merge `0bb3835`, deployed
