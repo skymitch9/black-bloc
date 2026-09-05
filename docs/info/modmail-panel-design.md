@@ -6,8 +6,8 @@
 > (the `/modmail` root panel, `Setup…`, `Blocked…`, `Snippets…`, `Forget…`, `Logs`; the six §F
 > extractions for block/unblock/snippets/settings; the log-kind rename and the five route
 > `note()` deletions; `modmail_panel_minutes`; the doc/string sweep — `commands synced`
-> **36 → 35, measured**). **BUILD B IS BUILT, 2026-09-05, on
-> `worktree-agent-a4bebd98196e3ca14` — NOT MERGED, NOT DEPLOYED:** the schema migration
+> **36 → 35, measured**). ✅ **BUILD B SHIPPED 2026-09-05 as v82 (`f42a591`; merge `f60ab1f`)**, built on
+> `worktree-agent-a4bebd98196e3ca14`, sweeps 219–230: the schema migration
 > (**29 → 30**, run against a real schema-29 database file), the sticky ticket card and its
 > reconciler job, `modmail_reply_style` and the relay gate, the practice ticket, and the
 > retirement of `/areply` `/note` `/close` (**33 → 30, measured**). ⚠️ **Nothing in either half

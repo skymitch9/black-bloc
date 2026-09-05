@@ -9,6 +9,183 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-05 — Modmail panel, both halves: `/modmail` is one command (Build A, v80) and every ticket carries a sticky staff card (Build B, v82, `f42a591`)
+
+Moved WHOLE from `TODO.md` at the Build B landing (10:27). Build A on `worktree-agent-afdd9e23bbaf59be8`
+(Opus, 392k, v80 `b926d9d`); Build B on `worktree-agent-a4bebd98196e3ca14` (Opus, ≈465k incl. the `ca67bb5` fix, six
+commits off `6e5a550`), reviewed by Fable, merged `f60ab1f`, deployed v82 10:27 (boot 17:27:37Z, `synced 30`,
+schema 29 → 30). Design: `docs/info/modmail-panel-design.md`; sweeps 200–207 (A) and 219–230 (B); forks F-M1–F-M8 all (a).
+Nothing exercised in Discord by a person. Leftovers stayed on `TODO.md` as "Modmail leftovers after Build B".
+
+- 🆕 **Ticket / modmail commands → maybe one (owner, 2026-09-04, clock read 20:50 after the ask: "All ticket stuff maybe?").**
+  Today: the `modmail` Group (`logs`, `block`, `unblock`, `blocked`, `mode`, `forget`) plus FOUR
+  top-level ticket commands used INSIDE a ticket — `/reply`, `/areply`, `/note`, `/close`
+  (`modmail.py:1131–1243`). The "maybe" is the owner's: the in-ticket four are typed mid-conversation
+  with text arguments, which a panel handles with modals but costs a click. The audit proposes the
+  split (a `/modmail` panel for the Group; the in-ticket four either stay, or become buttons on a
+  pinned ticket card) and the owner decides.
+  **Proposal 4 of 6 DECIDED (owner, 2026-09-04, "Yes"):** the `/modmail` group becomes ONE panel — root
+  card = `status`; Setup… (channel selects + channels/threads mode select, replaces `settings`/`mode`),
+  Blocked… (list, user select → Unblock, Block someone = user select + reason modal), Snippets… (list,
+  Add modal, select → Remove — the whole `/snippet` group folds in), Forget (renders only when pointed),
+  Logs. 11 subcommands over two slots → one; 36 → 33 with proposals 2–3. Est. 300–380k Opus.
+  **Proposal 5 of 6 DECIDED (owner, 2026-09-05 06:25, "B"):** every ticket
+  gets a PINNED staff card (member, opened-when, block state) with Reply (modal: text + snippet select),
+  Reply as Staff, Private note, Close… (reason modal + silent toggle). **`/reply` stays bare** (the one
+  typed constantly); `/areply`, `/note`, `/close` retire into the card. 36 → 30 with everything so far.
+  **Proposal 6 of 6 DECIDED (owner, 2026-09-05 06:27, "Yes that's fine"):** `/presence apply`
+  folds into the `/settings` panel as a Re-apply presence button (one slot freed); **`/settings` stays a
+  group for now** (the escape hatch every panel points at; `<key>` autocompletes ~80 keys) — its own
+  panel design comes AFTER the hide-when-off build, which adds a key. **Audit result: 36 → 29 slots;
+  the only group left is `/settings`.** Build sequence: honeypot → `/mod` → modmail (+ snippets + ticket
+  card) → presence-into-settings (folds into whichever build touches `cogs/core.py` first).
+  **Owner, 2026-09-05 06:36: "Maybe /reply could be a menu. Walk me through that one again and through
+  /settings. Start the rest in the meantime"** — proposal 5 reopened (`/reply` as a button/menu too) and a
+  `/settings` panel walk-through requested; both answered one at a time, decisions land here.
+  **`/reply` DECIDED (owner, 2026-09-05 06:41: "I think we do the both… We should have the buttons always
+  appear to click reply at the bottom of a channel but also a /reply so they can just start typing a
+  response"):** the staff card (Reply / Reply as Staff / Private note / Close…) is RE-POSTED at the bottom
+  of the ticket after every member message so the buttons are always the last thing in the channel (the
+  previous card's view is stopped, `ui/view.py` gotcha), AND `/reply` stays a bare command. `/areply`,
+  `/note`, `/close` still retire into the card. Tickets are one channel each by default (`modmail_mode`
+  `channel`; `thread` is the other choice) — the card works the same in a thread.
+  **AMENDED + `/settings` DECIDED (owner, 2026-09-05 06:46: "Okay ship both with your suggestions"):**
+  (1) the card is a STICKY message — on each member message the old card is deleted and a fresh one posted,
+  so exactly one card exists, always last, one in the transcript; (2) the reply style is a SETTING
+  `modmail_reply_style` (`buttons` / `typing relays` / `both`, default `both`) — in `both`/`typing`,
+  a plain message typed by staff in the ticket relays to the member; (3) the staff panel carries **Try a
+  fake ticket** — a practice ticket in the test channel with a fake member the owner "speaks as" from a
+  button, so all three styles get tried under test mode, no throwaway mock; (4) `/settings` becomes the
+  cross-cutting panel (option (a)): root shows every feature's mode read-only with "open `/x` to change",
+  cards for the keys with no feature panel (staff/lead roles, log channel, `hide_commands_when_off`,
+  panel-minutes, presence + Re-apply presence), Logs; `show`/`set`/`set-role`/`set-value`/`clear` retire —
+  29 slots, ZERO groups. Sequence: hide-when-off (in flight) → honeypot → `/mod` → modmail → `/settings`.
+  **DISPATCHED 06:48: three Opus DESIGN agents in parallel** (read-only on code, one file each in the main
+  tree, no commits): `info/honeypot-panel-design.md`, `info/mod-panel-design.md`,
+  `info/modmail-panel-design.md`; usage at dispatch session 8% / weekly 7% / Fable 8%, read 06:46. The
+  `/settings` design waits for modmail's keys to settle. Fable reviews each against §2, then forks to the
+  owner one at a time, then builds in wave order.
+  **DISPATCHED 06:36:** the hide-when-off build (Opus, own worktree off `cc18993`; usage at dispatch session 1% /
+  weekly 5% / Fable 6%, read 06:25). Honeypot / `/mod` / modmail designs follow.
+  **LANDED 06:55 (185k Opus): hide-when-off MERGED to `main` as `0fcbac2` + `e00c9bf`** — 14 features hide,
+  not 15: Fable kept `/memory`'s carve-out (fork I-M1 "open it"; memory off deletes nothing and the site is
+  staff-only, so the panel is a member's only door to their own notes, KI-14). Owner can flip it back with one
+  line. 4539 tests, ruff clean. ⚠️ **v78 NOT YET DEPLOYED** — `deploy.ps1` refuses untracked files and the
+  design agents write into the main tree; deploy the moment their docs are committed. Usage after landing
+  session 12% / weekly 8% / Fable 8%, read 06:55.
+  **LANDED 06:59 (287k Opus): `info/mod-panel-design.md` written and committed** — `/mod [member]`, staff
+  only, list → case card with Edit reason / Add a note / Void (Restore) / Jump to case # / Logs; `/case`,
+  `/cases`, `mod` group retire (36 → 34); migration schema 28 → 29 (six nullable `mod_cases` columns);
+  est. 340–420k Opus (280–340k if the site's four moves wait). Five defects REPORTED not fixed (bare
+  `mod.purged`/`mod.purge_failed` kinds, dead `CASE_KINDS`, dead `_audit`/`_failed`, site Notes chip matches
+  nothing, a code-notes claim about `/untimeout`/`/unban` gating that a test disproves). Forks F-M1/F-M2/F-M3
+  go to the owner one at a time (§J). Usage after landing session 13% / weekly 8% / Fable 9%, read 06:59.
+  **LANDED 07:00 (197k Opus): `info/honeypot-panel-design.md` written and committed** — `/honeypot`, staff
+  only; the group + exempt sub-group + seven leaves retire; NEW `black_bloc/honeypot.py` + `tests/test_honeypot.py`
+  (the feature has no pure module today); new kind `honeypot.exempt_set` (`honeypot.exempt` is taken), and
+  retiring `exempt_add`/`exempt_remove` must also drop them from `logkinds.ROUTINE` or the dead-entry test fails;
+  `honeypot_mode` STAYS in `HIDDEN_WHEN_OFF` (defaults to shadow, not off). Reported not fixed: the site writes
+  `honeypot_mode`/`honeypot_exempt_role_ids` through the generic settings API, bypassing the arming refusal. Est.
+  320–380k Opus. Forks F-H1/F-H2/F-H3 (§I) go to the owner one at a time after `/mod`'s. Usage after landing
+  session 14% / weekly 8% / Fable 9%, read 07:00.
+  **LANDED 07:02 (252k Opus): `info/modmail-panel-design.md` written and committed** — 1017 lines. Sticky
+  card jumps on every write into the ticket; `modmail_reply_style` gate already exists at `_staff_message`
+  (`buttons` is the only new value); practice ticket = private thread on the test channel claimed with
+  `guard.own_channel`, real tickets never claimed; migration schema → +1 (`card_message_id`, `practice` on
+  `modmail_tickets`) — ⚠️ the `/mod` design ALSO claims 28 → 29, so whichever builds second takes 30.
+  Findings: a successful reply and `/note` write NO log row today; four kinds spelled differently by the two
+  doors (`modmail.unblocked` IMPORTANT vs web `modmail.unblock` ROUTINE). Est. 480–600k as one agent —
+  SPLIT recommended: A = panel + extractions + kind rename (230–290k, 36 → 35), B = migration + sticky card +
+  ticket card + practice ticket + retire `/areply` `/note` `/close` (270–330k, 35 → 32). Seven forks (§I)
+  go to the owner one at a time after `/mod`'s and honeypot's. Usage after landing session 15% / weekly 8% /
+  Fable 9%, read 07:02. **All four agents landed; v78 deploy next.**
+  **v78 LIVE 07:05 (`baede2a`)** — hide-when-off shipped; boot verified, live log `35 command(s) in guild; hidden:
+  raidtrain`. Item moved WHOLE to `DONE.md`.
+  **Owner 07:05: "F-M1 yes"** → **F-M1 = (a)** voided cases always listed, struck through. **Owner 07:05: "Do as
+  much in parallel sub agents as possible"** → **DISPATCHED 07:07, two Opus builds in parallel, own worktrees
+  off `932f34e`** (usage at dispatch session 16% / weekly 8% / Fable 9%, read 07:06): (1) **honeypot panel** —
+  forks F-H1/F-H2/F-H3 built on the design's recommendation (all (a)), each reversible in a small local change,
+  owner confirmation pending; sweep rows lettered `H1…`; (2) **modmail Build A** (panel + extractions + kind
+  rename + five route `note()` deletions + `modmail_panel_minutes`; `/snippet` retires, 36 → 35; NO migration,
+  NO sticky card, none of F-M1–F-M8); sweep rows lettered `MA1…`. Next: F-M2 and F-M3 to the owner, then the
+  `/mod` build; modmail Build B (after A merges) carries the migration — takes schema 30 if `/mod` takes 29;
+  its seven forks go to the owner one at a time before it starts.
+  **Owner 07:10 "A" → F-M2 = (a)** (voided warns stop counting toward the threshold). **Owner 07:14 "A" →
+  F-M3 = (a)** (the site gets the four case moves in this build). **DISPATCHED 07:16: the `/mod` build** (Opus, own
+  worktree off `97531cc`; takes schema 29; sweep rows lettered `C1…`; est. 340–420k; usage at dispatch session
+  22% / weekly 9% / Fable 10%, read 07:15). THREE builds in flight: honeypot, modmail A, `/mod`.
+  **DISPATCHED 07:18: the `/settings` DESIGN** (Opus, own worktree off `0304c4d` this time so the main tree stays
+  deployable; writes and commits `info/settings-panel-design.md` on its branch; usage at dispatch read 07:15 as
+  above). Modmail Build B's seven forks go to the owner one at a time now, so B can dispatch the moment A merges.
+  **LANDED 07:33 (314k Opus): the honeypot panel** — merged clean as `fa845a6` (4593 tests, ruff clean, 36 → 36
+  measured); sweep rows `H1`–`H12` numbered **188–199** at the merge, guide count 187 → 199; KI-21 widened to
+  cover the honeypot's generic-route bypass (arming refusal skipped, exempt list rewritten with no
+  `honeypot.exempt_set` row). Forks F-H1/F-H2/F-H3 built as (a) — still to be confirmed with the owner one at
+  a time, after modmail B's seven. Usage after landing session 34% / weekly 12% / Fable 11%, read 07:33.
+  **LANDED 07:34 (264k Opus): `info/settings-panel-design.md` written and committed** (merged `361eaa2`) —
+  `/settings` one staff-only command; the group and five subcommands retire; sixteen read-only mode lines;
+  **Turn a feature back on…** off `hidden_names`; group → key editor over all 175 registry keys (measured;
+  supersedes `panels-program.md`'s "~120"); `Put the default back` widened to every key; `/presence` folds in
+  under F-S4(a) → **29 slots, zero groups**. Est. 380–450k, split Build 1 (150–190k) / Build 2 (230–280k);
+  ⚠️ dispatch only after all three wave-4 builds merge. Five forks F-S1…F-S5 (§ forks) go to the owner one at
+  a time after modmail B's and honeypot's; the five defects reported (no `/settings` subcommand checks the
+  database; `sweeps.md:150` names a `/settings logs` that never existed; `LOG_LEVEL_COMMANDS` wrong in 11 of
+  13 rows after wave 4) fold into the build. **v79 deploy started 07:36** (honeypot panel + the design doc).
+  **v79 LIVE 07:39 (`361eaa2`)** — honeypot panel shipped; boot verified 14:39:15Z, synced 36, no traceback. The
+  honeypot item moved WHOLE to `DONE.md`. Sweeps 188–199 are the owner's.
+  **LANDED 07:46 (392k Opus): modmail Build A** — reviewed sound; merged as `b926d9d` beside the honeypot merge
+  (eight conflicts: both `panel_minutes` blocks kept in `settings_store`, `LOGS_GROUPS` down to `mod`, both
+  labels/mock rows, both program rows, both guide rows, both code-notes sections); 4625 tests, ruff clean,
+  **36 → 35 measured**; sweep rows `MA1`–`MA8` numbered **200–207** at the merge, guide count 199 → 207.
+  **v80 LIVE 07:54 (`b926d9d`)** — boot verified 14:54:28Z, `synced 35`, no traceback; nothing opened in
+  Discord. This item STAYS until Build B (sticky card, migration, `modmail_reply_style`, practice ticket,
+  `/areply` `/note` `/close` retire) — B dispatches once forks 1–7 are answered. Usage
+  after landing session 42% / weekly 14% / Fable 13%, read 07:54.
+  **Forks, one at a time (owner 2026-09-05 09:06):** F-M1 card-jump = **(a) every write** ✅; F-M3 typed-reply
+  echo = **(a) unchanged** ✅; F-M4 practice transcript = **(a) filed, marked PRACTICE** ✅; F-M5 `/reply`
+  keeps `ticket:` = **(a)** ✅; F-M6 real tickets not claimed = **(a)** ✅; F-M7 snippet combines in one modal = **(a)** ✅; F-M8 Reply as Staff
+  stays a button = **(a)** ✅. **All seven answered (a). Build B DISPATCHED 09:21** (Opus, own worktree off `6e5a550`, est. 270–330k; five commit layers, migration 29 → 30, tree 33 → 30 expected, sweep rows lettered `MB1`–`MBn`). Usage before dispatch session 53% / weekly 16% / Fable 15%, read 09:15. Each fork got a push
+  notification (global rule, same day).
+  **LANDED 08:00 (429k Opus): the `/mod` cases panel** — reviewed sound (atomic void/restore with a 409 each way,
+  one write one row through four shared extractions, website routes gated by `writer()`); merged as `a90f416`
+  beside the two earlier merges (nine conflicts; `LOG_LEVEL_COMMANDS` loses `mod` and `honeypot`, `LOGS_GROUPS`
+  is empty, the tree pin is **33** — the branch measured 34 off a 36 base and `main` already had modmail A's
+  −1); 4686 tests, ruff clean, mock check 17 pages / 146 routes; sweep rows `C1`–`C11` numbered **208–218**,
+  guide count 207 → 218; KI-22 (bare `mod.purged` kinds) kept above KI-21. **v81 LIVE 08:09 (`a90f416`)** —
+  boot 15:08:59Z database ready (schema 29 — no migration line is logged, so the only evidence it ran is that
+  the bot came up), `synced 33`, no traceback; nothing opened in Discord. The `/case` + `/cases` item moved
+  WHOLE to `DONE.md`. Handed to the conductor by the build: `panels.NoteModal` cannot prefill (one line,
+  three other modals want it); `CASE_KINDS` is imported by nothing; the site's Notes chip matches zero rows.
+  ALL THREE wave-4 builds are merged — the `/settings` build may dispatch once its forks F-S1–F-S5 are
+  answered. Usage after landing session 44% / weekly 14% / Fable 13%, read 08:00.
+  **BUILD B BUILT 2026-09-05 on `worktree-agent-a4bebd98196e3ca14` off `6e5a550` — NOT MERGED, NOT
+  DEPLOYED, awaiting the conductor's review.** Five commits, one per layer: (1) schema **29 → 30**
+  (`modmail_tickets.card_message_id`, `.practice`) — ⚠️ **migrate before deploy**, and the migration was
+  RUN against a real schema-29 file built by `main`'s own `db.py`, not reasoned about; (2) the sticky
+  ticket card (a persistent `DynamicItem` with **Reply · Reply as Staff · Private note · Close…**),
+  `bump_card` with its 2 s/8 s debounce on the bot, the reconciler's third job, and the `add_note` /
+  `reply_body` extractions; (3) `modmail_reply_style` (`buttons`/`typing`/`both`, default `both`) gating
+  the relay that `_staff_message` already had; (4) the practice ticket — a claimed private thread on the
+  test channel where nobody is ever DMed, which is how F-M8's reply-style choice gets made; (5) the
+  retirement of `/areply` `/note` `/close` into the card — **33 → 30, measured** — with the doc, string and
+  site sweep. `/reply` keeps `ticket:` (F-M5). Verified: `pytest` **4738**, `ruff` clean,
+  `node site/mock/check.mjs` **17 pages / 146 routes, unchanged**. ⚠️ **NOT verified: anything against live
+  Discord** — no boot, no card posted, no practice thread made, no DM seen. Sweep rows lettered
+  `MB1`–`MB12` for the conductor to number. Handed to the conductor: `picked_values` is now a second copy
+  (`polls.py` and `modmail.py`) and wants hoisting into `panels.py`; the card's debounce numbers have never
+  been measured against a real channel.
+  **LANDED 10:27 (≈465k Opus incl. one fix): modmail Build B** — Fable review found one real defect (a write landing
+  while the card was mid-post was dropped, so the card was not last) → fixed on the branch as `ca67bb5` with a dirty flag
+  and a re-loop, test proven to fail on the old code; merged clean (no conflicts) as `f60ab1f`; `MB1`–`MB12` numbered
+  **219–230**, guide count 218 → 230; 4739 tests, ruff clean, mock check 17 pages / 146 routes.
+  **v82 LIVE 10:27 (`f42a591`)** — boot 17:27:37Z database ready (schema 30 — no migration line is logged), `synced 30`,
+  no traceback; nothing opened in Discord. This item moves WHOLE to `DONE.md`. Handed to the conductor by the build and
+  the review (now their own 🔧 item below): the panel-side **A ticket…** select / ticket card in the `/modmail` panel (design
+  §B S5, §C) fell between Build A and Build B and is UNBUILT; `picked_values` is copied in `polls.py` and
+  `black_bloc/modmail.py`; `NO_CATEGORY`/`NOT_A_CATEGORY` are dead in the cog; `Modmail._post_transcript` /
+  `_remove_place` are unreferenced Build-A wrappers; an exception inside `refresh_card` is only WARNING-logged with no
+  `modmail.card_failed` row; the design doc's `path:line` keys for `modmail.py` are stale.
+
 ## 2026-09-05 — Mod cases panel: `/mod [member]` is one command over the case record; `/case`, `/cases` and `/mod logs` retire (v81, `a90f416`)
 
 Moved WHOLE from `TODO.md` at the landing (08:12). Built on `worktree-agent-ab5740f777a3dfd80`
