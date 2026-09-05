@@ -1,20 +1,13 @@
 import json
 
+import discord
 import pytest
 from discord import app_commands
 
+from black_bloc import settings_panel as sp
 from black_bloc.bot import COGS, BlackBlocBot
-from black_bloc.cogs.core import (
-    CHANNEL_KEYS,
-    CLEARABLE_KEYS,
-    ROLE_KEYS,
-    VALUE_KEYS,
-    Core,
-    clear_key,
-    help_lines,
-    set_key,
-    tree_commands,
-)
+from black_bloc.cogs import core as core_cog
+from black_bloc.cogs.core import Core, clear_key, help_lines, set_key, tree_commands
 from black_bloc.config import load_settings
 from black_bloc.settings_store import SettingsStore, require_staff
 from black_bloc.storage.db import Database
@@ -86,24 +79,61 @@ class FakeMember:
         guild.members[user_id] = self
 
 
+class FakePresence:
+    def __init__(self, last_ok=None, last_error=None):
+        self.last_ok = last_ok
+        self.last_error = last_error
+        self.applied = 0
+
+    def loop_health(self, name):
+        return (self.last_ok, self.last_error)
+
+    async def apply_status(self):
+        self.applied += 1
+        return "watching 5 people"
+
+
 class FakeBot:
-    def __init__(self, db, store, guild):
+    def __init__(self, db, store, settings, guild):
         self.db = db
         self.store = store
+        self.settings = settings
         self.guild = guild
         self.guilds = [guild]
         self.guard = None
+        self.cogs_by_name = {}
 
     def get_channel(self, channel_id):
         return self.guild.get_channel(channel_id)
+
+    def get_cog(self, name):
+        return self.cogs_by_name.get(name)
+
+
+class FakeMessage:
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+        self.embeds = list(kwargs.get("embeds") or ())
 
 
 class FakeResponse:
     def __init__(self):
         self.messages = []
+        self.modals = []
+        self.deferred = False
+
+    def is_done(self):
+        return self.deferred or bool(self.messages)
 
     async def send_message(self, content=None, ephemeral=False, **kwargs):
         self.messages.append({"content": content, "ephemeral": ephemeral, **kwargs})
+
+    async def send_modal(self, modal):
+        self.modals.append(modal)
+        self.deferred = True
+
+    async def defer(self, ephemeral=False):
+        self.deferred = True
 
 
 class FakeFollowup:
@@ -115,18 +145,47 @@ class FakeFollowup:
 
 
 class FakeInteraction:
-    def __init__(self, bot, user):
+    def __init__(self, bot, user, guild=True):
         self.client = bot
         self.user = user
-        self.guild = bot.guild
-        self.guild_id = bot.guild.id
+        self.guild = bot.guild if guild else None
+        self.guild_id = bot.guild.id if guild else None
         self.channel_id = TEST_CHANNEL
         self.response = FakeResponse()
         self.followup = FakeFollowup(self.response)
+        self.edits = []
+
+    async def original_response(self):
+        return FakeMessage()
+
+    async def edit_original_response(self, **kwargs):
+        self.edits.append(kwargs)
+        return FakeMessage(**kwargs)
+
+    @property
+    def rendered(self):
+        if self.edits:
+            return self.edits[-1]
+        return self.response.messages[-1] if self.response.messages else {}
+
+    @property
+    def view(self):
+        return self.rendered.get("view")
+
+    @property
+    def embed(self):
+        return self.rendered.get("embed")
+
+    @property
+    def said(self):
+        return self.embed.description if self.embed is not None else ""
 
     @property
     def sent(self):
-        return self.response.messages[-1]["content"] if self.response.messages else None
+        spoken = [
+            one["content"] for one in self.response.messages if one.get("content") is not None
+        ]
+        return spoken[-1] if spoken else None
 
 
 @pytest.fixture
@@ -149,7 +208,7 @@ async def bot(db, monkeypatch):
     guild = FakeGuild()
     guild.add(FakeChannel(TEST_CHANNEL))
     guild.add(FakeChannel(LOG_CHANNEL))
-    return FakeBot(db, store, guild)
+    return FakeBot(db, store, settings, guild)
 
 
 @pytest.fixture
@@ -162,11 +221,23 @@ def member(bot):
     return FakeMember(bot.guild)
 
 
+@pytest.fixture
+def lead(bot):
+    found = FakeMember(bot.guild, user_id=1, manage_guild=True)
+    return found
+
+
 def give_staff(bot, member):
     role = FakeRole(STAFF_ROLE)
     bot.guild.roles.append(role)
     bot.guild.get_channel(TEST_CHANNEL).visible_to.add(STAFF_ROLE)
     member.roles.append(role)
+
+
+def take_staff(bot, member):
+    bot.guild.get_channel(TEST_CHANNEL).visible_to.discard(STAFF_ROLE)
+    member.roles.clear()
+    member.guild_permissions = FakePerms(manage_guild=False)
 
 
 async def kinds(db):
@@ -179,145 +250,615 @@ async def details(db):
     return [json.loads(row["details"]) if row["details"] else None for row in await cur.fetchall()]
 
 
-def test_the_choices_cover_every_key_and_fit_discords_limit():
-    assert "birthday_role_id" in CLEARABLE_KEYS and "birthday_channel_id" in CLEARABLE_KEYS
-    assert "birthday_color" in VALUE_KEYS
-    assert "bot_bio" in VALUE_KEYS and "status_prefix" in VALUE_KEYS
-    assert "golive_embed" in VALUE_KEYS
-    assert "youtube_channel_id" in CLEARABLE_KEYS and "youtube_ping_role_id" in CLEARABLE_KEYS
-    assert "youtube_mode" in VALUE_KEYS and "youtube_poll_minutes" in VALUE_KEYS
-    assert len(CHANNEL_KEYS) <= 25 and len(ROLE_KEYS) <= 25
+def labels(view):
+    return [getattr(item, "label", None) for item in view.children]
 
 
-async def test_the_clearable_keys_are_suggested_too_once_they_pass_the_ceiling(bot, cog):
-    """Phase 16's channel and role keys took CLEARABLE_KEYS past 25, so `clear` autocompletes."""
-    assert len(CLEARABLE_KEYS) > 25
-    interaction = FakeInteraction(bot, FakeMember(bot.guild, user_id=1, manage_guild=True))
-
-    everything = await cog.clearable_keys(interaction, "")
-    youtube = await cog.clearable_keys(interaction, "youtube")
-
-    assert len(everything) == 25
-    assert [choice.value for choice in youtube] == [k for k in CLEARABLE_KEYS if "youtube" in k]
-    assert all(len(choice.name) <= 100 for choice in everything + youtube)
+def placeholders(view):
+    return [getattr(item, "placeholder", None) for item in view.children]
 
 
-async def test_clearing_a_key_that_is_not_a_setting_says_how_to_find_one(bot, cog, member):
-    give_staff(bot, member)
-    interaction = FakeInteraction(bot, member)
-
-    await cog.settings_clear.callback(cog, interaction, "not_a_setting")
-
-    assert "not a Black Bloc setting" in interaction.sent
-    assert "offers the ones it knows" in interaction.sent
-    assert await kinds(bot.db) == []
+def button(view, label):
+    for item in view.children:
+        if getattr(item, "label", None) == label:
+            return item
+    raise AssertionError(f"no button labelled {label!r} in {labels(view)}")
 
 
-async def test_the_value_keys_are_suggested_because_there_are_too_many_to_list(bot, cog):
-    """VALUE_KEYS outgrew Discord's 25-choice ceiling, so /settings set-value autocompletes."""
-    assert len(VALUE_KEYS) > 25
-    interaction = FakeInteraction(bot, FakeMember(bot.guild, user_id=1, manage_guild=True))
-
-    everything = await cog.value_keys(interaction, "")
-    golive = await cog.value_keys(interaction, "golive")
-
-    assert len(everything) == 25
-    assert [choice.value for choice in golive] == [k for k in VALUE_KEYS if "golive" in k]
-    assert "golive_embed" in [choice.value for choice in golive]
-    assert all(len(choice.name) <= 100 for choice in everything + golive)
+def picker(view, placeholder):
+    for item in view.children:
+        if getattr(item, "placeholder", None) == placeholder:
+            return item
+    raise AssertionError(f"no select placeheld {placeholder!r} in {placeholders(view)}")
 
 
-async def test_setting_a_value_by_name_still_stores_and_logs(bot, cog, db):
-    interaction = FakeInteraction(bot, FakeMember(bot.guild, user_id=1, manage_guild=True))
-
-    await cog.settings_set_value.callback(cog, interaction, "golive_embed", "false")
-
-    assert bot.store.get(bot.guild.id, "golive_embed") is False
-    assert "golive_embed" in interaction.response.messages[-1]["content"]
-    assert "settings.set" in await kinds(db)
+def has_button(view, label):
+    return any(getattr(item, "label", None) == label for item in view.children)
 
 
-async def test_a_misspelt_setting_name_gets_a_sentence_not_a_stack_trace(bot, cog):
-    interaction = FakeInteraction(bot, FakeMember(bot.guild, user_id=1, manage_guild=True))
-
-    await cog.settings_set_value.callback(cog, interaction, "golive_embeds", "false")
-
-    said = interaction.response.messages[-1]["content"]
-    assert "is not a Black Bloc setting" in said and said.startswith("'golive_embeds'")
+async def choose(item, interaction, values):
+    """`values` is filled from Discord's payload, so a test fills the same private list."""
+    item._values = list(values)
+    await item.callback(interaction)
 
 
-async def test_settings_show_is_split_into_messages_discord_will_take(bot, cog):
-    interaction = FakeInteraction(bot, FakeMember(bot.guild, user_id=1, manage_guild=True))
-
-    await cog.settings_show.callback(cog, interaction)
-
-    said = [message["content"] for message in interaction.response.messages]
-    assert len(said) > 1
-    assert all(len(chunk) <= 1900 for chunk in said)
-    assert all(message["ephemeral"] for message in interaction.response.messages)
-    assert "automod_mode" in "\n".join(said)
+def ticked(item):
+    return [one.id for one in item._underlying.default_values]
 
 
-async def test_settings_show_is_staff_only(bot, cog, member):
-    interaction = FakeInteraction(bot, member)
+async def all_features_on(store):
+    from black_bloc.command_visibility import HIDDEN_WHEN_OFF
 
-    await cog.settings_show.callback(cog, interaction)
+    for key in HIDDEN_WHEN_OFF:
+        await store.set(GUILD, key, "on")
 
-    assert "staff only" in interaction.response.messages[0]["content"]
+
+async def open_panel(cog, bot, who):
+    interaction = FakeInteraction(bot, who)
+    await cog.settings.callback(cog, interaction)
+    return interaction
 
 
-async def test_clearing_a_setting_is_staff_only(bot, cog, member):
-    await bot.store.set(GUILD, "birthday_role_id", CAKE_ROLE)
-    interaction = FakeInteraction(bot, member)
+async def press(view, label, bot, who):
+    interaction = FakeInteraction(bot, who)
+    await button(view, label).callback(interaction)
+    return interaction
 
-    await cog.settings_clear.callback(cog, interaction, "birthday_role_id")
+
+# --- the command itself ---------------------------------------------------------------------------
+
+
+async def test_settings_opens_one_ephemeral_panel_naming_no_retired_subcommand(bot, cog, lead):
+    interaction = await open_panel(cog, bot, lead)
+
+    assert len(interaction.response.messages) == 1
+    assert interaction.rendered["ephemeral"] is True
+    assert interaction.embed.title == sp.PANEL_TITLE
+    said = interaction.said
+    assert "/settings show" not in said and "/settings set-value" not in said
+    assert "`/youtube` to change" in said
+    assert "A setting group…" in placeholders(interaction.view)
+
+
+async def test_settings_is_staff_only_and_opens_nothing_for_a_member(bot, cog, member):
+    interaction = await open_panel(cog, bot, member)
 
     assert "staff only" in interaction.sent
-    assert bot.store.get(GUILD, "birthday_role_id") == CAKE_ROLE
+    assert interaction.view is None
 
 
-async def test_clearing_a_setting_puts_the_default_back_and_is_recorded(bot, cog, member):
+async def test_settings_says_so_in_a_dm_rather_than_opening_a_panel(bot, cog, lead):
+    interaction = FakeInteraction(bot, lead, guild=False)
+
+    await cog.settings.callback(cog, interaction)
+
+    assert "run in the server itself" in interaction.sent
+
+
+async def test_settings_will_not_open_while_the_database_is_down(bot, cog, lead, db):
+    await db.close()
+
+    interaction = await open_panel(cog, bot, lead)
+
+    assert "cannot reach its own database" in interaction.sent
+    assert interaction.view is None
+    await db.connect()
+
+
+async def test_the_root_reads_every_feature_mode_and_never_offers_to_change_one(bot, cog, lead):
+    await bot.store.set(GUILD, "youtube_mode", "shadow")
+
+    interaction = await open_panel(cog, bot, lead)
+
+    assert "**YouTube uploads** — shadow · `/youtube` to change" in interaction.said
+    assert "**Modmail** — not answering DMs · `/modmail` to change" in interaction.said
+    assert not any("mode" in str(one).lower() for one in placeholders(interaction.view))
+
+
+async def test_the_site_link_is_drawn_only_when_the_bot_knows_its_own_origin(bot, cog, lead):
+    with_site = await open_panel(cog, bot, lead)
+    assert button(with_site.view, "Open on the site").url.endswith("/settings.html")
+
+    bot.settings = bot.settings.model_copy(update={"site_origin": ""})
+    without = await open_panel(cog, bot, lead)
+
+    assert not has_button(without.view, "Open on the site")
+
+
+# --- S2 / S3, the four core channel keys ---------------------------------------------------------
+
+
+async def test_roles_and_channels_is_not_drawn_without_manage_server_and_the_embed_says_so(
+    bot, cog, member
+):
     give_staff(bot, member)
-    await bot.store.set(GUILD, "birthday_role_id", CAKE_ROLE)
-    interaction = FakeInteraction(bot, member)
 
-    await cog.settings_clear.callback(cog, interaction, "birthday_role_id")
+    interaction = await open_panel(cog, bot, member)
 
-    assert bot.store.get(GUILD, "birthday_role_id") is None
-    assert "no longer set" in interaction.sent
-    assert interaction.response.messages[-1]["ephemeral"] is True
-    assert await kinds(bot.db) == ["settings.clear"]
+    assert not has_button(interaction.view, "Roles & channels…")
+    assert sp.CORE_KEYS_ARE_FOR_A_LEAD in interaction.said
 
 
-async def test_clearing_something_that_was_never_set_says_so_and_logs_nothing(bot, cog, member):
+async def test_a_lead_gets_roles_and_channels_and_the_card_names_each_key_in_words(bot, cog, lead):
+    root = await open_panel(cog, bot, lead)
+
+    opened = await press(root.view, "Roles & channels…", bot, lead)
+
+    assert "staff_channel_id" not in opened.said
+    assert "Where staff talk — and who counts as staff" in opened.said
+    assert "Where staff talk — and who counts as staff" in placeholders(opened.view)
+
+
+async def test_plain_staff_can_reach_the_core_keys_once_the_switch_says_they_may(bot, cog, member):
     give_staff(bot, member)
-    interaction = FakeInteraction(bot, member)
+    await bot.store.set(GUILD, sp.CORE_KEYS_ADMIN_ONLY_KEY, False)
 
-    await cog.settings_clear.callback(cog, interaction, "birthday_role_id")
+    interaction = await open_panel(cog, bot, member)
 
-    assert "was not set" in interaction.sent
-    assert await kinds(bot.db) == []
+    assert has_button(interaction.view, "Roles & channels…")
+    assert sp.CORE_KEYS_ARE_FOR_A_LEAD not in interaction.said
 
 
-async def test_a_slash_change_records_that_it_came_from_discord(bot, cog, db):
-    """Owner, 2026-08-27: the log says whether Discord or the website set a key."""
-    interaction = FakeInteraction(bot, FakeMember(bot.guild, user_id=1, manage_guild=True))
+async def test_a_lead_demoted_while_the_core_card_is_open_moves_nothing(bot, cog, lead, db):
+    root = await open_panel(cog, bot, lead)
+    card = await press(root.view, "Roles & channels…", bot, lead)
+    pick = picker(card.view, "Where staff talk — and who counts as staff")
+    lead.guild_permissions = FakePerms(manage_guild=False)
+    give_staff(bot, lead)
 
-    await cog.settings_set_value.callback(cog, interaction, "golive_embed", "false")
+    pressed = FakeInteraction(bot, lead)
+    await choose(pick, pressed, [discord.Object(id=TEST_CHANNEL)])
 
+    assert sp.CORE_KEYS_ARE_FOR_A_LEAD in pressed.sent
+    assert await kinds(db) == []
+
+
+# --- S4 / S5 / S6, the way back for a hidden command --------------------------------------------
+
+
+async def test_turn_a_feature_back_on_is_absent_while_nothing_is_hidden(bot, cog, lead):
+    await all_features_on(bot.store)
+
+    interaction = await open_panel(cog, bot, lead)
+
+    assert sp.BACK_ON_PLACEHOLDER not in placeholders(interaction.view)
+    assert sp.HIDDEN_NONE in interaction.said
+
+
+async def test_turn_a_feature_back_on_lists_what_is_hidden_and_writes_on_once(bot, cog, lead, db):
+    await all_features_on(bot.store)
+    await bot.store.set(GUILD, "youtube_mode", "off")
+
+    root = await open_panel(cog, bot, lead)
+    pick = picker(root.view, sp.BACK_ON_PLACEHOLDER)
+    assert [option.value for option in pick.options] == ["youtube_mode"]
+    assert "YouTube uploads — turn it on" in [option.label for option in pick.options]
+
+    pressed = FakeInteraction(bot, lead)
+    await choose(pick, pressed, ["youtube_mode"])
+
+    assert bot.store.get(GUILD, "youtube_mode") == "on"
+    assert await kinds(db) == ["settings.set"]
+    assert (await details(db))[0] == {"key": "youtube_mode", "value": "on", "via": "discord"}
+
+
+async def test_hiding_switched_off_altogether_is_a_different_sentence_from_nothing_hidden(
+    bot, cog, lead
+):
+    await bot.store.set(GUILD, "youtube_mode", "off")
+    await bot.store.set(GUILD, sp.HIDE_COMMANDS_WHEN_OFF, False)
+
+    interaction = await open_panel(cog, bot, lead)
+
+    assert sp.HIDING_OFF in interaction.said
+    assert sp.HIDDEN_NONE not in interaction.said
+    assert sp.BACK_ON_PLACEHOLDER not in placeholders(interaction.view)
+
+
+# --- the group card and the key card ------------------------------------------------------------
+
+
+async def test_a_setting_group_reaches_a_key_card_with_its_value_default_and_help(bot, cog, lead):
+    root = await open_panel(cog, bot, lead)
+    groups = picker(root.view, "A setting group…")
+
+    opened = FakeInteraction(bot, lead)
+    await choose(groups, opened, ["birthday"])
+    keys = picker(opened.view, "A setting…")
+
+    card = FakeInteraction(bot, lead)
+    await choose(keys, card, ["birthday_color"])
+
+    assert "**birthday_color**" in card.said
+    assert "Black Bloc's own default is" in card.said
+    assert has_button(card.view, "The colour…")
+
+
+async def test_find_a_setting_is_offered_only_on_the_group_that_outgrew_the_picker(bot, cog, lead):
+    root = await open_panel(cog, bot, lead)
+    groups = picker(root.view, "A setting group…")
+
+    chat = FakeInteraction(bot, lead)
+    await choose(groups, chat, ["chat"])
+    birthday = FakeInteraction(bot, lead)
+    await choose(groups, birthday, ["birthday"])
+
+    assert has_button(chat.view, "Find a setting…")
+    assert not has_button(birthday.view, "Find a setting…")
+    assert "25 of 28 — the rest are on the site" in placeholders(chat.view)
+    assert "A setting…" in placeholders(birthday.view)
+
+
+async def test_find_a_setting_filters_and_says_so_when_nothing_matches(bot, cog, lead):
+    root = await open_panel(cog, bot, lead)
+    groups = picker(root.view, "A setting group…")
+    chat = FakeInteraction(bot, lead)
+    await choose(groups, chat, ["chat"])
+
+    found = FakeInteraction(bot, lead)
+    await core_cog.run_find(found, chat.view, "chat", "memory")
+    empty = FakeInteraction(bot, lead)
+    await core_cog.run_find(empty, chat.view, "chat", "quidditch")
+
+    assert all("memory" in option.value for option in picker(found.view, "A setting…").options)
+    assert "Nothing in **chat** has **quidditch**" in empty.sent
+    assert picker(empty.view, "25 of 28 — the rest are on the site") is not None
+
+
+async def test_the_rule_book_card_carries_no_editor_at_all(bot, cog, lead):
+    card = FakeInteraction(bot, lead)
+    await core_cog.render_key(card, None, key="automod_rules")
+
+    assert sp.RULES_ELSEWHERE in card.said
+    assert labels(card.view) == ["Back to the group"]
+
+
+async def test_a_bool_key_shows_one_button_that_says_which_way_it_will_go(bot, cog, lead, db):
+    card = FakeInteraction(bot, lead)
+    await core_cog.render_key(card, None, key="golive_embed")
+    assert has_button(card.view, "Turn golive_embed off")
+    assert not has_button(card.view, "Turn golive_embed on")
+
+    pressed = await press(card.view, "Turn golive_embed off", bot, lead)
+
+    assert bot.store.get(GUILD, "golive_embed") is False
+    assert await kinds(db) == ["settings.set"]
+    assert has_button(pressed.view, "Turn golive_embed on")
+
+
+async def test_an_enum_key_offers_its_choices_with_the_current_one_ticked(bot, cog, lead):
+    card = FakeInteraction(bot, lead)
+    await core_cog.render_key(card, None, key="golive_mode")
+    pick = picker(card.view, "Pick one…")
+
+    assert [option.value for option in pick.options] == ["off", "shadow", "on"]
+    assert [option.value for option in pick.options if option.default] == ["shadow"]
+
+    chosen = FakeInteraction(bot, lead)
+    await choose(pick, chosen, ["on"])
+
+    assert bot.store.get(GUILD, "golive_mode") == "on"
+
+
+async def test_a_number_modal_carries_the_bound_and_refuses_past_it_without_writing(
+    bot, cog, lead, db
+):
+    card = FakeInteraction(bot, lead)
+    await core_cog.render_key(card, None, key="cost_hosting_usd")
+    opened = FakeInteraction(bot, lead)
+    await button(card.view, "A number…").callback(opened)
+    modal = opened.response.modals[0]
+    assert modal.field.label == "A whole number, no more than 10000"
+    assert "no larger than 10000" in card.said
+
+    refused = FakeInteraction(bot, lead)
+    await core_cog.run_typed(refused, card.view, "cost_hosting_usd", "99999")
+    words = FakeInteraction(bot, lead)
+    await core_cog.run_typed(words, card.view, "cost_hosting_usd", "loads")
+
+    assert "cannot be more than 10000" in refused.sent
+    assert "takes a whole number" in words.sent
+    assert not bot.store.is_stored(GUILD, "cost_hosting_usd")
+    assert await kinds(db) == []
+
+
+async def test_a_colour_is_refused_in_words_and_saved_when_it_is_one(bot, cog, lead, db):
+    refused = FakeInteraction(bot, lead)
+    await core_cog.run_typed(refused, None, "birthday_color", "blue")
+    assert "#4eefff" in refused.sent
+    assert not bot.store.is_stored(GUILD, "birthday_color")
+
+    saved = FakeInteraction(bot, lead)
+    await core_cog.run_typed(saved, None, "birthday_color", "#4EEFFF")
+
+    assert bot.store.get(GUILD, "birthday_color") == "#4eefff"
     assert await kinds(db) == ["settings.set"]
     assert (await details(db))[0]["via"] == "discord"
 
 
-async def test_a_slash_clear_records_discord_too(bot, cog, member):
-    give_staff(bot, member)
+async def test_a_list_longer_than_a_picker_can_hold_draws_no_picker_but_keeps_clear_the_list(
+    bot, cog, lead
+):
+    await bot.store.set(GUILD, "honeypot_exempt_role_ids", list(range(9000, 9026)))
+
+    card = FakeInteraction(bot, lead)
+    await core_cog.render_key(card, None, key="honeypot_exempt_role_ids")
+
+    assert "more than one Discord picker can edit at once" in card.said
+    assert not any(isinstance(one, discord.ui.RoleSelect) for one in card.view.children)
+    assert has_button(card.view, "Clear the list")
+
+
+async def test_a_short_list_draws_the_picker_with_what_is_stored_already_ticked(bot, cog, lead):
+    await bot.store.set(GUILD, "honeypot_exempt_role_ids", [CAKE_ROLE])
+
+    card = FakeInteraction(bot, lead)
+    await core_cog.render_key(card, None, key="honeypot_exempt_role_ids")
+    pick = picker(card.view, "Pick the roles…")
+
+    assert ticked(pick) == [CAKE_ROLE]
+    assert pick.min_values == 0
+
+    cleared = await press(card.view, "Clear the list", bot, lead)
+
+    assert bot.store.get(GUILD, "honeypot_exempt_role_ids") == []
+    assert not has_button(cleared.view, "Clear the list")
+
+
+# --- Put the default back -----------------------------------------------------------------------
+
+
+async def test_put_the_default_back_is_absent_until_a_row_is_actually_stored(bot, cog, lead, db):
+    empty = FakeInteraction(bot, lead)
+    await core_cog.render_key(empty, None, key="birthday_role_id")
+    assert not has_button(empty.view, "Put the default back")
+
     await bot.store.set(GUILD, "birthday_role_id", CAKE_ROLE)
+    stored = FakeInteraction(bot, lead)
+    await core_cog.render_key(stored, None, key="birthday_role_id")
+    assert has_button(stored.view, "Put the default back")
 
-    await cog.settings_clear.callback(
-        cog, FakeInteraction(bot, member), "birthday_role_id"
-    )
+    pressed = await press(stored.view, "Put the default back", bot, lead)
 
-    assert (await details(bot.db))[0] == {"key": "birthday_role_id", "via": "discord"}
+    assert not bot.store.is_stored(GUILD, "birthday_role_id")
+    assert await kinds(db) == ["settings.clear"]
+    assert not has_button(pressed.view, "Put the default back")
+
+
+async def test_the_staff_channel_reset_asks_first_and_names_what_stops_working(bot, cog, lead, db):
+    await bot.store.set(GUILD, "staff_channel_id", LOG_CHANNEL)
+
+    card = FakeInteraction(bot, lead)
+    await core_cog.render_key(card, None, key="staff_channel_id")
+    asked = await press(card.view, "Put the default back", bot, lead)
+
+    assert sp.CONFIRM_TITLE in asked.said
+    assert "two protections stop, quietly" in asked.said
+    assert bot.store.is_stored(GUILD, "staff_channel_id")
+    assert await kinds(db) == []
+
+    said_yes = await press(asked.view, "Yes, put the default back", bot, lead)
+
+    assert not bot.store.is_stored(GUILD, "staff_channel_id")
+    assert await kinds(db) == ["settings.clear"]
+    assert not has_button(said_yes.view, "Yes, put the default back")
+
+
+async def test_leaving_it_as_it_is_changes_nothing(bot, cog, lead, db):
+    await bot.store.set(GUILD, "staff_channel_id", LOG_CHANNEL)
+    card = FakeInteraction(bot, lead)
+    await core_cog.render_key(card, None, key="staff_channel_id")
+    asked = await press(card.view, "Put the default back", bot, lead)
+
+    left = await press(asked.view, "Leave it as it is", bot, lead)
+
+    assert bot.store.get(GUILD, "staff_channel_id") == LOG_CHANNEL
+    assert await kinds(db) == []
+    assert has_button(left.view, "Put the default back")
+
+
+# --- the sub-panels -------------------------------------------------------------------------------
+
+
+async def test_how_black_bloc_looks_says_presence_is_not_running_and_draws_no_re_apply(
+    bot, cog, lead
+):
+    root = await open_panel(cog, bot, lead)
+
+    opened = await press(root.view, "How Black Bloc looks…", bot, lead)
+
+    assert sp.PRESENCE_NOT_RUNNING in opened.said
+    assert not has_button(opened.view, "Re-apply presence")
+    assert has_button(opened.view, "The About Me…")
+
+
+async def test_re_apply_presence_runs_the_one_shared_function_and_prints_its_sentence(
+    bot, cog, lead, monkeypatch
+):
+    bot.cogs_by_name["Presence"] = FakePresence(last_ok="2026-09-05T10:00:00+00:00")
+    monkeypatch.setattr(core_cog, "reapply_presence", _fake_reapply)
+    root = await open_panel(cog, bot, lead)
+    looks = await press(root.view, "How Black Bloc looks…", bot, lead)
+    assert "the status loop last succeeded" in looks.said
+
+    pressed = await press(looks.view, "Re-apply presence", bot, lead)
+
+    assert pressed.sent == "the About Me and the status are back"
+
+
+async def _fake_reapply(bot):
+    return "the About Me and the status are back"
+
+
+async def test_panels_and_commands_toggles_the_hiding_switch_and_says_the_sync_takes_a_minute(
+    bot, cog, lead, db
+):
+    root = await open_panel(cog, bot, lead)
+    opened = await press(root.view, "Panels & commands…", bot, lead)
+    assert sp.HIDE_ON_STATE in opened.said
+
+    pressed = await press(opened.view, "Leave every command showing", bot, lead)
+
+    assert bot.store.get(GUILD, sp.HIDE_COMMANDS_WHEN_OFF) is False
+    assert "within about a minute" in pressed.sent
+    assert sp.HIDE_OFF_STATE in pressed.said
+    assert await kinds(db) == ["settings.set"]
+
+
+async def test_the_operator_log_toggle_is_only_drawn_for_manage_server(bot, cog, member, lead):
+    give_staff(bot, member)
+    await bot.store.set(GUILD, sp.CORE_KEYS_ADMIN_ONLY_KEY, False)
+    root = await open_panel(cog, bot, member)
+    plain = await press(root.view, "Panels & commands…", bot, member)
+
+    lead_root = await open_panel(cog, bot, lead)
+    theirs = await press(lead_root.view, "Panels & commands…", bot, lead)
+
+    assert not has_button(plain.view, "Leave operator-token reads unlogged")
+    assert not has_button(plain.view, "Write a line for every operator-token read")
+    assert core_cog.OPERATOR_LOG_IS_FOR_A_LEAD in plain.said
+    assert has_button(theirs.view, "Leave operator-token reads unlogged")
+
+
+async def test_the_panel_minutes_picker_opens_the_same_key_card_the_group_path_does(bot, cog, lead):
+    root = await open_panel(cog, bot, lead)
+    opened = await press(root.view, "Panels & commands…", bot, lead)
+    pick = picker(opened.view, "How long a panel stays open…")
+    assert "settings_panel_minutes — 10 minute(s)" in [one.label for one in pick.options]
+
+    card = FakeInteraction(bot, lead)
+    await choose(pick, card, [sp.PANEL_MINUTES_KEY])
+
+    assert "**settings_panel_minutes**" in card.said
+    assert has_button(card.view, "A number…")
+
+
+async def test_changing_the_panels_own_minutes_says_it_applies_next_time(bot, cog, lead):
+    said = FakeInteraction(bot, lead)
+    await core_cog.run_typed(said, None, sp.PANEL_MINUTES_KEY, "12")
+
+    assert bot.store.get(GUILD, sp.PANEL_MINUTES_KEY) == 12
+    assert sp.PANEL_MINUTES_NEXT_TIME in said.sent
+
+
+async def test_log_levels_offers_only_the_two_levels_a_feature_is_not_on(bot, cog, lead, db):
+    root = await open_panel(cog, bot, lead)
+    opened = await press(root.view, "Log levels…", bot, lead)
+    pick = picker(opened.view, "Which log…")
+
+    card = FakeInteraction(bot, lead)
+    await choose(pick, card, ["chat_log_level"])
+
+    assert labels(card.view) == ["off", "all", "Back"]
+
+    pressed = await press(card.view, "off", bot, lead)
+
+    assert bot.store.get(GUILD, "chat_log_level") == "off"
+    assert await kinds(db) == ["settings.set"]
+    assert labels(pressed.view) == ["important", "all", "Back"]
+
+
+async def test_back_from_a_level_card_returns_to_the_log_levels_picker(bot, cog, lead):
+    root = await open_panel(cog, bot, lead)
+    levels = await press(root.view, "Log levels…", bot, lead)
+    card = FakeInteraction(bot, lead)
+    await choose(picker(levels.view, "Which log…"), card, ["chat_log_level"])
+
+    back = await press(card.view, "Back", bot, lead)
+
+    assert "Which log…" in placeholders(back.view)
+
+
+async def test_back_from_a_key_card_returns_to_its_own_group(bot, cog, lead):
+    card = FakeInteraction(bot, lead)
+    await core_cog.render_key(card, None, key="birthday_color")
+
+    back = await press(card.view, "Back to the group", bot, lead)
+
+    assert back.embed.title == "The birthday settings"
+
+
+async def test_back_from_a_sub_panel_and_refresh_both_put_the_root_up_again(bot, cog, lead):
+    root = await open_panel(cog, bot, lead)
+    opened = await press(root.view, "Panels & commands…", bot, lead)
+
+    went_back = await press(opened.view, "Back", bot, lead)
+    refreshed = await press(root.view, "Refresh", bot, lead)
+
+    assert went_back.embed.title == sp.PANEL_TITLE
+    assert refreshed.embed.title == sp.PANEL_TITLE
+
+
+# --- Logs, and the gates on every move ----------------------------------------------------------
+
+
+async def test_logs_answers_a_new_ephemeral_message_and_leaves_the_panel_where_it_is(
+    bot, cog, lead
+):
+    root = await open_panel(cog, bot, lead)
+
+    pressed = await press(root.view, "Logs", bot, lead)
+
+    assert pressed.edits == []
+    assert pressed.response.messages[-1]["ephemeral"] is True
+    assert pressed.response.messages[-1]["embed"].title.startswith("Core")
+
+
+async def test_logs_still_refuses_a_staffer_who_was_demoted_since_the_panel_opened(
+    bot, cog, member
+):
+    give_staff(bot, member)
+    root = await open_panel(cog, bot, member)
+    take_staff(bot, member)
+
+    pressed = await press(root.view, "Logs", bot, member)
+
+    assert "staff only" in pressed.sent
+
+
+async def test_a_demoted_staffer_cannot_even_open_a_sub_panel(bot, cog, member):
+    give_staff(bot, member)
+    root = await open_panel(cog, bot, member)
+    take_staff(bot, member)
+
+    pressed = await press(root.view, "How Black Bloc looks…", bot, member)
+
+    assert "staff only" in pressed.sent
+    assert pressed.edits == []
+
+
+async def test_a_move_made_while_the_database_is_down_writes_nothing(bot, cog, lead, db):
+    root = await open_panel(cog, bot, lead)
+    await db.close()
+
+    pressed = await press(root.view, "Panels & commands…", bot, lead)
+
+    assert "cannot reach its own database" in pressed.sent
+    assert pressed.edits == []
+    await db.connect()
+
+
+async def test_every_write_the_panel_makes_goes_through_set_key_exactly_once(
+    bot, cog, lead, monkeypatch
+):
+    """Checklist 34 — one door, one write, one row, whatever control was pressed."""
+    seen = []
+
+    async def counted(bot_, guild, key, value, actor, *, via=core_cog.VIA_DISCORD):
+        seen.append((key, value))
+        return await set_key(bot_, guild, key, value, actor, via=via)
+
+    monkeypatch.setattr(core_cog, "set_key", counted)
+    card = FakeInteraction(bot, lead)
+    await core_cog.render_key(card, None, key="golive_embed")
+
+    await press(card.view, "Turn golive_embed off", bot, lead)
+    await core_cog.run_typed(FakeInteraction(bot, lead), None, "birthday_color", "#4eefff")
+
+    assert seen == [("golive_embed", False), ("birthday_color", "#4eefff")]
+
+
+# --- the shared writers ---------------------------------------------------------------------------
 
 
 async def test_set_key_writes_once_logs_once_and_answers_in_words(bot, db, member):
@@ -329,6 +870,13 @@ async def test_set_key_writes_once_logs_once_and_answers_in_words(bot, db, membe
     assert bot.store.get(GUILD, "golive_embed") is False
     assert await kinds(db) == ["settings.set"]
     assert (await details(db))[0] == {"key": "golive_embed", "value": False, "via": "discord"}
+
+
+async def test_set_key_records_the_door_it_was_asked_to(bot, db, member):
+    """The website reuses the same writer, so `via` is a keyword rather than a constant."""
+    await set_key(bot, bot.guild, "golive_embed", False, member, via="website")
+
+    assert (await details(db))[0]["via"] == "website"
 
 
 async def test_set_key_refuses_a_bad_value_in_words_and_writes_nothing(bot, db, member):
@@ -365,6 +913,14 @@ async def test_clear_key_puts_the_default_back_and_leaves_one_row(bot, db, membe
     assert not bot.store.is_stored(GUILD, "birthday_role_id")
     assert await kinds(db) == ["settings.clear"]
     assert (await details(db))[0] == {"key": "birthday_role_id", "via": "discord"}
+
+
+async def test_clear_key_records_the_door_it_was_asked_to(bot, db, member):
+    await bot.store.set(GUILD, "birthday_role_id", CAKE_ROLE)
+
+    await clear_key(bot, bot.guild, "birthday_role_id", member, via="website")
+
+    assert (await details(db))[0]["via"] == "website"
 
 
 async def test_clear_key_on_a_key_with_nothing_stored_says_so_and_logs_nothing(bot, db, member):
@@ -495,7 +1051,7 @@ async def test_help_says_how_many_commands_are_missing_and_how_to_get_them_back(
 
     said = "\n".join(message["content"] for message in interaction.response.messages)
     assert "not listed because their feature is turned off" in said
-    assert "/settings set-value <feature>_mode on" in said
+    assert "`/settings` ▸ **Turn a feature back on…**" in said
 
 
 async def test_help_leaves_the_missing_commands_note_off_a_filtered_list(bot, cog, member):
@@ -573,6 +1129,8 @@ async def test_help_marks_the_staff_commands_the_real_bot_registers(settings):
 
     assert "**/help** — List every command Black Bloc can run" in said
     assert "**/voice** — Your temporary voice channel, and everything you can change" in said
-    assert "/settings show — Show Black Bloc's settings for this server (staff)" in said
+    assert (
+        "**/settings** — Read and change Black Bloc's settings for this server (staff)" in said
+    )
     assert "**/warn** — " in said and "(staff)" in said.split("**/warn** — ")[1].split("\n")[0]
     assert "**/ping** — Check that Black Bloc is alive" in said
