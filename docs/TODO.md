@@ -12,7 +12,7 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-04 20:54, v77 live, PANELS PROGRAM COMPLETE — waves 1–3 all shipped)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 07:08, v78 live, wave 4 in flight: honeypot + modmail A building)
 
 **`main` = `43312b9`** (role-menus panel merge; v77 live 20:51, 4529 tests, **36 commands**; `youtube_mode` is
 **shadow** since 2026-09-03 17:42). **The panels program is COMPLETE** — waves 1, 2 and 3 (17 features, one
@@ -210,27 +210,6 @@ docs bookkeeping lands with the work, not after.
 
 ## 🔧 Open engineering items
 
-- 🆕 **A feature turned OFF on the web portal hides its /command (owner, 2026-09-04 20:45: "Can we expand
-  the app so if we turn a feature off on the web portal the /command is hidden? Like I want to turn off
-  YouTube videos for now. Can we have that make the /youtube command not appear until it turns back on").**
-  Measured 20:45: the mechanism EXISTS — `black_bloc/command_visibility.py` removes a top-level command
-  from the dev guild's tree whenever a key in `HIDDEN_WHEN_OFF` reads `off`, debounced 5 s / re-synced at
-  most once a minute, and it is wired to `store.on_change`, so the portal's Settings page already
-  triggers it (`api/settings_api.py` writes through `store.set`). The table only names `rolemenu_mode` and
-  `request_mode` (the role-menus build deletes the first). **The build:** the table grows to every mode key
-  whose choices include `off` → its top-level command — golive, youtube, pings, tempvoice → `voice`,
-  honeypot, events → `event`, poll, birthday, automod, rolemenu, request, chat, chat_memory → `memory`,
-  raidtrain, applications → `apply` (modmail has no off; `settings`, `help`, `about` never hide);
-  `shadow` is NOT off (youtube is `shadow` today — the owner sets it `off` on the portal and the command
-  goes). Configurable both ways (33): one new bool key `hide_commands_when_off` (default **true**)
-  that the Settings page and `/settings set-value` reach; `hidden_names` reads it. ⚠️ **Trade-off to
-  say out loud:** with a command hidden, staff turn the feature back on from the portal or
-  `/settings set-value <feature>_mode on`, not from the panel — the panels program's P9 "mode-off panel
-  still opens and says so" survives only for the ≤60 s sync lag. `/help` already follows `hidden_names`.
-  Tests: `tests/test_command_visibility.py` (the role-menus build re-pointed it at `request_mode`),
-  `tests/test_settings_store.py`, `labels.js` row, `feature-list.md`, OWNER_GUIDE, a sweeps row, code-notes.
-  **Order: AFTER the role-menus merge (v77)** — that branch edits `command_visibility.py` and its test.
-  Est. 120–180k Opus, one build, then v78.
 - 🆕 **Second slash-command audit — list EVERY `/` command, then propose merges (owner, 2026-09-04
   clock read 20:50 after the asks: "Let's run another audit on all the slash commands and then propose what can be combined to
   minimize commands" · then: "Make sure you output all the / commands in this audit, I want a list
@@ -344,6 +323,17 @@ docs bookkeeping lands with the work, not after.
   ticket card + practice ticket + retire `/areply` `/note` `/close` (270–330k, 35 → 32). Seven forks (§I)
   go to the owner one at a time after `/mod`'s and honeypot's. Usage after landing session 15% / weekly 8% /
   Fable 9%, read 07:02. **All four agents landed; v78 deploy next.**
+  **v78 LIVE 07:05 (`baede2a`)** — hide-when-off shipped; boot verified, live log `35 command(s) in guild; hidden:
+  raidtrain`. Item moved WHOLE to `DONE.md`.
+  **Owner 07:05: "F-M1 yes"** → **F-M1 = (a)** voided cases always listed, struck through. **Owner 07:05: "Do as
+  much in parallel sub agents as possible"** → **DISPATCHED 07:07, two Opus builds in parallel, own worktrees
+  off `932f34e`** (usage at dispatch session 16% / weekly 8% / Fable 9%, read 07:06): (1) **honeypot panel** —
+  forks F-H1/F-H2/F-H3 built on the design's recommendation (all (a)), each reversible in a small local change,
+  owner confirmation pending; sweep rows lettered `H1…`; (2) **modmail Build A** (panel + extractions + kind
+  rename + five route `note()` deletions + `modmail_panel_minutes`; `/snippet` retires, 36 → 35; NO migration,
+  NO sticky card, none of F-M1–F-M8); sweep rows lettered `MA1…`. Next: F-M2 and F-M3 to the owner, then the
+  `/mod` build; modmail Build B (after A merges) carries the migration — takes schema 30 if `/mod` takes 29;
+  its seven forks go to the owner one at a time before it starts.
 - **Wave-1 review findings, small, fold into the next build that touches each file (Fable
   review 2026-09-03 13:50–14:05):** `requests.py` re-renders lack `allowed_mentions`;
   `LOG_LEVEL_COMMANDS` help still says "`/birthday logs`" / "`/request logs`"; five form writes

@@ -9,6 +9,43 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-05 — Hide commands when off: a feature turned off on the portal takes its `/command` with it (v78, `baede2a`)
+
+**Landing:** Opus build in its own worktree (185k), merged `0fcbac2`, conductor's carve-out commit `e00c9bf`,
+deployed v78 07:05 Phoenix. Live proof in the boot log: `35 command(s) in guild; hidden: raidtrain` — the one
+mode that is `off` on the live guild lost its command on the first sync. **14 features hide, not the 15 the
+build first shipped: `/memory` keeps fork I-M1 ("open it", 2026-09-03)** — memory off deletes nothing and the
+site is staff-only, so the panel is a member's only door to notes held about them (KI-14); hiding it would have
+left members no way in. New bool `hide_commands_when_off` (default true) reachable from the Settings page and
+`/settings set-value`; `/help` names how many are hidden and both ways back; one `commands.visibility` row per
+sync naming hidden + shown again. `NEVER_HIDDEN` = settings, help, about, ping. Sweeps 183–187; rows 53, 108,
+130, 174 rewritten. NOT verified at landing: a portal flip re-syncing within 60 s, the dashboard row, the `/help`
+note as rendered. Design: `docs/info/code-notes.md` § *Hide commands when off*.
+
+**The item, moved whole from `TODO.md`:**
+
+- 🆕 **A feature turned OFF on the web portal hides its /command (owner, 2026-09-04 20:45: "Can we expand
+  the app so if we turn a feature off on the web portal the /command is hidden? Like I want to turn off
+  YouTube videos for now. Can we have that make the /youtube command not appear until it turns back on").**
+  Measured 20:45: the mechanism EXISTS — `black_bloc/command_visibility.py` removes a top-level command
+  from the dev guild's tree whenever a key in `HIDDEN_WHEN_OFF` reads `off`, debounced 5 s / re-synced at
+  most once a minute, and it is wired to `store.on_change`, so the portal's Settings page already
+  triggers it (`api/settings_api.py` writes through `store.set`). The table only names `rolemenu_mode` and
+  `request_mode` (the role-menus build deletes the first). **The build:** the table grows to every mode key
+  whose choices include `off` → its top-level command — golive, youtube, pings, tempvoice → `voice`,
+  honeypot, events → `event`, poll, birthday, automod, rolemenu, request, chat, chat_memory → `memory`,
+  raidtrain, applications → `apply` (modmail has no off; `settings`, `help`, `about` never hide);
+  `shadow` is NOT off (youtube is `shadow` today — the owner sets it `off` on the portal and the command
+  goes). Configurable both ways (33): one new bool key `hide_commands_when_off` (default **true**)
+  that the Settings page and `/settings set-value` reach; `hidden_names` reads it. ⚠️ **Trade-off to
+  say out loud:** with a command hidden, staff turn the feature back on from the portal or
+  `/settings set-value <feature>_mode on`, not from the panel — the panels program's P9 "mode-off panel
+  still opens and says so" survives only for the ≤60 s sync lag. `/help` already follows `hidden_names`.
+  Tests: `tests/test_command_visibility.py` (the role-menus build re-pointed it at `request_mode`),
+  `tests/test_settings_store.py`, `labels.js` row, `feature-list.md`, OWNER_GUIDE, a sweeps row, code-notes.
+  **Order: AFTER the role-menus merge (v77)** — that branch edits `command_visibility.py` and its test.
+  Est. 120–180k Opus, one build, then v78.
+
 ## 2026-09-04 — Role menus panel: `/rolemenu` is one window (wave 3 FOURTH and LAST landing, v77, `43312b9`)
 
 Release **v77** (`43312b9`, 20:51; `deploys.log` line 76). Merge `--no-ff` of
