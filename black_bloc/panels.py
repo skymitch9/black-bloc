@@ -105,6 +105,15 @@ def option_label(
     return (prefix + kept)[:limit]
 
 
+def picked_values(picker: Any) -> list[str]:
+    """2.7.1's modal groups answer with `values`; a radio answers with `value`."""
+    values = getattr(picker, "values", None)
+    if values is not None:
+        return [str(one) for one in values]
+    one = getattr(picker, "value", None)
+    return [str(one)] if one else []
+
+
 def clamped(lines: list[str]) -> str:
     found: list[str] = []
     spent = 0
@@ -211,6 +220,7 @@ __all__ = [
     "db_up",
     "option_label",
     "panel_minutes",
+    "picked_values",
     "refusal",
     "retire",
     "site_page_url",

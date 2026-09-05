@@ -780,7 +780,7 @@ practice ticket.
 | 219 | `/modmail` | the panel from rows 200–207 **plus** a new **Try a fake ticket** button on the first row. With no staff role resolving it is absent, and the embed says why |
 | 220 | **Try a fake ticket** | it asks first: *"Black Bloc makes a private thread for you… nobody is DMed"* over **Yes, open one · No**. **No** opens nothing at all |
 | 221 | **Yes, open one** | a **private thread on the test channel** appears with the header card, a line saying it is practice, and under it the staff card: **Reply · Reply as Staff · Private note · Close… · Speak as the member · End the practice** |
-| 222 | **Speak as the member** → "hello?" three times quickly | the message appears each time and the card **moves to the bottom once**, not three times (2-second debounce, 8-second floor). ⚠️ The old card is deleted, so the thread has exactly one |
+| 222 | **Speak as the member** → "hello?" three times quickly | the message appears each time and the card **moves to the bottom once**, not three times (2-second debounce, 8-second floor). ⚠️ The old card is deleted, so the thread has exactly one. ⚠️ **This row is the only measurement of the debounce there has ever been** — `CARD_DEBOUNCE_SECONDS` (2.0) and `CARD_MIN_GAP_SECONDS` (8.0) were reasoned from Discord's documented per-channel buckets and have never met a real channel: time on a stopwatch **how many seconds pass between your last "hello?" and the card reappearing at the bottom**, write that number here, and say whether the card ever double-posted or the bot visibly stalled; a gap much over 2 s (or any second card) is the signal to change the constants |
 | 223 | **Reply** → type text; **Reply** again → pick the snippet AND add a line; then **Reply as Staff** | all three land in the thread as *Sent to the member* embeds; the anonymous one says **Staff** and carries no role colour; the snippet one reads *snippet, blank line, your words* — byte-identical to `/reply text: snippet:`. ⚠️ **No DM reaches anybody and there is NO `modmail.dm_failed`** — it is practice, and a suppressed DM is not a failed one |
 | 224 | **Private note** → some text | a *Private note* embed in the thread, **one** `modmail.note` row in the Logs (`/note` never wrote one at all), and no DM |
 | 225 | `/modmail` → **Setup…** | a new **Reply style…** button and a **reply style — both** line. Pick **typing**; the reply says *"anything staff type in a ticket goes to the member"*. In the practice thread type `hello` as yourself, then `=this is private`: the plain line relays as a *Sent to the member* embed with a ✅, the `=` line does not and gets 📝 |
@@ -816,6 +816,26 @@ whole `/presence` group are gone, and the top-level count drops **30 → 29 with
 | 242 | **Log levels…** → **Chat** → the two buttons; then **Logs**; then leave the panel `settings_panel_minutes` (10) minutes | the level card offers only the two levels it is **not** on (never three with one greyed out), and the key's help text now says *and in `/chat` ▸ **Logs*** rather than naming a retired `logs` subcommand; **Logs** answers a **NEW** ephemeral message and the panel stays where it is; after ten minutes every control greys out and the footer reads *This panel has gone quiet — run /settings again* |
 | 243 | dashboard → **Settings** → the **core** group | two rows at the bottom of it: **How long the /settings panel stays live** (10) and **Whether only a Lead may re-point the staff and log channels** (true). ⚠️ They must be under **core**, not under a group called `settings` — that is what `CORE_KEYS` is for (Build 1, v83) |
 | 244 | set **How long the /settings panel stays live** to `0`, then to `10` again | `0` is refused in words by the same validator every other panel-minutes key uses, and nothing is saved. The Discord door onto the same key is `/settings` ▸ **Panels & commands…** ▸ **How long a panel stays open…** (Build 2, v84) |
+
+## Modmail leftovers — the ticket card ON the panel (wave 4 follow-up)
+
+Written as `ML1`–`ML7` and numbered by the conductor at the merge, after 244. Built
+2026-09-05 on `worktree-agent-ad2fc0f5aad473c19`; ⚠️ **NOT merged and NOT deployed as this is
+written, and nothing below has met live Discord.** The design is
+[`../info/modmail-panel-design.md`](../info/modmail-panel-design.md) §B row S5 and §C *"The ticket
+card ON THE PANEL"*. Everything here is a second door onto moves rows 219–230 already cover from
+the card in the channel — the point of walking it is that the SAME move, pressed here, leaves the
+same one row and the same one DM.
+
+| # | Do this | Expect |
+|---|---|---|
+| ML1 | `/modmail` with **no** ticket open, then DM the bot from a second account and run `/modmail` again | the first panel has no picker at all; the second carries **A ticket…** on its own row above **Setup…**, reading `#N · channel · <their name>` with the date it opened underneath |
+| ML2 | pick the ticket on **A ticket…** | the panel becomes that ticket's card — the **same** embed the sticky card in the test channel carries (number, who, when, mode, the in/out/note counts, and the blocked line if they are blocked) — over **Reply · Reply as Staff · Private note · Close… · Back** |
+| ML3 | **Reply** → type something; then **Reply as Staff** | both DM the member for real (test mode does not stop a DM), both leave **one** `modmail.reply` row on the Logs page, the anonymous one says **Staff** and carries no role colour, and the panel redraws the card with the counts one higher each time |
+| ML4 | **Private note** → some text | one *Private note* embed in the ticket, **one** `modmail.note` row, **no** DM, and the card's note count goes up |
+| ML5 | **Back** | the inbox again, with **A ticket…** still on it |
+| ML6 | **Close…** with a reason | the member is DM'd, the transcript is filed, the channel goes — and the panel is left showing the card with **only Back** on it and a footer saying the ticket is closed. Press **Back**: the ticket is gone from **A ticket…** |
+| ML7 | with **26** tickets open (or just read the picker with more than 25), and separately: pick a ticket, have somebody else close it, then press **Close…** | the picker shows 25 options and its placeholder reads **25 of 26 — the rest are on the site**; the raced close answers *"was closed by somebody else while you were typing"* in words and never a bare error. ⚠️ A `modmail.card_failed` row on the Logs page is now also written when the sticky card's own background move **raises** — before this it was a log line nobody could see |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that
