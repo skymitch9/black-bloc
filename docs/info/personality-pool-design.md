@@ -206,7 +206,7 @@ ages,"). A slot the bot does not fill is a test failure, not an empty string.
 
 | # | Fork | Recommend |
 |---|---|---|
-| F-P1 | Canonical home: (a) `catalog-platform/apps/discord-worker/src/personality-pool.json` — the origin, already locked there, public repo so the roster is readable by anyone who can read GABI; (b) a new estate-level repo/package | **(a)** |
+| F-P1 | Canonical home: (a) `catalog-platform/apps/discord-worker/src/personality-pool.json` — the origin, already locked there, public repo so the roster is readable by anyone who can read GABI; (b) a new estate-level repo/package | **(a)** — ✅ **owner chose (a)** 2026-09-05 16:41 |
 | F-P2 | Boot sync rewrites `voice`/`neighbours`/`label` of untouched `gabi` rows (a) or only ever inserts missing names, as today (b) | **(a)** — otherwise a graph change never reaches a running bot, which is the silent drift this exists to kill; staff's `enabled` is untouched either way |
 | F-P3 | A trope removed from the manifest is retired-but-kept (a) or deleted (b) | **(a)** — staff final say, and nothing is a terminal state |
 
