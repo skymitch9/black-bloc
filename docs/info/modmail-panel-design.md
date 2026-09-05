@@ -884,7 +884,8 @@ file's last row and starts after it. The Phase 7 block at `:239–247` is rewrit
     invisible confirmation under test mode, and one more branch in the one function every reply goes
     through.
 
-- **F-M4 — the practice ticket's transcript.**
+- ✅ **F-M4 — ANSWERED (a) by the owner 2026-09-05 ("A"): file it, marked PRACTICE.**
+  Original question — the practice ticket's transcript.
   - **(a) File it, marked PRACTICE** in the embed title, the filename
     (`modmail-practice-ticket-N.txt`) and the transcript header. The close path is a third of this
     feature's risk and practice that skips it has not practised it; under test mode the transcripts

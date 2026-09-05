@@ -12,7 +12,7 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 09:06, /mod merged + v81 LIVE, nothing building, modmail B forks 1–2 = (a), fork 3 of 7 (F-M4) open with the owner)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 09:06, /mod merged + v81 LIVE, nothing building, modmail B forks 1–3 = (a), fork 4 of 7 (F-M5) open with the owner)
 
 **`main` = `43312b9`** (role-menus panel merge; v77 live 20:51, 4529 tests, **36 commands**; `youtube_mode` is
 **shadow** since 2026-09-03 17:42). **The panels program is COMPLETE** — waves 1, 2 and 3 (17 features, one
@@ -344,7 +344,8 @@ docs bookkeeping lands with the work, not after.
   `/areply` `/note` `/close` retire) — B dispatches once forks 1–7 are answered. Usage
   after landing session 42% / weekly 14% / Fable 13%, read 07:54.
   **Forks, one at a time (owner 2026-09-05 09:06):** F-M1 card-jump = **(a) every write** ✅; F-M3 typed-reply
-  echo = **(a) unchanged** ✅. Open next, in order: F-M4 practice transcript (rec. a) → F-M5 `/reply` keeps `ticket:`
+  echo = **(a) unchanged** ✅; F-M4 practice transcript = **(a) filed, marked PRACTICE** ✅. Open next, in
+  order: F-M5 `/reply` keeps `ticket:`
   (rec. a) → F-M6 real tickets not claimed (rec. a) → F-M7 snippet combines in one modal (rec. a) → F-M8
   Reply as Staff stays a button (rec. a). Each fork gets a push notification (global rule, same day).
   **LANDED 08:00 (429k Opus): the `/mod` cases panel** — reviewed sound (atomic void/restore with a 409 each way,
