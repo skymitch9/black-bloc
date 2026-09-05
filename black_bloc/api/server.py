@@ -10,7 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from .. import __version__
-from . import auth, costs, ref, settings_api, status
+from . import auth, costs, ref, selftest_api, settings_api, status
 from .assets import NO_STORE, SiteFiles, build_id
 from .auth import Refused, refused_handler, validation_handler
 from .status import latency_ms
@@ -163,6 +163,7 @@ def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
     app.include_router(requests.build_router(bot))
     app.include_router(raidtrain.build_router(bot))
     app.include_router(applications.build_router(bot))
+    app.include_router(selftest_api.build_router(bot))
 
     root = Path(bot.settings.site_root)
     if root.is_dir():

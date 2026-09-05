@@ -424,13 +424,12 @@ async def run_one(one: Run, check: Check) -> Result:
     return Result(check.name, check.feature, True, str(detail), at)
 
 
-async def run(bot: Any, guild: Any, *, actor: Any = None, via: str = VIA_DISCORD) -> Run:
-    """The one body all three doors call: every check runs, nothing stops on a failure."""
+async def begin(bot: Any, guild: Any, *, actor: Any = None, via: str = VIA_DISCORD) -> Run:
+    """The row and the `started` line, so the website's door has a run_id to answer with."""
     found = running(bot, guild.id)
     if found is not None:
         raise SelfTestBusy(busy_sentence(found))
-    checks = checks_for(bot)
-    one = Run(bot=bot, guild=guild, actor=actor, via=via, total=len(checks))
+    one = Run(bot=bot, guild=guild, actor=actor, via=via, total=len(checks_for(bot)))
     _mark(bot, guild.id, one)
     try:
         one.run_id = await open_run(bot.db, one)
@@ -439,28 +438,42 @@ async def run(bot: Any, guild: Any, *, actor: Any = None, via: str = VIA_DISCORD
             guild,
             kind_via(SELFTEST_STARTED, via),
             actor=actor,
-            details={"run_id": one.run_id, "checks": len(checks), "via": via},
+            details={"run_id": one.run_id, "checks": one.total, "via": via},
         )
-        for check in checks:
+    except Exception:
+        _mark(bot, guild.id, None)
+        raise
+    return one
+
+
+async def finish(one: Run) -> Run:
+    """Every check runs; nothing stops on a failure, and the flag clears whatever happens."""
+    try:
+        for check in checks_for(one.bot):
             await record(one, await run_one(one, check))
         one.finished_at = datetime.now(UTC)
-        await close_run(bot.db, one)
+        await close_run(one.bot.db, one)
         await log_action(
-            bot,
-            guild,
-            kind_via(SELFTEST_FINISHED, via),
-            actor=actor,
+            one.bot,
+            one.guild,
+            kind_via(SELFTEST_FINISHED, one.via),
+            actor=one.actor,
             details={
                 "run_id": one.run_id,
                 "ok": one.ok,
                 "failed": one.failed,
                 "posted": one.posted,
-                "via": via,
+                "via": one.via,
             },
         )
     finally:
-        _mark(bot, guild.id, None)
+        _mark(one.bot, one.guild.id, None)
     return one
+
+
+async def run(bot: Any, guild: Any, *, actor: Any = None, via: str = VIA_DISCORD) -> Run:
+    """The body the boot and Discord doors call and wait for; the website starts it and lets go."""
+    return await finish(await begin(bot, guild, actor=actor, via=via))
 
 
 async def on_boot(bot: Any) -> None:
@@ -601,12 +614,14 @@ __all__ = [
     "Result",
     "Run",
     "SelfTestBusy",
+    "begin",
     "boot_lines",
     "busy_sentence",
     "checks_for",
     "checks_of",
     "config_checks",
     "failures_of",
+    "finish",
     "on_boot",
     "one_run",
     "purge",

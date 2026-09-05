@@ -170,6 +170,10 @@ class WebChannel:
     async def delete(self, reason: str | None = None) -> None:
         self.deleted = True
 
+    async def delete_messages(self, messages: Any) -> None:
+        wanted = {getattr(one, "id", one) for one in messages}
+        self.messages = [m for m in self.messages if m.id not in wanted]
+
     async def edit(self, **kwargs: Any) -> None:
         if self.edit_raises is not None:
             raise self.edit_raises
