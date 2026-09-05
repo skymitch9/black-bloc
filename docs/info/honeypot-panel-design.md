@@ -715,7 +715,7 @@ builds it from `panels.py:123`). The report names both, plus the `H1`–`H12` ro
 > sync, no panel opened, no trap created, nothing deployed.
 
 **The three forks, as BUILT** (decided by the conductor on this document's recommendation;
-owner confirmation pending — each reverses in one place):
+confirmed as built by the conductor 2026-09-05 12:04 under the owner's "keep going with queue, don't wait for me" — each reverses in one place if he later wants it):
 
 - **F-H1 = (a)** — a `RoleSelect` at `min_values=0` whose selection IS the exempt list, PLUS an
   **Exempt nobody** button that renders only when the stored list is non-empty. **To reverse to

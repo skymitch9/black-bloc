@@ -1,7 +1,7 @@
 # Settings — `/settings` is ONE command that opens the cross-cutting panel (wave 4)
 
 > **Audience:** the build agent and the reviewer, and the owner for §I. **Status:** TRACKED ·
-> **PLANNING — unbuilt.** This is the LAST panel of the program: it retires the last two
+> **BUILDING — Build 1 dispatched 2026-09-05 12:04 (forks F-S1–F-S5 all (a), decided by the conductor on this document's recommendation under the owner's "don't wait for me"; ⚠️ keyed against `0304c4d` — `main` is at tree 30 / schema 30 now, the build re-measures).** This is the LAST panel of the program: it retires the last two
 > `app_commands.Group`s in the tree.
 > **Last verified: 2026-09-05** — every `path:line` below was READ against `main` at
 > **`0304c4d`** ("TODO: F-M2/F-M3 = (a); /mod build dispatched"), in

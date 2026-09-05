@@ -9,6 +9,24 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-05 — Second slash-command audit: every command listed, six merge proposals decided one at a time
+
+Moved WHOLE from `TODO.md` 12:04. The audit ran in the main loop 2026-09-04 20:50–2026-09-05 06:46; its six
+proposals (`/case`+`/cases` → `/mod`; honeypot → one; `/modmail` panel; the ticket card; presence into
+`/settings`; `/settings` panel) were each decided by the owner and their records live in the modmail-panel entry
+below (Proposals 1–6) and the `/mod` entry. Everything it proposed is shipped except `/settings`, which is its own
+`TODO.md` item now.
+
+- 🆕 **Second slash-command audit — list EVERY `/` command, then propose merges (owner, 2026-09-04
+  clock read 20:50 after the asks: "Let's run another audit on all the slash commands and then propose what can be combined to
+  minimize commands" · then: "Make sure you output all the / commands in this audit, I want a list
+  of all of them").** Fable, main loop, no agent: build the real tree the way
+  `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits` does (`BlackBlocBot` +
+  `COGS`), walk `tree.get_commands()` INCLUDING every Group's children, and the report carries the
+  complete list — 36 top-level (pinned in `tests/test_bot.py`) and every subcommand — before any
+  proposal. Then propose merges one decision at a time (owner rule), with a count of how many
+  remain. Candidates already named by the owner, below; the audit adds the rest.
+
 ## 2026-09-05 — Modmail panel, both halves: `/modmail` is one command (Build A, v80) and every ticket carries a sticky staff card (Build B, v82, `f42a591`)
 
 Moved WHOLE from `TODO.md` at the Build B landing (10:27). Build A on `worktree-agent-afdd9e23bbaf59be8`

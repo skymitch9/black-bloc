@@ -12,7 +12,7 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 10:27, modmail Build B merged + v82 LIVE, nothing building; next = honeypot F-H1–F-H3 confirmations then `/settings` forks F-S1–F-S5, one at a time)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 12:04, v82 LIVE, honeypot forks confirmed + settings forks all (a) by the conductor under "don't wait for me"; `/settings` Build 1 dispatching — the only thing in flight)
 
 **`main` = `43312b9`** (role-menus panel merge; v77 live 20:51, 4529 tests, **36 commands**; `youtube_mode` is
 **shadow** since 2026-09-03 17:42). **The panels program is COMPLETE** — waves 1, 2 and 3 (17 features, one
@@ -210,15 +210,26 @@ docs bookkeeping lands with the work, not after.
 
 ## 🔧 Open engineering items
 
-- 🆕 **Second slash-command audit — list EVERY `/` command, then propose merges (owner, 2026-09-04
-  clock read 20:50 after the asks: "Let's run another audit on all the slash commands and then propose what can be combined to
-  minimize commands" · then: "Make sure you output all the / commands in this audit, I want a list
-  of all of them").** Fable, main loop, no agent: build the real tree the way
-  `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits` does (`BlackBlocBot` +
-  `COGS`), walk `tree.get_commands()` INCLUDING every Group's children, and the report carries the
-  complete list — 36 top-level (pinned in `tests/test_bot.py`) and every subcommand — before any
-  proposal. Then propose merges one decision at a time (owner rule), with a count of how many
-  remain. Candidates already named by the owner, below; the audit adds the rest.
+- 🆕 **`/settings` panel — the LAST panel, retires the last two Groups (owner, 2026-09-05 06:46 "Okay ship both with
+  your suggestions"; design `info/settings-panel-design.md`, landed 07:34, keyed against `0304c4d`).** End state
+  **29 slots, ZERO groups**: the `settings` Group and its five subcommands (`show`, `set-value`, `set-channel`,
+  `set-role`, `clear`) become one staff-only panel; the `presence` Group folds in as `How Black Bloc looks…`.
+  Est. 380–450k Opus, SPLIT: Build 1 = `black_bloc/settings_panel.py` + tests, the `namespace_of` move,
+  `set_key`/`clear_key`/`reapply_presence`, the two registry keys (150–190k); Build 2 = the panel, the `/presence`
+  retirement, `tests/cogs/test_core.py`'s settings half, the string + doc sweep (230–280k), off Build 1's merge.
+  **Forks F-S1–F-S5 DECIDED by the conductor on the design's recommendation, all (a), 2026-09-05 12:04, under the
+  owner's standing order (10:31: "Keep going with queue don't wait for me")** — each reverses in one place, the
+  owner may reverse any of them by eye: F-S1 `set-value` does NOT survive (all five go in one commit); F-S2
+  `Put the default back` confirms on `staff_channel_id` only; F-S3 the four core channel/role keys +
+  `operator_read_log` need `manage_guild`, behind new bool `settings_core_keys_admin_only` (default true);
+  F-S4 presence lives on `/settings`, `presence` Group retires; F-S5 a `Log levels…` sub-panel over the 17
+  `<feature>_log_level` keys. The design's five REPORTED defects fold into the build (no subcommand checks the db;
+  `sweeps.md` row 16 names a `/settings logs` that never existed; code-notes says the clearable list is 11 — it is 34;
+  `LOG_LEVEL_COMMANDS` wrong in 11 of 13 rows; `namespace_of`'s six singleton groups — report, one rename pass of
+  its own). ⚠️ The design was keyed against `0304c4d` (tree 36); `main` is now `cad3bbc` (tree **30**, schema 30,
+  4739 tests, sweeps to 230) — the build re-measures every `path:line` and pins **29**, not the doc's numbers.
+  **Honeypot forks F-H1/F-H2/F-H3 (built as (a) at v79, "owner confirmation pending") are CONFIRMED as built by
+  the conductor under the same order, 12:04** — the reversal recipe stays in `info/honeypot-panel-design.md` §K.
 - 🔧 **Modmail leftovers after Build B (handed over at the v82 landing, 2026-09-05):** (1) **the panel-side `A ticket…`
   select / ticket card** in the `/modmail` panel (`docs/info/modmail-panel-design.md` §B S5, §C) is UNBUILT — it fell between
   Build A and Build B; a small Opus follow-up (est. 80–120k) once `/settings` lands; (2) `picked_values` has two copies
