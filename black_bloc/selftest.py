@@ -56,6 +56,13 @@ NO_RUN = (
     "Black Bloc has no self-test run numbered {run_id} for this server, so there was nothing to "
     "purge. Open the Health page to see the runs it does have."
 )
+RUNNER_CHECK = "the self-test itself"
+RUNNER_FAILED = (
+    "The self-test stopped part way through — {detail}. That is a fault in the test rather than "
+    "in what it was testing: whatever it had already checked is recorded above, the rest was "
+    "never run, and any cards it had posted are still deleted on time. Run it again, and tell a "
+    "Lead if it stops in the same place twice."
+)
 
 
 class SelfTestBusy(RuntimeError):
@@ -385,14 +392,12 @@ async def checks_of(db: Any, guild_id: int, run_id: int) -> list[dict[str, Any]]
     """The check rows come back out of the action log — one write, one row (checklist 34)."""
     cur = await db.conn.execute(
         "SELECT at, kind, details FROM action_log WHERE guild_id = ? AND kind IN (?, ?) "
-        "ORDER BY id",
-        (int(guild_id), SELFTEST_CHECK, f"web.{SELFTEST_CHECK}"),
+        "AND json_extract(details, '$.run_id') = ? ORDER BY id",
+        (int(guild_id), SELFTEST_CHECK, f"web.{SELFTEST_CHECK}", int(run_id)),
     )
     found: list[dict[str, Any]] = []
     for row in await cur.fetchall():
         details = as_details(row["details"]) or {}
-        if int(details.get("run_id") or 0) != int(run_id):
-            continue
         found.append(
             {
                 "name": str(details.get("name") or ""),
@@ -501,9 +506,48 @@ async def finish(one: Run) -> Run:
     return one
 
 
+async def close_after_crash(one: Run, detail: str) -> Run:
+    """A runner that raises still owes a finished row, a closed run and a sentence saying why."""
+    at = datetime.now(UTC)
+    said = RUNNER_FAILED.format(detail=detail)
+    result = Result(RUNNER_CHECK, SELFTEST, False, said, at.isoformat())
+    one.finished_at = at
+    try:
+        await record(one, result)
+        await close_run(one.bot.db, one)
+        await log_action(
+            one.bot,
+            one.guild,
+            kind_via(SELFTEST_FINISHED, one.via),
+            actor=one.actor,
+            details={
+                "run_id": one.run_id,
+                "ok": one.ok,
+                "failed": one.failed,
+                "posted": one.posted,
+                "detail": result.detail,
+                "via": one.via,
+            },
+        )
+    except Exception:
+        log.warning("selftest: run %s could not be closed after it failed", one.run_id)
+    finally:
+        _mark(one.bot, one.guild.id, None)
+    return one
+
+
+async def finish_quietly(one: Run) -> Run:
+    """Nothing awaits the website's run, so the runner failing is a recorded run, not a warning."""
+    try:
+        return await finish(one)
+    except Exception as exc:
+        log.warning("selftest: the run itself failed", exc_info=True)
+        return await close_after_crash(one, f"{type(exc).__name__}: {exc}")
+
+
 async def run(bot: Any, guild: Any, *, actor: Any = None, via: str = VIA_DISCORD) -> Run:
     """The body the boot and Discord doors call and wait for; the website starts it and lets go."""
-    return await finish(await begin(bot, guild, actor=actor, via=via))
+    return await finish_quietly(await begin(bot, guild, actor=actor, via=via))
 
 
 async def on_boot(bot: Any) -> None:
@@ -639,6 +683,8 @@ __all__ = [
     "CHECKS",
     "NO_CHANNEL",
     "NO_RUN",
+    "RUNNER_CHECK",
+    "RUNNER_FAILED",
     "Check",
     "CheckFailed",
     "Result",
@@ -649,9 +695,11 @@ __all__ = [
     "busy_sentence",
     "checks_for",
     "checks_of",
+    "close_after_crash",
     "config_checks",
     "failures_of",
     "finish",
+    "finish_quietly",
     "on_boot",
     "one_run",
     "purge",

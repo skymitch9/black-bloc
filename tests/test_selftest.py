@@ -1,3 +1,4 @@
+import inspect
 import json
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -340,6 +341,64 @@ async def test_the_checks_come_back_out_of_the_log_not_a_table_of_their_own(bot,
     assert [row["name"] for row in await selftest.failures_of(bot.db, GUILD, one.run_id)] == [
         "read.two"
     ]
+
+
+class BrokenRegistry:
+    """`len()` answers, so the run opens; iterating is what falls over, the way a real one would."""
+
+    def __len__(self):
+        return 3
+
+    def __iter__(self):
+        raise RuntimeError("the check registry fell over")
+
+
+async def test_a_runner_that_falls_over_closes_its_own_run_and_says_why(bot, monkeypatch):
+    """Nothing awaits the website's task, so a runner that RAISES has to record itself."""
+    monkeypatch.setattr(selftest, "checks_for", lambda _bot: BrokenRegistry())
+
+    one = await selftest.run(bot, bot.guild)
+
+    assert (one.ok, one.failed) == (0, 1)
+    assert one.failures[0].name == selftest.RUNNER_CHECK
+    assert "the check registry fell over" in one.failures[0].detail
+    assert "stopped part way through" in one.failures[0].detail
+    assert selftest.running(bot, GUILD) is None
+
+    rows = await selftest.recent_runs(bot.db, GUILD)
+    assert rows[0]["finished_at"] and (rows[0]["ok"], rows[0]["failed"]) == (0, 1)
+    kinds = [kind for kind, _ in await kinds_in(bot.db)]
+    assert kinds == ["selftest.started", "selftest.check", "selftest.finished"]
+    found = await selftest.checks_of(bot.db, GUILD, one.run_id)
+    assert [row["name"] for row in found] == [selftest.RUNNER_CHECK]
+    assert found[0]["ok"] is False
+
+
+async def test_the_website_door_starts_the_run_through_the_wrapper_that_records_a_crash():
+    from black_bloc.api import selftest_api
+
+    assert "finish_quietly" in inspect.getsource(selftest_api.build_router)
+
+
+async def test_one_runs_check_rows_are_picked_out_in_sql_not_in_python(bot, monkeypatch):
+    """The Python filter grew one run's worth of rows per run; the WHERE clause does not."""
+    async def yes(_one):
+        return "fine"
+
+    monkeypatch.setattr(selftest, "checks_for", only(selftest.Check("config.one", "core", yes)))
+
+    first = await selftest.run(bot, bot.guild)
+    second = await selftest.run(bot, bot.guild)
+    await bot.db.conn.execute(
+        "INSERT INTO action_log(guild_id, at, kind, details) VALUES (?, ?, ?, ?)",
+        (GUILD, datetime.now(UTC).isoformat(), "selftest.check", None),
+    )
+    await bot.db.conn.commit()
+
+    assert len(await selftest.checks_of(bot.db, GUILD, first.run_id)) == 1
+    assert len(await selftest.checks_of(bot.db, GUILD, second.run_id)) == 1
+    assert await selftest.checks_of(bot.db, GUILD, 9999) == []
+    assert "json_extract" in inspect.getsource(selftest.checks_of)
 
 
 async def test_a_second_start_refuses_in_words_and_never_with_a_bare_status(bot, monkeypatch):
