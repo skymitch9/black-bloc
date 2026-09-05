@@ -907,7 +907,8 @@ file's last row and starts after it. The Phase 7 block at `:239–247` is rewrit
     until then the card's `Reply` button is the door (it works, because the card lands in the test
     channel and a component there is allowed). Cleaner command, a feature that is half-usable today.
 
-- **F-M6 — do REAL ticket channels get claimed with `guard.own_channel`?**
+- ✅ **F-M6 — ANSWERED (a) by the owner 2026-09-05 ("A"): real tickets are NOT claimed; only the
+  practice thread is.** Original question — do REAL ticket channels get claimed with `guard.own_channel`?
   - **(a) No.** Only the practice thread is claimed. Real tickets keep today's redirect into the
     test channel, which is what `sweeps.md:241–243` expects and what every existing modmail test
     asserts. **Recommended** — widening where the bot may speak is access-increasing and is not made
