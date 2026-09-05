@@ -465,6 +465,7 @@ async def finish(one: Run) -> Run:
             await record(one, await run_one(one, check))
         one.finished_at = datetime.now(UTC)
         await close_run(one.bot.db, one)
+        _mark(one.bot, one.guild.id, None)
         await log_action(
             one.bot,
             one.guild,
