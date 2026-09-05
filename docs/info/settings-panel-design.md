@@ -1,7 +1,7 @@
 # Settings — `/settings` is ONE command that opens the cross-cutting panel (wave 4)
 
 > **Audience:** the build agent and the reviewer, and the owner for §I. **Status:** TRACKED ·
-> **BUILDING — Build 1 dispatched 2026-09-05 12:04 (forks F-S1–F-S5 all (a), decided by the conductor on this document's recommendation under the owner's "don't wait for me"; ⚠️ keyed against `0304c4d` — `main` is at tree 30 / schema 30 now, the build re-measures).** This is the LAST panel of the program: it retires the last two
+> **BUILD 1 BUILT (not merged, not deployed) on `worktree-agent-a3e6ccbead5a90537`, 2026-09-05 — see [Build 1 deviations](#build-1-deviations--what-the-build-did-differently-and-why) at the foot, which carries the RE-MEASURED numbers; Build 2 not started.** Forks F-S1–F-S5 all (a), decided by the conductor on this document's recommendation under the owner's "don't wait for me". ⚠️ **Everything above the deviations foot was keyed against `0304c4d` and its counts are STALE** — the registry is **179** keys, not 175, and `tests/test_bot.py` pins **30** top-level, not 36. This is the LAST panel of the program: it retires the last two
 > `app_commands.Group`s in the tree.
 > **Last verified: 2026-09-05** — every `path:line` below was READ against `main` at
 > **`0304c4d`** ("TODO: F-M2/F-M3 = (a); /mod build dispatched"), in
@@ -879,3 +879,138 @@ standing rule that **`git stash` is never run in a shared tree**.
 ⚠️ **Dispatch this AFTER all three wave-4 branches have merged, not beside them.** It retires
 the last `Group` in the tree, its `tests/test_bot.py:179` assertion must be written against a
 settled number, and two of its string sites are inside files those branches own.
+
+---
+
+## Build 1 deviations — what the build did differently, and why
+
+> Written by the Build 1 agent on `worktree-agent-a3e6ccbead5a90537`, off `main` at `34331ec`,
+> 2026-09-05. **Status: BUILT, not merged, not deployed.** `pytest` **4973 passed** (4739 on
+> `main` before, +234), `ruff check .` clean, `node site/mock/check.mjs` **17 pages / 146
+> routes** — unchanged before and after — and `node --input-type=module --check` clean on
+> `site/public/assets/labels.js`. ⚠️ **Nothing has met live Discord** — no boot, no token, no
+> sync, no panel opened, nothing deployed. Build 1 retires nothing: the `settings` and
+> `presence` Groups and all six leaf subcommands still exist, and the top-level count is
+> **30, unchanged and measured** through
+> `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`.
+
+### ⚠️ The document's numbers were stale; these are the measured ones
+
+| The design says | Measured on `34331ec` | Consequence |
+|---|---|---|
+| registry holds **175 keys** | **179** before this build, **181** after | every "175" in §§A–J is four low; `/mod` and modmail Build B each added keys after the doc was keyed |
+| `tests/test_bot.py:179` asserts **36** top-level | the assertion is **30** and this build does not touch it | the header's arithmetic table is spent; Build 2 pins **29** off 30, not off 36 |
+| `settings_store.py` is **1782** lines, `sweeps.md` last row **187** | **1844** and **230** | every `path:line` in the design was re-read by anchor, not trusted |
+| 22 namespaces, `chat` the only one over 25 | **both confirmed**, and the six singleton groups (`event`, `voice`, `memory`, `hide`, `emoji`, `cost`) are real | §J defect 1 stands, unfixed |
+| no `KEY_CHOICES` entry exceeds 25 | **confirmed** — the largest is `chat_personality` at 13 | the `enum` select never caps |
+| 14 `*_panel_minutes` keys | **17**, and **18** with `settings_panel_minutes` | still one select, still under 25 |
+
+### The deviations, numbered
+
+1. **`clear_key` returns an `Outcome`, not a bare `bool`** (§F's table says `cleared: bool`).
+   Both writers then have ONE shape, and a refusal gets words: an unknown key (400) and a key
+   with nothing stored (409) are different answers and a bool can say neither. The bool survives
+   as `Outcome.value`.
+2. **`SettingsStore.is_stored(guild_id, key)` is NEW, and the design did not name it.** §C draws
+   `Put the default back` only when `store.clear` would return `True`, and there was no way to
+   ask that without doing it — `get()` answers with the default when no row exists, so a row
+   written *at* its default is invisible to a value comparison. It is a read; nothing inside
+   `set` / `clear` / `default` / `coerce_value` / `parse_value` moved, so §J's "not in this
+   build" list is respected.
+3. **`settings_api`'s own `CORE = "core"` was deleted** and `logkinds.CORE` imported in its place,
+   in the same commit as the `namespace_of` move. Two spellings of one string in two modules is
+   checklist 15, and the move would otherwise have left `namespace_of` reading one and `grouped`
+   the other.
+4. **The re-exports use the redundant-alias spelling** (`from ..settings_store import CORE_KEYS as
+   CORE_KEYS`). `tests/api/test_settings_api.py` imports `CORE_KEYS` from `settings_api` and had
+   to stay byte-identical; a plain import would have been ruff F401. It is, and it is green.
+5. **`set_key`'s `details` is `{key, value, via}` for every type**, where the three bare copies
+   wrote `{key, channel_id}`, `{key, role_id}` and `{key, value}`, and the `target=channel`
+   argument is gone. Measured before unifying: nothing in the repo reads `channel_id` or
+   `role_id` out of a `settings.set` row. One function cannot serve eleven control types with
+   three detail shapes.
+6. **`reapply_presence` resolves the cog itself** and returns `None` when it is absent, rather
+   than the caller doing `bot.get_cog`. That is what keeps ONE implementation — `presence_apply`
+   now calls it, so the surviving command and Build 2's button cannot drift. ⚠️ It cost two
+   lines in `tests/cogs/test_presence.py`: `FakeBot` gained a `get_cog` and the `cog` fixture
+   registers itself. **No assertion changed**, which is still the proof the loop and the
+   listeners did not move.
+7. **Seven tests for `set_key`/`clear_key` were added to `tests/cogs/test_core.py`**, which the
+   brief listed under Build 2. The tests-mirror rule leaves nowhere else for them, and a shared
+   writer with no test is half-built. Nothing existing in that file was edited — the settings
+   half and the whole `/help` half are untouched, which is what Build 2 needs.
+8. **`VALUE_KEYS` was NOT moved** out of `cogs/core.py` (§E says it is kept and moved). It is
+   still the autocomplete's source and `/settings set-value` still exists in Build 1; the new
+   store tests assert against it exactly as the fourteen shipped `*_panel_minutes` tests do.
+   The move belongs with the command's retirement, in Build 2.
+9. **The commit order is the dependency order**, not the brief's suggested order: the
+   `namespace_of` move and the two registry keys land BEFORE the pure module, because the module
+   imports both.
+10. **The pure module carries the button tables**, not just the render data — `root_buttons`,
+    `roles_channels_buttons`, `looks_buttons`, `panels_commands_buttons`, `log_levels_buttons`,
+    `level_buttons`, `group_buttons`, `key_card_buttons`. P3 says the table is DATA and §G asks
+    for the `PANEL_MOVES` distinctness test, so they are Build 1's; Build 2 renders them.
+11. **One `BACK_MOVE`, reused with `_replace(row=…)`**, rather than a `BACK` constant per
+    sub-panel. Six moves sharing one action would break the distinctness test that exists to
+    catch a real collision.
+12. **The two new mock rows carry `max: 1440`, copying their fourteen siblings** — and the real
+    registry has **no** `KEY_MAX` for any `*_panel_minutes` key. The divergence is pre-existing
+    and fourteen rows deep; a lone row without it would read as an oversight. Reported below,
+    not fixed.
+13. **`site/mock/server.mjs`'s own `CORE_KEYS` gained both keys too.** It is a second, shorter
+    copy of the API's list (three entries against six) and would otherwise have grouped them
+    under a `settings` namespace the real API does not have. The pre-existing three-vs-six
+    divergence is reported below, not fixed.
+
+### Sweep rows — Build 1 has almost none, and that is the point
+
+⚠️ **Every row in §H (S1–S12) needs the PANEL, so all twelve belong to Build 2.** Build 1 adds
+no control, retires no command and changes no string a person reads in Discord. Two rows are
+visible, both on the website, and are lettered for the conductor to number:
+
+| # | Do this | Expect |
+|---|---|---|
+| SB1 | dashboard → **Settings** → the **core** group | two new rows at the bottom of it: **How long the /settings panel stays live** (10) and **Whether only a Lead may re-point the staff and log channels** (true). ⚠️ They must be under **core**, not under a group called `settings` — that is what `CORE_KEYS` is for |
+| SB2 | set **How long the /settings panel stays live** to `0`, then to `10` again | `0` is refused in words by the same validator every other panel-minutes key uses, and nothing is saved. There is no Discord door onto either key yet — `/settings set-value settings_panel_minutes 15` is the only one until Build 2 |
+
+### Found while building, REPORTED and not fixed — three beyond §J's five
+
+⚠️ §J's five all stand, re-measured: the six singleton namespaces are real; `sweeps.md` row 16
+still names a `/settings logs` that has never existed; `code-notes.md` against `cogs/core.py:32`
+still says the clearable list is "11 long" and it is **34**; `LOG_LEVEL_COMMANDS` is now wrong in
+**eleven of thirteen** rows because honeypot, modmail and `/mod` all lost their `logs` children;
+and none of the five `/settings` subcommands checks the database. Three more:
+
+1. **The mock's `*_panel_minutes` rows claim `max: 1440`; the real registry has no `KEY_MAX` for
+   any of them.** Sixteen rows now (the fourteen shipped ones plus this build's two, which copied
+   their siblings deliberately). The dashboard renders a bound the API never sends. One pass to
+   decide which half is right — a real ceiling in `KEY_MAX` would be the better answer, since a
+   panel-minutes key over 15 already loses the gone-quiet footer.
+2. **`site/mock/server.mjs`'s `CORE_KEYS` is a second, shorter copy of the API's** — three entries
+   against six, so the mock groups `bot_bio`, `status_prefix` and `operator_read_log` under
+   `bot`, `status` and `operator` while the real API files all three under `core`. This build
+   added both new keys to each list to keep them agreeing; the three-key gap is older and was
+   left alone.
+3. **`cogs/community/birthdays.py:428` is a FOURTH emitter of `settings.clear`**, and it passes no
+   `via` at all — so a birthday role cleared by that path records neither Discord nor the website.
+   It is outside the panel's door and outside this build's scope; it should call `clear_key` when
+   Build 2 has landed it.
+
+### What Build 2 inherits
+
+- **`black_bloc/settings_panel.py`** — public names in its `__all__`. The render data is
+  `root_lines`, `mode_lines`, `hidden_line`, `stored_count`, `key_card_lines`,
+  `default_sentence`, `confirm_lines`, `bounds_line`; the option builders are `groups`,
+  `keys_in`, `editable_options`, `needs_find`, `back_on_options`, `log_level_options`,
+  `panel_minutes_options`, `level_moves`; the tables are `control_for`, `has_editor`,
+  `editor_move`, `toggle_label`, `may_edit_core_keys`, `list_is_too_long`, `needs_confirm`,
+  and the eight `*_buttons` functions; the panel plumbing is `PANEL_TITLE`,
+  `PANEL_TIMEOUT_FOOTER`, `PANEL_MINUTES_KEY`, `panel_minutes`, `site_page_url`.
+- **The writers**: `cogs.core.set_key(bot, guild, key, value, actor) -> Outcome`,
+  `cogs.core.clear_key(bot, guild, key, actor) -> Outcome` (`.value` is whether a row was
+  there), `cogs.presence.reapply_presence(bot) -> str | None` (`None` = cog not loaded).
+- **`store.is_stored(guild_id, key)`** is what `Put the default back` renders on.
+- **The registry keys**: `settings_panel_minutes` (int, 10) and
+  `settings_core_keys_admin_only` (bool, true), both in `CORE_KEYS`.
+- **The trap**: `tests/api/test_settings_api.py` must stay byte-identical through Build 2 as
+  well — it is the only thing proving the web door did not move.
