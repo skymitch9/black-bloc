@@ -789,10 +789,10 @@ def panel_buttons(state: PanelState, *, staff: bool = False) -> tuple[PanelMove,
             for feed, wear in state.events
             if wear in (WORN, NOT_WORN)
         ]
-        if state.own_role:
-            found.append(OWN_DROP_MOVE)
-        elif state.creation != STAFF and state.streams:
+        if not state.own_role and state.creation != STAFF and state.streams:
             found.append(OWN_ADD_MOVE)
+    if state.own_role:
+        found.append(OWN_DROP_MOVE)
     found.append(REFRESH_MOVE)
     if staff:
         found += list(STAFF_MOVES)

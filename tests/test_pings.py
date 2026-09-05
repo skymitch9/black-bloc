@@ -576,7 +576,15 @@ def moves(state, **kwargs):
 
 
 def test_the_mode_being_off_leaves_nothing_but_refresh():
-    assert moves(a_state(mode_on=False, own_role=True, streams=True)) == ["Refresh"]
+    assert moves(a_state(mode_on=False, streams=True)) == ["Refresh"]
+
+
+def test_a_role_already_held_can_be_dropped_with_the_mode_off():
+    """Owner 2026-09-05 (a): ending a role is never gated; only starting one is."""
+    assert moves(a_state(mode_on=False, own_role=True, streams=True)) == [
+        "Take my ping role away",
+        "Refresh",
+    ]
 
 
 def test_an_unset_or_gone_events_role_renders_no_toggle_at_all():

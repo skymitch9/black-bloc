@@ -260,9 +260,9 @@ docs bookkeeping lands with the work, not after.
   keys (event/poll/birthday/request) have no label in `site/public/assets/labels.js` or
   `site/mock/server.mjs` (memory and golive do); every panel's **Logs** button drops `count` /
   `important_only` (wave 1 shape — a modal if wanted back). From the pings build (2026-09-03 18:25,
-  Fable review): `pings.panel_buttons` only offers **Take my ping role away** while `pings_mode` is on,
-  so a streamer who already has a role cannot drop it from the panel with pings off (fork I1 said
-  "always", the mode gate wins — decide whether the button should render regardless of mode); the
+  Fable review): ~~`pings.panel_buttons` only offers **Take my ping role away** while `pings_mode` is on~~
+  **DECIDED (a) + FIXED 2026-09-05 14:35 (owner: "a for pings")** — the drop button renders whenever the
+  member holds a role, mode on or off; `pings.py:panel_buttons` + one test, rides with v86; the
   youtube cog keeps its own `site_page_url` (returns `""` where `panels.site_page_url` returns `None`)
   — fold it at the next youtube touch; `code-notes.md` pings keys are anchored to the branch, not
   `a5ad521` — re-key at the next merge. **From the wave-3 design docs (2026-09-04 09:21–09:33,
