@@ -847,7 +847,7 @@ same one row and the same one DM.
 ## The self-test (wave 5) — rows 252–261
 
 Rows 252–261, written as `ST1`–`ST10` on `worktree-agent-a4aa5efd43f249ba6` and numbered at the
-merge 2026-09-05; shipped as **v86**. Built 2026-09-05 (`info/selftest-design.md`). The bot
+merge 2026-09-05; shipped as **v86**, read checks corrected in **v87**. ✅ **Row 252 exercised by the owner 2026-09-05 16:21** (verbatim: "The test ran and worked") — a person pressed **Run the self-test** and it completed; the boot line at v87 read `106 ok, 0 failed, 24 messages posted` and the v86 purge deleted all 24. Rows 253–261 not yet walked one by one. Built 2026-09-05 (`info/selftest-design.md`). The bot
 exercises itself against the real guild — every settings channel and role, every read the pages
 make, all 18 panel cards posted as real messages, and six announcements rendered through their own
 templates — then deletes every message it posted five minutes later. The log lines stay on the
