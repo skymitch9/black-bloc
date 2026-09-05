@@ -52,6 +52,19 @@ checks the build against this list first.
 | P7 | **Timeout writes the "gone quiet" footer through the last interaction**, falling back to `message.edit`, both wrapped (deviation 10). Default `<feature>_panel_minutes` = **10**; 15+ loses the footer (KI-20) and the key's help text says so | `interaction_check`, `on_timeout` |
 | P8 | **Staff re-checked before EVERY staff move**, not only at render — `still_staff` + `answer()`; never `require_staff` after a defer (deviation 11) | `still_staff` |
 | P9 | **Refusals in words, never a dead button.** A control someone may not use is NOT rendered and the embed says who it is for; off / db-down / staff-only gates as sentences | `PANEL_*` strings |
+
+> ⚠️ **P9's "off" half is NARROWED, 2026-09-04** (owner: *"if we turn a feature off on the web
+> portal … make the /youtube command not appear until it turns back on"*). With
+> `hide_commands_when_off` at its default **true**, a mode-off feature's command is removed from
+> the guild's tree, so **the mode-off panel is only reachable during the ≤60 s sync lag** between
+> the portal write and Discord catching up. The other half of P9 is untouched and now matters
+> more: `hide_commands_when_off` set **false** puts every command back permanently, and that is
+> the posture in which "a mode-off panel still opens and says so" is the whole story. Nothing in
+> a panel changed — no `PANEL_*` string was edited — but a design doc that says "the panel
+> explains that the feature is off" should now say "…when the command is still reachable".
+> The way back is `/settings set-value <feature>_mode on`; `settings` is in `NEVER_HIDDEN` and
+> cannot itself be hidden. See `command_visibility.py` and the code-notes section
+> **Hide commands when off**.
 | P10 | **Selects cap at 25** (Discord's) with a placeholder "25 of N — the rest are on the site" where the site has the list | staff "Pick a request…" |
 | P11 | **`Logs` is a button that answers a NEW ephemeral followup** so the panel stays; it calls the same `send_logs` the subcommand did (which carries its own `require_staff`) | `LogsButton` |
 | P12 | **Modals share one shape**: `AnswersErrors` + `discord.ui.Modal`; a generic note modal whose label names what the note is for and who is sent it | `ReadyModal`, `NoteModal(kind)` |
