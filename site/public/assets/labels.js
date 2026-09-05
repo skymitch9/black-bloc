@@ -56,6 +56,7 @@ export const LABELS = {
   raidtrain_panel_minutes: 'How long the /raidtrain panel stays live',
   rolemenu_panel_minutes: 'How long the /rolemenu panel stays live',
   honeypot_panel_minutes: 'How long the /honeypot panel stays live',
+  modmail_panel_minutes: 'How long the /modmail panel stays live',
 
   tempvoice_mode: 'Whether people can make their own voice rooms',
   tempvoice_creator_ids: 'Which channels people join to get a room',

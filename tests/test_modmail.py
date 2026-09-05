@@ -1,27 +1,55 @@
 from datetime import UTC, datetime
+from types import SimpleNamespace
+
+import pytest
 
 from black_bloc.modmail import (
     ANONYMOUS_NAME,
+    BLOCK_PICK,
+    BLOCK_REASON,
     COLOURS,
+    DISABLE,
+    ENABLE,
+    FORGET,
     IN,
+    LOGS,
     NOTE,
     OUT,
+    PANEL_MINUTES_KEY,
+    PANEL_MOVES,
+    REFRESH,
+    SITE,
+    SNIPPET_ADD,
+    SNIPPET_CHANGE,
+    SNIPPET_REMOVE,
+    SNIPPET_REMOVE_NO,
+    SNIPPET_REMOVE_YES,
+    SOURCES,
     TRUNCATED_MARK,
+    UNBLOCK,
     UNDELIVERED_MARK,
     attachment_urls,
+    blocked_buttons,
+    blocked_lines,
     chunk_lines,
     clamp_bytes,
     closing_dm,
     count_directions,
     dump_attachments,
+    forget_buttons,
     header_embed,
     is_note,
     load_attachments,
     mentions,
     modes_sentence,
     note_body,
+    panel_minutes,
     parse_topic,
     relay_embed,
+    root_buttons,
+    setup_buttons,
+    snippet_buttons,
+    snippet_lines,
     staff_ping,
     thread_invite,
     thread_name,
@@ -308,3 +336,120 @@ def test_a_long_list_is_cut_into_messages_discord_will_take():
     assert chunks[0].startswith("line 0")
     assert chunk_lines([]) == []
     assert chunk_lines(["one", "two"]) == ["one\ntwo"]
+
+
+def actions(moves):
+    return [move.action for move in moves]
+
+
+def test_the_root_draws_forget_only_where_something_is_pointed():
+    bare = root_buttons(has_forget=False, has_site=False)
+    full = root_buttons(has_forget=True, has_site=True)
+
+    assert actions(bare) == ["setup", "blocked", "snippets", LOGS, REFRESH]
+    assert actions(full) == ["setup", "blocked", "snippets", FORGET, LOGS, REFRESH, SITE]
+
+
+def test_setup_names_the_switchs_own_effect_rather_than_offering_both():
+    on = actions(setup_buttons(enabled=True))
+    off = actions(setup_buttons(enabled=False))
+
+    assert DISABLE in on and ENABLE not in on
+    assert ENABLE in off and DISABLE not in off
+    assert on[:4] == ["category", "staff_channel", "transcripts", "mode"]
+
+
+def test_unblock_is_drawn_only_once_somebody_is_picked():
+    assert UNBLOCK not in actions(blocked_buttons(picked=False, blocking=False))
+    assert UNBLOCK in actions(blocked_buttons(picked=True, blocking=False))
+
+
+def test_blocking_swaps_the_picker_for_the_reason_modal_never_both():
+    idle = actions(blocked_buttons(picked=False, blocking=False))
+    chosen = actions(blocked_buttons(picked=False, blocking=True))
+
+    assert BLOCK_PICK in idle and BLOCK_REASON not in idle
+    assert BLOCK_REASON in chosen and BLOCK_PICK not in chosen
+
+
+def test_a_snippet_card_offers_change_and_remove_only_once_one_is_picked():
+    idle = actions(snippet_buttons(picked=False, confirming=False))
+    chosen = actions(snippet_buttons(picked=True, confirming=False))
+    asked = actions(snippet_buttons(picked=True, confirming=True))
+
+    assert idle.count(SNIPPET_ADD) == 1
+    assert SNIPPET_REMOVE not in idle and SNIPPET_CHANGE not in idle
+    assert SNIPPET_REMOVE in chosen and SNIPPET_CHANGE in chosen
+    assert asked[:2] == [SNIPPET_REMOVE_YES, SNIPPET_REMOVE_NO]
+    assert SNIPPET_ADD not in asked
+
+
+@pytest.mark.parametrize(
+    "built",
+    [
+        root_buttons(has_forget=True, has_site=True),
+        setup_buttons(enabled=True),
+        setup_buttons(enabled=False),
+        blocked_buttons(picked=True, blocking=False),
+        blocked_buttons(picked=False, blocking=True),
+        snippet_buttons(picked=True, confirming=False),
+        snippet_buttons(picked=True, confirming=True),
+        forget_buttons(),
+    ],
+)
+def test_every_state_fits_inside_discords_five_by_five(built):
+    """Row 0 is kept free for a select, and no other row may pass Discord's five."""
+    rows: dict[int, int] = {}
+    for move in built:
+        rows[move.row] = rows.get(move.row, 0) + 1
+    assert 0 not in rows
+    assert max(rows) <= 4
+    assert all(count <= 5 for count in rows.values()), rows
+
+
+def test_every_move_the_panel_can_draw_is_in_one_table():
+    known = {move.action for move in PANEL_MOVES}
+    drawn: set[str] = set()
+    for built in (
+        root_buttons(has_forget=True, has_site=True),
+        setup_buttons(enabled=True),
+        setup_buttons(enabled=False),
+        blocked_buttons(picked=True, blocking=True),
+        snippet_buttons(picked=True, confirming=False),
+        snippet_buttons(picked=True, confirming=True),
+        forget_buttons(),
+    ):
+        drawn |= {move.action for move in built}
+    assert drawn <= known
+
+
+def test_a_blocked_list_longer_than_the_cap_says_where_the_rest_are():
+    rows = [{"user_id": n, "reason": None, "at": "2026-09-05T10:00:00+00:00"} for n in range(30)]
+
+    lines = blocked_lines(rows)
+
+    assert len(lines) == 26
+    assert lines[0] == "<@0> — no reason given (2026-09-05)"
+    assert "5 more" in lines[-1] and "Modmail page" in lines[-1]
+    assert blocked_lines([]) == []
+
+
+def test_a_snippet_list_shows_a_clamped_preview_and_names_the_site_past_the_cap():
+    rows = [{"name": f"s{n}", "content": "x" * 300} for n in range(26)]
+
+    lines = snippet_lines(rows)
+
+    assert lines[0].startswith("**s0** — ") and len(lines[0]) < 200
+    assert "1 more" in lines[-1]
+    assert snippet_lines([{"name": "a", "content": "b"}]) == ["**a** — b"]
+
+
+def test_the_panel_minutes_key_is_read_through_the_shared_helper():
+    store = SimpleNamespace(get=lambda guild_id, key: 7 if key == PANEL_MINUTES_KEY else None)
+
+    assert panel_minutes(store, 1) == 7
+    assert PANEL_MINUTES_KEY == "modmail_panel_minutes"
+
+
+def test_the_four_sources_a_reply_can_come_from_are_named_once():
+    assert SOURCES == ("card", "typed", "command", "web")

@@ -185,7 +185,7 @@ black_bloc/
 │   │   └── requests.py    ← F18: /request, the member intake, the pending-features board
 │   ├── moderation/   ← one cog per moderation feature
 │   │   ├── honeypot.py    ← F9: the trap channel, delete + ban, shadow first
-│   │   ├── modmail.py     ← F11: inbound DM → ticket channel or private thread, /reply, /close, transcript
+│   │   ├── modmail.py     ← F11: inbound DM → ticket channel or private thread, the /modmail panel, /reply, /close, transcript
 │   │   ├── automod.py     ← F7: the message listener, the Apply-now button, /automod
 │   │   └── modcmds.py     ← F7: /warn /timeout /untimeout /kick /ban /unban /purge /case /cases
 │   └── content/      ← one cog per content feature

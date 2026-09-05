@@ -182,7 +182,7 @@ async def test_snippets_are_saved_listed_and_removed(client, sign_in, web, wf):
     assert removed.json() == {"removed": True, "name": "hi"}
     assert await get_snippet(web.db, "hi") is None
     assert client.delete("/api/modmail/snippets/hi").status_code == 404
-    assert "web.modmail.snippet" in await wf.kinds_in(web.db)
+    assert "web.modmail.snippet_saved" in await wf.kinds_in(web.db)
 
 
 def test_a_snippet_needs_a_name_and_content(client, sign_in):
@@ -205,7 +205,7 @@ async def test_blocks_are_added_listed_and_lifted(client, sign_in, web, guild, w
     assert client.delete("/api/modmail/blocks/21").json()["unblocked"] is True
     assert await blocked_row(web.db, 21) is None
     kinds = await wf.kinds_in(web.db)
-    assert "web.modmail.block" in kinds and "web.modmail.unblock" in kinds
+    assert "web.modmail.blocked" in kinds and "web.modmail.unblocked" in kinds
 
 
 def test_a_block_needs_a_real_id(client, sign_in):
