@@ -782,7 +782,6 @@ LOG_LEVEL_HELP = (
 )
 LOG_LEVEL_COMMANDS: dict[str, str] = {
     "honeypot": "honeypot",
-    "mod": "mod",
     "modmail": "modmail",
     "golive": "golive",
     "events": "event",

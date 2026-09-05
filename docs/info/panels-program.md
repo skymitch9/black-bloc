@@ -97,7 +97,7 @@ The panel column is the SHAPE, not the design — the design doc decides the tab
 | Automod | `moderation/automod.py` | `/automod` | 0 | 1 | staff | ✅ **BUILT — wave 3**, 2026-09-04, branch `worktree-agent-ae7bb4ba9c5540ad4`; `/automod` opens the panel and the `automod`, `rule` and `exempt` groups and all eight leaf subcommands are retired. `commands synced` does **NOT** move (a group was already one slot — **38, measured** through `test_the_command_tree_stays_inside_discords_limits`). Owner forks: **F-A1 = (a)** — arming asks *Are you sure?* first, behind `automod_arm_needs_confirm` (default true); every quieter move is one press. **F-A2 = (a)** — one prefilled paragraph modal for `bad_words`, one word per line, and `_as_words` learned to split on newlines so the modal and the site's textarea agree. **F-A3 = (a)** — no controls for `automod_warn_threshold` / `mod_dm_on_action`; they are read-only lines on the Settings sub-panel naming the Moderation page. The enforcement path is byte-identical by AST. [`automod-panel-design.md`](automod-panel-design.md) |
 | Honeypot | `moderation/honeypot.py` | `/honeypot` (logs, setup, status, mode, forget, `exempt add|remove`) | 7 | 1 | staff | `/honeypot`: Status card (Setup, Forget, Mode); Exemptions; Logs |
 | Modmail | `moderation/modmail.py` | `/modmail` (logs, block, unblock, blocked, mode, forget, status, settings), `/snippet` (add, remove, list), top-level `/reply`, `/areply`, `/note`, `/close` | 11 | 6 | staff, in-thread | `/modmail`: Status card (Mode, Forget, Settings); Blocked (list → pick → Unblock; Block via UserSelect + reason modal); Snippets (list → pick → Remove; Add modal); Logs. ⚠️ **Fork F2** on the four in-thread commands |
-| Mod commands | `moderation/modcmds.py` | `/mod` (logs), top-level `/warn`, `/timeout`, `/untimeout`, `/kick`, `/ban`, `/unban`, `/purge`, `/case`, `/cases` | 1 | 10 | staff | `/mod`: UserSelect → member card (Warn/Timeout/Kick/Ban via reason modal, Cases for them); Cases (pick → card); Purge modal; Logs. ⚠️ **Fork F1** on the direct commands |
+| Mod commands | `moderation/modcmds.py` | `/mod [member]` + the seven bare actions `/warn`, `/timeout`, `/untimeout`, `/kick`, `/ban`, `/unban`, `/purge` | 0 | 8 | staff | ✅ **BUILT — wave 4**, 2026-09-05, branch `worktree-agent-ab5740f777a3dfd80`; `/mod [member]` opens a panel over the case record and `/case`, `/cases` and the `mod` group's `logs` child are all retired — `commands synced` **36 → 34, measured** through `test_the_command_tree_stays_inside_discords_limits`. ⚠️ **Fork F1 is ANSWERED, not open: the seven bare actions STAY BARE** (owner, 2026-09-04, proposal 3 of 6 — "typed mid-incident with autocompleted arguments; a panel would be three clicks slower at the wrong moment"), so no member card with Warn/Timeout/Kick/Ban was built. The panel's own additions are the four corrections a case never had — edit its reason, note it, void it, restore it — behind schema **29** (`mod_cases` gains six nullable columns), through four shared functions that both Discord and four new API routes call with `via`. Owner forks: **F-M1 = (a)** voided cases stay in the list, struck through; **F-M2 = (a)** a voided warn stops counting toward `automod_warn_threshold`; **F-M3 = (a)** the website gets the four moves in the same build. `/mod` is never hidden — moderation has no mode key. [`mod-panel-design.md`](mod-panel-design.md) |
 | Core | `core.py` | `/ping`, `/about`, `/help`, `/settings` (show, set, set-role, set-value, clear), `/presence` (1) | 6 | 5 | anyone / staff | `/ping` `/about` `/help` stay. ⚠️ **Fork F3** on `/settings` |
 
 **Totals today:** ~177 subcommands (nested groups like `poll recur` and `automod rule`
@@ -202,10 +202,14 @@ weekly cut-off stands.
 
 ## 6. The forks — owner decisions, one at a time, before wave 4
 
-- **F1 — mod commands.** `/warn @user reason` is one line typed; the panel is UserSelect →
-  card → button → modal (four clicks). Keep the direct commands beside `/mod`, or panel only?
-  A user context-menu command ("Moderate…" on right-click) is a third shape that is
-  genuinely an interactive window and one click.
+- ✅ **F1 — mod commands. ANSWERED by the owner, 2026-09-04 (proposal 3 of 6): the seven bare
+  actions STAY BARE.** *"Typed mid-incident with autocompleted arguments; a panel would be three
+  clicks slower at the wrong moment."* `/mod [member]` opens a panel over the case RECORD only
+  (built 2026-09-05, wave 4); `/warn`, `/timeout`, `/untimeout`, `/kick`, `/ban`, `/unban` and
+  `/purge` are untouched, and the panel's footer names them so a moderator who opened `/mod` to
+  punish somebody is told where that lives. The user context-menu shape was not built and is not
+  asked for. The original question, for the record: `/warn @user reason` is one line typed; the
+  panel would have been UserSelect → card → button → modal (four clicks).
 - **F2 — modmail's in-thread `/reply` `/areply` `/note` `/close`.** Typing text is the
   whole job; a modal per reply is slower. Keep them, or a single in-thread `/modmail` panel
   with Reply/Anon reply/Note (modals) and Close?

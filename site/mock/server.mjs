@@ -257,7 +257,7 @@ const LOG_LEVEL_FEATURES = [
   ['core', 'core', null],
   ['automod', 'automod', 'automod'],
   ['honeypot', 'honeypot', 'honeypot'],
-  ['mod', 'moderation', 'mod'],
+  ['mod', 'moderation', null],
   ['modmail', 'modmail', 'modmail'],
   ['golive', 'go-live', 'golive'],
   ['youtube', 'youtube uploads', 'uploads'],

@@ -6,6 +6,12 @@
 > document is the record of what was decided in Phase 6 and is deliberately NOT rewritten —
 > every rule, bound, mode and log kind it names is still exactly what the engine does.
 >
+> ⚠️ **2026-09-05 — the `/case` and `/cases` COMMAND SHAPE below is superseded by
+> [`mod-panel-design.md`](mod-panel-design.md).** `/case <id>`, `/cases @user` and `/mod logs`
+> are now ONE `/mod [member]` that opens a panel, which also learned to edit a reason, note a
+> case, void one and restore it. The seven bare actions below are UNCHANGED. Same rule as above:
+> this document is the Phase 6 record and is deliberately not rewritten.
+>
 > **Audience:** the Phase 6 build agent and the reviewer. **Status:** LOCAL
 > ONLY. **Last verified: 2026-08-26** — Carl's live config from the owner's
 > `!am` dump (`archive/current-bots/carl-bot-dashboard-2026-08-26.md`);
@@ -36,7 +42,7 @@ black_bloc/
 ├── automod.py                   ← pure rule engine: RuleConfig, sliding-window counters, evaluate(message_facts) → Verdict
 └── cogs/moderation/
     ├── automod.py               ← on_message → facts → engine → act/log per mode
-    └── modcmds.py               ← /warn /timeout /untimeout /kick /ban /unban /purge /case /cases
+    └── modcmds.py               ← /warn /timeout /untimeout /kick /ban /unban /purge + the /mod panel
 tests/ test_automod.py · cogs/moderation/test_automod.py · cogs/moderation/test_modcmds.py
 ```
 

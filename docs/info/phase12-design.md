@@ -7,6 +7,13 @@
 > describes is unchanged — the announcer, the poller, the sessions, the settings and the log
 > kinds are all exactly what it says. Only the way in moved:
 > [`golive-panel-design.md`](golive-panel-design.md). This doc is NOT rewritten.
+>
+> ⚠️ **`/mod logs` is gone too, 2026-09-05.** `/mod` became ONE command that opens a panel over
+> the case record, and its **Logs** button calls the same `send_logs(interaction, "mod")` — the
+> lines, the kinds and the gate are unchanged; only the way in moved
+> ([`mod-panel-design.md`](mod-panel-design.md)). `LOG_LEVEL_COMMANDS["mod"]` was REMOVED rather
+> than re-pointed, so `mod_log_level`'s help text now says the lines are kept on the dashboard,
+> which is true. Same rule: this doc is NOT rewritten.
 
 > ✅ **12a BUILT (2026-08-27)** on branch `agent-ac3b8dd35b6cc0c5d` off `main` @ `0090fd8`, in seven
 > commits: `313fa48` (`logkinds.py` + the classification test), `e352f33` (the twelve
