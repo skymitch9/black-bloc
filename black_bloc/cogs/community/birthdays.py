@@ -66,6 +66,7 @@ from ...settings_store import (
     GUILD_ONLY,
     staff_roles_sentence,
 )
+from ..core import clear_key
 
 log = logging.getLogger(__name__)
 
@@ -421,13 +422,9 @@ async def set_mode(bot: Any, guild: Any, actor: Any, mode: str) -> str:
 
 
 async def clear_role(bot: Any, guild: Any, actor: Any) -> str:
-    cleared = await bot.store.clear(guild.id, "birthday_role_id", by=actor.id)
-    if not cleared:
-        return ROLE_NOT_SET
-    await log_action(
-        bot, guild, "settings.clear", actor=actor, details={"key": "birthday_role_id"}
-    )
-    return ROLE_CLEARED
+    """The shared writer keeps the row's shape; the words stay this feature's own."""
+    outcome = await clear_key(bot, guild, "birthday_role_id", actor)
+    return ROLE_CLEARED if outcome.ok else ROLE_NOT_SET
 
 
 async def person_lines(bot: Any, guild: Any, member: Any, row: Any, *, mine: bool) -> list[str]:
