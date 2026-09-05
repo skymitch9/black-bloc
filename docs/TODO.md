@@ -325,6 +325,14 @@ docs bookkeeping lands with the work, not after.
   `mod.purged`/`mod.purge_failed` kinds, dead `CASE_KINDS`, dead `_audit`/`_failed`, site Notes chip matches
   nothing, a code-notes claim about `/untimeout`/`/unban` gating that a test disproves). Forks F-M1/F-M2/F-M3
   go to the owner one at a time (§J). Usage after landing session 13% / weekly 8% / Fable 9%, read 06:59.
+  **LANDED 07:00 (197k Opus): `info/honeypot-panel-design.md` written and committed** — `/honeypot`, staff
+  only; the group + exempt sub-group + seven leaves retire; NEW `black_bloc/honeypot.py` + `tests/test_honeypot.py`
+  (the feature has no pure module today); new kind `honeypot.exempt_set` (`honeypot.exempt` is taken), and
+  retiring `exempt_add`/`exempt_remove` must also drop them from `logkinds.ROUTINE` or the dead-entry test fails;
+  `honeypot_mode` STAYS in `HIDDEN_WHEN_OFF` (defaults to shadow, not off). Reported not fixed: the site writes
+  `honeypot_mode`/`honeypot_exempt_role_ids` through the generic settings API, bypassing the arming refusal. Est.
+  320–380k Opus. Forks F-H1/F-H2/F-H3 (§I) go to the owner one at a time after `/mod`'s. Usage after landing
+  session 14% / weekly 8% / Fable 9%, read 07:00. Still writing: the modmail design.
 - **Wave-1 review findings, small, fold into the next build that touches each file (Fable
   review 2026-09-03 13:50–14:05):** `requests.py` re-renders lack `allowed_mentions`;
   `LOG_LEVEL_COMMANDS` help still says "`/birthday logs`" / "`/request logs`"; five form writes
