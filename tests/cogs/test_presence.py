@@ -250,33 +250,19 @@ async def test_someone_joining_or_leaving_refreshes_the_count_once(bot, cog, mon
     assert [activity.name for activity in bot.presences] == ["Cookout attendees: 10"]
 
 
-async def test_applying_by_hand_is_staff_only(bot, cog, member):
-    interaction = FakeInteraction(bot, member)
+async def test_reapply_presence_says_so_when_the_status_could_not_be_set(bot, cog, monkeypatch):
+    """`apply_sentence`'s third outcome, kept from the retired `/presence apply` test."""
 
-    await cog.presence_apply.callback(cog, interaction)
+    async def refuses(_bot):
+        raise RuntimeError("no")
 
-    assert "staff only" in interaction.sent
-    assert bot.app.edits == []
-    assert bot.presences == []
+    monkeypatch.setattr("black_bloc.cogs.presence.update_status", refuses)
 
+    said = await reapply_presence(bot)
 
-async def test_applying_by_hand_says_what_it_did(bot, cog, member):
-    give_staff(bot, member)
-    interaction = FakeInteraction(bot, member)
-
-    await cog.presence_apply.callback(cog, interaction)
-
-    assert interaction.response.deferred is True
-    assert "now says" in interaction.sent
-    assert "`Cookout attendees: 10`" in interaction.sent
-    assert interaction.response.messages[-1]["ephemeral"] is True
-    assert isinstance(bot.presences[-1], discord.CustomActivity)
-
-    again = FakeInteraction(bot, member)
-    await cog.presence_apply.callback(cog, again)
-
-    assert "left alone" in again.sent
-    assert len(bot.app.edits) == 1
+    assert "now says" in said
+    assert "could not be set" in said and "in Black Bloc's own log" in said
+    assert cog.last_error.startswith("RuntimeError")
 
 
 async def test_reapply_presence_is_the_one_implementation_both_doors_call(bot, cog):

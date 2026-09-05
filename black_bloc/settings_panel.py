@@ -353,6 +353,11 @@ def keys_in(group: str) -> tuple[str, ...]:
     return tuple(key for key in KEY_TYPES if namespace_of(key) == group)
 
 
+def reachable_on_the_panel(key: str) -> bool:
+    """Checklist 33 — `A setting group…` opens this key and its card carries a real editor."""
+    return key in keys_in(namespace_of(key)) and has_editor(key)
+
+
 def matches(key: str, needle: str) -> bool:
     return needle.strip().lower() in key.lower()
 
@@ -701,6 +706,7 @@ __all__ = [
     "panel_minutes_keys",
     "panel_minutes_options",
     "panels_commands_buttons",
+    "reachable_on_the_panel",
     "roles_channels_buttons",
     "root_buttons",
     "root_lines",

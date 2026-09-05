@@ -108,7 +108,7 @@ TEST_MODE_LINE = (
 )
 MODE_IS_OFF_WAY_BACK = (
     "While the mode is **off** this command disappears from Discord within about a minute. The "
-    "ways back are `/settings set-value honeypot_mode shadow` and the dashboard's Settings page."
+    "ways back are `/settings` ▸ **A setting group…** ▸ honeypot and the Settings page."
 )
 
 

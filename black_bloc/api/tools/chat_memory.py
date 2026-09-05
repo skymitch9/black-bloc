@@ -38,8 +38,8 @@ MEMORY_IS_OFF = (
 CONTENTS_ARE_PRIVATE = (
     "This server keeps what Black Bloc remembers about a member private to that member, so the "
     "notes were not shown — only the counts on this page. It needs `chat_memory_staff_view` set "
-    "to `full`, which a Lead can change on the Settings page or with "
-    "`/settings set chat_memory_staff_view full`. The member can always read their own with "
+    "to `full`, which a Lead can change on the Settings page, or in Discord with "
+    "`/settings` and the chat settings group. The member can always read their own with "
     "`/memory`."
 )
 NO_SUCH_PROFILE = (

@@ -94,8 +94,8 @@ ADMIN_ONLY_KEY = "chat_status_admin_only"
 CHAT_KEYS = tuple(key for key in KEY_TYPES if key.startswith("chat_"))
 MEMORY_PREFIX = "chat_memory_"
 SETTINGS_FOOTER = (
-    "`/settings set-value` changes any of these, and the Chat page on the dashboard edits the "
-    "words themselves."
+    "`/settings` ▸ **A setting group…** ▸ chat changes any of these, and the Chat page on "
+    "the dashboard edits the words themselves."
 )
 MEMORY_SETTINGS_HEADER = (
     "\n**What Black Bloc remembers about a person** — `/memory` and the Chat page's Memory "

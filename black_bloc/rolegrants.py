@@ -95,7 +95,7 @@ CANNOT_EDIT_THEIRS = (
 )
 NO_APPROVAL_CHANNEL = (
     "Black Bloc has nowhere to send the request, so nothing was submitted. A Lead points it at a "
-    "channel with `/settings set-value rolemenu_approval_channel_id`, or sets `staff_channel_id`."
+    "channel with `/settings` ▸ **A setting group…** ▸ rolemenu, or sets `staff_channel_id`."
 )
 CARD_NOT_POSTED = (
     "Your request for **{label}** is saved, but Black Bloc could not post the card for staff — "

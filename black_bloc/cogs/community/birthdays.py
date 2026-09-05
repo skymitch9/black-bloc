@@ -66,6 +66,7 @@ from ...settings_store import (
     GUILD_ONLY,
     staff_roles_sentence,
 )
+from ..core import clear_key
 
 log = logging.getLogger(__name__)
 
@@ -119,11 +120,11 @@ ROLE_CLEAR_CONFIRM = (
 )
 ROLE_CLEARED = (
     "No birthday role will be given any more. A role somebody already has for today still "
-    "comes off tomorrow. Set one again with `/settings set-role birthday_role_id`."
+    "comes off tomorrow. Set one again with `/settings` ▸ **A setting group…** ▸ birthday."
 )
 ROLE_NOT_SET = (
-    "There was no birthday role set, so nothing changed. `/settings set-role birthday_role_id` "
-    "is how one is chosen."
+    "There was no birthday role set, so nothing changed. `/settings` ▸ **A setting group…** "
+    "▸ birthday is how one is chosen."
 )
 BUTTON_STYLES: dict[str, discord.ButtonStyle] = {
     "primary": discord.ButtonStyle.primary,
@@ -421,13 +422,9 @@ async def set_mode(bot: Any, guild: Any, actor: Any, mode: str) -> str:
 
 
 async def clear_role(bot: Any, guild: Any, actor: Any) -> str:
-    cleared = await bot.store.clear(guild.id, "birthday_role_id", by=actor.id)
-    if not cleared:
-        return ROLE_NOT_SET
-    await log_action(
-        bot, guild, "settings.clear", actor=actor, details={"key": "birthday_role_id"}
-    )
-    return ROLE_CLEARED
+    """The shared writer keeps the row's shape; the words stay this feature's own."""
+    outcome = await clear_key(bot, guild, "birthday_role_id", actor)
+    return ROLE_CLEARED if outcome.ok else ROLE_NOT_SET
 
 
 async def person_lines(bot: Any, guild: Any, member: Any, row: Any, *, mine: bool) -> list[str]:

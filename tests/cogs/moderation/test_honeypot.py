@@ -1063,7 +1063,7 @@ async def test_the_settings_card_says_how_to_get_the_command_back_when_the_mode_
     _embed, view = honeypot_cog.build_settings(bot, bot.guild)
     embed, _again = honeypot_cog.build_settings(bot, bot.guild)
 
-    assert "/settings set-value honeypot_mode" in embed.description
+    assert "`/settings` ▸ **A setting group…** ▸ honeypot" in embed.description
     assert labels(view) == ["Numbers…", "Back"]
 
 

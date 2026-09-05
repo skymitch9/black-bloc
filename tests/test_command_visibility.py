@@ -338,20 +338,21 @@ async def test_the_request_group_is_shown_while_requests_are_on_and_hidden_when_
 
 
 async def test_every_hidden_feature_can_still_be_turned_back_on_from_discord():
-    """`/settings set-value <key> on` is the door that survives the command going away."""
-    from black_bloc.cogs.core import VALUE_KEYS
+    """`/settings` ▸ **Turn a feature back on…** is the door that survives the command going
+    away, and every hidden feature's key is also reachable through **A setting group…**."""
+    from black_bloc.settings_panel import reachable_on_the_panel
 
     assert "settings" in cv.NEVER_HIDDEN
     for key in cv.HIDDEN_WHEN_OFF:
-        assert key in VALUE_KEYS, key
+        assert reachable_on_the_panel(key), key
         assert parse_value(key, "on") == "on", key
         assert "shadow" not in KEY_CHOICES[key] or parse_value(key, "shadow") == "shadow"
 
 
 async def test_apply_and_rolemenu_hide_with_the_rest_but_memory_stays(bot):
     """Supersedes two earlier per-feature carve-outs — owner, 2026-09-03: `/apply` "Visible",
-    and `/rolemenu` kept because hiding it hid the only way back; `/settings set-value
-    <feature>_mode on` plus `hide_commands_when_off` are the ways back now. `/memory` KEEPS its
+    and `/rolemenu` kept because hiding it hid the only way back; `/settings` ▸ **Turn a
+    feature back on…** plus `hide_commands_when_off` are the ways back now. `/memory` KEEPS its
     carve-out (fork I-M1, "open it"): turning memory off deletes nothing, the site is
     staff-only, so the panel is a member's only door to notes held about them (KI-14)."""
     assert "chat_memory_mode" not in cv.HIDDEN_WHEN_OFF

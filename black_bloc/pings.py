@@ -50,7 +50,7 @@ ROLE_REASON = "Black Bloc pings"
 
 OFF = (
     "Ping roles are turned off right now, so nothing was changed and nobody was pinged. A Lead "
-    "turns them on from the dashboard's Go-live tab or with `/settings set-value pings_mode on`."
+    "turns them on from the dashboard's Go-live tab, or `/settings` ▸ **Turn a feature back on…**."
 )
 NO_EVENTS_ROLE = (
     "Staff have not set up the Events role yet, so there is nothing to opt in to. Ask an "
@@ -85,7 +85,7 @@ NOT_A_STREAMER = (
 STAFF_ONLY_CREATION = (
     "Only staff start a streamer's ping role on this server, so nothing was made. Ask an "
     "Auntie/Uncle to start one for you from `/pings` ▸ **Streamers…** — or a Lead can change who "
-    "may with `/settings set-value pings_fan_role_creation self`."
+    "may with `/settings` ▸ **A setting group…** ▸ pings."
 )
 ALREADY_HAS_ONE = (
     "**{name}** already has a ping role — <@&{role_id}>. Nothing was changed; people follow it "
@@ -122,7 +122,7 @@ SETUP_UNCHANGED = "Both feeds already pointed at **{role}**, so nothing was chan
 SETUP_MENU_ADDED = " Put it on the *{menu}* panel — `/rolemenu` ▸ *{menu}* ▸ **Post it**."
 SETUP_MENU_THERE = " It is already on the *{menu}* panel."
 SETUP_STILL_OFF = (
-    " Ping roles are still off, so nobody can opt in yet — turn them on with `/settings set-value "
+    " Ping roles are still off, so nobody can opt in yet — turn them on with `/settings` ▸ "
     "pings_mode on` or from the dashboard's Go-live tab."
 )
 

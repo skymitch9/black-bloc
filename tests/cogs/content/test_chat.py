@@ -1471,7 +1471,7 @@ async def test_the_settings_card_lists_every_chat_key_and_names_memorys_home(cog
     assert "`chat_panel_minutes` — **10**" in said
     assert "`chat_memory_mode`" in said
     assert "/memory" in said
-    assert "/settings set-value" in said
+    assert "`/settings` ▸ **A setting group…** ▸ chat" in said
 
 
 async def test_the_limits_modal_arrives_prefilled_and_saves_all_five_at_once(

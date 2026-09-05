@@ -296,7 +296,8 @@ ALREADY_PRACTISING = (
 )
 NO_STAFF_TO_PRACTISE = (
     "No staff role resolves, so a practice ticket would have nobody in it and none was made. "
-    "Point `staff_channel_id` at a staff-only channel with `/settings set staff_channel_id` "
+    "Point `staff_channel_id` at a staff-only channel with `/settings` ▸ **Roles & "
+    "channels…** "
     "first."
 )
 NOT_PRACTICE = "That is a real ticket with a real member, so nobody can be spoken for."
@@ -304,7 +305,7 @@ NOTHING_TO_SAY = "Type something for the pretend member to say — nothing was a
 NO_STAFF_WARNING = (
     "⚠️ **No staff roles resolve**, so a ticket channel would be visible to server admins only "
     "and a ticket thread would have nobody in it. Point `staff_channel_id` at a channel only "
-    "staff can see with `/settings set staff_channel_id`, then run this again."
+    "staff can see with `/settings` ▸ **Roles & channels…**, then run this again."
 )
 
 

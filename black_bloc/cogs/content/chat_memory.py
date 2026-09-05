@@ -60,7 +60,7 @@ WORDS_LIMIT = 200
 MEMORY_IS_OFF = (
     "Black Bloc is not remembering anybody here at the moment, so nothing new is being written "
     "down. Whatever it already had is above, and the buttons still clear it. A Lead turns it "
-    "back on with `/settings set-value key:chat_memory_mode value:on`."
+    "back on with `/settings` ▸ **A setting group…** ▸ chat ▸ `chat_memory_mode`."
 )
 NO_SERVER = (
     "Black Bloc keeps what it remembers per server, and this conversation is not in one it "
