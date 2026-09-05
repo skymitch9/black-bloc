@@ -1678,19 +1678,36 @@ async def test_a_card_that_cannot_be_posted_says_so_once(cog, bot, member, db):
     assert (await get_ticket(db, ticket["id"]))["card_message_id"] is None
 
 
-async def test_a_burst_of_messages_cycles_the_card_once(cog, bot, member, db, monkeypatch):
-    await quick_cards(monkeypatch)
+async def test_a_burst_of_messages_coalesces_into_one_card_move(
+    cog, bot, member, db, monkeypatch
+):
+    """The debounce is what stops five DMs costing fifteen calls; the clock is not waited on."""
+    monkeypatch.setattr(modmail_cog, "CARD_DEBOUNCE_SECONDS", 30.0)
     ticket = await open_one(cog, bot, member)
     await card_for(cog, bot, ticket)
     channel = bot.guild.channels[TEST_CHANNEL]
-    before = len(cards_in(channel))
+    before = len(channel.deleted_messages)
 
     for _ in range(5):
         await cog.on_message(dm_from(member, "hello?"))
-    await modmail_cog.settle_cards(bot)
+
+    assert list(modmail_cog.card_clock(bot)["tasks"]) == [ticket["id"]]
+    assert len(channel.deleted_messages) == before
+
+    modmail_cog.cancel_cards(bot)
+    await modmail_cog.refresh_card(bot, bot.guild, ticket["id"])
 
     assert len(cards_in(channel)) == 1
-    assert len(channel.deleted_messages) == before
+    assert len(channel.deleted_messages) == before + 1
+
+
+def test_the_card_clock_holds_a_ticket_to_its_floor_between_two_posts():
+    clock = {"tasks": {}, "last": {}}
+
+    assert modmail_cog.card_wait(clock, 1, 100.0) == modmail_cog.CARD_DEBOUNCE_SECONDS
+    clock["last"][1] = 100.0
+    assert modmail_cog.card_wait(clock, 1, 101.0) == modmail_cog.CARD_MIN_GAP_SECONDS - 1.0
+    assert modmail_cog.card_wait(clock, 1, 140.0) == modmail_cog.CARD_DEBOUNCE_SECONDS
 
 
 async def test_the_reconciler_gives_an_open_ticket_a_card_after_a_restart(cog, bot, member, db):
@@ -1871,6 +1888,97 @@ async def test_a_card_whose_ticket_has_closed_says_so_rather_than_dying(cog, bot
 
     assert pressed.response.modals == []
     assert "already closed" in pressed.sent
+
+
+# --- the relay gate ----------------------------------------------------------------------------
+
+
+async def typed_in_ticket(cog, bot, lead, ticket, text):
+    channel = bot.guild.get_channel(ticket["channel_id"])
+    lead.roles = [FakeRole(STAFF_ROLE)]
+    message = guild_message(channel, lead, text)
+    await cog.on_message(message)
+    return message
+
+
+@pytest.mark.parametrize("style", ["typing", "both"])
+async def test_a_typed_message_still_relays_under_typing_and_both(
+    cog, bot, member, lead, db, style
+):
+    ticket = await open_one(cog, bot, member)
+    await bot.store.set(GUILD, "modmail_reply_style", style)
+    before = len(member.dms)
+
+    await typed_in_ticket(cog, bot, lead, ticket, "we are looking into it")
+
+    assert len(member.dms) == before + 1
+    assert member.dms[-1]["embed"].description == "we are looking into it"
+    assert (await ticket_messages(db, ticket["id"]))[-1]["direction"] == OUT
+
+
+async def test_buttons_stops_the_typed_relay_dead(cog, bot, member, lead, db):
+    """The one thing `modmail_reply_style` is for: a ticket channel staff can talk in."""
+    ticket = await open_one(cog, bot, member)
+    await bot.store.set(GUILD, "modmail_reply_style", "buttons")
+    before = len(member.dms)
+
+    message = await typed_in_ticket(cog, bot, lead, ticket, "we are looking into it")
+
+    assert len(member.dms) == before
+    assert message.reactions == []
+    assert [row["direction"] for row in await ticket_messages(db, ticket["id"])] == [IN]
+    assert "modmail.reply" not in await action_kinds(db)
+
+
+@pytest.mark.parametrize("style", ["buttons", "typing", "both"])
+async def test_an_equals_note_is_a_note_in_every_style(cog, bot, member, lead, db, style):
+    """Guard lifted, so the reactions are visible: 📝 for the note whatever the style is."""
+    await live(bot)
+    await cog.on_message(dm_from(member))
+    ticket = await open_ticket_for(db, GUILD, member.id)
+    await bot.store.set(GUILD, "modmail_reply_style", style)
+    before = len(member.dms)
+
+    message = await typed_in_ticket(cog, bot, lead, ticket, "= watch this one")
+
+    rows = await ticket_messages(db, ticket["id"])
+    assert rows[-1]["direction"] == NOTE and rows[-1]["content"] == "watch this one"
+    assert message.reactions == ["\N{MEMO}"]
+    assert len(member.dms) == before
+    assert (await action_kinds(db)).count("modmail.note") == 1
+
+
+async def test_the_card_and_the_command_both_work_while_buttons_is_on(
+    cog, bot, member, lead, db
+):
+    ticket = await open_one(cog, bot, member)
+    await bot.store.set(GUILD, "modmail_reply_style", "buttons")
+    lead.roles = [FakeRole(STAFF_ROLE)]
+
+    await cog.reply.callback(cog, FakeInteraction(bot, lead), text="typed door")
+    card = await card_for(cog, bot, ticket)
+    opened = await press_card(bot, lead, card, "Reply")
+    modal = opened.response.modals[-1]
+    modal.text._value = "button door"
+    await modal.on_submit(FakeInteraction(bot, lead))
+
+    said = [one["embed"].description for one in member.dms if one.get("embed")]
+    assert said[-2:] == ["typed door", "button door"]
+
+
+async def test_the_reply_style_is_set_from_the_setup_panel_and_says_what_changed(
+    cog, bot, lead, db
+):
+    root = await open_panel(cog, bot, lead)
+    setup = await press(root.view, "Setup…", bot, lead)
+    picker = await press(setup.view, "Reply style…", bot, lead)
+
+    chosen = await choose(picker.view, modmail_cog.PICK_A_REPLY_STYLE, ["buttons"], bot, lead)
+
+    assert bot.store.get(GUILD, "modmail_reply_style") == "buttons"
+    assert "buttons" in chosen.sent
+    assert (await action_kinds(db)).count("modmail.settings") == 1
+    assert "**reply style** — buttons" in chosen.embed.description
 
 
 async def test_a_stored_message_keeps_its_direction_and_anonymity(db):

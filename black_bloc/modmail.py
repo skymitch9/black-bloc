@@ -9,7 +9,13 @@ import discord
 
 from .events import clamp, slugify
 from .golive import parse_ts
-from .settings_store import CHANNEL_MODE, THREAD_MODE
+from .settings_store import (
+    CHANNEL_MODE,
+    MODMAIL_BOTH,
+    MODMAIL_BUTTONS,
+    MODMAIL_TYPING,
+    THREAD_MODE,
+)
 from .timezones import stamp
 
 IN = "in"
@@ -377,6 +383,7 @@ PICK_A_BLOCK = "Somebody…"
 PICK_A_SNIPPET = "A snippet…"
 PICK_A_PLACE = "Which place to forget…"
 PICK_A_MODE = "How new tickets are made…"
+PICK_A_REPLY_STYLE = "How staff answer a ticket…"
 PICK_A_CHANNEL = "Pick a channel…"
 PICK_A_CATEGORY = "Pick a category…"
 PICK_SOMEBODY = "Who to block…"
@@ -399,6 +406,7 @@ CATEGORY = "category"
 STAFF_CHANNEL = "staff_channel"
 TRANSCRIPTS = "transcripts"
 MODE = "mode"
+REPLY_STYLE = "reply_style"
 ENABLE = "enable"
 DISABLE = "disable"
 UNBLOCK = "unblock"
@@ -433,6 +441,7 @@ TRANSCRIPTS_MOVE = ModmailMove(TRANSCRIPTS, "Transcripts…", "secondary", 1)
 MODE_MOVE = ModmailMove(MODE, "Mode…", "secondary", 1)
 ANSWER_ON_MOVE = ModmailMove(ENABLE, "Answer DMs on", "primary", 1)
 ANSWER_OFF_MOVE = ModmailMove(DISABLE, "Answer DMs off", "secondary", 1)
+REPLY_STYLE_MOVE = ModmailMove(REPLY_STYLE, "Reply style…", "secondary", 2)
 SETUP_BACK_MOVE = ModmailMove(BACK, "Back", "secondary", 2)
 SETUP_REFRESH_MOVE = ModmailMove(REFRESH, "Refresh", "secondary", 2)
 
@@ -467,6 +476,7 @@ PANEL_MOVES = (
     MODE_MOVE,
     ANSWER_ON_MOVE,
     ANSWER_OFF_MOVE,
+    REPLY_STYLE_MOVE,
     SETUP_BACK_MOVE,
     SETUP_REFRESH_MOVE,
     UNBLOCK_MOVE,
@@ -505,6 +515,7 @@ def setup_buttons(*, enabled: bool) -> tuple[ModmailMove, ...]:
         TRANSCRIPTS_MOVE,
         MODE_MOVE,
         ANSWER_OFF_MOVE if enabled else ANSWER_ON_MOVE,
+        REPLY_STYLE_MOVE,
         SETUP_BACK_MOVE,
         SETUP_REFRESH_MOVE,
     )
@@ -607,6 +618,38 @@ def card_buttons(*, practice: bool) -> tuple[CardMove, ...]:
     if practice:
         found += [SPEAK_MOVE, END_MOVE]
     return tuple(found)
+
+
+REPLY_STYLE_KEY = "modmail_reply_style"
+REPLY_STYLE_OPTIONS = {
+    MODMAIL_BUTTONS: "only the card's Reply and /reply reach the member",
+    MODMAIL_TYPING: "a plain message in a ticket is relayed, as it always has been",
+    MODMAIL_BOTH: "both — today's behaviour, with the card added",
+}
+REPLY_STYLE_SET = "Staff answer tickets by **{style}** from now on. {what}"
+REPLY_STYLE_WORDS = {
+    MODMAIL_BUTTONS: (
+        "A message typed in a ticket now stays in the ticket — only the card's **Reply** and "
+        "`/reply` reach the member."
+    ),
+    MODMAIL_TYPING: (
+        "⚠️ From now on, anything staff type in a ticket goes to the member. The card's buttons "
+        "still work."
+    ),
+    MODMAIL_BOTH: (
+        "⚠️ From now on, anything staff type in a ticket goes to the member, and the card's "
+        "buttons work too."
+    ),
+}
+
+
+def relays_typing(style: Any) -> bool:
+    """`buttons` is the only style that stops a typed message reaching the member."""
+    return str(style or MODMAIL_BOTH) != MODMAIL_BUTTONS
+
+
+def reply_style_sentence(style: str) -> str:
+    return REPLY_STYLE_SET.format(style=style, what=REPLY_STYLE_WORDS.get(style, ""))
 
 
 def picked_values(picker: Any) -> list[str]:

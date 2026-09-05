@@ -57,6 +57,7 @@ export const LABELS = {
   rolemenu_panel_minutes: 'How long the /rolemenu panel stays live',
   honeypot_panel_minutes: 'How long the /honeypot panel stays live',
   modmail_panel_minutes: 'How long the /modmail panel stays live',
+  modmail_reply_style: 'Whether typing in a ticket reaches the member',
   mod_panel_minutes: 'How long the /mod panel stays live',
 
   tempvoice_mode: 'Whether people can make their own voice rooms',

@@ -427,6 +427,7 @@ const SETTING_SPECS = [
   ['honeypot_panel_minutes', 'int', 10, 10, "minutes the /honeypot panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
   ['modmail_panel_minutes', 'int', 10, 10, "minutes the /modmail panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
   ['mod_panel_minutes', 'int', 10, 10, "minutes the /mod panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
+  ['modmail_reply_style', 'enum', 'both', 'both', 'how staff answer a ticket. typing: a plain message in the ticket is relayed to the member, as it always has been. buttons: it is not — only the ticket card’s Reply and /reply reach them, so a ticket channel can be talked in safely. both is the default and is today’s behaviour with the card added', ['buttons', 'typing', 'both']],
 ];
 
 const RULES = {

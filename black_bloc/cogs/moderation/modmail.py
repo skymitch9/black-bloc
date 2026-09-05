@@ -52,9 +52,13 @@ from ...modmail import (
     PICK_A_CHANNEL,
     PICK_A_MODE,
     PICK_A_PLACE,
+    PICK_A_REPLY_STYLE,
     PICK_A_SNIPPET,
     PICK_SOMEBODY,
     REFRESH,
+    REPLY_STYLE,
+    REPLY_STYLE_KEY,
+    REPLY_STYLE_OPTIONS,
     SETUP,
     SETUP_TITLE,
     SITE,
@@ -90,6 +94,8 @@ from ...modmail import (
     panel_minutes,
     picked_values,
     relay_embed,
+    relays_typing,
+    reply_style_sentence,
     root_buttons,
     setup_buttons,
     snippet_buttons,
@@ -124,6 +130,7 @@ from ...settings_store import (
     DB_UNAVAILABLE,
     GUILD_ONLY,
     MODMAIL_MODES,
+    MODMAIL_REPLY_STYLES,
     THREAD_MODE,
     require_staff,
     staff_roles_sentence,
@@ -1248,6 +1255,15 @@ async def set_enabled(
     return Outcome(True, ANSWERING if wanted else NOT_ANSWERING, value=wanted)
 
 
+async def set_reply_style(
+    bot: Any, guild: Any, actor: Any, style: str, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """`buttons` turns the typed relay off; it never turns a second relay on."""
+    await bot.store.set(guild.id, REPLY_STYLE_KEY, style, by=getattr(actor, "id", actor))
+    await settings_written(bot, guild, actor, {REPLY_STYLE_KEY: style}, via)
+    return Outcome(True, reply_style_sentence(style), value=style)
+
+
 class Modmail(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
@@ -1506,6 +1522,8 @@ class Modmail(commands.Cog):
                 source=SOURCE_TYPED,
             )
             await react(self.bot, message, NOTE_REACTION)
+            return
+        if not relays_typing(self.bot.store.get(message.guild.id, REPLY_STYLE_KEY)):
             return
         why_not = await self._send_reply(
             message.guild,
@@ -1938,6 +1956,7 @@ def setup_lines(bot: Any, guild: Any) -> list[str]:
         "**ticket category** — " + (f"<#{category_id}>" if category_id else "not set"),
         "**staff channel** — " + (f"<#{parent_id}>" if parent_id else "not set"),
         "**transcripts** — " + (f"<#{log_id}>" if log_id else "not set"),
+        f"**reply style** — {store.get(guild.id, REPLY_STYLE_KEY)}",
         f"**this panel stays live** — {minutes_for(bot, guild.id)} minute(s)",
     ]
 
@@ -1970,6 +1989,8 @@ def build_setup(
         view.add_item(PlacePick(TRANSCRIPTS, "modmail_log_channel_id"))
     elif picker == MODE:
         view.add_item(ModePick(bot.store.get(guild.id, "modmail_mode")))
+    elif picker == REPLY_STYLE:
+        view.add_item(ReplyStylePick(bot.store.get(guild.id, REPLY_STYLE_KEY)))
     for move in setup_buttons(enabled=bool(bot.store.get(guild.id, "modmail_enabled"))):
         view.add_item(MoveButton(move))
     return (embed, view)
@@ -2143,6 +2164,17 @@ async def run_mode(interaction: discord.Interaction, value: str, previous: Any =
     await open_setup_again(interaction, previous, outcome)
 
 
+async def run_reply_style(
+    interaction: discord.Interaction, value: str, previous: Any = None
+) -> None:
+    if not await opened(interaction):
+        return
+    outcome = await set_reply_style(
+        interaction.client, interaction.guild, interaction.user, value
+    )
+    await open_setup_again(interaction, previous, outcome)
+
+
 async def run_enabled(interaction: discord.Interaction, previous: Any = None) -> None:
     if not await opened(interaction):
         return
@@ -2258,7 +2290,7 @@ class MoveButton(discord.ui.Button):
         if action == FORGET:
             await open_forget(interaction, view)
             return
-        if action in (CATEGORY, STAFF_CHANNEL, TRANSCRIPTS, MODE):
+        if action in (CATEGORY, STAFF_CHANNEL, TRANSCRIPTS, MODE, REPLY_STYLE):
             await open_setup(interaction, view, action)
             return
         if action in (ENABLE, DISABLE):
@@ -2362,6 +2394,28 @@ class ModePick(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         await run_mode(interaction, self.values[0], self.view)
+
+
+class ReplyStylePick(discord.ui.Select):
+    def __init__(self, current: str) -> None:
+        super().__init__(
+            placeholder=PICK_A_REPLY_STYLE,
+            options=[
+                discord.SelectOption(
+                    label=name,
+                    value=name,
+                    description=REPLY_STYLE_OPTIONS[name][:100],
+                    default=name == current,
+                )
+                for name in MODMAIL_REPLY_STYLES
+            ],
+            min_values=1,
+            max_values=1,
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_reply_style(interaction, self.values[0], self.view)
 
 
 class BlockedPick(discord.ui.Select):
