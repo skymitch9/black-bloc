@@ -768,6 +768,8 @@ owner confirmation pending — each reverses in one place):
    instead of crossing them with the mode, because none of the three interacts with the mode at
    all and the crossing would assert the same thing twelve times.
 
+10. **`recorded_traps` casts each stored id with `int()`**, which `make_trap_channel`'s inline comprehension did not. The registry round-trips these through JSON so they are already whole numbers and the behaviour is identical in practice; the cast is there because the Forget picker's option VALUES are strings coming back off Discord, and one home for the list means one type for it. ⚠️ Stated rather than left to be discovered, because §J asked for that one edit to be behaviour-identical.
+
 **Reported, not fixed — measured while building:**
 
 - ⚠️ **The website can still write `honeypot_mode` and `honeypot_exempt_role_ids` through the
