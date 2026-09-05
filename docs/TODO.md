@@ -12,7 +12,7 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 15:40, v86 LIVE — **29 slots, zero Groups**; the SELF-TEST (wave 5, `info/selftest-design.md`, sweeps 252–261) + pings fork (a) landed; owner walked sweeps 232–251 and the mobile Logs page 15:19; NOTHING in flight; next = the `/settings` leftovers (engineering items below), then the small self-test findings filed under Open engineering items)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 15:38, v87 LIVE — **29 slots, zero Groups**; the SELF-TEST (wave 5, `info/selftest-design.md`, sweeps 252–261) + pings fork (a) landed; owner walked sweeps 232–251 and the mobile Logs page 15:19; NOTHING in flight; next = the `/settings` leftovers (engineering items below), then the small self-test findings filed under Open engineering items)
 
 **`main` = `43312b9`** (role-menus panel merge; v77 live 20:51, 4529 tests, **36 commands**; `youtube_mode` is
 **shadow** since 2026-09-03 17:42). **The panels program is COMPLETE** — waves 1, 2 and 3 (17 features, one
@@ -218,8 +218,7 @@ docs bookkeeping lands with the work, not after.
   row for the guild and filters by `run_id` in Python — grows one run's worth per run; index or `WHERE json_extract`
   on `details.run_id`, measure at ~50 runs; (3) `OPERATOR_READ_TOKEN` is not set on Fly, so `tests/live/` has never
   hit the deployed host — mint one (Fly secret, NAME only in docs) and run `pytest -m live` once from a laptop, then
-  record the measured count in `access/testing.md`; (4) the boot line is the ONLY live measurement of the self-test so
-  far — a person pressing **Run the self-test** and watching the purge is sweep row 252/259.
+  record the measured count in `access/testing.md`; (4) the boot line and the purge line are the only live measurements of the self-test so far (v87: `106 ok, 0 failed, 24 posted`; v86 purge: 24 deleted 5 min 40 s later) — a person pressing **Run the self-test** is sweep row 252.
 - 🔧 **`/settings` leftovers after Build 2 (handed over at the v84 landing, 2026-09-05):** (1) the operator-read-log
   toggle on `Panels & commands…` is drawn only for `manage_guild` but `MoveButton.callback` → `run_toggle` does not
   re-ask it (the core-key picks do, through `core_keys_allowed`) — the panel is ephemeral to its opener so the exposure
