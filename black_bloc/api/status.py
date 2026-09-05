@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import PlainTextResponse
 
 from .. import __version__
-from ..actionlog import SCAN_LIMIT, feature_clause, summary_of
+from ..actionlog import SCAN_LIMIT, default_view_clause, feature_clause, summary_of
 from ..events import OPEN_STATUSES
 from ..logkinds import FEATURES, feature_of, is_important, via_of
 from ..modmail import OPEN as MODMAIL_OPEN
@@ -248,6 +248,11 @@ async def kinds_present(bot: Any, guild_id: int, feature: str | None) -> list[st
         clause, wanted = feature_clause(feature)
         sql += f" AND {clause}"
         params += wanted
+    else:
+        hidden, patterns = default_view_clause()
+        if hidden:
+            sql += f" AND {hidden}"
+            params += patterns
     cur = await bot.db.conn.execute(f"{sql} ORDER BY kind", params)
     return [row["kind"] for row in await cur.fetchall()]
 
@@ -280,6 +285,11 @@ async def recent_actions(
         clause, wanted = feature_clause(feature)
         sql += f" AND {clause}"
         params += wanted
+    elif not kind:
+        hidden, patterns = default_view_clause()
+        if hidden:
+            sql += f" AND {hidden}"
+            params += patterns
     if since:
         sql += " AND at >= ?"
         params += (since,)

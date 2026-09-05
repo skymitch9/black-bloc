@@ -9,10 +9,12 @@ SHADOW = ".would_"
 VIA_DISCORD = "discord"
 VIA_WEBSITE = "website"
 VIA_OPERATOR = "operator"
+VIA_BOOT = "boot"
 VIA_WORDS: dict[str, str] = {
     VIA_DISCORD: "Discord",
     VIA_WEBSITE: "Website",
     VIA_OPERATOR: "Operator token",
+    VIA_BOOT: "By the bot at boot",
 }
 
 OFF = "off"
@@ -39,6 +41,7 @@ FEATURES = (
     "pings",
     "raidtrain",
     "applications",
+    "selftest",
 )
 
 HEADS: dict[str, str] = {
@@ -67,6 +70,7 @@ HEADS: dict[str, str] = {
     "raidtrain": "raidtrain",
     "application": "applications",
     "applications": "applications",
+    "selftest": "selftest",
 }
 
 FEATURE_LABELS: dict[str, str] = {
@@ -87,6 +91,7 @@ FEATURE_LABELS: dict[str, str] = {
     "pings": "Ping roles",
     "raidtrain": "Raid trains",
     "applications": "Applications",
+    "selftest": "Test",
 }
 
 FEATURE_PAGES: dict[str, str] = {
@@ -107,6 +112,7 @@ FEATURE_PAGES: dict[str, str] = {
     "pings": "golive.html",
     "raidtrain": "events.html",
     "applications": "rolemenus.html",
+    "selftest": "health.html",
 }
 
 IMPORTANT_SUFFIXES = (
@@ -354,7 +360,23 @@ ROUTINE: frozenset[str] = frozenset(
         "application.submitted",
         "application.withdrawn",
         "application.removed",
+        "selftest.started",
+        "selftest.check",
+        "selftest.finished",
+        "selftest.purged",
     }
+)
+
+SELFTEST = "selftest"
+SELFTEST_STARTED = "selftest.started"
+SELFTEST_CHECK = "selftest.check"
+SELFTEST_FINISHED = "selftest.finished"
+SELFTEST_PURGED = "selftest.purged"
+SELFTEST_KINDS: tuple[str, ...] = (
+    SELFTEST_STARTED,
+    SELFTEST_CHECK,
+    SELFTEST_FINISHED,
+    SELFTEST_PURGED,
 )
 
 
@@ -386,6 +408,16 @@ def like_patterns(feature: str) -> tuple[str, ...]:
         found.append(f"{head}.%")
         found.append(f"{WEB}.{head}.%")
     return tuple(found)
+
+
+HIDDEN_BY_DEFAULT: tuple[str, ...] = (SELFTEST,)
+
+
+def hidden_by_default_patterns() -> tuple[str, ...]:
+    """The features the Logs page leaves out until somebody asks for them by name."""
+    return tuple(
+        pattern for feature in HIDDEN_BY_DEFAULT for pattern in like_patterns(feature)
+    )
 
 
 def is_shadow(kind: str) -> bool:
@@ -438,6 +470,7 @@ __all__ = [
     "FEATURE_LABELS",
     "FEATURE_PAGES",
     "HEADS",
+    "HIDDEN_BY_DEFAULT",
     "IMPORTANT",
     "IMPORTANT_ONLY",
     "IMPORTANT_SUFFIXES",
@@ -447,6 +480,13 @@ __all__ = [
     "LOG_LEVEL_KEYS",
     "OFF",
     "ROUTINE",
+    "SELFTEST",
+    "SELFTEST_CHECK",
+    "SELFTEST_FINISHED",
+    "SELFTEST_KINDS",
+    "SELFTEST_PURGED",
+    "SELFTEST_STARTED",
+    "VIA_BOOT",
     "VIA_DISCORD",
     "VIA_OPERATOR",
     "VIA_WEBSITE",
@@ -454,6 +494,7 @@ __all__ = [
     "bare",
     "feature_of",
     "heads_for",
+    "hidden_by_default_patterns",
     "is_important",
     "is_shadow",
     "kind_via",

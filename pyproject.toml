@@ -39,7 +39,10 @@ black_bloc = ["data/*.json"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-addopts = "--import-mode=importlib"
+addopts = "--import-mode=importlib -m 'not live'"
+markers = [
+    "live: hits the DEPLOYED api rather than a fixture; excluded from the default run and skipped unless BLACK_BLOC_LIVE_URL and BLACK_BLOC_LIVE_TOKEN are both set. Run it with: pytest -m live tests/live",
+]
 
 [tool.ruff]
 line-length = 100

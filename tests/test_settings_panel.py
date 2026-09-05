@@ -247,11 +247,12 @@ def test_the_root_renders_exactly_its_row_and_no_other_control():
         LOGS,
         SITE,
         LOG_LEVELS,
+        "selftest",
         REFRESH,
     ]
 
     bare = root_buttons(may_turn_back_on=False, may_edit_core=False, has_site=False)
-    assert actions(bare) == [GROUP, "looks", "panels", LOGS, LOG_LEVELS, REFRESH]
+    assert actions(bare) == [GROUP, "looks", "panels", LOGS, LOG_LEVELS, "selftest", REFRESH]
     assert BACK_ON not in actions(bare) and ROLES_CHANNELS not in actions(bare)
 
 
@@ -298,7 +299,7 @@ def test_every_log_level_fits_one_select_and_shows_the_level_it_is_on():
     store = FakeStore(defaults={f"{feature}_log_level": "important" for feature in FEATURES})
     found = log_level_options(store, GUILD)
 
-    assert len(found) == len(FEATURES) == 17 <= SELECT_LIMIT
+    assert len(found) == len(FEATURES) == 18 <= SELECT_LIMIT
     assert all(label.endswith("— important") for _, label in found)
 
 
@@ -463,3 +464,67 @@ def test_an_editor_move_is_a_select_for_a_picker_and_a_modal_for_typed_text():
     assert editor_move("staff_channel_id", None).kind == "select"
     assert editor_move("bot_bio", "x").modal is True
     assert editor_move("birthday_color", "#4eefff").action == "edit:colour"
+
+
+def test_the_self_test_card_draws_purge_now_only_while_there_is_something_to_delete():
+    """P3 again: never a button that answers 'there was nothing to purge'."""
+    from black_bloc.settings_panel import selftest_buttons
+
+    idle = selftest_buttons(running=False, has_messages=False)
+    assert actions(idle) == ["selftest_run", "selftest_logs", BACK]
+
+    waiting = selftest_buttons(running=False, has_messages=True)
+    assert actions(waiting) == ["selftest_run", "selftest_purge", "selftest_logs", BACK]
+
+    # A run already going: **Run the self-test** is absent rather than offered and refused.
+    going = selftest_buttons(running=True, has_messages=True)
+    assert actions(going) == ["selftest_purge", "selftest_logs", BACK]
+    assert max(Counter(move.row for move in waiting).values()) <= 5
+
+
+async def test_the_self_test_card_says_what_it_will_do_before_it_has_ever_run(store):
+    from black_bloc.settings_panel import SELFTEST_IS_RUNNING, selftest_lines
+
+    said = "\n".join(selftest_lines(store, GUILD))
+
+    assert "deleted again after 5 minute(s)" in said
+    assert "under **Test**" in said
+    assert "**At every boot** — yes" in said
+    assert f"<#{TEST_CH}>" in said
+    assert "has not run yet" in said
+    assert SELFTEST_IS_RUNNING not in said
+
+    await store.set(GUILD, "selftest_on_boot", False)
+    assert "**At every boot** — no" in "\n".join(selftest_lines(store, GUILD))
+
+
+async def test_the_self_test_card_names_the_last_run_and_every_failure(store):
+    from black_bloc.settings_panel import selftest_lines
+
+    last = {
+        "started_at": "2026-09-05T14:03:00+00:00",
+        "ok": 79,
+        "failed": 2,
+        "posted": 18,
+        "purged_at": None,
+    }
+    failures = [
+        {"name": "config.birthday_channel_id", "detail": "missing embed_links"},
+        {"name": "read./api/costs", "detail": "TypeError: no"},
+    ]
+
+    said = "\n".join(
+        selftest_lines(store, GUILD, last=last, failures=failures, waiting=18, running="")
+    )
+
+    assert "79 ok · 2 failed · 18 message(s) posted" in said
+    assert "18 message(s) are still waiting to be deleted." in said
+    assert "**config.birthday_channel_id** — missing embed_links" in said
+    assert "**read./api/costs** — TypeError: no" in said
+
+    purged = dict(last)
+    purged["purged_at"] = "2026-09-05T14:09:00+00:00"
+    after = "\n".join(selftest_lines(store, GUILD, last=purged))
+
+    assert "were deleted 2026-09-05T14:09:00+00:00" in after
+    assert "waiting to be deleted" not in after

@@ -1,7 +1,9 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-05** — rows **245–251** at the FOOT added by the MODMAIL follow-up (the ticket card ON the
+> **2026-09-05** — rows **252–261** at the FOOT added by the SELF-TEST build (wave 5; written as
+> `ST1`–`ST10`, numbered at the merge, shipped as **v86**; schema 30 → 31); before them rows
+> **245–251** added by the MODMAIL follow-up (the ticket card ON the
 > panel; written as `ML1`–`ML7`, numbered at the merge, shipped as **v85**); before them rows
 > **231–244** added by the SETTINGS PANEL build (231–242 written as
 > `S1`–`S12` by **Build 2** on `worktree-agent-a56c7b5137d9a609d`, 243–244 as `SB1`–`SB2` by Build 1;
@@ -801,8 +803,9 @@ whole `/presence` group are gone, and the top-level count drops **30 → 29 with
 `app_commands.Group`s left in the tree** — measured through
 `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`, not predicted.
 ✅ **Row 231 exercised by the owner 2026-09-05 14:35** (verbatim: "settings Slash menu looks good") — the root panel
-opens and reads right. Rows 232–244 (the group cards, editors, roles & channels, look, panels, log levels and
-the two website rows) have NOT yet been walked — shipped as v84 on 2026-09-05.
+opens and reads right. ✅ **Rows 232–244 exercised by the owner 2026-09-05 15:19** (verbatim: "1 and 2 are good",
+item 2 being "sweeps 232–251 by eye") — the group cards, editors, roles & channels, look, panels, log levels and
+the two website rows, shipped as v84 on 2026-09-05. Nothing was reported wrong.
 
 | # | Do this | Expect |
 |---|---|---|
@@ -824,7 +827,8 @@ the two website rows) have NOT yet been walked — shipped as v84 on 2026-09-05.
 ## Modmail leftovers — the ticket card ON the panel (wave 4 follow-up)
 
 Rows 245–251, written as `ML1`–`ML7` on `worktree-agent-ad2fc0f5aad473c19` and numbered at the
-merge 2026-09-05; shipped as **v85**. ⚠️ Not yet run against live Discord by eye. The design is
+merge 2026-09-05; shipped as **v85**. ✅ **Exercised by the owner 2026-09-05 15:19** ("1 and 2 are good" — item 2
+was "sweeps 232–251 by eye"); nothing reported wrong. The design is
 [`../info/modmail-panel-design.md`](../info/modmail-panel-design.md) §B row S5 and §C *"The ticket
 card ON THE PANEL"*. Everything here is a second door onto moves rows 219–230 already cover from
 the card in the channel — the point of walking it is that the SAME move, pressed here, leaves the
@@ -839,6 +843,29 @@ same one row and the same one DM.
 | 249 | **Back** | the inbox again, with **A ticket…** still on it |
 | 250 | **Close…** with a reason | the member is DM'd, the transcript is filed, the channel goes — and the panel is left showing the card with **only Back** on it and a footer saying the ticket is closed. Press **Back**: the ticket is gone from **A ticket…** |
 | 251 | with **26** tickets open (or just read the picker with more than 25), and separately: pick a ticket, have somebody else close it, then press **Close…** | the picker shows 25 options and its placeholder reads **25 of 26 — the rest are on the site**; the raced close answers *"was closed by somebody else while you were typing"* in words and never a bare error. ⚠️ A `modmail.card_failed` row on the Logs page is now also written when the sticky card's own background move **raises** — before this it was a log line nobody could see |
+
+## The self-test (wave 5) — rows 252–261
+
+Rows 252–261, written as `ST1`–`ST10` on `worktree-agent-a4aa5efd43f249ba6` and numbered at the
+merge 2026-09-05; shipped as **v86**. Built 2026-09-05 (`info/selftest-design.md`). The bot
+exercises itself against the real guild — every settings channel and role, every read the pages
+make, all 18 panel cards posted as real messages, and six announcements rendered through their own
+templates — then deletes every message it posted five minutes later. The log lines stay on the
+dashboard's Logs page under **Test**. ⚠️ **Nothing below has met live Discord by a person**, and
+nothing under `tests/live/` has been run against the deployed host.
+
+| # | Do this | Expect |
+|---|---|---|
+| 252 | `/settings` as a Lead in `#mute-me-bot-test-spam` → **Self-test…** | a card titled **The self-test** saying what it will do, that it runs at every boot, where the cards go (`#mute-me-bot-test-spam`) and that they are deleted again after 5 minute(s). Buttons: **Run the self-test · Logs · Back**. ⚠️ **Purge now is NOT there** — nothing has been posted yet, so there is nothing to purge, and a button that answers "nothing to do" is not drawn |
+| 253 | press **Run the self-test** and watch `#mute-me-bot-test-spam` | ~24 messages arrive: one root card per panel (`/settings`, `/automod`, `/honeypot`, `/mod`, `/modmail`, `/event`, `/poll`, `/birthday`, `/rolemenu`, `/voice`, `/request`, `/apply`, `/chat`, `/memory`, `/golive`, `/youtube`, `/pings`, `/raidtrain`) and six announcements (go-live, upload, birthday, event, ping prefix, raid-train lineup). The ephemeral answer says **N ok, M failed** and names every failure. ⚠️ **The buttons on those cards are REAL** — press one and it works, for as long as the card lives (fork F-ST3) |
+| 254 | look at the card again, then press **Purge now** | **Purge now** is there now, and the embed says how many messages are still waiting. Pressing it answers *N self-test message(s) deleted.* and the channel is clean. Press it a second time: it is gone, because there is nothing left to purge |
+| 255 | run it again and leave it alone for five minutes | every message the run posted disappears on its own, within about a minute of the fifth minute. The `/settings` ▸ **Self-test…** card then says its messages were deleted |
+| 256 | dashboard → **Logs** | ⚠️ **not one `selftest.*` line is in the default view** — that is the point. The chip bar has a **Test** chip at the end; press it and only the test rows show: `selftest.started`, one `selftest.check` per check, `selftest.finished`, `selftest.purged`, each **via Discord** or **By the bot at boot**. Press **Everything** again and they vanish. The CSV export follows the same rule |
+| 257 | `/settings` ▸ **Self-test…** ▸ **Logs** | a NEW ephemeral message titled **Test log** with the same rows. This is the ONLY door in Discord onto them, because the dashboard's default view leaves them out |
+| 258 | dashboard → **Health** → the **Self-test** card | the last run: when, `ok`/`failed`/`posted`, whether its cards are still in Discord, and every failure by name with its sentence. **Run the self-test** starts one; while it is going the card refreshes itself every 15 seconds and the button is disabled. Older runs are in a **Runs before this one** foldout |
+| 259 | press **Run the self-test** on the website twice, quickly | the second press is refused **in words** — *"A self-test is already running (started 14:03, 12 of 106 checks done)…"* — never a bare 409. The same sentence comes back from the `/settings` card if you press its button while a website run is going |
+| 260 | dashboard → **Settings** → the **core** group | four new rows: **Whether the bot tests itself at every boot** (true), **Where the self-test posts the cards it is proving** (`#mute-me-bot-test-spam`), **How long the self-test's cards stay before the bot deletes them** (5), and **How much of the self-test is repeated into Discord** (**off** — the only feature that ships at off, on purpose). Set the minutes to `0`: refused in words. The Discord door onto all four is `/settings` ▸ **A setting group…** ▸ **core** |
+| 261 | after the next deploy, `flyctl logs` | one line — `selftest: 106 ok, 0 failed, 24 messages posted (purge in 5 min)` — and one `selftest: FAILED <check> — <sentence>` line per failure. ⚠️ **This is the line that verifies a deploy**, without opening Discord at all. Turn `selftest_on_boot` off and the line stops; the boot purge of any leftovers still happens |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that

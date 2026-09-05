@@ -15,6 +15,7 @@ from black_bloc.logkinds import (
     OFF,
     ROUTINE,
     SHADOW,
+    VIA_BOOT,
     VIA_DISCORD,
     VIA_OPERATOR,
     VIA_WEBSITE,
@@ -68,6 +69,24 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.application.form_deleted",
         "web.application.question_changed",
         "web.application.panel_posted",
+    ),
+    # The self-test's four kinds are module constants, and every door writes the same four
+    # through `kind_via`, so each one is dynamic in exactly the two spellings.
+    "black_bloc/selftest.py::SELFTEST_STARTED": (
+        "selftest.started",
+        "web.selftest.started",
+    ),
+    "black_bloc/selftest.py::SELFTEST_CHECK": (
+        "selftest.check",
+        "web.selftest.check",
+    ),
+    "black_bloc/selftest.py::SELFTEST_FINISHED": (
+        "selftest.finished",
+        "web.selftest.finished",
+    ),
+    "black_bloc/selftest.py::SELFTEST_PURGED": (
+        "selftest.purged",
+        "web.selftest.purged",
     ),
     # One `move_train` walks the transition table for both doors, so the kind is the target's.
     "black_bloc/cogs/content/raidtrain.py::MOVE_KINDS[to]": (
@@ -676,7 +695,10 @@ def test_via_reads_what_the_writer_recorded_and_falls_back_to_the_web_head():
     assert via_of("web") == "discord"
     assert via_word("web.settings.set") == "Website"
     assert via_word("settings.set") == "Discord"
-    assert set(VIA_WORDS) == {VIA_DISCORD, VIA_WEBSITE, VIA_OPERATOR}
+    # The self-test's boot door records its own word, so a boot run is not read as Discord.
+    assert via_of("selftest.started", {"via": "boot"}) == VIA_BOOT
+    assert via_word("selftest.started", {"via": "boot"}) == "By the bot at boot"
+    assert set(VIA_WORDS) == {VIA_DISCORD, VIA_WEBSITE, VIA_OPERATOR, VIA_BOOT}
 
 
 def test_an_operator_read_says_so_only_because_the_writer_recorded_it():
@@ -711,10 +733,25 @@ def test_an_unknown_level_is_todays_behaviour():
 
 
 def test_every_feature_has_one_settings_key():
-    assert len(FEATURES) == 17
-    assert len(set(FEATURES)) == 17
+    assert len(FEATURES) == 18
+    assert len(set(FEATURES)) == 18
     assert log_level_key("golive") == "golive_log_level"
     assert LEVELS == (OFF, IMPORTANT_ONLY, ALL)
+
+
+def test_the_test_feature_is_the_one_the_logs_page_leaves_out_until_it_is_asked_for():
+    """Owner, 2026-09-05: 'keep the logs on the website tho under test' — kept, and out of
+    the way. The exclusion is derived from HIDDEN_BY_DEFAULT, so there is one home for it."""
+    assert "selftest" in FEATURES
+    assert logkinds.FEATURE_LABELS["selftest"] == "Test"
+    assert logkinds.FEATURE_PAGES["selftest"] == "health.html"
+    assert logkinds.HIDDEN_BY_DEFAULT == ("selftest",)
+    assert logkinds.hidden_by_default_patterns() == ("selftest.%", "web.selftest.%")
+    assert feature_of("selftest.check") == "selftest"
+    assert feature_of("web.selftest.check") == "selftest"
+    # Not important, or the Logs page's Important switch would fill up with test rows —
+    # and `.purged` would otherwise be caught by IMPORTANT_SUFFIXES.
+    assert not any(is_important(kind) for kind in logkinds.SELFTEST_KINDS)
 
 
 def test_like_patterns_cover_every_head_of_a_feature():

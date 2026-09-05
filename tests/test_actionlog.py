@@ -7,6 +7,7 @@ from black_bloc.actionlog import (
     NOTHING_IMPORTANT,
     NOTHING_YET,
     build_embed,
+    default_view_clause,
     describe,
     entity_id,
     feature_clause,
@@ -278,6 +279,26 @@ async def test_core_is_everything_no_other_feature_claims(wired):
     lines = await recent_lines(db, 7, "core", 10)
 
     assert len(lines) == 3
+    assert all("poll.closed" not in line for line in lines)
+
+
+def test_the_unfiltered_view_leaves_out_the_features_that_are_hidden_by_default():
+    """ONE place decides it, and the SQL is built from `HIDDEN_BY_DEFAULT` rather than
+    a hand-written `kind NOT LIKE 'selftest.%'` in the route, so the CSV cannot drift."""
+    clause, patterns = default_view_clause()
+
+    assert clause == "(kind NOT LIKE ? AND kind NOT LIKE ?)"
+    assert patterns == ("selftest.%", "web.selftest.%")
+
+
+async def test_a_features_own_logs_card_still_sees_its_rows_even_when_it_is_hidden(wired):
+    """`/settings` ▸ Self-test ▸ Logs asks by feature, so the default-view rule never applies."""
+    db, store = wired
+    await _seed(db, store, ["selftest.started", "selftest.check", "poll.closed"])
+
+    lines = await recent_lines(db, 7, "selftest", 10)
+
+    assert len(lines) == 2
     assert all("poll.closed" not in line for line in lines)
 
 

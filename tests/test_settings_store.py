@@ -887,7 +887,7 @@ def test_the_ping_role_mode_is_read_as_a_feature_switch_on_the_health_page():
 
 async def test_every_feature_has_a_log_level_key_defaulting_to_important(store):
     keys = [f"{feature}_log_level" for feature in FEATURES]
-    assert len(keys) == 17
+    assert len(keys) == 18
     assert "request_log_level" in keys
     assert "pings_log_level" in keys
     assert "raidtrain_log_level" in keys
@@ -895,8 +895,13 @@ async def test_every_feature_has_a_log_level_key_defaulting_to_important(store):
         assert KEY_TYPES[key] == "enum"
         assert KEY_CHOICES[key] == LEVELS
         assert KEY_HELP.get(key)
+    # The self-test is the one exception, and it is deliberate: the rows are kept on the
+    # dashboard under Test, and none of them is repeated into Discord unless staff ask.
+    for key in [one for one in keys if one != "selftest_log_level"]:
         assert store.get(7, key) == "important"
         assert store.default(key) == "important"
+    assert store.default("selftest_log_level") == "off"
+    assert store.get(7, "selftest_log_level") == "off"
 
 
 def test_a_log_level_takes_only_the_three_levels():
@@ -1714,3 +1719,48 @@ async def test_the_reply_style_defaults_to_both_and_refuses_a_fourth_word(store)
         assert store.get(7, "modmail_reply_style") == style
     with pytest.raises(SettingError):
         coerce_value("modmail_reply_style", "shouting")
+
+
+async def test_the_three_self_test_keys_are_core_keys_reachable_from_both_doors(store):
+    """Checklist 33: every decision the self-test makes is a registry key, so the Settings
+    page and `/settings` ▸ **A setting group…** ▸ **core** both reach it."""
+    from black_bloc.settings_panel import reachable_on_the_panel
+    from black_bloc.settings_store import (
+        SELFTEST_CHANNEL_ID,
+        SELFTEST_LOG_LEVEL,
+        SELFTEST_ON_BOOT,
+        SELFTEST_PURGE_MINUTES,
+        namespace_of,
+    )
+
+    keys = (SELFTEST_ON_BOOT, SELFTEST_CHANNEL_ID, SELFTEST_PURGE_MINUTES, SELFTEST_LOG_LEVEL)
+    for key in keys:
+        assert namespace_of(key) == "core", key
+        assert reachable_on_the_panel(key), key
+        assert KEY_HELP.get(key), key
+    assert KEY_TYPES[SELFTEST_ON_BOOT] == "bool"
+    assert KEY_TYPES[SELFTEST_CHANNEL_ID] == "channel"
+    assert KEY_TYPES[SELFTEST_PURGE_MINUTES] == "int"
+
+
+async def test_the_self_test_runs_at_boot_posts_to_the_test_channel_and_purges_after_five(store):
+    """The owner's own number, 2026-09-05: 'after 5 minutes purge the discord chat of all test'."""
+    from black_bloc.settings_store import (
+        SELFTEST_CHANNEL_ID,
+        SELFTEST_ON_BOOT,
+        SELFTEST_PURGE_MINUTES,
+    )
+
+    assert store.get(7, SELFTEST_ON_BOOT) is True
+    assert store.get(7, SELFTEST_PURGE_MINUTES) == 5
+    assert store.get(7, SELFTEST_CHANNEL_ID) == store.settings.test_channel_id
+    assert store.default(SELFTEST_CHANNEL_ID) == store.settings.test_channel_id
+
+    await store.set(7, SELFTEST_PURGE_MINUTES, 60)
+    assert store.get(7, SELFTEST_PURGE_MINUTES) == 60
+    # Zero would delete the cards before anybody could look; a day is the ceiling.
+    with pytest.raises(SettingError):
+        coerce_value(SELFTEST_PURGE_MINUTES, 0)
+    with pytest.raises(SettingError):
+        coerce_value(SELFTEST_PURGE_MINUTES, 1441)
+    assert parse_value(SELFTEST_PURGE_MINUTES, "15") == 15

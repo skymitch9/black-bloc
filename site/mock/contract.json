@@ -3448,6 +3448,89 @@
           "answers"
         ]
       }
+    },
+    {
+      "_": "Wave 5, the self-test. POST /api/selftest is deliberately NOT in this table: it starts a real run against the live guild, which is the one route neither fixture can exercise without posting into Discord. tests/live/test_selftest.py is where that one is proven.",
+      "method": "GET",
+      "path": "/api/selftest",
+      "read_by": [
+        "page-health.js Self-test card"
+      ],
+      "shape": "object",
+      "keys": [
+        "runs",
+        "running",
+        "purge_minutes",
+        "notes"
+      ],
+      "rows": {
+        "runs": [
+          "run_id",
+          "started_at",
+          "finished_at",
+          "ok",
+          "failed",
+          "posted",
+          "purged_at",
+          "via",
+          "actor_id",
+          "running"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/selftest/{selftest_run_id}",
+      "read_by": [
+        "page-health.js Self-test card"
+      ],
+      "shape": "object",
+      "keys": [
+        "run_id",
+        "started_at",
+        "finished_at",
+        "ok",
+        "failed",
+        "posted",
+        "purged_at",
+        "via",
+        "actor_id",
+        "running",
+        "checks"
+      ],
+      "rows": {
+        "checks": [
+          "name",
+          "feature",
+          "ok",
+          "detail",
+          "at"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/selftest/{selftest_run_id}/purge",
+      "body": {},
+      "needs": "a run whose cards are still in Discord",
+      "read_by": [
+        "page-health.js Self-test card"
+      ],
+      "shape": "object",
+      "keys": [
+        "run_id",
+        "started_at",
+        "finished_at",
+        "ok",
+        "failed",
+        "posted",
+        "purged_at",
+        "via",
+        "actor_id",
+        "running",
+        "purged",
+        "notes"
+      ]
     }
   ],
   "pages": [
@@ -3579,6 +3662,10 @@
     "web.application.panel_posted",
     "web.application.approved",
     "web.application.denied",
-    "web.application.removed"
+    "web.application.removed",
+    "web.selftest.started",
+    "web.selftest.finished",
+    "web.selftest.purged",
+    "web.selftest.check"
   ]
 }

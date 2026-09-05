@@ -1,18 +1,19 @@
 from __future__ import annotations
 
+import logging
 from functools import partial
 from typing import Any
 
 import discord
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 
-from .. import __version__
+from .. import __version__, selftest
 from .. import settings_panel as sp
 from ..actionlog import log_action, send_logs
 from ..command_errors import AnswersErrors
 from ..command_visibility import STAFF_ONLY, hidden_names
-from ..logkinds import CORE, VIA_DISCORD
+from ..logkinds import CORE, SELFTEST, VIA_DISCORD
 from ..modcases import pages_under_limit
 from ..panels import (
     Outcome,
@@ -62,6 +63,11 @@ HIDDEN_NOTE = (
 SAVED = "**{key}** is now {value}."
 BAD_VALUE = "bad_value"
 NOTHING_STORED = "nothing_stored"
+
+log = logging.getLogger(__name__)
+
+PURGE_EVERY_SECONDS = 60
+PURGE_LOOP = "purge_loop"
 
 
 def actor_id(actor: Any) -> int | None:
@@ -155,6 +161,40 @@ def tree_commands(tree: Any, guild: Any = None) -> list[Any]:
 class Core(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+        self.last_purge_ok_at: Any = None
+        self.last_purge_error: Any = None
+
+    async def cog_load(self) -> None:
+        self.purge_loop.start()
+
+    async def cog_unload(self) -> None:
+        self.purge_loop.cancel()
+
+    @tasks.loop(seconds=PURGE_EVERY_SECONDS)
+    async def purge_loop(self) -> None:
+        """The first tick is on boot, so a run that died mid-way is cleared before a new one."""
+        if not getattr(self.bot.db, "is_connected", False):
+            return
+        for guild in list(getattr(self.bot, "guilds", ()) or ()):
+            gone = await selftest.purge(self.bot, guild)
+            if gone:
+                log.info("selftest: purged %d message(s) in %s", gone, guild.id)
+        self.last_purge_ok_at = discord.utils.utcnow().isoformat()
+        self.last_purge_error = None
+
+    @purge_loop.before_loop
+    async def _before_purge(self) -> None:
+        await self.bot.wait_until_ready()
+
+    @purge_loop.error
+    async def _purge_failed(self, exc: BaseException) -> None:
+        self.last_purge_error = f"{type(exc).__name__}: {exc}"
+        log.warning("selftest: the purge loop stopped — %s", self.last_purge_error, exc_info=exc)
+
+    def loop_health(self, name: str) -> tuple[Any, Any]:
+        if name != PURGE_LOOP:
+            return (None, None)
+        return (self.last_purge_ok_at, self.last_purge_error)
 
     @app_commands.command(name="ping", description="Check that Black Bloc is alive")
     async def ping(self, interaction: discord.Interaction) -> None:
@@ -462,6 +502,38 @@ def build_panels(bot: Any, guild: Any, member: Any) -> tuple[discord.Embed, Sett
     )
 
 
+async def selftest_card_state(bot: Any, guild: Any) -> dict[str, Any]:
+    """One read of everything the self-test card says, so the embed and its buttons agree."""
+    runs = await selftest.recent_runs(bot.db, guild.id, 1)
+    last = runs[0] if runs else None
+    waiting = await selftest.waiting_messages(bot.db, guild.id)
+    return {
+        "last": last,
+        "failures": await selftest.failures_of(bot.db, guild.id, last["id"]) if last else [],
+        "waiting": len(waiting),
+        "running": selftest.running(bot, guild.id),
+    }
+
+
+async def build_selftest(bot: Any, guild: Any) -> tuple[discord.Embed, SettingsPanel]:
+    state = await selftest_card_state(bot, guild)
+    view = SettingsPanel(minutes_for(bot, guild.id))
+    for move in sp.selftest_buttons(
+        running=state["running"] is not None, has_messages=state["waiting"] > 0
+    ):
+        view.add_item(MoveButton(move))
+    view.rerender = render_selftest
+    lines = sp.selftest_lines(
+        bot.store,
+        guild.id,
+        last=state["last"],
+        failures=state["failures"],
+        waiting=state["waiting"],
+        running=sp.SELFTEST_IS_RUNNING if state["running"] is not None else "",
+    )
+    return (discord.Embed(title=sp.SELFTEST_TITLE, description=clamped(lines)), view)
+
+
 def build_log_levels(bot: Any, guild: Any) -> tuple[discord.Embed, SettingsPanel]:
     view = SettingsPanel(minutes_for(bot, guild.id))
     for move in sp.log_levels_buttons():
@@ -591,6 +663,12 @@ async def render_panels(interaction: discord.Interaction, previous: Any = None) 
         interaction,
         build_panels(interaction.client, interaction.guild, interaction.user),
         previous,
+    )
+
+
+async def render_selftest(interaction: discord.Interaction, previous: Any = None) -> None:
+    await show(
+        interaction, await build_selftest(interaction.client, interaction.guild), previous
     )
 
 
@@ -758,6 +836,42 @@ async def run_find(interaction: discord.Interaction, view: Any, group: str, need
     await render_group(interaction, view, group=group, needle=needle)
 
 
+async def run_selftest(interaction: discord.Interaction, view: Any) -> None:
+    if not await opened(interaction):
+        return
+    bot, guild = interaction.client, interaction.guild
+    try:
+        one = await selftest.run(bot, guild, actor=interaction.user, via=VIA_DISCORD)
+    except selftest.SelfTestBusy as exc:
+        await answer(interaction, str(exc))
+        return
+    said = sp.SELFTEST_DONE.format(
+        ok=one.ok,
+        failed=one.failed,
+        posted=one.posted,
+        minutes=selftest.purge_minutes(bot, guild.id),
+    )
+    body = [said] + (
+        [sp.SELFTEST_FAILURE.format(name=row.name, detail=row.detail) for row in one.failures]
+        or [sp.SELFTEST_ALL_WELL]
+    )
+    await render_selftest(interaction, view)
+    await answer(interaction, clamped(body))
+
+
+async def run_selftest_purge(interaction: discord.Interaction, view: Any) -> None:
+    if not await opened(interaction):
+        return
+    gone = await selftest.purge(
+        interaction.client, interaction.guild, due_only=False, via=VIA_DISCORD
+    )
+    await render_selftest(interaction, view)
+    await answer(
+        interaction,
+        sp.SELFTEST_PURGE_DONE.format(count=gone) if gone else sp.SELFTEST_NOTHING_TO_PURGE,
+    )
+
+
 async def run_reapply(interaction: discord.Interaction, view: Any) -> None:
     if not await opened(interaction):
         return
@@ -792,6 +906,15 @@ class MoveButton(discord.ui.Button):
         action = self.move.action
         if action == sp.LOGS:
             await send_logs(interaction, CORE)
+            return
+        if action == sp.SELFTEST_LOGS:
+            await send_logs(interaction, SELFTEST)
+            return
+        if action == sp.SELFTEST_RUN:
+            await run_selftest(interaction, view)
+            return
+        if action == sp.SELFTEST_PURGE:
+            await run_selftest_purge(interaction, view)
             return
         if action == sp.REFRESH:
             await open_card(interaction, view, render_root)
@@ -1074,6 +1197,7 @@ OPENS = {
     sp.LOOKS: render_looks,
     sp.PANELS: render_panels,
     sp.LOG_LEVELS: render_log_levels,
+    sp.SELFTEST: render_selftest,
 }
 MODAL_KEYS = {
     sp.BIO: sp.BIO_KEY,

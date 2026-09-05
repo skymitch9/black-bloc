@@ -186,7 +186,11 @@ const KIND_HEADS = {
   poll: 'poll', chat: 'chat', request: 'request', requests: 'request',
   pings: 'pings', raidtrain: 'raidtrain',
   application: 'applications', applications: 'applications',
+  selftest: 'selftest',
 };
+// Mirrors black_bloc/logkinds.py:HIDDEN_BY_DEFAULT — the Logs page's unfiltered view
+// leaves these out, and the Test chip is the only way to them.
+const HIDDEN_BY_DEFAULT = ['selftest'];
 const IMPORTANT_SUFFIXES = [
   '_failed', '.approved', '.denied', '.expired', '.warned', '.timed_out', '.timeout',
   '.kicked', '.kick', '.banned', '.ban', '.granted', '.ended', '.removed', '.purged',
@@ -206,6 +210,7 @@ const ROUTINE_KINDS = [
   'application.submitted', 'application.withdrawn', 'application.panel_posted',
   'application.form_created', 'application.form_updated', 'application.form_deleted',
   'application.question_changed', 'application.mode', 'application.removed',
+  'selftest.started', 'selftest.check', 'selftest.finished', 'selftest.purged',
 ];
 
 function bareKind(kind) {
@@ -430,6 +435,10 @@ const SETTING_SPECS = [
   ['settings_panel_minutes', 'int', 10, 10, "minutes the /settings panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440],
   ['settings_core_keys_admin_only', 'bool', true, true, 'true keeps the four settings that decide who counts as staff and where Black Bloc talks — the staff channel, the log channel, the moderation log channel and the role-menu channel — to somebody with Manage Server; the rest of /settings still opens for any staff member, and false lets any staff member re-point them too. The dashboard’s Settings page stays staff-visible either way'],
   ['modmail_reply_style', 'enum', 'both', 'both', 'how staff answer a ticket. typing: a plain message in the ticket is relayed to the member, as it always has been. buttons: it is not — only the ticket card’s Reply and /reply reach them, so a ticket channel can be talked in safely. both is the default and is today’s behaviour with the card added', ['buttons', 'typing', 'both']],
+  ['selftest_on_boot', 'bool', true, true, 'true to run the self-test at every boot, so a deploy proves itself in the hosting log without anybody opening Discord; false to run it only when staff ask. It posts a card per panel into the self-test channel and deletes them again a few minutes later'],
+  ['selftest_channel_id', 'channel', '800000000000000003', '800000000000000003', 'where the self-test posts the cards it is proving; every one of them is deleted again once selftest_purge_minutes has passed. Unset means the test channel. While test mode is on, the guard refuses any other channel anyway'],
+  ['selftest_purge_minutes', 'int', 5, 5, 'how long a self-test’s messages stay in the self-test channel before Black Bloc deletes them; 5 by default. The log lines stay on the dashboard’s Logs page under Test whatever this says', null, 1440, 1],
+  ['selftest_log_level', 'enum', 'off', 'off', 'which test log lines reach the Discord log channel: off, important (anything that acted on a member, or failed) or all. Every line is kept on the dashboard and in `/settings` ▸ **Logs** either way', ['off', 'important', 'all']],
 ];
 
 const RULES = {
@@ -732,6 +741,24 @@ function seedState() {
   ],
   nextApplicationForm: 3,
   nextApplication: 7,
+  // Wave 5. Run 2 is the one whose cards are still in Discord, so the purge entry has
+  // something to take down; run 1 is already cleaned up.
+  selftestRuns: [
+    { id: 2, started_at: minutesAgo(3), finished_at: minutesAgo(2), ok: 79, failed: 1, posted: 18, purged_at: null, via: 'website', actor_id: STAFF.id, waiting: 18 },
+    { id: 1, started_at: minutesAgo(600), finished_at: minutesAgo(599), ok: 80, failed: 0, posted: 18, purged_at: minutesAgo(594), via: 'boot', actor_id: null, waiting: 0 },
+  ],
+  selftestChecks: {
+    2: [
+      { name: 'config.log_channel_id', feature: 'core', ok: true, detail: '#bot-log (800000000000000002); view_channel, send_messages, embed_links', at: minutesAgo(3) },
+      { name: 'panel.settings', feature: 'core', ok: true, detail: 'posted; 7 buttons, 2 selects', at: minutesAgo(3) },
+      { name: 'read./api/status', feature: 'selftest', ok: true, detail: '200; bot, guild, features, loops, open, notes, checked_at', at: minutesAgo(2) },
+      { name: 'config.birthday_channel_id', feature: 'birthday', ok: false, detail: 'CheckFailed: Black Bloc is missing embed_links in #birthdays', at: minutesAgo(2) },
+    ],
+    1: [
+      { name: 'config.log_channel_id', feature: 'core', ok: true, detail: '#bot-log (800000000000000002); view_channel, send_messages, embed_links', at: minutesAgo(600) },
+    ],
+  },
+  nextSelftestRun: 3,
   golive: {
     links: [
       { user_id: MEMBERS[1].id, twitch_login: 'caseyfast', twitch_user_id: '112233', linked_at: minutesAgo(4000) },
@@ -1012,7 +1039,7 @@ function seedActions() {
 
 let state = seedState();
 
-const CORE_KEYS = ['log_channel_id', 'staff_channel_id', 'role_menu_channel_id', 'settings_panel_minutes', 'settings_core_keys_admin_only'];
+const CORE_KEYS = ['log_channel_id', 'staff_channel_id', 'role_menu_channel_id', 'settings_panel_minutes', 'settings_core_keys_admin_only', 'selftest_on_boot', 'selftest_channel_id', 'selftest_purge_minutes', 'selftest_log_level'];
 const NOT_A_FEATURE = ['golive_end_mode'];
 const NAMESPACE_OVERRIDE = {
   modlog_channel_id: 'automod',
@@ -1446,7 +1473,9 @@ function summaryOfAction(row) {
 }
 
 function kindsPresent(feature) {
-  const rows = feature ? state.actions.filter((row) => featureOfKind(row.kind) === feature) : state.actions;
+  const rows = feature
+    ? state.actions.filter((row) => featureOfKind(row.kind) === feature)
+    : state.actions.filter((row) => !HIDDEN_BY_DEFAULT.includes(featureOfKind(row.kind)));
   return [...new Set(rows.map((row) => row.kind))].sort();
 }
 
@@ -1461,6 +1490,9 @@ function searchedActions(params) {
   if (kind) rows = rows.filter((row) => String(row.kind).startsWith(kind));
   if (userId) rows = rows.filter((row) => row.actor_id === userId || row.target_id === userId);
   if (feature) rows = rows.filter((row) => featureOfKind(row.kind) === feature);
+  else if (!kind) {
+    rows = rows.filter((row) => !HIDDEN_BY_DEFAULT.includes(featureOfKind(row.kind)));
+  }
   if (since) rows = rows.filter((row) => row.at >= since);
   if (until) rows = rows.filter((row) => row.at <= until);
   if (params.get('important') === '1') rows = rows.filter((row) => isImportantKind(row.kind));
@@ -1520,6 +1552,90 @@ route('GET', '/api/actions/export.csv', (context) => {
     headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="black-bloc-log.csv"' },
     body: `${lines.join('\n')}\n`,
   };
+});
+
+// Wave 5 — the self-test. Mirrors black_bloc/api/selftest_api.py: the POST starts a run and
+// lets go, so the mock finishes it at once and the Health card's poll sees it done first time.
+const SELFTEST_NOTHING_TO_PURGE = 'That self-test run has nothing left to delete — its cards have already gone. Nothing was done, and nothing is wrong.';
+
+function selftestRow(row) {
+  return {
+    run_id: row.id,
+    started_at: row.started_at,
+    finished_at: row.finished_at,
+    ok: row.ok,
+    failed: row.failed,
+    posted: row.posted,
+    purged_at: row.purged_at,
+    via: row.via,
+    actor_id: row.actor_id === null ? null : String(row.actor_id),
+    running: !row.finished_at,
+  };
+}
+
+function wantedSelftestRun(runId) {
+  const found = state.selftestRuns.find((row) => String(row.id) === String(runId));
+  if (!found) {
+    throw new Refused(404, 'no_such_run', `Black Bloc has no self-test run numbered ${runId} for this server, so there was nothing to purge. Open the Health page to see the runs it does have.`);
+  }
+  return found;
+}
+
+route('POST', '/api/selftest', (context) => {
+  requireStaff(context.session);
+  const going = state.selftestRuns.find((row) => !row.finished_at);
+  if (going) {
+    throw new Refused(409, 'selftest_running', `A self-test is already running (started ${going.started_at}, 0 of 106 checks done). Nothing was started a second time — wait for it to finish, or watch it on the dashboard's Health page.`);
+  }
+  const row = {
+    id: state.nextSelftestRun++,
+    started_at: now(),
+    finished_at: now(),
+    ok: 80,
+    failed: 0,
+    posted: 18,
+    purged_at: null,
+    via: 'website',
+    actor_id: actorOf(context.session),
+    waiting: 18,
+  };
+  state.selftestRuns.unshift(row);
+  state.selftestChecks[row.id] = [
+    { name: 'config.log_channel_id', feature: 'core', ok: true, detail: '#bot-log (800000000000000002); view_channel, send_messages, embed_links', at: now() },
+    { name: 'panel.settings', feature: 'core', ok: true, detail: 'posted; 7 buttons, 2 selects', at: now() },
+  ];
+  logAction('web.selftest.started', { details: { run_id: row.id, checks: 106, via: 'website' } });
+  logAction('web.selftest.finished', { details: { run_id: row.id, ok: row.ok, failed: row.failed, posted: row.posted, via: 'website' } });
+  return { run_id: row.id, started_at: row.started_at, checks: 106 };
+});
+
+route('GET', '/api/selftest', (context) => {
+  requireStaff(context.session);
+  const going = state.selftestRuns.find((row) => !row.finished_at);
+  return {
+    runs: state.selftestRuns.map(selftestRow),
+    running: going ? going.id : null,
+    purge_minutes: Number(state.settings.get('selftest_purge_minutes') || 5),
+    notes: [],
+  };
+});
+
+route('GET', '/api/selftest/:run_id', (context) => {
+  requireStaff(context.session);
+  const row = wantedSelftestRun(context.params.run_id);
+  return { ...selftestRow(row), checks: state.selftestChecks[row.id] || [] };
+});
+
+route('POST', '/api/selftest/:run_id/purge', (context) => {
+  requireStaff(context.session);
+  const row = wantedSelftestRun(context.params.run_id);
+  const gone = row.waiting;
+  row.waiting = 0;
+  if (gone) {
+    row.purged_at = now();
+    logAction('web.selftest.purged', { details: { run_id: row.id, messages: gone, via: 'website' } });
+  }
+  return { ...selftestRow(row), purged: gone, notes: gone ? [] : [SELFTEST_NOTHING_TO_PURGE] };
 });
 
 route('GET', '/api/ref/channels', (context) => {

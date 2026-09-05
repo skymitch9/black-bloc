@@ -13,6 +13,9 @@ from .settings_store import (
     KEY_MAX,
     KEY_MIN,
     KEY_TYPES,
+    SELFTEST_CHANNEL_ID,
+    SELFTEST_ON_BOOT,
+    SELFTEST_PURGE_MINUTES,
     SETTINGS_CORE_KEYS_ADMIN_ONLY,
     SETTINGS_PANEL_MINUTES,
     display_value,
@@ -190,6 +193,34 @@ HIDE_ON_STATE = "A feature's command is hidden while it is off"
 HIDE_OFF_STATE = "Every command shows all the time"
 PANEL_MINUTES_NEXT_TIME = "That applies the next time `/settings` is run, not to this panel."
 
+SELFTEST_TITLE = "The self-test"
+SELFTEST_INTRO = (
+    "Black Bloc exercises itself against this server: every setting's channel and role, every "
+    "read the dashboard makes, and every panel posted as a real card. The cards are deleted "
+    "again after {minutes} minute(s); the lines stay on the dashboard's Logs page under **Test**."
+)
+SELFTEST_BOOT_ON = "**At every boot** — yes, so a deploy proves itself without anybody looking."
+SELFTEST_BOOT_OFF = "**At every boot** — no, so it only runs when somebody asks."
+SELFTEST_WHERE = "**Where the cards go** — {value}"
+SELFTEST_NEVER = "It has not run yet in this server."
+SELFTEST_LAST = (
+    "**The last run** — started {started} · {ok} ok · {failed} failed · {posted} message(s) posted"
+)
+SELFTEST_PURGED = "Its messages were deleted {at}."
+SELFTEST_WAITING = "{count} message(s) are still waiting to be deleted."
+SELFTEST_FAILURE = "⚠️ **{name}** — {detail}"
+SELFTEST_IS_RUNNING = "A run is going right now, so **Run the self-test** is not drawn."
+SELFTEST_DONE = (
+    "The self-test ran: **{ok} ok, {failed} failed**, {posted} message(s) posted. They are "
+    "deleted again in {minutes} minute(s)."
+)
+SELFTEST_ALL_WELL = "Nothing failed."
+SELFTEST_NOTHING_TO_PURGE = (
+    "The self-test has nothing waiting to be deleted, so nothing was done. Its last run's cards "
+    "have already gone."
+)
+SELFTEST_PURGE_DONE = "{count} self-test message(s) deleted."
+
 HIDE_ON_LABEL = "Hide a feature's command while it is off"
 HIDE_OFF_LABEL = "Leave every command showing"
 OPERATOR_LOG_ON_LABEL = "Write a line for every operator-token read"
@@ -240,6 +271,10 @@ LOGS = "logs"
 SITE = "site"
 REFRESH = "refresh"
 BACK = "back"
+SELFTEST = "selftest"
+SELFTEST_RUN = "selftest_run"
+SELFTEST_PURGE = "selftest_purge"
+SELFTEST_LOGS = "selftest_logs"
 
 
 class PanelMove(NamedTuple):
@@ -259,7 +294,12 @@ PANELS_MOVE = PanelMove(PANELS, "Panels & commands…", row=2)
 LOGS_MOVE = PanelMove(LOGS, "Logs", row=2)
 SITE_MOVE = PanelMove(SITE, "Open on the site", "link", row=2, kind=LINK)
 LOG_LEVELS_MOVE = PanelMove(LOG_LEVELS, "Log levels…", row=3)
+SELFTEST_MOVE = PanelMove(SELFTEST, "Self-test…", row=3)
 REFRESH_MOVE = PanelMove(REFRESH, "Refresh", row=3)
+
+SELFTEST_RUN_MOVE = PanelMove(SELFTEST_RUN, "Run the self-test", "primary", row=0)
+SELFTEST_PURGE_MOVE = PanelMove(SELFTEST_PURGE, "Purge now", "danger", row=0)
+SELFTEST_LOGS_MOVE = PanelMove(SELFTEST_LOGS, "Logs", row=0)
 
 BACK_MOVE = PanelMove(BACK, "Back", row=2)
 KEY_BACK_LABEL = "Back to the group"
@@ -313,6 +353,10 @@ PANEL_MOVES: tuple[PanelMove, ...] = (
     LOGS_MOVE,
     SITE_MOVE,
     LOG_LEVELS_MOVE,
+    SELFTEST_MOVE,
+    SELFTEST_RUN_MOVE,
+    SELFTEST_PURGE_MOVE,
+    SELFTEST_LOGS_MOVE,
     REFRESH_MOVE,
     *CORE_KEY_MOVES,
     REAPPLY_MOVE,
@@ -556,8 +600,59 @@ def root_buttons(
     found.extend([LOOKS_MOVE, PANELS_MOVE, LOGS_MOVE])
     if has_site:
         found.append(SITE_MOVE)
-    found.extend([LOG_LEVELS_MOVE, REFRESH_MOVE])
+    found.extend([LOG_LEVELS_MOVE, SELFTEST_MOVE, REFRESH_MOVE])
     return tuple(found)
+
+
+def selftest_buttons(*, running: bool, has_messages: bool) -> tuple[PanelMove, ...]:
+    """P3 again: **Purge now** is drawn only while there is something left to delete."""
+    found: list[PanelMove] = []
+    if not running:
+        found.append(SELFTEST_RUN_MOVE)
+    if has_messages:
+        found.append(SELFTEST_PURGE_MOVE)
+    found.extend([SELFTEST_LOGS_MOVE, BACK_MOVE._replace(row=1)])
+    return tuple(found)
+
+
+def selftest_lines(
+    store: Any,
+    guild_id: int,
+    *,
+    last: Any = None,
+    failures: Any = (),
+    waiting: int = 0,
+    running: str = "",
+) -> list[str]:
+    lines = [
+        SELFTEST_INTRO.format(minutes=store.get(guild_id, SELFTEST_PURGE_MINUTES)),
+        SELFTEST_BOOT_ON if store.get(guild_id, SELFTEST_ON_BOOT) else SELFTEST_BOOT_OFF,
+        SELFTEST_WHERE.format(
+            value=display_value(SELFTEST_CHANNEL_ID, store.get(guild_id, SELFTEST_CHANNEL_ID))
+        ),
+    ]
+    if running:
+        lines.append(running)
+    if last is None:
+        lines.append(SELFTEST_NEVER)
+        return lines
+    lines.append(
+        SELFTEST_LAST.format(
+            started=last["started_at"],
+            ok=last["ok"],
+            failed=last["failed"],
+            posted=last["posted"],
+        )
+    )
+    lines.append(
+        SELFTEST_PURGED.format(at=last["purged_at"])
+        if last["purged_at"]
+        else SELFTEST_WAITING.format(count=waiting)
+    )
+    lines.extend(
+        SELFTEST_FAILURE.format(name=row["name"], detail=row["detail"]) for row in failures
+    )
+    return lines
 
 
 def roles_channels_buttons() -> tuple[PanelMove, ...]:
@@ -671,6 +766,12 @@ __all__ = [
     "PRESENCE_NOT_RUNNING",
     "RULES_ELSEWHERE",
     "SELECT_LIMIT",
+    "SELFTEST_ALL_WELL",
+    "SELFTEST_DONE",
+    "SELFTEST_IS_RUNNING",
+    "SELFTEST_NOTHING_TO_PURGE",
+    "SELFTEST_PURGE_DONE",
+    "SELFTEST_TITLE",
     "SITE_FEATURE",
     "BackOn",
     "FeatureMode",
@@ -710,6 +811,8 @@ __all__ = [
     "roles_channels_buttons",
     "root_buttons",
     "root_lines",
+    "selftest_buttons",
+    "selftest_lines",
     "site_page_url",
     "stored_count",
     "toggle_label",

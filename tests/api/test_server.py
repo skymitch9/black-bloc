@@ -123,6 +123,37 @@ def test_a_refusal_never_leaks_a_bare_status(bot):
     assert body["message"].endswith(".")
 
 
+def test_an_api_path_nothing_serves_is_a_sentence_and_not_starlettes_detail(bot):
+    """Global rule: nobody sees a bare status. FastAPI's own 404 is `{"detail": "Not Found"}`,
+    which the pages' error reader has nothing to show for."""
+    from black_bloc.api.server import UNKNOWN_ROUTE
+
+    response = client_for(bot).get("/api/nothing-is-here")
+
+    assert response.status_code == 404
+    assert response.json() == {"error": "unknown_route", "message": UNKNOWN_ROUTE}
+    assert "detail" not in response.json()
+
+
+async def test_a_route_that_refuses_with_its_own_404_keeps_its_own_words(client, sign_in):
+    """The blanket handler must not flatten a refusal that already said something better."""
+    sign_in(client)
+
+    response = client.get("/api/selftest/404")
+
+    assert response.status_code == 404
+    assert response.json()["error"] == "no_such_run"
+    assert "404" in response.json()["message"]
+
+
+def test_a_page_that_is_not_on_disk_is_still_the_sites_own_404(bot):
+    """Only `/api` paths get the words; the static mount answers as it always did."""
+    response = client_for(bot).get("/not-a-page.html")
+
+    assert response.status_code == 404
+    assert "unknown_route" not in response.text
+
+
 WRITE_ROUTES = (
     "/api/honeypot/setup",
     "/api/tempvoice/setup",

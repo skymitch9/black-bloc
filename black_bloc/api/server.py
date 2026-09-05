@@ -6,11 +6,13 @@ from typing import Any
 
 import uvicorn
 from fastapi import FastAPI, Request
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .. import __version__
-from . import auth, costs, ref, settings_api, status
+from . import auth, costs, ref, selftest_api, settings_api, status
 from .assets import NO_STORE, SiteFiles, build_id
 from .auth import Refused, refused_handler, validation_handler
 from .status import latency_ms
@@ -64,6 +66,11 @@ CROSS_SITE = (
 NOT_JSON = (
     "That change did not arrive the way the dashboard sends one, so nothing was done. It is a "
     "fault in the page rather than in what you typed — reload the dashboard and try again."
+)
+UNKNOWN_ROUTE = (
+    "This dashboard asked Black Bloc for something it does not serve, so nothing was done. That "
+    "is a fault in the page rather than a problem with your access — reload the dashboard, and "
+    "tell a Lead if it keeps happening."
 )
 
 
@@ -128,6 +135,7 @@ def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
         log.info("%s %s %d", request.method, request.url.path, response.status_code)
         return response
 
+
     @app.get("/health")
     async def health() -> dict[str, Any]:
         return {
@@ -138,8 +146,18 @@ def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
             "latency_ms": latency_ms(bot),
         }
 
+    async def unknown_route(request: Request, exc: Any) -> Any:
+        """An /api path nothing serves would otherwise answer Starlette's bare `detail`."""
+        if request.url.path.startswith(API_PREFIX):
+            return JSONResponse(
+                {"error": "unknown_route", "message": UNKNOWN_ROUTE},
+                status_code=getattr(exc, "status_code", 404),
+            )
+        return await http_exception_handler(request, exc)
+
     app.add_exception_handler(Refused, refused_handler)
     app.add_exception_handler(RequestValidationError, validation_handler)
+    app.add_exception_handler(StarletteHTTPException, unknown_route)
     app.include_router(auth.build_router(bot, oauth_request=oauth_request))
     app.include_router(status.build_router(bot))
     app.include_router(costs.build_router(bot))
@@ -163,6 +181,7 @@ def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
     app.include_router(requests.build_router(bot))
     app.include_router(raidtrain.build_router(bot))
     app.include_router(applications.build_router(bot))
+    app.include_router(selftest_api.build_router(bot))
 
     root = Path(bot.settings.site_root)
     if root.is_dir():
@@ -174,10 +193,19 @@ def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
     return app
 
 
+def api_app(bot: Any) -> FastAPI:
+    """One app per bot, kept so the self-test reads the same route table the site is served by."""
+    found = getattr(bot, "_api_app", None)
+    if found is None:
+        found = create_app(bot)
+        bot._api_app = found
+    return found
+
+
 async def start_api(bot: Any) -> None:
     settings = bot.settings
     config = uvicorn.Config(
-        create_app(bot),
+        api_app(bot),
         host=settings.api_host,
         port=settings.api_port,
         log_level=settings.log_level.lower(),

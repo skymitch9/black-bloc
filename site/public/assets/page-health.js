@@ -1,8 +1,10 @@
-import { api, listOf, names, notesOf } from './api.js';
-import { start } from './app.js';
+import { api, listOf, names, notesOf, send } from './api.js';
+import { start, tabHref } from './app.js';
 import {
   badge,
+  bar,
   boldParts,
+  button,
   card,
   duration,
   el,
@@ -12,6 +14,7 @@ import {
   nameNode,
   sayNothing,
   section,
+  sentenceFor,
   table,
   when,
 } from './ui.js';
@@ -178,6 +181,114 @@ function costs(payload) {
   return one.node;
 }
 
+const SELFTEST_NOTE = 'Black Bloc exercising itself against this server: every setting’s ' +
+  'channel and role, every read these pages make, and every panel posted as a real card in ' +
+  'Discord. The cards are deleted again a few minutes later; the lines are kept here under Test.';
+const SELFTEST_NEVER = 'It has not run in this server yet. Run it and watch — nothing here is ' +
+  'destructive, and the cards it posts are cleaned up on their own.';
+const SELFTEST_GOING = 'A run is going right now. This card refreshes itself every 15 seconds ' +
+  'until it finishes.';
+const SELFTEST_LOGS = 'Every Test line';
+const POLL_SECONDS = 15;
+
+function selftestRow(run, purgeMinutes) {
+  const done = Boolean(run.finished_at);
+  const cleaned = run.purged_at
+    ? `Its ${run.posted} card(s) were deleted ${when(run.purged_at)}.`
+    : run.posted
+      ? `${run.posted} card(s) are still in Discord; they go after ${purgeMinutes} minute(s).`
+      : 'It posted nothing into Discord.';
+  return row({
+    name: `Run #${run.run_id} — ${when(run.started_at)}`,
+    badge: done ? `${run.ok} ok · ${run.failed} failed` : 'running',
+    state: done ? (run.failed ? 'danger' : 'ok') : 'warn',
+    detail: done ? cleaned : SELFTEST_GOING,
+    note: `Started from ${run.via}`,
+  });
+}
+
+function failureRows(checks) {
+  const bad = (checks || []).filter((check) => !check.ok);
+  if (!bad.length) return sayNothing('Nothing failed.');
+  return rows(bad.map((check) => row({
+    name: check.name,
+    state: 'danger',
+    detail: check.detail,
+    note: check.feature,
+  })));
+}
+
+/**
+ * Owner ask, 2026-09-05: "test it all". The Health page owns "is the bot well?",
+ * so the button that proves it lives here rather than on Settings, which owns values.
+ */
+function selftest() {
+  const one = section('Self-test', SELFTEST_NOTE, { id: 'selftest' });
+  const body = el('div', { class: 'logs-results' });
+  const said = el('p', { class: 'section-note', hidden: true });
+  let timer = null;
+
+  const stopPolling = () => {
+    if (timer !== null) clearTimeout(timer);
+    timer = null;
+  };
+
+  const say = (text, tone = null) => {
+    said.textContent = text;
+    said.hidden = !text;
+    said.setAttribute('data-tone', tone || '');
+  };
+
+  const run = button('Run the self-test', async () => {
+    say('');
+    try {
+      await send('/api/selftest', 'POST', {});
+    } catch (error) {
+      const refusal = sentenceFor(error);
+      say(refusal.text, refusal.tone);
+      return;
+    }
+    await load();
+  }, { tone: null });
+
+  const load = async () => {
+    stopPolling();
+    let payload;
+    try {
+      payload = await api('/api/selftest');
+    } catch (error) {
+      body.replaceChildren(sayNothing(sentenceFor(error).text));
+      return;
+    }
+    const runs = listOf(payload, 'runs');
+    one.count(runs.length || null);
+    run.disabled = payload.running !== null && payload.running !== undefined;
+    if (!runs.length) {
+      body.replaceChildren(sayNothing(SELFTEST_NEVER));
+      return;
+    }
+    const latest = runs[0];
+    const detail = await api(`/api/selftest/${latest.run_id}`);
+    body.replaceChildren(
+      rows([selftestRow(latest, payload.purge_minutes)]),
+      failureRows(detail.checks),
+      runs.length > 1
+        ? foldout('Runs before this one', [rows(
+          runs.slice(1).map((each) => selftestRow(each, payload.purge_minutes)),
+        )], { count: runs.length - 1 })
+        : null,
+    );
+    if (!latest.finished_at) timer = setTimeout(load, POLL_SECONDS * 1000);
+  };
+
+  one.body.append(
+    bar([run, linkAction(SELFTEST_LOGS, `${tabHref('audit')}#logs`)]),
+    said,
+    body,
+  );
+  return { node: one.node, load };
+}
+
 async function load() {
   const [status, log, money] = await Promise.all([
     api('/api/status'),
@@ -194,14 +305,17 @@ async function load() {
   three.body.append(loops(status));
   const four = section('Last 50 actions', null, { count: items.length });
   four.body.append(actions(items));
+  const proof = selftest();
 
   document.getElementById('dash').replaceChildren(
     ...(notes.length ? [el('p', { class: 'section-note', text: notes.join(' ') })] : []),
     one.node,
+    proof.node,
     costs(money),
     three.node,
     four.node,
   );
+  await proof.load();
 }
 
 start({

@@ -15,6 +15,7 @@ from .logkinds import (
     FEATURES,
     LEVELS,
     feature_of,
+    hidden_by_default_patterns,
     is_important,
     like_patterns,
     log_level_key,
@@ -166,6 +167,15 @@ def feature_clause(feature: str) -> tuple[str, tuple[Any, ...]]:
         return (f"NOT ({joined})", patterns)
     patterns = like_patterns(feature)
     joined = " OR ".join("kind LIKE ?" for _ in patterns)
+    return (f"({joined})", patterns)
+
+
+def default_view_clause() -> tuple[str, tuple[Any, ...]]:
+    """The ONE place the unfiltered Logs view leaves the Test rows out; the CSV asks it too."""
+    patterns = hidden_by_default_patterns()
+    if not patterns:
+        return ("", ())
+    joined = " AND ".join("kind NOT LIKE ?" for _ in patterns)
     return (f"({joined})", patterns)
 
 

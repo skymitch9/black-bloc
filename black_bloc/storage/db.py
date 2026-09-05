@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 30
+SCHEMA_VERSION = 31
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -635,6 +635,34 @@ CREATE UNIQUE INDEX IF NOT EXISTS applications_one_open
     ON applications(form_id, user_id) WHERE status = 'pending';
 CREATE INDEX IF NOT EXISTS applications_by_status
     ON applications(guild_id, status, id);
+
+CREATE TABLE IF NOT EXISTS selftest_runs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id    INTEGER NOT NULL,
+    started_at  TEXT    NOT NULL,
+    finished_at TEXT,
+    ok          INTEGER NOT NULL DEFAULT 0,
+    failed      INTEGER NOT NULL DEFAULT 0,
+    posted      INTEGER NOT NULL DEFAULT 0,
+    purged_at   TEXT,
+    via         TEXT    NOT NULL,
+    actor_id    INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS selftest_runs_by_guild
+    ON selftest_runs(guild_id, id);
+
+CREATE TABLE IF NOT EXISTS selftest_messages (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id     INTEGER NOT NULL,
+    guild_id   INTEGER NOT NULL,
+    channel_id INTEGER NOT NULL,
+    message_id INTEGER NOT NULL,
+    posted_at  TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS selftest_messages_by_run
+    ON selftest_messages(run_id, id);
 """
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (

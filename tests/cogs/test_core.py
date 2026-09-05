@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 
 import discord
 import pytest
@@ -35,16 +36,23 @@ class FakePerms:
 class FakeChannel:
     def __init__(self, channel_id):
         self.id = channel_id
+        self.name = f"channel-{channel_id}"
         self.mention = f"<#{channel_id}>"
         self.messages = []
         self.visible_to = set()
+        self.deleted = []
 
     def permissions_for(self, role):
         return FakePerms(view_channel=role.id in self.visible_to)
 
     async def send(self, content=None, **kwargs):
-        self.messages.append({"content": content, **kwargs})
+        self.messages.append(
+            SimpleNamespace(id=9000 + len(self.messages), content=content, kwargs=kwargs)
+        )
         return self.messages[-1]
+
+    async def delete_messages(self, messages):
+        self.deleted += [one.id for one in messages]
 
 
 class FakeGuild:
@@ -1134,3 +1142,170 @@ async def test_help_marks_the_staff_commands_the_real_bot_registers(settings):
     )
     assert "**/warn** — " in said and "(staff)" in said.split("**/warn** — ")[1].split("\n")[0]
     assert "**/ping** — Check that Black Bloc is alive" in said
+
+
+# --- the self-test card ---------------------------------------------------------------------------
+
+
+def one_check(name, detail="fine", fails=False):
+    from black_bloc import selftest
+
+    async def body(_one):
+        if fails:
+            raise selftest.CheckFailed(detail)
+        return detail
+
+    return selftest.Check(name, "core", body)
+
+
+def stub_checks(monkeypatch, *checks):
+    from black_bloc import selftest
+
+    monkeypatch.setattr(selftest, "checks_for", lambda _bot: tuple(checks))
+
+
+async def open_selftest(cog, bot, who):
+    panel = await open_panel(cog, bot, who)
+    return await press(panel.view, "Self-test…", bot, who)
+
+
+async def test_the_root_opens_a_self_test_card_saying_what_it_will_do(bot, cog, lead):
+    give_staff(bot, lead)
+    panel = await open_panel(cog, bot, lead)
+
+    assert has_button(panel.view, "Self-test…")
+
+    card = await press(panel.view, "Self-test…", bot, lead)
+
+    assert card.embed.title == sp.SELFTEST_TITLE
+    assert "has not run yet" in card.said
+    assert labels(card.view) == ["Run the self-test", "Logs", "Back"]
+    # Nothing has been posted, so there is nothing to purge and no button that says so.
+    assert not has_button(card.view, "Purge now")
+
+
+async def test_running_the_self_test_answers_the_counts_and_names_every_failure(
+    bot, cog, lead, db, monkeypatch
+):
+    give_staff(bot, lead)
+    stub_checks(
+        monkeypatch,
+        one_check("config.log_channel_id"),
+        one_check("read./api/status", "TypeError: no", fails=True),
+    )
+    card = await open_selftest(cog, bot, lead)
+
+    pressed = await press(card.view, "Run the self-test", bot, lead)
+
+    assert "**1 ok, 1 failed**" in pressed.sent
+    assert "**read./api/status** — " in pressed.sent and "TypeError: no" in pressed.sent
+    assert "5 minute(s)" in pressed.sent
+    assert [kind for kind in await kinds(db) if kind.startswith("selftest")] == [
+        "selftest.started",
+        "selftest.check",
+        "selftest.check",
+        "selftest.finished",
+    ]
+    # The card is re-rendered under the answer, so the last run is on it straight away.
+    assert "1 ok · 1 failed" in pressed.embed.description
+
+
+async def test_a_run_with_nothing_wrong_says_so_rather_than_leaving_a_blank(
+    bot, cog, lead, monkeypatch
+):
+    give_staff(bot, lead)
+    stub_checks(monkeypatch, one_check("config.log_channel_id"))
+    card = await open_selftest(cog, bot, lead)
+
+    pressed = await press(card.view, "Run the self-test", bot, lead)
+
+    assert "**1 ok, 0 failed**" in pressed.sent
+    assert sp.SELFTEST_ALL_WELL in pressed.sent
+
+
+async def test_a_second_run_is_not_offered_and_is_refused_in_words_off_a_stale_card(
+    bot, cog, lead, monkeypatch
+):
+    """A card opened during a run does not draw the button at all (P3); the card somebody
+    already had open still does, so pressing it answers a sentence rather than a 409."""
+    from black_bloc import selftest
+
+    give_staff(bot, lead)
+    seen = []
+
+    async def while_running(one):
+        fresh = await open_selftest(cog, bot, lead)
+        seen.append(fresh)
+        seen.append(await press(card.view, "Run the self-test", bot, lead))
+        return "fine"
+
+    stub_checks(monkeypatch, selftest.Check("config.one", "core", while_running))
+    card = await open_selftest(cog, bot, lead)
+
+    await press(card.view, "Run the self-test", bot, lead)
+    fresh, stale = seen
+
+    assert not has_button(fresh.view, "Run the self-test")
+    assert sp.SELFTEST_IS_RUNNING in fresh.embed.description
+    assert "already running" in stale.sent
+    assert "0 of 1 checks done" in stale.sent
+    assert "409" not in stale.sent
+
+
+async def test_purge_now_appears_once_something_is_posted_and_takes_it_down(
+    bot, cog, lead, db, monkeypatch
+):
+    from black_bloc import selftest
+
+    give_staff(bot, lead)
+
+    async def posts(one):
+        await one.post(content="a card")
+        return "posted"
+
+    stub_checks(monkeypatch, selftest.Check("panel.settings", "core", posts))
+    card = await open_selftest(cog, bot, lead)
+    ran = await press(card.view, "Run the self-test", bot, lead)
+
+    assert has_button(ran.view, "Purge now")
+    assert "1 message(s) are still waiting" in ran.embed.description
+
+    purged = await press(ran.view, "Purge now", bot, lead)
+
+    assert "1 self-test message(s) deleted." == purged.sent
+    assert await selftest.waiting_messages(db, GUILD) == []
+    assert not has_button(purged.view, "Purge now")
+
+
+async def test_the_self_test_card_carries_its_own_logs_button_for_the_test_feature(
+    bot, cog, lead, db, monkeypatch
+):
+    """Every feature's Logs is a panel button; the Test feature's lives here, because the
+    Logs page leaves those rows out of its default view."""
+    from black_bloc import selftest
+
+    give_staff(bot, lead)
+    stub_checks(monkeypatch, one_check("config.log_channel_id"))
+    card = await open_selftest(cog, bot, lead)
+    await press(card.view, "Run the self-test", bot, lead)
+
+    logs = await press(card.view, "Logs", bot, lead)
+
+    assert logs.rendered["ephemeral"] is True
+    assert logs.embed.title == "Test log"
+    assert "selftest.started" in logs.embed.description
+    assert selftest.running(bot, GUILD) is None
+
+
+async def test_the_purge_loop_is_a_loop_the_health_page_can_see(bot, cog):
+    from discord.ext import tasks
+
+    assert isinstance(cog.purge_loop, tasks.Loop)
+    assert cog.purge_loop.seconds == 60
+    assert cog.loop_health("purge_loop") == (None, None)
+    assert cog.loop_health("something_else") == (None, None)
+
+    await cog.purge_loop.coro(cog)
+
+    last_ok, last_error = cog.loop_health("purge_loop")
+    assert last_ok and last_error is None
