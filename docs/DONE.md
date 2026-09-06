@@ -9,6 +9,27 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-05 19:50 — Member requests review: closed, every request already dispositioned
+
+> Moved whole from `TODO.md` at the v91 landing. Nothing was left to review: #1 (raid trains) shipped as
+> Phases 17–19 and Pawpette marked it done; #2 (Twitch Team form) shipped as `/apply` (v66) and was
+> exercised and approved by Pawpette; #3 (music bot) is on `hold` by the owner's 2026-09-03 14:22 call
+> (Spotify cannot be a source); #4 was a test. The Requests page shows the same four states. The item as it
+> stood:
+
+- **Review the incoming member requests (owner, 2026-09-02 ~19:55: "we got some
+  request in our /request features lets review them").** Read what has landed
+  via `/request` (Requests page, `/api/requests`), present them to the owner one
+  at a time, record each decision (accept → a TODO item; decline → the reason)
+  and close them out on the Requests page. **Live read 2026-09-03 14:25 (`requests` table via
+  `flyctl ssh`, owner-authorised): #1 done (Pawpette marked it), #2 review (→ done when `/apply`
+  ships, v66), #3 hold (Spotify skipped 14:22), #4 "Do" done (a test).** Three in (all staff-filed →
+  auto-approved, unassigned): #1 Pawpette — raid-train scheduler replacing
+  r3dlabs.com (owner: "can we capture all the features of this tool" →
+  [`info/raid-train-capture.md`](info/raid-train-capture.md), full inventory
+  bucketed); #2 Pawpette — Twitch Team application form via the bot, staff
+  approval; #3 PT — built-in music bot for the lounge/cowork voice channels.
+
 ## 2026-09-05 — Personality pool, both halves LIVE (Black Bloc v90 `7c59eb1` + v91 `604226f`; GABI `de4ef63`, deployment `755cfd54`); KI-23 closed
 
 > **Landed 2026-09-05 19:33–19:45 Phoenix.** GABI's half (catalog-platform `feature/personality-pool`,

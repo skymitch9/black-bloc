@@ -12,7 +12,7 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 19:45, v91 LIVE — **29 slots, zero Groups**; self-test live and run by the owner (sweep 252); the CONFIRM/OPENED FOLD ✅ LANDED as **v88** `794d3aa` 17:33 (309k, rows 262–275, moved to DONE); the ENGINEERING SWEEP ✅ LANDED as **v89** `243dc0f` 18:16 (481k, rows 276–279, KI-21 + `LOG_LEVEL_COMMANDS` + gate-pass items moved to DONE; B1–B4 and A1–A2 struck inside their parent items, B5–B9 / A3–A4 still open); the PERSONALITY-POOL BUILD, Black Bloc half ✅ LANDED as **v90** `7c59eb1` 19:00 (288k, rows 280–286, KI-23 added BLOCKED on the GABI half); the GABI HALF ✅ LIVE 19:33 (186k; catalog-platform `de4ef63` → main `cb4f779`, deployed by the owner `755cfd54`, health answers pool v1 + eleven) and Black Bloc **v91** `604226f` 19:38 (roster compare by name, byte-for-byte sync; selftest 107 ok with GABI answering) — item 4, KI-23 moved to DONE, rows 284/286 rewritten; the `C:/lcw/pool` worktree is still attached (remove with `git -C <catalog-platform> worktree remove C:/lcw/pool` once the other session has pulled `cb4f779`). NEXT: member requests review; owner by-eye sweeps 253–286; cutover plan; dormant bots; `OPERATOR_READ_TOKEN` mint (owner 16:33: "Keep running stuff, don't pause"))
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 19:45, v91 LIVE — **29 slots, zero Groups**; self-test live and run by the owner (sweep 252); the CONFIRM/OPENED FOLD ✅ LANDED as **v88** `794d3aa` 17:33 (309k, rows 262–275, moved to DONE); the ENGINEERING SWEEP ✅ LANDED as **v89** `243dc0f` 18:16 (481k, rows 276–279, KI-21 + `LOG_LEVEL_COMMANDS` + gate-pass items moved to DONE; B1–B4 and A1–A2 struck inside their parent items, B5–B9 / A3–A4 still open); the PERSONALITY-POOL BUILD, Black Bloc half ✅ LANDED as **v90** `7c59eb1` 19:00 (288k, rows 280–286, KI-23 added BLOCKED on the GABI half); the GABI HALF ✅ LIVE 19:33 (186k; catalog-platform `de4ef63` → main `cb4f779`, deployed by the owner `755cfd54`, health answers pool v1 + eleven) and Black Bloc **v91** `604226f` 19:38 (roster compare by name, byte-for-byte sync; selftest 107 ok with GABI answering) — item 4, KI-23 moved to DONE, rows 284/286 rewritten; the `C:/lcw/pool` worktree is still attached (remove with `git -C <catalog-platform> worktree remove C:/lcw/pool` once the other session has pulled `cb4f779`). ENGINEERING SWEEP 2 (Opus, own worktree; items 1–9 of the wave-1 review findings + v88 leftovers: `opened(staff=False)` pairs, `allowed_mentions` + the three withdraw/cancel cards, `may_cancel` re-check, `answer`/`site_page_url` copies, dead constants, stale `/request create` + `/role revoke` names, the five double-logged form writes + `via` audit, mock drift, the Logs guarantee) DISPATCHED 19:50 (est. 300–450k) — Fable merges, numbers `ES2-*` rows, deploys as v92; member-requests review moved to DONE 19:50 (all four requests already dispositioned). NEXT: owner by-eye sweeps 253–286; cutover plan; dormant bots; `OPERATOR_READ_TOKEN` mint (owner 16:33: "Keep running stuff, don't pause"))
 
 **`main` = `43312b9`** (role-menus panel merge; v77 live 20:51, 4529 tests, **36 commands**; `youtube_mode` is
 **shadow** since 2026-09-03 17:42). **The panels program is COMPLETE** — waves 1, 2 and 3 (17 features, one
@@ -300,20 +300,6 @@ docs bookkeeping lands with the work, not after.
   `tests/test_logkinds.py` AST walk's `SHARED` map), thread `via=` through, and add each
   to `tests/api/conftest.py:one_web_row`. Small; fold into the next requests/raid-train
   build rather than dispatching on its own.
-
-- **Review the incoming member requests (owner, 2026-09-02 ~19:55: "we got some
-  request in our /request features lets review them").** Read what has landed
-  via `/request` (Requests page, `/api/requests`), present them to the owner one
-  at a time, record each decision (accept → a TODO item; decline → the reason)
-  and close them out on the Requests page. **Live read 2026-09-03 14:25 (`requests` table via
-  `flyctl ssh`, owner-authorised): #1 done (Pawpette marked it), #2 review (→ done when `/apply`
-  ships, v66), #3 hold (Spotify skipped 14:22), #4 "Do" done (a test).** Three in (all staff-filed →
-  auto-approved, unassigned): #1 Pawpette — raid-train scheduler replacing
-  r3dlabs.com (owner: "can we capture all the features of this tool" →
-  [`info/raid-train-capture.md`](info/raid-train-capture.md), full inventory
-  bucketed); #2 Pawpette — Twitch Team application form via the bot, staff
-  approval; #3 PT — built-in music bot for the lounge/cowork voice channels.
-
 
 - **Curated docs for peers — DECIDED + DONE 2026-09-01** (owner picked "Rewrite
   README now"): root `README.md` rewritten as the peer front door (what the bot
