@@ -25,6 +25,7 @@ def refused():
 class FakeResponse:
     def __init__(self, done=False):
         self.done = done
+        self.deferred = False
         self.sent = []
 
     def is_done(self):
@@ -33,6 +34,10 @@ class FakeResponse:
     async def send_message(self, text, **kwargs):
         self.done = True
         self.sent.append((text, kwargs))
+
+    async def defer(self, **kwargs):
+        self.done = True
+        self.deferred = True
 
 
 class FakeFollowup:
@@ -82,9 +87,11 @@ class FakeInteraction:
         self.response = FakeResponse(done)
         self.followup = FakeFollowup()
         self.edits = []
+        self.rendered = object()
 
     async def edit_original_response(self, **kwargs):
         self.edits.append(kwargs)
+        return self.rendered
 
 
 class FakeToken:
@@ -475,6 +482,9 @@ def test_the_library_says_what_it_offers_and_knows_nothing_about_requests():
         "db_up",
         "option_label",
         "picked_values",
+        "confirm",
+        "confirm_items",
+        "opened",
     ):
         assert name in panels.__all__
     for name in ("RequestView", "PANEL_TIMEOUT_FOOTER", "PICK_A_REQUEST"):
@@ -494,6 +504,154 @@ async def test_a_note_modal_can_be_optional_so_dismissing_the_box_still_means_ye
 
     assert needed.note.required is True
     assert spare.note.required is False
+
+
+# --- opened ---------------------------------------------------------------------------------
+
+
+async def test_opened_re_asks_staff_then_defers_then_asks_the_database():
+    interaction = FakeInteraction()
+
+    assert await panels.opened(interaction) is True
+    assert interaction.response.deferred is True
+    assert interaction.response.sent == [] and interaction.followup.sent == []
+
+
+async def test_opened_refuses_a_demoted_staffer_before_it_defers_anything():
+    interaction = FakeInteraction(FakeBot(staff=False))
+
+    assert await panels.opened(interaction) is False
+    assert interaction.response.deferred is False
+    assert interaction.response.sent[0][0] == REFUSAL
+
+
+async def test_opened_says_the_database_is_down_as_a_followup_because_it_has_deferred():
+    interaction = FakeInteraction(FakeBot(connected=False))
+
+    assert await panels.opened(interaction) is False
+    assert interaction.response.deferred is True
+    assert interaction.followup.sent[0][0] == DB_UNAVAILABLE
+
+
+async def test_opened_without_the_staff_gate_defers_for_a_member_panel():
+    """`/memory`, `/raidtrain` and the member half of `/youtube` open for anybody."""
+    interaction = FakeInteraction(FakeBot(staff=False))
+
+    assert await panels.opened(interaction, staff=False) is True
+    assert interaction.response.deferred is True
+    assert interaction.response.sent == []
+
+
+# --- confirm --------------------------------------------------------------------------------
+
+
+def a_confirm_embed():
+    return discord.Embed(title="Birthdays", description="the card that raised the question")
+
+
+async def test_confirm_adds_the_question_to_the_card_and_both_buttons_in_order():
+    interaction = FakeInteraction()
+    view = a_panel()
+
+    await panels.confirm(
+        interaction,
+        view,
+        a_confirm_embed(),
+        [a_button("Yes, forget it"), a_button("Keep it")],
+        question="Forget your birthday?",
+    )
+
+    embed = interaction.edits[0]["embed"]
+    assert [(one.name, one.value) for one in embed.fields] == [
+        ("Are you sure?", "Forget your birthday?")
+    ]
+    assert [one.label for one in view.children] == ["Yes, forget it", "Keep it"]
+    assert interaction.edits[0]["view"] is view
+    assert view.message is interaction.rendered
+
+
+async def test_confirm_never_pings_out_of_a_question_somebody_typed():
+    interaction = FakeInteraction()
+
+    await panels.confirm(
+        interaction, a_panel(), a_confirm_embed(), [], question="Delete @everyone?"
+    )
+
+    assert interaction.edits[0]["allowed_mentions"].everyone is False
+
+
+async def test_confirm_leaves_the_card_alone_when_the_question_is_already_on_it():
+    """Role menus titles the whole embed `Are you sure?`, so it hands no question here."""
+    interaction = FakeInteraction()
+
+    await panels.confirm(interaction, a_panel(), a_confirm_embed(), [])
+
+    assert interaction.edits[0]["embed"].fields == []
+
+
+async def test_confirm_lets_a_caller_name_the_question_field_itself():
+    interaction = FakeInteraction()
+
+    await panels.confirm(
+        interaction, a_panel(), a_confirm_embed(), [], question="Arm it?", title="Last chance"
+    )
+
+    assert interaction.edits[0]["embed"].fields[0].name == "Last chance"
+
+
+async def test_confirm_stops_the_view_it_replaces_so_its_timeout_cannot_win():
+    interaction = FakeInteraction()
+    old = a_panel()
+
+    await panels.confirm(interaction, a_panel(), a_confirm_embed(), [], old)
+
+    assert old.replaced is True and old.is_finished()
+
+
+def test_confirm_items_puts_the_danger_move_first_and_the_way_back_second():
+    async def nothing(interaction, view):
+        return None
+
+    yes, no = panels.confirm_items(
+        yes="Yes, arm it", no="Keep it off", on_yes=nothing, on_no=nothing
+    )
+
+    assert (yes.label, yes.style, yes.row) == ("Yes, arm it", discord.ButtonStyle.danger, 0)
+    assert (no.label, no.style, no.row) == ("Keep it off", discord.ButtonStyle.secondary, 0)
+
+
+def test_confirm_items_can_wear_a_gentler_style_where_the_move_is_not_destructive():
+    async def nothing(interaction, view):
+        return None
+
+    yes, _ = panels.confirm_items(
+        yes="Yes, seed them",
+        no="Leave them",
+        on_yes=nothing,
+        on_no=nothing,
+        yes_style=discord.ButtonStyle.primary,
+        row=1,
+    )
+
+    assert yes.style is discord.ButtonStyle.primary and yes.row == 1
+
+
+async def test_a_confirm_button_hands_the_live_view_to_the_move_it_runs():
+    """The card the click lands on is the `previous` the move retires, so it must be the view."""
+    seen = []
+
+    async def took(interaction, view):
+        seen.append((interaction, view))
+
+    interaction = FakeInteraction()
+    view = a_panel()
+    yes, no = panels.confirm_items(yes="Yes", no="Keep it", on_yes=took, on_no=took)
+    view.add_item(yes)
+    view.add_item(no)
+
+    await yes.callback(interaction)
+
+    assert seen == [(interaction, view)]
 
 
 def test_picked_values_reads_both_spellings_a_modal_group_answers_with():

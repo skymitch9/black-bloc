@@ -21,8 +21,9 @@ from ...panels import (
     answer,
     capped_placeholder,
     clamped,
-    db_ready,
+    confirm,
     db_up,
+    opened,
     retire,
     still_staff,
 )
@@ -2040,18 +2041,14 @@ async def build_request(
     return (embed, view)
 
 
-def confirm(
-    bot: Any, guild: Any, previous: Any, question: str, moves: Any
-) -> tuple[discord.Embed, RoleMenuPanel]:
-    embed = discord.Embed(title=menus.CONFIRM_TITLE, description=question)
+def confirm_panel(bot: Any, guild: Any, previous: Any) -> RoleMenuPanel:
+    """The confirm card keeps the place it was raised from, so the way back lands there."""
     view = RoleMenuPanel(minutes_for(bot, guild.id))
     view.where = getattr(previous, "where", ROOT)
     view.menu_name = getattr(previous, "menu_name", "")
     view.grant_id = getattr(previous, "grant_id", None)
     view.member_id = getattr(previous, "member_id", None)
-    for move in moves:
-        view.add_item(MoveButton(move))
-    return (embed, view)
+    return view
 
 
 # --- rendering -----------------------------------------------------------------------------------
@@ -2143,14 +2140,6 @@ async def render_request(
     await render(interaction, embed, view, previous)
 
 
-async def ready(interaction: discord.Interaction) -> bool:
-    """Staff before every move AND every read, then the defer, then the database."""
-    if not await still_staff(interaction):
-        return False
-    await interaction.response.defer()
-    return await db_ready(interaction)
-
-
 async def guarded(interaction: discord.Interaction) -> bool:
     """`member.edit` is a side effect the HTTP guard cannot see, so the move asks it (item 1)."""
     guard = getattr(interaction.client, "guard", None)
@@ -2161,61 +2150,61 @@ async def guarded(interaction: discord.Interaction) -> bool:
 
 
 async def open_root(interaction: discord.Interaction, previous: Any = None) -> None:
-    if not await ready(interaction):
+    if not await opened(interaction):
         return
     await render_panel(interaction, previous)
 
 
 async def open_menu(interaction: discord.Interaction, name: str, previous: Any = None) -> None:
-    if not await ready(interaction):
+    if not await opened(interaction):
         return
     await render_menu(interaction, name, previous)
 
 
 async def open_add_role(interaction: discord.Interaction, view: Any) -> None:
-    if not await ready(interaction):
+    if not await opened(interaction):
         return
     await render_add_role(interaction, view.menu_name, None, view)
 
 
 async def open_hand_out(interaction: discord.Interaction, view: Any, removing: Any) -> None:
-    if not await ready(interaction):
+    if not await opened(interaction):
         return
     await render_hand_out(interaction, view.menu_name, view.member_id, removing, view)
 
 
 async def open_grants(interaction: discord.Interaction, member_id: Any, previous: Any) -> None:
-    if not await ready(interaction):
+    if not await opened(interaction):
         return
     await render_grants(interaction, member_id, previous)
 
 
 async def open_new_grant(interaction: discord.Interaction, view: Any) -> None:
-    if not await ready(interaction):
+    if not await opened(interaction):
         return
     await render_new_grant(interaction, view.member_id, view.role_id, view)
 
 
 async def open_grant(interaction: discord.Interaction, grant_id: Any, previous: Any) -> None:
-    if not await ready(interaction):
+    if not await opened(interaction):
         return
     await render_grant(interaction, grant_id, previous)
 
 
 async def open_requests(interaction: discord.Interaction, previous: Any) -> None:
-    if not await ready(interaction):
+    if not await opened(interaction):
         return
     await render_requests(interaction, previous)
 
 
 async def open_request(interaction: discord.Interaction, request_id: Any, previous: Any) -> None:
-    if not await ready(interaction):
+    if not await opened(interaction):
         return
     await render_request(interaction, request_id, previous)
 
 
 async def open_where(interaction: discord.Interaction, view: Any) -> None:
-    if not await ready(interaction):
+    if not await opened(interaction):
         return
     embed, fresh = build_where(interaction, view.menu_name)
     await render(interaction, embed, fresh, view)
@@ -2286,7 +2275,7 @@ async def repost_if_live(bot: Any, guild: Any, menu: Any) -> bool:
 async def run_new_menu(
     interaction: discord.Interaction, fields: dict[str, Any], previous: Any
 ) -> None:
-    if not await ready(interaction):
+    if not await opened(interaction):
         return
     mode = str(fields["mode"] or "").strip().lower() or "multiple"
     if mode not in MODES:
@@ -2319,7 +2308,7 @@ async def run_new_menu(
 async def run_change_menu(
     interaction: discord.Interaction, fields: dict[str, Any], previous: Any
 ) -> None:
-    if not await ready(interaction):
+    if not await opened(interaction):
         return
     name = previous.menu_name
     try:
@@ -2344,7 +2333,7 @@ async def run_change_menu(
 async def run_add_option(
     interaction: discord.Interaction, label: Any, emoji: Any, previous: Any
 ) -> None:
-    if not await ready(interaction):
+    if not await opened(interaction):
         return
     guild = interaction.guild
     name = previous.menu_name
@@ -2384,7 +2373,7 @@ async def run_add_option(
 
 
 async def run_drop_option(interaction: discord.Interaction, role_id: int, previous: Any) -> None:
-    if not await ready(interaction):
+    if not await opened(interaction):
         return
     guild = interaction.guild
     name = previous.menu_name
@@ -2407,7 +2396,7 @@ async def run_drop_option(interaction: discord.Interaction, role_id: int, previo
 
 
 async def run_post(interaction: discord.Interaction, channel: Any, previous: Any) -> None:
-    if not await ready(interaction):
+    if not await opened(interaction):
         return
     guild = interaction.guild
     bot = interaction.client
@@ -2440,7 +2429,7 @@ async def run_post(interaction: discord.Interaction, channel: Any, previous: Any
 async def run_take_down(interaction: discord.Interaction, previous: Any) -> None:
     from ... import rolemenu_panels as posts
 
-    if not await ready(interaction):
+    if not await opened(interaction):
         return
     name = previous.menu_name
     menu = await get_menu(interaction.client.db, interaction.guild.id, name)
@@ -2457,7 +2446,7 @@ async def run_take_down(interaction: discord.Interaction, previous: Any) -> None
 
 
 async def run_delete_menu(interaction: discord.Interaction, previous: Any) -> None:
-    if not await ready(interaction):
+    if not await opened(interaction):
         return
     name = previous.menu_name
     gone = await drop_menu(interaction.client, interaction.guild, interaction.user, name)
@@ -2468,7 +2457,7 @@ async def run_delete_menu(interaction: discord.Interaction, previous: Any) -> No
 
 
 async def run_mode(interaction: discord.Interaction, previous: Any) -> None:
-    if not await ready(interaction):
+    if not await opened(interaction):
         return
     bot = interaction.client
     wanted = "off" if picking_is_on(bot, interaction.guild.id) else "on"
@@ -2478,7 +2467,7 @@ async def run_mode(interaction: discord.Interaction, previous: Any) -> None:
 
 
 async def run_seed(interaction: discord.Interaction, previous: Any) -> None:
-    if not await ready(interaction):
+    if not await opened(interaction):
         return
     created, skipped = await seed_menus(interaction.client, interaction.guild, interaction.user)
     await render_panel(interaction, previous)
@@ -2486,7 +2475,7 @@ async def run_seed(interaction: discord.Interaction, previous: Any) -> None:
 
 
 async def run_assign(interaction: discord.Interaction, select: Any, previous: Any) -> None:
-    if not await guarded(interaction) or not await ready(interaction):
+    if not await guarded(interaction) or not await opened(interaction):
         return
     bot = interaction.client
     guild = interaction.guild
@@ -2512,7 +2501,7 @@ async def run_assign(interaction: discord.Interaction, select: Any, previous: An
 
 
 async def run_grant(interaction: discord.Interaction, days: Any, previous: Any) -> None:
-    if not await guarded(interaction) or not await ready(interaction):
+    if not await guarded(interaction) or not await opened(interaction):
         return
     guild = interaction.guild
     member = guild.get_member(int(previous.member_id)) if previous.member_id else None
@@ -2527,7 +2516,7 @@ async def run_grant(interaction: discord.Interaction, days: Any, previous: Any) 
 
 
 async def run_extend(interaction: discord.Interaction, days: Any, previous: Any) -> None:
-    if not await ready(interaction):
+    if not await opened(interaction):
         return
     row = await grants.get_grant(interaction.client.db, int(previous.grant_id))
     if row is None or row["removed_at"] or not row["expires_at"]:
@@ -2542,7 +2531,7 @@ async def run_extend(interaction: discord.Interaction, days: Any, previous: Any)
 
 
 async def run_revoke(interaction: discord.Interaction, previous: Any) -> None:
-    if not await guarded(interaction) or not await ready(interaction):
+    if not await guarded(interaction) or not await opened(interaction):
         return
     row = await grants.get_grant(interaction.client.db, int(previous.grant_id))
     if row is None or row["removed_at"]:
@@ -2563,7 +2552,7 @@ async def run_decision(
     days: Any = None,
 ) -> None:
     """A second door onto a decision the card also offers; the loser is told, never acted on."""
-    if not await ready(interaction):
+    if not await opened(interaction):
         return
     said, _fresh = await apply_request_decision(
         interaction.client,
@@ -2658,7 +2647,7 @@ class MoveButton(discord.ui.Button):
 
     async def ask_first(self, interaction: discord.Interaction, view: Any, action: str) -> None:
         """The three moves nobody can undo ask once; every quieter move is one press."""
-        if not await ready(interaction):
+        if not await opened(interaction):
             return
         bot, guild = interaction.client, interaction.guild
         if action == menus.DELETE:
@@ -2684,8 +2673,13 @@ class MoveButton(discord.ui.Button):
                 menus.PanelMove(menus.END_YES, menus.END_YES_LABEL, "danger", 0),
                 menus.PanelMove(menus.LEAVE_IT, menus.LEAVE_IT_LABEL, "secondary", 0),
             )
-        embed, fresh = confirm(bot, guild, view, question, moves)
-        await render(interaction, embed, fresh, view)
+        await confirm(
+            interaction,
+            confirm_panel(bot, guild, view),
+            discord.Embed(title=menus.CONFIRM_TITLE, description=question),
+            [MoveButton(move) for move in moves],
+            view,
+        )
 
     async def open_modal(self, interaction: discord.Interaction, view: Any, action: str) -> None:
         if not await still_staff(interaction):
@@ -2781,7 +2775,7 @@ class NewRolePick(discord.ui.RoleSelect):
     async def callback(self, interaction: discord.Interaction) -> None:
         view = self.view
         picked = int(self.values[0].id)
-        if not await ready(interaction):
+        if not await opened(interaction):
             return
         if view.where == NEW_GRANT_VIEW:
             await render_new_grant(interaction, view.member_id, picked, view)
@@ -2796,7 +2790,7 @@ class WhoPick(discord.ui.UserSelect):
     async def callback(self, interaction: discord.Interaction) -> None:
         view = self.view
         picked = int(self.values[0].id)
-        if not await ready(interaction):
+        if not await opened(interaction):
             return
         if view.where == GRANTS_VIEW:
             await render_grants(interaction, picked, view)

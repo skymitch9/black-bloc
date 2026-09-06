@@ -92,8 +92,9 @@ from ...panels import (
     answer,
     capped_placeholder,
     clamped,
-    db_ready,
+    confirm,
     db_up,
+    opened,
     retire,
     site_page_url,
     still_staff,
@@ -191,7 +192,6 @@ SITE_ONLY_LINES = (
     "not to automod, so they are changed on the Moderation page of the dashboard or with "
     "`/settings` ▸ **A setting group…** — not here, where a change would quietly alter `/warn` too."
 )
-CONFIRM_TITLE = "Are you sure?"
 ARM_QUESTION = (
     "Turning automod **on** starts deleting messages, warning people and timing them out for "
     "real, from the next message. Nothing you have read in shadow is applied retrospectively."
@@ -974,17 +974,6 @@ def build_settings(bot: Any, guild: Any) -> tuple[discord.Embed, AutomodPanel]:
     return (embed, view)
 
 
-async def build_confirm(bot: Any, guild: Any) -> tuple[discord.Embed, AutomodPanel]:
-    """Arming replaces the root's controls rather than adding a row to them."""
-    totals = await case_totals(bot.db, guild.id)
-    embed = discord.Embed(title=PANEL_TITLE, description=clamped(status_lines(bot, guild, totals)))
-    embed.add_field(name=CONFIRM_TITLE, value=ARM_QUESTION, inline=False)
-    view = AutomodPanel(minutes_for(bot, guild.id))
-    for move in confirm_buttons(bot.store.get(guild.id, "automod_mode")):
-        view.add_item(MoveButton(move))
-    return (embed, view)
-
-
 # --- rendering -----------------------------------------------------------------------------------
 
 
@@ -1012,14 +1001,6 @@ async def render_settings(interaction: discord.Interaction, previous: Any = None
     await show(interaction, build_settings(interaction.client, interaction.guild), previous)
 
 
-async def opened(interaction: discord.Interaction) -> bool:
-    """Staff are re-asked before every move, the reads included, and then the database is."""
-    if not await still_staff(interaction):
-        return False
-    await interaction.response.defer()
-    return await db_ready(interaction)
-
-
 async def back_to_root(interaction: discord.Interaction, previous: Any = None) -> None:
     if not await opened(interaction):
         return
@@ -1045,9 +1026,22 @@ async def open_settings(interaction: discord.Interaction, previous: Any = None) 
 
 
 async def open_confirm(interaction: discord.Interaction, previous: Any = None) -> None:
+    """Arming replaces the root's controls rather than adding a row to them."""
     if not await opened(interaction):
         return
-    await show(interaction, await build_confirm(interaction.client, interaction.guild), previous)
+    bot, guild = interaction.client, interaction.guild
+    totals = await case_totals(bot.db, guild.id)
+    await confirm(
+        interaction,
+        AutomodPanel(minutes_for(bot, guild.id)),
+        discord.Embed(title=PANEL_TITLE, description=clamped(status_lines(bot, guild, totals))),
+        [
+            MoveButton(move)
+            for move in confirm_buttons(bot.store.get(guild.id, "automod_mode"))
+        ],
+        previous,
+        question=ARM_QUESTION,
+    )
 
 
 async def run_rule(

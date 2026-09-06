@@ -21,6 +21,8 @@ from ...panels import (
     answer,
     capped_placeholder,
     clamped,
+    confirm,
+    confirm_items,
     db_ready,
     db_up,
     option_label,
@@ -1574,17 +1576,6 @@ async def build_staff_card(
     return (embed, view)
 
 
-def build_forget_confirm(bot: Any, guild: Any) -> tuple[discord.Embed, VoicePanel]:
-    embed = discord.Embed(
-        title=helpers.FORGET_TITLE, description=clamped([helpers.FORGET_QUESTION])
-    )
-    view = VoicePanel(minutes_for(bot, guild.id))
-    view.where = CONFIRM_VIEW
-    view.add_item(ForgetYesButton())
-    view.add_item(KeepItButton())
-    return (embed, view)
-
-
 async def render(interaction: discord.Interaction, embed: Any, view: Any, previous: Any) -> None:
     retire(previous)
     view.message = await interaction.edit_original_response(
@@ -1712,8 +1703,22 @@ async def open_staff_card(
 async def open_forget_confirm(interaction: discord.Interaction, previous: Any = None) -> None:
     if not await ready_to_move(interaction):
         return
-    embed, view = build_forget_confirm(interaction.client, interaction.guild)
-    await render(interaction, embed, view, previous)
+    view = VoicePanel(minutes_for(interaction.client, interaction.guild.id))
+    view.where = CONFIRM_VIEW
+    await confirm(
+        interaction,
+        view,
+        discord.Embed(
+            title=helpers.FORGET_TITLE, description=clamped([helpers.FORGET_QUESTION])
+        ),
+        confirm_items(
+            yes=helpers.FORGET_YES,
+            no=helpers.KEEP_IT,
+            on_yes=run_forget_prefs,
+            on_no=back_to_panel,
+        ),
+        previous,
+    )
 
 
 async def act_on_own(
@@ -1925,22 +1930,6 @@ async def back_from(interaction: discord.Interaction, view: Any) -> None:
         await open_staff_card(interaction, view.channel_id, view)
         return
     await back_to_panel(interaction, view)
-
-
-class ForgetYesButton(discord.ui.Button):
-    def __init__(self) -> None:
-        super().__init__(label=helpers.FORGET_YES, style=discord.ButtonStyle.danger, row=0)
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await run_forget_prefs(interaction, self.view)
-
-
-class KeepItButton(discord.ui.Button):
-    def __init__(self) -> None:
-        super().__init__(label=helpers.KEEP_IT, style=discord.ButtonStyle.secondary, row=0)
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await back_to_panel(interaction, self.view)
 
 
 class MemberPickOne(discord.ui.UserSelect):

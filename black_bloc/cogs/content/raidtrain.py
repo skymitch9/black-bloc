@@ -23,7 +23,6 @@ from ...panels import (
     answer,
     capped_placeholder,
     clamped,
-    db_ready,
     db_up,
     refusal,
     retire,
@@ -31,6 +30,7 @@ from ...panels import (
     still_allowed,
     still_staff,
 )
+from ...panels import opened as panel_opened
 from ...raidtrain import (
     CANCELLED,
     CAP_REACHED,
@@ -1287,9 +1287,8 @@ async def render_sub(interaction: discord.Interaction, view: Any, where: str) ->
 
 
 async def opened(interaction: discord.Interaction) -> bool:
-    """Every click defers first, then re-asks the database — the card may be minutes old."""
-    await interaction.response.defer()
-    return await db_ready(interaction)
+    """Three audiences share this panel, so the defer and the database ask with no staff gate."""
+    return await panel_opened(interaction, staff=False)
 
 
 async def open_root(interaction: discord.Interaction, previous: Any = None) -> None:

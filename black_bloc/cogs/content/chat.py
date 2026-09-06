@@ -51,8 +51,10 @@ from ...panels import (
     answer,
     capped_placeholder,
     clamped,
-    db_ready,
+    confirm,
+    confirm_items,
     db_up,
+    opened,
     retire,
     still_staff,
 )
@@ -155,7 +157,6 @@ PERSONALITY_TITLE = "The voice Black Bloc answers in"
 KNOWLEDGE_TITLE = "What Black Bloc knows about this server"
 NOTE_TITLE = "Note {id}"
 SETTINGS_TITLE = "How chat is set up"
-CONFIRM_TITLE = "Are you sure?"
 
 VOICE_PLACEHOLDER = "The voice…"
 MOOD_OFF_PLACEHOLDER = "Turn a mood off…"
@@ -480,19 +481,13 @@ async def render_settings(interaction: discord.Interaction, previous: Any = None
 
 
 async def open_root(interaction: discord.Interaction, previous: Any = None) -> None:
-    if not await still_staff(interaction):
-        return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction):
         return
     await render_panel(interaction, previous)
 
 
 async def open_personality(interaction: discord.Interaction, previous: Any = None) -> None:
-    if not await still_staff(interaction):
-        return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction):
         return
     await render_personality(interaction, previous)
 
@@ -500,10 +495,7 @@ async def open_personality(interaction: discord.Interaction, previous: Any = Non
 async def open_knowledge(
     interaction: discord.Interaction, query: str = "", previous: Any = None
 ) -> None:
-    if not await still_staff(interaction):
-        return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction):
         return
     await render_knowledge(interaction, query, previous)
 
@@ -511,28 +503,19 @@ async def open_knowledge(
 async def open_note(
     interaction: discord.Interaction, note_id: Any, previous: Any = None
 ) -> None:
-    if not await still_staff(interaction):
-        return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction):
         return
     await render_note(interaction, note_id, previous)
 
 
 async def open_settings(interaction: discord.Interaction, previous: Any = None) -> None:
-    if not await still_staff(interaction):
-        return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction):
         return
     await render_settings(interaction, previous)
 
 
 async def open_remove_confirm(interaction: discord.Interaction, view: Any) -> None:
-    if not await still_staff(interaction):
-        return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction):
         return
     bot = interaction.client
     guild = interaction.guild
@@ -541,21 +524,27 @@ async def open_remove_confirm(interaction: discord.Interaction, view: Any) -> No
         await render_knowledge(interaction, view.query, view)
         await answer(interaction, chat_panel.NO_SUCH_NOTE.format(id=view.note_id))
         return
-    embed = discord.Embed(
-        title=NOTE_TITLE.format(id=int(row["id"])), description=clamped(note_lines(row))
-    )
-    embed.add_field(
-        name=CONFIRM_TITLE,
-        value=chat_panel.REMOVE_QUESTION.format(id=int(row["id"]), title=str(row["title"])),
-        inline=False,
-    )
     fresh = ChatPanel(minutes_for(bot, guild.id))
     fresh.where = NOTE_VIEW
     fresh.note_id = int(row["id"])
     fresh.query = view.query
-    fresh.add_item(RemoveYesButton())
-    fresh.add_item(KeepItButton())
-    await render(interaction, embed, fresh, view)
+    await confirm(
+        interaction,
+        fresh,
+        discord.Embed(
+            title=NOTE_TITLE.format(id=int(row["id"])), description=clamped(note_lines(row))
+        ),
+        confirm_items(
+            yes=chat_panel.REMOVE_YES,
+            no=chat_panel.KEEP_IT,
+            on_yes=lambda one, card: run_remove_note(one, card.note_id, card),
+            on_no=lambda one, card: open_note(one, card.note_id, card),
+        ),
+        view,
+        question=chat_panel.REMOVE_QUESTION.format(
+            id=int(row["id"]), title=str(row["title"])
+        ),
+    )
 
 
 async def refresh_where(interaction: discord.Interaction, view: Any) -> None:
@@ -585,10 +574,7 @@ async def back_from(interaction: discord.Interaction, view: Any) -> None:
 
 
 async def run_voice(interaction: discord.Interaction, wanted: str, previous: Any) -> None:
-    if not await still_staff(interaction):
-        return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction):
         return
     outcome = await chat_panel.set_voice(
         interaction.client, interaction.guild, interaction.user, wanted
@@ -600,10 +586,7 @@ async def run_voice(interaction: discord.Interaction, wanted: str, previous: Any
 async def run_mood(
     interaction: discord.Interaction, name: str, enabled: bool, previous: Any
 ) -> None:
-    if not await still_staff(interaction):
-        return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction):
         return
     outcome = await chat_panel.set_mood(
         interaction.client, interaction.guild, interaction.user, name, enabled
@@ -615,10 +598,7 @@ async def run_mood(
 async def run_add_note(
     interaction: discord.Interaction, fields: dict[str, Any], previous: Any
 ) -> None:
-    if not await still_staff(interaction):
-        return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction):
         return
     outcome = await chat_panel.add_note(
         interaction.client,
@@ -635,10 +615,7 @@ async def run_add_note(
 async def run_edit_note(
     interaction: discord.Interaction, note_id: Any, fields: dict[str, Any], previous: Any
 ) -> None:
-    if not await still_staff(interaction):
-        return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction):
         return
     outcome = await chat_panel.edit_note(
         interaction.client, interaction.guild, interaction.user, note_id, fields
@@ -648,10 +625,7 @@ async def run_edit_note(
 
 
 async def run_remove_note(interaction: discord.Interaction, note_id: Any, previous: Any) -> None:
-    if not await still_staff(interaction):
-        return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction):
         return
     outcome = await chat_panel.remove_note(
         interaction.client, interaction.guild, interaction.user, note_id
@@ -662,10 +636,7 @@ async def run_remove_note(interaction: discord.Interaction, note_id: Any, previo
 
 async def run_mode(interaction: discord.Interaction, key: str, previous: Any) -> None:
     """One click, both ways — the monthly cap is the brake, not a confirm (fork F-C3)."""
-    if not await still_staff(interaction):
-        return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction):
         return
     bot = interaction.client
     wanted = "off" if str(bot.store.get(interaction.guild.id, key)) == ON else ON
@@ -679,10 +650,7 @@ async def run_mode(interaction: discord.Interaction, key: str, previous: Any) ->
 async def run_limits(
     interaction: discord.Interaction, given: dict[str, Any], previous: Any
 ) -> None:
-    if not await still_staff(interaction):
-        return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction):
         return
     read = chat_panel.read_limits(given)
     if not read.ok:
@@ -698,10 +666,7 @@ async def run_limits(
 
 async def run_find(interaction: discord.Interaction, query: str, previous: Any) -> None:
     """A pure read: it filters the list and leaves no row behind it."""
-    if not await still_staff(interaction):
-        return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction):
         return
     await render_knowledge(interaction, query, previous)
 
@@ -776,22 +741,6 @@ class MoveButton(discord.ui.Button):
                 on_submit=lambda one, text: run_find(one, text, view),
             )
         )
-
-
-class RemoveYesButton(discord.ui.Button):
-    def __init__(self) -> None:
-        super().__init__(label=chat_panel.REMOVE_YES, style=discord.ButtonStyle.danger, row=0)
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await run_remove_note(interaction, self.view.note_id, self.view)
-
-
-class KeepItButton(discord.ui.Button):
-    def __init__(self) -> None:
-        super().__init__(label=chat_panel.KEEP_IT, style=discord.ButtonStyle.secondary, row=0)
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await open_note(interaction, self.view.note_id, self.view)
 
 
 class VoicePick(discord.ui.Select):
