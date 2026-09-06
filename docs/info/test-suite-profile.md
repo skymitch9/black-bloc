@@ -6,7 +6,11 @@
 > date, on branch `worktree-agent-a8faa99c1ac0f0922` off `5c9c2a6` (v93), against a
 > clean worktree, with `pytest 9.1.1` / Python 3.12.10 / 32 logical CPUs, and
 > each table names the exact command that produced it.
-> ⚠️ **This is a REPORT. No test, no source file and no fixture was changed.**
+> ⚠️ **Sections 1–5 are the REPORT, as measured at v93: no test, no source
+> file and no fixture had been changed when they were written, and they are
+> left as they were. What has since been DONE to the suite is in "Half A —
+> measured" below and in the per-decision list at the foot of this file — read
+> those before treating a number in §1–§5 as current.**
 > ⚠️ **NOT measured, and not estimated into any table below:**
 > **(a)** the full serial (`-n 0`) run — started, killed at 15% when it
 > projected to ~25 min against a 15-min budget, and the readings it had taken
@@ -375,33 +379,112 @@ the tables are split for readability and the ids are unchanged.
 
 ---
 
+## Half A — measured
+
+> **Last verified: 2026-09-06**, branch `fixture-scope-half-a` off `19c7f3d`
+> (v93), worktree `C:/lcw/bb-fixtures-a`, same `pytest 9.1.1` / Python 3.12.10 /
+> 32 logical CPUs. ⚠️ **This machine is slower than the one §1 was measured on:
+> the SAME v93 tree that read 79.12 s there reads 105.17 s here. Compare the
+> before and after columns below to each other, never to §1.** The build is
+> TEST-ONLY — no file under `black_bloc/` or `site/` changed.
+
+| Run | Before | After (half A) | Change |
+|---|---:|---:|---:|
+| Full suite, `-n auto` | **105.17 s** (v93) | **52.14 s** | **−53.03 s, −50 %** |
+| `tests/api/test_contract.py`, serial | **83.22 s** (v93) | **5.87 s** | −77.35 s, −93 % |
+| `tests/api`, `-n auto` | **26.86 s** (v93) | **15.89 s** | −10.97 s, −41 % |
+| `tests/api`, serial | **204.37 s** (after decision 1) | **47.92 s** | −156.45 s, −77 % |
+
+⚠️ The `tests/api` serial "before" is measured at the decision-1 commit, not at
+v93 — no full serial `tests/api` run was ever taken at v93, and quoting one would
+be an estimate wearing a measurement's clothes. It is therefore an
+UNDERSTATEMENT of the change: at v93 that run also carried the 83 s contract file.
+
+Split by decision, each measured against the commit before it:
+
+| Decision | Full suite `-n auto` | `tests/api` `-n auto` |
+|---|---|---|
+| 1 — the contract seed, once per module | 105.17 s → **67.03 s** | — |
+| 3 — the api app and database, once per module | 67.03 s → **59.31 s** | 22.24 s → **15.89 s** |
+| 4 + 5 + the reversed-order guard | 59.31 s → **52.14 s** (noise; those three change no fixture) |  |
+
+```
+pytest -q -p no:cacheprovider -n auto                     # 5187 passed
+pytest -q -p no:cacheprovider tests/api/test_contract.py  # 153 passed
+pytest -q -p no:cacheprovider tests/api                   # 1035 passed
+pytest -q -p no:cacheprovider tests/api -n auto           # 1035 passed
+BB_REVERSE=1 pytest -p no:cacheprovider -n auto --tb=no -q   # the order guard
+```
+
+**Test count: 5188 → 5187.** One deleted (decision 4); nothing else lost.
+`ruff check .` clean.
+
+**How decision 1 was actually built, because it is not what the decision said.**
+The 149 routes were meant to share one seeded database and accept that a route
+which writes could affect a later one. Built that way it failed **48 of 149**,
+and not by accident: `site/mock/contract.json` orders **mutually exclusive
+transitions on the same seeded id** — `/end` then `/cancel` on poll 1, `approve`
+then `deny` on request 1, `/check` then `/sendback` then `/accept` on one review
+row. Splitting those onto separate ids means editing `contract.json`, which is
+under `site/` and off-limits to a test-only build. So the seed is **built once
+and rewound** — every entry still starts on it exactly as written, and the
+accepted trade was not taken after all. The rewind is a row copy (`take`/`put`
+in `tests/api/conftest.py`), not sqlite's page `backup`, which refuses a
+destination holding an open cursor.
+
+**What the read guard found.** Decision 1 promised a check that the seed is
+unchanged after each read-only route, failing by name. It fires on the first
+run: `GET /api/chat/personality` **writes** — it fills the trope pool the first
+time anybody reads it. The seed now takes that first read. The guard stays.
+
+**⚠️ Order dependence found and NOT caused by this branch.** Under reversed
+collection, `tests/cogs/test_presence.py::test_reapply_presence_says_so_when_the_
+status_could_not_be_set` and `::test_someone_joining_or_leaving_refreshes_the_
+count_once` fail. **Measured at v93 with the same reversal and nothing else
+changed: the same two fail there** (`2 failed, 5186 passed in 772.50 s` against
+half A's `2 failed, 5185 passed in 474.18 s`), so they pre-date half A. The file
+run ALONE passes in both directions (9 passed each way), so the dependence is
+CROSS-FILE, not within `test_presence.py`. Forward serial is green, and `-n auto`
+is green in both directions on two runs each — which makes it order-flaky rather
+than reliably red, and the reason it has never been seen. Not chased here — out
+of scope for a fixture-scope build, and reported rather than patched.
+
+⚠️ **NOT verified in half A:** coverage (no `--cov` run, same as §1); the
+`tests/live/` suite; anything against live Discord, the live dashboard or a real
+boot; and decision 2, which is untouched.
+
+---
+
 ## Decisions for the owner
 
-Each is a single yes/no. **Nothing below has been done.**
+Each is a single yes/no. The owner answered **yes to all seven, 2026-09-05.**
+**Decisions 1, 3, 4 and 5 are DONE (half A, branch `fixture-scope-half-a`, see
+"Half A — measured" below). Decision 2 is PENDING — it is half B.** Decisions 6
+and 7 were "leave it alone" and need no work.
 
-1. **Scope `test_contract.py`'s `seeded` fixture to the module** (seed once,
+1. ✅ **DONE (half A).** **Scope `test_contract.py`'s `seeded` fixture to the module** (seed once,
    run all 149 routes against it) — **saves ~14.7 s of the 79.1 s wall clock,
    measured.** Trades: the 149 routes stop being independent, so a route that
    writes state could affect a later one; the file's own comment ("every
    contract entry runs against a fresh seed") was a deliberate choice. Coverage
    lost: **none.** Yes / no?
-2. **Make the `db` fixture session- or module-scoped** (build schema v32 once,
+2. ⏳ **PENDING — this is half B.** **Make the `db` fixture session- or module-scoped** (build schema v32 once,
    roll back or truncate per test) across the 46 files that use it — **frees up
    to ~168 s of CPU.** Trades: real work in 46 files; tests stop being
    isolated-by-construction and rely on a reset that must itself be correct.
    Coverage lost: **none.** Yes / no?
-3. **Make the api `client` / `create_app()` fixture module-scoped** — **frees up
+3. ✅ **DONE (half A).** **Make the api `client` / `create_app()` fixture module-scoped** — **frees up
    to ~86 s of CPU** across 1035 tests. Trades: the app is shared inside a
    module, so a test that mutates app state leaks. Coverage lost: **none.**
    Yes / no?
-4. **Delete `tests/cogs/community/test_applications.py::test_a_number_is_read_off_a_card_with_or_without_the_hash`** —
+4. ✅ **DONE (half A).** **Delete `tests/cogs/community/test_applications.py::test_a_number_is_read_off_a_card_with_or_without_the_hash`** —
    the one true duplicate. **Saves ~62 ms.** Coverage lost: **none** (it is a
    strict subset of the helper test). Yes / no?
-5. **Give the three assertionless tests an explicit assertion** (§5) rather
+5. ✅ **DONE (half A).** **Give the three assertionless tests an explicit assertion** (§5) rather
    than relying on "did not raise". **Saves 0 s.** Trades: nothing but the
    edit. Coverage lost: none; coverage *clarity* gained. Yes / no?
-6. **Leave every parametrised table as it is.** Collapsing the four biggest
+6. ✅ **Nothing to do.** **Leave every parametrised table as it is.** Collapsing the four biggest
    would save **~0.34 s** on the two pure ones and would cost per-row failure
    messages on all four. Recommended: **yes, leave them.** Yes / no?
-7. **Leave the mirror rule and all 36 paired files alone.** The measured true
+7. ✅ **Nothing to do.** **Leave the mirror rule and all 36 paired files alone.** The measured true
    overlap is one test. Recommended: **yes, leave it.** Yes / no?
