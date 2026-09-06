@@ -9,6 +9,80 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-05 — Engineering sweep 2 landed as v92 (merge of `worktree-agent-a979d5d8b2c1fe2f5` at `f866e98`)
+
+> **Landed 2026-09-05 20:35–20:50 Phoenix.** Opus, own worktree, 349k tokens / 287 tool calls / 48 min
+> against a 300–450k estimate. Nine items, all closed, twelve commits; **5177 → 5186 tests, none lost**;
+> `ruff check .` clean; mock `17 pages, 149 routes, 14 core settings`. Owner sweep rows **287–294**
+> (were `ES2-a`–`ES2-h`); code notes in `docs/info/code-notes.md` § *Engineering sweep 2*, keyed by name.
+> Every new guard was broken on purpose once and seen to fail (four breakages, each reverted).
+>
+> What it found beyond the brief: `panels.opened(staff=False)` folded **103** inline defer+db_ready pairs
+> across **nine** cogs (`polls` and `golive` were never on the leftover list); **27** re-renders lacked
+> `allowed_mentions`, not just `requests.py`'s four (latent — Discord does not resolve mentions inside
+> an embed — but checklist 11 now has no exceptions); the three withdraw/cancel cards are on
+> `panels.confirm`, six one-off Button classes gone; `events.confirm_cancel` re-asks `may_cancel`
+> (`cancel_for` checked the status transition but never ownership); `/birthday set|optout` (6 sites)
+> and `/poll create` were the same stale-name class as `/request create` — `tests/test_chat.py` had
+> been pinning the bug; three of the four `/role revoke` homes were already fixed by the role-menus
+> build; the five double-logged form writes were ALREADY fixed — what was stale was
+> `KNOWN_DYNAMIC["api/writes.py::kind"]`, which listed **12 kinds no route writes**, now derived from
+> the AST (14 kinds); the via audit found exactly three shared functions without `via` —
+> `events.rename_channel`, `polls.post_poll`, `polls.send_review_card` — all consequence rows with no
+> actor, so they are a named `VIA_NOT_NEEDED` table with a reason each and a test; the mock already had
+> all 18 `*_panel_minutes` labels and `ROLE_MENUS_OFF` no longer drifted (a test now reads the JS
+> literal back); the Logs guarantee is `logged == FEATURES` (18) by equality, plus a check that no
+> `send_logs` sits under an `app_commands` decorator. `role_menus.py:answer` needed nothing (v88 fold).
+> ⚠️ **NOT verified at the merge:** nothing met live Discord or the live dashboard; rows 287–294 are
+> the owner's. Boot verification is on the v92 line in `deploys.log`.
+
+### Wave-1 review findings bullet AND the via-labelling gap bullet, moved whole from `TODO.md` (the still-open parts of the first were re-listed there under the same heading; the second is closed: `cancel_train` already took `via`, and the full audit found three functions, all consequence rows, now a named `VIA_NOT_NEEDED` table)
+
+- **Wave-1 review findings, small, fold into the next build that touches each file (Fable
+  review 2026-09-03 13:50–14:05):** `requests.py` re-renders lack `allowed_mentions`;
+  `LOG_LEVEL_COMMANDS` help still says "`/birthday logs`" / "`/request logs`"; five form writes
+  are logged twice (cog and API); `role_menus.py:392` re-implements `panels.answer()`;
+  `chat.py:483–488` and `personas.py:75` still say `/request create` / `/request list`
+  (`tests/test_chat.py:158` pins it) and `code-notes.md:3451` has the same stale name;
+  `NO_ANNOUNCE_CHANNEL` is dead in `events.py`; events `confirm_cancel` Yes button does not
+  re-run `may_cancel` (trusts the panel's opener pin); polls: `draft` status never written, no
+  create-recurrence web route, (`OWNER_GUIDE.md` polls row added at the v65 landing). From the
+  applications build (2026-09-03 14:55): `tests/test_bot.py::test_every_feature_group_has_a_logs_command`
+  shrinks with every panel wave (each deletes a `LOGS_GROUPS` entry) — re-express the guarantee
+  against the panels' **Logs** button before it covers nothing; `role_menus.py:answer()` is still a
+  byte-for-byte copy of `panels.answer`; `architecture.md`'s "current" command counts are stale
+  (a ⚠️ line names the real figures); `applications.py:NOT_YOUR_APPLICATION` / `NO_REVIEW_CHANNEL`
+  look dead; `OWNER_GUIDE.md` restates the sweeps count (95) instead of linking — two homes for one
+  number. From the golive build (2026-09-03 17:05, Fable review): the four earlier `*_panel_minutes`
+  keys (event/poll/birthday/request) have no label in `site/public/assets/labels.js` or
+  `site/mock/server.mjs` (memory and golive do); every panel's **Logs** button drops `count` /
+  `important_only` (wave 1 shape — a modal if wanted back). From the pings build (2026-09-03 18:25,
+  Fable review): ~~`pings.panel_buttons` only offers **Take my ping role away** while `pings_mode` is on~~
+  **DECIDED (a) + FIXED 2026-09-05 14:35 (owner: "a for pings")** — the drop button renders whenever the
+  member holds a role, mode on or off; `pings.py:panel_buttons` + one test, rides with v86; the
+  youtube cog keeps its own `site_page_url` (returns `""` where `panels.site_page_url` returns `None`)
+  — fold it at the next youtube touch; `code-notes.md` pings keys are anchored to the branch, not
+  `a5ad521` — re-key at the next merge. **From the wave-3 design docs (2026-09-04 09:21–09:33,
+  REPORT-not-fix until their builds):** the website can set `automod_mode=on` through the generic
+  settings API, which validates against `KEY_CHOICES` only — neither arming refusal applies on the web
+  path, so a guild with no resolved staff can be armed from the dashboard (`KNOWN_ISSUES` candidate;
+  the fix is wiring `set_mode` into the settings route, a settings-API pass, not a panel change);
+  `LOG_LEVEL_COMMANDS["pings"] = "pingroles"` (`settings_store.py`) names a wave-2-retired command and
+  every other `LOG_LEVEL_COMMANDS` row goes stale as its panel lands — re-express against the Logs
+  button; `/role revoke` is named in four places (`applications.py`, `OWNER_GUIDE.md:86`, `sweeps.md:254`,
+  `applications-panel-design.md:130`) and has NEVER existed — the role-menus build's `End it now` makes
+  it real; `site/mock/server.mjs:63`'s copy of `ROLE_MENUS_OFF` has already drifted from the real string;
+  `panels-program.md` §3 undercounts role menus (17 → 18); `rolemenu_log_level`'s registration site was
+  not read line-by-line (generated by the log-level family) — the build confirms it.
+
+- **Via-labelling gap: `raidtrain.cancel_train` logs one row but calls a website cancel
+  Via = Discord** (found by the double-logging build, 2026-09-03 — see `DONE.md` that
+  date). Not a double post, so out of that fix's scope. Audit every shared function a
+  route calls that does NOT yet take `via` (start from the `kind_via` call sites and the
+  `tests/test_logkinds.py` AST walk's `SHARED` map), thread `via=` through, and add each
+  to `tests/api/conftest.py:one_web_row`. Small; fold into the next requests/raid-train
+  build rather than dispatching on its own.
+
 ## 2026-09-05 19:50 — Member requests review: closed, every request already dispositioned
 
 > Moved whole from `TODO.md` at the v91 landing. Nothing was left to review: #1 (raid trains) shipped as
