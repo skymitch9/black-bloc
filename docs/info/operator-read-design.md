@@ -8,11 +8,13 @@
 > of its branches — no token, a wrong token against the LIVE app (it answered
 > `not_signed_in`, which is the proof that an unconfigured server is unchanged),
 > and `/health`.
-> ⚠️ **NOT verified:** nothing here has run with `OPERATOR_READ_TOKEN` actually
-> set on the live app — the owner mints it (`access/operator-read.md`), and until
-> he does, the whole feature is inert in production. No `web.operator.read` line
-> has ever been seen on the real Logs page; no rate limit has been hit by a real
-> client; the `logs.js` pill was not opened in a browser.
+> **2026-09-06 13:54 — FIRST LIVE RUN.** The owner minted the token (Q5, "A") and v97 carried it
+> live. Measured: `scripts/read.ps1 -Path /api/requests` answered the JSON; one `web.operator.read`
+> row per read with `via: operator` and `path=…` (read back through `/api/actions?kind=web.operator.read`);
+> `pytest -m live` **20 passed / 38 failed / 1 skipped** — the failures are two defects, on TODO for v98:
+> the guess bucket (decision 6) charges MATCHING tokens too, so a 60-path sweep 429s after ~30, and its
+> sentence says *sign-in attempts*; and the write-refusal test meets `cross_site` before the operator gate.
+> ⚠️ Still NOT verified: the `logs.js` pill was not opened in a browser (sweep row 103's Logs-page half).
 
 ## Why
 

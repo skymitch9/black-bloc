@@ -222,9 +222,9 @@ docs bookkeeping lands with the work, not after.
   beside them 19.6 → 8.5 ms. `EXPLAIN` showed `SCAN action_log` (no index existed at all), so schema **32** adds
   `action_log_by_kind` on `(guild_id, kind, id)`: 8.5 → 3.1 ms at that size. ⚠️ At 5.3k rows the index is SLOWER
   (3.4 → 4.2 ms, a temp B-tree for the ORDER BY) — the bigger measurement is the one that decided it;
-  (3) `OPERATOR_READ_TOKEN` is not set on Fly, so `tests/live/` has never
+  (3) ~~`OPERATOR_READ_TOKEN` is not set on Fly, so `tests/live/` has never
   hit the deployed host — mint one (Fly secret, NAME only in docs) and run `pytest -m live` once from a laptop, then
-  record the measured count in `access/testing.md`; (4) the boot line and the purge line are the only live measurements of the self-test so far (v87: `106 ok, 0 failed, 24 posted`; v86 purge: 24 deleted 5 min 40 s later) — a person pressing **Run the self-test** is sweep row 252.
+  record the measured count in `access/testing.md`~~ **DONE 2026-09-06 13:55** — minted (Q5 "A"), live at v97, first run 20/38/1 recorded in `access/testing.md`; the 38 are the v98 bucket fix, see the resume header; (4) the boot line and the purge line are the only live measurements of the self-test so far (v87: `106 ok, 0 failed, 24 posted`; v86 purge: 24 deleted 5 min 40 s later) — a person pressing **Run the self-test** is sweep row 252.
 - 🔧 **`/settings` leftovers after Build 2 (handed over at the v84 landing, 2026-09-05):** (1) ~~the operator-read-log
   toggle on `Panels & commands…` is drawn only for `manage_guild` but `MoveButton.callback` → `run_toggle` does not
   re-ask it (the core-key picks do, through `core_keys_allowed`) — the panel is ephemeral to its opener so the exposure

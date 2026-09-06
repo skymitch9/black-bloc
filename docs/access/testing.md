@@ -4,10 +4,12 @@
 > Last verified: **2026-09-05** — the counts below were MEASURED on the wave-5 self-test branch
 > (`pytest -q -n auto` = 5087 passed; `node site/mock/check.mjs` = 17 pages / 149 routes; `pytest
 > -m live tests/live` = 59 collected, all skipped with neither env name set).
-> ⚠️ **NOT verified:** nothing under `tests/live/` has ever been run against the deployed host —
-> `BLACK_BLOC_LIVE_TOKEN` needs `OPERATOR_READ_TOKEN` set on the Fly app, and it never has been
-> ([`operator-read.md`](operator-read.md)). Every live figure below is what the code asks for,
-> not what a run reported.
+> **2026-09-06 13:55 — `tests/live/` ran against the deployed host for the first time** (v97,
+> `OPERATOR_READ_TOKEN` set): **20 passed / 38 failed / 1 skipped** of 59 in 17 s. The 38 are the
+> `test_every_read…` sweep hitting the operator guess bucket (30 a minute per IP, charged on GOOD tokens —
+> a defect, on TODO for v98) plus one write-refusal test that meets the `cross_site` origin check before
+> the operator gate; the skip is the selftest start (no `BLACK_BLOC_LIVE_SESSION`). Loop health, `/health`,
+> the bot-in-guild check and every refusal test passed. The count after v98 goes here.
 
 ## The three layers, and what each one proves
 

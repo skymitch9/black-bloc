@@ -6,9 +6,12 @@
 > `black_bloc/api/server.py` and every `@router.get` under `black_bloc/api/`;
 > `scripts/read.ps1` was run against the live app on `/health` (200) and with a
 > wrong token (it printed the server's own sentence).
-> ⚠️ **NOT verified:** `OPERATOR_READ_TOKEN` has **never been set** on the live
-> app, so no path below has been read with the token; the mint command has not
-> been run; nothing here has been drilled end to end.
+> **2026-09-06 13:54 — drilled end to end:** the owner minted it with the one
+> command (13:34, staged; live at v97 13:52), `scripts/read.ps1 -Path /api/requests`
+> answered the JSON, and the `web.operator.read` line was read back through
+> `/api/actions`. ⚠️ Known since that run (TODO, v98): a good token is charged
+> against the 30-a-minute guess bucket, so more than ~30 reads a minute from one
+> address are refused with the sign-in sentence.
 >
 > Why this exists and how it is built: [`../info/operator-read-design.md`](../info/operator-read-design.md).
 

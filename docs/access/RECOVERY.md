@@ -87,8 +87,8 @@ re-minted from the portal (invalidating any leaked copy in the same motion);
 minted, so there is nothing to lose and nothing to restore. It is listed so a
 rebuild does not treat its absence as a missing backup: the vault still holds
 **nine** items, and this is the tenth name.
-⚠️ **`OPERATOR_READ_TOKEN` is a NAME with no value anywhere either** (added
-2026-09-03) — never minted, and deliberately **not a vault item**: its custody
+**`OPERATOR_READ_TOKEN` was minted 2026-09-06** (owner, `scripts/mint-operator-token.ps1`; live
+since v97) and is deliberately **not a vault item**: its custody
 is Fly plus the operator PC's own environment, because a re-mint costs nothing
 and nothing depends on the old value. A rebuild simply runs the mint command in
 [`operator-read.md`](operator-read.md) again, or leaves it unset and loses only
