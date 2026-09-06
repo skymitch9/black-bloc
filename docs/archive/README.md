@@ -1,12 +1,12 @@
 # archive/
 
 > **Status:** TRACKED (owner, 2026-08-31 — was local-only until then).
-> Last verified: **2026-08-31** — the table below was checked against the files
+> Last verified: **2026-09-05** — `architecture-header-2026-09-05.md` added by ENGINEERING
+> SWEEP 3, the **first** doc retired into this folder and the first to carry a retirement
+> banner. Before that, **2026-08-31** — the table below was checked against the files
 > actually present (`archive/current-bots/` holds **5**; three were missing from
 > this index and are added). ⚠️ **NOT checked:** the contents of any dump — they
-> are dated captures and are not re-verified. No doc in `archive/` currently
-> carries a retirement banner because nothing has been retired here yet; only
-> `current-bots/` data dumps live in this folder.
+> are dated captures and are not re-verified.
 
 Superseded docs and one-off data dumps. `current-bots/` holds exports from
 the bots Black Bloc replaces (source data for imports). A doc retired
@@ -22,3 +22,4 @@ here gets a dated banner at the top naming what replaced it — see
 | [`current-bots/carl-bot-dashboard-2026-08-26.md`](current-bots/carl-bot-dashboard-2026-08-26.md) | Carl-bot's live dashboard config as measured — automod rules, whitelists, warn thresholds, the reaction-role panels and their emoji→role maps. **Source for F7 and F16.** |
 | [`current-bots/yagpdb-dashboard-2026-08-26.md`](current-bots/yagpdb-dashboard-2026-08-26.md) | YAGPDB's live dashboard config — the Streaming/go-live feed template, automod (measured OFF), the role-command groups. **Source for F1/F2 and F17.** |
 | [`current-bots/role-audit-2026-08-26.md`](current-bots/role-audit-2026-08-26.md) | Per-member role audit: 118 humans, 7 bots, 59 roles, per-role counts and self-assign holders. **Source for F17** (role-process takeover). |
+| [`architecture-header-2026-09-05.md`](architecture-header-2026-09-05.md) | ⚠️ **RETIRED** — the five stacked per-branch headers `../info/architecture.md` carried until v92, plus its historical build-order narrative. Replaced by that file's one measured v92 block and its "how the counts moved" table. **No figure in it is current**; kept for the reasoning only. |
