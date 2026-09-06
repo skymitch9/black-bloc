@@ -23,16 +23,19 @@ from .logkinds import (
     via_of,
     via_word,
 )
-from .settings_store import GUILD_ONLY, require_staff
+from .settings_store import (
+    GUILD_ONLY,
+    LOGS_DEFAULT,
+    LOGS_MAX,
+    LOGS_MIN,
+    require_staff,
+)
 
 log = logging.getLogger(__name__)
 
 DETAILS_LIMIT = 900
 LINE_LIMIT = 100
 BODY_LIMIT = 3900
-LOGS_MIN = 1
-LOGS_MAX = 50
-LOGS_DEFAULT = 10
 SCAN_LIMIT = 5000
 COLUMNS = "id, at, kind, actor_id, target_id, reason, details"
 SUMMARY_SKIPS = ("via",)

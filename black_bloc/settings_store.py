@@ -1296,6 +1296,41 @@ KEY_HELP.update(
 )
 
 
+# The Logs button's two knobs. Its own block so a parallel branch merges textually, and the
+# bounds live here because `actionlog.py` reads them back out of the registry's one home.
+LOGS_MIN = 1
+LOGS_MAX = 50
+LOGS_DEFAULT = 10
+LOGS_COUNT = "logs_count"
+LOGS_IMPORTANT_ONLY = "logs_important_only"
+
+KEY_TYPES.update({LOGS_COUNT: "int", LOGS_IMPORTANT_ONLY: "bool"})
+KEY_MIN[LOGS_COUNT] = LOGS_MIN
+KEY_MAX[LOGS_COUNT] = LOGS_MAX
+KEY_MIN_REASON[LOGS_COUNT] = (
+    "A Logs button that opened on fewer than {limit} line would show nothing at all, which "
+    "reads as a broken button rather than as an empty log."
+)
+KEY_MAX_REASON[LOGS_COUNT] = (
+    "One embed holds about {limit} log lines before Discord cuts the rest off mid-sentence. "
+    "The whole log, searchable, is on the dashboard's Logs page."
+)
+KEY_HELP.update(
+    {
+        LOGS_COUNT: (
+            f"how many lines a Logs button shows to begin with, from {LOGS_MIN} to {LOGS_MAX}; "
+            f"{LOGS_DEFAULT} by default. Show more adds the same number again, and stops being "
+            f"offered once the log has run out or {LOGS_MAX} lines are shown"
+        ),
+        LOGS_IMPORTANT_ONLY: (
+            "true to open every Logs button already filtered to the lines that matter — "
+            "refusals, errors and staff moves — with Show everything beside the list to see the "
+            "rest; false opens on everything, which is what it did before"
+        ),
+    }
+)
+
+
 # Self-test (wave 5) — the three decisions the self-test introduces, in their own block.
 SELFTEST_ON_BOOT = "selftest_on_boot"
 SELFTEST_CHANNEL_ID = "selftest_channel_id"
@@ -1958,6 +1993,10 @@ class SettingsStore:
             return SETTINGS_CORE_KEYS_ADMIN_ONLY_DEFAULT
         if key == HIDE_COMMANDS_WHEN_OFF:
             return HIDE_COMMANDS_WHEN_OFF_DEFAULT
+        if key == LOGS_COUNT:
+            return LOGS_DEFAULT
+        if key == LOGS_IMPORTANT_ONLY:
+            return False
         if key == SELFTEST_ON_BOOT:
             return SELFTEST_ON_BOOT_DEFAULT
         if key == SELFTEST_CHANNEL_ID:

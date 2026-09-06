@@ -1186,10 +1186,14 @@ async def test_is_stored_answers_what_clear_would_find_without_deleting_it(store
 
 
 async def test_both_new_settings_keys_file_under_core_not_a_group_of_their_own(store):
-    """Their `settings_` prefix would make a 23rd group; CORE_KEYS is what stops it."""
+    """Their `settings_` prefix would make a group of their own; CORE_KEYS is what stops it.
+
+    The count is 23 because `logs_count` / `logs_important_only` opened a `logs` group on
+    purpose — they belong to every feature's Logs button, not to `/settings`.
+    """
     assert namespace_of("settings_panel_minutes") == "core"
     assert namespace_of("settings_core_keys_admin_only") == "core"
-    assert len({namespace_of(key) for key in KEY_TYPES}) == 22
+    assert len({namespace_of(key) for key in KEY_TYPES}) == 23
 
 
 async def test_the_automod_panel_stays_up_ten_minutes_by_default(store):

@@ -73,7 +73,7 @@ from black_bloc.storage.db import Database
 
 GUILD = 7
 TEST_CH = 111
-GROUP_COUNT = 22
+GROUP_COUNT = 23
 
 
 @pytest.fixture
@@ -167,7 +167,7 @@ def test_the_mode_block_says_modmail_in_words_and_never_as_on_or_off():
     assert "**Modmail** — True" not in said
 
 
-def test_every_key_lands_in_exactly_one_of_the_twenty_two_groups():
+def test_every_key_lands_in_exactly_one_of_the_twenty_three_groups():
     found = groups()
     assert len(found) == GROUP_COUNT
     counted = Counter(key for group in found for key in keys_in(group))
