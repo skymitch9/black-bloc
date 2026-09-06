@@ -20,6 +20,7 @@ from ...actionlog import (
 from ...command_errors import NETWORK_ERRORS, AnswersErrors, SafeDynamicItem
 from ...golive import now_iso, parse_ts
 from ...logkinds import VIA_DISCORD, kind_via
+from ...loops import wait_ready
 from ...panels import (
     KEEP_IT,
     Panel,
@@ -3415,7 +3416,7 @@ class Polls(commands.Cog):
 
     @_polls_loop.before_loop
     async def _before_polls(self) -> None:
-        await self.bot.wait_until_ready()
+        await wait_ready(self.bot, self._polls_broke)
 
     @_polls_loop.error
     async def _polls_broke(self, exc: BaseException) -> None:

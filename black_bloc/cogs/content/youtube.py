@@ -12,6 +12,7 @@ from ...actionlog import log_action, send_logs
 from ...command_errors import AnswersErrors
 from ...golive import now_iso
 from ...logkinds import VIA_DISCORD, kind_via
+from ...loops import wait_ready
 from ...panels import (
     NoteModal,
     Panel,
@@ -610,8 +611,8 @@ class YouTube(commands.Cog):
 
     @poller.before_loop
     async def _before_poller(self) -> None:
-        await self.bot.wait_until_ready()
-        self._retime()
+        if await wait_ready(self.bot, self._poller_stopped):
+            self._retime()
 
     @poller.error
     async def _poller_stopped(self, exc: BaseException) -> None:

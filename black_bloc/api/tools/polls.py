@@ -401,6 +401,8 @@ def build_router(bot: Any) -> APIRouter:
         who = await writer(request)
         guild = require_guild(bot)
         require_db(bot)
+        if not polls_are_on(bot.store, guild.id):
+            raise Refused(409, "polls_off", POLLS_OFF)
         asked = _asked_for(guild, payload)
         plan, channel_id = asked["plan"], asked["channel_id"]
         row, reviewing = await store_poll(

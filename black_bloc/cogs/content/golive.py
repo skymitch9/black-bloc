@@ -47,6 +47,7 @@ from ...golive import (
     with_box_art,
 )
 from ...logkinds import VIA_DISCORD, kind_via
+from ...loops import wait_ready
 from ...panels import (
     SELECT_OPTION_LIMIT,
     Panel,
@@ -998,7 +999,14 @@ class GoLive(commands.Cog):
 
     @poller.before_loop
     async def _before_poller(self) -> None:
-        await self.bot.wait_until_ready()
+        await wait_ready(self.bot, self._poller_stopped)
+
+    @poller.error
+    async def _poller_stopped(self, exc: BaseException) -> None:
+        """The loop stops for the life of the process unless it is started again."""
+        self.last_poll_error = f"{type(exc).__name__}: {exc}"
+        log.error("go-live: the Twitch poll stopped; restarting it", exc_info=exc)
+        self.poller.restart()
 
     async def age_out_sessions(self) -> None:
         """Close sessions still open long past any plausible stream, so nobody wedges."""

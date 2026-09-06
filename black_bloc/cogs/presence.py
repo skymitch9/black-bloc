@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 import discord
 from discord.ext import commands, tasks
 
+from ..loops import wait_ready
 from ..presence import ensure_bio, update_status
 
 log = logging.getLogger(__name__)
@@ -68,7 +69,7 @@ class Presence(commands.Cog):
 
     @status.before_loop
     async def _before_status(self) -> None:
-        await self.bot.wait_until_ready()
+        await wait_ready(self.bot, self._status_stopped)
 
     @status.error
     async def _status_stopped(self, exc: BaseException) -> None:

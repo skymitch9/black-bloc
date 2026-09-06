@@ -68,3 +68,46 @@ wherever loop health renders — read `api/tools/` and name the page) shows ever
 the deploy; `/poll` ▸ Settings ▸ polls **off** → the dashboard's Create-a-poll form refuses in a
 sentence. Code notes: `# Loop guard` at the foot of `code-notes.md`, keyed by name. Add a
 `## Deviations` section to this file for anything that differed, and why.
+
+## Deviations
+
+Written by the build, 2026-09-06, branch `loop-guard`. Everything §2 asked for landed; these
+five are the places the build differs from the words above, and why.
+
+1. **`wait_ready` returns `bool`, not `None`.** §2.1 names one coroutine and says nothing about
+   a return. Two `before_loop`s do more than wait — `content/raidtrain.py:_before_sweep` and
+   `content/youtube.py:_before_poller` both call `self._retime()`, which reads a setting and can
+   call `Loop.change_interval` — and after a failed wait the loop is already being restarted, so
+   running that is work on a task that is going away. The helper answers whether the gateway came
+   up; those two read it (`if await wait_ready(...): self._retime()`), the other twelve ignore it.
+   Still one helper and one try/except.
+2. **`content/golive.py:poller` had no `@loop.error` handler to hand anything to.** §2.1 assumes
+   every loop has one; thirteen do, this one does not — its body wraps `poll_once` in its own
+   `try/except Exception`, so nothing ever reached an error handler and none was written. Rather
+   than give this one `before_loop` a private recording path, the build added
+   `golive.py:_poller_stopped` in the shape of its thirteen siblings (record `last_poll_error`,
+   `log.error`, `self.poller.restart()`). That is checklist 28 for a loop that was missing it.
+3. **`restart()` from inside `before_loop` WORKS — measured, so the §2.2 fallback was not
+   needed.** `tests/test_loops.py::test_a_before_loop_failure_is_recorded_and_the_real_loop_restarts_and_runs`
+   builds a real `discord.ext.tasks.Loop` whose bot's `wait_until_ready` raises once, and the
+   loop restarts and runs its body on the second attempt. Why it works: `restart()` adds a
+   done-callback and cancels the task; the cancel is delivered at the next await
+   (`asyncio.sleep(0)` on line 220 of `discord/ext/tasks/__init__.py`, the one the library
+   comments "allows canceling in before_loop"), the callback fires, `start()` runs again. So a
+   `before_loop` failure now takes exactly the path a body failure takes, `last_error` included.
+4. **`cogs/core.py:_purge_failed` did not restart, and now does.** §2 asked the build to measure
+   and say. Measured: it was the only one of the fourteen handlers that recorded and logged but
+   left the loop dead, so KI-24's "every loop here satisfies checklist 28" was true of thirteen.
+   Nothing in the suite depended on it staying dead. Aligned rather than excused — without it,
+   the `before_loop` guard would record an error for the purge loop and still never bring it back.
+5. **Checklist 33 — no new decision, so no new settings key**, as §2.5 predicted. Nothing here is
+   a choice a Lead would want to change: the guard is unconditional, the `is_connected` check
+   matches every other `cog_load`, and the polls gate reads the existing `poll_mode`. Checklist
+   34 likewise: a loop failure is logged, never an `action_log` row, and `poll_create`'s refusal
+   is raised before any write so there is nothing to log.
+
+**Not verified.** `python -m black_bloc` was never booted — a worktree has no token — so none of
+this has met a live gateway; the restart claim is proved against a real `Loop` in-process, not
+against Discord. The Health surface was not opened: the claim that a `before_loop` failure now
+shows there rests on `last_error` being set (tested) and `api/status.py:loop_health` reading it
+onto https://blackbloc.heygabi.ai/health.html (unchanged by this branch). Both are sweep rows `LG-a` and `LG-b` in `access/sweeps.md`.
