@@ -2021,7 +2021,6 @@ async def test_a_re_render_stops_the_view_it_replaced(cog, bot, lead):
 # --- the card, one row per status ----------------------------------------------------------
 
 EXPECTED_BUTTONS = {
-    pure.DRAFT: ["Post it", "Cancel"],
     pure.PENDING_REVIEW: ["Approve", "Deny", "Cancel"],
     pure.OPEN: ["End", "Cancel"],
     pure.CLOSED: [],
@@ -2073,7 +2072,6 @@ async def test_the_card_renders_exactly_the_buttons_the_table_says(cog, bot, lea
         (pure.OPEN, "Cancel", "cancel_poll"),
         (pure.PENDING_REVIEW, "Approve", "apply_decision"),
         (pure.DENIED, "Post it anyway", "apply_decision"),
-        (pure.DRAFT, "Post it", "post_poll"),
     ],
 )
 async def test_a_move_button_calls_its_shared_function_and_leaves_via_alone(
@@ -2087,11 +2085,7 @@ async def test_a_move_button_calls_its_shared_function_and_leaves_via_alone(
         calls.append((args, kwargs))
         return (True, True) if func_name == "close_poll" else ("moved along", row)
 
-    async def fake_post(*args, **kwargs):
-        calls.append((args, kwargs))
-        return (None, "no_channel")
-
-    monkeypatch.setattr(polls_cog, func_name, fake_post if func_name == "post_poll" else fake)
+    monkeypatch.setattr(polls_cog, func_name, fake)
 
     await click(bot, lead, find_item(view, label))
 

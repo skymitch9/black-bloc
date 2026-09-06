@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import logging
+from dataclasses import dataclass, fields
 from datetime import UTC, datetime, timedelta
 from typing import Any, NamedTuple
 
@@ -82,12 +84,11 @@ ARCHIVED = "archived"
 DENIED = "denied"
 CANCELLED = "cancelled"
 RECURRING = "recurring"
-STATUSES = (DRAFT, PENDING_REVIEW, OPEN, CLOSED, ARCHIVED, DENIED, CANCELLED, RECURRING)
-OPEN_STATUSES = (DRAFT, PENDING_REVIEW, OPEN)
+STATUSES = (PENDING_REVIEW, OPEN, CLOSED, ARCHIVED, DENIED, CANCELLED, RECURRING)
+OPEN_STATUSES = (PENDING_REVIEW, OPEN)
 SETTLED_STATUSES = (CLOSED, CANCELLED, DENIED, ARCHIVED)
 
 TRANSITIONS: dict[str, tuple[str, ...]] = {
-    DRAFT: (PENDING_REVIEW, OPEN, CANCELLED),
     PENDING_REVIEW: (OPEN, DENIED, CANCELLED),
     OPEN: (CLOSED, CANCELLED),
     CLOSED: (ARCHIVED,),
@@ -100,7 +101,6 @@ TRANSITIONS: dict[str, tuple[str, ...]] = {
 TERMINAL_STATUSES = tuple(status for status, allowed in TRANSITIONS.items() if not allowed)
 
 COLOURS: dict[str, int] = {
-    DRAFT: 0x5865F2,
     PENDING_REVIEW: 0x5865F2,
     OPEN: 0x57F287,
     CLOSED: 0x99AAB5,
@@ -269,6 +269,8 @@ CADENCE_MONTHLY = "on the {day}{ordinal} of each month at {clock} {zone}"
 
 PANEL_MINUTES_KEY = "poll_panel_minutes"
 CREATOR_MAY_END_KEY = "poll_creator_may_end"
+DRAFTS_KEY = "poll_drafts"
+DRAFT_DAYS_KEY = "poll_draft_days"
 PANEL_TITLE = "Polls"
 PANEL_INTRO = "Put something to the room, or look at what is already running."
 PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run /poll again"
@@ -793,10 +795,6 @@ class MoveButton(NamedTuple):
 
 
 CARD_BUTTONS: dict[str, tuple[MoveButton, ...]] = {
-    DRAFT: (
-        MoveButton("post", "Post it", "primary"),
-        MoveButton("cancel", "Cancel", "danger"),
-    ),
     PENDING_REVIEW: (
         MoveButton("approve", "Approve", "success"),
         MoveButton("deny", "Deny", "danger", needs_modal=True),
@@ -890,6 +888,209 @@ def recurrence_card(
     embed.add_field(name="Options", value=shown or "none", inline=False)
     embed.set_footer(text=f"Poll #{poll_id}")
     return embed
+
+
+DRAFT_TITLE = "Saved draft"
+DRAFT_LINE = "You have a saved draft: **{question}** — saved {when}"
+DRAFT_STAFF_LINE = " · **{drafts}** saved draft(s)"
+DRAFT_PICK = "Saved drafts…"
+DRAFT_NOBODY = "somebody who has left"
+DRAFT_NO_QUESTION = "no question yet"
+SAVE_BUTTON = "Save for later"
+SAVE_REPLACES_BUTTON = "Save (replaces your draft)"
+RESUME_BUTTON = "Resume draft"
+DISCARD_BUTTON = "Discard draft"
+DISCARD_STAFF_BUTTON = "Discard"
+DISCARD_YES_BUTTON = "Yes, discard it"
+
+
+@dataclass
+class PollDraft:
+    """Everything typed so far. Saved only when somebody presses Save for later."""
+
+    question: str = ""
+    options: str = ""
+    hours: str = ""
+    kind: str = SINGLE
+    anonymous: bool = False
+    hidden: bool = False
+    channel_id: int | None = None
+    ping_role_id: int | None = None
+    thread: bool = False
+    start: str = ""
+    slots: str = ""
+    step: str = ""
+    step_unit: str = STEP_DAYS
+    cadence: str = ""
+    day: str = ""
+    at: str = ""
+    tz: str = timezones.DEFAULT_TZ
+    repeating: bool = False
+
+    def asked(self) -> dict[str, Any]:
+        return {
+            "question": self.question,
+            "kind": self.kind,
+            "options": self.options,
+            "hours": int(self.hours.strip()) if self.hours.strip() else None,
+            "anonymous": self.anonymous,
+            "results": AT_CLOSE if self.hidden else LIVE,
+            "start": self.start or None,
+            "slots": whole_or_text(self.slots),
+            "step": whole_or_text(self.step),
+            "step_unit": self.step_unit,
+        }
+
+    def to_json(self) -> str:
+        return json.dumps({spec.name: getattr(self, spec.name) for spec in fields(self)})
+
+    @classmethod
+    def from_json(cls, text: Any) -> PollDraft:
+        """A draft written by an older build still opens: unknown keys go, missing keys default."""
+        try:
+            found = json.loads(str(text or "{}"))
+        except (TypeError, ValueError):
+            found = {}
+        if not isinstance(found, dict):
+            found = {}
+        return cls(
+            **{
+                spec.name: draft_value(spec, found[spec.name])
+                for spec in fields(cls)
+                if spec.name in found
+            }
+        )
+
+
+def draft_value(spec: Any, given: Any) -> Any:
+    """A stored value only survives when it is still the shape the field was written in."""
+    if spec.default is None:
+        return int(given) if isinstance(given, int) and not isinstance(given, bool) else None
+    if isinstance(spec.default, bool):
+        return given if isinstance(given, bool) else spec.default
+    if isinstance(spec.default, str):
+        return given if isinstance(given, str) else spec.default
+    return spec.default
+
+
+def whole_or_text(given: Any) -> Any:
+    """A number when it is one, the typed text when it is not — so the refusal can quote it."""
+    text = str(given or "").strip()
+    return int(text) if text.isdigit() else text
+
+
+def draft_line(question: Any, saved: datetime | None = None) -> str:
+    when = f"<t:{int(saved.timestamp())}:R>" if saved else "a while ago"
+    return DRAFT_LINE.format(question=clamp(question, 60) or DRAFT_NO_QUESTION, when=when)
+
+
+def draft_label(name: Any, question: Any, limit: int = 100) -> str:
+    """One line of the staff select: whose it is, then as much of the question as fits."""
+    who = str(name or "").strip() or DRAFT_NOBODY
+    prefix = f"{who} · "
+    kept = clamp(question, max(0, limit - len(prefix))) or DRAFT_NO_QUESTION
+    return (prefix + kept)[:limit]
+
+
+def draft_card(
+    *,
+    question: Any,
+    user_id: Any,
+    kind: str = SINGLE,
+    labels: Any = (),
+    hours: Any = DEFAULT_HOURS,
+    channel_id: Any = None,
+    saved: datetime | None = None,
+) -> discord.Embed:
+    """The card staff read before they discard somebody's saved draft."""
+    embed = discord.Embed(
+        title=clamp(question, QUESTION_LIMIT) or DRAFT_NO_QUESTION,
+        colour=COLOURS[PENDING_REVIEW],
+    )
+    embed.add_field(name="Who", value=f"<@{user_id}>", inline=True)
+    embed.add_field(name="Kind", value=KIND_NAMES.get(kind, kind), inline=True)
+    embed.add_field(name="Open for", value=describe_hours(hours), inline=True)
+    embed.add_field(
+        name="Where", value=f"<#{channel_id}>" if channel_id else "not set", inline=True
+    )
+    embed.add_field(
+        name="Saved",
+        value=f"<t:{int(saved.timestamp())}:R>" if saved else "a while ago",
+        inline=True,
+    )
+    shown = "\n".join(
+        f"{n}. {clamp(label, LABEL_LIMIT)}" for n, label in enumerate(labels or (), 1)
+    )
+    embed.add_field(name="Options", value=shown or "none", inline=False)
+    embed.set_footer(text=DRAFT_TITLE)
+    return embed
+
+
+async def draft_row(db: Any, guild_id: int, user_id: int) -> Any:
+    cur = await db.conn.execute(
+        "SELECT * FROM poll_drafts WHERE guild_id = ? AND user_id = ?",
+        (int(guild_id), int(user_id)),
+    )
+    return await cur.fetchone()
+
+
+async def load_draft(db: Any, guild_id: int, user_id: int) -> PollDraft | None:
+    row = await draft_row(db, guild_id, user_id)
+    return None if row is None else PollDraft.from_json(row["payload"])
+
+
+async def save_draft(
+    db: Any, guild_id: int, user_id: int, draft: PollDraft, now: datetime | None = None
+) -> bool:
+    """One row per person per guild — the key says so. True when it replaced one."""
+    replaced = await draft_row(db, guild_id, user_id) is not None
+    await db.conn.execute(
+        "INSERT INTO poll_drafts(guild_id, user_id, payload, saved_at) VALUES (?, ?, ?, ?) "
+        "ON CONFLICT(guild_id, user_id) DO UPDATE SET payload = excluded.payload, "
+        "saved_at = excluded.saved_at",
+        (
+            int(guild_id),
+            int(user_id),
+            draft.to_json(),
+            (now or datetime.now(UTC)).isoformat(),
+        ),
+    )
+    await db.conn.commit()
+    return replaced
+
+
+async def drop_draft(db: Any, guild_id: int, user_id: int, commit: bool = True) -> bool:
+    """`commit=False` leaves it in the caller's transaction — Post it deletes and inserts once."""
+    cur = await db.conn.execute(
+        "DELETE FROM poll_drafts WHERE guild_id = ? AND user_id = ?",
+        (int(guild_id), int(user_id)),
+    )
+    if commit:
+        await db.conn.commit()
+    return bool(cur.rowcount)
+
+
+async def drafts(db: Any, guild_id: int) -> list[Any]:
+    cur = await db.conn.execute(
+        "SELECT * FROM poll_drafts WHERE guild_id = ? ORDER BY saved_at DESC, user_id",
+        (int(guild_id),),
+    )
+    return list(await cur.fetchall())
+
+
+async def stale_drafts(
+    db: Any, guild_id: int, days: Any, now: datetime | None = None
+) -> list[Any]:
+    """0 days is never, not everything — a draft is only dropped once it is older than the key."""
+    kept = int(days or 0)
+    if kept <= 0:
+        return []
+    before = ((now or datetime.now(UTC)) - timedelta(days=kept)).isoformat()
+    cur = await db.conn.execute(
+        "SELECT * FROM poll_drafts WHERE guild_id = ? AND saved_at < ? ORDER BY saved_at",
+        (int(guild_id), before),
+    )
+    return list(await cur.fetchall())
 
 
 def counts_from_options(rows: Any) -> list[dict[str, Any]]:

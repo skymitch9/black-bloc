@@ -6,7 +6,6 @@ import hmac
 import json
 import logging
 import re
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -37,7 +36,6 @@ from ...panels import NoteModal as PanelNoteModal
 from ...panels import site_page_url as library_site_page_url
 from ...polls import (
     ARCHIVED,
-    AT_CLOSE,
     BAD_HOURS,
     BUTTONS_UP_TO,
     CADENCES,
@@ -100,6 +98,7 @@ from ...polls import (
     VOTE_NOT_OPEN,
     WEEKDAYS,
     NeedsPanel,
+    PollDraft,
     cadence_token,
     cadence_trouble,
     can_transition,
@@ -1877,50 +1876,6 @@ def recur_placeholder(shown: int, total: int) -> str:
     return capped_placeholder(shown, total, pick=PICK_A_RECURRENCE)
 
 
-@dataclass
-class PollDraft:
-    """Everything typed so far. Nothing is written down until `Post it` — fork I-3."""
-
-    question: str = ""
-    options: str = ""
-    hours: str = ""
-    kind: str = SINGLE
-    anonymous: bool = False
-    hidden: bool = False
-    channel_id: int | None = None
-    ping_role_id: int | None = None
-    thread: bool = False
-    start: str = ""
-    slots: str = ""
-    step: str = ""
-    step_unit: str = STEP_DAYS
-    cadence: str = ""
-    day: str = ""
-    at: str = ""
-    tz: str = DEFAULT_TZ
-    repeating: bool = False
-
-    def asked(self) -> dict[str, Any]:
-        return {
-            "question": self.question,
-            "kind": self.kind,
-            "options": self.options,
-            "hours": int(self.hours.strip()) if self.hours.strip() else None,
-            "anonymous": self.anonymous,
-            "results": AT_CLOSE if self.hidden else LIVE,
-            "start": self.start or None,
-            "slots": whole_or_text(self.slots),
-            "step": whole_or_text(self.step),
-            "step_unit": self.step_unit,
-        }
-
-
-def whole_or_text(given: Any) -> Any:
-    """A number when it is one, the typed text when it is not — so the refusal can quote it."""
-    text = str(given or "").strip()
-    return int(text) if text.isdigit() else text
-
-
 def draft_trouble(draft: PollDraft) -> str | None:
     """The one thing `poll_plan` cannot be handed: hours that are not a whole number."""
     typed = draft.hours.strip()
@@ -2209,7 +2164,6 @@ async def finish_card(
 
 
 MOVE_FUNCS: dict[str, Any] = {
-    "post": lambda bot, guild, row, actor: post_now(bot, guild, row),
     "cancel": cancel_poll_now,
     "end": end_poll_now,
     "approve": lambda bot, guild, row, actor: apply_decision(
