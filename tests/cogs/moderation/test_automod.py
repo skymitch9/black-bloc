@@ -1064,24 +1064,33 @@ async def test_the_confirm_can_be_turned_off_and_then_arming_is_one_press(cog, b
 
 
 async def test_arming_is_refused_by_the_same_answer_the_picker_read(cog, bot, lead, db):
-    """The website can still write `on`; `set_mode` refuses it with the sentence, not silently."""
-    said = await automod_cog.set_mode(bot, bot.guild, "on", lead)
+    """Both doors read one verdict; the website's route reads the code and the status off it."""
+    outcome = await automod_cog.set_mode(bot, bot.guild, "on", lead)
 
-    assert "still the test channel" in said
+    assert outcome.ok is False and (outcome.code, outcome.status) == ("not_armable", 409)
+    assert "still the test channel" in outcome.message
     assert bot.store.get(GUILD, "automod_mode") == "shadow"
 
     await bot.store.set(GUILD, "staff_channel_id", STAFF_CHANNEL)
-    said = await automod_cog.set_mode(bot, bot.guild, "on", lead)
+    outcome = await automod_cog.set_mode(bot, bot.guild, "on", lead)
 
-    assert "cannot work out who counts as staff" in said
+    assert outcome.ok is False
+    assert "cannot work out who counts as staff" in outcome.message
     assert bot.store.get(GUILD, "automod_mode") == "shadow"
     assert await action_kinds(db) == []
 
     give_staff(bot, channel_id=STAFF_CHANNEL)
-    said = await automod_cog.set_mode(bot, bot.guild, "on", lead)
+    outcome = await automod_cog.set_mode(bot, bot.guild, "on", lead)
 
-    assert bot.store.get(GUILD, "automod_mode") == "on" and "**on**" in said
+    assert outcome.ok is True and outcome.value == "on"
+    assert bot.store.get(GUILD, "automod_mode") == "on" and "**on**" in outcome.message
     assert await action_kinds(db) == ["automod.mode"]
+
+    refused = await automod_cog.set_mode(bot, bot.guild, "sideways", lead)
+
+    assert refused.ok is False and (refused.code, refused.status) == ("bad_value", 400)
+    assert "off, shadow, on" in refused.message
+    assert bot.store.get(GUILD, "automod_mode") == "on"
 
 
 async def test_a_mode_written_from_the_website_takes_the_web_head_and_says_so(bot, lead, db):

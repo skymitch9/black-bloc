@@ -206,6 +206,32 @@ async def test_the_command_tree_stays_inside_discords_limits(settings):
     await bot.close()
 
 
+async def test_every_log_level_names_a_command_that_still_exists(settings):
+    """`LOG_LEVEL_COMMANDS` writes the help text a person reads on the Settings page and on
+    `/settings` — "`/<command>` ▸ **Logs**". It went stale eight times over the panels program,
+    each wave renaming a command under it, and nothing failed. This is what fails now."""
+    from black_bloc.logkinds import FEATURES
+    from black_bloc.settings_store import LOG_LEVEL_COMMANDS, log_level_help
+
+    bot = BlackBlocBot(settings)
+    for name in COGS:
+        await bot.load_extension(name)
+    names = {one.name for one in bot.tree.get_commands()}
+    await bot.close()
+
+    assert set(LOG_LEVEL_COMMANDS) == set(FEATURES)
+    gone = sorted(
+        f"{feature} -> /{command}"
+        for feature, command in LOG_LEVEL_COMMANDS.items()
+        if command not in names
+    )
+    assert not gone, f"these log levels name a command that no longer exists: {gone}"
+    for feature in FEATURES:
+        said = log_level_help(feature)
+        assert f"`/{LOG_LEVEL_COMMANDS[feature]}` ▸ **Logs**" in said, feature
+        assert "logs`" not in said, feature
+
+
 async def test_a_features_logs_is_staff_only_wherever_the_panel_button_reaches_it(settings):
     """`send_logs` is the whole body every Logs button calls, and it gates itself."""
     from black_bloc.actionlog import send_logs

@@ -121,6 +121,38 @@ async def test_a_failing_check_is_a_sentence_on_the_run_rather_than_a_failed_req
     assert found["checks"][0]["detail"] == "CheckFailed: TypeError: no"
 
 
+class BrokenRegistry:
+    """`len()` answers, so the run opens; iterating is what falls over, the way a real one would."""
+
+    def __len__(self):
+        return 3
+
+    def __iter__(self):
+        raise RuntimeError("the check registry fell over")
+
+
+async def test_a_runner_that_falls_over_still_finishes_the_run_and_says_so(
+    client, sign_in, web, wf, monkeypatch
+):
+    """Nothing awaits the task the POST starts, so a crash used to leave the run open for ever."""
+    monkeypatch.setattr(selftest, "checks_for", lambda _bot: BrokenRegistry())
+    sign_in(client)
+
+    run_id = client.post("/api/selftest", json={}).json()["run_id"]
+    found = finished(client, run_id)
+
+    assert found["finished_at"] and found["running"] is False
+    assert (found["ok"], found["failed"]) == (0, 1)
+    assert [row["name"] for row in found["checks"]] == [selftest.RUNNER_CHECK]
+    assert "the check registry fell over" in found["checks"][0]["detail"]
+    assert "stopped part way through" in found["checks"][0]["detail"]
+    assert "RuntimeError" in found["checks"][0]["detail"]
+    kinds = [kind for kind in await wf.kinds_in(web.db) if "selftest" in kind]
+    assert kinds == ["web.selftest.started", "web.selftest.check", "web.selftest.finished"]
+    assert selftest.running(web, wf.GUILD_ID) is None
+    assert client.get("/api/selftest").json()["running"] is None
+
+
 async def test_a_second_start_is_refused_in_words_and_never_as_a_bare_status(
     client, sign_in, web, wf, monkeypatch
 ):

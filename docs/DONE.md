@@ -47,6 +47,60 @@ Outcome: one `panels.confirm` card builder + `confirm_items` (with `yes_style`, 
   re-keyed), `panels-program.md` §4 *What the library gained after wave 0*, `access/sweeps.md` rows
   rows 262–275 (were `CF1`–`CF14`). ⚠️ **Nothing was run against live Discord and `python -m black_bloc` was not booted**
   (no token in a worktree); the sweep rows are the check-out.
+## 2026-09-05 — KI-21 closed: the website gets the SAME verdict the panel does (engineering sweep, `worktree-agent-accb69989b295c889`, NOT yet merged)
+
+**Outcome.** Two commits. **(1)** `PUT`/`DELETE /api/settings/{key}` now write through
+`cogs/core.py:set_key` / `clear_key` with `via=VIA_WEBSITE` and note nothing of their own; the
+shared writers build the head with `logkinds.kind_via`, so the kinds on the wire
+(`web.settings.set` / `web.settings.clear`) are unchanged and the audit reader needed no edit.
+The one behaviour kept by hand: `clear_key` refuses a key with no stored row (409
+`nothing_stored`) where the route has always answered 200 with `cleared: false`, and the page
+reads that flag — so that one code stays a 200 and every other refusal is raised.
+**(2)** The gate pass. `api/settings_api.py:gated_writers()` is a table of the keys a cog
+guards; the `PUT` validates with `coerce_value` and then hands the write to the cog's own move
+instead of `set_key`. **Audited 2026-09-05 against every `*_mode` key in the registry** (and every
+list key with a cog-side move): `automod_mode` → `automod.set_mode`, `honeypot_mode` →
+`honeypot.set_mode`, `honeypot_exempt_role_ids` → `honeypot.set_exempt_roles`. **Those three are
+the only writes in the app with a cog-side gate** — `golive`, `youtube`, `pings`, `tempvoice`,
+`events`, `birthday`, `poll`, `request`, `chat`, `chat_llm`, `chat_memory`, `rolemenu`,
+`raidtrain`, `applications`, `modmail` and `modmail_enabled` each have a `set_mode` that writes
+and logs with no verdict to share, so they go through `set_key` exactly as before.
+`automod.set_mode` was changed to return an `Outcome` (honeypot's shape already) so the website
+can tell a refusal from a save; its one panel caller reads `outcome.message`. **NOT verified:**
+nothing here has been exercised against the live dashboard. Review, once it lands:
+https://blackbloc.heygabi.ai/automod.html (Mode → **on** while the staff channel is the test
+channel now refuses in a sentence) and https://blackbloc.heygabi.ai/honeypot.html (same, and the
+exempt-roles editor now leaves a `web.honeypot.exempt_set` row on
+https://blackbloc.heygabi.ai/audit.html#logs). The entry, moved WHOLE out of `KNOWN_ISSUES.md`:
+
+### KI-21 — The website can arm automod (and the honeypot) past the arming refusals — `ACCEPTED`
+
+**Symptom.** `/automod` (the wave-3 panel, v74) never offers `on` while `staff_channel_id` is
+still the test channel or the guild resolves no staff role, and `set_mode` refuses the same two
+ways (`cogs/moderation/automod.py:arming_refusal`, read by both the select and the verdict). The
+dashboard's Automod page flips the same key through the generic settings route
+(`api/settings_api.py`), which validates against `KEY_CHOICES` only — `on` is a listed choice, so
+the PUT lands, `automod_mode` becomes `on`, and a guild with no reachable staff channel or staff
+role is armed from the website with neither refusal consulted. Found by the design doc's read of the
+route (2026-09-04), not by an incident. **Widened 2026-09-05 (v79):** `/honeypot`'s panel has the same
+shape — `on` is absent from its mode picker while no staff role resolves and
+`cogs/moderation/honeypot.py:arming_refusal` refuses it — and the dashboard writes `honeypot_mode`
+through the same generic route, so the trap can be armed from the website with nobody exempt. The
+route also rewrites `honeypot_exempt_role_ids` directly, so a website edit of the exempt list leaves
+**no `honeypot.exempt_set` row at all**, where the panel's one write leaves exactly one.
+
+**Why tolerated.** The route is behind the dashboard's staff sign-in, so the person doing it is
+already staff; the two refusals exist to stop a *misconfigured* guild going live, not a hostile one,
+and the misconfiguration they guard (staff channel = test channel) is the TEST_MODE posture the owner
+is running on purpose. Fixing it is a settings-API pass (route `set_mode` through the cog's own
+function so the web door and the Discord door share one verdict, then the same for every other key
+with a cog-side gate), not a panel change, and it belongs with the `LOG_LEVEL_COMMANDS` and
+confirm-helper sweeps rather than in the wave-3 landings.
+
+**What would change it.** The settings-API pass on `TODO.md` (wire `automod_mode` and `honeypot_mode`
+writes through each cog's `set_mode`, and `honeypot_exempt_role_ids` through `set_exempt_roles`, all
+with `via=website`), or **1 report** of a guild armed from the website while the Discord panel was
+refusing — today's number is **0**.
 
 ## 2026-09-05 — The self-test (wave 5): the bot proving itself at every boot, and cleaning up after itself (v86, merge of `worktree-agent-a4aa5efd43f249ba6` + `abac65d` + `ad5b614`)
 

@@ -265,6 +265,130 @@ async def test_clearing_from_the_website_says_so_too(client, sign_in, web, wf):
     assert next(one for one in logged if one["kind"] == "web.settings.clear")["via"] == "website"
 
 
+async def test_one_write_leaves_one_row_and_the_route_no_longer_writes_its_own(
+    client, sign_in, web, wf
+):
+    """KI-21, first half: the PUT and the DELETE go through `set_key` / `clear_key` with
+    `via=website`, so the shared writer builds the `web.` head and the route notes nothing."""
+    import inspect
+
+    from black_bloc.api import settings_api
+
+    sign_in(client, uid=7)
+
+    client.put("/api/settings/golive_mode", json={"value": "on"})
+    client.delete("/api/settings/golive_mode")
+
+    kinds = [kind for kind in await wf.kinds_in(web.db) if "settings." in kind]
+    assert kinds == ["web.settings.set", "web.settings.clear"]
+    assert "note(" not in inspect.getsource(settings_api.build_router)
+
+
+async def test_a_key_that_was_never_set_is_a_200_that_says_nothing_was_cleared(
+    client, sign_in, web, wf
+):
+    """`clear_key` refuses a key with no stored row; the website's door has always answered
+    200 with `cleared: false`, and the page reads that flag."""
+    sign_in(client, uid=7)
+
+    response = client.delete("/api/settings/golive_mode")
+
+    assert response.status_code == 200
+    assert response.json()["cleared"] is False
+    assert [kind for kind in await wf.kinds_in(web.db) if "settings." in kind] == []
+
+
+async def test_the_website_cannot_arm_automod_past_the_panels_own_refusal(
+    client, sign_in, web, wf
+):
+    """KI-21: the generic PUT validated against KEY_CHOICES only, so `on` landed on a guild
+    whose staff channel is still the test channel and whose staff set is empty."""
+    sign_in(client, uid=7)
+
+    refused = client.put("/api/settings/automod_mode", json={"value": "on"})
+
+    assert refused.status_code == 409
+    assert refused.json()["error"] == "not_armable"
+    assert "still the test channel" in refused.json()["message"]
+    assert web.store.get(wf.GUILD_ID, "automod_mode") == "shadow"
+    assert [kind for kind in await wf.kinds_in(web.db) if "automod" in kind] == []
+
+    shadow = client.put("/api/settings/automod_mode", json={"value": "shadow"})
+
+    assert shadow.status_code == 200 and shadow.json()["value"] == "shadow"
+    assert [kind for kind in await wf.kinds_in(web.db) if "automod" in kind] == [
+        "web.automod.mode"
+    ]
+
+
+async def test_the_website_cannot_arm_the_honeypot_past_its_own_refusal(
+    client, sign_in, web, wf, guild
+):
+    sign_in(client, uid=7)
+    # No role can see the staff channel any more, so nobody would be exempt from the trap.
+    # The signed-in staffer keeps the door through Manage Server, which is not a role rule.
+    guild.get_channel(wf.TEST_CHANNEL_ID).viewers = set()
+    guild.members[7].guild_permissions = types.SimpleNamespace(manage_guild=True)
+
+    refused = client.put("/api/settings/honeypot_mode", json={"value": "on"})
+
+    assert refused.status_code == 409
+    assert refused.json()["error"] == "no_staff_roles"
+    assert refused.json()["message"]
+    assert web.store.get(wf.GUILD_ID, "honeypot_mode") != "on"
+
+    shadow = client.put("/api/settings/honeypot_mode", json={"value": "shadow"})
+
+    assert shadow.status_code == 200
+    assert [kind for kind in await wf.kinds_in(web.db) if "honeypot" in kind] == [
+        "web.honeypot.mode"
+    ]
+
+
+async def test_a_website_edit_of_the_exempt_list_leaves_the_row_the_panel_leaves(
+    client, sign_in, web, wf
+):
+    """KI-21, widened: the route rewrote honeypot_exempt_role_ids with NO honeypot row at all."""
+    sign_in(client, uid=7)
+
+    response = client.put(
+        "/api/settings/honeypot_exempt_role_ids", json={"value": [str(wf.PLAIN_ROLE_ID)]}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["value"] == [str(wf.PLAIN_ROLE_ID)]
+    assert [kind for kind in await wf.kinds_in(web.db) if "honeypot" in kind] == [
+        "web.honeypot.exempt_set"
+    ]
+
+
+def test_a_gated_key_still_refuses_a_value_the_registry_does_not_know(client, sign_in, web, wf):
+    """The gate is asked as well as the validator, never instead of it."""
+    sign_in(client, uid=7)
+
+    refused = client.put("/api/settings/automod_mode", json={"value": "sideways"})
+
+    assert refused.status_code == 400 and refused.json()["error"] == "bad_value"
+    assert "off, shadow, on" in refused.json()["message"]
+
+    junk = client.put("/api/settings/honeypot_exempt_role_ids", json={"value": "nonsense"})
+
+    assert junk.status_code == 400 and junk.json()["error"] == "bad_value"
+    assert web.store.get(wf.GUILD_ID, "honeypot_exempt_role_ids") == []
+
+
+def test_every_gated_key_is_a_real_setting_a_cog_actually_guards(client, sign_in):
+    """The table is the audit's result; a key that leaves the registry must not linger here."""
+    from black_bloc.api.settings_api import gated_writers
+    from black_bloc.cogs.moderation import automod, honeypot
+
+    found = gated_writers()
+
+    assert set(found) <= set(KEY_TYPES)
+    assert set(found) == {"automod_mode", "honeypot_mode", "honeypot_exempt_role_ids"}
+    assert automod.arming_refusal is not None and honeypot.arming_refusal is not None
+
+
 async def test_a_key_the_action_log_never_saw_reports_no_via_rather_than_guessing(
     client, sign_in, web, wf
 ):

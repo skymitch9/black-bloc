@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 31
+        assert SCHEMA_VERSION == 32
         cur = await db.conn.execute("PRAGMA table_info(requests)")
         assert {
             "built",
@@ -470,7 +470,31 @@ async def test_the_self_test_tables_arrive_on_a_database_that_never_had_them(tmp
             "posted_at",
         }
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == "31"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await db.close()
+
+
+async def test_the_action_log_index_arrives_on_a_database_that_never_had_it(tmp_path):
+    """31 → 32: the self-test's run detail reads one run's check rows out of the action log."""
+    path = tmp_path / "old32.sqlite3"
+    old = await aiosqlite.connect(path)
+    await old.execute("CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    await old.execute("INSERT INTO schema_meta(key, value) VALUES ('schema_version', '31')")
+    await old.commit()
+    await old.close()
+
+    db = Database(path)
+    await db.connect()
+    try:
+        cur = await db.conn.execute("PRAGMA index_info(action_log_by_kind)")
+        assert [row["name"] for row in await cur.fetchall()] == ["guild_id", "kind", "id"]
+        cur = await db.conn.execute(
+            "EXPLAIN QUERY PLAN SELECT at, kind, details FROM action_log WHERE guild_id = ? "
+            "AND kind IN (?, ?) AND json_extract(details, '$.run_id') = ? ORDER BY id",
+            (1, "selftest.check", "web.selftest.check", 1),
+        )
+        assert any("action_log_by_kind" in row["detail"] for row in await cur.fetchall())
     finally:
         await db.close()
 

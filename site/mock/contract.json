@@ -1,5 +1,57 @@
 {
   "_": "The Phase 8b contract in machine-readable form: for every route, the keys the pages actually read. Derived from site/public/assets/*.js by grepping each page's property accesses. tests/api/test_contract.py checks the real routers against it; site/mock/check.mjs checks the mock. Both read THIS file, so the two halves cannot drift apart. shape: object | list | map. keys = required on the object, or on every row of a list. rows = {field: [keys required on every row of that list-valued field]}. nested = {field: [keys required on that object-valued field]}.",
+  "settings": {
+    "_": "The registry IS the truth (black_bloc/settings_store.py). This block is the one table both halves read: tests/api/test_contract.py asserts it equals CORE_KEYS / KEY_MIN / KEY_MAX, and site/mock/check.mjs asserts the mock's own /api/settings matches it. A bound invented in the mock, or one added to the registry and not mirrored, fails one half or the other by name.",
+    "core_keys": [
+      "bot_bio",
+      "log_channel_id",
+      "operator_read_log",
+      "role_menu_channel_id",
+      "selftest_channel_id",
+      "selftest_log_level",
+      "selftest_on_boot",
+      "selftest_purge_minutes",
+      "settings_core_keys_admin_only",
+      "settings_panel_minutes",
+      "staff_channel_id",
+      "status_prefix"
+    ],
+    "min": {
+      "chat_cooldown_seconds": 5,
+      "events_channel_retention_days": 1,
+      "poll_archive_days": 1,
+      "poll_default_hours": 1,
+      "raidtrain_poll_minutes": 1,
+      "raidtrain_reminder_minutes": 5,
+      "raidtrain_slot_minutes": 15,
+      "selftest_purge_minutes": 1,
+      "youtube_poll_minutes": 5
+    },
+    "max": {
+      "applications_retry_days": 3650,
+      "automod_warn_threshold": 100,
+      "chat_cooldown_seconds": 600,
+      "chat_daily_turns": 10000,
+      "chat_escalation_names": 10,
+      "chat_memory_notes_max": 20,
+      "chat_memory_retention_days": 3650,
+      "chat_memory_threads_max": 20,
+      "chat_monthly_cap_usd": 1000,
+      "chat_person_hourly_turns": 10000,
+      "cost_hosting_usd": 10000,
+      "events_channel_retention_days": 365,
+      "events_max_late_minutes": 1440,
+      "honeypot_purge_days": 7,
+      "poll_archive_days": 3650,
+      "poll_default_hours": 768,
+      "poll_reminder_minutes": 10080,
+      "raidtrain_max_slots_per_member": 24,
+      "raidtrain_poll_minutes": 60,
+      "raidtrain_reminder_minutes": 1440,
+      "raidtrain_slot_minutes": 720,
+      "selftest_purge_minutes": 1440
+    }
+  },
   "routes": [
     {
       "method": "GET",

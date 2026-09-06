@@ -61,7 +61,7 @@ def build_router(bot: Any) -> APIRouter:
             )
         except selftest.SelfTestBusy as exc:
             raise Refused(409, BUSY_CODE, str(exc)) from None
-        task = asyncio.create_task(selftest.finish(one), name=f"selftest-{one.run_id}")
+        task = asyncio.create_task(selftest.finish_quietly(one), name=f"selftest-{one.run_id}")
         keep_tasks(bot).add(task)
         task.add_done_callback(keep_tasks(bot).discard)
         return {

@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 31
+SCHEMA_VERSION = 32
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -663,6 +663,9 @@ CREATE TABLE IF NOT EXISTS selftest_messages (
 
 CREATE INDEX IF NOT EXISTS selftest_messages_by_run
     ON selftest_messages(run_id, id);
+
+CREATE INDEX IF NOT EXISTS action_log_by_kind
+    ON action_log(guild_id, kind, id);
 """
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (

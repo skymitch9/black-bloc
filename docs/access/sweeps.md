@@ -900,6 +900,23 @@ Lead's staff role removed while a staff panel is open, then press something — 
 refuse **in words**, not fail silently and not show a bare error. On `/raidtrain` and `/memory`
 there is deliberately **no** staff gate, and there was none before either.
 
+## Engineering sweep — rows 276–279 (were `ES1`–`ES4`; numbered at the merge 2026-09-05)
+
+Rows written as `ES1`–`ES4` on `worktree-agent-accb69989b295c889`, 2026-09-05, off `main` at
+`aa03a01` (v87); numbered 276–279 at the merge. These are the engineering
+leftovers from the `/settings` (v84) and self-test (v86/v87) landings: three of them are a
+refusal a person can now read instead of a thing quietly happening, and one is a help line that
+had been naming retired commands. ⚠️ **None of it has met live Discord or the live dashboard.**
+The verification is `pytest` (5127), `ruff check` and `node site/mock/check.mjs`
+(17 pages / 149 routes / 12 core settings).
+
+| # | Do this | Expect |
+|---|---|---|
+| 276 | As a **Lead**: `/settings` in `#mute-me-bot-test-spam` → **Panels & commands…**. Have somebody take Manage Server off you (or take it off a second Lead who has the card open) — do NOT close the card — then press **Leave operator-token reads unlogged** | a plain ephemeral sentence: *"Nothing was changed: whether an operator-token read leaves a log line is changed by somebody with Manage Server, and this panel no longer has it. Ask a Lead if it needs to change; press **Refresh** and the card will say the same."* The setting is unchanged, no line lands on the Logs page, and nothing shows a bare status. Give the permission back, press the button again: it toggles, the card redraws, and one `settings.set` row appears under **Core** |
+| 277 | Dashboard → https://blackbloc.heygabi.ai/automod.html → set **Mode** to **on** while the staff channel is still `#mute-me-bot-test-spam` | the page refuses **in words** — the same sentence `/automod`'s own mode picker gives, naming the test channel — and `automod_mode` does not move. ⚠️ **Before this it silently succeeded**, arming automod from the website past a refusal the Discord panel was making. **shadow** and **off** still save normally. The same on https://blackbloc.heygabi.ai/honeypot.html: **on** is refused while no role can see the staff channel |
+| 278 | Dashboard → https://blackbloc.heygabi.ai/honeypot.html → change the **exempt roles** list, then https://blackbloc.heygabi.ai/audit.html#logs | ONE `honeypot.exempt_set` row, marked **via Website**, naming what was added and removed — the same row the `/honeypot` panel leaves. Before this a website edit of that list left **no row at all**, so nobody could tell it had happened |
+| 279 | Dashboard → https://blackbloc.heygabi.ai/settings.html → any `*_log_level` row's help text (e.g. **How much of the go-live log is repeated into Discord**) | the sentence ends *"…and in `/golive` ▸ **Logs**"* — a command that exists and a button that is really on that panel. Every one of the 18 features says its own. ⚠️ **Eight of them used to name a retired command** (`tempvoice`, `events`, `poll`, `birthday`, `golive`, `request`, `applications`, `pings`); that was fixed at the v84 landing and is now held there by a test that loads the whole tree and fails by name if any of them drifts again |
+
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that
 minute plus the dashboard Logs page are enough to diagnose. Nothing here is destructive; the worst case is

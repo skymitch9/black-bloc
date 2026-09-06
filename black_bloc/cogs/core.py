@@ -13,7 +13,7 @@ from .. import settings_panel as sp
 from ..actionlog import log_action, send_logs
 from ..command_errors import AnswersErrors
 from ..command_visibility import STAFF_ONLY, hidden_names
-from ..logkinds import CORE, SELFTEST, VIA_DISCORD
+from ..logkinds import CORE, SELFTEST, VIA_DISCORD, kind_via
 from ..modcases import pages_under_limit
 from ..panels import (
     Outcome,
@@ -85,7 +85,7 @@ async def set_key(
     await log_action(
         bot,
         guild,
-        "settings.set",
+        kind_via("settings.set", via),
         actor=actor,
         details={"key": key, "value": stored, "via": via},
     )
@@ -105,7 +105,7 @@ async def clear_key(
     await log_action(
         bot,
         guild,
-        "settings.clear",
+        kind_via("settings.clear", via),
         actor=actor,
         details={"key": key, "via": via},
     )
@@ -293,6 +293,11 @@ OPERATOR_LOG_NOW = "**an operator-token read leaves a log line** — {value}"
 OPERATOR_LOG_IS_FOR_A_LEAD = (
     "Whether an operator-token read leaves a log line is changed by somebody with Manage "
     "Server, so that button is not drawn for you."
+)
+OPERATOR_LOG_REFUSED = (
+    "Nothing was changed: whether an operator-token read leaves a log line is changed by "
+    "somebody with Manage Server, and this panel no longer has it. Ask a Lead if it needs to "
+    "change; press **Refresh** and the card will say the same."
 )
 PANEL_MINUTES_INTRO = (
     "**How long a panel stays open** — {count} panels have their own number, and the picker "
@@ -715,6 +720,14 @@ async def core_keys_allowed(interaction: discord.Interaction) -> bool:
     return False
 
 
+async def operator_log_allowed(interaction: discord.Interaction) -> bool:
+    """Drawn only for Manage Server, and re-asked here — a Lead can lose it mid-panel."""
+    if manages_guild(interaction.user):
+        return True
+    await answer(interaction, OPERATOR_LOG_REFUSED)
+    return False
+
+
 async def go_back(interaction: discord.Interaction, view: Any) -> None:
     if not await opened(interaction):
         return
@@ -745,12 +758,13 @@ async def run_set(
     await answer(interaction, said or outcome.message)
 
 
-async def run_core_set(
-    interaction: discord.Interaction, view: Any, key: str, value: Any
+async def run_gated_set(
+    interaction: discord.Interaction, view: Any, key: str, value: Any, gate: Any
 ) -> None:
+    """A control drawn for one permission is re-asked for it here, never trusted to the draw."""
     if not await opened(interaction):
         return
-    if not await core_keys_allowed(interaction):
+    if not await gate(interaction):
         return
     outcome = await set_key(interaction.client, interaction.guild, key, value, interaction.user)
     if not outcome.ok:
@@ -758,6 +772,18 @@ async def run_core_set(
         return
     await again(interaction, view)
     await answer(interaction, outcome.message)
+
+
+async def run_core_set(
+    interaction: discord.Interaction, view: Any, key: str, value: Any
+) -> None:
+    await run_gated_set(interaction, view, key, value, core_keys_allowed)
+
+
+async def run_operator_toggle(interaction: discord.Interaction, view: Any) -> None:
+    key = sp.OPERATOR_READ_LOG_KEY
+    now = interaction.client.store.get(interaction.guild.id, key)
+    await run_gated_set(interaction, view, key, not now, operator_log_allowed)
 
 
 async def run_toggle(interaction: discord.Interaction, view: Any, key: str, said: str = "") -> None:
@@ -924,7 +950,7 @@ class MoveButton(discord.ui.Button):
             await run_hide_toggle(interaction, view)
             return
         if action == sp.OPERATOR_TOGGLE:
-            await run_toggle(interaction, view, sp.OPERATOR_READ_LOG_KEY)
+            await run_operator_toggle(interaction, view)
             return
         if action == f"{sp.EDIT}:{sp.TOGGLE}":
             await run_toggle(interaction, view, self.key)
