@@ -94,7 +94,7 @@ from ...events import (
 )
 from ...golive import now_iso, parse_ts
 from ...panels import NoteModal as PanelNoteModal
-from ...panels import Panel, answer, db_ready, retire, still_staff
+from ...panels import Panel, answer, opened, retire, still_staff
 from ...settings_store import (
     DB_UNAVAILABLE,
     EVENTS_MODES,
@@ -338,8 +338,7 @@ async def render_settings(interaction: discord.Interaction, previous: Any = None
 
 
 async def back_to_panel(interaction: discord.Interaction, previous: Any = None) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     await render_panel(interaction, previous)
 
@@ -347,8 +346,7 @@ async def back_to_panel(interaction: discord.Interaction, previous: Any = None) 
 async def open_settings(interaction: discord.Interaction, previous: Any = None) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     await render_settings(interaction, previous)
 
@@ -356,8 +354,7 @@ async def open_settings(interaction: discord.Interaction, previous: Any = None) 
 async def open_forget(interaction: discord.Interaction, previous: Any = None) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     embed, view = build_forget(interaction.client, interaction.guild)
     retire(previous)
@@ -370,8 +367,7 @@ async def change_settings(
     """Every settings control lands here: one write per key, one log row, one re-render."""
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     changed = await write_settings(
@@ -387,8 +383,7 @@ async def change_settings(
 async def open_card(
     interaction: discord.Interaction, event_id: int, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     row = await get_event(bot.db, event_id)
@@ -425,8 +420,7 @@ async def finish_card(
 async def run_move(
     interaction: discord.Interaction, event_id: int, action: str, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     said, fresh = await apply_decision(
         interaction.client, interaction.guild, event_id, MOVE_TARGETS[action], interaction.user
@@ -437,8 +431,7 @@ async def run_move(
 async def open_cancel_confirm(
     interaction: discord.Interaction, event_id: int, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     row = await get_event(bot.db, event_id)
@@ -466,8 +459,7 @@ async def open_cancel_confirm(
 async def confirm_cancel(
     interaction: discord.Interaction, event_id: int, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     row = await get_event(bot.db, event_id)
@@ -1210,8 +1202,7 @@ class Events(commands.Cog):
         self, interaction: discord.Interaction, given: str, previous: Any = None
     ) -> None:
         """What the time-zone modal does: store it or refuse, then re-render the panel."""
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         _, said = await store_zone(self.bot.db, interaction.user.id, given)
         await render_panel(interaction, previous)
@@ -1230,8 +1221,7 @@ class Events(commands.Cog):
         """What Deny and Call it off both do once their one line is in."""
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         if kind == "deny":
             said, fresh = await apply_decision(

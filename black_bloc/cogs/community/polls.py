@@ -26,7 +26,7 @@ from ...panels import (
     Panel,
     answer,
     capped_placeholder,
-    db_ready,
+    opened,
     option_label,
     panel_minutes,
     picked_values,
@@ -2129,15 +2129,13 @@ async def render_preview(
 async def open_preview(
     interaction: discord.Interaction, draft: PollDraft, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     await render_preview(interaction, draft, previous)
 
 
 async def back_to_panel(interaction: discord.Interaction, previous: Any = None) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     await render_panel(interaction, previous)
 
@@ -2174,8 +2172,7 @@ async def wanted_poll(interaction: discord.Interaction, poll_id: Any) -> Any:
 async def open_card(
     interaction: discord.Interaction, poll_id: int, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     row = await wanted_poll(interaction, poll_id)
     if row is None:
@@ -2220,8 +2217,7 @@ RECUR_FUNCS: dict[str, Any] = {
 async def run_move(
     interaction: discord.Interaction, poll_id: int, action: str, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     row = await wanted_poll(interaction, poll_id)
@@ -2237,8 +2233,7 @@ async def run_move(
 async def run_recur_move(
     interaction: discord.Interaction, poll_id: int, action: str, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     row = await get_recurrence(bot.db, interaction.guild.id, int(poll_id))
@@ -2374,8 +2369,7 @@ class SettingsButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         await render_settings(interaction, self.view)
 
@@ -2478,8 +2472,7 @@ class RecurDeleteButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         bot = interaction.client
         row = await get_recurrence(bot.db, interaction.guild.id, self.poll_id)
@@ -2519,8 +2512,7 @@ class PostButton(discord.ui.Button):
         super().__init__(label=POST_BUTTON, style=discord.ButtonStyle.success, row=0)
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         await write_draft(interaction, self.view.draft, self.view)
 
@@ -2780,8 +2772,7 @@ class DenyModal(PanelNoteModal):
     async def deny(self, interaction: discord.Interaction, text: str) -> None:
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         said, fresh = await apply_decision(
             interaction.client,
@@ -2861,8 +2852,7 @@ async def save_settings(
 ) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     await apply_poll_settings(
         interaction.client, interaction.guild, interaction.user, changes, clears

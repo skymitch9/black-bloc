@@ -18,8 +18,8 @@ from ...panels import (
     clamped,
     confirm,
     confirm_items,
-    db_ready,
     db_up,
+    opened,
     retire,
     still_staff,
 )
@@ -367,8 +367,7 @@ async def render_settings(interaction: discord.Interaction, previous: Any = None
 
 
 async def back_to_panel(interaction: discord.Interaction, previous: Any = None) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     await render_panel(interaction, previous)
 
@@ -376,8 +375,7 @@ async def back_to_panel(interaction: discord.Interaction, previous: Any = None) 
 async def open_streamers(interaction: discord.Interaction, previous: Any = None) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     await render_streamers(interaction, previous)
 
@@ -387,8 +385,7 @@ async def open_card(
 ) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     await render_card(interaction, user_id, previous)
 
@@ -396,8 +393,7 @@ async def open_card(
 async def open_settings(interaction: discord.Interaction, previous: Any = None) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     await render_settings(interaction, previous)
 
@@ -411,8 +407,7 @@ async def open_role_pick(
 ) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     await render_role_pick(
         interaction, purpose=purpose, member_id=member_id, picked=picked, previous=previous
@@ -422,8 +417,7 @@ async def open_role_pick(
 async def open_confirm(
     interaction: discord.Interaction, move: Any, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     embed, _rows, _state = await panel_embed(bot, interaction.guild, interaction.user)
@@ -447,8 +441,7 @@ async def open_card_confirm(
 ) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     guild = interaction.guild
@@ -503,8 +496,7 @@ async def back_from(interaction: discord.Interaction, view: Any) -> None:
 async def run_follow(
     interaction: discord.Interaction, user_id: Any, *, add: bool, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     guild = interaction.guild
@@ -523,8 +515,7 @@ async def run_follow(
 async def run_events(
     interaction: discord.Interaction, *, add: bool, feed: str, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     guild = interaction.guild
@@ -541,8 +532,7 @@ async def run_events(
 async def run_own(
     interaction: discord.Interaction, *, add: bool, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     guild = interaction.guild
@@ -561,8 +551,7 @@ async def run_setup(
 ) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     guild = interaction.guild
     outcome = await pings.setup_events_role(
@@ -583,8 +572,7 @@ async def run_give(
 ) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     guild = interaction.guild
     member = guild.get_member(int(member_id)) if member_id else None
@@ -609,8 +597,7 @@ async def run_remove(
 ) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     outcome = await pings.remove_fan_role(
         interaction.client, interaction.guild, int(user_id), by=interaction.user.id
@@ -624,8 +611,7 @@ async def run_remake(
 ) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     guild = interaction.guild
     member = guild.get_member(int(user_id)) if user_id else None
@@ -649,8 +635,7 @@ async def run_settings(
 ) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     said = await pings.save_settings(
         interaction.client, interaction.guild, interaction.user, changes

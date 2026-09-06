@@ -11,7 +11,7 @@ from ...actionlog import log_action, send_logs
 from ...command_errors import NETWORK_ERRORS, AnswersErrors
 from ...logkinds import VIA_DISCORD, kind_via
 from ...panels import NoteModal as PanelNoteModal
-from ...panels import Panel, answer, db_ready, retire, still_staff
+from ...panels import Panel, answer, opened, retire, still_staff
 from ...requests import (
     BUILT_LIMIT,
     CHECK_ASKED,
@@ -614,8 +614,7 @@ async def render_panel(interaction: discord.Interaction, previous: Any = None) -
 
 
 async def back_to_panel(interaction: discord.Interaction, previous: Any = None) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     await render_panel(interaction, previous)
 
@@ -644,8 +643,7 @@ async def finish_card(
 async def open_card(
     interaction: discord.Interaction, request_id: int, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     row = await get_request(bot.db, request_id)
@@ -665,8 +663,7 @@ async def open_card(
 async def open_withdraw_confirm(
     interaction: discord.Interaction, request_id: int, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     row = await get_request(bot.db, request_id)
@@ -704,8 +701,7 @@ async def open_withdraw_confirm(
 async def confirm_withdraw(
     interaction: discord.Interaction, request_id: int, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     row = await get_request(bot.db, request_id)
@@ -722,8 +718,7 @@ async def confirm_withdraw(
 async def run_move(
     interaction: discord.Interaction, request_id: int, action: str, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     said, fresh = await MOVE_FUNCS[action](bot, interaction.guild, request_id, interaction.user)
@@ -1024,8 +1019,7 @@ class Requests(commands.Cog):
         """What the ready modal does once it is filled in — the one shared path, nothing else."""
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         said, fresh = await mark_ready(
             self.bot,
@@ -1048,8 +1042,7 @@ class Requests(commands.Cog):
         """What hold, decline and send-back all do once their one-line note is submitted."""
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         if kind == "sendback":
             said, fresh = await send_back(
@@ -1094,7 +1087,6 @@ __all__ = [
     "build_panel",
     "card",
     "confirm_withdraw",
-    "db_ready",
     "finish_card",
     "guard_allows",
     "mark_ready",
@@ -1102,6 +1094,7 @@ __all__ = [
     "notify_move",
     "open_card",
     "open_withdraw_confirm",
+    "opened",
     "person_told",
     "post_line",
     "render_panel",

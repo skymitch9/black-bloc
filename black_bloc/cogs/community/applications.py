@@ -18,8 +18,8 @@ from ...panels import (
     Panel,
     answer,
     capped_placeholder,
-    db_ready,
     db_up,
+    opened,
     retire,
     still_staff,
 )
@@ -1195,8 +1195,7 @@ async def render_panel(interaction: discord.Interaction, previous: Any = None) -
 
 
 async def back_to_panel(interaction: discord.Interaction, previous: Any = None) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     await render_panel(interaction, previous)
 
@@ -1233,8 +1232,7 @@ def build_card(bot: Any, guild: Any, form: Any, row: Any, actor: Any) -> tuple[A
 async def open_card(
     interaction: discord.Interaction, application_id: int, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     guild = interaction.guild
@@ -1295,8 +1293,7 @@ async def run_move(
     note: Any = None,
     previous: Any = None,
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     form = await forms.get_form_by_id(bot.db, form_id)
@@ -1433,8 +1430,7 @@ class WithdrawPick(discord.ui.Select):
 async def open_withdraw_confirm(
     interaction: discord.Interaction, form_id: int, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     form = await forms.get_form_by_id(bot.db, form_id)
@@ -1461,8 +1457,7 @@ class WithdrawYesButton(discord.ui.Button):
         self.form_id = int(form_id)
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         bot = interaction.client
         form = await forms.get_form_by_id(bot.db, self.form_id)
@@ -1563,8 +1558,7 @@ class NewFormModal(AnswersErrors, discord.ui.Modal, title=NEW_FORM_TITLE):
     async def on_submit(self, interaction: discord.Interaction) -> None:
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         said, form = await make_form(
             interaction.client,
@@ -1600,8 +1594,7 @@ class FormPick(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         await render_form_card(interaction, int(self.values[0]), self.view)
 
@@ -1706,8 +1699,7 @@ class EditButton(FormButton):
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         await render_edit(interaction, self.form_id, self.view)
 
@@ -1719,8 +1711,7 @@ class QuestionsButton(FormButton):
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         await render_questions(interaction, self.form_id, None, self.view)
 
@@ -1733,8 +1724,7 @@ class OpenCloseButton(FormButton):
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         form = await self.form_of(interaction)
         if form is None:
@@ -1757,8 +1747,7 @@ class PostButton(FormButton):
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         await render_post_pick(interaction, self.form_id, self.view)
 
@@ -1770,8 +1759,7 @@ class RosterButton(FormButton):
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         await render_roster(interaction, self.form_id, self.view)
 
@@ -1798,8 +1786,7 @@ class DeleteButton(FormButton):
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         form = await self.form_of(interaction)
         if form is None:
@@ -1822,8 +1809,7 @@ class DeleteYesButton(FormButton):
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         form = await self.form_of(interaction)
         if form is None:
@@ -1843,8 +1829,7 @@ class FormBackButton(FormButton):
         super().__init__(form_id, "Back", "secondary", row)
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         await render_form_card(interaction, self.form_id, self.view)
 
@@ -1879,8 +1864,7 @@ class PostChannelPick(discord.ui.ChannelSelect):
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         bot = interaction.client
         form = await forms.get_form_by_id(bot.db, self.form_id)
@@ -1992,8 +1976,7 @@ class RosterOffModal(NoteModal):
             return
         if not await still_may_decide(interaction, form):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         said, _ = await remove(
             bot, interaction.guild, self.application_id, interaction.user, note
@@ -2039,8 +2022,7 @@ async def save_and_edit(
 ) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     form = await forms.get_form_by_id(bot.db, form_id)
@@ -2250,8 +2232,7 @@ class QuestionPick(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         await render_questions(interaction, self.form_id, int(self.values[0]), self.view)
 
@@ -2299,8 +2280,7 @@ class QuestionRemoveButton(FormButton):
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         form = await self.form_of(interaction)
         if form is None:
@@ -2330,8 +2310,7 @@ class QuestionRemoveYesButton(FormButton):
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         form = await self.form_of(interaction)
         if form is None:
@@ -2353,8 +2332,7 @@ class QuestionsBackButton(FormButton):
         super().__init__(form_id, "Back", "secondary", 0)
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         await render_questions(interaction, self.form_id, None, self.view)
 
@@ -2394,8 +2372,7 @@ class QuestionModal(AnswersErrors, discord.ui.Modal):
     async def on_submit(self, interaction: discord.Interaction) -> None:
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         bot = interaction.client
         form = await forms.get_form_by_id(bot.db, self.form_id)
@@ -2490,8 +2467,7 @@ async def save_settings(
 ) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     guild = interaction.guild
@@ -2510,8 +2486,7 @@ class SettingsButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         await render_settings(interaction, self.view)
 
@@ -2532,8 +2507,7 @@ class ModePick(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         said, _ = await set_mode(
             interaction.client, interaction.guild, interaction.user, str(self.values[0])
