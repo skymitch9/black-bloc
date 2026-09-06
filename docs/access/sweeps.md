@@ -1,9 +1,9 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-05** — a lettered block `PP1`–`PP7` at the FOOT added by the PERSONALITY-POOL build
-> (Black Bloc half) on `worktree-agent-a9f7e266cd87f5c2c`, off `main` at `a93f3e1` (v89);
-> **numbered at the merge**. Schema UNCHANGED at 32. ⚠️ `PP5` and `PP7` are rows whose EXPECTED
+> **2026-09-05** — rows **280–286** (were `PP1`–`PP7`) added by the PERSONALITY-POOL build
+> (Black Bloc half) on `worktree-agent-a9f7e266cd87f5c2c`, off `main` at `a93f3e1` (v89), numbered at
+> the merge and live as v90. Schema UNCHANGED at 32. ⚠️ 284 and 286 are rows whose EXPECTED
 > result is "not yet" — GABI's half of the shared manifest is a later build, so the self-test
 > check reports that she does not publish a pool version, and the sync script refuses. Before
 > them, rows **252–261** added by the SELF-TEST build (wave 5; written as
@@ -922,28 +922,28 @@ The verification is `pytest` (5127), `ruff check` and `node site/mock/check.mjs`
 | 278 | Dashboard → https://blackbloc.heygabi.ai/honeypot.html → change the **exempt roles** list, then https://blackbloc.heygabi.ai/audit.html#logs | ONE `honeypot.exempt_set` row, marked **via Website**, naming what was added and removed — the same row the `/honeypot` panel leaves. Before this a website edit of that list left **no row at all**, so nobody could tell it had happened |
 | 279 | Dashboard → https://blackbloc.heygabi.ai/settings.html → any `*_log_level` row's help text (e.g. **How much of the go-live log is repeated into Discord**) | the sentence ends *"…and in `/golive` ▸ **Logs**"* — a command that exists and a button that is really on that panel. Every one of the 18 features says its own. ⚠️ **Eight of them used to name a retired command** (`tempvoice`, `events`, `poll`, `birthday`, `golive`, `request`, `applications`, `pings`); that was fixed at the v84 landing and is now held there by a test that loads the whole tree and fails by name if any of them drifts again |
 
-## Personality pool, Black Bloc half — rows `PP1`–`PP7` (lettered; the main session numbers them at the merge)
+## Personality pool, Black Bloc half — rows 280–286 (were 280–286; numbered at the merge 2026-09-05)
 
-Written as `PP1`–`PP7` on `worktree-agent-a9f7e266cd87f5c2c`, 2026-09-05, off `main` at
+Written as 280–286 on `worktree-agent-a9f7e266cd87f5c2c`, 2026-09-05, off `main` at
 `a93f3e1` (v89, schema 32). ⚠️ **Schema is UNCHANGED at 32** — the sync writes existing
 columns only (`source = 'retired'` is a value, not a migration). The eleven moods, their
 wings, the drift constants and the two clauses now come from
 `black_bloc/personality_pool.json` instead of being restated in `personas.py`; the cookout's
 voice bodies did not move. ⚠️ **Nothing below has met live Discord, the live dashboard or the
 live Fly app**, and **GABI's health route was never fetched** — her half of the design is a
-later build, so `PP5` is expected to read *"GABI does not say its pool version yet"* rather
+later build, so 284 is expected to read *"GABI does not say its pool version yet"* rather
 than a comparison. The verification is `pytest`, `ruff check .` and
 `node site/mock/check.mjs` (17 pages / 149 routes / **14** core settings, up from 12).
 
 | # | Do this | Expect |
 |---|---|---|
-| `PP1` | As a **Lead**: `/chat` in `#mute-me-bot-test-spam` → **Personality…** | the same eleven moods in the same order as before this build, each with its label; the footer still says where they came from, now as **Ported from catalog-platform@03dcb91.** Switch one OFF |
-| `PP2` | Restart the bot (or wait for the next deploy), then reopen `/chat` ▸ **Personality…** | the mood you switched off in `PP1` is **still off**. ⚠️ This is the one that matters: the boot sync rewrites a mood's wording, wings and order, and must never touch whether it is ON. Staff have the final say |
-| `PP3` | Dashboard → https://blackbloc.heygabi.ai/audit.html#logs → filter **Chat**, straight after a fresh deploy's first boot | on a boot that changed nothing: **no** `chat.pool_synced` row at all. On the FIRST boot after this build lands (or after a manifest change): exactly ONE `chat.pool_synced` row, naming what was inserted/updated/retired, plus one `chat.pool_retired` row per mood the manifest dropped. Never one row per mood on an ordinary boot |
-| `PP4` | Dashboard → https://blackbloc.heygabi.ai/settings.html → **Core** | two new rows: **personality_pool_sync** (true) and **personality_pool_peer_url** (`https://discord.heygabi.ai/api/health`), each with a full sentence of help. Set `personality_pool_sync` to **false** and back to **true**: one `settings.set` row each time, marked **via Website**. The same two rows are in `/settings` ▸ **A setting group…** ▸ **core** |
-| `PP5` | As a **Lead**: `/settings` → **Self-test…** → **Run the self-test**, then read the check list | a check named **`pool.in_step_with_gabi`** under **Chat**, passing, with the detail *"pool v1 here; GABI does not say its pool version yet"*. ⚠️ That sentence is the CORRECT answer today — she does not publish the field yet. A red row here would mean the two bots' mood rosters can differ |
-| `PP6` | Open https://blackbloc.heygabi.ai/health in a browser (no sign-in needed) | the JSON carries **`"personality_pool_version": 1`** beside `version`, `ready`, `guilds` and `latency_ms`. This is the field GABI's side will compare against, so drift becomes visible in both directions once her half lands |
-| `PP7` | In the repo: `python scripts/sync_personality_pool.py` | it **fails**, exit code 1, with a sentence saying the canonical manifest is not there yet, that the local copy is hand-built from `personality.ts` until the catalog-platform build lands, and that `--from PATH` points it elsewhere. ⚠️ **Failing is the expected result today** — the day it succeeds is the day GABI's half shipped, and step 5 of the runbook (`docs/access/personality-pool.md`) is what to do then |
+| 280 | As a **Lead**: `/chat` in `#mute-me-bot-test-spam` → **Personality…** | the same eleven moods in the same order as before this build, each with its label; the footer still says where they came from, now as **Ported from catalog-platform@03dcb91.** Switch one OFF |
+| 281 | Restart the bot (or wait for the next deploy), then reopen `/chat` ▸ **Personality…** | the mood you switched off in 280 is **still off**. ⚠️ This is the one that matters: the boot sync rewrites a mood's wording, wings and order, and must never touch whether it is ON. Staff have the final say |
+| 282 | Dashboard → https://blackbloc.heygabi.ai/audit.html#logs → filter **Chat**, straight after a fresh deploy's first boot | on a boot that changed nothing: **no** `chat.pool_synced` row at all. On the FIRST boot after this build lands (or after a manifest change): exactly ONE `chat.pool_synced` row, naming what was inserted/updated/retired, plus one `chat.pool_retired` row per mood the manifest dropped. Never one row per mood on an ordinary boot |
+| 283 | Dashboard → https://blackbloc.heygabi.ai/settings.html → **Core** | two new rows: **personality_pool_sync** (true) and **personality_pool_peer_url** (`https://discord.heygabi.ai/api/health`), each with a full sentence of help. Set `personality_pool_sync` to **false** and back to **true**: one `settings.set` row each time, marked **via Website**. The same two rows are in `/settings` ▸ **A setting group…** ▸ **core** |
+| 284 | As a **Lead**: `/settings` → **Self-test…** → **Run the self-test**, then read the check list | a check named **`pool.in_step_with_gabi`** under **Chat**, passing, with the detail *"pool v1 here; GABI does not say its pool version yet"*. ⚠️ That sentence is the CORRECT answer today — she does not publish the field yet. A red row here would mean the two bots' mood rosters can differ |
+| 285 | Open https://blackbloc.heygabi.ai/health in a browser (no sign-in needed) | the JSON carries **`"personality_pool_version": 1`** beside `version`, `ready`, `guilds` and `latency_ms`. This is the field GABI's side will compare against, so drift becomes visible in both directions once her half lands |
+| 286 | In the repo: `python scripts/sync_personality_pool.py` | it **fails**, exit code 1, with a sentence saying the canonical manifest is not there yet, that the local copy is hand-built from `personality.ts` until the catalog-platform build lands, and that `--from PATH` points it elsewhere. ⚠️ **Failing is the expected result today** — the day it succeeds is the day GABI's half shipped, and step 5 of the runbook (`docs/access/personality-pool.md`) is what to do then |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that

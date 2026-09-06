@@ -173,7 +173,7 @@ already said go.** Order recommended by the 5.0 session, owner did not reorder:
    merged, not deployed** — manifest + derived `personas.py` + `sync_tropes`/`sync_pool` +
    two core settings + `/health` field + `pool.in_step_with_gabi` self-test check +
    `scripts/sync_personality_pool.py` + runbook [`access/personality-pool.md`](access/personality-pool.md)
-   + sweep rows `PP1`–`PP7`. Schema unchanged at 32. GABI half still to build.
+   + sweep rows 280–286. Schema unchanged at 32. GABI half still to build.
 5. **Restyle overrides** — the three cheap look-and-feel flips below stay
    available; fold into any site-touching build.
 6. ~~Raid trains (member request #1, Pawpette)~~ **SHIPPED merge `0bb3835`, deployed
