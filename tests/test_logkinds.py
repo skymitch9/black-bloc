@@ -54,21 +54,9 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.chat.line_deleted",
         "web.chat.line_edited",
         "web.event.edited",
-        "web.poll.recur_deleted",
-        "web.poll.recur_paused",
-        "web.poll.recur_resumed",
-        "web.chat.memory_forgot",
         "web.request.comment",
         "web.request.filed",
         "web.request.updated",
-        "web.request.withdrawn",
-        "web.settings.clear",
-        "web.settings.set",
-        "web.application.form_created",
-        "web.application.form_updated",
-        "web.application.form_deleted",
-        "web.application.question_changed",
-        "web.application.panel_posted",
     ),
     # The self-test's four kinds are module constants, and every door writes the same four
     # through `kind_via`, so each one is dynamic in exactly the two spellings.
@@ -501,6 +489,61 @@ def test_a_route_never_notes_an_event_its_shared_path_already_logged():
         f"function and delete the note(): {sorted(doubles)}"
     )
     assert sorted(unchecked) == [], unchecked
+
+
+def test_the_note_table_names_exactly_the_kinds_routes_still_write():
+    """A row for a kind nothing notes any more is how the 2026-09-03 fix went half-recorded.
+
+    The five application-form kinds sat here for two days after the routes stopped writing
+    them, which reads as "the website logs this twice" to anybody auditing the table.
+    """
+    written: set[str] = set()
+    for rel, (tree, _defs) in _MODULES.items():
+        if not rel.startswith(API):
+            continue
+        for wanted in _kind_args(tree, "note"):
+            for branch, _ in _branches(wanted):
+                if isinstance(branch, ast.Constant) and isinstance(branch.value, str):
+                    written.add(branch.value)
+    assert sorted(KNOWN_DYNAMIC["black_bloc/api/writes.py::kind"]) == sorted(written)
+
+
+# The via-labelling audit (2026-09-05). A shared function a ROUTE calls should take `via` so
+# the Logs page can say Via = Website. These do not, and each is here because its rows are a
+# CONSEQUENCE the bot emits on its own — no actor, and the same rows come from a sweep with
+# no person behind them — which checklist 34 says keeps the bare kind.
+VIA_NOT_NEEDED: dict[str, str] = {
+    "black_bloc/events.py::rename_channel": "cosmetic; would_rename/rename_failed carry no actor",
+    "black_bloc/cogs/community/polls.py::send_review_card": "poll.card_failed is a failure row",
+    "black_bloc/cogs/community/polls.py::post_poll": (
+        "poll.opened has no actor and the recurrence sweep posts too; the creation row "
+        "(store_poll) is the one that carries via"
+    ),
+}
+
+
+def test_every_shared_function_a_route_calls_takes_via():
+    """`raidtrain.cancel_train` logged one row and called a website cancel Via = Discord."""
+    missing: list[str] = []
+    for rel, (tree, _defs) in _MODULES.items():
+        if not rel.startswith(API):
+            continue
+        for where, name in _imported(rel, tree).values():
+            if not name or where.startswith(API):
+                continue
+            found = _MODULES[where][1].get(name)
+            if found is None or not _kind_args(found, "log_action"):
+                continue
+            spec = found.args
+            if any(arg.arg == "via" for arg in spec.args + spec.kwonlyargs):
+                continue
+            key = f"{where}::{name}"
+            if key not in VIA_NOT_NEEDED:
+                missing.append(key)
+    assert not sorted(missing), (
+        "these log an event and are called from a route, but take no `via`, so a website "
+        f"action is written as though somebody typed it in Discord: {sorted(missing)}"
+    )
 
 
 def test_a_shared_logger_stays_discord_unless_a_route_says_otherwise():
