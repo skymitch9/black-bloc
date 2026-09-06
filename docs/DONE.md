@@ -9,6 +9,35 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-05 — Engineering sweep landed as v89 (merge of `worktree-agent-accb69989b295c889` at `243dc0f`)
+
+Outcome: seven commits, 481k tokens (estimate was 250–350k). KI-21 closed (its own entry is below this one, written on the branch); schema **32** adds `action_log_by_kind (guild_id, kind, id)` and `checks_of` filters `run_id` in SQL (5,300 → 106 rows parsed; 8.5 → 3.1 ms at 55k rows, ⚠️ 3.4 → 4.2 ms at 5.3k — the bigger measurement decided it); a check-runner that RAISES now records itself (`selftest.finish_quietly`); the operator-log toggle re-asks Manage Server; the mock's `contract.json` gains a `settings` block read by both `tests/api/test_contract.py` and `check.mjs` (14 false `max: 1440` claims removed per KI-20, `youtube_poll_minutes` `min: 5`, 16 registry keys that had no mock row); `test_every_log_level_names_a_command_that_still_exists` guards `LOG_LEVEL_COMMANDS` by name. Sweep rows 276–279 (were `ES1`–`ES4`). Verified at the landing: ruff clean, **5139** passed, `check.mjs` ok (17 pages / 149 routes / 12 core settings), boot 01:16:08Z `synced 29`, `selftest: 106 ok, 0 failed` 01:16:34Z, no traceback. **NOT verified:** nothing on the live dashboard or by a person in Discord — rows 276–279 are unswept. The two `TODO.md` items that closed whole, moved as they stood (B1–B4 and A1–A2 are struck inside their still-open parent items and stay there):
+
+- ~~🔧 **`LOG_LEVEL_COMMANDS` is stale for eight features (report from the automod build, 2026-09-04):**
+  `settings_store.py` still names `tempvoice` (now `voice`), `events` (now `event`), `poll`, `birthday`,
+  `golive`, `request`, `applications` (now `/apply`) and `pings` (`pingroles`, retired) as the command that
+  reads each log level — every one of those became a panel's **Logs** button. One pass: re-express the help
+  text against the Logs button per feature and re-express
+  `tests/test_bot.py::test_every_feature_group_has_a_logs_command` (already on the small-findings list) against
+  the same thing before it covers nothing.~~ **ALREADY DONE, then GUARDED `83920bc`.** ⚠️ **Both halves had
+  already landed and this item was stale:** the v84 (`/settings` panel) build corrected `LOG_LEVEL_COMMANDS`
+  for all eighteen features and rewrote `log_level_help` to say "`/<command>` ▸ **Logs**", and the same build
+  re-expressed the test as
+  `tests/test_bot.py::test_every_features_logs_is_a_panel_button_and_no_group_is_left_to_hold_one`. Verified by
+  reading the code, not assumed. What this sweep added is the guard that stops it happening a ninth time:
+  `test_every_log_level_names_a_command_that_still_exists` loads the whole tree and fails **by name** on any
+  row of `LOG_LEVEL_COMMANDS` that names a command Discord no longer has. Sweep row 279.
+- ~~🔧 **Settings-API gate pass (KI-21, 2026-09-04):** the generic PUT in `api/settings_api.py` validates
+  against `KEY_CHOICES` only, so the website can set `automod_mode=on` past both of the panel's arming
+  refusals. Route the write through `cogs/moderation/automod.py:set_mode` with `via=website` (the youtube and
+  pings routes already call their cog's shared moves), then audit every other key that has a cog-side gate
+  for the same gap.~~ **DONE `675f233` + `49370a6`** — see the `/settings` leftovers item above. ⚠️ **One
+  premise in this item was wrong and is worth recording:** *no* route called a cog's `set_mode` before this
+  build. The youtube and pings routes call their cog's shared moves for **link / unlink / setup**, never for a
+  mode — every mode in the app was written through the generic settings PUT, which is exactly why the gap
+  existed. Audit result: `automod_mode`, `honeypot_mode` and `honeypot_exempt_role_ids` are the only three
+  writes with a cog-side gate; the other sixteen `*_mode` keys have nothing to share.
+
 ## 2026-09-05 — Confirm/opened fold (v88, merge of `worktree-agent-a1f44401815e31ccf` at `794d3aa`)
 
 Outcome: one `panels.confirm` card builder + `confirm_items` (with `yes_style`, because role menus' seed confirm is blue on purpose) + `panels.opened(interaction, *, staff=True)`; 8 confirm copies (11 cards — the survey found an eighth in `tempvoice.py` the item never listed) and 7 `opened()` copies + chat's 14 inline triplets folded; 12 one-off Button classes and 5 `CONFIRM_TITLE` constants gone; 5110 → 5122 tests; 12 commits; agent cost 309k against a 150–250k estimate. Deployed 17:33, boot verified (`synced 29`, `selftest: 106 ok, 0 failed`). Left on purpose: the three withdraw/cancel cards (events, requests, applications) — different shape and they edit without `allowed_mentions`; they fold once that small finding lands. Still open (reported, not done): the staffless `defer`+`db_ready` pair inline in seven cogs. Sweep rows 262–275 are the owner's check-out. The item as it stood:
