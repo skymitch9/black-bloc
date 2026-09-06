@@ -1,15 +1,26 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import aiosqlite
 import pytest
+import pytest_asyncio
 from discord.ext import tasks
 
 from black_bloc import applications, knowledge, pings
 from black_bloc import rolegrants as grants
+from black_bloc.api.auth import (
+    OPERATOR_BUCKET_ATTR,
+    SESSION_COOKIE,
+    SESSION_TTL_SECONDS,
+    sign_session,
+)
 from black_bloc.api.settings_api import grouped
+from black_bloc.api.writes import BUCKET_ATTR, MEMBER_BUCKET_ATTR, READ_BUCKET_ATTR
 from black_bloc.chat import add_line as add_chat_line
 from black_bloc.chat import create_intent
 from black_bloc.chat import seed_defaults as seed_chat
@@ -207,16 +218,40 @@ async def make_poll(db, guild_id: int, question: str, status: str) -> int:
     return poll_id
 
 
-@pytest.fixture
-async def seeded(client, sign_in, web, guild, wf):
+async def sign_in_staff(client, db, wf, uid: int = 7) -> None:
+    """The staff cookie without the `sign_in` fixture, which a module-scoped seed cannot ask for."""
+    at = datetime.now(UTC)
+    sid = f"contract-{uid}"
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO sessions(id, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
+        (sid, uid, at.isoformat(), (at + timedelta(seconds=SESSION_TTL_SECONDS)).isoformat()),
+    )
+    await db.conn.commit()
+    client.cookies.set(
+        SESSION_COOKIE,
+        sign_session(
+            wf.SECRET,
+            {
+                "uid": str(uid),
+                "name": "Mod",
+                "avatar": None,
+                "staff": True,
+                "sid": sid,
+                "exp": int(time.time()) + SESSION_TTL_SECONDS,
+            },
+        ),
+    )
+
+
+async def seed_world(client, web, guild, wf) -> dict:
     """One of everything the contract's routes read, so no route answers empty."""
     wf.member(guild, MEMBER_ID, name="ada")
     wf.member(guild, 7, name="lead", staff=True)
     # F14: {member_id} is given a ping role below, so the POST needs somebody who has none —
     # otherwise it answers the 409 that says they already have one.
     wf.member(guild, PING_MEMBER_ID, name="namu")
-    sign_in(client)
     db, guild_id = web.db, wf.GUILD_ID
+    await sign_in_staff(client, db, wf)
 
     web.cogs["Contract"] = FakeCog()
     await web.store.set(guild_id, "events_create_scheduled", False, by=7)
@@ -235,8 +270,8 @@ async def seeded(client, sign_in, web, guild, wf):
         applied=False,
         actions=["warn"],
     )
-    # A case already VOIDED, because /restore is only legal from there and every contract entry
-    # runs against a fresh seed.
+    # A case already VOIDED, because /restore is only legal from there. The seed is built ONCE
+    # per module now, so this id is spent by the single entry that restores it and by nothing else.
     voided_case_id = await add_case(
         db, guild_id, MEMBER_ID, "warn", moderator_id=7, reason="contract seed, voided"
     )
@@ -359,8 +394,8 @@ async def seeded(client, sign_in, web, guild, wf):
     # {feature_request_id} is the signed-in staffer's own OPEN row, so /api/requests/mine
     # is never empty and the staff moves have something to move; {member_request_id} is
     # somebody else's, also open. {held_request_id} is already on hold, because /resume is
-    # only legal from there and every route runs against a fresh seed. The mock seeds the
-    # same three as 25, 30 and 20.
+    # only legal from there and one entry owns it for the life of the module seed. The mock
+    # seeds the same three as 25, 30 and 20.
     feature_request_id = await make_request(
         db, guild_id, 7, "A requests board on the site", OPEN
     )
@@ -379,8 +414,8 @@ async def seeded(client, sign_in, web, guild, wf):
         decline_reason="waiting on the role menu rewrite",
         was=OPEN,
     )
-    # Third pass: {review_request_id} is already ready to check, because /accept and
-    # /sendback are only legal from there, and {progress_request_id} is being worked on,
+    # Third pass: {review_request_id} is already ready to check, because /sendback and
+    # /accept are only legal from there, and {progress_request_id} is being worked on,
     # which is where /ready is legal. The mock seeds the same two as 11 and 12.
     review_request_id = await make_request(
         db, guild_id, MEMBER_ID, "Threads should not get an answer", OPEN
@@ -488,6 +523,9 @@ async def seeded(client, sign_in, web, guild, wf):
     # Wave 5: one finished self-test run with a check row and a card still waiting to be
     # deleted, so GET /api/selftest/{id} has a shape and the purge entry has something to do.
     selftest_run_id = await seed_selftest_run(db, guild_id, wf.TEST_CHANNEL_ID)
+    # GET /api/chat/personality fills the trope pool the first time anybody reads it. The seed
+    # takes that first read, so no contract entry is the one that writes on a GET.
+    client.get("/api/chat/personality")
     grant_id = await grants.add_grant(
         db,
         guild_id,
@@ -530,6 +568,67 @@ async def seeded(client, sign_in, web, guild, wf):
         "listed_application_id": str(listed_application_id),
         "selftest_run_id": str(selftest_run_id),
     }
+
+
+BUCKETS = (BUCKET_ATTR, READ_BUCKET_ATTR, MEMBER_BUCKET_ATTR, OPERATOR_BUCKET_ATTR)
+
+
+class Seed:
+    """The module's one seeded database, plus the page-copy that puts it back between entries."""
+
+    def __init__(self, web, ids: dict, template) -> None:
+        self.web = web
+        self.ids = ids
+        self.template = template
+
+    async def rewind(self) -> None:
+        await self.template.backup(self.web.db.conn)
+        await self.web.store.load()
+        for attr in BUCKETS:
+            self.web.__dict__.pop(attr, None)
+
+
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
+async def contract_seed(module_client, module_web, module_guild, wf):
+    """Seeded once for the whole file: ~430 ms of writes, one schema build, one FastAPI app."""
+    ids = await seed_world(module_client, module_web, module_guild, wf)
+    template = await aiosqlite.connect(":memory:")
+    try:
+        await module_web.db.conn.backup(template)
+        yield Seed(module_web, ids, template)
+    finally:
+        await template.close()
+
+
+@pytest.fixture
+async def seeded(contract_seed):
+    """Every entry starts on the seed exactly as written; only the building of it is shared."""
+    await contract_seed.rewind()
+    return contract_seed.ids
+
+
+@pytest.fixture
+async def fresh_seeded(client, web, guild, wf):
+    """A database, app and seed of its own, for the entry that counts the `web.*` rows."""
+    return await seed_world(client, web, guild, wf)
+
+
+READ_ONLY = "GET"
+
+
+async def snapshot(db) -> dict[str, str]:
+    """One hash per table, so a read that writes is named with the tables it touched."""
+    cur = await db.conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' "
+        "ORDER BY name"
+    )
+    tables = [row["name"] for row in await cur.fetchall()]
+    found: dict[str, str] = {}
+    for table in tables:
+        cur = await db.conn.execute(f"SELECT * FROM {table}")
+        rows = sorted(repr(tuple(row)) for row in await cur.fetchall())
+        found[table] = hashlib.sha256("\n".join(rows).encode()).hexdigest()
+    return found
 
 
 async def seed_selftest_run(db, guild_id: int, channel_id: int) -> int:
@@ -581,15 +680,26 @@ def fill(text: str, ids: dict) -> str:
 
 
 @pytest.mark.parametrize("spec", ROUTES, ids=IDS)
-async def test_every_route_answers_with_the_keys_the_pages_read(client, seeded, spec):
+async def test_every_route_answers_with_the_keys_the_pages_read(
+    module_client, module_web, seeded, spec
+):
     path = fill(spec["path"], seeded)
     body = spec.get("body")
     if isinstance(body, dict):
         body = json.loads(fill(json.dumps(body), seeded))
-    response = client.request(spec["method"], path, json=body)
     where = f"{spec['method']} {path}"
+    reading = spec["method"] == READ_ONLY
+    before = await snapshot(module_web.db) if reading else {}
+    response = module_client.request(spec["method"], path, json=body)
     assert response.status_code == 200, f"{where} answered {response.status_code}: {response.text}"
     check(where, response.json(), spec)
+    if reading:
+        after = await snapshot(module_web.db)
+        dirtied = sorted(name for name, digest in after.items() if before.get(name) != digest)
+        assert not dirtied, (
+            f"{where} is a read, but it changed {dirtied} — the seed the rest of the file "
+            "shares is now dirty, so scope it back or make the route stop writing"
+        )
 
 
 def test_the_contracts_settings_block_is_the_registry_and_not_a_second_copy():
@@ -630,9 +740,10 @@ def test_the_moderation_settings_all_live_in_the_automod_namespace(web, wf):
 
 
 async def test_every_write_leaves_the_action_kind_the_audit_tab_filters_on(
-    client, seeded, web, wf
+    client, fresh_seeded, web, wf
 ):
     """The audit tab shows `web.` and nothing else, so every write route must spell it that way."""
+    seeded = fresh_seeded
     client.put("/api/settings/birthday_show_age", json={"value": True})
     client.post("/api/mod/warn", json={"user_id": seeded["member_id"], "reason": "contract"})
     client.post("/api/modmail/snippets", json={"name": "second", "content": "hi"})

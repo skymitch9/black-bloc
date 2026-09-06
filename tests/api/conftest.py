@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+import pytest_asyncio
 from fastapi.testclient import TestClient
 
 from black_bloc.api.server import SAME_ORIGIN, SAME_SITE_HEADER, create_app
@@ -349,20 +350,30 @@ def guild():
     return WebGuild()
 
 
+def web_settings_now():
+    with pytest.MonkeyPatch.context() as patch:
+        for name in (
+            "DISCORD_TOKEN",
+            "DISCORD_CLIENT_ID",
+            "DISCORD_CLIENT_SECRET",
+            "SESSION_SECRET",
+        ):
+            patch.delenv(name, raising=False)
+        return load_settings(
+            _env_file=None,
+            dev_guild_id=GUILD_ID,
+            discord_client_id="client-id",
+            discord_client_secret="client-secret",
+            session_secret=SECRET,
+            site_origin=ORIGIN,
+            test_mode=False,
+            test_channel_id=TEST_CHANNEL_ID,
+        )
+
+
 @pytest.fixture
-def web_settings(monkeypatch):
-    for name in ("DISCORD_TOKEN", "DISCORD_CLIENT_ID", "DISCORD_CLIENT_SECRET", "SESSION_SECRET"):
-        monkeypatch.delenv(name, raising=False)
-    return load_settings(
-        _env_file=None,
-        dev_guild_id=GUILD_ID,
-        discord_client_id="client-id",
-        discord_client_secret="client-secret",
-        session_secret=SECRET,
-        site_origin=ORIGIN,
-        test_mode=False,
-        test_channel_id=TEST_CHANNEL_ID,
-    )
+def web_settings():
+    return web_settings_now()
 
 
 @pytest.fixture
@@ -386,6 +397,29 @@ async def web(web_settings, guild, web_db):
 def client(web):
     """The header a browser sends from the dashboard's own page; without it every write is 403."""
     return TestClient(create_app(web), base_url=ORIGIN, headers=SAME_SITE)
+
+
+@pytest.fixture(scope="module")
+def module_guild():
+    return WebGuild()
+
+
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
+async def module_web(module_guild, tmp_path_factory):
+    settings = web_settings_now()
+    database = Database(tmp_path_factory.mktemp("web") / "web.sqlite3")
+    await database.connect()
+    store = SettingsStore(database, settings)
+    await store.load()
+    try:
+        yield WebBot(settings, module_guild, database, store)
+    finally:
+        await database.close()
+
+
+@pytest.fixture(scope="module")
+def module_client(module_web):
+    return TestClient(create_app(module_web), base_url=ORIGIN, headers=SAME_SITE)
 
 
 def member(guild: Any, user_id: int, *, name: str = "", staff: bool = False) -> WebMember:
@@ -415,7 +449,7 @@ async def one_web_row(db: Any, kind: str) -> dict:
     return details
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def wf():
     """The api fakes as a fixture, because a conftest is not importable by name."""
     return SimpleNamespace(
