@@ -163,7 +163,8 @@ already said go.** Order recommended by the 5.0 session, owner did not reorder:
    two settings, health field, one self-test check that reads GABI's health
    route so drift is visible. Measured today: roster + graph identical, voices
    deliberately different, `personality.ts` untouched since the port. Forks
-   F-P1–F-P3 to the owner one at a time (recommend (a) each). Two Opus builds:
+   F-P1–F-P3 ✅ ALL DECIDED (a) by the owner 16:41–16:43 — READY TO BUILD once
+   v88/v89 land (all touch nearby files). Two Opus builds:
    Black Bloc half (est. 150–220k) THEN GABI half (80–120k). ⚠️ The
    catalog-platform TODO pointer is NOT yet written — that tree was in use by
    another session at 16:37 (`821cd26` + a dirty `deploys.log`); the GABI-half

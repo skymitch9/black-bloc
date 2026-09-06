@@ -1,7 +1,7 @@
 # The global personality pool — design (next-wave #4)
 
 > **Audience:** Claude sessions in BOTH repos (this one and `catalog-platform`).
-> **Status:** TRACKED — DESIGN, not built. Written **2026-09-05** by Fable in the
+> **Status:** TRACKED — DESIGN, not built. ✅ All three forks decided (a) by the owner 2026-09-05 16:41–16:43; ready to build. Written **2026-09-05** by Fable in the
 > main loop. Last verified: **2026-09-05** — every fact about the two codebases
 > below was read from `black_bloc/personas.py` (407 lines) and
 > `catalog-platform/apps/discord-worker/src/personality.ts` (930 lines, last
@@ -208,7 +208,7 @@ ages,"). A slot the bot does not fill is a test failure, not an empty string.
 |---|---|---|
 | F-P1 | Canonical home: (a) `catalog-platform/apps/discord-worker/src/personality-pool.json` — the origin, already locked there, public repo so the roster is readable by anyone who can read GABI; (b) a new estate-level repo/package | **(a)** — ✅ **owner chose (a)** 2026-09-05 16:41 |
 | F-P2 | Boot sync rewrites `voice`/`neighbours`/`label` of untouched `gabi` rows (a) or only ever inserts missing names, as today (b) | **(a)** — otherwise a graph change never reaches a running bot, which is the silent drift this exists to kill; staff's `enabled` is untouched either way — ✅ **owner chose (a)** 2026-09-05 16:42 |
-| F-P3 | A trope removed from the manifest is retired-but-kept (a) or deleted (b) | **(a)** — staff final say, and nothing is a terminal state |
+| F-P3 | A trope removed from the manifest is retired-but-kept (a) or deleted (b) | **(a)** — staff final say, and nothing is a terminal state — ✅ **owner chose (a)** 2026-09-05 16:43 |
 
 ## 8. Cost (labeled guesses, at the measured ~1.5–3× overrun)
 
