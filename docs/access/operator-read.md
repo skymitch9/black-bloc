@@ -2,13 +2,21 @@
 
 > **Audience:** the owner (minting) and Claude sessions (reading). **Status:**
 > TRACKED — ⚠️ **secret NAMES only; no value appears in this file, ever.**
-> Last verified: **2026-09-03** — the paths below were read off
+> Last verified: **2026-09-06** — the token WAS minted and the door opened for the
+> first time at 13:55 against v97, which retires the "never been set" line below.
+> The refusal table at the foot was rewritten on branch `operator-bucket` after
+> that run: reading with the right token no longer costs a rate-limit token, and
+> the 429 has its own sentence. ⚠️ **NOT verified on this branch:** a worktree
+> holds no token, so nothing here was re-read against the live app — the paths
+> table below still carries its 2026-09-03 reading.
+>
+> Before that, **2026-09-03** — the paths below were read off
 > `black_bloc/api/server.py` and every `@router.get` under `black_bloc/api/`;
 > `scripts/read.ps1` was run against the live app on `/health` (200) and with a
 > wrong token (it printed the server's own sentence).
-> ⚠️ **NOT verified:** `OPERATOR_READ_TOKEN` has **never been set** on the live
-> app, so no path below has been read with the token; the mint command has not
-> been run; nothing here has been drilled end to end.
+> ⚠️ **NOT verified — SUPERSEDED above:** it read *`OPERATOR_READ_TOKEN` has
+> never been set on the live app, so no path below has been read with the token;
+> the mint command has not been run; nothing here has been drilled end to end.*
 >
 > Why this exists and how it is built: [`../info/operator-read-design.md`](../info/operator-read-design.md).
 
@@ -141,5 +149,5 @@ list and the operator identity is deliberately not a member; it answers
 |---|---|---|
 | *You are not signed in…* | The bearer was **ignored** — no `OPERATOR_READ_TOKEN` is set on that app | Ask the owner to mint one (above) |
 | *That operator token is not the one this server holds…* | The two halves disagree | Re-run the mint command, which sets both |
-| *That is more sign-in attempts than Black Bloc will take in a minute…* | 30 bearer requests a minute from one IP | Wait a minute |
+| *That is more wrong operator tokens from this address than Black Bloc will take in a minute…* | 30 **wrong** tokens a minute from one IP. ⚠️ The RIGHT token costs nothing here — the bucket prices guesses, so a matching token never touches it, and it still reads while that address is out of guesses (design note, 2026-09-06) | Wait a minute, and check you are sending the token the mint command set |
 | *The operator token can only look, never change…* | You sent something that was not a `GET` | Make the change on the dashboard or in Discord |

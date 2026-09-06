@@ -1,6 +1,10 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-06** — rows **`OB-a`–`OB-b`** added by the OPERATOR BUCKET fix on branch `operator-bucket`
+> (off `main` at `6216e97`, v97); they are lettered because the conductor numbers them at the merge.
+> Schema UNCHANGED at **33**; registry keys unchanged at **191**; mock routes unchanged at **150**.
+> ⚠️ They need the operator token and a terminal, not Discord. Before that,
 > **2026-09-06 13:50** — rows **315–319** (were `LG-a`–`LG-e`) numbered at the merge of the LOOP GUARD build
 > (`689eff5`, branch `loop-guard`), shipping as **v97**. Closes **KI-24**. Schema UNCHANGED at **33**; registry keys
 > unchanged at **191**; mock routes unchanged at **150**. ⚠️ Verified by the suite here (5277 both orders) and the
@@ -1080,6 +1084,27 @@ forward and `BB_REVERSE=1`, `ruff check .`, and `node site/mock/check.mjs`
 | **317** (was `LG-c`) | `/poll` in `#mute-me-bot-test-spam` ▸ **Settings** ▸ turn polls **off**. Then, on the dashboard, https://blackbloc.heygabi.ai/polls.html ▸ **Create a poll** ▸ write a question and two options ▸ **Create the poll** | a red sentence in the form's notice line saying polls are turned off and how to turn them back on — **not** a bare 409, and **not** a poll. ⚠️ Then look at the **Polls** list on that same page: **no new row**, because the refusal happens before anything is written. Before this branch the website made the poll anyway while `/poll` refused |
 | **318** (was `LG-d`) | With polls still **off**, use the dashboard's **Repeating** form (same page) to try to save a repeating poll | the same refusal, in the same words. That route already refused; the row is here so the pair is checked together and the two doors are seen to agree |
 | **319** (was `LG-e`) | Turn polls back **on** from `/poll` ▸ **Settings**, then create a poll from the dashboard again | it posts to `#mute-me-bot-test-spam` as it always did, and the **Logs** section at the foot of the polls page shows **one** `poll.created` line carrying `via: website`. Nothing about the ordinary path changed — the gate only bites when polls are off |
+
+## Operator bucket — rows `OB-a`–`OB-b`
+
+Written on `operator-bucket`, 2026-09-06, off `main` at `6216e97` (v97), in a worktree at
+`C:/lcw/bb-operator-bucket`. Two findings from the FIRST live run of the operator-token door
+(2026-09-06 13:55): the guess bucket was charging good tokens, and the live write-refusal tests
+were watching the origin check rather than the operator gate. Written up at the foot of
+[`../info/operator-read-design.md`](../info/operator-read-design.md). No schema change, no new
+registry key, no new route. ⚠️ **Nothing below has met the live host**; `python -m black_bloc` was
+NOT booted and `pytest -m live` was NOT run (a worktree holds no operator token — the conductor
+runs the live suite after the deploy). The verification is `pytest` (**5279 passed**, was 5277)
+forward and `BB_REVERSE=1`, and `ruff check .`.
+
+⚠️ **These two rows need the operator token**, which only the owner and a session with
+`BLACK_BLOC_OPERATOR_TOKEN` set can send — they are done from a terminal, not from Discord.
+`scripts/read.ps1` never echoes the token.
+
+| # | Do this | Expect |
+|---|---|---|
+| `OB-a` | From a terminal, send a WRONG token thirty-one times and print what each one said. `scripts/read.ps1` always sends the REAL token, so this row goes round it: `1..31 \| % { try { Invoke-RestMethod -Uri "https://blackbloc.heygabi.ai/api/status" -Headers @{ Authorization = "Bearer not-the-token-this-server-holds-at-all" } } catch { ($_.ErrorDetails.Message \| ConvertFrom-Json).message } }` | the first thirty print *That operator token is not the one this server holds…*; the **thirty-first** prints the operator's own slow-down sentence — *That is more **wrong operator tokens from this address** than Black Bloc will take in a minute…*, saying no account is locked out and that **signing in still works**. ⚠️ It must NOT say *"more sign-in attempts"*: that is the login sentence, it names the wrong cause, and seeing it here means this branch did not ship |
+| `OB-b` | While that address is still out of guesses (within the same minute), do two things: run `.\scripts\read.ps1 -Path /api/status` with the REAL token, and open https://blackbloc.heygabi.ai in a browser and sign in with Discord | both work. The real token answers **200** with the status JSON — a correct token never touches the guess bucket, so being out of guesses cannot lock a real operator out — and the dashboard sign-in is unaffected, because guessing at this door uses its own bucket and never the login one. ⚠️ Then read the **Logs** page: the successful read leaves one `web.operator.read` line carrying *via Operator token* and the path; the thirty-one refusals leave **nothing at all** |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that

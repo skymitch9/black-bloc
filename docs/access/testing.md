@@ -4,10 +4,13 @@
 > Last verified: **2026-09-05** — the counts below were MEASURED on the wave-5 self-test branch
 > (`pytest -q -n auto` = 5087 passed; `node site/mock/check.mjs` = 17 pages / 149 routes; `pytest
 > -m live tests/live` = 59 collected, all skipped with neither env name set).
-> ⚠️ **NOT verified:** nothing under `tests/live/` has ever been run against the deployed host —
-> `BLACK_BLOC_LIVE_TOKEN` needs `OPERATOR_READ_TOKEN` set on the Fly app, and it never has been
-> ([`operator-read.md`](operator-read.md)). Every live figure below is what the code asks for,
-> not what a run reported.
+> ⚠️ **NOT verified — SUPERSEDED 2026-09-06:** it read *nothing under `tests/live/` has ever been
+> run against the deployed host — `BLACK_BLOC_LIVE_TOKEN` needs `OPERATOR_READ_TOKEN` set on the
+> Fly app, and it never has been.* The token was minted and the live suite run for the first time
+> at **2026-09-06 13:55** against v97; it found two things, both fixed on branch `operator-bucket`
+> and written up in [`../info/operator-read-design.md`](../info/operator-read-design.md) § *what the
+> first live run found*. ⚠️ The live suite has NOT been run again since that fix — a worktree holds
+> no token. Every live figure below is still what the code asks for, not what a run reported.
 
 ## The three layers, and what each one proves
 
@@ -59,6 +62,12 @@ Two env names, both required, or the whole suite skips:
 every method but `GET`/`HEAD` in words). So it reads the runs but **cannot start one**. The
 start → poll → purge test needs `BLACK_BLOC_LIVE_SESSION`; without it that one test skips and the
 rest still run.
+
+⚠️ **A test that means to check the OPERATOR gate on a write must send the dashboard's own headers**
+— `conftest.same_site_headers()` (`origin` from `BLACK_BLOC_LIVE_URL`, plus `sec-fetch-site:
+same-origin`). Without them `server.py`'s `same_site_writes` middleware runs first and answers
+`403 cross_site`, so the operator gate is never reached and the test proves nothing. That is
+exactly what the first live run found, 2026-09-06.
 
 ```powershell
 $env:BLACK_BLOC_LIVE_URL  = "https://<the dashboard host>"
