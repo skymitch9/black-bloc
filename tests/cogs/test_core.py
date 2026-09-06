@@ -11,7 +11,6 @@ from black_bloc.cogs import core as core_cog
 from black_bloc.cogs.core import Core, clear_key, help_lines, set_key, tree_commands
 from black_bloc.config import load_settings
 from black_bloc.settings_store import SettingsStore, require_staff
-from black_bloc.storage.db import Database
 
 GUILD = 7
 TEST_CHANNEL = 111
@@ -195,15 +194,6 @@ class FakeInteraction:
         ]
         return spoken[-1] if spoken else None
 
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "core.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 @pytest.fixture

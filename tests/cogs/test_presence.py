@@ -7,7 +7,6 @@ import pytest
 from black_bloc.cogs.presence import Presence, apply_sentence, reapply_presence
 from black_bloc.config import load_settings
 from black_bloc.settings_store import SettingsStore
-from black_bloc.storage.db import Database
 
 GUILD = 7
 TEST_CHANNEL = 111
@@ -140,15 +139,6 @@ class FakeInteraction:
     def sent(self):
         return self.response.messages[-1]["content"] if self.response.messages else None
 
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "presence-cog.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 @pytest.fixture

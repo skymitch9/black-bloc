@@ -18,7 +18,6 @@ from black_bloc.api.status import (
     open_counts,
 )
 from black_bloc.settings_store import DB_UNAVAILABLE, KEY_TYPES
-from black_bloc.storage.db import Database
 
 
 def _named(name: str):
@@ -79,13 +78,6 @@ class SilentCog(FakeCog):
 def client_for(bot) -> TestClient:
     return TestClient(create_app(bot), base_url="https://testserver")
 
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "status.sqlite3")
-    await database.connect()
-    yield database
-    await database.close()
 
 
 def test_status_needs_a_session(bot):

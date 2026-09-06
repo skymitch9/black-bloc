@@ -7,7 +7,6 @@ from black_bloc.cogs.moderation.modcmds import ModCommands
 from black_bloc.config import load_settings
 from black_bloc.modcases import add_case
 from black_bloc.settings_store import SettingsStore
-from black_bloc.storage.db import Database
 
 GUILD = 7
 TEST_CHANNEL = 111
@@ -248,15 +247,6 @@ async def cases(db):
 def cards(bot):
     return [m for m in bot.guild.get_channel(TEST_CHANNEL).messages if "embed" in m.kwargs]
 
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "c.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 @pytest.fixture
