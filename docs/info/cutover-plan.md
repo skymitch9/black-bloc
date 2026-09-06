@@ -51,9 +51,9 @@ panel loses it) and the dashboard's Logs page https://blackbloc.heygabi.ai/audit
 filtered to that feature. Rollback for every row is the same: flip the mode back; the
 incumbent bot never stopped running until its retirement step.
 
-Every mode below is ALSO a row on https://blackbloc.heygabi.ai/settings.html — the
-panel move is named because it carries the feature's own refusals (see §4 for the one
-place the dashboard does not).
+Every mode below is ALSO a row on https://blackbloc.heygabi.ai/settings.html, and the
+three gated keys (automod's mode, honeypot's mode and exemptions) get the same refusal
+there as on the panel (§4). The panel move is named because it is where staff will be.
 
 | Order | Feature | Flip | Watch for | Retires |
 |---|---|---|---|---|
@@ -86,12 +86,11 @@ under `archive/current-bots/`).
 - **The one brake after P5 is per-feature modes.** Anything already `on`
   (tempvoice, polls, chat, events, requests, golive-once-flipped) acts on the
   real server immediately. That is by design; the sweep is what earns it.
-- ⚠️ **The dashboard's generic settings route does not carry automod's arming
-  refusal** (found at the wave-3 design review, 2026-09-04; open on `TODO.md`):
-  the Settings page validates `automod_mode` against its choices only, so a
-  guild whose `staff_channel_id` still points at the log channel CAN be armed
-  from the website. Until that settings-API pass lands, flip automod from
-  `/automod` ▸ **What automod does…**, never from the Settings page.
+- **The dashboard carries automod's arming refusal too** (KI-21's gate pass, v84
+  `675f233`: `api/settings_api.py:gated_writers` hands `automod_mode`, `honeypot_mode`
+  and `honeypot_exempt_role_ids` to the cog's own move, so a `PUT` gets the panel's
+  verdict). Either door is safe to flip from; the 2026-09-04 finding that said
+  otherwise was closed before it was ever re-listed.
 - **KI-5's DM behaviour** becomes moot after P5 (its whole point was test mode).
 - **KI-20 — a restart kills every open ephemeral panel.** P5 is a restart; so is
   every deploy. Neither is dangerous, but a staffer mid-move gets "This
