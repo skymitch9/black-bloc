@@ -592,6 +592,34 @@ async def test_every_route_answers_with_the_keys_the_pages_read(client, seeded, 
     check(where, response.json(), spec)
 
 
+def test_the_contracts_settings_block_is_the_registry_and_not_a_second_copy():
+    """One home. `site/mock/check.mjs` reads the same block, so a bound invented in the mock,
+    or one added to the registry and not mirrored, fails one half or the other by name."""
+    from black_bloc.settings_store import CORE_KEYS, KEY_MAX, KEY_MIN
+
+    block = contract()["settings"]
+
+    assert block["core_keys"] == sorted(CORE_KEYS)
+    assert block["min"] == {key: KEY_MIN[key] for key in sorted(KEY_MIN)}
+    assert block["max"] == {key: KEY_MAX[key] for key in sorted(KEY_MAX)}
+
+
+def test_the_real_settings_index_bounds_exactly_what_the_contract_says(client, sign_in, web, wf):
+    """The other half of the same guard, against the real router rather than the mock."""
+    sign_in(client)
+    block = contract()["settings"]
+    rows = {
+        row["key"]: row | {"namespace": namespace}
+        for namespace, found in client.get("/api/settings").json().items()
+        for row in found
+    }
+
+    core = sorted(key for key, row in rows.items() if row["namespace"] == "core")
+    assert core == sorted([*block["core_keys"], "core_log_level"])
+    assert {key: row["max"] for key, row in rows.items() if "max" in row} == block["max"]
+    assert {key: row["min"] for key, row in rows.items() if "min" in row} == block["min"]
+
+
 def test_the_moderation_settings_all_live_in_the_automod_namespace(web, wf):
     """modlog and mod were one-key namespaces of their own; they are moderation keys."""
     found = grouped(web.store, wf.GUILD_ID)

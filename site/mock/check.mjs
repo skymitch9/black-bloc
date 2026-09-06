@@ -387,6 +387,50 @@ async function checkActionKinds() {
   }
 }
 
+// The settings registry has ONE home, black_bloc/settings_store.py, and contract.json's
+// `settings` block is the table both halves read: tests/api/test_contract.py checks it against
+// the registry, this checks the mock against it. It exists because the mock had invented a
+// max of 1440 for sixteen *_panel_minutes keys the registry does not bound, was missing sixteen
+// keys altogether, and kept a shorter second copy of CORE_KEYS.
+async function checkSettings() {
+  await setGuard(false);
+  await seed();
+  const wanted = contract.settings;
+  const response = await send('GET', '/api/settings', undefined);
+  if (response.status !== 200) {
+    fail('GET /api/settings', `answered ${response.status}`);
+    return;
+  }
+  const body = await response.json();
+  const rows = new Map();
+  for (const [namespace, list] of Object.entries(body)) {
+    for (const row of list) rows.set(row.key, { ...row, namespace });
+  }
+  const core = [...rows.values()].filter((row) => row.namespace === 'core').map((row) => row.key);
+  const wantedCore = [...wanted.core_keys, 'core_log_level'].sort();
+  if (core.sort().join(',') !== wantedCore.join(',')) {
+    fail('GET /api/settings[core]', `holds ${core.join(', ')}, not ${wantedCore.join(', ')}`);
+  }
+  for (const [key, bound] of Object.entries(wanted.max)) {
+    const row = rows.get(key);
+    if (!row) fail('GET /api/settings', `has no ${key} row at all`);
+    else if (row.max !== bound) fail(`GET /api/settings[${key}]`, `max is ${row.max}, not ${bound}`);
+  }
+  for (const [key, bound] of Object.entries(wanted.min)) {
+    const row = rows.get(key);
+    if (!row) fail('GET /api/settings', `has no ${key} row at all`);
+    else if (row.min !== bound) fail(`GET /api/settings[${key}]`, `min is ${row.min}, not ${bound}`);
+  }
+  for (const [key, row] of rows) {
+    if ('max' in row && !(key in wanted.max)) {
+      fail(`GET /api/settings[${key}]`, `claims max ${row.max}; the registry bounds no such thing`);
+    }
+    if ('min' in row && !(key in wanted.min)) {
+      fail(`GET /api/settings[${key}]`, `claims min ${row.min}; the registry bounds no such thing`);
+    }
+  }
+}
+
 // The roster foldout's walk, without a DOM: the list a no-role form keeps, one member taken
 // off it with a reason, and the row that leaves showing as `removed` in the Decided table.
 async function checkRoster() {
@@ -415,6 +459,7 @@ process.stdout.write(`check: ${BASE} against ${HERE}contract.json\n`);
 await checkPages();
 await checkGuard();
 await checkRoutes();
+await checkSettings();
 await checkRoster();
 await checkActionKinds();
 await setGuard(true);
@@ -425,5 +470,6 @@ if (failures.length) {
   process.exit(1);
 }
 process.stdout.write(
-  `check: ok - ${contract.pages.length} pages, ${contract.routes.length} routes, all keys present\n`,
+  `check: ok - ${contract.pages.length} pages, ${contract.routes.length} routes, `
+    + `${contract.settings.core_keys.length} core settings, all keys present\n`,
 );
