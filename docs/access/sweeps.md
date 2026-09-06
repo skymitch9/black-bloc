@@ -1,6 +1,10 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-06** — rows **`LB-a`–`LB-e`** added by the LOGS BUTTONS build on branch
+> `logs-buttons` (off `main` at `b428236`), which puts **Show more** and **Important only** under
+> every feature's Logs list; lettered because the conductor numbers them at the merge. Schema
+> UNCHANGED at **33**; registry keys **189 → 191**. Before that,
 > **2026-09-06** — rows **`PD-a`–`PD-e`** added by the SAVED POLL DRAFTS build on branch
 > `poll-drafts` (off `main` at `9cd79d6`, v93); they are lettered because the conductor numbers
 > them at the merge, and schema moves **32 → 33**. Before that,
@@ -1011,6 +1015,26 @@ Written on `poll-drafts`, 2026-09-06, off `main` at `9cd79d6` (v93), in a worktr
 | **302** (was `PD-c`) | **Create** a second poll, press **Save for later** twice over (save, then Create ▸ Save again) | the button reads **Save (replaces your draft)** the second time and the panel says it replaced the one you had. Only ever ONE draft per person: press **Resume draft** and it is the newer one. This is the owner's "1 per person max", enforced by the table's key rather than by a check |
 | **303** (was `PD-d`) | With a draft saved by somebody else, `/poll` as a Lead ▸ the **Saved drafts…** select ▸ pick theirs ▸ **Discard** ▸ **Yes, discard it** ▸ type a reason | the card shows whose it is, what they typed and when they saved it; after the reason box the panel says it is discarded, and **they get a DM naming the poll and your reason**. Staff cannot post or edit somebody else's draft — Discard and Back are the only buttons, because posting one would forge its creator |
 | **304** (was `PD-e`) | `/poll` ▸ **Settings** ▸ **Drafts: on** (bottom row) to turn them off, then **Create** | **Save for later** is gone, so is **Resume draft** and the panel's draft line — and the draft itself is NOT deleted: turn Drafts back on and it is still there. **Numbers…** carries *"Days a saved draft is kept (0 for ever)"*, default **14**; a draft older than that is dropped by the poll sweep (a `poll.draft_expired` line on the Logs page), and drafts turned off never age out |
+
+## The Logs button's two knobs, as buttons — rows `LB-a`–`LB-e`
+
+Written on `logs-buttons`, 2026-09-06, off `main` at `b428236`, in a worktree at
+`C:/lcw/bb-logs-buttons`. Built to
+[`../info/logs-buttons-design.md`](../info/logs-buttons-design.md) (owner, 2026-09-06: *"3. B"* —
+`Show more` + `Important only` ON the list rather than a modal first). Schema UNCHANGED at **33**;
+two new registry keys (**189 → 191**), which open a new **Logs** section on the dashboard's
+Settings page. ⚠️ **Nothing below has met live Discord**; `python -m black_bloc` was NOT booted
+(no token in a worktree). The verification is `pytest` (**5252 passed**, was 5228), `ruff check .`,
+forward and `BB_REVERSE=1`, and `node site/mock/check.mjs` (17 pages / 149 routes / 14 core
+settings, unchanged). Rows are lettered because the conductor numbers them at the merge.
+
+| # | Do this | Expect |
+|---|---|---|
+| **`LB-a`** | `/poll` in `#mute-me-bot-test-spam` ▸ **Logs** | the log list as before, and now **two buttons under it**: **Show more** and **Important only**. ⚠️ If the log holds fewer than ten lines, **Show more is not there at all** — there is nothing more to show, and a button that would do nothing is not drawn |
+| **`LB-b`** | Press **Show more** | the SAME message grows to 20 lines — no second reply appears. Press again for 30, 40, 50. **Show more disappears** at 50, or earlier the moment a press returns fewer lines than it asked for |
+| **`LB-c`** | Press **Important only** | the list shrinks to refusals, errors and staff moves, the embed title gains *"— important only"*, and the button itself now reads **Show everything**. Press it again and everything comes back. An empty filtered list says *"Nothing important has been logged for this yet."* rather than looking broken |
+| **`LB-d`** | Leave the list open for ten minutes without pressing anything, then press a button | the buttons are greyed out and the footer reads *"This log has gone quiet — press Logs again"*. The ten minutes is the same `settings_panel_minutes` number `/settings` uses — no third setting was added |
+| **`LB-e`** | Dashboard ▸ **Settings** ▸ the **Logs** section ▸ set `logs_count` to **25** (and try `logs_important_only` on) | the NEXT Logs button you press anywhere — `/poll`, `/request`, `/mod`, any of the eighteen — opens on 25 lines, and **Show more** adds 25 at a time. With `logs_important_only` on, every list opens already filtered with **Show everything** beside it. `/settings` ▸ **A setting group…** ▸ **Logs** reaches both from Discord too |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that
