@@ -1275,6 +1275,44 @@
     },
     {
       "method": "POST",
+      "path": "/api/polls/recurrences",
+      "body": {
+        "question": "Are we running tonight?",
+        "options": [
+          "Yes",
+          "No"
+        ],
+        "hours": 6,
+        "channel_id": "{test_channel_id}",
+        "cadence": "weekly",
+        "day": "sat",
+        "at": "19:00",
+        "tz": "America/Phoenix"
+      },
+      "read_by": [
+        "page-polls.js create form, Repeat block"
+      ],
+      "shape": "object",
+      "keys": [
+        "recurrence",
+        "message"
+      ],
+      "nested": {
+        "recurrence": [
+          "id",
+          "question",
+          "cadence",
+          "cadence_said",
+          "at",
+          "tz",
+          "next_at",
+          "paused",
+          "options"
+        ]
+      }
+    },
+    {
+      "method": "POST",
       "path": "/api/polls/recurrences/{poll_recurrence_id}/pause",
       "body": {
         "paused": true
@@ -3677,6 +3715,7 @@
     "web.role.extended",
     "web.role.ended",
     "web.poll.created",
+    "web.poll.recur_created",
     "web.poll.recur_paused",
     "web.poll.recur_resumed",
     "web.poll.recur_deleted",

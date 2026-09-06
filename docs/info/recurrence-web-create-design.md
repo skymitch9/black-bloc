@@ -79,3 +79,47 @@ with the right next-run; a bad time refused in a sentence; Discord's `/poll` pan
 recurrence with its stop-repeating card. Code notes: `# Recurrence create, website` at the foot of
 `code-notes.md`, keyed by name. Add a `## Deviations` section to this file for anything that
 differed, and why.
+
+## Deviations
+
+Built on branch `recur-web` off `main` at `b428236`, in a worktree at `C:/lcw/bb-recur-web`,
+2026-09-06. The design was followed as written; these are the places the build made a call it
+did not spell out, plus one thing it got wrong.
+
+1. **§3's "same gates" resolved to `poll_mode` + staff — there is no recurrence key.** The
+   question §3 left open has an answer in the cog: `post_the_draft` checks `polls_are_on`
+   (`poll_mode != "off"`), then `may_create`, then `store.is_staff` for the repeating half.
+   `settings_store.py` has no `poll_recurring`. The router's `staff_dependency` already
+   covers the staff half (and `may_create` with it), so the route adds exactly one gate:
+   `409 polls_off` carrying the cog's own `POLLS_OFF`, in the shape `api/tools/rolemenus.py`
+   uses for `ROLE_MENUS_OFF`.
+2. **A gate the design did not name: a DATE poll cannot recur.** `CadenceModal.on_submit`
+   refuses one with `polls.RECUR_NOT_A_DATE`, so the route does too (400, before any row),
+   and the page hides the whole Repeat block for that kind rather than offering a control
+   that will be refused.
+3. **The success sentence is the route's own constant, not `polls.RECUR_SAVED`.** §3 asked
+   for a "`RECUR_SAVED`-style sentence"; the literal constant ends in `<t:{when}:R>`, Discord
+   timestamp markup that renders as raw text in a browser. `RECUR_CREATED_SAID` keeps the
+   shared `describe_cadence` wording and points at the Repeating section, which already
+   prints the real next-run time.
+4. **The timezone field defaults by being BLANK.** §3 says "default `timezones.DEFAULT_TZ`".
+   The page sends `tz` only when somebody types one, so the default stays in
+   `black_bloc/timezones.py` rather than being copied into a JS file. Rule 5 asked whether a
+   default tz should become a registry key: no new decision was made, so it is not one.
+5. **`poll_create` was refactored, not just added beside.** The body-reading both routes
+   share is now `_asked_for(guild, payload)` — a pure extraction with no behaviour change,
+   so there is one spelling of "where does this poll go".
+6. **The success message lands on the Repeating section, not the create form.**
+   `keepSaying('recurring', …)`, which §4's "`sayAgain('recurring', …)` pattern" points at:
+   after the refresh the sentence sits beside the row it made. The form clears its question
+   and returns to *Doesn't repeat*.
+7. **`NO_RECUR` on the page was rewritten.** It told people the only way to start a
+   recurrence was Discord's `/poll` panel, which this change made untrue.
+8. **The mock does not reimplement `next_occurrence`.** It mirrors `cadence_token` and the
+   refusals a person can see, and sets `next_at` to `daysAhead(1)` — the same simplification
+   the resume half of the pause route already makes. The arithmetic has one home.
+
+**Not verified:** live Discord, the live dashboard, and a real boot — `python -m black_bloc`
+was NOT run (no token in a worktree), so no recurrence made here has ever opened a poll and
+the sweep loop (`run_due_polls`) was not exercised against a website-made row. The page half
+WAS driven in a real browser against the mock.

@@ -14,6 +14,7 @@ from black_bloc.cogs.community.polls import (
     set_posted,
     set_recurrence,
 )
+from black_bloc.timezones import DEFAULT_TZ
 
 MEMBER_ID = 21
 LEAD_ID = 7
@@ -476,6 +477,176 @@ async def test_a_poll_number_that_is_not_a_recurrence_is_a_404(client, seeded):
     assert "no repeating poll" in response.json()["message"]
 
 
+def repeating(client, **body):
+    asked = {
+        "question": "Are we running tonight?",
+        "options": ["Yes", "No"],
+        "hours": 6,
+        "channel_id": str(TEST_CHANNEL),
+        "cadence": "weekly",
+        "day": "sat",
+        "at": "19:00",
+        "tz": "America/Phoenix",
+    }
+    asked.update(body)
+    return client.post("/api/polls/recurrences", json=asked)
+
+
+async def polls_in(db) -> list:
+    cur = await db.conn.execute("SELECT * FROM polls ORDER BY id")
+    return list(await cur.fetchall())
+
+
+async def test_the_form_saves_a_repeating_poll_and_names_the_cadence(client, seeded, web, wf):
+    response = repeating(client)
+
+    assert response.status_code == 200
+    made = response.json()["recurrence"]
+    assert made["cadence"] == "weekly:sat"
+    assert made["cadence_said"] == "every Saturday at 19:00 America/Phoenix"
+    assert made["paused"] is False and made["next_at"] is not None
+    assert [item["label"] for item in made["options"]] == ["Yes", "No"]
+    assert "will run every Saturday" in response.json()["message"]
+
+
+async def test_a_repeating_poll_is_a_template_and_is_never_posted(client, seeded, web, wf):
+    before = len(web.guild.get_channel(TEST_CHANNEL).messages)
+
+    made = repeating(client).json()["recurrence"]
+
+    row = await get_poll(web.db, int(made["id"]))
+    assert row["status"] == pure.RECURRING
+    assert row["recur_next_at"] is not None and row["message_id"] is None
+    assert len(web.guild.get_channel(TEST_CHANNEL).messages) == before
+
+
+async def test_saving_one_leaves_one_recur_created_line_saying_the_website_did_it(
+    client, seeded, web, wf
+):
+    made = repeating(client).json()["recurrence"]
+
+    rows = await wf.web_rows_in(web.db)
+    created = [details for kind, details in rows if kind == "web.poll.recur_created"]
+    assert len(created) == 1
+    assert created[0]["via"] == "website"
+    assert created[0]["recurrence_id"] == int(made["id"])
+    assert [kind for kind, _ in rows] == ["web.poll.created", "web.poll.recur_created"]
+
+
+async def test_a_saved_recurrence_shows_up_on_the_recurring_list(client, seeded):
+    made = repeating(client).json()["recurrence"]
+
+    rows = client.get("/api/polls/recurrences").json()
+
+    assert [row["id"] for row in rows] == [int(made["id"])]
+
+
+async def test_a_cadence_nobody_can_read_is_refused_in_words_and_writes_no_poll(
+    client, seeded, web
+):
+    before = len(await polls_in(web.db))
+
+    response = repeating(client, day="funday")
+
+    assert response.status_code == 400
+    assert "funday" in response.json()["message"]
+    assert len(await polls_in(web.db)) == before
+
+
+async def test_a_time_of_day_nobody_can_read_is_refused_before_any_row_exists(
+    client, seeded, web
+):
+    before = len(await polls_in(web.db))
+
+    response = repeating(client, at="half seven")
+
+    assert response.status_code == 400
+    assert "24-hour clock" in response.json()["message"]
+    assert len(await polls_in(web.db)) == before
+
+
+async def test_a_timezone_this_machine_does_not_know_is_refused_in_words(client, seeded, web):
+    before = len(await polls_in(web.db))
+
+    response = repeating(client, tz="Mars/Olympus")
+
+    assert response.status_code == 400
+    assert "Mars/Olympus" in response.json()["message"]
+    assert len(await polls_in(web.db)) == before
+
+
+async def test_a_date_poll_is_told_it_cannot_repeat(client, seeded, web):
+    before = len(await polls_in(web.db))
+
+    response = repeating(
+        client, kind=pure.DATE, options=None, start="2026-09-05", slots=3, step=1
+    )
+
+    assert response.status_code == 400
+    assert "cannot recur" in response.json()["message"]
+    assert len(await polls_in(web.db)) == before
+
+
+async def test_a_repeating_poll_will_not_be_pointed_outside_the_test_channel(
+    client, seeded, web, wf
+):
+    web.guard = wf.Guard()
+    before = len(await polls_in(web.db))
+
+    response = repeating(client, channel_id=str(wf.OTHER_CHANNEL_ID))
+
+    assert response.status_code == 409
+    assert "test mode" in response.json()["message"]
+    assert len(await polls_in(web.db)) == before
+
+
+async def test_a_repeating_poll_is_refused_while_polls_are_switched_off(
+    client, seeded, web, wf
+):
+    await web.store.set(wf.GUILD_ID, "poll_mode", "off")
+    before = len(await polls_in(web.db))
+
+    response = repeating(client)
+
+    assert response.status_code == 409
+    assert "turned off" in response.json()["message"]
+    assert len(await polls_in(web.db)) == before
+
+
+async def test_a_repeating_poll_is_refused_what_a_one_off_poll_is_refused(client, seeded):
+    response = repeating(client, options=["Yes"])
+
+    assert response.status_code == 400
+    assert "at least 2" in response.json()["message"]
+
+
+async def test_a_repeating_poll_falls_back_to_the_default_channel(client, seeded, web, wf):
+    await web.store.set(wf.GUILD_ID, "poll_channel_id", TEST_CHANNEL)
+
+    made = repeating(client, channel_id=None).json()["recurrence"]
+
+    assert made["channel_id"] == str(TEST_CHANNEL)
+
+
+async def test_a_repeating_poll_takes_the_default_timezone_when_none_is_typed(
+    client, seeded, web
+):
+    made = repeating(client, tz=None).json()["recurrence"]
+
+    assert made["tz"] == DEFAULT_TZ
+
+
+async def test_a_repeating_poll_never_waits_on_a_lead_the_way_a_one_off_does(
+    client, seeded, web, wf
+):
+    await web.store.set(wf.GUILD_ID, "poll_review_mode", "on")
+    await web.store.set(wf.GUILD_ID, "staff_channel_id", TEST_CHANNEL)
+
+    made = repeating(client).json()["recurrence"]
+
+    assert (await get_poll(web.db, int(made["id"])))["status"] == pure.RECURRING
+
+
 async def test_every_poll_route_is_for_staff_only(client, seeded, sign_in):
     sign_in(client, uid=MEMBER_ID, staff=False)
 
@@ -484,6 +655,7 @@ async def test_every_poll_route_is_for_staff_only(client, seeded, sign_in):
         ("POST", "/api/polls"),
         ("GET", "/api/polls/requests"),
         ("GET", "/api/polls/recurrences"),
+        ("POST", "/api/polls/recurrences"),
         ("POST", "/api/polls/recurrences/1/pause"),
         ("DELETE", "/api/polls/recurrences/1"),
         ("GET", f"/api/polls/{seeded['open']}"),

@@ -3219,6 +3219,74 @@ route('GET', '/api/polls/recurrences', (context) => {
   return state.pollRecurrences.map(pollRecurrenceRow);
 });
 
+/** Mirrors black_bloc/polls.py:cadence_token — the one string the row carries. */
+function cadenceToken(cadence, day) {
+  const kind = String(cadence || '').trim().toLowerCase();
+  if (kind === 'daily') return 'daily';
+  if (kind === 'weekly') {
+    const wanted = String(day || '').trim().toLowerCase().slice(0, 3);
+    return WEEKDAYS.includes(wanted) ? `weekly:${wanted}` : null;
+  }
+  if (kind === 'monthly') {
+    const at = Number(String(day || '').trim());
+    return Number.isInteger(at) && at >= 1 && at <= 28 ? `monthly:${at}` : null;
+  }
+  return null;
+}
+
+route('POST', '/api/polls/recurrences', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const kind = String(body.kind || 'single');
+  if (kind === 'date') {
+    throw new Refused(400, 'not_a_recurrence', 'A **date** poll cannot recur, so nothing was saved — its slots are fixed days, and the second time round it would be asking about a day that has been and gone. Make a one-off date poll when you need one, or recur a checkbox poll with the days written on it.');
+  }
+  const token = cadenceToken(body.cadence, body.day);
+  if (!token) {
+    throw new Refused(400, 'not_a_recurrence', `**${body.day || body.cadence || 'nothing'}** is not a day of the week, so nothing was saved. A weekly poll runs on one of ${WEEKDAYS.join(', ')}.`);
+  }
+  if (!/^\d{1,2}:\d{2}$/.test(String(body.at || ''))) {
+    throw new Refused(400, 'not_a_recurrence', `**${body.at || 'nothing'}** is not a time of day Black Bloc can read, so nothing was saved. Write it on the 24-hour clock — \`09:00\`, \`19:30\`.`);
+  }
+  const labels = Array.isArray(body.options)
+    ? body.options.map((one) => String(one).trim()).filter(Boolean)
+    : String(body.options || '').split('|').map((one) => one.trim()).filter(Boolean);
+  const found = kind === 'yesno' ? ['Yes', 'No'] : kind === 'rating' ? ['1', '2', '3', '4', '5'] : labels;
+  if (found.length < 2) {
+    throw new Refused(400, 'poll_refused', `A poll needs at least 2 options and this one has ${found.length}, so nothing was posted. Write them separated by \`|\` — \`Pizza | Tacos | Neither\` is three.`);
+  }
+  const channelId = body.channel_id || state.settings.get('poll_channel_id');
+  if (!channelId) {
+    throw new Refused(400, 'no_channel', 'Black Bloc has nowhere to put this poll, so nothing was posted. Pick a channel on the form, or set a default one in the Settings section below.');
+  }
+  // next_at is black_bloc/polls.py:next_occurrence's sum in the bot; the mock only has to carry
+  // a real instant, the way the resume half of the pause route below already does.
+  const made = {
+    id: state.nextPoll++,
+    creator_id: STAFF.id,
+    question: String(body.question || '').trim(),
+    kind,
+    surface: 'native',
+    hours: Number(body.hours || 24),
+    anonymous: Boolean(body.anonymous),
+    results: String(body.results || 'live'),
+    channel_id: String(channelId),
+    cadence: token,
+    at: String(body.at),
+    tz: String(body.tz || 'America/Phoenix'),
+    next_at: daysAhead(1),
+    created_at: now(),
+    options: found.map((label, position) => ({ position, label, votes: 0 })),
+  };
+  state.pollRecurrences.push(made);
+  logAction('web.poll.created', { details: { poll_id: made.id, kind, surface: made.surface } });
+  logAction('web.poll.recur_created', { details: { recurrence_id: made.id, cadence: token, at: made.at, tz: made.tz } });
+  return {
+    recurrence: pollRecurrenceRow(made),
+    message: `**${made.question}** will run ${describeCadence(made)}. Nothing is posted yet — the Repeating section above says when the first one opens, and Pause stops it at any time.`,
+  };
+});
+
 route('POST', '/api/polls/recurrences/:id/pause', async (context) => {
   requireStaff(context.session);
   const row = pollRecurrenceOf(context.params.id);

@@ -9,9 +9,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import PlainTextResponse
 
 from ...cogs.community.polls import (
-    apply_decision as decide_poll,
-)
-from ...cogs.community.polls import (
+    POLLS_OFF,
     cancel_poll,
     close_poll,
     delete_recurrence,
@@ -21,31 +19,43 @@ from ...cogs.community.polls import (
     panel_counts,
     pause_recurrence,
     poll_plan,
+    polls_are_on,
     polls_by_status,
     post_poll,
     recurrences,
     results_of,
     resume_recurrence,
+    save_recurrence,
     send_review_card,
     set_status,
     store_poll,
     votes_of,
 )
+from ...cogs.community.polls import (
+    apply_decision as decide_poll,
+)
 from ...logkinds import VIA_WEBSITE
 from ...polls import (
     CANCELLED,
     CLOSED,
+    DATE,
     DENIED,
     LIVE,
     OPEN,
     PANEL,
     PENDING_REVIEW,
+    RECUR_NOT_A_DATE,
+    RECURRING,
     STATUSES,
+    cadence_token,
+    cadence_trouble,
     clamp,
     counts_from_options,
     describe_cadence,
+    next_occurrence,
     winners,
 )
+from ...timezones import DEFAULT_TZ
 from ..auth import Refused, staff_dependency
 from ..names import resolve_one
 from ..writes import (
@@ -126,6 +136,14 @@ RECUR_DELETED_SAID = "**{question}** will not run again. Polls it already opened
 RECUR_UNREADABLE = (
     "Black Bloc cannot work out when **{question}** would next run, so it was left paused. Delete "
     "it and set it up again."
+)
+RECUR_NOT_WORKED_OUT = (
+    "Black Bloc could not work out when that would next come round, so nothing was saved. Check "
+    "the day, the time of day and the timezone, then send it again."
+)
+RECUR_CREATED_SAID = (
+    "**{question}** will run {cadence}. Nothing is posted yet — the Repeating section above says "
+    "when the first one opens, and Pause stops it at any time."
 )
 
 
@@ -341,11 +359,8 @@ def build_router(bot: Any) -> APIRouter:
             "notes": [],
         }
 
-    @router.post("")
-    async def poll_create(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
-        who = await writer(request)
-        guild = require_guild(bot)
-        require_db(bot)
+    def _asked_for(guild: Any, payload: Any) -> dict[str, Any]:
+        """The body both create routes read: the plan, and where the poll is to go."""
         plan, refusal = poll_plan(
             bot.store,
             guild.id,
@@ -366,25 +381,39 @@ def build_router(bot: Any) -> APIRouter:
         if not channel_id:
             raise Refused(400, "no_channel", NO_CHANNEL_PICKED)
         _refuse_outside_the_test_channel_id(channel_id)
+        return {
+            "plan": plan,
+            "channel_id": int(channel_id),
+            "ping_role_id": (
+                int(payload["ping_role_id"])
+                if payload.get("ping_role_id")
+                else bot.store.get(guild.id, "poll_ping_role_id")
+            ),
+            "auto_thread": (
+                bool(payload["auto_thread"])
+                if payload.get("auto_thread") is not None
+                else bool(bot.store.get(guild.id, "poll_auto_thread"))
+            ),
+        }
+
+    @router.post("")
+    async def poll_create(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        asked = _asked_for(guild, payload)
+        plan, channel_id = asked["plan"], asked["channel_id"]
         row, reviewing = await store_poll(
             bot,
             guild,
             int(who["id"]),
             plan,
-            channel_id=int(channel_id),
-            ping_role_id=(
-                int(payload["ping_role_id"])
-                if payload.get("ping_role_id")
-                else bot.store.get(guild.id, "poll_ping_role_id")
-            ),
-            auto_thread=(
-                bool(payload["auto_thread"])
-                if payload.get("auto_thread") is not None
-                else bool(bot.store.get(guild.id, "poll_auto_thread"))
-            ),
+            channel_id=channel_id,
+            ping_role_id=asked["ping_role_id"],
+            auto_thread=asked["auto_thread"],
             via=VIA_WEBSITE,
         )
-        said = await _open_or_hold(guild, row, reviewing, int(channel_id))
+        said = await _open_or_hold(guild, row, reviewing, channel_id)
         fresh = await get_poll(bot.db, row["id"])
         return {
             "poll": await _shown(guild, fresh),
@@ -423,6 +452,67 @@ def build_router(bot: Any) -> APIRouter:
             recurrence_row(guild, row, await options_of(bot.db, row["id"]))
             for row in await recurrences(bot.db, guild.id)
         ]
+
+    def _wanted_cadence(payload: Any) -> tuple[str, str, str]:
+        """Proved BEFORE any row is written, so a cadence nobody can read leaves no poll behind."""
+        if str(payload.get("kind") or "") == DATE:
+            raise Refused(400, "not_a_recurrence", RECUR_NOT_A_DATE)
+        at_local = str(payload.get("at") or "").strip()
+        tz_name = str(payload.get("tz") or DEFAULT_TZ).strip()
+        trouble = cadence_trouble(payload.get("cadence"), payload.get("day"), at_local, tz_name)
+        if trouble is not None:
+            raise Refused(400, "not_a_recurrence", trouble)
+        token = str(cadence_token(payload.get("cadence"), payload.get("day")))
+        if next_occurrence(token, at_local, tz_name) is None:
+            raise Refused(400, "not_a_recurrence", RECUR_NOT_WORKED_OUT)
+        return (token, at_local, tz_name)
+
+    @router.post("/recurrences")
+    async def poll_recurrence_create(
+        request: Request, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        if not polls_are_on(bot.store, guild.id):
+            raise Refused(409, "polls_off", POLLS_OFF)
+        token, at_local, tz_name = _wanted_cadence(payload)
+        asked = _asked_for(guild, payload)
+        row, _ = await store_poll(
+            bot,
+            guild,
+            int(who["id"]),
+            asked["plan"],
+            channel_id=asked["channel_id"],
+            ping_role_id=asked["ping_role_id"],
+            auto_thread=asked["auto_thread"],
+            status=RECURRING,
+            via=VIA_WEBSITE,
+        )
+        _, fresh = await save_recurrence(
+            bot,
+            guild,
+            row,
+            token,
+            at_local,
+            tz_name,
+            actor_for(bot, who, guild),
+            via=VIA_WEBSITE,
+        )
+        if fresh is None:
+            await set_status(bot.db, row["id"], CANCELLED, closed=True)
+            raise Refused(
+                409,
+                "unreadable_cadence",
+                RECUR_UNREADABLE.format(question=clamp(row["question"], 80)),
+            )
+        return {
+            "recurrence": recurrence_row(guild, fresh, await options_of(bot.db, row["id"])),
+            "message": RECUR_CREATED_SAID.format(
+                question=clamp(row["question"], 80),
+                cadence=describe_cadence(token, at_local, tz_name),
+            ),
+        }
 
     async def _wanted_recurrence(guild: Any, poll_id: int) -> Any:
         row = await get_recurrence(bot.db, guild.id, poll_id)
