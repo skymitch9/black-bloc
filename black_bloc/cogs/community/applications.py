@@ -14,6 +14,7 @@ from ...actionlog import log_action, send_logs
 from ...command_errors import AnswersErrors, SafeDynamicItem
 from ...logkinds import VIA_DISCORD, kind_via
 from ...panels import (
+    KEEP_IT,
     NoteModal,
     Panel,
     answer,
@@ -51,7 +52,6 @@ TAKE_OFF_MODAL_LABEL = "One line they will be sent"
 DENY_MODAL_TITLE = "Why not?"
 DENY_MODAL_LABEL = "One line the applicant will be sent"
 WITHDRAW_YES = "Yes, take it back"
-KEEP_IT = "Keep it"
 
 NOT_IN_GUILD = (
     "Applications only work inside the server, and this did not come from one, so nothing was "

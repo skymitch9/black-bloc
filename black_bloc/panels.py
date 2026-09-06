@@ -15,6 +15,7 @@ log = logging.getLogger(__name__)
 
 CAPPED_PLACEHOLDER = "{shown} of {total} — the rest are on the site"
 CONFIRM_TITLE = "Are you sure?"
+KEEP_IT = "Keep it"
 SELECT_OPTION_LIMIT = 100
 DESCRIPTION_LIMIT = 4000
 

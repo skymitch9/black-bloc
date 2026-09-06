@@ -36,6 +36,7 @@ from ...chat_memory import (
 )
 from ...logkinds import VIA_DISCORD, kind_via
 from ...panels import (
+    KEEP_IT,
     NoteModal,
     Panel,
     answer,
@@ -152,7 +153,6 @@ FORGET_WORDS_MOVE = MemoryMove(FORGET_WORDS, "Forget by words…", "secondary", 
 STOP_MOVE = MemoryMove(STOP, "Stop remembering me", "danger", STOP_QUESTION, "Yes, stop")
 START_MOVE = MemoryMove(START, "Remember me again", "success")
 REFRESH_MOVE = MemoryMove(REFRESH, "Refresh", "secondary")
-KEEP_IT = "Keep it"
 
 PANEL_MOVES = (FORGET_ALL_MOVE, FORGET_WORDS_MOVE, STOP_MOVE, START_MOVE, REFRESH_MOVE)
 

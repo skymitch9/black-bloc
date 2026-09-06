@@ -9,6 +9,7 @@ import discord
 
 from .events import clamp, slugify
 from .golive import parse_ts
+from .panels import KEEP_IT
 from .settings_store import (
     CHANNEL_MODE,
     MODMAIL_BOTH,
@@ -470,7 +471,7 @@ SNIPPET_REMOVE_MOVE = ModmailMove(SNIPPET_REMOVE, "Remove it", "danger", 2)
 SNIPPET_ADD_MOVE = ModmailMove(SNIPPET_ADD, "Add one…", "secondary", 2, modal=True)
 SNIPPET_CHANGE_MOVE = ModmailMove(SNIPPET_CHANGE, "Change it…", "secondary", 2, modal=True)
 SNIPPET_YES_MOVE = ModmailMove(SNIPPET_REMOVE_YES, "Yes, remove it", "danger", 2)
-SNIPPET_NO_MOVE = ModmailMove(SNIPPET_REMOVE_NO, "Keep it", "secondary", 2)
+SNIPPET_NO_MOVE = ModmailMove(SNIPPET_REMOVE_NO, KEEP_IT, "secondary", 2)
 SNIPPETS_BACK_MOVE = ModmailMove(BACK, "Back", "secondary", 3)
 SNIPPETS_REFRESH_MOVE = ModmailMove(REFRESH, "Refresh", "secondary", 3)
 

@@ -93,8 +93,17 @@ from ...events import (
     set_zone as store_zone,
 )
 from ...golive import now_iso, parse_ts
+from ...panels import (
+    KEEP_IT,
+    Panel,
+    answer,
+    confirm,
+    confirm_items,
+    opened,
+    retire,
+    still_staff,
+)
 from ...panels import NoteModal as PanelNoteModal
-from ...panels import Panel, answer, confirm, confirm_items, opened, retire, still_staff
 from ...settings_store import (
     DB_UNAVAILABLE,
     EVENTS_MODES,
@@ -118,7 +127,6 @@ SETTINGS_BUTTON = "Settings"
 NUMBERS_BUTTON = "Numbers…"
 FORGET_BUTTON = "Forget…"
 CANCEL_YES = "Yes, call it off"
-KEEP_IT = "Keep it"
 FORGET_PLACEHOLDER = "Forget which one?"
 SCHEDULED_BUTTON = "Scheduled events: {state}"
 MODE_PLACEHOLDER = "How events behave…"

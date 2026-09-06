@@ -19,6 +19,7 @@ from .knowledge import (
     update_section,
 )
 from .logkinds import VIA_DISCORD, kind_via
+from .panels import KEEP_IT as KEEP_IT
 from .panels import Outcome, refusal
 from .panels import panel_minutes as library_panel_minutes
 from .panels import site_page_url as library_site_page_url
@@ -141,7 +142,6 @@ LLM_ON = "Turn the conversation models on"
 LLM_OFF = "Turn the conversation models off"
 REMOVE_QUESTION = "Remove note **{id}** — **{title}**? Black Bloc stops quoting it at once."
 REMOVE_YES = "Yes, remove it"
-KEEP_IT = "Keep it"
 
 
 class PanelMove(NamedTuple):

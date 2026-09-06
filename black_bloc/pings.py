@@ -18,6 +18,7 @@ from .cogs.community.role_menus import (
 )
 from .golive import now_iso
 from .logkinds import VIA_DISCORD, kind_via
+from .panels import KEEP_IT as KEEP_IT
 from .panels import panel_minutes as library_panel_minutes
 from .panels import site_page_url as library_site_page_url
 from .settings_store import PINGS_FAN_ROLE_TEMPLATE, SettingError, coerce_value
@@ -644,7 +645,6 @@ CARD_REMOVE_QUESTION = (
     "Take **{name}**'s ping role away? Everybody who followed them simply stops being pinged."
 )
 CARD_REMOVE_YES = "Yes, take it away"
-KEEP_IT = "Keep it"
 
 EVENTS_ON_LABEL = "Turn event pings on"
 EVENTS_OFF_LABEL = "Turn them off"

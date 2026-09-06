@@ -1,4 +1,6 @@
+import ast
 import logging
+import pathlib
 from types import SimpleNamespace
 
 import discord
@@ -660,3 +662,22 @@ def test_picked_values_reads_both_spellings_a_modal_group_answers_with():
     assert picked_values(SimpleNamespace(value="a")) == ["a"]
     assert picked_values(SimpleNamespace(value=None)) == []
     assert picked_values(None) == []
+
+
+PACKAGE = pathlib.Path(panels.__file__).resolve().parent
+LIBRARY = "panels.py"
+
+
+def _modules_holding(literal):
+    """Every package module whose AST carries this exact string, however it is written."""
+    found = set()
+    for path in sorted(PACKAGE.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and node.value == literal:
+                found.add(path.relative_to(PACKAGE).as_posix())
+    return found
+
+
+def test_keep_it_is_written_out_in_exactly_one_module():
+    assert _modules_holding(panels.KEEP_IT) == {LIBRARY}
