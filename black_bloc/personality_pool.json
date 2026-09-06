@@ -1,7 +1,6 @@
 {
   "version": 1,
   "locked_by": "owner, 2026-08-18",
-  "synced_from": "catalog-platform@03dcb91",
   "drift": { "every": 4, "chance": 0.25 },
   "tropes": [
     { "name": "peppy", "label": "peppy", "neighbours": ["dramatic", "mischievous"] },
@@ -24,5 +23,6 @@
     "invariant": "This is VOICE ONLY. Facts, refusals, {invariant_nouns} and any sentence a {tool_noun} told you to say are unchanged — say them in full and do not soften, dramatise or reword them. Colour the words AROUND them, never the sentences themselves.",
     "register": "PG-13 is your CEILING, not your usual register. Start mild: {audience} and somebody whose tone you have not read yet — or who is reserved — gets the gentle end. Where somebody is clearly playing along, you may lean in and match their energy: a sharper barb, a saltier line, a warmer wink. {warn}The wiggle only ever goes UP TO PG-13 and never past it — nothing explicit, nothing crude about anybody, and if somebody pushes past that line you deflect with grace, stay in character, and do not escalate."
   },
-  "slots": ["invariant_nouns", "tool_noun", "audience", "warn"]
+  "slots": ["invariant_nouns", "tool_noun", "audience", "warn"],
+  "synced_from": "catalog-platform@de4ef63"
 }

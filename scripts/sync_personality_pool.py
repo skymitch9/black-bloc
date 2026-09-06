@@ -33,11 +33,10 @@ DONE = "Copied {path}\n     to {local}\n  pool v{version}, synced_from {stamp}{s
 UNCHANGED = " (unchanged — the local copy already said this)"
 
 
-def head_of(where: Path) -> str:
-    """The short commit of the repository the manifest came from; its own worded failure."""
+def git_says(where: Path, *args: str) -> str:
     try:
         found = subprocess.run(
-            ["git", "-C", str(where), "rev-parse", "--short", "HEAD"],
+            ["git", "-C", str(where), "rev-parse", *args],
             capture_output=True,
             text=True,
             check=True,
@@ -46,6 +45,17 @@ def head_of(where: Path) -> str:
         detail = getattr(exc, "stderr", "") or str(exc)
         raise SystemExit(NO_HEAD.format(path=where, reason=str(detail).strip())) from exc
     return found.stdout.strip()
+
+
+def head_of(where: Path) -> str:
+    """The short commit of the repository the manifest came from; its own worded failure."""
+    return git_says(where, "--short", "HEAD")
+
+
+def name_of(where: Path) -> str:
+    """The main checkout's folder name, so a worktree at C:/lcw/pool still says catalog-platform."""
+    common = Path(git_says(where, "--path-format=absolute", "--git-common-dir"))
+    return common.parent.name or SOURCE_REPO
 
 
 def repo_of(source: Path) -> Path:
@@ -69,14 +79,24 @@ def read_source(source: Path) -> dict:
     return found
 
 
+def stamped(text: str, stamp: str) -> str:
+    """The canonical's own bytes plus one key, so a diff between the two copies is one line."""
+    if "synced_from" in json.loads(text):
+        manifest = {key: value for key, value in json.loads(text).items() if key != "synced_from"}
+        return json.dumps({**manifest, "synced_from": stamp}, indent=2, ensure_ascii=False) + "\n"
+    body = text.rstrip().rstrip("}").rstrip()
+    return f'{body},\n  "synced_from": {json.dumps(stamp)}\n}}\n'
+
+
 def sync(source: Path, local: Path) -> str:
     manifest = read_source(source)
     repo = repo_of(source)
-    stamp = f"{repo.name or SOURCE_REPO}@{head_of(repo)}"
+    stamp = f"{name_of(repo)}@{head_of(repo)}"
     was = local.read_text(encoding="utf-8") if local.is_file() else ""
-    manifest["synced_from"] = stamp
-    text = json.dumps(manifest, indent=2, ensure_ascii=False) + "\n"
-    local.write_text(text, encoding="utf-8")
+    text = stamped(source.read_text(encoding="utf-8").replace("\r\n", "\n"), stamp)
+    assert json.loads(text)["synced_from"] == stamp
+    with local.open("w", encoding="utf-8", newline="\n") as out:
+        out.write(text)
     return DONE.format(
         path=source,
         local=local,

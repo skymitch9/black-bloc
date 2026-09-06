@@ -262,6 +262,42 @@ async def test_a_matching_version_with_a_different_count_is_still_a_failure(bot)
     assert "3 moods" in str(raised.value)
 
 
+async def test_gabi_lists_her_roster_as_names_and_the_same_names_in_order_pass(bot):
+    from black_bloc.personas import POOL_NAMES, POOL_VERSION
+
+    one = selftest.Run(bot=bot, guild=bot.guild)
+    said = await selftest.check_pool(
+        one,
+        fetch=answers(
+            {
+                "gabi_personality_pool_version": POOL_VERSION,
+                "gabi_personality_tropes": list(POOL_NAMES),
+            }
+        ),
+    )
+
+    assert f"same {len(POOL_NAMES)}, in the same order" in said
+
+
+async def test_a_roster_with_a_different_name_fails_and_reads_both_rosters(bot):
+    from black_bloc.personas import POOL_NAMES, POOL_VERSION
+
+    one = selftest.Run(bot=bot, guild=bot.guild)
+    theirs = list(POOL_NAMES[:-1]) + ["gloomy"]
+
+    with pytest.raises(selftest.CheckFailed) as raised:
+        await selftest.check_pool(
+            one,
+            fetch=answers(
+                {"gabi_personality_pool_version": POOL_VERSION, "gabi_personality_tropes": theirs}
+            ),
+        )
+
+    said = str(raised.value)
+    assert "gloomy" in said and POOL_NAMES[-1] in said
+    assert selftest.POOL_FIX in said
+
+
 async def test_a_peer_that_does_not_say_its_pool_version_yet_is_a_pass_in_words(bot):
     one = selftest.Run(bot=bot, guild=bot.guild)
 

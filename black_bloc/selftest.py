@@ -82,6 +82,10 @@ POOL_COUNT = (
     "GABI and this bot say the same pool version, and she lists {theirs} moods where this bot has "
     "{mine}. One side's copy is edited rather than synced — run `{fix}` and redeploy."
 )
+POOL_ROSTER = (
+    "GABI and this bot say the same pool version, but her roster reads {theirs} where this bot's "
+    "reads {mine}. One side's copy is edited rather than synced — run `{fix}` and redeploy."
+)
 
 
 class PeerUnreachable(RuntimeError):
@@ -365,14 +369,25 @@ async def check_pool(one: Run, *, fetch: Any = None) -> str:
             POOL_BEHIND.format(theirs=int(theirs), mine=mine, ahead=ahead, fix=POOL_FIX)
         )
     said = f"pool v{mine} on both; {len(personas.TROPES)} moods here"
-    count = payload.get(PEER_TROPES_FIELD)
-    if count is None:
+    roster = payload.get(PEER_TROPES_FIELD)
+    if roster is None:
         return f"{said}; GABI does not say how many she has"
-    if int(count) != len(personas.TROPES):
+    if isinstance(roster, (list, tuple)):
+        theirs_names = tuple(str(name) for name in roster)
+        if theirs_names != personas.POOL_NAMES:
+            raise CheckFailed(
+                POOL_ROSTER.format(
+                    theirs=", ".join(theirs_names) or "nothing",
+                    mine=", ".join(personas.POOL_NAMES),
+                    fix=POOL_FIX,
+                )
+            )
+        return f"{said}; GABI lists the same {len(theirs_names)}, in the same order"
+    if int(roster) != len(personas.TROPES):
         raise CheckFailed(
-            POOL_COUNT.format(theirs=int(count), mine=len(personas.TROPES), fix=POOL_FIX)
+            POOL_COUNT.format(theirs=int(roster), mine=len(personas.TROPES), fix=POOL_FIX)
         )
-    return f"{said}; GABI has the same {int(count)}"
+    return f"{said}; GABI has the same {int(roster)}"
 
 
 def pool_checks() -> tuple[Check, ...]:
