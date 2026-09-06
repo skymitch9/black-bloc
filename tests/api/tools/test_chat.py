@@ -427,7 +427,7 @@ async def test_the_personality_page_seeds_the_ported_pool_on_the_first_read(seed
     assert first["counts"] == {"total": 11, "enabled": 11}
     assert [row["name"] for row in first["tropes"]] == [row["name"] for row in second["tropes"]]
     assert all(row["voice"] and row["label"] for row in first["tropes"])
-    assert "personality.ts" in first["ported_from"]
+    assert first["ported_from"].startswith("catalog-platform@")
     assert first["mode_word"]
 
 

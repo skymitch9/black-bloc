@@ -63,9 +63,8 @@ from ...personas import (
     PERSONALITY_CHOICES,
     PERSONALITY_KEY,
     POOL,
-    forget_tropes,
     list_tropes,
-    seed_tropes,
+    sync_pool,
 )
 from ...settings_store import (
     CHAT_COOLDOWN_SECONDS,
@@ -984,10 +983,9 @@ class Chat(commands.Cog):
         if db is None or not getattr(db, "is_connected", False):
             return
         try:
-            if await seed_tropes(db):
-                forget_tropes(self.bot)
+            await sync_pool(self.bot)
         except Exception as exc:
-            log.warning("chat: the mood pool was not seeded — %s: %s", type(exc).__name__, exc)
+            log.warning("chat: the mood pool was not synced — %s: %s", type(exc).__name__, exc)
         for guild in getattr(self.bot, "guilds", ()) or ():
             if guild.id in self._seeded:
                 continue

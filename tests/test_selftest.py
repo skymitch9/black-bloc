@@ -167,6 +167,126 @@ def test_the_config_family_is_read_off_the_registry_and_never_hand_listed():
     assert "config.honeypot_channel_ids" not in names
 
 
+def test_the_pool_check_is_one_check_of_its_own_inside_the_chat_feature():
+    found = selftest.pool_checks()
+
+    assert [check.name for check in found] == [selftest.POOL_CHECK]
+    assert found[0].feature == "chat"
+
+
+def test_the_registry_is_the_four_families_plus_the_one_pool_check(bot):
+    names = [check.name for check in selftest.checks_for(bot)]
+
+    assert names.count(selftest.POOL_CHECK) == 1
+    assert len(names) == len(set(names))
+    assert len(names) == (
+        len(selftest.config_checks())
+        + len(selftest.panel_checks())
+        + len(selftest.read_checks(bot))
+        + 1
+        + len(selftest.send_checks())
+    )
+
+
+def answers(payload):
+    async def fetch(_url):
+        return payload
+
+    return fetch
+
+
+def refuses(reason="ClientError: nope"):
+    async def fetch(_url):
+        raise selftest.PeerUnreachable(reason)
+
+    return fetch
+
+
+async def test_the_pool_check_passes_when_both_bots_are_on_the_same_version(bot):
+    from black_bloc.personas import POOL_VERSION, TROPES
+
+    one = selftest.Run(bot=bot, guild=bot.guild)
+    said = await selftest.check_pool(
+        one,
+        fetch=answers(
+            {"gabi_personality_pool_version": POOL_VERSION, "gabi_personality_tropes": len(TROPES)}
+        ),
+    )
+
+    assert f"pool v{POOL_VERSION} on both" in said
+    assert f"same {len(TROPES)}" in said
+
+
+async def test_the_pool_check_fails_by_name_and_says_which_side_is_ahead(bot):
+    from black_bloc.personas import POOL_VERSION
+
+    one = selftest.Run(bot=bot, guild=bot.guild)
+
+    with pytest.raises(selftest.CheckFailed) as raised:
+        await selftest.check_pool(
+            one, fetch=answers({"gabi_personality_pool_version": POOL_VERSION + 1})
+        )
+
+    said = str(raised.value)
+    assert f"v{POOL_VERSION + 1}" in said and f"v{POOL_VERSION}" in said
+    assert "GABI is ahead" in said
+    assert selftest.POOL_FIX in said
+
+
+async def test_the_pool_check_says_this_bot_is_ahead_when_it_is(bot):
+    from black_bloc.personas import POOL_VERSION
+
+    one = selftest.Run(bot=bot, guild=bot.guild)
+
+    with pytest.raises(selftest.CheckFailed) as raised:
+        await selftest.check_pool(
+            one, fetch=answers({"gabi_personality_pool_version": POOL_VERSION - 1})
+        )
+
+    assert "this bot is ahead" in str(raised.value)
+
+
+async def test_a_matching_version_with_a_different_count_is_still_a_failure(bot):
+    from black_bloc.personas import POOL_VERSION
+
+    one = selftest.Run(bot=bot, guild=bot.guild)
+
+    with pytest.raises(selftest.CheckFailed) as raised:
+        await selftest.check_pool(
+            one,
+            fetch=answers(
+                {"gabi_personality_pool_version": POOL_VERSION, "gabi_personality_tropes": 3}
+            ),
+        )
+
+    assert "3 moods" in str(raised.value)
+
+
+async def test_a_peer_that_does_not_say_its_pool_version_yet_is_a_pass_in_words(bot):
+    one = selftest.Run(bot=bot, guild=bot.guild)
+
+    said = await selftest.check_pool(one, fetch=answers({"ok": True}))
+
+    assert "does not say its pool version yet" in said
+
+
+async def test_a_network_failure_is_not_a_pool_failure(bot):
+    one = selftest.Run(bot=bot, guild=bot.guild)
+
+    said = await selftest.check_pool(one, fetch=refuses("TimeoutError: "))
+
+    assert "could not reach GABI's health route" in said
+    assert "TimeoutError" in said
+
+
+async def test_no_peer_address_asks_nobody_and_says_so(bot, monkeypatch):
+    """The registry refuses blank text, so this is the belt-and-braces path, not the panel's."""
+    monkeypatch.setattr(bot.store, "get", lambda _guild_id, _key: "")
+    one = selftest.Run(bot=bot, guild=bot.guild)
+
+    assert "nothing was asked" in await selftest.check_pool(one, fetch=refuses())
+
+
 def test_a_feature_that_deletes_messages_asks_for_manage_messages_and_the_rest_do_not():
     assert selftest.wanted_permissions("honeypot_channel_ids") == (
         "view_channel",

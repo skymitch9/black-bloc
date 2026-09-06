@@ -6,6 +6,8 @@
       "bot_bio",
       "log_channel_id",
       "operator_read_log",
+      "personality_pool_peer_url",
+      "personality_pool_sync",
       "role_menu_channel_id",
       "selftest_channel_id",
       "selftest_log_level",

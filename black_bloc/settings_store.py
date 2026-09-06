@@ -1329,6 +1329,35 @@ KEY_HELP.update(
 )
 
 
+# The global personality pool (next-wave #4) — the two decisions the shared manifest introduces.
+PERSONALITY_POOL_SYNC = "personality_pool_sync"
+PERSONALITY_POOL_PEER_URL = "personality_pool_peer_url"
+PERSONALITY_POOL_SYNC_DEFAULT = True
+PERSONALITY_POOL_PEER_URL_DEFAULT = "https://discord.heygabi.ai/api/health"
+
+KEY_TYPES.update(
+    {PERSONALITY_POOL_SYNC: "bool", PERSONALITY_POOL_PEER_URL: "text"}
+)
+KEY_HELP.update(
+    {
+        PERSONALITY_POOL_SYNC: (
+            "true to bring the mood pool up to the estate's shared personality manifest at every "
+            "boot — new moods are added, a mood's wording, wings and order are refreshed, and a "
+            "mood the manifest has dropped is retired and switched off. Whether a mood is ON is "
+            "always staff's, and this never touches it. false adds missing moods only, which is "
+            "what to use if a manifest change ever lands wrong"
+        ),
+        PERSONALITY_POOL_PEER_URL: (
+            "the health address of the estate's other bot, read by the self-test so the two "
+            "cannot drift apart unnoticed: it compares that bot's personality pool version with "
+            "this one's and says which side is ahead. It cannot be left blank, and reaching it is "
+            "never required for Black Bloc to work — a bot that will not answer is reported as "
+            "unreachable, never as drifted"
+        ),
+    }
+)
+
+
 # The one grouping of the registry, read by the dashboard's Settings page and by /settings.
 CORE_KEYS = (
     "log_channel_id",
@@ -1343,6 +1372,8 @@ CORE_KEYS = (
     SELFTEST_CHANNEL_ID,
     SELFTEST_PURGE_MINUTES,
     SELFTEST_LOG_LEVEL,
+    PERSONALITY_POOL_SYNC,
+    PERSONALITY_POOL_PEER_URL,
 )
 NAMESPACE_OVERRIDE = {
     "modlog_channel_id": "automod",
@@ -1906,6 +1937,10 @@ class SettingsStore:
             return SELFTEST_PURGE_MINUTES_DEFAULT
         if key == SELFTEST_LOG_LEVEL:
             return OFF
+        if key == PERSONALITY_POOL_SYNC:
+            return PERSONALITY_POOL_SYNC_DEFAULT
+        if key == PERSONALITY_POOL_PEER_URL:
+            return PERSONALITY_POOL_PEER_URL_DEFAULT
         if key.endswith("_log_level"):
             return LEVEL_DEFAULT
         if KEY_TYPES.get(key) in ("channels", "roles"):

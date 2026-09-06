@@ -161,6 +161,7 @@ IMPORTANT: frozenset[str] = frozenset(
         "request.sent_back",
         "chat.memory_forgot",
         "chat.memory_optout",
+        "chat.pool_retired",
         "role.extended",
     }
 )
@@ -196,6 +197,7 @@ ROUTINE: frozenset[str] = frozenset(
         "chat.llm_reply",
         "chat.mode",
         "chat.personality_mode",
+        "chat.pool_synced",
         "chat.reply_reference_fixed",
         "chat.route",
         "chat.settings",
@@ -367,6 +369,9 @@ ROUTINE: frozenset[str] = frozenset(
     }
 )
 
+CHAT_POOL_SYNCED = "chat.pool_synced"
+CHAT_POOL_RETIRED = "chat.pool_retired"
+
 SELFTEST = "selftest"
 SELFTEST_STARTED = "selftest.started"
 SELFTEST_CHECK = "selftest.check"
@@ -465,6 +470,8 @@ LOG_LEVEL_KEYS: tuple[str, ...] = tuple(log_level_key(feature) for feature in FE
 
 __all__ = [
     "ALL",
+    "CHAT_POOL_RETIRED",
+    "CHAT_POOL_SYNCED",
     "CORE",
     "FEATURES",
     "FEATURE_LABELS",

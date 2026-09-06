@@ -9,6 +9,7 @@ from typing import Any
 
 import discord
 
+from . import personas
 from .actionlog import as_details, log_action
 from .api.auth import Refused
 from .logkinds import (
@@ -23,6 +24,7 @@ from .logkinds import (
 )
 from .settings_store import (
     KEY_TYPES,
+    PERSONALITY_POOL_PEER_URL,
     SELFTEST_CHANNEL_ID,
     SELFTEST_ON_BOOT,
     SELFTEST_PURGE_MINUTES,
@@ -63,6 +65,27 @@ RUNNER_FAILED = (
     "never run, and any cards it had posted are still deleted on time. Run it again, and tell a "
     "Lead if it stops in the same place twice."
 )
+
+POOL_CHECK = "pool.in_step_with_gabi"
+PEER_TIMEOUT_SECONDS = 5
+PEER_VERSION_FIELD = "gabi_personality_pool_version"
+PEER_TROPES_FIELD = "gabi_personality_tropes"
+POOL_FIX = "python scripts/sync_personality_pool.py"
+POOL_NO_PEER = "pool v{version} here; no peer address is set, so nothing was asked"
+POOL_NO_FIELD = "pool v{version} here; GABI does not say its pool version yet"
+POOL_UNREACHABLE = "could not reach GABI's health route ({reason}) — the pool itself is fine"
+POOL_BEHIND = (
+    "GABI is on personality pool v{theirs}, this bot on v{mine}, so {ahead} is ahead and the two "
+    "rosters can differ. Bring them back into step by running `{fix}` and redeploying."
+)
+POOL_COUNT = (
+    "GABI and this bot say the same pool version, and she lists {theirs} moods where this bot has "
+    "{mine}. One side's copy is edited rather than synced — run `{fix}` and redeploy."
+)
+
+
+class PeerUnreachable(RuntimeError):
+    """The peer's health route did not answer. Not a pool failure — a network one."""
 
 
 class SelfTestBusy(RuntimeError):
@@ -309,6 +332,53 @@ def read_checks(bot: Any) -> tuple[Check, ...]:
     return tuple(read_check(path, endpoint) for path, endpoint in readable_routes(bot))
 
 
+async def fetch_peer(url: str) -> dict[str, Any]:
+    """One GET at the peer's health route, wrapped at the boundary so callers catch one type."""
+    import aiohttp
+
+    timeout = aiohttp.ClientTimeout(total=PEER_TIMEOUT_SECONDS)
+    try:
+        async with aiohttp.ClientSession(timeout=timeout) as session, session.get(url) as answer:
+            answer.raise_for_status()
+            found = await answer.json(content_type=None)
+    except (TimeoutError, aiohttp.ClientError, OSError, ValueError) as exc:
+        raise PeerUnreachable(f"{type(exc).__name__}: {exc}") from exc
+    return found if isinstance(found, dict) else {}
+
+
+async def check_pool(one: Run, *, fetch: Any = None) -> str:
+    """Drift between the two bots' rosters, made visible; a network fault is not a drift fault."""
+    url = str(one.bot.store.get(one.guild.id, PERSONALITY_POOL_PEER_URL) or "").strip()
+    mine = personas.POOL_VERSION
+    if not url:
+        return POOL_NO_PEER.format(version=mine)
+    try:
+        payload = await (fetch or fetch_peer)(url)
+    except PeerUnreachable as exc:
+        return POOL_UNREACHABLE.format(reason=exc)
+    theirs = payload.get(PEER_VERSION_FIELD)
+    if theirs is None:
+        return POOL_NO_FIELD.format(version=mine)
+    if int(theirs) != mine:
+        ahead = "GABI" if int(theirs) > mine else "this bot"
+        raise CheckFailed(
+            POOL_BEHIND.format(theirs=int(theirs), mine=mine, ahead=ahead, fix=POOL_FIX)
+        )
+    said = f"pool v{mine} on both; {len(personas.TROPES)} moods here"
+    count = payload.get(PEER_TROPES_FIELD)
+    if count is None:
+        return f"{said}; GABI does not say how many she has"
+    if int(count) != len(personas.TROPES):
+        raise CheckFailed(
+            POOL_COUNT.format(theirs=int(count), mine=len(personas.TROPES), fix=POOL_FIX)
+        )
+    return f"{said}; GABI has the same {int(count)}"
+
+
+def pool_checks() -> tuple[Check, ...]:
+    return (Check(POOL_CHECK, "chat", check_pool),)
+
+
 def panel_checks() -> tuple[Check, ...]:
     from .selftest_panels import panel_checks as built
 
@@ -323,7 +393,13 @@ def send_checks() -> tuple[Check, ...]:
 
 def checks_for(bot: Any) -> tuple[Check, ...]:
     """The registry, in the design's order: config, panels, reads, sends."""
-    return (*config_checks(), *panel_checks(), *read_checks(bot), *send_checks())
+    return (
+        *config_checks(),
+        *panel_checks(),
+        *read_checks(bot),
+        *pool_checks(),
+        *send_checks(),
+    )
 
 
 CHECKS = config_checks()
@@ -683,10 +759,18 @@ __all__ = [
     "CHECKS",
     "NO_CHANNEL",
     "NO_RUN",
-    "RUNNER_CHECK",
-    "RUNNER_FAILED",
+    "POOL_BEHIND",
+    "POOL_CHECK",
+    "POOL_COUNT",
+    "POOL_FIX",
+    "POOL_NO_FIELD",
+    "POOL_NO_PEER",
+    "POOL_UNREACHABLE",
     "Check",
     "CheckFailed",
+    "PeerUnreachable",
+    "RUNNER_CHECK",
+    "RUNNER_FAILED",
     "Result",
     "Run",
     "SelfTestBusy",
@@ -694,14 +778,17 @@ __all__ = [
     "boot_lines",
     "busy_sentence",
     "checks_for",
+    "check_pool",
     "checks_of",
     "close_after_crash",
     "config_checks",
     "failures_of",
+    "fetch_peer",
     "finish",
     "finish_quietly",
     "on_boot",
     "one_run",
+    "pool_checks",
     "purge",
     "purge_minutes",
     "read_checks",

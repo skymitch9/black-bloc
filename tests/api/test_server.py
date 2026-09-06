@@ -31,6 +31,13 @@ def test_health(bot):
     assert body["latency_ms"] == 42
 
 
+def test_health_says_which_personality_pool_this_bot_is_on(bot):
+    """The one field the estate's other bot is compared against; drift is silent without it."""
+    from black_bloc.personas import POOL_VERSION
+
+    assert client_for(bot).get("/health").json()["personality_pool_version"] == POOL_VERSION
+
+
 def test_health_stays_public(bot):
     """No cookie, no sign-in — /health is the uptime probe, not a dashboard route."""
     assert client_for(bot).get("/health").status_code == 200

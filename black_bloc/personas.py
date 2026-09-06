@@ -1,6 +1,6 @@
-"""The voice stack. The eleven tropes are ported from GABI —
-`catalog-platform/apps/discord-worker/src/personality.ts` (roster locked by the owner
-2026-08-18) — and adapted from her book world to this server."""
+"""The voice stack. The roster, the graph, the drift constants and the two shared clauses
+are DERIVED from `personality_pool.json`, the synced copy of GABI's canonical manifest; the
+voice bodies below are this server's own."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import logging
 import random
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 log = logging.getLogger(__name__)
@@ -16,11 +17,94 @@ log = logging.getLogger(__name__)
 COOKOUT = "cookout"
 POOL = "pool"
 GABI = "gabi"
+RETIRED = "retired"
 PERSONALITY_KEY = "chat_personality"
-POOL_SOURCE = "catalog-platform/apps/discord-worker/src/personality.ts (GABI, 2026-08-18)"
 
-DRIFT_EVERY_TURNS = 4
-DRIFT_CHANCE = 0.25
+MANIFEST_PATH = Path(__file__).with_name("personality_pool.json")
+MANIFEST_MISSING = (
+    "Black Bloc's personality pool manifest is missing: {path} is not there, so the roster, the "
+    "mood graph and the two shared clauses cannot be read. Restore it from the estate's canonical "
+    "copy with `python scripts/sync_personality_pool.py`."
+)
+MANIFEST_UNREADABLE = (
+    "Black Bloc's personality pool manifest at {path} could not be read as JSON ({reason}), so "
+    "the roster cannot be built. Restore it with `python scripts/sync_personality_pool.py`."
+)
+MANIFEST_EMPTY = (
+    "Black Bloc's personality pool manifest at {path} lists no tropes at all, so there would be "
+    "no moods to pick from. Restore it with `python scripts/sync_personality_pool.py`."
+)
+VOICE_MISSING = (
+    "The personality pool manifest lists {names}, and personas.py has no cookout voice for "
+    "{that}. Every trope in the manifest needs a voice body here — write one, or take the trope "
+    "out of the manifest and bump its version."
+)
+VOICE_EXTRA = (
+    "personas.py holds a cookout voice for {names}, and the personality pool manifest does not "
+    "list {that}. A voice with no trope is never used — take it out, or add the trope to the "
+    "manifest and bump its version."
+)
+SLOT_MISSING = (
+    "The personality pool manifest's {clause} clause wants a {slot} slot and Black Bloc fills no "
+    "such slot, so the clause cannot be built. Add it to personas.py:COOKOUT_SLOTS."
+)
+
+
+class PoolError(RuntimeError):
+    """The manifest is missing, unreadable, or out of step with the voices in this module."""
+
+
+def read_manifest(path: Path = MANIFEST_PATH) -> dict[str, Any]:
+    """Read at import so a broken manifest stops the boot with a sentence, not a later KeyError."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError as exc:
+        raise PoolError(MANIFEST_MISSING.format(path=path)) from exc
+    except OSError as exc:
+        raise PoolError(MANIFEST_UNREADABLE.format(path=path, reason=exc)) from exc
+    try:
+        found = json.loads(text)
+    except ValueError as exc:
+        raise PoolError(MANIFEST_UNREADABLE.format(path=path, reason=exc)) from exc
+    if not isinstance(found, dict) or not found.get("tropes"):
+        raise PoolError(MANIFEST_EMPTY.format(path=path))
+    return found
+
+
+MANIFEST: dict[str, Any] = read_manifest()
+POOL_VERSION = int(MANIFEST.get("version") or 0)
+POOL_LOCKED_BY = str(MANIFEST.get("locked_by") or "")
+POOL_SOURCE = str(MANIFEST.get("synced_from") or "")
+POOL_SLOTS: tuple[str, ...] = tuple(str(one) for one in MANIFEST.get("slots") or ())
+POOL_NAMES: tuple[str, ...] = tuple(str(one["name"]) for one in MANIFEST["tropes"])
+POOL_LABELS: dict[str, str] = {
+    str(one["name"]): str(one.get("label") or one["name"]) for one in MANIFEST["tropes"]
+}
+POOL_NEIGHBOURS: dict[str, tuple[str, ...]] = {
+    str(one["name"]): tuple(str(edge) for edge in one.get("neighbours") or ())
+    for one in MANIFEST["tropes"]
+}
+POOL_SORT: dict[str, int] = {name: place for place, name in enumerate(POOL_NAMES)}
+
+DRIFT_EVERY_TURNS = int(MANIFEST.get("drift", {}).get("every") or 4)
+DRIFT_CHANCE = float(MANIFEST.get("drift", {}).get("chance") or 0.25)
+
+COOKOUT_SLOTS: dict[str, str] = {
+    "invariant_nouns": "the server's own notes",
+    "tool_noun": "command",
+    "audience": "this server has a range of ages,",
+    "warn": "",
+}
+
+
+def clause(name: str) -> str:
+    """One shared template, filled with the cookout's own nouns."""
+    template = str(MANIFEST.get("clauses", {}).get(name) or "")
+    try:
+        return template.format(**COOKOUT_SLOTS)
+    except KeyError as exc:
+        raise PoolError(SLOT_MISSING.format(clause=name, slot=exc.args[0])) from exc
+
 
 CORE = """You are Black Bloc, the helper bot for the Black in a Flash! Discord server — the
 cookout. You are talking to one member, in a channel, and you answer in two or three sentences
@@ -103,20 +187,8 @@ You sound like the cookout: warm, easy, a little playful — somebody's favourit
 grill who is glad you came. Use people's names. Never be stiff. Given the choice, be brief and
 friendly rather than long and correct-sounding."""
 
-INVARIANT = (
-    "This is VOICE ONLY. Facts, refusals, the server's own notes and any sentence a command told "
-    "you to say are unchanged — say them in full and do not soften, dramatise or reword them. "
-    "Colour the words AROUND them, never the sentences themselves."
-)
-
-REGISTER = (
-    "PG-13 is your CEILING, not your usual register. Start mild: this server has a range of ages, "
-    "and somebody whose tone you have not read yet — or who is reserved — gets the gentle end. "
-    "Where somebody is clearly playing along you may lean in and match their energy: a sharper "
-    "barb, a saltier line, a warmer wink. The wiggle only ever goes UP TO PG-13 and never past "
-    "it — nothing explicit, nothing crude about anybody, and if somebody pushes past that line "
-    "you deflect with grace, stay in character, and do not escalate."
-)
+INVARIANT = clause("invariant")
+REGISTER = clause("register")
 
 TROPE_BLOCK = """## How you sound right now
 This is a mood, not a different person. You are still Black Bloc, the cookout's bot.
@@ -133,95 +205,86 @@ class Trope:
     neighbours: tuple[str, ...]
 
 
-TROPES: tuple[Trope, ...] = (
-    Trope(
-        "peppy",
-        "peppy",
+VOICES: dict[str, str] = {
+    "peppy": (
         "You are BRIGHT and fast today — genuinely delighted to be asked. Short exclamations, "
         "visible enthusiasm for whatever is going on, quick to celebrate somebody's good news. "
-        "Never manic, and never so busy being cheerful that the answer gets thin.",
-        ("dramatic", "mischievous"),
+        "Never manic, and never so busy being cheerful that the answer gets thin."
     ),
-    Trope(
-        "dramatic",
-        "dramatic",
+    "dramatic": (
         "You are THEATRICAL today — grand pronouncements about small things, a flair for the "
         "reveal, the occasional sweeping gesture in words. The drama is in the framing; what you "
-        "actually tell them stays plain and complete.",
-        ("mischievous", "peppy"),
+        "actually tell them stays plain and complete."
     ),
-    Trope(
-        "mischievous",
-        "mischievous",
+    "mischievous": (
         "You are PLAYFUL today — light teasing, a raised eyebrow, enjoying yourself. Never mean, "
-        "never at their expense, and never holding something back to be coy about it.",
-        ("flirty", "dramatic", "peppy", "tsundere"),
+        "never at their expense, and never holding something back to be coy about it."
     ),
-    Trope(
-        "flirty",
-        "flirty",
+    "flirty": (
         "You are CHARMING today, with a playful wink — light compliments, affectionate teasing, "
         "pleased to be the one they came to. CHARM, NOT HEAT: the appeal is that you are "
         "delighted by them, not that you are available. You may be warmer with somebody plainly "
-        "enjoying it, and you never get flustered into dropping the answer.",
-        ("warm", "mischievous"),
+        "enjoying it, and you never get flustered into dropping the answer."
     ),
-    Trope(
-        "warm",
-        "warm",
+    "warm": (
         "You are WARM today — familiar, unhurried, glad to see them. You notice how they are as "
-        "well as what they asked. Kind without being saccharine.",
-        ("cozy", "flirty"),
+        "well as what they asked. Kind without being saccharine."
     ),
-    Trope(
-        "cozy",
-        "cozy",
+    "cozy": (
         "You are COSY today — the voice of a folding chair in the shade and a full plate. "
         "Unhurried, softly pleased by a good evening, happy to settle into a question. Calm "
-        "rather than sleepy.",
-        ("shy", "warm"),
+        "rather than sleepy."
     ),
-    Trope(
-        "shy",
-        "shy",
+    "shy": (
         "You are a little SHY today — soft, hedging, a bit apologetic about taking up room. BUT "
         "YOU STILL GIVE THE WHOLE ANSWER, first time, without being asked twice. Timid in "
-        "manner, never in substance.",
-        ("cozy",),
+        "manner, never in substance."
     ),
-    Trope(
-        "scholar",
-        "scholarly",
+    "scholar": (
         "You are SCHOLARLY today — precise, fond of getting a detail exactly right, quietly "
         "pleased when you do. A mild inability to let an imprecision pass. Pedantic about "
-        "accuracy, never about the person.",
-        ("noir", "deadpan"),
+        "accuracy, never about the person."
     ),
-    Trope(
-        "noir",
-        "noir",
+    "noir": (
         "You are HARD-BOILED today — clipped sentences, a little world-weary, everything faintly "
         "a metaphor about rain and long odds. The weariness is a style; the help is genuine and "
-        "prompt.",
-        ("deadpan", "scholar"),
+        "prompt."
     ),
-    Trope(
-        "deadpan",
-        "deadpan",
+    "deadpan": (
         "You are DEADPAN today — flat, economical, dry. The joke is the flatness. Few words, all "
-        "of them load-bearing. Never cold to the person, just unbothered by drama.",
-        ("tsundere", "noir", "scholar"),
+        "of them load-bearing. Never cold to the person, just unbothered by drama."
     ),
-    Trope(
-        "tsundere",
-        "tsundere",
+    "tsundere": (
         "You are BRUSQUE today, and helping anyway — mildly put upon, \"I suppose I can look\", "
         "\"not that I did it for you or anything\". THE GRUMBLING IS THE WHOLE JOKE AND IT IS "
         "ALL SURFACE: you still answer fully, accurately and promptly, you are never actually "
-        "rude to them, and you never withhold anything.",
-        ("mischievous", "deadpan"),
+        "rude to them, and you never withhold anything."
     ),
-)
+}
+
+
+def _said(names: Any) -> tuple[str, str]:
+    found = sorted(names)
+    return (", ".join(found), "it" if len(found) == 1 else "them")
+
+
+def built_tropes() -> tuple[Trope, ...]:
+    """The manifest's skeleton zipped with this server's skin; a gap either way is a sentence."""
+    missing = set(POOL_NAMES) - set(VOICES)
+    if missing:
+        names, that = _said(missing)
+        raise PoolError(VOICE_MISSING.format(names=names, that=that))
+    extra = set(VOICES) - set(POOL_NAMES)
+    if extra:
+        names, that = _said(extra)
+        raise PoolError(VOICE_EXTRA.format(names=names, that=that))
+    return tuple(
+        Trope(name, POOL_LABELS[name], VOICES[name], POOL_NEIGHBOURS[name])
+        for name in POOL_NAMES
+    )
+
+
+TROPES: tuple[Trope, ...] = built_tropes()
 
 TROPE_NAMES: tuple[str, ...] = tuple(trope.name for trope in TROPES)
 BY_NAME: dict[str, Trope] = {trope.name: trope for trope in TROPES}
@@ -331,34 +394,149 @@ def pick_trope(setting: Any, rows: Any, *, key: str = "", turns: int = 0) -> Tro
     return found
 
 
-async def seed_tropes(db: Any, by: int | None = None) -> int:
-    """The code table becomes rows staff can turn off — once, and never twice."""
-    made = 0
-    for position, trope in enumerate(TROPES):
-        cur = await db.conn.execute(
-            "SELECT name FROM personality_tropes WHERE name = ?", (trope.name,)
-        )
-        if await cur.fetchone() is not None:
-            continue
-        await db.conn.execute(
-            "INSERT INTO personality_tropes(name, label, voice, neighbours, enabled, sort, "
-            "source, updated_at, updated_by) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)",
-            (
-                trope.name,
-                trope.label,
-                trope.voice,
-                json.dumps(list(trope.neighbours)),
-                position,
-                GABI,
-                now_iso(),
-                by,
-            ),
-        )
-        made += 1
-    if made:
+@dataclass(frozen=True)
+class PoolSync:
+    """What one sync changed, so the caller can log it once and say nothing when nothing moved."""
+
+    inserted: tuple[str, ...] = ()
+    updated: tuple[str, ...] = ()
+    retired: tuple[str, ...] = ()
+
+    @property
+    def changed(self) -> bool:
+        return bool(self.inserted or self.updated or self.retired)
+
+    @property
+    def summary(self) -> dict[str, Any]:
+        return {
+            "version": POOL_VERSION,
+            "source": POOL_SOURCE,
+            "inserted": list(self.inserted),
+            "updated": list(self.updated),
+            "retired": list(self.retired),
+        }
+
+
+async def _insert_trope(db: Any, trope: Trope, by: int | None) -> None:
+    await db.conn.execute(
+        "INSERT INTO personality_tropes(name, label, voice, neighbours, enabled, sort, "
+        "source, updated_at, updated_by) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)",
+        (
+            trope.name,
+            trope.label,
+            trope.voice,
+            json.dumps(list(trope.neighbours)),
+            POOL_SORT[trope.name],
+            GABI,
+            now_iso(),
+            by,
+        ),
+    )
+
+
+def _stale(row: Any, trope: Trope) -> bool:
+    return (
+        str(row["label"]) != trope.label
+        or str(row["voice"]) != trope.voice
+        or read_neighbours(row["neighbours"]) != trope.neighbours
+        or int(row["sort"]) != POOL_SORT[trope.name]
+    )
+
+
+async def _update_trope(db: Any, trope: Trope, by: int | None) -> None:
+    """`enabled` is missing from this UPDATE on purpose — it is the column staff own."""
+    await db.conn.execute(
+        "UPDATE personality_tropes SET label = ?, voice = ?, neighbours = ?, sort = ?, "
+        "updated_at = ?, updated_by = ? WHERE name = ?",
+        (
+            trope.label,
+            trope.voice,
+            json.dumps(list(trope.neighbours)),
+            POOL_SORT[trope.name],
+            now_iso(),
+            by,
+            trope.name,
+        ),
+    )
+
+
+async def _retire_trope(db: Any, name: str, by: int | None) -> None:
+    await db.conn.execute(
+        "UPDATE personality_tropes SET source = ?, enabled = 0, updated_at = ?, updated_by = ? "
+        "WHERE name = ?",
+        (RETIRED, now_iso(), by, name),
+    )
+
+
+async def sync_tropes(db: Any, *, full: bool = True, by: int | None = None) -> PoolSync:
+    """The manifest becomes rows staff can turn off; `full=False` only ever inserts missing ones."""
+    cur = await db.conn.execute("SELECT * FROM personality_tropes")
+    rows = {str(row["name"]): row for row in await cur.fetchall()}
+    inserted: list[str] = []
+    updated: list[str] = []
+    retired: list[str] = []
+    for trope in TROPES:
+        row = rows.get(trope.name)
+        if row is None:
+            await _insert_trope(db, trope, by)
+            inserted.append(trope.name)
+        elif full and str(row["source"]) == GABI and _stale(row, trope):
+            await _update_trope(db, trope, by)
+            updated.append(trope.name)
+    if full:
+        for name, row in rows.items():
+            if name in POOL_LABELS or str(row["source"]) != GABI:
+                continue
+            await _retire_trope(db, name, by)
+            retired.append(name)
+    found = PoolSync(tuple(inserted), tuple(updated), tuple(retired))
+    if found.changed:
         await db.conn.commit()
-        log.info("personas: seeded %d trope(s)", made)
-    return made
+        log.info(
+            "personas: pool v%d synced — %d inserted, %d updated, %d retired",
+            POOL_VERSION,
+            len(inserted),
+            len(updated),
+            len(retired),
+        )
+    return found
+
+
+def sync_wanted(bot: Any, guilds: Any) -> bool:
+    """The table is global, so one server holding the sync off holds it off for the table."""
+    from .settings_store import PERSONALITY_POOL_SYNC
+
+    store = getattr(bot, "store", None)
+    found = list(guilds or ())
+    if store is None or not found:
+        return True
+    return all(bool(store.get(guild.id, PERSONALITY_POOL_SYNC)) for guild in found)
+
+
+async def sync_pool(bot: Any, *, by: int | None = None) -> PoolSync:
+    """The boot door: sync once, one row per server saying what moved, nothing when nothing did."""
+    from .actionlog import log_action
+    from .logkinds import CHAT_POOL_RETIRED, CHAT_POOL_SYNCED
+
+    guilds = [
+        guild
+        for guild in list(getattr(bot, "guilds", ()) or ())
+        if not getattr(guild, "unavailable", False)
+    ]
+    found = await sync_tropes(bot.db, full=sync_wanted(bot, guilds), by=by)
+    if not found.changed:
+        return found
+    forget_tropes(bot)
+    for guild in guilds:
+        for name in found.retired:
+            await log_action(
+                bot,
+                guild,
+                CHAT_POOL_RETIRED,
+                details={"name": name, "version": POOL_VERSION, "source": POOL_SOURCE},
+            )
+        await log_action(bot, guild, CHAT_POOL_SYNCED, details=found.summary)
+    return found
 
 
 async def list_tropes(db: Any) -> list[Any]:

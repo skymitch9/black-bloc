@@ -11,7 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .. import __version__
+from .. import __version__, personas
 from . import auth, costs, ref, selftest_api, settings_api, status
 from .assets import NO_STORE, SiteFiles, build_id
 from .auth import Refused, refused_handler, validation_handler
@@ -144,6 +144,7 @@ def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
             "ready": bool(bot.is_ready()),
             "guilds": len(bot.guilds),
             "latency_ms": latency_ms(bot),
+            "personality_pool_version": personas.POOL_VERSION,
         }
 
     async def unknown_route(request: Request, exc: Any) -> Any:
