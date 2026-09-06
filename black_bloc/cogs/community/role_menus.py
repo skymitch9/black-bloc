@@ -15,6 +15,7 @@ from ...command_errors import NETWORK_ERRORS, AnswersErrors, SafeDynamicItem
 from ...command_visibility import STAFF_ONLY
 from ...golive import now_iso
 from ...logkinds import VIA_DISCORD, kind_via
+from ...loops import wait_ready
 from ...panels import (
     DESCRIPTION_LIMIT,
     Panel,
@@ -3072,7 +3073,7 @@ class RoleMenus(commands.Cog):
 
     @_expiry_loop.before_loop
     async def _before_expiry(self) -> None:
-        await self.bot.wait_until_ready()
+        await wait_ready(self.bot, self._expiry_broke)
 
     @_expiry_loop.error
     async def _expiry_broke(self, exc: BaseException) -> None:

@@ -20,6 +20,7 @@ from ...command_visibility import STAFF_ONLY
 from ...events import clamp
 from ...golive import now_iso, parse_ts
 from ...logkinds import VIA_DISCORD, kind_via
+from ...loops import wait_ready
 from ...modmail import (
     ANONYMOUS_NAME,
     AUTO_ARCHIVE_MINUTES,
@@ -1890,7 +1891,7 @@ class Modmail(commands.Cog):
 
     @_reconcile_loop.before_loop
     async def _before_reconcile(self) -> None:
-        await self.bot.wait_until_ready()
+        await wait_ready(self.bot, self._reconcile_error)
 
     @_reconcile_loop.error
     async def _reconcile_error(self, error: BaseException) -> None:

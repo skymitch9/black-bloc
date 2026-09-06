@@ -15,6 +15,7 @@ from ...command_errors import NETWORK_ERRORS, AnswersErrors
 from ...events import START_IN_THE_PAST, clamp, start_error
 from ...golive import now_iso, parse_ts
 from ...logkinds import VIA_DISCORD, kind_via
+from ...loops import wait_ready
 from ...panels import (
     SELECT_OPTION_LIMIT,
     NoteModal,
@@ -1829,8 +1830,8 @@ class RaidTrains(commands.Cog):
 
     @sweep.before_loop
     async def _before_sweep(self) -> None:
-        await self.bot.wait_until_ready()
-        self._retime()
+        if await wait_ready(self.bot, self._sweep_stopped):
+            self._retime()
 
     @sweep.error
     async def _sweep_stopped(self, exc: BaseException) -> None:

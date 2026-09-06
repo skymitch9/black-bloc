@@ -15,6 +15,7 @@ from ...actionlog import log_action, send_logs
 from ...command_errors import AnswersErrors
 from ...golive import now_iso, parse_ts
 from ...logkinds import VIA_DISCORD, kind_via
+from ...loops import wait_ready
 from ...panels import (
     SELECT_OPTION_LIMIT,
     Panel,
@@ -2337,7 +2338,7 @@ class TempVoice(commands.Cog):
 
     @_reconcile_loop.before_loop
     async def _before_reconcile(self) -> None:
-        await self.bot.wait_until_ready()
+        await wait_ready(self.bot, self._reconcile_stopped)
 
     @_reconcile_loop.error
     async def _reconcile_stopped(self, exc: BaseException) -> None:

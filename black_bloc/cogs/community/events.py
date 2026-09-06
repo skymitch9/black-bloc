@@ -93,6 +93,7 @@ from ...events import (
     set_zone as store_zone,
 )
 from ...golive import now_iso, parse_ts
+from ...loops import wait_ready
 from ...panels import (
     KEEP_IT,
     Panel,
@@ -933,7 +934,7 @@ class Events(commands.Cog):
 
     @_golive_loop.before_loop
     async def _before_golive(self) -> None:
-        await self.bot.wait_until_ready()
+        await wait_ready(self.bot, self._golive_broke)
 
     @_golive_loop.error
     async def _golive_broke(self, exc: BaseException) -> None:
@@ -947,7 +948,7 @@ class Events(commands.Cog):
 
     @_reconcile_loop.before_loop
     async def _before_reconcile(self) -> None:
-        await self.bot.wait_until_ready()
+        await wait_ready(self.bot, self._reconcile_broke)
 
     @_reconcile_loop.error
     async def _reconcile_broke(self, exc: BaseException) -> None:

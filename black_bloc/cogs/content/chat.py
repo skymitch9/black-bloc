@@ -44,6 +44,7 @@ from ...knowledge import (
     server_sections,
 )
 from ...llm import IMPORTANT, SIMPLE
+from ...loops import wait_ready
 from ...panels import (
     SELECT_OPTION_LIMIT,
     NoteModal,
@@ -933,7 +934,7 @@ class Chat(commands.Cog):
 
     @_ingest.before_loop
     async def _before_ingest(self) -> None:
-        await self.bot.wait_until_ready()
+        await wait_ready(self.bot, self._ingest_stopped)
 
     @_ingest.error
     async def _ingest_stopped(self, exc: BaseException) -> None:

@@ -59,6 +59,7 @@ from ...birthdays import (
     year_problem,
 )
 from ...command_errors import AnswersErrors
+from ...loops import wait_ready
 from ...panels import (
     KEEP_IT,
     Panel,
@@ -977,7 +978,7 @@ class Birthdays(commands.Cog):
 
     @_sweep.before_loop
     async def _before_sweep(self) -> None:
-        await self.bot.wait_until_ready()
+        await wait_ready(self.bot, self._sweep_stopped)
 
     @_sweep.error
     async def _sweep_stopped(self, exc: BaseException) -> None:
@@ -1001,7 +1002,7 @@ class Birthdays(commands.Cog):
 
     @_import_loop.before_loop
     async def _before_import(self) -> None:
-        await self.bot.wait_until_ready()
+        await wait_ready(self.bot, self._import_stopped)
 
     @_import_loop.error
     async def _import_stopped(self, exc: BaseException) -> None:
