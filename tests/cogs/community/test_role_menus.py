@@ -60,22 +60,12 @@ from black_bloc.cogs.community.role_menus import (
 )
 from black_bloc.config import load_settings
 from black_bloc.settings_store import SettingsStore
-from black_bloc.storage.db import Database
 
 GUILD = 7
 TEST_CHANNEL = 111
 LOG_CHANNEL = 222
 STAFF_CHANNEL = 333
 
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "r.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 async def test_menu_crud(db):

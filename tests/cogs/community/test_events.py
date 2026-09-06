@@ -43,7 +43,6 @@ from black_bloc.events import (
     set_status,
 )
 from black_bloc.settings_store import SettingsStore
-from black_bloc.storage.db import Database
 from black_bloc.timezones import DEFAULT_TZ, get_timezone, local_time, set_timezone
 
 GUILD = 7
@@ -371,15 +370,6 @@ async def action_kinds(db):
     cur = await db.conn.execute("SELECT kind FROM action_log ORDER BY id")
     return [row["kind"] for row in await cur.fetchall()]
 
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "e.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 @pytest.fixture

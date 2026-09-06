@@ -51,7 +51,6 @@ from black_bloc.cogs.community.applications import (
 from black_bloc.cogs.community.role_menus import RoleMenus
 from black_bloc.config import load_settings
 from black_bloc.settings_store import DB_UNAVAILABLE, SettingsStore
-from black_bloc.storage.db import Database
 
 GUILD = 7
 TEST_CHANNEL = 111
@@ -283,15 +282,6 @@ class FakeInteraction:
             getattr(one, "placeholder", None) for one in found.children
         ]
 
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "app.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 @pytest.fixture

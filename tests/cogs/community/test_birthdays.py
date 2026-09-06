@@ -26,7 +26,6 @@ from black_bloc.cogs.community.birthdays import (
 )
 from black_bloc.config import load_settings
 from black_bloc.settings_store import BIRTHDAY_MODES, BIRTHDAY_TZ, SettingsStore
-from black_bloc.storage.db import Database
 
 GUILD = 7
 TEST_CHANNEL = 111
@@ -278,15 +277,6 @@ async def details_for(db, kind):
     )
     return [row["details"] for row in await cur.fetchall()]
 
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "b.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 @pytest.fixture
