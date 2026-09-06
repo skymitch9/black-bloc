@@ -23,13 +23,7 @@ from .logkinds import (
     via_of,
     via_word,
 )
-from .settings_store import (
-    GUILD_ONLY,
-    LOGS_DEFAULT,
-    LOGS_MAX,
-    LOGS_MIN,
-    require_staff,
-)
+from .settings_store import GUILD_ONLY, LOGS_DEFAULT, require_staff
 
 log = logging.getLogger(__name__)
 
@@ -306,11 +300,13 @@ async def send_logs(
     interaction: Any,
     feature: str,
     *,
-    count: int = LOGS_DEFAULT,
-    important_only: bool = False,
+    count: int | None = None,
+    important_only: bool | None = None,
     staff_only: bool = True,
 ) -> None:
-    """The whole body of every `/<feature> logs` command."""
+    """The whole body of every feature's Logs button: the list first, the refinements under it."""
+    from .logs_panel import panel_for
+
     if staff_only:
         if not await require_staff(interaction):
             return
@@ -321,15 +317,18 @@ async def send_logs(
     if not getattr(bot.db, "is_connected", False):
         await interaction.response.send_message(LOGS_DB_DOWN, ephemeral=True)
         return
-    lines = await recent_lines(
-        bot.db,
+    view = panel_for(
+        bot,
         interaction.guild.id,
         feature,
-        max(LOGS_MIN, min(int(count), LOGS_MAX)),
-        important_only,
+        count=count,
+        important_only=important_only,
+        staff_only=staff_only,
     )
     await interaction.response.send_message(
-        embed=logs_embed(feature, lines, important_only, bot.settings.origin),
+        embed=await view.page(bot, interaction.guild.id),
+        view=view,
         ephemeral=True,
         allowed_mentions=discord.AllowedMentions.none(),
     )
+    view.message = await interaction.original_response()

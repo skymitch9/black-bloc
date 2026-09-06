@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import discord
 import pytest
 
+from black_bloc import logs_panel
 from black_bloc.birthdays import (
     ImportRow,
     local_today,
@@ -1266,8 +1267,9 @@ async def test_the_logs_button_answers_a_new_message_and_refuses_a_stranger(
     logs = find_item(view, "Logs")
 
     interaction = await click(bot, birthday_person, logs)
-    assert interaction.response.messages[-1].get("embed") is not None
-    assert interaction.message is None
+    last = interaction.response.messages[-1]
+    assert last.get("embed") is not None
+    assert [item.label for item in last["view"].children] == [logs_panel.ONLY_IMPORTANT]
 
     stranger = FakeMember(bot.guild, user_id=1002, display_name="Plain")
     refused = FakeInteraction(bot, stranger)

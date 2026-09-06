@@ -5,6 +5,7 @@ import discord
 import pytest
 
 from black_bloc import events as events_pure
+from black_bloc import logs_panel
 from black_bloc.cogs.community import events as events_cog
 from black_bloc.cogs.community.events import (
     GOLIVE_MINUTES,
@@ -2144,8 +2145,9 @@ async def test_the_logs_button_answers_a_new_message_and_keeps_its_own_staff_gat
     assert refused_one._edited is None
 
     allowed = await click(bot, lead, LogsButton())
-    assert allowed.response.messages[-1]["ephemeral"] is True
-    assert allowed._edited is None
+    last = allowed.response.messages[-1]
+    assert last["ephemeral"] is True
+    assert [item.label for item in last["view"].children] == [logs_panel.ONLY_IMPORTANT]
 
 
 async def test_a_panel_that_goes_quiet_disables_every_item_and_says_so(cog, bot, member):

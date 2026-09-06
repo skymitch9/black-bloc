@@ -4,9 +4,15 @@ from typing import Any
 
 import discord
 
-from .actionlog import LOGS_DB_DOWN, LOGS_MAX, LOGS_MIN, lines_for, logs_embed, recent_rows
+from .actionlog import LOGS_DB_DOWN, lines_for, logs_embed, recent_rows
 from .panels import Panel, answer, panel_minutes, still_staff
-from .settings_store import LOGS_COUNT, LOGS_IMPORTANT_ONLY, SETTINGS_PANEL_MINUTES
+from .settings_store import (
+    LOGS_COUNT,
+    LOGS_IMPORTANT_ONLY,
+    LOGS_MAX,
+    LOGS_MIN,
+    SETTINGS_PANEL_MINUTES,
+)
 
 MORE = "Show more"
 ONLY_IMPORTANT = "Important only"

@@ -4,6 +4,7 @@ import discord
 import pytest
 from discord import app_commands
 
+from black_bloc import logs_panel
 from black_bloc import polls as pure
 from black_bloc.cogs.community import polls as polls_cog
 from black_bloc.cogs.community.polls import (
@@ -2355,6 +2356,10 @@ async def test_a_demoted_staffer_opening_settings_is_refused_in_words(cog, bot, 
 
 
 async def test_the_logs_button_answers_with_a_new_ephemeral_message(cog, bot, lead, db):
+    """The list is a message of its own, and the panel it was pressed from is left alone.
+
+    One poll's worth of log is fewer lines than it asked for, so `Show more` is not drawn.
+    """
     await make(cog, bot, lead)
     panel = await open_panel(cog, bot, lead)
 
@@ -2363,7 +2368,8 @@ async def test_the_logs_button_answers_with_a_new_ephemeral_message(cog, bot, le
     last = interaction.response.messages[-1]
     assert last["ephemeral"] is True
     assert "poll.created" in last["embed"].description
-    assert interaction.rendered is None
+    assert [item.label for item in last["view"].children] == [logs_panel.ONLY_IMPORTANT]
+    assert last["view"].message is interaction.rendered
 
 
 async def test_the_logs_button_still_refuses_a_demoted_staffer_in_words(cog, bot, member):
