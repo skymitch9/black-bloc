@@ -9,6 +9,38 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-06 — Saved poll drafts landed as merge `8405bea` (branch `poll-drafts`, schema 32 → 33, shipped as v94 — deploy verification recorded on `deploys.log`). Owner decision Q1: "B but only save 1 draft per person max".
+
+> **Landed 2026-09-06 10:45 Phoenix.** Opus, hand-made worktree `C:/lcw/bb-poll-drafts` off `9cd79d6`,
+> 358k tokens / 146 calls / 32 min against a 250–400k estimate. Merge pushed BEFORE the docs commit
+> (runbook gotcha honoured). Gate on the main checkout: ruff clean, **5187 → 5226** tests green forward
+> and `BB_REVERSE=1` (26.3 s / 29.9 s), mock `ok - 17 pages, 149 routes, 14 core settings`. Sweep rows
+> **300–304** (were `PD-a`–`PD-e`) in `docs/access/sweeps.md`; design + nine recorded deviations in
+> `docs/info/poll-drafts-design.md` § Deviations; notes in `code-notes.md` § *Saved poll drafts*.
+> ⚠️ First detached `scripts/deploy.ps1` run HUNG at 92% of its pytest gate (32 idle workers, 11+ min,
+> before push/flyctl); the same command passed in the session shell in 26.7 s — environmental, see TODO.
+
+- **What it is:** a member can press **Save for later** on the `/poll` create preview; the draft lives in its
+  own `poll_drafts` table keyed `PRIMARY KEY (guild_id, user_id)` — one per person per guild, enforced by
+  the schema, a second save REPLACES (button says so). **Resume draft** on the main panel reopens the
+  preview; **Post it** from a resumed draft deletes the draft row in the SAME transaction as the poll
+  insert and the one `poll.created` log row carries `from_draft: true` (checklist 34). **Discard draft**
+  (danger, confirm). Staff: `Saved drafts…` select → card → **Discard** → reason modal → DM to the member
+  through the test-mode guard; staff cannot post or edit another's draft. `draft` LEFT the poll state
+  machine (`STATUSES`/`OPEN_STATUSES`/`TRANSITIONS`/`COLOURS`/`CARD_BUTTONS`; `polls.status DEFAULT
+  'draft'` stays — SQLite has no ALTER COLUMN — and is unreachable). Keys `poll_drafts` (bool, True) and
+  `poll_draft_days` (int, 14, 0 = never, max 365) registered both ways with labels; expiry runs inside the
+  existing polls archive sweep (`_expire_drafts`, one `poll.draft_expired` row per drop, nothing while
+  drafts are off). Log kinds `poll.draft_saved` / `draft_expired` ROUTINE, `poll.draft_discarded` IMPORTANT.
+- **Why the deviations:** Discord's five-buttons-per-row cap — a staff panel's row 0 was already full, so
+  `Resume`/`Save`/`Discard` sit on row 4 and the site link moved 3 → 4; `poll_draft_days` is the fifth and
+  last field the `Numbers…` modal can hold. "Saved." is an ephemeral sentence, not a panel footer, because
+  `Panel.on_timeout` overwrites the footer. `Save`/`Resume` render only for somebody who may CREATE.
+  `from_json` also replaces wrong-typed values (a bad payload must not raise inside a callback).
+- **Recurrence path (design §8):** `Save for later` is simply not rendered once a draft is repeating.
+- **Reported, not fixed:** `site/mock/server.mjs:2986` still lists `'draft'` in `POLL_STATUSES` and `:3303`
+  treats it as open — mock-only copy, check passes either way. Nothing here has met live Discord yet.
+
 ## 2026-09-06 — Fixture-scope sweep, half B landed as merge `348b98e` (branch `fixture-scope-half-b`; NOT deployed — test-only, v93 stays live). All seven measurement-pass decisions settled.
 
 > **Landed 2026-09-06 09:35–09:40 Phoenix.** Opus, hand-made worktree `C:/lcw/bb-fixtures-b`, 203k tokens /

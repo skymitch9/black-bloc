@@ -8,7 +8,7 @@
 > `SCHEMA_VERSION` is imported from `black_bloc/storage/db.py`, and the site figures come from
 > `node site/mock/check.mjs` against `site/mock/server.mjs`.
 >
-> **2026-09-06 (saved poll drafts branch, not yet merged):** schema **32 → 33** (`poll_drafts`)
+> **2026-09-06 (saved poll drafts, merged `8405bea`, v94):** schema **32 → 33** (`poll_drafts`)
 > and registry keys **187 → 189** (`poll_drafts`, `poll_draft_days`), both re-measured by
 > importing them. Nothing else in this table moved — no cog, no command, no feature, and the
 > mock still reads 17 pages / 149 routes / 14 core settings.
