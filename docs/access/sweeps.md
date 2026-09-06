@@ -1012,6 +1012,28 @@ Written on `poll-drafts`, 2026-09-06, off `main` at `9cd79d6` (v93), in a worktr
 | **303** (was `PD-d`) | With a draft saved by somebody else, `/poll` as a Lead ▸ the **Saved drafts…** select ▸ pick theirs ▸ **Discard** ▸ **Yes, discard it** ▸ type a reason | the card shows whose it is, what they typed and when they saved it; after the reason box the panel says it is discarded, and **they get a DM naming the poll and your reason**. Staff cannot post or edit somebody else's draft — Discard and Back are the only buttons, because posting one would forge its creator |
 | **304** (was `PD-e`) | `/poll` ▸ **Settings** ▸ **Drafts: on** (bottom row) to turn them off, then **Create** | **Save for later** is gone, so is **Resume draft** and the panel's draft line — and the draft itself is NOT deleted: turn Drafts back on and it is still there. **Numbers…** carries *"Days a saved draft is kept (0 for ever)"*, default **14**; a draft older than that is dropped by the poll sweep (a `poll.draft_expired` line on the Logs page), and drafts turned off never age out |
 
+## Recurrence create, website — rows `RW-a`–`RW-e`
+
+Written on `recur-web`, 2026-09-06, off `main` at `b428236`, in a worktree at
+`C:/lcw/bb-recur-web`. Built to
+[`../info/recurrence-web-create-design.md`](../info/recurrence-web-create-design.md)
+(owner, 2026-09-06: *"2. A"* — add a dashboard form rather than leave recurrences
+Discord-only). No schema change and no new registry key. ⚠️ **Nothing below has met live
+Discord or the live dashboard**; `python -m black_bloc` was NOT booted (no token in a
+worktree). The verification is `pytest` (**5241 passed**, was 5226) forward and
+`BB_REVERSE=1`, `ruff check .`, and `node site/mock/check.mjs`
+(17 pages / **150** routes / 14 core settings, was 149). The page half WAS driven in a real
+browser against the mock — the block, the refusal and the saved row were measured there
+rather than reasoned about.
+
+| # | Do this | Expect |
+|---|---|---|
+| **RW-a** | Dashboard → https://blackbloc.heygabi.ai/polls.html → **Create a poll** → write a question and two options, pick **#mute-me-bot-test-spam**, then the **Repeat** select (directly under the Channel / Ping / Voters / Results / Thread row) → **Every week** | a row of day, time and timezone fields appears, the sentence under the form changes to *"Saves “…” as a template that opens in #mute-me-bot-test-spam every Saturday at 19:00 …"*, and the button relabels itself from **Create the poll** to **Save the repeating poll**. ⚠️ Only the field that applies is drawn — **Which day** for weekly, **Day of the month** for monthly, neither for daily |
+| **RW-b** | Fill **Which day** = Saturday, **Time of day** = `19:00`, leave **Timezone** blank, and press **Save the repeating poll** | the **Repeating** section gains the new row — *"every Saturday at 19:00 America/Phoenix"* under **How often**, a real time under **Next** — with a green sentence above it saying when it first opens, and the form clears itself back to **Doesn't repeat**. ⚠️ **Nothing is posted**: a recurrence is the template that makes polls, not a poll. Discord stays quiet until the first Saturday |
+| **RW-c** | Back at the form, set **Repeat** → **Every week** again and type `half seven` in **Time of day**, then press the button | a red sentence: *"**half seven** is not a time of day Black Bloc can read, so nothing was saved. Write it on the 24-hour clock — `09:00`, `19:30`."* ⚠️ And the **Repeating** list is unchanged — the cadence is proved BEFORE any row is written, so a bad one leaves no half-made poll behind. Same for a weekday it cannot read and a timezone this machine does not know |
+| **RW-d** | Set **Kind** → **Date / availability** and look at the form | the whole **Repeat** block is gone. A date poll cannot repeat — its slots are fixed days, and the second time round it would ask about a day that has been and gone — so the control nobody can use is not drawn rather than shown and then refused |
+| **RW-e** | `/poll` in `#mute-me-bot-test-spam`, as a Lead | the panel's counts line includes the recurrence made from the website, and picking it offers the same **stop-repeating** card a Discord-made one gets — one feature, two front doors. Then the **Logs** section at the foot of the polls page shows **one** `poll.recur_created` line for it carrying `via: website`, beside the `poll.created` line for the row itself: the same pair the Discord path leaves, spelled `web.` |
+
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that
 minute plus the dashboard Logs page are enough to diagnose. Nothing here is destructive; the worst case is
