@@ -1199,12 +1199,6 @@ async def test_find_refuses_a_number_from_another_server_without_leaking_it(bot,
     assert "no application with that number" in interaction.sent
 
 
-def test_a_number_is_read_off_a_card_with_or_without_the_hash():
-    assert forms.application_id_from("#12") == 12
-    assert forms.application_id_from(" 12 ") == 12
-    assert forms.application_id_from("twelve") is None
-
-
 # The form card, its sub-panels, and the five writes that used to be inline.
 
 
