@@ -495,6 +495,14 @@ async def confirm_cancel(
     if row is None:
         await render_panel(interaction, previous)
         return
+    if not may_cancel(bot.store, row, interaction.user):
+        await render_panel(interaction, previous)
+        await interaction.followup.send(
+            EVENT_ALREADY_DECIDED.format(event_id=event_id, status=row["status"]),
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        return
     said, _ = await cancel_for(bot, interaction.guild, row, interaction.user)
     await render_panel(interaction, previous)
     await interaction.followup.send(
