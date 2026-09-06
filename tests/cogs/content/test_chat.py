@@ -1211,7 +1211,7 @@ async def test_the_voice_is_set_through_the_registry_so_the_website_sees_it_too(
 
     assert "The voice is **pool**" in interaction.sent
     assert bot.store.get(GUILD, "chat_personality") == "pool"
-    assert await kinds_of(db) == ["chat.personality_mode"]
+    assert await kinds_of(db) == ["chat.pool_synced", "chat.personality_mode"]
 
 
 async def test_a_mood_moves_between_the_two_selects_and_the_cached_pool_is_dropped(
@@ -1232,7 +1232,11 @@ async def test_a_mood_moves_between_the_two_selects_and_the_cached_pool_is_dropp
     await pick_one(interaction, cog_module.MOOD_ON_PLACEHOLDER, "flirty")
 
     assert "**flirty** is on" in interaction.sent
-    assert await kinds_of(db) == ["chat.trope_disabled", "chat.trope_enabled"]
+    assert await kinds_of(db) == [
+        "chat.pool_synced",
+        "chat.trope_disabled",
+        "chat.trope_enabled",
+    ]
 
 
 async def test_the_mood_that_is_the_voice_is_not_on_the_select_at_all(cog, bot):

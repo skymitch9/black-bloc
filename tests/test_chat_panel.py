@@ -83,7 +83,7 @@ def actor():
 
 @pytest.fixture
 async def pool(db):
-    await personas.seed_tropes(db)
+    await personas.sync_tropes(db)
     return await personas.list_tropes(db)
 
 

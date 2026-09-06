@@ -621,7 +621,7 @@ def build_router(bot: Any) -> APIRouter:
         }
 
     async def _personality(guild: Any) -> dict[str, Any]:
-        await personas.seed_tropes(bot.db)
+        await personas.sync_tropes(bot.db, full=False)
         rows = await personas.list_tropes(bot.db)
         mode = persona_mode(bot, guild.id)
         shown = [trope_row(guild, row, mode) for row in rows]
@@ -652,7 +652,7 @@ def build_router(bot: Any) -> APIRouter:
         who = await writer(request)
         guild = require_guild(bot)
         require_db(bot)
-        await personas.seed_tropes(bot.db)
+        await personas.sync_tropes(bot.db, full=False)
         wanted = str(payload.get("mode") or "").strip().lower()
         answered(
             await chat_panel.set_voice(
@@ -680,7 +680,7 @@ def build_router(bot: Any) -> APIRouter:
         who = await writer(request)
         guild = require_guild(bot)
         require_db(bot)
-        await personas.seed_tropes(bot.db)
+        await personas.sync_tropes(bot.db, full=False)
         said = str(name).strip().lower()
         wanted = payload.get("enabled") is not False
         mode = persona_mode(bot, guild.id)

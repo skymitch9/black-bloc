@@ -34,7 +34,7 @@ build-backend = "setuptools.build_meta"
 include = ["black_bloc*"]
 
 [tool.setuptools.package-data]
-black_bloc = ["data/*.json"]
+black_bloc = ["data/*.json", "personality_pool.json"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

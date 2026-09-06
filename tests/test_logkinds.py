@@ -88,6 +88,10 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "selftest.purged",
         "web.selftest.purged",
     ),
+    # The boot sync's two kinds are module constants, and the boot is the only door that
+    # writes them — a website read syncs insert-only and logs nothing.
+    "black_bloc/personas.py::CHAT_POOL_SYNCED": ("chat.pool_synced",),
+    "black_bloc/personas.py::CHAT_POOL_RETIRED": ("chat.pool_retired",),
     # One `move_train` walks the transition table for both doors, so the kind is the target's.
     "black_bloc/cogs/content/raidtrain.py::MOVE_KINDS[to]": (
         "raidtrain.lock",

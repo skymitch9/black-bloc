@@ -1,7 +1,11 @@
 # The global personality pool — design (next-wave #4)
 
 > **Audience:** Claude sessions in BOTH repos (this one and `catalog-platform`).
-> **Status:** TRACKED — DESIGN, not built. ✅ All three forks decided (a) by the owner 2026-09-05 16:41–16:43; ready to build. Written **2026-09-05** by Fable in the
+> **Status:** TRACKED — **BUILT (Black Bloc half) on `worktree-agent-a9f7e266cd87f5c2c`, not
+> merged, not deployed** (2026-09-05). The GABI half (§5.1) is **NOT built**; until it lands,
+> the self-test check reports *"GABI does not say its pool version yet"* as a pass, which is
+> the landing order §8 asks for. The runbook for the built half is
+> [`../access/personality-pool.md`](../access/personality-pool.md). ✅ All three forks decided (a) by the owner 2026-09-05 16:41–16:43. Written **2026-09-05** by Fable in the
 > main loop. Last verified: **2026-09-05** — every fact about the two codebases
 > below was read from `black_bloc/personas.py` (407 lines) and
 > `catalog-platform/apps/discord-worker/src/personality.ts` (930 lines, last
@@ -101,9 +105,32 @@ What is **deliberately not** in it: voice bodies, the `TROPE_BLOCK` framing
 line ("You are still GABI…" / "…still Black Bloc…"), the pin/roster/devops
 machinery (GABI-only), the intensity dial (GABI-only), and per-person state.
 
-Slots are filled per bot from constants in that bot's code (`{audience}` =
-"this is a family server with a range of ages," / "this server has a range of
-ages,"). A slot the bot does not fill is a test failure, not an empty string.
+Slots are filled per bot from constants in that bot's code. A slot the bot does
+not fill is a test failure, not an empty string.
+
+### 4.1 ⚠️ The FINAL slot list, as built (2026-09-05)
+
+The manifest carries its own `"slots"` array so each bot's test can assert it
+fills every slot without hard-coding the list. **Four slots**, chosen as the
+minimum that reproduces both bots' *current* wording:
+
+| Slot | Black Bloc fills | GABI fills | Why it exists |
+|---|---|---|---|
+| `invariant_nouns` | `the server's own notes` | `quotes, citations, spoiler limits` | each bot's own protected material |
+| `tool_noun` | `command` | `tool` | a slash command vs a Worker tool call |
+| `audience` | `this server has a range of ages,` | `this is a family server with a range of ages,` | the one word §1 called them apart on |
+| `warn` | `` (empty) | `⚠️ ` | GABI's register clause carries an internal ⚠️ before *"The wiggle…"*; nothing in Black Bloc's prompts uses that marker. A slot is cheaper than changing either bot's live prompt |
+
+⚠️ **One deliberate NORMALISATION, and it changes Black Bloc's prompt text by
+one character:** the template keeps GABI's comma in *"clearly playing along,
+you may lean in"*, which Black Bloc's copy had lost. Two spellings of one
+sentence is exactly the accidental drift this design exists to kill, and the
+comma is the grammatical one. Nothing else in either clause moved.
+
+⚠️ **`black_bloc/personality_pool.json` is HAND-BUILT from `personality.ts`**
+until the GABI half writes the canonical. Its `synced_from` says
+`catalog-platform@03dcb91` — the commit its content was read from, not a commit
+that contains the file.
 
 ## 5. Each bot's side
 
