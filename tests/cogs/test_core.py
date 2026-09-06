@@ -728,6 +728,36 @@ async def test_the_operator_log_toggle_is_only_drawn_for_manage_server(bot, cog,
     assert has_button(theirs.view, "Leave operator-token reads unlogged")
 
 
+async def test_a_lead_demoted_while_the_panels_card_is_open_cannot_press_the_operator_toggle(
+    bot, cog, lead, db
+):
+    """The button is drawn for Manage Server; the MOVE has to re-ask, or losing it mid-panel
+    leaves a live control behind."""
+    root = await open_panel(cog, bot, lead)
+    card = await press(root.view, "Panels & commands…", bot, lead)
+    before = bot.store.get(GUILD, sp.OPERATOR_READ_LOG_KEY)
+    lead.guild_permissions = FakePerms(manage_guild=False)
+    give_staff(bot, lead)
+
+    pressed = await press(card.view, "Leave operator-token reads unlogged", bot, lead)
+
+    assert core_cog.OPERATOR_LOG_REFUSED in pressed.sent
+    assert "Manage Server" in pressed.sent
+    assert bot.store.get(GUILD, sp.OPERATOR_READ_LOG_KEY) == before
+    assert await kinds(db) == []
+
+
+async def test_a_lead_who_still_has_manage_server_turns_the_operator_log_on(bot, cog, lead, db):
+    root = await open_panel(cog, bot, lead)
+    card = await press(root.view, "Panels & commands…", bot, lead)
+
+    pressed = await press(card.view, "Leave operator-token reads unlogged", bot, lead)
+
+    assert bot.store.get(GUILD, sp.OPERATOR_READ_LOG_KEY) is False
+    assert core_cog.OPERATOR_LOG_REFUSED not in pressed.sent
+    assert await kinds(db) == ["settings.set"]
+
+
 async def test_the_panel_minutes_picker_opens_the_same_key_card_the_group_path_does(bot, cog, lead):
     root = await open_panel(cog, bot, lead)
     opened = await press(root.view, "Panels & commands…", bot, lead)
