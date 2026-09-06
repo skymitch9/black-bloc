@@ -9,6 +9,45 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-05 — Confirm/opened fold (v88, merge of `worktree-agent-a1f44401815e31ccf` at `794d3aa`)
+
+Outcome: one `panels.confirm` card builder + `confirm_items` (with `yes_style`, because role menus' seed confirm is blue on purpose) + `panels.opened(interaction, *, staff=True)`; 8 confirm copies (11 cards — the survey found an eighth in `tempvoice.py` the item never listed) and 7 `opened()` copies + chat's 14 inline triplets folded; 12 one-off Button classes and 5 `CONFIRM_TITLE` constants gone; 5110 → 5122 tests; 12 commits; agent cost 309k against a 150–250k estimate. Deployed 17:33, boot verified (`synced 29`, `selftest: 106 ok, 0 failed`). Left on purpose: the three withdraw/cancel cards (events, requests, applications) — different shape and they edit without `allowed_mentions`; they fold once that small finding lands. Still open (reported, not done): the staffless `defer`+`db_ready` pair inline in seven cogs. Sweep rows 262–275 are the owner's check-out. The item as it stood:
+
+- 🔧 **Confirm-helper fold — BUILT 2026-09-05 on `worktree-agent-a1f44401815e31ccf`, NOT merged, NOT deployed.**
+  Two helpers landed in `black_bloc/panels.py` with 11 new tests in `tests/test_panels.py` (`9cb96ea`):
+  `confirm(interaction, view, embed, items, previous, *, question, title)` with `confirm_items(...)` /
+  `ConfirmButton`, and `opened(interaction, *, staff=True)`. **5110 tests before, 5122 after; ruff clean;
+  no behaviour change** (no test changed an assertion). Checklist 15/17.
+  **The confirm copies:**
+  ~~`cogs/content/chat_memory.py:open_confirm`~~ `0597087` ·
+  ~~`cogs/community/birthdays.py:open_confirm` (+ its six Button classes, three call sites)~~ `17dc187` ·
+  ~~`cogs/content/youtube.py:open_confirm`~~ `4a56e2e` ·
+  ~~`cogs/content/pings.py:open_confirm` + `open_card_confirm`~~ `5bd9978` ·
+  ~~`cogs/moderation/automod.py:build_confirm`/`open_confirm`~~ `863a58c` (the pure
+  `black_bloc/automod.py:confirm_buttons` stays — it is the move TABLE, not a copy of the card) ·
+  ~~`cogs/content/chat.py` `RemoveYesButton`/`KeepItButton`~~ `3438d4d` ·
+  ~~`cogs/community/role_menus.py:confirm`~~ `5508e9f` (what is left is `confirm_panel`, which only carries
+  the previous card's place) · ~~`cogs/community/tempvoice.py:build_forget_confirm`~~ `714a04c` — an
+  **EIGHTH copy this item never listed**, found by the survey.
+  **LEFT, on purpose — `cogs/community/events.py:open_cancel_confirm`, `cogs/community/requests.py:open_withdraw_confirm`
+  and `cogs/community/applications.py`'s withdraw card.** They are a different shape (the card IS the question,
+  no `Are you sure?` field, and the Yes button carries the row id), and all three edit **without
+  `allowed_mentions`** where `panels.confirm` always passes `AllowedMentions.none()` — folding them would have
+  been a behaviour change inside a refactor. They fold trivially once the standing small finding
+  "`requests.py` re-renders lack `allowed_mentions`" (above) lands: `question=""` and one `confirm_items` each.
+  **The `opened` copies:** ~~`cogs/core.py`~~ ~~`cogs/moderation/automod.py`~~ ~~`.../honeypot.py`~~
+  ~~`.../modcmds.py`~~ ~~`.../modmail.py`~~ ~~`cogs/community/role_menus.py:ready` (renamed at 27 call sites)~~
+  all `7d1ddfd`; ~~the 14 inline repeats in `cogs/content/chat.py`~~ `5b20bed`.
+  `cogs/content/raidtrain.py:opened` KEPT as a one-line delegation to `panel_opened(..., staff=False)` rather
+  than adding the keyword at ~30 call sites — the triplet itself is gone.
+  **Still open, reported not done:** the `defer` + `db_ready` PAIR (the same triplet with no staff gate) is
+  still written inline in `chat_memory.py`, `youtube.py`, `pings.py`, `birthdays.py`, `events.py`,
+  `requests.py` and `applications.py` — `opened(interaction, staff=False)` covers it, but it was outside
+  this sweep's brief. Docs landed with the work: `code-notes.md` § *Confirm/opened fold* (five notes above
+  re-keyed), `panels-program.md` §4 *What the library gained after wave 0*, `access/sweeps.md` rows
+  rows 262–275 (were `CF1`–`CF14`). ⚠️ **Nothing was run against live Discord and `python -m black_bloc` was not booted**
+  (no token in a worktree); the sweep rows are the check-out.
+
 ## 2026-09-05 — The self-test (wave 5): the bot proving itself at every boot, and cleaning up after itself (v86, merge of `worktree-agent-a4aa5efd43f249ba6` + `abac65d` + `ad5b614`)
 
 **Outcome (Fable review + merge 2026-09-05 15:15, deployed ~15:35):** `black_bloc/selftest.py` — a `Check` registry
