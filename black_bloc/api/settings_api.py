@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
+from ..cogs.core import NOTHING_STORED, clear_key, set_key
 from ..logkinds import CORE, VIA_WEBSITE, via_of
 from ..settings_store import CORE_KEYS as CORE_KEYS
 from ..settings_store import (
@@ -14,13 +15,12 @@ from ..settings_store import (
     KEY_MAX,
     KEY_MIN,
     KEY_TYPES,
-    SettingError,
     namespace_of,
 )
 from ..settings_store import NAMESPACE_OVERRIDE as NAMESPACE_OVERRIDE
 from .auth import Refused, staff_dependency
 from .names import resolve_one
-from .writes import note, require_db, require_guild, writer_dependency
+from .writes import actor_for, require_db, require_guild, writer_dependency
 
 log = logging.getLogger(__name__)
 
@@ -176,19 +176,11 @@ def build_router(bot: Any) -> APIRouter:
             raise Refused(400, "unknown_setting", UNKNOWN_KEY.format(key=key))
         if "value" not in payload:
             raise Refused(400, "no_value", NO_VALUE)
-        try:
-            stored = await bot.store.set(
-                guild.id, key, from_json(key, payload["value"]), by=int(who["id"])
-            )
-        except SettingError as exc:
-            raise Refused(400, "bad_value", str(exc)) from None
-        await note(
-            bot,
-            guild,
-            "web.settings.set",
-            who,
-            details={"key": key, "value": as_json(key, stored), "via": VIA_WEBSITE},
-        )
+        actor = actor_for(bot, who, guild)
+        wanted = from_json(key, payload["value"])
+        outcome = await set_key(bot, guild, key, wanted, actor, via=VIA_WEBSITE)
+        if not outcome.ok:
+            raise Refused(outcome.status or 400, outcome.code or "bad_value", outcome.message)
         return key_row(bot.store, guild.id, key)
 
     @router.delete("/{key}")
@@ -198,10 +190,9 @@ def build_router(bot: Any) -> APIRouter:
         require_db(bot)
         if key not in KEY_TYPES:
             raise Refused(400, "unknown_setting", UNKNOWN_KEY.format(key=key))
-        cleared = await bot.store.clear(guild.id, key, by=int(who["id"]))
-        await note(
-            bot, guild, "web.settings.clear", who, details={"key": key, "via": VIA_WEBSITE}
-        )
-        return key_row(bot.store, guild.id, key) | {"cleared": cleared}
+        outcome = await clear_key(bot, guild, key, actor_for(bot, who, guild), via=VIA_WEBSITE)
+        if not outcome.ok and outcome.code != NOTHING_STORED:
+            raise Refused(outcome.status or 400, outcome.code or "bad_value", outcome.message)
+        return key_row(bot.store, guild.id, key) | {"cleared": bool(outcome.ok)}
 
     return router

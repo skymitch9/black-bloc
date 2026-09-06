@@ -265,6 +265,39 @@ async def test_clearing_from_the_website_says_so_too(client, sign_in, web, wf):
     assert next(one for one in logged if one["kind"] == "web.settings.clear")["via"] == "website"
 
 
+async def test_one_write_leaves_one_row_and_the_route_no_longer_writes_its_own(
+    client, sign_in, web, wf
+):
+    """KI-21, first half: the PUT and the DELETE go through `set_key` / `clear_key` with
+    `via=website`, so the shared writer builds the `web.` head and the route notes nothing."""
+    import inspect
+
+    from black_bloc.api import settings_api
+
+    sign_in(client, uid=7)
+
+    client.put("/api/settings/golive_mode", json={"value": "on"})
+    client.delete("/api/settings/golive_mode")
+
+    kinds = [kind for kind in await wf.kinds_in(web.db) if "settings." in kind]
+    assert kinds == ["web.settings.set", "web.settings.clear"]
+    assert "note(" not in inspect.getsource(settings_api.build_router)
+
+
+async def test_a_key_that_was_never_set_is_a_200_that_says_nothing_was_cleared(
+    client, sign_in, web, wf
+):
+    """`clear_key` refuses a key with no stored row; the website's door has always answered
+    200 with `cleared: false`, and the page reads that flag."""
+    sign_in(client, uid=7)
+
+    response = client.delete("/api/settings/golive_mode")
+
+    assert response.status_code == 200
+    assert response.json()["cleared"] is False
+    assert [kind for kind in await wf.kinds_in(web.db) if "settings." in kind] == []
+
+
 async def test_a_key_the_action_log_never_saw_reports_no_via_rather_than_guessing(
     client, sign_in, web, wf
 ):

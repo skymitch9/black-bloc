@@ -13,7 +13,7 @@ from .. import settings_panel as sp
 from ..actionlog import log_action, send_logs
 from ..command_errors import AnswersErrors
 from ..command_visibility import STAFF_ONLY, hidden_names
-from ..logkinds import CORE, SELFTEST, VIA_DISCORD
+from ..logkinds import CORE, SELFTEST, VIA_DISCORD, kind_via
 from ..modcases import pages_under_limit
 from ..panels import (
     Outcome,
@@ -85,7 +85,7 @@ async def set_key(
     await log_action(
         bot,
         guild,
-        "settings.set",
+        kind_via("settings.set", via),
         actor=actor,
         details={"key": key, "value": stored, "via": via},
     )
@@ -105,7 +105,7 @@ async def clear_key(
     await log_action(
         bot,
         guild,
-        "settings.clear",
+        kind_via("settings.clear", via),
         actor=actor,
         details={"key": key, "via": via},
     )
