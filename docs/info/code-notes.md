@@ -6010,7 +6010,7 @@ line numbers — the standing re-key rule applies after the merge.
 > Off `main` at `460716e` (v91). Every key is a `path:name` ANCHOR, never a line number, so the
 > standing merge-order re-key is this paragraph and nothing else. Source: the wave-1 review
 > findings on `docs/TODO.md` plus the v88 fold's "left on purpose" list. **5177 tests before,
-> 5185 after**; `ruff check .` clean; `node site/mock/check.mjs` 17 pages / 149 routes / 14 core
+> 5186 after — +9, none lost**; `ruff check .` clean; `node site/mock/check.mjs` 17 pages / 149 routes / 14 core
 > settings. ⚠️ **Nothing here has met live Discord, the live dashboard or a real boot** —
 > `python -m black_bloc` was not run (no token in a worktree). Sweep rows `ES2-a`–`ES2-h`.
 
