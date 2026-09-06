@@ -20,7 +20,6 @@ from black_bloc.cogs.moderation.modmail import (
 from black_bloc.config import load_settings
 from black_bloc.modmail import COLOURS, IN, NOTE, OUT, UNDELIVERED_MARK, parse_topic
 from black_bloc.settings_store import CHANNEL_MODE, THREAD_MODE, SettingsStore
-from black_bloc.storage.db import Database
 
 GUILD = 7
 TEST_CHANNEL = 111
@@ -418,16 +417,6 @@ async def open_panel(cog, bot, who):
 async def action_kinds(db):
     cur = await db.conn.execute("SELECT kind FROM action_log ORDER BY id")
     return [row["kind"] for row in await cur.fetchall()]
-
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "m.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 @pytest.fixture

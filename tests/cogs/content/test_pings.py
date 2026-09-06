@@ -37,7 +37,6 @@ from black_bloc.cogs.content.pings import (
 )
 from black_bloc.config import load_settings
 from black_bloc.settings_store import DB_UNAVAILABLE, SettingsStore
-from black_bloc.storage.db import Database
 
 GUILD = 7
 LOG_CHANNEL = 222
@@ -210,16 +209,6 @@ class FakeInteraction:
             one["content"] for one in self.response.messages if one.get("content") is not None
         ]
         return spoken[-1] if spoken else None
-
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "pc.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 @pytest.fixture

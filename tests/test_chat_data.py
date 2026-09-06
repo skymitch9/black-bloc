@@ -22,7 +22,6 @@ from black_bloc.config import load_settings
 from black_bloc.events import APPROVED, create_event, set_status
 from black_bloc.golive import StreamInfo
 from black_bloc.settings_store import SettingsStore
-from black_bloc.storage.db import Database
 from black_bloc.timezones import set_timezone
 
 GUILD = 7
@@ -102,16 +101,6 @@ class FakeBot:
         self.store = store
         self.guild = guild
         self.guilds = [guild]
-
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "d.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 @pytest.fixture

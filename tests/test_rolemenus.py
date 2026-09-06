@@ -6,7 +6,6 @@ from black_bloc import rolegrants as grants
 from black_bloc import rolemenus as rm
 from black_bloc.config import load_settings
 from black_bloc.settings_store import SettingsStore
-from black_bloc.storage.db import Database
 
 GUILD = 7
 OPTIONS_MAX = 25
@@ -282,16 +281,6 @@ def test_an_audit_that_fits_says_nothing_about_the_site():
     lines = rm.grant_lines([grant(expires_at=at(1))], at=NOW)
 
     assert len(lines) == 2 and "the rest" not in lines[-1]
-
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "rm.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 async def test_active_grants_leaves_out_the_ones_that_are_over(db):

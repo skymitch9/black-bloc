@@ -1,17 +1,21 @@
 import os
 import secrets
 import sqlite3
+import sys
 import time
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
+import pytest_asyncio
 
 from black_bloc.api.auth import SESSION_COOKIE, SESSION_TTL_SECONDS, sign_session
 from black_bloc.api.server import SAME_ORIGIN, SAME_SITE_HEADER
+from black_bloc.bot import COGS
 from black_bloc.config import load_settings
 from black_bloc.settings_store import member_is_staff
+from black_bloc.storage.db import Database
 
 REVERSE = "BB_REVERSE"
 
@@ -22,10 +26,99 @@ def pytest_collection_modifyitems(items):
         items.reverse()
 
 
+@pytest.fixture(scope="session")
+def cog_modules_as_collected():
+    return {name: sys.modules[name] for name in COGS if name in sys.modules}
+
+
+@pytest.fixture(autouse=True)
+def cog_modules_stay_the_ones_the_test_files_imported(cog_modules_as_collected):
+    """`load_extension` builds a NEW module object and hangs it in `sys.modules`, so after any
+    test that loads a cog, `monkeypatch.setattr("black_bloc.cogs.x.y", ...)` patches a module the
+    test file's own imports no longer point at."""
+    yield
+    sys.modules.update(cog_modules_as_collected)
+
+
 @pytest.fixture
 def settings(tmp_path, monkeypatch):
     monkeypatch.delenv("DISCORD_TOKEN", raising=False)
     return load_settings(_env_file=None, database_path=tmp_path / "test.sqlite3")
+
+
+async def schema_of(db: Any) -> dict[str, tuple[str, str | None]]:
+    """Every table, index, view and trigger the database holds right now, in creation order."""
+    cur = await db.conn.execute("SELECT type, name, sql FROM sqlite_master ORDER BY rowid")
+    return {row["name"]: (row["type"], row["sql"]) for row in await cur.fetchall()}
+
+
+async def take(db: Any) -> dict[str, Any]:
+    """Every row of every table AND the schema holding them, so a database can be put back
+    without rebuilding schema v32."""
+    schema = await schema_of(db)
+    rows: dict[str, list[tuple]] = {}
+    for name, (kind, _sql) in schema.items():
+        if kind != "table":
+            continue
+        cur = await db.conn.execute(f"SELECT * FROM {name}")
+        rows[name] = [tuple(row) for row in await cur.fetchall()]
+    return {"schema": schema, "rows": rows}
+
+
+async def _put_schema_back(db: Any, wanted: dict, found: dict) -> None:
+    for name, (kind, sql) in found.items():
+        if name in wanted or sql is None or name.startswith("sqlite_"):
+            continue
+        await db.conn.execute(f"DROP {kind.upper()} IF EXISTS {name}")
+    for name, (_kind, sql) in wanted.items():
+        if name not in found and sql is not None and not name.startswith("sqlite_"):
+            await db.conn.execute(sql)
+
+
+async def put(db: Any, snapshot: dict[str, Any]) -> None:
+    """The other half: emptied and refilled on the live connection, which a page copy cannot do.
+    A test that dropped an index or made a table of its own has both put back first."""
+    await db.conn.commit()
+    await db.conn.execute("PRAGMA foreign_keys=OFF")
+    found = await schema_of(db)
+    rows = snapshot["rows"]
+    for name in rows:
+        if name in found:
+            await db.conn.execute(f"DELETE FROM {name}")
+    if set(found) != set(snapshot["schema"]):
+        await _put_schema_back(db, snapshot["schema"], found)
+    for name, kept in rows.items():
+        if kept:
+            marks = ", ".join("?" * len(kept[0]))
+            await db.conn.executemany(f"INSERT INTO {name} VALUES ({marks})", kept)
+    await db.conn.commit()
+    await db.conn.execute("PRAGMA foreign_keys=ON")
+
+
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
+async def module_db(tmp_path_factory):
+    database = Database(tmp_path_factory.mktemp("db") / "test.sqlite3")
+    await database.connect()
+    try:
+        yield database
+    finally:
+        await database.close()
+
+
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
+async def module_db_blank(module_db):
+    """What a freshly connected database holds, so a test is handed that instead of building it."""
+    return await take(module_db)
+
+
+@pytest.fixture
+async def db(module_db, module_db_blank):
+    """The module's one schema-v32 database, rewound to what a per-test one would have handed over.
+    Reconnected first when the test before it closed the database on purpose."""
+    if not module_db.is_connected:
+        await module_db.connect()
+    await put(module_db, module_db_blank)
+    return module_db
 
 
 # At least SESSION_SECRET_MIN characters, or site_login_configured stays False

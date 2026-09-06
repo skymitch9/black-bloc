@@ -17,7 +17,6 @@ from black_bloc.cogs.community.requests import (
 )
 from black_bloc.config import load_settings
 from black_bloc.settings_store import SettingsStore
-from black_bloc.storage.db import Database
 
 GUILD = 7
 TEST_CHANNEL = 111
@@ -246,16 +245,6 @@ def words_in(card):
 def link_of(sent):
     view = (sent.kwargs if hasattr(sent, "kwargs") else sent)["view"]
     return view.children[0].url if view is not None else None
-
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "r.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 @pytest.fixture

@@ -38,7 +38,6 @@ from black_bloc.golive import (
     panel_buttons,
 )
 from black_bloc.settings_store import SettingsStore
-from black_bloc.storage.db import Database
 from black_bloc.twitch import TwitchError, TwitchGame, TwitchStream, TwitchUser
 
 GUILD = 7
@@ -341,16 +340,6 @@ async def action_details(db, kind):
     )
     row = await cur.fetchone()
     return row["details"] if row else None
-
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "g.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 @pytest.fixture

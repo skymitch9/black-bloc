@@ -56,7 +56,6 @@ from black_bloc.modcases import (
     warn_count,
     write_case_note,
 )
-from black_bloc.storage.db import Database
 
 GUILD = 7
 USER = 900
@@ -73,16 +72,6 @@ class FakeUser:
         if self.raises is not None:
             raise self.raises
         self.dms.append((content, kwargs))
-
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "m.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 def test_durations_are_read_the_way_the_incumbent_writes_them():

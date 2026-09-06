@@ -34,7 +34,6 @@ from black_bloc.cogs.community.polls import (
 )
 from black_bloc.config import load_settings
 from black_bloc.settings_store import SettingsStore
-from black_bloc.storage.db import Database
 
 GUILD = 7
 TEST_CHANNEL = 111
@@ -368,16 +367,6 @@ class FakeInteraction:
 async def action_kinds(db):
     cur = await db.conn.execute("SELECT kind FROM action_log ORDER BY id")
     return [row["kind"] for row in await cur.fetchall()]
-
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "p.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 @pytest.fixture

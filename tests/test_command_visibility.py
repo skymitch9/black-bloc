@@ -9,7 +9,6 @@ from black_bloc import command_visibility as cv
 from black_bloc.bot import COGS, BlackBlocBot
 from black_bloc.config import load_settings
 from black_bloc.settings_store import KEY_CHOICES, KEY_TYPES, SettingsStore, parse_value
-from black_bloc.storage.db import Database
 
 GUILD = 4242
 TEST_CHANNEL = 555
@@ -73,16 +72,6 @@ class FakeBot:
 
     def get_channel(self, channel_id):
         return None
-
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "visibility.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 @pytest.fixture

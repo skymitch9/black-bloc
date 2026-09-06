@@ -57,7 +57,6 @@ from black_bloc.chat import (
     with_extra,
 )
 from black_bloc.emoji import SKIN_TONES
-from black_bloc.storage.db import Database
 
 WAVE = "\U0001f44b"
 HEART = "\U0001f5a4"
@@ -321,16 +320,6 @@ class StoredBot(FakeBot):
     def __init__(self, db, guilds=()):
         super().__init__(guilds=guilds)
         self.db = db
-
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "chat.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 async def rows(db, guild_id=GUILD):

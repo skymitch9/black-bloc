@@ -85,7 +85,6 @@ from black_bloc.settings_store import (
     TEMPVOICE_CREATOR_NAME,
     SettingsStore,
 )
-from black_bloc.storage.db import Database
 
 GUILD = 7
 TEST_CHANNEL = 111
@@ -469,16 +468,6 @@ async def choose(bot, actor, view, kind, value):
 async def action_kinds(db):
     cur = await db.conn.execute("SELECT kind FROM action_log ORDER BY id")
     return [row["kind"] for row in await cur.fetchall()]
-
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "v.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 @pytest.fixture

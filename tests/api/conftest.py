@@ -14,6 +14,7 @@ from black_bloc.config import load_settings
 from black_bloc.logkinds import VIA_DISCORD, VIA_WEBSITE
 from black_bloc.settings_store import SettingsStore
 from black_bloc.storage.db import Database
+from tests.conftest import put, take
 
 SECRET = "test-session-secret-long-enough-to-sign"
 ORIGIN = "https://testserver"
@@ -417,35 +418,6 @@ async def module_web(module_guild, tmp_path_factory):
 @pytest.fixture(scope="module")
 def module_client(module_web):
     return TestClient(create_app(module_web), base_url=ORIGIN, headers=SAME_SITE)
-
-
-async def tables_of(db: Any) -> list[str]:
-    cur = await db.conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-    )
-    return [row["name"] for row in await cur.fetchall()]
-
-
-async def take(db: Any) -> dict[str, list[tuple]]:
-    """Every row of every table, so a database can be put back without rebuilding schema v32."""
-    found: dict[str, list[tuple]] = {}
-    for name in await tables_of(db):
-        cur = await db.conn.execute(f"SELECT * FROM {name}")
-        found[name] = [tuple(row) for row in await cur.fetchall()]
-    return found
-
-
-async def put(db: Any, rows: dict[str, list[tuple]]) -> None:
-    """The other half: emptied and refilled on the live connection, which a page copy cannot do."""
-    await db.conn.commit()
-    await db.conn.execute("PRAGMA foreign_keys=OFF")
-    for name, kept in rows.items():
-        await db.conn.execute(f"DELETE FROM {name}")
-        if kept:
-            marks = ", ".join("?" * len(kept[0]))
-            await db.conn.executemany(f"INSERT INTO {name} VALUES ({marks})", kept)
-    await db.conn.commit()
-    await db.conn.execute("PRAGMA foreign_keys=ON")
 
 
 @pytest_asyncio.fixture(scope="module", loop_scope="module")

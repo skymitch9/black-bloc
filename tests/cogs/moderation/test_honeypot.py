@@ -29,7 +29,6 @@ from black_bloc.honeypot import (
     PANEL_TITLE,
 )
 from black_bloc.settings_store import SettingsStore
-from black_bloc.storage.db import Database
 
 GUILD = 7
 TEST_CHANNEL = 111
@@ -305,16 +304,6 @@ def ban_buttons(bot):
 async def hits(db):
     cur = await db.conn.execute("SELECT * FROM honeypot_hits ORDER BY id")
     return list(await cur.fetchall())
-
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "h.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 @pytest.fixture

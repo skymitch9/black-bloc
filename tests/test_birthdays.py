@@ -43,7 +43,6 @@ from black_bloc.birthdays import (
     year_problem,
 )
 from black_bloc.settings_store import BIRTHDAY_TEMPLATE, BIRTHDAY_TZ
-from black_bloc.storage.db import Database
 
 PHOENIX = ZoneInfo(BIRTHDAY_TZ)
 NEW_YORK = ZoneInfo("America/New_York")
@@ -290,16 +289,6 @@ def test_upcoming_orders_by_the_next_local_midnight():
 def test_month_day_reads_as_words():
     assert month_day_text(9, 3) == "September 3"
     assert month_day_text(99, 99) == "December 31"
-
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "b.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 async def test_the_zone_lookup_prefers_the_member_s_own_zone(db):

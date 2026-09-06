@@ -9,8 +9,10 @@
 > ⚠️ **Sections 1–5 are the REPORT, as measured at v93: no test, no source
 > file and no fixture had been changed when they were written, and they are
 > left as they were. What has since been DONE to the suite is in "Half A —
-> measured" below and in the per-decision list at the foot of this file — read
-> those before treating a number in §1–§5 as current.**
+> measured" and "Half B — measured" below, and in the per-decision list at the
+> foot of this file — read those before treating a number in §1–§5 as current.
+> As of 2026-09-06 all seven decisions are settled and every fixture §2.2 names
+> has been scoped.**
 > ⚠️ **NOT measured, and not estimated into any table below:**
 > **(a)** the full serial (`-n 0`) run — started, killed at 15% when it
 > projected to ~25 min against a 15-min budget, and the readings it had taken
@@ -455,12 +457,92 @@ boot; and decision 2, which is untouched.
 
 ---
 
+## Half B — measured
+
+> **Last verified: 2026-09-06**, branch `fixture-scope-half-b` off `b366c2a`
+> (v93 + half A), worktree `C:/lcw/bb-fixtures-b`, same `pytest 9.1.1` / Python
+> 3.12.10 / 32 logical CPUs, and the same machine "Half A — measured" was taken on.
+> ⚠️ **Before and after are BOTH measured here, with the same commands, on this
+> machine. Compare them to each other, never to §1 or to half A's table** — the
+> "before" column below is half A's tree, so half A's saving is already in it.
+> The build is TEST-ONLY — no file under `black_bloc/` or `site/` changed.
+
+| Run | Before (`b366c2a`) | After (half B) | Change |
+|---|---:|---:|---:|
+| Full suite, `-n auto` | **55.00 s** | **25.99 s** | **−29.01 s, −53 %** |
+| Full suite, **serial** | **462.06 s** | **109.90 s** | **−352.16 s, −76 %** |
+| `tests/cogs`, `-n auto` | **29.03 s** | **12.11 s** | −16.92 s, −58 % |
+
+```
+pytest -q -p no:cacheprovider -n auto              # 5187 passed
+pytest -q -p no:cacheprovider                      # 5187 passed, 59 deselected
+pytest -q -p no:cacheprovider tests/cogs -n auto   # 1863 passed
+BB_REVERSE=1 pytest -q -p no:cacheprovider -n auto     # the order guard, parallel
+BB_REVERSE=1 pytest -q -p no:cacheprovider             # the order guard, serial
+```
+
+⚠️ **The full SERIAL run is a first: half A never took one**, so 462.06 s is the
+earliest serial baseline that exists for this suite and there is no v93 serial
+figure to compare it with. Spread across three post-change serial runs was
+109.90 / 113.03 / 147.77 s; the 147.77 s reading was an outlier with nothing else
+knowingly running, so treat ~110 s as the figure and the spread as the noise.
+
+**Test count: 5187 → 5187.** None deleted, none added. `ruff check .` clean.
+
+**The order guard, all three ways, all green at 5187:** forward `-n auto`
+(25.99 s), reversed `-n auto` (27.91 s), reversed **serial** (110.94 s). Forward
+serial is the 109.90 s row above.
+
+**What was built.** One `db` in `tests/conftest.py`: `module_db` connects once per
+module, `module_db_blank` snapshots what a freshly connected database holds, and
+the function-scoped `db` puts that back before each test. `take`/`put` MOVED from
+`tests/api/conftest.py` (the api conftest imports them; nothing is copied) and
+were widened to restore the **schema** as well as the rows. All **35** local `db`
+fixtures were the plain `Database(tmp_path / "x.sqlite3")` + `connect()` pattern —
+none pre-seeded, none read the file back, none subclassed — so all 35 were deleted
+and **none** was kept under a distinct name.
+
+**Two leaks the sharing surfaced, both fixed, neither skipped.**
+**(a)** `tests/cogs/content/test_golive.py` **drops the unique open-session index
+on purpose**, so a row-only rewind handed the next test a database without it and
+`test_a_second_open_session_is_refused_by_the_database` read `assert 2 is None`.
+`put` now compares `sqlite_master` with the snapshot and repairs it.
+**(b)** 13 tests in 8 files `await db.close()` to prove the
+"cannot reach its own database" sentence; the `db` fixture reconnects when it
+finds the database closed, so only those tests pay for a rebuild.
+
+⚠️ **The presence order-dependence half A reported is FIXED, and it was never
+about fixtures.** `discord.py`'s `load_extension` does not consult `sys.modules` —
+it builds a **new module object** and hangs it there. `tests/test_selftest_panels.py:live`
+loads all 19 cogs, so afterwards `sys.modules["black_bloc.cogs.presence"]` is not
+the object `tests/cogs/test_presence.py` imported `Presence` and `reapply_presence`
+from at collection time; reversed, that file runs first and
+`monkeypatch.setattr("black_bloc.cogs.presence.update_status", …)` then patches a
+module the running cog no longer lives in. Found by bisecting the reversed order
+to the file. Fixed **test-side** — an autouse fixture in `tests/conftest.py` puts
+the collection-time module objects back after every test. **Nothing under
+`black_bloc/` was touched**; the production behaviour is `discord.py`'s and is
+right for a real bot, which never imports a cog by name from outside.
+
+⚠️ **NOT verified in half B:** coverage (no `--cov` run, same as §1 and half A);
+the `tests/live/` suite; anything against live Discord, the live dashboard or a
+real boot; and the **eleven files that still build a `Database` inline** rather
+than in a fixture (`tests/storage/test_db.py` by design, plus `test_actionlog.py`,
+`test_chat_llm.py`, `test_chat_memory.py`, `test_knowledge.py`, `test_llm.py`,
+`test_personas.py`, `test_selftest.py`, `test_selftest_panels.py`,
+`test_settings_panel.py`, `test_settings_store.py`) — decision 2 named the
+fixtures, so only the fixtures were changed.
+
+---
+
 ## Decisions for the owner
 
 Each is a single yes/no. The owner answered **yes to all seven, 2026-09-05.**
 **Decisions 1, 3, 4 and 5 are DONE (half A, branch `fixture-scope-half-a`, see
-"Half A — measured" below). Decision 2 is PENDING — it is half B.** Decisions 6
-and 7 were "leave it alone" and need no work.
+"Half A — measured" above). Decision 2 is DONE too (half B, branch
+`fixture-scope-half-b`, see "Half B — measured" above).** Decisions 6
+and 7 were "leave it alone" and need no work. **Every one of the seven is now
+settled; nothing on this list is waiting on anybody.**
 
 1. ✅ **DONE (half A).** **Scope `test_contract.py`'s `seeded` fixture to the module** (seed once,
    run all 149 routes against it) — **saves ~14.7 s of the 79.1 s wall clock,
@@ -468,11 +550,16 @@ and 7 were "leave it alone" and need no work.
    writes state could affect a later one; the file's own comment ("every
    contract entry runs against a fresh seed") was a deliberate choice. Coverage
    lost: **none.** Yes / no?
-2. ⏳ **PENDING — this is half B.** **Make the `db` fixture session- or module-scoped** (build schema v32 once,
+2. ✅ **DONE (half B, branch `fixture-scope-half-b`, see "Half B — measured" above).**
+   **Make the `db` fixture session- or module-scoped** (build schema v32 once,
    roll back or truncate per test) across the 46 files that use it — **frees up
    to ~168 s of CPU.** Trades: real work in 46 files; tests stop being
    isolated-by-construction and rely on a reset that must itself be correct.
    Coverage lost: **none.** Yes / no?
+   **Built as ONE module-scoped `db` in `tests/conftest.py`, rewound per test; 35
+   local fixtures deleted, none kept under a distinct name. Measured: full
+   `-n auto` 55.00 s → 25.99 s, full serial 462.06 s → 109.90 s, 5187 tests either
+   way.**
 3. ✅ **DONE (half A).** **Make the api `client` / `create_app()` fixture module-scoped** — **frees up
    to ~86 s of CPU** across 1035 tests. Trades: the app is shared inside a
    module, so a test that mutates app state leaks. Coverage lost: **none.**
