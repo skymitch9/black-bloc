@@ -29,6 +29,9 @@ from black_bloc.settings_store import (
     KEY_HELP,
     KEY_TYPES,
     LIVE_NOW_CHANNEL_ID,
+    LOGS_DEFAULT,
+    LOGS_MAX,
+    LOGS_MIN,
     MEMBER_ROLE_ID,
     MODMAIL_CATEGORY_ID,
     MODMAIL_LOG_CHANNEL_ID,
@@ -1372,6 +1375,41 @@ async def test_a_saved_draft_is_kept_a_fortnight_and_zero_days_keeps_it_for_ever
     with pytest.raises(SettingError):
         coerce_value("poll_draft_days", "14")
     assert parse_value("poll_draft_days", "30") == 30
+
+
+async def test_a_logs_button_opens_on_ten_lines_and_the_bounds_are_the_embeds_room(store):
+    """The step Show more adds is the same number, so one setting decides both."""
+    from black_bloc.settings_panel import reachable_on_the_panel
+
+    assert store.get(7, "logs_count") == LOGS_DEFAULT == 10
+    assert KEY_TYPES["logs_count"] == "int"
+    assert f"from {LOGS_MIN} to {LOGS_MAX}" in KEY_HELP["logs_count"]
+    assert "Show more" in KEY_HELP["logs_count"]
+    assert reachable_on_the_panel("logs_count")
+    await store.set(7, "logs_count", LOGS_MAX)
+    assert store.get(7, "logs_count") == LOGS_MAX
+    await store.set(7, "logs_count", LOGS_MIN)
+    with pytest.raises(SettingError):
+        coerce_value("logs_count", LOGS_MAX + 1)
+    with pytest.raises(SettingError):
+        coerce_value("logs_count", LOGS_MIN - 1)
+    with pytest.raises(SettingError):
+        coerce_value("logs_count", "10")
+    assert parse_value("logs_count", "25") == 25
+
+
+async def test_a_logs_button_opens_on_everything_until_a_lead_says_otherwise(store):
+    from black_bloc.settings_panel import reachable_on_the_panel
+
+    assert store.get(7, "logs_important_only") is False
+    assert KEY_TYPES["logs_important_only"] == "bool"
+    assert "Show everything" in KEY_HELP["logs_important_only"]
+    assert reachable_on_the_panel("logs_important_only")
+    await store.set(7, "logs_important_only", True)
+    assert store.get(7, "logs_important_only") is True
+    with pytest.raises(SettingError):
+        coerce_value("logs_important_only", "true")
+    assert parse_value("logs_important_only", "true") is True
 
 
 async def test_the_panel_keeps_a_members_own_requests_to_themselves_until_a_lead_says_otherwise(
