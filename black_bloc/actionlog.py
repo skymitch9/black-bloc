@@ -264,6 +264,13 @@ def action_line(row: Any) -> str:
     return f"{stamp(row['at'])} · {body} · {said_via}"
 
 
+def lines_for(rows: list[Any], important_only: bool) -> list[str]:
+    """The one rendering of a page of rows; the Logs panel reads the rows itself and calls this."""
+    if not rows:
+        return [NOTHING_IMPORTANT if important_only else NOTHING_YET]
+    return [action_line(row) for row in rows]
+
+
 async def recent_lines(
     db: Any,
     guild_id: int,
@@ -273,9 +280,7 @@ async def recent_lines(
 ) -> list[str]:
     """The one rendering of an action log line; every `/… logs` command is a caller."""
     rows = await recent_rows(db, guild_id, feature, limit, important_only)
-    if not rows:
-        return [NOTHING_IMPORTANT if important_only else NOTHING_YET]
-    return [action_line(row) for row in rows]
+    return lines_for(rows, important_only)
 
 
 def logs_embed(feature: str, lines: list[str], important_only: bool, origin: str) -> discord.Embed:
