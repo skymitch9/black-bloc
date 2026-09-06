@@ -1,10 +1,10 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-06** — rows **`LB-a`–`LB-e`** added by the LOGS BUTTONS build on branch
-> `logs-buttons` (off `main` at `b428236`), which puts **Show more** and **Important only** under
-> every feature's Logs list; lettered because the conductor numbers them at the merge. Schema
-> UNCHANGED at **33**; registry keys **189 → 191**. Before that,
+> **2026-09-06 11:45** — rows **305–309** (were `LB-a`–`LB-e`, LOGS BUTTONS, merge `42d2e6e`) and
+> **310–314** (were `RW-a`–`RW-e`, RECURRENCE CREATE FROM THE WEBSITE, merge `c915ade`) numbered at the
+> merge and shipping as **v96**. Schema UNCHANGED at **33**; registry keys **189 → 191**; mock routes
+> **149 → 150**. Rows 300–304 (drafts) shipped as v94 (and v95, the same commit again). Before that,
 > **2026-09-06** — rows **`PD-a`–`PD-e`** added by the SAVED POLL DRAFTS build on branch
 > `poll-drafts` (off `main` at `9cd79d6`, v93); they are lettered because the conductor numbers
 > them at the merge, and schema moves **32 → 33**. Before that,
@@ -1016,7 +1016,7 @@ Written on `poll-drafts`, 2026-09-06, off `main` at `9cd79d6` (v93), in a worktr
 | **303** (was `PD-d`) | With a draft saved by somebody else, `/poll` as a Lead ▸ the **Saved drafts…** select ▸ pick theirs ▸ **Discard** ▸ **Yes, discard it** ▸ type a reason | the card shows whose it is, what they typed and when they saved it; after the reason box the panel says it is discarded, and **they get a DM naming the poll and your reason**. Staff cannot post or edit somebody else's draft — Discard and Back are the only buttons, because posting one would forge its creator |
 | **304** (was `PD-e`) | `/poll` ▸ **Settings** ▸ **Drafts: on** (bottom row) to turn them off, then **Create** | **Save for later** is gone, so is **Resume draft** and the panel's draft line — and the draft itself is NOT deleted: turn Drafts back on and it is still there. **Numbers…** carries *"Days a saved draft is kept (0 for ever)"*, default **14**; a draft older than that is dropped by the poll sweep (a `poll.draft_expired` line on the Logs page), and drafts turned off never age out |
 
-## The Logs button's two knobs, as buttons — rows `LB-a`–`LB-e`
+## The Logs button's two knobs, as buttons — rows 305–309 (were `LB-a`–`LB-e`)
 
 Written on `logs-buttons`, 2026-09-06, off `main` at `b428236`, in a worktree at
 `C:/lcw/bb-logs-buttons`. Built to
@@ -1026,17 +1026,17 @@ two new registry keys (**189 → 191**), which open a new **Logs** section on th
 Settings page. ⚠️ **Nothing below has met live Discord**; `python -m black_bloc` was NOT booted
 (no token in a worktree). The verification is `pytest` (**5252 passed**, was 5228), `ruff check .`,
 forward and `BB_REVERSE=1`, and `node site/mock/check.mjs` (17 pages / 149 routes / 14 core
-settings, unchanged). Rows are lettered because the conductor numbers them at the merge.
+settings, unchanged). Merged as `42d2e6e` on 2026-09-06 11:36; on `main` the three merges together gate at **5267 passed** and 17 / 150 / 14. Shipping as **v96** (deploys.log has the verified line).
 
 | # | Do this | Expect |
 |---|---|---|
-| **`LB-a`** | `/poll` in `#mute-me-bot-test-spam` ▸ **Logs** | the log list as before, and now **two buttons under it**: **Show more** and **Important only**. ⚠️ If the log holds fewer than ten lines, **Show more is not there at all** — there is nothing more to show, and a button that would do nothing is not drawn |
-| **`LB-b`** | Press **Show more** | the SAME message grows to 20 lines — no second reply appears. Press again for 30, 40, 50. **Show more disappears** at 50, or earlier the moment a press returns fewer lines than it asked for |
-| **`LB-c`** | Press **Important only** | the list shrinks to refusals, errors and staff moves, the embed title gains *"— important only"*, and the button itself now reads **Show everything**. Press it again and everything comes back. An empty filtered list says *"Nothing important has been logged for this yet."* rather than looking broken |
-| **`LB-d`** | Leave the list open for ten minutes without pressing anything, then press a button | the buttons are greyed out and the footer reads *"This log has gone quiet — press Logs again"*. The ten minutes is the same `settings_panel_minutes` number `/settings` uses — no third setting was added |
-| **`LB-e`** | Dashboard ▸ **Settings** ▸ the **Logs** section ▸ set `logs_count` to **25** (and try `logs_important_only` on) | the NEXT Logs button you press anywhere — `/poll`, `/request`, `/mod`, any of the eighteen — opens on 25 lines, and **Show more** adds 25 at a time. With `logs_important_only` on, every list opens already filtered with **Show everything** beside it. `/settings` ▸ **A setting group…** ▸ **Logs** reaches both from Discord too |
+| **305** (was `LB-a`) | `/poll` in `#mute-me-bot-test-spam` ▸ **Logs** | the log list as before, and now **two buttons under it**: **Show more** and **Important only**. ⚠️ If the log holds fewer than ten lines, **Show more is not there at all** — there is nothing more to show, and a button that would do nothing is not drawn |
+| **306** (was `LB-b`) | Press **Show more** | the SAME message grows to 20 lines — no second reply appears. Press again for 30, 40, 50. **Show more disappears** at 50, or earlier the moment a press returns fewer lines than it asked for |
+| **307** (was `LB-c`) | Press **Important only** | the list shrinks to refusals, errors and staff moves, the embed title gains *"— important only"*, and the button itself now reads **Show everything**. Press it again and everything comes back. An empty filtered list says *"Nothing important has been logged for this yet."* rather than looking broken |
+| **308** (was `LB-d`) | Leave the list open for ten minutes without pressing anything, then press a button | the buttons are greyed out and the footer reads *"This log has gone quiet — press Logs again"*. The ten minutes is the same `settings_panel_minutes` number `/settings` uses — no third setting was added |
+| **309** (was `LB-e`) | Dashboard ▸ **Settings** ▸ the **Logs** section ▸ set `logs_count` to **25** (and try `logs_important_only` on) | the NEXT Logs button you press anywhere — `/poll`, `/request`, `/mod`, any of the eighteen — opens on 25 lines, and **Show more** adds 25 at a time. With `logs_important_only` on, every list opens already filtered with **Show everything** beside it. `/settings` ▸ **A setting group…** ▸ **Logs** reaches both from Discord too |
 
-## Recurrence create, website — rows `RW-a`–`RW-e`
+## Recurrence create, website — rows 310–314 (were `RW-a`–`RW-e`)
 
 Written on `recur-web`, 2026-09-06, off `main` at `b428236`, in a worktree at
 `C:/lcw/bb-recur-web`. Built to
@@ -1048,15 +1048,15 @@ worktree). The verification is `pytest` (**5241 passed**, was 5226) forward and
 `BB_REVERSE=1`, `ruff check .`, and `node site/mock/check.mjs`
 (17 pages / **150** routes / 14 core settings, was 149). The page half WAS driven in a real
 browser against the mock — the block, the refusal and the saved row were measured there
-rather than reasoned about.
+rather than reasoned about. Merged as `c915ade` on 2026-09-06 11:36 (the two `## …` sections above and in `code-notes.md` were the only conflicts — both sides kept). Shipping as **v96**.
 
 | # | Do this | Expect |
 |---|---|---|
-| **RW-a** | Dashboard → https://blackbloc.heygabi.ai/polls.html → **Create a poll** → write a question and two options, pick **#mute-me-bot-test-spam**, then the **Repeat** select (directly under the Channel / Ping / Voters / Results / Thread row) → **Every week** | a row of day, time and timezone fields appears, the sentence under the form changes to *"Saves “…” as a template that opens in #mute-me-bot-test-spam every Saturday at 19:00 …"*, and the button relabels itself from **Create the poll** to **Save the repeating poll**. ⚠️ Only the field that applies is drawn — **Which day** for weekly, **Day of the month** for monthly, neither for daily |
-| **RW-b** | Fill **Which day** = Saturday, **Time of day** = `19:00`, leave **Timezone** blank, and press **Save the repeating poll** | the **Repeating** section gains the new row — *"every Saturday at 19:00 America/Phoenix"* under **How often**, a real time under **Next** — with a green sentence above it saying when it first opens, and the form clears itself back to **Doesn't repeat**. ⚠️ **Nothing is posted**: a recurrence is the template that makes polls, not a poll. Discord stays quiet until the first Saturday |
-| **RW-c** | Back at the form, set **Repeat** → **Every week** again and type `half seven` in **Time of day**, then press the button | a red sentence: *"**half seven** is not a time of day Black Bloc can read, so nothing was saved. Write it on the 24-hour clock — `09:00`, `19:30`."* ⚠️ And the **Repeating** list is unchanged — the cadence is proved BEFORE any row is written, so a bad one leaves no half-made poll behind. Same for a weekday it cannot read and a timezone this machine does not know |
-| **RW-d** | Set **Kind** → **Date / availability** and look at the form | the whole **Repeat** block is gone. A date poll cannot repeat — its slots are fixed days, and the second time round it would ask about a day that has been and gone — so the control nobody can use is not drawn rather than shown and then refused |
-| **RW-e** | `/poll` in `#mute-me-bot-test-spam`, as a Lead | the panel's counts line includes the recurrence made from the website, and picking it offers the same **stop-repeating** card a Discord-made one gets — one feature, two front doors. Then the **Logs** section at the foot of the polls page shows **one** `poll.recur_created` line for it carrying `via: website`, beside the `poll.created` line for the row itself: the same pair the Discord path leaves, spelled `web.` |
+| **310** (was `RW-a`) | Dashboard → https://blackbloc.heygabi.ai/polls.html → **Create a poll** → write a question and two options, pick **#mute-me-bot-test-spam**, then the **Repeat** select (directly under the Channel / Ping / Voters / Results / Thread row) → **Every week** | a row of day, time and timezone fields appears, the sentence under the form changes to *"Saves “…” as a template that opens in #mute-me-bot-test-spam every Saturday at 19:00 …"*, and the button relabels itself from **Create the poll** to **Save the repeating poll**. ⚠️ Only the field that applies is drawn — **Which day** for weekly, **Day of the month** for monthly, neither for daily |
+| **311** (was `RW-b`) | Fill **Which day** = Saturday, **Time of day** = `19:00`, leave **Timezone** blank, and press **Save the repeating poll** | the **Repeating** section gains the new row — *"every Saturday at 19:00 America/Phoenix"* under **How often**, a real time under **Next** — with a green sentence above it saying when it first opens, and the form clears itself back to **Doesn't repeat**. ⚠️ **Nothing is posted**: a recurrence is the template that makes polls, not a poll. Discord stays quiet until the first Saturday |
+| **312** (was `RW-c`) | Back at the form, set **Repeat** → **Every week** again and type `half seven` in **Time of day**, then press the button | a red sentence: *"**half seven** is not a time of day Black Bloc can read, so nothing was saved. Write it on the 24-hour clock — `09:00`, `19:30`."* ⚠️ And the **Repeating** list is unchanged — the cadence is proved BEFORE any row is written, so a bad one leaves no half-made poll behind. Same for a weekday it cannot read and a timezone this machine does not know |
+| **313** (was `RW-d`) | Set **Kind** → **Date / availability** and look at the form | the whole **Repeat** block is gone. A date poll cannot repeat — its slots are fixed days, and the second time round it would ask about a day that has been and gone — so the control nobody can use is not drawn rather than shown and then refused |
+| **314** (was `RW-e`) | `/poll` in `#mute-me-bot-test-spam`, as a Lead | the panel's counts line includes the recurrence made from the website, and picking it offers the same **stop-repeating** card a Discord-made one gets — one feature, two front doors. Then the **Logs** section at the foot of the polls page shows **one** `poll.recur_created` line for it carrying `via: website`, beside the `poll.created` line for the row itself: the same pair the Discord path leaves, spelled `web.` |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that

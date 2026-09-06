@@ -8,6 +8,7 @@
 > `SCHEMA_VERSION` is imported from `black_bloc/storage/db.py`, and the site figures come from
 > `node site/mock/check.mjs` against `site/mock/server.mjs`.
 >
+> **2026-09-06 (logs buttons `42d2e6e` + recurrence create from the website `c915ade`, v96):** schema unchanged at **33**; registry keys **189 → 191** (`logs_count`, `logs_important_only` — a new `logs` group, **23** groups); mock routes **149 → 150** (`POST /api/polls/recurrences`); new module `black_bloc/logs_panel.py`; tests **5226 → 5267**. Before that:
 > **2026-09-06 (saved poll drafts, merged `8405bea`, v94):** schema **32 → 33** (`poll_drafts`)
 > and registry keys **187 → 189** (`poll_drafts`, `poll_draft_days`), both re-measured by
 > importing them. Nothing else in this table moved — no cog, no command, no feature, and the

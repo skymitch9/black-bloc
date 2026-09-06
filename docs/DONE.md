@@ -9,6 +9,66 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-06 — Logs buttons (merge `42d2e6e`, branch `logs-buttons`) and Create-a-recurring-poll from the website (merge `c915ade`, branch `recur-web`) landed together, shipping as v96 — deploy verification recorded on `deploys.log`. Owner decisions Q2 "2. A", Q3 "3. B".
+
+> **Landed 2026-09-06 11:36 Phoenix**, both merges pushed BEFORE this docs commit. Two Opus agents in
+> parallel, hand-made worktrees off `b428236`: `C:/lcw/bb-logs-buttons` (244k / 185 calls / 30 min against
+> 120–180k) and `C:/lcw/bb-recur-web` (274k / 147 calls / 34 min against 150–220k) — both over estimate,
+> both by the tests (+24 and +15). The only merge conflicts were the two agents appending sections to the
+> foot of `sweeps.md` and `code-notes.md`; both sides kept. Gate on `main` after both: ruff clean,
+> **5226 → 5267** green forward and `BB_REVERSE=1` (29.5 s / 30.2 s), mock `ok - 17 pages, 150 routes,
+> 14 core settings`. Sweep rows **305–309** (were `LB-a`–`LB-e`) and **310–314** (were `RW-a`–`RW-e`).
+> Registry keys **189 → 191**, settings groups **22 → 23** (a new `logs` group), mock routes **149 → 150**,
+> schema unchanged at 33.
+
+- **Q3 — the Logs button's two knobs, as buttons (owner: "3. B", buttons ON the list rather than a modal
+  first).** `black_bloc/logs_panel.py` (`LogsPanel(Panel)`, `MORE`/`ONLY_IMPORTANT`/`EVERYTHING`,
+  `buttons_for`, `refresh`, `panel_for`); `actionlog.send_logs` — still the one body behind all 18 call
+  sites (an AST guard asserts they pass only the feature) — builds the panel and sends it with `view=`;
+  each press edits the SAME ephemeral message with `allowed_mentions=none()`; **Show more** is not drawn at
+  `LOGS_MAX` or when the last read came back short; the toggle's label is the move it would make; staff
+  and the database are re-asked on every press (row 290 precedent); timeout through `Panel` on the
+  existing `settings_panel_minutes` key (no third key — a test asserts `logs_panel_minutes` is absent).
+  Keys `logs_count` (int 10, `LOGS_MIN`..`LOGS_MAX`) and `logs_important_only` (bool False) in
+  `settings_store.py` with `KEY_HELP` + `labels.js` + mock `SETTING_SPECS` + `contract.json` min/max —
+  they open a **Logs** section on settings.html and under `/settings` ▸ *A setting group…*. Ten deviations
+  in `docs/info/logs-buttons-design.md` § Deviations, two worth knowing: the agent had to edit
+  `contract.json` (fenced off for the other agent) because a bounded key cannot exist without its
+  min/max rows there; three cog tests that asserted "Logs did not re-render the panel" read a fake
+  attribute their harness also set inside `original_response()`, which `send_logs` now calls so a
+  timed-out list can disable itself — re-expressed, behaviour unchanged. `LOGS_MIN/MAX/DEFAULT` moved into
+  `settings_store.py`; `recent_lines` split into `lines_for`.
+- **Q2 — create a recurring poll from the website (owner: "2. A", a dashboard form rather than
+  Discord-only).** `POST /api/polls/recurrences` in `api/tools/polls.py`: `_wanted_cadence` proves the
+  cadence (`cadence_trouble`, `cadence_token`, `next_occurrence`) BEFORE any row exists, so a bad one
+  leaves no poll behind (a guard broken on purpose failed four tests on the row count); then the shared
+  `_asked_for` (extracted from `poll_create`, no behaviour change) → `store_poll(status=RECURRING,
+  via=VIA_WEBSITE)` → the cog's own `save_recurrence(..., actor_for(...), via=VIA_WEBSITE)` — ONE
+  `poll.recur_created` row with `via: website`. Gates: **no `poll_recurring` key exists**; the cog gates
+  on `polls_are_on` + `may_create` + staff, so the route adds `409 polls_off` (`POLLS_OFF`) beside the
+  router's `staff_dependency`, plus the test-channel refusal, plus a gate the design did not name — a
+  DATE poll cannot recur (`RECUR_NOT_A_DATE`, 400, and the page hides the block for that kind). The page:
+  `createForm` gains a **Repeat** select directly under the Channel/Ping/Voters/Results/Thread row; only
+  the field that applies is drawn (weekday / day-of-month / neither); the button relabels to *Save the
+  repeating poll*; the outcome lands on the Repeating section and the form clears; tz defaults by being
+  BLANK so `timezones.DEFAULT_TZ` stays the one home (no new key — no new decision, checklist 33). The
+  agent drove the page half in a real browser against the mock. Eight deviations in
+  `docs/info/recurrence-web-create-design.md` § Deviations. Mock mirrors the visible refusals but not
+  `next_occurrence` (`next_at = daysAhead(1)`, the resume route's existing simplification).
+- **Reported by the agents, NOT fixed (now on TODO):** 🔴 `POST /api/polls` (one-off create) does not
+  check `poll_mode` — a staffer can create a poll from the website while polls are off in Discord; the
+  new route gates it, the old one was deliberately left alone. The `logs` namespace makes **23** settings
+  groups against `/settings`' 25-option select cap. Mock `state.pollRecurrences` seeds ids 4/5 inside
+  `state.polls`' id space (no collision, one table in the bot). Chrome `computer left_click` by ref landed
+  off-screen on polls.html (button rect at `x = -90`) — `javascript_tool` clicked it.
+- **v94/v95 note (supersedes the DONE entry below and the 10:58 TODO header):** v94 was deployed by the
+  OWNER at 11:13 (Fly v94, `b428236`) after the session's detached run hung; he ran the script twice, so
+  Fly **v95 is the same commit** 72 s later. Both boots: `database ready`, `synced 29`, `selftest 107 ok 0
+  failed`, `/health` ready. There is NO "migration to 33" log line to look for — `db.py` logs only when a
+  migration adds a column; a new table is silent. The hung PIDs (19840 powershell / 67456 python, started
+  10:42:49) were still alive at 11:37; the v96 detached run passed its gate in 27.9 s, so the hang was a
+  one-off, cause unknown.
+
 ## 2026-09-06 — Saved poll drafts landed as merge `8405bea` (branch `poll-drafts`, schema 32 → 33, shipped as v94 — deploy verification recorded on `deploys.log`). Owner decision Q1: "B but only save 1 draft per person max".
 
 > **Landed 2026-09-06 10:45 Phoenix.** Opus, hand-made worktree `C:/lcw/bb-poll-drafts` off `9cd79d6`,
