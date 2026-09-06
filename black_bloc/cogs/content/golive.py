@@ -52,7 +52,7 @@ from ...panels import (
     Panel,
     answer,
     capped_placeholder,
-    db_ready,
+    opened,
     retire,
     still_staff,
 )
@@ -1250,13 +1250,11 @@ async def run_move(interaction: discord.Interaction, move: Any, previous: Any = 
     if action == "streamers":
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         await render_streamers(interaction, None, previous)
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     if action == "refresh":
         await render_panel(interaction, previous)
@@ -1289,8 +1287,7 @@ class LinkModal(AnswersErrors, discord.ui.Modal, title=LINK_MODAL_TITLE):
             self.channel.default = str(login)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         bot = interaction.client
         given = str(self.channel)
@@ -1353,8 +1350,7 @@ class ModePick(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         said = await set_mode(
             interaction.client, interaction.guild, interaction.user, self.values[0]
@@ -1432,8 +1428,7 @@ class StreamerPick(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         await render_streamers(interaction, int(self.values[0]), self.view)
 
@@ -1457,8 +1452,7 @@ class TheirMoveButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         if self.action == "unlink":
             await render_unlink_confirm(interaction, self.user_id, self.view)
@@ -1502,8 +1496,7 @@ class UnlinkYesButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         said = await their_move(
             interaction.client, interaction.guild, interaction.user, self.user_id, "unlink"
@@ -1520,8 +1513,7 @@ class StreamersBackButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         await render_streamers(interaction, self.user_id, self.view)
 
@@ -1531,8 +1523,7 @@ class BackButton(discord.ui.Button):
         super().__init__(label="Back", style=discord.ButtonStyle.secondary, row=row)
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         await render_panel(interaction, self.view)
 

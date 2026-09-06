@@ -142,10 +142,6 @@ NOTHING_TO_WITHDRAW = (
     "You have nothing waiting on **{title}**, so there was nothing to take back. `/apply` "
     "sends one."
 )
-NOT_YOUR_APPLICATION = (
-    "That application belongs to somebody else, so nothing was changed. `/apply` lists your "
-    "own."
-)
 NOTHING_TO_DECIDE = (
     "Black Bloc has no record of that application any more, so nothing was changed. The Role "
     "menus page lists the ones it still has."
@@ -178,7 +174,6 @@ ROLE_REFUSED_AFTER_DECISION = (
     "needs Manage Roles and its own role has to sit above it in Server Settings → Roles. Fix "
     "that, then hand it over from `/rolemenu` ▸ **Grants…** ▸ **Give somebody a role…**."
 )
-NO_REVIEW_CHANNEL = "no_review_channel"
 NOTHING_PENDING = "Nobody is waiting on staff right now."
 NO_FORMS_YET = (
     "This server has no application forms yet. `/apply` → **New form** makes the "

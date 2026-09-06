@@ -1004,6 +1004,22 @@ async def test_a_staffer_with_something_of_their_own_waiting_can_take_it_back(bo
     assert "application.withdrawn" in await action_kinds(db)
 
 
+async def test_the_take_it_back_confirm_card_silences_mentions(bot, db, lead):
+    form = await a_form(db)
+    await pending_row(bot, db, form, lead)
+
+    interaction = await open_panel(bot, lead)
+    withdraw = picks(interaction, WithdrawPick)[0]
+    picking = FakeInteraction(bot, lead)
+    withdraw._values = [str(form["id"])]
+    await withdraw.callback(picking)
+    allowed = picking.rendered.get("allowed_mentions")
+
+    assert [one.label for one in picking.view.children] == ["Yes, take it back", "Keep it"]
+    assert allowed is not None
+    assert (allowed.everyone, allowed.users, allowed.roles) == (False, False, False)
+
+
 # The application card — the table is data, and every status renders its own row.
 
 

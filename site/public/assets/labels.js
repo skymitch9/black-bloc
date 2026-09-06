@@ -86,6 +86,7 @@ export const LABELS = {
   events_create_scheduled: 'Whether Discord gets a scheduled event too',
   events_channel_retention_days: 'How long an event keeps its channel',
   events_max_late_minutes: 'How late an event may start before it is dropped',
+  event_panel_minutes: 'How long the /event panel stays live',
   events_log_level: 'How much of events is repeated into Discord',
 
   poll_mode: 'Whether people can run polls',
@@ -99,6 +100,7 @@ export const LABELS = {
   poll_archive_days: 'How long a finished poll waits before it is archived',
   poll_archive_drop_votes: 'Whether archiving forgets who voted',
   poll_date_labels: 'How dates are written on a poll',
+  poll_panel_minutes: 'How long the /poll panel stays live',
   poll_log_level: 'How much of polls is repeated into Discord',
 
   birthday_mode: 'Whether the bot wishes people happy birthday',
@@ -107,6 +109,7 @@ export const LABELS = {
   birthday_color: 'What colour a birthday embed is',
   birthday_role_id: 'Which role someone wears on their birthday',
   birthday_show_age: 'Whether the age is said out loud',
+  birthday_panel_minutes: 'How long the /birthday panel stays live',
   birthday_log_level: 'How much of birthdays is repeated into Discord',
 
   modmail_enabled: 'Whether the bot answers DMs',
@@ -162,6 +165,7 @@ export const LABELS = {
   request_review_by_other: 'Whether somebody else has to check a request before it is done',
   request_check_fallback_channel: 'Ping in the channel when a check-DM is refused',
   request_check_on_ready: 'Ask the requester to check automatically at ready',
+  request_panel_minutes: 'How long the /request panel stays live',
   request_log_level: 'How much of requests is repeated into Discord',
 
   cost_hosting_usd: 'What hosting costs a month, off the invoice',

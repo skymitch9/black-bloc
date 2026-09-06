@@ -19,12 +19,13 @@ from ...panels import (
     capped_placeholder,
     confirm,
     confirm_items,
-    db_ready,
     db_up,
+    opened,
     option_label,
     retire,
     still_staff,
 )
+from ...panels import site_page_url as library_site_page_url
 from ...settings_store import (
     DB_UNAVAILABLE,
     GUILD_ONLY,
@@ -143,7 +144,7 @@ PANEL_INTRO = (
     "out. Nothing already published is ever announced."
 )
 SITE_BUTTON = "Open on the site"
-SITE_PAGE = "golive.html"
+FEATURE = "youtube"
 PICK_A_CHANNEL = "Somebody's channel…"
 MODE_PLACEHOLDER = "Announcements are…"
 MODE_LABELS = {
@@ -269,8 +270,7 @@ def setup_words(store: Any, guild_id: int) -> str:
 
 
 def site_page_url(origin: Any) -> str:
-    kept = str(origin or "").strip().rstrip("/")
-    return f"{kept}/{SITE_PAGE}" if kept else ""
+    return library_site_page_url(origin, FEATURE) or ""
 
 
 def add_site_button(view: Any, bot: Any, row: int) -> None:
@@ -1181,8 +1181,7 @@ async def render_forget(interaction: discord.Interaction, previous: Any = None) 
 async def back_to_panel(
     interaction: discord.Interaction, previous: Any = None, *, picking: bool = False
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     await render_panel(interaction, previous, picking=picking)
 
@@ -1192,8 +1191,7 @@ async def open_card(
 ) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     await render_card(interaction, member_id, previous)
 
@@ -1201,8 +1199,7 @@ async def open_card(
 async def open_setup(interaction: discord.Interaction, previous: Any = None) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     await render_setup(interaction, previous)
 
@@ -1210,8 +1207,7 @@ async def open_setup(interaction: discord.Interaction, previous: Any = None) -> 
 async def open_forget(interaction: discord.Interaction, previous: Any = None) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     await render_forget(interaction, previous)
 
@@ -1219,8 +1215,7 @@ async def open_forget(interaction: discord.Interaction, previous: Any = None) ->
 async def open_confirm(
     interaction: discord.Interaction, move: PanelMove, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     embed, _row, _rows = await panel_embed(bot, interaction.guild, interaction.user)
@@ -1254,8 +1249,7 @@ async def run_link(
 ) -> None:
     if not mine and not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     try:
         said, _row, _counted = await link_channel(
@@ -1280,8 +1274,7 @@ async def run_unlink(
 ) -> None:
     if not mine and not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     said, _row = await unlink_channel(
         interaction.client, interaction.guild, interaction.user, member, note=note
@@ -1298,8 +1291,7 @@ async def run_mode(
 ) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     said, _row = await set_mode(
         interaction.client, interaction.guild, interaction.user, value
@@ -1317,8 +1309,7 @@ async def run_setup(
 ) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     said, _row = await save_setup(
         interaction.client, interaction.guild, interaction.user, changes

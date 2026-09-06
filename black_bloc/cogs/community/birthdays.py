@@ -59,7 +59,7 @@ from ...birthdays import (
     year_problem,
 )
 from ...command_errors import AnswersErrors
-from ...panels import Panel, answer, confirm, confirm_items, db_ready, retire, still_staff
+from ...panels import Panel, answer, confirm, confirm_items, opened, retire, still_staff
 from ...settings_store import (
     BIRTHDAY_MODES,
     DB_UNAVAILABLE,
@@ -566,8 +566,7 @@ async def said_after(interaction: discord.Interaction, said: str) -> None:
 
 
 async def back_to_panel(interaction: discord.Interaction, previous: Any = None) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     await render_panel(interaction, previous)
 
@@ -575,8 +574,7 @@ async def back_to_panel(interaction: discord.Interaction, previous: Any = None) 
 async def open_card(
     interaction: discord.Interaction, member: Any, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     await render_card(interaction, member, previous)
 
@@ -600,8 +598,7 @@ async def open_confirm(
 
 
 async def open_remove_confirm(interaction: discord.Interaction, previous: Any = None) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     row = await get_birthday(interaction.client.db, interaction.user.id)
     if row is None:
@@ -626,8 +623,7 @@ async def open_forget_confirm(
 ) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     await open_confirm(
         interaction,
@@ -647,8 +643,7 @@ async def open_role_clear_confirm(
 ) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     await open_confirm(
         interaction,
@@ -666,8 +661,7 @@ async def open_role_clear_confirm(
 async def run_opt(
     interaction: discord.Interaction, opted_in: bool, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     cog = interaction.client.get_cog(COG_NAME)
     said = await change_opt(cog, interaction.guild, interaction.user, opted_in=opted_in)
@@ -676,8 +670,7 @@ async def run_opt(
 
 
 async def run_remove(interaction: discord.Interaction, previous: Any = None) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     cog = interaction.client.get_cog(COG_NAME)
     said = await forget_birthday(cog, interaction.guild, interaction.user)
@@ -690,8 +683,7 @@ async def run_forget(
 ) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     cog = interaction.client.get_cog(COG_NAME)
     said = await forget_birthday(
@@ -706,8 +698,7 @@ async def run_mode(
 ) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     said = await set_mode(interaction.client, interaction.guild, interaction.user, mode)
     await render_panel(interaction, previous)
@@ -717,8 +708,7 @@ async def run_mode(
 async def run_clear_role(interaction: discord.Interaction, previous: Any = None) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     said = await clear_role(interaction.client, interaction.guild, interaction.user)
     await render_panel(interaction, previous)
@@ -728,8 +718,7 @@ async def run_clear_role(interaction: discord.Interaction, previous: Any = None)
 async def send_month(interaction: discord.Interaction, month: int) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     rows = await rows_for_guild(bot.db, interaction.guild.id)
@@ -748,8 +737,7 @@ async def send_month(interaction: discord.Interaction, month: int) -> None:
 async def send_status(interaction: discord.Interaction) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     guild = interaction.guild
@@ -1277,8 +1265,7 @@ class Birthdays(commands.Cog):
         """What the one date modal does once it is filled in, for the self and staff paths."""
         if not mine and not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         parsed = parse_birthday_input(typed)
         if parsed is None:

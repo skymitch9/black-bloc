@@ -1059,6 +1059,37 @@ async def call_off_from_panel(cog, bot, who, event_id):
     return await click(bot, who, find_item(card_view(picked), "Yes, call it off"))
 
 
+async def test_the_yes_re_asks_may_cancel_rather_than_trusting_the_opener(cog, bot, member, db):
+    """A gate can close while a card is open, so the Yes re-asks instead of trusting the pin."""
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    stranger = FakeMember(bot.guild, user_id=USER + 7, display_name="Bo")
+    interaction = FakeInteraction(bot, stranger)
+
+    await events_cog.confirm_cancel(interaction, row["id"])
+
+    assert (await get_event(db, row["id"]))["status"] == PENDING
+    assert "already" in interaction.response.messages[-1]["content"]
+
+
+async def test_the_call_off_confirm_card_silences_mentions(cog, bot, member, db):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    panel = await open_panel(cog, bot, member)
+    select = next(item for item in panel_view(panel).children if isinstance(item, CallOffPick))
+    select._values = [str(row["id"])]
+
+    picked = await click(bot, member, select)
+    allowed = picked._edited.kwargs.get("allowed_mentions")
+
+    assert [item.label for item in card_view(picked).children] == [
+        "Yes, call it off",
+        "Keep it",
+    ]
+    assert allowed is not None
+    assert (allowed.everyone, allowed.users, allowed.roles) == (False, False, False)
+
+
 async def test_the_requester_may_call_their_own_event_off_and_a_stranger_never_sees_it(
     cog, bot, member, db
 ):

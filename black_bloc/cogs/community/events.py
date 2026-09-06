@@ -94,7 +94,7 @@ from ...events import (
 )
 from ...golive import now_iso, parse_ts
 from ...panels import NoteModal as PanelNoteModal
-from ...panels import Panel, answer, db_ready, retire, still_staff
+from ...panels import Panel, answer, confirm, confirm_items, opened, retire, still_staff
 from ...settings_store import (
     DB_UNAVAILABLE,
     EVENTS_MODES,
@@ -117,6 +117,8 @@ PROPOSE_BUTTON = "Propose an event"
 SETTINGS_BUTTON = "Settings"
 NUMBERS_BUTTON = "Numbers…"
 FORGET_BUTTON = "Forget…"
+CANCEL_YES = "Yes, call it off"
+KEEP_IT = "Keep it"
 FORGET_PLACEHOLDER = "Forget which one?"
 SCHEDULED_BUTTON = "Scheduled events: {state}"
 MODE_PLACEHOLDER = "How events behave…"
@@ -326,7 +328,11 @@ def build_forget(bot: Any, guild: Any) -> tuple[discord.Embed, EventView]:
 async def render_panel(interaction: discord.Interaction, previous: Any = None) -> None:
     embed, view = await build_panel(interaction.client, interaction.guild, interaction.user)
     retire(previous)
-    view.message = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
 
 
 async def render_settings(interaction: discord.Interaction, previous: Any = None) -> None:
@@ -334,12 +340,15 @@ async def render_settings(interaction: discord.Interaction, previous: Any = None
     health = cog.health_lines() if cog is not None else ()
     embed, view = build_settings(interaction.client, interaction.guild, health)
     retire(previous)
-    view.message = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
 
 
 async def back_to_panel(interaction: discord.Interaction, previous: Any = None) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     await render_panel(interaction, previous)
 
@@ -347,8 +356,7 @@ async def back_to_panel(interaction: discord.Interaction, previous: Any = None) 
 async def open_settings(interaction: discord.Interaction, previous: Any = None) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     await render_settings(interaction, previous)
 
@@ -356,12 +364,15 @@ async def open_settings(interaction: discord.Interaction, previous: Any = None) 
 async def open_forget(interaction: discord.Interaction, previous: Any = None) -> None:
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     embed, view = build_forget(interaction.client, interaction.guild)
     retire(previous)
-    view.message = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
 
 
 async def change_settings(
@@ -370,8 +381,7 @@ async def change_settings(
     """Every settings control lands here: one write per key, one log row, one re-render."""
     if not await still_staff(interaction):
         return
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     changed = await write_settings(
@@ -387,8 +397,7 @@ async def change_settings(
 async def open_card(
     interaction: discord.Interaction, event_id: int, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     row = await get_event(bot.db, event_id)
@@ -399,7 +408,11 @@ async def open_card(
         return
     embed, view = build_card(bot, interaction.guild, row, interaction.user)
     retire(previous)
-    view.message = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
 
 
 async def finish_card(
@@ -416,7 +429,11 @@ async def finish_card(
     else:
         embed, view = build_card(bot, interaction.guild, row, interaction.user)
         retire(previous)
-        view.message = await interaction.edit_original_response(embed=embed, view=view)
+        view.message = await interaction.edit_original_response(
+            embed=embed,
+            view=view,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
     await interaction.followup.send(
         said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
     )
@@ -425,8 +442,7 @@ async def finish_card(
 async def run_move(
     interaction: discord.Interaction, event_id: int, action: str, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     said, fresh = await apply_decision(
         interaction.client, interaction.guild, event_id, MOVE_TARGETS[action], interaction.user
@@ -437,8 +453,7 @@ async def run_move(
 async def open_cancel_confirm(
     interaction: discord.Interaction, event_id: int, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     row = await get_event(bot.db, event_id)
@@ -456,23 +471,37 @@ async def open_cancel_confirm(
             allowed_mentions=discord.AllowedMentions.none(),
         )
         return
-    view = EventView(panel_minutes(bot.store, interaction.guild.id))
-    view.add_item(CancelYesButton(event_id))
-    view.add_item(CancelKeepButton())
-    retire(previous)
-    view.message = await interaction.edit_original_response(embed=card_for(row), view=view)
+    await confirm(
+        interaction,
+        EventView(panel_minutes(bot.store, interaction.guild.id)),
+        card_for(row),
+        confirm_items(
+            yes=CANCEL_YES,
+            no=KEEP_IT,
+            on_yes=lambda one, card: confirm_cancel(one, event_id, card),
+            on_no=back_to_panel,
+        ),
+        previous,
+    )
 
 
 async def confirm_cancel(
     interaction: discord.Interaction, event_id: int, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     row = await get_event(bot.db, event_id)
     if row is None:
         await render_panel(interaction, previous)
+        return
+    if not may_cancel(bot.store, row, interaction.user):
+        await render_panel(interaction, previous)
+        await interaction.followup.send(
+            EVENT_ALREADY_DECIDED.format(event_id=event_id, status=row["status"]),
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
         return
     said, _ = await cancel_for(bot, interaction.guild, row, interaction.user)
     await render_panel(interaction, previous)
@@ -692,23 +721,6 @@ class CallOffPick(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         await open_cancel_confirm(interaction, int(self.values[0]), self.view)
-
-
-class CancelYesButton(discord.ui.Button):
-    def __init__(self, event_id: int) -> None:
-        super().__init__(label="Yes, call it off", style=discord.ButtonStyle.danger, row=0)
-        self.event_id = event_id
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await confirm_cancel(interaction, self.event_id, self.view)
-
-
-class CancelKeepButton(discord.ui.Button):
-    def __init__(self) -> None:
-        super().__init__(label="Keep it", style=discord.ButtonStyle.secondary, row=0)
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await back_to_panel(interaction, self.view)
 
 
 class CardMoveButton(discord.ui.Button):
@@ -1210,8 +1222,7 @@ class Events(commands.Cog):
         self, interaction: discord.Interaction, given: str, previous: Any = None
     ) -> None:
         """What the time-zone modal does: store it or refuse, then re-render the panel."""
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         _, said = await store_zone(self.bot.db, interaction.user.id, given)
         await render_panel(interaction, previous)
@@ -1230,8 +1241,7 @@ class Events(commands.Cog):
         """What Deny and Call it off both do once their one line is in."""
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         if kind == "deny":
             said, fresh = await apply_decision(
@@ -1275,8 +1285,6 @@ async def setup(bot: commands.Bot) -> None:
 __all__ = [
     "BackButton",
     "CallOffPick",
-    "CancelKeepButton",
-    "CancelYesButton",
     "CardMoveButton",
     "DecisionButton",
     "DenyModal",

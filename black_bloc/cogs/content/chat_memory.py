@@ -42,8 +42,8 @@ from ...panels import (
     capped_placeholder,
     confirm,
     confirm_items,
-    db_ready,
     db_up,
+    opened,
     option_label,
     panel_minutes,
     retire,
@@ -394,8 +394,7 @@ async def render_panel(interaction: discord.Interaction, previous: Any = None) -
 
 
 async def back_to_panel(interaction: discord.Interaction, previous: Any = None) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     await render_panel(interaction, previous)
 
@@ -403,8 +402,7 @@ async def back_to_panel(interaction: discord.Interaction, previous: Any = None) 
 async def open_confirm(
     interaction: discord.Interaction, move: MemoryMove, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     home = home_of(bot, interaction)
@@ -433,8 +431,7 @@ async def run_move(
     extra: Any = None,
     previous: Any = None,
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     home = home_of(bot, interaction)
@@ -454,8 +451,7 @@ async def drop_picked(
     interaction: discord.Interaction, key: str, rendered: Any, previous: Any = None
 ) -> None:
     """A distillation can land between render and click, so the line is re-read before it goes."""
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     home = home_of(bot, interaction)

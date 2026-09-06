@@ -1,5 +1,9 @@
+import pathlib
+import re
+
 import pytest
 
+from black_bloc import settings_store
 from black_bloc.api.status import mode_keys
 from black_bloc.automod import validate_rules
 from black_bloc.config import load_settings
@@ -1764,3 +1768,35 @@ async def test_the_self_test_runs_at_boot_posts_to_the_test_channel_and_purges_a
     with pytest.raises(SettingError):
         coerce_value(SELFTEST_PURGE_MINUTES, 1441)
     assert parse_value(SELFTEST_PURGE_MINUTES, "15") == 15
+
+
+# `site/public/assets/labels.js` is what the Settings page prints under a key's name. These
+# thirteen have no line there and show the bare key instead — measured 2026-09-05, reported
+# not fixed (each needs a sentence somebody has decided on, not one a sweep invented).
+NO_LABEL_YET = (
+    "birthday_panel_lookup",
+    "birthday_panel_next_for_members",
+    "chat_daily_turns",
+    "chat_llm_mode",
+    "chat_monthly_cap_usd",
+    "chat_person_hourly_turns",
+    "chat_personality",
+    "chat_simple_model",
+    "event_panel_own_list",
+    "personality_pool_peer_url",
+    "personality_pool_sync",
+    "poll_creator_may_end",
+    "request_panel_own_list",
+)
+
+
+def test_every_registry_key_the_site_shows_has_a_label():
+    """The four `*_panel_minutes` keys the panel waves added sat unlabelled for two days.
+
+    An unlabelled key is not a crash, which is why nobody notices: the Settings page just
+    prints `request_panel_minutes` at somebody instead of saying what it does.
+    """
+    root = pathlib.Path(settings_store.__file__).resolve().parent.parent
+    text = (root / "site" / "public" / "assets" / "labels.js").read_text(encoding="utf-8")
+    labelled = {found.group(1) for found in re.finditer(r"^\s{2}([a-z_0-9]+):", text, re.M)}
+    assert sorted(set(KEY_TYPES) - labelled) == sorted(NO_LABEL_YET)

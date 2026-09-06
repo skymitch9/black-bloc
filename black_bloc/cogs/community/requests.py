@@ -11,7 +11,7 @@ from ...actionlog import log_action, send_logs
 from ...command_errors import NETWORK_ERRORS, AnswersErrors
 from ...logkinds import VIA_DISCORD, kind_via
 from ...panels import NoteModal as PanelNoteModal
-from ...panels import Panel, answer, db_ready, retire, still_staff
+from ...panels import Panel, answer, confirm, confirm_items, opened, retire, still_staff
 from ...requests import (
     BUILT_LIMIT,
     CHECK_ASKED,
@@ -120,6 +120,8 @@ MOVE_SAID: dict[str, str] = {
     DECLINED: SET_SAID,
 }
 READY_MODAL_TITLE = "Ready to check"
+WITHDRAW_YES = "Yes, take it back"
+KEEP_IT = "Keep it"
 
 NOTE_TITLES: dict[str, str] = {
     "hold": "Put this on hold",
@@ -609,13 +611,16 @@ async def render_panel(interaction: discord.Interaction, previous: Any = None) -
     bot = interaction.client
     embed, view = await build_panel(bot, interaction.guild, interaction.user)
     retire(previous)
-    msg = await interaction.edit_original_response(embed=embed, view=view)
+    msg = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
     view.message = msg
 
 
 async def back_to_panel(interaction: discord.Interaction, previous: Any = None) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     await render_panel(interaction, previous)
 
@@ -634,7 +639,11 @@ async def finish_card(
     else:
         embed, view = build_card(bot, interaction.guild, row, interaction.user)
         retire(previous)
-        msg = await interaction.edit_original_response(embed=embed, view=view)
+        msg = await interaction.edit_original_response(
+            embed=embed,
+            view=view,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
         view.message = msg
     await interaction.followup.send(
         said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
@@ -644,8 +653,7 @@ async def finish_card(
 async def open_card(
     interaction: discord.Interaction, request_id: int, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     row = await get_request(bot.db, request_id)
@@ -658,15 +666,18 @@ async def open_card(
         return
     embed, view = build_card(bot, interaction.guild, row, interaction.user)
     retire(previous)
-    msg = await interaction.edit_original_response(embed=embed, view=view)
+    msg = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
     view.message = msg
 
 
 async def open_withdraw_confirm(
     interaction: discord.Interaction, request_id: int, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     row = await get_request(bot.db, request_id)
@@ -693,19 +704,24 @@ async def open_withdraw_confirm(
     embed = request_embed(
         row, move=look_for_status(row["status"]), origin=origin, guild=interaction.guild
     )
-    view = RequestView(panel_minutes(bot.store, interaction.guild.id))
-    view.add_item(WithdrawYesButton(request_id))
-    view.add_item(WithdrawKeepButton())
-    retire(previous)
-    msg = await interaction.edit_original_response(embed=embed, view=view)
-    view.message = msg
+    await confirm(
+        interaction,
+        RequestView(panel_minutes(bot.store, interaction.guild.id)),
+        embed,
+        confirm_items(
+            yes=WITHDRAW_YES,
+            no=KEEP_IT,
+            on_yes=lambda one, card: confirm_withdraw(one, request_id, card),
+            on_no=back_to_panel,
+        ),
+        previous,
+    )
 
 
 async def confirm_withdraw(
     interaction: discord.Interaction, request_id: int, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     row = await get_request(bot.db, request_id)
@@ -722,8 +738,7 @@ async def confirm_withdraw(
 async def run_move(
     interaction: discord.Interaction, request_id: int, action: str, previous: Any = None
 ) -> None:
-    await interaction.response.defer()
-    if not await db_ready(interaction):
+    if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     said, fresh = await MOVE_FUNCS[action](bot, interaction.guild, request_id, interaction.user)
@@ -834,23 +849,6 @@ class CardMoveButton(discord.ui.Button):
             )
             return
         await run_move(interaction, self.request_id, self.spec.action, self.view)
-
-
-class WithdrawYesButton(discord.ui.Button):
-    def __init__(self, request_id: int) -> None:
-        super().__init__(label="Yes, take it back", style=discord.ButtonStyle.danger, row=0)
-        self.request_id = request_id
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await confirm_withdraw(interaction, self.request_id, self.view)
-
-
-class WithdrawKeepButton(discord.ui.Button):
-    def __init__(self) -> None:
-        super().__init__(label="Keep it", style=discord.ButtonStyle.secondary, row=0)
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await back_to_panel(interaction, self.view)
 
 
 class RequestModal(AnswersErrors, discord.ui.Modal, title="Ask for something"):
@@ -1024,8 +1022,7 @@ class Requests(commands.Cog):
         """What the ready modal does once it is filled in — the one shared path, nothing else."""
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         said, fresh = await mark_ready(
             self.bot,
@@ -1048,8 +1045,7 @@ class Requests(commands.Cog):
         """What hold, decline and send-back all do once their one-line note is submitted."""
         if not await still_staff(interaction):
             return
-        await interaction.response.defer()
-        if not await db_ready(interaction):
+        if not await opened(interaction, staff=False):
             return
         if kind == "sendback":
             said, fresh = await send_back(
@@ -1083,9 +1079,7 @@ __all__ = [
     "RequestPick",
     "RequestView",
     "Requests",
-    "WithdrawKeepButton",
     "WithdrawPick",
-    "WithdrawYesButton",
     "accept",
     "apply_decision",
     "ask_check",
@@ -1094,7 +1088,6 @@ __all__ = [
     "build_panel",
     "card",
     "confirm_withdraw",
-    "db_ready",
     "finish_card",
     "guard_allows",
     "mark_ready",
@@ -1102,6 +1095,7 @@ __all__ = [
     "notify_move",
     "open_card",
     "open_withdraw_confirm",
+    "opened",
     "person_told",
     "post_line",
     "render_panel",

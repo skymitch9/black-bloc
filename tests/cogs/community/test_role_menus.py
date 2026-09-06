@@ -1,3 +1,4 @@
+import pathlib
 import re
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -2083,3 +2084,17 @@ async def test_every_control_sits_inside_discords_five_rows(bot, db, lead):
 
     for view in (root.view, card.view):
         assert all(0 <= one.row <= 4 for one in view.children)
+
+
+def test_the_mock_servers_copy_of_the_refusal_has_not_drifted():
+    """`site/mock/server.mjs` hand-copies this sentence, and it HAD drifted once already.
+
+    The mock is what the dashboard is developed against, so a drifted copy means the page is
+    built to a refusal nobody will ever be sent. Nothing generates the copy, so this is the
+    thing that stops it: the JS literal is read back and compared, escaping and all.
+    """
+    root = pathlib.Path(cog_module.__file__).resolve().parents[3]
+    text = (root / "site" / "mock" / "server.mjs").read_text(encoding="utf-8")
+    found = re.search(r"^const ROLE_MENUS_OFF = '(.*)';$", text, re.M)
+    assert found is not None, "site/mock/server.mjs no longer defines ROLE_MENUS_OFF"
+    assert found.group(1).replace("\\'", "'") == ROLE_MENUS_OFF
