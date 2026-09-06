@@ -9,6 +9,44 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-06 — Operator bucket fix landed as merge `deaae68` (branch `operator-bucket`), shipping as v98 — the live suite's first green run (58 passed / 1 skipped). Deploy verification recorded on `deploys.log`.
+
+**Asked (moved whole from the TODO resume header, where it was recorded 13:55):** `pytest -m live` after the
+first operator read ever: 20 passed / 38 failed / 1 skipped, and the failures are two findings, not the door:
+(1) 🔴 `auth.py:operator_session` charges the 30-a-minute per-IP bucket on EVERY bearer, matching or not, so
+the 60-path read sweep 429s after ~30 — the design's intent (decision 6, *"a guess costs something"*) is that
+a WRONG token is a guess; charge on mismatch only, and give the operator 429 its own sentence (today it says
+*"more sign-in attempts"*, which mislabels the cause); (2) `tests/live/test_selftest.py::…never_start_one`
+expects `operator_read_only` but the live host answers `cross_site` — `server.py:117`'s origin check refuses
+the POST before the operator gate does (still a 403 in words; the test must send the dashboard `Origin` so
+the operator gate is the one that answers, or accept either). Build dispatched ~14:05 (Opus, worktree
+`C:/lcw/bb-operator-bucket`, branch `operator-bucket`) → v98; then re-run `pytest -m live`, record the count
+in `access/testing.md`, sweep row 103, retire the three NOT-verified headers.
+
+**Landed:** the Opus build (129k / 69 calls / 10 min against 60–100k) as `7c1c830` + `1cc5447`, merged
+`deaae68` 14:05 after three doc-header conflicts (both sides had retired the same "never minted" headers;
+main's measured lines kept). `operator_session` compares first, constant-time, and everything else lives
+inside the mismatch branch: bucket `take` → `429 slow_down` with the new `OPERATOR_SLOW_DOWN` sentence, else
+`401 bad_operator_token`. A right token never builds the bucket (tested by attribute absence) and still reads
+while its address is out of guesses — deliberate, written as a Deviation in
+`info/operator-read-design.md`: the bucket is per IP and a correct token is proof the caller is not guessing.
+Past 30 wrong tokens the 401 is unreachable (429 every time), so ignoring the limit buys no extra guesses.
+Live tests send `conftest.same_site_headers()` (Origin from `BLACK_BLOC_LIVE_URL` + `sec-fetch-site:
+same-origin`; both, because `same_site()` accepts either and Origin-only needs a character-exact host);
+`test_refusals` tightened from `(403, 415)` to `403` + `operator_read_only`. +2 tests to **5279**.
+**Deploy:** the 14:09 foreground `deploy.ps1` run HUNG at xdist spawn (third time today; 33 idle pythons,
+Stop-Process denied); the 14:19 retry via the PowerShell tool with `*> file` got through and shipped
+v98 14:22 (boot `database ready` 21:21:57Z, `synced 29`, `/health` ready).
+**Live run against v98:** 27 failed at first — a THIRD finding, test-side: `test_reads.py` ignored the
+contract's `shape`, and `/api/requests/mine` rightly refuses the operator identity as `not_a_member`. Fixed
+on main (`rows_of` reads `list`/`map`/`namespaces` the way `check.mjs` does; the sweep accepts that one
+403) → **58 passed / 1 skipped**, recorded in `access/testing.md`. Sweep rows **320–321**. Gap flagged by
+the build, not fixed: routes gated by `staff_dependency` alone have no per-identity read bound for the
+operator (the 300/min `reader_dependency` bucket covers `ref.py` and parts of `status.py`/`costs.py` only)
+— on TODO as a residual.
+**Not verified:** rows 320 (31 wrong tokens by hand) and 321's dashboard-sign-in half; the Logs-page half
+of row 103 (by eye).
+
 ## 2026-09-06 — Loop guard (KI-24) and two small gates landed as merge `689eff5` (branch `loop-guard`), shipping as v97 — deploy verification recorded on `deploys.log`. Owner decision Q4, verbatim "Build it a".
 
 **Asked:** Q4 of the five owner questions of 2026-09-06 — KI-24 (a `before_loop` failure bypasses

@@ -9,7 +9,14 @@
 > `test_every_read…` sweep hitting the operator guess bucket (30 a minute per IP, charged on GOOD tokens —
 > a defect, on TODO for v98) plus one write-refusal test that meets the `cross_site` origin check before
 > the operator gate; the skip is the selftest start (no `BLACK_BLOC_LIVE_SESSION`). Loop health, `/health`,
-> the bot-in-guild check and every refusal test passed. The count after v98 goes here.
+> the bot-in-guild check and every refusal test passed.
+> **2026-09-06 14:24 — after v98: 58 passed / 1 skipped** of 59 in 16.5 s (the skip is still the selftest start
+> without `BLACK_BLOC_LIVE_SESSION`). The 429s are gone (the bucket fix); 27 of the 38 turned out to be a
+> THIRD, test-side defect fixed on `main` right after: `test_reads.py` read the contract's `keys` off the top
+> level of every payload, ignoring `shape` (`list` / `map` / `namespaces`) the way `site/mock/check.mjs`
+> honours it — `rows_of` now reads the same way; and `/api/requests/mine` refuses the operator identity
+> with `403 not_a_member` in words, which is right (the operator is nobody's account), so the sweep accepts
+> that one answer. **58 / 59 is the live suite's first green run.**
 
 ## The three layers, and what each one proves
 

@@ -1,10 +1,12 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-06** — rows **`OB-a`–`OB-b`** added by the OPERATOR BUCKET fix on branch `operator-bucket`
-> (off `main` at `6216e97`, v97); they are lettered because the conductor numbers them at the merge.
-> Schema UNCHANGED at **33**; registry keys unchanged at **191**; mock routes unchanged at **150**.
-> ⚠️ They need the operator token and a terminal, not Discord. Before that,
+> **2026-09-06 14:30** — rows **320–321** (were `OB-a`–`OB-b`) numbered at the merge of the OPERATOR BUCKET fix
+> (`deaae68`, branch `operator-bucket`), shipping as **v98**. Schema UNCHANGED at **33**; registry keys unchanged at
+> **191**; mock routes unchanged at **150**; tests 5277 → **5279**. ⚠️ They need the operator token and a terminal, not
+> Discord. Verified by the suite (5279 both orders), the v98 boot, and `pytest -m live` = **58 passed / 1 skipped**
+> against v98 — which exercises the right-token half of row 321 (60 reads in 16 s, no 429) but NOT the 31 wrong
+> tokens of row 320; that half is yours. Before that,
 > **2026-09-06 13:50** — rows **315–319** (were `LG-a`–`LG-e`) numbered at the merge of the LOOP GUARD build
 > (`689eff5`, branch `loop-guard`), shipping as **v97**. Closes **KI-24**. Schema UNCHANGED at **33**; registry keys
 > unchanged at **191**; mock routes unchanged at **150**. ⚠️ Verified by the suite here (5277 both orders) and the
@@ -1085,7 +1087,7 @@ forward and `BB_REVERSE=1`, `ruff check .`, and `node site/mock/check.mjs`
 | **318** (was `LG-d`) | With polls still **off**, use the dashboard's **Repeating** form (same page) to try to save a repeating poll | the same refusal, in the same words. That route already refused; the row is here so the pair is checked together and the two doors are seen to agree |
 | **319** (was `LG-e`) | Turn polls back **on** from `/poll` ▸ **Settings**, then create a poll from the dashboard again | it posts to `#mute-me-bot-test-spam` as it always did, and the **Logs** section at the foot of the polls page shows **one** `poll.created` line carrying `via: website`. Nothing about the ordinary path changed — the gate only bites when polls are off |
 
-## Operator bucket — rows `OB-a`–`OB-b`
+## Operator bucket — rows 320–321 (were `OB-a`–`OB-b`)
 
 Written on `operator-bucket`, 2026-09-06, off `main` at `6216e97` (v97), in a worktree at
 `C:/lcw/bb-operator-bucket`. Two findings from the FIRST live run of the operator-token door
@@ -1103,8 +1105,8 @@ forward and `BB_REVERSE=1`, and `ruff check .`.
 
 | # | Do this | Expect |
 |---|---|---|
-| `OB-a` | From a terminal, send a WRONG token thirty-one times and print what each one said. `scripts/read.ps1` always sends the REAL token, so this row goes round it: `1..31 \| % { try { Invoke-RestMethod -Uri "https://blackbloc.heygabi.ai/api/status" -Headers @{ Authorization = "Bearer not-the-token-this-server-holds-at-all" } } catch { ($_.ErrorDetails.Message \| ConvertFrom-Json).message } }` | the first thirty print *That operator token is not the one this server holds…*; the **thirty-first** prints the operator's own slow-down sentence — *That is more **wrong operator tokens from this address** than Black Bloc will take in a minute…*, saying no account is locked out and that **signing in still works**. ⚠️ It must NOT say *"more sign-in attempts"*: that is the login sentence, it names the wrong cause, and seeing it here means this branch did not ship |
-| `OB-b` | While that address is still out of guesses (within the same minute), do two things: run `.\scripts\read.ps1 -Path /api/status` with the REAL token, and open https://blackbloc.heygabi.ai in a browser and sign in with Discord | both work. The real token answers **200** with the status JSON — a correct token never touches the guess bucket, so being out of guesses cannot lock a real operator out — and the dashboard sign-in is unaffected, because guessing at this door uses its own bucket and never the login one. ⚠️ Then read the **Logs** page: the successful read leaves one `web.operator.read` line carrying *via Operator token* and the path; the thirty-one refusals leave **nothing at all** |
+| **320** (was `OB-a`) | From a terminal, send a WRONG token thirty-one times and print what each one said. `scripts/read.ps1` always sends the REAL token, so this row goes round it: `1..31 \| % { try { Invoke-RestMethod -Uri "https://blackbloc.heygabi.ai/api/status" -Headers @{ Authorization = "Bearer not-the-token-this-server-holds-at-all" } } catch { ($_.ErrorDetails.Message \| ConvertFrom-Json).message } }` | the first thirty print *That operator token is not the one this server holds…*; the **thirty-first** prints the operator's own slow-down sentence — *That is more **wrong operator tokens from this address** than Black Bloc will take in a minute…*, saying no account is locked out and that **signing in still works**. ⚠️ It must NOT say *"more sign-in attempts"*: that is the login sentence, it names the wrong cause, and seeing it here means this branch did not ship |
+| **321** (was `OB-b`) | While that address is still out of guesses (within the same minute), do two things: run `.\scripts\read.ps1 -Path /api/status` with the REAL token, and open https://blackbloc.heygabi.ai in a browser and sign in with Discord | both work. The real token answers **200** with the status JSON — a correct token never touches the guess bucket, so being out of guesses cannot lock a real operator out — and the dashboard sign-in is unaffected, because guessing at this door uses its own bucket and never the login one. ⚠️ Then read the **Logs** page: the successful read leaves one `web.operator.read` line carrying *via Operator token* and the path; the thirty-one refusals leave **nothing at all** |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that
