@@ -1,6 +1,11 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-06** — rows **`LG-a`–`LG-e`** added by the LOOP GUARD build on branch `loop-guard`
+> (off `main` at `16bd8c2`, v96); they are lettered because the conductor numbers them at the
+> merge. Closes **KI-24**. Schema UNCHANGED at **33**; registry keys unchanged at **191**; mock
+> routes unchanged at **150**. ⚠️ Verified by the suite in a worktree only — not merged, not
+> deployed, and `python -m black_bloc` was not booted. Before that,
 > **2026-09-06 11:45** — rows **305–309** (were `LB-a`–`LB-e`, LOGS BUTTONS, merge `42d2e6e`) and
 > **310–314** (were `RW-a`–`RW-e`, RECURRENCE CREATE FROM THE WEBSITE, merge `c915ade`) numbered at the
 > merge and shipping as **v96**. Schema UNCHANGED at **33**; registry keys **189 → 191**; mock routes
@@ -1057,6 +1062,26 @@ rather than reasoned about. Merged as `c915ade` on 2026-09-06 11:36 (the two `##
 | **312** (was `RW-c`) | Back at the form, set **Repeat** → **Every week** again and type `half seven` in **Time of day**, then press the button | a red sentence: *"**half seven** is not a time of day Black Bloc can read, so nothing was saved. Write it on the 24-hour clock — `09:00`, `19:30`."* ⚠️ And the **Repeating** list is unchanged — the cadence is proved BEFORE any row is written, so a bad one leaves no half-made poll behind. Same for a weekday it cannot read and a timezone this machine does not know |
 | **313** (was `RW-d`) | Set **Kind** → **Date / availability** and look at the form | the whole **Repeat** block is gone. A date poll cannot repeat — its slots are fixed days, and the second time round it would ask about a day that has been and gone — so the control nobody can use is not drawn rather than shown and then refused |
 | **314** (was `RW-e`) | `/poll` in `#mute-me-bot-test-spam`, as a Lead | the panel's counts line includes the recurrence made from the website, and picking it offers the same **stop-repeating** card a Discord-made one gets — one feature, two front doors. Then the **Logs** section at the foot of the polls page shows **one** `poll.recur_created` line for it carrying `via: website`, beside the `poll.created` line for the row itself: the same pair the Discord path leaves, spelled `web.` |
+
+## Loop guard, and two small gates — rows `LG-a`–`LG-e`
+
+Written on `loop-guard`, 2026-09-06, off `main` at `16bd8c2` (v96), in a worktree at
+`C:/lcw/bb-loop-guard`. Built to
+[`../info/loop-guard-design.md`](../info/loop-guard-design.md) (owner, 2026-09-06:
+*"Build it a"* — build the guard rather than leave KI-24 `WATCHING`). Closes **KI-24**. No schema
+change and no new registry key. They are lettered because the conductor numbers them at the
+merge. ⚠️ **Nothing below has met live Discord or the live dashboard**; `python -m black_bloc` was
+NOT booted (no token in a worktree). The verification is `pytest` (**5277 passed**, was 5267)
+forward and `BB_REVERSE=1`, `ruff check .`, and `node site/mock/check.mjs`
+(17 pages / 150 routes / 14 core settings — **unchanged**, this branch adds no route).
+
+| # | Do this | Expect |
+|---|---|---|
+| `LG-a` | After the deploy, open https://blackbloc.heygabi.ai/health.html and read the **Loops** list | every loop **running**, with a real *last ok* time beside it and **no error**. The list should hold the same loops it held before this branch — the guard changes what happens when one fails, not which ones exist. ⚠️ This is the row that proves the deploy did not break a `before_loop`: a loop that is **not running with nothing beside it** is exactly the KI-24 symptom, and after this branch it should be impossible |
+| `LG-b` | On the same page, note what the **purge** loop (cog `Core`) says | **running**, like the rest. Before this branch it started whether or not the database was up, and if it ever stopped it stayed stopped — it now waits for the database at `cog_load` and restarts itself if it fails, like the other thirteen |
+| `LG-c` | `/poll` in `#mute-me-bot-test-spam` ▸ **Settings** ▸ turn polls **off**. Then, on the dashboard, https://blackbloc.heygabi.ai/polls.html ▸ **Create a poll** ▸ write a question and two options ▸ **Create the poll** | a red sentence in the form's notice line saying polls are turned off and how to turn them back on — **not** a bare 409, and **not** a poll. ⚠️ Then look at the **Polls** list on that same page: **no new row**, because the refusal happens before anything is written. Before this branch the website made the poll anyway while `/poll` refused |
+| `LG-d` | With polls still **off**, use the dashboard's **Repeating** form (same page) to try to save a repeating poll | the same refusal, in the same words. That route already refused; the row is here so the pair is checked together and the two doors are seen to agree |
+| `LG-e` | Turn polls back **on** from `/poll` ▸ **Settings**, then create a poll from the dashboard again | it posts to `#mute-me-bot-test-spam` as it always did, and the **Logs** section at the foot of the polls page shows **one** `poll.created` line carrying `via: website`. Nothing about the ordinary path changed — the gate only bites when polls are off |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that
