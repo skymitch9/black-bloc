@@ -125,6 +125,20 @@ async def test_the_form_posts_a_poll_and_says_where_it_went(client, seeded, web,
     assert web.guild.get_channel(TEST_CHANNEL).messages[-1].kwargs["poll"] is not None
 
 
+async def test_the_form_is_refused_in_words_while_polls_are_switched_off(
+    client, seeded, web, wf
+):
+    """The one-off route now gates on `poll_mode` the way the recurrence route beside it does."""
+    await web.store.set(wf.GUILD_ID, "poll_mode", "off")
+    before = len(await polls_in(web.db))
+
+    response = creating(client)
+
+    assert response.status_code == 409
+    assert "turned off" in response.json()["message"]
+    assert len(await polls_in(web.db)) == before
+
+
 async def test_the_form_refuses_what_the_slash_command_refuses(client, seeded):
     response = creating(client, options=["Pizza"])
 
