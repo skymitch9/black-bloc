@@ -2107,7 +2107,11 @@ async def render_panel(interaction: discord.Interaction, previous: Any = None) -
     bot = interaction.client
     embed, view = await build_panel(bot, interaction.guild, interaction.user)
     retire(previous)
-    view.message = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
 
 
 async def render_preview(
@@ -2123,7 +2127,11 @@ async def render_preview(
         staff=bot.store.is_staff(interaction.user),
     )
     retire(previous)
-    view.message = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
 
 
 async def open_preview(
@@ -2147,7 +2155,11 @@ async def show_row(interaction: discord.Interaction, row: Any, previous: Any = N
     else:
         embed, view = await build_card(bot, interaction.guild, row, interaction.user)
     retire(previous)
-    view.message = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
 
 
 async def said_to(interaction: discord.Interaction, text: str) -> None:
@@ -2484,7 +2496,11 @@ class RecurDeleteButton(discord.ui.Button):
         view.add_item(DeleteYesButton(self.poll_id))
         view.add_item(DeleteKeepButton(self.poll_id))
         retire(self.view)
-        view.message = await interaction.edit_original_response(embed=embed, view=view)
+        view.message = await interaction.edit_original_response(
+            embed=embed,
+            view=view,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
 
 
 class DeleteYesButton(discord.ui.Button):
@@ -2841,7 +2857,11 @@ async def render_settings(interaction: discord.Interaction, previous: Any = None
     view.add_item(ClearChannelButton())
     view.add_item(BackButton(row=4))
     retire(previous)
-    view.message = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
 
 
 async def save_settings(

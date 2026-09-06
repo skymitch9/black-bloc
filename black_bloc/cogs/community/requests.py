@@ -609,7 +609,11 @@ async def render_panel(interaction: discord.Interaction, previous: Any = None) -
     bot = interaction.client
     embed, view = await build_panel(bot, interaction.guild, interaction.user)
     retire(previous)
-    msg = await interaction.edit_original_response(embed=embed, view=view)
+    msg = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
     view.message = msg
 
 
@@ -633,7 +637,11 @@ async def finish_card(
     else:
         embed, view = build_card(bot, interaction.guild, row, interaction.user)
         retire(previous)
-        msg = await interaction.edit_original_response(embed=embed, view=view)
+        msg = await interaction.edit_original_response(
+            embed=embed,
+            view=view,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
         view.message = msg
     await interaction.followup.send(
         said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
@@ -656,7 +664,11 @@ async def open_card(
         return
     embed, view = build_card(bot, interaction.guild, row, interaction.user)
     retire(previous)
-    msg = await interaction.edit_original_response(embed=embed, view=view)
+    msg = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
     view.message = msg
 
 
@@ -694,7 +706,11 @@ async def open_withdraw_confirm(
     view.add_item(WithdrawYesButton(request_id))
     view.add_item(WithdrawKeepButton())
     retire(previous)
-    msg = await interaction.edit_original_response(embed=embed, view=view)
+    msg = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
     view.message = msg
 
 

@@ -1191,7 +1191,11 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
 async def render_panel(interaction: discord.Interaction, previous: Any = None) -> None:
     embed, view = await build_panel(interaction.client, interaction.guild, interaction.user)
     retire(previous)
-    view.message = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
 
 
 async def back_to_panel(interaction: discord.Interaction, previous: Any = None) -> None:
@@ -1248,7 +1252,11 @@ async def open_card(
         return
     embed, view = build_card(bot, guild, form, row, interaction.user)
     retire(previous)
-    view.message = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
 
 
 async def finish_card(
@@ -1269,7 +1277,11 @@ async def finish_card(
     else:
         embed, view = build_card(bot, guild, form, row, interaction.user)
         retire(previous)
-        view.message = await interaction.edit_original_response(embed=embed, view=view)
+        view.message = await interaction.edit_original_response(
+            embed=embed,
+            view=view,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
     await answer(interaction, said)
 
 
@@ -1448,7 +1460,11 @@ async def open_withdraw_confirm(
     view.add_item(WithdrawYesButton(form_id))
     view.add_item(WithdrawKeepButton())
     retire(previous)
-    view.message = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
 
 
 class WithdrawYesButton(discord.ui.Button):
@@ -1672,7 +1688,11 @@ async def render_form_card(
         return
     embed, view = await build_form_card(bot, interaction.guild, form, interaction.user)
     retire(previous)
-    view.message = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
 
 
 class FormButton(discord.ui.Button):
@@ -1799,7 +1819,11 @@ class DeleteButton(FormButton):
         view.add_item(DeleteYesButton(self.form_id))
         view.add_item(FormBackButton(self.form_id))
         retire(self.view)
-        view.message = await interaction.edit_original_response(embed=embed, view=view)
+        view.message = await interaction.edit_original_response(
+            embed=embed,
+            view=view,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
 
 
 class DeleteYesButton(FormButton):
@@ -1847,7 +1871,11 @@ async def render_post_pick(
     view.add_item(PostChannelPick(form_id))
     view.add_item(FormBackButton(form_id, row=1))
     retire(previous)
-    view.message = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
 
 
 class PostChannelPick(discord.ui.ChannelSelect):
@@ -1918,7 +1946,11 @@ async def render_roster(
         view.add_item(RosterPick(form_id, shown[:SELECT_CAP], len(shown), guild))
     view.add_item(FormBackButton(form_id, row=1))
     retire(previous)
-    view.message = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
 
 
 class RosterPick(discord.ui.Select):
@@ -2014,7 +2046,11 @@ async def render_edit(
     view.add_item(EditApproverPick(form_id))
     view.add_item(EditOwnerPick(form_id))
     retire(previous)
-    view.message = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
 
 
 async def save_and_edit(
@@ -2209,7 +2245,11 @@ async def render_questions(
     view.add_item(FormBackButton(form_id, row=1))
     add_site_link(view, bot, 1)
     retire(previous)
-    view.message = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
 
 
 class QuestionPick(discord.ui.Select):
@@ -2299,7 +2339,11 @@ class QuestionRemoveButton(FormButton):
         view.add_item(QuestionRemoveYesButton(self.form_id, self.position))
         view.add_item(QuestionsBackButton(self.form_id))
         retire(self.view)
-        view.message = await interaction.edit_original_response(embed=embed, view=view)
+        view.message = await interaction.edit_original_response(
+            embed=embed,
+            view=view,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
 
 
 class QuestionRemoveYesButton(FormButton):
@@ -2459,7 +2503,11 @@ async def render_settings(interaction: discord.Interaction, previous: Any = None
     view.add_item(SettingsNumbersButton())
     view.add_item(BackButton(row=4))
     retire(previous)
-    view.message = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
 
 
 async def save_settings(

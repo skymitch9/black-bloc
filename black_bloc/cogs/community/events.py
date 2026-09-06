@@ -326,7 +326,11 @@ def build_forget(bot: Any, guild: Any) -> tuple[discord.Embed, EventView]:
 async def render_panel(interaction: discord.Interaction, previous: Any = None) -> None:
     embed, view = await build_panel(interaction.client, interaction.guild, interaction.user)
     retire(previous)
-    view.message = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
 
 
 async def render_settings(interaction: discord.Interaction, previous: Any = None) -> None:
@@ -334,7 +338,11 @@ async def render_settings(interaction: discord.Interaction, previous: Any = None
     health = cog.health_lines() if cog is not None else ()
     embed, view = build_settings(interaction.client, interaction.guild, health)
     retire(previous)
-    view.message = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
 
 
 async def back_to_panel(interaction: discord.Interaction, previous: Any = None) -> None:
@@ -358,7 +366,11 @@ async def open_forget(interaction: discord.Interaction, previous: Any = None) ->
         return
     embed, view = build_forget(interaction.client, interaction.guild)
     retire(previous)
-    view.message = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
 
 
 async def change_settings(
@@ -394,7 +406,11 @@ async def open_card(
         return
     embed, view = build_card(bot, interaction.guild, row, interaction.user)
     retire(previous)
-    view.message = await interaction.edit_original_response(embed=embed, view=view)
+    view.message = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
 
 
 async def finish_card(
@@ -411,7 +427,11 @@ async def finish_card(
     else:
         embed, view = build_card(bot, interaction.guild, row, interaction.user)
         retire(previous)
-        view.message = await interaction.edit_original_response(embed=embed, view=view)
+        view.message = await interaction.edit_original_response(
+            embed=embed,
+            view=view,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
     await interaction.followup.send(
         said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
     )
@@ -453,7 +473,11 @@ async def open_cancel_confirm(
     view.add_item(CancelYesButton(event_id))
     view.add_item(CancelKeepButton())
     retire(previous)
-    view.message = await interaction.edit_original_response(embed=card_for(row), view=view)
+    view.message = await interaction.edit_original_response(
+        embed=card_for(row),
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
 
 
 async def confirm_cancel(
