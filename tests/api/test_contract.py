@@ -6,21 +6,14 @@ import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import aiosqlite
 import pytest
 import pytest_asyncio
 from discord.ext import tasks
 
 from black_bloc import applications, knowledge, pings
 from black_bloc import rolegrants as grants
-from black_bloc.api.auth import (
-    OPERATOR_BUCKET_ATTR,
-    SESSION_COOKIE,
-    SESSION_TTL_SECONDS,
-    sign_session,
-)
+from black_bloc.api.auth import SESSION_COOKIE, SESSION_TTL_SECONDS, sign_session
 from black_bloc.api.settings_api import grouped
-from black_bloc.api.writes import BUCKET_ATTR, MEMBER_BUCKET_ATTR, READ_BUCKET_ATTR
 from black_bloc.chat import add_line as add_chat_line
 from black_bloc.chat import create_intent
 from black_bloc.chat import seed_defaults as seed_chat
@@ -570,34 +563,26 @@ async def seed_world(client, web, guild, wf) -> dict:
     }
 
 
-BUCKETS = (BUCKET_ATTR, READ_BUCKET_ATTR, MEMBER_BUCKET_ATTR, OPERATOR_BUCKET_ATTR)
-
-
 class Seed:
-    """The module's one seeded database, plus the page-copy that puts it back between entries."""
+    """The module's one seeded database, plus the row copy that puts it back between entries."""
 
-    def __init__(self, web, ids: dict, template) -> None:
+    def __init__(self, web, wf, ids: dict, rows: dict) -> None:
         self.web = web
+        self.wf = wf
         self.ids = ids
-        self.template = template
+        self.rows = rows
 
     async def rewind(self) -> None:
-        await self.template.backup(self.web.db.conn)
+        await self.wf.put(self.web.db, self.rows)
         await self.web.store.load()
-        for attr in BUCKETS:
-            self.web.__dict__.pop(attr, None)
+        self.wf.clear_buckets(self.web)
 
 
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def contract_seed(module_client, module_web, module_guild, wf):
     """Seeded once for the whole file: ~430 ms of writes, one schema build, one FastAPI app."""
     ids = await seed_world(module_client, module_web, module_guild, wf)
-    template = await aiosqlite.connect(":memory:")
-    try:
-        await module_web.db.conn.backup(template)
-        yield Seed(module_web, ids, template)
-    finally:
-        await template.close()
+    return Seed(module_web, wf, ids, await wf.take(module_web.db))
 
 
 @pytest.fixture
@@ -608,9 +593,9 @@ async def seeded(contract_seed):
 
 
 @pytest.fixture
-async def fresh_seeded(client, web, guild, wf):
+async def fresh_seeded(fresh_client, fresh_web, guild, wf):
     """A database, app and seed of its own, for the entry that counts the `web.*` rows."""
-    return await seed_world(client, web, guild, wf)
+    return await seed_world(fresh_client, fresh_web, guild, wf)
 
 
 READ_ONLY = "GET"
@@ -740,10 +725,10 @@ def test_the_moderation_settings_all_live_in_the_automod_namespace(web, wf):
 
 
 async def test_every_write_leaves_the_action_kind_the_audit_tab_filters_on(
-    client, fresh_seeded, web, wf
+    fresh_client, fresh_seeded, fresh_web, wf
 ):
     """The audit tab shows `web.` and nothing else, so every write route must spell it that way."""
-    seeded = fresh_seeded
+    client, web, seeded = fresh_client, fresh_web, fresh_seeded
     client.put("/api/settings/birthday_show_age", json={"value": True})
     client.post("/api/mod/warn", json={"user_id": seeded["member_id"], "reason": "contract"})
     client.post("/api/modmail/snippets", json={"name": "second", "content": "hi"})
