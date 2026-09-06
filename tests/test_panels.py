@@ -1,4 +1,6 @@
+import ast
 import logging
+import pathlib
 from types import SimpleNamespace
 
 import discord
@@ -660,3 +662,54 @@ def test_picked_values_reads_both_spellings_a_modal_group_answers_with():
     assert picked_values(SimpleNamespace(value="a")) == ["a"]
     assert picked_values(SimpleNamespace(value=None)) == []
     assert picked_values(None) == []
+
+
+PACKAGE = pathlib.Path(panels.__file__).resolve().parent
+LIBRARY = "panels.py"
+
+
+def _modules_holding(literal):
+    """Every package module whose AST carries this exact string, however it is written."""
+    found = set()
+    for path in sorted(PACKAGE.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and node.value == literal:
+                found.add(path.relative_to(PACKAGE).as_posix())
+    return found
+
+
+def test_keep_it_is_written_out_in_exactly_one_module():
+    assert _modules_holding(panels.KEEP_IT) == {LIBRARY}
+
+
+# The library helpers that take nothing feature-specific, so a second copy is always a copy.
+# `panel_minutes`, `site_page_url` and `option_label` are deliberately NOT here: every feature
+# binds its own key, page and row shape, and those thin wrappers are the binding.
+UNCOPYABLE = (
+    "confirm",
+    "confirm_items",
+    "db_ready",
+    "db_up",
+    "retire",
+    "still_allowed",
+    "still_staff",
+)
+DEFINITIONS = (ast.FunctionDef, ast.AsyncFunctionDef)
+
+
+def _modules_defining(name):
+    """Every package module with a top-level function of this name."""
+    found = set()
+    for path in sorted(PACKAGE.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in tree.body:
+            if isinstance(node, DEFINITIONS) and node.name == name:
+                found.add(path.relative_to(PACKAGE).as_posix())
+    return found
+
+
+def test_no_cog_writes_its_own_copy_of_a_library_helper():
+    """`golive.db_up` was byte-identical to `panels.db_up` until this test existed."""
+    copies = {name: sorted(_modules_defining(name) - {LIBRARY}) for name in UNCOPYABLE}
+    assert {name: found for name, found in copies.items() if found} == {}

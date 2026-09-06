@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, NamedTuple
 from xml.etree import ElementTree
 
+from .panels import KEEP_IT as KEEP_IT
 from .panels import panel_minutes as _panel_minutes
 from .settings_store import YOUTUBE_TEMPLATE
 
@@ -373,7 +374,6 @@ UNLINK_QUESTION = (
     "it again whenever you like."
 )
 UNLINK_YES = "Yes, forget it"
-KEEP_IT = "Keep it"
 
 
 class PanelMove(NamedTuple):

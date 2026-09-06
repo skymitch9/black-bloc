@@ -10,8 +10,17 @@ from discord.ext import commands
 from ...actionlog import log_action, send_logs
 from ...command_errors import NETWORK_ERRORS, AnswersErrors
 from ...logkinds import VIA_DISCORD, kind_via
+from ...panels import (
+    KEEP_IT,
+    Panel,
+    answer,
+    confirm,
+    confirm_items,
+    opened,
+    retire,
+    still_staff,
+)
 from ...panels import NoteModal as PanelNoteModal
-from ...panels import Panel, answer, confirm, confirm_items, opened, retire, still_staff
 from ...requests import (
     BUILT_LIMIT,
     CHECK_ASKED,
@@ -121,7 +130,6 @@ MOVE_SAID: dict[str, str] = {
 }
 READY_MODAL_TITLE = "Ready to check"
 WITHDRAW_YES = "Yes, take it back"
-KEEP_IT = "Keep it"
 
 NOTE_TITLES: dict[str, str] = {
     "hold": "Put this on hold",

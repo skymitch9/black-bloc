@@ -21,8 +21,8 @@ from ...actionlog import (
 from ...command_errors import NETWORK_ERRORS, AnswersErrors, SafeDynamicItem
 from ...golive import now_iso, parse_ts
 from ...logkinds import VIA_DISCORD, kind_via
-from ...panels import NoteModal as PanelNoteModal
 from ...panels import (
+    KEEP_IT,
     Panel,
     answer,
     capped_placeholder,
@@ -33,6 +33,7 @@ from ...panels import (
     retire,
     still_staff,
 )
+from ...panels import NoteModal as PanelNoteModal
 from ...panels import site_page_url as library_site_page_url
 from ...polls import (
     ARCHIVED,
@@ -262,7 +263,7 @@ DELETE_BUTTON = "Delete"
 PAUSE_BUTTON = "Pause"
 RESUME_BUTTON = "Resume"
 DELETE_YES_BUTTON = "Yes, stop it repeating"
-DELETE_KEEP_BUTTON = "Keep it"
+DELETE_KEEP_BUTTON = KEEP_IT
 THREAD_ON = "Thread: on"
 THREAD_OFF = "Thread: off"
 FIND_TITLE = "Find a poll"

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any, NamedTuple
 
+from . import panels
 from . import rolegrants as grants
 from .golive import parse_ts
 from .panels import panel_minutes as library_panel_minutes
@@ -90,7 +91,7 @@ DELETE_QUESTION = (
     "stops working."
 )
 DELETE_YES_LABEL = "Yes, delete it"
-KEEP_IT_LABEL = "Keep it"
+KEEP_IT_LABEL = panels.KEEP_IT
 END_QUESTION = (
     "Take <@&{role_id}> back off <@{user_id}> now? They are not sent a DM — this is a staff "
     "move, and the log records who made it."

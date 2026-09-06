@@ -52,6 +52,7 @@ from ...panels import (
     Panel,
     answer,
     capped_placeholder,
+    db_up,
     opened,
     retire,
     still_staff,
@@ -1130,14 +1131,6 @@ def minutes_for(bot: Any, guild_id: int) -> int:
 def cog_of(bot: Any) -> Any:
     getter = getattr(bot, "get_cog", None)
     return getter(COG_NAME) if callable(getter) else None
-
-
-async def db_up(interaction: discord.Interaction) -> bool:
-    """`db_ready` answers a followup; this one is for the reads that happen BEFORE a defer."""
-    if interaction.client.db.is_connected:
-        return True
-    await answer(interaction, DB_UNAVAILABLE)
-    return False
 
 
 def add_site_link(view: Any, bot: Any, row: int) -> None:

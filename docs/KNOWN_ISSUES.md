@@ -2,7 +2,15 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-05 19:45 — KI-23 CLOSED and moved WHOLE to [`DONE.md`](DONE.md)** ("Personality
+> Last verified: **2026-09-05 22:10 — KI-24 ADDED** by ENGINEERING SWEEP 3 on
+> `worktree-agent-ab52a6d7c53bc1ecb`. It was found through a measured deploy-gate symptom that
+> is now **FIXED in the same branch**: `pytest -q -n 4` off `main` at `6af0ba0` (v92) was green
+> at 5188 passed while writing **1716 stderr lines / 143 tracebacks across 14 loops in 13
+> cogs**; bisected to one fixture (`tests/test_selftest_panels.py::live`) and taken to **0
+> stderr lines**, 5188 still passing. What the entry keeps is the PRODUCTION half the bisect
+> exposed — that a `before_loop` failure bypasses `@loop.error` — read from the installed
+> `discord/ext/tasks/__init__.py` (line 210 outside the try on 217, error dispatch on 278),
+> **never from a running bot**. Nothing else was re-checked then. Before that, **2026-09-05 19:45 — KI-23 CLOSED and moved WHOLE to [`DONE.md`](DONE.md)** ("Personality
 > pool, both halves"): both numbers it named arrived — GABI's `/api/health` answers
 > `gabi_personality_pool_version: 1` (deployed by the owner, `755cfd54`) and `sync_personality_pool.py`
 > exits 0 (`synced_from: catalog-platform@de4ef63`); Black Bloc v91 `604226f` compares her roster by name.
@@ -50,6 +58,49 @@
 >
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
+
+## KI-24 — A `before_loop` failure bypasses `@loop.error`, so the loop dies silently — `WATCHING`
+
+**Symptom.** Every one of the **14 `tasks.loop`s across 13 cogs** installs an `@loop.error`
+handler that logs, records `last_error` and calls `loop.restart()` — checklist item 28, and
+every loop here satisfies it. It does not cover the `before_loop`. Read from the installed
+`discord/ext/tasks/__init__.py` (2.7.1): `await self._call_loop_function('before_loop')` is
+line **210**, the `try:` is line **217**, and the `except Exception` that dispatches to
+`error` is line **278**. So a `before_loop` that raises kills the task **outside** the
+handler's reach — no restart, no `last_error`, nothing on the dashboard's Health tab, and
+the only trace is asyncio's own `Task exception was never retrieved` at garbage-collection
+time, which is not attached to anything.
+
+Every `_before_*` in this repo is one line — `await self.bot.wait_until_ready()` — so the
+only realistic way in is `wait_until_ready` raising, which on a properly started bot it does
+not.
+
+**Status:** `WATCHING`. From reading the library source, **never from an incident**: no loop
+has ever been observed dying this way on a running bot.
+
+**Why tolerated.** Closing it means wrapping the `wait_until_ready()` call in all fourteen
+`_before_*` methods so the loop's own error handler can see the failure — a production edit
+to every loop-owning cog, for a path with no observed occurrence. The Health tab is already
+the detector: a loop that died this way shows as **not running with no error beside it**,
+which is distinguishable from the ordinary failure (not running, error recorded).
+
+⚠️ **The test-suite symptom this was found through is FIXED and is not part of this entry.**
+Measured 2026-09-05 on the sweep-3 branch off `main` at `6af0ba0`: `pytest -q -n 4` was green
+at 5188 passed while writing **1716 lines and 143 tracebacks to stderr**, every deploy, since
+v89. Bisected to exactly one fixture — `tests/test_selftest_panels.py::live`, the only one
+that connects the database **and** loads all 19 cogs, so every `cog_load` cleared its
+`db.is_connected` check and started a real loop against a client that was never logged in.
+`monkeypatch.setattr(tasks.Loop, "start", …)` inside that fixture takes the whole suite's
+stderr to **0 lines**. It is scoped to that fixture on purpose: eight tests in six other
+modules assert `is_running()` right after `cog_load` (`test_birthdays.py:1500`,
+`test_events.py:1303`, `test_tempvoice.py:1336`, `test_golive.py:827`,
+`test_modmail.py:1464`, `test_presence.py:233`), and a suite-wide stub would make every one
+of them assert nothing.
+
+**What would change it.** **One** — a loop found not running on the Health tab with **no
+`last_error` beside it**. That is this failure and nothing else looks like it. The fix then
+is the fourteen-method wrap, in one commit, with a test per cog that the handler sees a
+`before_loop` failure.
 
 ## KI-22 — `/purge`'s two log kinds cannot say which door made them — `ACCEPTED`
 

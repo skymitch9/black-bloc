@@ -59,7 +59,16 @@ from ...birthdays import (
     year_problem,
 )
 from ...command_errors import AnswersErrors
-from ...panels import Panel, answer, confirm, confirm_items, opened, retire, still_staff
+from ...panels import (
+    KEEP_IT,
+    Panel,
+    answer,
+    confirm,
+    confirm_items,
+    opened,
+    retire,
+    still_staff,
+)
 from ...settings_store import (
     BIRTHDAY_MODES,
     DB_UNAVAILABLE,
@@ -610,7 +619,7 @@ async def open_remove_confirm(interaction: discord.Interaction, previous: Any = 
         REMOVE_CONFIRM,
         confirm_items(
             yes="Yes, forget it",
-            no="Keep it",
+            no=KEEP_IT,
             on_yes=run_remove,
             on_no=back_to_panel,
         ),
@@ -630,7 +639,7 @@ async def open_forget_confirm(
         FORGET_CONFIRM.format(who=member.display_name),
         confirm_items(
             yes="Yes, forget it",
-            no="Keep it",
+            no=KEEP_IT,
             on_yes=lambda one, card: run_forget(one, member, card),
             on_no=lambda one, card: open_card(one, member, card),
         ),

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, NamedTuple
 
+from .panels import KEEP_IT
 from .panels import panel_minutes as library_panel_minutes
 from .panels import site_page_url as library_site_page_url
 
@@ -86,7 +87,6 @@ FORGET_QUESTION = (
     "now is not changed."
 )
 FORGET_YES = "Yes, forget it"
-KEEP_IT = "Keep it"
 
 BLOCKED = "blocked"
 NONE = "none"
