@@ -318,7 +318,7 @@ docs bookkeeping lands with the work, not after.
   `requests.py` and `applications.py` — `opened(interaction, staff=False)` covers it, but it was outside
   this sweep's brief. Docs landed with the work: `code-notes.md` § *Confirm/opened fold* (five notes above
   re-keyed), `panels-program.md` §4 *What the library gained after wave 0*, `access/sweeps.md` rows
-  `CF1`–`CF14`. ⚠️ **Nothing was run against live Discord and `python -m black_bloc` was not booted**
+  rows 262–275 (were `CF1`–`CF14`). ⚠️ **Nothing was run against live Discord and `python -m black_bloc` was not booted**
   (no token in a worktree); the sweep rows are the check-out.
 - 🔧 **`LOG_LEVEL_COMMANDS` is stale for eight features (report from the automod build, 2026-09-04):**
   `settings_store.py` still names `tempvoice` (now `voice`), `events` (now `event`), `poll`, `birthday`,

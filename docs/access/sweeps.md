@@ -867,7 +867,7 @@ nothing under `tests/live/` has been run against the deployed host.
 | 260 | dashboard → **Settings** → the **core** group | four new rows: **Whether the bot tests itself at every boot** (true), **Where the self-test posts the cards it is proving** (`#mute-me-bot-test-spam`), **How long the self-test's cards stay before the bot deletes them** (5), and **How much of the self-test is repeated into Discord** (**off** — the only feature that ships at off, on purpose). Set the minutes to `0`: refused in words. The Discord door onto all four is `/settings` ▸ **A setting group…** ▸ **core** |
 | 261 | after the next deploy, `flyctl logs` | one line — `selftest: 106 ok, 0 failed, 24 messages posted (purge in 5 min)` — and one `selftest: FAILED <check> — <sentence>` line per failure. ⚠️ **This is the line that verifies a deploy**, without opening Discord at all. Turn `selftest_on_boot` off and the line stops; the boot purge of any leftovers still happens |
 
-## Confirm/opened fold — rows `CF1`–`CF14` (the conductor numbers them at the merge)
+## Confirm/opened fold — rows 262–275 (were `CF1`–`CF14`; numbered at the merge 2026-09-05)
 
 **This is a REFACTOR sweep, so every row has the same answer: it must look EXACTLY as it did
 before.** Nothing new was built. Eight features stopped building the *Keep it / Yes* card by hand
@@ -878,20 +878,20 @@ a *Keep it* that lands somewhere it did not use to — that is a defect, not a c
 
 | Row | Press this | What must be IDENTICAL to before |
 |---|---|---|
-| CF1 | `/memory` ▸ **Forget everything** | the card keeps your memory lines and adds an **Are you sure?** field; **Yes, forget it all** (red) then **Keep it** (grey), that order. **Keep it** returns to the `/memory` panel |
-| CF2 | `/memory` ▸ **Stop remembering me** | same card shape, **Yes, stop** then **Keep it** |
-| CF3 | `/birthday` ▸ the button that forgets YOUR birthday | the whole card becomes the question (there is **no** *Are you sure?* field on this one — the question IS the description, as it always was), **Yes, forget it** then **Keep it** |
-| CF4 | `/birthday` ▸ look somebody up ▸ **Forget their birthday** | same shape, and ⚠️ **Keep it goes back to THAT MEMBER'S card, not to the panel** — this is the one that would break most quietly |
-| CF5 | `/birthday` ▸ settings ▸ clear the birthday role | **Yes, clear it** then **Cancel** — note the second button says *Cancel* here and *Keep it* everywhere else. It must still say Cancel |
-| CF6 | `/youtube` ▸ the button that unlinks YOUR channel | the panel card plus an **Are you sure?** field, **Yes, forget it** then **Keep it**; **Keep it** returns to the `/youtube` panel |
-| CF7 | `/pings` ▸ **Take my ping role away** | the notifications card plus the field, **Yes, take it away** then **Keep it** back to the panel |
-| CF8 | `/pings` ▸ **Streamers…** ▸ pick one ▸ the remove button | **Yes, take it away** then **Keep it**, and ⚠️ **Keep it returns to THAT STREAMER'S card, not to the root panel** |
-| CF9 | `/automod` ▸ **Mode…** ▸ **on** (needs `automod_arm_needs_confirm` true, the default) | the root status card plus the arming question, **Yes, arm it** (red) then either **Keep it in shadow** or **Keep it off** depending on where you are now. Press the second and you land back on the root with the mode UNCHANGED |
-| CF10 | `/chat` ▸ **Knowledge…** ▸ a note ▸ **Remove** | the note's own card plus the field, **Yes, remove it** then **Keep it**; ⚠️ **Keep it returns to the NOTE, not to the knowledge list** |
-| CF11 | `/rolemenu` ▸ a menu ▸ **Delete it** | an embed TITLED **Are you sure?** with the question as its body (no field), **Yes, delete it** then **Keep it** |
-| CF12 | `/rolemenu` ▸ **Seed the defaults** | ⚠️ the yes button here is **blue, not red** — it is the one confirm in the app that is not destructive — it says **Yes, make them**, and the way back says **Leave it**, not *Keep it*. All three must be unchanged |
-| CF13 | `/rolemenu` ▸ **Grants…** ▸ a grant ▸ **End it now** | **Yes, take it back** in red, and the way back says **Leave it**, not *Keep it* |
-| CF14 | `/voice` ▸ the button that forgets your saved preferences | an embed titled **Are you sure?**, **Yes, forget it** in red, **Keep it** back to the voice panel |
+| 262 | `/memory` ▸ **Forget everything** | the card keeps your memory lines and adds an **Are you sure?** field; **Yes, forget it all** (red) then **Keep it** (grey), that order. **Keep it** returns to the `/memory` panel |
+| 263 | `/memory` ▸ **Stop remembering me** | same card shape, **Yes, stop** then **Keep it** |
+| 264 | `/birthday` ▸ the button that forgets YOUR birthday | the whole card becomes the question (there is **no** *Are you sure?* field on this one — the question IS the description, as it always was), **Yes, forget it** then **Keep it** |
+| 265 | `/birthday` ▸ look somebody up ▸ **Forget their birthday** | same shape, and ⚠️ **Keep it goes back to THAT MEMBER'S card, not to the panel** — this is the one that would break most quietly |
+| 266 | `/birthday` ▸ settings ▸ clear the birthday role | **Yes, clear it** then **Cancel** — note the second button says *Cancel* here and *Keep it* everywhere else. It must still say Cancel |
+| 267 | `/youtube` ▸ the button that unlinks YOUR channel | the panel card plus an **Are you sure?** field, **Yes, forget it** then **Keep it**; **Keep it** returns to the `/youtube` panel |
+| 268 | `/pings` ▸ **Take my ping role away** | the notifications card plus the field, **Yes, take it away** then **Keep it** back to the panel |
+| 269 | `/pings` ▸ **Streamers…** ▸ pick one ▸ the remove button | **Yes, take it away** then **Keep it**, and ⚠️ **Keep it returns to THAT STREAMER'S card, not to the root panel** |
+| 270 | `/automod` ▸ **Mode…** ▸ **on** (needs `automod_arm_needs_confirm` true, the default) | the root status card plus the arming question, **Yes, arm it** (red) then either **Keep it in shadow** or **Keep it off** depending on where you are now. Press the second and you land back on the root with the mode UNCHANGED |
+| 271 | `/chat` ▸ **Knowledge…** ▸ a note ▸ **Remove** | the note's own card plus the field, **Yes, remove it** then **Keep it**; ⚠️ **Keep it returns to the NOTE, not to the knowledge list** |
+| 272 | `/rolemenu` ▸ a menu ▸ **Delete it** | an embed TITLED **Are you sure?** with the question as its body (no field), **Yes, delete it** then **Keep it** |
+| 273 | `/rolemenu` ▸ **Seed the defaults** | ⚠️ the yes button here is **blue, not red** — it is the one confirm in the app that is not destructive — it says **Yes, make them**, and the way back says **Leave it**, not *Keep it*. All three must be unchanged |
+| 274 | `/rolemenu` ▸ **Grants…** ▸ a grant ▸ **End it now** | **Yes, take it back** in red, and the way back says **Leave it**, not *Keep it* |
+| 275 | `/voice` ▸ the button that forgets your saved preferences | an embed titled **Are you sure?**, **Yes, forget it** in red, **Keep it** back to the voice panel |
 
 **And the half that is invisible when it works** — the `opened` fold touched `/settings`,
 `/automod`, `/honeypot`, `/mod`, `/modmail`, `/rolemenu`, `/raidtrain` and `/chat`. Two checks
