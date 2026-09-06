@@ -175,6 +175,21 @@ above says.
    site/mock/check.mjs` and the `labels.js` parse were not run either: the site is
    untouched by this wave.
 
+### What the library gained after wave 0
+
+Wave 0 shipped the pieces in the table above. Two more were added on **2026-09-05**, by the
+confirm/opened fold — both are things seventeen panels had each re-implemented, which is the
+same argument §1 makes for the library existing at all:
+
+| Piece | What it replaced |
+|---|---|
+| `confirm(interaction, view, embed, items, previous, *, question, title)` plus `confirm_items(...)` and `ConfirmButton` | **Eight** hand-built Keep it / Yes cards (`/memory`, `/birthday` ×3, `/youtube`, `/pings` ×2, `/automod`, `/chat`, `/rolemenu` ×3, `/voice`) and the twelve one-off Button subclasses under them. `items` stays a parameter so automod and role menus keep drawing their confirm from their own move table (P3); `question` is optional because three cards put the question in the embed rather than in a field |
+| `opened(interaction, *, staff=True)` | The `still_staff` → `defer` → `db_ready` triplet: five cogs' identical `opened`, `role_menus.ready` (the same function renamed) and **fourteen** inline repeats in `cogs/content/chat.py`. `staff=False` covers the panels that open for members (`/raidtrain`, `/memory`) |
+
+⚠️ **`/event`, `/request` and `/apply`'s confirm cards were deliberately left out** — they edit
+without `allowed_mentions`, so folding them would have changed behaviour inside a refactor. See
+the `Confirm/opened fold` section of `code-notes.md`.
+
 ## 5. Waves — proposed sequence (the owner picks; one feature at a time where a fork exists)
 
 Parallel agents in worktrees, three or four per wave, each on ONE feature. Shared files
