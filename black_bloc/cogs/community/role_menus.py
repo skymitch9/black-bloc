@@ -21,6 +21,7 @@ from ...panels import (
     answer,
     capped_placeholder,
     clamped,
+    confirm,
     db_up,
     opened,
     retire,
@@ -2040,18 +2041,14 @@ async def build_request(
     return (embed, view)
 
 
-def confirm(
-    bot: Any, guild: Any, previous: Any, question: str, moves: Any
-) -> tuple[discord.Embed, RoleMenuPanel]:
-    embed = discord.Embed(title=menus.CONFIRM_TITLE, description=question)
+def confirm_panel(bot: Any, guild: Any, previous: Any) -> RoleMenuPanel:
+    """The confirm card keeps the place it was raised from, so the way back lands there."""
     view = RoleMenuPanel(minutes_for(bot, guild.id))
     view.where = getattr(previous, "where", ROOT)
     view.menu_name = getattr(previous, "menu_name", "")
     view.grant_id = getattr(previous, "grant_id", None)
     view.member_id = getattr(previous, "member_id", None)
-    for move in moves:
-        view.add_item(MoveButton(move))
-    return (embed, view)
+    return view
 
 
 # --- rendering -----------------------------------------------------------------------------------
@@ -2676,8 +2673,13 @@ class MoveButton(discord.ui.Button):
                 menus.PanelMove(menus.END_YES, menus.END_YES_LABEL, "danger", 0),
                 menus.PanelMove(menus.LEAVE_IT, menus.LEAVE_IT_LABEL, "secondary", 0),
             )
-        embed, fresh = confirm(bot, guild, view, question, moves)
-        await render(interaction, embed, fresh, view)
+        await confirm(
+            interaction,
+            confirm_panel(bot, guild, view),
+            discord.Embed(title=menus.CONFIRM_TITLE, description=question),
+            [MoveButton(move) for move in moves],
+            view,
+        )
 
     async def open_modal(self, interaction: discord.Interaction, view: Any, action: str) -> None:
         if not await still_staff(interaction):
