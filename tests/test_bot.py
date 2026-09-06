@@ -149,10 +149,14 @@ async def test_the_bot_has_no_prefix_commands_to_dispatch(settings):
 async def test_every_features_logs_is_a_panel_button_and_no_group_is_left_to_hold_one(settings):
     """The guarantee this once made — every feature group carries a `logs` child — could not
     survive the panels program, which retired every group. It is re-expressed against what
-    replaced it: no group is left at all, and every feature in `FEATURES` has a panel whose
-    Logs button calls `send_logs` with that feature's name."""
+    replaced it: no group is left at all, every feature in `FEATURES` has a panel whose Logs
+    button calls `send_logs` with that feature's name, and nothing reaches `send_logs` from a
+    slash command any more. The feature set is checked for EQUALITY, so a Logs button deleted
+    by the next wave fails here, and so does a `send_logs("typo")` nobody can reach."""
     import ast
     import pathlib
+
+    import black_bloc
 
     bot = BlackBlocBot(settings)
     for name in COGS:
@@ -173,12 +177,32 @@ async def test_every_features_logs_is_a_panel_button_and_no_group_is_left_to_hol
                         found[target.id] = node.value.value
         return found
 
-    root = pathlib.Path("black_bloc")
+    def holders(tree):
+        """Each node's nearest enclosing function, so a call's decorators can be read."""
+        found = {}
+
+        def walk(node, holder):
+            for child in ast.iter_child_nodes(node):
+                mine = child if isinstance(child, FUNCTIONS) else holder
+                if holder is not None:
+                    found[child] = holder
+                walk(child, mine)
+
+        walk(tree, None)
+        return found
+
+    FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef)
+    root = pathlib.Path(black_bloc.__file__).resolve().parent
     shared = strings(ast.parse((root / "logkinds.py").read_text(encoding="utf-8")))
     logged = set()
+    from_a_command = []
+    labels = 0
     for path in root.rglob("*.py"):
-        tree = ast.parse(path.read_text(encoding="utf-8"))
+        text = path.read_text(encoding="utf-8")
+        labels += text.count('"Logs"') + text.count("'Logs'")
+        tree = ast.parse(text)
         known = {**shared, **strings(tree)}
+        holder = holders(tree)
         for node in ast.walk(tree):
             if not (isinstance(node, ast.Call) and getattr(node.func, "id", "") == "send_logs"):
                 continue
@@ -187,10 +211,21 @@ async def test_every_features_logs_is_a_panel_button_and_no_group_is_left_to_hol
                 logged.add(feature.value)
             elif isinstance(feature, ast.Name):
                 logged.add(known.get(feature.id, feature.id))
+            owner = holder.get(node)
+            decorators = getattr(owner, "decorator_list", []) if owner is not None else []
+            if any("app_commands" in ast.unparse(one) for one in decorators):
+                from_a_command.append(f"{path.name}::{getattr(owner, 'name', '?')}")
 
     assert groups == []
     assert not [name for name in RETIRED_GROUPS if name in groups]
-    assert set(FEATURES) <= logged
+    assert logged == set(FEATURES)
+    assert not from_a_command, (
+        "Logs is a panel button now, not a subcommand — these reach send_logs from a slash "
+        f"command callback: {sorted(from_a_command)}"
+    )
+    assert labels >= len(FEATURES), (
+        f"only {labels} controls are labelled Logs for {len(FEATURES)} features"
+    )
 
 
 async def test_the_command_tree_stays_inside_discords_limits(settings):
