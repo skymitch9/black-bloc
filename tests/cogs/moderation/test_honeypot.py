@@ -306,7 +306,6 @@ async def hits(db):
     return list(await cur.fetchall())
 
 
-
 @pytest.fixture
 async def bot(db, monkeypatch):
     monkeypatch.delenv("DISCORD_TOKEN", raising=False)

@@ -283,7 +283,6 @@ class FakeInteraction:
         ]
 
 
-
 @pytest.fixture
 async def bot(db, monkeypatch):
     monkeypatch.delenv("DISCORD_TOKEN", raising=False)

@@ -195,7 +195,6 @@ class FakeInteraction:
         return spoken[-1] if spoken else None
 
 
-
 @pytest.fixture
 async def bot(db, monkeypatch):
     monkeypatch.delenv("DISCORD_TOKEN", raising=False)

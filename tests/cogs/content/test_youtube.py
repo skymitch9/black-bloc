@@ -50,7 +50,6 @@ from black_bloc.cogs.content.youtube import (
 from black_bloc.config import load_settings
 from black_bloc.logkinds import FEATURE_PAGES
 from black_bloc.settings_store import DB_UNAVAILABLE, SettingsStore
-from black_bloc.storage.db import Database
 from black_bloc.youtube import (
     CANNOT_RESOLVE,
     FEED_REFUSED,
@@ -296,16 +295,6 @@ class _Feed:
 
 
 # --- fixtures ----------------------------------------------------------------------------------
-
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "yt.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 @pytest.fixture

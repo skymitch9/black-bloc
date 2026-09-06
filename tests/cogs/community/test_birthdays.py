@@ -278,7 +278,6 @@ async def details_for(db, kind):
     return [row["details"] for row in await cur.fetchall()]
 
 
-
 @pytest.fixture
 async def bot(db, monkeypatch):
     monkeypatch.delenv("DISCORD_TOKEN", raising=False)

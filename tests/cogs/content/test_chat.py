@@ -29,7 +29,6 @@ from black_bloc.settings_store import (
     DB_UNAVAILABLE,
     SettingsStore,
 )
-from black_bloc.storage.db import Database
 
 GUILD = 7
 CHANNEL = 111
@@ -192,16 +191,6 @@ class FakeBot:
 
     def get_cog(self, name):
         return self.cogs.get(name)
-
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "c.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 @pytest.fixture

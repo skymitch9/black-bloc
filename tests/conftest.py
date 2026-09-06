@@ -30,26 +30,48 @@ def settings(tmp_path, monkeypatch):
     return load_settings(_env_file=None, database_path=tmp_path / "test.sqlite3")
 
 
-async def tables_of(db: Any) -> list[str]:
-    cur = await db.conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-    return [row["name"] for row in await cur.fetchall()]
+async def schema_of(db: Any) -> dict[str, tuple[str, str | None]]:
+    """Every table, index, view and trigger the database holds right now, in creation order."""
+    cur = await db.conn.execute("SELECT type, name, sql FROM sqlite_master ORDER BY rowid")
+    return {row["name"]: (row["type"], row["sql"]) for row in await cur.fetchall()}
 
 
-async def take(db: Any) -> dict[str, list[tuple]]:
-    """Every row of every table, so a database can be put back without rebuilding schema v32."""
-    found: dict[str, list[tuple]] = {}
-    for name in await tables_of(db):
+async def take(db: Any) -> dict[str, Any]:
+    """Every row of every table AND the schema holding them, so a database can be put back
+    without rebuilding schema v32."""
+    schema = await schema_of(db)
+    rows: dict[str, list[tuple]] = {}
+    for name, (kind, _sql) in schema.items():
+        if kind != "table":
+            continue
         cur = await db.conn.execute(f"SELECT * FROM {name}")
-        found[name] = [tuple(row) for row in await cur.fetchall()]
-    return found
+        rows[name] = [tuple(row) for row in await cur.fetchall()]
+    return {"schema": schema, "rows": rows}
 
 
-async def put(db: Any, rows: dict[str, list[tuple]]) -> None:
-    """The other half: emptied and refilled on the live connection, which a page copy cannot do."""
+async def _put_schema_back(db: Any, wanted: dict, found: dict) -> None:
+    for name, (kind, sql) in found.items():
+        if name in wanted or sql is None or name.startswith("sqlite_"):
+            continue
+        await db.conn.execute(f"DROP {kind.upper()} IF EXISTS {name}")
+    for name, (_kind, sql) in wanted.items():
+        if name not in found and sql is not None and not name.startswith("sqlite_"):
+            await db.conn.execute(sql)
+
+
+async def put(db: Any, snapshot: dict[str, Any]) -> None:
+    """The other half: emptied and refilled on the live connection, which a page copy cannot do.
+    A test that dropped an index or made a table of its own has both put back first."""
     await db.conn.commit()
     await db.conn.execute("PRAGMA foreign_keys=OFF")
+    found = await schema_of(db)
+    rows = snapshot["rows"]
+    for name in rows:
+        if name in found:
+            await db.conn.execute(f"DELETE FROM {name}")
+    if set(found) != set(snapshot["schema"]):
+        await _put_schema_back(db, snapshot["schema"], found)
     for name, kept in rows.items():
-        await db.conn.execute(f"DELETE FROM {name}")
         if kept:
             marks = ", ".join("?" * len(kept[0]))
             await db.conn.executemany(f"INSERT INTO {name} VALUES ({marks})", kept)

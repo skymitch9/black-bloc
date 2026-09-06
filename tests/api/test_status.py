@@ -79,7 +79,6 @@ def client_for(bot) -> TestClient:
     return TestClient(create_app(bot), base_url="https://testserver")
 
 
-
 def test_status_needs_a_session(bot):
     response = client_for(bot).get("/api/status")
     assert response.status_code == 401

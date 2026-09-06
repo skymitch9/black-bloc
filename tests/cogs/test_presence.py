@@ -140,7 +140,6 @@ class FakeInteraction:
         return self.response.messages[-1]["content"] if self.response.messages else None
 
 
-
 @pytest.fixture
 async def bot(db, monkeypatch):
     monkeypatch.delenv("DISCORD_TOKEN", raising=False)

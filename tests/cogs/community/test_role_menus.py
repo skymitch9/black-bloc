@@ -67,7 +67,6 @@ LOG_CHANNEL = 222
 STAFF_CHANNEL = 333
 
 
-
 async def test_menu_crud(db):
     menu_id = await create_menu(db, GUILD, "pronouns", "Pronouns", "pick some", "multiple")
     assert menu_id is not None

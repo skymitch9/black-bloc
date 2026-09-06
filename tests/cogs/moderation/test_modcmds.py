@@ -248,7 +248,6 @@ def cards(bot):
     return [m for m in bot.guild.get_channel(TEST_CHANNEL).messages if "embed" in m.kwargs]
 
 
-
 @pytest.fixture
 async def bot(db, monkeypatch):
     monkeypatch.delenv("DISCORD_TOKEN", raising=False)

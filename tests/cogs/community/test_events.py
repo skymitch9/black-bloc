@@ -371,7 +371,6 @@ async def action_kinds(db):
     return [row["kind"] for row in await cur.fetchall()]
 
 
-
 @pytest.fixture
 async def bot(db, monkeypatch):
     monkeypatch.delenv("DISCORD_TOKEN", raising=False)

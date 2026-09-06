@@ -230,16 +230,6 @@ class FakeInteraction:
 
 
 @pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "rt.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
-
-
-@pytest.fixture
 async def bot(db, monkeypatch):
     monkeypatch.delenv("DISCORD_TOKEN", raising=False)
     settings = load_settings(_env_file=None, test_mode=True, test_channel_id=TEST_CHANNEL)

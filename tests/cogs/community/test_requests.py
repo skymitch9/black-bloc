@@ -247,7 +247,6 @@ def link_of(sent):
     return view.children[0].url if view is not None else None
 
 
-
 @pytest.fixture
 async def bot(db, monkeypatch):
     monkeypatch.delenv("DISCORD_TOKEN", raising=False)
