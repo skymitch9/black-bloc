@@ -51,6 +51,8 @@ from ...panels import (
     answer,
     capped_placeholder,
     clamped,
+    confirm,
+    confirm_items,
     db_up,
     opened,
     retire,
@@ -155,7 +157,6 @@ PERSONALITY_TITLE = "The voice Black Bloc answers in"
 KNOWLEDGE_TITLE = "What Black Bloc knows about this server"
 NOTE_TITLE = "Note {id}"
 SETTINGS_TITLE = "How chat is set up"
-CONFIRM_TITLE = "Are you sure?"
 
 VOICE_PLACEHOLDER = "The voice…"
 MOOD_OFF_PLACEHOLDER = "Turn a mood off…"
@@ -523,21 +524,27 @@ async def open_remove_confirm(interaction: discord.Interaction, view: Any) -> No
         await render_knowledge(interaction, view.query, view)
         await answer(interaction, chat_panel.NO_SUCH_NOTE.format(id=view.note_id))
         return
-    embed = discord.Embed(
-        title=NOTE_TITLE.format(id=int(row["id"])), description=clamped(note_lines(row))
-    )
-    embed.add_field(
-        name=CONFIRM_TITLE,
-        value=chat_panel.REMOVE_QUESTION.format(id=int(row["id"]), title=str(row["title"])),
-        inline=False,
-    )
     fresh = ChatPanel(minutes_for(bot, guild.id))
     fresh.where = NOTE_VIEW
     fresh.note_id = int(row["id"])
     fresh.query = view.query
-    fresh.add_item(RemoveYesButton())
-    fresh.add_item(KeepItButton())
-    await render(interaction, embed, fresh, view)
+    await confirm(
+        interaction,
+        fresh,
+        discord.Embed(
+            title=NOTE_TITLE.format(id=int(row["id"])), description=clamped(note_lines(row))
+        ),
+        confirm_items(
+            yes=chat_panel.REMOVE_YES,
+            no=chat_panel.KEEP_IT,
+            on_yes=lambda one, card: run_remove_note(one, card.note_id, card),
+            on_no=lambda one, card: open_note(one, card.note_id, card),
+        ),
+        view,
+        question=chat_panel.REMOVE_QUESTION.format(
+            id=int(row["id"]), title=str(row["title"])
+        ),
+    )
 
 
 async def refresh_where(interaction: discord.Interaction, view: Any) -> None:
@@ -734,22 +741,6 @@ class MoveButton(discord.ui.Button):
                 on_submit=lambda one, text: run_find(one, text, view),
             )
         )
-
-
-class RemoveYesButton(discord.ui.Button):
-    def __init__(self) -> None:
-        super().__init__(label=chat_panel.REMOVE_YES, style=discord.ButtonStyle.danger, row=0)
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await run_remove_note(interaction, self.view.note_id, self.view)
-
-
-class KeepItButton(discord.ui.Button):
-    def __init__(self) -> None:
-        super().__init__(label=chat_panel.KEEP_IT, style=discord.ButtonStyle.secondary, row=0)
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await open_note(interaction, self.view.note_id, self.view)
 
 
 class VoicePick(discord.ui.Select):
