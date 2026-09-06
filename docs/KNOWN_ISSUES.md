@@ -2,7 +2,12 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-05 — KI-21 widened at the v79 (honeypot panel) landing: the same generic
+> Last verified: **2026-09-05 — KI-21 RESOLVED and moved WHOLE to [`DONE.md`](DONE.md)** by the
+> engineering sweep on `worktree-agent-accb69989b295c889`: `PUT /api/settings/{key}` hands
+> `automod_mode`, `honeypot_mode` and `honeypot_exempt_role_ids` to the cog's own move, so the
+> website reads the same verdict the Discord panel does. ⚠️ Fixed in tests only — the branch has
+> not been merged, deployed, or exercised against the live dashboard. Before that, **2026-09-05 —
+> KI-21 widened at the v79 (honeypot panel) landing: the same generic
 > route bypasses `/honeypot`'s arming refusal and rewrites its exempt list with no log row; from the
 > build's read of the code, not an incident.** Before that, **2026-09-04 — KI-21 added at the v74 (automod
 > panel) landing from the design doc's
@@ -61,35 +66,6 @@ not move, and spending it on a kind nobody can emit twice is a poor trade.
 **What would change it.** **One** — the moment a `POST /api/mod/purge` route is proposed. At that
 point the two kinds get `kind_via` and a `via` parameter in the same commit as the route, and
 `tests/test_logkinds.py`'s AST guard is what catches it if they do not.
-
-## KI-21 — The website can arm automod (and the honeypot) past the arming refusals — `ACCEPTED`
-
-**Symptom.** `/automod` (the wave-3 panel, v74) never offers `on` while `staff_channel_id` is
-still the test channel or the guild resolves no staff role, and `set_mode` refuses the same two
-ways (`cogs/moderation/automod.py:arming_refusal`, read by both the select and the verdict). The
-dashboard's Automod page flips the same key through the generic settings route
-(`api/settings_api.py`), which validates against `KEY_CHOICES` only — `on` is a listed choice, so
-the PUT lands, `automod_mode` becomes `on`, and a guild with no reachable staff channel or staff
-role is armed from the website with neither refusal consulted. Found by the design doc's read of the
-route (2026-09-04), not by an incident. **Widened 2026-09-05 (v79):** `/honeypot`'s panel has the same
-shape — `on` is absent from its mode picker while no staff role resolves and
-`cogs/moderation/honeypot.py:arming_refusal` refuses it — and the dashboard writes `honeypot_mode`
-through the same generic route, so the trap can be armed from the website with nobody exempt. The
-route also rewrites `honeypot_exempt_role_ids` directly, so a website edit of the exempt list leaves
-**no `honeypot.exempt_set` row at all**, where the panel's one write leaves exactly one.
-
-**Why tolerated.** The route is behind the dashboard's staff sign-in, so the person doing it is
-already staff; the two refusals exist to stop a *misconfigured* guild going live, not a hostile one,
-and the misconfiguration they guard (staff channel = test channel) is the TEST_MODE posture the owner
-is running on purpose. Fixing it is a settings-API pass (route `set_mode` through the cog's own
-function so the web door and the Discord door share one verdict, then the same for every other key
-with a cog-side gate), not a panel change, and it belongs with the `LOG_LEVEL_COMMANDS` and
-confirm-helper sweeps rather than in the wave-3 landings.
-
-**What would change it.** The settings-API pass on `TODO.md` (wire `automod_mode` and `honeypot_mode`
-writes through each cog's `set_mode`, and `honeypot_exempt_role_ids` through `set_exempt_roles`, all
-with `via=website`), or **1 report** of a guild armed from the website while the Discord panel was
-refusing — today's number is **0**.
 
 ## KI-14 — A memory note about a THIRD PERSON is prevented, not proved impossible — `ACCEPTED`
 

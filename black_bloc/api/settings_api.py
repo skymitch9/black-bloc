@@ -15,6 +15,8 @@ from ..settings_store import (
     KEY_MAX,
     KEY_MIN,
     KEY_TYPES,
+    SettingError,
+    coerce_value,
     namespace_of,
 )
 from ..settings_store import NAMESPACE_OVERRIDE as NAMESPACE_OVERRIDE
@@ -71,6 +73,22 @@ def as_json(key: str, value: Any) -> Any:
     if kind in ("channels", "roles"):
         return [str(item) for item in value or ()]
     return value
+
+
+def gated_writers() -> dict[str, Any]:
+    """KI-21: the keys a cog guards, so the website's PUT gets the SAME verdict the panel does.
+
+    Every value takes `(bot, guild, value, actor, *, via)` and answers an `Outcome`. Audited
+    2026-09-05 against every `*_mode` key in the registry: these are the only writes with a
+    cog-side gate — the rest have no verdict to share and go through `set_key` as they always did.
+    """
+    from ..cogs.moderation import automod, honeypot
+
+    return {
+        "automod_mode": automod.set_mode,
+        "honeypot_mode": honeypot.set_mode,
+        "honeypot_exempt_role_ids": honeypot.set_exempt_roles,
+    }
 
 
 def key_row(store: Any, guild_id: int, key: str) -> dict[str, Any]:
@@ -178,7 +196,15 @@ def build_router(bot: Any) -> APIRouter:
             raise Refused(400, "no_value", NO_VALUE)
         actor = actor_for(bot, who, guild)
         wanted = from_json(key, payload["value"])
-        outcome = await set_key(bot, guild, key, wanted, actor, via=VIA_WEBSITE)
+        guarded = gated_writers().get(key)
+        if guarded is None:
+            outcome = await set_key(bot, guild, key, wanted, actor, via=VIA_WEBSITE)
+        else:
+            try:
+                wanted = coerce_value(key, wanted)
+            except SettingError as exc:
+                raise Refused(400, "bad_value", str(exc)) from None
+            outcome = await guarded(bot, guild, wanted, actor, via=VIA_WEBSITE)
         if not outcome.ok:
             raise Refused(outcome.status or 400, outcome.code or "bad_value", outcome.message)
         return key_row(bot.store, guild.id, key)

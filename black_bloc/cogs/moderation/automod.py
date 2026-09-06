@@ -88,6 +88,7 @@ from ...modcases import (
 from ...panels import (
     DESCRIPTION_LIMIT,
     SELECT_OPTION_LIMIT,
+    Outcome,
     Panel,
     answer,
     capped_placeholder,
@@ -737,20 +738,27 @@ def arming_refusal(bot: Any, guild: Any) -> str | None:
     return None
 
 
-async def set_mode(bot: Any, guild: Any, value: str, actor: Any, *, via: str = VIA_DISCORD) -> str:
+async def set_mode(
+    bot: Any, guild: Any, value: str, actor: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """One verdict for both doors: an `Outcome`, so the website can tell a refusal from a save."""
     if value == "on":
-        refusal = arming_refusal(bot, guild)
-        if refusal is not None:
-            return refusal
-    await bot.store.set(guild.id, "automod_mode", value, by=getattr(actor, "id", actor))
+        blocker = arming_refusal(bot, guild)
+        if blocker is not None:
+            return Outcome(False, blocker, "not_armable", 409)
+    try:
+        stored = coerce_value("automod_mode", value)
+    except SettingError as exc:
+        return Outcome(False, str(exc), "bad_value", 400)
+    await bot.store.set(guild.id, "automod_mode", stored, by=getattr(actor, "id", actor))
     await log_action(
         bot,
         guild,
         kind_via("automod.mode", via),
         actor=actor,
-        details={"mode": value, "via": via},
+        details={"mode": stored, "via": via},
     )
-    return MODE_SET.format(mode=value)
+    return Outcome(True, MODE_SET.format(mode=stored), "set", 200, stored)
 
 
 async def set_exempt(
@@ -1083,9 +1091,9 @@ async def run_mode(
         return
     if not await opened(interaction):
         return
-    said = await set_mode(bot, guild, value, interaction.user)
+    outcome = await set_mode(bot, guild, value, interaction.user)
     await render_root(interaction, previous)
-    await answer(interaction, said)
+    await answer(interaction, outcome.message)
 
 
 async def run_exempt(
