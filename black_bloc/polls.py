@@ -896,12 +896,6 @@ DRAFT_STAFF_LINE = " · **{drafts}** saved draft(s)"
 DRAFT_PICK = "Saved drafts…"
 DRAFT_NOBODY = "somebody who has left"
 DRAFT_NO_QUESTION = "no question yet"
-SAVE_BUTTON = "Save for later"
-SAVE_REPLACES_BUTTON = "Save (replaces your draft)"
-RESUME_BUTTON = "Resume draft"
-DISCARD_BUTTON = "Discard draft"
-DISCARD_STAFF_BUTTON = "Discard"
-DISCARD_YES_BUTTON = "Yes, discard it"
 
 
 @dataclass
