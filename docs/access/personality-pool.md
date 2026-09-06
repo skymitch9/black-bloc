@@ -124,3 +124,11 @@ Health route: `GET https://blackbloc.heygabi.ai/health` now carries
 | startup fails saying a trope has no voice | a name was added to the manifest and not to `personas.py:VOICES`. Write the cookout body |
 | the self-test row is red after a GABI deploy | she moved first, which is the designed order. Run the sync script here and deploy |
 | a mood vanished from the panel | it was retired by a manifest change. It is still a row — switch it back on, or put the name back in the canonical and bump the version |
+
+⚠️ **One asymmetry a retired mood has, worth knowing before it surprises somebody.** Switching
+a retired mood back ON returns it to the **pool** — the drift can land on it again, because
+`enabled_tropes` reads the rows, not the manifest. Setting it as the server's **single pinned
+voice** (`chat_personality = <name>`) is refused, because that setting's choices come from the
+manifest. The fix in both directions is the same one: put the name back in the canonical and
+bump the version. This was not asked for by the design and is not treated as a defect —
+staff's re-enable does the thing staff would want it for.
