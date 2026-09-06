@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 32
+SCHEMA_VERSION = 33
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -397,6 +397,14 @@ CREATE TABLE IF NOT EXISTS poll_results (
     winner_position INTEGER,
     counts          TEXT    NOT NULL,
     votes_dropped   INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS poll_drafts (
+    guild_id INTEGER NOT NULL,
+    user_id  INTEGER NOT NULL,
+    payload  TEXT    NOT NULL,
+    saved_at TEXT    NOT NULL,
+    PRIMARY KEY (guild_id, user_id)
 );
 
 CREATE TABLE IF NOT EXISTS chat_intents (
