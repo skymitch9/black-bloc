@@ -9,9 +9,7 @@ import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
 
-from black_bloc.api.auth import OPERATOR_BUCKET_ATTR
 from black_bloc.api.server import SAME_ORIGIN, SAME_SITE_HEADER, create_app
-from black_bloc.api.writes import BUCKET_ATTR, MEMBER_BUCKET_ATTR, READ_BUCKET_ATTR
 from black_bloc.config import load_settings
 from black_bloc.logkinds import VIA_DISCORD, VIA_WEBSITE
 from black_bloc.settings_store import SettingsStore
@@ -456,16 +454,12 @@ async def module_blank(module_web):
     return await take(module_web.db)
 
 
-def clear_buckets(bot: Any) -> None:
-    """The four rate limiters hang off the bot, so a shared bot would keep their history."""
-    for attr in (BUCKET_ATTR, READ_BUCKET_ATTR, MEMBER_BUCKET_ATTR, OPERATOR_BUCKET_ATTR):
-        bot.__dict__.pop(attr, None)
-
-
-async def rewind(bot: Any, blank: Any, guild: Any) -> None:
-    """Everything a fresh bot used to give a test: the attributes it was built with, back again,
-    with empty tables, its own guild and no rate-limit history. Every other attribute a test hung
-    on the bot — a swapped `db`, an installed guard, a cog — goes, because the bot is shared now."""
+def reset_bot(bot: Any, guild: Any) -> None:
+    """The attributes a per-test bot was built with, back again. Everything a test hung on the
+    shared one goes with them: a swapped `db`, an installed guard, a cog, and the four rate-limit
+    buckets, which the api hangs off the bot by name. Settings are rebuilt rather than restored —
+    tests write a token or an api key straight onto that object, so putting the same one back
+    hands the next test the write."""
     base = bot.__dict__[BASELINE]
     bot.__dict__.clear()
     bot.__dict__.update(base)
@@ -474,6 +468,11 @@ async def rewind(bot: Any, blank: Any, guild: Any) -> None:
     bot.guilds = [guild] if guild is not None else []
     bot.cogs = {}
     bot.views = []
+    bot.settings = bot.store.settings = web_settings_now()
+
+
+async def rewind(bot: Any, blank: Any, guild: Any) -> None:
+    reset_bot(bot, guild)
     await put(bot.db, blank)
     await bot.store.load()
 
@@ -541,7 +540,7 @@ def wf():
         Member=WebMember,
         Role=WebRole,
         member=member,
-        clear_buckets=clear_buckets,
+        reset_bot=reset_bot,
         take=take,
         put=put,
         kinds_in=kinds_in,

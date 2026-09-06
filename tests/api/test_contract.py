@@ -236,13 +236,17 @@ async def sign_in_staff(client, db, wf, uid: int = 7) -> None:
     )
 
 
-async def seed_world(client, web, guild, wf) -> dict:
-    """One of everything the contract's routes read, so no route answers empty."""
+def seed_members(guild, wf) -> None:
     wf.member(guild, MEMBER_ID, name="ada")
     wf.member(guild, 7, name="lead", staff=True)
     # F14: {member_id} is given a ping role below, so the POST needs somebody who has none —
     # otherwise it answers the 409 that says they already have one.
     wf.member(guild, PING_MEMBER_ID, name="namu")
+
+
+async def seed_world(client, web, guild, wf) -> dict:
+    """One of everything the contract's routes read, so no route answers empty."""
+    seed_members(guild, wf)
     db, guild_id = web.db, wf.GUILD_ID
     await sign_in_staff(client, db, wf)
 
@@ -564,25 +568,39 @@ async def seed_world(client, web, guild, wf) -> dict:
 
 
 class Seed:
-    """The module's one seeded database, plus the row copy that puts it back between entries."""
+    """The module's one seeded database and guild, plus what puts both back between entries."""
 
-    def __init__(self, web, wf, ids: dict, rows: dict) -> None:
+    def __init__(self, web, wf, ids: dict, rows: dict, sent: list, cogs: dict) -> None:
         self.web = web
         self.wf = wf
         self.ids = ids
         self.rows = rows
+        self.sent = sent
+        self.cogs = cogs
 
     async def rewind(self) -> None:
+        # Three of the seed's marks are not rows: its members, the message the role menu was
+        # posted as, and its cogs. Every other api fixture resets the shared bot, so the seed
+        # puts all three back rather than assuming it ran last.
+        guild = self.wf.Guild()
+        self.wf.reset_bot(self.web, guild)
+        seed_members(guild, self.wf)
+        for kwargs in self.sent:
+            await guild.get_channel(self.wf.TEST_CHANNEL_ID).send(**kwargs)
+        self.web.cogs.update(self.cogs)
         await self.wf.put(self.web.db, self.rows)
         await self.web.store.load()
-        self.wf.clear_buckets(self.web)
 
 
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
-async def contract_seed(module_client, module_web, module_guild, wf):
+async def contract_seed(module_client, module_web, wf):
     """Seeded once for the whole file: ~430 ms of writes, one schema build, one FastAPI app."""
-    ids = await seed_world(module_client, module_web, module_guild, wf)
-    return Seed(module_web, wf, ids, await wf.take(module_web.db))
+    guild = wf.Guild()
+    wf.reset_bot(module_web, guild)
+    ids = await seed_world(module_client, module_web, guild, wf)
+    sent = [dict(one.kwargs) for one in guild.get_channel(wf.TEST_CHANNEL_ID).messages]
+    rows = await wf.take(module_web.db)
+    return Seed(module_web, wf, ids, rows, sent, dict(module_web.cogs))
 
 
 @pytest.fixture

@@ -1,3 +1,4 @@
+import os
 import secrets
 import sqlite3
 import time
@@ -11,6 +12,14 @@ from black_bloc.api.auth import SESSION_COOKIE, SESSION_TTL_SECONDS, sign_sessio
 from black_bloc.api.server import SAME_ORIGIN, SAME_SITE_HEADER
 from black_bloc.config import load_settings
 from black_bloc.settings_store import member_is_staff
+
+REVERSE = "BB_REVERSE"
+
+
+def pytest_collection_modifyitems(items):
+    """`BB_REVERSE=1` runs everything backwards — the guard on the module-scoped fixtures."""
+    if os.environ.get(REVERSE) == "1":
+        items.reverse()
 
 
 @pytest.fixture
