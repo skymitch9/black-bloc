@@ -25,6 +25,7 @@ from ...panels import (
     retire,
     still_staff,
 )
+from ...panels import site_page_url as library_site_page_url
 from ...settings_store import (
     DB_UNAVAILABLE,
     GUILD_ONLY,
@@ -143,7 +144,7 @@ PANEL_INTRO = (
     "out. Nothing already published is ever announced."
 )
 SITE_BUTTON = "Open on the site"
-SITE_PAGE = "golive.html"
+FEATURE = "youtube"
 PICK_A_CHANNEL = "Somebody's channel…"
 MODE_PLACEHOLDER = "Announcements are…"
 MODE_LABELS = {
@@ -269,8 +270,7 @@ def setup_words(store: Any, guild_id: int) -> str:
 
 
 def site_page_url(origin: Any) -> str:
-    kept = str(origin or "").strip().rstrip("/")
-    return f"{kept}/{SITE_PAGE}" if kept else ""
+    return library_site_page_url(origin, FEATURE) or ""
 
 
 def add_site_button(view: Any, bot: Any, row: int) -> None:

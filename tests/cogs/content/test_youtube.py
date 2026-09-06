@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import discord
 import pytest
 
+from black_bloc.cogs.content import youtube as youtube_cog
 from black_bloc.cogs.content.youtube import (
     FANS_ON,
     FORGET_BUTTON,
@@ -47,6 +48,7 @@ from black_bloc.cogs.content.youtube import (
     unlink_channel,
 )
 from black_bloc.config import load_settings
+from black_bloc.logkinds import FEATURE_PAGES
 from black_bloc.settings_store import DB_UNAVAILABLE, SettingsStore
 from black_bloc.storage.db import Database
 from black_bloc.youtube import (
@@ -1491,3 +1493,12 @@ async def test_a_kind_the_feed_alone_cannot_settle_is_still_a_video(bot, cog, db
     await cog.poll_once()
 
     assert (await recent_videos(db))[0]["kind"] == VIDEO
+
+
+def test_the_site_link_is_the_shared_one_and_no_origin_is_still_an_empty_string():
+    """The cog kept its own copy; the page it names now has one home, in `logkinds`."""
+    assert youtube_cog.site_page_url("https://example.test/") == (
+        f"https://example.test/{FEATURE_PAGES[youtube_cog.FEATURE]}"
+    )
+    assert youtube_cog.site_page_url("") == ""
+    assert youtube_cog.site_page_url(None) == ""
