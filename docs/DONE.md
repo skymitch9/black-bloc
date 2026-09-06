@@ -9,6 +9,36 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-06 — Fixture-scope sweep, half B landed as merge `348b98e` (branch `fixture-scope-half-b`; NOT deployed — test-only, v93 stays live). All seven measurement-pass decisions settled.
+
+> **Landed 2026-09-06 09:35–09:40 Phoenix.** Opus, hand-made worktree `C:/lcw/bb-fixtures-b`, 203k tokens /
+> 127 tool calls / 50 min against a 250–400k estimate. The owner's decision 2 (2026-09-05, "Yes"): one
+> module-scoped `db` fixture in `tests/conftest.py`, connected once per module and REWOUND per test —
+> `take`/`put` MOVED from `tests/api/conftest.py` (which now imports them), the rewind widened to put the
+> schema back (`test_golive` drops the unique open-session index on purpose; `put` compares `sqlite_master`
+> to the snapshot and re-runs stored DDL, rows deleted before the repair so an index never rebuilds over
+> duplicates; `sqlite_sequence` is in the row snapshot so ids restart at 1). **All 35 per-file `db`
+> fixtures deleted, 0 kept** — every one was the plain pattern; the 13 tests in 8 files that `await
+> db.close()` to prove the "cannot reach its own database" sentence are handled by the shared fixture
+> reconnecting when it finds the database closed. Commits `b8d4eab` B1, `99f76ee`/`572071c`/`6d69763`/
+> `298c8cb` B2 by folder, `1fe17e8` B3, `4c81a93` docs. **5187 tests, none added or deleted**, `ruff`
+> clean; gate on main 28.2 s forward / 28.7 s reversed on `-n auto`; the agent measured 55.0 → 26.0 s
+> `-n auto` (−53 %), 462 → 110 s serial (−76 %), `tests/cogs` 29.0 → 12.1 s; reversed serial green too.
+> Combined with half A (`e24e6b7`): the gate here went **88.7 s (v93) → 28.2 s** on the same machine.
+>
+> **The presence reversed-serial failure half A found was not a fixture problem:** `discord.py`'s
+> `load_extension` builds a NEW module object and hangs it on `sys.modules`, so after
+> `tests/test_selftest_panels.py:live` loads all 19 cogs, `black_bloc.cogs.presence` is no longer the
+> object `tests/cogs/test_presence.py` imported from, and its `monkeypatch.setattr` patches a module the
+> running cog no longer lives in. Fixed test-side: an autouse fixture in `tests/conftest.py` restores the
+> collection-time cog modules after every test. Nothing under `black_bloc/` touched — the production
+> behaviour is discord.py's and correct for a real bot. Also corrected: half A's note that a conftest is
+> not importable by name — under `--import-mode=importlib` pytest registers `tests.conftest` in
+> `sys.modules` before the api conftest imports, verified with a probe.
+> ⚠️ **Beyond the brief, NOT fixed:** eleven test files still build a `Database` inline (listed in the
+> profile § *Half B — measured* and on `TODO.md`). ⚠️ **NOT verified:** coverage, `tests/live/`,
+> anything live; per-fixture microbenchmarks not re-measured — the wall-clock table is the measurement.
+
 ## 2026-09-06 — Fixture-scope sweep, half A landed on main at `e24e6b7` (linear — the `--no-ff` merge was flattened by `git pull --rebase`; six commits, content identical) (branch `fixture-scope-half-a`; NOT deployed — test-only, v93 stays live)
 
 > **Landed 2026-09-06 08:36–08:50 Phoenix.** Opus, hand-made worktree `C:/lcw/bb-fixtures-a` (the first
