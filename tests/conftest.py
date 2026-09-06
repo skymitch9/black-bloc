@@ -1,6 +1,7 @@
 import os
 import secrets
 import sqlite3
+import sys
 import time
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -11,6 +12,7 @@ import pytest_asyncio
 
 from black_bloc.api.auth import SESSION_COOKIE, SESSION_TTL_SECONDS, sign_session
 from black_bloc.api.server import SAME_ORIGIN, SAME_SITE_HEADER
+from black_bloc.bot import COGS
 from black_bloc.config import load_settings
 from black_bloc.settings_store import member_is_staff
 from black_bloc.storage.db import Database
@@ -22,6 +24,20 @@ def pytest_collection_modifyitems(items):
     """`BB_REVERSE=1` runs everything backwards — the guard on the module-scoped fixtures."""
     if os.environ.get(REVERSE) == "1":
         items.reverse()
+
+
+@pytest.fixture(scope="session")
+def cog_modules_as_collected():
+    return {name: sys.modules[name] for name in COGS if name in sys.modules}
+
+
+@pytest.fixture(autouse=True)
+def cog_modules_stay_the_ones_the_test_files_imported(cog_modules_as_collected):
+    """`load_extension` builds a NEW module object and hangs it in `sys.modules`, so after any
+    test that loads a cog, `monkeypatch.setattr("black_bloc.cogs.x.y", ...)` patches a module the
+    test file's own imports no longer point at."""
+    yield
+    sys.modules.update(cog_modules_as_collected)
 
 
 @pytest.fixture
