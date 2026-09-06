@@ -1328,3 +1328,36 @@ async def test_the_purge_loop_is_a_loop_the_health_page_can_see(bot, cog):
 
     last_ok, last_error = cog.loop_health("purge_loop")
     assert last_ok and last_error is None
+
+
+async def test_the_purge_loop_waits_for_a_database_like_every_other_db_backed_loop(bot):
+    bot.db = SimpleNamespace(is_connected=False)
+    cog = Core(bot)
+
+    await cog.cog_load()
+
+    assert cog.purge_loop.is_running() is False
+
+
+async def test_the_purge_loop_starts_once_the_database_is_there(bot):
+    cog = Core(bot)
+
+    await cog.cog_load()
+    try:
+        assert cog.purge_loop.is_running() is True
+    finally:
+        await cog.cog_unload()
+
+
+async def test_a_purge_that_stopped_is_restarted_like_every_other_loop_here(bot, monkeypatch):
+    """Checklist 28 — `_purge_failed` recorded and logged but left the loop dead."""
+    cog = Core(bot)
+    restarted = []
+    monkeypatch.setattr(
+        type(cog.purge_loop), "restart", lambda self, *a, **k: restarted.append(True)
+    )
+
+    await cog._purge_failed(RuntimeError("the sweep fell over"))
+
+    assert cog.loop_health("purge_loop")[1] == "RuntimeError: the sweep fell over"
+    assert restarted == [True]

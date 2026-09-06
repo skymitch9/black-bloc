@@ -14,6 +14,7 @@ from ..actionlog import log_action, send_logs
 from ..command_errors import AnswersErrors
 from ..command_visibility import STAFF_ONLY, hidden_names
 from ..logkinds import CORE, SELFTEST, VIA_DISCORD, kind_via
+from ..loops import wait_ready
 from ..modcases import pages_under_limit
 from ..panels import (
     Outcome,
@@ -165,6 +166,8 @@ class Core(commands.Cog):
         self.last_purge_error: Any = None
 
     async def cog_load(self) -> None:
+        if not getattr(self.bot.db, "is_connected", False):
+            return
         self.purge_loop.start()
 
     async def cog_unload(self) -> None:
@@ -184,12 +187,13 @@ class Core(commands.Cog):
 
     @purge_loop.before_loop
     async def _before_purge(self) -> None:
-        await self.bot.wait_until_ready()
+        await wait_ready(self.bot, self._purge_failed)
 
     @purge_loop.error
     async def _purge_failed(self, exc: BaseException) -> None:
         self.last_purge_error = f"{type(exc).__name__}: {exc}"
         log.warning("selftest: the purge loop stopped — %s", self.last_purge_error, exc_info=exc)
+        self.purge_loop.restart()
 
     def loop_health(self, name: str) -> tuple[Any, Any]:
         if name != PURGE_LOOP:
