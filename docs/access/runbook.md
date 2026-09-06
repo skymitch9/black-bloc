@@ -31,6 +31,22 @@ The Claude session shells never have `flyctl` on PATH. Always spell it out:
 ```
 (`winget install --id Fly-io.flyctl` on a new machine; then `flyctl auth login` in an interactive shell.)
 
+## Agent worktrees on this machine (since 2026-09-06)
+`.claude/` in this checkout is a Windows **junction** → `C:\lcw\onedrive-excluded\black_bot_baf\.claude`
+(made 2026-09-06 ~00:20 alongside the same move for every sibling repo, so agent worktrees and
+session state stay out of OneDrive; not in git, and the 13 older `worktree-agent-*` folders live
+under the target). ⚠️ The Agent tool's own `isolation: "worktree"` REFUSES a junction
+("`.claude` is a symlink"). Do not remove the junction — dispatch without isolation and have the
+agent make its own worktree outside the checkout, the `C:/lcw/pool` precedent:
+
+```
+git -C <checkout> worktree add C:/lcw/<name> -b <branch> <sha>
+```
+
+The `.venv` stays in the main checkout; the agent confirms `import black_bloc` resolves to its
+worktree before running pytest. Remove with `git worktree remove C:/lcw/<name>` after the merge.
+Measured 2026-09-06 07:15 (first dispatch that hit the refusal: fixture-scope half A).
+
 ## Deploy (owner-authorised for Claude, 2026-08-27; MECHANICALLY GATED since 2026-09-02)
 ```
 powershell -File scripts\deploy.ps1     # THE deploy path. Refuses a dirty tree or a red gate.
