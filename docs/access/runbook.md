@@ -124,6 +124,13 @@ Stop a leftover mock server on Windows: find the `node` PID on the port (`Get-Ne
 into DONE with a landing note (append-only, newest first). Every ask goes on `TODO.md` the moment it is
 mentioned; finished items move in the session they land.
 
+⚠️ **"The merge commit vanished" → `git pull --rebase` flattens `--no-ff` merges.** Twice on
+2026-09-05/06 a build was merged with `git merge --no-ff`, docs were written naming the merge sha, and
+the pre-push `git pull --rebase --autostash` replayed the branch commits linearly (new shas, no merge
+commit) — the docs then pointed at a commit nobody has. Push the merge FIRST (`git push` right after
+`git merge`, before any docs commit), or pull with `--rebase-merges`. Content is never lost; only the
+shas the docs cite.
+
 ## Laptop from scratch (what you need while away)
 You do NOT need `.env` to deploy — secrets live on Fly. You need it only to run the bot locally.
 

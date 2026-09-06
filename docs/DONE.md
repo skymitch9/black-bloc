@@ -9,18 +9,18 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
-## 2026-09-06 — Fixture-scope sweep, half A landed on main as `099f02b` (branch `fixture-scope-half-a`; NOT deployed — test-only, v93 stays live)
+## 2026-09-06 — Fixture-scope sweep, half A landed on main at `e24e6b7` (linear — the `--no-ff` merge was flattened by `git pull --rebase`; six commits, content identical) (branch `fixture-scope-half-a`; NOT deployed — test-only, v93 stays live)
 
 > **Landed 2026-09-06 08:36–08:50 Phoenix.** Opus, hand-made worktree `C:/lcw/bb-fixtures-a` (the first
 > build after `.claude/` became a junction — `docs/access/runbook.md` § *Agent worktrees on this machine*),
 > 302k tokens / 174 tool calls / 81 min against a 120–180k estimate. The owner's decisions 1, 3, 4 and 5
 > from the test-suite measurement pass (`docs/info/test-suite-profile.md`, all answered "Yes" one at a
-> time on 2026-09-05): `8c6454b` contract seed built once per module and rewound per entry with a
-> by-name read guard; `21ce582` api app + database module-scoped, rewound per test, `fresh_*` chain kept;
-> `3b0e28a` the one true duplicate deleted; `3e920cc` the three assertionless tests assert what they
-> were proving; `a8766c2` `BB_REVERSE=1` reverses collection (kept as the order guard) and the three leaks
+> time on 2026-09-05): `adeb214` contract seed built once per module and rewound per entry with a
+> by-name read guard; `52b9a81` api app + database module-scoped, rewound per test, `fresh_*` chain kept;
+> `a5c7a28` the one true duplicate deleted; `a7f6a52` the three assertionless tests assert what they
+> were proving; `4c3a4c2` `BB_REVERSE=1` reverses collection (kept as the order guard) and the three leaks
 > it found are shut (`web.db = None` from an unreachable-database test, in-place writes to
-> `web.settings`, the contract seed's non-row marks); `45791c3` docs. **5188 → 5187 tests**, `ruff` clean,
+> `web.settings`, the contract seed's non-row marks); `e24e6b7` docs. **5188 → 5187 tests**, `ruff` clean,
 > green forward and reversed on `-n auto` at the gate on main; the agent measured 105.17 s → 52.14 s
 > (−50 %) on its machine, the gate here read 88.7 s (v93, throwaway worktree) → 54.4 s. No file under
 > `black_bloc/` or `site/` changed, so no deploy line and no mock check.
