@@ -23,16 +23,13 @@ from .logkinds import (
     via_of,
     via_word,
 )
-from .settings_store import GUILD_ONLY, require_staff
+from .settings_store import GUILD_ONLY, LOGS_DEFAULT, require_staff
 
 log = logging.getLogger(__name__)
 
 DETAILS_LIMIT = 900
 LINE_LIMIT = 100
 BODY_LIMIT = 3900
-LOGS_MIN = 1
-LOGS_MAX = 50
-LOGS_DEFAULT = 10
 SCAN_LIMIT = 5000
 COLUMNS = "id, at, kind, actor_id, target_id, reason, details"
 SUMMARY_SKIPS = ("via",)
@@ -261,6 +258,13 @@ def action_line(row: Any) -> str:
     return f"{stamp(row['at'])} · {body} · {said_via}"
 
 
+def lines_for(rows: list[Any], important_only: bool) -> list[str]:
+    """The one rendering of a page of rows; the Logs panel reads the rows itself and calls this."""
+    if not rows:
+        return [NOTHING_IMPORTANT if important_only else NOTHING_YET]
+    return [action_line(row) for row in rows]
+
+
 async def recent_lines(
     db: Any,
     guild_id: int,
@@ -270,9 +274,7 @@ async def recent_lines(
 ) -> list[str]:
     """The one rendering of an action log line; every `/… logs` command is a caller."""
     rows = await recent_rows(db, guild_id, feature, limit, important_only)
-    if not rows:
-        return [NOTHING_IMPORTANT if important_only else NOTHING_YET]
-    return [action_line(row) for row in rows]
+    return lines_for(rows, important_only)
 
 
 def logs_embed(feature: str, lines: list[str], important_only: bool, origin: str) -> discord.Embed:
@@ -298,11 +300,13 @@ async def send_logs(
     interaction: Any,
     feature: str,
     *,
-    count: int = LOGS_DEFAULT,
-    important_only: bool = False,
+    count: int | None = None,
+    important_only: bool | None = None,
     staff_only: bool = True,
 ) -> None:
-    """The whole body of every `/<feature> logs` command."""
+    """The whole body of every feature's Logs button: the list first, the refinements under it."""
+    from .logs_panel import panel_for
+
     if staff_only:
         if not await require_staff(interaction):
             return
@@ -313,15 +317,18 @@ async def send_logs(
     if not getattr(bot.db, "is_connected", False):
         await interaction.response.send_message(LOGS_DB_DOWN, ephemeral=True)
         return
-    lines = await recent_lines(
-        bot.db,
+    view = panel_for(
+        bot,
         interaction.guild.id,
         feature,
-        max(LOGS_MIN, min(int(count), LOGS_MAX)),
-        important_only,
+        count=count,
+        important_only=important_only,
+        staff_only=staff_only,
     )
     await interaction.response.send_message(
-        embed=logs_embed(feature, lines, important_only, bot.settings.origin),
+        embed=await view.page(bot, interaction.guild.id),
+        view=view,
         ephemeral=True,
         allowed_mentions=discord.AllowedMentions.none(),
     )
+    view.message = await interaction.original_response()

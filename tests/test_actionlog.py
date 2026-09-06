@@ -403,3 +403,37 @@ def test_every_feature_has_a_clause_and_core_asks_it_backwards():
 def test_an_unparseable_timestamp_is_shown_as_it_was_stored():
     assert stamp("not a date") == "not a date"
     assert stamp("2026-08-27T00:00:00+00:00").startswith("<t:")
+
+
+def test_every_send_logs_call_site_passes_only_the_feature_name():
+    """The one body stays one body: no cog learns about counts or importance."""
+    import ast
+    import pathlib
+
+    import black_bloc
+
+    root = pathlib.Path(black_bloc.__file__).resolve().parent
+    found = []
+    for path in root.rglob("*.py"):
+        if path.name == "actionlog.py":
+            continue
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "send_logs":
+                found.append((path.name, len(node.args), tuple(one.arg for one in node.keywords)))
+
+    assert len(found) == 18
+    assert {(args, words) for _, args, words in found} == {(2, ())}
+
+
+def test_send_logs_reads_the_two_knobs_itself_unless_a_caller_overrides_them():
+    """Both default to None, which is what makes the settings the source rather than a literal."""
+    import inspect
+
+    from black_bloc.actionlog import send_logs
+
+    found = inspect.signature(send_logs).parameters
+
+    assert list(found) == ["interaction", "feature", "count", "important_only", "staff_only"]
+    assert found["count"].default is None
+    assert found["important_only"].default is None
+    assert found["staff_only"].default is True

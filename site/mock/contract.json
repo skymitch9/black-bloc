@@ -21,6 +21,7 @@
     "min": {
       "chat_cooldown_seconds": 5,
       "events_channel_retention_days": 1,
+      "logs_count": 1,
       "poll_archive_days": 1,
       "poll_default_hours": 1,
       "raidtrain_poll_minutes": 1,
@@ -44,6 +45,7 @@
       "events_channel_retention_days": 365,
       "events_max_late_minutes": 1440,
       "honeypot_purge_days": 7,
+      "logs_count": 50,
       "poll_archive_days": 3650,
       "poll_default_hours": 768,
       "poll_draft_days": 365,

@@ -78,3 +78,61 @@ under it; `Show more` → 20, then 30 … and the button goes away at 50 or when
 Dashboard → settings.html → `logs_count` 25 → the next Logs press starts at 25. Code notes:
 `# Logs panel` at the foot of `code-notes.md`, keyed by name. Add a `## Deviations` section to
 this file for anything that differed, and why.
+
+## Deviations
+
+Built on branch `logs-buttons`, off `main` at `b428236`, in a worktree at
+`C:/lcw/bb-logs-buttons`. §2–§5 were built as written except for the following.
+
+1. ⚠️ **`site/mock/contract.json` was edited, though the build was told to stay out of it.** Two
+   lines: `settings.min.logs_count = 1` and `settings.max.logs_count = 50`. A bounded registry key
+   cannot be added without them — `tests/api/test_contract.py` asserts the contract's `min`/`max`
+   blocks EQUAL `KEY_MIN`/`KEY_MAX` (twice, once against the mock and once against the real
+   router), and `site/mock/check.mjs` fails `has no logs_count row at all`. The alternative was to
+   leave `logs_count` unbounded in the registry and keep clamping only inside the code, which §2.5
+   rules out. The edit is in blocks a routes/pages change never touches.
+2. **`LOGS_MIN` / `LOGS_MAX` / `LOGS_DEFAULT` moved from `actionlog.py` into `settings_store.py`**
+   and are imported back. §2.5 wants the key bounded by them, and `settings_store` cannot import
+   `actionlog`. Measured first: none of the three, nor `logs_embed`, had a reader outside
+   `actionlog.py`.
+3. **`actionlog.recent_lines` was split**, gaining `lines_for(rows, important_only)`. The panel
+   must know how many ROWS came back to decide whether `Show more` is still true, and
+   `recent_lines` answers a one-line placeholder for zero rows. Both callers now share one
+   rendering; every existing caller of `recent_lines` is untouched.
+4. **`logs_embed` was NOT given the shown count.** §3 said it "may take the shown count for its
+   title if that reads well". It does not: the count is visible in the list itself, the title
+   already says `— important only` when filtered, and a signature change would have been a second
+   thing for the merge to reconcile for no gain.
+5. **`send_logs` keeps its `count` / `important_only` keywords**, as `None` sentinels meaning
+   *"ask the settings"*, rather than losing them. Nothing passes them (an AST guard in
+   `tests/test_actionlog.py` pins all 18 sites at two positional arguments and no keywords), so
+   deleting them was possible; keeping them costs one line each and leaves the override a caller
+   might one day want.
+6. **The `send_logs` tests are split across two files.** The two CONTRACT guards (the 18 call
+   sites; the signature's `None` defaults) live in `tests/test_actionlog.py`, per the mirror rule.
+   The four behavioural ones live in `tests/test_logs_panel.py` because what they assert is the
+   panel, and they need its fakes. §4 put them all in `test_actionlog.py`.
+7. **Three existing cog tests changed** — `test_polls.py::…answers_with_a_new_ephemeral_message`,
+   `test_birthdays.py::…refuses_a_stranger`, `test_events.py::…keeps_its_own_staff_gate`. Each
+   asserted the Logs button had not re-rendered its panel by reading a fake attribute
+   (`interaction.rendered` / `.message` / `._edited`) that their harnesses also set inside
+   `original_response()` — which `send_logs` now calls so a timed-out list can disable itself.
+   The behaviour is unchanged; the assertions now read what the new message CARRIES.
+8. **Two counting tests moved 22 → 23**
+   (`tests/test_settings_panel.py:GROUP_COUNT`, `tests/test_settings_store.py::test_both_new_
+   settings_keys_file_under_core_not_a_group_of_their_own`). The keys open a `logs` namespace,
+   which is a new **Logs** section on the Settings page. They were NOT made core: `hide` and
+   `emoji` are the precedent for a cross-cutting one-or-two-key group, and core membership would
+   have moved `CORE_KEYS` in the contract and the mock as well. So the mock's core-settings count
+   is **14 before and after**, per §2.5's "either answer is fine, say which".
+9. **The timeout footer names a button, not a command** — *"This log has gone quiet — press Logs
+   again"*. Every other panel's says *"run /x again"*; a Logs list is reached from eighteen panels
+   and has no command of its own.
+10. **`panel_for` reads `settings_store.SETTINGS_PANEL_MINUTES` directly**, not
+    `settings_panel.PANEL_MINUTES_KEY` (they are the same string). The store is the home, and
+    `settings_panel` imports half the app.
+
+**Not verified:** anything against live Discord or the live dashboard. `python -m black_bloc` was
+NOT booted — a worktree has no token — so no button has been pressed by a person, no ephemeral
+edit has been made by a real client, and the new **Logs** section on `settings.html` has not been
+opened in a browser. The sweep rows `LB-a`–`LB-e` are what close that gap.

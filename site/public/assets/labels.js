@@ -15,6 +15,9 @@ export const LABELS = {
   hide_commands_when_off: 'Whether a turned-off feature’s slash command disappears',
   emoji_skin_tone: 'Which skin tone the bot’s emoji wear',
 
+  logs_count: 'How many lines a Logs button shows to begin with',
+  logs_important_only: 'Whether a Logs button opens on the important lines only',
+
   golive_mode: 'Whether the bot announces streams',
   golive_channel_id: 'Where a go-live announcement is posted',
   golive_template: 'What a go-live announcement says',
