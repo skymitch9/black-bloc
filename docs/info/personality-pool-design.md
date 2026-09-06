@@ -1,9 +1,10 @@
 # The global personality pool — design (next-wave #4)
 
 > **Audience:** Claude sessions in BOTH repos (this one and `catalog-platform`).
-> **Status:** TRACKED — **Black Bloc half LIVE as v90 `7c59eb1`** (2026-09-05 19:00; built on `worktree-agent-a9f7e266cd87f5c2c`). The GABI half (§5.1) is **NOT built**; until it lands,
-> the self-test check reports *"GABI does not say its pool version yet"* as a pass, which is
-> the landing order §8 asks for. The runbook for the built half is
+> **Status:** TRACKED — **Black Bloc half LIVE as v90 `7c59eb1`** (2026-09-05 19:00; built on `worktree-agent-a9f7e266cd87f5c2c`) **and v91 `604226f`** (19:38: roster compared by name, byte-for-byte sync).
+> **GABI half (§5.1) LIVE 2026-09-05 19:33** — catalog-platform `de4ef63` (main `cb4f779`), deployed by the owner (`755cfd54`); her `/api/health` answers
+> `gabi_personality_pool_version: 1` + the eleven, Black Bloc's copy is `synced_from: catalog-platform@de4ef63`, and the self-test compares the two rosters on every boot
+> (§8's landing order held: no red at any step). The runbook is
 > [`../access/personality-pool.md`](../access/personality-pool.md). ✅ All three forks decided (a) by the owner 2026-09-05 16:41–16:43. Written **2026-09-05** by Fable in the
 > main loop. Last verified: **2026-09-05** — every fact about the two codebases
 > below was read from `black_bloc/personas.py` (407 lines) and

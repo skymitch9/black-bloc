@@ -2,11 +2,12 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-05 — KI-23 ADDED** by the personality-pool build (Black Bloc half,
-> `worktree-agent-a9f7e266cd87f5c2c`, not merged, not deployed): the shared manifest has no
-> canonical to sync from until the GABI half lands, so nothing is verifying that the two bots'
-> rosters agree. From the build's own state, not an incident. Nothing else was re-checked that
-> day by that build. Before that, **2026-09-05 — KI-21 RESOLVED and moved WHOLE to [`DONE.md`](DONE.md)** by the
+> Last verified: **2026-09-05 19:45 — KI-23 CLOSED and moved WHOLE to [`DONE.md`](DONE.md)** ("Personality
+> pool, both halves"): both numbers it named arrived — GABI's `/api/health` answers
+> `gabi_personality_pool_version: 1` (deployed by the owner, `755cfd54`) and `sync_personality_pool.py`
+> exits 0 (`synced_from: catalog-platform@de4ef63`); Black Bloc v91 `604226f` compares her roster by name.
+> Nothing else was re-checked then. Before that, **2026-09-05 — KI-23 ADDED** by the personality-pool
+> build (Black Bloc half): nothing was verifying that the two bots' rosters agreed until the GABI half landed. Before that, **2026-09-05 — KI-21 RESOLVED and moved WHOLE to [`DONE.md`](DONE.md)** by the
 > engineering sweep on `worktree-agent-accb69989b295c889`: `PUT /api/settings/{key}` hands
 > `automod_mode`, `honeypot_mode` and `honeypot_exempt_role_ids` to the cog's own move, so the
 > website reads the same verdict the Discord panel does. ⚠️ Fixed in tests only — the branch has
@@ -49,32 +50,6 @@
 >
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
-
-## KI-23 — The shared personality manifest has no canonical to sync from yet — `BLOCKED`
-
-**Symptom.** `black_bloc/personality_pool.json` is **hand-built from GABI's
-`personality.ts`**, and `python scripts/sync_personality_pool.py` exits 1 every time with
-*"the canonical personality manifest is not at …"*. The canonical file
-(`catalog-platform/apps/discord-worker/src/personality-pool.json`) does not exist: the GABI
-half of `info/personality-pool-design.md` §5.1 is a later build. The self-test check
-`pool.in_step_with_gabi` therefore reports *"GABI does not say its pool version yet"* — a
-pass, not a comparison — so **nothing is actually verifying that the two bots' rosters agree**
-today. Added 2026-09-05 by the Black Bloc half's own build, from its own state, not an
-incident.
-
-**Status:** `BLOCKED` — on the GABI half.
-
-**Why tolerated.** It is the landing order the design chose on purpose (§8): Black Bloc first,
-so no order of shipping can produce a red self-test. The two rosters were **measured identical
-this session** — eleven names in the same order, the same graph, the same drift constants —
-so the drift being unmonitored is a risk about the future, not a defect today. The refusal is
-loud (exit 1, a sentence naming the fix), which is what the CLI-quirk rule asks for; the
-failure mode this entry rules out is a script that prints success over a stale copy.
-
-**What would change it:** the GABI half landing. Concretely, **two numbers**:
-`GET https://discord.heygabi.ai/api/health` answering `gabi_personality_pool_version`, and
-`scripts/sync_personality_pool.py` exiting **0**. On that day, run step 5 of
-[`access/personality-pool.md`](access/personality-pool.md) and this entry closes.
 
 ## KI-22 — `/purge`'s two log kinds cannot say which door made them — `ACCEPTED`
 

@@ -9,6 +9,80 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-05 — Personality pool, both halves LIVE (Black Bloc v90 `7c59eb1` + v91 `604226f`; GABI `de4ef63`, deployment `755cfd54`); KI-23 closed
+
+> **Landed 2026-09-05 19:33–19:45 Phoenix.** GABI's half (catalog-platform `feature/personality-pool`,
+> Opus, 186k against an 80–120k estimate) was rebased onto that repo's main, deployed by the owner
+> himself (`755cfd54`, 13 s after the session's identical `519eb2c8`), and fast-forwarded onto
+> catalog-platform `main` as `cb4f779`. Verified live: `GET https://discord.heygabi.ai/api/health` →
+> `gabi_personality_pool_version: 1` and the eleven tropes in the manifest's order. Black Bloc then
+> re-synced (`synced_from: catalog-platform@de4ef63` — the first sync that ever succeeded) and shipped
+> **v91** `604226f`: `check_pool` compares GABI's roster BY NAME, IN ORDER (the first cut did `int()` on
+> an array — it would have raised the moment she answered); `sync_personality_pool.py` stamps the main
+> checkout's name from `--git-common-dir` (a worktree stamped `pool@sha`) and copies the canonical's
+> bytes plus one key, so the two files differ by the `synced_from` line only. v91 boot: `selftest: 107 ok,
+> 0 failed` with GABI answering, so `pool.in_step_with_gabi` ran the compare path and passed.
+> ⚠️ **NOT verified:** the check's exact sentence (*"GABI lists the same 11, in the same order"*) — the
+> log row lives behind Discord sign-in and `fly ssh` was refused, so it is inferred from 107/0 plus the
+> live health read; sweep row 284 is the owner's by-eye read of it. Nobody has talked to GABI since
+> (voice byte-identical by design, §5.1).
+
+### KI-23, moved whole from `KNOWN_ISSUES.md` (closed: both numbers it named arrived — the health field answers `1`, the sync script exits 0)
+
+## KI-23 — The shared personality manifest has no canonical to sync from yet — `BLOCKED`
+
+**Symptom.** `black_bloc/personality_pool.json` is **hand-built from GABI's
+`personality.ts`**, and `python scripts/sync_personality_pool.py` exits 1 every time with
+*"the canonical personality manifest is not at …"*. The canonical file
+(`catalog-platform/apps/discord-worker/src/personality-pool.json`) does not exist: the GABI
+half of `info/personality-pool-design.md` §5.1 is a later build. The self-test check
+`pool.in_step_with_gabi` therefore reports *"GABI does not say its pool version yet"* — a
+pass, not a comparison — so **nothing is actually verifying that the two bots' rosters agree**
+today. Added 2026-09-05 by the Black Bloc half's own build, from its own state, not an
+incident.
+
+**Status:** `BLOCKED` — on the GABI half.
+
+**Why tolerated.** It is the landing order the design chose on purpose (§8): Black Bloc first,
+so no order of shipping can produce a red self-test. The two rosters were **measured identical
+this session** — eleven names in the same order, the same graph, the same drift constants —
+so the drift being unmonitored is a risk about the future, not a defect today. The refusal is
+loud (exit 1, a sentence naming the fix), which is what the CLI-quirk rule asks for; the
+failure mode this entry rules out is a script that prints success over a stale copy.
+
+**What would change it:** the GABI half landing. Concretely, **two numbers**:
+`GET https://discord.heygabi.ai/api/health` answering `gabi_personality_pool_version`, and
+`scripts/sync_personality_pool.py` exiting **0**. On that day, run step 5 of
+[`access/personality-pool.md`](access/personality-pool.md) and this entry closes.
+
+### TODO item 4, moved whole
+
+4. **Global personality pool** — one trope store shared across estate bots
+   (Black Bloc's `personality_tropes` + GABI's `personality.ts` unify). This is
+   an ESTATE design spanning two repos: design doc first, likely a small shared
+   store + sync convention; coordinate with catalog-platform docs.
+   **DESIGN WRITTEN 2026-09-05 16:5x** → [`info/personality-pool-design.md`](info/personality-pool-design.md):
+   share the SKELETON (roster, graph, drift constants, clause templates in one
+   canonical `personality-pool.json` in catalog-platform), keep the SKIN (each
+   bot's voice bodies); Black Bloc boot SYNC (never touches staff's `enabled`),
+   two settings, health field, one self-test check that reads GABI's health
+   route so drift is visible. Measured today: roster + graph identical, voices
+   deliberately different, `personality.ts` untouched since the port. Forks
+   F-P1–F-P3 ✅ ALL DECIDED (a) by the owner 16:41–16:43 — READY TO BUILD once
+   v88/v89 land (all touch nearby files). Two Opus builds:
+   Black Bloc half (est. 150–220k) THEN GABI half (80–120k). ⚠️ The
+   catalog-platform TODO pointer is NOT yet written — that tree was in use by
+   another session at 16:37 (`821cd26` + a dirty `deploys.log`); the GABI-half
+   brief carries it.
+   **Black Bloc half ✅ LIVE as v90 `7c59eb1` 2026-09-05 19:00** (288k; selftest 107 ok, `/health` says `personality_pool_version: 1`) — manifest + derived `personas.py` + `sync_tropes`/`sync_pool` +
+   two core settings + `/health` field + `pool.in_step_with_gabi` self-test check +
+   `scripts/sync_personality_pool.py` + runbook [`access/personality-pool.md`](access/personality-pool.md)
+   + sweep rows 280–286. Schema unchanged at 32. GABI half still to build.
+   **GABI half ✅ LIVE 2026-09-05 19:33** (catalog-platform `de4ef63`, deployment `755cfd54`, main
+   `cb4f779`; 1247 → 1260 tests, typecheck clean). **Black Bloc v91 `604226f` 19:38** closes the loop
+   (roster compare by name, byte-for-byte sync). Design's §8 landing order held: no order of shipping
+   produced a red self-test.
+
 ## 2026-09-05 — Engineering sweep landed as v89 (merge of `worktree-agent-accb69989b295c889` at `243dc0f`)
 
 Outcome: seven commits, 481k tokens (estimate was 250–350k). KI-21 closed (its own entry is below this one, written on the branch); schema **32** adds `action_log_by_kind (guild_id, kind, id)` and `checks_of` filters `run_id` in SQL (5,300 → 106 rows parsed; 8.5 → 3.1 ms at 55k rows, ⚠️ 3.4 → 4.2 ms at 5.3k — the bigger measurement decided it); a check-runner that RAISES now records itself (`selftest.finish_quietly`); the operator-log toggle re-asks Manage Server; the mock's `contract.json` gains a `settings` block read by both `tests/api/test_contract.py` and `check.mjs` (14 false `max: 1440` claims removed per KI-20, `youtube_poll_minutes` `min: 5`, 16 registry keys that had no mock row); `test_every_log_level_names_a_command_that_still_exists` guards `LOG_LEVEL_COMMANDS` by name. Sweep rows 276–279 (were `ES1`–`ES4`). Verified at the landing: ruff clean, **5139** passed, `check.mjs` ok (17 pages / 149 routes / 12 core settings), boot 01:16:08Z `synced 29`, `selftest: 106 ok, 0 failed` 01:16:34Z, no traceback. **NOT verified:** nothing on the live dashboard or by a person in Discord — rows 276–279 are unswept. The two `TODO.md` items that closed whole, moved as they stood (B1–B4 and A1–A2 are struck inside their still-open parent items and stay there):
