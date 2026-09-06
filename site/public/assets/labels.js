@@ -103,6 +103,8 @@ export const LABELS = {
   poll_date_labels: 'How dates are written on a poll',
   poll_panel_minutes: 'How long the /poll panel stays live',
   poll_creator_may_end: 'Whether whoever started a poll may close it early',
+  poll_drafts: 'Whether a half-written poll can be saved and come back to',
+  poll_draft_days: 'How long a saved poll draft is kept',
   poll_log_level: 'How much of polls is repeated into Discord',
 
   birthday_mode: 'Whether the bot wishes people happy birthday',

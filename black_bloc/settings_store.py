@@ -1016,6 +1016,31 @@ KEY_HELP.update(
 )
 
 
+# Saved poll drafts. Its own block so a parallel branch merges textually.
+POLL_DRAFT_DAYS = 14
+POLL_DRAFT_MAX_DAYS = 365
+
+KEY_TYPES.update({"poll_drafts": "bool", "poll_draft_days": "int"})
+KEY_MAX["poll_draft_days"] = POLL_DRAFT_MAX_DAYS
+KEY_MAX_REASON["poll_draft_days"] = (
+    "A half-written poll nobody has come back to in {limit} days is not a draft any more. Set "
+    "it to 0 if a saved draft should wait for ever."
+)
+KEY_HELP.update(
+    {
+        "poll_drafts": (
+            "true to let somebody save a half-written poll from the /poll panel and come back to "
+            "it; false hides Save for later and Resume draft, and the drafts already saved are "
+            "kept, not deleted"
+        ),
+        "poll_draft_days": (
+            f"days a saved poll draft is kept before Black Bloc drops it, up to "
+            f"{POLL_DRAFT_MAX_DAYS}; 0 keeps it for ever"
+        ),
+    }
+)
+
+
 # Memory panel (wave 2) — the one decision `/memory`'s panel introduces, in its own block so the
 # parallel wave-2 branches merge textually.
 KEY_TYPES.update({"memory_panel_minutes": "int"})
@@ -1745,6 +1770,10 @@ class SettingsStore:
             return 10
         if key == "poll_creator_may_end":
             return True
+        if key == "poll_drafts":
+            return True
+        if key == "poll_draft_days":
+            return POLL_DRAFT_DAYS
         if key == "golive_panel_minutes":
             return 10
         if key == "birthday_mode":
