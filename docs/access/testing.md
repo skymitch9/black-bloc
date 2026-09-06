@@ -62,6 +62,12 @@ every method but `GET`/`HEAD` in words). So it reads the runs but **cannot start
 start → poll → purge test needs `BLACK_BLOC_LIVE_SESSION`; without it that one test skips and the
 rest still run.
 
+⚠️ **A test that means to check the OPERATOR gate on a write must send the dashboard's own headers**
+— `conftest.same_site_headers()` (`origin` from `BLACK_BLOC_LIVE_URL`, plus `sec-fetch-site:
+same-origin`). Without them `server.py`'s `same_site_writes` middleware runs first and answers
+`403 cross_site`, so the operator gate is never reached and the test proves nothing. That is
+exactly what the first live run found, 2026-09-06.
+
 ```powershell
 $env:BLACK_BLOC_LIVE_URL  = "https://<the dashboard host>"
 $env:BLACK_BLOC_LIVE_TOKEN = "<the operator token>"     # never paste this into a doc or a log

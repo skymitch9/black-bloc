@@ -104,6 +104,12 @@ BAD_OPERATOR_TOKEN = (
     "copy in BLACK_BLOC_OPERATOR_TOKEN, and ask the owner to set a fresh one if it has been "
     "rotated (docs/access/operator-read.md)."
 )
+OPERATOR_SLOW_DOWN = (
+    "That is more wrong operator tokens from this address than Black Bloc will take in a minute, "
+    "so nothing was read. It is the OPERATOR_READ_TOKEN secret rather than a sign-in, so no "
+    "account is locked out and signing in still works — wait a minute, then send the token the "
+    "mint command set (docs/access/operator-read.md)."
+)
 OPERATOR_READ_ONLY = (
     "The operator token can only look, never change, so nothing was done and nothing was "
     "logged as a change. Make this change on the dashboard or in Discord, where a person signs "
@@ -288,12 +294,12 @@ async def operator_session(request: Any, bot: Any) -> dict[str, Any] | None:
     given = bearer_token(request)
     if given is None or not getattr(bot.settings, "operator_read_enabled", False):
         return None
-    who = client_ip(request)
-    if not operator_bucket_for(bot).take(who):
-        log.warning("auth: rate-limited operator reads from %s", who)
-        raise Refused(429, "slow_down", SLOW_DOWN)
     wanted = str(bot.settings.operator_read_token or "")
     if not hmac.compare_digest(given.encode("utf-8"), wanted.encode("utf-8")):
+        who = client_ip(request)
+        if not operator_bucket_for(bot).take(who):
+            log.warning("auth: rate-limited operator token guesses from %s", who)
+            raise Refused(429, "slow_down", OPERATOR_SLOW_DOWN)
         log.warning("auth: an operator token did not match, from %s", who)
         raise Refused(401, "bad_operator_token", BAD_OPERATOR_TOKEN)
     if str(getattr(request, "method", "")).upper() not in READ_METHODS:
@@ -634,6 +640,7 @@ __all__ = [
     "OPERATOR_READ_KIND",
     "OPERATOR_READ_LOG_KEY",
     "OPERATOR_READ_ONLY",
+    "OPERATOR_SLOW_DOWN",
     "OPERATOR_WHO",
     "SESSION_COOKIE",
     "SLOW_DOWN",

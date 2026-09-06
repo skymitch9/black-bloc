@@ -2,7 +2,16 @@
 
 > **Audience:** Claude sessions first, the owner second. **Status:** TRACKED —
 > secret NAMES only, never values.
-> Last verified: **2026-09-03** — written by the build that landed it, against its
+> Last verified: **2026-09-06** — `OPERATOR_READ_TOKEN` was minted and the live
+> suite run against the deployed app for the FIRST time at 13:55 (v97). What it
+> found, and what changed because of it, is the dated note at the foot; the two
+> superseded claims in the 2026-09-03 header below are marked where they sit.
+> Measured on branch `operator-bucket`: `ruff check .` clean, `pytest -q -n auto`
+> **5279 passed** both orders (5277 before). ⚠️ **NOT verified on this branch:**
+> the live suite — a worktree holds no token, so `pytest -m live` has not run
+> against the fix.
+>
+> Before that, **2026-09-03** — written by the build that landed it, against its
 > own branch. Measured here: `ruff check .` clean, `pytest -q -n auto` **3710
 > passed** (3697 on `main` before), and `scripts/read.ps1` exercised on all three
 > of its branches — no token, a wrong token against the LIVE app (it answered
@@ -56,7 +65,7 @@ Every one is a sentence: what happened, what it needs, how to get it.
 | When | Status / error | What it says |
 |---|---|---|
 | The token does not match | `401` `bad_operator_token` | *That operator token is not the one this server holds, so nothing was read. It is the OPERATOR_READ_TOKEN secret rather than a sign-in, so no account is locked out — check the copy in BLACK_BLOC_OPERATOR_TOKEN, and ask the owner to set a fresh one if it has been rotated (docs/access/operator-read.md).* |
-| Too many guesses from one IP | `429` `slow_down` | The existing `SLOW_DOWN` sentence, unchanged — *That is more sign-in attempts than Black Bloc will take in a minute…* |
+| Too many **wrong** tokens from one IP | `429` `slow_down` | Its own sentence, `OPERATOR_SLOW_DOWN` — *That is more wrong operator tokens from this address than Black Bloc will take in a minute, so nothing was read. It is the OPERATOR_READ_TOKEN secret rather than a sign-in, so no account is locked out and signing in still works — wait a minute, then send the token the mint command set (docs/access/operator-read.md).* ⚠️ A **matching** token never reaches this row; see the 2026-09-06 note at the foot |
 | A good token on a write | `403` `operator_read_only` | *The operator token can only look, never change, so nothing was done and nothing was logged as a change. Make this change on the dashboard or in Discord, where a person signs for it.* |
 | No token configured | — | Nothing of its own: the request falls through and gets whatever the cookie path would have said (`not_signed_in`, and so on). |
 
@@ -108,9 +117,12 @@ unauthenticated OAuth step. They are reported here rather than changed.
    sharing the login bucket would let guessing here lock a person out of signing
    in. `OPERATOR_RATE` is exported so the test names the number rather than
    repeating it.
-3. **A token is consumed on every bearer request, not only on a mismatch.**
-   `TokenBucket` has no peek, and a peek-then-take would be two homes for one
-   decision. At 30/minute the cost to a legitimate session is nothing.
+3. ⚠️ **SUPERSEDED 2026-09-06 — see the note at the foot.** It read: *a token is
+   consumed on every bearer request, not only on a mismatch; `TokenBucket` has no
+   peek, and a peek-then-take would be two homes for one decision. At 30/minute
+   the cost to a legitimate session is nothing.* The first live run showed the
+   cost to a legitimate session is not nothing: the read sweep is ~60 paths and
+   429'd after thirty. Only a mismatch charges the bucket now.
 4. **`SESSION_SECRET_MIN` is reused as the operator minimum** rather than getting
    a second constant. One fact, one home; the name says `SESSION` and the note in
    `code-notes.md` says why it is shared.
@@ -123,3 +135,81 @@ unauthenticated OAuth step. They are reported here rather than changed.
    first word of a key, which would have put it in a namespace of its own called
    `operator`. The brief asked for `core`, and `CORE_KEYS` is how a key that does
    not start with `core_` gets there.
+
+## 2026-09-06 — what the first live run found
+
+Written on branch `operator-bucket` off `main` at `6216e97` (v97 live). The
+token was minted and the live suite run for the first time on 2026-09-06 13:55,
+against the deployed app. Two things the build could not have known:
+
+### 1. The guess bucket was charging good tokens
+
+`operator_session` took a bucket token **before** comparing, so every bearer —
+matching or not — spent one of the 30-a-minute per-IP tokens. The live read
+sweep (`tests/live/test_reads.py::test_every_read_the_pages_make_answers…`, one
+case per GET in `contract.json`, about sixty of them) hit `429` after thirty.
+Decision 6 says *a guess costs something*; a WRONG token is a guess and a right
+one is not, so the ordering was the bug and the decision was right.
+
+**The ordering now, and why it leaks nothing.** The compare is still first and
+still `hmac.compare_digest` on UTF-8 bytes. Only the mismatch branch reads
+`client_ip`, takes the bucket and refuses — `429 slow_down` when the bucket is
+empty, `401 bad_operator_token` when it is not. A matching token never calls
+`operator_bucket_for`, so on a server nobody has guessed at, the bucket object is
+never even built. The only thing an attacker learns from `429` versus `401` is
+that the bucket is empty, which he emptied himself; both answers mean *wrong
+token*, and neither is reachable with a right one. The compare itself is
+constant time, so no byte-level oracle exists either way. ⚠️ The honest caveat:
+a mismatch now does slightly MORE work than a match (a header read, a dict
+update, a log line), so the two paths differ in wall-clock time — but that
+distinction is already public in the status code, and it is not a per-byte
+signal.
+
+### 2. An exhausted bucket does NOT block a right token — deliberate
+
+The bucket is **per IP**, so a shared address (an office, a VPN exit, a Fly
+region) means one person's guessing could otherwise lock a real operator out.
+Taking decision 6 at its word — the bucket exists to *price guesses* — a correct
+token is proof the caller is not guessing, so it passes while that IP is out of
+guesses. Nothing is weakened: wrong tokens from that IP keep getting `429` and
+still cannot be burned without limit, which is the whole property the bucket was
+for. `tests/api/test_auth.py::test_a_right_token_still_reads_while_that_ip_is_out_of_guesses`
+pins it, and `…::test_the_right_operator_token_never_costs_a_bucket_token` reads
+forty times in a minute and asserts the bucket was never created.
+
+### 3. The 429 sentence is the operator's own, not the sign-in one
+
+`SLOW_DOWN` says *"That is more sign-in attempts than Black Bloc will take in a
+minute"*. On a token read that names the wrong cause — there was no sign-in
+attempt, and a reader chasing a locked account is chasing nothing.
+`OPERATOR_SLOW_DOWN` says what happened (too many wrong operator tokens from
+this address), what it is about (the `OPERATOR_READ_TOKEN` secret, not an
+account, and signing in still works), and what to do (wait a minute, send the
+token the mint command set). The refusal table above carries the new row and so
+does `../access/operator-read.md`.
+
+### 4. The live write-refusal tests were watching the wrong gate
+
+`tests/live/test_selftest.py::test_the_operator_token_can_read_the_runs_but_never_start_one`
+asserted `operator_read_only` on `POST /api/selftest`, but the live host answered
+`403 cross_site` first: `server.py`'s `same_site_writes` middleware runs before
+any dependency, exactly as Deviation 5 above says it does. Both are refusals in
+words and both leave the write undone, so nothing was broken — but the test's
+point is that the OPERATOR gate refuses writes, and it was never reaching it.
+The two write tests (the other is in `tests/live/test_refusals.py`) now send the
+dashboard's own headers through `conftest.same_site_headers()`. The middleware
+is still not weakened.
+
+⚠️ **Deviation:** `same_site_headers()` sends **both** `origin` (derived from
+`BLACK_BLOC_LIVE_URL`) and `sec-fetch-site: same-origin`, where the brief asked
+for the Origin alone. A real browser sends both, `same_site` accepts either, and
+the Origin path needs `BLACK_BLOC_LIVE_URL` to match `settings.origin`
+character for character — which this branch could not verify, having no token.
+Sending both means a hostname that differs by a trailing slash or a `www.`
+cannot silently put the test back on the wrong gate.
+
+⚠️ **NOT verified here:** nothing on this branch has met the live host. A
+worktree has no operator token, so `pytest -m live` was not run; the conductor
+runs it after the deploy. Measured on the branch: `ruff check .` clean, and
+`pytest -q -n auto` **5279 passed** forward and with `BB_REVERSE=1` (5277 on
+`main` before; the two new ones are the bucket tests above).

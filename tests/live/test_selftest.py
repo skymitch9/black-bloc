@@ -6,6 +6,8 @@ import time
 
 import pytest
 
+from .conftest import same_site_headers
+
 pytestmark = pytest.mark.live
 
 POLL_SECONDS = 5
@@ -24,7 +26,9 @@ def poll_until_finished(client, run_id):
 
 def test_the_operator_token_can_read_the_runs_but_never_start_one(reader):
     """auth.py refuses every non-GET on the operator bearer, and says so in words — so the
-    read half of this door is open to a Claude session and the write half is not."""
+    read half of this door is open to a Claude session and the write half is not. The write
+    carries the dashboard's own headers, or `same_site_writes` answers `cross_site` first and
+    the operator gate is never reached."""
     listed = reader.get("/api/selftest")
 
     assert listed.status_code == 200
@@ -32,7 +36,7 @@ def test_the_operator_token_can_read_the_runs_but_never_start_one(reader):
     assert {"runs", "running", "purge_minutes", "notes"} <= set(body)
     assert isinstance(body["runs"], list)
 
-    refused = reader.post("/api/selftest", json={})
+    refused = reader.post("/api/selftest", json={}, headers=same_site_headers())
 
     assert refused.status_code == 403
     assert refused.json()["error"] == "operator_read_only"

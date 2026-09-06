@@ -10,6 +10,7 @@ from black_bloc.api import sessions
 from black_bloc.api.auth import (
     BUCKET_MAX_KEYS,
     LOGIN_RATE,
+    OPERATOR_BUCKET_ATTR,
     OPERATOR_RATE,
     SESSION_COOKIE,
     STATE_COOKIE,
@@ -521,7 +522,7 @@ async def test_a_wrong_operator_token_is_refused_in_words_and_leaves_no_row(clie
 
 
 def test_guessing_the_operator_token_runs_out_of_attempts(client, web):
-    """A guess costs a token from the same per-IP bucket a sign-in attempt does."""
+    """A WRONG token costs a token from the per-IP bucket; the 31st is refused in words."""
     with_token(web)
     mine = dict(WRONG_BEARER, **{"Fly-Client-IP": "1.2.3.4"})
     for _ in range(OPERATOR_RATE):
@@ -531,9 +532,37 @@ def test_guessing_the_operator_token_runs_out_of_attempts(client, web):
 
     assert refused.status_code == 429
     assert refused.json()["error"] == "slow_down"
-    assert "wait a minute" in refused.json()["message"]
+    said = refused.json()["message"]
+    assert "wrong operator tokens from this address" in said
+    assert "sign-in attempts" not in said
+    assert "signing in still works" in said
     elsewhere = dict(WRONG_BEARER, **{"Fly-Client-IP": "5.6.7.8"})
     assert client.get("/api/settings", headers=elsewhere).status_code == 401
+
+
+def test_the_right_operator_token_never_costs_a_bucket_token(client, web):
+    """A guess costs something; a correct token is not a guess, so it never touches the bucket."""
+    with_token(web)
+    mine = dict(BEARER, **{"Fly-Client-IP": "1.2.3.4"})
+
+    for _ in range(OPERATOR_RATE + 10):
+        assert client.get("/api/settings", headers=mine).status_code == 200
+
+    assert getattr(web, OPERATOR_BUCKET_ATTR, None) is None
+
+
+def test_a_right_token_still_reads_while_that_ip_is_out_of_guesses(client, web):
+    """The bucket prices guesses, and a matching token proves the caller is not guessing."""
+    with_token(web)
+    wrong = dict(WRONG_BEARER, **{"Fly-Client-IP": "1.2.3.4"})
+    for _ in range(OPERATOR_RATE):
+        assert client.get("/api/settings", headers=wrong).status_code == 401
+    assert client.get("/api/settings", headers=wrong).status_code == 429
+
+    right = dict(BEARER, **{"Fly-Client-IP": "1.2.3.4"})
+
+    assert client.get("/api/settings", headers=right).status_code == 200
+    assert client.get("/api/settings", headers=wrong).status_code == 429
 
 
 def test_the_operator_token_reads_exactly_what_a_staff_cookie_reads(client, web, sign_in):

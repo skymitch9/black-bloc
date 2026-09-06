@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from .conftest import same_site_headers
+
 pytestmark = pytest.mark.live
 
 WITHOUT_A_TOKEN = ("/api/status", "/api/settings", "/api/actions", "/api/selftest")
@@ -44,11 +46,16 @@ def test_a_wrong_operator_token_names_the_secret_and_says_no_account_is_locked_o
 
 
 def test_the_operator_token_is_refused_on_every_write_and_says_why(reader):
-    refused = reader.put("/api/settings/birthday_show_age", json={"value": True})
+    """With the dashboard's own headers the origin check passes, so the OPERATOR gate is what
+    answers — without them `same_site_writes` says `cross_site` first and this proves nothing."""
+    refused = reader.put(
+        "/api/settings/birthday_show_age", json={"value": True}, headers=same_site_headers()
+    )
 
-    assert refused.status_code in (403, 415)
+    assert refused.status_code == 403
+    assert refused.json()["error"] == "operator_read_only"
     said = says_something(refused)
-    assert "never change" in said or "dashboard" in said
+    assert "never change" in said
 
 
 def test_a_route_that_does_not_exist_is_still_a_sentence(reader):

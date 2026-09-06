@@ -40,6 +40,11 @@ def live_session() -> str | None:
     return (os.environ.get(SESSION_NAME) or "").strip() or None
 
 
+def same_site_headers() -> dict[str, str]:
+    """What the dashboard's own fetch sends, so `same_site_writes` is not the thing that answers."""
+    return {"origin": live_url() or "", "sec-fetch-site": "same-origin"}
+
+
 def readable_paths() -> list[str]:
     """The contract's own GET inventory, minus anything with an id to fill in."""
     found = json.loads(CONTRACT.read_text(encoding="utf-8"))
