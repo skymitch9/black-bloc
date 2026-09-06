@@ -1,8 +1,7 @@
 # The global personality pool — design (next-wave #4)
 
 > **Audience:** Claude sessions in BOTH repos (this one and `catalog-platform`).
-> **Status:** TRACKED — **BUILT (Black Bloc half) on `worktree-agent-a9f7e266cd87f5c2c`, not
-> merged, not deployed** (2026-09-05). The GABI half (§5.1) is **NOT built**; until it lands,
+> **Status:** TRACKED — **Black Bloc half LIVE as v90 `7c59eb1`** (2026-09-05 19:00; built on `worktree-agent-a9f7e266cd87f5c2c`). The GABI half (§5.1) is **NOT built**; until it lands,
 > the self-test check reports *"GABI does not say its pool version yet"* as a pass, which is
 > the landing order §8 asks for. The runbook for the built half is
 > [`../access/personality-pool.md`](../access/personality-pool.md). ✅ All three forks decided (a) by the owner 2026-09-05 16:41–16:43. Written **2026-09-05** by Fable in the

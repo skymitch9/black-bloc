@@ -12,7 +12,7 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 18:20, v89 LIVE — **29 slots, zero Groups**; self-test live and run by the owner (sweep 252); the CONFIRM/OPENED FOLD ✅ LANDED as **v88** `794d3aa` 17:33 (309k, rows 262–275, moved to DONE); the ENGINEERING SWEEP ✅ LANDED as **v89** `243dc0f` 18:16 (481k, rows 276–279, KI-21 + `LOG_LEVEL_COMMANDS` + gate-pass items moved to DONE; B1–B4 and A1–A2 struck inside their parent items, B5–B9 / A3–A4 still open); the PERSONALITY-POOL BUILD, Black Bloc half (Opus, own worktree off `a93f3e1`, sweep rows `PP1`–`PPn`, est. 220–330k) DISPATCHED 18:19, lands as v90; then the GABI half in catalog-platform (owner 16:33: "Keep running stuff, don't pause"); Fable meanwhile designs the global personality pool (next-wave #4) in the main loop)
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 19:05, v90 LIVE — **29 slots, zero Groups**; self-test live and run by the owner (sweep 252); the CONFIRM/OPENED FOLD ✅ LANDED as **v88** `794d3aa` 17:33 (309k, rows 262–275, moved to DONE); the ENGINEERING SWEEP ✅ LANDED as **v89** `243dc0f` 18:16 (481k, rows 276–279, KI-21 + `LOG_LEVEL_COMMANDS` + gate-pass items moved to DONE; B1–B4 and A1–A2 struck inside their parent items, B5–B9 / A3–A4 still open); the PERSONALITY-POOL BUILD, Black Bloc half ✅ LANDED as **v90** `7c59eb1` 19:00 (288k, rows 280–286, KI-23 added BLOCKED on the GABI half); NEXT = the GABI half in catalog-platform (Opus, its own worktree, design §5.1 — check that tree is not in use by another session first), which closes KI-23 and turns sweep rows 284/286 from "not yet" into real checks (owner 16:33: "Keep running stuff, don't pause"); Fable meanwhile designs the global personality pool (next-wave #4) in the main loop)
 
 **`main` = `43312b9`** (role-menus panel merge; v77 live 20:51, 4529 tests, **36 commands**; `youtube_mode` is
 **shadow** since 2026-09-03 17:42). **The panels program is COMPLETE** — waves 1, 2 and 3 (17 features, one
@@ -169,8 +169,7 @@ already said go.** Order recommended by the 5.0 session, owner did not reorder:
    catalog-platform TODO pointer is NOT yet written — that tree was in use by
    another session at 16:37 (`821cd26` + a dirty `deploys.log`); the GABI-half
    brief carries it.
-   **Black Bloc half BUILT on `worktree-agent-a9f7e266cd87f5c2c` 2026-09-05, not
-   merged, not deployed** — manifest + derived `personas.py` + `sync_tropes`/`sync_pool` +
+   **Black Bloc half ✅ LIVE as v90 `7c59eb1` 2026-09-05 19:00** (288k; selftest 107 ok, `/health` says `personality_pool_version: 1`) — manifest + derived `personas.py` + `sync_tropes`/`sync_pool` +
    two core settings + `/health` field + `pool.in_step_with_gabi` self-test check +
    `scripts/sync_personality_pool.py` + runbook [`access/personality-pool.md`](access/personality-pool.md)
    + sweep rows 280–286. Schema unchanged at 32. GABI half still to build.
