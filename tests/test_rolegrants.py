@@ -41,22 +41,11 @@ from black_bloc.rolegrants import (
     still_cooling,
     was_ours,
 )
-from black_bloc.storage.db import Database
 
 GUILD = 7
 MENU_ID = 3
 MEMBER = 900
 ROLE = 10
-
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "g.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 async def test_a_request_is_open_once_and_the_second_one_is_refused(db):

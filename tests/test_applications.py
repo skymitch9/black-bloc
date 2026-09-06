@@ -75,22 +75,11 @@ from black_bloc.applications import (
     validate_question,
     validate_questions,
 )
-from black_bloc.storage.db import Database
 
 GUILD = 7
 ROLE = 4242
 STAFF = 1
 MEMBER = 900
-
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "a.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 async def a_form(db, name="twitch-team", **kwargs):

@@ -1,22 +1,11 @@
 import pytest
 
 from black_bloc import requests as pure
-from black_bloc.storage.db import Database
 
 GUILD = 7
 OTHER_GUILD = 8
 ASKER = 900
 STAFFER = 901
-
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "r.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 async def file_one(db, **kwargs):

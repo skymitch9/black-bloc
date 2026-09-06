@@ -29,7 +29,6 @@ from black_bloc.chat_panel import (
 from black_bloc.config import load_settings
 from black_bloc.logkinds import VIA_DISCORD, VIA_WEBSITE
 from black_bloc.settings_store import SettingsStore
-from black_bloc.storage.db import Database
 
 GUILD = 7
 LOG_CHANNEL = 222
@@ -54,16 +53,6 @@ class FakeBot:
 
     def get_channel(self, channel_id):
         return None
-
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "cp.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 @pytest.fixture

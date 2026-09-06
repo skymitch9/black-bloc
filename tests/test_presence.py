@@ -15,7 +15,6 @@ from black_bloc.presence import (
     update_status,
 )
 from black_bloc.settings_store import BOT_BIO_TEMPLATE, STATUS_PREFIX, SettingsStore
-from black_bloc.storage.db import Database
 
 GUILD = 7
 OTHER_GUILD = 8
@@ -88,16 +87,6 @@ def refusal(status=403):
     return discord.HTTPException(
         SimpleNamespace(status=status, reason="Forbidden"), "Missing Access"
     )
-
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "presence.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 @pytest.fixture

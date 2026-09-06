@@ -20,7 +20,6 @@ from black_bloc.cogs.community.role_menus import (
 )
 from black_bloc.config import load_settings
 from black_bloc.settings_store import SettingsStore
-from black_bloc.storage.db import Database
 
 GUILD = 7
 OTHER_GUILD = 8
@@ -107,16 +106,6 @@ class FakeBot:
 
     def add_view(self, view, *, message_id=None):
         self.views.append((view, message_id))
-
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "panels.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 @pytest.fixture

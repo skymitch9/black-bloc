@@ -6,7 +6,6 @@ from black_bloc import pings
 from black_bloc.cogs.community.role_menus import get_menu, get_options, list_menus
 from black_bloc.config import load_settings
 from black_bloc.settings_store import SettingsStore
-from black_bloc.storage.db import Database
 
 GUILD = 7
 LOG_CHANNEL = 222
@@ -129,16 +128,6 @@ class FakeBot:
 
     def get_guild(self, guild_id):
         return self.guild if self.guild.id == guild_id else None
-
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "p.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 @pytest.fixture

@@ -9,7 +9,6 @@ from black_bloc.chat_memory import MEMORY_TIER, profile_for, set_override
 from black_bloc.config import load_settings
 from black_bloc.llm import GROQ, Reply, Usage
 from black_bloc.settings_store import SettingsStore
-from black_bloc.storage.db import Database
 
 GUILD = 7
 CHANNEL = 111
@@ -88,16 +87,6 @@ class FakeBot:
 
     def get_guild(self, guild_id):
         return self.guild if int(guild_id) == self.guild.id else None
-
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "d.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 @pytest.fixture

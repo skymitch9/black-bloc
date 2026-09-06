@@ -1,8 +1,5 @@
 from datetime import UTC, datetime
 
-import pytest
-
-from black_bloc.storage.db import Database
 from black_bloc.timezones import (
     AMBIGUOUS,
     CHOICE_LIMIT,
@@ -24,16 +21,6 @@ from black_bloc.timezones import (
 )
 
 USER = 900
-
-
-@pytest.fixture
-async def db(tmp_path):
-    database = Database(tmp_path / "tz.sqlite3")
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await database.close()
 
 
 def test_the_default_zone_resolves_on_this_machine():
