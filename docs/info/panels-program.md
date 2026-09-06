@@ -1,17 +1,17 @@
 # Panels over slash commands — the program for the rest of the app
 
 > **Audience:** the conductor (Fable), every design and build agent, the reviewer, the owner.
-> **Status:** TRACKED · **PLANNING**, except **§4 wave 0, which is SHIPPED** (`black_bloc/panels.py`,
-> `feat/panels-library` → `main` `1861923`, 2026-09-03 ~11:50, Fable-reviewed: no defect, five
-> deviations all accepted; live in release v60 at 11:39, `deploys.log` line 59). Waves 1–4 are unbuilt; the template is
-> `/request` ([`requests-panel-design.md`](requests-panel-design.md)).
-> **Last verified: 2026-09-03** — §4's BUILT line was measured on `feat/panels-library`
-> (3371 tests, ruff clean, import check); the command inventory in §3 was measured by grep
-> against `black_bloc/cogs/` at `a392a3f` (one row per `app_commands.Group` /
-> `@<group>.command`) and is unchanged by wave 0, which added no command and retired none;
-> the pattern in §2 was read out of `requests-panel-design.md` and its twelve deviations.
-> ⚠️ **NOT verified:** which features the owner wants first (§5 is a proposal), and the
-> three forks in §6, which are his to decide one at a time.
+> **Status:** TRACKED · ⚠️ **COMPLETE.** Every wave has landed and all three forks in §6 are
+> ANSWERED — the last of them, **F3 on `/settings`**, shipped as v84 on 2026-09-05 and took the
+> `app_commands.Group` count to zero. The item moved WHOLE to [`DONE.md`](../DONE.md) on
+> 2026-09-04 ("Panels over slash commands — the program"); this file stays as the record of what
+> the program was and what it decided, not as work in flight.
+> **Last verified: 2026-09-05** — §3's Core row, its totals line and §6's F3 were re-measured
+> against the tree at `aa03a01` (v87): `bot.tree.get_commands()` is **29 commands and ZERO
+> `Group`s** (`tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`), and
+> `len(KEY_TYPES)` is **185**, not the "~120" F3 was asked with. ⚠️ **NOT re-verified:** the
+> other sixteen feature rows in §3, §2's pattern, and §4/§5, all of which are the record of
+> earlier landings and were left as written.
 
 **The order, verbatim (owner, 2026-09-03):** *"Let's try and minimize slash commands and
 maximize interactive windows"* → *"Let's start this process with request then carry it
@@ -98,16 +98,16 @@ The panel column is the SHAPE, not the design — the design doc decides the tab
 | Honeypot | `moderation/honeypot.py` | `/honeypot` | 0 | 1 | staff | ✅ **SHIPPED — wave 3**, 2026-09-05 as v79 (`361eaa2`), branch `worktree-agent-a7ea6b0dbeac7f753`; `/honeypot` opens the panel and the `honeypot` and `exempt` groups and all **seven** leaf subcommands are retired. `commands synced` does **NOT** move (a group was already one slot — **36, measured** through `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`). Owner forks: **F-H1 = (a)** — the `RoleSelect` at `min_values=0` PLUS an **Exempt nobody** button, because whether a client submits an empty multi-select is unproven and the exempt list IS the select. **F-H2 = (a)** — **Forget…** opens a card with a picker over every recorded id, one Discord no longer has labelled as such. **F-H3 = (a)** — `honeypot_purge_days` gets a second field on the Settings `Numbers…` modal. `honeypot.exempt_add`/`exempt_remove` are retired for one `honeypot.exempt_set` carrying the added/removed diff; `honeypot.settings` is new. The catching path is untouched. One key: `honeypot_panel_minutes`. [`honeypot-panel-design.md`](honeypot-panel-design.md) |
 | Modmail | `moderation/modmail.py` | `/modmail`, top-level `/reply`, `/areply`, `/note`, `/close` | 0 | 5 | staff, in-thread | ✅ **BUILT — wave 4 (Build A)**, 2026-09-05, branch `worktree-agent-afdd9e23bbaf59be8`; `/modmail` opens the panel and BOTH the `modmail` and `snippet` groups and all eleven leaf subcommands are retired, so the top-level count really drops — **36 → 35, measured** through `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`. The panel is the root status card + `Setup…` (the three places, the mode, one Answer-DMs button that names its own effect), `Blocked…` (list → pick → Unblock; Block via a `UserSelect` + reason modal), `Snippets…` (list → pick → Remove/Change; Add modal), `Forget…`, `Logs` and the site link. `/modmail` is never hidden by `hide_commands_when_off` (`modmail_mode` has no `off`, and the switch is the bool `modmail_enabled`). Five website routes lose their `note()` and pass `via=VIA_WEBSITE`, four log kinds are renamed so the two doors agree, and a Discord reply writes a `modmail.reply` row for the first time. ⚠️ **Fork F2 answered in full by Build B**, 2026-09-05, branch `worktree-agent-a4bebd98196e3ca14` (**NOT merged, NOT deployed**): the sticky ticket card (a persistent `DynamicItem` carrying **Reply · Reply as Staff · Private note · Close…**, bumped to the bottom on every write, reconciled after a restart), schema **29 → 30** (`card_message_id`, `practice`), `modmail_reply_style` gating the typed relay, the practice ticket, and the retirement of `/areply` `/note` `/close` — **33 → 30, measured**. `/reply` survives with its `ticket:` (fork F-M5). [`modmail-panel-design.md`](modmail-panel-design.md) |
 | Mod commands | `moderation/modcmds.py` | `/mod [member]` + the seven bare actions `/warn`, `/timeout`, `/untimeout`, `/kick`, `/ban`, `/unban`, `/purge` | 0 | 8 | staff | ✅ **BUILT — wave 4**, 2026-09-05, branch `worktree-agent-ab5740f777a3dfd80`; `/mod [member]` opens a panel over the case record and `/case`, `/cases` and the `mod` group's `logs` child are all retired — `commands synced` **36 → 34 on its branch, 35 → 33 on `main` after modmail A, measured** through `test_the_command_tree_stays_inside_discords_limits`. ⚠️ **Fork F1 is ANSWERED, not open: the seven bare actions STAY BARE** (owner, 2026-09-04, proposal 3 of 6 — "typed mid-incident with autocompleted arguments; a panel would be three clicks slower at the wrong moment"), so no member card with Warn/Timeout/Kick/Ban was built. The panel's own additions are the four corrections a case never had — edit its reason, note it, void it, restore it — behind schema **29** (`mod_cases` gains six nullable columns), through four shared functions that both Discord and four new API routes call with `via`. Owner forks: **F-M1 = (a)** voided cases stay in the list, struck through; **F-M2 = (a)** a voided warn stops counting toward `automod_warn_threshold`; **F-M3 = (a)** the website gets the four moves in the same build. `/mod` is never hidden — moderation has no mode key. [`mod-panel-design.md`](mod-panel-design.md) |
-| Core | `core.py` | `/ping`, `/about`, `/help`, `/settings` (show, set, set-role, set-value, clear), `/presence` (1) | 6 | 5 | anyone / staff | `/ping` `/about` `/help` stay. ⚠️ **Fork F3** on `/settings` |
+| Core | `core.py` | `/ping`, `/about`, `/help`, `/settings` | 0 | 4 | anyone / staff | ✅ **SHIPPED — wave 4**, 2026-09-05 as **v84** (`ce97de0`); `/settings` opens the panel and its five subcommands AND the whole `presence` group are retired, taking the top-level count **30 → 29** and the `app_commands.Group` count to **ZERO**. Fork **F3 = the paged panel**: **A setting group…** over the 22 namespaces, **Find a setting…** within one, so all **185** keys are reachable through 25-option selects. `/ping` `/about` `/help` stay as they were. [`settings-panel-design.md`](settings-panel-design.md) |
 
-**Totals today:** ~177 subcommands (nested groups like `poll recur` and `automod rule`
-counted inside their parent) over the 44 top-level commands `commands synced` reports.
-⚠️ **The honeypot row above is now 0 / 1** — the panel build retired its **seven** leaf
-subcommands (2026-09-05), so the surviving subcommand total is seven lower than this line's
-figure and the top-level count is unchanged at **36, measured**.
-**After the program**, if every fork goes the panel way: 0 subcommands, **~21 top-level
-commands** — 17 feature panels + `/ping` `/about` `/help` `/presence`. Discord's cap is 100
-top-level; the gain is for people, not the limit.
+**Totals today, measured 2026-09-05 at `aa03a01` (v87):** **ZERO subcommands, zero
+`app_commands.Group`s, and 29 top-level commands** — 18 of them open a panel, the other eleven
+take an argument and act (`/ban`, `/warn`, `/timeout`, `/untimeout`, `/kick`, `/unban`,
+`/purge`, `/reply`) or answer one line (`/ping`, `/about`, `/help`). ⚠️ **This line used to read
+"~177 subcommands over 44 top-level commands"; that was the figure the program started from.**
+The program's own estimate of where it would land ("~21 top-level") was low, because it counted
+one slot per feature and the seven bare moderation actions plus `/reply` were kept deliberately
+(fork F1). Discord's cap is 100 top-level; the gain was for people, not the limit.
 
 ## 4. Wave 0 — the library the template becomes (build first, alone)
 
@@ -220,9 +220,14 @@ weekly cut-off stands.
   ticket. **Build A (2026-09-05) left all four alone; Build B (2026-09-05, branch
   `worktree-agent-a4bebd98196e3ca14`, NOT merged) built the card and retired the three** —
   `33 → 30, measured` ([`modmail-panel-design.md`](modmail-panel-design.md) §J).
-- **F3 — `/settings`.** The site already owns settings (~120 keys; a 25-option select cannot
-  list them). A paged panel, keep the group as the site's fallback, or retire the Discord
-  path entirely and point at the site?
+- **F3 — `/settings`.** ✅ **Decided and BUILT — the paged panel** (wave 4, 2026-09-05, live as
+  **v84**; [`settings-panel-design.md`](settings-panel-design.md)). The Discord path was neither
+  retired nor left as a group: `/settings` opens a panel whose **A setting group…** select walks
+  the 22 namespaces and whose **Find a setting…** modal filters within one, so all **185** keys
+  are reachable through a 25-option select without paging. `show`, `set`, `set-role`, `set-value`
+  and `clear` are retired with it, and so is the whole `presence` group — the last two
+  `app_commands.Group`s in the tree. The question's premise ("~120 keys") was stale even when it
+  was asked; the figure is **185**, counted off `KEY_TYPES`.
 
 ## 7. What this program does NOT touch
 

@@ -211,23 +211,44 @@ docs bookkeeping lands with the work, not after.
 ## 🔧 Open engineering items
 
 - 🔧 **Self-test leftovers after wave 5 (handed over at the v86 landing, 2026-09-05 — Fable review findings, none
-  blocking):** (1) `api/selftest_api.py:start` hands `selftest.finish(one)` to `asyncio.create_task` and nothing awaits
+  blocking):** (1) ~~`api/selftest_api.py:start` hands `selftest.finish(one)` to `asyncio.create_task` and nothing awaits
   it, so a check-runner that RAISES (not a check that fails — those are recorded) dies with only asyncio's GC warning;
   wrap it so the exception lands as a `selftest.finished` row with `failed` counted and the busy flag cleared (the
-  `finally` already clears it — the row is what is missing); (2) `selftest.py:checks_of` scans every `selftest.check`
+  `finally` already clears it — the row is what is missing)~~ **DONE `36e4ad7`** — `selftest.finish_quietly` records the
+  crash as a `selftest.check` row in words, closes the run and logs the finished row; all three doors use it, not just
+  the website's; (2) ~~`selftest.py:checks_of` scans every `selftest.check`
   row for the guild and filters by `run_id` in Python — grows one run's worth per run; index or `WHERE json_extract`
-  on `details.run_id`, measure at ~50 runs; (3) `OPERATOR_READ_TOKEN` is not set on Fly, so `tests/live/` has never
+  on `details.run_id`, measure at ~50 runs~~ **DONE `36e4ad7`** — `json_extract(details, '$.run_id')` in the WHERE
+  clause; measured at 50 runs × 106 checks, 5300 rows read → 106 and 14.9 ms → 3.4 ms, and with 50k unrelated rows
+  beside them 19.6 → 8.5 ms. `EXPLAIN` showed `SCAN action_log` (no index existed at all), so schema **32** adds
+  `action_log_by_kind` on `(guild_id, kind, id)`: 8.5 → 3.1 ms at that size. ⚠️ At 5.3k rows the index is SLOWER
+  (3.4 → 4.2 ms, a temp B-tree for the ORDER BY) — the bigger measurement is the one that decided it;
+  (3) `OPERATOR_READ_TOKEN` is not set on Fly, so `tests/live/` has never
   hit the deployed host — mint one (Fly secret, NAME only in docs) and run `pytest -m live` once from a laptop, then
   record the measured count in `access/testing.md`; (4) the boot line and the purge line are the only live measurements of the self-test so far (v87: `106 ok, 0 failed, 24 posted`; v86 purge: 24 deleted 5 min 40 s later) — a person pressing **Run the self-test** is sweep row 252.
-- 🔧 **`/settings` leftovers after Build 2 (handed over at the v84 landing, 2026-09-05):** (1) the operator-read-log
+- 🔧 **`/settings` leftovers after Build 2 (handed over at the v84 landing, 2026-09-05):** (1) ~~the operator-read-log
   toggle on `Panels & commands…` is drawn only for `manage_guild` but `MoveButton.callback` → `run_toggle` does not
   re-ask it (the core-key picks do, through `core_keys_allowed`) — the panel is ephemeral to its opener so the exposure
-  is a Lead losing the permission mid-panel; one `manages_guild` line + a test; (2) `docs/info/panels-program.md` and
+  is a Lead losing the permission mid-panel; one `manages_guild` line + a test~~ **DONE `e6ecfba`** — `run_gated_set`
+  is `run_core_set`'s body with the gate passed in, and both moves are one line on top of it; sweep row `ES1`;
+  (2) ~~`docs/info/panels-program.md` and
   `docs/info/feature-list.md` are STALE — panels-program still asks fork F3 as open, says "~120 keys", and its Core
-  row/totals describe a `settings` Group; feature-list has no `/settings` panel row; (3) **KI-21**: the `via` keyword
+  row/totals describe a `settings` Group; feature-list has no `/settings` panel row~~ **DONE `3f13ee0`** — F3 answered
+  (the paged panel, v84), the Core row and totals re-measured at `aa03a01` (**29 commands, ZERO Groups, 185 keys**,
+  not "~120"), the program's status flipped to COMPLETE, and feature-list gains row **C1**; its three
+  `/settings set-value` instructions were corrected too — that subcommand no longer exists;
+  (3) ~~**KI-21**: the `via` keyword
   exists now — route `PUT`/`DELETE /api/settings/{key}` through `set_key`/`clear_key` and delete the route's own
-  `note()` (one commit); (4) the mock's `*_panel_minutes` rows claim `max: 1440` with no `KEY_MAX` in the registry
-  (16 rows) and the mock's `CORE_KEYS` is a shorter second copy (3 vs 6) — one home; (5) the six singleton namespaces
+  `note()` (one commit)~~ **DONE `675f233` + `49370a6`** — and the gate pass with it: `gated_writers()` hands
+  `automod_mode`, `honeypot_mode` and `honeypot_exempt_role_ids` to the cog's own move, which the audit found are
+  **the only three writes in the app with a cog-side gate**; KI-21 moved WHOLE to `DONE.md`; sweep rows `ES2`/`ES3`;
+  (4) ~~the mock's `*_panel_minutes` rows claim `max: 1440` with no `KEY_MAX` in the registry
+  (16 rows) and the mock's `CORE_KEYS` is a shorter second copy (3 vs 6) — one home~~ **DONE `c1263ca`** — measured
+  against the running mock: **14** rows claimed the 1440 (the validator enforces no such bound, and KI-20 says it is
+  deliberately unclamped, so the claim was removed rather than mirrored), `youtube_poll_minutes` was missing its
+  `min: 5`, `CORE_KEYS` was 9 against 12, and **sixteen registry keys had no row in the mock at all**. All generated
+  from the registry; `contract.json` gains a `settings` block that both `tests/api/test_contract.py` and
+  `site/mock/check.mjs` read, in both directions; (5) the six singleton namespaces
   (`event`, `voice`, `memory`, `hide`, `emoji`, `cost`) now appear on a Discord control, one rename pass for both
   surfaces; (6) the number modal's bound is a compact label of its own because a `TextInput` label caps at 45 chars —
   fine, but the `bounds_line` prose and the label can drift; (7) `tests/cogs/test_presence.py` + `tests/test_bot.py`
@@ -289,19 +310,30 @@ docs bookkeeping lands with the work, not after.
   `cogs/content/raidtrain.py`, and its `Outcome`/`refusal` fold into `panels.py` is DONE (chat imports
   them from there now). Role menus adds a SEVENTH confirm (`confirm()` in `cogs/community/role_menus.py`)
   and a `ready()` that is `opened()` under another name.** Est. 120–180k.
-- 🔧 **`LOG_LEVEL_COMMANDS` is stale for eight features (report from the automod build, 2026-09-04):**
+- ~~🔧 **`LOG_LEVEL_COMMANDS` is stale for eight features (report from the automod build, 2026-09-04):**
   `settings_store.py` still names `tempvoice` (now `voice`), `events` (now `event`), `poll`, `birthday`,
   `golive`, `request`, `applications` (now `/apply`) and `pings` (`pingroles`, retired) as the command that
   reads each log level — every one of those became a panel's **Logs** button. One pass: re-express the help
   text against the Logs button per feature and re-express
   `tests/test_bot.py::test_every_feature_group_has_a_logs_command` (already on the small-findings list) against
-  the same thing before it covers nothing. Fold into whichever wave-3 build touches `settings_store.py` last,
-  or its own Sonnet sweep. Est. 60–90k.
-- 🔧 **Settings-API gate pass (KI-21, 2026-09-04):** the generic PUT in `api/settings_api.py` validates
+  the same thing before it covers nothing.~~ **ALREADY DONE, then GUARDED `3f13ee0`.** ⚠️ **Both halves had
+  already landed and this item was stale:** the v84 (`/settings` panel) build corrected `LOG_LEVEL_COMMANDS`
+  for all eighteen features and rewrote `log_level_help` to say "`/<command>` ▸ **Logs**", and the same build
+  re-expressed the test as
+  `tests/test_bot.py::test_every_features_logs_is_a_panel_button_and_no_group_is_left_to_hold_one`. Verified by
+  reading the code, not assumed. What this sweep added is the guard that stops it happening a ninth time:
+  `test_every_log_level_names_a_command_that_still_exists` loads the whole tree and fails **by name** on any
+  row of `LOG_LEVEL_COMMANDS` that names a command Discord no longer has. Sweep row `ES4`.
+- ~~🔧 **Settings-API gate pass (KI-21, 2026-09-04):** the generic PUT in `api/settings_api.py` validates
   against `KEY_CHOICES` only, so the website can set `automod_mode=on` past both of the panel's arming
   refusals. Route the write through `cogs/moderation/automod.py:set_mode` with `via=website` (the youtube and
   pings routes already call their cog's shared moves), then audit every other key that has a cog-side gate
-  for the same gap. Not a panel change — its own item, after wave 3. Est. 90–140k.
+  for the same gap.~~ **DONE `675f233` + `49370a6`** — see the `/settings` leftovers item above. ⚠️ **One
+  premise in this item was wrong and is worth recording:** *no* route called a cog's `set_mode` before this
+  build. The youtube and pings routes call their cog's shared moves for **link / unlink / setup**, never for a
+  mode — every mode in the app was written through the generic settings PUT, which is exactly why the gap
+  existed. Audit result: `automod_mode`, `honeypot_mode` and `honeypot_exempt_role_ids` are the only three
+  writes with a cog-side gate; the other sixteen `*_mode` keys have nothing to share.
 - **Via-labelling gap: `raidtrain.cancel_train` logs one row but calls a website cancel
   Via = Discord** (found by the double-logging build, 2026-09-03 — see `DONE.md` that
   date). Not a double post, so out of that fix's scope. Audit every shared function a
