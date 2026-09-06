@@ -48,6 +48,23 @@ const KINDS = [
 ];
 const GENERATED = { yesno: ['Yes', 'No'], rating: ['1', '2', '3', '4', '5'] };
 
+const NO_REPEAT = 'no';
+const CADENCES = [
+  [NO_REPEAT, 'Doesn’t repeat'],
+  ['daily', 'Every day'],
+  ['weekly', 'Every week'],
+  ['monthly', 'Every month'],
+];
+const WEEKDAYS = [
+  ['mon', 'Monday'],
+  ['tue', 'Tuesday'],
+  ['wed', 'Wednesday'],
+  ['thu', 'Thursday'],
+  ['fri', 'Friday'],
+  ['sat', 'Saturday'],
+  ['sun', 'Sunday'],
+];
+
 const SWITCH_HELP = 'Off hides Create on the /poll panel and refuses new polls. Nothing already ' +
   'running is closed, and every result Black Bloc has kept stays on this page.';
 const NO_MODE_KEY = 'The bot did not report a poll_mode key, so this switch is not shown ' +
@@ -72,12 +89,23 @@ const makeOne = () => textAction('Create a poll', () => goToSection('create-a-po
 
 const NO_OPEN = 'Nothing is taking votes right now. Start one below.';
 const NO_REVIEW = 'Nobody is waiting on a Lead. A poll only waits when poll_review_mode is on.';
-const NO_RECUR = 'No poll repeats on its own yet. Repeat… while writing one on the /poll panel in Discord starts one.';
+const NO_RECUR = 'No poll repeats on its own yet. Repeat on the Create a poll form below starts ' +
+  'one, and so does Repeat… while writing one on the /poll panel in Discord.';
 const NO_CLOSED = 'No poll has finished yet.';
 const NO_ARCHIVE = 'Nothing has been archived yet.';
 const NEED_A_QUESTION = 'Write the question first — it is the heading everybody votes under.';
 const NEED_OPTIONS = 'A poll needs at least two options.';
 const NEED_A_START = 'A date poll needs a start date, like 2026-09-05.';
+const NEED_A_TIME = 'A repeating poll needs the time of day it opens, on the 24-hour clock — 19:00.';
+const NEED_A_WEEKDAY = 'Pick the day of the week it runs on.';
+const NEED_A_MONTH_DAY = 'A monthly poll runs on a day from 1 to 28 — every month has those.';
+const REPEAT_HELP = 'A repeating poll is a template rather than a poll: nothing is posted when ' +
+  'you save it, and Black Bloc opens a fresh copy each time it comes round.';
+const TZ_HELP = 'Blank uses the server’s own zone. Write it the tzdata way — America/Phoenix.';
+const REPEATED = 'Saves “{question}” as a template that opens in {where} {cadence}, each one ' +
+  'open for {hours} hour(s). Nothing is posted until it first comes round.';
+const CREATE_LABEL = 'Create the poll';
+const REPEAT_LABEL = 'Save the repeating poll';
 
 const STATUS_TONE = {
   open: 'ok',
@@ -411,6 +439,34 @@ function optionRow(value, onChange) {
   return { node, read: () => box.value.trim() };
 }
 
+function ordinal(value) {
+  if (value % 100 >= 11 && value % 100 <= 13) return 'th';
+  return { 1: 'st', 2: 'nd', 3: 'rd' }[value % 10] || 'th';
+}
+
+/** The same reading black_bloc/polls.py:describe_cadence writes onto the saved row. */
+function cadenceOf(form) {
+  const clock = form.at.value.trim();
+  const zone = form.zone.value.trim() || 'the server’s own zone';
+  if (form.repeat.value === 'weekly') {
+    const found = WEEKDAYS.find(([value]) => value === form.weekday.value);
+    return `every ${found ? found[1] : form.weekday.value} at ${clock} ${zone}`;
+  }
+  if (form.repeat.value === 'monthly') {
+    const day = Number(form.monthDay.value) || 0;
+    return `on the ${day}${ordinal(day)} of each month at ${clock} ${zone}`;
+  }
+  return `every day at ${clock} ${zone}`;
+}
+
+function repeatTrouble(form) {
+  if (!/^\d{1,2}:\d{2}$/.test(form.at.value.trim())) return NEED_A_TIME;
+  if (form.repeat.value === 'weekly' && !form.weekday.value) return NEED_A_WEEKDAY;
+  const day = Number(form.monthDay.value);
+  if (form.repeat.value === 'monthly' && !(day >= 1 && day <= 28)) return NEED_A_MONTH_DAY;
+  return null;
+}
+
 /**
  * The sentence under the Create button, rebuilt on every keystroke: what
  * pressing it will do, in the words the bot itself would use. The surface is
@@ -438,6 +494,13 @@ function outcomeOf(form) {
         : null;
   const where = form.channelName();
   const hours = Number(form.hours.value) || 24;
+  if (form.repeating()) {
+    return repeatTrouble(form) || REPEATED
+      .replace('{question}', question)
+      .replace('{where}', where)
+      .replace('{cadence}', cadenceOf(form))
+      .replace('{hours}', String(hours));
+  }
   const shape = why
     ? `a Black Bloc panel — buttons rather than Discord's own poll, because ${why}`
     : "a Discord poll, on Discord's own voting UI";
@@ -465,6 +528,13 @@ async function createForm(say) {
   const slots = el('input', { class: 'input', type: 'number', min: '2', max: '25', value: '5' });
   const step = el('input', { class: 'input', type: 'number', min: '1', max: '168', value: '1' });
   const stepUnit = segment([{ value: 'days', label: 'Days' }, { value: 'hours', label: 'Hours' }], 'days');
+  const repeat = el('select', { class: 'input' });
+  for (const [value, label] of CADENCES) repeat.append(el('option', { value, text: label }));
+  const weekday = el('select', { class: 'input' });
+  for (const [value, label] of WEEKDAYS) weekday.append(el('option', { value, text: label }));
+  const monthDay = el('input', { class: 'input', type: 'number', min: '1', max: '28', value: '1' });
+  const at = el('input', { class: 'input', type: 'text', placeholder: '19:00', maxlength: '5' });
+  const zone = el('input', { class: 'input', type: 'text', placeholder: 'America/Phoenix' });
 
   const list = el('div');
   const outcome = el('p', { class: 'section-note' });
@@ -477,7 +547,13 @@ async function createForm(say) {
     results,
     thread,
     start,
+    repeat,
+    weekday,
+    monthDay,
+    at,
+    zone,
     review: false,
+    repeating: () => repeat.value !== NO_REPEAT && kind.value !== 'date',
     labels: () => (GENERATED[kind.value]
       ? GENERATED[kind.value]
       : kind.value === 'date'
@@ -514,20 +590,45 @@ async function createForm(say) {
     field('Counted in', stepUnit),
   ]);
 
+  const weekdayField = field('Which day', weekday);
+  const monthDayField = field('Day of the month', monthDay, 'One to 28 — every month has those.');
+  const repeatWhen = el('div', { class: 'formrow' }, [
+    weekdayField,
+    monthDayField,
+    field('Time of day', at, 'On the 24-hour clock, like 19:00.'),
+    field('Timezone', zone, TZ_HELP),
+  ]);
+  const repeatBlock = el('div', {}, [
+    el('div', { class: 'formrow' }, [field('Repeat', repeat, REPEAT_HELP)]),
+    repeatWhen,
+  ]);
+
+  const paintRepeat = () => {
+    repeatBlock.hidden = kind.value === 'date';
+    repeatWhen.hidden = !form.repeating();
+    weekdayField.hidden = repeat.value !== 'weekly';
+    monthDayField.hidden = repeat.value !== 'monthly';
+    create.textContent = form.repeating() ? REPEAT_LABEL : CREATE_LABEL;
+    repaint();
+  };
+
   const paintKind = () => {
     typedBlock.hidden = Boolean(GENERATED[kind.value]) || kind.value === 'date';
     dateBlock.hidden = kind.value !== 'date';
-    repaint();
+    paintRepeat();
   };
   kind.addEventListener('change', paintKind);
-  for (const box of [question, hours, start, slots, step]) box.addEventListener('input', repaint);
+  repeat.addEventListener('change', paintRepeat);
+  weekday.addEventListener('change', repaint);
+  for (const box of [question, hours, start, slots, step, monthDay, at, zone]) {
+    box.addEventListener('input', repaint);
+  }
   where.addEventListener('change', repaint);
   for (const seg of [anonymous, results, thread, stepUnit]) {
     seg.addEventListener('click', () => setTimeout(repaint, 0));
   }
-  paintKind();
 
-  const create = button('Create the poll', async () => {
+  const create = button(CREATE_LABEL, async () => {
     const body = {
       question: question.value.trim(),
       kind: kind.value,
@@ -548,16 +649,32 @@ async function createForm(say) {
     } else if (!GENERATED[kind.value]) {
       body.options = options.map((one) => one.read()).filter(Boolean);
     }
+    const repeating = form.repeating();
+    if (repeating) {
+      body.cadence = repeat.value;
+      if (repeat.value === 'weekly') body.day = weekday.value;
+      if (repeat.value === 'monthly') body.day = monthDay.value;
+      body.at = at.value.trim();
+      const named = zone.value.trim();
+      if (named) body.tz = named;
+    }
     const done = await run(
       say,
-      () => send('/api/polls', 'POST', body),
+      () => send(repeating ? '/api/polls/recurrences' : '/api/polls', 'POST', body),
       (found) => [found?.message, found?.note].filter(Boolean).join(' '),
     );
     if (done.ok) {
-      keepSaying('create', say);
+      keepSaying(repeating ? 'recurring' : 'create', say);
+      if (repeating) {
+        question.value = '';
+        repeat.value = NO_REPEAT;
+        paintRepeat();
+      }
       refresh();
     }
   }, { tone: 'warn', small: false });
+
+  paintKind();
 
   return card('Create a poll', [
     el('div', { class: 'formrow' }, [
@@ -574,6 +691,7 @@ async function createForm(say) {
       field('Results', results, 'Hidden until close forces one too.'),
       field('Thread', thread),
     ]),
+    repeatBlock,
     outcome,
     bar([create]),
     say,

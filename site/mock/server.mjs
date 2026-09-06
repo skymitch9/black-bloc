@@ -3244,7 +3244,7 @@ route('POST', '/api/polls/recurrences', async (context) => {
     throw new Refused(400, 'not_a_recurrence', `**${body.day || body.cadence || 'nothing'}** is not a day of the week, so nothing was saved. A weekly poll runs on one of ${WEEKDAYS.join(', ')}.`);
   }
   if (!/^\d{1,2}:\d{2}$/.test(String(body.at || ''))) {
-    throw new Refused(400, 'not_a_recurrence', `**${body.at || 'nothing'}** is not a time of day Black Bloc can read, so nothing was saved. Write it on the 24-hour clock, like \`19:00\`.`);
+    throw new Refused(400, 'not_a_recurrence', `**${body.at || 'nothing'}** is not a time of day Black Bloc can read, so nothing was saved. Write it on the 24-hour clock — \`09:00\`, \`19:30\`.`);
   }
   const labels = Array.isArray(body.options)
     ? body.options.map((one) => String(one).trim()).filter(Boolean)
