@@ -9,6 +9,44 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-06 — Loop guard (KI-24) and two small gates landed as merge `689eff5` (branch `loop-guard`), shipping as v97 — deploy verification recorded on `deploys.log`. Owner decision Q4, verbatim "Build it a".
+
+**Asked:** Q4 of the five owner questions of 2026-09-06 — KI-24 (a `before_loop` failure bypasses
+`@loop.error`, filed by engineering sweep 3 as `WATCHING`): (a) build the guard, bundled with the two
+report-only findings beside it, or (b) leave it. Owner 11:48: *"Build it a"*. Design
+`docs/info/loop-guard-design.md` (`16bd8c2`); Opus agent in worktree `C:/lcw/bb-loop-guard`,
+170k / 92 calls / 15.5 min against an 80–140k estimate; six branch commits `e4a3efa` → `59c5aec`;
+21 files, +370/−60; tests 5267 → 5277 both orders; ruff clean; mock 17/150/14 unchanged.
+
+- **The guard:** one new leaf module `black_bloc/loops.py:wait_ready(bot, failed) -> bool` awaits
+  `bot.wait_until_ready()` and hands any `Exception` (never `CancelledError`, a `BaseException`) to the
+  loop's own `@loop.error` handler, so a `before_loop` failure records `last_error`, logs, and
+  `restart()`s exactly as a body failure does. All fourteen `before_loop`s across thirteen cogs call
+  it; `raidtrain._before_sweep` and `youtube._before_poller` read the bool before `_retime()`. Two AST
+  guards in `tests/test_loops.py` keep every `before_loop` on the helper, and a test against a REAL
+  `discord.ext.tasks.Loop` whose `wait_until_ready` raises once proves the restart: `restart()` from
+  inside `before_loop` works because the library yields at `await asyncio.sleep(0)`
+  (`discord/ext/tasks/__init__.py:220`, its own comment says *allows canceling in before_loop*) and
+  the done-callback starts it again.
+- **Found on the way:** `golive.py:poller` had NO `@loop.error` handler at all (its body swallowed
+  its own errors) — it gained `_poller_stopped` in its siblings' shape; and `Core._purge_failed` was
+  the one handler of fourteen that did not restart (KI-24's "every loop restarts" was true of
+  thirteen) — it restarts now.
+- **Gate 1:** `Core.cog_load` no longer starts `purge_loop` on a bot with no database
+  (`getattr(self.bot.db, "is_connected", False)`), like every other db-backed loop.
+- **Gate 2:** `POST /api/polls` (`poll_create`) refuses `409 polls_off` with the cog's own `POLLS_OFF`
+  before any row is written, the shape the recurrence route beside it already used — the 🔴 finding
+  from the recur-web report (a staffer could make a poll from the website while `/poll` said polls were
+  off) is closed.
+- **No new settings key** (checklist 33: no decision a Lead would change), **no new log kind**
+  (checklist 34). KI-24 replaced with a CLOSED stub in `KNOWN_ISSUES.md` pointing at the design.
+- Sweep rows **315–319** (were `LG-a`–`LG-e`): the Health page shows every loop running after the
+  deploy; polls off → the dashboard's create form refuses in a sentence; polls on → the ordinary path
+  is unchanged.
+
+**Not verified:** nothing has met live Discord; the restart is proved in-process against a real
+`Loop`, not against a gateway; the Health page was not opened by the build (row 315 is that check).
+
 ## 2026-09-06 — Logs buttons (merge `42d2e6e`, branch `logs-buttons`) and Create-a-recurring-poll from the website (merge `c915ade`, branch `recur-web`) landed together, shipping as v96 — deploy verification recorded on `deploys.log`. Owner decisions Q2 "2. A", Q3 "3. B".
 
 > **Landed 2026-09-06 11:36 Phoenix**, both merges pushed BEFORE this docs commit. Two Opus agents in
