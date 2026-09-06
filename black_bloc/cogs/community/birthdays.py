@@ -59,7 +59,7 @@ from ...birthdays import (
     year_problem,
 )
 from ...command_errors import AnswersErrors
-from ...panels import Panel, answer, db_ready, retire, still_staff
+from ...panels import Panel, answer, confirm, confirm_items, db_ready, retire, still_staff
 from ...settings_store import (
     BIRTHDAY_MODES,
     DB_UNAVAILABLE,
@@ -584,18 +584,18 @@ async def open_card(
 async def open_confirm(
     interaction: discord.Interaction, text: str, items: list[Any], previous: Any = None
 ) -> None:
+    """The question is the card's whole description here, so no `Are you sure?` field is added."""
     bot = interaction.client
-    embed = discord.Embed(
-        title=PANEL_TITLE,
-        description=text,
-        colour=panel_colour(bot.store, interaction.guild.id),
-    )
-    view = BirthdayView(panel_minutes(bot.store, interaction.guild.id))
-    for item in items:
-        view.add_item(item)
-    retire(previous)
-    view.message = await interaction.edit_original_response(
-        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    await confirm(
+        interaction,
+        BirthdayView(panel_minutes(bot.store, interaction.guild.id)),
+        discord.Embed(
+            title=PANEL_TITLE,
+            description=text,
+            colour=panel_colour(bot.store, interaction.guild.id),
+        ),
+        items,
+        previous,
     )
 
 
@@ -609,7 +609,15 @@ async def open_remove_confirm(interaction: discord.Interaction, previous: Any = 
         await said_after(interaction, NOT_STORED)
         return
     await open_confirm(
-        interaction, REMOVE_CONFIRM, [RemoveYesButton(), RemoveKeepButton()], previous
+        interaction,
+        REMOVE_CONFIRM,
+        confirm_items(
+            yes="Yes, forget it",
+            no="Keep it",
+            on_yes=run_remove,
+            on_no=back_to_panel,
+        ),
+        previous,
     )
 
 
@@ -624,7 +632,12 @@ async def open_forget_confirm(
     await open_confirm(
         interaction,
         FORGET_CONFIRM.format(who=member.display_name),
-        [ForgetYesButton(member), ForgetKeepButton(member)],
+        confirm_items(
+            yes="Yes, forget it",
+            no="Keep it",
+            on_yes=lambda one, card: run_forget(one, member, card),
+            on_no=lambda one, card: open_card(one, member, card),
+        ),
         previous,
     )
 
@@ -638,7 +651,15 @@ async def open_role_clear_confirm(
     if not await db_ready(interaction):
         return
     await open_confirm(
-        interaction, ROLE_CLEAR_CONFIRM, [RoleClearYesButton(), RoleClearNoButton()], previous
+        interaction,
+        ROLE_CLEAR_CONFIRM,
+        confirm_items(
+            yes="Yes, clear it",
+            no="Cancel",
+            on_yes=run_clear_role,
+            on_no=back_to_panel,
+        ),
+        previous,
     )
 
 
@@ -869,54 +890,6 @@ class ForgetTheirsButton(discord.ui.Button):
         await open_forget_confirm(interaction, self.member, self.view)
 
 
-class RemoveYesButton(discord.ui.Button):
-    def __init__(self) -> None:
-        super().__init__(label="Yes, forget it", style=discord.ButtonStyle.danger, row=0)
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await run_remove(interaction, self.view)
-
-
-class RemoveKeepButton(discord.ui.Button):
-    def __init__(self) -> None:
-        super().__init__(label="Keep it", style=discord.ButtonStyle.secondary, row=0)
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await back_to_panel(interaction, self.view)
-
-
-class ForgetYesButton(discord.ui.Button):
-    def __init__(self, member: Any) -> None:
-        super().__init__(label="Yes, forget it", style=discord.ButtonStyle.danger, row=0)
-        self.member = member
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await run_forget(interaction, self.member, self.view)
-
-
-class ForgetKeepButton(discord.ui.Button):
-    def __init__(self, member: Any) -> None:
-        super().__init__(label="Keep it", style=discord.ButtonStyle.secondary, row=0)
-        self.member = member
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await open_card(interaction, self.member, self.view)
-
-
-class RoleClearYesButton(discord.ui.Button):
-    def __init__(self) -> None:
-        super().__init__(label="Yes, clear it", style=discord.ButtonStyle.danger, row=0)
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await run_clear_role(interaction, self.view)
-
-
-class RoleClearNoButton(discord.ui.Button):
-    def __init__(self) -> None:
-        super().__init__(label="Cancel", style=discord.ButtonStyle.secondary, row=0)
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await back_to_panel(interaction, self.view)
 
 
 class DateModal(AnswersErrors, discord.ui.Modal):
