@@ -1,6 +1,8 @@
 # Saved poll drafts — design
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED. Last verified: **2026-09-06 10:05** —
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · **BUILT** on `poll-drafts`
+> (off `main` at `9cd79d6`, v93) 2026-09-06 — see the `## Deviations` foot for what differs and
+> why; nothing has met live Discord. Last verified: **2026-09-06 10:05** —
 > every `path:name` below was read in the tree at `62ace89` (v93 + the fixture sweeps); nothing has been
 > built yet. Owner decision **2026-09-06 09:45**, verbatim: *"B but only save 1 draft per person max"*
 > — answering "polls' `draft` status: (a) drop it or (b) make saved drafts real". This closes fork I-3 of
@@ -127,3 +129,74 @@ Drafts for `recur create` (the cadence step) — out of scope; a recurrence draf
 existing `RECUR_NOT_A_DATE`-style sentence *"Recurring polls cannot be saved as drafts yet"* only if the
 save button would otherwise appear there; simplest is to not render `Save for later` on the recurrence
 path at all. Say which you did.
+
+## Deviations
+
+Written by the build agent, 2026-09-06, on `poll-drafts` off `main` at `9cd79d6`. Everything not
+listed here was built as this document says. Details and reasoning for each are in
+[`code-notes.md`](code-notes.md) § *Saved poll drafts*.
+
+1. **`Resume draft` is on row 4 of the panel, not row 0 beside `Create`; `Save for later` and
+   `Discard draft` are on row 4 of the preview, not row 0.** §4 puts all three in row 0.
+   **Discord allows five components per action row and a staff panel's row 0 already holds
+   exactly five** (`Create` · `Find #…` · `Refresh` · `Settings` · `Logs`) — a sixth raises at
+   render time, so the panel would not open at all for a staffer with a draft. The preview's row
+   0 can already reach four (`Date slots…` / `Post it` / `Repeat…` / `Start over` / `Cancel`).
+   Row 4 is the drafts row; the site link moved from row 3 to row 4 so the staff `Saved drafts…`
+   select could have row 3, and an empty row is not drawn, so nothing else moved visually. A test
+   asserts row 0 never exceeds five.
+2. **`polls.status` keeps its `DEFAULT 'draft'`.** §2 rule 1 allowed either ("drop it only if
+   SQLite allows it cheaply; otherwise leave the default and note it"). SQLite has no
+   `ALTER COLUMN`, so dropping it means rebuilding a 37-column table with an index and four child
+   tables — real risk for a value nothing can reach, since `create_poll` requires `status` as a
+   keyword. Left, and noted here and in the code notes.
+3. **Saving answers with an ephemeral sentence, not a footer on the panel embed.** §4 asks for
+   the main panel "with a footer line *Saved. Resume it from this panel any time.*". The words are
+   exactly that, but they arrive the way every other move in this cog answers — a re-render plus
+   `said_to(...)`. ⚠️ A footer would have been **overwritten by `Panel.on_timeout`**, which sets
+   the "gone quiet" footer on the same embed, so the sentence would vanish at the ten-minute mark
+   and read as if the save had been undone.
+4. **`Save for later` and `Resume draft` are only rendered for somebody who could POST the poll**
+   (`may_save` = `poll_drafts` on AND `may_create`), not merely when `poll_drafts` is on. A member
+   who cannot create a poll cannot post a draft either, and a control nobody can use is not
+   rendered (`CLAUDE.md`). Their saved row is never deleted by this — it is simply not offered
+   until they can post again.
+5. **The `poll_drafts` toggle is on row 4 of the Settings card, not row 0.** Same five-per-row cap:
+   row 0 already holds the five existing toggles. Row 4 now holds `Drafts: on/off` · `Numbers…` ·
+   `Clear ping role` · `Clear channel` · `Back` — five, exactly at the cap. ⚠️ `poll_draft_days` is
+   the **fifth** field of the `Numbers…` modal, which is Discord's modal cap: a sixth poll number
+   will need a second modal.
+6. **The expiry sweep does nothing while `poll_drafts` is off.** §3 promises that turning drafts
+   off keeps the rows "(turning it back on restores them)"; a sweep still running would have
+   emptied the table a fortnight later and broken that promise silently. `poll_draft_days` still
+   governs everything else, and `0` still means never.
+7. **`load_draft` has a sibling, `draft_row`.** §3 names `load_draft(...) -> PollDraft | None`,
+   which is what `Resume draft` uses. The panel line and the staff card also need `saved_at`,
+   which the dataclass does not carry, so the row-returning read is its own one-line function and
+   `load_draft` is written on top of it. One query text, two callers.
+8. **`PollDraft.from_json` also replaces a value whose TYPE has changed**, not only unknown and
+   missing keys. §3 asks for the latter two. A payload whose `question` came back as a number
+   would otherwise raise inside a button callback — a permanent spinner (checklist 30) rather than
+   a sentence.
+9. **The panel line writes the question in bold rather than in «guillemets».** §4 writes
+   *"You have a saved draft: «{question}»"*. Every other line this panel writes uses `**bold**`;
+   the guillemets appear nowhere else in the estate.
+10. **§8, the recurrence path: `Save for later` is simply not rendered once a draft is
+    repeating** — the simplest of the two options the design offered, so no `RECUR_NOT_A_DATE`-style
+    sentence was added and none is needed (there is no button to press). `Discard draft` still
+    renders on a resumed draft that has since been given a cadence, because the saved row is still
+    there. A test covers it.
+11. **Two things beyond the design's list were deleted as dead code**, both consequences of `draft`
+    leaving `STATUSES`: `CARD_BUTTONS[DRAFT]` (§2 asked for this) and, with it,
+    `MOVE_FUNCS["post"]` in the cog — no card row can produce that action any more. The
+    parametrised test case that exercised it went with it, which is part of why the count below
+    moves the way it does.
+
+### What §7 asked for, and what it got
+
+| Asked | Result |
+|---|---|
+| `ruff check .` clean | ✅ |
+| full suite `-n auto`, forward and `BB_REVERSE=1` | ✅ **5226 passed** both ways (5187 at the base `9cd79d6`). **+39 net = 43 added − 4 removed**, measured by diffing the collected ids, not by subtracting totals: the four are the `draft` cases of `test_a_bystander_is_offered_nothing_at_all`, `test_staff_get_exactly_the_row_the_table_names_for_every_status`, `test_the_card_renders_exactly_the_buttons_the_table_says` and `test_a_move_button_calls_its_shared_function_and_leaves_via_alone`. |
+| `node site/mock/check.mjs` | ✅ **ok — 17 pages, 149 routes, 14 core settings** before and after; `labels.js` still parses as an ES module. |
+| `python -m black_bloc` NOT booted | ✅ correct — there is no token in a worktree, so the bot was never started and **nothing here has been rendered by a real Discord client**. |

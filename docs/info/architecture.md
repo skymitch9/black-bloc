@@ -8,13 +8,18 @@
 > `SCHEMA_VERSION` is imported from `black_bloc/storage/db.py`, and the site figures come from
 > `node site/mock/check.mjs` against `site/mock/server.mjs`.
 >
+> **2026-09-06 (saved poll drafts branch, not yet merged):** schema **32 → 33** (`poll_drafts`)
+> and registry keys **187 → 189** (`poll_drafts`, `poll_draft_days`), both re-measured by
+> importing them. Nothing else in this table moved — no cog, no command, no feature, and the
+> mock still reads 17 pages / 149 routes / 14 core settings.
+>
 > | What | v92 | Where it is measured |
 > |---|---|---|
 > | Cogs | **19** | `bot.py:COGS` |
 > | Top-level slash commands | **29** — 15 staff-locked, 14 member-visible | `tree.get_commands()` |
 > | `app_commands.Group`s | **0** | ⚠️ every group retired by the panel waves |
-> | Schema version | **32** | `storage/db.py:SCHEMA_VERSION` |
-> | Registry keys | **187** | `settings_store.KEY_TYPES` |
+> | Schema version | **33** | `storage/db.py:SCHEMA_VERSION` |
+> | Registry keys | **189** | `settings_store.KEY_TYPES` |
 > | Features (log-level keys) | **18** | `settings_store.FEATURES` == `logkinds.FEATURES` |
 > | Mock contract | **17 pages / 149 routes / 14 core settings** | `node site/mock/check.mjs` |
 > | Deploys | **91**, last `4b327cf` (v92) at 2026-09-05 20:44 | `../deploys.log` |

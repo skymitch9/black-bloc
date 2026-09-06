@@ -6,7 +6,6 @@ import hmac
 import json
 import logging
 import re
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -26,6 +25,8 @@ from ...panels import (
     Panel,
     answer,
     capped_placeholder,
+    confirm,
+    confirm_items,
     opened,
     option_label,
     panel_minutes,
@@ -37,7 +38,6 @@ from ...panels import NoteModal as PanelNoteModal
 from ...panels import site_page_url as library_site_page_url
 from ...polls import (
     ARCHIVED,
-    AT_CLOSE,
     BAD_HOURS,
     BUTTONS_UP_TO,
     CADENCES,
@@ -53,6 +53,10 @@ from ...polls import (
     DEFAULT_HOURS,
     DENIED,
     DRAFT,
+    DRAFT_DAYS_KEY,
+    DRAFT_PICK,
+    DRAFT_STAFF_LINE,
+    DRAFTS_KEY,
     FIND_BUTTON,
     KIND_NAMES,
     KNOWN_KINDS,
@@ -100,6 +104,7 @@ from ...polls import (
     VOTE_NOT_OPEN,
     WEEKDAYS,
     NeedsPanel,
+    PollDraft,
     cadence_token,
     cadence_trouble,
     can_transition,
@@ -112,7 +117,14 @@ from ...polls import (
     date_trouble,
     describe_cadence,
     describe_hours,
+    draft_card,
+    draft_label,
+    draft_line,
+    draft_row,
+    drafts,
+    drop_draft,
     is_multi,
+    load_draft,
     mentions,
     next_occurrence,
     open_text,
@@ -124,6 +136,8 @@ from ...polls import (
     reminder_text,
     results_embed,
     review_card,
+    save_draft,
+    stale_drafts,
     summary_line,
     surface_for,
     thread_name,
@@ -137,6 +151,7 @@ from ...settings_store import (
     POLL_ARCHIVE_MAX_DAYS,
     POLL_ARCHIVE_MIN_DAYS,
     POLL_CREATORS,
+    POLL_DRAFT_MAX_DAYS,
     POLL_MODES,
     POLL_REMINDER_MAX_MINUTES,
     POLL_REVIEW_MODES,
@@ -287,6 +302,47 @@ DRAFT_NEEDS_SLOTS = "A date poll needs its slots before it can go up — press *
 NOT_YOURS_TO_END = (
     "Only staff can close this poll early on this server, so nothing was changed. Ask a Lead."
 )
+SAVE_BUTTON = "Save for later"
+SAVE_REPLACES_BUTTON = "Save (replaces your draft)"
+RESUME_DRAFT_BUTTON = "Resume draft"
+DISCARD_BUTTON = "Discard draft"
+DISCARD_STAFF_BUTTON = "Discard"
+DISCARD_YES_BUTTON = "Yes, discard it"
+DRAFT_SAVED = "Saved. Resume it from this panel any time."
+DRAFT_REPLACED = (
+    "Saved, and it replaced the draft you had — one per person. Resume it from this panel any "
+    "time."
+)
+DRAFT_DISCARDED = "That draft is gone and nothing was posted. **Create** starts a fresh one."
+DRAFT_GONE = (
+    "Black Bloc has no saved draft of yours any more, so there was nothing to open. It may have "
+    "been discarded, or kept past the number of days a Lead set. **Create** starts a fresh one."
+)
+DRAFTS_OFF = (
+    "Saved drafts are turned off on this server, so nothing was saved. A Lead turns them back on "
+    "from **Settings** on this panel, and the drafts already saved are still there."
+)
+DRAFT_NOT_THEIRS = (
+    "Black Bloc has no saved draft for that person any more, so nothing was discarded. They may "
+    "have posted it or thrown it away already."
+)
+DRAFT_DISCARD_ASK = (
+    "Discard this saved draft? They are DM'd the reason you give on the next screen, and the "
+    "draft itself cannot be got back."
+)
+DRAFT_DISCARD_MINE_ASK = (
+    "Throw this draft away? Nothing is posted either way and nobody else is told."
+)
+DRAFT_DISCARD_TITLE = "Why is it going?"
+DRAFT_DISCARD_LABEL = "One line the person who saved it will be sent"
+DRAFT_DISCARD_LIMIT = 400
+DRAFT_DISCARD_SAID = "That draft is discarded and they have been told why."
+DRAFT_DM_FAILED = " Black Bloc could not DM them, so tell them yourself — the log says why."
+DM_DRAFT_DISCARDED = (
+    "Staff removed your saved poll draft **{question}** on **{guild}**: {reason}. Nothing was "
+    "posted, and `/poll` starts a new one whenever you like."
+)
+RESUMED_INTRO = "This is your saved draft. **Post it** puts it up and clears the draft."
 SWITCH_ANONYMOUS = "Nobody is told who voted"
 SWITCH_HIDDEN = "Hide the bars until it closes"
 KIND_LABEL = "What kind of poll?"
@@ -312,6 +368,7 @@ async def create_poll(
     status: str,
     auto_thread: bool = False,
     vote_scheme: str = VOTE_HASHED,
+    from_draft: bool = False,
 ) -> int | None:
     cur = await db.conn.execute(
         "INSERT INTO polls(guild_id, creator_id, question, kind, surface, multi, anonymous, "
@@ -335,6 +392,8 @@ async def create_poll(
             now_iso(),
         ),
     )
+    if from_draft:
+        await drop_draft(db, guild_id, creator_id, commit=False)
     await db.conn.commit()
     return cur.lastrowid
 
@@ -412,6 +471,7 @@ async def store_poll(
     ping_role_id: int | None,
     auto_thread: bool,
     status: str | None = None,
+    from_draft: bool = False,
     via: str = VIA_DISCORD,
 ) -> tuple[Any, bool]:
     """A plan written down as a row, its options and one log line: (the row, is it held)."""
@@ -432,6 +492,7 @@ async def store_poll(
         status=status or (PENDING_REVIEW if reviewing else OPEN),
         auto_thread=auto_thread,
         vote_scheme=vote_scheme_for(poll_secret(bot)),
+        from_draft=from_draft,
     )
     await add_options(bot.db, poll_id, plan["labels"], plan.get("values"))
     await log_action(
@@ -448,6 +509,7 @@ async def store_poll(
             "options": len(plan["labels"]),
             "hours": plan["hours"],
             "review": reviewing,
+            "from_draft": from_draft,
         },
     )
     return (await get_poll(bot.db, poll_id), reviewing)
@@ -1865,6 +1927,23 @@ def creator_may_end(store: Any, guild_id: int) -> bool:
     return bool(store.get(guild_id, CREATOR_MAY_END_KEY))
 
 
+def drafts_are_on(store: Any, guild_id: int) -> bool:
+    return bool(store.get(guild_id, DRAFTS_KEY))
+
+
+def may_save(store: Any, guild_id: int, actor: Any) -> bool:
+    """Save and Resume are only drawn for somebody who could post the poll behind them."""
+    return drafts_are_on(store, guild_id) and may_create(store, guild_id, actor)
+
+
+def draft_days(store: Any, guild_id: int) -> int:
+    return int(store.get(guild_id, DRAFT_DAYS_KEY) or 0)
+
+
+def draft_placeholder(shown: int, total: int) -> str:
+    return capped_placeholder(shown, total, pick=DRAFT_PICK)
+
+
 def site_page_url(origin: Any) -> str | None:
     return library_site_page_url(origin, "poll")
 
@@ -1875,50 +1954,6 @@ def pick_placeholder(shown: int, total: int) -> str:
 
 def recur_placeholder(shown: int, total: int) -> str:
     return capped_placeholder(shown, total, pick=PICK_A_RECURRENCE)
-
-
-@dataclass
-class PollDraft:
-    """Everything typed so far. Nothing is written down until `Post it` — fork I-3."""
-
-    question: str = ""
-    options: str = ""
-    hours: str = ""
-    kind: str = SINGLE
-    anonymous: bool = False
-    hidden: bool = False
-    channel_id: int | None = None
-    ping_role_id: int | None = None
-    thread: bool = False
-    start: str = ""
-    slots: str = ""
-    step: str = ""
-    step_unit: str = STEP_DAYS
-    cadence: str = ""
-    day: str = ""
-    at: str = ""
-    tz: str = DEFAULT_TZ
-    repeating: bool = False
-
-    def asked(self) -> dict[str, Any]:
-        return {
-            "question": self.question,
-            "kind": self.kind,
-            "options": self.options,
-            "hours": int(self.hours.strip()) if self.hours.strip() else None,
-            "anonymous": self.anonymous,
-            "results": AT_CLOSE if self.hidden else LIVE,
-            "start": self.start or None,
-            "slots": whole_or_text(self.slots),
-            "step": whole_or_text(self.step),
-            "step_unit": self.step_unit,
-        }
-
-
-def whole_or_text(given: Any) -> Any:
-    """A number when it is one, the typed text when it is not — so the refusal can quote it."""
-    text = str(given or "").strip()
-    return int(text) if text.isdigit() else text
 
 
 def draft_trouble(draft: PollDraft) -> str | None:
@@ -1944,20 +1979,25 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
     rows = await polls_by_status(db, guild.id, OPEN_STATUSES)
     repeats = await recurrences(db, guild.id) if staff else []
     shown = rows[:LIST_LIMIT]
+    mine = await draft_row(db, guild.id, actor.id) if may_save(store, guild.id, actor) else None
+    saved = await drafts(db, guild.id) if staff and drafts_are_on(store, guild.id) else []
 
     lines = [PANEL_INTRO]
     if staff:
-        lines.append(
-            PANEL_COUNTS.format(
-                running=sum(1 for row in rows if row["status"] == OPEN),
-                waiting=sum(1 for row in rows if row["status"] == PENDING_REVIEW),
-                repeating=len(repeats),
-            )
+        counts = PANEL_COUNTS.format(
+            running=sum(1 for row in rows if row["status"] == OPEN),
+            waiting=sum(1 for row in rows if row["status"] == PENDING_REVIEW),
+            repeating=len(repeats),
         )
+        lines.append(counts + (DRAFT_STAFF_LINE.format(drafts=len(saved)) if saved else ""))
     if shown:
         lines.extend(summary_line(row, parse_ts(row["closes_at"])) for row in shown)
     else:
         lines.append(NO_OPEN_POLLS)
+    if mine is not None:
+        lines.append(
+            draft_line(PollDraft.from_json(mine["payload"]).question, parse_ts(mine["saved_at"]))
+        )
     if not on:
         lines.append(POLLS_OFF)
     elif not can_create:
@@ -1980,11 +2020,15 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
         view.add_item(PollPick(shown, len(rows)))
     if staff and repeats:
         view.add_item(RecurrencePick(repeats[:LIST_LIMIT], len(repeats)))
+    if staff and saved:
+        view.add_item(DraftPick(guild, saved[:LIST_LIMIT], len(saved)))
+    if mine is not None:
+        view.add_item(ResumeDraftButton())
     page = site_page_url(getattr(bot.settings, "origin", ""))
     if page:
         view.add_item(
             discord.ui.Button(
-                style=discord.ButtonStyle.link, label=SITE_BUTTON, url=page, row=3
+                style=discord.ButtonStyle.link, label=SITE_BUTTON, url=page, row=4
             )
         )
     return embed, view
@@ -2046,7 +2090,14 @@ async def build_recurrence_card(
     return embed, view
 
 
-def preview_embed(bot: Any, actor: Any, draft: PollDraft, plan: Any, trouble: Any) -> discord.Embed:
+def preview_embed(
+    bot: Any,
+    actor: Any,
+    draft: PollDraft,
+    plan: Any,
+    trouble: Any,
+    resumed: bool = False,
+) -> discord.Embed:
     if plan is None:
         embed = discord.Embed(
             title=CREATE_TITLE,
@@ -2083,14 +2134,25 @@ def preview_embed(bot: Any, actor: Any, draft: PollDraft, plan: Any, trouble: An
         )
     if draft.kind == DATE and plan is None:
         embed.add_field(name="Slots", value=DRAFT_NEEDS_SLOTS, inline=False)
-    embed.set_footer(text=DRAFT_INTRO)
+    embed.set_footer(text=RESUMED_INTRO if resumed else DRAFT_INTRO)
     return embed
 
 
 class PreviewView(PollPanel):
-    def __init__(self, minutes: int, draft: PollDraft, *, postable: bool, staff: bool) -> None:
+    def __init__(
+        self,
+        minutes: int,
+        draft: PollDraft,
+        *,
+        postable: bool,
+        staff: bool,
+        saving: bool = False,
+        saved: bool = False,
+        resumed: bool = False,
+    ) -> None:
         super().__init__(minutes)
         self.draft = draft
+        self.resumed = resumed
         if draft.kind == DATE:
             self.add_item(SlotsButton())
         if postable:
@@ -2102,6 +2164,10 @@ class PreviewView(PollPanel):
         self.add_item(DraftChannelSelect())
         self.add_item(DraftRoleSelect())
         self.add_item(ThreadToggle(draft.thread))
+        if saving and not draft.repeating:
+            self.add_item(SaveDraftButton(saved))
+        if resumed:
+            self.add_item(DiscardDraftButton())
 
 
 async def render_panel(interaction: discord.Interaction, previous: Any = None) -> None:
@@ -2116,16 +2182,26 @@ async def render_panel(interaction: discord.Interaction, previous: Any = None) -
 
 
 async def render_preview(
-    interaction: discord.Interaction, draft: PollDraft, previous: Any = None
+    interaction: discord.Interaction,
+    draft: PollDraft,
+    previous: Any = None,
+    resumed: bool | None = None,
 ) -> None:
     bot = interaction.client
-    plan, trouble = draft_plan(bot.store, interaction.guild.id, draft)
-    embed = preview_embed(bot, interaction.user, draft, plan, trouble)
+    guild = interaction.guild
+    plan, trouble = draft_plan(bot.store, guild.id, draft)
+    from_saved = getattr(previous, "resumed", False) if resumed is None else resumed
+    saving = may_save(bot.store, guild.id, interaction.user)
+    saved = saving and await draft_row(bot.db, guild.id, interaction.user.id) is not None
+    embed = preview_embed(bot, interaction.user, draft, plan, trouble, from_saved)
     view = PreviewView(
-        minutes_for(bot.store, interaction.guild.id),
+        minutes_for(bot.store, guild.id),
         draft,
         postable=plan is not None,
         staff=bot.store.is_staff(interaction.user),
+        saving=saving,
+        saved=saved,
+        resumed=from_saved,
     )
     retire(previous)
     view.message = await interaction.edit_original_response(
@@ -2136,11 +2212,14 @@ async def render_preview(
 
 
 async def open_preview(
-    interaction: discord.Interaction, draft: PollDraft, previous: Any = None
+    interaction: discord.Interaction,
+    draft: PollDraft,
+    previous: Any = None,
+    resumed: bool | None = None,
 ) -> None:
     if not await opened(interaction, staff=False):
         return
-    await render_preview(interaction, draft, previous)
+    await render_preview(interaction, draft, previous, resumed)
 
 
 async def back_to_panel(interaction: discord.Interaction, previous: Any = None) -> None:
@@ -2209,7 +2288,6 @@ async def finish_card(
 
 
 MOVE_FUNCS: dict[str, Any] = {
-    "post": lambda bot, guild, row, actor: post_now(bot, guild, row),
     "cancel": cancel_poll_now,
     "end": end_poll_now,
     "approve": lambda bot, guild, row, actor: apply_decision(
@@ -2274,7 +2352,10 @@ async def may_end(interaction: discord.Interaction, poll_id: int) -> bool:
 
 
 async def write_draft(
-    interaction: discord.Interaction, draft: PollDraft, previous: Any = None
+    interaction: discord.Interaction,
+    draft: PollDraft,
+    previous: Any = None,
+    from_draft: bool = False,
 ) -> None:
     """The ONE write the create flow makes — one row, its options and one log line."""
     bot = interaction.client
@@ -2319,6 +2400,7 @@ async def write_draft(
         ping_role_id=role_id,
         auto_thread=draft.thread,
         status=RECURRING if draft.repeating else None,
+        from_draft=from_draft,
     )
     if draft.repeating:
         said, fresh = await save_recurrence(
@@ -2339,6 +2421,172 @@ async def write_draft(
     await finish_card(interaction, int(row["id"]), said, fresh, previous)
 
 
+async def save_the_draft(
+    interaction: discord.Interaction, draft: PollDraft, previous: Any = None
+) -> None:
+    """The ONE write Save for later makes — one row, replacing this person's own, one log line."""
+    bot = interaction.client
+    guild = interaction.guild
+    if not drafts_are_on(bot.store, guild.id):
+        await render_panel(interaction, previous)
+        await said_to(interaction, DRAFTS_OFF)
+        return
+    if not polls_are_on(bot.store, guild.id):
+        await render_panel(interaction, previous)
+        await said_to(interaction, POLLS_OFF)
+        return
+    if not may_create(bot.store, guild.id, interaction.user):
+        await render_panel(interaction, previous)
+        await said_to(interaction, NOT_A_CREATOR)
+        return
+    replaced = await save_draft(bot.db, guild.id, interaction.user.id, draft)
+    await log_action(
+        bot,
+        guild,
+        "poll.draft_saved",
+        actor=interaction.user.id,
+        target=interaction.user.id,
+        details={
+            "via": VIA_DISCORD,
+            "question": clamp(draft.question, 80),
+            "kind": draft.kind,
+            "replaced": replaced,
+        },
+    )
+    await render_panel(interaction, previous)
+    await said_to(interaction, DRAFT_REPLACED if replaced else DRAFT_SAVED)
+
+
+async def discard_my_draft(interaction: discord.Interaction, previous: Any = None) -> None:
+    """Their own draft, so no reason is asked for and nobody is DM'd."""
+    bot = interaction.client
+    guild = interaction.guild
+    row = await draft_row(bot.db, guild.id, interaction.user.id)
+    if row is None:
+        await render_panel(interaction, previous)
+        await said_to(interaction, DRAFT_GONE)
+        return
+    await drop_draft(bot.db, guild.id, interaction.user.id)
+    await log_action(
+        bot,
+        guild,
+        "poll.draft_discarded",
+        actor=interaction.user.id,
+        target=interaction.user.id,
+        details={
+            "via": VIA_DISCORD,
+            "question": clamp(PollDraft.from_json(row["payload"]).question, 80),
+            "by": "member",
+        },
+    )
+    await render_panel(interaction, previous)
+    await said_to(interaction, DRAFT_DISCARDED)
+
+
+async def discard_their_draft(
+    interaction: discord.Interaction, user_id: int, reason: str, previous: Any = None
+) -> None:
+    """Staff have the final say on a draft too — and the person is told why theirs went."""
+    bot = interaction.client
+    guild = interaction.guild
+    row = await draft_row(bot.db, guild.id, user_id)
+    if row is None:
+        await render_panel(interaction, previous)
+        await said_to(interaction, DRAFT_NOT_THEIRS)
+        return
+    question = clamp(PollDraft.from_json(row["payload"]).question, 80)
+    await drop_draft(bot.db, guild.id, user_id)
+    await log_action(
+        bot,
+        guild,
+        "poll.draft_discarded",
+        actor=interaction.user.id,
+        target=user_id,
+        reason=reason,
+        details={"via": VIA_DISCORD, "question": question, "by": "staff"},
+    )
+    told = await dm(
+        guild.get_member(user_id),
+        DM_DRAFT_DISCARDED.format(question=question, guild=guild.name, reason=reason),
+    )
+    await render_panel(interaction, previous)
+    await said_to(interaction, DRAFT_DISCARD_SAID + ("" if told else DRAFT_DM_FAILED))
+
+
+async def build_draft_card(bot: Any, guild: Any, row: Any) -> tuple[discord.Embed, PollPanel]:
+    """What staff read before they discard somebody's draft; a plan that no longer works still
+    shows what was typed."""
+    draft = PollDraft.from_json(row["payload"])
+    plan, _ = draft_plan(bot.store, guild.id, draft)
+    typed = draft.hours.strip()
+    hours = (
+        int(typed)
+        if typed.isdigit()
+        else int(bot.store.get(guild.id, "poll_default_hours") or DEFAULT_HOURS)
+    )
+    embed = draft_card(
+        question=draft.question,
+        user_id=row["user_id"],
+        kind=draft.kind,
+        labels=plan["labels"] if plan is not None else options_for(draft.kind, draft.options),
+        hours=plan["hours"] if plan is not None else hours,
+        channel_id=draft.channel_id,
+        saved=parse_ts(row["saved_at"]),
+    )
+    view = PollPanel(minutes_for(bot.store, guild.id))
+    view.add_item(DraftDiscardButton(int(row["user_id"])))
+    view.add_item(BackButton())
+    return embed, view
+
+
+async def open_draft_card(
+    interaction: discord.Interaction, user_id: int, previous: Any = None
+) -> None:
+    if not await still_staff(interaction):
+        return
+    if not await opened(interaction, staff=False):
+        return
+    bot = interaction.client
+    row = await draft_row(bot.db, interaction.guild.id, user_id)
+    if row is None:
+        await render_panel(interaction, previous)
+        await said_to(interaction, DRAFT_NOT_THEIRS)
+        return
+    embed, view = await build_draft_card(bot, interaction.guild, row)
+    retire(previous)
+    view.message = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
+
+
+def their_discard_moves(user_id: int) -> list[discord.ui.Button]:
+    """Yes opens the reason modal — a discard nobody explained is not one staff may make."""
+
+    async def ask_why(interaction: discord.Interaction, view: Any) -> None:
+        if not await still_staff(interaction):
+            return
+        await interaction.response.send_modal(DraftReasonModal(user_id, view))
+
+    async def keep_it(interaction: discord.Interaction, view: Any) -> None:
+        await open_draft_card(interaction, user_id, view)
+
+    return confirm_items(yes=DISCARD_YES_BUTTON, no=KEEP_IT, on_yes=ask_why, on_no=keep_it)
+
+
+def my_discard_moves(draft: PollDraft) -> list[discord.ui.Button]:
+    async def yes(interaction: discord.Interaction, view: Any) -> None:
+        if not await opened(interaction, staff=False):
+            return
+        await discard_my_draft(interaction, view)
+
+    async def no(interaction: discord.Interaction, view: Any) -> None:
+        await open_preview(interaction, draft, view, resumed=True)
+
+    return confirm_items(yes=DISCARD_YES_BUTTON, no=KEEP_IT, on_yes=yes, on_no=no)
+
+
 class CreateButton(discord.ui.Button):
     def __init__(self) -> None:
         super().__init__(label=CREATE_BUTTON, style=discord.ButtonStyle.primary, row=0)
@@ -2357,6 +2605,131 @@ class CreateButton(discord.ui.Button):
             thread=bool(bot.store.get(guild.id, "poll_auto_thread")),
         )
         await interaction.response.send_modal(NewPollModal(draft, self.view))
+
+
+class ResumeDraftButton(discord.ui.Button):
+    """Only rendered when this person has a saved draft and could post it."""
+
+    def __init__(self) -> None:
+        super().__init__(label=RESUME_DRAFT_BUTTON, style=discord.ButtonStyle.primary, row=4)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await opened(interaction, staff=False):
+            return
+        bot = interaction.client
+        found = await load_draft(bot.db, interaction.guild.id, interaction.user.id)
+        if found is None:
+            await render_panel(interaction, self.view)
+            await said_to(interaction, DRAFT_GONE)
+            return
+        await render_preview(interaction, found, self.view, resumed=True)
+
+
+class SaveDraftButton(discord.ui.Button):
+    def __init__(self, saved: bool) -> None:
+        super().__init__(
+            label=SAVE_REPLACES_BUTTON if saved else SAVE_BUTTON,
+            style=discord.ButtonStyle.secondary,
+            row=4,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await opened(interaction, staff=False):
+            return
+        await save_the_draft(interaction, self.view.draft, self.view)
+
+
+class DiscardDraftButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label=DISCARD_BUTTON, style=discord.ButtonStyle.danger, row=4)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await opened(interaction, staff=False):
+            return
+        bot = interaction.client
+        draft = self.view.draft
+        plan, trouble = draft_plan(bot.store, interaction.guild.id, draft)
+        await confirm(
+            interaction,
+            PollPanel(minutes_for(bot.store, interaction.guild.id)),
+            preview_embed(bot, interaction.user, draft, plan, trouble, True),
+            my_discard_moves(draft),
+            self.view,
+            question=DRAFT_DISCARD_MINE_ASK,
+        )
+
+
+class DraftPick(discord.ui.Select):
+    """Staff only, and only when somebody has one saved."""
+
+    def __init__(self, guild: Any, rows: list[Any], total: int) -> None:
+        super().__init__(
+            placeholder=draft_placeholder(len(rows), total),
+            options=[
+                discord.SelectOption(
+                    label=draft_label(
+                        getattr(guild.get_member(row["user_id"]), "display_name", None),
+                        PollDraft.from_json(row["payload"]).question,
+                    ),
+                    value=str(row["user_id"]),
+                )
+                for row in rows
+            ],
+            min_values=1,
+            max_values=1,
+            row=3,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_draft_card(interaction, int(self.values[0]), self.view)
+
+
+class DraftDiscardButton(discord.ui.Button):
+    def __init__(self, user_id: int) -> None:
+        super().__init__(label=DISCARD_STAFF_BUTTON, style=discord.ButtonStyle.danger, row=0)
+        self.user_id = user_id
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await still_staff(interaction):
+            return
+        if not await opened(interaction, staff=False):
+            return
+        bot = interaction.client
+        row = await draft_row(bot.db, interaction.guild.id, self.user_id)
+        if row is None:
+            await render_panel(interaction, self.view)
+            await said_to(interaction, DRAFT_NOT_THEIRS)
+            return
+        embed, _ = await build_draft_card(bot, interaction.guild, row)
+        await confirm(
+            interaction,
+            PollPanel(minutes_for(bot.store, interaction.guild.id)),
+            embed,
+            their_discard_moves(self.user_id),
+            self.view,
+            question=DRAFT_DISCARD_ASK,
+        )
+
+
+class DraftReasonModal(PanelNoteModal):
+    def __init__(self, user_id: int, previous: Any = None) -> None:
+        self.user_id = user_id
+        self.previous = previous
+        super().__init__(
+            title=DRAFT_DISCARD_TITLE,
+            label=DRAFT_DISCARD_LABEL,
+            max_length=DRAFT_DISCARD_LIMIT,
+            on_submit=self.discard,
+        )
+
+    async def discard(self, interaction: discord.Interaction, text: str) -> None:
+        if not await still_staff(interaction):
+            return
+        if not await opened(interaction, staff=False):
+            return
+        await discard_their_draft(
+            interaction, self.user_id, clamp(text, DRAFT_DISCARD_LIMIT), self.previous
+        )
 
 
 class FindButton(discord.ui.Button):
@@ -2531,7 +2904,9 @@ class PostButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await opened(interaction, staff=False):
             return
-        await write_draft(interaction, self.view.draft, self.view)
+        await write_draft(
+            interaction, self.view.draft, self.view, getattr(self.view, "resumed", False)
+        )
 
 
 class SlotsButton(discord.ui.Button):
@@ -2802,12 +3177,13 @@ class DenyModal(PanelNoteModal):
         await finish_card(interaction, self.poll_id, said, fresh, self.previous)
 
 
-SETTINGS_TOGGLES: tuple[tuple[str, str, Any], ...] = (
-    ("poll_mode", "Polls", POLL_MODES),
-    ("poll_who_can_create", "Create", POLL_CREATORS),
-    ("poll_review_mode", "Review", POLL_REVIEW_MODES),
-    ("poll_auto_thread", "Threads", None),
-    ("poll_archive_drop_votes", "Drop votes", None),
+SETTINGS_TOGGLES: tuple[tuple[str, str, Any, int], ...] = (
+    ("poll_mode", "Polls", POLL_MODES, 0),
+    ("poll_who_can_create", "Create", POLL_CREATORS, 0),
+    ("poll_review_mode", "Review", POLL_REVIEW_MODES, 0),
+    ("poll_auto_thread", "Threads", None, 0),
+    ("poll_archive_drop_votes", "Drop votes", None, 0),
+    ("poll_drafts", "Drafts", None, 4),
 )
 NUMBER_FIELDS: tuple[tuple[str, str, int, int], ...] = (
     ("poll_default_hours", "How long a poll stays open, in hours", MIN_HOURS, MAX_HOURS),
@@ -2824,6 +3200,7 @@ NUMBER_FIELDS: tuple[tuple[str, str, int, int], ...] = (
         POLL_ARCHIVE_MAX_DAYS,
     ),
     ("poll_panel_minutes", "Minutes this panel stays live", 1, 60),
+    ("poll_draft_days", "Days a saved draft is kept (0 for ever)", 0, POLL_DRAFT_MAX_DAYS),
 )
 NOT_A_NUMBER = "**{given}** is not a whole number between {low} and {high}, so nothing was saved."
 
@@ -2848,8 +3225,8 @@ async def render_settings(interaction: discord.Interaction, previous: Any = None
         colour=discord.Colour(COLOURS[OPEN]),
     )
     view = PollPanel(minutes_for(bot.store, guild.id))
-    for key, name, choices in SETTINGS_TOGGLES:
-        view.add_item(SettingsToggle(bot.store, guild.id, key, name, choices))
+    for key, name, choices, row in SETTINGS_TOGGLES:
+        view.add_item(SettingsToggle(bot.store, guild.id, key, name, choices, row))
     view.add_item(SettingsChannelSelect())
     view.add_item(SettingsRoleSelect())
     view.add_item(DateLabelPick(bot.store.get(guild.id, "poll_date_labels")))
@@ -2882,11 +3259,13 @@ async def save_settings(
 
 
 class SettingsToggle(discord.ui.Button):
-    def __init__(self, store: Any, guild_id: int, key: str, name: str, choices: Any) -> None:
+    def __init__(
+        self, store: Any, guild_id: int, key: str, name: str, choices: Any, row: int = 0
+    ) -> None:
         current = store.get(guild_id, key)
         shown = ("on" if current else "off") if choices is None else str(current)
         super().__init__(
-            label=f"{name}: {shown}", style=discord.ButtonStyle.secondary, row=0
+            label=f"{name}: {shown}", style=discord.ButtonStyle.secondary, row=row
         )
         self.key = key
         self.choices = choices
@@ -3060,6 +3439,7 @@ class Polls(commands.Cog):
                 await close_poll(self.bot, guild, row, reason="expired")
         for guild in seen.values():
             await self._archive(guild, now)
+            await self._expire_drafts(guild, now)
 
     async def _recur(self, guild: Any, row: Any, now: datetime) -> None:
         """One occurrence, claimed before it is opened so a restart cannot post it twice."""
@@ -3183,6 +3563,26 @@ class Polls(commands.Cog):
             details={"polls": moved, "kept_days": days, "votes_dropped": dropped},
         )
 
+    async def _expire_drafts(self, guild: Any, now: datetime) -> None:
+        """The archive sweep's other half: a draft nobody came back to, one log row per drop."""
+        if not drafts_are_on(self.bot.store, guild.id):
+            return
+        kept = draft_days(self.bot.store, guild.id)
+        for row in await stale_drafts(self.bot.db, guild.id, kept, now):
+            if not await drop_draft(self.bot.db, guild.id, row["user_id"]):
+                continue
+            await log_action(
+                self.bot,
+                guild,
+                "poll.draft_expired",
+                target=row["user_id"],
+                details={
+                    "question": clamp(PollDraft.from_json(row["payload"]).question, 80),
+                    "kept_days": kept,
+                    "saved_at": row["saved_at"],
+                },
+            )
+
     @commands.Cog.listener()
     async def on_raw_poll_vote_add(self, payload: discord.RawPollVoteActionEvent) -> None:
         await self._vote(payload, added=True)
@@ -3255,6 +3655,12 @@ class Polls(commands.Cog):
             f"**archived after** — {store.get(guild.id, 'poll_archive_days')} day(s), "
             f"votes dropped: {store.get(guild.id, 'poll_archive_drop_votes')}",
             f"**date slot labels** — {store.get(guild.id, 'poll_date_labels')}",
+            f"**saved drafts** — {'on' if drafts_are_on(store, guild.id) else 'off'}, "
+            + (
+                f"kept {draft_days(store, guild.id)} day(s)"
+                if draft_days(store, guild.id)
+                else "kept for ever"
+            ),
             f"**staff (who may approve)** — {staff_roles_sentence(staff)}",
             *self._health_lines(),
         ]

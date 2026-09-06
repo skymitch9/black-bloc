@@ -46,6 +46,7 @@
       "honeypot_purge_days": 7,
       "poll_archive_days": 3650,
       "poll_default_hours": 768,
+      "poll_draft_days": 365,
       "poll_reminder_minutes": 10080,
       "raidtrain_max_slots_per_member": 24,
       "raidtrain_poll_minutes": 60,

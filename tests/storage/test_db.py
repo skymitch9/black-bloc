@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 32
+        assert SCHEMA_VERSION == 33
         cur = await db.conn.execute("PRAGMA table_info(requests)")
         assert {
             "built",
@@ -76,6 +76,7 @@ async def test_connect_bootstraps_schema(tmp_path):
             "modmail_snippets",
         } <= tables
         assert {"polls", "poll_options", "poll_votes", "poll_results"} <= tables
+        assert "poll_drafts" in tables
         assert {"chat_intents", "chat_lines"} <= tables
         assert {"knowledge_sections", "personality_tropes"} <= tables
         assert {"chat_window", "llm_ledger"} <= tables
@@ -1238,3 +1239,46 @@ async def test_the_application_forms_rebuild_runs_once_and_is_quiet_the_second_t
         finally:
             await second.close()
     assert not any("rebuilding application_forms" in one.message for one in caplog.records)
+
+
+async def test_a_schema_32_file_gains_the_draft_table_and_keeps_its_polls(tmp_path):
+    """Schema 33 is additive: a poll written before saved drafts is untouched, and the new
+    table arrives empty with one row per person per guild."""
+    path = tmp_path / "old32.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("DROP TABLE poll_drafts")
+    await db.conn.execute(
+        "INSERT INTO polls(id, guild_id, creator_id, question, status, created_at) "
+        "VALUES (1, 7, 9, 'Pizza or tacos?', 'open', '2026-09-06T00:00:00+00:00')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '32')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        assert "poll_drafts" in {row["name"] for row in await cur.fetchall()}
+        cur = await again.conn.execute("SELECT COUNT(*) AS n FROM poll_drafts")
+        assert (await cur.fetchone())["n"] == 0
+        cur = await again.conn.execute("SELECT question, status FROM polls WHERE id = 1")
+        row = await cur.fetchone()
+        assert (row["question"], row["status"]) == ("Pizza or tacos?", "open")
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+
+        await again.conn.execute(
+            "INSERT INTO poll_drafts(guild_id, user_id, payload, saved_at) "
+            "VALUES (7, 9, '{}', 'now')"
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            await again.conn.execute(
+                "INSERT INTO poll_drafts(guild_id, user_id, payload, saved_at) "
+                "VALUES (7, 9, '{}', 'later')"
+            )
+    finally:
+        await again.close()

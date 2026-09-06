@@ -2021,7 +2021,6 @@ async def test_a_re_render_stops_the_view_it_replaced(cog, bot, lead):
 # --- the card, one row per status ----------------------------------------------------------
 
 EXPECTED_BUTTONS = {
-    pure.DRAFT: ["Post it", "Cancel"],
     pure.PENDING_REVIEW: ["Approve", "Deny", "Cancel"],
     pure.OPEN: ["End", "Cancel"],
     pure.CLOSED: [],
@@ -2073,7 +2072,6 @@ async def test_the_card_renders_exactly_the_buttons_the_table_says(cog, bot, lea
         (pure.OPEN, "Cancel", "cancel_poll"),
         (pure.PENDING_REVIEW, "Approve", "apply_decision"),
         (pure.DENIED, "Post it anyway", "apply_decision"),
-        (pure.DRAFT, "Post it", "post_poll"),
     ],
 )
 async def test_a_move_button_calls_its_shared_function_and_leaves_via_alone(
@@ -2087,11 +2085,7 @@ async def test_a_move_button_calls_its_shared_function_and_leaves_via_alone(
         calls.append((args, kwargs))
         return (True, True) if func_name == "close_poll" else ("moved along", row)
 
-    async def fake_post(*args, **kwargs):
-        calls.append((args, kwargs))
-        return (None, "no_channel")
-
-    monkeypatch.setattr(polls_cog, func_name, fake_post if func_name == "post_poll" else fake)
+    monkeypatch.setattr(polls_cog, func_name, fake)
 
     await click(bot, lead, find_item(view, label))
 
@@ -2399,3 +2393,358 @@ async def test_the_panel_minutes_key_is_what_sets_the_clock(cog, bot, lead):
     view = panel_view(await open_panel(cog, bot, lead))
 
     assert view.timeout == 180
+
+
+# --- saved drafts: one per person, staff have the final say ---------------------------------
+
+SAVE_NOW = "Save for later"
+SAVE_REPLACES = "Save (replaces your draft)"
+RESUME = "Resume draft"
+DISCARD_MINE = "Discard draft"
+DISCARD_THEIRS = "Discard"
+DISCARD_YES = "Yes, discard it"
+
+
+async def draft_rows(db, guild_id=GUILD):
+    return await pure.drafts(db, guild_id)
+
+
+async def save_one(cog, bot, who, **fields):
+    """The create modal, the preview, then Save for later."""
+    opened, _ = await fresh_draft(cog, bot, who, **fields)
+    label = SAVE_REPLACES if has_item(card_view(opened), SAVE_REPLACES) else SAVE_NOW
+    return await click(bot, who, find_item(card_view(opened), label))
+
+
+async def resume_one(cog, bot, who):
+    panel = await open_panel(cog, bot, who)
+    return await click(bot, who, find_item(panel_view(panel), RESUME))
+
+
+async def test_a_panel_with_nothing_saved_offers_no_resume_and_says_nothing_about_drafts(
+    cog, bot, lead
+):
+    panel = await open_panel(cog, bot, lead)
+
+    assert not has_item(panel_view(panel), RESUME)
+    assert "saved draft" not in panel_embed(panel).description
+
+
+async def test_save_for_later_writes_one_row_and_one_log_line(cog, bot, lead, db):
+    interaction = await save_one(cog, bot, lead, question="Pizza or tacos?")
+
+    rows = await draft_rows(db)
+    assert len(rows) == 1 and rows[0]["user_id"] == lead.id
+    assert await action_kinds(db) == ["poll.draft_saved"]
+    assert await get_poll(db, 1) is None
+    assert polls_cog.DRAFT_SAVED in interaction.sent
+    assert card_embed(interaction).title == pure.PANEL_TITLE
+
+
+async def test_the_panel_then_says_there_is_a_draft_and_offers_resume(cog, bot, lead, db):
+    await save_one(cog, bot, lead, question="Pizza or tacos?")
+
+    panel = await open_panel(cog, bot, lead)
+
+    assert "Pizza or tacos?" in panel_embed(panel).description
+    assert has_item(panel_view(panel), RESUME)
+    assert find_item(panel_view(panel), RESUME).row == 4
+    assert len([one for one in panel_view(panel).children if one.row == 0]) <= 5
+
+
+async def test_saving_twice_replaces_the_one_draft_and_the_button_says_so(cog, bot, lead, db):
+    await save_one(cog, bot, lead, question="First go")
+    opened, _ = await fresh_draft(cog, bot, lead, question="Second go")
+
+    assert has_item(card_view(opened), SAVE_REPLACES)
+    said = await click(bot, lead, find_item(card_view(opened), SAVE_REPLACES))
+
+    rows = await draft_rows(db)
+    assert len(rows) == 1
+    assert pure.PollDraft.from_json(rows[0]["payload"]).question == "Second go"
+    assert polls_cog.DRAFT_REPLACED in said.sent
+
+
+async def test_two_people_each_keep_their_own_draft(cog, bot, lead, member, db):
+    await bot.store.set(GUILD, "poll_who_can_create", "everyone")
+    await save_one(cog, bot, lead, question="Theirs")
+    await save_one(cog, bot, member, question="Mine")
+
+    rows = await draft_rows(db)
+    assert sorted(row["user_id"] for row in rows) == sorted([lead.id, member.id])
+
+
+async def test_resume_opens_the_preview_the_draft_was_saved_as(cog, bot, lead, db):
+    await save_one(cog, bot, lead, question="Pizza or tacos?", options="Pizza | Tacos")
+
+    resumed = await resume_one(cog, bot, lead)
+
+    assert card_embed(resumed).title == "Pizza or tacos?"
+    assert polls_cog.RESUMED_INTRO in card_embed(resumed).footer.text
+    assert has_item(card_view(resumed), "Post it")
+    assert has_item(card_view(resumed), DISCARD_MINE)
+    assert has_item(card_view(resumed), SAVE_REPLACES)
+
+
+async def test_post_it_from_a_resumed_draft_leaves_no_draft_and_one_log_row(cog, bot, lead, db):
+    await save_one(cog, bot, lead, question="Pizza or tacos?")
+    resumed = await resume_one(cog, bot, lead)
+
+    await click(bot, lead, find_item(card_view(resumed), "Post it"))
+
+    assert await draft_rows(db) == []
+    assert (await get_poll(db, 1))["status"] == pure.OPEN
+    assert await action_kinds(db) == ["poll.draft_saved", "poll.created", "poll.opened"]
+    cur = await db.conn.execute("SELECT details FROM action_log WHERE kind = 'poll.created'")
+    assert '"from_draft": true' in (await cur.fetchone())["details"]
+
+
+async def test_posting_a_fresh_poll_leaves_the_saved_draft_alone(cog, bot, lead, db):
+    await save_one(cog, bot, lead, question="Kept")
+    opened, _ = await fresh_draft(cog, bot, lead, question="A different one")
+
+    await click(bot, lead, find_item(card_view(opened), "Post it"))
+
+    rows = await draft_rows(db)
+    assert len(rows) == 1
+    assert pure.PollDraft.from_json(rows[0]["payload"]).question == "Kept"
+    cur = await db.conn.execute("SELECT details FROM action_log WHERE kind = 'poll.created'")
+    assert '"from_draft": false' in (await cur.fetchone())["details"]
+
+
+async def test_resuming_a_draft_that_has_gone_says_so_rather_than_dying(cog, bot, lead, db):
+    await save_one(cog, bot, lead)
+    panel = await open_panel(cog, bot, lead)
+    await pure.drop_draft(db, GUILD, lead.id)
+
+    interaction = await click(bot, lead, find_item(panel_view(panel), RESUME))
+
+    assert polls_cog.DRAFT_GONE in interaction.sent
+    assert card_embed(interaction).title == pure.PANEL_TITLE
+
+
+async def test_discarding_your_own_draft_asks_first_and_tells_nobody(cog, bot, lead, db):
+    await save_one(cog, bot, lead)
+    resumed = await resume_one(cog, bot, lead)
+
+    asked = await click(bot, lead, find_item(card_view(resumed), DISCARD_MINE))
+    assert has_item(card_view(asked), DISCARD_YES) and has_item(card_view(asked), "Keep it")
+
+    gone = await click(bot, lead, find_item(card_view(asked), DISCARD_YES))
+
+    assert await draft_rows(db) == []
+    assert await action_kinds(db) == ["poll.draft_saved", "poll.draft_discarded"]
+    assert polls_cog.DRAFT_DISCARDED in gone.sent
+    assert lead.dms == []
+
+
+async def test_keeping_it_at_the_confirm_leaves_the_draft_where_it_was(cog, bot, lead, db):
+    await save_one(cog, bot, lead)
+    resumed = await resume_one(cog, bot, lead)
+    asked = await click(bot, lead, find_item(card_view(resumed), DISCARD_MINE))
+
+    kept = await click(bot, lead, find_item(card_view(asked), "Keep it"))
+
+    assert len(await draft_rows(db)) == 1
+    assert has_item(card_view(kept), DISCARD_MINE)
+
+
+async def test_a_member_never_sees_the_staff_draft_select(cog, bot, lead, member, db):
+    await bot.store.set(GUILD, "poll_who_can_create", "everyone")
+    await save_one(cog, bot, member)
+
+    theirs = await open_panel(cog, bot, member)
+    staff = await open_panel(cog, bot, lead)
+
+    assert not any(
+        isinstance(item, polls_cog.DraftPick) for item in panel_view(theirs).children
+    )
+    assert any(isinstance(item, polls_cog.DraftPick) for item in panel_view(staff).children)
+    assert "1** saved draft(s)" in panel_embed(staff).description
+
+
+async def test_staff_discard_asks_why_dms_the_reason_and_leaves_one_log_row(
+    cog, bot, lead, member, db
+):
+    await bot.store.set(GUILD, "poll_who_can_create", "everyone")
+    await save_one(cog, bot, member, question="Pizza or tacos?")
+    panel = await open_panel(cog, bot, lead)
+    pick = next(
+        item for item in panel_view(panel).children if isinstance(item, polls_cog.DraftPick)
+    )
+    pick._values = [str(member.id)]
+
+    card = await click(bot, lead, pick)
+    assert f"<@{member.id}>" in " ".join(one.value for one in card_embed(card).fields)
+
+    asked = await click(bot, lead, find_item(card_view(card), DISCARD_THEIRS))
+    opened = FakeInteraction(bot, lead)
+    await find_item(card_view(asked), DISCARD_YES).callback(opened)
+    modal = opened.response.modals[0]
+    said = FakeInteraction(bot, lead)
+    await modal.discard(said, "we are running that one ourselves")
+
+    assert await draft_rows(db) == []
+    assert await action_kinds(db) == ["poll.draft_saved", "poll.draft_discarded"]
+    assert "we are running that one ourselves" in member.dms[0]["content"]
+    assert "Pizza or tacos?" in member.dms[0]["content"]
+    assert polls_cog.DRAFT_DISCARD_SAID in said.sent
+
+
+async def test_staff_cannot_post_or_edit_somebody_elses_draft(cog, bot, lead, member, db):
+    await bot.store.set(GUILD, "poll_who_can_create", "everyone")
+    await save_one(cog, bot, member)
+    card = FakeInteraction(bot, lead)
+    await polls_cog.open_draft_card(card, member.id)
+
+    labels = [getattr(item, "label", None) for item in card_view(card).children]
+    assert labels == [DISCARD_THEIRS, "Back"]
+
+
+async def test_a_demoted_staffer_discards_nobodys_draft(cog, bot, lead, member, db):
+    await bot.store.set(GUILD, "poll_who_can_create", "everyone")
+    await save_one(cog, bot, member)
+    card = FakeInteraction(bot, lead)
+    await polls_cog.open_draft_card(card, member.id)
+    bot.store = Demoted(bot.store)
+    bot.store.staff = False
+
+    refused = await click(bot, lead, find_item(card_view(card), DISCARD_THEIRS))
+    assert "staff only" in refused.sent
+    assert len(await draft_rows(db)) == 1
+
+    modal = FakeInteraction(bot, lead)
+    await polls_cog.DraftReasonModal(member.id).discard(modal, "because")
+    assert "staff only" in modal.sent
+    assert len(await draft_rows(db)) == 1
+
+
+async def test_turning_drafts_off_hides_every_draft_move_and_keeps_the_rows(cog, bot, lead, db):
+    await save_one(cog, bot, lead)
+    await bot.store.set(GUILD, "poll_drafts", False)
+
+    panel = await open_panel(cog, bot, lead)
+    opened, _ = await fresh_draft(cog, bot, lead)
+
+    assert not has_item(panel_view(panel), RESUME)
+    assert "saved draft" not in panel_embed(panel).description
+    assert not any(
+        isinstance(item, polls_cog.DraftPick) for item in panel_view(panel).children
+    )
+    assert not has_item(card_view(opened), SAVE_NOW)
+    assert not has_item(card_view(opened), SAVE_REPLACES)
+    assert len(await draft_rows(db)) == 1
+
+
+async def test_saving_after_a_lead_turns_drafts_off_mid_flow_is_refused_in_words(
+    cog, bot, lead, db
+):
+    opened, _ = await fresh_draft(cog, bot, lead)
+    await bot.store.set(GUILD, "poll_drafts", False)
+
+    refused = await click(bot, lead, find_item(card_view(opened), SAVE_NOW))
+
+    assert polls_cog.DRAFTS_OFF in refused.sent
+    assert await draft_rows(db) == []
+
+
+async def test_a_member_who_may_not_start_a_poll_is_offered_no_draft_at_all(
+    cog, bot, member, db
+):
+    await bot.store.set(GUILD, "poll_who_can_create", "everyone")
+    await save_one(cog, bot, member)
+    await bot.store.set(GUILD, "poll_who_can_create", "staff")
+
+    panel = await open_panel(cog, bot, member)
+
+    assert not has_item(panel_view(panel), RESUME)
+    assert len(await draft_rows(db)) == 1
+
+
+async def test_a_repeating_poll_cannot_be_saved_as_a_draft(cog, bot, lead, db):
+    opened, draft = await fresh_draft(cog, bot, lead)
+    cadence = fill(
+        polls_cog.CadenceModal(draft, card_view(opened)),
+        every=pure.DAILY,
+        at="19:00",
+        day="",
+        tz="America/Phoenix",
+    )
+    repeating = FakeInteraction(bot, lead)
+    await cadence.on_submit(repeating)
+
+    assert draft.repeating is True
+    assert not has_item(card_view(repeating), SAVE_NOW)
+    assert not has_item(card_view(repeating), SAVE_REPLACES)
+
+
+async def test_the_archive_sweep_drops_a_draft_nobody_came_back_to(cog, bot, lead, db):
+    now = datetime.now(UTC)
+    await pure.save_draft(
+        db, GUILD, lead.id, pure.PollDraft(question="Old"), now - timedelta(days=15)
+    )
+    await pure.save_draft(
+        db, GUILD, 4242, pure.PollDraft(question="New"), now - timedelta(days=1)
+    )
+
+    await cog.run_due_polls()
+
+    rows = await draft_rows(db)
+    assert [row["user_id"] for row in rows] == [4242]
+    assert await action_kinds(db) == ["poll.draft_expired"]
+
+
+async def test_zero_days_keeps_a_draft_however_old_it_is(cog, bot, lead, db):
+    await bot.store.set(GUILD, "poll_draft_days", 0)
+    await pure.save_draft(
+        db,
+        GUILD,
+        lead.id,
+        pure.PollDraft(question="Ancient"),
+        datetime.now(UTC) - timedelta(days=400),
+    )
+
+    await cog._expire_drafts(bot.guild, datetime.now(UTC))
+
+    assert len(await draft_rows(db)) == 1
+    assert await action_kinds(db) == []
+
+
+async def test_drafts_turned_off_are_kept_rather_than_aged_out(cog, bot, lead, db):
+    await pure.save_draft(
+        db,
+        GUILD,
+        lead.id,
+        pure.PollDraft(question="Old"),
+        datetime.now(UTC) - timedelta(days=40),
+    )
+    await bot.store.set(GUILD, "poll_drafts", False)
+
+    await cog._expire_drafts(bot.guild, datetime.now(UTC))
+
+    assert len(await draft_rows(db)) == 1
+
+
+async def test_the_settings_row_turns_drafts_off_and_sets_the_days(cog, bot, lead, db):
+    settings = await open_settings(cog, bot, lead)
+    toggle = find_item(card_view(settings), "Drafts: on")
+    assert toggle.row == 4
+    assert len([one for one in card_view(settings).children if one.row == 4]) <= 5
+
+    await click(bot, lead, toggle)
+    assert bot.store.get(GUILD, "poll_drafts") is False
+
+    numbers = polls_cog.NumbersModal(bot.store, GUILD)
+    assert len(numbers.children) <= 5
+    for field in numbers.fields[:-1]:
+        field._value = ""
+    numbers.fields[-1]._value = "30"
+    await numbers.on_submit(FakeInteraction(bot, lead))
+
+    assert bot.store.get(GUILD, "poll_draft_days") == 30
+
+
+async def test_the_settings_embed_says_where_drafts_stand(cog, bot, lead):
+    lines = " ".join(cog.settings_lines(bot.guild))
+
+    assert "saved drafts" in lines and "kept 14 day(s)" in lines

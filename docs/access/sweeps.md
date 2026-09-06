@@ -1,6 +1,9 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-06** — rows **`PD-a`–`PD-e`** added by the SAVED POLL DRAFTS build on branch
+> `poll-drafts` (off `main` at `9cd79d6`, v93); they are lettered because the conductor numbers
+> them at the merge, and schema moves **32 → 33**. Before that,
 > **2026-09-05 21:55** — rows **295–299** (were `ES3-a`–`ES3-e`) added by ENGINEERING SWEEP 3,
 > merged as `9fddad1` and shipping as v93. Schema UNCHANGED at **32**. ⚠️ Four of the five check that
 > a REFACTOR changed nothing a person can see ("Keep it" still reads *Keep it*), which is the only
@@ -989,6 +992,24 @@ something a person RUNS. ⚠️ **Nothing below has met live Discord or the live
 | **297** (was `ES3-c`) | Dashboard → https://blackbloc.heygabi.ai/settings.html → search for each of **chat_daily_turns**, **chat_llm_mode**, **chat_monthly_cap_usd**, **chat_person_hourly_turns**, **chat_personality**, **chat_simple_model**, **birthday_panel_lookup**, **birthday_panel_next_for_members**, **event_panel_own_list**, **poll_creator_may_end**, **request_panel_own_list**, **personality_pool_sync**, **personality_pool_peer_url** | every one shows a plain-English line above the mono key — *"How many answers the whole server gets in a day"*, *"Whether members can look somebody else's birthday up"*, *"Whether whoever started a poll may close it early"* — instead of the bare key. ⚠️ These are the last thirteen unlabelled keys in the whole registry; **there are now none**, and the test that pinned them by name has an empty list, so the next key added without a sentence fails the suite by name |
 | **298** (was `ES3-d`) | Nothing to press — read [`../info/architecture.md`](../info/architecture.md)'s header | ONE table of current figures (19 cogs, **29** top-level commands, schema 32, 187 registry keys, 17 pages / 149 routes) with a second table showing how those numbers MOVED, instead of five paragraphs quoting 44, 41, 39 and 37 commands at once. ⚠️ Worth knowing why it kept being wrong: the command count **fell** when the panel waves retired every command group, so every stale figure reads as more commands than exist. The old header is kept whole at [`../archive/architecture-header-2026-09-05.md`](../archive/architecture-header-2026-09-05.md) |
 | **299** (was `ES3-e`) | Run a deploy — `./scripts/deploy.ps1` — and watch the test-gate step | the `pytest -q -n auto` line runs to *"N passed"* and prints **nothing in red**. ⚠️ Every deploy since v89 printed 143 tracebacks and 1716 lines of red under a passing suite, which trains a person to ignore the one place a real failure would appear. Nothing about the bot changed; one test fixture stopped starting 14 background loops against a bot that was never logged in |
+
+## Saved poll drafts — rows `PD-a`–`PD-e` (numbered at the merge)
+
+Written on `poll-drafts`, 2026-09-06, off `main` at `9cd79d6` (v93), in a worktree at
+`C:/lcw/bb-poll-drafts`. Built to [`../info/poll-drafts-design.md`](../info/poll-drafts-design.md)
+(owner, 2026-09-06: *"B but only save 1 draft per person max"*). Schema **32 → 33**
+(`poll_drafts`), two new registry keys. ⚠️ **Nothing below has met live Discord**;
+`python -m black_bloc` was NOT booted (no token in a worktree). The verification is `pytest`
+(**5226 passed**, was 5187), `ruff check .`, forward and `BB_REVERSE=1`, and
+`node site/mock/check.mjs` (17 pages / 149 routes / 14 core settings, unchanged).
+
+| # | Do this | Expect |
+|---|---|---|
+| **PD-a** | `/poll` in `#mute-me-bot-test-spam` ▸ **Create** ▸ fill the modal ▸ **Save for later** (bottom row) | the panel comes back with *"Saved. Resume it from this panel any time."*, and the embed now carries a line *"You have a saved draft: **your question** — saved a few seconds ago"* with a blue **Resume draft** button under it. ⚠️ Nothing is posted and no poll number is used up — the draft lives in its own table, never in `polls` |
+| **PD-b** | Press **Resume draft**, then **Post it** | the preview comes back exactly as it was typed (footer: *"This is your saved draft…"*), the poll goes up, and the panel no longer offers **Resume draft**. ⚠️ The draft row is deleted in the SAME write as the poll, and the Logs page shows ONE `poll.created` line for it (open it and read `from_draft: true` in the details) — not a second "draft used" row |
+| **PD-c** | **Create** a second poll, press **Save for later** twice over (save, then Create ▸ Save again) | the button reads **Save (replaces your draft)** the second time and the panel says it replaced the one you had. Only ever ONE draft per person: press **Resume draft** and it is the newer one. This is the owner's "1 per person max", enforced by the table's key rather than by a check |
+| **PD-d** | With a draft saved by somebody else, `/poll` as a Lead ▸ the **Saved drafts…** select ▸ pick theirs ▸ **Discard** ▸ **Yes, discard it** ▸ type a reason | the card shows whose it is, what they typed and when they saved it; after the reason box the panel says it is discarded, and **they get a DM naming the poll and your reason**. Staff cannot post or edit somebody else's draft — Discard and Back are the only buttons, because posting one would forge its creator |
+| **PD-e** | `/poll` ▸ **Settings** ▸ **Drafts: on** (bottom row) to turn them off, then **Create** | **Save for later** is gone, so is **Resume draft** and the panel's draft line — and the draft itself is NOT deleted: turn Drafts back on and it is still there. **Numbers…** carries *"Days a saved draft is kept (0 for ever)"*, default **14**; a draft older than that is dropped by the poll sweep (a `poll.draft_expired` line on the Logs page), and drafts turned off never age out |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that

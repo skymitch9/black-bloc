@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -16,6 +16,16 @@ def test_every_status_the_machine_names_has_a_row_of_its_own():
     assert set(polls.TRANSITIONS) == set(polls.STATUSES)
     for allowed in polls.TRANSITIONS.values():
         assert set(allowed) <= set(polls.STATUSES)
+
+
+def test_the_draft_status_is_gone_from_every_table_a_poll_walks():
+    """A saved draft is not a poll; it lives in `poll_drafts` and never in `polls`."""
+    assert "draft" not in polls.STATUSES
+    assert "draft" not in polls.OPEN_STATUSES
+    assert "draft" not in polls.TRANSITIONS
+    assert "draft" not in polls.COLOURS
+    assert "draft" not in polls.CARD_BUTTONS
+    assert polls.DRAFT == "draft"
 
 
 def test_a_reviewed_poll_walks_from_pending_to_open_and_never_backwards():
@@ -472,7 +482,6 @@ def recur_row(**fields):
 @pytest.mark.parametrize(
     ("status", "labels"),
     [
-        (polls.DRAFT, ["Post it", "Cancel"]),
         (polls.PENDING_REVIEW, ["Approve", "Deny", "Cancel"]),
         (polls.OPEN, ["End", "Cancel"]),
         (polls.CLOSED, []),
@@ -574,3 +583,139 @@ def test_a_paused_recurrence_card_says_paused_where_the_clock_would_be():
 
     assert polls.RECURRENCE_PAUSED in said
     assert "none" in said
+
+
+# --- saved drafts (B, one per person) -------------------------------------------------------
+
+
+def a_draft(**fields):
+    return polls.PollDraft(
+        **{
+            "question": "Pizza or tacos?",
+            "options": "Pizza | Tacos",
+            "hours": "6",
+            "channel_id": 555,
+            "thread": True,
+            **fields,
+        }
+    )
+
+
+def test_a_draft_reads_back_exactly_as_it_was_written():
+    draft = a_draft(anonymous=True, kind=polls.CHECKBOX)
+
+    again = polls.PollDraft.from_json(draft.to_json())
+
+    assert again == draft
+    assert again.asked() == draft.asked()
+
+
+def test_a_draft_written_by_an_older_build_still_opens():
+    """Unknown keys are ignored and missing ones default, so a field added later costs nothing."""
+    found = polls.PollDraft.from_json(
+        '{"question": "Only this", "wibble": 3, "kind": "checkbox"}'
+    )
+
+    assert found.question == "Only this" and found.kind == polls.CHECKBOX
+    assert found.options == "" and found.channel_id is None and found.thread is False
+
+
+def test_a_draft_whose_stored_value_is_the_wrong_shape_falls_back_to_the_default():
+    found = polls.PollDraft.from_json(
+        '{"question": 12, "anonymous": "yes", "channel_id": "555", "ping_role_id": 7}'
+    )
+
+    assert found.question == "" and found.anonymous is False
+    assert found.channel_id is None and found.ping_role_id == 7
+
+
+def test_nonsense_in_the_payload_is_an_empty_draft_rather_than_a_crash():
+    assert polls.PollDraft.from_json("not json at all") == polls.PollDraft()
+    assert polls.PollDraft.from_json("[1, 2]") == polls.PollDraft()
+    assert polls.PollDraft.from_json(None) == polls.PollDraft()
+
+
+async def test_a_person_keeps_one_draft_per_guild_and_saving_again_replaces_it(db):
+    assert await polls.save_draft(db, 7, 900, a_draft()) is False
+    assert await polls.save_draft(db, 7, 900, a_draft(question="Tacos or pizza?")) is True
+
+    rows = await polls.drafts(db, 7)
+    assert len(rows) == 1
+    found = await polls.load_draft(db, 7, 900)
+    assert found.question == "Tacos or pizza?"
+
+
+async def test_two_people_and_two_guilds_each_keep_their_own(db):
+    await polls.save_draft(db, 7, 900, a_draft(question="Mine"))
+    await polls.save_draft(db, 7, 901, a_draft(question="Theirs"))
+    await polls.save_draft(db, 8, 900, a_draft(question="Other server"))
+
+    assert len(await polls.drafts(db, 7)) == 2
+    assert (await polls.load_draft(db, 8, 900)).question == "Other server"
+
+
+async def test_a_draft_nobody_saved_is_nothing_rather_than_an_empty_one(db):
+    assert await polls.load_draft(db, 7, 900) is None
+    assert await polls.draft_row(db, 7, 900) is None
+    assert await polls.drop_draft(db, 7, 900) is False
+
+
+async def test_dropping_a_draft_says_whether_there_was_one(db):
+    await polls.save_draft(db, 7, 900, a_draft())
+
+    assert await polls.drop_draft(db, 7, 900) is True
+    assert await polls.load_draft(db, 7, 900) is None
+
+
+async def test_a_draft_is_stale_only_once_it_is_older_than_the_key_says(db):
+    now = datetime(2026, 9, 6, 12, tzinfo=UTC)
+    await polls.save_draft(db, 7, 900, a_draft(), now - timedelta(days=14, seconds=1))
+    await polls.save_draft(db, 7, 901, a_draft(), now - timedelta(days=13, hours=23))
+
+    stale = await polls.stale_drafts(db, 7, 14, now)
+
+    assert [row["user_id"] for row in stale] == [900]
+
+
+async def test_zero_days_keeps_every_draft_for_ever(db):
+    now = datetime(2026, 9, 6, 12, tzinfo=UTC)
+    await polls.save_draft(db, 7, 900, a_draft(), now - timedelta(days=400))
+
+    assert await polls.stale_drafts(db, 7, 0, now) == []
+    assert await polls.stale_drafts(db, 7, None, now) == []
+    assert len(await polls.stale_drafts(db, 7, 365, now)) == 1
+
+
+def test_the_panel_line_names_the_question_and_when_it_was_saved():
+    when = datetime(2026, 9, 5, tzinfo=UTC)
+    line = polls.draft_line("Pizza or tacos?", when)
+
+    assert "Pizza or tacos?" in line and f"<t:{int(when.timestamp())}:R>" in line
+    assert polls.DRAFT_NO_QUESTION in polls.draft_line("", None)
+
+
+def test_a_draft_select_line_names_whose_it_is_and_never_outgrows_the_option():
+    line = polls.draft_label("Alice", "Pizza or tacos?")
+
+    assert line.startswith("Alice · ") and "Pizza or tacos?" in line
+    assert len(polls.draft_label("A" * 40, "Q" * 200)) <= 100
+    assert polls.draft_label(None, "Q").startswith(polls.DRAFT_NOBODY)
+
+
+def test_the_staff_draft_card_carries_who_what_and_when():
+    when = datetime(2026, 9, 5, tzinfo=UTC)
+    card = polls.draft_card(
+        question="Pizza or tacos?",
+        user_id=900,
+        kind=polls.CHECKBOX,
+        labels=["Pizza", "Tacos"],
+        hours=48,
+        channel_id=555,
+        saved=when,
+    ).to_dict()
+    said = " ".join(one["value"] for one in card["fields"])
+
+    assert card["title"] == "Pizza or tacos?"
+    assert "<@900>" in said and "checkbox" in said and "2d" in said
+    assert "<#555>" in said and f"<t:{int(when.timestamp())}:R>" in said
+    assert "1. Pizza" in said and "2. Tacos" in said

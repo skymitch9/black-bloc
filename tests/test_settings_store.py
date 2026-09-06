@@ -35,6 +35,8 @@ from black_bloc.settings_store import (
     POLL_ARCHIVE_DAYS,
     POLL_ARCHIVE_MAX_DAYS,
     POLL_DEFAULT_HOURS,
+    POLL_DRAFT_DAYS,
+    POLL_DRAFT_MAX_DAYS,
     POLL_MAX_HOURS,
     POLL_MIN_HOURS,
     POLL_REMINDER_MAX_MINUTES,
@@ -1331,6 +1333,41 @@ async def test_whoever_started_a_poll_may_close_it_until_a_lead_says_otherwise(s
     with pytest.raises(SettingError):
         coerce_value("poll_creator_may_end", "false")
     assert parse_value("poll_creator_may_end", "false") is False
+
+
+async def test_a_half_written_poll_can_be_saved_until_a_lead_turns_drafts_off(store):
+    """Owner, 2026-09-06: "B but only save 1 draft per person max" — and it is a key."""
+    from black_bloc.settings_panel import reachable_on_the_panel
+
+    assert store.get(7, "poll_drafts") is True
+    assert KEY_TYPES["poll_drafts"] == "bool"
+    assert "Save for later" in KEY_HELP["poll_drafts"]
+    assert "kept, not deleted" in KEY_HELP["poll_drafts"]
+    assert reachable_on_the_panel("poll_drafts")
+    await store.set(7, "poll_drafts", False)
+    assert store.get(7, "poll_drafts") is False
+    with pytest.raises(SettingError):
+        coerce_value("poll_drafts", "false")
+    assert parse_value("poll_drafts", "false") is False
+
+
+async def test_a_saved_draft_is_kept_a_fortnight_and_zero_days_keeps_it_for_ever(store):
+    from black_bloc.settings_panel import reachable_on_the_panel
+
+    assert store.get(7, "poll_draft_days") == POLL_DRAFT_DAYS == 14
+    assert KEY_TYPES["poll_draft_days"] == "int"
+    assert "0 keeps it for ever" in KEY_HELP["poll_draft_days"]
+    assert reachable_on_the_panel("poll_draft_days")
+    await store.set(7, "poll_draft_days", 0)
+    assert store.get(7, "poll_draft_days") == 0
+    await store.set(7, "poll_draft_days", POLL_DRAFT_MAX_DAYS)
+    with pytest.raises(SettingError):
+        coerce_value("poll_draft_days", POLL_DRAFT_MAX_DAYS + 1)
+    with pytest.raises(SettingError):
+        coerce_value("poll_draft_days", -1)
+    with pytest.raises(SettingError):
+        coerce_value("poll_draft_days", "14")
+    assert parse_value("poll_draft_days", "30") == 30
 
 
 async def test_the_panel_keeps_a_members_own_requests_to_themselves_until_a_lead_says_otherwise(
