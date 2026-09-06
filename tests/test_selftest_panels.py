@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import discord
 import pytest
+from discord.ext import tasks
 
 from black_bloc import selftest, selftest_panels
 from black_bloc.bot import COGS, BlackBlocBot
@@ -129,7 +130,11 @@ class Guild:
 @pytest.fixture
 async def live(tmp_path, monkeypatch):
     """A REAL bot with every cog loaded — the panel family is only proof if the builders
-    are the ones the command handlers call, so nothing here is stubbed."""
+    are the ones the command handlers call, so nothing they touch is stubbed. The one thing
+    held back is the background loops: this is the only fixture that connects the database
+    AND loads all 19 cogs, so every `cog_load` would start a real `tasks.loop` against a
+    client that was never logged in (`docs/KNOWN_ISSUES.md` KI-24)."""
+    monkeypatch.setattr(tasks.Loop, "start", lambda self, *args, **kwargs: None)
     monkeypatch.delenv("DISCORD_TOKEN", raising=False)
     settings = load_settings(
         _env_file=None,
