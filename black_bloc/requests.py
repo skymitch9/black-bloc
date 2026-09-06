@@ -105,7 +105,7 @@ BAD_DUE = (
     f"`{DUE_SHAPE}` — `2026-09-15`, say — or leave the box empty if there is no deadline."
 )
 NO_SUCH_REQUEST = (
-    "Black Bloc has no request **#{request_id}**, so nothing was done. `/request list` shows the "
+    "Black Bloc has no request **#{request_id}**, so nothing was done. `/request` shows the "
     "ones it has."
 )
 NOT_YOURS = (
@@ -800,7 +800,7 @@ async def list_requests(
     limit: int | None = None,
     offset: int = 0,
 ) -> list[Any]:
-    """Pending first, then newest; the order the requests page and `/request list` both show."""
+    """Pending first, then newest; the order the requests page and the `/request` panel show."""
     where, params = _where(
         guild_id,
         statuses=statuses,

@@ -3459,7 +3459,7 @@ The counts are what the scanner found on 2026-08-27; the test is what keeps them
 
 | Key | Note |
 |---|---|
-| `black_bloc/cogs/community/requests.py:345` | ⚠️ **The brief says `/request` opens the modal; it is `/request create`.** Discord cannot have a command group called `request` *and* a bare `/request` — the group owns the name, and `list` / `withdraw` / `set` need the group. `create` is what `/event create` and `/poll create` already use, so it is the name a member has met before. |
+| `black_bloc/cogs/community/requests.py:345` | 🗄️ **SUPERSEDED 2026-09-03 by the requests-panel build — `/request` IS one bare command now and the group is gone; kept as the record of why it was not, and see the `# Requests, fourth pass` section.** ⚠️ The brief says `/request` opens the modal; it is `/request create`. Discord cannot have a command group called `request` *and* a bare `/request` — the group owns the name, and `list` / `withdraw` / `set` need the group. `create` is what `/event create` and `/poll create` already use, so it is the name a member has met before. |
 
 ### Storage
 

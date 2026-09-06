@@ -328,7 +328,10 @@ ROUTE_INTENTS: dict[str, tuple[str, ...]] = {
 DATA_LINES: dict[str, dict[str, tuple[str, ...]]] = {
     "birthdays": {
         FILLED: ("Birthdays coming up, {name}: {list}",),
-        EMPTY: ("No birthdays stored yet, {name} — `/birthday set` adds yours to the list.",),
+        EMPTY: (
+            "No birthdays stored yet, {name} — `/birthday` ▸ **Set my birthday** adds yours to "
+            "the list.",
+        ),
     },
     "whats_next": {
         FILLED: ("Next up, {name}: **{title}** {when} in {channel}.",),
@@ -480,13 +483,16 @@ LINES: dict[str, tuple[str, ...]] = {
         "staff waving it through.",
     ),
     "file_a_request": (
-        "`/request create`, {name} — say what you want and why, and staff pick it up from there.",
-        "That is what `/request create` is for, {name}. Ideas, asks and gripes all go in the "
-        "same place, and you get told what was decided.",
-        "Put it in with `/request create`, {name}, and it lands on the list staff work through.",
-        "Write it down where it will not get lost, {name} — `/request create` does that.",
-        "`/request create` is the front door for that, {name}. `/request list` shows what you "
-        "have already asked for.",
+        "`/request` opens a little window, {name} — **File a request** asks for what you want, "
+        "and staff pick it up from there.",
+        "That is what `/request` is for, {name}. Press **File a request**; ideas, asks and "
+        "gripes all go in the same place, and you get told what was decided.",
+        "Put it in with `/request` ▸ **File a request**, {name}, and it lands on the list staff "
+        "work through.",
+        "Write it down where it will not get lost, {name} — `/request` ▸ **File a request** "
+        "does that.",
+        "`/request` is the front door for that, {name}. **File a request** files one, and the "
+        "same panel shows what you have already asked for.",
     ),
     "link_twitch": (
         "Run `/golive` and press **Link my Twitch channel**, {name} — after that I shout about "
@@ -499,13 +505,16 @@ LINES: dict[str, tuple[str, ...]] = {
         "going live.",
     ),
     "set_a_birthday": (
-        "`/birthday set`, {name} — give me the day and the cookout gets a heads-up on it.",
-        "`/birthday set` and I will remember, {name}. `/birthday optout` takes you back off the "
-        "list whenever you like.",
-        "Tell me with `/birthday set`, {name}, and I will say something on the day.",
-        "`/birthday set` puts you on the list, {name} — you pick whether the year shows.",
-        "Run `/birthday set`, {name}, and I will not forget. I am a bot; forgetting is the one "
-        "thing I am bad at.",
+        "`/birthday` ▸ **Set my birthday**, {name} — give me the day and the cookout gets a "
+        "heads-up on it.",
+        "`/birthday` opens a window and I will remember, {name}. **Opt out** on the same panel "
+        "takes you back off the list whenever you like.",
+        "Tell me with `/birthday` ▸ **Set my birthday**, {name}, and I will say something on "
+        "the day.",
+        "`/birthday` puts you on the list, {name} — **Set my birthday**, and you pick whether "
+        "the year shows.",
+        "Run `/birthday`, {name}, press **Set my birthday**, and I will not forget. I am a bot; "
+        "forgetting is the one thing I am bad at.",
     ),
     "love": (
         "Love you too, {name} 🖤",

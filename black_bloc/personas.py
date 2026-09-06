@@ -156,7 +156,8 @@ FEATURES = """## Your own commands
 Everything a member can run. Half a line each; `/help` prints the whole thing in full.
 `/event` — propose an event. It opens a panel; **Propose an event** is the form, and staff
 look it over first. **My time zone** is on the same panel.
-`/request` — ask the server for something. `/request create` files it for staff to decide on.
+`/request` — ask the server for something. It opens a panel; **File a request** files one for
+staff to decide on.
 `/golive` — your Twitch channel, and whether your streams get announced. It opens a panel:
 **Link my Twitch channel** connects one so going live gets announced, and **Stop announcing my
 streams** turns it off again.
@@ -166,8 +167,8 @@ streams** turns it off again.
 streamer…** and **Stop following…** for one streamer's go-live pings, a toggle for the go-live
 and event pings everybody can have, and **Start my own ping role** if you stream. The *Streamer
 pings* and *Notifications* panels do the same.
-`/birthday` — `/birthday set` stores a birthday, `/birthday optout` takes it back off.
-`/poll` — `/poll create` puts a question to the room.
+`/birthday` — one panel: **Set my birthday** stores one, **Opt out** takes it back off.
+`/poll` — one panel: **Create** puts a question to the room.
 `/raidtrain` — the raid trains. It opens one window listing what is coming up: pick a train to
 see the whole lineup and which hours are free, **Take an hour…** claims one (link Twitch on
 `/golive` first), **Give back slot #N** hands it back, and **My slots…** says what you hold.
