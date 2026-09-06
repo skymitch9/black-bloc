@@ -233,7 +233,7 @@ docs bookkeeping lands with the work, not after.
   is `run_core_set`'s body with the gate passed in, and both moves are one line on top of it; sweep row `ES1`;
   (2) ~~`docs/info/panels-program.md` and
   `docs/info/feature-list.md` are STALE — panels-program still asks fork F3 as open, says "~120 keys", and its Core
-  row/totals describe a `settings` Group; feature-list has no `/settings` panel row~~ **DONE `3f13ee0`** — F3 answered
+  row/totals describe a `settings` Group; feature-list has no `/settings` panel row~~ **DONE `83920bc`** — F3 answered
   (the paged panel, v84), the Core row and totals re-measured at `aa03a01` (**29 commands, ZERO Groups, 185 keys**,
   not "~120"), the program's status flipped to COMPLETE, and feature-list gains row **C1**; its three
   `/settings set-value` instructions were corrected too — that subcommand no longer exists;
@@ -316,7 +316,7 @@ docs bookkeeping lands with the work, not after.
   reads each log level — every one of those became a panel's **Logs** button. One pass: re-express the help
   text against the Logs button per feature and re-express
   `tests/test_bot.py::test_every_feature_group_has_a_logs_command` (already on the small-findings list) against
-  the same thing before it covers nothing.~~ **ALREADY DONE, then GUARDED `3f13ee0`.** ⚠️ **Both halves had
+  the same thing before it covers nothing.~~ **ALREADY DONE, then GUARDED `83920bc`.** ⚠️ **Both halves had
   already landed and this item was stale:** the v84 (`/settings` panel) build corrected `LOG_LEVEL_COMMANDS`
   for all eighteen features and rewrote `log_level_help` to say "`/<command>` ▸ **Logs**", and the same build
   re-expressed the test as
