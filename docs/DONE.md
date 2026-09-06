@@ -9,6 +9,37 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-06 — Fixture-scope sweep, half A landed on main as `099f02b` (branch `fixture-scope-half-a`; NOT deployed — test-only, v93 stays live)
+
+> **Landed 2026-09-06 08:36–08:50 Phoenix.** Opus, hand-made worktree `C:/lcw/bb-fixtures-a` (the first
+> build after `.claude/` became a junction — `docs/access/runbook.md` § *Agent worktrees on this machine*),
+> 302k tokens / 174 tool calls / 81 min against a 120–180k estimate. The owner's decisions 1, 3, 4 and 5
+> from the test-suite measurement pass (`docs/info/test-suite-profile.md`, all answered "Yes" one at a
+> time on 2026-09-05): `8c6454b` contract seed built once per module and rewound per entry with a
+> by-name read guard; `21ce582` api app + database module-scoped, rewound per test, `fresh_*` chain kept;
+> `3b0e28a` the one true duplicate deleted; `3e920cc` the three assertionless tests assert what they
+> were proving; `a8766c2` `BB_REVERSE=1` reverses collection (kept as the order guard) and the three leaks
+> it found are shut (`web.db = None` from an unreachable-database test, in-place writes to
+> `web.settings`, the contract seed's non-row marks); `45791c3` docs. **5188 → 5187 tests**, `ruff` clean,
+> green forward and reversed on `-n auto` at the gate on main; the agent measured 105.17 s → 52.14 s
+> (−50 %) on its machine, the gate here read 88.7 s (v93, throwaway worktree) → 54.4 s. No file under
+> `black_bloc/` or `site/` changed, so no deploy line and no mock check.
+>
+> Where the brief did not survive contact: the 149 contract routes CANNOT share one seed — `contract.json`
+> runs mutually exclusive transitions on the same seeded ids (48 of 149 failed built as briefed), and
+> splitting them means editing `site/`, off-limits — so the seed is built once and REWOUND from a row copy,
+> every route still starting on the seed exactly as written; the accepted independence trade was never
+> taken. sqlite `backup` was unusable (37 "destination database is in use" — helpers leave cursors open);
+> `take`/`put` on the live connection replaced it. The read guard caught `GET /api/chat/personality`
+> writing on a read (fills the trope pool on first read — the seed now takes that first read).
+> ⚠️ **Found beyond the brief, NOT fixed:** `tests/cogs/test_presence.py` has two tests
+> (`test_reapply_presence_says_so_when_the_status_could_not_be_set`,
+> `test_someone_joining_or_leaving_refreshes_the_count_once`) failing under reversed SERIAL collection —
+> **the same two fail at v93**, so it pre-dates this branch; the file alone passes both ways (cross-file
+> dependence). Handed to half B. ⚠️ **NOT verified:** coverage, `tests/live/`, anything live; decision 2
+> (half B) untouched — the 46 cog `db` fixtures are as they were. The 140 pytest warnings are pre-existing
+> (v93 throwaway worktree: 140).
+
 ## 2026-09-05 — Engineering sweep 3 landed as v93 (merge of `worktree-agent-ab52a6d7c53bc1ecb` at `9fddad1`, deployed `09ff46b`)
 
 > **Landed 2026-09-05 21:49–22:00 Phoenix.** Opus, own worktree, 277k tokens / 198 tool calls / 46 min
