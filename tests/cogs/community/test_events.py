@@ -1059,6 +1059,24 @@ async def call_off_from_panel(cog, bot, who, event_id):
     return await click(bot, who, find_item(card_view(picked), "Yes, call it off"))
 
 
+async def test_the_call_off_confirm_card_silences_mentions(cog, bot, member, db):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    panel = await open_panel(cog, bot, member)
+    select = next(item for item in panel_view(panel).children if isinstance(item, CallOffPick))
+    select._values = [str(row["id"])]
+
+    picked = await click(bot, member, select)
+    allowed = picked._edited.kwargs.get("allowed_mentions")
+
+    assert [item.label for item in card_view(picked).children] == [
+        "Yes, call it off",
+        "Keep it",
+    ]
+    assert allowed is not None
+    assert (allowed.everyone, allowed.users, allowed.roles) == (False, False, False)
+
+
 async def test_the_requester_may_call_their_own_event_off_and_a_stranger_never_sees_it(
     cog, bot, member, db
 ):

@@ -11,7 +11,7 @@ from ...actionlog import log_action, send_logs
 from ...command_errors import NETWORK_ERRORS, AnswersErrors
 from ...logkinds import VIA_DISCORD, kind_via
 from ...panels import NoteModal as PanelNoteModal
-from ...panels import Panel, answer, opened, retire, still_staff
+from ...panels import Panel, answer, confirm, confirm_items, opened, retire, still_staff
 from ...requests import (
     BUILT_LIMIT,
     CHECK_ASKED,
@@ -120,6 +120,8 @@ MOVE_SAID: dict[str, str] = {
     DECLINED: SET_SAID,
 }
 READY_MODAL_TITLE = "Ready to check"
+WITHDRAW_YES = "Yes, take it back"
+KEEP_IT = "Keep it"
 
 NOTE_TITLES: dict[str, str] = {
     "hold": "Put this on hold",
@@ -702,16 +704,18 @@ async def open_withdraw_confirm(
     embed = request_embed(
         row, move=look_for_status(row["status"]), origin=origin, guild=interaction.guild
     )
-    view = RequestView(panel_minutes(bot.store, interaction.guild.id))
-    view.add_item(WithdrawYesButton(request_id))
-    view.add_item(WithdrawKeepButton())
-    retire(previous)
-    msg = await interaction.edit_original_response(
-        embed=embed,
-        view=view,
-        allowed_mentions=discord.AllowedMentions.none(),
+    await confirm(
+        interaction,
+        RequestView(panel_minutes(bot.store, interaction.guild.id)),
+        embed,
+        confirm_items(
+            yes=WITHDRAW_YES,
+            no=KEEP_IT,
+            on_yes=lambda one, card: confirm_withdraw(one, request_id, card),
+            on_no=back_to_panel,
+        ),
+        previous,
     )
-    view.message = msg
 
 
 async def confirm_withdraw(
@@ -845,23 +849,6 @@ class CardMoveButton(discord.ui.Button):
             )
             return
         await run_move(interaction, self.request_id, self.spec.action, self.view)
-
-
-class WithdrawYesButton(discord.ui.Button):
-    def __init__(self, request_id: int) -> None:
-        super().__init__(label="Yes, take it back", style=discord.ButtonStyle.danger, row=0)
-        self.request_id = request_id
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await confirm_withdraw(interaction, self.request_id, self.view)
-
-
-class WithdrawKeepButton(discord.ui.Button):
-    def __init__(self) -> None:
-        super().__init__(label="Keep it", style=discord.ButtonStyle.secondary, row=0)
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await back_to_panel(interaction, self.view)
 
 
 class RequestModal(AnswersErrors, discord.ui.Modal, title="Ask for something"):
@@ -1092,9 +1079,7 @@ __all__ = [
     "RequestPick",
     "RequestView",
     "Requests",
-    "WithdrawKeepButton",
     "WithdrawPick",
-    "WithdrawYesButton",
     "accept",
     "apply_decision",
     "ask_check",

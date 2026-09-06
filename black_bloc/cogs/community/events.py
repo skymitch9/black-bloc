@@ -94,7 +94,7 @@ from ...events import (
 )
 from ...golive import now_iso, parse_ts
 from ...panels import NoteModal as PanelNoteModal
-from ...panels import Panel, answer, opened, retire, still_staff
+from ...panels import Panel, answer, confirm, confirm_items, opened, retire, still_staff
 from ...settings_store import (
     DB_UNAVAILABLE,
     EVENTS_MODES,
@@ -117,6 +117,8 @@ PROPOSE_BUTTON = "Propose an event"
 SETTINGS_BUTTON = "Settings"
 NUMBERS_BUTTON = "Numbers…"
 FORGET_BUTTON = "Forget…"
+CANCEL_YES = "Yes, call it off"
+KEEP_IT = "Keep it"
 FORGET_PLACEHOLDER = "Forget which one?"
 SCHEDULED_BUTTON = "Scheduled events: {state}"
 MODE_PLACEHOLDER = "How events behave…"
@@ -469,14 +471,17 @@ async def open_cancel_confirm(
             allowed_mentions=discord.AllowedMentions.none(),
         )
         return
-    view = EventView(panel_minutes(bot.store, interaction.guild.id))
-    view.add_item(CancelYesButton(event_id))
-    view.add_item(CancelKeepButton())
-    retire(previous)
-    view.message = await interaction.edit_original_response(
-        embed=card_for(row),
-        view=view,
-        allowed_mentions=discord.AllowedMentions.none(),
+    await confirm(
+        interaction,
+        EventView(panel_minutes(bot.store, interaction.guild.id)),
+        card_for(row),
+        confirm_items(
+            yes=CANCEL_YES,
+            no=KEEP_IT,
+            on_yes=lambda one, card: confirm_cancel(one, event_id, card),
+            on_no=back_to_panel,
+        ),
+        previous,
     )
 
 
@@ -708,23 +713,6 @@ class CallOffPick(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         await open_cancel_confirm(interaction, int(self.values[0]), self.view)
-
-
-class CancelYesButton(discord.ui.Button):
-    def __init__(self, event_id: int) -> None:
-        super().__init__(label="Yes, call it off", style=discord.ButtonStyle.danger, row=0)
-        self.event_id = event_id
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await confirm_cancel(interaction, self.event_id, self.view)
-
-
-class CancelKeepButton(discord.ui.Button):
-    def __init__(self) -> None:
-        super().__init__(label="Keep it", style=discord.ButtonStyle.secondary, row=0)
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await back_to_panel(interaction, self.view)
 
 
 class CardMoveButton(discord.ui.Button):
@@ -1289,8 +1277,6 @@ async def setup(bot: commands.Bot) -> None:
 __all__ = [
     "BackButton",
     "CallOffPick",
-    "CancelKeepButton",
-    "CancelYesButton",
     "CardMoveButton",
     "DecisionButton",
     "DenyModal",

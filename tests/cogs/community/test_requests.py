@@ -894,6 +894,20 @@ async def test_choosing_one_to_withdraw_shows_its_card_and_a_yes_keep_choice(cog
     assert [item.label for item in view.children] == ["Yes, take it back", "Keep it"]
 
 
+async def test_every_panel_re_render_silences_mentions(cog, bot, member):
+    await file_one(cog, bot, member)
+    panel = await open_panel(cog, bot, member)
+    select = next(item for item in panel_view(panel).children if isinstance(item, WithdrawPick))
+    select._values = ["1"]
+    confirm = await click(bot, member, select)
+    back = await click(bot, member, find_item(card_view(confirm), "Keep it"))
+
+    for interaction in (confirm, back):
+        allowed = interaction.message.kwargs.get("allowed_mentions")
+        assert allowed is not None
+        assert (allowed.everyone, allowed.users, allowed.roles) == (False, False, False)
+
+
 async def test_confirming_a_withdraw_calls_the_same_code_the_route_calls(
     cog, bot, member, db, monkeypatch
 ):

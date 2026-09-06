@@ -18,6 +18,8 @@ from ...panels import (
     Panel,
     answer,
     capped_placeholder,
+    confirm,
+    confirm_items,
     db_up,
     opened,
     retire,
@@ -48,6 +50,8 @@ TAKE_OFF_MODAL_TITLE = "Take them off the list?"
 TAKE_OFF_MODAL_LABEL = "One line they will be sent"
 DENY_MODAL_TITLE = "Why not?"
 DENY_MODAL_LABEL = "One line the applicant will be sent"
+WITHDRAW_YES = "Yes, take it back"
+KEEP_IT = "Keep it"
 
 NOT_IN_GUILD = (
     "Applications only work inside the server, and this did not come from one, so nothing was "
@@ -1455,43 +1459,34 @@ async def open_withdraw_confirm(
         await render_panel(interaction, previous)
         await answer(interaction, NOTHING_TO_SHOW)
         return
-    embed = forms.render_card(form, row, interaction.user)
-    view = ApplicationsPanel(minutes_for(bot, interaction.guild.id))
-    view.add_item(WithdrawYesButton(form_id))
-    view.add_item(WithdrawKeepButton())
-    retire(previous)
-    view.message = await interaction.edit_original_response(
-        embed=embed,
-        view=view,
-        allowed_mentions=discord.AllowedMentions.none(),
+    await confirm(
+        interaction,
+        ApplicationsPanel(minutes_for(bot, interaction.guild.id)),
+        forms.render_card(form, row, interaction.user),
+        confirm_items(
+            yes=WITHDRAW_YES,
+            no=KEEP_IT,
+            on_yes=lambda one, card: confirm_withdraw(one, form_id, card),
+            on_no=back_to_panel,
+        ),
+        previous,
     )
 
 
-class WithdrawYesButton(discord.ui.Button):
-    def __init__(self, form_id: int) -> None:
-        super().__init__(label="Yes, take it back", style=discord.ButtonStyle.danger, row=0)
-        self.form_id = int(form_id)
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        if not await opened(interaction, staff=False):
-            return
-        bot = interaction.client
-        form = await forms.get_form_by_id(bot.db, self.form_id)
-        said = (
-            await withdraw_application(bot, interaction.guild, interaction.user, form)
-            if form is not None
-            else forms.NOTHING_TO_DECIDE
-        )
-        await render_panel(interaction, self.view)
-        await answer(interaction, said)
-
-
-class WithdrawKeepButton(discord.ui.Button):
-    def __init__(self) -> None:
-        super().__init__(label="Keep it", style=discord.ButtonStyle.secondary, row=0)
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await back_to_panel(interaction, self.view)
+async def confirm_withdraw(
+    interaction: discord.Interaction, form_id: int, previous: Any = None
+) -> None:
+    if not await opened(interaction, staff=False):
+        return
+    bot = interaction.client
+    form = await forms.get_form_by_id(bot.db, int(form_id))
+    said = (
+        await withdraw_application(bot, interaction.guild, interaction.user, form)
+        if form is not None
+        else forms.NOTHING_TO_DECIDE
+    )
+    await render_panel(interaction, previous)
+    await answer(interaction, said)
 
 
 class RefreshButton(discord.ui.Button):
@@ -2727,6 +2722,7 @@ __all__ = [
     "build_panel",
     "can_decide",
     "change_question",
+    "confirm_withdraw",
     "decidable",
     "db_up",
     "decides_anything",
