@@ -16,6 +16,8 @@ from ...panels import (
     answer,
     capped_placeholder,
     clamped,
+    confirm,
+    confirm_items,
     db_ready,
     db_up,
     retire,
@@ -80,7 +82,6 @@ STREAMERS_TITLE = "Streamer ping roles"
 SETTINGS_TITLE = "Ping-role settings"
 SETUP_TITLE = "Set up the Events role"
 GIVE_TITLE = "A ping role for {who}"
-CONFIRM_TITLE = "Are you sure?"
 NAMES_BUTTON = "Names…"
 DELETE_ON = "Delete the role too: on"
 DELETE_OFF = "Delete the role too: off"
@@ -426,11 +427,19 @@ async def open_confirm(
         return
     bot = interaction.client
     embed, _rows, _state = await panel_embed(bot, interaction.guild, interaction.user)
-    embed.add_field(name=CONFIRM_TITLE, value=move.question, inline=False)
-    view = PingsPanel(minutes_for(bot, interaction.guild.id))
-    view.add_item(OwnDropYesButton(move))
-    view.add_item(KeepItButton())
-    await render(interaction, embed, view, previous)
+    await confirm(
+        interaction,
+        PingsPanel(minutes_for(bot, interaction.guild.id)),
+        embed,
+        confirm_items(
+            yes=move.yes,
+            no=pings.KEEP_IT,
+            on_yes=lambda one, card: run_own(one, add=False, previous=card),
+            on_no=back_to_panel,
+        ),
+        previous,
+        question=move.question,
+    )
 
 
 async def open_card_confirm(
@@ -450,15 +459,22 @@ async def open_card_confirm(
         return
     name = pings.option_label(guild, row)
     embed = discord.Embed(title=STREAMERS_TITLE, description=clamped(card_lines(guild, row)))
-    embed.add_field(
-        name=CONFIRM_TITLE, value=pings.CARD_REMOVE_QUESTION.format(name=name), inline=False
-    )
     view = PingsPanel(minutes_for(bot, guild.id))
     view.where = CARD_VIEW
     view.streamer_id = int(user_id)
-    view.add_item(CardRemoveYesButton())
-    view.add_item(KeepItButton())
-    await render(interaction, embed, view, previous)
+    await confirm(
+        interaction,
+        view,
+        embed,
+        confirm_items(
+            yes=pings.CARD_REMOVE_YES,
+            no=pings.KEEP_IT,
+            on_yes=lambda one, card: run_remove(one, card.streamer_id, card),
+            on_no=lambda one, card: open_card(one, card.streamer_id, card),
+        ),
+        previous,
+        question=pings.CARD_REMOVE_QUESTION.format(name=name),
+    )
 
 
 async def refresh_where(interaction: discord.Interaction, view: Any) -> None:
@@ -706,34 +722,6 @@ class MoveButton(discord.ui.Button):
         )
 
 
-class OwnDropYesButton(discord.ui.Button):
-    def __init__(self, move: Any) -> None:
-        super().__init__(label=move.yes, style=discord.ButtonStyle.danger, row=0)
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await run_own(interaction, add=False, previous=self.view)
-
-
-class CardRemoveYesButton(discord.ui.Button):
-    def __init__(self) -> None:
-        super().__init__(label=pings.CARD_REMOVE_YES, style=discord.ButtonStyle.danger, row=0)
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await run_remove(interaction, self.view.streamer_id, self.view)
-
-
-class KeepItButton(discord.ui.Button):
-    def __init__(self) -> None:
-        super().__init__(label=pings.KEEP_IT, style=discord.ButtonStyle.secondary, row=0)
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        view = self.view
-        if view.where == CARD_VIEW:
-            await open_card(interaction, view.streamer_id, view)
-            return
-        await back_to_panel(interaction, view)
-
-
 class FollowPick(discord.ui.Select):
     """The member's two selects; the cap points at the panels that page, not at the site."""
 
@@ -935,12 +923,10 @@ __all__ = [
     "SITE_BUTTON",
     "STREAMER_PLACEHOLDER",
     "UNFOLLOW_PLACEHOLDER",
-    "CardRemoveYesButton",
     "ChoicePick",
     "ConfirmRoleButton",
     "FollowPick",
     "GivePick",
-    "KeepItButton",
     "MoveButton",
     "NamesModal",
     "Pings",
