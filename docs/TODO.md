@@ -12,7 +12,7 @@
 > Finished items MOVE whole to [`DONE.md`](DONE.md) in the session they land.
 > Accepted defects go to [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), not here.
 
-## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 20:50, v91 LIVE — **29 slots, zero Groups**; self-test live and run by the owner (sweep 252); the CONFIRM/OPENED FOLD ✅ LANDED as **v88** `794d3aa` 17:33 (309k, rows 262–275, moved to DONE); the ENGINEERING SWEEP ✅ LANDED as **v89** `243dc0f` 18:16 (481k, rows 276–279, KI-21 + `LOG_LEVEL_COMMANDS` + gate-pass items moved to DONE; B1–B4 and A1–A2 struck inside their parent items, B5–B9 / A3–A4 still open); the PERSONALITY-POOL BUILD, Black Bloc half ✅ LANDED as **v90** `7c59eb1` 19:00 (288k, rows 280–286, KI-23 added BLOCKED on the GABI half); the GABI HALF ✅ LIVE 19:33 (186k; catalog-platform `de4ef63` → main `cb4f779`, deployed by the owner `755cfd54`, health answers pool v1 + eleven) and Black Bloc **v91** `604226f` 19:38 (roster compare by name, byte-for-byte sync; selftest 107 ok with GABI answering) — item 4, KI-23 moved to DONE, rows 284/286 rewritten; the `C:/lcw/pool` worktree is still attached (remove with `git -C <catalog-platform> worktree remove C:/lcw/pool` once the other session has pulled `cb4f779`). ENGINEERING SWEEP 2 ✅ LANDED as **v92** (merge `f866e98`; 349k against 300–450k; rows 287–294; all nine items closed, +9 tests to 5186; wave-1 findings + via-labelling bullets moved whole to DONE, the still-open remainder re-listed under the same heading with 13 unlabelled settings keys and two fold candidates from the sweep). cutover plan REFRESHED 20:55 against v92; the automod web-path item was found ALREADY CLOSED at v84 (`gated_writers`) and struck 21:05. **ENGINEERING SWEEP 3 DISPATCHED 21:05** (Opus, own worktree, est 100–150k; five items: `KEEP_IT` nine homes → `panels.KEEP_IT`, `golive.db_up` → `panels.db_up`, the 13 `labels.js` sentences + `NO_LABEL_YET` emptied, `architecture.md` counts re-measured, the `deploy.ps1` `_expiry_loop` stderr traceback root-caused or filed as a KI). If it landed and this session died: its branch is a `worktree-agent-*`; merge with `--no-ff`, number its `ES3-` rows, run ruff + full suite + mock check, deploy detached as v93 via `scripts/deploy.ps1`, then move its five items out of the wave-1 residual bullet below. NEXT after that: owner by-eye sweeps 253–294; dormant bots; `OPERATOR_READ_TOKEN` mint (owner 16:33: "Keep running stuff, don't pause"))
+## 🔁 IF THIS SESSION DIES — resume here (refreshed 2026-09-05 22:03, v91 LIVE — **29 slots, zero Groups**; self-test live and run by the owner (sweep 252); the CONFIRM/OPENED FOLD ✅ LANDED as **v88** `794d3aa` 17:33 (309k, rows 262–275, moved to DONE); the ENGINEERING SWEEP ✅ LANDED as **v89** `243dc0f` 18:16 (481k, rows 276–279, KI-21 + `LOG_LEVEL_COMMANDS` + gate-pass items moved to DONE; B1–B4 and A1–A2 struck inside their parent items, B5–B9 / A3–A4 still open); the PERSONALITY-POOL BUILD, Black Bloc half ✅ LANDED as **v90** `7c59eb1` 19:00 (288k, rows 280–286, KI-23 added BLOCKED on the GABI half); the GABI HALF ✅ LIVE 19:33 (186k; catalog-platform `de4ef63` → main `cb4f779`, deployed by the owner `755cfd54`, health answers pool v1 + eleven) and Black Bloc **v91** `604226f` 19:38 (roster compare by name, byte-for-byte sync; selftest 107 ok with GABI answering) — item 4, KI-23 moved to DONE, rows 284/286 rewritten; the `C:/lcw/pool` worktree is still attached (remove with `git -C <catalog-platform> worktree remove C:/lcw/pool` once the other session has pulled `cb4f779`). ENGINEERING SWEEP 2 ✅ LANDED as **v92** (merge `f866e98`; 349k against 300–450k; rows 287–294; all nine items closed, +9 tests to 5186; wave-1 findings + via-labelling bullets moved whole to DONE, the still-open remainder re-listed under the same heading with 13 unlabelled settings keys and two fold candidates from the sweep). cutover plan REFRESHED 20:55 against v92; the automod web-path item was found ALREADY CLOSED at v84 (`gated_writers`) and struck 21:05. ENGINEERING SWEEP 3 ✅ LANDED as **v93** `09ff46b` 21:59 (277k against 100–150k — item 5 was 143 tracebacks not one; merge `9fddad1`; rows 295–299; five items closed, +2 tests to 5188, deploy-gate stderr 1716 → 0; KI-24 filed; the sweep-2 residual bullet moved whole to DONE, the remainder re-listed under the same heading). OPEN QUESTION to the owner 21:41: a test-suite timing/redundancy MEASUREMENT pass (report only) — unanswered. NEXT after that: owner by-eye sweeps 253–294; dormant bots; `OPERATOR_READ_TOKEN` mint (owner 16:33: "Keep running stuff, don't pause"))
 
 **`main` = `43312b9`** (role-menus panel merge; v77 live 20:51, 4529 tests, **36 commands**; `youtube_mode` is
 **shadow** since 2026-09-03 17:42). **The panels program is COMPLETE** — waves 1, 2 and 3 (17 features, one
@@ -256,25 +256,19 @@ docs bookkeeping lands with the work, not after.
   feature copies it (a module function, not a cog; acceptable, but `set_key`/`clear_key` may belong in a leaf module);
   (9) the three hand-rolled confirm copies are still three — Build 2 made the settings confirm a card STATE, so the
   "fold 7 copies" sweep is now a fold of the other panels, not of this one.
-- **Wave-1 review findings — what is still open after ENGINEERING SWEEP 2 (v92, 2026-09-05; the
-  full bullet with the nine closed items moved whole to `DONE.md`, "Engineering sweep 2 landed as
-  v92"):** polls' `draft` status is never written (`DRAFT` sits in `STATUSES`/`TRANSITIONS`/`COLOURS`
-  but only the in-memory `PollDraft` preview holds it — decide: drop it or make a saved draft real) and
-  there is no create-recurrence web route (Discord-only; decide whether the dashboard should get one);
-  `architecture.md`'s "current" command counts are stale (a ⚠️ line names the real figures); every
+- **Wave-1 review findings — what is still open after ENGINEERING SWEEP 3 (v93, 2026-09-05; the
+  sweep-2 residual bullet moved whole to `DONE.md`, "Engineering sweep 3 landed as v93"):** polls'
+  `draft` status is never written (`DRAFT` sits in `STATUSES`/`TRANSITIONS`/`COLOURS` but only the
+  in-memory `PollDraft` preview holds it — decide: drop it or make a saved draft real); there is no
+  create-recurrence web route (Discord-only; decide whether the dashboard should get one); every
   panel's **Logs** button drops `count` / `important_only` (wave 1 shape — a modal if wanted back);
-  **from the wave-3 design docs (2026-09-04):** ~~the website can set `automod_mode=on` past the arming
-  refusal~~ — **was ALREADY CLOSED at v84 `675f233`** (`api/settings_api.py:gated_writers` hands
-  `automod_mode`, `honeypot_mode`, `honeypot_exempt_role_ids` to the cog's own move) when sweep 2
-  carried it forward; struck 2026-09-05 21:05, nothing to do; `rolemenu_log_level`'s registration site was not read
-  line-by-line (generated by the log-level family). **New from sweep 2 (report-only):** 13 registry
-  keys have no `labels.js` sentence — pinned by name in `tests/test_settings_store.py:NO_LABEL_YET`
-  (`birthday_panel_lookup`, `birthday_panel_next_for_members`, `chat_daily_turns`, `chat_llm_mode`,
-  `chat_monthly_cap_usd`, `chat_person_hourly_turns`, `chat_personality`, `chat_simple_model`,
-  `event_panel_own_list`, `personality_pool_peer_url`, `personality_pool_sync`, `poll_creator_may_end`,
-  `request_panel_own_list`) — each needs a sentence someone decides on, then comes off the list;
-  `KEEP_IT = "Keep it"` has eight homes (checklist-15 candidate for a `panels.KEEP_IT`);
-  `golive.py:db_up` is a byte-for-byte copy of `panels.db_up` — fold at the next golive touch.
+  `rolemenu_log_level`'s registration site was not read line-by-line (generated by the log-level
+  family). **New from sweep 3 (report-only):** `Core.purge_loop` starts unconditionally in `cog_load`
+  where every other loop first checks `db.is_connected` (harmless today; the one loop that would start
+  on a bot with no database); three `path:line` pointers into `architecture.md` inside past design
+  docs' executed checklists are ~77 lines off (historical record, left on purpose); **KI-24** (a
+  `before_loop` failure bypasses `@loop.error` — a production edit to every loop-owning cog, its own
+  build when wanted).
 
 - **Curated docs for peers — DECIDED + DONE 2026-09-01** (owner picked "Rewrite
   README now"): root `README.md` rewritten as the peer front door (what the bot
