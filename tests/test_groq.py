@@ -114,4 +114,8 @@ async def test_a_transport_error_is_wrapped_at_the_boundary_so_callers_catch_one
 
 
 async def test_closing_a_client_that_never_opened_a_session_is_quiet():
-    await GroqClient("k", request=answering()[0]).close()
+    client = GroqClient("k", request=answering()[0])
+
+    await client.close()
+
+    assert client._session is None

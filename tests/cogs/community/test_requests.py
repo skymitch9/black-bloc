@@ -982,8 +982,14 @@ async def test_the_view_disables_every_item_and_says_so_on_timeout():
 
 async def test_a_view_with_no_message_yet_does_nothing_on_timeout():
     view = RequestView(15)
+    view.add_item(requests_cog.RefreshButton())
+    token = FakeToken()
+    view.last_interaction = token
 
     await view.on_timeout()
+
+    assert token.edits == []
+    assert not any(item.disabled for item in view.children)
 
 
 # --- a replaced view stops; the survivor writes its footer through the freshest token ----------

@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from discord import app_commands
 
 from black_bloc.command_errors import (
@@ -94,7 +96,11 @@ def test_install_puts_the_handler_on_the_tree():
 
 
 def test_install_is_a_no_op_without_a_tree():
-    install(object())
+    bot = SimpleNamespace()
+
+    install(bot)
+
+    assert not hasattr(bot, "tree")
 
 
 class _Modal(AnswersErrors):
