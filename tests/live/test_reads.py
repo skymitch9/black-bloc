@@ -4,22 +4,41 @@ from __future__ import annotations
 
 import pytest
 
-from .conftest import keys_for, readable_paths
+from .conftest import readable_paths, spec_for
 
 pytestmark = pytest.mark.live
+
+NOBODY = "not_a_member"
+
+
+def rows_of(payload, spec) -> list:
+    """Where the contract's `keys` live, by `shape` — the reading `site/mock/check.mjs` makes."""
+    shape = spec.get("shape")
+    if shape == "list":
+        return list(payload)
+    if shape == "map":
+        return list(payload.values())
+    if shape == "namespaces":
+        return [row for name in spec.get("namespaces", []) for row in payload.get(name, [])]
+    return [payload]
 
 
 @pytest.mark.parametrize("path", readable_paths())
 def test_every_read_the_pages_make_answers_on_the_live_host(reader, path):
+    """A member-scoped read refuses the operator in words: it is nobody's account."""
     response = reader.get(path)
 
+    if response.status_code == 403 and response.json().get("error") == NOBODY:
+        assert "member" in response.json()["message"]
+        return
     assert response.status_code == 200, f"{path} answered {response.status_code}: {response.text}"
     if path.endswith(".csv"):
         assert response.text, f"{path} answered an empty file"
         return
-    payload = response.json()
-    missing = [key for key in keys_for(path) if key not in payload]
-    assert not missing, f"{path} is missing {missing}"
+    spec = spec_for(path)
+    for row in rows_of(response.json(), spec):
+        missing = [key for key in spec.get("keys", []) if key not in row]
+        assert not missing, f"{path} is missing {missing}"
 
 
 def test_health_answers_without_any_token_at_all(stranger):

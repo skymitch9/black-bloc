@@ -57,12 +57,12 @@ def readable_paths() -> list[str]:
     )
 
 
-def keys_for(path: str) -> list[str]:
+def spec_for(path: str) -> dict:
     found = json.loads(CONTRACT.read_text(encoding="utf-8"))
     for route in found["routes"]:
         if route["method"] == "GET" and route["path"] == path:
-            return list(route.get("keys") or [])
-    return []
+            return route
+    return {}
 
 
 @pytest.fixture(scope="session", autouse=True)
