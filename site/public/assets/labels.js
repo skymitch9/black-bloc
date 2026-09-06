@@ -87,6 +87,7 @@ export const LABELS = {
   events_channel_retention_days: 'How long an event keeps its channel',
   events_max_late_minutes: 'How late an event may start before it is dropped',
   event_panel_minutes: 'How long the /event panel stays live',
+  event_panel_own_list: 'Whether a member sees their own events on /event',
   events_log_level: 'How much of events is repeated into Discord',
 
   poll_mode: 'Whether people can run polls',
@@ -101,6 +102,7 @@ export const LABELS = {
   poll_archive_drop_votes: 'Whether archiving forgets who voted',
   poll_date_labels: 'How dates are written on a poll',
   poll_panel_minutes: 'How long the /poll panel stays live',
+  poll_creator_may_end: 'Whether whoever started a poll may close it early',
   poll_log_level: 'How much of polls is repeated into Discord',
 
   birthday_mode: 'Whether the bot wishes people happy birthday',
@@ -110,6 +112,8 @@ export const LABELS = {
   birthday_role_id: 'Which role someone wears on their birthday',
   birthday_show_age: 'Whether the age is said out loud',
   birthday_panel_minutes: 'How long the /birthday panel stays live',
+  birthday_panel_next_for_members: 'Whether members see the birthdays coming up',
+  birthday_panel_lookup: 'Whether members can look somebody else’s birthday up',
   birthday_log_level: 'How much of birthdays is repeated into Discord',
 
   modmail_enabled: 'Whether the bot answers DMs',
@@ -145,6 +149,12 @@ export const LABELS = {
   chat_greeting_reaction: 'Whether a bare hello gets a wave',
   chat_reply_in_threads: 'Whether the bot answers inside threads',
   chat_route_ping_staff: 'Whether staff are told when a mod is asked for',
+  chat_llm_mode: 'Whether a language model answers what the bot cannot',
+  chat_simple_model: 'Which model answers the quick questions',
+  chat_personality: 'Which voice the bot answers in',
+  chat_person_hourly_turns: 'How many answers one member gets in an hour',
+  chat_daily_turns: 'How many answers the whole server gets in a day',
+  chat_monthly_cap_usd: 'How many dollars a month the models may cost',
   chat_status_admin_only: 'Whether the spend block on /chat is for administrators only',
   chat_log_level: 'How much of chat is repeated into Discord',
   chat_memory_mode: 'Whether the bot remembers people between conversations',
@@ -166,6 +176,7 @@ export const LABELS = {
   request_check_fallback_channel: 'Ping in the channel when a check-DM is refused',
   request_check_on_ready: 'Ask the requester to check automatically at ready',
   request_panel_minutes: 'How long the /request panel stays live',
+  request_panel_own_list: 'Whether a member sees their own requests on /request',
   request_log_level: 'How much of requests is repeated into Discord',
 
   cost_hosting_usd: 'What hosting costs a month, off the invoice',
@@ -196,6 +207,9 @@ export const LABELS = {
   applications_log_level: 'How much of applications is repeated into Discord',
 
   memory_panel_minutes: 'How long the /memory panel stays live',
+
+  personality_pool_sync: 'Whether the mood pool follows the estate’s shared manifest',
+  personality_pool_peer_url: 'Where the estate’s other bot reports its health',
 };
 
 const NAMESPACES = ['golive', 'youtube', 'pings', 'tempvoice', 'honeypot', 'events', 'birthday', 'modmail', 'automod', 'rolemenu', 'raidtrain', 'applications'];

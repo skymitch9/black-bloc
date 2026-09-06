@@ -1770,24 +1770,10 @@ async def test_the_self_test_runs_at_boot_posts_to_the_test_channel_and_purges_a
     assert parse_value(SELFTEST_PURGE_MINUTES, "15") == 15
 
 
-# `site/public/assets/labels.js` is what the Settings page prints under a key's name. These
-# thirteen have no line there and show the bare key instead — measured 2026-09-05, reported
-# not fixed (each needs a sentence somebody has decided on, not one a sweep invented).
-NO_LABEL_YET = (
-    "birthday_panel_lookup",
-    "birthday_panel_next_for_members",
-    "chat_daily_turns",
-    "chat_llm_mode",
-    "chat_monthly_cap_usd",
-    "chat_person_hourly_turns",
-    "chat_personality",
-    "chat_simple_model",
-    "event_panel_own_list",
-    "personality_pool_peer_url",
-    "personality_pool_sync",
-    "poll_creator_may_end",
-    "request_panel_own_list",
-)
+# `site/public/assets/labels.js` is what the Settings page prints under a key's name. The
+# thirteen keys that had no line there were given one on 2026-09-05, so the list is EMPTY and
+# the guard below is total: a registry key added without a sentence now fails by name.
+NO_LABEL_YET = ()
 
 
 def test_every_registry_key_the_site_shows_has_a_label():
