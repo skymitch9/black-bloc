@@ -214,9 +214,9 @@ runs it after the deploy. Measured on the branch: `ruff check .` clean, and
 `pytest -q -n auto` **5279 passed** forward and with `BB_REVERSE=1` (5277 on
 `main` before; the two new ones are the bucket tests above).
 
-## 2026-09-06 14:40 — the operator read bound (design for branch `operator-read-bound`)
+## 2026-09-06 19:35 — the operator read bound (design for branch `operator-read-bound`)
 
-> Written by the conductor against `main` at `571e581` (v98 live). Owner decision 14:38, verbatim
+> Written by the conductor against `main` at `571e581` (v98 live). Owner decision 19:30, verbatim
 > *"Do a"* — the first of the two fix shapes named on `TODO.md`: hang the read limiter on the operator
 > identity where the operator is admitted. Every `path:name` below was read in that tree.
 
