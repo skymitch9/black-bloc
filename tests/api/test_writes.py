@@ -4,6 +4,7 @@ import time
 
 import pytest
 
+from black_bloc.api import auth, writes
 from black_bloc.api.auth import Refused
 from black_bloc.api.writes import (
     MEMBER_RATE,
@@ -103,6 +104,28 @@ def test_reads_and_writes_have_separate_buckets(web):
     assert read_bucket_for(web) is read_bucket_for(web)
     assert read_bucket_for(web) is not bucket_for(web)
     assert read_bucket_for(web).limit == READ_RATE
+
+
+def test_the_read_bucket_lives_in_auth_and_writes_re_exports_the_same_one(web):
+    """One bucket, one home: `auth.py` owns it now, so both imports name the same object."""
+    assert writes.read_bucket_for is auth.read_bucket_for
+    assert (writes.READ_RATE, writes.READ_WINDOW_SECONDS, writes.READ_BUCKET_ATTR) == (
+        auth.READ_RATE,
+        auth.READ_WINDOW_SECONDS,
+        auth.READ_BUCKET_ATTR,
+    )
+    assert writes.TOO_MANY_READS is auth.TOO_MANY_READS
+    assert read_bucket_for(web) is auth.read_bucket_for(web)
+
+
+def test_reader_dependency_still_charges_a_signed_in_staffer(client, sign_in, web):
+    """Only the operator skips the take there; a person is charged exactly as before."""
+    sign_in(client, uid=7)
+
+    assert client.get("/api/ref/roles").status_code == 200
+
+    tokens, _ = read_bucket_for(web)._seen["7"]
+    assert READ_RATE - 1 <= tokens < READ_RATE
 
 
 def drain_reads(web, uid: str = "7") -> None:

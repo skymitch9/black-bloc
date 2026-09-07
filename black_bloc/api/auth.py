@@ -35,6 +35,9 @@ BUCKET_MAX_KEYS = 4096
 
 BEARER_SCHEME = "bearer"
 READ_METHODS = frozenset({"GET", "HEAD"})
+READ_RATE = 300
+READ_WINDOW_SECONDS = 60
+READ_BUCKET_ATTR = "_api_read_bucket"
 OPERATOR_RATE = 30
 OPERATOR_WINDOW_SECONDS = 60
 OPERATOR_BUCKET_ATTR = "_api_operator_bucket"
@@ -114,6 +117,11 @@ OPERATOR_READ_ONLY = (
     "The operator token can only look, never change, so nothing was done and nothing was "
     "logged as a change. Make this change on the dashboard or in Discord, where a person signs "
     "for it."
+)
+TOO_MANY_READS = (
+    "That is more of this than Black Bloc will look up in a minute, so it was not loaded. "
+    "Nothing is wrong with your account — wait a minute and open the page, or send the read, "
+    "again."
 )
 
 
@@ -255,17 +263,26 @@ def bearer_token(request: Any) -> str | None:
     return rest.strip() if scheme.lower() == BEARER_SCHEME and rest.strip() else None
 
 
-def operator_bucket_for(bot: Any) -> TokenBucket:
-    """One bucket per bot, so a guess costs the same whichever route it was aimed at."""
-    bucket = getattr(bot, OPERATOR_BUCKET_ATTR, None)
+def _bucket(bot: Any, attr: str, rate: int, window: float) -> TokenBucket:
+    bucket = getattr(bot, attr, None)
     if bucket is None:
-        bucket = TokenBucket(OPERATOR_RATE, OPERATOR_WINDOW_SECONDS)
-        setattr(bot, OPERATOR_BUCKET_ATTR, bucket)
+        bucket = TokenBucket(rate, window)
+        setattr(bot, attr, bucket)
     return bucket
 
 
+def operator_bucket_for(bot: Any) -> TokenBucket:
+    """One bucket per bot, so a guess costs the same whichever route it was aimed at."""
+    return _bucket(bot, OPERATOR_BUCKET_ATTR, OPERATOR_RATE, OPERATOR_WINDOW_SECONDS)
+
+
+def read_bucket_for(bot: Any) -> TokenBucket:
+    """One read bucket per bot, keyed by identity, so no two readers drain each other."""
+    return _bucket(bot, READ_BUCKET_ATTR, READ_RATE, READ_WINDOW_SECONDS)
+
+
 async def note_operator_read(bot: Any, request: Any) -> None:
-    """One `web.operator.read` row per request, and never one for a refused token."""
+    """One `web.operator.read` row per request, and never one for a refused token or read."""
     state = getattr(request, "state", None)
     if getattr(state, "operator_noted", False):
         return
@@ -304,6 +321,9 @@ async def operator_session(request: Any, bot: Any) -> dict[str, Any] | None:
         raise Refused(401, "bad_operator_token", BAD_OPERATOR_TOKEN)
     if str(getattr(request, "method", "")).upper() not in READ_METHODS:
         raise Refused(403, "operator_read_only", OPERATOR_READ_ONLY)
+    if not read_bucket_for(bot).take(OPERATOR_WHO["id"]):
+        log.warning("auth: rate-limited operator reads")
+        raise Refused(429, "slow_down", TOO_MANY_READS)
     await note_operator_read(bot, request)
     return dict(OPERATOR_WHO)
 
@@ -642,10 +662,14 @@ __all__ = [
     "OPERATOR_READ_ONLY",
     "OPERATOR_SLOW_DOWN",
     "OPERATOR_WHO",
+    "READ_BUCKET_ATTR",
+    "READ_RATE",
+    "READ_WINDOW_SECONDS",
     "SESSION_COOKIE",
     "SLOW_DOWN",
     "STAFF_UNKNOWN",
     "STATE_COOKIE",
+    "TOO_MANY_READS",
     "DiscordOAuth",
     "OAuthError",
     "Refused",
@@ -657,6 +681,7 @@ __all__ = [
     "note_operator_read",
     "operator_bucket_for",
     "operator_session",
+    "read_bucket_for",
     "guild_of",
     "is_admitted",
     "live_member",
