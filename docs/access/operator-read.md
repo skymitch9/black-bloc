@@ -2,7 +2,14 @@
 
 > **Audience:** the owner (minting) and Claude sessions (reading). **Status:**
 > TRACKED — ⚠️ **secret NAMES only; no value appears in this file, ever.**
-> Last verified: **2026-09-06** — **13:54, drilled end to end:** the owner minted
+> Last verified: **2026-09-06 19:45** — the refusal table at the foot gained the
+> **300 reads a minute** row: branch `operator-read-bound` gives the RIGHT token
+> its own read bound, on the operator identity, where v98 left it bounded only by
+> the server. Measured there: `ruff check .` clean and `pytest -q -n auto` **5286
+> passed** both orders. ⚠️ **NOT measured on that branch:** anything live — a
+> worktree holds no token, so nothing below was re-run against the app and
+> `python -m black_bloc` was not booted. Before that,
+> **2026-09-06** — **13:54, drilled end to end:** the owner minted
 > it with the one command (13:34, staged; live at v97 13:52), `scripts/read.ps1
 > -Path /api/requests` answered the JSON, and the `web.operator.read` line was
 > read back through `/api/actions`. That run found that a GOOD token was charged
@@ -149,3 +156,4 @@ list and the operator identity is deliberately not a member; it answers
 | *That operator token is not the one this server holds…* | The two halves disagree | Re-run the mint command, which sets both |
 | *That is more wrong operator tokens from this address than Black Bloc will take in a minute…* | 30 **wrong** tokens a minute from one IP. ⚠️ The RIGHT token costs nothing here — the bucket prices guesses, so a matching token never touches it, and it still reads while that address is out of guesses (design note, 2026-09-06) | Wait a minute, and check you are sending the token the mint command set |
 | *The operator token can only look, never change…* | You sent something that was not a `GET` | Make the change on the dashboard or in Discord |
+| *That is more of this than Black Bloc will look up in a minute…* | **300 reads a minute** with the RIGHT token. This is the dashboard's own read limit, keyed on the operator identity, so it never drains a staffer's allowance and none of theirs drains it. A read refused here leaves **no** `web.operator.read` line | Wait a minute. A sweep of every path in the table below is ~60 reads, so this bites only on a loop |
