@@ -1,7 +1,7 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-06 20:10** — row **322** (was `RB-a`) numbered at the merge of the OPERATOR READ BOUND build
+> **2026-09-06 20:08** — row **322** (was `RB-a`) numbered at the merge of the OPERATOR READ BOUND build
 > (`88e0242`, branch `operator-read-bound` off `6be8929`), shipping as **v99** (live 20:00). Schema UNCHANGED at
 > **33**; registry keys unchanged at **191**; mock routes unchanged at **150** (checked: *17 pages, 150 routes, 14 core
 > settings*); tests 5279 → **5286**. ⚠️ It needs the operator token and a terminal, not Discord. **Row 322 was DRILLED
@@ -1129,7 +1129,7 @@ at the foot of [`../info/operator-read-design.md`](../info/operator-read-design.
 change, no new registry key, no new route, no new log kind. The build's verification was `pytest`
 (**5286 passed**, was 5279) forward and `BB_REVERSE=1`, `ruff check .`, and `node
 site/mock/check.mjs` (routes unchanged at **150**). ✅ **Claude drilled this row against v99 at
-20:02 and again at 20:08** (the two bursts, numbers in the header); `pytest -m live` against v99 =
+20:02 and again at 20:05** (the two bursts, numbers in the header); `pytest -m live` against v99 =
 58 passed / 1 skipped. ⚠️ **The build's recipe was a SERIAL loop "to 320", and that never trips**:
 the bucket refills at five a second, and one `Invoke-RestMethod` after another from here runs at
 seven to ten a second, so it would take six hundred calls or more to drain it. The recipe below

@@ -2,7 +2,7 @@
 
 > **Audience:** Claude sessions first, the owner second. **Status:** TRACKED —
 > secret NAMES only, never values.
-> Last verified: **2026-09-06 20:15** — the OPERATOR READ BOUND section at the
+> Last verified: **2026-09-06 20:08** — the OPERATOR READ BOUND section at the
 > foot LANDED: branch `operator-read-bound` (off `main` at `6be8929`, v98) merged
 > as `88e0242`, live as **v99** at 20:00. Measured: `ruff check .` clean, `pytest
 > -q -n auto` **5286 passed** both orders (5279 before), mock 17 / 150 / 14,
@@ -314,7 +314,7 @@ differed, and why. The conductor writes `TODO.md` / `DONE.md` / `deploys.log` / 
    drains the operator's key against a clock a minute ahead — the `drain_reads` trick `test_writes.py`
    already uses for the same reason — so the refusal is deterministic rather than a race with the refill.
    ⚠️ The same arithmetic applies to sweep row 322 (was `RB-a`): a human typing 301 calls will be far slower
-   than 0.7 s, so the refusal lands LATER than the 301st, not earlier. **Conductor, at the merge (20:10): later
+   than 0.7 s, so the refusal lands LATER than the 301st, not earlier. **Conductor, at the merge (20:07): later
    still — it never lands at all from a serial loop.** One `Invoke-RestMethod` after another runs at seven to
    ten a second against a refill of five, so the bucket drains at two to five a second and a loop "to 320"
    ends with every read answered. The row now fires 400 reads at once (`HttpClient.GetAsync` tasks, PowerShell
