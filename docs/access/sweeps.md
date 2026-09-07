@@ -1,13 +1,16 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-06 19:45** — row **`RB-a`** added at the foot by the OPERATOR READ BOUND build on branch
-> `operator-read-bound` (off `main` at `571e581`, v98); it is LETTERED because the conductor numbers it at the
-> merge. Schema UNCHANGED at **33**; registry keys unchanged at **191**; mock routes unchanged at **150** (checked:
-> *17 pages, 150 routes, 14 core settings*); tests 5279 → **5286**. ⚠️ It needs the operator token and a terminal,
-> not Discord. Verified by the suite (5286 both orders) and `ruff` only — ⚠️ **NOT** by the live host: a worktree
-> holds no token, so `pytest -m live` was NOT run and `python -m black_bloc` was NOT booted, and no person has run
-> `RB-a` yet. Before that,
+> **2026-09-06 20:10** — row **322** (was `RB-a`) numbered at the merge of the OPERATOR READ BOUND build
+> (`88e0242`, branch `operator-read-bound` off `6be8929`), shipping as **v99** (live 20:00). Schema UNCHANGED at
+> **33**; registry keys unchanged at **191**; mock routes unchanged at **150** (checked: *17 pages, 150 routes, 14 core
+> settings*); tests 5279 → **5286**. ⚠️ It needs the operator token and a terminal, not Discord. **Row 322 was DRILLED
+> against v99 by Claude at 20:02** (a 400-read burst, 25 at a time, 2.3 s: **308 × 200, 92 × 429** with the right
+> sentence, first refusal at read 312 — 300 plus the eight the bucket refilled at five a second; the right token read
+> again a minute later; the Logs page held 309 `web.operator.read` lines for the burst — ONE MORE than the 308
+> successes, cause not established, most likely a proxy-retried `GET`; the code cannot write a line for a refusal).
+> `pytest -m live` against v99 = **58 passed / 1 skipped**. ⚠️ The build's original recipe ("run a serial loop to
+> 320") was replaced: a serial `Invoke-RestMethod` loop runs slower than the bucket refills, so it never trips. Before that,
 > **2026-09-06 14:30** — rows **320–321** (were `OB-a`–`OB-b`) numbered at the merge of the OPERATOR BUCKET fix
 > (`deaae68`, branch `operator-bucket`), shipping as **v98**. Schema UNCHANGED at **33**; registry keys unchanged at
 > **191**; mock routes unchanged at **150**; tests 5277 → **5279**. ⚠️ They need the operator token and a terminal, not
@@ -1115,27 +1118,30 @@ forward and `BB_REVERSE=1`, and `ruff check .`.
 | **320** (was `OB-a`) | From a terminal, send a WRONG token thirty-one times and print what each one said. `scripts/read.ps1` always sends the REAL token, so this row goes round it: `1..31 \| % { try { Invoke-RestMethod -Uri "https://blackbloc.heygabi.ai/api/status" -Headers @{ Authorization = "Bearer not-the-token-this-server-holds-at-all" } } catch { ($_.ErrorDetails.Message \| ConvertFrom-Json).message } }` | the first thirty print *That operator token is not the one this server holds…*; the **thirty-first** prints the operator's own slow-down sentence — *That is more **wrong operator tokens from this address** than Black Bloc will take in a minute…*, saying no account is locked out and that **signing in still works**. ⚠️ It must NOT say *"more sign-in attempts"*: that is the login sentence, it names the wrong cause, and seeing it here means this branch did not ship |
 | **321** (was `OB-b`) | While that address is still out of guesses (within the same minute), do two things: run `.\scripts\read.ps1 -Path /api/status` with the REAL token, and open https://blackbloc.heygabi.ai in a browser and sign in with Discord | both work. The real token answers **200** with the status JSON — a correct token never touches the guess bucket, so being out of guesses cannot lock a real operator out — and the dashboard sign-in is unaffected, because guessing at this door uses its own bucket and never the login one. ⚠️ Then read the **Logs** page: the successful read leaves one `web.operator.read` line carrying *via Operator token* and the path; the thirty-one refusals leave **nothing at all** |
 
-## Operator read bound — row `RB-a`
+## Operator read bound — row 322 (was `RB-a`)
 
-Written on `operator-read-bound`, 2026-09-06, off `main` at `571e581` (v98), in a worktree at
-`C:/lcw/bb-read-bound`. It is lettered because the conductor numbers it at the merge. v98 took the
+Written on `operator-read-bound`, 2026-09-06, off `main` at `6be8929` (v98), in a worktree at
+`C:/lcw/bb-read-bound`; numbered at the merge (`88e0242`), shipping as **v99** (live 20:00). v98 took the
 right token off the guess bucket entirely (rows 320–321), which left an operator loop on a
 `staff_dependency`-only route bounded by nothing but the server; this hangs the dashboard's own
 **300-reads-a-minute** bucket on the operator IDENTITY, where the operator is admitted. Written up
 at the foot of [`../info/operator-read-design.md`](../info/operator-read-design.md). No schema
-change, no new registry key, no new route, no new log kind. ⚠️ **Nothing below has met the live
-host**; `python -m black_bloc` was NOT booted and `pytest -m live` was NOT run (a worktree holds no
-operator token — the conductor runs the live suite after the deploy). The verification is `pytest`
+change, no new registry key, no new route, no new log kind. The build's verification was `pytest`
 (**5286 passed**, was 5279) forward and `BB_REVERSE=1`, `ruff check .`, and `node
-site/mock/check.mjs` (routes unchanged at **150**).
+site/mock/check.mjs` (routes unchanged at **150**). ✅ **Claude drilled this row against v99 at
+20:02 and again at 20:08** (the two bursts, numbers in the header); `pytest -m live` against v99 =
+58 passed / 1 skipped. ⚠️ **The build's recipe was a SERIAL loop "to 320", and that never trips**:
+the bucket refills at five a second, and one `Invoke-RestMethod` after another from here runs at
+seven to ten a second, so it would take six hundred calls or more to drain it. The recipe below
+sends the reads all at once instead.
 
 ⚠️ **This row needs the operator token**, which only the owner and a session with
 `BLACK_BLOC_OPERATOR_TOKEN` set can send — it is done from a terminal, not from Discord.
-`scripts/read.ps1` never echoes the token.
+`scripts/read.ps1` never echoes the token, and neither does this.
 
 | # | Do this | Expect |
 |---|---|---|
-| **`RB-a`** | From a terminal, read one path in a tight loop with the REAL token and print what each one said. `scripts/read.ps1` prints the JSON rather than the sentence, so this row goes round it: `1..320 \| % { try { Invoke-RestMethod -Uri "https://blackbloc.heygabi.ai/api/status" -Headers @{ Authorization = "Bearer $env:BLACK_BLOC_OPERATOR_TOKEN" } \| Out-Null } catch { "$_ - " + ($_.ErrorDetails.Message \| ConvertFrom-Json).message } }` (a shell opened before the token was minted has no `$env:` copy — open a new one) | the first **300** answer silently; the ones after that print *That is more of this than Black Bloc will look up in a minute, so it was not loaded… wait a minute and open the page, or send the read, again.* ⚠️ It must NOT say *"more **wrong operator tokens** from this address"* — that is the guess bucket's sentence (row 320), the token here is RIGHT, and seeing it here means this branch did not ship. ⚠️ **The refusal lands a little LATER than the 301st call, and that is correct, not a miss**: the bucket refills at five tokens a second, so a loop that takes ten seconds to reach 300 has earned about fifty more back. Let it run to 320. Then read the **Logs** page filtered to `web.operator.read`: **one line per call that succeeded and none for the refused ones** — the row is written after the bucket, never before. Then wait a minute and run `.\scripts\read.ps1 -Path /api/status` once: it answers the JSON again, and the dashboard was never slowed down while this ran, because the budget is keyed on the token's identity and not shared with a signed-in staffer |
+| **322** (was `RB-a`) | From a terminal, fire 400 reads of one path AT ONCE with the REAL token and count the answers. `scripts/read.ps1` sends one read at a time, so this row goes round it (paste as one line; a shell opened before the token was minted has no `$env:` copy — open a new one): `[Net.ServicePointManager]::DefaultConnectionLimit = 50; Add-Type -AssemblyName System.Net.Http; $c = New-Object System.Net.Http.HttpClient; $c.DefaultRequestHeaders.Authorization = New-Object System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", $env:BLACK_BLOC_OPERATOR_TOKEN); $t = 1..400 \| % { $c.GetAsync("https://blackbloc.heygabi.ai/api/status") }; [Threading.Tasks.Task]::WaitAll($t); $t \| % { [int]$_.Result.StatusCode } \| Group-Object \| % { "$($_.Name) x$($_.Count)" }; ($t \| ? { [int]$_.Result.StatusCode -eq 429 } \| select -First 1).Result.Content.ReadAsStringAsync().Result` | two lines like `200 x305` and `429 x95` — about **300 answered, the rest refused** (a few more than 300 answer, because the bucket refilled a little while the burst ran: 305 and 308 on the two drills) — and then the sentence *That is more of this than Black Bloc will look up in a minute, so it was not loaded… wait a minute and open the page, or send the read, again.* ⚠️ It must NOT say *"more **wrong operator tokens** from this address"* — that is the guess bucket's sentence (row 320), the token here is RIGHT, and seeing it here means this branch did not ship. Then read the **Logs** page filtered to `web.operator.read`: **about one line per read that answered and none for the refused ones** — the line is written after the bucket, never before. (Claude's first drill found 309 lines for 308 answers: ONE extra, cause not established, most likely a `GET` the edge proxy retried. One or two extra is not a failure; a line count near 400 is — it would mean refusals are being logged.) Then wait a minute and run `.\scripts\read.ps1 -Path /api/status` once: it answers the JSON again, and the dashboard was never slowed down while this ran, because the budget is keyed on the token's identity and not shared with a signed-in staffer |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that

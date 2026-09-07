@@ -17,6 +17,9 @@
 > honours it — `rows_of` now reads the same way; and `/api/requests/mine` refuses the operator identity
 > with `403 not_a_member` in words, which is right (the operator is nobody's account), so the sweep accepts
 > that one answer. **58 / 59 is the live suite's first green run.**
+> **2026-09-06 20:02 — against v99 (operator read bound): 58 passed / 1 skipped**, unchanged — the design required
+> the live suite not to change, since a 300-read flood against the deployed host is not a test for every push.
+> That flood was drilled by hand instead (sweep row 322): 400 reads at once → 308 answered, 92 refused in words.
 
 ## The three layers, and what each one proves
 

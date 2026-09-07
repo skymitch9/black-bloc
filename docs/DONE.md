@@ -9,6 +9,52 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-06 — Operator read bound landed as merge `88e0242` (branch `operator-read-bound`), shipping as v99 — the right token is now bounded by the dashboard's own 300/min read bucket, on the operator identity
+
+**Asked (moved whole from `TODO.md`'s wave-1 residual bullet):** **Added 2026-09-06 14:32 (v98 build's finding, not fixed):** routes gated by `staff_dependency`
+  alone (`/api/settings`, `/api/selftest`, most of `status.py`) have no per-identity read bound for the
+  operator identity (`who["id"] == "0"`) — `writes.py:reader_dependency`'s 300/min bucket covers `ref.py`
+  wholesale and only the `reader`-taking routes of `status.py`/`costs.py`. The operator's own guess bucket
+  no longer touches right tokens (by design), so an operator read loop on those routes is bounded only by
+  the server. Fix shape: hang the read limiter on the operator identity in `auth.py:note_operator_read`, or
+  give `staff_dependency` the same `reader` bucket — one bucket, one home (checklist 33 asks nothing: the
+  rate is the existing `READ_RATE`). **✅ DECIDED 2026-09-06 19:30, owner verbatim *"Do a"* — the first shape; design appended to `info/operator-read-design.md` (§ *the operator read bound*); Opus build dispatched ~19:40 in worktree `C:/lcw/bb-read-bound`, branch `operator-read-bound` off `571e581` → v99.**
+
+**Landed 20:00 (Opus build, 158k against 60–100k, 66 calls, 11.5 min; commits `c6f7594` code+tests,
+`3a7ad78` docs):** `auth.py:operator_session` now runs compare → `READ_METHODS` → **`read_bucket_for(bot).take(OPERATOR_WHO["id"])`
+→ `429 slow_down` / `TOO_MANY_READS`** → `note_operator_read`, so a good-token write is refused `403` without
+spending a read token and a refused read leaves no `web.operator.read` row. `writes.py:reader_dependency`
+returns early for the operator (by the constant, never `"0"`), so one request costs one token whichever gate
+the route uses; staff are charged there exactly as before. `READ_RATE`, `READ_WINDOW_SECONDS`,
+`READ_BUCKET_ATTR`, `TOO_MANY_READS`, `read_bucket_for` and (deviation 1) `_bucket` moved into `auth.py`;
+`writes.py` imports them back and re-exports. The sentence took Rule 4's clause: *"…open the page, or send
+the read, again."* +7 tests (5279 → **5286**, both orders): the 300-read flood proves the bound is 300 not 30
+and counts exactly 300 rows, then drains the operator's key a minute ahead (deviation 3: the 301st read is
+NOT refused — 300 `TestClient` reads take 0.7 s and the bucket refills 5 a second); staff buckets untouched
+by the operator's flood and the reverse; a read refused by the read bucket never builds the guess bucket;
+`writes.read_bucket_for is auth.read_bucket_for`. No schema, key, route or log-kind change; mock 17/150/14.
+Design + `### Deviations` at the foot of `info/operator-read-design.md`; refusal-table rows in both
+operator-read docs; code-notes `# Operator read bound`.
+
+**Deploy:** the 19:52 `deploy.ps1` run **deadlocked at 81% of the pytest gate** — all 33 xdist workers idle
+at zero CPU for four minutes, a THIRD hang shape today (the 10:42 / 13:45 / 14:09 hangs were at worker
+spawn); killed the tree, the 19:59 retry (PowerShell tool, `*> file`, background) passed the gate in 26 s and
+shipped. v99 boot: `database ready` 03:00:51Z, `synced 29`, selftest 107 ok / 0 failed, `/health` ready
+guilds=1 latency 64. `docs/deploys.log` line filled.
+
+**Live run:** `pytest -m live` against v99 = **58 passed / 1 skipped** (unchanged, as the design required).
+**Sweep row 322 (was `RB-a`) drilled twice by Claude:** 400 reads at 25 concurrent, 2.3 s → **308 × 200,
+92 × 429** with the `TOO_MANY_READS` sentence, first refusal at read 312 (300 + eight refilled); the
+PowerShell 5.1 `HttpClient` recipe from the owner's own shell, 1.2 s → 305 / 95; the right token read again a
+minute later. ⚠️ **The build's sweep recipe was wrong and was replaced at the merge:** a serial
+`Invoke-RestMethod` loop "to 320" runs at 7–10 a second against a 5-a-second refill and never trips; the row
+now fires the reads at once.
+
+**Not verified:** the Logs page held **309** `web.operator.read` rows for the burst's 308 answers — one
+EXTRA (a refusal cannot write one; most likely an edge-proxy-retried `GET`), cause not established. Row 322
+by a PERSON (Claude's drill is not the owner's eye on the Logs page). Rows 320 and 321's sign-in half remain
+the owner's.
+
 ## 2026-09-06 — Operator bucket fix landed as merge `deaae68` (branch `operator-bucket`), shipping as v98 — the live suite's first green run (58 passed / 1 skipped). Deploy verification recorded on `deploys.log`.
 
 **Asked (moved whole from the TODO resume header, where it was recorded 13:55):** `pytest -m live` after the

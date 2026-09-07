@@ -2,13 +2,17 @@
 
 > **Audience:** Claude sessions first, the owner second. **Status:** TRACKED —
 > secret NAMES only, never values.
-> Last verified: **2026-09-06 19:45** — the OPERATOR READ BOUND section at the
-> foot is new, written on branch `operator-read-bound` off `main` at `571e581`
-> (v98 live). Measured there: `ruff check .` clean, `pytest -q -n auto` **5286
-> passed** both orders (5279 before), `node site/mock/check.mjs` ok at 17 pages /
-> 150 routes / 14 core settings. ⚠️ **NOT measured:** the live host — a worktree
-> holds no token, so `pytest -m live` did not run and `python -m black_bloc` was
-> not booted; sweep row `RB-a` is unrun by a person. Before that,
+> Last verified: **2026-09-06 20:15** — the OPERATOR READ BOUND section at the
+> foot LANDED: branch `operator-read-bound` (off `main` at `6be8929`, v98) merged
+> as `88e0242`, live as **v99** at 20:00. Measured: `ruff check .` clean, `pytest
+> -q -n auto` **5286 passed** both orders (5279 before), mock 17 / 150 / 14,
+> `pytest -m live` against v99 **58 passed / 1 skipped** (unchanged), and sweep
+> row **322** (was `RB-a`) drilled twice by Claude — a 400-read burst answered
+> 308 and refused 92 with `TOO_MANY_READS`, first refusal at read 312, which is
+> the 5-a-second refill arithmetic in § *Deviations* seen live. ⚠️ **NOT
+> measured:** why the Logs page held 309 `web.operator.read` rows for 308
+> answers (one extra — most likely a proxy-retried `GET`; a refusal cannot write
+> one). Row 322 is unrun by a PERSON. Before that,
 > **2026-09-06** — `OPERATOR_READ_TOKEN` was minted and the live
 > suite run against the deployed app for the FIRST time at 13:55 (v97). What it
 > found, and what changed because of it, is the dated note at the foot; the two
@@ -309,8 +313,12 @@ differed, and why. The conductor writes `TODO.md` / `DONE.md` / `deploys.log` / 
    reads (proving the bound is 300 and not 30) and still counts exactly 300 `web.operator.read` rows, then
    drains the operator's key against a clock a minute ahead — the `drain_reads` trick `test_writes.py`
    already uses for the same reason — so the refusal is deterministic rather than a race with the refill.
-   ⚠️ The same arithmetic applies to sweep row `RB-a`: a human typing 301 calls will be far slower than
-   0.7 s, so the refusal lands LATER than the 301st, not earlier. The row says so.
+   ⚠️ The same arithmetic applies to sweep row 322 (was `RB-a`): a human typing 301 calls will be far slower
+   than 0.7 s, so the refusal lands LATER than the 301st, not earlier. **Conductor, at the merge (20:10): later
+   still — it never lands at all from a serial loop.** One `Invoke-RestMethod` after another runs at seven to
+   ten a second against a refill of five, so the bucket drains at two to five a second and a loop "to 320"
+   ends with every read answered. The row now fires 400 reads at once (`HttpClient.GetAsync` tasks, PowerShell
+   5.1) — measured live against v99: 400 in 2.3 s → 308 answered / 92 refused, first refusal at read 312.
 4. **Seven tests, not the four the brief sketched.** The extra three: the operator's flood does not slow a
    staff session down (the brief named only the other direction); a read refused by the read bucket never
    touches the GUESS bucket (Rule 6's *two buckets, two questions*, asserted rather than assumed); and, in

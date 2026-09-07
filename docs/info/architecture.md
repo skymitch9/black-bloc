@@ -8,11 +8,13 @@
 > `SCHEMA_VERSION` is imported from `black_bloc/storage/db.py`, and the site figures come from
 > `node site/mock/check.mjs` against `site/mock/server.mjs`.
 >
-> **2026-09-06 (loop guard `689eff5`, v97; operator bucket `deaae68`, v98):** schema unchanged at **33**;
-> registry keys unchanged at **191**; mock routes unchanged at **150**; new leaf module `black_bloc/loops.py`
-> (`wait_ready`, called by all fourteen `before_loop`s); `auth.py:operator_session` reorders compare-then-bucket;
-> tests **5267 → 5277 → 5279**; `tests/live/` first run green against v98 (58 passed / 1 skipped — the count
-> lives in `../access/testing.md`, which owns it). Before that:
+> **2026-09-06 (loop guard `689eff5`, v97; operator bucket `deaae68`, v98; operator read bound `88e0242`, v99):**
+> schema unchanged at **33**; registry keys unchanged at **191**; mock routes unchanged at **150**; new leaf module
+> `black_bloc/loops.py` (`wait_ready`, called by all fourteen `before_loop`s); `auth.py:operator_session` reorders
+> compare-then-bucket (v98) and then charges the shared 300/min read bucket on the operator identity (v99) — the
+> read-bucket names and `_bucket` now live in `auth.py`, `writes.py` re-exports them; tests **5267 → 5277 → 5279 →
+> 5286**; `tests/live/` green against v98 and v99 (58 passed / 1 skipped — the count lives in
+> `../access/testing.md`, which owns it). Before that:
 > **2026-09-06 (logs buttons `42d2e6e` + recurrence create from the website `c915ade`, v96):** schema unchanged at **33**; registry keys **189 → 191** (`logs_count`, `logs_important_only` — a new `logs` group, **23** groups); mock routes **149 → 150** (`POST /api/polls/recurrences`); new module `black_bloc/logs_panel.py`; tests **5226 → 5267**. Before that:
 > **2026-09-06 (saved poll drafts, merged `8405bea`, v94):** schema **32 → 33** (`poll_drafts`)
 > and registry keys **187 → 189** (`poll_drafts`, `poll_draft_days`), both re-measured by
