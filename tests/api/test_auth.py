@@ -12,12 +12,16 @@ from black_bloc.api.auth import (
     LOGIN_RATE,
     OPERATOR_BUCKET_ATTR,
     OPERATOR_RATE,
+    OPERATOR_WHO,
+    READ_RATE,
     SESSION_COOKIE,
     STATE_COOKIE,
+    TOO_MANY_READS,
     Refused,
     TokenBucket,
     current_session,
     is_admitted,
+    read_bucket_for,
     read_session,
     role_ids_from,
     sign_session,
@@ -640,3 +644,70 @@ async def test_operator_read_log_off_reads_the_same_data_and_writes_nothing(clie
     assert client.get("/api/settings", headers=BEARER).status_code == 200
 
     assert await wf.web_rows_in(web.db) == []
+
+
+def drain_operator_reads(web, key: str = OPERATOR_WHO["id"]) -> None:
+    """Drained against a clock a minute ahead, so the real request that follows finds no refill."""
+    bucket = read_bucket_for(web)
+    ahead = time.time() + 60
+    for _ in range(READ_RATE):
+        bucket.take(key, now=ahead)
+
+
+async def test_a_right_token_reading_too_much_is_a_sentence_and_leaves_no_row(client, web, wf):
+    """The bound the guess bucket stopped giving: 300 reads a minute, then words, not a bare 429."""
+    with_token(web)
+    for _ in range(READ_RATE):
+        assert client.get("/api/auth/me", headers=BEARER).status_code == 200
+    drain_operator_reads(web)
+
+    refused = client.get("/api/auth/me", headers=BEARER)
+
+    assert refused.status_code == 429
+    assert refused.json()["error"] == "slow_down"
+    assert refused.json()["message"] == TOO_MANY_READS
+    assert "wrong operator tokens" not in refused.json()["message"]
+    rows = await wf.web_rows_in(web.db)
+    assert len(rows) == READ_RATE
+    assert {kind for kind, _ in rows} == {"web.operator.read"}
+
+
+def test_a_staff_flood_does_not_spend_the_operator_tokens_budget(client, sign_in, web):
+    """The key is the identity, so the dashboard's 300 and the token's 300 are separate budgets."""
+    with_token(web)
+    drain_operator_reads(web, str(USER_ID))
+    sign_in(client, uid=USER_ID)
+    assert client.get("/api/ref/roles").status_code == 429
+    client.cookies.clear()
+
+    assert client.get("/api/auth/me", headers=BEARER).status_code == 200
+
+
+def test_the_operator_reading_too_much_does_not_slow_a_staff_session_down(client, sign_in, web):
+    with_token(web)
+    drain_operator_reads(web)
+    assert client.get("/api/auth/me", headers=BEARER).status_code == 429
+
+    sign_in(client, uid=USER_ID)
+
+    assert client.get("/api/ref/roles").status_code == 200
+
+
+def test_a_reader_route_costs_the_operator_one_token_not_two(client, web):
+    """Charged where it is admitted; `reader_dependency` skips it rather than charge it again."""
+    with_token(web)
+
+    assert client.get("/api/ref/roles", headers=BEARER).status_code == 200
+
+    tokens, _ = read_bucket_for(web)._seen[OPERATOR_WHO["id"]]
+    assert READ_RATE - 1 <= tokens < READ_RATE
+
+
+def test_a_read_the_bucket_refused_never_reaches_the_guess_bucket(client, web):
+    """Two buckets, two questions — being out of reads is not being out of guesses."""
+    with_token(web)
+    drain_operator_reads(web)
+
+    assert client.get("/api/settings", headers=BEARER).status_code == 429
+
+    assert getattr(web, OPERATOR_BUCKET_ATTR, None) is None

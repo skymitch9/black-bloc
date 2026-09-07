@@ -9,11 +9,18 @@ from ..actionlog import log_action
 from .auth import (
     MEMBER_UNKNOWN,
     NOT_A_MEMBER,
+    OPERATOR_WHO,
+    READ_BUCKET_ATTR,
+    READ_RATE,
+    READ_WINDOW_SECONDS,
+    TOO_MANY_READS,
     Refused,
     TokenBucket,
+    _bucket,
     current_session,
     guild_of,
     member_state,
+    read_bucket_for,
     staff_dependency,
 )
 from .status import DB_UNREACHABLE
@@ -24,10 +31,6 @@ WRITE_RATE = 60
 WRITE_WINDOW_SECONDS = 60
 BUCKET_ATTR = "_api_write_bucket"
 
-READ_RATE = 300
-READ_WINDOW_SECONDS = 60
-READ_BUCKET_ATTR = "_api_read_bucket"
-
 MEMBER_RATE = 10
 MEMBER_WINDOW_SECONDS = 60
 MEMBER_BUCKET_ATTR = "_api_member_bucket"
@@ -35,10 +38,6 @@ MEMBER_BUCKET_ATTR = "_api_member_bucket"
 TOO_MANY_WRITES = (
     "That is more changes than Black Bloc will take in a minute, so this one was not made. "
     "Nothing is wrong with your account — wait a minute and try again."
-)
-TOO_MANY_READS = (
-    "That is more of this than Black Bloc will look up in a minute, so it was not loaded. "
-    "Nothing is wrong with your account — wait a minute and open the page again."
 )
 TOO_MANY_MEMBER_WRITES = (
     "That is more requests than Black Bloc will take from one person in a minute, so this one "
@@ -71,21 +70,9 @@ class WebActor:
         return self.display_name
 
 
-def _bucket(bot: Any, attr: str, rate: int, window: float) -> TokenBucket:
-    bucket = getattr(bot, attr, None)
-    if bucket is None:
-        bucket = TokenBucket(rate, window)
-        setattr(bot, attr, bucket)
-    return bucket
-
-
 def bucket_for(bot: Any) -> TokenBucket:
     """One bucket per bot, so the limit is per session and not per router."""
     return _bucket(bot, BUCKET_ATTR, WRITE_RATE, WRITE_WINDOW_SECONDS)
-
-
-def read_bucket_for(bot: Any) -> TokenBucket:
-    return _bucket(bot, READ_BUCKET_ATTR, READ_RATE, READ_WINDOW_SECONDS)
 
 
 def member_bucket_for(bot: Any) -> TokenBucket:
@@ -128,6 +115,8 @@ def reader_dependency(bot: Any):
 
     async def dependency(request: Request) -> dict[str, Any]:
         who = await staff(request)
+        if str(who["id"]) == OPERATOR_WHO["id"]:
+            return who
         if not read_bucket_for(bot).take(str(who["id"])):
             log.warning("api: rate-limited reads from %s", who["id"])
             raise Refused(429, "slow_down", TOO_MANY_READS)
@@ -208,7 +197,9 @@ __all__ = [
     "FEATURE_OFF",
     "MEMBER_RATE",
     "NO_GUILD",
+    "READ_BUCKET_ATTR",
     "READ_RATE",
+    "READ_WINDOW_SECONDS",
     "TOO_MANY_MEMBER_WRITES",
     "TOO_MANY_READS",
     "TOO_MANY_WRITES",

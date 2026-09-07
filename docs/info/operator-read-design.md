@@ -2,7 +2,14 @@
 
 > **Audience:** Claude sessions first, the owner second. **Status:** TRACKED —
 > secret NAMES only, never values.
-> Last verified: **2026-09-06** — `OPERATOR_READ_TOKEN` was minted and the live
+> Last verified: **2026-09-06 19:45** — the OPERATOR READ BOUND section at the
+> foot is new, written on branch `operator-read-bound` off `main` at `571e581`
+> (v98 live). Measured there: `ruff check .` clean, `pytest -q -n auto` **5286
+> passed** both orders (5279 before), `node site/mock/check.mjs` ok at 17 pages /
+> 150 routes / 14 core settings. ⚠️ **NOT measured:** the live host — a worktree
+> holds no token, so `pytest -m live` did not run and `python -m black_bloc` was
+> not booted; sweep row `RB-a` is unrun by a person. Before that,
+> **2026-09-06** — `OPERATOR_READ_TOKEN` was minted and the live
 > suite run against the deployed app for the FIRST time at 13:55 (v97). What it
 > found, and what changed because of it, is the dated note at the foot; the two
 > superseded claims in the 2026-09-03 header below are marked where they sit.
@@ -67,6 +74,7 @@ Every one is a sentence: what happened, what it needs, how to get it.
 | The token does not match | `401` `bad_operator_token` | *That operator token is not the one this server holds, so nothing was read. It is the OPERATOR_READ_TOKEN secret rather than a sign-in, so no account is locked out — check the copy in BLACK_BLOC_OPERATOR_TOKEN, and ask the owner to set a fresh one if it has been rotated (docs/access/operator-read.md).* |
 | Too many **wrong** tokens from one IP | `429` `slow_down` | Its own sentence, `OPERATOR_SLOW_DOWN` — *That is more wrong operator tokens from this address than Black Bloc will take in a minute, so nothing was read. It is the OPERATOR_READ_TOKEN secret rather than a sign-in, so no account is locked out and signing in still works — wait a minute, then send the token the mint command set (docs/access/operator-read.md).* ⚠️ A **matching** token never reaches this row; see the 2026-09-06 note at the foot |
 | A good token on a write | `403` `operator_read_only` | *The operator token can only look, never change, so nothing was done and nothing was logged as a change. Make this change on the dashboard or in Discord, where a person signs for it.* |
+| Too many **right**-token reads | `429` `slow_down` | The dashboard's own read sentence, `TOO_MANY_READS` — *That is more of this than Black Bloc will look up in a minute, so it was not loaded. Nothing is wrong with your account — wait a minute and open the page, or send the read, again.* 300 a minute, keyed on the operator IDENTITY rather than the IP, so it never drains a staffer's budget and none of theirs drains it. A read refused here leaves NO `web.operator.read` row |
 | No token configured | — | Nothing of its own: the request falls through and gets whatever the cookie path would have said (`not_signed_in`, and so on). |
 
 `scripts/read.ps1` prints the `message` field of any non-2xx, so what a person
@@ -281,3 +289,36 @@ page shows exactly 300 `web.operator.read` lines for that minute. Code notes: `#
 the foot of `code-notes.md`, keyed by name. Refusal tables in this file (§ *The refusal words*) and in
 `../access/operator-read.md` gain the row. Add a `### Deviations` under this section for anything that
 differed, and why. The conductor writes `TODO.md` / `DONE.md` / `deploys.log` / `architecture.md`.
+
+### Deviations
+
+1. **`_bucket` moved to `auth.py` as well**, and `writes.py` imports it back beside the five names the
+   brief listed. `read_bucket_for` is `_bucket(bot, READ_BUCKET_ATTR, …)`, and `operator_bucket_for` —
+   which had its own inline copy of the same four lines — now calls it too. Writing `read_bucket_for` out
+   longhand in `auth.py` would have left TWO implementations of *hang a bucket on the bot* in one package,
+   which is the near-duplicate the review checklist exists to catch. `writes.py`'s `bucket_for` and
+   `member_bucket_for` are unchanged and still call `_bucket` by that name.
+2. ⚠️ **The sentence gained the clause Rule 4 allowed**, and only that: *"wait a minute and open the page
+   again"* → *"wait a minute and open the page, or send the read, again"*. A terminal reading through
+   `scripts/read.ps1` has no page to open, and the sentence is now the only 429 it can meet with a right
+   token. One refusal, one sentence — no second constant, and the dashboard reads the same words.
+3. **The tests drain the bucket rather than counting on the 301st request to be refused.** Measured here:
+   300 real requests take ~0.7 s and the bucket refills at 5 tokens a second, so **three or four tokens
+   are back before the 301st arrives** and it answers 200. The first attempt at the brief's test failed on
+   exactly that. `test_a_right_token_reading_too_much_is_a_sentence_and_leaves_no_row` still makes all 300
+   reads (proving the bound is 300 and not 30) and still counts exactly 300 `web.operator.read` rows, then
+   drains the operator's key against a clock a minute ahead — the `drain_reads` trick `test_writes.py`
+   already uses for the same reason — so the refusal is deterministic rather than a race with the refill.
+   ⚠️ The same arithmetic applies to sweep row `RB-a`: a human typing 301 calls will be far slower than
+   0.7 s, so the refusal lands LATER than the 301st, not earlier. The row says so.
+4. **Seven tests, not the four the brief sketched.** The extra three: the operator's flood does not slow a
+   staff session down (the brief named only the other direction); a read refused by the read bucket never
+   touches the GUESS bucket (Rule 6's *two buckets, two questions*, asserted rather than assumed); and, in
+   `test_writes.py`, that `writes.read_bucket_for is auth.read_bucket_for` — the re-export is the whole
+   point of Rule 1 and nothing else would have caught a second bucket sneaking back in.
+
+⚠️ **NOT verified here:** nothing on this branch has met the live host — a worktree holds no operator
+token, so `pytest -m live` was NOT run, and `python -m black_bloc` was NOT booted (no token). Measured on
+the branch: `ruff check .` clean; `pytest -q -n auto` **5286 passed** forward and with `BB_REVERSE=1`
+(5279 on `main` before; the seven new ones are above); `node site/mock/check.mjs` → *17 pages, 150 routes,
+14 core settings, all keys present* (routes unchanged at 150, as the brief expected).
