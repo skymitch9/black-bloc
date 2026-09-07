@@ -9,6 +9,31 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-07 — Music bot scrapped (owner, 15:10) — request #3 is closed, not paused; a monthly feasibility check replaces it
+
+**Owner, verbatim:** *"3 scrap this whole project, until we find a reliable way to do this let's be done with me. Maybe set up a monthly research task to look into if it's doable in a stable way."* — item 3 of the 2026-09-07 15:06 pending list (the Spotify decision). Nothing was ever built. The recurring check lives in `TODO.md` under *Waiting on the owner* (next check 2026-10-07; findings go to `info/music-source-research.md` when the first pass runs).
+
+⚠️ **Not done here:** request #3's own row in the bot (Requests page, status `on hold`) is a staff write; the operator token is read-only, so it stays `on hold` until staff move it on https://blackbloc.heygabi.ai/requests.html — the owner said "be done with me", so this is recorded, not asked.
+
+**Moved whole from `TODO.md`:**
+
+- ✅ **DECIDED 2026-09-03 14:22 — SKIPPED (owner: "still would be YouTube? Let's skip it then.
+  Back to the backlog dungeon with the music bot").** Request #3 stays on **hold**; nothing
+  is built. Original: **Spotify for the music bot (owner, 2026-09-03 ~13:55: "Check if we can do
+  Spotify for the music bot")** — request #3 (PT, on hold). Checked the same
+  afternoon: **not as a source.** Spotify's Web API exposes no audio stream (it
+  only controls a signed-in user's own Spotify client), its developer terms name
+  Discord bots as not permitted, the 30-second `preview_url` was pulled for new
+  apps 2024-11-27, and since 2025-05 an app needs 250k monthly users before it
+  leaves development mode. What every surviving music bot does instead:
+  **accept Spotify links** (track / album / playlist), resolve them to titles via
+  the metadata endpoints (client-credentials, still open in dev mode), and play
+  the matching audio from YouTube / SoundCloud (Lavalink + the LavaSrc plugin is
+  the standard stack; needs a Java sidecar — a second Fly app — and YouTube
+  increasingly blocks datacenter IPs, so that source needs its own care). Owner
+  decision pending: "Spotify links in, audio from elsewhere" is buildable; native
+  Spotify playback is not.
+
 ## 2026-09-06 — Operator read bound landed as merge `88e0242` (branch `operator-read-bound`), shipping as v99 — the right token is now bounded by the dashboard's own 300/min read bucket, on the operator identity
 
 **Asked (moved whole from `TODO.md`'s wave-1 residual bullet):** **Added 2026-09-06 14:32 (v98 build's finding, not fixed):** routes gated by `staff_dependency`

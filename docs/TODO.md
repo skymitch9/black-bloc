@@ -182,30 +182,15 @@ docs bookkeeping lands with the work, not after.
 
 ## ⏳ Waiting on the owner
 
-- **Cutover, at your pace** — [`info/cutover-plan.md`](info/cutover-plan.md) (**re-measured against v92 on 2026-09-05 20:55** — every step now names the panel move, not the retired sub-commands): prerequisites P1–P6 (channel rename, staff channel, approval channels, TEST_MODE lift — the lift is yours alone — then a verification pass), then the per-feature ladder. Either door flips automod safely — the dashboard has carried its arming refusal since v84 (plan §4).
+- ⏸️ **PAUSED again (owner, 2026-09-07 15:10: "The other 3 can be paused again").** **Cutover, at your pace** — [`info/cutover-plan.md`](info/cutover-plan.md) (**re-measured against v92 on 2026-09-05 20:55** — every step now names the panel move, not the retired sub-commands): prerequisites P1–P6 (channel rename, staff channel, approval channels, TEST_MODE lift — the lift is yours alone — then a verification pass), then the per-feature ladder. Either door flips automod safely — the dashboard has carried its arming refusal since v84 (plan §4).
 - **Test sweep — the whole list lives in [`access/sweeps.md`](access/sweeps.md)** (37 rows in priority order + the detailed phase 1–8a scripts; it is the ONE home for what a person has not yet exercised).
 - ~~Twitch developer app~~ **ALREADY DONE — stale line caught by the owner
   2026-08-31 ("didnt we already connect twitch dev").** Measured: `TWITCH_CLIENT_ID`
   + `TWITCH_CLIENT_SECRET` are Deployed on Fly and present in `.env`, and the boot
   log says `twitch: app token obtained` (20:13:48Z). Nothing to do.
-- **Cleanup (later, owner):** kick the dormant bots `Verification Bot`, `baf`,
+- ⏸️ **PAUSED (owner, 2026-09-07).** **Cleanup (later, owner):** kick the dormant bots `Verification Bot`, `baf`,
   `Black Block` once Black Bloc is stable.
-- ✅ **DECIDED 2026-09-03 14:22 — SKIPPED (owner: "still would be YouTube? Let's skip it then.
-  Back to the backlog dungeon with the music bot").** Request #3 stays on **hold**; nothing
-  is built. Original: **Spotify for the music bot (owner, 2026-09-03 ~13:55: "Check if we can do
-  Spotify for the music bot")** — request #3 (PT, on hold). Checked the same
-  afternoon: **not as a source.** Spotify's Web API exposes no audio stream (it
-  only controls a signed-in user's own Spotify client), its developer terms name
-  Discord bots as not permitted, the 30-second `preview_url` was pulled for new
-  apps 2024-11-27, and since 2025-05 an app needs 250k monthly users before it
-  leaves development mode. What every surviving music bot does instead:
-  **accept Spotify links** (track / album / playlist), resolve them to titles via
-  the metadata endpoints (client-credentials, still open in dev mode), and play
-  the matching audio from YouTube / SoundCloud (Lavalink + the LavaSrc plugin is
-  the standard stack; needs a Java sidecar — a second Fly app — and YouTube
-  increasingly blocks datacenter IPs, so that source needs its own care). Owner
-  decision pending: "Spotify links in, audio from elsewhere" is buildable; native
-  Spotify playback is not.
+- 🔁 **RECURRING — monthly music-bot feasibility check (owner, 2026-09-07 15:10: "scrap this whole project, until we find a reliable way to do this let's be done with me. Maybe set up a monthly research task to look into if it's doable in a stable way").** The music bot / request #3 is SCRAPPED (moved whole to `DONE.md`, "Music bot scrapped"). What a session does when the date below has passed: one research pass, no build — is there now a STABLE, terms-compliant way for a Discord bot to play music (Spotify's developer terms and dev-mode 250k-user gate; whether YouTube/SoundCloud sources via Lavalink still survive datacenter-IP blocking; anything new from Discord itself, e.g. Activities/Watch Together-style playback); write the dated finding to `info/music-source-research.md` (create it), bump the next-check date here, and only if the answer is a clear YES put ONE question to the owner. **Next check: 2026-10-07.** This line is the reminder — session crons die with the session, and every session reads this file; a Windows scheduled task running Claude headless is the upgrade if the owner wants it unattended.
 
 ## 🔧 Open engineering items
 
