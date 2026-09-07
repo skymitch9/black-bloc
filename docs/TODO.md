@@ -282,7 +282,7 @@ docs bookkeeping lands with the work, not after.
   no longer touches right tokens (by design), so an operator read loop on those routes is bounded only by
   the server. Fix shape: hang the read limiter on the operator identity in `auth.py:note_operator_read`, or
   give `staff_dependency` the same `reader` bucket — one bucket, one home (checklist 33 asks nothing: the
-  rate is the existing `READ_RATE`).
+  rate is the existing `READ_RATE`). **✅ DECIDED 2026-09-06 14:38, owner verbatim *"Do a"* — the first shape; design appended to `info/operator-read-design.md` (§ *the operator read bound*); Opus build dispatched ~14:45 in worktree `C:/lcw/bb-read-bound`, branch `operator-read-bound` off `571e581` → v99.**
 
 - **Curated docs for peers — DECIDED + DONE 2026-09-01** (owner picked "Rewrite
   README now"): root `README.md` rewritten as the peer front door (what the bot

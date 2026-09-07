@@ -213,3 +213,71 @@ worktree has no operator token, so `pytest -m live` was not run; the conductor
 runs it after the deploy. Measured on the branch: `ruff check .` clean, and
 `pytest -q -n auto` **5279 passed** forward and with `BB_REVERSE=1` (5277 on
 `main` before; the two new ones are the bucket tests above).
+
+## 2026-09-06 14:40 — the operator read bound (design for branch `operator-read-bound`)
+
+> Written by the conductor against `main` at `571e581` (v98 live). Owner decision 14:38, verbatim
+> *"Do a"* — the first of the two fix shapes named on `TODO.md`: hang the read limiter on the operator
+> identity where the operator is admitted. Every `path:name` below was read in that tree.
+
+### What exists
+
+- `api/writes.py:read_bucket_for` — ONE per-bot `TokenBucket(READ_RATE=300, READ_WINDOW_SECONDS=60)`
+  keyed by identity, charged only inside `writes.py:reader_dependency` (`take(str(who["id"]))`, else
+  `429 slow_down` with `TOO_MANY_READS`). `reader_dependency` is used by `api/ref.py` wholesale and by
+  the `reader`-taking routes of `status.py`, `costs.py`, `tools/chat.py`, `tools/chat_memory.py`,
+  `tools/members.py`, `tools/mod.py`, `tools/requests.py`. Everything gated by `auth.py:staff_dependency`
+  ALONE (`/api/settings`, `/api/selftest`, most of `status.py`, every tools router's plain GETs) has no
+  per-identity read bound.
+- `api/auth.py:operator_session` — admits the operator with `dict(OPERATOR_WHO)` (`id == "0"`) after the
+  compare, the `READ_METHODS` check and `note_operator_read`. Since v98 a right token touches no bucket
+  at all, so an operator loop on a `staff_dependency`-only route is bounded only by the server.
+- Import direction: `writes.py` imports from `auth.py`; `auth.py` must not import `writes.py`.
+
+### Rules
+
+1. **One bucket, one home.** Move `READ_RATE`, `READ_WINDOW_SECONDS`, `READ_BUCKET_ATTR`, `TOO_MANY_READS`
+   and `read_bucket_for` from `writes.py` into `auth.py` (beside `operator_bucket_for`, which already has
+   the same shape); `writes.py` imports them back and keeps re-exporting the names in `__all__`, so every
+   existing import (`from .writes import READ_RATE` in tests, if any — grep) still resolves. No second
+   `TokenBucket` for reads anywhere.
+2. **Charge the operator where it is admitted.** In `operator_session`, after the `READ_METHODS` check and
+   BEFORE `note_operator_read`: `if not read_bucket_for(bot).take(OPERATOR_WHO["id"]): raise Refused(429,
+   "slow_down", TOO_MANY_READS)`. Order matters: a refused read logs no `web.operator.read` row (the
+   docstring on `note_operator_read` promises "never one for a refused token"; extend it to a refused
+   read). The key is the operator IDENTITY, not the IP — a staff member's own reads and the operator's
+   never drain each other, and two operator terminals share one budget, which is the point.
+3. **Charge each read once.** `reader_dependency` must not charge the operator a second time on the
+   routes that use it: skip the `take` when `who["id"] == OPERATOR_WHO["id"]` (compare against the
+   constant, never a literal `"0"`). A staff session is charged there exactly as today.
+4. **The sentence is `TOO_MANY_READS`, reused.** It names the cause correctly (*more of this than Black
+   Bloc will look up in a minute*) and says nothing is wrong with the account, which is true of the
+   token too. If the build finds *open the page again* misleads a terminal reader, add ONE clause to the
+   existing sentence rather than a second constant — one refusal, one sentence.
+5. **No new setting, no new log kind.** The rate is the existing `READ_RATE` and the decision to bound
+   reads was made when `reader_dependency` was written; checklist 33 asks nothing new, and a rate-limited
+   read is logged (`log.warning`, like `reader_dependency`), never an `action_log` row (34).
+6. **The guess bucket is untouched.** `operator_bucket_for` still prices wrong tokens per IP; this adds
+   the right-token bound that v98 deliberately removed from it. The two are different questions (is this
+   caller guessing? / is this caller reading too much?) and stay two buckets.
+
+### Tests (mirror the package)
+
+`tests/api/test_auth.py`: 301 right-token reads in one minute → the 301st is `429 slow_down` with
+`TOO_MANY_READS`, and NO `web.operator.read` row is written for it (count rows: 300); the bucket key is
+`OPERATOR_WHO["id"]` (a staff session's 300 reads in the same minute do not touch the operator's budget,
+and vice versa); a right token on a `reader_dependency` route (`/api/ref/roles` is the cheapest) costs
+ONE token per request, not two. `tests/api/test_writes.py`: `reader_dependency` still charges a staff
+session; the moved names import from both modules. Do NOT add a live test — 300 reads against the real
+host is not a test anyone should run on every push; `pytest -m live` must stay at 58 passed / 1 skipped.
+
+### Prove before merge, and the sweep row
+
+`ruff` clean; full suite `-n auto` forward and `BB_REVERSE=1` (5279 + yours — say the number); `node
+site/mock/check.mjs` ok (routes stay 150 — say so); `python -m black_bloc` NOT booted in a worktree — say
+so. One sweep row lettered `RB-a` in `docs/access/sweeps.md`: from a terminal, 301 `scripts/read.ps1
+-Path /api/status` calls inside one minute → the 301st prints the `TOO_MANY_READS` sentence, and the Logs
+page shows exactly 300 `web.operator.read` lines for that minute. Code notes: `# Operator read bound` at
+the foot of `code-notes.md`, keyed by name. Refusal tables in this file (§ *The refusal words*) and in
+`../access/operator-read.md` gain the row. Add a `### Deviations` under this section for anything that
+differed, and why. The conductor writes `TODO.md` / `DONE.md` / `deploys.log` / `architecture.md`.
