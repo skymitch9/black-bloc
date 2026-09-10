@@ -57,7 +57,7 @@ data and `docs/` is tracked).
 > deliberately SEPARATE from the estate's `Estate` vault so it can be shared
 > with a future Black Bloc dev without exposing estate master credentials.
 > Custody order on any disagreement: **vault → `.env` (working copy) →
-> `.env.enc` (offline fallback; passphrase in the owner's head)** — resolve
+> `.env.enc` (offline fallback, kept OUTSIDE git since 2026-09-10 — the repo is public; passphrase in the owner's head)** — resolve
 > toward the vault, never away from it. Rotation: change the vault item, paste
 > into `.env`, then push to Fly. Laptop: open 1Password, copy each value into a
 > `.env` built from the tracked `.env.example`. ⚠️ Gotcha, measured 2026-09-02:

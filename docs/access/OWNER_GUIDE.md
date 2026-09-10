@@ -55,12 +55,9 @@
    ```
    Type a passphrase (nothing shows), Enter, type it again. Put the passphrase in your password manager —
    there is no recovery. It prints `wrote .env.enc`.
-2. **Commit only the encrypted file:**
-   ```
-   git add .env.enc
-   git commit -m "Encrypted env"
-   git push
-   ```
+2. **Move the encrypted file by hand — never commit it.** ⚠️ Changed 2026-09-10: the repo is PUBLIC now, so
+   `.env.enc` is gitignored and was purged from history (`TODO.md`, the repo-public item). Copy it to the laptop
+   over OneDrive / AirDrop / a USB stick and run `sh scripts/env-unlock.sh` there.
    Never run `sh scripts/env-lock.sh` through Claude — it must never see the values.
 3. **Leave this Claude Code window open** if you want the Sunday 16:05 wake-up to fire (it lives in the
    session). The laptop can sleep and reconnect; the window on this machine must stay open. If you close it,

@@ -147,7 +147,8 @@ Deploy = the block under **Deploy** above (`git pull` first). Docs are tracked t
 `.env.example` to `.env`, and paste each of the nine secret values from its
 bare-titled vault item. Sharing that vault + repo access fully onboards a dev.
 FALLBACK (offline / no 1Password): `sh scripts/env-lock.sh` on the main machine
-(passphrase prompt — yours alone), commit `.env.enc`, push; laptop runs
+(passphrase prompt — yours alone), carry `.env.enc` to the laptop by hand (it is gitignored — the repo
+is public since 2026-09-10, and the old copies were purged from history); laptop runs
 `sh scripts/env-unlock.sh`. ⚠️ On the owner's machines `sh` is NOT on PATH —
 use `& "C:\Program Files\Git\bin\bash.exe" scripts/env-lock.sh`. After any
 rotation: vault item first, then `.env`, then Fly, then (optionally) a fresh
