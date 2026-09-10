@@ -2,12 +2,18 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner, 2026-08-31 — was
 > local-only until then).
-> Last verified: **2026-09-05** — every figure below re-MEASURED on the ENGINEERING SWEEP 3
+> Last verified: **2026-09-10 16:02** (the v100 paragraph: keys and schema measured by import, tests from the gate; nothing else re-measured) — earlier **2026-09-05**: every figure below re-MEASURED on the ENGINEERING SWEEP 3
 > branch off `main` at `6af0ba0` (v92) by running the thing, not by reading a doc: the tree is
 > built the way `tests/test_bot.py` builds it (load all `bot.py:COGS`, then `tree.get_commands()`),
 > `SCHEMA_VERSION` is imported from `black_bloc/storage/db.py`, and the site figures come from
 > `node site/mock/check.mjs` against `site/mock/server.mjs`.
 >
+> **2026-09-10 (the "When?" picker `1f35f28`, v100):** schema unchanged at **33** (measured: `SCHEMA_VERSION`); registry
+> keys **191 → 196** (measured: `len(KEY_TYPES)` — `default_timezone`, `timezone_choices`, `time_step_minutes`,
+> `events_default_minutes`, `events_scheduled_name_template`, all filed in the `events` group by `NAMESPACE_OVERRIDE`,
+> so **23** groups still); mock routes unchanged at **150**; new leaf module `black_bloc/when_picker.py` (the shared
+> Day/Hour/Minute/Duration selects, `WhenDraft`, `ZonePanel`), used by `cogs/community/events.py` and
+> `cogs/content/raidtrain.py`; `EventModal`, `TrainModal`, `Events.submit` gone; tests **5286 → 5395**. Before that:
 > **2026-09-06 (loop guard `689eff5`, v97; operator bucket `deaae68`, v98; operator read bound `88e0242`, v99):**
 > schema unchanged at **33**; registry keys unchanged at **191**; mock routes unchanged at **150**; new leaf module
 > `black_bloc/loops.py` (`wait_ready`, called by all fourteen `before_loop`s); `auth.py:operator_session` reorders

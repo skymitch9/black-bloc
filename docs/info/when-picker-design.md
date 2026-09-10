@@ -1,14 +1,14 @@
 # The "When?" picker — `/event` Propose and `/raidtrain` Start as draft panels
 
-> **Audience:** whoever maintains the two forms. **Status:** TRACKED, ✅ **BUILT** — branch
-> `when-picker` off `main` at `ef54e60`, commits `446f191` (the module), `567d33b` (the five
-> settings keys), `6c0768d` (`/event`), `869e57a` (`/raidtrain`) and this docs commit.
-> ⚠️ **NOT merged, NOT deployed, and NOT seen in Discord** — no test can click a Discord button
-> (`../access/testing.md`), so what is proven here is the suite (**5286 → 5395**, green forward
-> and `BB_REVERSE=1`), `ruff`, and the mock (`ok - 17 pages, 150 routes, 14 core settings`).
+> **Audience:** whoever maintains the two forms. **Status:** TRACKED, ✅ **SHIPPED as v100** —
+> branch `when-picker` off `main` at `ef54e60`, commits `446f191` (the module), `567d33b` (the five
+> settings keys), `6c0768d` (`/event`), `869e57a` (`/raidtrain`), `580774a` (docs); merged `1f35f28`
+> 2026-09-10 15:52, live 16:00 (`deploys.log`). ⚠️ **NOT seen in Discord** — no test can click a
+> Discord button (`../access/testing.md`), so what is proven is the suite (**5286 → 5395**, green forward
+> and `BB_REVERSE=1`), `ruff`, the mock (`ok - 17 pages, 150 routes, 14 core settings`) and a clean boot.
 > The sweep rows a person still has to run by eye are **323–327** in
 > [`../access/sweeps.md`](../access/sweeps.md). Every departure from what is written below is in
-> the **`## Deviations`** foot. Last verified: **2026-09-10** — the design below was verified
+> the **`## Deviations`** foot. Last verified: **2026-09-10 16:00** (the header: merge, deploy and boot measured; the body: as at the build) — the design below was verified
 > against `main` at `c3f842b` before the build (what existed then was read in
 > `black_bloc/cogs/community/events.py`,
 > `black_bloc/cogs/content/raidtrain.py`, `black_bloc/events.py`, `black_bloc/timezones.py`,
