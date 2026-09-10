@@ -38,7 +38,7 @@ from black_bloc.cogs.content.youtube import YouTube
 from black_bloc.cogs.content.youtube import set_link as set_youtube_link
 from black_bloc.cogs.moderation.honeypot import record_hit
 from black_bloc.cogs.moderation.modmail import add_message, create_ticket, set_ticket_place
-from black_bloc.events import create_event
+from black_bloc.events import WHERE_OTHER, Where, create_event
 from black_bloc.golive import StreamInfo
 from black_bloc.llm import ANTHROPIC, GROQ, Usage
 from black_bloc.llm import MODEL as HAIKU
@@ -280,7 +280,7 @@ async def seed_world(client, web, guild, wf) -> dict:
         MEMBER_ID,
         title="Bloc night",
         description="come along",
-        location="the park",
+        where=Where(WHERE_OTHER, None, "the park"),
         starts_at=starts,
         finishes_at=starts + timedelta(hours=2),
     )

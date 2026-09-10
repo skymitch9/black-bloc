@@ -14,14 +14,17 @@ from ...events import (
     apply_decision,
     cancel_for,
     checked_fields,
+    checked_where,
     clamp,
     describe_duration,
     duration_minutes,
     ends_at,
     events_by_status,
     get_event,
+    read_where,
     rename_channel,
     update_event,
+    where_said,
 )
 from ...logkinds import VIA_WEBSITE
 from ...settings_store import DEFAULT_TIMEZONE_KEY
@@ -66,11 +69,16 @@ EDITED = "Saved, and the review channel's name follows the title."
 
 
 def event_row(guild: Any, row: Any) -> dict[str, Any]:
+    where = read_where(row)
+    channel = guild.get_channel(where.channel_id) if where.channel_id else None
     return {
         "id": row["id"],
         "title": row["title"],
         "description": row["description"],
         "location": row["location"],
+        "where_kind": where.kind,
+        "where_channel_id": str(where.channel_id) if where.channel_id else None,
+        "where_label": where_said(where, channel),
         "starts_at": row["starts_at"],
         "ends_at": row["ends_at"],
         "minutes": duration_minutes(row),
@@ -162,10 +170,18 @@ def build_router(bot: Any) -> APIRouter:
                 bot.db, int(who["id"]), bot.store.get(guild.id, DEFAULT_TIMEZONE_KEY)
             )
         )
+        where, refused = checked_where(
+            guild,
+            payload.get("where_kind"),
+            payload.get("where_channel_id"),
+            payload.get("location"),
+        )
+        if where is None:
+            raise Refused(400, "where_refused", refused)
         fields, why = checked_fields(
             title=payload.get("title"),
             description=payload.get("description"),
-            location=payload.get("location"),
+            where=where,
             start=payload.get("start"),
             duration=payload.get("duration"),
             tz_name=tz_name,
@@ -178,7 +194,7 @@ def build_router(bot: Any) -> APIRouter:
             event_id,
             title=fields.title,
             description=fields.description,
-            location=fields.location,
+            where=fields.where,
             starts_at=fields.starts,
             finishes_at=ends_at(fields.starts, fields.minutes),
         )

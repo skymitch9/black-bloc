@@ -1058,7 +1058,10 @@
         "decided_at",
         "deny_reason",
         "review_channel_id",
-        "created_at"
+        "created_at",
+        "where_kind",
+        "where_channel_id",
+        "where_label"
       ]
     },
     {
@@ -1081,7 +1084,10 @@
           "duration",
           "editable",
           "announced",
-          "scheduled"
+          "scheduled",
+          "where_kind",
+          "where_channel_id",
+          "where_label"
         ]
       }
     },
@@ -1094,7 +1100,9 @@
         "location": "the park",
         "start": "2099-09-14 19:30",
         "duration": "1h30m",
-        "tz": "UTC"
+        "tz": "UTC",
+        "where_kind": "other",
+        "where_channel_id": null
       },
       "read_by": [
         "page-events.js editor"
@@ -1112,7 +1120,10 @@
           "starts_at",
           "ends_at",
           "minutes",
-          "duration"
+          "duration",
+          "where_kind",
+          "where_channel_id",
+          "where_label"
         ]
       }
     },
