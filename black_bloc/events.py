@@ -165,7 +165,6 @@ WHERE_TEXT = "text"
 WHERE_OTHER = "other"
 WHERE_KINDS = (WHERE_VOICE, WHERE_TEXT, WHERE_OTHER)
 WHERE_CHANNEL_KINDS = (WHERE_VOICE, WHERE_TEXT)
-WHERE_CHANNEL_GONE = "event.where_channel_gone"
 WHERE_BUTTON = "Where"
 WHERE_VOICE_MARK = "🔊 "
 WHERE_TEXT_MARK = "#"
@@ -979,7 +978,7 @@ async def scheduled_place(bot: Any, guild: Any, row: Any) -> dict[str, Any]:
             await log_action(
                 bot,
                 guild,
-                WHERE_CHANNEL_GONE,
+                "event.where_channel_gone",
                 target=row["requester_id"],
                 details={
                     "event_id": row["id"],

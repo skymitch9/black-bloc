@@ -19,7 +19,7 @@ from black_bloc.cogs.community.birthdays import save_birthday
 from black_bloc.cogs.community.role_menus import add_option, create_menu, get_menu
 from black_bloc.cogs.content.golive import set_link, start_session
 from black_bloc.config import load_settings
-from black_bloc.events import APPROVED, create_event, set_status
+from black_bloc.events import APPROVED, WHERE_OTHER, Where, create_event, set_status
 from black_bloc.golive import StreamInfo
 from black_bloc.settings_store import SettingsStore
 from black_bloc.timezones import set_timezone
@@ -160,7 +160,7 @@ async def test_whats_next_is_the_soonest_approved_event_still_to_come(bot, db):
             MEMBER,
             title=title,
             description=None,
-            location="the park",
+            where=Where(WHERE_OTHER, None, "the park"),
             starts_at=starts,
             finishes_at=starts + timedelta(hours=1),
         )
@@ -182,7 +182,6 @@ async def test_an_event_that_has_already_started_is_not_whats_next(bot, db):
         MEMBER,
         title="Gone",
         description=None,
-        location=None,
         starts_at=gone,
         finishes_at=gone + timedelta(hours=1),
     )
@@ -199,7 +198,6 @@ async def test_a_pending_event_is_not_announced_by_chat_either(bot, db):
         MEMBER,
         title="Not approved",
         description=None,
-        location=None,
         starts_at=soon,
         finishes_at=soon + timedelta(hours=1),
     )

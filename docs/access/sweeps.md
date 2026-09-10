@@ -1,6 +1,14 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-10 17:20** — rows **329–335** written by the WHERE PICKER build on branch `where-picker`, off
+> `main` at `a47e43a`; the conductor renumbers them at the merge. **Schema 33 → 34** (`events` gains
+> `where_kind` and `where_channel_id`); registry keys **unchanged** — the design says there is nothing to
+> decide; mock routes unchanged at **150** (checked: *17 pages, 150 routes, 14 core settings*); one new log
+> kind `event.where_channel_gone`; tests **5395 → 5444**. ⚠️ **Nothing in 329–335 has met Discord** — no
+> test can click a Discord button, the branch is NOT merged and NOT deployed, and `python -m black_bloc`
+> was NOT booted (a worktree holds no token). 329–334 are done in `#mute-me-bot-test-spam` or on the
+> website; **335 needs TEST_MODE lifted** and is owner-side. Before that,
 > **2026-09-10 16:40** — row **328** written by the RAID-TRAIN CALENDAR NAME build on branch `raidtrain-name`,
 > off `main` at `d25f87c`. Schema UNCHANGED at **33**; registry keys **196 → 197**; mock routes unchanged at
 > **150** (checked: *17 pages, 150 routes, 14 core settings*); tests **5395 → 5403**. ⚠️ **Nothing in 328 has met
@@ -1189,6 +1197,35 @@ carries five new rows — `default_timezone`, `timezone_choices`, `time_step_min
 `events_default_minutes` and `events_scheduled_name_template`. Setting `timezone_choices` to a
 list with a name Black Bloc cannot resolve drops that name and says what it stored; setting it to
 nothing it knows at all is refused outright rather than leaving the dropdown empty.
+
+## The "Where?" picker — rows 329–335
+
+Written on `where-picker`, 2026-09-10, off `main` at `a47e43a`, in a worktree at
+`C:/lcw/bb-where-picker`; the conductor renumbers these at the merge (328 was taken by the
+raid-train name build the same afternoon). From the owner's own ask — *"We also need to add the
+where section like a real discord event for text channel or voice channel or other if they want
+to use a twitch link or something"* — the draft's free-text `Where` box is now a fifth button
+opening Discord's own channel picker. Designed and deviated from in
+[`../info/where-picker-design.md`](../info/where-picker-design.md). **Schema 33 → 34** (`events`
+gains `where_kind` and `where_channel_id`); **registry keys unchanged** — there is nothing to
+decide, the kind is the person's choice each time; **mock routes unchanged at 150**; one new log
+kind `event.where_channel_gone`; tests **5395 → 5444**. ⚠️ **Nothing below has met Discord**: no
+test can click a Discord button, `python -m black_bloc` was NOT booted (a worktree holds no
+token), and the branch is NOT merged and NOT deployed.
+
+⚠️ **Rows 329–334 are done in `#mute-me-bot-test-spam`** (TEST_MODE) or on the website. **Row 335
+is the only one that needs TEST_MODE lifted**, because TEST_MODE deliberately makes no scheduled
+event at all (`event.would_create_scheduled`) — so the Join button is owner-side and can wait.
+
+| # | Do this | Expect |
+|---|---|---|
+| **329** | `/event` ▸ **Propose an event**, and read the bottom row of buttons | Five of them: **Title & details**, **Where**, **Time zone**, **Submit** (once a title and a whole time are in) and **Back**. Open **Title & details**: it has only **two** boxes now — Title and What is it? The old `Where, or a link` box is gone, because Where has its own panel. The card still says **`Where — (not set)`**, and **Submit** appears without ever touching it: Where is optional and always was |
+| **330** | Press **Where**, then pick a **voice channel** from the dropdown | The panel is Discord's own channel list — voice, stage and text channels, no 25-item cap — with `A voice or text channel…` on it. Picking one takes you straight back to the draft, whose **Where** line now reads as a channel **mention** (`#raid-night` in blue, clickable) and whose button now says **`Where: 🔊 Raid Night`**. Press **Where** again: the dropdown opens with that channel already ticked |
+| **331** | On the same draft, press **Where** and pick a **text channel** instead | Same round trip; the card shows that channel's mention and the button says **`Where: #general`**. Rename the channel in Discord and open `/event` again — the card shows the NEW name, because only the id is stored |
+| **332** | Press **Where** ▸ **`Other — type a place or link…`** and type `twitch.tv/blackbloc` | The card reads **`Where — twitch.tv/blackbloc`** and the button **`Where: twitch.tv/blackbloc`**. Open the same box again: it is prefilled with what you typed, so correcting it is the same gesture as retyping. ⚠️ The box **cannot refuse** — anything you type is kept |
+| **333** | With something set, press **Where** and look for **Clear**; press it. Then press **Where** again | **Clear** is only on the panel while something IS set — it never renders on an empty draft. Pressing it puts the card back to **`Where — (not set)`** and the button back to plain **Where**, and Clear is gone again. **Back** on that panel changes nothing at all. Emptying the **Other** box does the same thing as Clear |
+| **334** | https://blackbloc.heygabi.ai/events.html ▸ **Open** on an event ▸ **Change it** | **Where** is a dropdown, not a text box: `— nowhere in particular —`, `— somewhere else —`, then **Voice channels** and **Text channels** as two named groups of the server's real channels. The typed box appears ONLY when `— somewhere else —` is chosen. Save with a channel picked and the detail card above reads **`🔊 Raid Night`** or **`#general`**; the Discord card shows the same event as a mention. The two doors agree — set it on the site, open `/event` in Discord, and the button carries what you saved |
+| **335** ⚠️ **needs TEST_MODE lifted — owner-side** | Approve an event whose Where is a **voice channel**, outside test mode, and open the server's **Events** list in Discord | The scheduled event has a **Join** button and names the voice channel — not the words "Ask in the server". A **stage** channel does the same through Discord's stage kind. A **text** channel has no Join button (Discord has no text-channel event kind) and reads **`#general`** as plain words; a typed place reads as the typed words, exactly as it always did. ⚠️ If the channel is deleted between the proposal and the approval, the event is made anyway with **`Ask in the server`** on it and the Logs page carries one **`event.where_channel_gone`** line saying which channel went |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that

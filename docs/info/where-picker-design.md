@@ -1,9 +1,16 @@
 # The "Where?" picker — a real place on `/event` Propose, like Discord's own create-event dialog
 
-> **Audience:** whoever maintains the events form. **Status:** TRACKED, DESIGN — written
-> 2026-09-10 16:13 against `main` at `3609b3e` (v102); nothing here has been run. Build dispatched
-> to an Opus agent the same afternoon; every departure goes in a **`## Deviations`** foot the build
-> appends. Last verified: **2026-09-10 16:13** — what exists today was read in
+> **Audience:** whoever maintains the events form. **Status:** TRACKED, 🔨 **BUILT** on branch
+> `where-picker` off `main` at `a47e43a`, worktree `C:/lcw/bb-where-picker` — ⚠️ **NOT merged, NOT
+> deployed, and NOTHING here has met Discord**: no test can click a Discord button
+> ([`../access/testing.md`](../access/testing.md)), `python -m black_bloc` was NOT booted (a worktree
+> holds no token), and TEST_MODE deliberately makes no scheduled event at all, so the kind mapping in
+> §2 is proven by TESTS ONLY. What IS measured: the suite (**5395 → 5444**, forward and `BB_REVERSE=1`),
+> `ruff check black_bloc tests`, and `node site/mock/check.mjs`
+> (*ok - 17 pages, 150 routes, 14 core settings, all keys present*). The owner's by-eye rows are
+> **329–335** in [`../access/sweeps.md`](../access/sweeps.md). Every departure from what is written
+> below is in the **`## Deviations`** foot. Last verified (the header: 2026-09-10 17:30, measured on
+> the branch; the body: as at the design) — what existed before the build was read in
 > `black_bloc/events.py` (`build_card`, `create_event`, `EventFields`/`checked_fields`,
 > `EventDraft`/`draft_lines`, `update_event`, `create_scheduled_event`), `cogs/community/events.py`
 > (`build_draft`, `EventTextModal`, the staff `EditModal`), `storage/db.py` (`events` table, schema
@@ -137,3 +144,62 @@ Clear, the website form, and one ⚠️ owner-side row for the Join button on a 
 `docs/info/README.md` (this doc's row → BUILT), `docs/info/architecture.md` (schema 34, key
 count unchanged), `docs/TODO.md` (status line on the 🆕 item only — the MOVE to DONE is the
 conductor's, at landing).
+
+## Deviations
+
+- **D1 (build) There is no `EditModal`, so staff got a Where BUTTON on the review card instead.**
+  §5's table points at "the staff **Edit** on the review panel (`EditModal`,
+  `cogs/community/events.py` ~1065)" with a `location` TextInput. No such class exists anywhere in
+  the repo — the only staff *edit* of an event's details is the website's `PUT /api/events/{id}`.
+  What was built is the same behaviour on the surface staff actually have: a `CardWhereButton` on
+  the review card (`build_card` in the cog), staff-only and only while the event is still in an open
+  status, opening the same `WherePanel`. Staff can set any of the three kinds or clear it, which is
+  what the row asked for.
+- **D2 (build) That button writes through a new `events.set_where`, not through `update_event`.**
+  §5 says "storing through `update_event(where=…)`". `update_event` rewrites title, description,
+  start and end as well, and the card has no business re-writing a start it never showed — a row
+  with an unreadable start would have had one invented for it. `set_where` writes the three columns
+  Where owns and nothing else, beside `set_status` / `set_review` / `set_scheduled` /
+  `set_announced`, which is the grammar this module already uses. The WEBSITE still goes through
+  `update_event(where=…)` exactly as written, because there the whole row genuinely is being edited.
+- **D3 (build) `create_scheduled_event` branches on the CHANNEL'S LIVE TYPE, not on `where.kind`.**
+  §5 says "branches on `where.kind` per §2". A channel can be converted between text, voice and
+  stage after an event is proposed, and Discord refuses `entity_type=voice` for a stage channel and
+  either for a text one — so a stored kind that has gone out of date would produce a refused
+  calendar entry rather than a wrong one. `scheduled_place` asks `guild.get_channel` what the
+  channel is *now*: stage → `stage_instance` + `channel=`, voice → `voice` + `channel=`, anything
+  else → external with `#name`. `where_kind` still lives on the row, for the website's dropdown and
+  for rendering a row with no guild in hand.
+- **D4 (build) `checked_where` CORRECTS a kind that disagrees with the channel, and refuses a
+  channel an event cannot happen in.** §5 says the API "validates the kind against the three
+  constants and the channel against the guild" — two checks. A payload naming a text channel as
+  `voice` passes both and would still be wrong, so the channel's own type wins (same argument as
+  D3) and the row is stored as `text`; a payload naming a CATEGORY or a forum passes both too, and
+  that one is refused, in a sentence, because there is no kind to correct it to. Four refusals
+  ship, not two: unknown kind, no channel picked, no such channel here, and not a place an event
+  can happen.
+- **D5 (build) The Title & details modal keeps TWO boxes, not three.** §4 says "It had four boxes;
+  it keeps three." It had three — Title, What is it?, and `Where, or a link` — since the When
+  picker landed, so removing one leaves two. Nothing else about the paragraph changed.
+- **D6 (build) `build_card` takes `where: Where` in place of its `location: str` parameter.** §5
+  only names the field's *value* (`Where` field = `where_line(...)`). Leaving the parameter as text
+  would have meant every caller flattening a `Where` on the way in and the card losing the ability
+  to render a mention — so the parameter changed shape with the fact. Same for
+  `create_event`/`update_event`, which §3 does imply. `selftest_panels.send_events` passes
+  `Where(WHERE_OTHER, None, SELFTEST_NOTE)`.
+- **D7 (build) A fifth reader of `location` was found and fixed: `knowledge.py:event_section`.**
+  §5's table lists four surfaces. The chat's knowledge sections also read `row["location"]` to say
+  where an approved event is, and after this change that column is NULL for the two channel kinds —
+  so "what's on?" would have silently dropped the Where clause. It now goes through the same
+  `read_where`/`where_line`. `chat_data.py:event_place` was deliberately LEFT ALONE: it already
+  prefers `card_channel_id` and only falls back to `location`, so its behaviour is unchanged by
+  this build and changing it would move a different fact.
+- **D8 (build) `BUTTON_LABEL_LIMIT` did not exist and was added.** The brief names it as an
+  existing convention; nothing in the repo defined it. It is `80` in `black_bloc/events.py` —
+  Discord's own cap on a button label — and `where_button_label` clamps to it.
+- **D9 (build) Deselecting the channel picker clears the Where, the same as `Clear`.** §4 gives
+  `min_values=0` but says only that picking a channel stores one. An empty selection had to mean
+  something; anything other than "nowhere" would have left a control that silently does nothing.
+- **D10 (build) The sweep rows are 329–335, not 328 onwards.** The raid-train calendar-name build
+  took 328 on `main` the same afternoon, while this branch was in flight. The conductor renumbers
+  at the merge either way; this is recorded so the gap is not read as a missing row.
