@@ -683,6 +683,7 @@ async def open_where_panel(
         where=where,
         on_pick=on_pick,
         on_back=back,
+        known=interaction.guild.get_channel(where.channel_id or 0) is not None,
     )
     retire(previous)
     view.message = await interaction.edit_original_response(
@@ -694,13 +695,13 @@ class WherePanel(Panel):
     """The channel picker, the typed door and the way back; what it writes is handed in."""
 
     def __init__(
-        self, minutes: int, *, where: Where, on_pick: Any, on_back: Any
+        self, minutes: int, *, where: Where, on_pick: Any, on_back: Any, known: bool = True
     ) -> None:
         super().__init__(minutes, footer=PANEL_TIMEOUT_FOOTER)
         self.where = where
         self.takes_where = on_pick
         self.goes_back = on_back
-        self.add_item(WhereSelect(where))
+        self.add_item(WhereSelect(where, known=known))
         self.add_item(WhereOtherButton())
         if where.kind is not None:
             self.add_item(WhereClearButton())
@@ -716,7 +717,7 @@ class WherePanel(Panel):
 class WhereSelect(discord.ui.ChannelSelect):
     """Discord's own picker, so there is no 25 cap and no option list to keep in step."""
 
-    def __init__(self, where: Where) -> None:
+    def __init__(self, where: Where, *, known: bool = True) -> None:
         super().__init__(
             placeholder=WHERE_PLACEHOLDER,
             channel_types=[
@@ -728,7 +729,7 @@ class WhereSelect(discord.ui.ChannelSelect):
             max_values=1,
             row=0,
             default_values=(
-                [discord.Object(id=int(where.channel_id))] if where.channel_id else []
+                [discord.Object(id=int(where.channel_id))] if where.channel_id and known else []
             ),
         )
 

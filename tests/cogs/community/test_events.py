@@ -2958,3 +2958,18 @@ async def test_a_member_who_is_not_staff_cannot_store_a_where_on_somebody_elses_
 
     fresh = await get_event(db, row["id"])
     assert fresh["location"] == "the park"
+
+
+async def test_a_channel_that_has_gone_is_not_sent_back_as_a_pre_selected_default(
+    cog, bot, member
+):
+    """Discord is handed a default it may not be able to resolve, so it is not handed one."""
+    with_channels(bot)
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.where = Where(WHERE_VOICE, VOICE_CHANNEL, "")
+    bot.guild.channels.pop(VOICE_CHANNEL)
+
+    _shown, panel = await open_where(cog, bot, member, view)
+
+    assert find_select(panel, events_pure.WHERE_PLACEHOLDER).default_values == []
+    assert has_item(panel, events_pure.WHERE_CLEAR_BUTTON)
