@@ -1,6 +1,12 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-10 16:40** — row **328** written by the RAID-TRAIN CALENDAR NAME build on branch `raidtrain-name`,
+> off `main` at `d25f87c`. Schema UNCHANGED at **33**; registry keys **196 → 197**; mock routes unchanged at
+> **150** (checked: *17 pages, 150 routes, 14 core settings*); tests **5395 → 5403**. ⚠️ **Nothing in 328 has met
+> Discord** — the branch is NOT merged and NOT deployed, and no test can make a real scheduled event (the guard
+> refuses one under TEST_MODE, which is itself a test). Row 328 **needs TEST_MODE lifted** and is owner-side.
+> Before that,
 > **2026-09-10** — rows **323–327** (were `WP-a`–`WP-e`) written by the WHEN PICKER build on branch
 > `when-picker`, off `main` at `ef54e60`; the conductor numbers them at the merge. Schema UNCHANGED at
 > **33**; registry keys **191 → 196**; mock routes unchanged at **150** (checked: *17 pages, 150 routes,
@@ -1176,6 +1182,7 @@ scheduled event at all (`event.would_create_scheduled`) — so it is owner-side 
 | **325** (was `WP-c`) | `/event` ▸ **My time zone** | A DROPDOWN of 24 zones, each labelled with the time it is there right now (`America/Phoenix · now 3:07 PM`) — not a typed box. Pick one: it is saved with the same sentence it always used and you land back on `/event`. Open it again and press **`Other — type it…`** at the bottom: THAT is the old typed box, prefilled with the zone you just picked, for anywhere not on the list. The **Time zone** button on a draft panel opens the same dropdown and **Back** returns you to the draft with everything still on it |
 | **326** (was `WP-d`) | `/raidtrain` ▸ **Start a raid train** ▸ **Title & details**. Put a title in, and type **`abc`** into **Minutes per slot**. Submit the box, then set the Day, Hour and Minute | The panel shows **`Minutes per slot — abc`** and keeps the title. **Start** never appears. Once the time is complete the panel says **`abc` is not a whole number** and names the 15–720 range. Open **Title & details** again — `abc` is still in the box — put `60` in, and **Start** appears |
 | **327** (was `WP-e`) ⚠️ **needs TEST_MODE lifted — owner-side** | Approve an event outside test mode and look at the server's **Events** list in Discord | The scheduled event is called **`<the title> Feat. BaF`**, not just the title. The review card, the announcement and the DM all keep the plain title. The wording is `events_scheduled_name_template` on https://blackbloc.heygabi.ai/settings.html (Events group) — change it to anything containing `{title}` and the next approval uses it; a template without `{title}`, or with any other `{placeholder}`, is refused there in words |
+| **328** ⚠️ **needs TEST_MODE lifted — owner-side** | Open https://blackbloc.heygabi.ai/settings.html ▸ **Raid train** and find `raidtrain_scheduled_name_template`. Leave it alone, turn `raidtrain_scheduled_event` on, and start a raid train outside test mode; look at the server's **Events** list in Discord. Then set the template to `{title} Feat. BaF` and start another | The row is there, showing **`{title}`** — the plain title, exactly what raid trains have always been called, so the FIRST train's calendar event is called just its title with no suffix. After the change the SECOND one reads **`<the title> Feat. BaF`**, matching what `/event` events are called. The lineup post, the thread and the DMs keep the plain title either way. A template without `{title}`, or with any other `{placeholder}`, is refused there in words and nothing is stored |
 
 ⚠️ **Also visible without Discord:** https://blackbloc.heygabi.ai/settings.html ▸ **Events** now
 carries five new rows — `default_timezone`, `timezone_choices`, `time_step_minutes`,
