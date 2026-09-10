@@ -1,7 +1,7 @@
 # The "When?" picker — `/event` Propose and `/raidtrain` Start as draft panels
 
 > **Audience:** the Opus build agent, then whoever maintains the two forms. **Status:** TRACKED,
-> **DESIGN — decided 2026-09-10 15:10, build dispatched after.** Last verified: **2026-09-10 15:20**
+> **DESIGN — decided 2026-09-10 15:08–15:10, build dispatched 15:15.** Last verified: **2026-09-10 15:13**
 > against `main` at `c3f842b` (what exists today was read in `black_bloc/cogs/community/events.py`,
 > `black_bloc/cogs/content/raidtrain.py`, `black_bloc/events.py`, `black_bloc/timezones.py`,
 > `black_bloc/settings_store.py`; nothing here has been run yet). Pattern reference:
@@ -20,7 +20,7 @@ He typed `2026-09-11` into `Start — YYYY-MM-DD HH:MM`; `checked_fields` refuse
 `start_error` sentence) and, because a modal-submit interaction cannot be answered with another
 modal, the ephemeral refusal was all he got — title, description, location, gone.
 
-Decided with the owner, one question at a time (2026-09-10 15:10–15:15):
+Decided with the owner, one question at a time (2026-09-10 15:08–15:10):
 
 - **Q1 = "A"** — Propose becomes a **draft panel + text modal**, not a modal with selects inside.
 - **Q2 = "Yes, same build"** — `/raidtrain` Start gets the same picker in this build.
@@ -148,7 +148,7 @@ Third key: `time_step_minutes` (`int`, 5–60, default 15) — the Minute dropdo
 `events_default_minutes` (§4) that is four new keys: 191 → **195** (verify the starting count
 in `tests/test_settings_store.py` first — 191 is the v96 figure).
 
-## 5b. The scheduled event's name — added 2026-09-10 15:30 (owner: "Can we make it also say '{Event Name} Feat. BaF' when it post the discord events after")
+## 5b. The scheduled event's name — added 2026-09-10 15:11 (owner: "Can we make it also say '{Event Name} Feat. BaF' when it post the discord events after")
 
 `create_scheduled_event` (`black_bloc/events.py:716`) names the Discord scheduled event
 `clamp(row["title"], EVENT_NAME_LIMIT)`. New `text` key **`events_scheduled_name_template`**,
@@ -157,7 +157,7 @@ template without `{title}` is refused on set, in words) and clamped to `EVENT_NA
 rendering so a long title never makes Discord refuse the event. Applies to the scheduled event
 only — the review card, the announcement and the DM keep the plain title (they already say whose
 server it is). Raid trains' `raidtrain_scheduled_event` keeps its own name; if the owner wants
-the suffix there too that is one more key, not a shared one. Owner, 15:32: "Also make that standard name format something changeable on the website" — it
+the suffix there too that is one more key, not a shared one. Owner, 15:12: "Also make that standard name format something changeable on the website" — it
 is a registry key, so the Settings page (https://blackbloc.heygabi.ai/settings.html, Events
 group) and `/settings set-value` both edit it; the agent verifies the key renders there in the
 mock (`check.mjs`) and names the group in its report. Key count → **196**. One test in
