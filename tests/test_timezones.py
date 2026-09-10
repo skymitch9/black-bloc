@@ -133,3 +133,20 @@ def test_an_ordinary_time_has_no_trouble_at_all():
     assert clock_trouble("2027-03-14 02:30", "America/Phoenix") is None
     assert clock_trouble("next tuesday", "America/New_York") is None
     assert clock_trouble("2027-09-14 19:30", "Middle/Earth") is None
+
+
+async def test_the_fallback_is_what_a_member_who_never_chose_reads_times_in(db):
+    assert await get_timezone(db, USER, "Europe/London") == "Europe/London"
+
+
+async def test_a_stored_zone_beats_the_fallback_the_guild_hands_over(db):
+    await set_timezone(db, USER, "Asia/Tokyo")
+
+    assert await get_timezone(db, USER, "Europe/London") == "Asia/Tokyo"
+
+
+async def test_a_fallback_this_machine_cannot_resolve_lands_on_the_module_default(db):
+    """A guild's `default_timezone` is validated on set, but tzdata can drop a name later."""
+    assert await get_timezone(db, USER, "Middle/Earth") == DEFAULT_TZ
+    assert await get_timezone(db, USER, "") == DEFAULT_TZ
+    assert await get_timezone(db, USER, None) == DEFAULT_TZ

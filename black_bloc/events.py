@@ -1301,9 +1301,12 @@ async def set_zone(db: Any, user_id: int, given: Any) -> tuple[bool, str]:
     return (True, TZ_SET.format(tz=name, now=local_time(name)))
 
 
-async def stored_zone(db: Any, user_id: int) -> tuple[str, bool]:
+async def stored_zone(db: Any, user_id: int, fallback: Any = DEFAULT_TZ) -> tuple[str, bool]:
     chosen = await stored_timezone(db, user_id)
-    return (chosen or DEFAULT_TZ, chosen is not None)
+    if chosen is not None:
+        return (chosen, True)
+    wanted = str(fallback or "").strip()
+    return (wanted if is_known(wanted) else DEFAULT_TZ, False)
 
 
 SETTINGS_KEYS = (

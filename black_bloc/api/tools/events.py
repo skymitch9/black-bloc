@@ -24,6 +24,7 @@ from ...events import (
     update_event,
 )
 from ...logkinds import VIA_WEBSITE
+from ...settings_store import DEFAULT_TIMEZONE_KEY
 from ...timezones import get_timezone, is_known
 from ..auth import Refused, staff_dependency
 from ..names import resolve_one
@@ -154,7 +155,13 @@ def build_router(bot: Any) -> APIRouter:
                 NOT_EDITABLE.format(event_id=event_id, status=row["status"]),
             )
         given = str(payload.get("tz") or "")
-        tz_name = given if is_known(given) else await get_timezone(bot.db, int(who["id"]))
+        tz_name = (
+            given
+            if is_known(given)
+            else await get_timezone(
+                bot.db, int(who["id"]), bot.store.get(guild.id, DEFAULT_TIMEZONE_KEY)
+            )
+        )
         fields, why = checked_fields(
             title=payload.get("title"),
             description=payload.get("description"),
