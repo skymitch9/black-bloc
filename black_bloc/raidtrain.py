@@ -1,14 +1,27 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, NamedTuple
 
-from .events import clamp
+from .events import (
+    DRAFT_NEEDED,
+    DRAFT_NOTHING_YET,
+    DRAFT_WHAT_LIMIT,
+    DRAFT_WHEN,
+    DRAFT_ZONE,
+    DRAFT_ZONE_HINT,
+    START_IN_THE_PAST,
+    STILL_NEEDED,
+    clamp,
+    start_error,
+)
 from .golive import parse_ts, ping_prefix
 from .panels import SELECT_OPTION_LIMIT, option_label
 from .panels import panel_minutes as library_panel_minutes
-from .timezones import unix
+from .timezones import START_EXAMPLE, parse_start, unix
+from .when_picker import WhenDraft, resolve, said_when
 
 log = logging.getLogger(__name__)
 
@@ -117,6 +130,21 @@ SWAP_THEM = "swap_them"
 SAVE = "save"
 
 GIVE_BACK_LABEL = "Give back slot #{position}"
+
+DRAFT_TITLE = "Start a raid train — draft"
+START_BUTTON = "Start"
+NO_TRAIN_TITLE = (
+    "A raid train needs a name, so nothing was made. Put something in the Title box — it is the "
+    "heading on the lineup post everybody reads."
+)
+BAD_NUMBER = (
+    "**{given}** is not a whole number, so no train was made. Slots are {min}-{max} minutes "
+    "long, and a train runs {count_min}-{count_max} of them."
+)
+OUT_OF_RANGE = (
+    "A raid train runs {count_min} to {count_max} slots of {min} to {max} minutes each, so "
+    "nothing was made. Discord will not carry a longer lineup in one message."
+)
 
 
 class RaidMove(NamedTuple):
@@ -581,9 +609,109 @@ def panel_minutes(store: Any, guild_id: int) -> int:
     return library_panel_minutes(store, guild_id, PANEL_MINUTES_KEY)
 
 
+class TrainFields(NamedTuple):
+    title: str
+    description: str
+    starts: datetime
+    slot_minutes: int
+    slot_count: int
+
+
+@dataclass
+class TrainDraft:
+    """What the Start panel holds between renders; the numbers are kept as they were typed."""
+
+    when: WhenDraft = field(default_factory=WhenDraft)
+    title: str = ""
+    description: str = ""
+    slot_minutes: str = ""
+    slot_count: str = ""
+
+
+def read_numbers(slot_minutes: Any, slot_count: Any) -> tuple[int, int] | str:
+    """A modal has no `app_commands.Range`, so the bounds are re-asked here."""
+    try:
+        minutes = int(str(slot_minutes).strip())
+        count = int(str(slot_count).strip())
+    except ValueError:
+        return BAD_NUMBER.format(
+            given=clamp(f"{slot_minutes} / {slot_count}", 60),
+            min=SLOT_MINUTES_MIN,
+            max=SLOT_MINUTES_MAX,
+            count_min=SLOT_COUNT_MIN,
+            count_max=SLOT_COUNT_MAX,
+        )
+    if not (SLOT_MINUTES_MIN <= minutes <= SLOT_MINUTES_MAX) or not (
+        SLOT_COUNT_MIN <= count <= SLOT_COUNT_MAX
+    ):
+        return OUT_OF_RANGE.format(
+            min=SLOT_MINUTES_MIN,
+            max=SLOT_MINUTES_MAX,
+            count_min=SLOT_COUNT_MIN,
+            count_max=SLOT_COUNT_MAX,
+        )
+    return (minutes, count)
+
+
+def draft_check(draft: TrainDraft, now: datetime) -> tuple[TrainFields | None, str]:
+    """Everything `run_create` checked, said one at a time so Start can wait for the last."""
+    title = clamp(draft.title, TITLE_LIMIT)
+    if not title:
+        return None, NO_TRAIN_TITLE
+    start, trouble = resolve(draft.when, now)
+    if start is None:
+        return None, trouble
+    starts = parse_start(start, draft.when.zone)
+    if starts is None:
+        return None, start_error(start, draft.when.zone, START_EXAMPLE)
+    if starts <= now:
+        return None, START_IN_THE_PAST.format(given=clamp(start, 80), tz=draft.when.zone)
+    numbers = read_numbers(draft.slot_minutes, draft.slot_count)
+    if isinstance(numbers, str):
+        return None, numbers
+    minutes, count = numbers
+    return (
+        TrainFields(title, clamp(draft.description, DESCRIPTION_LIMIT), starts, minutes, count),
+        "",
+    )
+
+
+def draft_when_line(draft: TrainDraft, now: datetime) -> str:
+    said = said_when(draft.when)
+    if said:
+        return DRAFT_WHEN.format(when=said, tz=draft.when.zone)
+    return resolve(draft.when, now)[1]
+
+
+def draft_lines(draft: TrainDraft, now: datetime, *, chosen: bool, why: str = "") -> list[str]:
+    """The draft card, with the two numbers shown exactly as they were typed."""
+    when = draft_when_line(draft, now)
+    lines = [
+        f"**Title** — {clamp(draft.title, TITLE_LIMIT) or DRAFT_NEEDED}",
+        f"**Starts** — {when}",
+        f"**Minutes per slot** — {clamp(draft.slot_minutes, 40) or DRAFT_NEEDED}",
+        f"**How many slots** — {clamp(draft.slot_count, 40) or DRAFT_NEEDED}",
+        f"**What** — {clamp(draft.description, DRAFT_WHAT_LIMIT) or DRAFT_NOTHING_YET}",
+        (DRAFT_ZONE if chosen else DRAFT_ZONE_HINT).format(tz=draft.when.zone),
+    ]
+    if why and why != when:
+        lines.append(STILL_NEEDED.format(why=why))
+    return lines
+
+
 __all__ = [
     "ALL_SLOTS",
     "BACK",
+    "BAD_NUMBER",
+    "DRAFT_TITLE",
+    "NO_TRAIN_TITLE",
+    "OUT_OF_RANGE",
+    "START_BUTTON",
+    "TrainDraft",
+    "TrainFields",
+    "draft_check",
+    "draft_lines",
+    "read_numbers",
     "CALL_OFF",
     "CANCELLED",
     "CAP_REACHED",

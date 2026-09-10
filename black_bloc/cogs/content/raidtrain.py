@@ -12,7 +12,20 @@ from discord.ext import commands, tasks
 from ... import raidtrain as rt
 from ...actionlog import log_action, send_logs, stamp
 from ...command_errors import NETWORK_ERRORS, AnswersErrors
-from ...events import START_IN_THE_PAST, clamp, start_error
+from ...events import (
+    TEXT_BUTTON,
+    TEXT_MODAL_TITLE,
+    ZONE_PANEL_BUTTON,
+    ZONE_PANEL_INTRO,
+    ZONE_PANEL_TITLE,
+    clamp,
+    guild_zone,
+    minute_step,
+    stored_zone,
+    zone_choices,
+    zone_line,
+)
+from ...events import set_zone as store_zone
 from ...golive import now_iso, parse_ts
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import wait_ready
@@ -43,10 +56,6 @@ from ...raidtrain import (
     NOT_YOURS,
     OPEN,
     OPEN_STATUSES,
-    SLOT_COUNT_MAX,
-    SLOT_COUNT_MIN,
-    SLOT_MINUTES_MAX,
-    SLOT_MINUTES_MIN,
     SLOT_TAKEN,
     SLOT_UNKNOWN,
     STATUS_WORDS,
@@ -77,7 +86,9 @@ from ...settings_store import (
     SettingError,
     coerce_value,
 )
-from ...timezones import START_EXAMPLE, get_timezone, parse_start, unix
+from ...timezones import unix
+from ...when_picker import DaySelect, HourSelect, MinuteSelect, WhenDraft, ZonePanel
+from ...when_picker import ZoneModal as WhenZoneModal
 
 log = logging.getLogger(__name__)
 
@@ -85,7 +96,6 @@ SWEEPS_BEFORE_DEGRADED = 3
 CHOICE_LIMIT = 25
 LIST_LIMIT = 20
 MINE_LIMIT = 10
-MODAL_ZONE_HINT = "{example} — read in {tz}"
 
 REFUSED = "raidtrain_refused"
 NO_SUCH_SLOT_CODE = "no_such_slot"
@@ -108,14 +118,6 @@ NOTHING_UPCOMING = (
 )
 NOTHING_HELD = (
     "You do not hold a slot on any raid train. **Back** shows the ones that are coming up."
-)
-BAD_NUMBER = (
-    "**{given}** is not a whole number, so no train was made. Slots are {min}–{max} minutes "
-    "long, and a train runs {count_min}–{count_max} of them."
-)
-OUT_OF_RANGE = (
-    "A raid train runs {count_min} to {count_max} slots of {min} to {max} minutes each, so "
-    "nothing was made. Discord will not carry a longer lineup in one message."
 )
 CREATED = (
     "**{title}** is up with {count} slot(s) of {minutes} minutes, starting <t:{when}:F>. "
@@ -742,39 +744,6 @@ async def save_setup(
     return Outcome(True, SETUP_DONE.format(parts=", ".join(parts)), value=wanted)
 
 
-class TrainModal(AnswersErrors, discord.ui.Modal, title="Start a raid train"):
-    train_title = discord.ui.TextInput(label="Title", max_length=TITLE_LIMIT)
-    description = discord.ui.TextInput(
-        label="What is it?",
-        style=discord.TextStyle.paragraph,
-        max_length=DESCRIPTION_LIMIT,
-        required=False,
-    )
-    start = discord.ui.TextInput(
-        label="Start — YYYY-MM-DD HH:MM", placeholder=START_EXAMPLE, max_length=16
-    )
-    slot_minutes = discord.ui.TextInput(label="Minutes per slot", placeholder="60", max_length=4)
-    slot_count = discord.ui.TextInput(label="How many slots", placeholder="8", max_length=3)
-
-    def __init__(self, cog: RaidTrains, tz_name: str, minutes: int) -> None:
-        super().__init__()
-        self.cog = cog
-        self.tz_name = tz_name
-        self.slot_minutes.default = str(minutes)
-        self.start.placeholder = MODAL_ZONE_HINT.format(example=START_EXAMPLE, tz=tz_name)
-
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        await self.cog.submit_train(
-            interaction,
-            tz_name=self.tz_name,
-            title=clamp(self.train_title, TITLE_LIMIT),
-            description=clamp(self.description, DESCRIPTION_LIMIT),
-            start=str(self.start),
-            slot_minutes=str(self.slot_minutes),
-            slot_count=str(self.slot_count),
-        )
-
-
 # --- what renders --------------------------------------------------------------------------------
 
 
@@ -788,6 +757,7 @@ GIVE_BACK_VIEW = "give_back"
 
 SELECT_CAP = 25
 MODAL_TITLE_LIMIT = 45
+DRAFT_BUTTON_ROW = 3
 
 DO_CLAIM = "do_claim"
 DO_UNASSIGN = "do_unassign"
@@ -1512,73 +1482,238 @@ async def run_setup(interaction: discord.Interaction, view: Any, fields: Any) ->
     await answer(interaction, said.message)
 
 
-async def run_create(
-    interaction: discord.Interaction,
-    previous: Any,
-    *,
-    tz_name: str,
-    title: str,
-    description: str,
-    start: str,
-    slot_minutes: str,
-    slot_count: str,
+# --- the Start draft ------------------------------------------------------------------------------
+
+
+class TrainDraftPanel(Panel):
+    """The draft Start writes into: nothing typed is refused, and Start waits until it passes."""
+
+    def __init__(self, minutes: int, fields: rt.TrainDraft) -> None:
+        super().__init__(minutes, footer=rt.PANEL_TIMEOUT_FOOTER)
+        self.fields = fields
+
+    @property
+    def draft(self) -> WhenDraft:
+        return self.fields.when
+
+    async def rerender(self, interaction: discord.Interaction) -> None:
+        await open_draft(interaction, self.fields, self)
+
+    async def take_later(self, interaction: discord.Interaction, text: str) -> None:
+        self.fields.when.later_text = str(text or "").strip()
+        self.fields.when.day = None
+        await self.rerender(interaction)
+
+
+class TrainTextModal(AnswersErrors, discord.ui.Modal, title=TEXT_MODAL_TITLE):
+    """Four boxes with no failure path; `"abc"` slot minutes are held on the panel, not lost."""
+
+    train_title = discord.ui.TextInput(label="Title", max_length=TITLE_LIMIT, required=False)
+    description = discord.ui.TextInput(
+        label="What is it?",
+        style=discord.TextStyle.paragraph,
+        max_length=DESCRIPTION_LIMIT,
+        required=False,
+    )
+    slot_minutes = discord.ui.TextInput(
+        label="Minutes per slot", placeholder="60", max_length=4, required=False
+    )
+    slot_count = discord.ui.TextInput(
+        label="How many slots", placeholder="8", max_length=3, required=False
+    )
+
+    def __init__(self, previous: Any) -> None:
+        super().__init__()
+        self.previous = previous
+        fields = previous.fields
+        self.train_title.default = fields.title or None
+        self.description.default = fields.description or None
+        self.slot_minutes.default = fields.slot_minutes or None
+        self.slot_count.default = fields.slot_count or None
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        fields = self.previous.fields
+        fields.title = clamp(self.train_title, TITLE_LIMIT)
+        fields.description = clamp(self.description, DESCRIPTION_LIMIT)
+        fields.slot_minutes = str(self.slot_minutes).strip()
+        fields.slot_count = str(self.slot_count).strip()
+        await open_draft(interaction, fields, self.previous)
+
+
+class DraftTextButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(
+            label=TEXT_BUTTON, style=discord.ButtonStyle.primary, row=DRAFT_BUTTON_ROW
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await still_organizer(interaction):
+            return
+        await interaction.response.send_modal(TrainTextModal(self.view))
+
+
+class DraftZoneButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(
+            label=ZONE_PANEL_BUTTON, style=discord.ButtonStyle.secondary, row=DRAFT_BUTTON_ROW
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        fields = self.view.fields
+        await open_zone_panel(
+            interaction, self.view, lambda one, prev: open_draft(one, fields, prev)
+        )
+
+
+class StartButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(
+            label=rt.START_BUTTON, style=discord.ButtonStyle.success, row=DRAFT_BUTTON_ROW
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await start_draft(interaction, self.view)
+
+
+class DraftBackButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label="Back", style=discord.ButtonStyle.secondary, row=DRAFT_BUTTON_ROW)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_root(interaction, self.view)
+
+
+async def build_draft(
+    bot: Any, guild: Any, actor: Any, fields: rt.TrainDraft
+) -> tuple[discord.Embed, TrainDraftPanel]:
+    store = bot.store
+    now = datetime.now(UTC)
+    zone_name, chosen = await stored_zone(bot.db, actor.id, guild_zone(store, guild.id))
+    fields.when.zone = zone_name
+    checked, why = rt.draft_check(fields, now)
+    embed = discord.Embed(
+        title=rt.DRAFT_TITLE,
+        description=clamped(rt.draft_lines(fields, now, chosen=chosen, why=why)),
+    )
+    view = TrainDraftPanel(minutes_for(bot, guild.id), fields)
+    view.add_item(DaySelect(fields.when, now))
+    view.add_item(HourSelect(fields.when))
+    view.add_item(MinuteSelect(fields.when, minute_step(store, guild.id)))
+    view.add_item(DraftTextButton())
+    view.add_item(DraftZoneButton())
+    if checked is not None:
+        view.add_item(StartButton())
+    view.add_item(DraftBackButton())
+    return (embed, view)
+
+
+async def render_draft(
+    interaction: discord.Interaction, fields: rt.TrainDraft, previous: Any = None
 ) -> None:
-    """Everything the modal typed, checked in words before a row is written."""
+    embed, view = await build_draft(
+        interaction.client, interaction.guild, interaction.user, fields
+    )
+    await render(interaction, embed, view, previous)
+
+
+async def open_draft(
+    interaction: discord.Interaction, fields: rt.TrainDraft, previous: Any = None
+) -> None:
     if not await still_organizer(interaction):
         return
-    starts = parse_start(start, tz_name)
-    if starts is None:
-        await answer(interaction, start_error(start, tz_name, START_EXAMPLE))
-        return
-    if starts <= datetime.now(UTC):
-        await answer(
-            interaction, START_IN_THE_PAST.format(given=clamp(start, 80), tz=tz_name)
-        )
-        return
-    numbers = read_numbers(slot_minutes, slot_count)
-    if isinstance(numbers, str):
-        await answer(interaction, numbers)
-        return
-    minutes, count = numbers
     if not await opened(interaction):
+        return
+    await render_draft(interaction, fields, previous)
+
+
+async def start_new_train(interaction: discord.Interaction, previous: Any) -> None:
+    """`Start a raid train` on the root: a fresh draft seeded with the server's slot length."""
+    bot = interaction.client
+    if not await still_organizer(interaction):
+        return
+    if not await db_up(interaction):
+        return
+    fields = rt.TrainDraft(
+        slot_minutes=str(int(bot.store.get(interaction.guild.id, "raidtrain_slot_minutes")))
+    )
+    await open_draft(interaction, fields, previous)
+
+
+async def start_draft(interaction: discord.Interaction, previous: Any) -> None:
+    """What `run_create` did from validation onward, with the organizer gate asked again."""
+    fields = previous.fields
+    if not await still_organizer(interaction):
+        return
+    if not await opened(interaction):
+        return
+    checked, why = rt.draft_check(fields, datetime.now(UTC))
+    if checked is None:
+        await render_draft(interaction, fields, previous)
+        await answer(interaction, why)
         return
     made = await create_and_publish(
         interaction.client,
         interaction.guild,
         interaction.user,
-        title=title,
-        description=description,
-        starts_at=starts,
-        slot_minutes=minutes,
-        slot_count=count,
+        title=checked.title,
+        description=checked.description,
+        starts_at=checked.starts,
+        slot_minutes=checked.slot_minutes,
+        slot_count=checked.slot_count,
     )
     await render_root(interaction, previous)
     await answer(interaction, made.message)
 
 
-def read_numbers(slot_minutes: Any, slot_count: Any) -> tuple[int, int] | str:
-    """A modal has no `app_commands.Range`, so the bounds are re-asked here."""
-    try:
-        minutes = int(str(slot_minutes).strip())
-        count = int(str(slot_count).strip())
-    except ValueError:
-        return BAD_NUMBER.format(
-            given=clamp(f"{slot_minutes} / {slot_count}", 60),
-            min=SLOT_MINUTES_MIN,
-            max=SLOT_MINUTES_MAX,
-            count_min=SLOT_COUNT_MIN,
-            count_max=SLOT_COUNT_MAX,
-        )
-    if not (SLOT_MINUTES_MIN <= minutes <= SLOT_MINUTES_MAX) or not (
-        SLOT_COUNT_MIN <= count <= SLOT_COUNT_MAX
-    ):
-        return OUT_OF_RANGE.format(
-            min=SLOT_MINUTES_MIN,
-            max=SLOT_MINUTES_MAX,
-            count_min=SLOT_COUNT_MIN,
-            count_max=SLOT_COUNT_MAX,
-        )
-    return (minutes, count)
+async def open_zone_panel(interaction: discord.Interaction, previous: Any, back: Any) -> None:
+    """The same dropdown `/event` shows, storing through the same `set_zone`."""
+    if not await opened(interaction):
+        return
+    bot, store = interaction.client, interaction.client.store
+    guild_default = guild_zone(store, interaction.guild.id)
+    zone_name, chosen = await stored_zone(bot.db, interaction.user.id, guild_default)
+    current = zone_name if chosen else ""
+    embed = discord.Embed(
+        title=ZONE_PANEL_TITLE,
+        description=clamped([ZONE_PANEL_INTRO, zone_line(zone_name, chosen=chosen)]),
+    )
+    view = ZonePanel(
+        minutes_for(bot, interaction.guild.id),
+        footer=rt.PANEL_TIMEOUT_FOOTER,
+        choices=zone_choices(store, interaction.guild.id),
+        stored=current or None,
+        guild_default=guild_default,
+        on_pick=lambda one, name, panel: pick_zone(one, name, panel, back),
+        on_other=lambda one, panel: open_zone_modal(one, current, panel, back),
+        on_back=back,
+    )
+    await render(interaction, embed, view, previous)
+
+
+async def open_zone_modal(
+    interaction: discord.Interaction, current: str, previous: Any, back: Any
+) -> None:
+    await interaction.response.send_modal(TrainZoneModal(current, previous, back))
+
+
+async def pick_zone(
+    interaction: discord.Interaction, given: str, previous: Any, back: Any
+) -> None:
+    if not await opened(interaction):
+        return
+    _, said = await store_zone(interaction.client.db, interaction.user.id, given)
+    await back(interaction, previous)
+    await answer(interaction, said)
+
+
+class TrainZoneModal(WhenZoneModal):
+    def __init__(self, current: str = "", previous: Any = None, back: Any = None) -> None:
+        self.previous = previous
+        self.back = back
+        super().__init__(current=current, on_submit=self.zone_submit)
+
+    async def zone_submit(self, interaction: discord.Interaction, given: str) -> None:
+        await pick_zone(interaction, given, self.previous, self.back)
 
 
 # --- the controls --------------------------------------------------------------------------------
@@ -1618,6 +1753,8 @@ class MoveButton(discord.ui.Button):
             await run_swap(interaction, view)
         elif action == rt.SAVE:
             await run_setup(interaction, view, dict(view.setup))
+        elif action == rt.START_TRAIN:
+            await start_new_train(interaction, view)
         else:
             await self.open_modal(interaction, view, action)
 
@@ -1626,11 +1763,6 @@ class MoveButton(discord.ui.Button):
         if not await still_organizer(interaction):
             return
         if not await db_up(interaction):
-            return
-        if action == rt.START_TRAIN:
-            tz_name = await get_timezone(bot.db, interaction.user.id)
-            minutes = int(bot.store.get(interaction.guild.id, "raidtrain_slot_minutes"))
-            await interaction.response.send_modal(TrainModal(view, tz_name, minutes))
             return
         train = await get_train(bot.db, interaction.guild.id, view.train_id)
         if train is None:

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import discord
 import pytest
 
+from black_bloc import raidtrain as rt
 from black_bloc.cogs.content import raidtrain as cog_module
 from black_bloc.cogs.content.raidtrain import (
     NOT_AN_ORGANIZER,
@@ -21,9 +23,20 @@ from black_bloc.cogs.content.raidtrain import (
     twitch_login_of,
 )
 from black_bloc.config import load_settings
+from black_bloc.events import ZONE_PANEL_TITLE
 from black_bloc.raidtrain import CANCELLED, DONE, LIVE, LOCKED, NEEDS_LINK, OPEN
 from black_bloc.settings_store import SettingsStore
 from black_bloc.storage.db import Database
+from black_bloc.timezones import get_timezone
+from black_bloc.when_picker import (
+    DAY_PLACEHOLDER,
+    HOUR_PLACEHOLDER,
+    LATER_VALUE,
+    MINUTE_PLACEHOLDER,
+    ZONE_PLACEHOLDER,
+    WhenDraft,
+    parse_day,
+)
 
 GUILD = 7
 TEST_CHANNEL = 111
@@ -942,46 +955,173 @@ async def test_an_organizer_demoted_mid_card_moves_nothing(bot, cog, organizer, 
     assert (await get_train(db, GUILD, train_id))["status"] == OPEN
 
 
-# --- the create modal ----------------------------------------------------------------------------
+# --- the create draft -----------------------------------------------------------------------------
 
 
-async def test_the_create_form_is_only_offered_to_organizers(bot, cog, alice, organizer):
-    interaction = await open_the_panel(cog, bot, organizer)
+def a_draft(**fields):
+    """A filled `TrainDraft`; a start the picker could never produce lands as a typed date."""
+    when = WhenDraft(zone=fields.pop("tz_name", "UTC"))
+    start = fields.pop("start", "2099-09-14 19:30")
+    day = parse_day(str(start)[:10])
+    clock = str(start)[11:16]
+    if day is not None and re.fullmatch(r"\d{2}:\d{2}", clock):
+        when.day = day
+        when.hour, when.minute = (int(part) for part in clock.split(":"))
+    else:
+        when.later_text = str(start)
+    return rt.TrainDraft(
+        when=when,
+        title=fields.pop("title", "Saturday train"),
+        description=fields.pop("description", ""),
+        slot_minutes=fields.pop("slot_minutes", "60"),
+        slot_count=fields.pop("slot_count", "4"),
+    )
+
+
+async def start_from(bot, who, **fields):
+    view = cog_module.TrainDraftPanel(10, a_draft(**fields))
+    interaction = FakeInteraction(bot, who)
+    await cog_module.start_draft(interaction, view)
+    return interaction
+
+
+async def open_the_draft(cog, bot, who):
+    interaction = await open_the_panel(cog, bot, who)
     await press(interaction, "Start a raid train")
-    assert len(interaction.response.modals) == 1
+    return interaction
+
+
+async def test_the_create_draft_is_only_offered_to_organizers(bot, cog, alice, organizer):
+    interaction = await open_the_draft(cog, bot, organizer)
+
+    assert interaction.response.modals == []
+    assert isinstance(interaction.view, cog_module.TrainDraftPanel)
     assert "Start a raid train" not in labels((await open_the_panel(cog, bot, alice)).view)
 
 
-async def test_a_start_in_the_past_is_refused_in_words_and_never_defers(bot, cog, organizer):
-    interaction = FakeInteraction(bot, organizer)
-    await cog_module.run_create(
-        interaction,
-        None,
-        tz_name="UTC",
-        title="Old train",
-        description="",
-        start="2020-01-01 10:00",
-        slot_minutes="60",
-        slot_count="3",
-    )
+async def test_the_draft_opens_with_the_three_dropdowns_and_no_start_yet(bot, cog, organizer):
+    interaction = await open_the_draft(cog, bot, organizer)
+
+    assert DAY_PLACEHOLDER in placeholders(interaction.view)
+    assert HOUR_PLACEHOLDER in placeholders(interaction.view)
+    assert MINUTE_PLACEHOLDER in placeholders(interaction.view)
+    assert "Title & details" in labels(interaction.view)
+    assert "Time zone" in labels(interaction.view)
+    assert "Start" not in labels(interaction.view)
+
+
+async def test_a_fresh_draft_starts_at_the_slot_length_the_server_uses(bot, cog, organizer):
+    await bot.store.set(GUILD, "raidtrain_slot_minutes", 45)
+
+    interaction = await open_the_draft(cog, bot, organizer)
+
+    assert interaction.view.fields.slot_minutes == "45"
+    assert "**Minutes per slot** — 45" in interaction.embed.description
+
+
+async def test_the_text_modal_holds_abc_slot_minutes_on_the_panel_and_keeps_the_title(
+    bot, cog, organizer
+):
+    """The owner's report: an error emptied the form. `"abc"` no longer costs the title."""
+    interaction = await open_the_draft(cog, bot, organizer)
+    view = interaction.view
+    await press(interaction, "Title & details")
+    modal = interaction.response.modals[0]
+
+    modal.train_title._value = "Saturday train"
+    modal.description._value = "Everyone welcome."
+    modal.slot_minutes._value = "abc"
+    modal.slot_count._value = "4"
+    typed = FakeInteraction(bot, organizer)
+    await modal.on_submit(typed)
+
+    said = typed.embed.description
+    assert "Saturday train" in said
+    assert "Everyone welcome." in said
+    assert "**Minutes per slot** — abc" in said
+    assert "Start" not in labels(typed.view)
+    assert view.fields.slot_minutes == "abc"
+
+
+async def test_abc_slot_minutes_says_why_once_the_time_is_the_last_thing_settled(
+    bot, cog, organizer
+):
+    """One sentence at a time: the time is asked for first, the numbers when it is there."""
+    interaction = await open_the_draft(cog, bot, organizer)
+    fields = interaction.view.fields
+    fields.title = "Saturday train"
+    fields.slot_minutes = "abc"
+    fields.when.day = (datetime.now(UTC) + timedelta(days=3)).date()
+    fields.when.hour = 19
+
+    await pick_one(interaction, MINUTE_PLACEHOLDER, "30")
+
+    said = interaction.embed.description
+    assert "not a whole number" in said
+    assert "**Minutes per slot** — abc" in said
+    assert "Saturday train" in said
+    assert "Start" not in labels(interaction.view)
+
+
+async def test_the_text_modal_comes_back_with_everything_already_typed(bot, cog, organizer):
+    interaction = await open_the_draft(cog, bot, organizer)
+    interaction.view.fields.title = "Saturday train"
+    interaction.view.fields.slot_count = "4"
+
+    await press(interaction, "Title & details")
+
+    modal = interaction.response.modals[0]
+    assert modal.train_title.default == "Saturday train"
+    assert modal.slot_count.default == "4"
+
+
+async def test_start_appears_only_once_the_title_the_time_and_both_numbers_pass(
+    bot, cog, organizer
+):
+    interaction = await open_the_draft(cog, bot, organizer)
+    fields = interaction.view.fields
+    fields.title = "Saturday train"
+    fields.slot_count = "4"
+
+    day = (datetime.now(UTC) + timedelta(days=3)).date()
+    await pick_one(interaction, DAY_PLACEHOLDER, day.isoformat())
+    assert "Start" not in labels(interaction.view)
+
+    await pick_one(interaction, HOUR_PLACEHOLDER, "19")
+    assert "Start" not in labels(interaction.view)
+
+    await pick_one(interaction, MINUTE_PLACEHOLDER, "30")
+    assert "Start" in labels(interaction.view)
+
+
+async def test_a_bad_typed_date_keeps_everything_and_says_so_on_the_panel(bot, cog, organizer):
+    interaction = await open_the_draft(cog, bot, organizer)
+    interaction.view.fields.title = "Saturday train"
+
+    await pick_one(interaction, DAY_PLACEHOLDER, LATER_VALUE)
+    modal = interaction.response.modals[0]
+    modal.day._value = "saturday-ish"
+    typed = FakeInteraction(bot, organizer)
+    await modal.on_submit(typed)
+
+    said = typed.embed.description
+    assert "Saturday train" in said
+    assert "saturday-ish" in said and "YYYY-MM-DD" in said
+    assert "Start" not in labels(typed.view)
+
+
+async def test_a_start_in_the_past_is_refused_in_words_and_writes_nothing(bot, cog, organizer):
+    interaction = await start_from(bot, organizer, start="2020-01-01 10:00")
+
     assert "already gone by" in interaction.sent
-    assert interaction.response.deferred is False
     assert await list_trains(bot.db, GUILD, scope="all") == []
 
 
-async def test_a_start_nobody_can_read_names_the_shape_it_wants(bot, cog, organizer):
-    interaction = FakeInteraction(bot, organizer)
-    await cog_module.run_create(
-        interaction,
-        None,
-        tz_name="UTC",
-        title="Bad train",
-        description="",
-        start="saturday-ish",
-        slot_minutes="60",
-        slot_count="3",
-    )
-    assert "YYYY-MM-DD HH:MM" in interaction.sent
+async def test_a_draft_with_no_title_says_the_title_is_what_is_left(bot, cog, organizer):
+    interaction = await start_from(bot, organizer, title="")
+
+    assert "needs a name" in interaction.sent
+    assert await list_trains(bot.db, GUILD, scope="all") == []
 
 
 @pytest.mark.parametrize(
@@ -996,37 +1136,20 @@ async def test_a_start_nobody_can_read_names_the_shape_it_wants(bot, cog, organi
 async def test_a_train_nobody_could_post_is_refused_before_it_is_written(
     bot, cog, organizer, minutes, count, said
 ):
-    """A modal has no `app_commands.Range`, so the bounds are re-asked in the handler."""
-    interaction = FakeInteraction(bot, organizer)
-    await cog_module.run_create(
-        interaction,
-        None,
-        tz_name="UTC",
-        title="Long train",
-        description="",
-        start="2099-09-14 19:30",
-        slot_minutes=minutes,
-        slot_count=count,
-    )
+    """Start re-asks the bounds rather than trusting the button that rendered it."""
+    interaction = await start_from(bot, organizer, slot_minutes=minutes, slot_count=count)
+
     assert said in interaction.sent
     assert await list_trains(bot.db, GUILD, scope="all") == []
 
 
-async def test_a_good_form_defers_writes_the_train_posts_it_and_lands_on_the_root(
+async def test_a_good_draft_defers_writes_the_train_posts_it_and_lands_on_the_root(
     bot, cog, organizer, db
 ):
     bot.guard = FakeGuard([TEST_CHANNEL])
-    interaction = FakeInteraction(bot, organizer)
-    await cog_module.run_create(
-        interaction,
-        None,
-        tz_name="UTC",
-        title="Saturday train",
-        description="Everyone welcome.",
-        start="2099-09-14 19:30",
-        slot_minutes="60",
-        slot_count="4",
-    )
+
+    interaction = await start_from(bot, organizer, description="Everyone welcome.")
+
     assert interaction.response.deferred is True
     trains = await list_trains(db, GUILD, scope="all")
     assert len(trains) == 1
@@ -1035,6 +1158,37 @@ async def test_a_good_form_defers_writes_the_train_posts_it_and_lands_on_the_roo
     assert bot.guild.get_channel(TEST_CHANNEL).posts
     assert "The lineup is in" in interaction.sent
     assert "A train…" in placeholders(interaction.view)
+
+
+async def test_start_is_refused_when_the_organizer_role_goes_while_the_draft_is_open(
+    bot, cog, organizer, db
+):
+    view = cog_module.TrainDraftPanel(10, a_draft())
+    organizer.roles = []
+    organizer.guild_permissions = SimpleNamespace(manage_guild=False)
+
+    interaction = FakeInteraction(bot, organizer)
+    await cog_module.start_draft(interaction, view)
+
+    assert NOT_AN_ORGANIZER.format(who="staff") in interaction.sent
+    assert await list_trains(db, GUILD, scope="all") == []
+
+
+async def test_the_drafts_time_zone_button_stores_through_the_same_door_and_comes_back(
+    bot, cog, organizer, db
+):
+    interaction = await open_the_draft(cog, bot, organizer)
+    interaction.view.fields.title = "Saturday train"
+
+    await press(interaction, "Time zone")
+    assert interaction.embed.title == ZONE_PANEL_TITLE
+
+    await pick_one(interaction, ZONE_PLACEHOLDER, "Europe/London")
+
+    assert await get_timezone(db, organizer.id) == "Europe/London"
+    assert interaction.embed.title == rt.DRAFT_TITLE
+    assert "Saturday train" in interaction.embed.description
+    assert "Europe/London" in interaction.embed.description
 
 
 # --- panel discipline ----------------------------------------------------------------------------
