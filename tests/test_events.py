@@ -639,6 +639,12 @@ def test_a_template_that_will_not_render_falls_back_rather_than_losing_the_event
     assert made == "Cookout Feat. BaF"
 
 
+def test_a_caller_may_name_its_own_fallback_so_a_raid_train_keeps_the_plain_title():
+    """The default is untouched, so `/event` still falls back to the Feat. BaF wording."""
+    assert events.scheduled_name("{title} on {date}", "Cookout", fallback="{title}") == "Cookout"
+    assert events.scheduled_name("{title} on {date}", "Cookout") == "Cookout Feat. BaF"
+
+
 def test_a_template_that_is_not_text_at_all_still_produces_a_name():
     assert events.scheduled_name(None, "Cookout") == "Cookout"
     assert events.scheduled_name("", "Cookout") == "Cookout"

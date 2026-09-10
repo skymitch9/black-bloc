@@ -533,14 +533,16 @@ def draft_lines(draft: EventDraft, now: datetime, *, chosen: bool, why: str = ""
     return lines
 
 
-def scheduled_name(template: Any, title: Any) -> str:
+def scheduled_name(
+    template: Any, title: Any, *, fallback: str = EVENTS_SCHEDULED_NAME_TEMPLATE
+) -> str:
     """Staff-editable text, so a template that will not render falls back (checklist 17)."""
     wanted = clamp(title, TITLE_LIMIT)
     try:
         rendered = (str(template or "").strip() or NAME_PLACEHOLDER).format(title=wanted)
     except (KeyError, IndexError, ValueError) as exc:
         log.warning("events: the calendar name %r would not render: %s", template, exc)
-        rendered = EVENTS_SCHEDULED_NAME_TEMPLATE.format(title=wanted)
+        rendered = fallback.format(title=wanted)
     return clamp(rendered, EVENT_NAME_LIMIT) or wanted[:EVENT_NAME_LIMIT]
 
 

@@ -183,6 +183,8 @@ RAIDTRAIN_POLL_MIN_MINUTES = 1
 RAIDTRAIN_POLL_MAX_MINUTES = 60
 RAIDTRAIN_MAX_SLOTS_PER_MEMBER = 1
 RAIDTRAIN_SLOTS_PER_MEMBER_MAX = 24
+RAIDTRAIN_SCHEDULED_NAME_KEY = "raidtrain_scheduled_name_template"
+RAIDTRAIN_SCHEDULED_NAME_TEMPLATE = "{title}"
 
 BOT_BIO_TEMPLATE = (
     "Black Bloc — moderation & content bot for Black in a Flash!. Staff dashboard: {site}"
@@ -318,6 +320,7 @@ KEY_TYPES: dict[str, str] = {
     "raidtrain_live_posts": "bool",
     "raidtrain_max_slots_per_member": "int",
     "raidtrain_scheduled_event": "bool",
+    RAIDTRAIN_SCHEDULED_NAME_KEY: "text",
 }
 
 KEY_CHOICES: dict[str, tuple[str, ...]] = {
@@ -873,6 +876,13 @@ KEY_HELP: dict[str, str] = {
     "raidtrain_scheduled_event": (
         "on puts the train on Discord's own event calendar as well. Off by default: Phase 4's "
         "calendar helper writes to the events table, so raid trains keep their own"
+    ),
+    RAIDTRAIN_SCHEDULED_NAME_KEY: (
+        f"what a raid train is called on Discord's own calendar when "
+        f"`raidtrain_scheduled_event` is on; `{NAME_PLACEHOLDER}` stands for the train's title "
+        f"and is the only thing that may be filled in. It ships as `{NAME_PLACEHOLDER}`, the "
+        f"plain title — set it to `{EVENTS_SCHEDULED_NAME_TEMPLATE}` to match what `/event` "
+        "events are called. The lineup post, the thread and the DMs keep the plain title"
     ),
 }
 
@@ -1575,7 +1585,7 @@ NO_KNOWN_ZONE = (
 )
 NAME_TEMPLATE_NEEDS_TITLE = (
     "A calendar name has to say which event it is, so it must contain `{placeholder}` somewhere "
-    "— `{example}` is the one it ships with. Nothing was changed."
+    "— `{example}` is one that works. Nothing was changed."
 )
 NAME_TEMPLATE_UNKNOWN = (
     "`{{{found}}}` is not something Black Bloc can fill in, so nothing was changed. The only "
@@ -1632,6 +1642,7 @@ TEXT_CHECKS: dict[str, Any] = {
     DEFAULT_TIMEZONE_KEY: checked_zone,
     TIMEZONE_CHOICES_KEY: checked_zones,
     EVENTS_SCHEDULED_NAME_KEY: checked_name_template,
+    RAIDTRAIN_SCHEDULED_NAME_KEY: checked_name_template,
 }
 
 
@@ -2126,6 +2137,8 @@ class SettingsStore:
             return RAIDTRAIN_MAX_SLOTS_PER_MEMBER
         if key == "raidtrain_scheduled_event":
             return False
+        if key == RAIDTRAIN_SCHEDULED_NAME_KEY:
+            return RAIDTRAIN_SCHEDULED_NAME_TEMPLATE
         if key == "applications_mode":
             return "off"
         if key == "applications_retry_days":

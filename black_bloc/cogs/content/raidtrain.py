@@ -21,6 +21,7 @@ from ...events import (
     clamp,
     guild_zone,
     minute_step,
+    scheduled_name,
     stored_zone,
     zone_choices,
     zone_line,
@@ -83,6 +84,8 @@ from ...settings_store import (
     DB_UNAVAILABLE,
     GUILD_ONLY,
     RAIDTRAIN_MODES,
+    RAIDTRAIN_SCHEDULED_NAME_KEY,
+    RAIDTRAIN_SCHEDULED_NAME_TEMPLATE,
     SettingError,
     coerce_value,
 )
@@ -2302,7 +2305,11 @@ class RaidTrains(commands.Cog):
             return
         try:
             made = await guild.create_scheduled_event(
-                name=clamp(train["title"], TITLE_LIMIT),
+                name=scheduled_name(
+                    self.bot.store.get(guild.id, RAIDTRAIN_SCHEDULED_NAME_KEY),
+                    train["title"],
+                    fallback=RAIDTRAIN_SCHEDULED_NAME_TEMPLATE,
+                ),
                 description=clamp(train["description"], DESCRIPTION_LIMIT) or None,
                 start_time=starts,
                 end_time=finishes,
