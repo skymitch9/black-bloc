@@ -1,5 +1,12 @@
 # Events — `/event` is ONE command that opens a panel (wave 1)
 
+> ⚠️ **PARTLY SUPERSEDED, 2026-09-10** by [`when-picker-design.md`](when-picker-design.md): `EventModal`
+> and the typed `My time zone` modal are both gone. Propose opens a DRAFT PANEL with Day / Hour /
+> Minute / How long dropdowns and a text modal that never refuses; `My time zone` opens a `ZonePanel`
+> dropdown whose 25th option is the old typed box. §D's "598 zones cannot fit a 25-option select" is
+> still true and is exactly why that option exists. Everything else here — the panel, the card, the
+> button tables, the settings sub-panel — is unchanged and still current.
+
 > **Audience:** the build agent and the reviewer. **Status:** TRACKED · ✅ **SHIPPED — live in v64** (`e670542`, merged `--no-ff` 2026-09-03 after Fable review,
 > deployed 14:05, `deploys.log` line 63; synced 43 app commands, not run against Discord by eye). Built on
 > `feat/events-panel` (worktree branch `worktree-agent-a448c7ab780ed3c2b`, commits `9a1beb4`
