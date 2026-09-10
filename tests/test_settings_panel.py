@@ -487,7 +487,7 @@ async def test_the_self_test_card_says_what_it_will_do_before_it_has_ever_run(st
 
     said = "\n".join(selftest_lines(store, GUILD))
 
-    assert "deleted again after 5 minute(s)" in said
+    assert "deleted again after 1 minute(s)" in said
     assert "under **Test**" in said
     assert "**At every boot** — yes" in said
     assert f"<#{TEST_CH}>" in said

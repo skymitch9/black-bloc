@@ -1218,7 +1218,7 @@ async def test_running_the_self_test_answers_the_counts_and_names_every_failure(
 
     assert "**1 ok, 1 failed**" in pressed.sent
     assert "**read./api/status** — " in pressed.sent and "TypeError: no" in pressed.sent
-    assert "5 minute(s)" in pressed.sent
+    assert "1 minute(s)" in pressed.sent
     assert [kind for kind in await kinds(db) if kind.startswith("selftest")] == [
         "selftest.started",
         "selftest.check",

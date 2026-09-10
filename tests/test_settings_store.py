@@ -1835,8 +1835,8 @@ async def test_the_three_self_test_keys_are_core_keys_reachable_from_both_doors(
     assert KEY_TYPES[SELFTEST_PURGE_MINUTES] == "int"
 
 
-async def test_the_self_test_runs_at_boot_posts_to_the_test_channel_and_purges_after_five(store):
-    """The owner's own number, 2026-09-05: 'after 5 minutes purge the discord chat of all test'."""
+async def test_the_self_test_runs_at_boot_posts_to_the_test_channel_and_purges_in_a_minute(store):
+    """Owner 2026-09-05: 'after 5 minutes purge'; a minute since 2026-09-10 ('last 60s instead')."""
     from black_bloc.settings_store import (
         SELFTEST_CHANNEL_ID,
         SELFTEST_ON_BOOT,
