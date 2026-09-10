@@ -148,6 +148,23 @@ Third key: `time_step_minutes` (`int`, 5–60, default 15) — the Minute dropdo
 `events_default_minutes` (§4) that is four new keys: 191 → **195** (verify the starting count
 in `tests/test_settings_store.py` first — 191 is the v96 figure).
 
+## 5b. The scheduled event's name — added 2026-09-10 15:30 (owner: "Can we make it also say '{Event Name} Feat. BaF' when it post the discord events after")
+
+`create_scheduled_event` (`black_bloc/events.py:716`) names the Discord scheduled event
+`clamp(row["title"], EVENT_NAME_LIMIT)`. New `text` key **`events_scheduled_name_template`**,
+default **`{title} Feat. BaF`**, rendered with `.format(title=…)` (an unknown placeholder or a
+template without `{title}` is refused on set, in words) and clamped to `EVENT_NAME_LIMIT` after
+rendering so a long title never makes Discord refuse the event. Applies to the scheduled event
+only — the review card, the announcement and the DM keep the plain title (they already say whose
+server it is). Raid trains' `raidtrain_scheduled_event` keeps its own name; if the owner wants
+the suffix there too that is one more key, not a shared one. Owner, 15:32: "Also make that standard name format something changeable on the website" — it
+is a registry key, so the Settings page (https://blackbloc.heygabi.ai/settings.html, Events
+group) and `/settings set-value` both edit it; the agent verifies the key renders there in the
+mock (`check.mjs`) and names the group in its report. Key count → **196**. One test in
+`tests/test_events.py` (`.format` result, clamp, the refusal on set in `test_settings_store.py`).
+Sweep row: approve an event outside TEST_MODE and read the calendar name — owner-side, since
+TEST_MODE makes no scheduled event (`event.would_create_scheduled`).
+
 ## 6. What does NOT change
 
 - Validation sentences (`start_error`, `DST_GAP`, `DST_AMBIGUOUS`, `START_IN_THE_PAST`,
