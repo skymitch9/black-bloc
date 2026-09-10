@@ -26,8 +26,8 @@ LATER_LABEL = "Later — pick a date…"
 OTHER_LABEL = "Other — type it…"
 
 DAY_PLACEHOLDER = "Which day?"
-HOUR_PLACEHOLDER = "Which hour?"
-MINUTE_PLACEHOLDER = "Which minute?"
+HOUR_PLACEHOLDER = "Start time — hour"
+MINUTE_PLACEHOLDER = "Start time — minute"
 ZONE_PLACEHOLDER = "Which time zone?"
 DURATION_PLACEHOLDER = "How long?"
 
