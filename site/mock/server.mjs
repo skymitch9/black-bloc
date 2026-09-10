@@ -437,7 +437,7 @@ const SETTING_SPECS = [
   ['modmail_reply_style', 'enum', 'both', 'both', 'how staff answer a ticket. typing: a plain message in the ticket is relayed to the member, as it always has been. buttons: it is not — only the ticket card’s Reply and /reply reach them, so a ticket channel can be talked in safely. both is the default and is today’s behaviour with the card added', ['buttons', 'typing', 'both']],
   ['selftest_on_boot', 'bool', true, true, 'true to run the self-test at every boot, so a deploy proves itself in the hosting log without anybody opening Discord; false to run it only when staff ask. It posts a card per panel into the self-test channel and deletes them again a few minutes later'],
   ['selftest_channel_id', 'channel', '800000000000000003', '800000000000000003', 'where the self-test posts the cards it is proving; every one of them is deleted again once selftest_purge_minutes has passed. Unset means the test channel. While test mode is on, the guard refuses any other channel anyway'],
-  ['selftest_purge_minutes', 'int', 5, 5, 'how long a self-test’s messages stay in the self-test channel before Black Bloc deletes them; 5 by default. The log lines stay on the dashboard’s Logs page under Test whatever this says', null, 1440, 1],
+  ['selftest_purge_minutes', 'int', 1, 1, 'how long a self-test’s messages stay in the self-test channel before Black Bloc deletes them; 1 by default. The log lines stay on the dashboard’s Logs page under Test whatever this says', null, 1440, 1],
   ['personality_pool_sync', 'bool', true, true, 'true to bring the mood pool up to the estate’s shared personality manifest at every boot — new moods are added, a mood’s wording, wings and order are refreshed, and a mood the manifest has dropped is retired and switched off. Whether a mood is ON is always staff’s, and this never touches it. false adds missing moods only, which is what to use if a manifest change ever lands wrong'],
   ['personality_pool_peer_url', 'text', 'https://discord.heygabi.ai/api/health', 'https://discord.heygabi.ai/api/health', 'the health address of the estate’s other bot, read by the self-test so the two cannot drift apart unnoticed: it compares that bot’s personality pool version with this one’s and says which side is ahead. It cannot be left blank, and reaching it is never required for Black Bloc to work — a bot that will not answer is reported as unreachable, never as drifted'],
   ['selftest_log_level', 'enum', 'off', 'off', 'which test log lines reach the Discord log channel: off, important (anything that acted on a member, or failed) or all. Every line is kept on the dashboard and in `/settings` ▸ **Logs** either way', ['off', 'important', 'all']],
@@ -1648,7 +1648,7 @@ route('GET', '/api/selftest', (context) => {
   return {
     runs: state.selftestRuns.map(selftestRow),
     running: going ? going.id : null,
-    purge_minutes: Number(state.settings.get('selftest_purge_minutes') || 5),
+    purge_minutes: Number(state.settings.get('selftest_purge_minutes') || 1),
     notes: [],
   };
 });

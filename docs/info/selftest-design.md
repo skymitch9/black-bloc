@@ -82,7 +82,7 @@ The runner does not stop on failure; every check runs; the run's `ok`/`failed` c
   posted_at)`** BEFORE the next check runs — one write, one row (checklist 34) — so a restart mid-run
   still knows what to delete.
 - A `discord.ext.tasks` loop (`purge_loop`, every 60 s) deletes every row whose `posted_at` is older
-  than `selftest_purge_minutes` (settings key, int minutes, default **5**, min 1, max 1440) with
+  than `selftest_purge_minutes` (settings key, int minutes, default **1** — was 5 until 2026-09-10, when the owner said "the test stuff posted each deployment should last 60s instead since it's mainly for you and not me"; the loop ticks every 60 s so a 1-minute setting purges within 60–120 s — min 1, max 1440) with
   `channel.delete_messages` in chunks of 100; messages older than 14 days fall back to one-by-one
   `message.delete()`; a message already gone (404) counts as purged. Purged rows are deleted from the
   table and the run's `purged_at` is stamped when its last message goes. The purge writes ONE log row
@@ -125,7 +125,7 @@ The runner does not stop on failure; every check runs; the run's `ok`/`failed` c
 |---|---|---|---|
 | `selftest_on_boot` | bool | true | Whether the bot runs the self-test at every boot |
 | `selftest_channel_id` | channel | `TEST_CHANNEL_ID` | Where the self-test posts its cards |
-| `selftest_purge_minutes` | int 1–1440 | 5 | How long the self-test's messages stay before the bot deletes them |
+| `selftest_purge_minutes` | int 1–1440 | 1 (was 5 until 2026-09-10) | How long the self-test's messages stay before the bot deletes them |
 | `log_level_selftest` (via `log_level_key`) | level | off | as the other features |
 
 Reachable from `/settings` ▸ **Panels & commands…** (or wherever Build 2 put the core group's siblings)

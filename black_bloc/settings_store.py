@@ -1429,7 +1429,7 @@ SELFTEST_CHANNEL_ID = "selftest_channel_id"
 SELFTEST_PURGE_MINUTES = "selftest_purge_minutes"
 SELFTEST_LOG_LEVEL = log_level_key("selftest")
 SELFTEST_ON_BOOT_DEFAULT = True
-SELFTEST_PURGE_MINUTES_DEFAULT = 5
+SELFTEST_PURGE_MINUTES_DEFAULT = 1
 SELFTEST_PURGE_MIN_MINUTES = 1
 SELFTEST_PURGE_MAX_MINUTES = 24 * 60
 
@@ -1474,7 +1474,7 @@ KEY_HELP.update(
         ),
         SELFTEST_PURGE_MINUTES: (
             "how long a self-test's messages stay in the self-test channel before Black Bloc "
-            "deletes them; 5 by default. The log lines stay on the dashboard's Logs page under "
+            "deletes them; 1 by default. The log lines stay on the dashboard's Logs page under "
             "Test whatever this says"
         ),
     }

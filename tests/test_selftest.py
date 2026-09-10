@@ -717,7 +717,7 @@ def test_the_boot_line_is_the_one_a_deploy_is_read_by(bot):
 
     lines = selftest.boot_lines(bot, one)
 
-    assert lines[0] == "selftest: 1 ok, 1 failed, 3 messages posted (purge in 5 min)"
+    assert lines[0] == "selftest: 1 ok, 1 failed, 3 messages posted (purge in 1 min)"
     assert lines[1] == "selftest: FAILED read./api/status — TypeError: no"
     assert len(lines) == 2
 

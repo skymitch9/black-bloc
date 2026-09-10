@@ -85,7 +85,7 @@ async def test_the_list_says_which_run_is_going_and_how_long_the_cards_live(clie
     empty = client.get("/api/selftest").json()
 
     assert empty["runs"] == [] and empty["running"] is None
-    assert empty["purge_minutes"] == 5
+    assert empty["purge_minutes"] == 1
 
     run_id = client.post("/api/selftest", json={}).json()["run_id"]
     finished(client, run_id)

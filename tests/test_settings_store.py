@@ -1844,7 +1844,7 @@ async def test_the_self_test_runs_at_boot_posts_to_the_test_channel_and_purges_a
     )
 
     assert store.get(7, SELFTEST_ON_BOOT) is True
-    assert store.get(7, SELFTEST_PURGE_MINUTES) == 5
+    assert store.get(7, SELFTEST_PURGE_MINUTES) == 1
     assert store.get(7, SELFTEST_CHANNEL_ID) == store.settings.test_channel_id
     assert store.default(SELFTEST_CHANNEL_ID) == store.settings.test_channel_id
 
