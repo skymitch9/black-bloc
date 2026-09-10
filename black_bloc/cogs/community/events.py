@@ -24,11 +24,11 @@ from ...events import (
     DESCRIPTION_LIMIT,
     DM_MISSED,
     DONE,
+    DRAFT_TITLE,
     EVENTS_OFF,
     LIST_PAGE,
     LIVE,
     LOCATION_LIMIT,
-    MODAL_ZONE_HINT,
     MOVE_TARGETS,
     NO_SUCH_EVENT,
     NOTHING_OPEN,
@@ -41,9 +41,16 @@ from ...events import (
     REVIEW_ROOM_BUTTON,
     SELECT_CAP,
     SITE_BUTTON,
+    SUBMIT_BUTTON,
     SWEPT_STATUSES,
+    TEXT_BUTTON,
+    TEXT_MODAL_TITLE,
     TITLE_LIMIT,
     ZONE_BUTTON,
+    ZONE_PANEL_BUTTON,
+    ZONE_PANEL_INTRO,
+    ZONE_PANEL_TITLE,
+    EventDraft,
     apply_decision,
     can_transition,
     cancel_event,
@@ -51,12 +58,14 @@ from ...events import (
     card_buttons,
     card_footer_override,
     card_for,
-    checked_fields,
     checked_numbers,
     clamp,
     counts_line,
     counts_of,
+    default_minutes,
     dm,
+    draft_check,
+    draft_lines,
     drop_lock,
     due_events,
     event_for_channel,
@@ -65,8 +74,10 @@ from ...events import (
     events_by_status,
     get_event,
     golive_text,
+    guild_zone,
     list_lines,
     may_cancel,
+    minute_step,
     option_label,
     own_events,
     panel_minutes,
@@ -84,6 +95,7 @@ from ...events import (
     tell_or_log,
     when_line,
     write_settings,
+    zone_choices,
     zone_line,
 )
 from ...events import (
@@ -111,7 +123,16 @@ from ...settings_store import (
     GUILD_ONLY,
     require_staff,
 )
-from ...timezones import START_EXAMPLE, get_timezone
+from ...when_picker import (
+    DaySelect,
+    DurationSelect,
+    HourSelect,
+    MinuteSelect,
+    WhenDraft,
+    ZonePanel,
+    duration_for,
+)
+from ...when_picker import ZoneModal as WhenZoneModal
 
 log = logging.getLogger(__name__)
 
@@ -137,6 +158,7 @@ PING_PLACEHOLDER = "Role mentioned when one is announced"
 ZONE_MODAL_TITLE = "Your time zone"
 ZONE_MODAL_LABEL = "Region/City — Phoenix is America/Phoenix"
 ZONE_INPUT_LIMIT = 60
+DRAFT_BUTTON_ROW = 4
 NUMBERS_MODAL_TITLE = "Events — numbers"
 FORGOT_NOTHING = "Nothing was picked, so nothing was forgotten."
 
@@ -226,7 +248,7 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
     store = bot.store
     staff = store.is_staff(actor)
     on = store.get(guild.id, "events_mode") != "off"
-    zone_name, chosen = await stored_zone(bot.db, actor.id)
+    zone_name, chosen = await stored_zone(bot.db, actor.id, guild_zone(store, guild.id))
     own = await own_events(bot.db, guild.id, actor.id)
     staff_rows: list[Any] = []
 
@@ -519,6 +541,148 @@ async def confirm_cancel(
     )
 
 
+class EventDraftPanel(Panel):
+    """The draft the four dropdowns and the text modal write into; nothing here refuses."""
+
+    def __init__(self, minutes: int, fields: EventDraft) -> None:
+        super().__init__(minutes, footer=PANEL_TIMEOUT_FOOTER)
+        self.fields = fields
+
+    @property
+    def draft(self) -> WhenDraft:
+        return self.fields.when
+
+    async def rerender(self, interaction: discord.Interaction) -> None:
+        await open_draft(interaction, self.fields, self)
+
+    async def take_later(self, interaction: discord.Interaction, text: str) -> None:
+        self.fields.when.later_text = str(text or "").strip()
+        self.fields.when.day = None
+        await self.rerender(interaction)
+
+    async def take_duration(self, interaction: discord.Interaction, value: str) -> None:
+        self.fields.duration = value
+        await self.rerender(interaction)
+
+
+async def build_draft(
+    bot: Any, guild: Any, actor: Any, fields: EventDraft
+) -> tuple[discord.Embed, EventDraftPanel]:
+    store = bot.store
+    now = datetime.now(UTC)
+    zone_name, chosen = await stored_zone(bot.db, actor.id, guild_zone(store, guild.id))
+    fields.when.zone = zone_name
+    checked, why = draft_check(fields, now)
+    embed = discord.Embed(
+        title=DRAFT_TITLE,
+        description="\n".join(draft_lines(fields, now, chosen=chosen, why=why)),
+        colour=discord.Colour(COLOURS[PENDING]),
+    )
+    view = EventDraftPanel(panel_minutes(store, guild.id), fields)
+    view.add_item(DaySelect(fields.when, now))
+    view.add_item(HourSelect(fields.when))
+    view.add_item(MinuteSelect(fields.when, minute_step(store, guild.id)))
+    view.add_item(DurationSelect(fields.duration))
+    view.add_item(TextButton())
+    view.add_item(DraftZoneButton())
+    if checked is not None:
+        view.add_item(SubmitButton())
+    view.add_item(BackButton(row=DRAFT_BUTTON_ROW))
+    return embed, view
+
+
+async def render_draft(
+    interaction: discord.Interaction, fields: EventDraft, previous: Any = None
+) -> None:
+    embed, view = await build_draft(
+        interaction.client, interaction.guild, interaction.user, fields
+    )
+    retire(previous)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+async def open_draft(
+    interaction: discord.Interaction, fields: EventDraft, previous: Any = None
+) -> None:
+    if not await opened(interaction, staff=False):
+        return
+    await render_draft(interaction, fields, previous)
+
+
+async def submit_draft(interaction: discord.Interaction, previous: Any) -> None:
+    """The Submit button and nothing else: `checked_fields` onward, exactly as the modal did."""
+    fields = previous.fields
+    bot = interaction.client
+    if not await opened(interaction, staff=False):
+        return
+    if bot.store.get(interaction.guild.id, "events_mode") == "off":
+        await render_panel(interaction, previous)
+        await answer(interaction, EVENTS_OFF)
+        return
+    checked, why = draft_check(fields, datetime.now(UTC))
+    if checked is None:
+        await render_draft(interaction, fields, previous)
+        await answer(interaction, why)
+        return
+    said, row = await submit_event(
+        bot, interaction.guild, interaction.user, checked, review_view=review_view
+    )
+    if row is None:
+        await render_draft(interaction, fields, previous)
+        await answer(interaction, said)
+        return
+    await render_panel(interaction, previous)
+    await answer(interaction, f"{said} {when_line(checked.starts, fields.when.zone)}")
+    await dm(interaction.user, f"Submitted on **{interaction.guild.name}**.", card_for(row))
+
+
+async def open_zone_panel(interaction: discord.Interaction, previous: Any, back: Any) -> None:
+    """One zone panel, from `/event` and from both drafts; `back` decides where Back goes."""
+    if not await opened(interaction, staff=False):
+        return
+    bot, store = interaction.client, interaction.client.store
+    guild_default = guild_zone(store, interaction.guild.id)
+    zone_name, chosen = await stored_zone(bot.db, interaction.user.id, guild_default)
+    current = zone_name if chosen else ""
+    embed = discord.Embed(
+        title=ZONE_PANEL_TITLE,
+        description="\n".join([ZONE_PANEL_INTRO, zone_line(zone_name, chosen=chosen)]),
+        colour=discord.Colour(COLOURS[PENDING]),
+    )
+    view = ZonePanel(
+        panel_minutes(store, interaction.guild.id),
+        footer=PANEL_TIMEOUT_FOOTER,
+        choices=zone_choices(store, interaction.guild.id),
+        stored=current or None,
+        guild_default=guild_default,
+        on_pick=lambda one, name, panel: pick_zone(one, name, panel, back),
+        on_other=lambda one, panel: open_zone_modal(one, current, panel, back),
+        on_back=back,
+    )
+    retire(previous)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+async def open_zone_modal(
+    interaction: discord.Interaction, current: str, previous: Any, back: Any
+) -> None:
+    await interaction.response.send_modal(
+        ZoneModal(interaction.client.get_cog(COG_NAME), current, previous, back)
+    )
+
+
+async def pick_zone(
+    interaction: discord.Interaction, given: str, previous: Any, back: Any
+) -> None:
+    """`store_zone` writes the row and says the sentence; the panel adds neither of its own."""
+    cog = interaction.client.get_cog(COG_NAME)
+    await cog.zone_submit(interaction, given, previous, back)
+
+
 class ProposeButton(discord.ui.Button):
     def __init__(self) -> None:
         super().__init__(label=PROPOSE_BUTTON, style=discord.ButtonStyle.primary, row=0)
@@ -531,8 +695,43 @@ class ProposeButton(discord.ui.Button):
         if not bot.db.is_connected:
             await answer(interaction, DB_UNAVAILABLE)
             return
-        tz_name = await get_timezone(bot.db, interaction.user.id)
-        await interaction.response.send_modal(EventModal(bot.get_cog(COG_NAME), tz_name))
+        fields = EventDraft(
+            duration=duration_for(default_minutes(bot.store, interaction.guild.id))
+        )
+        await open_draft(interaction, fields, self.view)
+
+
+class TextButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(
+            label=TEXT_BUTTON, style=discord.ButtonStyle.primary, row=DRAFT_BUTTON_ROW
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(EventTextModal(self.view))
+
+
+class SubmitButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(
+            label=SUBMIT_BUTTON, style=discord.ButtonStyle.success, row=DRAFT_BUTTON_ROW
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await submit_draft(interaction, self.view)
+
+
+class DraftZoneButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(
+            label=ZONE_PANEL_BUTTON, style=discord.ButtonStyle.secondary, row=DRAFT_BUTTON_ROW
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        fields = self.view.fields
+        await open_zone_panel(
+            interaction, self.view, lambda one, prev: open_draft(one, fields, prev)
+        )
 
 
 class ZoneButton(discord.ui.Button):
@@ -540,14 +739,10 @@ class ZoneButton(discord.ui.Button):
         super().__init__(label=ZONE_BUTTON, style=discord.ButtonStyle.secondary, row=0)
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        bot = interaction.client
-        if not bot.db.is_connected:
+        if not interaction.client.db.is_connected:
             await answer(interaction, DB_UNAVAILABLE)
             return
-        zone_name, chosen = await stored_zone(bot.db, interaction.user.id)
-        await interaction.response.send_modal(
-            ZoneModal(bot.get_cog(COG_NAME), zone_name if chosen else "", self.view)
-        )
+        await open_zone_panel(interaction, self.view, back_to_panel)
 
 
 class RefreshButton(discord.ui.Button):
@@ -772,19 +967,17 @@ class NoteModal(PanelNoteModal):
         await self.cog.note_submit(interaction, self.event_id, self.kind, text, self.previous)
 
 
-class ZoneModal(AnswersErrors, discord.ui.Modal, title=ZONE_MODAL_TITLE):
-    zone = discord.ui.TextInput(
-        label=ZONE_MODAL_LABEL, placeholder="America/Phoenix", max_length=ZONE_INPUT_LIMIT
-    )
-
-    def __init__(self, cog: Events, current: str = "", previous: Any = None) -> None:
-        super().__init__()
+class ZoneModal(WhenZoneModal):
+    def __init__(
+        self, cog: Events, current: str = "", previous: Any = None, back: Any = None
+    ) -> None:
         self.cog = cog
         self.previous = previous
-        self.zone.default = current or None
+        self.back = back
+        super().__init__(current=current, on_submit=self.zone_submit)
 
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        await self.cog.zone_submit(interaction, str(self.zone), self.previous)
+    async def zone_submit(self, interaction: discord.Interaction, given: str) -> None:
+        await self.cog.zone_submit(interaction, given, self.previous, self.back)
 
 
 class NumbersModal(AnswersErrors, discord.ui.Modal, title=NUMBERS_MODAL_TITLE):
@@ -859,40 +1052,33 @@ class DecisionButton(
         await decide(interaction, self.event_id, APPROVED)
 
 
-class EventModal(AnswersErrors, discord.ui.Modal, title="Propose an event"):
-    event_title = discord.ui.TextInput(label="Title", max_length=TITLE_LIMIT)
+class EventTextModal(AnswersErrors, discord.ui.Modal, title=TEXT_MODAL_TITLE):
+    """Three boxes with no failure path: what is typed lands on the draft, which judges it."""
+
+    event_title = discord.ui.TextInput(label="Title", max_length=TITLE_LIMIT, required=False)
     description = discord.ui.TextInput(
         label="What is it?",
         style=discord.TextStyle.paragraph,
         max_length=DESCRIPTION_LIMIT,
         required=False,
     )
-    start = discord.ui.TextInput(
-        label="Start — YYYY-MM-DD HH:MM", placeholder=START_EXAMPLE, max_length=16
-    )
-    duration = discord.ui.TextInput(
-        label="How long? 1h30m", placeholder="2h", max_length=12, required=False
-    )
     location = discord.ui.TextInput(
         label="Where, or a link", max_length=LOCATION_LIMIT, required=False
     )
 
-    def __init__(self, cog: Events, tz_name: str) -> None:
+    def __init__(self, previous: Any) -> None:
         super().__init__()
-        self.cog = cog
-        self.tz_name = tz_name
-        self.start.placeholder = MODAL_ZONE_HINT.format(example=START_EXAMPLE, tz=tz_name)
+        self.previous = previous
+        self.event_title.default = previous.fields.title or None
+        self.description.default = previous.fields.description or None
+        self.location.default = previous.fields.location or None
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        await self.cog.submit(
-            interaction,
-            tz_name=self.tz_name,
-            title=clamp(self.event_title, TITLE_LIMIT),
-            description=clamp(self.description, DESCRIPTION_LIMIT),
-            start=str(self.start),
-            duration=str(self.duration),
-            location=clamp(self.location, LOCATION_LIMIT),
-        )
+        fields = self.previous.fields
+        fields.title = clamp(self.event_title, TITLE_LIMIT)
+        fields.description = clamp(self.description, DESCRIPTION_LIMIT)
+        fields.location = clamp(self.location, LOCATION_LIMIT)
+        await open_draft(interaction, fields, self.previous)
 
 
 class Events(commands.Cog):
@@ -1191,50 +1377,21 @@ class Events(commands.Cog):
         )
         view.message = await interaction.original_response()
 
-    async def submit(
+    async def zone_submit(
         self,
         interaction: discord.Interaction,
-        *,
-        tz_name: str,
-        title: str,
-        description: str,
-        start: str,
-        duration: str,
-        location: str,
+        given: str,
+        previous: Any = None,
+        back: Any = None,
     ) -> None:
-        """What the modal does once it is filled in: one row, one channel, one card."""
-        fields, why = checked_fields(
-            title=title,
-            description=description,
-            location=location,
-            start=start,
-            duration=duration,
-            tz_name=tz_name,
-            now=datetime.now(UTC),
-        )
-        if fields is None:
-            await answer(interaction, why)
-            return
-        if not await self._ready(interaction):
-            return
-        await interaction.response.defer(ephemeral=True)
-        said, row = await submit_event(
-            self.bot, interaction.guild, interaction.user, fields, review_view=review_view
-        )
-        if row is None:
-            await answer(interaction, said)
-            return
-        await answer(interaction, f"{said} {when_line(fields.starts, tz_name)}")
-        await dm(interaction.user, f"Submitted on **{interaction.guild.name}**.", card_for(row))
-
-    async def zone_submit(
-        self, interaction: discord.Interaction, given: str, previous: Any = None
-    ) -> None:
-        """What the time-zone modal does: store it or refuse, then re-render the panel."""
+        """Store it or refuse, then render whatever asked — the panel, or the draft it left."""
         if not await opened(interaction, staff=False):
             return
         _, said = await store_zone(self.bot.db, interaction.user.id, given)
-        await render_panel(interaction, previous)
+        if back is None:
+            await render_panel(interaction, previous)
+        else:
+            await back(interaction, previous)
         await interaction.followup.send(
             said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
         )
@@ -1297,8 +1454,9 @@ __all__ = [
     "CardMoveButton",
     "DecisionButton",
     "DenyModal",
-    "EventModal",
+    "EventDraftPanel",
     "EventPick",
+    "EventTextModal",
     "EventView",
     "Events",
     "ForgetPick",
@@ -1309,10 +1467,13 @@ __all__ = [
     "ProposeButton",
     "RefreshButton",
     "SettingsButton",
+    "SubmitButton",
+    "TextButton",
     "ZoneButton",
     "ZoneModal",
     "back_to_panel",
     "build_card",
+    "build_draft",
     "build_panel",
     "build_settings",
     "change_settings",
@@ -1324,9 +1485,13 @@ __all__ = [
     "finish_card",
     "open_card",
     "open_cancel_confirm",
+    "open_draft",
     "open_settings",
+    "open_zone_panel",
+    "render_draft",
     "render_panel",
     "render_settings",
     "review_view",
     "run_move",
+    "submit_draft",
 ]

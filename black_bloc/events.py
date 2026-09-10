@@ -4,6 +4,7 @@ import asyncio
 import logging
 import re
 import unicodedata
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, NamedTuple
 
@@ -17,9 +18,15 @@ from .panels import capped_placeholder
 from .panels import panel_minutes as library_panel_minutes
 from .panels import site_page_url as library_site_page_url
 from .settings_store import (
+    DEFAULT_TIMEZONE_KEY,
     EVENTS_LATE_CEILING_MINUTES,
     EVENTS_RETENTION_MAX_DAYS,
     EVENTS_RETENTION_MIN_DAYS,
+    EVENTS_SCHEDULED_NAME_KEY,
+    EVENTS_SCHEDULED_NAME_TEMPLATE,
+    NAME_PLACEHOLDER,
+    TIME_STEP_KEY,
+    TIMEZONE_CHOICES_KEY,
     staff_roles_sentence,
 )
 from .timezones import (
@@ -36,6 +43,7 @@ from .timezones import (
     stored_timezone,
     suggest,
 )
+from .when_picker import WhenDraft, resolve, said_when
 
 log = logging.getLogger(__name__)
 
@@ -223,6 +231,7 @@ DENY_LIMIT = 400
 CANCEL_NOTE_LIMIT = 400
 PANEL_MINUTES_KEY = "event_panel_minutes"
 PANEL_OWN_LIST_KEY = "event_panel_own_list"
+DEFAULT_MINUTES_KEY = "events_default_minutes"
 
 UNKNOWN_TZ = (
     "**{given}** is not a time zone Black Bloc knows, so nothing was saved. Write the "
@@ -266,7 +275,25 @@ DST_AMBIGUOUS = (
     "Black Bloc will not guess which of the two you meant and nothing was submitted. Pick a time "
     "an hour either side of it."
 )
-MODAL_ZONE_HINT = "{example} — read in {tz}"
+DRAFT_TITLE = "Propose an event — draft"
+DRAFT_NEEDED = "(needed)"
+DRAFT_NOT_SET = "(not set)"
+DRAFT_NOTHING_YET = "(nothing yet)"
+DRAFT_WHAT_LIMIT = 120
+DRAFT_WHEN = "{when}, read in **{tz}**"
+DRAFT_ZONE_HINT = (
+    "Times are read in **{tz}** — the server's default. Press **Time zone** if that is not yours."
+)
+DRAFT_ZONE = "Times are read in **{tz}**, which **Time zone** changes."
+STILL_NEEDED = "**Still needed:** {why}"
+TEXT_BUTTON = "Title & details"
+ZONE_PANEL_BUTTON = "Time zone"
+SUBMIT_BUTTON = "Submit"
+TEXT_MODAL_TITLE = "Title & details"
+ZONE_PANEL_TITLE = "Your time zone"
+ZONE_PANEL_INTRO = (
+    "Times you pick are read in this zone. Pick one, or **Other — type it…** for anywhere else."
+)
 CANCELLED_ANNOUNCEMENT = "**{title}** is cancelled and is no longer happening."
 NO_CATEGORY = (
     "Black Bloc has nowhere to put the review channel, so nothing was submitted. A Lead points it "
@@ -445,6 +472,76 @@ def checked_fields(
         ),
         "",
     )
+
+
+@dataclass
+class EventDraft:
+    """What the Propose panel holds between renders; nothing typed into it can be refused."""
+
+    when: WhenDraft = field(default_factory=WhenDraft)
+    title: str = ""
+    description: str = ""
+    location: str = ""
+    duration: str = ""
+
+
+def draft_check(draft: EventDraft, now: datetime) -> tuple[EventFields | None, str]:
+    """The panel's own gate: `checked_fields` once there is a time, its own sentence before."""
+    start, trouble = resolve(draft.when, now)
+    if start is None:
+        if not clamp(draft.title, TITLE_LIMIT):
+            return None, NO_TITLE
+        return None, trouble
+    return checked_fields(
+        title=draft.title,
+        description=draft.description,
+        location=draft.location,
+        start=start,
+        duration=draft.duration,
+        tz_name=draft.when.zone,
+        now=now,
+    )
+
+
+def draft_when_line(draft: EventDraft, now: datetime) -> str:
+    said = said_when(draft.when)
+    if said:
+        return DRAFT_WHEN.format(when=said, tz=draft.when.zone)
+    return resolve(draft.when, now)[1]
+
+
+def draft_how_long(draft: EventDraft) -> str:
+    minutes = parse_duration(draft.duration)
+    if minutes is None:
+        return clamp(draft.duration, 40) or DRAFT_NOT_SET
+    return describe_duration(minutes)
+
+
+def draft_lines(draft: EventDraft, now: datetime, *, chosen: bool, why: str = "") -> list[str]:
+    """The draft card, in the order the design writes it, with one Still-needed line at most."""
+    when = draft_when_line(draft, now)
+    lines = [
+        f"**Title** — {clamp(draft.title, TITLE_LIMIT) or DRAFT_NEEDED}",
+        f"**When** — {when}",
+        f"**How long** — {draft_how_long(draft)}",
+        f"**Where** — {clamp(draft.location, LOCATION_LIMIT) or DRAFT_NOT_SET}",
+        f"**What** — {clamp(draft.description, DRAFT_WHAT_LIMIT) or DRAFT_NOTHING_YET}",
+    ]
+    lines.append((DRAFT_ZONE if chosen else DRAFT_ZONE_HINT).format(tz=draft.when.zone))
+    if why and why != when:
+        lines.append(STILL_NEEDED.format(why=why))
+    return lines
+
+
+def scheduled_name(template: Any, title: Any) -> str:
+    """Staff-editable text, so a template that will not render falls back (checklist 17)."""
+    wanted = clamp(title, TITLE_LIMIT)
+    try:
+        rendered = (str(template or "").strip() or NAME_PLACEHOLDER).format(title=wanted)
+    except (KeyError, IndexError, ValueError) as exc:
+        log.warning("events: the calendar name %r would not render: %s", template, exc)
+        rendered = EVENTS_SCHEDULED_NAME_TEMPLATE.format(title=wanted)
+    return clamp(rendered, EVENT_NAME_LIMIT) or wanted[:EVENT_NAME_LIMIT]
 
 
 async def update_event(
@@ -722,7 +819,7 @@ async def create_scheduled_event(bot: Any, guild: Any, row: Any) -> tuple[Any, s
     if starts is None:
         return None, "unreadable_start"
     if finishes is None:
-        finishes = ends_at(starts, DEFAULT_DURATION_MINUTES)
+        finishes = ends_at(starts, default_minutes(bot.store, guild.id))
     if getattr(bot, "guard", None) is not None:
         log.warning("events: TEST MODE — no scheduled event made for event %s", row["id"])
         await log_action(
@@ -735,7 +832,9 @@ async def create_scheduled_event(bot: Any, guild: Any, row: Any) -> tuple[Any, s
         return None, "test_mode"
     try:
         made = await guild.create_scheduled_event(
-            name=clamp(row["title"], EVENT_NAME_LIMIT),
+            name=scheduled_name(
+                bot.store.get(guild.id, EVENTS_SCHEDULED_NAME_KEY), row["title"]
+            ),
             description=clamp(row["description"], DESCRIPTION_LIMIT) or None,
             start_time=starts,
             end_time=finishes,
@@ -1276,6 +1375,23 @@ def panel_minutes(store: Any, guild_id: int) -> int:
 
 def panel_shows_own_list(store: Any, guild_id: int) -> bool:
     return bool(store.get(guild_id, PANEL_OWN_LIST_KEY))
+
+
+def default_minutes(store: Any, guild_id: int) -> int:
+    return int(store.get(guild_id, DEFAULT_MINUTES_KEY) or DEFAULT_DURATION_MINUTES)
+
+
+def guild_zone(store: Any, guild_id: int) -> str:
+    return str(store.get(guild_id, DEFAULT_TIMEZONE_KEY) or DEFAULT_TZ)
+
+
+def zone_choices(store: Any, guild_id: int) -> list[str]:
+    stored = str(store.get(guild_id, TIMEZONE_CHOICES_KEY) or "")
+    return [one.strip() for one in stored.split(",") if one.strip()]
+
+
+def minute_step(store: Any, guild_id: int) -> int:
+    return int(store.get(guild_id, TIME_STEP_KEY) or 15)
 
 
 def zone_line(name: str, *, chosen: bool) -> str:

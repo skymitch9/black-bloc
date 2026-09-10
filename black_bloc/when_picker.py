@@ -151,6 +151,15 @@ class WhenDraft:
         return f"{chosen:{DAY_FORMAT}} {int(self.hour):02d}:{int(self.minute):02d}"
 
 
+def said_when(draft: WhenDraft) -> str:
+    """`Fri Sep 12 · 7:00 PM`, or nothing at all while any of the three is still unpicked."""
+    day = draft.chosen_day()
+    if day is None or draft.hour is None or draft.minute is None:
+        return ""
+    picked = datetime(day.year, day.month, day.day, int(draft.hour), int(draft.minute))
+    return f"{day:%a %b %d} · {hour_minute(picked)}"
+
+
 def missing_parts(draft: WhenDraft) -> list[str]:
     parts = []
     if draft.chosen_day() is None:
@@ -405,9 +414,9 @@ class ZonePanel(Panel):
         choices: Any,
         stored: str | None,
         guild_default: str,
-        on_pick: Callable[[discord.Interaction, str], Awaitable[None]],
-        on_other: Callable[[discord.Interaction], Awaitable[None]],
-        on_back: Callable[[discord.Interaction], Awaitable[None]],
+        on_pick: Callable[[discord.Interaction, str, Any], Awaitable[None]],
+        on_other: Callable[[discord.Interaction, Any], Awaitable[None]],
+        on_back: Callable[[discord.Interaction, Any], Awaitable[None]],
         now: datetime | None = None,
     ) -> None:
         super().__init__(minutes, footer=footer)
@@ -418,13 +427,13 @@ class ZonePanel(Panel):
         self.add_item(BackButton())
 
     async def take_zone(self, interaction: discord.Interaction, name: str) -> None:
-        await self.takes_zone(interaction, name)
+        await self.takes_zone(interaction, name, self)
 
     async def take_other(self, interaction: discord.Interaction) -> None:
-        await self.takes_other(interaction)
+        await self.takes_other(interaction, self)
 
     async def go_back(self, interaction: discord.Interaction) -> None:
-        await self.goes_back(interaction)
+        await self.goes_back(interaction, self)
 
 
 __all__ = [
@@ -463,5 +472,6 @@ __all__ = [
     "minute_options",
     "parse_day",
     "resolve",
+    "said_when",
     "zone_options",
 ]
