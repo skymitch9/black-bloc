@@ -171,7 +171,7 @@ async def send_events(one: Run) -> str:
         requester_id=int(getattr(_member(one), "id", 0) or 0),
         starts_at=starts,
         minutes=60,
-        location=SELFTEST_NOTE,
+        where=events.Where(events.WHERE_OTHER, None, SELFTEST_NOTE),
         description=SELFTEST_NOTE,
     )
     text = events.announce_text(one.bot.store.get(one.guild.id, "events_ping_role_id"))

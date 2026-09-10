@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 33
+SCHEMA_VERSION = 34
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -230,6 +230,8 @@ CREATE TABLE IF NOT EXISTS events (
     title              TEXT    NOT NULL,
     description        TEXT,
     location           TEXT,
+    where_kind         TEXT,
+    where_channel_id   INTEGER,
     starts_at          TEXT    NOT NULL,
     ends_at            TEXT,
     status             TEXT    NOT NULL DEFAULT 'pending',
@@ -684,6 +686,8 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("golive_sessions", "platform", "TEXT"),
     ("golive_sessions", "live_role_id", "INTEGER"),
     ("events", "card_channel_id", "INTEGER"),
+    ("events", "where_kind", "TEXT"),
+    ("events", "where_channel_id", "INTEGER"),
     ("birthdays", "role_added_id", "INTEGER"),
     ("modmail_messages", "delivered", "INTEGER NOT NULL DEFAULT 1"),
     ("modmail_tickets", "card_message_id", "INTEGER"),

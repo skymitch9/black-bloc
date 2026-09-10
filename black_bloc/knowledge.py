@@ -475,12 +475,19 @@ def role_holder_sections(guild: Any) -> list[tuple[str, str, str]]:
     return found
 
 
+def event_where(row: Any) -> str:
+    """Schema 34: the place is a channel or a typed line, and `events` owns which."""
+    from .events import read_where, where_line
+
+    return where_line(read_where(row)).strip()
+
+
 def event_section(row: Any) -> tuple[str, str, str] | None:
     title = str(value_of(row, "title")).strip()
     if not title:
         return None
     when = str(value_of(row, "starts_at")).strip()
-    where = str(value_of(row, "location")).strip()
+    where = event_where(row)
     about = str(value_of(row, "description")).strip()
     body = f"An approved event starting {when}."
     if where:

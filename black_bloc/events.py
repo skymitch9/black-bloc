@@ -52,6 +52,7 @@ DESCRIPTION_LIMIT = 1000
 LOCATION_LIMIT = 100
 EVENT_NAME_LIMIT = 100
 CHANNEL_NAME_LIMIT = 100
+BUTTON_LABEL_LIMIT = 80
 DEFAULT_DURATION_MINUTES = 120
 MAX_DURATION_MINUTES = 7 * 24 * 60
 
@@ -159,6 +160,129 @@ def is_due(when: Any, now: datetime) -> bool:
     return parsed is not None and parsed <= now
 
 
+WHERE_VOICE = "voice"
+WHERE_TEXT = "text"
+WHERE_OTHER = "other"
+WHERE_KINDS = (WHERE_VOICE, WHERE_TEXT, WHERE_OTHER)
+WHERE_CHANNEL_KINDS = (WHERE_VOICE, WHERE_TEXT)
+WHERE_CHANNEL_GONE = "event.where_channel_gone"
+WHERE_BUTTON = "Where"
+WHERE_VOICE_MARK = "🔊 "
+WHERE_TEXT_MARK = "#"
+WHERE_GONE_WORD = "a channel that has gone"
+
+
+class Where(NamedTuple):
+    """The one shape the four writers agree on: a channel, or a typed place, or nothing."""
+
+    kind: str | None = None
+    channel_id: int | None = None
+    text: str = ""
+
+
+WHERE_UNSET = Where()
+
+
+def cell(row: Any, name: str) -> Any:
+    """A column an older row may not carry yet, read without raising."""
+    try:
+        return row[name]
+    except (KeyError, IndexError, TypeError):
+        return None
+
+
+def channel_where_kind(channel: Any) -> str | None:
+    """Voice and stage are one kind to a person; anything unpickable is no kind at all."""
+    kind = getattr(getattr(channel, "type", None), "name", None)
+    if kind in ("voice", "stage_voice"):
+        return WHERE_VOICE
+    if kind in ("text", "news"):
+        return WHERE_TEXT
+    return None
+
+
+def where_of_channel(channel: Any) -> Where:
+    kind = channel_where_kind(channel)
+    return Where(kind, int(channel.id), "") if kind else WHERE_UNSET
+
+
+def read_where(row: Any) -> Where:
+    """A stored event's place; a row from before schema 34 reads as the typed kind it was."""
+    kind = cell(row, "where_kind")
+    channel_id = cell(row, "where_channel_id")
+    if kind in WHERE_CHANNEL_KINDS and channel_id:
+        return Where(str(kind), int(channel_id), "")
+    text = clamp(cell(row, "location"), LOCATION_LIMIT)
+    return Where(WHERE_OTHER, None, text) if text else WHERE_UNSET
+
+
+def where_line(where: Where) -> str:
+    """The card's and the draft's one Where line; empty means the field is left out."""
+    if where.kind in WHERE_CHANNEL_KINDS and where.channel_id:
+        return f"<#{int(where.channel_id)}>"
+    return clamp(where.text, LOCATION_LIMIT)
+
+
+def where_said(where: Where, channel: Any = None) -> str:
+    """Plain words for a button label, where a mention would render as its own id."""
+    if where.kind in WHERE_CHANNEL_KINDS and where.channel_id:
+        name = str(getattr(channel, "name", "") or "")
+        if not name:
+            return WHERE_GONE_WORD
+        mark = WHERE_VOICE_MARK if where.kind == WHERE_VOICE else WHERE_TEXT_MARK
+        return f"{mark}{name}"
+    return clamp(where.text, LOCATION_LIMIT)
+
+
+def where_button_label(where: Where, channel: Any = None) -> str:
+    said = where_said(where, channel)
+    if not said:
+        return WHERE_BUTTON
+    return clamp(f"{WHERE_BUTTON}: {said}", BUTTON_LABEL_LIMIT)
+
+
+WHERE_UNKNOWN_KIND = (
+    "**{given}** is not a kind of place Black Bloc can set, so nothing was saved. It takes a "
+    "voice channel, a text channel, or **somewhere else** with the place typed in."
+)
+WHERE_NEEDS_A_CHANNEL = (
+    "A voice or text channel has to be picked before it can be saved, so nothing was changed. "
+    "Pick one from the list, or choose **somewhere else** and type where it is."
+)
+WHERE_NO_SUCH_CHANNEL = (
+    "Black Bloc cannot find channel **{given}** on this server, so nothing was saved. It may "
+    "have been deleted — pick one from the list, or choose **somewhere else** and type it."
+)
+WHERE_NOT_A_PLACE = (
+    "**{name}** is not somewhere an event can happen, so nothing was saved. Discord takes a "
+    "voice channel, a stage or a text channel — or **somewhere else** with the place typed in."
+)
+
+
+def checked_where(guild: Any, kind: Any, channel_id: Any, text: Any) -> tuple[Where | None, str]:
+    """The website's door onto the same three kinds, refusing in words rather than a status."""
+    wanted = str(kind or "").strip().lower()
+    typed = clamp(text, LOCATION_LIMIT)
+    if not wanted:
+        return (Where(WHERE_OTHER, None, typed) if typed else WHERE_UNSET), ""
+    if wanted not in WHERE_KINDS:
+        return None, WHERE_UNKNOWN_KIND.format(given=clamp(kind, 40))
+    if wanted == WHERE_OTHER:
+        return (Where(WHERE_OTHER, None, typed) if typed else WHERE_UNSET), ""
+    given = str(channel_id or "").strip()
+    if not given.isdigit():
+        return None, WHERE_NEEDS_A_CHANNEL
+    channel = guild.get_channel(int(given))
+    if channel is None:
+        return None, WHERE_NO_SUCH_CHANNEL.format(given=clamp(given, 40))
+    found = where_of_channel(channel)
+    if found.kind is None:
+        return None, WHERE_NOT_A_PLACE.format(
+            name=clamp(getattr(channel, "name", ""), 60) or given
+        )
+    return found, ""
+
+
 def build_card(
     *,
     event_id: Any,
@@ -166,7 +290,7 @@ def build_card(
     requester_id: int,
     starts_at: datetime,
     minutes: int,
-    location: str | None = None,
+    where: Where = WHERE_UNSET,
     description: str | None = None,
     status: str = PENDING,
     deny_reason: str | None = None,
@@ -181,8 +305,9 @@ def build_card(
     embed.add_field(name="Status", value=status, inline=True)
     embed.add_field(name="How long", value=describe_duration(minutes), inline=True)
     embed.add_field(name="When", value=stamp(starts_at), inline=False)
-    if location:
-        embed.add_field(name="Where", value=clamp(location, LOCATION_LIMIT), inline=False)
+    said = where_line(where)
+    if said:
+        embed.add_field(name="Where", value=said, inline=False)
     if deny_reason:
         embed.add_field(name="Why not", value=clamp(deny_reason, 1024), inline=False)
     embed.set_footer(text=f"Event #{event_id}")
@@ -290,6 +415,20 @@ TEXT_BUTTON = "Title & details"
 ZONE_PANEL_BUTTON = "Time zone"
 SUBMIT_BUTTON = "Submit"
 TEXT_MODAL_TITLE = "Title & details"
+WHERE_PANEL_TITLE = "Where is it?"
+WHERE_PANEL_INTRO = (
+    "Pick the voice or text channel it happens in, or **Other** for a place or a link that is "
+    "not on this server. Leaving it empty is fine — the card just will not say where."
+)
+WHERE_PLACEHOLDER = "A voice or text channel…"
+WHERE_OTHER_BUTTON = "Other — type a place or link…"
+WHERE_CLEAR_BUTTON = "Clear"
+WHERE_MODAL_TITLE = "Somewhere else"
+WHERE_MODAL_LABEL = "Where, or a link"
+WHERE_JOIN_NOTE = (
+    "A voice or stage channel gives everybody a **Join** button on the Discord event; anything "
+    "else is written on it as words."
+)
 ZONE_PANEL_TITLE = "Your time zone"
 ZONE_PANEL_INTRO = (
     "Times you pick are read in this zone. Pick one, or **Other — type it…** for anywhere else."
@@ -404,19 +543,22 @@ async def create_event(
     *,
     title: str,
     description: str | None,
-    location: str | None,
+    where: Where = WHERE_UNSET,
     starts_at: datetime,
     finishes_at: datetime,
 ) -> int | None:
     cur = await db.conn.execute(
-        "INSERT INTO events(guild_id, requester_id, title, description, location, starts_at, "
-        "ends_at, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO events(guild_id, requester_id, title, description, location, where_kind, "
+        "where_channel_id, starts_at, ends_at, status, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             guild_id,
             requester_id,
             title,
             description or None,
-            location or None,
+            clamp(where.text, LOCATION_LIMIT) or None,
+            where.kind or None,
+            int(where.channel_id) if where.channel_id else None,
             starts_at.isoformat(),
             finishes_at.isoformat(),
             PENDING,
@@ -430,7 +572,7 @@ async def create_event(
 class EventFields(NamedTuple):
     title: str
     description: str
-    location: str
+    where: Where
     starts: datetime
     minutes: int
 
@@ -439,7 +581,7 @@ def checked_fields(
     *,
     title: Any,
     description: Any,
-    location: Any,
+    where: Where = WHERE_UNSET,
     start: Any,
     duration: Any,
     tz_name: str,
@@ -466,7 +608,7 @@ def checked_fields(
         EventFields(
             wanted,
             clamp(description, DESCRIPTION_LIMIT),
-            clamp(location, LOCATION_LIMIT),
+            where._replace(text=clamp(where.text, LOCATION_LIMIT)),
             starts,
             minutes,
         ),
@@ -481,7 +623,7 @@ class EventDraft:
     when: WhenDraft = field(default_factory=WhenDraft)
     title: str = ""
     description: str = ""
-    location: str = ""
+    where: Where = WHERE_UNSET
     duration: str = ""
 
 
@@ -495,7 +637,7 @@ def draft_check(draft: EventDraft, now: datetime) -> tuple[EventFields | None, s
     return checked_fields(
         title=draft.title,
         description=draft.description,
-        location=draft.location,
+        where=draft.where,
         start=start,
         duration=draft.duration,
         tz_name=draft.when.zone,
@@ -524,7 +666,7 @@ def draft_lines(draft: EventDraft, now: datetime, *, chosen: bool, why: str = ""
         f"**Title** — {clamp(draft.title, TITLE_LIMIT) or DRAFT_NEEDED}",
         f"**When** — {when}",
         f"**How long** — {draft_how_long(draft)}",
-        f"**Where** — {clamp(draft.location, LOCATION_LIMIT) or DRAFT_NOT_SET}",
+        f"**Where** — {where_line(draft.where) or DRAFT_NOT_SET}",
         f"**What** — {clamp(draft.description, DRAFT_WHAT_LIMIT) or DRAFT_NOTHING_YET}",
     ]
     lines.append((DRAFT_ZONE if chosen else DRAFT_ZONE_HINT).format(tz=draft.when.zone))
@@ -552,17 +694,19 @@ async def update_event(
     *,
     title: str,
     description: str | None,
-    location: str | None,
+    where: Where = WHERE_UNSET,
     starts_at: datetime,
     finishes_at: datetime,
 ) -> None:
     await db.conn.execute(
-        "UPDATE events SET title = ?, description = ?, location = ?, starts_at = ?, ends_at = ? "
-        "WHERE id = ?",
+        "UPDATE events SET title = ?, description = ?, location = ?, where_kind = ?, "
+        "where_channel_id = ?, starts_at = ?, ends_at = ? WHERE id = ?",
         (
             title,
             description or None,
-            location or None,
+            clamp(where.text, LOCATION_LIMIT) or None,
+            where.kind or None,
+            int(where.channel_id) if where.channel_id else None,
             starts_at.isoformat(),
             finishes_at.isoformat(),
             event_id,
@@ -618,6 +762,20 @@ async def set_review(
         "UPDATE events SET review_channel_id = ?, review_message_id = ?, card_channel_id = ? "
         "WHERE id = ?",
         (channel_id, message_id, card_channel_id, event_id),
+    )
+    await db.conn.commit()
+
+
+async def set_where(db: Any, event_id: int, where: Where) -> None:
+    """Staff final say, one fact at a time: the three columns `Where` owns and nothing else."""
+    await db.conn.execute(
+        "UPDATE events SET location = ?, where_kind = ?, where_channel_id = ? WHERE id = ?",
+        (
+            clamp(where.text, LOCATION_LIMIT) or None,
+            where.kind or None,
+            int(where.channel_id) if where.channel_id else None,
+            event_id,
+        ),
     )
     await db.conn.commit()
 
@@ -700,7 +858,7 @@ def card_for(row: Any) -> discord.Embed:
         requester_id=row["requester_id"],
         starts_at=starts,
         minutes=duration_minutes(row),
-        location=row["location"],
+        where=read_where(row),
         description=row["description"],
         status=row["status"],
         deny_reason=row["deny_reason"],
@@ -812,6 +970,39 @@ async def rename_channel(bot: Any, guild: Any, row: Any, status: str, user_name:
         )
 
 
+async def scheduled_place(bot: Any, guild: Any, row: Any) -> dict[str, Any]:
+    """Discord's own three doors: a voice channel, a stage, or the external kind with words."""
+    where = read_where(row)
+    if where.kind in WHERE_CHANNEL_KINDS and where.channel_id:
+        channel = guild.get_channel(int(where.channel_id))
+        if channel is None:
+            await log_action(
+                bot,
+                guild,
+                WHERE_CHANNEL_GONE,
+                target=row["requester_id"],
+                details={
+                    "event_id": row["id"],
+                    "channel_id": int(where.channel_id),
+                    "where_kind": where.kind,
+                },
+            )
+        else:
+            kind = getattr(getattr(channel, "type", None), "name", None)
+            if kind == "stage_voice":
+                return {"entity_type": discord.EntityType.stage_instance, "channel": channel}
+            if kind == "voice":
+                return {"entity_type": discord.EntityType.voice, "channel": channel}
+            return {
+                "entity_type": discord.EntityType.external,
+                "location": clamp(f"#{getattr(channel, 'name', '')}", LOCATION_LIMIT),
+            }
+    return {
+        "entity_type": discord.EntityType.external,
+        "location": clamp(where.text, LOCATION_LIMIT) or LOCATION_FALLBACK,
+    }
+
+
 async def create_scheduled_event(bot: Any, guild: Any, row: Any) -> tuple[Any, str | None]:
     """The scheduled event Discord made, or the reason there is not one."""
     if not bot.store.get(guild.id, "events_create_scheduled"):
@@ -832,6 +1023,7 @@ async def create_scheduled_event(bot: Any, guild: Any, row: Any) -> tuple[Any, s
             details={"event_id": row["id"], "reason": "test_mode"},
         )
         return None, "test_mode"
+    place = await scheduled_place(bot, guild, row)
     try:
         made = await guild.create_scheduled_event(
             name=scheduled_name(
@@ -840,10 +1032,9 @@ async def create_scheduled_event(bot: Any, guild: Any, row: Any) -> tuple[Any, s
             description=clamp(row["description"], DESCRIPTION_LIMIT) or None,
             start_time=starts,
             end_time=finishes,
-            entity_type=discord.EntityType.external,
-            location=clamp(row["location"], LOCATION_LIMIT) or LOCATION_FALLBACK,
             privacy_level=discord.PrivacyLevel.guild_only,
             reason=f"Black Bloc event {row['id']}",
+            **place,
         )
     except NETWORK_ERRORS as exc:
         log.warning("events: could not make a scheduled event for %s: %s", row["id"], exc)
@@ -1200,7 +1391,7 @@ async def submit_event(
         getattr(actor, "id", actor),
         title=fields.title,
         description=fields.description,
-        location=fields.location,
+        where=fields.where,
         starts_at=fields.starts,
         finishes_at=ends_at(fields.starts, fields.minutes),
     )
