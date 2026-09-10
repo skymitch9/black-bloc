@@ -25,7 +25,7 @@ OTHER_VALUE = "__other__"
 LATER_LABEL = "Later — pick a date…"
 OTHER_LABEL = "Other — type it…"
 
-DAY_PLACEHOLDER = "Which day?"
+DAY_PLACEHOLDER = "Date"
 HOUR_PLACEHOLDER = "Start time — hour"
 MINUTE_PLACEHOLDER = "Start time — minute"
 ZONE_PLACEHOLDER = "Which time zone?"
