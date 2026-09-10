@@ -25,6 +25,8 @@ from black_bloc.cogs.community.events import (
     NumbersModal,
     ProposeButton,
     SettingsButton,
+    WhereModal,
+    WherePanel,
     ZoneModal,
     decision_id,
     review_view,
@@ -40,8 +42,14 @@ from black_bloc.events import (
     LIVE,
     PANEL_TITLE,
     PENDING,
+    WHERE_OTHER,
+    WHERE_PANEL_TITLE,
+    WHERE_TEXT,
+    WHERE_UNSET,
+    WHERE_VOICE,
     ZONE_PANEL_TITLE,
     EventDraft,
+    Where,
     create_event,
     event_for_channel,
     events_by_status,
@@ -140,6 +148,7 @@ class FakeText:
         self.id = channel_id
         self.guild = guild
         self.name = name
+        self.type = discord.ChannelType.text
         self.mention = f"<#{channel_id}>"
         self.category = category
         self.category_id = category.id if category else None
@@ -174,6 +183,19 @@ class FakeText:
         self.deleted = True
         if self.guild is not None:
             self.guild.channels.pop(self.id, None)
+
+
+class FakeVoice:
+    """A voice or stage channel — what the Where picker points a scheduled event at."""
+
+    def __init__(self, channel_id, name="Raid Night", stage=False):
+        self.id = channel_id
+        self.name = name
+        self.guild = None
+        self.category = None
+        self.category_id = None
+        self.mention = f"<#{channel_id}>"
+        self.type = discord.ChannelType.stage_voice if stage else discord.ChannelType.voice
 
 
 class FakeScheduledEvent:
@@ -481,8 +503,9 @@ def card_view(interaction):
 class FakePicked:
     """What a ChannelSelect/RoleSelect hands its callback: something with an id."""
 
-    def __init__(self, picked_id):
+    def __init__(self, picked_id, kind=None):
         self.id = picked_id
+        self.type = discord.ChannelType[kind] if kind else None
 
 
 def pick(select, values):
@@ -626,7 +649,7 @@ def draft_fields(**fields):
         when=when,
         title=fields.pop("title", "Block Party"),
         description=fields.pop("description", "bring a chair"),
-        location=fields.pop("location", "the park"),
+        where=fields.pop("where", Where(WHERE_OTHER, None, "the park")),
         duration=fields.pop("duration", "1h30m"),
     )
 
@@ -675,7 +698,7 @@ async def store_event(db, *, status=PENDING, starts_in=None, minutes=60, channel
         USER,
         title="Block Party",
         description=None,
-        location="the park",
+        where=Where(WHERE_OTHER, None, "the park"),
         starts_at=starts,
         finishes_at=starts + timedelta(minutes=minutes),
     )
@@ -2361,12 +2384,11 @@ async def test_the_text_modal_stores_what_was_typed_and_never_refuses(cog, bot, 
 
     modal.event_title._value = "Cookout at the park"
     modal.description._value = "bring a chair"
-    modal.location._value = "the park"
     typed = FakeInteraction(bot, member)
     await modal.on_submit(typed)
 
     said = card_embed(typed).description
-    assert "Cookout at the park" in said and "the park" in said
+    assert "Cookout at the park" in said and "bring a chair" in said
     assert "(needed)" not in said
 
 
@@ -2375,13 +2397,13 @@ async def test_the_text_modal_comes_back_prefilled_with_everything_already_typed
 ):
     _opened, view = await open_draft_panel(cog, bot, member)
     view.fields.title = "Cookout at the park"
-    view.fields.location = "the park"
+    view.fields.description = "bring a chair"
 
     reopened = await click(bot, member, find_item(view, "Title & details"))
 
     modal = reopened.response.modals[0]
     assert modal.event_title.default == "Cookout at the park"
-    assert modal.location.default == "the park"
+    assert modal.description.default == "bring a chair"
 
 
 async def test_submit_appears_only_once_the_title_and_the_whole_time_are_there(
@@ -2566,3 +2588,373 @@ async def test_submit_is_refused_when_events_go_off_while_the_draft_is_open(
 
     assert await events_by_status(db, GUILD, (PENDING,)) == []
     assert "turned off" in filed.sent
+
+
+# The "Where?" picker (`docs/info/where-picker-design.md` §4-§6): the fifth button on the draft's
+# row, Discord's own channel picker behind it, and the kind mapping the calendar reads.
+
+VOICE_CHANNEL = 610
+STAGE_CHANNEL = 611
+TEXT_CHANNEL_ID = 612
+
+
+def with_channels(bot):
+    bot.guild.add(FakeVoice(VOICE_CHANNEL, "Raid Night"))
+    bot.guild.add(FakeVoice(STAGE_CHANNEL, "The Stage", stage=True))
+    bot.guild.add(FakeText(TEXT_CHANNEL_ID, name="general"))
+    return bot
+
+
+def find_where(view):
+    """The Where button, whatever the current pick has done to its label."""
+    return next(
+        one for one in view.children if str(getattr(one, "label", "")).startswith("Where")
+    )
+
+
+async def open_where(cog, bot, member, view=None):
+    if view is None:
+        _opened, view = await open_draft_panel(cog, bot, member)
+    clicked = await click(bot, member, find_where(view))
+    return clicked, card_view(clicked)
+
+
+async def a_full_draft(cog, bot, member):
+    """A draft Submit renders on, so the button row is at Discord's cap of five."""
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.title = "Cookout at the park"
+    view.fields.when.day = future_day(3)
+    view.fields.when.hour = 19
+    picked = await click(bot, member, pick(find_select(view, MINUTE_PLACEHOLDER), ["30"]))
+    return picked, card_view(picked)
+
+
+async def test_the_draft_carries_a_fifth_where_button_on_the_button_row(cog, bot, member):
+    _picked, view = await a_full_draft(cog, bot, member)
+
+    where = find_where(view)
+    row = [one for one in view.children if getattr(one, "row", None) == where.row]
+    assert len(row) == 5
+    assert [one.label for one in row] == [
+        "Title & details",
+        "Where",
+        "Time zone",
+        "Submit",
+        "Back",
+    ]
+
+
+async def test_the_where_button_label_carries_the_channel_by_name(cog, bot, member):
+    with_channels(bot)
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.where = Where(WHERE_VOICE, VOICE_CHANNEL, "")
+
+    shown = await click(bot, member, find_item(view, "Title & details"))
+    typed = FakeInteraction(bot, member)
+    await shown.response.modals[0].on_submit(typed)
+
+    assert has_item(card_view(typed), "Where: 🔊 Raid Night")
+
+
+async def test_the_where_button_label_carries_a_typed_place_too(cog, bot, member):
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.where = Where(WHERE_OTHER, None, "twitch.tv/blackbloc")
+
+    shown = await click(bot, member, find_item(view, "Title & details"))
+    typed = FakeInteraction(bot, member)
+    await shown.response.modals[0].on_submit(typed)
+
+    assert has_item(card_view(typed), "Where: twitch.tv/blackbloc")
+
+
+async def test_the_where_panel_opens_with_the_channel_picker_and_the_two_other_doors(
+    cog, bot, member
+):
+    opened_where, panel = await open_where(cog, bot, member)
+
+    assert isinstance(panel, WherePanel)
+    assert card_embed(opened_where).title == WHERE_PANEL_TITLE
+    assert "Join" in card_embed(opened_where).description
+    assert isinstance(find_select(panel, events_pure.WHERE_PLACEHOLDER), discord.ui.ChannelSelect)
+    assert has_item(panel, events_pure.WHERE_OTHER_BUTTON)
+    assert has_item(panel, "Back")
+
+
+async def test_the_channel_picker_offers_voice_stage_and_text_and_nothing_else(cog, bot, member):
+    _opened_where, panel = await open_where(cog, bot, member)
+
+    picker = find_select(panel, events_pure.WHERE_PLACEHOLDER)
+    assert set(picker.channel_types) == {
+        discord.ChannelType.voice,
+        discord.ChannelType.stage_voice,
+        discord.ChannelType.text,
+    }
+    assert picker.min_values == 0 and picker.max_values == 1
+
+
+async def test_clear_only_renders_once_something_is_set(cog, bot, member):
+    _opened, view = await open_draft_panel(cog, bot, member)
+    _shown, panel = await open_where(cog, bot, member, view)
+    assert not has_item(panel, events_pure.WHERE_CLEAR_BUTTON)
+
+    view.fields.where = Where(WHERE_OTHER, None, "the park")
+    _shown, panel = await open_where(cog, bot, member, view)
+    assert has_item(panel, events_pure.WHERE_CLEAR_BUTTON)
+
+
+@pytest.mark.parametrize(
+    ("channel_id", "kind", "wanted"),
+    [
+        (VOICE_CHANNEL, "voice", WHERE_VOICE),
+        (STAGE_CHANNEL, "stage_voice", WHERE_VOICE),
+        (TEXT_CHANNEL_ID, "text", WHERE_TEXT),
+    ],
+)
+async def test_picking_a_channel_stores_the_kind_the_channel_is(
+    cog, bot, member, channel_id, kind, wanted
+):
+    with_channels(bot)
+    _opened, view = await open_draft_panel(cog, bot, member)
+    _shown, panel = await open_where(cog, bot, member, view)
+
+    picker = find_select(panel, events_pure.WHERE_PLACEHOLDER)
+    back = await click(bot, member, pick(picker, [FakePicked(channel_id, kind)]))
+
+    assert view.fields.where == Where(wanted, channel_id, "")
+    assert f"<#{channel_id}>" in card_embed(back).description
+    assert card_embed(back).title == DRAFT_TITLE
+
+
+async def test_an_empty_channel_pick_leaves_the_draft_with_nowhere(cog, bot, member):
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.where = Where(WHERE_OTHER, None, "the park")
+    _shown, panel = await open_where(cog, bot, member, view)
+
+    back = await click(bot, member, pick(find_select(panel, events_pure.WHERE_PLACEHOLDER), []))
+
+    assert view.fields.where == WHERE_UNSET
+    assert "**Where** — (not set)" in card_embed(back).description
+
+
+async def test_the_channel_picker_opens_on_the_one_already_chosen(cog, bot, member):
+    with_channels(bot)
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.where = Where(WHERE_VOICE, VOICE_CHANNEL, "")
+
+    _shown, panel = await open_where(cog, bot, member, view)
+
+    picker = find_select(panel, events_pure.WHERE_PLACEHOLDER)
+    assert [one.id for one in picker.default_values] == [VOICE_CHANNEL]
+
+
+async def test_other_types_a_place_and_an_empty_box_clears_it(cog, bot, member):
+    _opened, view = await open_draft_panel(cog, bot, member)
+    _shown, panel = await open_where(cog, bot, member, view)
+
+    opened_modal = await click(bot, member, find_item(panel, events_pure.WHERE_OTHER_BUTTON))
+    modal = opened_modal.response.modals[0]
+    assert isinstance(modal, WhereModal)
+    modal.place._value = "twitch.tv/blackbloc"
+    typed = FakeInteraction(bot, member)
+    await modal.on_submit(typed)
+
+    assert view.fields.where == Where(WHERE_OTHER, None, "twitch.tv/blackbloc")
+    assert "twitch.tv/blackbloc" in card_embed(typed).description
+    assert card_embed(typed).title == DRAFT_TITLE
+
+    _shown, panel = await open_where(cog, bot, member, view)
+    reopened = await click(bot, member, find_item(panel, events_pure.WHERE_OTHER_BUTTON))
+    empty = reopened.response.modals[0]
+    assert empty.place.default == "twitch.tv/blackbloc"
+    empty.place._value = ""
+    await empty.on_submit(FakeInteraction(bot, member))
+
+    assert view.fields.where == WHERE_UNSET
+
+
+async def test_clear_puts_the_draft_back_to_nowhere(cog, bot, member):
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.where = Where(WHERE_OTHER, None, "the park")
+    _shown, panel = await open_where(cog, bot, member, view)
+
+    back = await click(bot, member, find_item(panel, events_pure.WHERE_CLEAR_BUTTON))
+
+    assert view.fields.where == WHERE_UNSET
+    assert card_embed(back).title == DRAFT_TITLE
+
+
+async def test_back_from_the_where_panel_changes_nothing(cog, bot, member):
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.where = Where(WHERE_OTHER, None, "the park")
+    _shown, panel = await open_where(cog, bot, member, view)
+
+    back = await click(bot, member, find_item(panel, "Back"))
+
+    assert view.fields.where == Where(WHERE_OTHER, None, "the park")
+    assert card_embed(back).title == DRAFT_TITLE
+
+
+async def test_a_draft_with_nowhere_still_submits(cog, bot, member, db):
+    """Where is never needed, so nothing about it may hold Submit back."""
+    interaction = await submit(cog, bot, member, where=WHERE_UNSET)
+
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    assert row["location"] is None and row["where_kind"] is None
+    assert "Block Party" in interaction.sent
+
+
+async def test_the_text_modal_keeps_two_boxes_now_that_where_has_its_own_panel(cog, bot, member):
+    _opened, view = await open_draft_panel(cog, bot, member)
+    opened_modal = await click(bot, member, find_item(view, "Title & details"))
+
+    modal = opened_modal.response.modals[0]
+    assert len(modal.children) == 2
+    assert [modal.event_title, modal.description] == list(modal.children)
+
+
+async def test_a_channel_where_is_stored_as_a_channel_not_as_text(cog, bot, member, db):
+    with_channels(bot)
+    await submit(cog, bot, member, where=Where(WHERE_VOICE, VOICE_CHANNEL, ""))
+
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    assert row["where_kind"] == WHERE_VOICE
+    assert row["where_channel_id"] == VOICE_CHANNEL
+    assert row["location"] is None
+
+
+@pytest.mark.parametrize(
+    ("where", "entity", "channel_id", "location"),
+    [
+        (Where(WHERE_VOICE, VOICE_CHANNEL, ""), discord.EntityType.voice, VOICE_CHANNEL, None),
+        (
+            Where(WHERE_VOICE, STAGE_CHANNEL, ""),
+            discord.EntityType.stage_instance,
+            STAGE_CHANNEL,
+            None,
+        ),
+        (Where(WHERE_TEXT, TEXT_CHANNEL_ID, ""), discord.EntityType.external, None, "#general"),
+        (
+            Where(WHERE_OTHER, None, "twitch.tv/blackbloc"),
+            discord.EntityType.external,
+            None,
+            "twitch.tv/blackbloc",
+        ),
+        (WHERE_UNSET, discord.EntityType.external, None, "Ask in the server"),
+    ],
+)
+async def test_the_calendar_entry_follows_the_kind_that_was_picked(
+    cog, bot, member, lead, db, where, entity, channel_id, location
+):
+    with_channels(bot)
+    await submit(cog, bot, member, where=where)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+
+    await approve(bot, lead, row["id"])
+
+    made = bot.guild.scheduled[0].kwargs
+    assert made["entity_type"] is entity
+    assert getattr(made.get("channel"), "id", None) == channel_id
+    assert made.get("location") == location
+    assert ("location" in made) is (location is not None)
+
+
+async def test_a_channel_that_has_gone_falls_back_to_words_and_says_so_in_the_log(
+    cog, bot, member, lead, db
+):
+    with_channels(bot)
+    await submit(cog, bot, member, where=Where(WHERE_VOICE, VOICE_CHANNEL, ""))
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    bot.guild.channels.pop(VOICE_CHANNEL)
+
+    await approve(bot, lead, row["id"])
+
+    made = bot.guild.scheduled[0].kwargs
+    assert made["entity_type"] is discord.EntityType.external
+    assert made["location"] == "Ask in the server"
+    assert "event.where_channel_gone" in await action_kinds(db)
+
+
+async def test_no_scheduled_event_is_made_under_the_guard_whatever_the_where_is(
+    cog, bot, member, lead, db
+):
+    """TEST_MODE: the kind mapping is proven by the test above, never by a real calendar entry."""
+    with_channels(bot)
+    await submit(cog, bot, member, where=Where(WHERE_VOICE, VOICE_CHANNEL, ""))
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    bot.guard = FakeGuard()
+
+    await approve(bot, lead, row["id"])
+
+    assert bot.guild.scheduled == []
+    assert "event.would_create_scheduled" in await action_kinds(db)
+
+
+async def open_staff_card(cog, bot, who, event_id):
+    interaction = FakeInteraction(bot, who)
+    await events_cog.open_card(interaction, event_id)
+    return interaction, card_view(interaction)
+
+
+async def test_staff_get_a_where_button_on_the_review_card_and_a_member_does_not(
+    cog, bot, member, lead, db
+):
+    with_channels(bot)
+    await submit(cog, bot, member, where=Where(WHERE_OTHER, None, "the park"))
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+
+    _staff, staff_view = await open_staff_card(cog, bot, lead, row["id"])
+    _theirs, member_view = await open_staff_card(cog, bot, member, row["id"])
+
+    assert has_item(staff_view, "Where: the park")
+    assert not [
+        one
+        for one in member_view.children
+        if str(getattr(one, "label", "")).startswith("Where")
+    ]
+
+
+async def test_staff_can_set_any_kind_on_a_card_and_the_write_leaves_one_log_row(
+    cog, bot, member, lead, db
+):
+    with_channels(bot)
+    await submit(cog, bot, member, where=Where(WHERE_OTHER, None, "the park"))
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    _staff, staff_view = await open_staff_card(cog, bot, lead, row["id"])
+    before = (await action_kinds(db)).count("event.edited")
+
+    _shown, panel = await open_where(cog, bot, lead, staff_view)
+    picker = find_select(panel, events_pure.WHERE_PLACEHOLDER)
+    back = await click(bot, lead, pick(picker, [FakePicked(STAGE_CHANNEL, "stage_voice")]))
+
+    fresh = await get_event(db, row["id"])
+    assert fresh["where_kind"] == WHERE_VOICE and fresh["where_channel_id"] == STAGE_CHANNEL
+    assert fresh["location"] is None
+    assert (await action_kinds(db)).count("event.edited") == before + 1
+    assert f"<#{STAGE_CHANNEL}>" in [one.value for one in card_embed(back).fields]
+
+
+async def test_staff_can_clear_a_where_off_a_card_altogether(cog, bot, member, lead, db):
+    with_channels(bot)
+    await submit(cog, bot, member, where=Where(WHERE_OTHER, None, "the park"))
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    _staff, staff_view = await open_staff_card(cog, bot, lead, row["id"])
+
+    _shown, panel = await open_where(cog, bot, lead, staff_view)
+    back = await click(bot, lead, find_item(panel, events_pure.WHERE_CLEAR_BUTTON))
+
+    fresh = await get_event(db, row["id"])
+    assert fresh["where_kind"] is None and fresh["location"] is None
+    assert "Where" not in [one.name for one in card_embed(back).fields]
+
+
+async def test_a_member_who_is_not_staff_cannot_store_a_where_on_somebody_elses_card(
+    cog, bot, member, db
+):
+    await submit(cog, bot, member, where=Where(WHERE_OTHER, None, "the park"))
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+
+    interaction = FakeInteraction(bot, member)
+    await events_cog.store_card_where(interaction, row["id"], WHERE_UNSET, None)
+
+    fresh = await get_event(db, row["id"])
+    assert fresh["location"] == "the park"

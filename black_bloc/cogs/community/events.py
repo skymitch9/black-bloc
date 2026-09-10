@@ -46,11 +46,22 @@ from ...events import (
     TEXT_BUTTON,
     TEXT_MODAL_TITLE,
     TITLE_LIMIT,
+    WHERE_CLEAR_BUTTON,
+    WHERE_JOIN_NOTE,
+    WHERE_MODAL_LABEL,
+    WHERE_MODAL_TITLE,
+    WHERE_OTHER,
+    WHERE_OTHER_BUTTON,
+    WHERE_PANEL_INTRO,
+    WHERE_PANEL_TITLE,
+    WHERE_PLACEHOLDER,
+    WHERE_UNSET,
     ZONE_BUTTON,
     ZONE_PANEL_BUTTON,
     ZONE_PANEL_INTRO,
     ZONE_PANEL_TITLE,
     EventDraft,
+    Where,
     apply_decision,
     can_transition,
     cancel_event,
@@ -84,16 +95,20 @@ from ...events import (
     panel_shows_own_list,
     pick_placeholder,
     post_to_announce,
+    read_where,
     rename_channel,
     review_channel_url,
     set_review,
     set_status,
+    set_where,
     settings_lines,
     site_page_url,
     stored_zone,
     submit_event,
     tell_or_log,
     when_line,
+    where_button_label,
+    where_of_channel,
     write_settings,
     zone_choices,
     zone_line,
@@ -305,6 +320,11 @@ def build_card(bot: Any, guild: Any, row: Any, actor: Any) -> tuple[discord.Embe
         room_resolves=room is not None,
     ):
         view.add_item(CardMoveButton(row["id"], spec))
+    if bot.store.is_staff(actor) and row["status"] in OPEN_STATUSES:
+        where = read_where(row)
+        view.add_item(
+            CardWhereButton(row["id"], where, guild.get_channel(where.channel_id or 0))
+        )
     view.add_item(BackButton())
     if room is not None:
         view.add_item(
@@ -425,11 +445,10 @@ async def change_settings(
         )
 
 
-async def open_card(
+async def render_card(
     interaction: discord.Interaction, event_id: int, previous: Any = None
 ) -> None:
-    if not await opened(interaction, staff=False):
-        return
+    """The card itself, for the callers that have already deferred their own interaction."""
     bot = interaction.client
     row = await get_event(bot.db, event_id)
     if row is None or row["guild_id"] != interaction.guild.id:
@@ -444,6 +463,14 @@ async def open_card(
         view=view,
         allowed_mentions=discord.AllowedMentions.none(),
     )
+
+
+async def open_card(
+    interaction: discord.Interaction, event_id: int, previous: Any = None
+) -> None:
+    if not await opened(interaction, staff=False):
+        return
+    await render_card(interaction, event_id, previous)
 
 
 async def finish_card(
@@ -584,6 +611,7 @@ async def build_draft(
     view.add_item(MinuteSelect(fields.when, minute_step(store, guild.id)))
     view.add_item(DurationSelect(fields.duration))
     view.add_item(TextButton())
+    view.add_item(WhereButton(fields.where, guild.get_channel(fields.where.channel_id or 0)))
     view.add_item(DraftZoneButton())
     if checked is not None:
         view.add_item(SubmitButton())
@@ -636,6 +664,122 @@ async def submit_draft(interaction: discord.Interaction, previous: Any) -> None:
     await render_panel(interaction, previous)
     await answer(interaction, f"{said} {when_line(checked.starts, fields.when.zone)}")
     await dm(interaction.user, f"Submitted on **{interaction.guild.name}**.", card_for(row))
+
+
+async def open_where_panel(
+    interaction: discord.Interaction, where: Where, previous: Any, on_pick: Any, back: Any
+) -> None:
+    """One Where panel, from the draft and from a staff card; `on_pick` decides what it writes."""
+    if not await opened(interaction, staff=False):
+        return
+    store = interaction.client.store
+    embed = discord.Embed(
+        title=WHERE_PANEL_TITLE,
+        description="\n".join([WHERE_PANEL_INTRO, WHERE_JOIN_NOTE]),
+        colour=discord.Colour(COLOURS[PENDING]),
+    )
+    view = WherePanel(
+        panel_minutes(store, interaction.guild.id),
+        where=where,
+        on_pick=on_pick,
+        on_back=back,
+    )
+    retire(previous)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+class WherePanel(Panel):
+    """The channel picker, the typed door and the way back; what it writes is handed in."""
+
+    def __init__(
+        self, minutes: int, *, where: Where, on_pick: Any, on_back: Any
+    ) -> None:
+        super().__init__(minutes, footer=PANEL_TIMEOUT_FOOTER)
+        self.where = where
+        self.takes_where = on_pick
+        self.goes_back = on_back
+        self.add_item(WhereSelect(where))
+        self.add_item(WhereOtherButton())
+        if where.kind is not None:
+            self.add_item(WhereClearButton())
+        self.add_item(WhereBackButton())
+
+    async def take_where(self, interaction: discord.Interaction, where: Where) -> None:
+        await self.takes_where(interaction, where, self)
+
+    async def go_back(self, interaction: discord.Interaction) -> None:
+        await self.goes_back(interaction, self)
+
+
+class WhereSelect(discord.ui.ChannelSelect):
+    """Discord's own picker, so there is no 25 cap and no option list to keep in step."""
+
+    def __init__(self, where: Where) -> None:
+        super().__init__(
+            placeholder=WHERE_PLACEHOLDER,
+            channel_types=[
+                discord.ChannelType.voice,
+                discord.ChannelType.stage_voice,
+                discord.ChannelType.text,
+            ],
+            min_values=0,
+            max_values=1,
+            row=0,
+            default_values=(
+                [discord.Object(id=int(where.channel_id))] if where.channel_id else []
+            ),
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        picked = self.values[0] if self.values else None
+        await self.view.take_where(
+            interaction, where_of_channel(picked) if picked is not None else WHERE_UNSET
+        )
+
+
+class WhereOtherButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label=WHERE_OTHER_BUTTON, style=discord.ButtonStyle.secondary, row=1)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(WhereModal(self.view))
+
+
+class WhereClearButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label=WHERE_CLEAR_BUTTON, style=discord.ButtonStyle.secondary, row=1)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await self.view.take_where(interaction, WHERE_UNSET)
+
+
+class WhereBackButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label="Back", style=discord.ButtonStyle.secondary, row=1)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await self.view.go_back(interaction)
+
+
+class WhereModal(AnswersErrors, discord.ui.Modal, title=WHERE_MODAL_TITLE):
+    """One optional box with no failure path: what is typed is the place, and empty clears it."""
+
+    place = discord.ui.TextInput(
+        label=WHERE_MODAL_LABEL, max_length=LOCATION_LIMIT, required=False
+    )
+
+    def __init__(self, previous: Any) -> None:
+        super().__init__()
+        self.previous = previous
+        self.place.default = previous.where.text or None
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        typed = clamp(self.place, LOCATION_LIMIT)
+        await self.previous.take_where(
+            interaction, Where(WHERE_OTHER, None, typed) if typed else WHERE_UNSET
+        )
 
 
 async def open_zone_panel(interaction: discord.Interaction, previous: Any, back: Any) -> None:
@@ -719,6 +863,34 @@ class SubmitButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         await submit_draft(interaction, self.view)
+
+
+class WhereButton(discord.ui.Button):
+    """The fifth button on the draft's row; its label carries the pick so the card is not read."""
+
+    def __init__(self, where: Where, channel: Any = None) -> None:
+        super().__init__(
+            label=where_button_label(where, channel),
+            style=discord.ButtonStyle.secondary,
+            row=DRAFT_BUTTON_ROW,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        fields = self.view.fields
+        await open_where_panel(
+            interaction,
+            fields.where,
+            self.view,
+            lambda one, where, prev: take_draft_where(one, fields, where, prev),
+            lambda one, prev: open_draft(one, fields, prev),
+        )
+
+
+async def take_draft_where(
+    interaction: discord.Interaction, fields: EventDraft, where: Where, previous: Any
+) -> None:
+    fields.where = where
+    await open_draft(interaction, fields, previous)
 
 
 class DraftZoneButton(discord.ui.Button):
@@ -949,6 +1121,58 @@ class CardMoveButton(discord.ui.Button):
         await run_move(interaction, self.event_id, self.spec.action, self.view)
 
 
+class CardWhereButton(discord.ui.Button):
+    """Staff final say: the same three kinds on a card that is already in review."""
+
+    def __init__(self, event_id: int, where: Where, channel: Any = None) -> None:
+        super().__init__(
+            label=where_button_label(where, channel),
+            style=discord.ButtonStyle.secondary,
+            row=1,
+        )
+        self.event_id = event_id
+        self.where = where
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await still_staff(interaction):
+            return
+        await open_where_panel(
+            interaction,
+            self.where,
+            self.view,
+            lambda one, where, prev: store_card_where(one, self.event_id, where, prev),
+            lambda one, prev: open_card(one, self.event_id, prev),
+        )
+
+
+async def store_card_where(
+    interaction: discord.Interaction, event_id: int, where: Where, previous: Any
+) -> None:
+    """One write, one log row, then the card the change is now on."""
+    if not await still_staff(interaction):
+        return
+    if not await opened(interaction, staff=False):
+        return
+    bot = interaction.client
+    row = await get_event(bot.db, event_id)
+    if row is None:
+        await render_panel(interaction, previous)
+        await interaction.followup.send(
+            NO_SUCH_EVENT, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+        )
+        return
+    await set_where(bot.db, event_id, where)
+    await log_action(
+        bot,
+        interaction.guild,
+        "event.edited",
+        actor=interaction.user,
+        target=row["requester_id"],
+        details={"event_id": event_id, "where_kind": where.kind},
+    )
+    await render_card(interaction, event_id, previous)
+
+
 class NoteModal(PanelNoteModal):
     def __init__(self, cog: Events, event_id: int, kind: str, previous: Any = None) -> None:
         self.cog = cog
@@ -1053,7 +1277,7 @@ class DecisionButton(
 
 
 class EventTextModal(AnswersErrors, discord.ui.Modal, title=TEXT_MODAL_TITLE):
-    """Three boxes with no failure path: what is typed lands on the draft, which judges it."""
+    """Two boxes with no failure path: what is typed lands on the draft, which judges it."""
 
     event_title = discord.ui.TextInput(label="Title", max_length=TITLE_LIMIT, required=False)
     description = discord.ui.TextInput(
@@ -1062,22 +1286,17 @@ class EventTextModal(AnswersErrors, discord.ui.Modal, title=TEXT_MODAL_TITLE):
         max_length=DESCRIPTION_LIMIT,
         required=False,
     )
-    location = discord.ui.TextInput(
-        label="Where, or a link", max_length=LOCATION_LIMIT, required=False
-    )
 
     def __init__(self, previous: Any) -> None:
         super().__init__()
         self.previous = previous
         self.event_title.default = previous.fields.title or None
         self.description.default = previous.fields.description or None
-        self.location.default = previous.fields.location or None
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         fields = self.previous.fields
         fields.title = clamp(self.event_title, TITLE_LIMIT)
         fields.description = clamp(self.description, DESCRIPTION_LIMIT)
-        fields.location = clamp(self.location, LOCATION_LIMIT)
         await open_draft(interaction, fields, self.previous)
 
 
@@ -1452,6 +1671,7 @@ __all__ = [
     "BackButton",
     "CallOffPick",
     "CardMoveButton",
+    "CardWhereButton",
     "DecisionButton",
     "DenyModal",
     "EventDraftPanel",
@@ -1469,6 +1689,12 @@ __all__ = [
     "SettingsButton",
     "SubmitButton",
     "TextButton",
+    "WhereButton",
+    "WhereClearButton",
+    "WhereModal",
+    "WhereOtherButton",
+    "WherePanel",
+    "WhereSelect",
     "ZoneButton",
     "ZoneModal",
     "back_to_panel",
@@ -1487,11 +1713,15 @@ __all__ = [
     "open_cancel_confirm",
     "open_draft",
     "open_settings",
+    "open_where_panel",
     "open_zone_panel",
+    "render_card",
     "render_draft",
     "render_panel",
     "render_settings",
     "review_view",
     "run_move",
+    "store_card_where",
     "submit_draft",
+    "take_draft_where",
 ]
