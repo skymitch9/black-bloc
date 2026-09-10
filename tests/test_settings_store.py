@@ -22,6 +22,7 @@ from black_bloc.settings_store import (
     EVENTS_RETENTION_MAX_DAYS,
     EVENTS_RETENTION_MIN_DAYS,
     EVENTS_SCHEDULED_NAME_KEY,
+    EVENTS_SCHEDULED_NAME_TEMPLATE,
     GOLIVE_END_EDIT,
     GOLIVE_END_MODES,
     GOLIVE_END_OFF,
@@ -47,6 +48,8 @@ from black_bloc.settings_store import (
     POLL_MIN_HOURS,
     POLL_REMINDER_MAX_MINUTES,
     POLL_REMINDER_MINUTES,
+    RAIDTRAIN_SCHEDULED_NAME_KEY,
+    RAIDTRAIN_SCHEDULED_NAME_TEMPLATE,
     REQUEST_CARD_MOVES,
     TEMPVOICE_NAME_TEMPLATE,
     THREAD_MODE,
@@ -1573,6 +1576,7 @@ async def test_every_raid_train_decision_is_a_key_both_the_dashboard_and_the_bot
         "raidtrain_live_posts",
         "raidtrain_max_slots_per_member",
         "raidtrain_scheduled_event",
+        RAIDTRAIN_SCHEDULED_NAME_KEY,
         "raidtrain_log_level",
     ):
         assert key in KEY_TYPES and KEY_HELP.get(key)
@@ -1585,8 +1589,34 @@ async def test_every_raid_train_decision_is_a_key_both_the_dashboard_and_the_bot
     assert store.get(7, "raidtrain_live_posts") is True
     assert store.get(7, "raidtrain_max_slots_per_member") == 1
     assert store.get(7, "raidtrain_scheduled_event") is False
+    assert store.get(7, RAIDTRAIN_SCHEDULED_NAME_KEY) == RAIDTRAIN_SCHEDULED_NAME_TEMPLATE
     assert store.get(7, "raidtrain_channel_id") is None
     assert store.get(7, "raidtrain_organizer_role_id") is None
+
+
+def test_a_raid_trains_calendar_name_is_the_plain_title_until_staff_change_it():
+    """Owner 2026-09-10: "Leave raid train as it is now but let it be changeable"."""
+    assert RAIDTRAIN_SCHEDULED_NAME_TEMPLATE == "{title}"
+    assert KEY_TYPES[RAIDTRAIN_SCHEDULED_NAME_KEY] == "text"
+    assert namespace_of(RAIDTRAIN_SCHEDULED_NAME_KEY) == "raidtrain"
+
+
+def test_the_raid_train_calendar_name_is_held_to_the_same_rules_as_an_events():
+    assert coerce_value(RAIDTRAIN_SCHEDULED_NAME_KEY, "  BaF: {title}  ") == "BaF: {title}"
+    assert (
+        coerce_value(RAIDTRAIN_SCHEDULED_NAME_KEY, EVENTS_SCHEDULED_NAME_TEMPLATE)
+        == EVENTS_SCHEDULED_NAME_TEMPLATE
+    )
+
+    with pytest.raises(SettingError) as caught:
+        coerce_value(RAIDTRAIN_SCHEDULED_NAME_KEY, "Feat. BaF")
+
+    assert "{title}" in str(caught.value) and "Nothing was changed" in str(caught.value)
+
+    with pytest.raises(SettingError) as caught:
+        coerce_value(RAIDTRAIN_SCHEDULED_NAME_KEY, "{title} on {date}")
+
+    assert "{date}" in str(caught.value) and "{title}" in str(caught.value)
 
 
 def test_the_raid_train_mode_is_read_as_a_feature_switch_on_the_health_page():

@@ -203,6 +203,7 @@ export const LABELS = {
   raidtrain_live_posts: 'Whether the bot says the train has moved on',
   raidtrain_max_slots_per_member: 'How many slots one person may claim',
   raidtrain_scheduled_event: 'Whether Discord gets a scheduled event too',
+  raidtrain_scheduled_name_template: 'What a raid train is called on the calendar',
   raidtrain_log_level: 'How much of raid trains is repeated into Discord',
 
   applications_mode: 'Whether people can apply for a role',
