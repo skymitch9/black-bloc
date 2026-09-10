@@ -102,8 +102,13 @@ async def stored_timezone(db: Any, user_id: int) -> str | None:
     return name
 
 
-async def get_timezone(db: Any, user_id: int) -> str:
-    return await stored_timezone(db, user_id) or DEFAULT_TZ
+async def get_timezone(db: Any, user_id: int, fallback: Any = DEFAULT_TZ) -> str:
+    """What they chose; a caller that knows its guild passes that guild's `default_timezone`."""
+    chosen = await stored_timezone(db, user_id)
+    if chosen is not None:
+        return chosen
+    wanted = str(fallback or "").strip()
+    return wanted if is_known(wanted) else DEFAULT_TZ
 
 
 async def set_timezone(db: Any, user_id: int, tz_name: str) -> None:

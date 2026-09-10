@@ -1,8 +1,9 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
 
+from black_bloc import events
 from black_bloc.events import (
     APPROVED,
     CANCELLED,
@@ -51,7 +52,8 @@ from black_bloc.events import (
     write_settings,
     zone_line,
 )
-from black_bloc.timezones import START_EXAMPLE, unix
+from black_bloc.timezones import START_EXAMPLE, local_time, unix
+from black_bloc.when_picker import WhenDraft
 
 WHEN = datetime(2026, 9, 15, 2, 30, tzinfo=UTC)
 
@@ -509,3 +511,165 @@ def test_the_site_link_needs_an_origin_and_points_at_the_events_page():
 
 def test_a_review_channel_link_is_a_real_discord_url():
     assert review_channel_url(7, 99) == "https://discord.com/channels/7/99"
+
+
+# The draft's own gate (`docs/info/when-picker-design.md` §2, §4 and §5b). One sentence at a
+# time, the same ones `checked_fields` already says, and one name for Discord's calendar.
+
+NOW = datetime(2026, 9, 10, 22, 7, tzinfo=UTC)
+
+
+def a_draft(**kept):
+    when = WhenDraft(zone="America/Phoenix", **kept.pop("when", {}))
+    return events.EventDraft(when=when, duration=kept.pop("duration", "2h"), **kept)
+
+
+def test_a_draft_with_no_title_says_so_before_it_says_anything_about_the_time():
+    fields, why = events.draft_check(a_draft(), NOW)
+
+    assert fields is None
+    assert why == events.NO_TITLE
+
+
+def test_a_titled_draft_with_no_time_says_what_is_left_to_pick():
+    fields, why = events.draft_check(a_draft(title="Cookout"), NOW)
+
+    assert fields is None
+    assert "a day, an hour and a minute" in why
+
+
+def test_a_complete_draft_comes_back_as_the_fields_submit_event_already_takes():
+    draft = a_draft(
+        title="Cookout",
+        description="bring a chair",
+        location="the park",
+        when={"day": date(2026, 9, 12), "hour": 19, "minute": 30},
+    )
+
+    fields, why = events.draft_check(draft, NOW)
+
+    assert why == ""
+    assert isinstance(fields, events.EventFields)
+    assert fields.title == "Cookout" and fields.minutes == 120
+    assert fields.location == "the park"
+    assert local_time("America/Phoenix", fields.starts) == "2026-09-12 19:30"
+
+
+def test_the_draft_reuses_the_dst_and_past_sentences_rather_than_writing_new_ones():
+    gap = a_draft(title="Cookout", when={"day": date(2027, 3, 14), "hour": 2, "minute": 30})
+    gap.when.zone = "America/New_York"
+    fields, why = events.draft_check(gap, NOW)
+    assert fields is None and "never happens" in why
+
+    past = a_draft(title="Cookout", when={"day": date(2020, 1, 1), "hour": 19, "minute": 30})
+    fields, why = events.draft_check(past, NOW)
+    assert fields is None and "already gone by" in why
+
+
+def test_the_draft_card_says_what_is_missing_once_and_never_twice():
+    lines = events.draft_lines(a_draft(title="Cookout"), NOW, chosen=True, why="")
+    said = "\n".join(lines)
+
+    assert "**Title** — Cookout" in said
+    assert "a day, an hour and a minute" in said
+    assert said.count("a day, an hour and a minute") == 1
+
+    _fields, why = events.draft_check(a_draft(title="Cookout"), NOW)
+    full = "\n".join(events.draft_lines(a_draft(title="Cookout"), NOW, chosen=True, why=why))
+    assert full.count("a day, an hour and a minute") == 1
+    assert events.STILL_NEEDED.format(why=why) not in full
+
+
+def test_a_problem_that_is_not_the_time_gets_its_own_still_needed_line():
+    draft = a_draft(when={"day": date(2026, 9, 12), "hour": 19, "minute": 30})
+
+    _fields, why = events.draft_check(draft, NOW)
+    said = "\n".join(events.draft_lines(draft, NOW, chosen=True, why=why))
+
+    assert "**Still needed:**" in said and "needs a name" in said
+    assert "Fri Sep 11" not in said and "Sat Sep 12 · 7:30 PM" in said
+
+
+def test_the_draft_card_names_the_empty_boxes_rather_than_leaving_them_blank():
+    said = "\n".join(events.draft_lines(a_draft(title="Cookout"), NOW, chosen=True))
+
+    assert "**Where** — (not set)" in said
+    assert "**What** — (nothing yet)" in said
+    assert "**How long** — 2h" in said
+
+
+def test_the_what_line_is_cut_so_a_long_description_cannot_take_the_card_over():
+    draft = a_draft(title="Cookout", description="x" * 500)
+
+    said = "\n".join(events.draft_lines(draft, NOW, chosen=True))
+
+    assert "x" * events.DRAFT_WHAT_LIMIT in said
+    assert "x" * (events.DRAFT_WHAT_LIMIT + 1) not in said
+
+
+def test_the_zone_line_says_the_server_chose_it_only_while_nobody_has():
+    hint = "\n".join(events.draft_lines(a_draft(title="C"), NOW, chosen=False))
+    own = "\n".join(events.draft_lines(a_draft(title="C"), NOW, chosen=True))
+
+    assert "the server's default" in hint and "America/Phoenix" in hint
+    assert "the server's default" not in own and "America/Phoenix" in own
+
+
+def test_a_length_the_dropdown_could_not_have_produced_is_shown_as_it_was_typed():
+    said = "\n".join(events.draft_lines(a_draft(title="C", duration="a while"), NOW, chosen=True))
+
+    assert "**How long** — a while" in said
+
+
+def test_the_calendar_name_puts_the_title_into_the_template_staff_typed():
+    assert events.scheduled_name("{title} Feat. BaF", "Cookout") == "Cookout Feat. BaF"
+    assert events.scheduled_name("BaF: {title}", " Cookout ") == "BaF: Cookout"
+
+
+def test_a_long_title_is_cut_so_discord_never_refuses_the_scheduled_event():
+    made = events.scheduled_name("{title} Feat. BaF", "C" * 200)
+
+    assert len(made) == events.EVENT_NAME_LIMIT == 100
+
+
+def test_a_template_that_will_not_render_falls_back_rather_than_losing_the_event():
+    """Checklist 17: staff-editable text is caught, not trusted, however it got stored."""
+    made = events.scheduled_name("{title} on {date}", "Cookout")
+
+    assert made == "Cookout Feat. BaF"
+
+
+def test_a_template_that_is_not_text_at_all_still_produces_a_name():
+    assert events.scheduled_name(None, "Cookout") == "Cookout"
+    assert events.scheduled_name("", "Cookout") == "Cookout"
+
+
+class _Store:
+    def __init__(self, **values):
+        self.values = values
+
+    def get(self, guild_id, key):
+        return self.values.get(key)
+
+
+def test_the_default_length_and_the_zone_come_from_the_guild_not_from_a_constant():
+    store = _Store(
+        events_default_minutes=45,
+        default_timezone="Europe/London",
+        timezone_choices="Europe/London, Asia/Tokyo",
+        time_step_minutes=30,
+    )
+
+    assert events.default_minutes(store, 7) == 45
+    assert events.guild_zone(store, 7) == "Europe/London"
+    assert events.zone_choices(store, 7) == ["Europe/London", "Asia/Tokyo"]
+    assert events.minute_step(store, 7) == 30
+
+
+def test_a_guild_that_has_stored_nothing_lands_on_the_shipped_figures():
+    store = _Store()
+
+    assert events.default_minutes(store, 7) == events.DEFAULT_DURATION_MINUTES == 120
+    assert events.guild_zone(store, 7) == "America/Phoenix"
+    assert events.zone_choices(store, 7) == []
+    assert events.minute_step(store, 7) == 15

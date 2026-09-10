@@ -44,6 +44,7 @@ from .polls import DATE_LABEL_FORMS as POLL_DATE_LABEL_FORMS
 from .polls import MAX_HOURS as POLL_MAX_HOURS
 from .polls import MIN_HOURS as POLL_MIN_HOURS
 from .storage.db import Database
+from .timezones import DEFAULT_TZ, is_known, suggest
 
 log = logging.getLogger(__name__)
 
@@ -84,6 +85,46 @@ EVENTS_RETENTION_MIN_DAYS = 1
 EVENTS_RETENTION_MAX_DAYS = 365
 EVENTS_MAX_LATE_MINUTES = 15
 EVENTS_LATE_CEILING_MINUTES = 24 * 60
+EVENTS_DEFAULT_MINUTES = 120
+EVENTS_DURATION_MIN_MINUTES = 5
+EVENTS_DURATION_MAX_MINUTES = 7 * 24 * 60
+EVENTS_SCHEDULED_NAME_KEY = "events_scheduled_name_template"
+EVENTS_SCHEDULED_NAME_TEMPLATE = "{title} Feat. BaF"
+NAME_PLACEHOLDER = "{title}"
+
+DEFAULT_TIMEZONE_KEY = "default_timezone"
+TIMEZONE_CHOICES_KEY = "timezone_choices"
+TIME_STEP_KEY = "time_step_minutes"
+TIME_STEP_MINUTES = 15
+TIME_STEP_MIN_MINUTES = 5
+TIME_STEP_MAX_MINUTES = 60
+TIMEZONE_CHOICES_MAX = 24
+TIMEZONE_CHOICES = (
+    "America/Phoenix",
+    "America/Los_Angeles",
+    "America/Denver",
+    "America/Chicago",
+    "America/New_York",
+    "America/Anchorage",
+    "Pacific/Honolulu",
+    "America/Toronto",
+    "America/Vancouver",
+    "America/Mexico_City",
+    "America/Sao_Paulo",
+    "Europe/London",
+    "Europe/Paris",
+    "Europe/Berlin",
+    "Europe/Madrid",
+    "Europe/Moscow",
+    "Asia/Tokyo",
+    "Asia/Seoul",
+    "Asia/Shanghai",
+    "Asia/Kolkata",
+    "Asia/Dubai",
+    "Australia/Sydney",
+    "Australia/Perth",
+    "Pacific/Auckland",
+)
 
 POLL_MODES = ("off", "on")
 POLL_REVIEW_MODES = ("off", "on")
@@ -193,6 +234,11 @@ KEY_TYPES: dict[str, str] = {
     "events_create_scheduled": "bool",
     "events_channel_retention_days": "int",
     "events_max_late_minutes": "int",
+    "events_default_minutes": "int",
+    EVENTS_SCHEDULED_NAME_KEY: "text",
+    DEFAULT_TIMEZONE_KEY: "text",
+    TIMEZONE_CHOICES_KEY: "text",
+    TIME_STEP_KEY: "int",
     "poll_mode": "enum",
     "poll_who_can_create": "enum",
     "poll_review_mode": "enum",
@@ -310,6 +356,8 @@ KEY_MAX: dict[str, int] = {
     "honeypot_purge_days": HONEYPOT_PURGE_MAX_DAYS,
     "events_channel_retention_days": EVENTS_RETENTION_MAX_DAYS,
     "events_max_late_minutes": EVENTS_LATE_CEILING_MINUTES,
+    "events_default_minutes": EVENTS_DURATION_MAX_MINUTES,
+    TIME_STEP_KEY: TIME_STEP_MAX_MINUTES,
     "automod_warn_threshold": WARN_THRESHOLD_MAX,
     "chat_cooldown_seconds": CHAT_COOLDOWN_MAX_SECONDS,
     "chat_escalation_names": CHAT_ESCALATION_NAMES_MAX,
@@ -331,6 +379,8 @@ KEY_MAX: dict[str, int] = {
 
 KEY_MIN: dict[str, int] = {
     "events_channel_retention_days": EVENTS_RETENTION_MIN_DAYS,
+    "events_default_minutes": EVENTS_DURATION_MIN_MINUTES,
+    TIME_STEP_KEY: TIME_STEP_MIN_MINUTES,
     "chat_cooldown_seconds": CHAT_COOLDOWN_MIN_SECONDS,
     "poll_default_hours": POLL_MIN_HOURS,
     "poll_archive_days": POLL_ARCHIVE_MIN_DAYS,
@@ -341,6 +391,14 @@ KEY_MIN: dict[str, int] = {
 }
 
 KEY_MIN_REASON: dict[str, str] = {
+    "events_default_minutes": (
+        "An event shorter than {limit} minutes is over before anybody has read the announcement, "
+        "and whoever proposes one can still pick a shorter length from How long."
+    ),
+    TIME_STEP_KEY: (
+        "Minutes finer than every {limit} would need more than twelve options, which is more "
+        "than one dropdown can hold and more than anybody wants to scroll."
+    ),
     "events_channel_retention_days": (
         "Deleting a finished event's channel the moment it ends throws away the record before "
         "anybody has read it, so the shortest Black Bloc will keep one is {limit} day."
@@ -387,6 +445,14 @@ KEY_MAX_REASON: dict[str, str] = {
     "events_max_late_minutes": (
         "Announcing an event more than {limit} minutes after it started tells people to come to "
         "something that is already half over."
+    ),
+    "events_default_minutes": (
+        "Black Bloc will not carry an event longer than {limit} minutes — a week — so a default "
+        "above that would refuse every proposal that left How long alone."
+    ),
+    TIME_STEP_KEY: (
+        "A step of {limit} minutes is one option, on the hour, which is as coarse as the Minute "
+        "dropdown gets. Anything larger would leave it with nothing to offer."
     ),
     "automod_warn_threshold": (
         "A warning count above {limit} is a number nobody is reading any more. Set it to 0 to "
@@ -539,6 +605,32 @@ KEY_HELP: dict[str, str] = {
     "events_max_late_minutes": (
         "minutes an event may start late and still be announced; later than that it goes live "
         "quietly"
+    ),
+    "events_default_minutes": (
+        f"how long a proposed event runs when nobody changes How long, "
+        f"{EVENTS_DURATION_MIN_MINUTES} to {EVENTS_DURATION_MAX_MINUTES} minutes; whoever "
+        "proposes one picks their own length from the dropdown"
+    ),
+    EVENTS_SCHEDULED_NAME_KEY: (
+        f"what an approved event is called on Discord's own calendar; `{NAME_PLACEHOLDER}` "
+        f"stands for the event's title and is the only thing that may be filled in, so "
+        f"`{EVENTS_SCHEDULED_NAME_TEMPLATE}` reads as `Cookout {EVENTS_SCHEDULED_NAME_TEMPLATE}`"
+        " minus the placeholder. The review card, the announcement and the DM keep the plain "
+        "title"
+    ),
+    DEFAULT_TIMEZONE_KEY: (
+        "the `Region/City` zone times are read in for anybody who has never picked their own — "
+        "the Time zone button on `/event` is how a member changes theirs"
+    ),
+    TIMEZONE_CHOICES_KEY: (
+        f"the zones the Time zone dropdown offers, `Region/City` names separated by commas, up "
+        f"to {TIMEZONE_CHOICES_MAX} of them; a name Black Bloc cannot resolve is dropped, and "
+        "Other — type it… always sits at the bottom of the list for the rest"
+    ),
+    TIME_STEP_KEY: (
+        f"how far apart the Minute dropdown's choices are on the /event and /raidtrain draft "
+        f"panels, {TIME_STEP_MIN_MINUTES} to {TIME_STEP_MAX_MINUTES} minutes; 15 gives :00, "
+        ":15, :30 and :45"
     ),
     "poll_mode": "off, or on (members and staff can start polls from the /poll panel)",
     "poll_who_can_create": "who may start a poll from the /poll panel: staff, or everyone",
@@ -1440,6 +1532,9 @@ NAMESPACE_OVERRIDE = {
     "mod_dm_on_action": "automod",
     "mod_log_level": "automod",
     "mod_panel_minutes": "automod",
+    DEFAULT_TIMEZONE_KEY: "events",
+    TIMEZONE_CHOICES_KEY: "events",
+    TIME_STEP_KEY: "events",
 }
 
 
@@ -1465,6 +1560,79 @@ DB_UNAVAILABLE = (
 
 class SettingError(ValueError):
     """A settings key is unknown, or its value is the wrong type."""
+
+
+UNKNOWN_ZONE = (
+    "**{given}** is not a time zone Black Bloc knows, so nothing was changed. Write the "
+    "`Region/City` name Discord and your phone both use — `America/Phoenix`, `Europe/London`, "
+    "`Asia/Tokyo`."
+)
+ZONE_DID_YOU_MEAN = " Did you mean {names}?"
+NO_KNOWN_ZONE = (
+    "Not one of those is a time zone Black Bloc knows, so nothing was changed. They are "
+    "`Region/City` names separated by commas — `America/Phoenix, Europe/London, Asia/Tokyo` — "
+    "and the dropdown holds at most {limit} of them."
+)
+NAME_TEMPLATE_NEEDS_TITLE = (
+    "A calendar name has to say which event it is, so it must contain `{placeholder}` somewhere "
+    "— `{example}` is the one it ships with. Nothing was changed."
+)
+NAME_TEMPLATE_UNKNOWN = (
+    "`{{{found}}}` is not something Black Bloc can fill in, so nothing was changed. The only "
+    "thing a calendar name may stand in for is `{placeholder}`, the event's own title; write "
+    "any other braces out as words."
+)
+
+PLACEHOLDERS = re.compile(r"\{([^{}]*)\}")
+
+
+def checked_zone(given: Any) -> str:
+    """One `Region/City` name, refused in words with the closest matches when it is not one."""
+    name = str(given or "").strip()
+    if is_known(name):
+        return name
+    said = UNKNOWN_ZONE.format(given=name[:60] or "(nothing)")
+    near = suggest(name, 5)
+    if near:
+        said += ZONE_DID_YOU_MEAN.format(names=", ".join(f"`{one}`" for one in near))
+    raise SettingError(said)
+
+
+def checked_zones(given: Any) -> str:
+    """The dropdown's list: names this machine cannot resolve are dropped, and 24 are kept."""
+    wanted: list[str] = []
+    for part in str(given or "").split(","):
+        name = part.strip()
+        if is_known(name) and name not in wanted:
+            wanted.append(name)
+    if not wanted:
+        raise SettingError(NO_KNOWN_ZONE.format(limit=TIMEZONE_CHOICES_MAX))
+    return ", ".join(wanted[:TIMEZONE_CHOICES_MAX])
+
+
+def checked_name_template(given: Any) -> str:
+    """`{title}` and nothing else, so a staff-typed name can never fail to render."""
+    text = str(given or "").strip()
+    found = [one.strip() for one in PLACEHOLDERS.findall(text)]
+    stray = next((one for one in found if one != "title"), None)
+    if stray is not None:
+        raise SettingError(
+            NAME_TEMPLATE_UNKNOWN.format(found=stray[:40], placeholder=NAME_PLACEHOLDER)
+        )
+    if NAME_PLACEHOLDER not in text:
+        raise SettingError(
+            NAME_TEMPLATE_NEEDS_TITLE.format(
+                placeholder=NAME_PLACEHOLDER, example=EVENTS_SCHEDULED_NAME_TEMPLATE
+            )
+        )
+    return text
+
+
+TEXT_CHECKS: dict[str, Any] = {
+    DEFAULT_TIMEZONE_KEY: checked_zone,
+    TIMEZONE_CHOICES_KEY: checked_zones,
+    EVENTS_SCHEDULED_NAME_KEY: checked_name_template,
+}
 
 
 def coerce_value(key: str, value: Any) -> Any:
@@ -1542,7 +1710,8 @@ def coerce_value(key: str, value: Any) -> Any:
     if kind == "text":
         if not isinstance(value, str) or not value.strip():
             raise SettingError(f"{key!r} takes some text, not {value!r}.")
-        return value
+        check = TEXT_CHECKS.get(key)
+        return check(value) if check is not None else value
     if kind == "color":
         match = HEX_COLOR.match(str(value or "").strip()) if isinstance(value, str) else None
         if match is None:
@@ -1781,6 +1950,16 @@ class SettingsStore:
             return EVENTS_RETENTION_DAYS
         if key == "events_max_late_minutes":
             return EVENTS_MAX_LATE_MINUTES
+        if key == "events_default_minutes":
+            return EVENTS_DEFAULT_MINUTES
+        if key == EVENTS_SCHEDULED_NAME_KEY:
+            return EVENTS_SCHEDULED_NAME_TEMPLATE
+        if key == DEFAULT_TIMEZONE_KEY:
+            return DEFAULT_TZ
+        if key == TIMEZONE_CHOICES_KEY:
+            return ", ".join(TIMEZONE_CHOICES)
+        if key == TIME_STEP_KEY:
+            return TIME_STEP_MINUTES
         if key == "poll_mode":
             return "on"
         if key == "poll_who_can_create":

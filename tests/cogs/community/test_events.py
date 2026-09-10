@@ -1,4 +1,5 @@
 import asyncio
+import re
 from datetime import UTC, datetime, timedelta
 
 import discord
@@ -13,9 +14,10 @@ from black_bloc.cogs.community.events import (
     CallOffPick,
     DecisionButton,
     DenyModal,
-    EventModal,
+    EventDraftPanel,
     EventPick,
     Events,
+    EventTextModal,
     EventView,
     ForgetPick,
     LogsButton,
@@ -26,6 +28,7 @@ from black_bloc.cogs.community.events import (
     ZoneModal,
     decision_id,
     review_view,
+    submit_draft,
 )
 from black_bloc.config import load_settings
 from black_bloc.events import (
@@ -33,8 +36,12 @@ from black_bloc.events import (
     CANCELLED,
     DENIED,
     DONE,
+    DRAFT_TITLE,
     LIVE,
+    PANEL_TITLE,
     PENDING,
+    ZONE_PANEL_TITLE,
+    EventDraft,
     create_event,
     event_for_channel,
     events_by_status,
@@ -43,8 +50,30 @@ from black_bloc.events import (
     set_review,
     set_status,
 )
-from black_bloc.settings_store import SettingsStore
-from black_bloc.timezones import DEFAULT_TZ, get_timezone, local_time, set_timezone
+from black_bloc.settings_store import (
+    DEFAULT_TIMEZONE_KEY,
+    TIME_STEP_KEY,
+    TIMEZONE_CHOICES_KEY,
+    SettingsStore,
+)
+from black_bloc.timezones import (
+    DEFAULT_TZ,
+    get_timezone,
+    local_time,
+    set_timezone,
+    stored_timezone,
+)
+from black_bloc.when_picker import (
+    DAY_PLACEHOLDER,
+    DURATION_PLACEHOLDER,
+    HOUR_PLACEHOLDER,
+    LATER_VALUE,
+    MINUTE_PLACEHOLDER,
+    OTHER_VALUE,
+    ZONE_PLACEHOLDER,
+    WhenDraft,
+    parse_day,
+)
 
 GUILD = 7
 TEST_CHANNEL = 111
@@ -421,6 +450,12 @@ def panel_embed(interaction):
     return interaction.response.messages[-1]["embed"]
 
 
+def find_select(view, placeholder):
+    return next(
+        item for item in view.children if getattr(item, "placeholder", None) == placeholder
+    )
+
+
 def find_item(view, label):
     return next(item for item in view.children if getattr(item, "label", None) == label)
 
@@ -500,13 +535,62 @@ async def test_the_panel_names_the_default_zone_until_someone_chooses(cog, bot, 
     assert "not set a time zone" not in panel_embed(second).description
 
 
-async def test_the_zone_modal_is_prefilled_with_the_zone_already_stored(cog, bot, member, db):
+async def test_my_time_zone_opens_the_dropdown_with_the_stored_zone_already_picked(
+    cog, bot, member, db
+):
     await set_timezone(db, member.id, "Asia/Tokyo")
     panel = await open_panel(cog, bot, member)
 
     interaction = await click(bot, member, find_item(panel_view(panel), "My time zone"))
 
-    assert interaction.response.modals[0].zone.default == "Asia/Tokyo"
+    picker = find_select(card_view(interaction), ZONE_PLACEHOLDER)
+    assert [one.value for one in picker.options if one.default] == ["Asia/Tokyo"]
+    assert picker.options[-1].value == OTHER_VALUE
+    assert interaction.response.modals == []
+
+
+async def test_other_type_it_opens_the_typed_door_prefilled_with_the_stored_zone(
+    cog, bot, member, db
+):
+    await set_timezone(db, member.id, "Asia/Tokyo")
+    panel = await open_panel(cog, bot, member)
+    opened = await click(bot, member, find_item(panel_view(panel), "My time zone"))
+
+    picker = pick(find_select(card_view(opened), ZONE_PLACEHOLDER), [OTHER_VALUE])
+    typed = await click(bot, member, picker)
+
+    assert isinstance(typed.response.modals[0], ZoneModal)
+    assert typed.response.modals[0].zone.default == "Asia/Tokyo"
+
+
+async def test_picking_a_zone_from_the_dropdown_stores_it_and_goes_back_to_the_panel(
+    cog, bot, member, db
+):
+    panel = await open_panel(cog, bot, member)
+    opened = await click(bot, member, find_item(panel_view(panel), "My time zone"))
+
+    picker = pick(find_select(card_view(opened), ZONE_PLACEHOLDER), ["Europe/London"])
+    picked = await click(bot, member, picker)
+
+    assert await get_timezone(db, member.id) == "Europe/London"
+    assert "Europe/London" in picked.sent
+    assert card_embed(picked).title == PANEL_TITLE
+
+
+async def test_the_zone_dropdown_offers_what_the_setting_names_and_nothing_else(
+    cog, bot, member
+):
+    await bot.store.set(GUILD, TIMEZONE_CHOICES_KEY, "Europe/London, Asia/Tokyo")
+    panel = await open_panel(cog, bot, member)
+
+    opened = await click(bot, member, find_item(panel_view(panel), "My time zone"))
+
+    picker = find_select(card_view(opened), ZONE_PLACEHOLDER)
+    assert [one.value for one in picker.options] == [
+        "Europe/London",
+        "Asia/Tokyo",
+        OTHER_VALUE,
+    ]
 
 
 async def test_the_zone_button_only_shows_where_a_member_types_a_time(cog, bot, member):
@@ -523,15 +607,45 @@ def future_start(tz_name=DEFAULT_TZ, days=3):
     return local_time(tz_name, datetime.now(UTC) + timedelta(days=days))
 
 
+def future_day(days=3):
+    return (datetime.now(UTC) + timedelta(days=days)).date()
+
+
+def draft_fields(**fields):
+    """A filled `EventDraft`; a start the picker could never produce lands as a typed date."""
+    when = WhenDraft(zone=fields.pop("tz", DEFAULT_TZ))
+    start = fields.pop("start", future_start())
+    day = parse_day(str(start)[:10])
+    clock = str(start)[11:16]
+    if day is not None and re.fullmatch(r"\d{2}:\d{2}", clock):
+        when.day = day
+        when.hour, when.minute = (int(part) for part in clock.split(":"))
+    else:
+        when.later_text = str(start)
+    return EventDraft(
+        when=when,
+        title=fields.pop("title", "Block Party"),
+        description=fields.pop("description", "bring a chair"),
+        location=fields.pop("location", "the park"),
+        duration=fields.pop("duration", "1h30m"),
+    )
+
+
+def draft_panel(fields):
+    return EventDraftPanel(10, fields)
+
+
+async def open_draft_panel(cog, bot, member):
+    panel = await open_panel(cog, bot, member)
+    opened = await click(bot, member, find_item(panel_view(panel), "Propose an event"))
+    return opened, card_view(opened)
+
+
 async def submit(cog, bot, member, **fields):
-    modal = EventModal(cog, fields.pop("tz", DEFAULT_TZ))
-    modal.event_title._value = fields.pop("title", "Block Party")
-    modal.description._value = fields.pop("description", "bring a chair")
-    modal.start._value = fields.pop("start", future_start())
-    modal.duration._value = fields.pop("duration", "1h30m")
-    modal.location._value = fields.pop("location", "the park")
+    """Every proposal goes through the panel's own Submit path, gate and all."""
+    view = draft_panel(draft_fields(**fields))
     interaction = FakeInteraction(bot, member)
-    await modal.on_submit(interaction)
+    await submit_draft(interaction, view)
     return interaction
 
 
@@ -622,12 +736,14 @@ async def test_the_review_card_carries_approve_and_deny_buttons_keyed_by_the_eve
     assert posted.kwargs["allowed_mentions"].everyone is False
 
 
-async def test_a_start_black_bloc_cannot_read_is_refused_with_an_example(cog, bot, member, db):
+async def test_a_typed_date_black_bloc_cannot_read_is_refused_with_an_example(
+    cog, bot, member, db
+):
     interaction = await submit(cog, bot, member, start="next tuesday")
 
     assert await events_by_status(db, GUILD, (PENDING,)) == []
     assert bot.guild.created == []
-    assert "YYYY-MM-DD HH:MM" in interaction.sent and DEFAULT_TZ in interaction.sent
+    assert "next tuesday" in interaction.sent and "YYYY-MM-DD" in interaction.sent
 
 
 async def test_a_start_that_has_already_gone_by_is_refused(cog, bot, member, db):
@@ -1792,14 +1908,13 @@ async def test_a_local_time_that_happens_twice_is_refused_by_name(cog, bot, memb
     assert "happens twice" in interaction.sent
 
 
-async def test_the_modal_says_which_zone_the_time_is_read_in(cog, bot, member):
-    panel = await open_panel(cog, bot, member)
+async def test_the_draft_says_which_zone_the_time_is_read_in(cog, bot, member):
+    opened, view = await open_draft_panel(cog, bot, member)
 
-    interaction = await click(bot, member, find_item(panel_view(panel), "Propose an event"))
-
-    modal = interaction.response.modals[0]
-    assert isinstance(modal, EventModal)
-    assert DEFAULT_TZ in modal.start.placeholder
+    said = card_embed(opened).description
+    assert DEFAULT_TZ in said and "Time zone" in said
+    assert card_embed(opened).title == DRAFT_TITLE
+    assert has_item(view, "Time zone")
 
 
 async def test_a_settled_event_stops_being_kept_a_lock(cog, bot, member, lead, db):
@@ -2188,13 +2303,266 @@ async def test_the_submitted_line_shows_both_readings_of_the_time_that_was_typed
 
 
 async def test_proposing_through_the_panel_still_files_exactly_as_before(cog, bot, member, db):
-    panel = await open_panel(cog, bot, member)
-    opened = await click(bot, member, find_item(panel_view(panel), "Propose an event"))
+    opened, view = await open_draft_panel(cog, bot, member)
 
-    assert isinstance(opened.response.modals[0], EventModal)
+    assert isinstance(view, EventDraftPanel)
+    assert opened.response.modals == []
 
     await submit(cog, bot, member)
     rows = await events_by_status(db, GUILD, (PENDING,))
 
     assert len(rows) == 1 and rows[0]["requester_id"] == member.id
     assert "event.created" in await action_kinds(db)
+
+
+# The draft panel (`docs/info/when-picker-design.md` §2 and §4): a modal that never refuses, a
+# panel that says what is still needed, and a Submit that renders only once everything passes.
+
+
+async def test_propose_opens_a_draft_with_the_four_dropdowns_and_no_submit_yet(
+    cog, bot, member
+):
+    opened, view = await open_draft_panel(cog, bot, member)
+
+    placeholders = [getattr(one, "placeholder", None) for one in view.children]
+    assert DAY_PLACEHOLDER in placeholders
+    assert HOUR_PLACEHOLDER in placeholders
+    assert MINUTE_PLACEHOLDER in placeholders
+    assert DURATION_PLACEHOLDER in placeholders
+    assert has_item(view, "Title & details") and has_item(view, "Back")
+    assert not has_item(view, "Submit")
+    assert "(needed)" in card_embed(opened).description
+
+
+async def test_a_fresh_draft_starts_at_the_length_the_setting_names(cog, bot, member):
+    await bot.store.set(GUILD, "events_default_minutes", 90)
+
+    opened, view = await open_draft_panel(cog, bot, member)
+
+    picker = find_select(view, DURATION_PLACEHOLDER)
+    assert [one.value for one in picker.options if one.default] == ["1h30m"]
+    assert "1h 30m" in card_embed(opened).description
+
+
+async def test_the_minute_dropdown_steps_by_what_the_setting_says(cog, bot, member):
+    await bot.store.set(GUILD, TIME_STEP_KEY, 30)
+
+    _opened, view = await open_draft_panel(cog, bot, member)
+
+    picker = find_select(view, MINUTE_PLACEHOLDER)
+    assert [one.label for one in picker.options] == [":00", ":30"]
+
+
+async def test_the_text_modal_stores_what_was_typed_and_never_refuses(cog, bot, member):
+    _opened, view = await open_draft_panel(cog, bot, member)
+    opened_modal = await click(bot, member, find_item(view, "Title & details"))
+    modal = opened_modal.response.modals[0]
+    assert isinstance(modal, EventTextModal)
+
+    modal.event_title._value = "Cookout at the park"
+    modal.description._value = "bring a chair"
+    modal.location._value = "the park"
+    typed = FakeInteraction(bot, member)
+    await modal.on_submit(typed)
+
+    said = card_embed(typed).description
+    assert "Cookout at the park" in said and "the park" in said
+    assert "(needed)" not in said
+
+
+async def test_the_text_modal_comes_back_prefilled_with_everything_already_typed(
+    cog, bot, member
+):
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.title = "Cookout at the park"
+    view.fields.location = "the park"
+
+    reopened = await click(bot, member, find_item(view, "Title & details"))
+
+    modal = reopened.response.modals[0]
+    assert modal.event_title.default == "Cookout at the park"
+    assert modal.location.default == "the park"
+
+
+async def test_submit_appears_only_once_the_title_and_the_whole_time_are_there(
+    cog, bot, member
+):
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.title = "Cookout at the park"
+
+    day = future_day(3)
+    picked = await click(bot, member, pick(find_select(view, DAY_PLACEHOLDER), [day.isoformat()]))
+    view = card_view(picked)
+    assert not has_item(view, "Submit")
+
+    picked = await click(bot, member, pick(find_select(view, HOUR_PLACEHOLDER), ["19"]))
+    view = card_view(picked)
+    assert not has_item(view, "Submit")
+
+    picked = await click(bot, member, pick(find_select(view, MINUTE_PLACEHOLDER), ["30"]))
+    view = card_view(picked)
+    assert has_item(view, "Submit")
+    assert "Still needed" not in card_embed(picked).description
+
+
+async def test_a_draft_with_a_time_but_no_title_says_the_title_is_what_is_left(
+    cog, bot, member
+):
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.when.day = future_day(3)
+    view.fields.when.hour, view.fields.when.minute = 19, 30
+
+    shown = await click(bot, member, pick(find_select(view, HOUR_PLACEHOLDER), ["19"]))
+
+    assert "needs a name" in card_embed(shown).description
+    assert not has_item(card_view(shown), "Submit")
+
+
+async def test_a_bad_typed_date_keeps_the_title_and_says_so_on_the_panel(cog, bot, member):
+    """The owner's report was that an error emptied the form. It cannot any more."""
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.title = "Cookout at the park"
+
+    later = await click(bot, member, pick(find_select(view, DAY_PLACEHOLDER), [LATER_VALUE]))
+    modal = later.response.modals[0]
+    modal.day._value = "next tuesday"
+    typed = FakeInteraction(bot, member)
+    await modal.on_submit(typed)
+
+    said = card_embed(typed).description
+    assert "Cookout at the park" in said
+    assert "next tuesday" in said and "YYYY-MM-DD" in said
+    assert not has_item(card_view(typed), "Submit")
+
+
+async def test_the_typed_date_comes_back_prefilled_so_editing_is_the_same_as_retrying(
+    cog, bot, member
+):
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.when.later_text = "next tuesday"
+
+    later = await click(bot, member, pick(find_select(view, DAY_PLACEHOLDER), [LATER_VALUE]))
+
+    assert later.response.modals[0].day.default == "next tuesday"
+
+
+async def test_a_typed_date_that_reads_lands_on_the_panel_as_the_chosen_day(cog, bot, member):
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.title = "Cookout at the park"
+    view.fields.when.hour, view.fields.when.minute = 19, 30
+
+    later = await click(bot, member, pick(find_select(view, DAY_PLACEHOLDER), [LATER_VALUE]))
+    modal = later.response.modals[0]
+    modal.day._value = future_day(40).isoformat()
+    typed = FakeInteraction(bot, member)
+    await modal.on_submit(typed)
+
+    assert "7:30 PM" in card_embed(typed).description
+    assert has_item(card_view(typed), "Submit")
+
+
+async def test_submit_from_the_button_files_exactly_one_event_and_one_log_row(
+    cog, bot, member, db
+):
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.title = "Cookout at the park"
+    view.fields.when.day = future_day(3)
+    view.fields.when.hour, view.fields.when.minute = 19, 30
+    ready = card_view(await click(bot, member, pick(find_select(view, MINUTE_PLACEHOLDER), ["30"])))
+
+    filed = FakeInteraction(bot, member)
+    await find_item(ready, "Submit").callback(filed)
+
+    rows = await events_by_status(db, GUILD, (PENDING,))
+    kinds = await action_kinds(db)
+    assert len(rows) == 1 and rows[0]["title"] == "Cookout at the park"
+    assert kinds.count("event.created") == 1
+    assert card_embed(filed).title == PANEL_TITLE
+    assert "Cookout at the park" in filed.sent
+
+
+async def test_back_leaves_the_draft_behind_and_writes_nothing(cog, bot, member, db):
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.title = "Cookout at the park"
+
+    back = await click(bot, member, find_item(view, "Back"))
+
+    assert card_embed(back).title == PANEL_TITLE
+    assert await events_by_status(db, GUILD, (PENDING,)) == []
+    assert "Cookout at the park" not in card_embed(back).description
+
+
+async def test_the_drafts_time_zone_button_goes_to_the_dropdown_and_back_to_the_draft(
+    cog, bot, member, db
+):
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.title = "Cookout at the park"
+
+    zone = await click(bot, member, find_item(view, "Time zone"))
+    assert card_embed(zone).title == ZONE_PANEL_TITLE
+
+    picker = pick(find_select(card_view(zone), ZONE_PLACEHOLDER), ["Europe/London"])
+    picked = await click(bot, member, picker)
+
+    assert await get_timezone(db, member.id) == "Europe/London"
+    assert card_embed(picked).title == DRAFT_TITLE
+    assert "Cookout at the park" in card_embed(picked).description
+    assert "Europe/London" in card_embed(picked).description
+
+
+async def test_back_on_the_zone_panel_returns_to_the_draft_without_storing_anything(
+    cog, bot, member, db
+):
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.title = "Cookout at the park"
+    zone = await click(bot, member, find_item(view, "Time zone"))
+
+    back = await click(bot, member, find_item(card_view(zone), "Back"))
+
+    assert card_embed(back).title == DRAFT_TITLE
+    assert await stored_timezone(db, member.id) is None
+
+
+async def test_a_member_who_never_chose_reads_times_in_the_guilds_default(cog, bot, member):
+    await bot.store.set(GUILD, DEFAULT_TIMEZONE_KEY, "Europe/London")
+
+    opened, _view = await open_draft_panel(cog, bot, member)
+
+    assert "Europe/London" in card_embed(opened).description
+    assert "the server's default" in card_embed(opened).description
+
+
+async def test_a_stored_zone_beats_the_guilds_default_and_drops_the_hint(cog, bot, member, db):
+    await bot.store.set(GUILD, DEFAULT_TIMEZONE_KEY, "Europe/London")
+    await set_timezone(db, member.id, "Asia/Tokyo")
+
+    opened, _view = await open_draft_panel(cog, bot, member)
+
+    assert "Asia/Tokyo" in card_embed(opened).description
+    assert "the server's default" not in card_embed(opened).description
+
+
+async def test_submit_re_checks_rather_than_trusting_the_button_that_rendered_it(
+    cog, bot, member, db
+):
+    """A duration the dropdown can never produce still has to be refused in words."""
+    interaction = await submit(cog, bot, member, duration="a while")
+
+    assert await events_by_status(db, GUILD, (PENDING,)) == []
+    assert "1h30m" in interaction.sent
+
+
+async def test_submit_is_refused_when_events_go_off_while_the_draft_is_open(
+    cog, bot, member, db
+):
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.title = "Cookout at the park"
+    view.fields.when.day = future_day(3)
+    view.fields.when.hour, view.fields.when.minute = 19, 30
+    await bot.store.set(GUILD, "events_mode", "off")
+
+    filed = FakeInteraction(bot, member)
+    await submit_draft(filed, view)
+
+    assert await events_by_status(db, GUILD, (PENDING,)) == []
+    assert "turned off" in filed.sent

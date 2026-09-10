@@ -463,6 +463,12 @@ const SETTING_SPECS = [
   ["request_panel_minutes", "int", 10, 10, "minutes the /request panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ["request_panel_own_list", "bool", false, false, "true to show members their own requests on the /request panel; staff always see them, and members can still file and take one back"],
   ["status_prefix", "text", "Cookout attendees", "Cookout attendees", "what goes in front of the member count in Black Bloc's status"],
+  // The "When?" picker's five keys — black_bloc/settings_store.py owns them; these are the mock's copy.
+  ["events_default_minutes", "int", 120, 120, "how long a proposed event runs when nobody changes How long, 5 to 10080 minutes; whoever proposes one picks their own length from the dropdown", null, 10080, 5],
+  ["events_scheduled_name_template", "text", "{title} Feat. BaF", "{title} Feat. BaF", "what an approved event is called on Discord's own calendar; `{title}` stands for the event's title and is the only thing that may be filled in. The review card, the announcement and the DM keep the plain title"],
+  ["default_timezone", "text", "America/Phoenix", "America/Phoenix", "the `Region/City` zone times are read in for anybody who has never picked their own — the Time zone button on `/event` is how a member changes theirs"],
+  ["timezone_choices", "text", "America/Phoenix, America/Los_Angeles, America/Denver, America/Chicago, America/New_York, America/Anchorage, Pacific/Honolulu, America/Toronto, America/Vancouver, America/Mexico_City, America/Sao_Paulo, Europe/London, Europe/Paris, Europe/Berlin, Europe/Madrid, Europe/Moscow, Asia/Tokyo, Asia/Seoul, Asia/Shanghai, Asia/Kolkata, Asia/Dubai, Australia/Sydney, Australia/Perth, Pacific/Auckland", "America/Phoenix, America/Los_Angeles, America/Denver, America/Chicago, America/New_York, America/Anchorage, Pacific/Honolulu, America/Toronto, America/Vancouver, America/Mexico_City, America/Sao_Paulo, Europe/London, Europe/Paris, Europe/Berlin, Europe/Madrid, Europe/Moscow, Asia/Tokyo, Asia/Seoul, Asia/Shanghai, Asia/Kolkata, Asia/Dubai, Australia/Sydney, Australia/Perth, Pacific/Auckland", "the zones the Time zone dropdown offers, `Region/City` names separated by commas, up to 24 of them; a name Black Bloc cannot resolve is dropped, and Other — type it… always sits at the bottom of the list for the rest"],
+  ["time_step_minutes", "int", 15, 15, "how far apart the Minute dropdown's choices are on the /event and /raidtrain draft panels, 5 to 60 minutes; 15 gives :00, :15, :30 and :45", null, 60, 5],
 ];
 
 const RULES = {
@@ -1070,6 +1076,9 @@ const NAMESPACE_OVERRIDE = {
   mod_dm_on_action: 'automod',
   mod_log_level: 'automod',
   mod_panel_minutes: 'automod',
+  default_timezone: 'events',
+  timezone_choices: 'events',
+  time_step_minutes: 'events',
 };
 
 function namespaceOf(key) {

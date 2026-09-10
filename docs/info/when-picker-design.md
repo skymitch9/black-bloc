@@ -1,8 +1,16 @@
 # The "When?" picker — `/event` Propose and `/raidtrain` Start as draft panels
 
-> **Audience:** the Opus build agent, then whoever maintains the two forms. **Status:** TRACKED,
-> **DESIGN — decided 2026-09-10 15:08–15:10, build dispatched 15:15.** Last verified: **2026-09-10 15:13**
-> against `main` at `c3f842b` (what exists today was read in `black_bloc/cogs/community/events.py`,
+> **Audience:** whoever maintains the two forms. **Status:** TRACKED, ✅ **BUILT** — branch
+> `when-picker` off `main` at `ef54e60`, commits `446f191` (the module), `567d33b` (the five
+> settings keys), `6c0768d` (`/event`), `869e57a` (`/raidtrain`) and this docs commit.
+> ⚠️ **NOT merged, NOT deployed, and NOT seen in Discord** — no test can click a Discord button
+> (`../access/testing.md`), so what is proven here is the suite (**5286 → 5395**, green forward
+> and `BB_REVERSE=1`), `ruff`, and the mock (`ok - 17 pages, 150 routes, 14 core settings`).
+> The sweep rows a person still has to run by eye are **323–327** in
+> [`../access/sweeps.md`](../access/sweeps.md). Every departure from what is written below is in
+> the **`## Deviations`** foot. Last verified: **2026-09-10** — the design below was verified
+> against `main` at `c3f842b` before the build (what existed then was read in
+> `black_bloc/cogs/community/events.py`,
 > `black_bloc/cogs/content/raidtrain.py`, `black_bloc/events.py`, `black_bloc/timezones.py`,
 > `black_bloc/settings_store.py`; nothing here has been run yet). Pattern reference:
 > [`panels-program.md`](panels-program.md) §4 (`Panel`, `answer`, `capped_placeholder`,
@@ -209,3 +217,38 @@ lives (the agent greps for `logs_important_only` to find it).
 - **D3** Dates further than 24 days out are typed, not scrolled — a second page of days would
   cost a row the panel does not have.
 - **D4** The website forms keep their typed date; filed on TODO, not built here.
+- **D5** (build) **The zone line never disappears; only the "the server's default" half does.**
+  §5 says the hint drops once a zone is stored. It does — but a member with a stored zone and no
+  time picked yet would then see no zone at all on the draft, which is the confusion the whole
+  change exists to end. `events.DRAFT_ZONE` replaces `DRAFT_ZONE_HINT` once stored: one clause,
+  naming the zone and the button that changes it.
+- **D6** (build) **The `Later…` modal takes a DATE only, so the old `YYYY-MM-DD HH:MM` sentence
+  is gone from that path.** §3's `LaterModal` is one `Date — YYYY-MM-DD` box, so a typed
+  `next tuesday` is answered by a new sentence (`when_picker.BAD_DAY`) naming what was typed and
+  the shape wanted, not by `start_error`. `start_error` is untouched and still says
+  `YYYY-MM-DD HH:MM` on the paths that take a whole timestamp — the website's form, and the
+  train's `draft_check` when a resolved string somehow fails to parse.
+- **D7** (build) **`Events.submit` went with `EventModal`.** §4 only names the modal, but the cog
+  method existed solely to be called by it, and P4 says the panel calls the shared function. The
+  panel's `submit_draft` does what it did, from `checked_fields` onward. The 65 tests that drove
+  `submit(...)` now drive `submit_draft`, so the propose path is still covered end to end.
+- **D8** (build) **`read_numbers`, `BAD_NUMBER` and `OUT_OF_RANGE` moved from the raid-train cog
+  into `black_bloc/raidtrain.py`.** Not asked for; forced by §4 putting the numbers in the same
+  gate as the time, which lives in the pure half. The sentences are byte-identical, which is why
+  the four parametrised refusal tests kept their expectations.
+- **D9** (build) **`TrainModal` was broken before it was deleted.** It was handed a `RaidPanel`
+  and called `self.cog.submit_train(...)`, which no class in the file defines, so a real
+  `Start a raid train` would have raised. Nothing in the suite touched it. Recorded because it
+  means §4's "what `submit_train` does today" had no `submit_train` to point at — the behaviour
+  reused is `run_create`'s, which the panel's `start_draft` now carries.
+- **D10** (build) **Two bounds were added that §5 does not mention**, both mirrored into
+  `site/mock/contract.json`: `time_step_minutes` 5–60 (the design's own range, made enforceable)
+  and `events_default_minutes` 5–10080 (checklist 22 — a default above `MAX_DURATION_MINUTES`
+  would refuse every proposal that left How long alone).
+- **D11** (build) **`events_default_minutes` replaces `DEFAULT_DURATION_MINUTES` in exactly the
+  two places §4 and §5b name** — the propose path's seed and `create_scheduled_event`'s fallback.
+  `parse_duration`'s own default argument is untouched: it is a pure function with no store, and
+  changing its signature would have moved the default for `POST /api/events` too, which §6 says
+  does not change.
+- **D12** (build) **The `/event` draft's `Back` discards without asking (D1 above), and so does
+  the train's.** §4 only settles it for events; the same argument applies.

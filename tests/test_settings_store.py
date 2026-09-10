@@ -14,11 +14,14 @@ from black_bloc.settings_store import (
     BIRTHDAY_COLOR,
     BIRTHDAY_TEMPLATE,
     CHANNEL_MODE,
+    DEFAULT_TIMEZONE_KEY,
+    EVENTS_DEFAULT_MINUTES,
     EVENTS_LATE_CEILING_MINUTES,
     EVENTS_MAX_LATE_MINUTES,
     EVENTS_RETENTION_DAYS,
     EVENTS_RETENTION_MAX_DAYS,
     EVENTS_RETENTION_MIN_DAYS,
+    EVENTS_SCHEDULED_NAME_KEY,
     GOLIVE_END_EDIT,
     GOLIVE_END_MODES,
     GOLIVE_END_OFF,
@@ -47,6 +50,11 @@ from black_bloc.settings_store import (
     REQUEST_CARD_MOVES,
     TEMPVOICE_NAME_TEMPLATE,
     THREAD_MODE,
+    TIME_STEP_KEY,
+    TIME_STEP_MINUTES,
+    TIMEZONE_CHOICES,
+    TIMEZONE_CHOICES_KEY,
+    TIMEZONE_CHOICES_MAX,
     YOUTUBE_MODES,
     YOUTUBE_TEMPLATE,
     SettingError,
@@ -62,6 +70,7 @@ from black_bloc.settings_store import (
     staff_roles_sentence,
 )
 from black_bloc.storage.db import Database
+from black_bloc.timezones import is_known
 
 TEST_CH = 111
 STAFF_ROLE = 555
@@ -1865,3 +1874,140 @@ def test_every_registry_key_the_site_shows_has_a_label():
     text = (root / "site" / "public" / "assets" / "labels.js").read_text(encoding="utf-8")
     labelled = {found.group(1) for found in re.finditer(r"^\s{2}([a-z_0-9]+):", text, re.M)}
     assert sorted(set(KEY_TYPES) - labelled) == sorted(NO_LABEL_YET)
+
+
+# The "When?" picker's five keys (`docs/info/when-picker-design.md` §5 and §5b). Every decision
+# the draft panels make is here rather than in a cog, so the Settings page and `/settings
+# set-value` both reach it — checklist 33.
+
+
+async def test_every_when_picker_decision_is_a_key_both_doors_reach(store):
+    for key in (
+        DEFAULT_TIMEZONE_KEY,
+        TIMEZONE_CHOICES_KEY,
+        TIME_STEP_KEY,
+        "events_default_minutes",
+        EVENTS_SCHEDULED_NAME_KEY,
+    ):
+        assert key in KEY_TYPES and KEY_HELP.get(key)
+    assert KEY_TYPES[DEFAULT_TIMEZONE_KEY] == "text"
+    assert KEY_TYPES[TIMEZONE_CHOICES_KEY] == "text"
+    assert KEY_TYPES[EVENTS_SCHEDULED_NAME_KEY] == "text"
+    assert KEY_TYPES[TIME_STEP_KEY] == "int"
+    assert KEY_TYPES["events_default_minutes"] == "int"
+    assert store.get(7, DEFAULT_TIMEZONE_KEY) == "America/Phoenix"
+    assert store.get(7, TIME_STEP_KEY) == TIME_STEP_MINUTES == 15
+    assert store.get(7, "events_default_minutes") == EVENTS_DEFAULT_MINUTES == 120
+    assert store.get(7, EVENTS_SCHEDULED_NAME_KEY) == "{title} Feat. BaF"
+
+
+def test_the_three_timezone_keys_are_filed_under_events_and_make_no_group_of_their_own():
+    for key in (DEFAULT_TIMEZONE_KEY, TIMEZONE_CHOICES_KEY, TIME_STEP_KEY):
+        assert namespace_of(key) == "events"
+    assert namespace_of("events_default_minutes") == "events"
+    assert namespace_of(EVENTS_SCHEDULED_NAME_KEY) == "events"
+
+
+async def test_the_zone_dropdown_ships_the_twenty_four_the_design_names(store):
+    stored = store.get(7, TIMEZONE_CHOICES_KEY)
+    names = [one.strip() for one in stored.split(",")]
+
+    assert len(TIMEZONE_CHOICES) == TIMEZONE_CHOICES_MAX == 24
+    assert names == list(TIMEZONE_CHOICES)
+    assert names[0] == "America/Phoenix"
+    assert all(is_known(one) for one in names)
+
+
+def test_a_default_timezone_black_bloc_cannot_resolve_is_refused_by_name():
+    assert coerce_value(DEFAULT_TIMEZONE_KEY, " Europe/London ") == "Europe/London"
+
+    with pytest.raises(SettingError) as caught:
+        coerce_value(DEFAULT_TIMEZONE_KEY, "Phoenix")
+
+    assert "Phoenix" in str(caught.value)
+    assert "Did you mean" in str(caught.value)
+    assert "America/Phoenix" in str(caught.value)
+
+
+def test_a_default_timezone_nothing_resembles_is_refused_without_a_guess():
+    with pytest.raises(SettingError) as caught:
+        coerce_value(DEFAULT_TIMEZONE_KEY, "Middle/Earth")
+
+    assert "Middle/Earth" in str(caught.value)
+    assert "Did you mean" not in str(caught.value)
+
+
+def test_the_zone_list_drops_what_this_machine_cannot_resolve_and_keeps_the_rest():
+    kept = coerce_value(TIMEZONE_CHOICES_KEY, "America/Phoenix, Middle/Earth, Europe/London")
+
+    assert kept == "America/Phoenix, Europe/London"
+
+
+def test_the_zone_list_is_cut_to_the_twenty_four_the_dropdown_can_hold():
+    """The 25th slot belongs to `Other — type it…`, which is how the rest are reached."""
+    typed = ", ".join([*TIMEZONE_CHOICES, "Europe/Lisbon", "Asia/Manila"])
+
+    kept = coerce_value(TIMEZONE_CHOICES_KEY, typed).split(", ")
+
+    assert len(kept) == TIMEZONE_CHOICES_MAX
+    assert "Asia/Manila" not in kept
+
+
+def test_the_zone_list_never_keeps_the_same_name_twice():
+    kept = coerce_value(TIMEZONE_CHOICES_KEY, "Asia/Tokyo, Asia/Tokyo, Europe/London")
+
+    assert kept == "Asia/Tokyo, Europe/London"
+
+
+def test_a_zone_list_with_nothing_known_in_it_is_refused_rather_than_emptied():
+    with pytest.raises(SettingError) as caught:
+        coerce_value(TIMEZONE_CHOICES_KEY, "Middle/Earth, Narnia")
+
+    assert "Region/City" in str(caught.value) and "24" in str(caught.value)
+
+
+def test_the_calendar_name_must_say_which_event_it_is():
+    assert coerce_value(EVENTS_SCHEDULED_NAME_KEY, "{title} Feat. BaF") == "{title} Feat. BaF"
+    assert coerce_value(EVENTS_SCHEDULED_NAME_KEY, "  BaF: {title}  ") == "BaF: {title}"
+
+    with pytest.raises(SettingError) as caught:
+        coerce_value(EVENTS_SCHEDULED_NAME_KEY, "Feat. BaF")
+
+    assert "{title}" in str(caught.value)
+
+
+def test_a_calendar_name_with_a_placeholder_nothing_can_fill_is_refused_by_name():
+    with pytest.raises(SettingError) as caught:
+        coerce_value(EVENTS_SCHEDULED_NAME_KEY, "{title} on {date}")
+
+    assert "{date}" in str(caught.value)
+    assert "{title}" in str(caught.value)
+
+
+def test_the_minute_step_and_the_default_length_refuse_a_figure_the_pickers_cannot_render():
+    assert coerce_value(TIME_STEP_KEY, 5) == 5
+    assert coerce_value(TIME_STEP_KEY, 60) == 60
+    assert coerce_value("events_default_minutes", 30) == 30
+    for key, bad, said in (
+        (TIME_STEP_KEY, 4, "twelve options"),
+        (TIME_STEP_KEY, 61, "one option"),
+        ("events_default_minutes", 4, "over before"),
+        ("events_default_minutes", 10081, "a week"),
+    ):
+        with pytest.raises(SettingError) as caught:
+            coerce_value(key, bad)
+        assert said in str(caught.value), key
+
+
+async def test_a_lead_can_change_all_five_through_the_store_the_settings_page_writes_to(store):
+    await store.set(7, DEFAULT_TIMEZONE_KEY, "Europe/London")
+    await store.set(7, TIMEZONE_CHOICES_KEY, "Europe/London, Asia/Tokyo")
+    await store.set(7, TIME_STEP_KEY, parse_value(TIME_STEP_KEY, "30"))
+    await store.set(7, "events_default_minutes", parse_value("events_default_minutes", "90"))
+    await store.set(7, EVENTS_SCHEDULED_NAME_KEY, "{title} — Black in a Flash")
+
+    assert store.get(7, DEFAULT_TIMEZONE_KEY) == "Europe/London"
+    assert store.get(7, TIMEZONE_CHOICES_KEY) == "Europe/London, Asia/Tokyo"
+    assert store.get(7, TIME_STEP_KEY) == 30
+    assert store.get(7, "events_default_minutes") == 90
+    assert store.get(7, EVENTS_SCHEDULED_NAME_KEY) == "{title} — Black in a Flash"

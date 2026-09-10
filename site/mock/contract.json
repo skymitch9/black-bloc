@@ -21,6 +21,7 @@
     "min": {
       "chat_cooldown_seconds": 5,
       "events_channel_retention_days": 1,
+      "events_default_minutes": 5,
       "logs_count": 1,
       "poll_archive_days": 1,
       "poll_default_hours": 1,
@@ -28,6 +29,7 @@
       "raidtrain_reminder_minutes": 5,
       "raidtrain_slot_minutes": 15,
       "selftest_purge_minutes": 1,
+      "time_step_minutes": 5,
       "youtube_poll_minutes": 5
     },
     "max": {
@@ -43,6 +45,7 @@
       "chat_person_hourly_turns": 10000,
       "cost_hosting_usd": 10000,
       "events_channel_retention_days": 365,
+      "events_default_minutes": 10080,
       "events_max_late_minutes": 1440,
       "honeypot_purge_days": 7,
       "logs_count": 50,
@@ -54,7 +57,8 @@
       "raidtrain_poll_minutes": 60,
       "raidtrain_reminder_minutes": 1440,
       "raidtrain_slot_minutes": 720,
-      "selftest_purge_minutes": 1440
+      "selftest_purge_minutes": 1440,
+      "time_step_minutes": 60
     }
   },
   "routes": [

@@ -1,8 +1,9 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
 
+from black_bloc import raidtrain as rt
 from black_bloc.raidtrain import (
     ALL_SLOTS,
     CANCELLED,
@@ -57,6 +58,7 @@ from black_bloc.raidtrain import (
     train_options,
     twitch_url,
 )
+from black_bloc.when_picker import WhenDraft
 
 START = datetime(2026, 9, 14, 19, 0, tzinfo=UTC)
 SELECT_CAP = 25
@@ -490,3 +492,100 @@ def test_every_card_move_has_exactly_one_home_in_the_move_table():
     for status in STATUSES:
         for move in card_buttons(status, organizer=True, held=[1], slot_count=4):
             assert move.action in {one.action for one in CARD_MOVES}
+
+
+# The Start draft's own gate (`docs/info/when-picker-design.md` §4). One sentence at a time, and
+# the two numbers kept exactly as they were typed until they pass.
+
+DRAFT_NOW = datetime(2026, 9, 10, 22, 7, tzinfo=UTC)
+
+
+def train_draft(**kept):
+    when = WhenDraft(zone="America/Phoenix", **kept.pop("when", {}))
+    return rt.TrainDraft(
+        when=when,
+        title=kept.pop("title", "Saturday train"),
+        description=kept.pop("description", ""),
+        slot_minutes=kept.pop("slot_minutes", "60"),
+        slot_count=kept.pop("slot_count", "4"),
+    )
+
+
+def test_a_train_draft_with_no_title_says_so_before_anything_about_the_time():
+    fields, why = rt.draft_check(train_draft(title=""), DRAFT_NOW)
+
+    assert fields is None
+    assert why == rt.NO_TRAIN_TITLE
+
+
+def test_a_titled_train_draft_with_no_time_says_what_is_left_to_pick():
+    fields, why = rt.draft_check(train_draft(), DRAFT_NOW)
+
+    assert fields is None
+    assert "a day, an hour and a minute" in why
+
+
+def test_a_complete_train_draft_comes_back_as_the_numbers_create_and_publish_takes():
+    draft = train_draft(when={"day": date(2026, 9, 12), "hour": 19, "minute": 30})
+
+    fields, why = rt.draft_check(draft, DRAFT_NOW)
+
+    assert why == ""
+    assert isinstance(fields, rt.TrainFields)
+    assert fields.title == "Saturday train"
+    assert (fields.slot_minutes, fields.slot_count) == (60, 4)
+    assert fields.starts > DRAFT_NOW
+
+
+def test_a_train_start_that_has_gone_by_reuses_the_events_sentence():
+    draft = train_draft(when={"day": date(2020, 1, 1), "hour": 19, "minute": 30})
+
+    fields, why = rt.draft_check(draft, DRAFT_NOW)
+
+    assert fields is None and "already gone by" in why
+
+
+def test_the_numbers_are_asked_last_so_the_time_is_never_hidden_behind_them():
+    draft = train_draft(slot_minutes="abc")
+    _fields, why = rt.draft_check(draft, DRAFT_NOW)
+    assert "a day, an hour and a minute" in why
+
+    draft.when.day, draft.when.hour, draft.when.minute = date(2026, 9, 12), 19, 30
+    fields, why = rt.draft_check(draft, DRAFT_NOW)
+    assert fields is None and "not a whole number" in why
+
+
+def test_the_train_draft_card_shows_the_numbers_exactly_as_they_were_typed():
+    said = "\n".join(
+        rt.draft_lines(train_draft(slot_minutes="abc", slot_count=""), DRAFT_NOW, chosen=True)
+    )
+
+    assert "**Minutes per slot** — abc" in said
+    assert "**How many slots** — (needed)" in said
+    assert "**Title** — Saturday train" in said
+
+
+def test_the_train_draft_card_says_the_time_once_and_never_twice():
+    draft = train_draft()
+    _fields, why = rt.draft_check(draft, DRAFT_NOW)
+
+    said = "\n".join(rt.draft_lines(draft, DRAFT_NOW, chosen=True, why=why))
+
+    assert said.count("a day, an hour and a minute") == 1
+    assert "**Still needed:**" not in said
+
+
+def test_a_settled_time_reads_as_the_day_and_the_clock_in_the_drafts_zone():
+    draft = train_draft(when={"day": date(2026, 9, 12), "hour": 19, "minute": 30})
+
+    said = "\n".join(rt.draft_lines(draft, DRAFT_NOW, chosen=True))
+
+    assert "Sat Sep 12 · 7:30 PM" in said
+    assert "America/Phoenix" in said
+
+
+def test_the_bounds_are_one_home_now_rather_than_a_copy_in_the_cog():
+    assert rt.read_numbers("60", "4") == (60, 4)
+    assert "not a whole number" in rt.read_numbers("ten", "4")
+    assert "15 to 720 minutes" in rt.read_numbers("5", "4")
+    assert "1 to 24 slots" in rt.read_numbers("60", "99")
