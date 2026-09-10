@@ -25,7 +25,7 @@ from black_bloc.cogs.content.raidtrain import (
 from black_bloc.config import load_settings
 from black_bloc.events import ZONE_PANEL_TITLE
 from black_bloc.raidtrain import CANCELLED, DONE, LIVE, LOCKED, NEEDS_LINK, OPEN
-from black_bloc.settings_store import SettingsStore
+from black_bloc.settings_store import RAIDTRAIN_SCHEDULED_NAME_KEY, SettingsStore
 from black_bloc.storage.db import Database
 from black_bloc.timezones import get_timezone
 from black_bloc.when_picker import (
@@ -117,6 +117,12 @@ class FakeGuild:
         self.members = {}
         self.roles = []
         self.unavailable = False
+        self.scheduled = []
+
+    async def create_scheduled_event(self, **kwargs):
+        made = SimpleNamespace(id=7700 + len(self.scheduled), **kwargs)
+        self.scheduled.append(made)
+        return made
 
     def add(self, channel):
         self.channels[channel.id] = channel
@@ -1456,6 +1462,55 @@ async def test_shadow_never_puts_a_lineup_in_a_channel(bot, cog, db):
     await cog.publish_lineup(bot.guild, train_id)
     assert bot.guild.get_channel(TEST_CHANNEL).posts == []
     assert "raidtrain.would_post" in await kinds_logged(db)
+
+
+async def test_the_calendar_event_is_the_plain_title_until_staff_change_the_key(bot, cog, db):
+    """Owner 2026-09-10: raid trains stay as they are, but the wording is a setting now."""
+    await bot.store.set(GUILD, "raidtrain_scheduled_event", True)
+    train_id = await a_train(db)
+    await cog.publish_lineup(bot.guild, train_id)
+
+    assert [one.name for one in bot.guild.scheduled] == ["Saturday train"]
+    assert (await get_train(db, GUILD, train_id))["scheduled_event_id"] == 7700
+
+
+async def test_the_calendar_event_takes_the_wording_staff_typed_on_the_dashboard(bot, cog, db):
+    await bot.store.set(GUILD, "raidtrain_scheduled_event", True)
+    await bot.store.set(GUILD, RAIDTRAIN_SCHEDULED_NAME_KEY, "{title} Feat. BaF")
+    train_id = await a_train(db)
+    await cog.publish_lineup(bot.guild, train_id)
+
+    assert [one.name for one in bot.guild.scheduled] == ["Saturday train Feat. BaF"]
+
+
+async def test_a_wording_that_will_not_render_falls_back_to_the_title_not_to_feat_baf(
+    bot, cog, db
+):
+    """Checklist 17, and the fallback is this feature's own default rather than the events one."""
+    await bot.store.set(GUILD, "raidtrain_scheduled_event", True)
+    await bot.store.set(GUILD, RAIDTRAIN_SCHEDULED_NAME_KEY, "{title} Feat. BaF")
+    await db.conn.execute(
+        "UPDATE settings SET value = ? WHERE guild_id = ? AND key = ?",
+        ('"{title} on {date}"', GUILD, RAIDTRAIN_SCHEDULED_NAME_KEY),
+    )
+    await db.conn.commit()
+    await bot.store.load()
+    train_id = await a_train(db)
+    await cog.publish_lineup(bot.guild, train_id)
+
+    assert [one.name for one in bot.guild.scheduled] == ["Saturday train"]
+
+
+async def test_test_mode_makes_no_calendar_event_however_the_wording_is_set(bot, cog, db):
+    bot.guard = FakeGuard([TEST_CHANNEL])
+    await bot.store.set(GUILD, "raidtrain_scheduled_event", True)
+    await bot.store.set(GUILD, RAIDTRAIN_SCHEDULED_NAME_KEY, "{title} Feat. BaF")
+    train_id = await a_train(db)
+    await cog.publish_lineup(bot.guild, train_id)
+
+    assert bot.guild.scheduled == []
+    assert "raidtrain.would_create_scheduled" in await kinds_logged(db)
+    assert (await get_train(db, GUILD, train_id))["scheduled_event_id"] is None
 
 
 async def test_only_the_ping_role_may_be_mentioned_by_a_lineup(bot, cog):
