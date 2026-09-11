@@ -59,6 +59,17 @@ from black_bloc.events import (
     zone_line,
 )
 from black_bloc.linkcheck import LINK_MISSING, LINK_OK, LINK_UNREACHABLE
+from black_bloc.settings_store import (
+    EVENTS_APPROVER_ROLE_KEY,
+    EVENTS_POSTS_WHERE_KEY,
+    EVENTS_ROOM_DELETE_KEY,
+    EVENTS_ROOM_NOTICE_KEY,
+    EVENTS_TEST_RETENTION_KEY,
+    POSTS_ANNOUNCE,
+    POSTS_BOTH,
+    POSTS_ROOM,
+    ROOM_DELETE_APPROVER,
+)
 from black_bloc.timezones import START_EXAMPLE, local_time, unix
 from black_bloc.when_picker import WhenDraft
 
@@ -1202,3 +1213,105 @@ def test_a_row_with_nothing_readable_on_it_has_no_anchor_and_is_left_alone():
         events.swept_anchor(a_row(status=DENIED, decided_at=None, ends_at=None, created_at=None))
         is None
     )
+
+
+# Event rooms (`docs/info/events-rooms-design.md`): where an event's posts go, who may remove
+# its room, and the words the notice message says how long it has left in.
+
+
+def test_where_an_events_posts_go_defaults_to_its_own_room():
+    store = FakeStore()
+
+    assert events.posts_where(store, 7) == POSTS_ROOM
+    assert events.posts_in_room(store, 7) is True
+    assert events.posts_in_announce(store, 7) is False
+
+
+@pytest.mark.parametrize(
+    ("value", "room", "announce"),
+    [
+        (POSTS_ROOM, True, False),
+        (POSTS_ANNOUNCE, False, True),
+        (POSTS_BOTH, True, True),
+    ],
+)
+def test_each_value_opens_exactly_the_doors_it_names(value, room, announce):
+    store = FakeStore(values={EVENTS_POSTS_WHERE_KEY: value})
+
+    assert events.posts_in_room(store, 7) is room
+    assert events.posts_in_announce(store, 7) is announce
+
+
+def test_the_notice_says_minutes_while_testing_and_days_when_it_is_live():
+    store = FakeStore(
+        values={"events_channel_retention_days": 7, EVENTS_TEST_RETENTION_KEY: 5}
+    )
+
+    assert events.room_keeps(store, 7, testing=True) == "5 minutes after it ends"
+    assert events.room_keeps(store, 7, testing=False) == "7 days after it ends"
+
+
+def test_staff_may_always_remove_a_room_and_so_may_the_approver_role():
+    staff_only = FakeStore(staff_ids={1})
+    lead = FakeActor(1)
+    lead.roles = []
+    other = FakeActor(2)
+    other.roles = [SimpleNamespace(id=99)]
+
+    assert events.may_delete_room(staff_only, 7, lead) is True
+    assert events.may_delete_room(staff_only, 7, other) is False
+
+    approver = FakeStore(
+        staff_ids={1},
+        values={EVENTS_ROOM_DELETE_KEY: ROOM_DELETE_APPROVER, EVENTS_APPROVER_ROLE_KEY: 99},
+    )
+
+    assert events.may_delete_room(approver, 7, other) is True
+    assert events.may_delete_room(approver, 7, lead) is True
+
+
+def test_an_approver_mode_with_no_role_set_falls_back_to_staff():
+    store = FakeStore(staff_ids={1}, values={EVENTS_ROOM_DELETE_KEY: ROOM_DELETE_APPROVER})
+    other = FakeActor(2)
+    other.roles = [SimpleNamespace(id=99)]
+
+    assert events.room_delete_role_id(store, 7) is None
+    assert events.may_delete_room(store, 7, other) is False
+
+
+def test_the_cancel_reason_a_removed_room_gives_reads_as_one_sentence():
+    said = events.DM_CANCELLED.format(
+        title="Block Party", guild="Black Bloc", why=events.CANCEL_WHY["room_deleted"]
+    ) + events.CANCEL_NOTE.format(note="we are done in here")
+
+    assert "has been cancelled — staff removed its room." in said
+    assert "The reason given was: we are done in here" in said
+
+
+def test_the_rooms_page_says_all_four_keys_in_words():
+    store = FakeStore(
+        values={
+            EVENTS_POSTS_WHERE_KEY: POSTS_BOTH,
+            EVENTS_ROOM_DELETE_KEY: ROOM_DELETE_APPROVER,
+            EVENTS_APPROVER_ROLE_KEY: 99,
+            EVENTS_ROOM_NOTICE_KEY: True,
+            "events_channel_retention_days": 7,
+            EVENTS_TEST_RETENTION_KEY: 5,
+        }
+    )
+
+    lines = events.rooms_lines(store, SimpleNamespace(id=7))
+
+    assert "both the room and the announce channel" in lines[0]
+    assert ROOM_DELETE_APPROVER in lines[1]
+    assert "<@&99>" in lines[2]
+    assert "posted in every room" in lines[3]
+    assert "5 minutes after it ends" in lines[4]
+
+
+def test_an_approval_that_only_reached_the_room_does_not_claim_nothing_was_announced():
+    said = events.approve_extra(None, None, where=POSTS_ROOM)
+
+    assert "the event's own room" in said
+    assert "Nothing was announced" not in said
+    assert "Nothing was announced" in events.approve_extra(None, None, where=POSTS_ANNOUNCE)

@@ -329,6 +329,10 @@ const SETTING_SPECS = [
   ['events_channel_retention_days', 'int', 7, 7, 'days a finished event’s channel is kept before deletion, 1 to 365', null, 365, 1],
   ['events_test_retention_minutes', 'int', 5, 5, 'minutes a finished or refused event’s review room is kept while Black Bloc is in test mode, 1 to 1440', null, 1440, 1],
   ['events_max_late_minutes', 'int', 30, 30, 'minutes an event may start late and still be announced', null, 1440],
+  ['events_posts_where', 'enum', 'room', 'room', "where an approved event's posts go: room (the event's own review room), announce (only events_announce_channel_id), or both", ['room', 'announce', 'both']],
+  ['events_room_delete_who', 'enum', 'staff', 'staff', 'who may press Delete this room: staff, or approver — the role in events_approver_role_id. Staff can always press it whichever this holds', ['staff', 'approver']],
+  ['events_approver_role_id', 'role', null, null, 'the role Delete this room asks for when events_room_delete_who is approver; blank falls back to staff'],
+  ['events_room_notice', 'bool', true, true, 'true to post the message carrying Delete this room in every review room Black Bloc makes'],
   ['poll_mode', 'enum', 'on', 'on', 'off, or on (members and staff can run polls with /poll create)', ['off', 'on']],
   ['poll_who_can_create', 'enum', 'staff', 'staff', 'who may run /poll create: staff, or everyone', ['staff', 'everyone']],
   ['poll_review_mode', 'enum', 'off', 'off', 'off posts a poll straight away; on holds it for a staff Approve or Deny first', ['off', 'on']],
@@ -823,7 +827,7 @@ function seedState() {
     ],
   },
   events: [
-    { id: 3, requester_id: MEMBERS[3].id, title: 'Movie night', description: 'Bring snacks.', location: null, where_kind: 'voice', where_channel_id: '800000000000000010', starts_at: minutesAgo(-2880), ends_at: null, status: 'pending', created_at: minutesAgo(60), decided_by: null, decided_at: null, deny_reason: null },
+    { id: 3, requester_id: MEMBERS[3].id, title: 'Movie night', description: 'Bring snacks.', location: null, where_kind: 'voice', where_channel_id: '800000000000000010', starts_at: minutesAgo(-2880), ends_at: null, status: 'pending', created_at: minutesAgo(60), decided_by: null, decided_at: null, deny_reason: null, review_channel_id: '800000000000000005' },
     { id: 2, requester_id: MEMBERS[1].id, title: 'Speedrun race', description: null, location: 'Twitch', starts_at: minutesAgo(-10080), ends_at: null, status: 'approved', created_at: minutesAgo(4000), decided_by: STAFF.id, decided_at: minutesAgo(3900), deny_reason: null },
     { id: 1, requester_id: MEMBERS[4].id, title: 'Crypto giveaway', description: 'trust me', location: 'DM', starts_at: minutesAgo(-500), ends_at: null, status: 'denied', created_at: minutesAgo(6000), decided_by: STAFF.id, decided_at: minutesAgo(5900), deny_reason: 'This is a scam.' },
   ],
@@ -3036,6 +3040,32 @@ route('POST', '/api/events/:id/deny', async (context) => {
   event.decided_at = now();
   logAction('web.event.denied', { target_id: event.requester_id, reason: body.reason, details: { event_id: event.id } });
   return { event: eventRow(event), message: `“${event.title}” is denied.` };
+});
+
+// Part 2D: one canonical `delete_room` on the bot's side, so the mock answers the same way —
+// the room goes, and an event still open is called off with it.
+route('POST', '/api/events/:id/room/delete', async (context) => {
+  requireStaff(context.session);
+  const event = eventOf(context.params.id);
+  if (!event.review_channel_id) {
+    throw new Refused(409, 'no_room', `Event **#${event.id}** has no room of its own any more, so there was nothing to remove.`);
+  }
+  const body = await context.body();
+  const note = String(body.note || '').trim();
+  const cancelled = ['pending', 'approved', 'live'].includes(event.status);
+  if (cancelled) {
+    event.status = 'cancelled';
+    event.decided_by = STAFF.id;
+    event.decided_at = now();
+    logAction('web.event.cancelled', { target_id: event.requester_id, reason: note || 'room_deleted', details: { event_id: event.id } });
+  }
+  const channel_id = event.review_channel_id;
+  event.review_channel_id = null;
+  logAction('web.event.channel_deleted', { target_id: event.requester_id, details: { event_id: event.id, channel_id, by: STAFF.id, cancelled } });
+  const said = cancelled
+    ? `The room is gone. Event #${event.id} is cancelled, and the person who proposed it has been told why.`
+    : 'The room is gone.';
+  return { event: eventRow(event), message: said };
 });
 
 route('POST', '/api/events/:id/cancel', (context) => {

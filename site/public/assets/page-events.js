@@ -212,6 +212,27 @@ function decide(row, say) {
       if (done.ok) refresh();
     }, { tone: 'quiet' }));
   }
+  if (row.review_channel_id) {
+    buttons.push(button('Remove its room', async () => {
+      const note = el('input', { class: 'input', type: 'text', placeholder: 'a line the host is sent — optional' });
+      const sure = await ask({
+        title: `Remove the room for “${row.title}”?`,
+        body: [
+          'The channel goes for good. If the event is still open it is called off as well, and the person who asked is told why.',
+          field('A line the host is sent', note),
+        ],
+        confirmLabel: 'Remove it',
+        tone: 'warn',
+      });
+      if (!sure) return;
+      const done = await run(
+        say,
+        () => send(`/api/events/${encodeURIComponent(row.id)}/room/delete`, 'POST', { note: note.value.trim() }),
+        (found) => found?.message,
+      );
+      if (done.ok) refresh();
+    }, { tone: 'danger' }));
+  }
   return el('div', { class: 'bar' }, buttons);
 }
 

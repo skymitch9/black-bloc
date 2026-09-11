@@ -297,12 +297,24 @@ class WebGuard:
 
     def __init__(self, test_channel_id: int = TEST_CHANNEL_ID) -> None:
         self.test_channel_id = test_channel_id
+        self.owned: set[int] = set()
+
+    def own_channel(self, channel: Any) -> None:
+        self.owned.add(int(getattr(channel, "id", channel)))
+
+    def disown_channel(self, channel: Any) -> None:
+        self.owned.discard(int(getattr(channel, "id", channel)))
+
+    def owns_channel(self, channel: Any) -> bool:
+        return int(getattr(channel, "id", channel)) in self.owned
 
     def allows_channel(self, channel: Any) -> bool:
-        return int(getattr(channel, "id", channel)) == self.test_channel_id
+        found = int(getattr(channel, "id", channel))
+        return found == self.test_channel_id or found in self.owned
 
     def allows_place(self, channel: Any) -> bool:
-        return self.allows_channel(channel) or getattr(channel, "category_id", None) == CATEGORY_ID
+        here = int(getattr(channel, "id", channel))
+        return here == self.test_channel_id or getattr(channel, "category_id", None) == CATEGORY_ID
 
     def refusal_message(self) -> str:
         return (

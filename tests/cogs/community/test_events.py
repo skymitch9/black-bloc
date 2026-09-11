@@ -61,7 +61,14 @@ from black_bloc.events import (
 )
 from black_bloc.settings_store import (
     DEFAULT_TIMEZONE_KEY,
+    EVENTS_APPROVER_ROLE_KEY,
+    EVENTS_POSTS_WHERE_KEY,
+    EVENTS_ROOM_DELETE_KEY,
+    EVENTS_ROOM_NOTICE_KEY,
     EVENTS_TEST_RETENTION_KEY,
+    POSTS_ANNOUNCE,
+    POSTS_BOTH,
+    ROOM_DELETE_APPROVER,
     TIME_STEP_KEY,
     TIMEZONE_CHOICES_KEY,
     WHERE_ALIASES_KEY,
@@ -165,6 +172,7 @@ class FakeText:
         self.deleted = False
         self.send_raises = None
         self.edit_raises = None
+        self.delete_raises = None
 
     def permissions_for(self, role):
         return FakePerms(view_channel=role.id in self.visible_to)
@@ -187,6 +195,8 @@ class FakeText:
             self.name = kwargs["name"]
 
     async def delete(self, reason=None):
+        if self.delete_raises is not None:
+            raise self.delete_raises
         self.deleted = True
         if self.guild is not None:
             self.guild.channels.pop(self.id, None)
@@ -312,12 +322,23 @@ class FakeGuard:
     def __init__(self, test_channel_id=TEST_CHANNEL, category_id=CATEGORY):
         self.test_channel_id = test_channel_id
         self.category_id = category_id
+        self.owned = set()
+
+    def own_channel(self, channel):
+        self.owned.add(getattr(channel, "id", channel))
+
+    def disown_channel(self, channel):
+        self.owned.discard(getattr(channel, "id", channel))
+
+    def owns_channel(self, channel):
+        return getattr(channel, "id", channel) in self.owned
 
     def allows_channel(self, channel):
-        return getattr(channel, "id", channel) == self.test_channel_id
+        found = getattr(channel, "id", channel)
+        return found == self.test_channel_id or found in self.owned
 
     def allows_place(self, channel):
-        if self.allows_channel(channel):
+        if getattr(channel, "id", channel) == self.test_channel_id:
             return True
         found = getattr(channel, "category_id", None)
         return found is not None and found == self.category_id
@@ -856,17 +877,19 @@ async def test_a_channel_discord_refuses_cancels_the_row_rather_than_stranding_i
     assert "Manage Channels" in interaction.sent
 
 
-async def test_in_test_mode_the_card_goes_to_the_test_channel_not_the_review_one(
+async def test_in_test_mode_the_card_goes_to_the_room_because_black_bloc_made_it(
     cog, bot, member, db
 ):
+    """Part 1A: owning the room is what lets the card land in it rather than in the spam."""
     bot.guard = FakeGuard()
 
     interaction = await submit(cog, bot, member)
 
     made = bot.guild.created[0]
-    assert made.messages == []
-    assert len(bot.guild.get_channel(TEST_CHANNEL).messages) == 1
-    assert "Test mode is on" in interaction.sent
+    assert bot.guard.owns_channel(made) is True
+    assert len(made.messages) == 2
+    assert bot.guild.get_channel(TEST_CHANNEL).messages == []
+    assert "you can see and post in there too" in interaction.sent
     row = (await events_by_status(db, GUILD, (PENDING,)))[0]
     assert row["review_channel_id"] == made.id
 
@@ -980,24 +1003,24 @@ async def test_the_announcement_only_lets_the_configured_role_ping(cog, bot, mem
 
     await approve(bot, lead, row["id"])
 
-    posted = bot.guild.get_channel(TEST_CHANNEL).messages[-1]
+    posted = bot.guild.created[0].messages[-1]
     assert posted.kwargs["allowed_mentions"].everyone is False
     assert [r.id for r in posted.kwargs["allowed_mentions"].roles] == [4242]
     assert posted.content.startswith("<@&4242> ")
-    assert "event.announce" in await action_kinds(db)
+    assert "event.announce_room" in await action_kinds(db)
 
 
 async def test_shadow_mode_computes_everything_and_announces_nothing(cog, bot, member, lead, db):
     await bot.store.set(GUILD, "events_mode", "shadow")
     await submit(cog, bot, member)
     row = (await events_by_status(db, GUILD, (PENDING,)))[0]
-    before = len(bot.guild.get_channel(TEST_CHANNEL).messages)
+    before = len(bot.guild.created[0].messages)
 
     await approve(bot, lead, row["id"])
 
-    assert len(bot.guild.get_channel(TEST_CHANNEL).messages) == before
+    assert len(bot.guild.created[0].messages) == before
     assert (await get_event(db, row["id"]))["status"] == APPROVED
-    assert "event.would_announce" in await action_kinds(db)
+    assert "event.would_announce_room" in await action_kinds(db)
 
 
 async def test_denying_asks_for_a_reason_and_sends_it_to_the_requester(
@@ -1079,7 +1102,10 @@ async def test_the_buttons_are_refused_from_outside_the_test_channel(cog, bot, m
 
 
 async def test_the_go_live_loop_picks_exactly_the_events_that_have_started(cog, bot, db):
-    due = await store_event(db, status=APPROVED, starts_in=-timedelta(minutes=1))
+    room = bot.guild.add(FakeText(760, name="approved-alice-block-party"))
+    due = await store_event(
+        db, status=APPROVED, starts_in=-timedelta(minutes=1), channel_id=room.id
+    )
     later = await store_event(db, status=APPROVED, starts_in=timedelta(hours=1))
     unapproved = await store_event(db, status=PENDING, starts_in=-timedelta(minutes=1))
 
@@ -1088,8 +1114,7 @@ async def test_the_go_live_loop_picks_exactly_the_events_that_have_started(cog, 
     assert (await get_event(db, due))["status"] == LIVE
     assert (await get_event(db, later))["status"] == APPROVED
     assert (await get_event(db, unapproved))["status"] == PENDING
-    posted = bot.guild.get_channel(TEST_CHANNEL).messages[-1]
-    assert "Block Party** is starting now!" in posted.content
+    assert "Block Party** is starting now!" in room.messages[-1].content
 
 
 async def test_an_event_that_is_over_becomes_done_and_its_channel_is_renamed(cog, bot, db):
@@ -1681,14 +1706,15 @@ async def test_an_event_that_started_too_long_ago_goes_live_without_the_announce
 
 
 async def test_an_event_that_started_a_moment_ago_is_still_announced(cog, bot, db):
+    room = bot.guild.add(FakeText(761, name="approved-alice-block-party"))
     event_id = await store_event(
-        db, status=APPROVED, starts_in=-timedelta(minutes=2), minutes=180
+        db, status=APPROVED, starts_in=-timedelta(minutes=2), minutes=180, channel_id=room.id
     )
 
     await cog.run_due_events()
 
     assert (await get_event(db, event_id))["status"] == LIVE
-    assert "event.go_live" in await action_kinds(db)
+    assert "event.go_live_room" in await action_kinds(db)
 
 
 async def test_a_finished_channel_outside_the_test_category_is_logged_not_deleted(cog, bot, db):
@@ -1755,7 +1781,7 @@ async def test_the_announcement_links_the_scheduled_event_when_there_is_one(
 
     await approve(bot, lead, row["id"])
 
-    posted = bot.guild.get_channel(TEST_CHANNEL).messages[-1]
+    posted = bot.guild.created[0].messages[-1]
     assert bot.guild.scheduled[0].url in posted.content
     assert "Interested" in posted.content
 
@@ -1769,7 +1795,7 @@ async def test_the_announcement_promises_no_button_when_there_is_no_scheduled_ev
 
     await approve(bot, lead, row["id"])
 
-    posted = bot.guild.get_channel(TEST_CHANNEL).messages[-1]
+    posted = bot.guild.created[0].messages[-1]
     assert "Interested" not in posted.content
     assert "watch this channel" in posted.content
 
@@ -1867,6 +1893,7 @@ async def test_an_event_whose_start_cannot_be_read_is_cancelled_and_the_requeste
 
 
 async def test_cancelling_an_approved_event_edits_its_announcement(cog, bot, member, lead, db):
+    await bot.store.set(GUILD, EVENTS_POSTS_WHERE_KEY, POSTS_ANNOUNCE)
     await submit(cog, bot, member)
     row = (await events_by_status(db, GUILD, (PENDING,)))[0]
     await approve(bot, lead, row["id"])
@@ -1881,6 +1908,7 @@ async def test_cancelling_an_approved_event_edits_its_announcement(cog, bot, mem
 async def test_an_announcement_in_a_channel_the_guard_refuses_is_logged_not_edited(
     cog, bot, member, lead, db
 ):
+    await bot.store.set(GUILD, EVENTS_POSTS_WHERE_KEY, POSTS_ANNOUNCE)
     await submit(cog, bot, member)
     row = (await events_by_status(db, GUILD, (PENDING,)))[0]
     await approve(bot, lead, row["id"])
@@ -1910,7 +1938,7 @@ async def test_in_test_mode_the_card_channel_is_recorded_beside_the_message(cog,
 
     row = (await events_by_status(db, GUILD, (PENDING,)))[0]
     assert row["review_channel_id"] == bot.guild.created[0].id
-    assert row["card_channel_id"] == TEST_CHANNEL
+    assert row["card_channel_id"] == row["review_channel_id"]
     assert row["review_message_id"] is not None
 
 
@@ -3525,3 +3553,367 @@ async def test_a_room_outside_the_test_category_is_still_only_logged_never_delet
 
     assert outside.deleted is False
     assert "event.would_delete_channel" in await action_kinds(db)
+
+
+# Event rooms (`docs/info/events-rooms-design.md`): the posts land in the event's own room, and
+# staff get a Delete button that settles the event before the channel goes.
+
+
+async def press_delete(bot, who, event_id, channel, note=""):
+    """The button, then the box, exactly as a person meets them."""
+    pressed = FakeInteraction(bot, who, channel=channel)
+    await DecisionButton(event_id, "delete_room").callback(pressed)
+    if not pressed.response.modals:
+        return pressed, None
+    modal = pressed.response.modals[0]
+    modal.note._value = note
+    submitted = FakeInteraction(bot, who, channel=channel)
+    await modal.on_submit(submitted)
+    return pressed, submitted
+
+
+async def test_the_room_carries_a_delete_message_under_the_card(cog, bot, member, db):
+    await submit(cog, bot, member)
+
+    room = bot.guild.created[0]
+    notice = room.messages[-1]
+    assert "goes away on its own" in notice.content
+    assert "7 days after it ends" in notice.content
+    assert notice.kwargs["view"].children[0].item.label == "Delete this room"
+
+
+async def test_the_delete_message_counts_in_minutes_while_the_guard_is_on(cog, bot, member, db):
+    bot.guard = FakeGuard()
+
+    await submit(cog, bot, member)
+
+    assert "5 minutes after it ends" in bot.guild.created[0].messages[-1].content
+
+
+async def test_turning_the_notice_off_still_leaves_the_card_and_the_sweep(cog, bot, member, db):
+    await bot.store.set(GUILD, EVENTS_ROOM_NOTICE_KEY, False)
+
+    await submit(cog, bot, member)
+
+    room = bot.guild.created[0]
+    assert len(room.messages) == 1
+    assert room.messages[0].kwargs.get("embed") is not None
+
+
+async def test_the_announce_value_keeps_the_old_channel_and_leaves_the_room_alone(
+    cog, bot, member, lead, db
+):
+    await bot.store.set(GUILD, EVENTS_POSTS_WHERE_KEY, POSTS_ANNOUNCE)
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    before = len(bot.guild.created[0].messages)
+
+    await approve(bot, lead, row["id"])
+
+    posted = bot.guild.get_channel(TEST_CHANNEL).messages[-1]
+    assert len(bot.guild.created[0].messages) == before
+    assert "A new event is on the calendar" in posted.content
+    kinds = await action_kinds(db)
+    assert "event.announce" in kinds and "event.announce_room" not in kinds
+    assert (await get_event(db, row["id"]))["announce_message_id"] is not None
+
+
+async def test_the_both_value_posts_twice_and_only_the_channel_one_is_kept_to_edit(
+    cog, bot, member, lead, db
+):
+    await bot.store.set(GUILD, EVENTS_POSTS_WHERE_KEY, POSTS_BOTH)
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+
+    await approve(bot, lead, row["id"])
+
+    kinds = await action_kinds(db)
+    assert "event.announce" in kinds and "event.announce_room" in kinds
+    assert "A new event is on the calendar" in bot.guild.created[0].messages[-1].content
+    assert (await get_event(db, row["id"]))["announce_message_id"] is not None
+
+
+async def test_the_room_value_announces_in_the_room_and_says_so_to_whoever_approved(
+    cog, bot, member, lead, db
+):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+
+    interaction = await approve(bot, lead, row["id"])
+
+    assert "the event's own room" in interaction.sent
+    assert bot.guild.get_channel(TEST_CHANNEL).messages == []
+    assert (await get_event(db, row["id"]))["announce_message_id"] is None
+
+
+async def test_a_row_with_no_room_left_is_a_failure_not_a_dry_run(cog, bot, member, lead, db):
+    event_id = await store_event(db, status=APPROVED, starts_in=-timedelta(minutes=1))
+
+    await cog.run_due_events()
+
+    kinds = await action_kinds(db)
+    assert "event.go_live_room_failed" in kinds
+    assert "event.would_go_live_room" not in kinds
+    assert (await get_event(db, event_id))["status"] == LIVE
+
+
+async def test_the_ended_line_lands_in_the_room_when_it_finishes(cog, bot, db):
+    room = bot.guild.add(FakeText(770, name="approved-alice-block-party"))
+    await store_event(
+        db, status=LIVE, starts_in=-timedelta(hours=3), minutes=60, channel_id=room.id
+    )
+
+    await cog.run_due_events()
+
+    assert "has ended. Thanks for coming." in room.messages[-1].content
+    assert room.messages[-1].kwargs["allowed_mentions"].roles is False
+    assert "event.ended_room" in await action_kinds(db)
+
+
+async def test_the_ended_line_is_left_out_when_the_posts_go_to_the_channel(cog, bot, db):
+    await bot.store.set(GUILD, EVENTS_POSTS_WHERE_KEY, POSTS_ANNOUNCE)
+    room = bot.guild.add(FakeText(771, name="approved-alice-block-party"))
+    await store_event(
+        db, status=LIVE, starts_in=-timedelta(hours=3), minutes=60, channel_id=room.id
+    )
+
+    await cog.run_due_events()
+
+    assert room.messages == []
+    assert "event.ended_room" not in await action_kinds(db)
+
+
+async def test_a_denied_event_is_told_so_in_its_own_room(cog, bot, member, lead, db):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    room = bot.guild.created[0]
+
+    await deny(bot, lead, row["id"], message=room.messages[0])
+
+    assert "clashes with the marathon" in room.messages[-1].content
+    assert "event.denied_room" in await action_kinds(db)
+
+
+async def test_calling_an_event_off_says_so_in_its_room(cog, bot, member, lead, db):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    room = bot.guild.created[0]
+
+    await cog._cancel(bot.guild, await get_event(db, row["id"]), "cancelled_by_1")
+
+    assert "is cancelled and is no longer happening" in room.messages[-1].content
+    assert "event.cancelled_room" in await action_kinds(db)
+
+
+async def test_a_room_that_is_already_gone_is_not_told_its_event_is_off(cog, bot, member, db):
+    event_id = await store_event(db, channel_id=4242)
+
+    await cog._cancel(bot.guild, await get_event(db, event_id), "review_channel_gone")
+
+    kinds = await action_kinds(db)
+    assert "event.cancelled_room" not in kinds
+    assert "event.cancelled_room_failed" not in kinds
+
+
+async def test_the_host_pressing_delete_is_refused_in_words_and_keeps_the_room(
+    cog, bot, member, db
+):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    room = bot.guild.created[0]
+
+    pressed, submitted = await press_delete(bot, member, row["id"], room)
+
+    assert submitted is None
+    assert "Only staff can remove this room" in pressed.sent
+    assert room.deleted is False
+    assert (await get_event(db, row["id"]))["status"] == PENDING
+
+
+async def test_anybody_else_pressing_delete_is_told_what_it_needs(cog, bot, member, db):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    room = bot.guild.created[0]
+    stranger = FakeMember(bot.guild, user_id=77, display_name="Stranger")
+
+    pressed, _ = await press_delete(bot, stranger, row["id"], room)
+
+    assert "staff only" in pressed.sent
+    assert room.deleted is False
+
+
+async def test_the_approver_role_may_remove_a_room_when_the_key_says_so(cog, bot, member, db):
+    await bot.store.set(GUILD, EVENTS_ROOM_DELETE_KEY, ROOM_DELETE_APPROVER)
+    await bot.store.set(GUILD, EVENTS_APPROVER_ROLE_KEY, 4242)
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    room = bot.guild.created[0]
+    approver = FakeMember(bot.guild, user_id=78, display_name="Approver", roles=(4242,))
+
+    _, submitted = await press_delete(bot, approver, row["id"], room)
+
+    assert room.deleted is True
+    assert "The room is gone." in submitted.sent
+
+
+async def test_staff_removing_an_open_events_room_cancels_it_first_and_dms_the_note(
+    cog, bot, member, lead, db
+):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    room = bot.guild.created[0]
+
+    _, submitted = await press_delete(bot, lead, row["id"], room, note="we need the space")
+
+    fresh = await get_event(db, row["id"])
+    assert fresh["status"] == CANCELLED
+    assert fresh["review_channel_id"] is None
+    assert room.deleted is True
+    assert "staff removed its room" in member.dms[-1]["content"]
+    assert "we need the space" in member.dms[-1]["content"]
+    assert "is cancelled" in submitted.sent
+    details = await action_details(db, "event.channel_deleted")
+    assert details["by"] == lead.id and details["cancelled"] is True
+
+
+async def test_the_listener_does_not_cancel_an_event_the_button_already_settled(
+    cog, bot, member, lead, db
+):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    room = bot.guild.created[0]
+
+    await press_delete(bot, lead, row["id"], room)
+    await cog.on_guild_channel_delete(room)
+
+    assert (await action_kinds(db)).count("event.cancelled") == 1
+
+
+async def test_removing_a_finished_events_room_changes_nothing_but_the_room(
+    cog, bot, lead, member, db
+):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    room = bot.guild.created[0]
+    await set_status(db, row["id"], DONE)
+
+    _, submitted = await press_delete(bot, lead, row["id"], room)
+
+    fresh = await get_event(db, row["id"])
+    assert fresh["status"] == DONE and room.deleted is True
+    assert not [one for one in member.dms if "cancelled" in str(one["content"])]
+    assert "is cancelled" not in submitted.sent
+    details = await action_details(db, "event.channel_deleted")
+    assert details["cancelled"] is False
+
+
+async def test_a_room_the_guard_would_not_delete_is_logged_and_the_cancel_is_owned_up_to(
+    cog, bot, member, lead, db
+):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    room = bot.guild.created[0]
+    bot.guard = FakeGuard(test_channel_id=TEST_CHANNEL, category_id=None)
+    bot.guard.own_channel(room)
+
+    _, submitted = await press_delete(bot, lead, row["id"], room)
+
+    assert room.deleted is False
+    assert (await get_event(db, row["id"]))["status"] == CANCELLED
+    assert "test mode" in submitted.sent and "is cancelled" in submitted.sent
+    details = await action_details(db, "event.would_delete_channel")
+    assert details["by"] == lead.id
+
+
+async def test_a_delete_discord_refuses_says_the_cancel_still_happened(
+    cog, bot, member, lead, db
+):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    room = bot.guild.created[0]
+    room.delete_raises = refused()
+
+    _, submitted = await press_delete(bot, lead, row["id"], room)
+
+    assert room.deleted is False
+    assert (await get_event(db, row["id"]))["review_channel_id"] == room.id
+    assert "would not remove this room" in submitted.sent
+    assert "is cancelled" in submitted.sent
+    assert "event.room_delete_failed" in await action_kinds(db)
+
+
+async def test_a_button_pressed_in_a_room_that_is_not_that_events_any_more_says_so(
+    cog, bot, member, lead, db
+):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    room = bot.guild.created[0]
+    elsewhere = bot.guild.add(FakeText(780, name="somewhere-else", category=FakeCategory()))
+    await set_review(db, row["id"], elsewhere.id, row["review_message_id"])
+
+    _, submitted = await press_delete(bot, lead, row["id"], room)
+
+    assert room.deleted is False and elsewhere.deleted is False
+    assert "is not the event this room is for" in submitted.sent
+
+
+async def test_reconcile_re_owns_every_room_it_can_still_see(cog, bot, member, db):
+    bot.guard = FakeGuard()
+    await submit(cog, bot, member)
+    room = bot.guild.created[0]
+    bot.guard = FakeGuard()
+
+    await cog.reconcile_events()
+
+    assert bot.guard.owns_channel(room) is True
+
+
+async def test_a_swept_row_whose_room_has_gone_stops_carrying_its_id_and_says_so_once(
+    cog, bot, db
+):
+    event_id = await store_event(
+        db, status=DENIED, starts_in=-timedelta(days=30), minutes=60, channel_id=4242
+    )
+
+    await cog.reconcile_events()
+    await cog.reconcile_events()
+
+    assert (await get_event(db, event_id))["review_channel_id"] is None
+    assert (await action_kinds(db)).count("event.room_forgotten") == 1
+
+
+async def test_a_hand_deleted_room_is_forgotten_by_the_guard_as_well(cog, bot, member, db):
+    bot.guard = FakeGuard()
+    await submit(cog, bot, member)
+    room = bot.guild.created[0]
+
+    await cog.on_guild_channel_delete(room)
+
+    assert bot.guard.owns_channel(room) is False
+
+
+async def test_the_rooms_page_is_reached_from_settings_and_writes_what_is_picked(
+    cog, bot, lead, db
+):
+    settings = await settings_panel(cog, bot, lead)
+
+    opened_rooms = await click(bot, lead, find_item(card_view(settings), "Rooms…"))
+    select = find_select(card_view(opened_rooms), events_pure.POSTS_WHERE_PLACEHOLDER)
+    picked = await click(bot, lead, pick(select, [POSTS_BOTH]))
+
+    assert "Events — rooms" in card_embed(opened_rooms).title
+    assert bot.store.get(GUILD, EVENTS_POSTS_WHERE_KEY) == POSTS_BOTH
+    assert "both the room and the announce channel" in card_embed(picked).description
+    assert "event.settings" in await action_kinds(db)
+
+
+async def test_the_delete_button_is_the_same_registration_the_card_buttons_use(cog, bot):
+    """One `add_dynamic_items(DecisionButton)`, so the template has to read all three moves."""
+    await cog.cog_load()
+    match = re.fullmatch(events_cog.DECISION_TEMPLATE, decision_id(12, "delete_room"))
+    rebuilt = await DecisionButton.from_custom_id(None, None, match)
+
+    assert events_cog.DecisionButton in bot.dynamic
+    assert match["event_id"] == "12" and match["action"] == "delete_room"
+    assert rebuilt.event_id == 12 and rebuilt.item.label == "Delete this room"
+    assert re.fullmatch(events_cog.DECISION_TEMPLATE, decision_id(12, "deny"))["action"] == "deny"

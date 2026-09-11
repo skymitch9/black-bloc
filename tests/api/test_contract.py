@@ -38,7 +38,7 @@ from black_bloc.cogs.content.youtube import YouTube
 from black_bloc.cogs.content.youtube import set_link as set_youtube_link
 from black_bloc.cogs.moderation.honeypot import record_hit
 from black_bloc.cogs.moderation.modmail import add_message, create_ticket, set_ticket_place
-from black_bloc.events import WHERE_OTHER, Where, create_event
+from black_bloc.events import WHERE_OTHER, Where, create_event, set_review
 from black_bloc.golive import StreamInfo
 from black_bloc.llm import ANTHROPIC, GROQ, Usage
 from black_bloc.llm import MODEL as HAIKU
@@ -284,6 +284,9 @@ async def seed_world(client, web, guild, wf) -> dict:
         starts_at=starts,
         finishes_at=starts + timedelta(hours=2),
     )
+    # The room the events page's Remove-its-room entry acts on. The guild is rebuilt for every
+    # entry, so the channel it deletes comes back with it.
+    await set_review(db, event_id, wf.OTHER_CHANNEL_ID, None)
     ticket_id = await create_ticket(db, guild_id, MEMBER_ID, "channel")
     await set_ticket_place(db, ticket_id, wf.TEST_CHANNEL_ID, None)
     await add_message(db, ticket_id, MEMBER_ID, IN, content="are you there?")

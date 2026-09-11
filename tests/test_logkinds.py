@@ -103,6 +103,27 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "event.announce_failed",
         "event.go_live_failed",
     ),
+    "black_bloc/events.py::f'event.{kind}_room'": (
+        "event.announce_room",
+        "event.go_live_room",
+        "event.ended_room",
+        "event.cancelled_room",
+        "event.denied_room",
+    ),
+    "black_bloc/events.py::f'event.would_{kind}_room'": (
+        "event.would_announce_room",
+        "event.would_go_live_room",
+        "event.would_ended_room",
+        "event.would_cancelled_room",
+        "event.would_denied_room",
+    ),
+    "black_bloc/events.py::f'event.{kind}_room_failed'": (
+        "event.announce_room_failed",
+        "event.go_live_room_failed",
+        "event.ended_room_failed",
+        "event.cancelled_room_failed",
+        "event.denied_room_failed",
+    ),
     "black_bloc/events.py::f'event.{status}'": (
         "event.approved",
         "event.denied",

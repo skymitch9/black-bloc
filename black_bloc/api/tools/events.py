@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Request
 
 from ...events import (
     APPROVED,
+    CANCEL_NOTE_LIMIT,
     DENIED,
     PENDING,
     STATUSES,
@@ -16,6 +17,7 @@ from ...events import (
     checked_fields,
     checked_where,
     clamp,
+    delete_room,
     describe_duration,
     duration_minutes,
     ends_at,
@@ -66,6 +68,9 @@ SCHEDULED_STALE = (
     "already made."
 )
 EDITED = "Saved, and the review channel's name follows the title."
+NO_ROOM = (
+    "Event **#{event_id}** has no room of its own any more, so there was nothing to remove."
+)
 
 
 def event_row(guild: Any, row: Any) -> dict[str, Any]:
@@ -254,5 +259,28 @@ def build_router(bot: Any) -> APIRouter:
                 NOT_CANCELLABLE.format(event_id=event_id, status=row["status"]),
             )
         return {"event": event_row(guild, fresh), "message": "Cancelled."}
+
+    @router.post("/{event_id}/room/delete")
+    async def event_room_delete(
+        request: Request, event_id: int, payload: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        row = await wanted_event(bot, guild, event_id)
+        if not row["review_channel_id"]:
+            raise Refused(409, "no_room", NO_ROOM.format(event_id=event_id))
+        said, gone = await delete_room(
+            bot,
+            guild,
+            row,
+            by=actor_for(bot, who, guild),
+            note=clamp((payload or {}).get("note"), CANCEL_NOTE_LIMIT) or None,
+            via=VIA_WEBSITE,
+        )
+        if not gone:
+            raise Refused(409, "room_kept", said)
+        fresh = await wanted_event(bot, guild, event_id)
+        return {"event": event_row(guild, fresh), "message": said}
 
     return router

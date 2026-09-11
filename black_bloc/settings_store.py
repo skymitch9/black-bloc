@@ -96,6 +96,21 @@ EVENTS_SCHEDULED_NAME_KEY = "events_scheduled_name_template"
 EVENTS_SCHEDULED_NAME_TEMPLATE = "{title} Feat. BaF"
 NAME_PLACEHOLDER = "{title}"
 
+EVENTS_POSTS_WHERE_KEY = "events_posts_where"
+POSTS_ROOM = "room"
+POSTS_ANNOUNCE = "announce"
+POSTS_BOTH = "both"
+EVENTS_POSTS_WHERES = (POSTS_ROOM, POSTS_ANNOUNCE, POSTS_BOTH)
+EVENTS_POSTS_WHERE = POSTS_ROOM
+EVENTS_ROOM_DELETE_KEY = "events_room_delete_who"
+ROOM_DELETE_STAFF = "staff"
+ROOM_DELETE_APPROVER = "approver"
+EVENTS_ROOM_DELETE_WHOS = (ROOM_DELETE_STAFF, ROOM_DELETE_APPROVER)
+EVENTS_ROOM_DELETE_WHO = ROOM_DELETE_STAFF
+EVENTS_APPROVER_ROLE_KEY = "events_approver_role_id"
+EVENTS_ROOM_NOTICE_KEY = "events_room_notice"
+EVENTS_ROOM_NOTICE = True
+
 WHERE_ALIASES_KEY = "events_where_link_aliases"
 WHERE_ALIAS_MAX = 32
 HANDLE_PLACEHOLDER = "{handle}"
@@ -269,6 +284,10 @@ KEY_TYPES: dict[str, str] = {
     "events_max_late_minutes": "int",
     "events_default_minutes": "int",
     EVENTS_SCHEDULED_NAME_KEY: "text",
+    EVENTS_POSTS_WHERE_KEY: "enum",
+    EVENTS_ROOM_DELETE_KEY: "enum",
+    EVENTS_APPROVER_ROLE_KEY: "role",
+    EVENTS_ROOM_NOTICE_KEY: "bool",
     DEFAULT_TIMEZONE_KEY: "text",
     TIMEZONE_CHOICES_KEY: "text",
     TIME_STEP_KEY: "int",
@@ -364,6 +383,8 @@ KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "tempvoice_mode": TEMPVOICE_MODES,
     "honeypot_mode": HONEYPOT_MODES,
     "events_mode": EVENTS_MODES,
+    EVENTS_POSTS_WHERE_KEY: EVENTS_POSTS_WHERES,
+    EVENTS_ROOM_DELETE_KEY: EVENTS_ROOM_DELETE_WHOS,
     WHERE_CHECK_KEY: WHERE_CHECK_MODES,
     "poll_mode": POLL_MODES,
     "poll_review_mode": POLL_REVIEW_MODES,
@@ -678,13 +699,32 @@ KEY_HELP: dict[str, str] = {
     ),
     "events_channel_retention_days": (
         f"days a finished event's channel is kept before deletion, "
-        f"{EVENTS_RETENTION_MIN_DAYS} to {EVENTS_RETENTION_MAX_DAYS}"
+        f"{EVENTS_RETENTION_MIN_DAYS} to {EVENTS_RETENTION_MAX_DAYS}. Staff can remove a room "
+        f"sooner with **Delete this room** in the room itself"
     ),
     EVENTS_TEST_RETENTION_KEY: (
         f"minutes a finished or refused event's review room is kept while Black Bloc is in test "
         f"mode, {EVENTS_TEST_RETENTION_MIN_MINUTES} to {EVENTS_TEST_RETENTION_MAX_MINUTES}; the "
         f"real retention is `events_channel_retention_days`. The sweep runs every five minutes, "
-        f"so a room goes between this many minutes and five minutes later"
+        f"so a room goes between this many minutes and five minutes later. Staff can remove a "
+        f"room sooner with **Delete this room** in the room itself"
+    ),
+    EVENTS_POSTS_WHERE_KEY: (
+        "where an approved event's posts go: room (the event's own review room — the "
+        "announcement, the go-live ping and the line saying it has ended), announce (only "
+        "`events_announce_channel_id`, which is how it worked before rooms), or both"
+    ),
+    EVENTS_ROOM_DELETE_KEY: (
+        "who may press **Delete this room**: staff, or approver — the role in "
+        "`events_approver_role_id`. Staff can always press it whichever this holds"
+    ),
+    EVENTS_APPROVER_ROLE_KEY: (
+        "the role **Delete this room** asks for when `events_room_delete_who` is approver; "
+        "blank falls back to staff"
+    ),
+    EVENTS_ROOM_NOTICE_KEY: (
+        "true to post the message carrying **Delete this room** in every review room Black "
+        "Bloc makes; false posts nothing and the sweep still tidies the room away on its own"
     ),
     "events_max_late_minutes": (
         "minutes an event may start late and still be announced; later than that it goes live "
@@ -2092,6 +2132,12 @@ class SettingsStore:
             return EVENTS_DEFAULT_MINUTES
         if key == EVENTS_SCHEDULED_NAME_KEY:
             return EVENTS_SCHEDULED_NAME_TEMPLATE
+        if key == EVENTS_POSTS_WHERE_KEY:
+            return EVENTS_POSTS_WHERE
+        if key == EVENTS_ROOM_DELETE_KEY:
+            return EVENTS_ROOM_DELETE_WHO
+        if key == EVENTS_ROOM_NOTICE_KEY:
+            return EVENTS_ROOM_NOTICE
         if key == DEFAULT_TIMEZONE_KEY:
             return DEFAULT_TZ
         if key == TIMEZONE_CHOICES_KEY:

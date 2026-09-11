@@ -21,6 +21,7 @@ ROUTES = [
     ("POST", "/api/events/1/approve", None),
     ("POST", "/api/events/1/deny", {"reason": "no"}),
     ("POST", "/api/events/1/cancel", {}),
+    ("POST", "/api/events/1/room/delete", {}),
 ]
 
 
@@ -439,3 +440,79 @@ async def test_a_where_the_guild_cannot_make_sense_of_is_refused_in_words(
     said = answer.json()["message"]
     assert why in said and len(said.split()) > 8
     assert (await get_event(web.db, event_id))["location"] == "the park"
+
+
+# Event rooms (`docs/info/events-rooms-design.md` §2D): the website's Remove-its-room button
+# runs the one `delete_room` the button in Discord runs, and leaves ONE action row with a
+# `web.` head (checklist 34).
+
+
+async def a_room(web, wf, guild, event_id: int) -> object:
+    channel = guild.get_channel(wf.OTHER_CHANNEL_ID)
+    await web.db.conn.execute(
+        "UPDATE events SET review_channel_id = ? WHERE id = ?", (channel.id, event_id)
+    )
+    await web.db.conn.commit()
+    return channel
+
+
+async def test_removing_a_room_from_the_site_deletes_it_and_calls_the_event_off(
+    client, sign_in, web, guild, wf
+):
+    wf.member(guild, 21, name="ada")
+    event_id = await an_event(web, wf)
+    channel = await a_room(web, wf, guild, event_id)
+    sign_in(client)
+
+    answer = client.post(f"/api/events/{event_id}/room/delete", json={"note": "we need it back"})
+
+    assert answer.status_code == 200
+    assert channel.deleted is True
+    assert "is cancelled" in answer.json()["message"]
+    fresh = await get_event(web.db, event_id)
+    assert fresh["status"] == "cancelled" and fresh["review_channel_id"] is None
+
+
+async def test_removing_a_finished_events_room_leaves_the_status_alone(
+    client, sign_in, web, guild, wf
+):
+    wf.member(guild, 21, name="ada")
+    event_id = await an_event(web, wf, status="done")
+    channel = await a_room(web, wf, guild, event_id)
+    sign_in(client)
+
+    answer = client.post(f"/api/events/{event_id}/room/delete", json={})
+
+    assert answer.status_code == 200
+    assert channel.deleted is True
+    assert "is cancelled" not in answer.json()["message"]
+    assert (await get_event(web.db, event_id))["status"] == "done"
+
+
+async def test_an_event_with_no_room_is_refused_in_words_not_a_bare_status(
+    client, sign_in, web, wf
+):
+    event_id = await an_event(web, wf)
+    sign_in(client)
+
+    answer = client.post(f"/api/events/{event_id}/room/delete", json={})
+
+    assert answer.status_code == 409
+    said = answer.json()["message"]
+    assert "nothing to remove" in said and len(said.split()) > 8
+
+
+async def test_one_web_write_leaves_one_action_row_with_the_web_head(
+    client, sign_in, web, guild, wf
+):
+    wf.member(guild, 21, name="ada")
+    event_id = await an_event(web, wf, status="done")
+    await a_room(web, wf, guild, event_id)
+    sign_in(client)
+
+    client.post(f"/api/events/{event_id}/room/delete", json={})
+
+    cur = await web.db.conn.execute("SELECT kind FROM action_log ORDER BY id")
+    kinds = [row["kind"] for row in await cur.fetchall()]
+    assert kinds.count("web.event.channel_deleted") == 1
+    assert "event.channel_deleted" not in kinds
