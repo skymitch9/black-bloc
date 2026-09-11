@@ -447,6 +447,7 @@ async def test_events_defaults(store):
     assert store.get(1, "events_mode") == "on"
     assert store.get(1, "events_announce_channel_id") == TEST_CH
     assert store.get(1, "events_create_scheduled") is True
+    assert store.get(1, "events_where_link_in_description") is True
     assert store.get(1, "events_channel_retention_days") == EVENTS_RETENTION_DAYS
     assert store.get(1, "events_max_late_minutes") == EVENTS_MAX_LATE_MINUTES
     assert store.get(1, "events_category_id") is None
@@ -1929,6 +1930,16 @@ async def test_every_when_picker_decision_is_a_key_both_doors_reach(store):
     assert store.get(7, TIME_STEP_KEY) == TIME_STEP_MINUTES == 15
     assert store.get(7, "events_default_minutes") == EVENTS_DEFAULT_MINUTES == 120
     assert store.get(7, EVENTS_SCHEDULED_NAME_KEY) == "{title} Feat. BaF"
+
+
+async def test_the_where_link_decision_is_a_key_both_doors_reach(store):
+    """Checklist 33: the owner said append the link, so both doors can say otherwise."""
+    key = "events_where_link_in_description"
+
+    assert KEY_TYPES[key] == "bool" and KEY_HELP.get(key)
+    assert namespace_of(key) == "events"
+    assert store.get(7, key) is True
+    assert parse_value(key, "off") is False
 
 
 def test_the_three_timezone_keys_are_filed_under_events_and_make_no_group_of_their_own():

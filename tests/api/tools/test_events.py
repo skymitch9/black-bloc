@@ -358,6 +358,36 @@ async def test_editing_can_set_each_of_the_three_kinds(client, sign_in, web, wf)
     assert row["where_kind"] is None and row["location"] is None
 
 
+async def test_editing_can_set_a_channel_and_a_link_at_the_same_time(client, sign_in, web, wf):
+    """The follow-up: the box is optional beside a channel, not instead of one."""
+    event_id = await an_event(web, wf)
+    sign_in(client)
+
+    answer = client.put(
+        f"/api/events/{event_id}",
+        json={
+            "title": "Bloc night",
+            "description": "come along",
+            "start": a_start(),
+            "duration": "2h",
+            "tz": "UTC",
+            "where_kind": WHERE_VOICE,
+            "where_channel_id": str(wf.VOICE_CHANNEL_ID),
+            "location": "twitch.tv/blackbloc",
+        },
+    )
+
+    body = answer.json()["event"]
+    assert answer.status_code == 200
+    assert body["where_kind"] == WHERE_VOICE
+    assert body["where_channel_id"] == str(wf.VOICE_CHANNEL_ID)
+    assert body["location"] == "twitch.tv/blackbloc"
+    assert body["where_label"] == "🔊 voice · twitch.tv/blackbloc"
+    row = await get_event(web.db, event_id)
+    assert row["where_channel_id"] == wf.VOICE_CHANNEL_ID
+    assert row["location"] == "twitch.tv/blackbloc"
+
+
 async def test_a_text_channel_sent_as_voice_is_stored_as_what_it_actually_is(
     client, sign_in, web, wf
 ):

@@ -87,6 +87,7 @@ export const LABELS = {
   events_announce_channel_id: 'Where an approved event is announced',
   events_ping_role_id: 'Who is pinged about an event',
   events_create_scheduled: 'Whether Discord gets a scheduled event too',
+  events_where_link_in_description: 'Whether a link typed beside a channel rides in the description',
   events_channel_retention_days: 'How long an event keeps its channel',
   events_max_late_minutes: 'How late an event may start before it is dropped',
   events_default_minutes: 'How long an event runs when nobody changes How long',

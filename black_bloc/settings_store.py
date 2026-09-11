@@ -234,6 +234,7 @@ KEY_TYPES: dict[str, str] = {
     "events_announce_channel_id": "channel",
     "events_ping_role_id": "role",
     "events_create_scheduled": "bool",
+    "events_where_link_in_description": "bool",
     "events_channel_retention_days": "int",
     "events_max_late_minutes": "int",
     "events_default_minutes": "int",
@@ -601,6 +602,10 @@ KEY_HELP: dict[str, str] = {
     "events_announce_channel_id": "where an approved event is announced and pinged when it starts",
     "events_ping_role_id": "role mentioned when an event is announced and when it starts",
     "events_create_scheduled": "true to make a real Discord scheduled event when one is approved",
+    "events_where_link_in_description": (
+        "true to put the link or note typed beside a channel at the end of the Discord scheduled "
+        "event's description, where a channel event has nowhere else to show it"
+    ),
     "events_channel_retention_days": (
         f"days a finished event's channel is kept before deletion, "
         f"{EVENTS_RETENTION_MIN_DAYS} to {EVENTS_RETENTION_MAX_DAYS}"
@@ -1956,6 +1961,8 @@ class SettingsStore:
                 return self.settings.test_channel_id
             return LIVE_NOW_CHANNEL_ID
         if key == "events_create_scheduled":
+            return True
+        if key == "events_where_link_in_description":
             return True
         if key == "events_channel_retention_days":
             return EVENTS_RETENTION_DAYS
