@@ -1,12 +1,42 @@
 ﻿# Phase 8b design — the full dashboard: tabs, names, settings pages, moderation tools
 
-> ⚠️ **2026-09-03: this document's `/request list` mention is a slash path superseded by
-> the panel** — `/request` is now ONE command that opens an interactive panel; see
-> [`requests-panel-design.md`](requests-panel-design.md). Everything else here (names,
+> ⚠️ **2026-09-03 (v65 for `/poll`, v61 for `/request`): this document's `/request list` and
+> `/poll recur create` mentions are slash paths superseded by panels** — `/request` and
+> `/poll` are each ONE command that opens an interactive panel; see
+> [`requests-panel-design.md`](requests-panel-design.md) and
+> [`polls-panel-design.md`](polls-panel-design.md). Everything else here (names,
 > tabs, settings pages, moderation tools) is unaffected.
 
 > **Audience:** the two 8b build agents (API / pages) and the reviewer.
-> **Status:** TRACKED (2026-08-31; private repo). **Last verified: 2026-08-26 ~23:00** — written
+> **Status:** TRACKED · ✅ **LIVE since 2026-08-27** — deployed `2026-08-27T06:14:19-07:00`
+> as `5da62b3` ("8b dashboard (53-route API, 13 tabs) + /voice"), hardened 9 minutes later by
+> `3581eea` ("8b security hygiene"); `DONE.md` → "2026-08-27 — Phase 8b merged and reconciled:
+> the API and the pages meet" and "2026-08-27 — The Phase 8b security review's nine findings,
+> fixed in two commits". ⚠️ Fly release numbers were not written into `deploys.log` until
+> **v59** (2026-09-03), so this landing has a date and a commit but no `vNN`.
+>
+> ⚠️ **Every route/page/key COUNT in this document is a snapshot of the day its section was
+> written, and every one is now low.** Measured 2026-09-11 off `site/mock/contract.json`:
+> **17 pages · 150 routes · 115 action kinds**, and `len(KEY_TYPES)` is **202**. The
+> section-by-section counts below (49 → 61 → 68 → 72 → 80 → 88) are kept as the growth record,
+> not as current fact.
+>
+> ⚠️ **Two things named in the contract no longer exist**, marked in place below:
+> `GET /api/mod/parity` (deleted 2026-08-27 in `47634b8` with the rest of the parity tool) and
+> the requests **status vocabulary** (`pending`/`approved`/`planned` were folded into `open` by
+> the Phase 17 state machine — see [`requests-states-design.md`](requests-states-design.md)).
+> The two "⚠️ **Not in `main` yet**" notices on the Phase 10a/10b sections are both **stale**:
+> both merged and shipped on 2026-08-27.
+>
+> **Last verified: 2026-09-11 09:35** — counts re-measured off `contract.json` and `KEY_TYPES`
+> at `1d090e5`; `black_bloc/api/assets.py:SiteFiles`, `black_bloc/api/tools/roles.py` and
+> `black_bloc/api/tools/polls.py` exist; `grep -r parity black_bloc/ site/` finds nothing;
+> `requests.STATUSES` is `(open, in_progress, review, hold, done, declined, withdrawn)`.
+> ⚠️ **NOT checked:** any page in a browser, any live API response, `node site/mock/check.mjs`
+> end to end (it needs the mock server on `127.0.0.1:8788`, not started in this pass), and
+> every per-route refusal table below — those were verified when written and have not been
+> re-exercised here.
+> Before that, **2026-08-26 ~23:00** — written
 > against `main` @ `618dcd1` (8a live, sign-in verified by the owner).
 > Owner feedback that triggered it, verbatim: *"the who category i assume is
 > a discord user id number, that's not helpful we need to resolve that to
@@ -62,7 +92,7 @@ overflow JS numbers).
 | `GET /api/birthdays` · `PUT /api/birthdays/{user_id}` · `DELETE …` | |
 | `GET /api/tempvoice/channels` · `POST /api/tempvoice/setup` | live list; setup/repair |
 | `GET /api/honeypot/hits?limit=` · `POST /api/honeypot/hits/{id}/ban` · `POST /api/honeypot/setup` | ban = the Ban-now path incl. test-mode refusal |
-| `GET /api/mod/cases?user_id=&page=` · `GET /api/mod/cases/{id}` · `POST /api/mod/cases/{id}/apply` · `POST /api/mod/warn\|timeout\|kick\|ban\|unban` body `{user_id, reason, duration?}` · `GET /api/mod/rules` · `PUT /api/mod/rules/{name}` · `GET /api/mod/parity?days=` | all through `modcases`/automod helpers; destructive ones return the test-mode refusal sentence with 409 while a guard exists |
+| `GET /api/mod/cases?user_id=&page=` · `GET /api/mod/cases/{id}` · `POST /api/mod/cases/{id}/apply` · `POST /api/mod/warn\|timeout\|kick\|ban\|unban` body `{user_id, reason, duration?}` · `GET /api/mod/rules` · `PUT /api/mod/rules/{name}` · ~~`GET /api/mod/parity?days=`~~ *(removed 2026-08-27, `47634b8`)* | all through `modcases`/automod helpers; destructive ones return the test-mode refusal sentence with 409 while a guard exists |
 | `GET /api/modmail/tickets?status=` · `GET /api/modmail/tickets/{id}` (messages) · `POST /api/modmail/tickets/{id}/reply` body `{text, anonymous}` · `POST …/close` body `{reason, silent}` · `GET/POST/DELETE /api/modmail/snippets` · `GET/POST/DELETE /api/modmail/blocks` | |
 | `GET /api/actions?limit=&kind=&user_id=` | as 8a, **plus `actor_name`/`target_name` resolved** and `details` on request |
 
@@ -73,14 +103,17 @@ action log distinguishes web from slash.
 
 Nav (left rail on wide screens, top tabs on narrow): **Overview · Moderation
 · Automod · Modmail · Events · Go-live · Role menus · Birthdays · Temp voice
-· Honeypot · Settings · Audit · Health**.
+· Honeypot · Settings · Audit · Health**. *(Thirteen at 8b. It is **17** today —
+Members, Polls, Chat and Requests joined; see the sections below and
+`ls site/public/*.html`.)*
 
 - **Overview** (default, replaces 8a's single page): mode chips per feature
   (click → that feature's tab), open counts, last 10 actions **with names**.
 - **Health**: what 8a showed — bot status, uptime, loop health, `/health`.
 - **Moderation**: cases table (search by member, paginated), case detail,
   Apply-now; action bar: warn / timeout / kick / ban / unban with a member
-  picker (search), reason, duration; parity report with a days input.
+  picker (search), reason, duration; ~~parity report with a days input~~ *(removed 2026-08-27,
+  `47634b8`)*.
 - **Automod**: the rule editor (enabled, window, threshold, actions,
   timeout) per rule; exempt roles/channels pickers; mode switch with the
   arming refusal shown as a sentence.
@@ -132,7 +165,7 @@ against the mock with names, not ids; reviewer merges both and deploys.
 > The nav is now **fourteen** tabs: Overview · Moderation · **Members** ·
 > Automod · Modmail · Events · Go-live · Role menus · Birthdays · Temp voice ·
 > Honeypot · Settings · Audit · Health. `site/mock/contract.json` lists 14
-> pages and 49 routes.
+> pages and 49 routes. *(**17 pages / 150 routes / 115 action kinds** as of 2026-09-11.)*
 
 ### The route
 
@@ -277,7 +310,8 @@ for a value in the wrong shape.
 ## Routes added by Phase 10a — polls (2026-08-27)
 
 > Built on branch `worktree-agent-aa83500e6aae1280f` from `main` @ `6e08223`;
-> the API commit is `09d8654`. ⚠️ **Not in `main` yet.** The page that reads
+> the API commit is `09d8654`. ⚠️ ~~**Not in `main` yet.**~~ **STALE — it merged and shipped the
+same day**, deployed `2026-08-27T14:46:08-07:00` as `3eb7e4f` ("Polls 10a"). The page that reads
 > these is 10b — 10a ships the routes, the contract entries and the mock, and
 > nothing on the site renders them. **Last verified: 2026-08-27** —
 > `node site/mock/check.mjs` 14 pages / **68 routes** (61 before), all keys
@@ -359,7 +393,9 @@ ten rows.
 ## Routes added by Phase 10b — the create form and recurrences (2026-08-27)
 
 > Built on branch `worktree-agent-a9f9dbcabf9636130` from `main` @ `3eb7e4f`
-> (10a's tip); the API-and-page commit is `85d05da`. ⚠️ **Not in `main` yet.**
+> (10a's tip); the API-and-page commit is `85d05da`. ⚠️ ~~**Not in `main` yet.**~~ **STALE — it
+merged and shipped the same day**, deployed `2026-08-27T15:44:49-07:00` as `ebf99a2`
+("Polls 10b").
 > **Last verified: 2026-08-27** — `node site/mock/check.mjs` **15 pages / 72
 > routes** (14 / 68 before), all keys present; `tests/api/test_contract.py`
 > green against the real routers; every route below exercised by hand against
@@ -411,7 +447,11 @@ Pause answers `{recurrence, message}`; delete answers `{recurrence_id, message}`
 ⚠️ **There is no create-a-recurrence route.** Setting one up needs a cadence, a
 weekday-or-day-of-month and a timezone, and `/poll recur create` already asks
 for those with Discord's own choice pickers. The page points at it rather than
-offering the worse of the two forms.
+offering the worse of the two forms. *(Both halves of this changed later:
+`/poll recur create` was **removed at v65**, 2026-09-03, when `/poll` became one panel command;
+and the website DID get a create-a-recurring-poll route at **v96**, 2026-09-06 — see
+`DONE.md` "Logs buttons … and Create-a-recurring-poll from the website" and
+[`recurrence-web-create-design.md`](recurrence-web-create-design.md).)*
 
 ### Ordering matters on this router
 
@@ -439,7 +479,8 @@ already is — FastAPI matches in declaration order, and the other way round
 ### One more settings key
 
 `poll_date_labels` (enum `plain` / `timestamp`, default `plain`) joins the ten
-10a added, so the `poll` namespace is **eleven** keys. It decides how a date
+10a added, so the `poll` namespace is **eleven** keys. *(It is **16** today — the poll panel,
+saved drafts and the log level added the rest.)* It decides how a date
 poll writes its slots — see `code-notes.md` § *polls (10b)*, which records the
 one real poll posted to measure the question it answers.
 
@@ -501,7 +542,8 @@ returned on `GET /api/chat/intents` as well as by `/api/settings`, and all six
 were added to `site/mock/server.mjs`, which had never carried any of them.
 
 (12a made the `chat` namespace **seven** — `chat_log_level` lands there on its
-own prefix, so the Chat page's `settings` block carries it too.)
+own prefix, so the Chat page's `settings` block carries it too.) *(It is **28** today —
+Phase 14's LLM tiers and Phase 17's long-term memory added the rest.)*
 
 ---
 
@@ -570,6 +612,14 @@ prefix, so the registry's singular names are what the pages read —
 > page that reads them is **13b**. **Last verified: 2026-08-27** — `pytest -q`
 > **2071 passed** and `node site/mock/check.mjs` clean at **88 routes**; nothing
 > has been run against live Discord.
+>
+> ⚠️ **The STATUS VOCABULARY in this section is superseded** (Phase 17, merged `6d61994`,
+> deployed `2026-09-03T00:31:37-07:00` as `7b1c592`). `pending`, `approved` and `planned` were
+> all folded into **`open`**, `hold` and `review` were added, and `request_auto_approve_staff`
+> was **retired** (it is no longer in `KEY_TYPES`). Measured 2026-09-11,
+> `black_bloc/requests.py:27`: `STATUSES = (open, in_progress, review, hold, done, declined,
+> withdrawn)`. The routes, gates, refusal codes and `{request, message}` shapes below are
+> otherwise unchanged. See [`requests-states-design.md`](requests-states-design.md).
 
 ⚠️ **This is the first router on the site that is not staff-only end to end.**
 `black_bloc/api/writes.py:member_dependency` is a new gate — signed in **and**
@@ -673,12 +723,14 @@ The cog's own kinds are the same words without the `web.` — plus
 ### Five more settings keys
 
 `request_mode` (enum off/on, default **on**), `request_who_can_file` (enum
-everyone/staff, default **everyone**), `request_auto_approve_staff` (bool,
-default **true**), `request_notify_channel_id` (channel, the test channel while
+everyone/staff, default **everyone**), ~~`request_auto_approve_staff` (bool,
+default **true**)~~ *(retired by the Phase 17 state machine, 2026-09-03 — not in `KEY_TYPES`)*,
+`request_notify_channel_id` (channel, the test channel while
 `TEST_MODE` is on and nothing once it is off), `request_dm_on_decision` (bool,
 default **true**). They land on their own `request` namespace in
 `/api/settings`. `request_mode` is in `command_visibility.HIDDEN_WHEN_OFF`, so
-turning it off takes `/request` out of the tree as well.
+turning it off takes `/request` out of the tree as well. *(The `request` namespace is **12**
+keys today — the panel and the state machine added the rest.)*
 
 ### Not in `contract.json`
 
