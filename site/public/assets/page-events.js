@@ -75,8 +75,10 @@ const SOMEWHERE_ELSE = '— somewhere else —';
 const ELSEWHERE = '__other__';
 const WHERE_HELP = 'A voice or stage channel gives everybody a Join button on the Discord '
   + 'event; anything else is written on it as words.';
+const BESIDE_HELP = 'Optional beside a channel — a Twitch link, say.';
+const INSTEAD_HELP = 'Only used when it is somewhere else.';
 
-/** The three-way Where control: a channel from the server, a typed place, or nothing. */
+/** A channel from the server, a typed place, or both — the box is never taken away. */
 function whereControl(row, channels) {
   const select = el('select', { class: 'input' });
   select.append(el('option', { value: '', text: NOWHERE }));
@@ -95,24 +97,29 @@ function whereControl(row, channels) {
   if (row.where_kind === 'other') select.value = ELSEWHERE;
   else if (!row.where_channel_id) select.value = '';
 
-  const typed = el('input', { class: 'input', type: 'text', value: row.where_kind === 'other' ? (row.location || '') : '', placeholder: 'twitch.tv/blackbloc' });
-  const typedField = field('Where, or a link', typed, 'Only used when it is somewhere else.');
-  const showTyped = () => { typedField.hidden = select.value !== ELSEWHERE; };
-  select.addEventListener('change', showTyped);
-  showTyped();
+  const typed = el('input', { class: 'input', type: 'text', value: row.location || '', placeholder: 'twitch.tv/blackbloc' });
+  const typedField = field('Where, or a link', typed, INSTEAD_HELP);
+  const hint = typedField.querySelector('.field-help');
+  const sayHint = () => {
+    const beside = select.value !== '' && select.value !== ELSEWHERE;
+    hint.textContent = beside ? BESIDE_HELP : INSTEAD_HELP;
+  };
+  select.addEventListener('change', sayHint);
+  sayHint();
 
   return {
     nodes: [field('Where', select, WHERE_HELP), typedField],
     payload: () => {
-      if (select.value === '') return { where_kind: null, where_channel_id: null, location: '' };
+      const location = typed.value.trim();
+      if (select.value === '') return { where_kind: null, where_channel_id: null, location };
       if (select.value === ELSEWHERE) {
-        return { where_kind: 'other', where_channel_id: null, location: typed.value.trim() };
+        return { where_kind: 'other', where_channel_id: null, location };
       }
       const picked = channels.find((one) => String(one.id) === select.value);
       return {
         where_kind: picked && picked.type === 'voice' ? 'voice' : 'text',
         where_channel_id: select.value,
-        location: '',
+        location,
       };
     },
   };

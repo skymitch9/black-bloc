@@ -206,8 +206,15 @@ conductor's, at landing).
 
 ## Follow-up — a channel AND a link together, the link appended to the description
 
-> Written 2026-09-10 17:18 against `main` at `d5c0515` (v105 live). **Status: DESIGN**, build dispatched
-> to an Opus agent the same evening; departures go in a `## Follow-up deviations` foot under this.
+> Written 2026-09-10 17:18 against `main` at `d5c0515` (v105 live). **Status: 🔨 BUILT** on branch
+> `where-link` off `main` at `ebe0ead` (commits `08173b7`, `2cfbdbe`) — ⚠️ **NOT merged, NOT deployed, and
+> NOTHING here has met Discord**: no test can click a Discord button, `python -m black_bloc` was NOT booted
+> (a worktree holds no token), no browser rendered the events page, and TEST_MODE makes no scheduled event at
+> all, so **the appended description is proven by TESTS ONLY**. What IS measured: the suite (**5453 → 5473**,
+> forward and `BB_REVERSE=1`), `ruff check black_bloc tests`, and `node site/mock/check.mjs`
+> (*ok - 17 pages, 150 routes, 14 core settings, all keys present*). Keys **197 → 198**, schema unchanged at
+> **34**. The owner's by-eye rows are **336–337** in [`../access/sweeps.md`](../access/sweeps.md). Every
+> departure from what is written below is in the **`## Follow-up deviations`** foot.
 
 ### What the owner asked (2026-09-10 17:12, verbatim)
 
@@ -253,3 +260,49 @@ happens*, the box is an optional **link or note** that rides along.
 with both), `docs/info/code-notes.md` (a by-NAME `## Where follow-up` block under the Where section),
 `docs/info/architecture.md` (keys 197 → 198), `docs/info/README.md` (this doc's row), `docs/TODO.md`
 (status line on the 🆕 item only — the MOVE to DONE is the conductor's).
+
+## Follow-up deviations
+
+- **F1 (build) The modal's TITLE flips as well as the button's label.** The table above names only the
+  button (`Link or place (optional)…`). "Somewhere else" over a box that is adding a Twitch link *beside*
+  a chosen channel says the wrong thing, so `WHERE_LINK_MODAL_TITLE` (`A link or a note`) is set on the
+  instance when a channel is set. The class-level `title=` stays `WHERE_MODAL_TITLE`, so every existing
+  test that constructs the modal with no channel is unchanged.
+- **F2 (build) The panel's intro GAINED a clause rather than being rewritten.** The table says the intro
+  "says the box is optional beside a channel". One sentence was inserted into `WHERE_PANEL_INTRO`
+  between the existing two; the **Other** sentence and the "leaving it empty is fine" sentence are the
+  words they already were, because they are still true and a rewrite would have moved facts nobody asked
+  to move.
+- **F3 (build) `scheduled_place` really is unchanged, and that means a GONE channel now falls back to the
+  typed link instead of `Ask in the server`.** Its last branch is `clamp(where.text) or
+  LOCATION_FALLBACK`, and `where.text` was always `""` for a channel kind before this build. It no longer
+  is. The same event's description carries the link too (the stored kind is still `voice`, so the append
+  fires), so on that one path the link appears twice. Both were left as they fell rather than special-cased:
+  a venue that has vanished is exactly when the link is the most useful thing on the calendar entry, and
+  the duplication costs a reader nothing. `event.where_channel_gone` is still logged.
+- **F4 (build) The `create_scheduled_event` kwargs tests live in `tests/cogs/community/test_events.py`,
+  not `tests/test_events.py`.** The Tests list files them under the pure half's mirror. Making a scheduled
+  event needs a bot, a guild, an approval and a store, which are that file's fixtures and where
+  `test_the_calendar_entry_follows_the_kind_that_was_picked` already sits — a second copy of that rig in
+  the pure file would be the thing that drifts. `described_with_where` itself, which is where the clamp and
+  the gate actually live, IS tested in `tests/test_events.py` as written.
+- **F5 (build) Two existing tests were re-pointed, because they pinned the behaviour this follow-up
+  reverses.** `test_staff_can_set_any_kind_on_a_card_and_the_write_leaves_one_log_row` asserted
+  `location is None` after a staff channel pick (it now keeps `the park` and the card reads
+  `<#…> · the park`), and `test_an_empty_channel_pick_leaves_the_draft_with_nowhere` started from a typed
+  place that deselecting now KEEPS — so it starts from a channel with no text instead, and the "keeps what
+  was typed" case is its own new test. Neither was deleted.
+- **F6 (build) `— nowhere in particular —` on the website now sends whatever is in the box, so it can
+  land as `other`.** The table says "the payload sends `location` for every kind", and the panel's rule is
+  that deselecting keeps the text (`Where(other, None, text)`). Doing anything else on the website would
+  have made the two doors disagree about the same gesture. Emptying the box is how a person means
+  *nothing at all* there, exactly as it is in the modal.
+- **F7 (build) `where_button_label` clamps the PAIR, so a long link eats its own tail — and can eat the
+  channel name's.** The table says "clamped as now", which for a button is `BUTTON_LABEL_LIMIT` (80) over
+  the whole label. The channel is what the button is for, so the trim falling on the end (the link) is the
+  right way round; a 100-character link beside a long channel name will show truncated. The card and the
+  announcement are unaffected — `where_line` clamps only the text.
+- **F8 (docs) Sweep row 334 was left alone and row 337 says it supersedes it.** 334 (a landed, LIVE row)
+  ends "The typed box appears ONLY when `— somewhere else —` is chosen", which this build makes false.
+  Rewriting a row the owner may already have walked would lose that history, so 337 carries the ⚠️ clause
+  instead. If the conductor would rather 334 were corrected at the merge, that is a one-line edit.

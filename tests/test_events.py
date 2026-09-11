@@ -854,3 +854,81 @@ def test_the_channel_itself_decides_the_kind_whatever_the_website_called_it():
     guild = FakeWhereGuild(FakeChannel(56, "text"))
 
     assert events.checked_where(guild, WHERE_VOICE, 56, "") == (Where(WHERE_TEXT, 56, ""), "")
+
+
+# The follow-up (`docs/info/where-picker-design.md` § Follow-up): a channel AND a link together,
+# so `text` means something for every kind and the link rides in the description.
+
+
+def test_a_link_typed_beside_a_channel_reads_back_off_the_row_with_the_channel():
+    assert read_where(
+        a_row(where_kind=WHERE_VOICE, where_channel_id=55, location="twitch.tv/blackbloc")
+    ) == Where(WHERE_VOICE, 55, "twitch.tv/blackbloc")
+    assert read_where(
+        a_row(where_kind=WHERE_TEXT, where_channel_id=56, location="twitch.tv/blackbloc")
+    ) == Where(WHERE_TEXT, 56, "twitch.tv/blackbloc")
+
+
+def test_the_where_line_says_the_channel_and_the_link_when_there_are_both():
+    assert events.where_line(Where(WHERE_VOICE, 55, "twitch.tv/bb")) == "<#55> · twitch.tv/bb"
+    assert events.where_line(Where(WHERE_TEXT, 56, "twitch.tv/bb")) == "<#56> · twitch.tv/bb"
+    assert events.where_line(Where(WHERE_VOICE, 55, "")) == "<#55>"
+
+
+def test_a_button_label_says_the_channel_and_the_link_in_words():
+    channel = SimpleNamespace(id=55, name="Raid Night")
+
+    assert events.where_said(Where(WHERE_VOICE, 55, "twitch.tv/bb"), channel) == (
+        "🔊 Raid Night · twitch.tv/bb"
+    )
+    assert events.where_button_label(Where(WHERE_TEXT, 55, "twitch.tv/bb"), channel) == (
+        "Where: #Raid Night · twitch.tv/bb"
+    )
+    assert len(events.where_button_label(Where(WHERE_VOICE, 55, "x" * 100), channel)) == 80
+
+
+def test_the_website_door_keeps_what_was_typed_beside_a_channel():
+    guild = FakeWhereGuild(FakeChannel(55, "voice", "Raid Night"), FakeChannel(56, "text"))
+
+    assert events.checked_where(guild, WHERE_VOICE, 55, "twitch.tv/bb") == (
+        Where(WHERE_VOICE, 55, "twitch.tv/bb"),
+        "",
+    )
+    assert events.checked_where(guild, WHERE_VOICE, 56, "twitch.tv/bb") == (
+        Where(WHERE_TEXT, 56, "twitch.tv/bb"),
+        "",
+    )
+    assert events.checked_where(guild, WHERE_VOICE, 55, "x" * 300)[0].text == "x" * 100
+
+
+def test_the_three_spellings_of_nowhere_still_collapse_to_one_unset():
+    guild = FakeWhereGuild(FakeChannel(55, "voice"))
+
+    assert events.checked_where(guild, None, None, "") == (WHERE_UNSET, "")
+    assert events.checked_where(guild, WHERE_OTHER, None, "  ") == (WHERE_UNSET, "")
+    assert events.checked_where(guild, "", 55, None) == (WHERE_UNSET, "")
+
+
+def test_the_link_is_appended_to_the_description_only_for_a_channel_kind():
+    beside = Where(WHERE_VOICE, 55, "twitch.tv/bb")
+
+    assert events.described_with_where("bring a chair", beside) == "bring a chair\n\ntwitch.tv/bb"
+    assert events.described_with_where("", beside) == "twitch.tv/bb"
+    assert events.described_with_where("bring a chair", beside, appended=False) == "bring a chair"
+    assert (
+        events.described_with_where("bring a chair", Where(WHERE_OTHER, None, "the park"))
+        == "bring a chair"
+    )
+    assert events.described_with_where("bring a chair", WHERE_UNSET) == "bring a chair"
+    assert events.described_with_where("bring a chair", Where(WHERE_VOICE, 55, "")) == (
+        "bring a chair"
+    )
+
+
+def test_the_appended_link_wins_when_the_description_has_to_give():
+    """The link is the whole reason the description was touched, so it is what survives."""
+    said = events.described_with_where("d" * DESCRIPTION_LIMIT, Where(WHERE_VOICE, 55, "x" * 100))
+
+    assert len(said) == DESCRIPTION_LIMIT
+    assert said.endswith("\n\n" + "x" * 100)
+    assert said.startswith("d" * (DESCRIPTION_LIMIT - 102))

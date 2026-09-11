@@ -322,6 +322,7 @@ const SETTING_SPECS = [
   ['events_announce_channel_id', 'channel', '800000000000000006', null, 'where an approved event is announced'],
   ['events_ping_role_id', 'role', null, null, 'role mentioned when an event is announced and when it starts'],
   ['events_create_scheduled', 'bool', true, false, 'true to make a real Discord scheduled event when one is approved'],
+  ['events_where_link_in_description', 'bool', true, true, "true to put the link or note typed beside a channel at the end of the Discord scheduled event's description"],
   ['events_channel_retention_days', 'int', 7, 7, 'days a finished event’s channel is kept before deletion, 1 to 365', null, 365, 1],
   ['events_max_late_minutes', 'int', 30, 30, 'minutes an event may start late and still be announced', null, 1440],
   ['poll_mode', 'enum', 'on', 'on', 'off, or on (members and staff can run polls with /poll create)', ['off', 'on']],
