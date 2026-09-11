@@ -1,7 +1,8 @@
 ﻿# Phase 10 — Polls (F15): native Discord polls, wrapped
 
-> ⚠️ **SUPERSEDED IN PART, 2026-09-03: every `/poll …` subcommand this document names is
-> gone.** `/poll` is now ONE command that opens an interactive panel — see
+> ⚠️ **SUPERSEDED IN PART, 2026-09-03 (v65, `d13e1a4`): every `/poll …` subcommand this document names is
+> gone** — eleven of them, including the whole `/poll recur create|list|pause|delete` set.
+> `/poll` is now ONE command that opens an interactive panel — see
 > [`polls-panel-design.md`](polls-panel-design.md) (wave 1 of
 > [`panels-program.md`](panels-program.md)). Nothing else here changed: the surfaces, the
 > kinds, the review flow, the loop, the settings keys and the dashboard page are all as
@@ -29,14 +30,17 @@
 >
 > **What 10b built:** the panel surface (anonymous · results-at-close · more
 > than ten options · date polls past ten slots), the date/availability kind,
-> recurring polls (`/poll recur create|list|pause|delete`, daily / weekly /
+> recurring polls (`/poll recur create|list|pause|delete` — *removed at **v65**, 2026-09-03;
+> the moves are controls on the `/poll` panel*, daily / weekly /
 > monthly), `POST /api/polls` with three recurrence routes, and the fifteenth
 > dashboard page. **F15 is feature-complete except the v2 kinds** (free text,
 > number, ranked), which `surface_for` still refuses by name.
 >
-> ⚠️ **Still not merged, not deployed, and nobody has ever voted** — on either
-> surface. No panel button has been pressed, no vote modal has been opened, and
-> no recurrence has fired. The owner's sweep at the bottom of this file is the
+> ⚠️ ~~**Still not merged, not deployed**~~ **STALE — 10b merged as `ebf99a2` and deployed
+> `2026-08-27T15:44:49-07:00`**, the same day this was written. What is still true as of
+> 2026-09-11 is the second half: **nobody has ever voted** on either surface in this pass's
+> knowledge — no panel button pressed, no vote modal opened, no recurrence watched firing, and
+> nothing in this pass met Discord. The owner's sweep at the bottom of this file is the
 > thing that would prove it.
 
 > 🟢 **10a WAS BUILT (2026-08-27)** — branch `worktree-agent-aa83500e6aae1280f`
@@ -44,20 +48,37 @@
 > four tables) · `a0fe975` the pure module + ten settings keys · `d3d1234` the
 > cog, the loop and the raw vote listeners · `09d8654` the API, the contract
 > and the mock. `pytest -q` **1738 passed** (1596 before), `ruff` clean,
-> `check.mjs` 14 pages / 68 routes clean. ⚠️ **Not merged, not deployed, and
-> nothing has run against Discord — this code has never posted a poll.** The
+> `check.mjs` 14 pages / 68 routes clean. ⚠️ ~~**Not merged, not deployed**~~ **STALE — 10a
+> merged as `3eb7e4f` and deployed `2026-08-27T14:45`**, the same day. Still true:
+> **nothing here has been watched running against Discord.** The
 > per-file notes are in [`code-notes.md`](code-notes.md) § *polls (10a)*; the
 > routes are in [`phase8b-design.md`](phase8b-design.md) § *Phase 10a*.
 >
 > **10b then took all of it** — the panel surface, recurrence, the dashboard
 > tab, `POST /api/polls` and the `<t:…>` measurement. See the banner above.
 
-> **Audience:** the Phase 10 build agents and the reviewer. **Status:** TRACKED (2026-08-31; private repo).
-> Last verified: **2026-08-27** — the 15 owner decisions were taken one at a time (`TODO.md`, the
+> **Audience:** the Phase 10 build agents and the reviewer. **Status:** TRACKED ·
+> ✅ **LIVE since 2026-08-27** — **10a** merge `3eb7e4f` deployed `2026-08-27T14:46:08-07:00`
+> (schema 13 → 14, 32 commands synced); **10b** merge `ebf99a2` deployed
+> `2026-08-27T15:44:49-07:00`. `DONE.md` → "2026-08-27 — Phase 10: polls (native Discord polls
+> wrapped, panel surface, recurring, Polls tab)". ⚠️ Fly release numbers were not written into
+> `deploys.log` until **v59** (2026-09-03), so these landings have dates and commits but no
+> `vNN`.
+>
+> Last verified: **2026-09-11 09:58** — re-checked against the tree at `1d090e5`:
+> `black_bloc/polls.py` still carries `surface_for` (`:521`) and `describe_cadence` (`:500`);
+> the `poll` namespace is **16** keys in `KEY_TYPES` (eleven when 10b shipped — the panel,
+> saved drafts and `poll_log_level` added the rest). `check.mjs`'s 15 pages / 72 routes are
+> now **17 pages / 150 routes** in `contract.json`.
+> ⚠️ **The `<t:…>`-in-an-answer-label question is STILL OPEN** — the banner above is accurate:
+> the API stores it verbatim, and whether the client *renders* it is a pixel question nobody
+> has answered. `poll_date_labels` still exists to flip it once somebody looks.
+> ⚠️ **NOT verified:** anything against Discord — nothing in this pass posted, voted in, ended
+> or watched a poll, and no browser was opened.
+> Before that, **2026-08-27** — the 15 owner decisions were taken one at a time (`TODO.md`, the
 > polls decisions entry); every technical claim below is inherited from
 > [`polls-research.md`](polls-research.md) §4 (measured against discord.py 2.7.1) and §6 (the
-> recommended design). NOT verified: nothing has run; the `<t:…>` inside a poll answer label question
-> (research §9) is still open and must be tested first.
+> recommended design).
 
 **Priority: after Phase 9 and the polish/verification work — the owner: "it's not an urgent feature."**
 
@@ -116,7 +137,8 @@ like `cogs/moderation/automod.py` does. A test asserts a poll cannot be created 
 test channel while TEST_MODE is on.
 
 ## Slices
-- **10a** (~250–350k, one worktree): storage + status machine + `/poll create|end|results|settings` on
+- **10a** (~250–350k, one worktree): storage + status machine + `/poll create|end|results|settings`
+  *(removed: retired at **v65**, 2026-09-03)* on
   native polls (single/checkbox/yes-no/rating), review switch, reminder + close loop, results embed,
   `poll_results` history, action log, API read routes, contract + mock entries, tests.
 - **10b** (~200–300k, after 10a lands): the panel surface (anonymous, hide-until-close, date
