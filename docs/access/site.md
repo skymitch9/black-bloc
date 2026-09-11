@@ -3,11 +3,18 @@
 > **Audience:** whoever deploys or fixes the site, and the reviewer doing the
 > first live sign-in. **Status:** TRACKED (owner, 2026-08-31 — was local-only
 > until then; secret NAMES only). **Last verified:
-> 2026-08-31** — the PAGE COUNT and the mock's page/route figures were
-> re-measured today (17 pages / 89 routes; `ls site/public/*.html` = 17) and the
-> route table is now marked incomplete. ⚠️ **NOT re-verified today:** the deploy
-> steps, the OAuth redirect URI, the CSP/cookie claims, or anything in a browser.
-> Previously **2026-08-27** — the routes table and the mock section below were added at the
+> 2026-09-11 08:37** — the counts were re-measured off `main` `1d090e5`:
+> `ls site/public/*.html` = **17** (and the list below names exactly those 17, checked
+> name by name against `site/mock/contract.json`'s `pages`), and the route figure is
+> **150**, not 89. 🔴 **The big correction: the "NOTHING HERE HAS BEEN RUN" block was
+> retired.** It is false — the site has been live at https://blackbloc.heygabi.ai since
+> Phase 8a, the certificate was issued, the redirect URI is registered, and people have
+> signed in; **107** deploy lines in [`../deploys.log`](../deploys.log) record `/health`
+> answering after each one. ⚠️ **NOT re-verified today:** the DNS records, the
+> certificate, the OAuth redirect string byte-for-byte, the CSP/HSTS/cookie claims, the
+> first-sign-in drill in §5, and the route table's completeness — nothing in this pass
+> opened a browser or touched the live app. Before that, **2026-08-31** — the page count
+> and the mock's figures (17 pages / 89 routes). Before that, **2026-08-27** — the routes table and the mock section below were added at the
 > **Phase 8b merge** and read off the merged tree (`black_bloc/api/tools/*`,
 > `site/mock/`); the deploy steps above them are unchanged and still
 > **2026-08-26**, rewritten for **Option A** (one hostname) after the Phase 8a
@@ -18,15 +25,22 @@
 > `DISCORD_CLIENT_ID` joins the secrets to set, and the status page now also
 > counts **open modmail tickets** (Phases 5–7 had not merged when 8a was built).
 >
-> ⚠️ **NOTHING HERE HAS BEEN RUN.** The DNS records have never been created,
-> the certificate has never been issued, the redirect URI has never been
-> registered, and no human has ever signed in. Every step below is written from
-> the code, not from a deploy. Treat the first run as a drill and correct this
-> file from what actually happens.
+> ⚠️ **RETIRED 2026-09-11 — this header used to say "NOTHING HERE HAS BEEN RUN".**
+> That was written before Phase 8a shipped and stopped being true almost immediately;
+> it is kept here, struck, because a reader who acted on it would have treated a live
+> production site as an unbuilt plan. ~~The DNS records have never been created, the
+> certificate has never been issued, the redirect URI has never been registered, and no
+> human has ever signed in.~~ **What is true now:** the site is LIVE at
+> https://blackbloc.heygabi.ai, the certificate resolves, sign-in works, and every one
+> of the **107** lines in [`../deploys.log`](../deploys.log) records `/health` answering
+> after the deploy.
 >
-> ⚠️ **What was NOT verified:** anything against live Discord, live Fly or a
-> browser. The `__Host-` cookie prefix, the CSP, HSTS and the static mount are
-> asserted by tests against an in-process ASGI client, which is not a browser.
+> ⚠️ **What is STILL not verified by any doc pass:** the `__Host-` cookie prefix, the
+> CSP, HSTS and the static mount are asserted by tests against an in-process ASGI
+> client, which is **not a browser** — nobody has read those headers off a real browser
+> and written the result down. The steps in §2 (DNS) and §3 (redirect URI) were run once
+> by the owner and have not been re-read against Cloudflare or the Developer Portal
+> since.
 
 Companions: [`deploy.md`](deploy.md) (the bot on Fly),
 [`../info/phase8-design.md`](../info/phase8-design.md) (why any of this
@@ -189,8 +203,9 @@ In order, because each step's failure looks different:
 ## The pages
 
 **Seventeen** HTML files in `site/public/`, served by the same app at `/`
-(counted 2026-08-31 — this said "Thirteen" until then, which predates Polls,
-Chat, Requests and Members):
+(re-counted 2026-09-11 — still 17, and the seventeen names below match
+`site/mock/contract.json`'s `pages` list exactly. It said "Thirteen" until 2026-08-31,
+which predates Polls, Chat, Requests and Members):
 `index.html` (Overview), `moderation.html`, `automod.html`, `modmail.html`,
 `events.html`, `golive.html`, `rolemenus.html`, `birthdays.html`,
 `tempvoice.html`, `honeypot.html`, `polls.html`, `chat.html`, `requests.html`,
@@ -207,12 +222,15 @@ serves the file.
 
 ## The routes, after Phase 8b (2026-08-27)
 
-⚠️ **This table is the Phase 8b snapshot and is INCOMPLETE as of 2026-08-31.**
-`node site/mock/check.mjs` reports **89 routes** today; Phases 9–13 added the
-polls, chat, requests, members and timed-role routers
-(`black_bloc/api/tools/{polls,chat,requests,members,roles}.py`) and they are not
-listed below. **`site/mock/contract.json` is the one home for the route
-shapes** — read it rather than trusting this table's completeness.
+⚠️ **This table is the Phase 8b snapshot and is BADLY INCOMPLETE — it covers roughly a
+third of the surface.** `site/mock/contract.json` carries **150 routes** (re-measured
+2026-09-11; it was 89 when this warning was first written, and the table below predates
+even that). Everything Phases 9–19 and the panel program added is missing from it —
+polls, chat, requests, members, timed roles, applications, raid trains, YouTube, pings,
+costs, the self-test and the operator reads. **`site/mock/contract.json` is the one home
+for the route shapes** — read it, and never trust this table for completeness. A
+readable path-by-path list of the GETs lives in
+[`operator-read.md`](operator-read.md#the-paths-worth-reading).
 
 Every one is under `/api`, JSON, staff-gated by the same
 `staff_dependency` 8a introduced (401 `not_signed_in`, 403 `not_staff`,
@@ -278,7 +296,7 @@ MOCK_TEST_MODE=0 MOCK_PORT=8788 node site/mock/server.mjs &
 MOCK_PORT=8788 node site/mock/check.mjs
 ```
 
-It fetches all **17** pages and every route (**89** as of 2026-08-31) and asserts the keys in
+It fetches all **17** pages and every route (**150** as of 2026-09-11) and asserts the keys in
 `site/mock/contract.json`. ⚠️ **`site/mock/contract.json` is the one home for
 those shapes**, and `tests/api/test_contract.py` asserts the **real** routers
 against the same file — so the mock cannot teach a shape the bot does not
