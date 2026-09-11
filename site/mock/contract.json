@@ -1184,6 +1184,29 @@
       ]
     },
     {
+      "method": "POST",
+      "path": "/api/events/{event_id}/room/delete",
+      "body": {
+        "note": "the contract check needs the space"
+      },
+      "read_by": [
+        "page-events.js"
+      ],
+      "shape": "object",
+      "keys": [
+        "event",
+        "message"
+      ],
+      "nested": {
+        "event": [
+          "id",
+          "title",
+          "status",
+          "review_channel_id"
+        ]
+      }
+    },
+    {
       "method": "GET",
       "path": "/api/polls?status=open&page=1&per_page=25",
       "read_by": [
@@ -3690,6 +3713,7 @@
     "web.event.approved",
     "web.event.denied",
     "web.event.cancelled",
+    "web.event.channel_deleted",
     "web.event.edited",
     "web.poll.approved",
     "web.poll.denied",
