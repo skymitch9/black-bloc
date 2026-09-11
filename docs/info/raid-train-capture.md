@@ -1,8 +1,17 @@
 # Raid trains — what r3dlabs.com does, captured for request #1
 
 **Audience:** the owner deciding request #1, and the session that designs it.
-**Status:** TRACKED · reference (a capture, not a design — the design doc comes
-after the owner picks a scope). **Last verified: 2026-09-02** against
+**Status:** TRACKED · reference (a capture, not a design). ✅ **The design and the build
+both happened:** [`phase18-design.md`](phase18-design.md) shipped as merge `0bb3835`
+(deployed `7b1c592`, 2026-09-03, `raidtrain_mode` off), and `/raidtrain` became ONE
+command opening a panel in **v76** `2dd2689` (2026-09-04) —
+[`raidtrain-panel-design.md`](raidtrain-panel-design.md). A `raidtrain_scheduled_name_template`
+key followed in **v104** (2026-09-10). So the line "the design doc comes after the owner
+picks a scope" is history; this file is the capture the scope was picked FROM.
+**Last verified: 2026-09-11 09:30** — docs-wide staleness pass: it cites **no repo path**
+at all, so nothing in it can rot against this tree, and the capture itself is unchanged.
+⚠️ **NOT re-checked: r3dlabs.com was NOT re-visited**, so every row is still the
+2026-09-02 reading. Before that, **2026-09-02** against
 https://r3dlabs.com (home, `/features`, one live event page), read through
 the browser while signed OUT — the signed-in organizer UI, R3ddyBot's chat
 commands and the OBS/Stream Deck tools were NOT exercised; their rows come

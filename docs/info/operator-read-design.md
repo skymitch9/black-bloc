@@ -2,7 +2,19 @@
 
 > **Audience:** Claude sessions first, the owner second. **Status:** TRACKED —
 > secret NAMES only, never values.
-> Last verified: **2026-09-06 20:08** — the OPERATOR READ BOUND section at the
+> Last verified: **2026-09-11 09:25** — docs-wide staleness pass. **Nothing in this design
+> has changed since v99**, and every symbol it names was re-read off `main` at `1d090e5`:
+> `api/auth.py` — `READ_RATE = 300` (:38), `OPERATOR_READ_LOG_KEY` (:45),
+> `OPERATOR_SLOW_DOWN` (:110), `TOO_MANY_READS` (:121), `read_bucket_for` (:281),
+> `note_operator_read` (:284), `operator_session` (:309) with the 403
+> `operator_read_only` (:323) and both 429s — plus `settings_store.py:1453`'s
+> `operator_read_log` bool, `scripts/read.ps1` and `scripts/mint-operator-token.ps1`, and
+> the runbook [`../access/operator-read.md`](../access/operator-read.md). ⚠️ **NOT
+> re-measured:** no live read was made and `pytest -m live` was not run today, so the
+> 58 passed / 1 skipped figure below is still the 2026-09-06 reading; the test count in
+> that note (5286) is the v99 figure and the suite is **5546** at v108. Sweep row **322**
+> is still unrun by a PERSON, and nothing here met Discord or a browser.
+> Before that, **2026-09-06 20:08** — the OPERATOR READ BOUND section at the
 > foot LANDED: branch `operator-read-bound` (off `main` at `6be8929`, v98) merged
 > as `88e0242`, live as **v99** at 20:00. Measured: `ruff check .` clean, `pytest
 > -q -n auto` **5286 passed** both orders (5279 before), mock 17 / 150 / 14,

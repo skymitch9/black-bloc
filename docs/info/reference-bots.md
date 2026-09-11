@@ -1,6 +1,15 @@
 # Reference bots — feature inventory for cloning
 
-> Audience: Black Bloc design docs. Status: TRACKED (owner, 2026-08-31 — was local-only until then). Last verified: 2026-08-26 — fetched from the cited URLs that day; only the STATUS line was re-checked 2026-08-31, no URL was re-fetched.
+> Audience: Black Bloc design docs. Status: TRACKED (owner, 2026-08-31 — was local-only until then).
+> Last verified: **2026-09-11 09:30** — docs-wide staleness pass. ⚠️ **This is a VENDOR
+> CAPTURE dated 2026-08-26, and it is now sixteen days old.** What was re-checked today is
+> only that the file cites no repo path that has moved: the 26 file-shaped strings in it are
+> all VENDOR paths (Modmail's own `cogs/modmail.py`, Carl-bot and YAGPDB doc pages) reached
+> through the URLs beside them — none is a Black Bloc file, so nothing here can rot against
+> this repo. ⚠️ **NOT re-checked: NO URL was re-fetched**, then or now, so every vendor
+> feature, limit and command table is a 2026-08-26 reading and a vendor may have changed it.
+> The Discord platform notes in §7 are the part most worth re-deriving before relying on
+> them. Before that, **2026-08-26** — fetched from the cited URLs that day; only the STATUS line was re-checked 2026-08-31, no URL was re-fetched.
 
 Six products Black Bloc is meant to replace or copy, inventoried feature by
 feature. Every section cites the URL it came from. Anything marked

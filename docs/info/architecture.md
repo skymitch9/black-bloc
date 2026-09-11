@@ -2,7 +2,7 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner, 2026-08-31 — was
 > local-only until then).
-> Last verified: **2026-09-11 00:38** (the follow-up 4 paragraph: ✅ LIVE v108 00:37, merge `73e2e44` — keys measured by the live `/api/settings` — **202**; tests and the mock line from the v108 gate — **5546** passed, *17 pages, 150 routes, 14 core settings, all keys present*; the link check itself probed live at the review; nothing here met Discord; nothing else re-measured) — earlier **2026-09-10 23:45** (the follow-ups 2+3 paragraph: keys measured by the live `/api/settings` — 199; tests and the mock line from the v107 gate — 5502 passed, 17 pages / 150 routes; nothing else re-measured) — earlier **2026-09-10 17:45** (the Where follow-up paragraph: keys and schema measured by import on the branch, tests and the mock line from the v106 gate — 5473 passed, 198 keys answered by the live `/api/settings`; nothing else re-measured) — earlier **2026-09-10 16:40** (the raid-train calendar-name paragraph: keys measured by import, tests and mock routes from the gate; nothing else re-measured) — earlier **2026-09-10 16:02** (the v100 paragraph: keys and schema measured by import, tests from the gate; nothing else re-measured) — earlier **2026-09-05**: every figure below re-MEASURED on the ENGINEERING SWEEP 3
+> Last verified: **2026-09-11 08:30** — docs-wide staleness pass on `main` at `1d090e5`. **Re-measured by import/command in a worktree of `main`:** cogs **19** (`len(bot.COGS)`), schema **34** (`db.SCHEMA_VERSION`), registry keys **202** (`len(settings_store.KEY_TYPES)`), features **18** (`settings_store.FEATURES == logkinds.FEATURES`), setting groups **23**, deploys **107** lines last `73e2e44` v108. **Read off disk:** `black_bloc/api/`, `black_bloc/api/tools/`, `black_bloc/cogs/**`, `site/public/*.html` (17). What that FIXED: the v92 fact table (keys 189 → **202**; schema "34 on `where-picker`, 33 on `main`" → **34 on `main`**; mock 149 → **150** routes; deploys 91/v92 → **107**/v108), the `storage/db.py` tree annotation (`SCHEMA_VERSION 22` → **34**), and three cogs + three `api/tools/` routers + three `api/` modules the Shape tree did not name. ⚠️ **NOT checked:** the prose below the tree (rules, library table, API section) still not re-traced to the code; the tree's per-file annotations beyond the ones named here; the mock line was taken from the v108 gate on `deploys.log`, not re-run; nothing here met Discord, and no browser rendered anything. Before that, **2026-09-11 00:38** (the follow-up 4 paragraph: ✅ LIVE v108 00:37, merge `73e2e44` — keys measured by the live `/api/settings` — **202**; tests and the mock line from the v108 gate — **5546** passed, *17 pages, 150 routes, 14 core settings, all keys present*; the link check itself probed live at the review; nothing here met Discord; nothing else re-measured) — earlier **2026-09-10 23:45** (the follow-ups 2+3 paragraph: keys measured by the live `/api/settings` — 199; tests and the mock line from the v107 gate — 5502 passed, 17 pages / 150 routes; nothing else re-measured) — earlier **2026-09-10 17:45** (the Where follow-up paragraph: keys and schema measured by import on the branch, tests and the mock line from the v106 gate — 5473 passed, 198 keys answered by the live `/api/settings`; nothing else re-measured) — earlier **2026-09-10 16:40** (the raid-train calendar-name paragraph: keys measured by import, tests and mock routes from the gate; nothing else re-measured) — earlier **2026-09-10 16:02** (the v100 paragraph: keys and schema measured by import, tests from the gate; nothing else re-measured) — earlier **2026-09-05**: every figure below re-MEASURED on the ENGINEERING SWEEP 3
 > branch off `main` at `6af0ba0` (v92) by running the thing, not by reading a doc: the tree is
 > built the way `tests/test_bot.py` builds it (load all `bot.py:COGS`, then `tree.get_commands()`),
 > `SCHEMA_VERSION` is imported from `black_bloc/storage/db.py`, and the site figures come from
@@ -52,16 +52,18 @@
 > importing them. Nothing else in this table moved — no cog, no command, no feature, and the
 > mock still reads 17 pages / 149 routes / 14 core settings.
 >
-> | What | v92 | Where it is measured |
+> | What | v108 (`main`, 2026-09-11 08:30) | Where it is measured |
 > |---|---|---|
 > | Cogs | **19** | `bot.py:COGS` |
 > | Top-level slash commands | **29** — 15 staff-locked, 14 member-visible | `tree.get_commands()` |
 > | `app_commands.Group`s | **0** | ⚠️ every group retired by the panel waves |
-> | Schema version | **34** (on `where-picker`; **33** on `main`) | `storage/db.py:SCHEMA_VERSION` |
-> | Registry keys | **189** | `settings_store.KEY_TYPES` |
+> | Schema version | **34** | `storage/db.py:SCHEMA_VERSION` |
+> | Registry keys | **202** (was 189 at v92) | `settings_store.KEY_TYPES` |
+> | Setting groups | **23** | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **18** | `settings_store.FEATURES` == `logkinds.FEATURES` |
-> | Mock contract | **17 pages / 149 routes / 14 core settings** | `node site/mock/check.mjs` |
-> | Deploys | **91**, last `4b327cf` (v92) at 2026-09-05 20:44 | `../deploys.log` |
+> | Mock contract | **17 pages / 150 routes / 14 core settings** (was 149 routes at v92) | `node site/mock/check.mjs` — figure read off the v108 gate line in `../deploys.log`, not re-run 2026-09-11 |
+> | Tests | **5546** | the v108 deploy gate |
+> | Deploys | **107**, last `73e2e44` (v108) at 2026-09-11 00:37 | `../deploys.log` |
 >
 > ⚠️ **The command count is the figure that has been wrong most often, and the reason is that
 > it FELL.** The panel waves (owner rule, 2026-09-03: one command per feature opens a panel)
@@ -80,7 +82,8 @@
 > | Phase 19 branch | 17 | 41 | 25 | 126 | — |
 > | 17→18→19 on `main`, 2026-09-03 | 19 | 44 | 25 | 136 | 3238 |
 > | Phase 15 (F14) branch, 2026-09-02 | 15 | 37 | 21 | 111 | 2714 |
-> | **v92 `6af0ba0`, 2026-09-05** | **19** | **29** | **32** | **149** | **5186** |
+> | v92 `6af0ba0`, 2026-09-05 | 19 | 29 | 32 | 149 | 5186 |
+> | **v108 `73e2e44`, 2026-09-11** | **19** | **29** | **34** | **150** | **5546** |
 >
 > ⚠️ **NOT verified today:** the *prose* below the tree (the rules, the library table, the API
 > section) was not re-traced to the code; the Shape tree's per-file annotations (last verified
@@ -133,6 +136,36 @@ black_bloc/
 │                       `via_of()` (Discord vs website) which stamps every action-log row
 ├── emoji.py          ← skin-tone application for the bot's own emoji (emoji_skin_tone)
 ├── prefix.py         ← no_prefix_commands: the bot answers no text prefix (slash only)
+├── panels.py         ← ⚠️ THE PANEL LIBRARY every feature's one command opens (wave 0 of the
+│                       panels program): Panel, retire, answer, still_staff, still_allowed,
+│                       db_ready, capped_placeholder, panel_minutes, confirm, opened, KEEP_IT,
+│                       NoteModal. A panel that re-implements one of these is the bug
+├── logs_panel.py     ← the Logs button's list + its Show more / Important only knobs
+├── settings_panel.py ← the pure half of /settings: the groups, the typed key cards, the editors
+├── selftest.py       ← the self-test registry (config · panel · read · send) and run()/purge
+├── selftest_panels.py ← the Discord half of the self-test: the panel and its cards
+├── when_picker.py    ← the shared Day/Hour/Minute/How-long selects, WhenDraft, ZonePanel
+├── linkcheck.py      ← ⚠️ the ONLY outbound HTTP in the events path: one bounded GET that tries
+│                       a typed link before it is kept (LINK_OK / MISSING / UNREACHABLE)
+├── loops.py          ← wait_ready, behind all fourteen before_loops so a failure reaches @loop.error
+├── applications.py   ← Phase 19: pure application logic — the forms, the statuses, the roster
+├── raidtrain.py      ← Phase 18: pure train logic — slots, claims, the lineup, the reminder clock
+├── rolemenus.py      ← F16: pure role-menu logic, shared by the cog and the website
+├── honeypot.py       ← F9: pure trap logic (built at the /honeypot panel; neither existed before)
+├── tempvoice.py      ← F8: the temp-voice state machine and the owner control-post button table
+├── chat_memory.py    ← Phase 17: the profile store and the opt-out list
+├── chat_distil.py    ← Phase 17: the hourly distillation — never on the reply path
+├── chat_check.py     ← the chat door: cooldown, mode, manners, the spend fuses
+├── chat_panel.py     ← the pure half of /chat: Personality, Knowledge, Settings
+├── chat_llm.py       ← the model ladder and the spend ledger (microdollars, month_start)
+├── llm.py / groq.py  ← the two clients. HTTP injectable, so no test reaches the network
+├── knowledge.py      ← GABI-style knowledge ingestion + lexical search behind chat
+├── personas.py       ← the voice stack: roster, graph, drift constants, the shared clauses,
+│                       fed by personality_pool.json (synced from catalog-platform)
+├── directory.py      ← the channel directory the chat prompt gets: the visible-channel list,
+│                       the hidden/archive categories, and the "name no channel at all" fallback
+├── dbsnapshot.py     ← a consistent snapshot of the live database, for the nightly backup pull
+├── personality_pool.json ← the SKELETON shared with GABI (see personality-pool-design.md)
 ├── data/             ← shipped package data (`pyproject.toml` → package-data)
 │   └── birthday_import_2026-08-05.json  ← the 39-row Birthday Bot export, seed for the daily import loop
 ├── logging_setup.py
@@ -150,7 +183,9 @@ black_bloc/
 │   │   │                    and move layer lives in `black_bloc/events.py`, not here
 │   │   ├── birthdays.py   ← F6: the five-minute sweep, the /birthday panel, the day role, the daily import
 │   │   ├── polls.py       ← F15: /poll on native Discord polls + Black Bloc's own panel, /poll recur
-│   │   └── requests.py    ← F18: /request, the member intake, the pending-features board
+│   │   ├── requests.py    ← F18: /request, the member intake, the pending-features board
+│   │   └── applications.py ← Phase 19: /apply — ONE command, one panel (both groups retired);
+│   │                        the forms, the queue, approve/deny/remove, the roster
 │   ├── moderation/   ← one cog per moderation feature
 │   │   ├── honeypot.py    ← F9: the trap channel, delete + ban, shadow first
 │   │   ├── modmail.py     ← F11: inbound DM → ticket channel or private thread, the /modmail panel, the sticky ticket card, /reply, transcript
@@ -162,13 +197,21 @@ black_bloc/
 │       ├── pings.py  ← F14: /pings — ONE command, one ephemeral panel (wave 2). Member half:
 │       │                follow/stop-following selects, the Events toggle(s), the fan button.
 │       │                Staff half: Streamers…, Set up the Events role, Settings, Logs
+│       ├── chat_memory.py ← Phase 17: the hourly distillation sweep and /memory — ONE command,
+│       │                    one member panel. The pure half is `chat_distil.py`
+│       ├── raidtrain.py ← Phase 18: /raidtrain — ONE command, one panel (both slots retired);
+│       │                  slots, claims, the lineup post, the 30-minute reminder DM
 │       └── youtube.py ← F3: the uploads sweep and /youtube, ONE command that opens a panel for
 │                        members and staff alike (2026-09-03; /uploads is retired). Reads the
 │                        public Atom feed; YOUTUBE_API_KEY is optional (see KI-11)
-├── storage/db.py     ← aiosqlite connection + schema bootstrap (SCHEMA_VERSION 22)
+├── storage/db.py     ← aiosqlite connection + schema bootstrap (SCHEMA_VERSION 34, measured 2026-09-11)
 └── api/             ← the dashboard API, one router per surface (API_ENABLED)
     ├── server.py    ← create_app: /health (public), security headers, routers, then site/ at /
-    ├── auth.py      ← Discord OAuth2 + the signed session cookie. The site's ONLY gate
+    ├── auth.py      ← Discord OAuth2 + the signed session cookie. The site's ONLY gate.
+    │                  Also the operator read token and both rate buckets
+    ├── sessions.py  ← the signed-cookie session store behind auth.py
+    ├── costs.py     ← /api/costs: the chat spend ledger, hosting cost, secret presence (names only)
+    ├── selftest_api.py ← /api/selftest — run, list, read one, purge one. The self-test's web door
     ├── status.py    ← /api/status + /api/actions — READ-ONLY, staff-gated
     ├── writes.py    ← THE SHARED WRITE SIDE: staff + one rate-limit bucket per bot, the guard's
     │                  409, the guild/database checks, and the `web.<area>.<verb>` audit line
@@ -191,6 +234,9 @@ black_bloc/
         ├── polls.py      ← the poll list, create, end / cancel, results
         ├── requests.py   ← the requests board + the member-only routes (the one non-staff gate)
         ├── chat.py       ← the editable intents and lines, the manners settings
+        ├── chat_memory.py ← Phase 17: the stored preference profiles and the opt-out list
+        ├── applications.py ← Phase 19: forms, questions, the queue, approve/deny/remove, the roster
+        ├── raidtrain.py  ← Phase 18: trains, slots, claims, the lineup post
         ├── members.py    ← the Members tab: the roster, roles, grant chips
         └── roles.py      ← timed role grants: list, extend, end now
 site/                 ← THE DASHBOARD (8a status page, 8b tabs). Static, no build step, COMMITTED
@@ -208,12 +254,18 @@ site/                 ← THE DASHBOARD (8a status page, 8b tabs). Static, no bu
     │                   (17 pages total, measured 2026-08-31). Each is an empty shell:
     │                   #tabnav + #dash, filled by its page module. The nav is built from ONE
     │                   array in app.js, never seventeen hand-written copies
+    │                   (17 `.html` files counted on disk 2026-09-11)
     └── assets/
         ├── api.js    ← the ONLY fetch. Outage vs refusal, the name cache, the ref caches
         ├── app.js    ← the shell: the tab list, the five permission states, start()/reload()
         ├── ui.js     ← the widgets. createElement + textContent only; nothing assigns innerHTML
         ├── page-*.js ← one module per tab, each exporting nothing and calling start()
+        ├── labels.js ← ⚠️ the one home for every settings key's human sentence
+        ├── logs.js   ← the shared Logs list every page embeds
+        ├── shell.js / layout.js / theme.js / palette.js / icons.js / motion.js /
+        │   permission-ux.js ← the restyle's shared chrome
         └── site.css  ← ours, beside a SNAPSHOT of the estate theme + fonts
+                        (`estate-theme.css`, `status-shell.css`, `fonts/`)
 tests/                ← everything runs OFFLINE; no test needs a token or the gateway
 └── api/test_contract.py ← runs contract.json against the REAL routers with fakes, so the
                            mock and the bot cannot answer different shapes
@@ -253,7 +305,9 @@ no network.
 
 `tzdata` is a **runtime dependency**, not a convenience: Windows ships no
 zone database, so without it `zoneinfo.available_timezones()` is empty and
-every `/timezone` lookup and every event start fails. Pinning it in
+every zone lookup and every event start fails — `timezones.py:31`'s
+`available_timezones()` is what feeds the `My time zone` picker on the `/event` panel (the
+`/timezone` command itself retired with the events panel in v64). Pinning it in
 `pyproject.toml` makes the Windows developer machine and the Linux container
 resolve the same zones from the same data.
 

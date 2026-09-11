@@ -6,10 +6,22 @@
 > `gabi_personality_pool_version: 1` + the eleven, Black Bloc's copy is `synced_from: catalog-platform@de4ef63`, and the self-test compares the two rosters on every boot
 > (§8's landing order held: no red at any step). The runbook is
 > [`../access/personality-pool.md`](../access/personality-pool.md). ✅ All three forks decided (a) by the owner 2026-09-05 16:41–16:43. Written **2026-09-05** by Fable in the
-> main loop. Last verified: **2026-09-05** — every fact about the two codebases
-> below was read from `black_bloc/personas.py` (407 lines) and
+> main loop. Last verified: **2026-09-11 09:20** — docs-wide staleness pass.
+> **Re-measured off `main` at `1d090e5`:** `black_bloc/personality_pool.json` holds
+> **11 tropes, version 1, 2 clauses, 4 slots, drift 2, `synced_from:
+> catalog-platform@de4ef63`** — exactly what this design says shipped, six days on and
+> unchanged; `selftest.py:69 POOL_CHECK = "pool.in_step_with_gabi"` is registered
+> (`:394`) and the live boot line has read **107 ok, 0 failed** at every deploy since v90;
+> the two settings keys `personality_pool_sync` / `personality_pool_peer_url` are in
+> `settings_store.py:1576–1577`. ⚠️ **One figure is now history, not current:**
+> `black_bloc/personas.py` is **586** lines, not the 407 read before this build — the pool
+> build is what grew it. ⚠️ **NOT verified today:** nothing was RUN, GABI's health route
+> was not fetched, `catalog-platform` was not opened at all (the 930-line
+> `personality.ts` figure is still the 2026-09-05 reading), and nothing met Discord.
+> Before that, **2026-09-05** — every fact about the two codebases
+> below was read from `black_bloc/personas.py` (407 lines then) and
 > `catalog-platform/apps/discord-worker/src/personality.ts` (930 lines, last
-> touched `2ff0037` 2026-08-18) this session. NOT verified: nothing was run;
+> touched `2ff0037` 2026-08-18) that session. NOT verified then: nothing was run;
 > the GABI health route was not fetched.
 > Owner ask (next-wave list, 2026-09-02): *"Global personality pool — one trope
 > store shared across estate bots (Black Bloc's `personality_tropes` + GABI's

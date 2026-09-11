@@ -2,14 +2,28 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then; secret NAMES only).
-> Last verified: **2026-08-26** (STATUS line only re-checked 2026-08-31; no
+> Last verified: **2026-09-11 08:40** — docs-wide staleness pass. **What was checked:** every
+> path, symbol and cross-reference each entry names, read off `main` at `1d090e5` —
+> `intents.py:8–9`, `api/server.py:206 start_api`, `tests/conftest.py:55–56` and `:237–240`,
+> `command_visibility.py`, `../KNOWN_ISSUES.md` KI-1/KI-2, `../access/deploy.md` §4 and its
+> "Pause the bot" row. **What that FIXED:** the intents entry said `bot.py` asks for them
+> (it is `intents.py:build_intents`); the OneDrive entry cited KI-1 as if open (**CLOSED
+> 2026-09-01** — `DATABASE_PATH` now points outside OneDrive); the bare `access/…` prose
+> paths are now real `../access/…` links; the mojibake detector was re-run (**0** hits
+> outside this file's own examples). **One entry ADDED:** the `deploy.ps1` xdist hang, five
+> recorded incidents on `../deploys.log` (v97–v100, v103) that had no home here. ⚠️ **NOT re-tested:** every entry's underlying
+> behaviour — none of these traps was re-triggered, so each *(anticipated)* one is still
+> library knowledge and each incident one is still a 2026-08/09 reading. Nothing here met
+> Discord or a browser.
+> Before that, **2026-08-26** (STATUS line only re-checked 2026-08-31; no
 > entry below was re-tested). Entries marked *(anticipated)* come from
 > library knowledge, not from an incident here; promote them to a dated
 > incident the first time one bites.
 
 ## Login fails with `PrivilegedIntentsRequired` *(anticipated)*
 
-`bot.py` requests `members` and `message_content`. Both are **privileged**:
+`intents.py:build_intents` (called from `bot.py`) requests `members` and
+`message_content` — `intents.py:8–9`. Both are **privileged**:
 they must ALSO be toggled on in the Developer Portal (Bot → Privileged Gateway
 Intents). Code alone cannot grant them. Symptom is the bot dying seconds after
 start with that exception name in the log.
@@ -24,12 +38,14 @@ start with that exception name in the log.
 - Syncing is rate-limited. Rapid restart loops produce 429s and a slow start.
   That is Discord, not a bug.
 
-## SQLite inside a OneDrive folder *(anticipated, and this repo IS in one)*
+## SQLite inside a OneDrive folder *(anticipated; FIXED 2026-09-01, keep it that way)*
 
 `data/black_bloc.sqlite3` and its `-wal`/`-shm` sidecars under
 `OneDrive/Documents/...` can hit "database is locked" while OneDrive uploads
-mid-write. KI-1 in `../KNOWN_ISSUES.md`. Fix: `DATABASE_PATH` in `.env`
-pointing outside OneDrive.
+mid-write. ✅ **[KI-1](../KNOWN_ISSUES.md) is CLOSED** — the local `.env` `DATABASE_PATH`
+points outside OneDrive and the old file under `data/` is inert; the hosted deployment
+always used the Fly volume at `/data` and was never affected. The trap is still live for
+anyone who clears `DATABASE_PATH` or clones fresh, which is why this entry stays.
 
 ## Ctrl+C with `API_ENABLED=true` *(anticipated, UNVERIFIED)*
 
@@ -58,7 +74,7 @@ per command, and check `find . -type f` before assuming anything landed.
 The Fly machine runs 24/7. Starting `python -m black_bloc` locally while it is
 up means two gateway sessions on the same token — every command answered
 twice, every announcement posted twice. Stop the Fly machine first
-(`access/deploy.md`, "Pause the bot"). Same reason `fly deploy` must carry
+([`../access/deploy.md`](../access/deploy.md), "Pause the bot"). Same reason `fly deploy` must carry
 `--ha=false`.
 
 ## Bash tool dies with `EPERM: uv_spawn bash.exe` = Windows Defender "ClickFix" (incident, 2026-08-26)
@@ -98,7 +114,7 @@ Piping Python's stdout into `flyctl secrets import` from the PowerShell tool
 prepends a UTF-8 BOM to the first line, and Fly refuses the key name. The
 deploy that followed started the bot with Twitch enrichment OFF (the
 designed graceful path — the log said so). Fix: write an ASCII temp file and
-redirect it via `cmd /c "flyctl … < file"` (`access/deploy.md` §4).
+redirect it via `cmd /c "flyctl … < file"` ([`../access/deploy.md`](../access/deploy.md) §4).
 
 ## Discord's API returns Cloudflare 403 error 1010 to Python's default User-Agent (incident, 2026-08-26)
 
@@ -113,6 +129,20 @@ did not contain. It recovered by reading the shared checkout read-only, but the
 rule for the conductor is: **commit the design doc to main FIRST, then dispatch
 the worktree builders.** A dispatch that references any repo file must be cut
 from a commit that contains it.
+
+## `deploy.ps1` hangs mid-pytest with every xdist worker idle (incidents ×5, 2026-09-06 and 2026-09-10)
+
+Recorded on `../deploys.log` at v97, v98, v99, v100 and (as the first attempt) v103. The
+deploy gate's `pytest -n auto` stops making progress and sits there: **33 idle pythons, log
+untouched for 72 s, CPU flat over 20 s.** Two shapes were seen — a hang at *spawn* (the two
+morning ones) and a hang at **81–92 % of the run** (the rest). It is not a failing test and
+it is not stoppable from the console.
+
+**What got past it, every time:** kill the process tree, then re-run the deploy **through
+the PowerShell tool with output redirected to a file** (`*> file`) rather than detached.
+The retry passed the gate in 26–30 s on each occasion. ⚠️ **Do not conclude the suite is
+broken** — the same commit's tests pass forward and under `BB_REVERSE=1` on the retry. Cause
+never established; it is the retry, not a fix.
 
 ## A doc suddenly reads `â€”` and `âš ï¸` everywhere = it was written back double-encoded (incident, 2026-09-03)
 

@@ -3,9 +3,19 @@
 > **Audience:** the owner (to make the decisions at the bottom) and the build
 > agent that eventually ships F15. **Status:** TRACKED (owner, 2026-08-31 —
 > was local-only until then).
-> **Last verified: 2026-08-27** (STATUS line only re-checked 2026-08-31).
-> ℹ️ F15 has since SHIPPED — Polls 10a/10b, live 2026-08-27; this doc is now
-> the research record behind that build, not a pending brief.
+> **Last verified: 2026-09-11 09:30** — docs-wide staleness pass. **Re-measured:**
+> `discord.py` is still **2.7.1** in the repo's `.venv`
+> (`.venv/Lib/site-packages/discord/__init__.py:16`, `version_info` at :89), so every
+> §3/§4 constraint cited against that version still cites the installed library, and the
+> four typed-component modules §4 leans on — `discord/ui/label.py`, `radio.py`,
+> `checkbox.py`, `file_upload.py` — are all present. ⚠️ **NOT re-checked:** no `path:line`
+> anchor inside those library files was re-read, and no competitor (EasyPoll, Simple Poll,
+> Polly) page was re-fetched — the vendor matrices are still the 2026-08-27 reading.
+> ℹ️ **F15 SHIPPED long since** — Polls 10a/10b live 2026-08-27, the `/poll` **panel** as
+> **v65** 2026-09-03, saved drafts as **v94** and create-a-recurrence-from-the-website as
+> **v96**, both 2026-09-06. This doc is the research record behind that build, not a pending
+> brief, and the command surface it proposes has been superseded by the panel.
+> Before that, **2026-08-27** (STATUS line only re-checked 2026-08-31).
 >
 > **What IS measured:** every Discord-API constraint in §3 and §4 is read out of
 > the repo's own `.venv` — `discord.py` **2.7.1**
