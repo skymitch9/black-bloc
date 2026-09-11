@@ -8,12 +8,18 @@
 > Written as BUILT 2026-09-03 on `worktree-agent-a86e71fd801362ca2` — see the
 > `## Deviations` foot for what was built differently and what was measured.
 >
-> 🔴 **THE DESIGN BODY OF THIS FILE IS GONE, DELIBERATELY, AND THE FOOT STILL REFERS TO IT.**
-> Commit `8426b1a` (2026-09-03, *"Pings: rewrite every string and doc that named a retired
-> subcommand"*) cut the file from 408 lines to 140 — §A–§J were removed and only this header plus the
-> Deviations foot were kept. So every `§C` / `§E` / `§F` / `§H` / `§J` the foot cites points at
-> nothing in this file. **Read the design at `git show 8426b1a^:docs/info/pings-panel-design.md`**;
-> the post-merge map of what actually shipped is `code-notes.md`'s `# Pings panel` section.
+> ✅ **The design body below was RESTORED 2026-09-11 10:40** (owner: *"Restore it"*). Commit `8426b1a`
+> (2026-09-03, *"Pings: rewrite every string and doc that named a retired subcommand"*) had cut the
+> file from 408 lines to 140 because §A and §E listed the twelve retired `/pingroles` subcommands —
+> and took §B–§J, the spec of the panel that shipped, with them. §B, §C, §D, §F, §I and §J are back
+> verbatim from `8426b1a^`; §A (the pre-build measurement), §E (every line that named a retired
+> subcommand), §G (the test plan) and §H (the prove-before-merge list) are historical and live in
+> [`../archive/pings-panel-design-prebuild-2026-09-03.md`](../archive/pings-panel-design-prebuild-2026-09-03.md).
+> Verified at the restore: every control the §B/§C tables name exists by that string in
+> `black_bloc/cogs/content/pings.py` / `black_bloc/pings.py` today (21 labels, `Turn event pings on` …
+> `Open on the site`) and `pings_panel_minutes` is registered; the per-state rendering rules were NOT
+> exercised in a client. ⚠️ Where a `## Deviations` item at the foot disagrees with the body, the
+> deviation is what shipped. `/pingroles …` in the body names the commands this panel replaced (gone at v72).
 >
 > **Since then, three things this document predates:**
 > 1. **v78** (`3429233`) gave `pings_mode` a `HIDDEN_WHEN_OFF` entry (`command_visibility.py:25`),
@@ -27,7 +33,7 @@
 >    open_confirm` wraps `panels.confirm` + `confirm_items` (`:19–20`).
 > Also: **v86** (`ad5b614`) fixed *"Take my ping role away renders with the mode off"*.
 >
-> **Last verified: 2026-09-11 09:28** — re-measured in this tree at `1d090e5`: `pings_panel_minutes`
+> **Last verified: 2026-09-11 10:40** — the body restored and its 21 control labels re-checked against `7406842` (above); **09:28** — re-measured in this tree at `1d090e5`: `pings_panel_minutes`
 > registered beside seven other `pings_*` keys (registry **202**); every move label still reads the
 > same string — `OWN_ADD_MOVE` "Start my own ping role" / `OWN_DROP_MOVE` "Take my ping role away"
 > (`pings.py:675–678`), `STREAMERS_MOVE` "Streamers…" (`:685`), `SETUP_MOVE` "Set up the Events role"
@@ -58,6 +64,255 @@
 > **Inherits every invariant in [`panels-program.md`](panels-program.md) §2 (P1–P17) and its §4
 > library — none restated here.** Template: [`requests-panel-design.md`](requests-panel-design.md),
 > whose `## Deviations
+
+## B. The decision — one `/pings`, member panel and staff panel
+
+**`/pings` becomes a single `app_commands.command`; both `Group`s go and `/pingroles` disappears.**
+`commands synced` drops by **one** relative to whatever it reads when this lands — 42 today, so 41
+for this feature alone, but **the build MEASURES it at boot and edits `tests/test_bot.py:198` to what
+it reads** (requests deviation 7). Other wave-2 features drop one each; the conductor reconciles at
+merge.
+
+The one command keeps **no `default_permissions`** — `pings` is member-visible today
+(`tests/test_bot.py:65`) and stays in `MEMBER_COMMANDS`; `"pingroles"` leaves `STAFF_COMMANDS`
+(`:40`) and `LOGS_GROUPS` (`:21`). The staff half is gated at runtime as it always was
+(`require_staff` / `still_staff`), never by the UX lock.
+
+**Root panel** — `build_panel(bot, guild, actor)`, one ephemeral embed + `Panel` subclass, split on
+`store.is_staff(actor)`. Embed title **Your pings**; description = the `/pings list` lines (`:242–259`
+extracted) plus, for staff, a counts line (**N** streamer(s) · **N** with a role Discord still has).
+
+| Row | Control | Rendered when |
+|---|---|---|
+| 0 | Select **"Follow a streamer…"** — fan-role rows whose Discord role resolves and the caller does NOT wear, ≤25, `capped_placeholder` | mode on **and** ≥1 such row |
+| 1 | Select **"Stop following…"** — the rows the caller DOES wear, ≤25 | ≥1 such row (**not** gated on the mode — see §C) |
+| 2 | `Turn event pings on` / `Turn them off` · `Start my own ping role` / `Take my ping role away` · `Refresh` | per §C's table; `Refresh` always |
+| 3 | **staff only:** `Streamers…` · `Set up the Events role` · `Settings` · `Logs` · `Open on the site` (link) | exactly Discord's five-per-row cap with an origin configured, four without |
+| 4 | — | free; leave it free |
+
+⚠️ **`Open on the site` renders for STAFF ONLY.** Every `/api/pings/*` route sits behind
+`staff_dependency` (`api/tools/pings.py:59`) and the Pings section lives on `golive.html`
+(`FEATURE_PAGES["pings"]` — `logkinds.py:102`), which a member cannot open. A link button that leads
+to a sign-in wall is P9's dead button in another costume.
+
+⚠️ **The 25-cap placeholder does NOT say "the rest are on the site" for the member selects.** The
+library's `CAPPED_PLACEHOLDER` (`panels.py:14`) does, and for a member that is false. Pass
+`capped=` (the parameter exists — `panels.py:57`) with a sentence naming the **Streamer pings**
+panels, which page past 25 by design (`pings.py:299`, `code-notes.md:4532`). Staff's `A streamer…`
+select keeps the library default.
+
+## C. The button table per state, the sub-panels, the modals
+
+Each is a **re-render in place**: `retire(previous)` first (P6), `defer()` then
+`edit_original_response` (P5), `db_ready` on every click (requests deviation 6), `still_staff` before
+every staff move (P8).
+
+**The member half.** The state is `(mode_on, events_role: unset|gone|worn|not_worn, own_role: yes|no,
+creation, streams, followed_count, unfollowed_count)`. Every refusal below is a LINE in the embed, not
+a disabled button (P9), and `/pings` never refuses the whole command.
+
+| State | Rendered | Calls |
+|---|---|---|
+| mode off | no move at all; embed carries `pings.OFF` (`pings.py:49`) reworded, plus the caller's current state so the panel is still worth opening | — |
+| mode on · events role unset | no toggle; line from `LIST_EVENTS_UNSET` (`:64`) — staff press *Set up the Events role* | — |
+| mode on · events role set, gone from the server | no toggle; line from `EVENTS_ROLE_GONE` (`pings.py:58`) reworded | — |
+| mode on · resolves · not worn | `Turn event pings on` (success) | `set_event_pings(add=True)` — §F |
+| mode on · resolves · worn | `Turn them off` (secondary) | `set_event_pings(add=False)` |
+| mode on · own row exists | `Take my ping role away` (danger) → `Yes, take it away` / `Keep it` | `stop_own_fan_role` — §F · ⚠️ fork **I1** |
+| mode on · no own row · `pings_fan_role_creation == staff` | no button; line from `STAFF_ONLY_CREATION` (`pings.py:82`) reworded | — |
+| mode on · no own row · creation `self`/`auto` · not a streamer | no button; line from `NOT_A_STREAMER` (`:77`) reworded | — |
+| mode on · no own row · creation `self`/`auto` · streams | `Start my own ping role` (primary) | `start_own_fan_role` — §F |
+| mode on · no fan roles anywhere | neither select; line from `NO_STREAMERS` (cog `:28`) reworded | — |
+
+⚠️ **"Stop following…" is NOT gated on the mode, and that is deliberate.** Today `/pings unfollow`
+refuses while the mode is off (`_on` `:124`), which means a member who wants OUT of a ping cannot get
+out until staff turn the feature back on. Taking a role OFF yourself is the access-REDUCING move; it
+fails safe and it needs no feature switch. `Follow…`, both fan buttons and the Events toggle stay
+mode-gated exactly as today. This is a deliberate behaviour change, one line in `follow_streamer`, and
+sweeps row 108 tests it.
+
+**The staff half** renders with the mode OFF as well as on — `setup_events_role` is allowed while off
+and says so (`SETUP_STILL_OFF` `pings.py:121`, `code-notes.md:4540`), and `ensure_fan_role(staff=True)`
+is the one path past it (`code-notes.md:4536`). The embed says the feature is off and nobody can opt
+in yet; the staff controls stay.
+
+**Streamers sub-panel** (`Streamers…`). Embed = the `/pingroles streamer list` lines verbatim
+(`streamer_lines`, §F — `STREAMER_LINE` `:74` + `followers_word` `:87`), `STREAMER_LIST_EMPTY` (`:70`)
+reworded when there are none, one query, clamped at 4000 characters (the applications roster
+precedent: every row readable, only the select capped).
+
+| Row | Control |
+|---|---|
+| 0 | Select **"A streamer…"** over `all_fan_roles`, ≤25, `panels.capped_placeholder`, label = `pings.option_label(guild, row)` (`pings.py:306`) |
+| 1 | `discord.ui.UserSelect` **"Give somebody a ping role…"** (`max_values=1`) → the role-pick step |
+| 2 | `Refresh` · `Back` |
+
+**The streamer card** (staff picked one). Embed: display name, `<@&role_id>` or "the role is gone from
+the server" (`FOLLOWERS_UNKNOWN` `:76` — never a `0`, `code-notes.md:4565`), the follower count,
+`created_at`, who started it.
+
+| Buttons (+ `Back` always) | Rendered when | Calls |
+|---|---|---|
+| `Remove their ping role` (danger) → `Yes, take it away` / `Keep it` | always | `remove_fan_role` (`pings.py:410`) |
+| `Make the role again` (primary) | `guild.get_role(row["role_id"]) is None` | `ensure_fan_role(…, staff=True)` — a row whose Discord role was deleted by hand is already treated as no row and `INSERT OR REPLACE`d (`code-notes.md:4537`) |
+
+That second button is the staff-final-say rule (`CLAUDE.md`, owner 2026-09-03): a streamer whose role
+somebody tidied away is otherwise a row staff can only delete, never repair, from Discord.
+
+**The role-pick step** — ONE shape, used twice, because both retired commands take an optional role
+(`/pingroles setup [role]` `:340`, `/pingroles streamer add … [role]` `:357`) and a `UserSelect` cannot
+carry a second value. Row 0: `RoleSelect` (`min_values=0`) *"Use this role instead — leave it empty and
+one is made"*; row 1: `Set it up` / `Make the role` · `Back`. It mirrors the site's own card
+(`page-golive.js:214–243`: member picker + optional role select + one button) — one shape, two doors.
+⚠️ If the client will not submit an empty `RoleSelect` (unverified, see the header), the fallback is
+that the confirm button ALSO works with nothing picked, which is the same write path with
+`existing_role=None`; build both, as the events build did (its deviation 6).
+
+**Settings sub-panel** (staff). Embed = today's six `pings_*` values as lines.
+
+| Row | Control | Key |
+|---|---|---|
+| 0 | `Mode…` select | `pings_mode` (`PINGS_MODES`) |
+| 1 | `Who may start one…` select | `pings_fan_role_creation` (`PINGS_CREATORS`) |
+| 2 | `On unlink…` select | `pings_fan_role_on_unlink` (`PINGS_ON_UNLINK`) |
+| 3 | `Names…` (modal: events-role name, fan-role template, panel minutes) · `Delete the role too: on/off` toggle · `Open on the site` (link) · `Back` | `pings_events_role_name`, `pings_fan_role_template`, `pings_panel_minutes`, `pings_fan_role_delete` |
+
+⚠️ **Yes, a sub-panel, even though `golive.html` already renders the whole `pings` namespace**
+(`page-golive.js:539`, `:557`). Events built one because the site had nowhere to point; here the
+site DOES — but the applications build's deviation 4 settled the principle: a Lead should not have to
+leave Discord to flip a decision the panel itself is about, and `pings_mode` is exactly that. The
+`Open on the site` link on row 3 is what keeps one fact one home for the rest.
+
+The `Names…` modal ECHOES what the template will produce (`fan_role_name` `pings.py:143` against the
+caller's own display name) rather than only saving it — the fallback there swallows a broken template
+silently (`code-notes.md:4528`), so a staffer who types `{game} pings` would otherwise see "saved" and
+get `{name} pings`.
+
+**Modals** — all `AnswersErrors` + `discord.ui.Modal`, one shape (P12). There is exactly one:
+`Names…`. Nothing here sends a person a note, so `panels.NoteModal` has no caller in this feature —
+do not import it for the sake of symmetry.
+
+**`Logs`** — a button answering a NEW ephemeral followup (P11), `send_logs(interaction, "pings")`,
+which carries its own `require_staff`. ⚠️ The `count` / `important_only` options (`:423–425`) are
+LOST, as they were for `/request` and `/apply`; the site's Logs section under the Pings section has
+both (`page-golive.js:562`).
+
+## D. Settings (P13 · checklist 33)
+
+| Key | Type | Default | Status |
+|---|---|---|---|
+| `pings_panel_minutes` | `int` | **10** | **NEW.** The only key this build adds. Registered in a `pings` block of its own — `KEY_TYPES`, `KEY_HELP`, `default()` — appended after the polls/events blocks (`settings_store.py:987` is the last such block) so parallel wave-2 branches merge textually. Help text carries KI-20's warning in the shape the other five use: 15+ loses the "gone quiet" footer because Discord's interaction token expires at 15 minutes. ⚠️ **No `KEY_MIN`/`KEY_MAX` entry** — none of the five existing `*_panel_minutes` keys has one, and inventing a bound for this one alone breaks one-fact-one-home |
+
+**Read, not changed:** `pings_mode` (`:166`), `pings_events_role_name` (`:167`),
+`pings_fan_role_creation` (`:168`), `pings_fan_role_template` (`:169`), `pings_fan_role_on_unlink`
+(`:170`), `pings_fan_role_delete` (`:171`), `golive_ping_role_id` (`:156`), `events_ping_role_id`
+(`:184`), `pings_log_level`.
+
+⚠️ **There is NO own-list key here, and that is not an oversight.** `request_panel_own_list` /
+`event_panel_own_list` / `applications_panel_own_list` decide whether a member sees rows OTHER people
+could also see. This panel shows a member only which roles they are wearing — Discord shows them that
+anyway — so a switch to hide it would hide the whole point of the command. Do not add one.
+
+Also add the one label so the Settings page does not fall back to a raw key name:
+`site/public/assets/labels.js` beside the `pings_*` block (`:39–45`) and the matching row in
+`site/mock/server.mjs` (`:298–303`). ⚠️ Measured: only the applications pair took this step
+(`labels.js:168–169`, `server.mjs:415`) — events, polls and birthdays skipped it and `check.mjs` is
+still green, so this is a courtesy, not a gate.
+
+## F. Extractions (P4) — one function per move, called by BOTH doors
+
+All of these go into **`black_bloc/pings.py`**, which is already the pure module the site imports
+(`api/tools/pings.py:8`). Each does ONE write and ONE log row, returns the sentence, and takes
+`via: str = VIA_DISCORD` whose kind is built with `kind_via` (checklist 34) — as `ensure_fan_role`
+`:362` and `remove_fan_role` `:410` already do.
+
+| New | Replaces | Note |
+|---|---|---|
+| `async follow_streamer(bot, guild, member, row, *, add, via=VIA_DISCORD) -> str` | `_follow` `:199–234` | the `role_of` / `wears` / already-following guards, `wear`, the sentence, `log_action("pings.follow"/"pings.unfollow")` |
+| `async set_event_pings(bot, guild, member, *, add, via=VIA_DISCORD) -> str` | `_events` `:270–300` | includes the unset / gone refusals and `pings.events_on`/`events_off` |
+| `async start_own_fan_role(bot, guild, member, *, streams: bool, via=VIA_DISCORD) -> Outcome` | `fans_on` `:307–316` | ⚠️ **`streams` is an ARGUMENT, not a query.** `_streams` `:331` calls `get_link` / `latest_session`, which live in **`cogs/content/golive.py:137` and `:225`** — and that cog already does `from ... import pings` (`golive.py:14`). Querying them from `black_bloc/pings.py` is an import CYCLE. Moving them into `black_bloc/golive.py` would fix it and is mechanical — **do not**: the golive/twitch panel is a sibling wave-2 build rewriting that file. The cog keeps `_streams` and passes the boolean |
+| `async stop_own_fan_role(bot, guild, member, *, via=VIA_DISCORD) -> Outcome` | `fans_off` `:323–329` | the `FANS_OFF_NONE` guard + `remove_fan_role` |
+| `def notification_lines(guild, member, rows, events_role_id) -> list[str]` | `pings_list` `:242–259` | the member embed's body, `LIST_*` strings kept |
+| `def streamer_lines(guild, rows) -> list[str]` | `streamer_list` `:410–418` | the Streamers sub-panel's body |
+| `def role_of(guild, role_id)` · `def wears(member, role_id)` · `def followers_word(guild, role_id)` | cog `:79` `:83` `:87` | move whole; the cog re-exports nothing — nothing outside it imports them (measured) |
+| `def counts_of(rows, guild) -> dict[str, int]` | new | the staff counts line: streamers · how many roles Discord still has |
+| `def panel_state(...)` + `PANEL_BUTTONS` + `def panel_buttons(state) -> tuple[Move, ...]` | §C's table AS DATA | keyed by the boolean tuple, **not** by a status (§A) |
+| `def panel_minutes(store, guild_id)` | one-liner over `panels.panel_minutes` (`panels.py:76`) | exactly `requests.py:510` |
+| `def site_page_url(origin) -> str \| None` | ⚠️ **DO NOT write a fifth copy.** It exists four times already — `requests.py:503`, `events.py:1267`, `applications.py:624`, `cogs/community/polls.py:1872` — differing only in the `FEATURE_PAGES[...]` key. **Import one** (`requests.py`'s) and pass the key, or add `panels.site_page_url(origin, feature)` if `panels.py` is free of sibling edits at build time. This is checklist 15, reported in §J |
+
+⚠️ **`pings.option_label(guild, row)` `:306` and `panels.option_label(ident, status, text)`
+`panels.py:64` share a NAME and nothing else.** Do not fold them (wave-0 deviation 2 left the library
+one deliberately) and do not `from ...panels import option_label` into a module that already defines
+one — import the module, not the name.
+
+## I. The genuine forks — the owner decides, one at a time
+
+Settled first, by the standing rules, so they are NOT put to him:
+
+- ✅ **The command is `/pings`.** It is the member word, it is already the member-visible half, and
+  `/pingroles` is the staff group that goes — the same shape as the owner's applications answer
+  (`/apply`, "it's gamer lingo"). The feature, the log kinds, the settings keys and the site section
+  keep the name "pings" either way.
+- ✅ **A gone-from-the-server role gets a staff repair** (`Make the role again`) — *"never design a
+  terminal state staff cannot leave"* (`CLAUDE.md`, owner 2026-09-03).
+- ✅ **Unfollowing is not mode-gated** (§C) — an access-REDUCING move fails safe, and a feature switch
+  that traps a member in a ping is the wrong default.
+- ✅ **The Settings sub-panel is built** despite `golive.html` owning the namespace — the applications
+  build's deviation 4 settled it.
+- ✅ **The Streamer pings / Notifications role-menu posts are untouched** — P14 and program §7.
+
+Genuinely his, two:
+
+- **I1 — may a streamer take away a ping role that STAFF started, when `pings_fan_role_creation` is
+  `staff`?** Today yes: `/pings fans off` `:318` asks only whether a row exists, while `/pings fans on`
+  `:307` refuses when the setting says `staff`. So the setting governs who may START one and nothing
+  governs who may END one. The owner's standing answer for polls, birthdays and applications was *keep
+  today's permission* ("if you can post it you can withdraw it") — but that premise fails here, because
+  under `staff` the member did not make it. **Options:** (a) keep today's behaviour — `Take my ping role
+  away` always renders; (b) hide it when the setting is `staff`, so only staff undo what only staff may
+  do, and the panel says "an Auntie/Uncle started this one — ask them to take it off"; (c) a new
+  `pings_fan_role_removal` key with the same three values, defaulting to match `creation`.
+  **Recommended: (a)** — it is today's behaviour, it is the access-REDUCING direction, and a member
+  who wants out of a role they wear should not need a ticket. Staff keep the card's own Remove either
+  way. (c) is the only one that costs a second settings key.
+- **I2 — when `golive_ping_role_id` and `events_ping_role_id` point at DIFFERENT roles, does the panel
+  show one Events toggle or two?** D3 (`phase15-design.md:41`) kept them as two keys precisely so the
+  feeds could be split later from the Go-live and Events pages; `events_role_id` `pings.py:468` reads
+  `golive_ping_role_id or events_ping_role_id`, so after a split the one toggle silently moves the
+  go-live role only and leaves the event role un-worn. **Options:** (a) one toggle, today's behaviour,
+  and the split stays invisible; (b) one toggle while the two keys agree, two labelled toggles
+  (`Go-live pings`, `Event pings`) when they differ; (c) always two. **Recommended: (b)** — it costs
+  one branch in `panel_buttons`, nothing changes for anybody who has not split the feeds, and it is
+  the only option where the button does what its label says. (c) makes the common case worse.
+
+## J. What this build does NOT do
+
+- **Does not touch the persistent posts** — `sync_streamer_menus` `:314`, `ensure_notifications_menu`
+  `:472`, `menu_name` / `menu_title` / `pages_of`, or any `rolemenu_panels` path (P14, program §7).
+- **Does not move `get_link` / `latest_session` out of `cogs/content/golive.py`** — the cycle is real
+  (§F) and that file belongs to the sibling golive/twitch build this wave.
+- **Does not add, move or rename an API route** (`api/tools/pings.py` and its 16 tests are untouched;
+  no new web door, so nothing new needs `via=VIA_WEBSITE`) and **does not rename or re-home anything
+  already in `black_bloc/pings.py`** — the site imports it by name.
+- **Does not add a second settings key** (no own-list twin — §D), a `KEY_MIN`/`KEY_MAX` for the
+  panel-minutes key, or a `HIDDEN_WHEN_OFF` entry.
+- **Does not edit `black_bloc/panels.py`** unless it is demonstrably free of sibling wave-2 edits at
+  build time — three branches editing the library at once is the merge conflict program §5 exists to
+  avoid. `option_label` stays two separate functions.
+- **Does not widen `guard.py`** to gate role add/remove (deliberate, `phase15-design.md` §Guard rails)
+  and **does not touch the announcement path** (`golive.py:render`, `announced_fan_role` `:208`,
+  `cogs/content/golive.py:416`) or `on_streamer_left` / `maybe_auto_create`.
+- **Does not restore the `Logs` count / important_only options**, does not delete `pages_under_limit`
+  (other callers), and **does not run against Discord** — nobody here can.
+
+**Cost estimate: ~300–360k Opus tokens**, the low end of wave 1 (376k–458k). Cheaper than
+applications because there is **no layer move** (the pure module already exists and the site already
+imports it from there), **no schema change**, **no new route**, **no state machine** and **one modal**;
+more than the floor because there are three sub-panels, a two-use role-pick step and thirteen strings
+to rewrite. Commit at clean boundaries: (1) the extractions in `black_bloc/pings.py` with the existing
+tests still green, (2) the cog rewritten onto the panel, (3) tests, (4) strings + docs.
+
+## Deviations
 
 Written by the build agent, 2026-09-03, on `worktree-agent-a86e71fd801362ca2`.
 Everything not listed here was built as this document says.
