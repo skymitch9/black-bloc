@@ -7,7 +7,9 @@
 `withdraw_request` tests, `tests/test_settings_store.py` +1), then **17 more** for the
 three review findings (`79548c1`); **3338 tests pass** (3321 before the review fixes), ruff
 clean, `check.mjs` 17 pages / 139 routes, `labels.js` still parses (site untouched). Since
-then, **deviation 12** (branch `feat/requests-panel-own-list`, ⚠️ **not yet merged**): the
+then, **deviation 12** (branch `feat/requests-panel-own-list`, ✅ **merged and live** — the
+*fifth pass*, [`../DONE.md`](../DONE.md) *"Requests, fifth pass"*, commits `dd7c788` code /
+`bda45da` docs): the
 owner's *"We need to make the view request thing staff only"* — a member no longer sees
 their own requests written out on the panel unless the new `request_panel_own_list` is on
 (default off); **3345 tests pass**. See
@@ -17,13 +19,40 @@ engineering items"): *"The flow
 seems tough, and request set and request ready seem overlapping."* → *"Let's also have
 /request open a menu maybe. Let's try and minimize slash commands and maximize interactive
 windows"* → *"Let's start this process with request then carry it through the rest of the
-app. Request first."* **Last verified: 2026-09-03** against `black_bloc/requests.py` and
-`cogs/community/requests.py` at `3e18e4a` (the third pass, deployed `70a6720`). ⚠️ This is
-the PATTERN for every later feature — see the project `CLAUDE.md` rule. ⚠️ **NOT verified:**
-anything against live Discord — this build cannot reach it; a member gate, staff gate,
-component defer, or modal-from-component flow that only real Discord's dispatch would
-distinguish (`code-notes.md` says exactly which lines were checked against installed
-library source instead).
+app. Request first."* ⚠️ This is
+the PATTERN for every later feature — see the project `CLAUDE.md` rule.
+
+> ⚠️ **Since then — three things this document describes have moved on.** The design body is the
+> fourth pass; read these beside it:
+> - **The card's `review` row gained a fifth button, `Ask them to check`** (sixth pass, v61, merge
+>   `44170f4`) — [`requests-check-design.md`](requests-check-design.md). The live
+>   `requests.CARD_BUTTONS` is `open` → Pick up / Hold / Decline; `in_progress` → Ready to check /
+>   Hold / Decline; `review` → **Accept / Ask them to check / Send back / Hold / Decline**; `hold` →
+>   Resume / Decline; `done` / `declined` / `withdrawn` → empty. So the button table in *The request
+>   card* below is the fourth-pass version.
+> - **The panel machinery was extracted into `black_bloc/panels.py`** at panels wave 0 (2026-09-03,
+>   [`panels-program.md`](panels-program.md)). `still_staff`, `retire`, `capped_placeholder`,
+>   `panel_minutes`, `confirm` / `confirm_items` and the `Panel` base with its `last_interaction`
+>   footer fallback all live there now, not in the requests cog; `RequestView` is a `Panel`
+>   subclass. Deviations 9, 10 and 11 describe where those mechanisms were INVENTED — this cog —
+>   and they are still the reason each exists.
+> - **The slash tree shrank a long way past deviation 7's 44.** There are **29** top-level commands
+>   and **29** leaves at v108 — no Groups at all (the `/settings` panel, v83/v84, retired the last
+>   one).
+>
+> **Last verified: 2026-09-11 09:00** (the header; the body is as at the build). Measured this pass
+> against `main` at `f3ae743` (v108 live): `requests.PANEL_MINUTES_KEY = "request_panel_minutes"`
+> and `PANEL_OWN_LIST_KEY = "request_panel_own_list"` are both exported and both registered in
+> `settings_store.py` (`KEY_TYPES` + `KEY_HELP`); `requests.panel_shows_own_list` and
+> `withdraw_request` exist; `cogs/community/requests.py:build_panel` and `class RequestView(Panel)`
+> exist and the cog imports `still_staff` / `retire` from `panels.py`; `CARD_BUTTONS` is the
+> five-row table quoted above; KI-20 is still **WATCHING** in
+> [`../KNOWN_ISSUES.md`](../KNOWN_ISSUES.md). ⚠️ **NOT verified:**
+> anything against live Discord or a browser — this pass cannot reach it; a member gate, staff gate,
+> component defer, or modal-from-component flow that only real Discord's dispatch would
+> distinguish (`code-notes.md` says exactly which lines were checked against installed
+> library source instead). Before that, **2026-09-03** against `black_bloc/requests.py` and
+> `cogs/community/requests.py` at `3e18e4a` (the third pass, deployed `70a6720`).
 
 ## What is wrong today (measured)
 
@@ -91,7 +120,7 @@ The panel re-renders in place (`interaction.response.edit_message`) as:
   |---|---|
   | `open` | `Pick up` (→ in_progress) · `Hold` (modal) · `Decline` (modal) |
   | `in_progress` | `Ready to check` (→ `ReadyModal`) · `Hold` · `Decline` |
-  | `review` | `Accept` (→ done; NOT rendered when `may_accept` says this staffer may not, the embed footer says who may) · `Send back` (modal, note required) · `Hold` · `Decline` |
+  | `review` | `Accept` (→ done; NOT rendered when `may_accept` says this staffer may not, the embed footer says who may) · `Send back` (modal, note required) · `Hold` · `Decline` — ⚠️ **plus `Ask them to check` between Accept and Send back since v61** |
   | `hold` | `Resume` (→ `resume_target(row)`) · `Decline` |
   | `done` / `declined` / `withdrawn` | no move buttons; the card says it is final (`NO_MOVES_LEFT`) |
 
@@ -217,7 +246,8 @@ specified.
    and a `Group` already counted as ONE top-level slot — turning it into a bare
    command keeps that slot, so the number is **unchanged at 44**
    (`tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`,
-   measured, not merely asserted). What actually drops by nine is the total
+   measured, not merely asserted; the tree has since shrunk to **29** top-level commands with no
+   Groups left at all — the panel waves this build started did the rest). What actually drops by nine is the total
    command-tree size (the nine subcommands that no longer exist beneath
    `/request`), which is not what Discord calls "synced." `LOGS_GROUPS` in
    `tests/test_bot.py` lost its `"request": "request"` entry, since `/request`
@@ -334,4 +364,6 @@ specified.
     Seven new tests cover the default-off member, the flipped-on member, staff either way,
     and the helper/registry. 3345 tests pass (3338 at `ba5cb99`), ruff clean, `check.mjs`
     17 pages / 139 routes (site untouched). ⚠️ **NOT verified against live Discord** — no
-    panel has been opened with the key off.
+    panel has been opened with the key off. **Merged and live** as the fifth pass
+    ([`../DONE.md`](../DONE.md)); the branch is gone. The suite is **5546** and the mock reads
+    **150 routes** at v108.
