@@ -1,6 +1,6 @@
 # Phase 17 — Chat long-term memory (per-person profiles)
 
-> ⚠️ **SUPERSEDED IN PART, 2026-09-03: the SLASH SURFACE this document describes is gone.**
+> ⚠️ **SUPERSEDED IN PART, 2026-09-03 (v68, `cb941d9`): the SLASH SURFACE this document describes is gone.**
 > `/memory show`, `/memory forget`, `/memory forget-this`, `/memory off` and `/memory on` are
 > retired; `/memory` is now ONE command that opens an ephemeral panel, and every one of those
 > subcommands is a button, a select or a modal on it — see
@@ -11,21 +11,44 @@
 
 > **Audience:** the owner first (the five privacy decisions in §Decisions are
 > HIS, asked one at a time), then the Opus builder, then reviewers.
-> **Status:** TRACKED — **BUILT on branch `worktree-agent-a268aa7fa2979dd4a`,
-> 2026-09-02, NOT merged and NOT deployed. §J is measured (see below); the
+> **Status:** TRACKED · ✅ **LIVE since 2026-09-03** (shipped with `chat_memory_mode` **off**)
+> — built on branch `worktree-agent-a268aa7fa2979dd4a` (tip `44f4a9b`), ~~NOT merged and NOT
+> deployed~~ **merged `6d61994`** and deployed with Phases 18 and 19 in one release,
+> `2026-09-03T00:31:37-07:00` as `7b1c592` (schema 23 `chat_profiles`/`chat_memory_optout`,
+> 3238 tests, 19 cogs incl. `content.chat_memory`, 44 commands synced, `/memory` hidden);
+> `DONE.md` → "2026-09-03 — Phases 17/18/19". ⚠️ Fly release numbers were not written into
+> `deploys.log` until **v59** (2026-09-03), and this deploy predates the first numbered line,
+> so it has a date and a merge sha but no `vNN`.
+> §J is measured (see below); the
 > `## Deviations` list at the foot names every place the build departed from
-> this document.** All five owner decisions taken 2026-09-02
+> this document.
+>
+> ⚠️ **§E lists NINE keys; only EIGHT were ever built.** `chat_memory_log_level` does not
+> exist and never did (verified against the landing commit `160149c` — it added exactly the
+> other eight), because memory logs under the `chat` feature, which already has
+> `chat_log_level`. The landing note's "9 `chat_memory_*` keys" traces to this table, not to
+> the code.
+>
+> All five owner decisions taken 2026-09-02
 > 17:20–18:38, one at a time** (D1 opt-out · D2 preferences with the
 > §D2-definition · D3 180 days, no raw archive · D4 separate scopes · D5 counts
 > only). Written 2026-09-02 by the Fable session (NEXT WAVE item 3). Each
 > decision is a settings key with the decided value as its default; the builder
 > ships exactly the "proposed" column.
-> Last verified: **2026-09-02** — the "what exists" rows were read in
+> Last verified: **2026-09-11 10:52** — re-checked against the tree at `1d090e5`:
+> `black_bloc/chat_memory.py` and `black_bloc/chat_distil.py` exist;
+> `chat_llm.py` still carries `remember` (`:217`), `window_for` (`:251`), `sweep_window`
+> (`:275`), `as_messages` (`:284`) and `user_turn` (`:488`); the **eight** `chat_memory_*`
+> keys are in `KEY_TYPES` (see the banner above about the ninth). Groq's JSON-mode behaviour
+> was measured by the builder — §J below carries the result.
+> ⚠️ **NOT checked:** whether `chat_memory_mode` is on or off on the live guild, whether any
+> profile has ever been distilled, and anything in Discord or a browser — nothing in this pass
+> met either.
+> Before that, **2026-09-02** — the "what exists" rows were read in
 > `black_bloc/chat_llm.py` (`remember`, `window_for`, `sweep_window`,
-> `as_messages`, `user_turn`) and `cogs/content/chat.py:ingest_once` today.
+> `as_messages`, `user_turn`) and `cogs/content/chat.py:ingest_once` that day.
 > The three-tier shape is ported from the estate's precedent,
-> `catalog-platform/docs/info/gabi-memory-design.md`. ⚠️ NOT verified: Groq's
-> JSON-mode behaviour on the distil prompt — the builder measures it first (§J).
+> `catalog-platform/docs/info/gabi-memory-design.md`.
 
 ## The ask
 
@@ -178,6 +201,10 @@ the note — one profile per person, two scopes inside it (D4).
   words), `forget` (wipe), `forget-this <text>` (drop one note/thread by
   substring), `off` (opt out + wipe), `on` (opt back in). `/help` entry;
   `chat_data.py` FEATURES line ("does the bot remember me? → `/chat memory show`").
+  *(Built as a top-level `/memory` group, then **removed at v68**, 2026-09-03 — `/memory` is
+  ONE member command that opens a panel and all five are controls on it. Owner fork I-M1:
+  `HIDDEN_WHEN_OFF["chat_memory_mode"]` is gone, so the panel opens even with memory off and
+  says so as a LINE. See [`memory-panel-design.md`](memory-panel-design.md).)*
 - **Dashboard, Chat page, "Memory" section**: mode switch, the settings
   namespace `chat_memory_*`, the profiles table (member · updated · notes
   count · Forget) — contents shown only when `chat_memory_staff_view = full`
@@ -191,7 +218,7 @@ the note — one profile per person, two scopes inside it (D4).
 | Key | Type | Default |
 |---|---|---|
 | `chat_memory_mode` | mode (off/on) | `off` |
-| `chat_memory_log_level` | level | `important` |
+| ~~`chat_memory_log_level`~~ ⚠️ **never built** | level | `important` — *memory logs under `chat_log_level`; the key is not in `KEY_TYPES`* |
 | `chat_memory_consent` | choice optout/optin | D1 |
 | `chat_memory_retention_days` | int (0 = forever) | D3 |
 | `chat_memory_dm_scope` | choice separate/shared | D4 |
