@@ -456,7 +456,7 @@ Two commits on the build branch: Follow-up 2 first, Follow-up 3 second, each wit
 ## Follow-up 4 — a SHORTHAND becomes a link, and the link is checked first (owner, 2026-09-10 23:5x, verbatim: "Can we do some smart work to make it a link / Like twitch.tv/skyaiva or ttv/skyaiva or yt skyaiva / We go and make those into links / Maybe even curl them first?")
 
 > **Status: 🔨 BUILT on branch `where-smart` off `main` at `9fc3a33`** (commits `6e81d83` part A,
-> `a876540` part B, `DOCS_SHA` docs) — ⚠️ **NOT merged, NOT deployed, never seen in Discord.**
+> `a876540` part B, `af63b63` docs) — ⚠️ **NOT merged, NOT deployed, never seen in Discord.**
 > Measurements and every departure are the **`## Follow-up 4 deviations`** foot.
 
 Follow-up 2 only recognises `https://…`, `http://…` and `www.…` (`where_link`). The owner types
@@ -558,7 +558,7 @@ silent; the aliases key edited on Settings; the old-row case), `info/code-notes.
 ## Follow-up 4 deviations
 
 > Written at the build, 2026-09-11 00:2x, on branch `where-smart` off `main` at `9fc3a33`
-> (commits `6e81d83` part A, `a876540` part B, `DOCS_SHA` docs). **Status: 🔨 BUILT — ⚠️ NOT merged,
+> (commits `6e81d83` part A, `a876540` part B, `af63b63` docs). **Status: 🔨 BUILT — ⚠️ NOT merged,
 > NOT deployed.** ⚠️ **NOTHING here has met Discord**: no test can click a Discord button,
 > `python -m black_bloc` was NOT booted (a worktree holds no token), no browser rendered the
 > Settings page, TEST_MODE makes no scheduled event at all, and — new for this build — **no link was
