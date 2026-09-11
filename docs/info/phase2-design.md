@@ -1,6 +1,6 @@
 # Phase 2 design — go-live feed (F1 + F2 + the F5 hook)
 
-> ⚠️ **SUPERSEDED IN PART, 2026-09-03 — the slash surface below is gone.** `/golive` and
+> ⚠️ **SUPERSEDED IN PART, 2026-09-03 (v70, `0aeed72`) — the slash surface below is gone.** `/golive` and
 > `/twitch` and all eight of their subcommands (`logs`, `optout`, `optin`, `status`, `mode`,
 > `test`, `link`, `unlink`) were replaced by ONE `/golive` command that opens an ephemeral
 > panel; every subcommand is a button, a select or a modal on it. The behaviour this doc
@@ -8,8 +8,21 @@
 > kinds are all exactly what it says. Only the way in moved:
 > [`golive-panel-design.md`](golive-panel-design.md). This doc is NOT rewritten.
 
-> **Audience:** the Phase 2 build agent and the reviewer. **Status:** LOCAL
-> ONLY. **Last verified: 2026-08-26** — incumbent behaviour is measured
+> **Audience:** the Phase 2 build agent and the reviewer. **Status:** TRACKED ·
+> ✅ **LIVE since 2026-08-26** (shipped in `shadow`) — deployed `2026-08-27T02:19:20Z`
+> as `50d896d` (`deploys.log` line 4, `synced 6 app commands`); `DONE.md` → "2026-08-26 —
+> Phase 2 live in shadow: go-live feed (F1/F2) + review fixes". The two 2026-08-27 sections at
+> the foot (YouTube on the presence path, the announcement card) landed on top of it.
+> ⚠️ Fly release numbers were not written into `deploys.log` until **v59** (2026-09-03), so
+> this landing has a date and a commit but no `vNN`.
+> **Last verified: 2026-09-11 08:45** — re-checked against the tree at `1d090e5`:
+> `black_bloc/twitch.py`, `black_bloc/golive.py` and `cogs/content/golive.py` all exist;
+> all **eight** `golive_*` keys in the table below are in `KEY_TYPES`, as are `golive_embed`,
+> `golive_end_mode` and `golive_end_suffix` added later; `TwitchClient.get_users/get_streams/
+> get_games` and `extract_stream`/`render`/`should_announce` all exist. ⚠️ **NOT checked:**
+> anything in Discord — no card has been seen rendered, the Helix response shapes are still
+> from Twitch's docs, and nothing in this pass met Discord or a browser.
+> Before that, **2026-08-26** — incumbent behaviour was measured
 > (`archive/current-bots/discord-scan-2026-08-26.md` §G, 199 YAGPDB posts;
 > `yagpdb-dashboard-2026-08-26.md`); Twitch API constraints are from the
 > vendor docs as summarised in `reference-bots.md` and flagged where they are
@@ -94,7 +107,8 @@ lacks them. Discord's own link preview supplies the image — no thumbnail.
 
 ## Debounce (beats the incumbent)
 
-`should_announce(user_id, now, last_session)` → True only if there is no
+`should_announce(user_id, now, last_session)` *(built as
+`should_announce(now, last_session, cooldown_minutes)` — `golive.py:299`)* → True only if there is no
 open session for the user AND (no previous session OR `now -
 last.ended_at ≥ cooldown`). Category/title changes during a stream never
 re-announce; a restart of the bot re-derives open sessions from the DB and
@@ -117,6 +131,10 @@ owner flips to `on` per the rollout rule after watching a few days of
 shadow entries next to YAG's real posts.
 
 ## Commands
+
+*(Removed: every command in this section retired at **v70**, 2026-09-03 — `/golive` opens the
+panel and each one is a button, a select or a modal on it. See
+[`golive-panel-design.md`](golive-panel-design.md).)*
 
 - `/golive optout` · `/golive optin` — anyone; ephemeral confirmation.
 - `/twitch link <login>` · `/twitch unlink` — anyone; validates the login
@@ -226,7 +244,9 @@ preview leads with the streamer's avatar. The announcement is now
 value-typed setting and `/settings set-value` listed every one as an
 `app_commands.choices` list. **Discord's ceiling is 25**, so the command would
 have failed to register the moment the key existed. It now uses an autocomplete
-on a plain string parameter.
+on a plain string parameter. *(Removed: `/settings set-value` retired at **v84**,
+2026-09-05 — `/settings` opens the paged panel, which walks the namespaces with 25-option
+selects for the same reason. The registry is **202** keys today, not 26.)*
 
 **NOT verified:** none of this has been seen in Discord. No card has ever been
 rendered by the real client, the `/helix/games` response shape is from Twitch's

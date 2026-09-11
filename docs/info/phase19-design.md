@@ -1,16 +1,43 @@
 # Phase 19 — Applications (the Twitch Team form, member request #2)
 
-> ⚠️ **Superseded on the DOOR, 2026-09-03: every `/apply *` and `/applications *` subcommand named below is retired.** One member-visible `/apply` opens a panel and every subcommand is a button, a picker or a modal on it — [`applications-panel-design.md`](applications-panel-design.md). The forms, the questions, the states, the DMs, the logs, the settings and the site are all unchanged; only the way in is. Read this file for BEHAVIOUR, never for the command to type.
+> ⚠️ **Superseded on the DOOR, 2026-09-03 (v66, `853776c`): every `/apply *` and `/applications *` subcommand named below is retired** — BOTH groups and all seventeen leaves, which is why this was the program's second real `commands synced` drop (43 → 42). One member-visible `/apply` opens a panel and every subcommand is a button, a picker or a modal on it — [`applications-panel-design.md`](applications-panel-design.md). The forms, the questions, the states, the DMs, the logs, the settings and the site are all unchanged; only the way in is. Read this file for BEHAVIOUR, never for the command to type.
+>
+> ⚠️ **Superseded IN BEHAVIOUR too, 2026-09-03 (v62, `9891f71`, schema 28): an application form
+> no longer has to grant a role.** A form with no role keeps a **list** instead — see
+> [`applications-no-role-design.md`](applications-no-role-design.md) and the
+> `applications_roster_shows_left` key. The role path below is still one of the two shapes,
+> not the only one.
 
 > **Audience:** the Opus builder first, reviewers second, the owner for the
-> decisions table. **Status:** TRACKED — DESIGN, written 2026-09-02 22:40 by
-> the Fable session (NEXT WAVE item 7). Secret NAMES only.
-> Last verified: **2026-09-02** — the "what exists" rows were read in the code
-> today at `820c393` (`storage/db.py` `role_requests`/`role_grants`/`role_menus`,
+> decisions table. **Status:** TRACKED · ✅ **LIVE since 2026-09-03** (shipped with
+> `applications_mode` **off**) — built on branch tip `dcba425` (~575k Opus tokens),
+> **merged `7b1c592`** and deployed with Phases 17 and 18 in one release,
+> `2026-09-03T00:31:37-07:00` (schema 25 `application_forms`/`application_questions`/
+> `applications`, 19 cogs incl. `community.applications`, 44 commands synced, `/apply` hidden);
+> `DONE.md` → "2026-09-03 — Phases 17/18/19". ⚠️ Fly release numbers were not written into
+> `deploys.log` until **v59** (2026-09-03), and this deploy predates the first numbered line,
+> so it has a date and a merge sha but no `vNN`.
+>
+> ⚠️ **§D lists SEVEN keys; there are TEN today** — `applications_panel_minutes`,
+> `applications_panel_own_list` (both with the panel, v66) and `applications_roster_shows_left`
+> (with the no-role form, v62). ✅ **§I's two residuals ARE FILED** — **KI-17** ("Black Bloc
+> cannot confirm the twitch.tv Team invite was ever sent") and **KI-18** ("Editing a question
+> changes the form, never the answers already sent"), both `ACCEPTED`. ✅ **§J.1 was answered
+> YES**: `change_roles` is module-level (`cogs/community/role_menus.py:704`) and remembers its
+> own changes, so no `_add_role` deviation was needed.
+>
+> Last verified: **2026-09-11 11:08** — re-checked against the tree at `1d090e5`:
+> `black_bloc/applications.py` and `cogs/community/applications.py` exist; **10**
+> `applications_*` keys are in `KEY_TYPES`; `change_roles` is at `role_menus.py:704`;
+> `applications` is one of the 18 `logkinds.FEATURES`.
+> ⚠️ **NOT checked:** whether `applications_mode` is still off on the live guild, whether any
+> form or application exists, and anything in Discord or a browser — nothing in this pass met
+> either.
+> Before that, **2026-09-02** — the "what exists" rows were read in the code
+> that day at `820c393` (`storage/db.py` `role_requests`/`role_grants`/`role_menus`,
 > `rolegrants.py` `add_grant`/`remember_change`/`decide_request`,
 > `cogs/community/role_menus.py:_approve_request` and its `change_roles`
-> call, the `rolemenu_*` registry keys). ⚠️ NOT verified: whether `change_roles`
-> is importable by a second cog without editing `role_menus.py` (§J).
+> call, the `rolemenu_*` registry keys).
 > ⚠️ **Built IN PARALLEL with Phases 17 and 18** (owner, 2026-09-02 22:25) — §K.
 
 ## The ask
@@ -169,8 +196,11 @@ approved/denied/withdrawn incl. `next_step` and the re-apply date);
 | `applications_ping_role_id` | role | blank |
 | `applications_retry_days` | int (≥0) | `30` |
 | `applications_dm_on_decision` | bool | `true` |
+| *(added v66)* `applications_panel_minutes` | int | `10` — the panel's gone-quiet clock |
+| *(added v66)* `applications_panel_own_list` | bool | whether the panel carries its own list |
+| *(added v62)* `applications_roster_shows_left` | bool | for a form with no role — see [`applications-no-role-design.md`](applications-no-role-design.md) |
 
-No new config/env. No secrets.
+No new config/env. No secrets. *(**10** `applications_*` keys in `KEY_TYPES` as of 2026-09-11.)*
 
 ## E. Dashboard + API
 
@@ -217,14 +247,20 @@ notifications" → `panel`), `cutover-plan.md` ladder row, `feature-list.md` new
 row **F20 applications**, `architecture.md` counts, `info/README.md` row.
 Not `TODO.md`/`DONE.md`.
 
-## I. Residuals to record in `KNOWN_ISSUES.md` at landing
+## I. Residuals to record in `KNOWN_ISSUES.md` at landing — ✅ BOTH FILED
+
+*(Filed as **KI-17** and **KI-18**, both `ACCEPTED`.)*
 
 - The twitch.tv Team invite is a human click; the bot cannot confirm it
   happened. What would change it: Twitch publishing a Teams API.
 - Editing a question after submissions exist changes the modal, not history
   (snapshot by design). Accepted.
 
-## J. First task for the builder — measure, don't assume
+## J. First task for the builder — measure, don't assume — ✅ ANSWERED
+
+*(1 = **yes**: `change_roles` is module-level at `cogs/community/role_menus.py:704` and calls
+`rolegrants.remember_change` itself, so the applications cog imports it and no `_add_role`
+deviation was needed. 2 = the persistent-view pattern was confirmed and used.)*
 
 1. Confirm the role-add path a second cog can use WITHOUT editing
    `role_menus.py`: is `change_roles` (the thing `_approve_request` calls) a

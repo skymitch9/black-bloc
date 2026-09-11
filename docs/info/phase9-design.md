@@ -1,6 +1,6 @@
 ﻿# Phase 9 — Role menus 2: approval, time limits, reconciliation
 
-> ⚠️ **SUPERSEDED IN PART, 2026-09-04:** every `/rolemenu …` and `/role …` subcommand named below is retired — `/rolemenu` is now ONE staff command that opens a panel. The behaviour is unchanged; only the door is. See
+> ⚠️ **SUPERSEDED IN PART, 2026-09-04 (v77, `43312b9`):** every `/rolemenu …` and `/role …` subcommand named below is retired — `/rolemenu` is now ONE staff command that opens a panel and BOTH groups' eighteen leaves are gone. The behaviour is unchanged; only the door is. See
 > [`role-menus-panel-design.md`](role-menus-panel-design.md) and
 > [`panels-program.md`](panels-program.md).
 >
@@ -29,10 +29,34 @@
 > and the not-verified list are in `code-notes.md`
 > § "role menus 2 — dashboard (9b)".
 
-> **Audience:** the Phase 9 build agent and the reviewer. **Status:** TRACKED (2026-08-31; private repo).
-> Last verified: **2026-08-27** — decisions taken with the owner one at a time (see `TODO.md`, the
+> **Audience:** the Phase 9 build agent and the reviewer. **Status:** TRACKED ·
+> ✅ **LIVE since 2026-08-27** — **9a** merge `e792bfa`, deployed `2026-08-27T12:27:35-07:00`
+> as `a46b7ff` (schema 13, 31 commands synced); **9b** deployed `2026-08-27T13:18:30-07:00` as
+> `271b42a` (Requests + Timed roles sections, 61 routes). `DONE.md` → "2026-08-27 — Phase 9:
+> approval-gated role menus, timed roles, reconciliation (bot + dashboard)". ⚠️ Fly release
+> numbers were not written into `deploys.log` until **v59** (2026-09-03), so these landings
+> have dates and commits but no `vNN`.
+>
+> ✅ **The B5–B7 gap the 9b note below records is CLOSED.** All three landed 2026-08-31 —
+> un-post `47628b7`, seed defaults `2c65db0`, staff assign from the site `d8f44c7` (`DONE.md`
+> → "2026-08-31 — B4–B8: the last five audit leftovers, live"). The 9b paragraph is left as
+> written because it is the record of what that half shipped.
+>
+> Last verified: **2026-09-11 09:50** — re-checked against the tree at `1d090e5`:
+> `rolemenu_approval_channel_id` and `rolemenu_approver_role_id` are both in `KEY_TYPES`;
+> `role_menus.py` still has `panel_embed`, `post_panel`, `apply_diff`, `RoleMenuSelect`,
+> `expires_days_of` and the `_expiry_loop`; `black_bloc/rolegrants.py` exists.
+> ⚠️ **Every `path:line` in §"What exists" is now WRONG** — the file has grown from ~560 lines
+> to over 3,000 (`apply_diff` is `:692`, `panel_embed` `:395`, `post_panel` `:680`,
+> `RoleMenuSelect` `:1194`, `_expiry_loop` `:3068`), and **`StaffAssignSelect` no longer
+> exists at all** — trust the symbol names, not the numbers. The `contract.json` figures in
+> the 9b note (14 pages / 61 routes) are now **17 pages / 150 routes**.
+> ⚠️ **NOT verified:** still nothing here against live Discord — no request card, button
+> press, DM, expiry or panel move has been watched, and nothing in this pass met Discord or a
+> browser. Whether the Bots role holds **View Audit Log** (which the by-hand actor needs) is
+> still unchecked.
+> Before that, **2026-08-27** — decisions taken with the owner one at a time (see `TODO.md`, the
 > role-menu decisions entry); code facts read from `cogs/community/role_menus.py` at `8b8f792`.
-> NOT verified: nothing here has run.
 
 ## The asks (owner, verbatim, 2026-08-27)
 
@@ -74,7 +98,7 @@ Plus, from the asks: **time-limited grants** (per-menu default `expires_days`, s
 3. Test mode: cards and DMs go through the guard (DMs are allowed; the approval channel is refused unless it is the test channel — under TEST_MODE the card posts in the test channel and the log says so). Everything is `log_action`-ed: `role.requested`, `role.approved`, `role.denied`, `role.withdrawn`.
 
 ### Time limits
-- Every grant the bot makes (menu pick, approval, staff assign, `/role grant`) writes a `role_grants` row; `expires_at` from the menu default or the staff override; `/role grant @member @role days:7 [reason]` (staff) grants outside any menu.
+- Every grant the bot makes (menu pick, approval, staff assign, `/role grant`) writes a `role_grants` row; `expires_at` from the menu default or the staff override; `/role grant @member @role days:7 [reason]` (staff) grants outside any menu. *(Removed: `/role grant` and `/role extend` retired at **v77**, 2026-09-04 — **Grants…** on the `/rolemenu` panel opens an audit of every active timed role, soonest first, with the same moves. `grant`/`extend` had two divergent implementations then and are now one.)*
 - Hourly loop `_expiry` (health-visible, `loop_health`): for `expires_at <= now` and `removed_at IS NULL`: remove the role (only if the member still has it), mark removed with reason `expired`, DM the member ("Your **{role}** on {guild} ran out today"), `log_action("role.expired")`. `/role extend @member @role days:N` and a dashboard Extend button push `expires_at`.
 
 ### Reconciliation
@@ -82,7 +106,8 @@ Plus, from the asks: **time-limited grants** (per-menu default `expires_days`, s
 - Hourly sweep (same loop): diff live roles vs open `role_grants`/`role_requests` for menu-managed roles and correct the RECORDS (never the member). Log a summary only when something changed.
 
 ### Surfaces
-- Menu editor (dashboard + `/rolemenu edit`): Approval on/off, Expires after (days, blank = never), Retry after (days).
+- Menu editor (dashboard + `/rolemenu edit` *(removed: retired at **v77**, 2026-09-04 — the
+  editor is a control on the `/rolemenu` panel)*): Approval on/off, Expires after (days, blank = never), Retry after (days).
 - New dashboard section on Role menus: **Requests** (pending first: member, role, menu, age, Approve / Deny with reason) and **Timed roles** (member, role, expires, Extend / End now). API: `GET /api/rolemenus/requests`, `POST /api/rolemenus/requests/{id}/{approve|deny}`, `GET /api/roles/grants`, `POST /api/roles/grants` (staff grant), `POST /api/roles/grants/{id}/extend`, `DELETE /api/roles/grants/{id}`; contract + mock updated; refusals in words.
 - Members tab: role chip gets "· expires in N d" when a grant has an expiry.
 - Settings: `rolemenu_approval_channel_id` (channel), `rolemenu_approver_role_id` (role).

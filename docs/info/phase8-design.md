@@ -1,7 +1,32 @@
 ﻿# Phase 8 design — the config website for mods and admins (F12)
 
 > **Audience:** the owner (this is the acknowledgment and the plan) and the
-> Phase 8 build agents. **Status:** TRACKED (2026-08-31; private repo). **Last verified:
+> Phase 8 build agents. **Status:** TRACKED · ✅ **BOTH MILESTONES LIVE** — **8a** deployed
+> `2026-08-27T05:51:27Z` as `618dcd1` (`deploys.log` line 11: status site + Discord OAuth at
+> https://blackbloc.heygabi.ai, `[http_service]` on, `/health` 200 + index 200 + CSP verified);
+> **8b** deployed `2026-08-27T06:14:19-07:00` as `5da62b3` (53-route API, 13 tabs), hardened
+> the same hour by `3581eea`. `DONE.md` → "2026-08-26 — Phase 8a live" and "2026-08-27 — Phase
+> 8b merged and reconciled". ⚠️ Fly release numbers were not written into `deploys.log` until
+> **v59** (2026-09-03), so these landings have dates and commits but no `vNN`.
+>
+> ⚠️ **Three things in this plan were NOT built as written — read the Architecture and Owner
+> decisions sections with these in hand:**
+>
+> | Planned here | What actually shipped |
+> |---|---|
+> | Front end on **Cloudflare Pages** (`wrangler pages deploy site/public`) | Served by the **same Fly app** — `black_bloc/api/assets.py` mounts `site/public` through a `StaticFiles` subclass. There is no `wrangler.toml` in this repo and the Pages directory-deploy rules never applied. |
+> | **Google OAuth2** for the owner + a `user_identities` table | Never wired. Discord OAuth2 is the only identity provider; `grep -ri google black_bloc/` finds only the YouTube Data API host, and `user_identities` does not exist. |
+> | 12 pages, including named **Logging** and **Access** pages | **17** pages under `site/public/` (`index · golive · rolemenus · events · birthdays · tempvoice · honeypot · moderation · automod · modmail · polls · chat · requests · members · settings · audit · health`). The Logs page is `audit.html`; there is no Access page. |
+>
+> **Last verified: 2026-09-11 09:20** — re-measured against the tree at `1d090e5`: 17 HTML
+> pages in `site/public/`, no `wrangler.toml`, `StaticFiles` mount in `api/assets.py`, no
+> Google identity anywhere. The Moderation page's **parity report** (below) was deleted with
+> the rest of the parity tool in `47634b8` — see [`phase6-design.md`](phase6-design.md).
+> The API is **150 routes** today, not the 53 8b shipped (`len(contract.json["routes"])`).
+> ⚠️ **NOT checked:** the live site in a browser (nothing in this pass opened one), the OAuth
+> round trip, or `node site/mock/check.mjs` end to end — it needs the mock server on
+> `127.0.0.1:8788` and this pass did not start one.
+> Before that, **Last verified:
 > 2026-08-26** — the estate template inventory was read from
 > `catalog-platform/sites/heygabi-home/public/` and
 > `catalog-platform/docs/info/estate-themes.md` that day; the dashboard
@@ -46,7 +71,7 @@ Bloc's features. Each page = one settings namespace + its action-log slice.
 | **Birthdays** | Birthday Bot dashboard | channel, template, colour, role, show-age, mode, the birthday list (paginated by month), import report |
 | **Temp voice** | TempVoice dashboard | creator channels, name template, allowed role, mode, live list of spawned channels |
 | **Honeypot** | Honeypot Bot / Carl Honeypot | trap channels, mode, purge days, exempt roles, hits table with "Ban now" for shadow hits |
-| **Moderation** | Carl Automod + Moderation | per-rule editor (enabled, window, threshold, actions), exempt roles/channels, DM style, modlog channel, **cases table** (search by user), **parity report** |
+| **Moderation** | Carl Automod + Moderation | per-rule editor (enabled, window, threshold, actions), exempt roles/channels, DM style, modlog channel, **cases table** (search by user), ~~**parity report**~~ *(removed 2026-08-27, `47634b8` — the parity card and `GET /api/mod/parity` are gone with Carl's automod)* |
 | **Modmail** | Modmail config | mode (channel/thread), category/staff channel, log channel, enabled, snippets editor, blocks, open tickets |
 | **Logging** | Carl Logging | log channel, which event kinds post embeds vs DB-only |
 | **Settings audit** | *new* | every `settings.set` with who/when/before/after; revert button |
@@ -67,7 +92,10 @@ Browser ──HTTPS──▶ Cloudflare Pages (static: HTML/JS, estate theme, es
 - **Front end**: a static site in this repo under `site/` (committed — it IS
   the product), deployed to **Cloudflare Pages** like the rest of the estate
   (`wrangler pages deploy site/public`, directory-deploy rules apply: clean
-  tree only). It copies, verbatim, the estate assets: `estate-theme.css`,
+  tree only). ⚠️ **NOT what shipped** — `site/public` is served by the Fly app itself through
+  `black_bloc/api/assets.py` (a `StaticFiles` subclass); there is no `wrangler.toml` and no
+  Pages project, so a bot deploy ships the site with it and the directory-deploy rules do not
+  apply. It copies, verbatim, the estate assets: `estate-theme.css`,
   `theme.js` (the 5-theme dropdown), `status-shell.css`, `permission-ux.js`,
   `motion.js`, the fonts — and follows `estate-themes.md` §3a so a sixth
   theme reaches this site the same mechanical way it reaches the others.
@@ -119,7 +147,9 @@ Browser ──HTTPS──▶ Cloudflare Pages (static: HTML/JS, estate theme, es
    this app. **Future:** link the owner's Discord identity to the Google SSO
    identity so both resolve to one admin (a `user_identities` table keyed
    on a local account id — design it in now, wire Google later if it slows
-   8b).
+   8b). ⚠️ **Google was never wired and `user_identities` was never built** (measured
+   2026-09-11): Discord OAuth2 is the only identity provider. The owner signs in as a staff
+   member like everyone else. This is an OPEN gap against decision 3, not a quiet change.
 4. **Who gets in:** exactly the roles that can currently see
    `#mute-me-bot-test-spam` — `Aunties / Uncles` and the roles above it.
    This is Phase 1's `staff_role_ids` derivation from `staff_channel_id`,
@@ -132,7 +162,8 @@ Two or three Opus builders: **API routers + auth** (one), **site shell +
 theme + overview/status** (one), **feature pages** (one, possibly two).
 Tests: API routes with FastAPI's test client against a temp DB; auth
 role-gate matrix; a Playwright smoke is optional. Deploys: Pages for the
-site (`deploys.log` line), Fly for the API.
+site (`deploys.log` line), Fly for the API. *(As built: **one** Fly deploy ships both — see
+the Architecture note above. `deploys.log` has one line per deploy, not two.)*
 
 ## Not in scope
 

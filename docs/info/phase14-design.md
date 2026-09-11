@@ -1,16 +1,40 @@
 # Phase 14 — Chat step 3: the real conversation (three tiers, knowledge, personas)
 
-> ⚠️ **SUPERSEDED IN PART, 2026-09-04, by [`chat-panel-design.md`](chat-panel-design.md)** —
+> ⚠️ **SUPERSEDED IN PART, 2026-09-04 (v75, `251dd14`), by [`chat-panel-design.md`](chat-panel-design.md)** —
 > the tiers, the knowledge store, the personas and the spend cap are all as described, but the
 > `/chat status`, `/chat knowledge …` and `/chat personality …` subcommands this doc walks
 > through (`:78`, `:105`, `:126`, `:137`, `:144`) are retired: `/chat` is now ONE staff command
 > that opens a panel, and every one of them is a button, a select or a modal on it.
 
-> **Audience:** the Phase 14 build agents and the reviewer. **Status:** TRACKED.
-> **Last verified: 2026-09-01** — owner decisions taken this morning (one at a
-> time, verbatim below); the GABI mechanics cited were surveyed today from
+> **Audience:** the Phase 14 build agents and the reviewer. **Status:** TRACKED ·
+> ✅ **LIVE since 2026-09-01** (shipped DORMANT — `chat_llm_mode` off) — deployed
+> `2026-09-01T13:21:45-07:00` as `a49e77d` (schema 20, `anthropic` in the image, 2451 tests,
+> 106 routes / 17 pages, 35 commands synced); `DONE.md` → "2026-09-01 — Phase 14: the bot can
+> really talk (three tiers, knowledge, personas — shipped dormant)". The keys were set an hour
+> later (`2026-09-01T14:40:30-07:00`, `ANTHROPIC_API_KEY` + `GROQ_API_KEY`), and a
+> **chat-hardening wave** the same afternoon (`45176ed`, `1ab76f8`, `503ce3a`, `bff7331`,
+> `4cea469`, `9906bda`) fixed live findings — `DONE.md` → "2026-09-01 — The chat-hardening
+> wave". ⚠️ Fly release numbers were not written into `deploys.log` until **v59** (2026-09-03),
+> so this landing has a date and a commit but no `vNN`.
+>
+> ✅ **§4's "global personality pool ambition … future work" HAPPENED** — both halves live
+> 2026-09-05 (Black Bloc **v90** `7c59eb1` + **v91** `604226f`; GABI `de4ef63`), closing KI-23.
+> `black_bloc/personality_pool.json` is the shared manifest. See
+> [`personality-pool-design.md`](personality-pool-design.md) and `DONE.md`.
+>
+> **Last verified: 2026-09-11 10:28** — re-checked against the tree at `1d090e5`:
+> `black_bloc/llm.py`, `groq.py`, `knowledge.py`, `personas.py`, `chat_llm.py` and
+> `personality_pool.json` all exist; `tier_for` is `chat_llm.py:156`; `llm.py:17` still pins
+> `MODEL = "claude-haiku-4-5"` and the price table still carries `llama-3.3-70b-versatile`;
+> all **six** settings keys named below (`chat_llm_mode`, `chat_simple_model`,
+> `chat_personality`, `chat_person_hourly_turns`, `chat_daily_turns`, `chat_monthly_cap_usd`)
+> are in `KEY_TYPES`.
+> ⚠️ **NOT checked:** whether `chat_llm_mode` is on or off on the live guild, the
+> month-to-date spend against the $20 cap, whether either API key is still valid, and anything
+> in Discord or a browser — nothing in this pass met either.
+> Before that, **2026-09-01** — owner decisions taken that morning (one at a
+> time, verbatim below); the GABI mechanics cited were surveyed that day from
 > `catalog-platform` (agent report; file paths verified to exist, code read).
-> Nothing here is built yet.
 
 ## 0. Owner decisions (2026-09-01, verbatim)
 
@@ -81,7 +105,9 @@ refuse-don't-trim). Port `searchBundle`'s scoring shape onto SQLite:
 - **Schema 20** (additive): `knowledge_sections(id, title, body, source, tag,
   updated_at, updated_by)`.
 - **Two sources:** (a) **staff-written** — a dashboard **Knowledge** section on
-  the Chat page (add/edit/delete sections) AND `/chat knowledge add|list|remove`
+  the Chat page (add/edit/delete sections) AND `/chat knowledge add|list|remove` *(removed:
+  retired at **v75**, 2026-09-04 — **Knowledge…** is a control on the `/chat` panel; both
+  doors still exist, so checklist 33 holds)*
   (checklist 33: both doors); (b) **server-ingested** — a daily loop rewrites
   `source='server'` rows from live Discord: channel names+topics, role names,
   upcoming approved events, active role menus. Staff rows are never touched by
@@ -108,10 +134,13 @@ refuse-don't-trim). Port `searchBundle`'s scoring shape onto SQLite:
   (default) / `pool` (per-conversation trope with gradual drift, GABI's
   selection shape) / a specific trope name. Dashboard: a Personality section on
   the Chat page listing tropes with enable/disable + preview; slash:
-  `/chat personality`. **The owner's "global personality pool" ambition** (one
+  `/chat personality` *(removed: retired at **v75**, 2026-09-04 — **Personality…** is a
+  control on the `/chat` panel)*. **The owner's "global personality pool" ambition** (one
   pool shared across estate bots) is future work — for now the port carries a
   provenance header naming GABI's file as the source; a shared estate store is
-  a TODO note, not this build.
+  a TODO note, not this build. *(✅ **Built 2026-09-05**, both halves live — Black Bloc v90
+  `7c59eb1` + v91 `604226f`, GABI `de4ef63`; `black_bloc/personality_pool.json` is the shared
+  manifest and KI-23 closed. See [`personality-pool-design.md`](personality-pool-design.md).)*
 
 ## 5. Conversation window + fuses + the $20 cap
 
@@ -129,7 +158,8 @@ refuse-don't-trim). Port `searchBundle`'s scoring shape onto SQLite:
   while free — still recorded with real token counts). Month-to-date sum ≥ cap
   → tier 2 closed until the 1st; the bot answers with intents + an in-character
   line; `chat.llm_capped` logged ONCE (routine) when it first closes.
-- **Surfacing:** `/chat status` and the dashboard Chat page show month-to-date
+- **Surfacing:** `/chat status` *(removed: retired at **v75**, 2026-09-04 — the root of the
+  `/chat` panel IS the status card)* and the dashboard Chat page show month-to-date
   spend, turns today, and which tiers are live (worded, not bare numbers).
 
 ## 6. Test mode & review checklist notes
@@ -140,7 +170,8 @@ refuse-don't-trim). Port `searchBundle`'s scoring shape onto SQLite:
   the current window + grounding (no bulk history); say so in code-notes.
 - New log kinds (`chat.llm_reply`, `chat.llm_capped`, `chat.llm_error`, …)
   classified in `logkinds.py` (routine).
-- `poll_degraded`-style honesty: a tier that is down shows in `/chat status`.
+- `poll_degraded`-style honesty: a tier that is down shows in `/chat status` *(now the
+  `/chat` panel's root card)*.
 
 ## 7. Build slices
 

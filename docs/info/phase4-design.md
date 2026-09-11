@@ -1,7 +1,33 @@
 # Phase 4 design — events: form → review channel → Scheduled Event → go-live ping (F4 + F5)
 
-> **Audience:** the Phase 4 build agent and the reviewer. **Status:** LOCAL
-> ONLY. **Last verified: 2026-08-26** — owner decisions dated in `TODO.md`;
+> ⚠️ **SUPERSEDED IN PART, 2026-09-03 (v64, `e670542`) — the slash surface is gone.** `/event`
+> is ONE command that opens an ephemeral panel and the whole `/timezone` group is retired.
+> See [`events-panel-design.md`](events-panel-design.md) and
+> [`panels-program.md`](panels-program.md).
+>
+> ⚠️ **SUPERSEDED IN PART, 2026-09-10/11 — the five-input modal in §"The flow" step 1 is not
+> how an event is proposed any more.** *Start* and *Duration* became the **When?** draft panel
+> (v100, merge `1f35f28`, branch `when-picker` — dropdowns plus a modal that never refuses, and
+> a zone dropdown), and *Location or link* became the **Where?** picker: a real voice/stage/text
+> channel or a typed place (v105), a channel AND a link beside it appended to the scheduled
+> event's description (v106), a masked link with an **Open link** button (v107), and a bare host
+> shorthand resolved through an alias table and tried once before it is kept (v108, live
+> 2026-09-11 00:37). See [`when-picker-design.md`](when-picker-design.md) and
+> [`where-picker-design.md`](where-picker-design.md).
+>
+> **Audience:** the Phase 4 build agent and the reviewer. **Status:** TRACKED ·
+> ✅ **LIVE since 2026-08-26** — deployed `2026-08-27T04:37:38Z` as `8474f14` (`deploys.log`
+> line 7, `synced 10 app commands`); `DONE.md` → "2026-08-26 — Phase 4 live: events (F4/F5) +
+> review fixes". ⚠️ Fly release numbers were not written into `deploys.log` until **v59**
+> (2026-09-03), so this landing has a date and a commit but no `vNN`.
+> **Last verified: 2026-09-11 08:55** — re-checked against the tree at `1d090e5`:
+> `black_bloc/timezones.py`, `black_bloc/events.py` and `cogs/community/events.py` all exist;
+> all **six** settings keys named below (`events_category_id`, `events_announce_channel_id`,
+> `events_ping_role_id`, `events_create_scheduled`, `events_mode`,
+> `events_channel_retention_days`) are in `KEY_TYPES`. ⚠️ **NOT checked:** any of this in
+> Discord — no modal, panel, review channel or Scheduled Event was opened by eye in this pass,
+> and the `#live-now` channel id below needs a live scan.
+> Before that, **2026-08-26** — owner decisions dated in `TODO.md`;
 > Discord constraints from `reference-bots.md` §"Discord platform notes"
 > (modal input cap is ambiguous between 5 and a newer 40-component scheme —
 > **design to 5, verify against discord.py at build time**). Depends on
@@ -59,7 +85,9 @@ nothing punishes; shadow only suppresses the public announcement).
 
 ## The flow
 
-1. **`/event create`** (anyone with `Member`): modal with 5 inputs — *Title*
+1. **`/event create`** *(removed: retired at **v64**, 2026-09-03; the five-input modal itself
+   was replaced by the When?/Where? draft panels at v100–v108 — see the banner at the top)*
+   (anyone with `Member`): modal with 5 inputs — *Title*
    (≤100), *Description* (paragraph, ≤1000), *Start* (`YYYY-MM-DD HH:MM`,
    interpreted in the requester's tz; validation error → ephemeral sentence
    with an example), *Duration* (`1h30m`, default 2h), *Location or link*.
@@ -90,7 +118,7 @@ nothing punishes; shadow only suppresses the public announcement).
    review channel is **archived**: renamed `done-…` and moved/left in place
    (deleting is the owner's call; default keep for 7 days then delete —
    setting `events_channel_retention_days`, default 7).
-5. **Commands** — ⚠️ **SUPERSEDED 2026-09-03 by the panel**
+5. **Commands** — ⚠️ **SUPERSEDED 2026-09-03 (v64, `e670542`) by the panel**
    ([`events-panel-design.md`](events-panel-design.md)): every subcommand below
    is gone and `/event` is one command that opens an ephemeral panel. `/timezone`
    was retired whole — the zone is the **My time zone** button beside **Propose an

@@ -1,7 +1,24 @@
 # Phase 5 design — birthdays (F6)
 
-> **Audience:** the Phase 5 build agent and the reviewer. **Status:** LOCAL
-> ONLY. **Last verified: 2026-08-26** — incumbent behaviour measured from 16
+> ⚠️ **SUPERSEDED IN PART, 2026-09-03 (v63, `616adb3`) — the slash surface is gone.**
+> `/birthday` is ONE command that opens an ephemeral panel and all twelve subcommands are
+> retired. See [`birthdays-panel-design.md`](birthdays-panel-design.md) and
+> [`panels-program.md`](panels-program.md). Everything else here still describes what is built.
+>
+> **Audience:** the Phase 5 build agent and the reviewer. **Status:** TRACKED ·
+> ✅ **LIVE since 2026-08-26** (shipped in `shadow`) — deployed `2026-08-27T04:56:54Z` as
+> `08b114c` (`deploys.log` line 8, `synced 11 app commands`); `DONE.md` → "2026-08-26 — Phase 5
+> live: birthdays (F6) — first parallel-worktree phase". ⚠️ Fly release numbers were not
+> written into `deploys.log` until **v59** (2026-09-03), so this landing has a date and a
+> commit but no `vNN`.
+> **Last verified: 2026-09-11 09:00** — re-checked against the tree at `1d090e5`:
+> `black_bloc/birthdays.py` and `cogs/community/birthdays.py` exist, the seeded data file
+> `black_bloc/data/birthday_import_2026-08-05.json` is committed, `Birthdays._import_loop`
+> exists, and all **six** `birthday_*` keys named below are in `KEY_TYPES`.
+> ⚠️ **NOT checked:** whether `birthday_mode` is still `shadow` on the live guild, whether
+> Birthday Bot is still posting, and anything in Discord — nothing in this pass met Discord
+> or a browser. The channel and role IDs below need a live scan.
+> Before that, **2026-08-26** — incumbent behaviour measured from 16
 > Birthday Bot posts (`archive/current-bots/discord-scan-2026-08-26.md` §C);
 > seed data = `archive/current-bots/birthday-bot-export-2026-08-05.md` (39
 > rows). Depends on Phase 1 (settings, action log) and Phase 4
@@ -98,7 +115,7 @@ Re-running never overwrites a `source='self'` row. Member lookup uses
 
 ## Commands
 
-> ⚠️ **Superseded 2026-09-03 by [`birthdays-panel-design.md`](birthdays-panel-design.md):
+> ⚠️ **Superseded 2026-09-03 (v63, `616adb3`) by [`birthdays-panel-design.md`](birthdays-panel-design.md):
 > `/birthday` is now ONE command that opens a panel, and every subcommand listed below is
 > retired.** Nothing else in this document changes — the sweep, the role, the daily import
 > and the settings are untouched; only the front door moved.

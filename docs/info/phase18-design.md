@@ -1,6 +1,6 @@
 # Phase 18 — Raid trains (member request #1)
 
-> ⚠️ **SUPERSEDED IN PART, 2026-09-04 — the command surface below is gone.** The `raidtrain`
+> ⚠️ **SUPERSEDED IN PART, 2026-09-04 (v76, `2dd2689`) — the command surface below is gone.** The `raidtrain`
 > group's twelve subcommands (`list`, `status`, `claim`, `release`, `mine`, `create`, `assign`,
 > `unassign`, `swap`, `lock`, `unlock`, `cancel`) and the whole `raidtrains` staff group
 > (`mode`, `setup`, `logs`) were replaced by ONE member-visible `/raidtrain` command that opens
@@ -12,20 +12,41 @@
 > NOT rewritten.
 > ⚠️ An earlier copy of this banner (2026-09-03) described `/golive` and `/twitch` — the wrong
 > feature entirely. It was written here by mistake and is replaced, not archived.
+>
+> ⚠️ **SUPERSEDED IN PART AGAIN, 2026-09-10 — how a train is STARTED changed twice.** The
+> **When?** draft panel (v100, merge `1f35f28`, branch `when-picker`) replaced the typed
+> start/duration with dropdowns plus a modal that never refuses and a zone dropdown, and set
+> `{title} Feat. BaF` as the calendar name; **v104** then made the calendar name the title,
+> editable on the dashboard, behind the new `raidtrain_scheduled_name_template` key. See
+> [`when-picker-design.md`](when-picker-design.md).
 
 > **Audience:** the Opus builder first, reviewers second, the owner for the
-> decisions table. **Status:** TRACKED — DESIGN, written 2026-09-02 22:30 by
-> the Fable session (NEXT WAVE item 6). Secret NAMES only.
-> 🔨 **BUILT 2026-09-02** on branch `worktree-agent-a1c38e3df0f71fa7e` (off
-> `820c393`) — not merged, not deployed, `raidtrain_mode` ships `off`. Read the
-> `## Deviations` list at the foot before trusting the body of this doc.
-> Last verified: **2026-09-02** — the "what exists" rows were read in the code
-> today at `31b1689` (`storage/db.py` tables `events` / `golive_links` /
+> decisions table. **Status:** TRACKED · ✅ **LIVE since 2026-09-03** (shipped with
+> `raidtrain_mode` **off**) — built on branch `worktree-agent-a1c38e3df0f71fa7e` (off
+> `820c393`, tip `8999d6e`), ~~not merged, not deployed~~ **merged `0bb3835`** and deployed
+> with Phases 17 and 19 in one release, `2026-09-03T00:31:37-07:00` as `7b1c592` (schema 24
+> `raid_trains`/`raid_slots`, 19 cogs incl. `content.raidtrain`, 44 commands synced);
+> `DONE.md` → "2026-09-03 — Phases 17/18/19". ⚠️ Fly release numbers were not written into
+> `deploys.log` until **v59** (2026-09-03), and this deploy predates the first numbered line,
+> so it has a date and a merge sha but no `vNN`.
+> Read the `## Deviations` list at the foot before trusting the body of this doc.
+>
+> ⚠️ **§D lists THIRTEEN keys; there are FIFTEEN today.** `raidtrain_panel_minutes` arrived
+> with the panel (v76) and `raidtrain_scheduled_name_template` with the calendar-name change
+> (v104). ✅ **§I's two residuals ARE FILED** — **KI-15** (a slot keeps the Twitch name it was
+> claimed with) and **KI-16**. ✅ **§J was answered**: `raidtrain_scheduled_event` exists as a
+> real bool key with its own help text naming the name template, so D13 shipped usable.
+>
+> Last verified: **2026-09-11 11:00** — re-checked against the tree at `1d090e5`:
+> `black_bloc/raidtrain.py` and `cogs/content/raidtrain.py` exist; **15** `raidtrain_*` keys
+> are in `KEY_TYPES`; `raidtrain` is one of the 18 `logkinds.FEATURES`.
+> ⚠️ **NOT checked:** whether `raidtrain_mode` is still off on the live guild, whether any
+> train has been run, and anything in Discord or a browser — nothing in this pass met either.
+> Before that, **2026-09-02** — the "what exists" rows were read in the code
+> that day at `31b1689` (`storage/db.py` tables `events` / `golive_links` /
 > `golive_sessions` / `user_timezones`, `cogs/community/events.py` surface,
-> `cogs/content/golive.py:open_sessions`, `pings.py`). ⚠️ NOT verified: whether
-> Phase 4's Scheduled-Event helper can be reused without editing `events.py`
-> (§J — measure first). ⚠️ **Built IN PARALLEL with Phase 17** (owner,
-> 2026-09-02 22:25: "Can we start doing some of this in parallel?") — see §K.
+> `cogs/content/golive.py:open_sessions`, `pings.py`). ⚠️ **Built IN PARALLEL with Phase 17**
+> (owner, 2026-09-02 22:25: "Can we start doing some of this in parallel?") — see §K.
 
 ## The ask
 
@@ -186,8 +207,10 @@ times derived), so `reorder` is a swap of two rows' `user_id`/`twitch_login`/
 | `raidtrain_live_posts` | bool | `true` |
 | `raidtrain_max_slots_per_member` | int (≥0) | `1` |
 | `raidtrain_scheduled_event` | bool | per §J |
+| *(added v76)* `raidtrain_panel_minutes` | int | `10` — the panel's gone-quiet clock |
+| *(added v104)* `raidtrain_scheduled_name_template` | str | the train's title — the calendar name, editable on the dashboard |
 
-No new config/env. No secrets.
+No new config/env. No secrets. *(**15** `raidtrain_*` keys in `KEY_TYPES` as of 2026-09-11.)*
 
 ## E. Dashboard + API
 
@@ -229,7 +252,10 @@ session, cancel DMs holders), `tests/api/tools/test_raidtrain.py`,
 `cutover-plan.md` ladder row, `feature-list.md` new row **F19 raid trains**,
 `architecture.md` counts, `info/README.md` row. Not `TODO.md`/`DONE.md`.
 
-## I. Residuals to record in `KNOWN_ISSUES.md` at landing
+## I. Residuals to record in `KNOWN_ISSUES.md` at landing — ✅ BOTH FILED
+
+*(Filed as **KI-15** — "A raid-train slot keeps the Twitch name it was claimed with" — and
+**KI-16** — "Raid-train check-in sees only what go-live sees". Both `ACCEPTED`.)*
 
 - A member who unlinks Twitch after claiming keeps the slot with the copied
   login; the lineup may name a login that no longer streams. What would change
@@ -237,7 +263,11 @@ session, cancel DMs holders), `tests/api/tools/test_raidtrain.py`,
 - Check-in (D9) sees only what go-live sees — a holder whose presence is hidden
   and who is not Twitch-linked is never marked live. Accepted; same limit as F1.
 
-## J. First task for the builder — measure, don't assume
+## J. First task for the builder — measure, don't assume — ✅ ANSWERED: D13 ships usable
+
+*(`raidtrain_scheduled_event` is a real `bool` key in `KEY_TYPES` with help text naming the
+name template, so the train does create a Scheduled Event. The template itself became its own
+key, `raidtrain_scheduled_name_template`, at v104.)*
 
 Read `events.py:_go_live` and whatever it calls to create the Discord
 Scheduled Event. **If** that helper is callable from a new cog without editing

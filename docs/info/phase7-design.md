@@ -1,13 +1,28 @@
 # Phase 7 design — modmail (F11)
 
-> **Audience:** the Phase 7 build agent and the reviewer. **Status:** LOCAL
-> ONLY. **Last verified: 2026-08-26** — incumbent schema measured from the
+> **Audience:** the Phase 7 build agent and the reviewer. **Status:** TRACKED ·
+> ✅ **LIVE since 2026-08-26** (shipped with `modmail_enabled=false`) — deployed
+> `2026-08-27T05:11:36Z` as `088b107` (`deploys.log` line 9, `synced 17 app commands`);
+> `DONE.md` → "2026-08-26 — Phase 7 live (disabled by default): modmail (F11)". ⚠️ Fly
+> release numbers were not written into `deploys.log` until **v59** (2026-09-03), so this
+> landing has a date and a commit but no `vNN`.
+> **Last verified: 2026-09-11 09:10** — re-checked against the tree at `1d090e5`:
+> `black_bloc/modmail.py` and `cogs/moderation/modmail.py` exist and the cog now declares
+> exactly **two** app commands, `reply` (line 1825) and `modmail` (line 1996) — every other
+> name below is gone; `modmail_mode`, `modmail_category_id`, `modmail_staff_channel_id`,
+> `modmail_log_channel_id`, `modmail_enabled` and `modmail_reply_style` are in `KEY_TYPES`.
+> ⚠️ `modmail_autoclose_hours` (below, "reserved" in v1) was **never added** — it is not in
+> `KEY_TYPES` and auto-close does not exist. ⚠️ **NOT checked:** whether `modmail_enabled` is
+> still false on the live guild, whether the incumbent ModMail bot is still answering DMs, and
+> anything in Discord — nothing in this pass met Discord or a browser; the `#modmail-log` and
+> ModMail category ids below need a live scan.
+> Before that, **2026-08-26** — incumbent schema measured from the
 > scan (`discord-scan-2026-08-26.md`: ModMail category, 5 open tickets, topic
 > `ModMail Channel <user-id> <channel-id> (Please do not change this)`, staff
 > private notes by prefixing `=`); command table from `reference-bots.md`
 > (Modmail `cogs/modmail.py`). Depends on Phase 1.
 >
-> ⚠️ **SUPERSEDED IN PART, 2026-09-05, by
+> ⚠️ **SUPERSEDED IN PART, 2026-09-05 (Build A = v80; Build B = v82, `f42a591`), by
 > [`modmail-panel-design.md`](modmail-panel-design.md) (Builds A and B).** Everything §4
 > *Management* names below — `/modmail block|unblock|blocked|mode|forget|status|settings`
 > and the whole `/snippet` group — is **gone** (Build A); `/modmail` is one command that
@@ -79,19 +94,24 @@ gets one sentence pointing at the existing ModMail bot).
    in a private thread adds those members). Post a header embed (user,
    account age, join date, roles, prior ticket count), then relay the DM
    (content + attachments) as an embed `user → staff`. React ✅ to the DM.
-2. **Staff reply.** `/reply <text>` (or plain messages in the ticket without
+2. **Staff reply.** *(Removed in part: `/areply` and `/note` retired at **v82**, 2026-09-05 —
+   they are **Reply as Staff** and **Private note** on the sticky ticket card. `/reply`
+   survives, deliberately: owner fork F2, "we do the both". Whether a plain typed message is
+   still relayed is now `modmail_reply_style` (`buttons`/`typing`/`both`).)*
+   `/reply <text>` (or plain messages in the ticket without
    a prefix = reply, matching the incumbent) → DM the user as an embed
    showing the staff member's name and role colour; `/areply <text>` →
    anonymous ("Staff"). **Private note:** a message starting with `=` (kept
    from the incumbent) or `/note <text>` → stays in the ticket, recorded as
    `note`, never relayed. Every relayed/noted message → `modmail_messages`.
-3. **Close.** `/close [reason]` → DM the user the reason, render the
+3. **Close.** `/close [reason]` *(removed: retired at **v82**, 2026-09-05 — **Close…** is a
+   button on the sticky ticket card)* → DM the user the reason, render the
    **transcript** (chronological, notes marked, attachments as links) into
    the log channel as a file + summary embed, `status=closed`, then delete
    the channel / archive+lock the thread. `/close` with `silent:true` skips
    the DM. Auto-close: none in v1 (setting `modmail_autoclose_hours`
    reserved).
-4. **Management.** ⚠️ **Superseded 2026-09-05 — every command in this item is
+4. **Management.** ⚠️ **Superseded 2026-09-05 (v80, Build A) — every command in this item is
    retired; the moves are now controls on the `/modmail` panel.** As built:
    block/unblock a member, save/change/remove snippets, point the three places,
    pick the mode (applies to new tickets only — open ones keep their mode, and the

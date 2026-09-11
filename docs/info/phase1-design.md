@@ -1,12 +1,28 @@
 # Phase 1 design — settings store, action log, role menus (F16)
 
-> ⚠️ **SUPERSEDED IN PART, 2026-09-04:** every `/rolemenu …` and `/role …` subcommand named below is retired — `/rolemenu` is now ONE staff command that opens a panel. The behaviour is unchanged; only the door is. See
+> ⚠️ **SUPERSEDED IN PART, 2026-09-04 (v77, `43312b9`):** every `/rolemenu …` and `/role …` subcommand named below is retired — `/rolemenu` is now ONE staff command that opens a panel. The behaviour is unchanged; only the door is. See
 > [`role-menus-panel-design.md`](role-menus-panel-design.md) and
 > [`panels-program.md`](panels-program.md).
 >
-> **Audience:** the Phase 1 build agent and the reviewer. **Status:** LOCAL
-> ONLY. **Last verified: 2026-08-26** — role/channel IDs below are from the
-> same-day Discord scan; everything else is design, not measurement.
+> ⚠️ **SUPERSEDED IN PART, 2026-09-05 (v84, `ce97de0`):** `/settings show|set` below are
+> retired too — `/settings` is now ONE staff command that opens a paged panel over all the
+> registry keys. See [`settings-panel-design.md`](settings-panel-design.md).
+>
+> **Audience:** the Phase 1 build agent and the reviewer. **Status:** TRACKED ·
+> ✅ **LIVE since 2026-08-26** — three commits (`7190855` settings store + schema 2,
+> `81fe783` action log, `5c528c5` role menus + Carl seed), deployed `2026-08-27T01:29:57Z`
+> (`deploys.log` line 3, `synced 4 app commands`); `DONE.md` → "2026-08-26 — Phase 1 live".
+> ⚠️ Fly release numbers were not written into `deploys.log` until **v59** (2026-09-03), so
+> the phases 1–19 landings carry a date and a commit but no `vNN`.
+> **Last verified: 2026-09-11 08:40** — re-checked against the tree at `1d090e5`: the three
+> module paths and `bot.py:COGS` entry exist; `log_channel_id`, `staff_channel_id` and
+> `role_menu_channel_id` are all still in `KEY_TYPES` (now **202** keys); `SettingsStore.get/
+> set/all/staff_role_ids` all exist (`settings_store.py`); `SCHEMA_VERSION` is now **34**, not
+> the 2 this design bumps it to. ⚠️ **NOT checked:** the role and channel IDs in the seed table
+> (they need live Discord, and nothing in this pass met Discord or a browser), and whether
+> Carl's panels are still posted.
+> Before that, **2026-08-26** — role/channel IDs below were from the
+> same-day Discord scan; everything else was design, not measurement.
 > Owner approvals: build order (Q13), test policy, code style, test layout,
 > commit policy — all in `TODO.md` / `CLAUDE.md`.
 
@@ -69,6 +85,9 @@ Commands (in the same cog file as role menus? **No** — a small
 `cogs/core.py` as a group, since it is core): `/settings show`, `/settings set
 <key> <value>` (channel keys take a channel picker). Staff-only via
 `is_staff(interaction)` = member has a staff role OR `manage_guild`.
+*(Removed: `/settings show|set` retired at **v84**, 2026-09-05 — `/settings` is one command
+that opens the paged panel; `settings_panel.py` — see
+[`settings-panel-design.md`](settings-panel-design.md).)*
 
 ### 2. Action log — `actionlog.py`
 
@@ -119,7 +138,9 @@ CREATE TABLE IF NOT EXISTS role_menu_options (
 );
 ```
 
-Commands (staff-only, all under `/rolemenu`): `create <name> <title>
+Commands (staff-only, all under `/rolemenu`) *(removed: all eighteen `/rolemenu …` / `/role …`
+leaves retired at **v77**, 2026-09-04 — `/rolemenu` opens the panel instead; see
+[`role-menus-panel-design.md`](role-menus-panel-design.md))*: `create <name> <title>
 [description] [mode]`, `add <name> <role> [label] [emoji]`, `remove <name>
 <role>`, `list`, `show <name>`, `post <name> [channel]` (re-posting edits
 the existing message if it still exists, else posts fresh and stores the new
@@ -138,7 +159,9 @@ time with a plain sentence, not at click time.
 
 **Seed data** — a one-shot `/rolemenu seed-from-carl` staff command that
 creates the five menus below from the measured maps (idempotent: skips a
-menu whose name exists). IDs are from `archive/current-bots/discord-scan-2026-08-26.md`
+menu whose name exists). *(Removed with the rest of the group at **v77**; it shipped as
+`seed`/`seed-defaults` and its work is done — the menus exist.)*
+IDs are from `archive/current-bots/discord-scan-2026-08-26.md`
 §B/§D and `yagpdb-dashboard-2026-08-26.md`:
 
 | name | title | mode | options (emoji → role id) |
@@ -175,7 +198,8 @@ never remove a role a member did not deselect.
   storage functions; diff computation (add/remove sets) as a pure function;
   `single` mode limits; seed is idempotent; persistent view custom_id format.
 - `tests/storage/test_db.py`: bump to `SCHEMA_VERSION == 2` and assert the
-  four new tables exist.
+  four new tables exist. *(`SCHEMA_VERSION` is **34** today — eighteen later phases and
+  sweeps moved it; the four tables are still there.)*
 
 ## Definition of done
 

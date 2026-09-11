@@ -1,6 +1,6 @@
 # Phase 16 — YouTube upload announcements (F3)
 
-> ⚠️ **SUPERSEDED IN PART, 2026-09-03 — the slash surface below is gone.** `/golive` and
+> ⚠️ **SUPERSEDED IN PART, 2026-09-03 (v70, `0aeed72`) — the slash surface below is gone.** `/golive` and
 > `/twitch` and all eight of their subcommands (`logs`, `optout`, `optin`, `status`, `mode`,
 > `test`, `link`, `unlink`) were replaced by ONE `/golive` command that opens an ephemeral
 > panel; every subcommand is a button, a select or a modal on it. The behaviour this doc
@@ -8,21 +8,39 @@
 > kinds are all exactly what it says. Only the way in moved:
 > [`golive-panel-design.md`](golive-panel-design.md). This doc is NOT rewritten.
 
-> ⚠️ **The COMMAND SURFACE below (§C's last three bullets) was superseded on 2026-09-03 by
+> ⚠️ **The COMMAND SURFACE below (§C's last three bullets) was superseded on 2026-09-03 (v71, `b764757`) by
 > [`youtube-panel-design.md`](youtube-panel-design.md):** `/youtube` is now ONE command that
 > opens a panel, and the `youtube` and `uploads` groups and their nine subcommands are gone.
 > **Everything else in this document still stands** — the poller, the seed rule (D10), the
 > guarded post path, the settings and every log kind are untouched by that build.
 >
 > **Audience:** the Opus builder first, reviewers second, the owner for the
-> decisions table. **Status:** TRACKED — DESIGN, written 2026-09-02 by the
-> Fable session (NEXT WAVE item 2). Secret NAMES only.
-> Last verified: **2026-09-02** — the "what exists" rows were read in the code
-> today (`cogs/content/golive.py:poll_once`, `twitch.py:TwitchClient`,
-> `groq.py` aiohttp pattern, schema 20 + Phase 15's planned 21). ⚠️ NOT
-> verified: the YouTube feed/API behaviours below are from the documented
-> platform contract, not measured against a live channel — the builder's
-> first job is to measure them (§J).
+> decisions table. **Status:** TRACKED · ✅ **LIVE since 2026-09-02** (shipped with
+> `youtube_mode` **off**, D8) — ~~DESIGN~~ deployed `2026-09-02T22:18:51-07:00` as `049881b`
+> (schema 22 `youtube_links`/`youtube_videos`, 2865 tests, 16 cogs incl. `content.youtube`
+> loaded feed-only with no key, 39 commands synced); `DONE.md` → "2026-09-02 — Phase 16:
+> YouTube uploads (F3), NEXT WAVE item 2". ⚠️ Fly release numbers were not written into
+> `deploys.log` until **v59** (2026-09-03), so this landing has a date and a commit but no
+> `vNN`.
+>
+> ✅ **§J WAS DONE and §I's residuals ARE FILED.** The builder measured the live feed (30
+> timed requests; the fixture is `tests/fixtures/youtube_feed.xml`), and the residuals became
+> **KI-11** (a live broadcast announced as an upload without `YOUTUBE_API_KEY`), **KI-12**
+> (the feed answers only about half the time — found by measuring, not predicted here) and
+> **KI-13** (an upload announcement can be up to ~25 minutes late). All three `ACCEPTED`.
+>
+> Last verified: **2026-09-11 10:42** — re-checked against the tree at `1d090e5`:
+> `black_bloc/youtube.py` and `cogs/content/youtube.py` exist and all **seven** `youtube_*`
+> keys (`youtube_channel_id`, `youtube_ping_role_id`, `youtube_ping_fan_roles`,
+> `youtube_announce_shorts`, `youtube_template`, `youtube_mode`, `youtube_log_level`) are in
+> `KEY_TYPES`; `youtube` is one of the 18 `logkinds.FEATURES`.
+> ⚠️ **NOT checked:** whether `youtube_mode` is still off on the live guild, whether
+> `YOUTUBE_API_KEY` has since been set, whether any channel is linked, and anything in
+> Discord or a browser — nothing in this pass met either.
+> Before that, **2026-09-02** — the "what exists" rows were read in the code
+> that day (`cogs/content/golive.py:poll_once`, `twitch.py:TwitchClient`,
+> `groq.py` aiohttp pattern, schema 20 + Phase 15's planned 21); the YouTube feed/API
+> behaviours below were from the documented platform contract, not yet measured.
 
 ## The ask
 
@@ -122,9 +140,14 @@ CREATE INDEX IF NOT EXISTS youtube_videos_user ON youtube_videos(user_id, publis
   `video_id`, `kind`, `url`, `text`, `channel_id`, `source: feed|api`.
 - Member group **`/youtube`** (visible to all): `link <channel>`, `unlink`,
   `status` (my link, last video seen, whether uploads are announced here).
+  *(Removed: retired at **v71**, 2026-09-03 — `/youtube` opens the panel.)*
 - Staff group **`/uploads`** (manage_messages default perms, like the other
   staff groups): `mode <off|shadow|on>`, `setup [channel] [ping_role]`,
   `link-for <member> <channel>`, `unlink-for <member>`, `list`, `logs`.
+  *(Removed: the whole `/uploads` group is gone — retired at **v71**, 2026-09-03, folded into
+  the `/youtube` panel with all nine subcommands; the mode select sits on the panel's ROOT
+  because turning the feature on is why a Lead opens it. See
+  [`youtube-panel-design.md`](youtube-panel-design.md).)*
 - Registered in `bot.py:COGS`; `/help` entry; `chat_data.py` FEATURES line
   ("how do I get my uploads posted? → `/youtube link`").
 
@@ -183,7 +206,10 @@ tools/test_youtube.py`, `tests/storage/test_db.py` (schema 22),
 `feature-list.md` F3; `architecture.md` counts; runbook boot line + secret
 list; `RECOVERY.md` custody row; `.env.example`.
 
-## I. Residuals to record in `KNOWN_ISSUES.md` at landing
+## I. Residuals to record in `KNOWN_ISSUES.md` at landing — ✅ BOTH FILED
+
+*(Filed as **KI-11** and **KI-13**; measuring the feed for §J also turned up a third nobody
+predicted, **KI-12** — the feed answers only about half the time. All `ACCEPTED`.)*
 
 - Without `YOUTUBE_API_KEY`, a scheduled/live broadcast that appears in the
   feed while the member has no open `youtube` go-live session will be
@@ -192,7 +218,11 @@ list; `RECOVERY.md` custody row; `.env.example`.
 - Feed latency: YouTube's feed can lag a publish by minutes; the poll adds up
   to `youtube_poll_minutes` more. Accepted.
 
-## J. First task for the builder — measure, don't assume
+## J. First task for the builder — measure, don't assume — ✅ DONE 2026-09-02
+
+*(Measured: 30 timed requests against the live feed; the fixture it produced is
+`tests/fixtures/youtube_feed.xml`, and the one surprise — a ~50 % answer rate — became KI-12.
+Kept below as the record of what was asked for.)*
 
 Before writing the cog, fetch one real public channel feed (any large channel)
 with `curl -I` / `curl` in the worktree and confirm: the `channel_id=` URL

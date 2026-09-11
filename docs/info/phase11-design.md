@@ -1,6 +1,6 @@
 ﻿# Phase 11 — Chat 2 (F10 step 2): editable lines, data intents, routing, manners
 
-> ⚠️ **SUPERSEDED IN PART, 2026-09-04, by [`chat-panel-design.md`](chat-panel-design.md)** —
+> ⚠️ **SUPERSEDED IN PART, 2026-09-04 (v75, `251dd14`), by [`chat-panel-design.md`](chat-panel-design.md)** —
 > the FEATURE behaviour below is what shipped, but every `/chat …` subcommand it names is
 > retired: `/chat` is now ONE staff command that opens a panel. Read the doors off the panel
 > design; read the behaviour here.
@@ -9,21 +9,37 @@
 > off `main` @ `ebf99a2`, 2026-08-27). Sections 1 (storage, seed, classification
 > order, `POST /api/chat/try`), 2, 3 and 4 are **done and tested** — `pytest -q`
 > 1941 passed, `ruff` clean, `site/mock/check.mjs` clean at 80 routes. ⚠️ Nothing
-> has run against live Discord. **11b — the Chat page, the Try-it box and the
-> settings section — is still to build.** How it was built, and the three places
+> has run against live Discord. ~~**11b — the Chat page, the Try-it box and the
+> settings section — is still to build.**~~ **STALE — 11b built and shipped the same day**
+> (see below). How it was built, and the three places
 > the build deviated from this document, are in `code-notes.md` § *chat 2 (11a)*.
 
-> **Audience:** the Phase 11 build agents and the reviewer. **Status:** TRACKED (2026-08-31; private repo).
-> Last verified: **2026-08-27** — owner decision taken 14:12 ("yes lets do all of those"); code facts from
+> **Audience:** the Phase 11 build agents and the reviewer. **Status:** TRACKED ·
+> ✅ **LIVE since 2026-08-27** — both halves deployed together as `5f5741a`,
+> `2026-08-27T17:05:59-07:00` ("Chat 2: editable intents/lines, schema 15, seeded 15 intents");
+> `DONE.md` → "2026-08-27 — Phase 11: Chat 2 — editable intents and lines, data intents,
+> routing, manners, the Chat page". ⚠️ Fly release numbers were not written into `deploys.log`
+> until **v59** (2026-09-03), so this landing has a date and a commit but no `vNN`.
+>
+> Last verified: **2026-09-11 10:05** — re-checked against the tree at `1d090e5`:
+> `black_bloc/chat.py` still carries `classify` (`:599`), `respond` (`:687`), `reply_for`
+> (`:785`) and `seed_defaults` (`:1012`); all **six** `chat_*` settings keys §4 names are in
+> `KEY_TYPES`. ⚠️ **§5 "Later" happened** — the conversation backend behind `reply_for` was
+> built as **Phase 14** (three LLM tiers, `chat_llm_mode`, personas); see
+> [`phase14-design.md`](phase14-design.md). The `chat` namespace is **28** keys today, not the
+> six or seven this phase left. ⚠️ **NOT verified:** anything against live Discord — nothing
+> in this pass @-mentioned the bot, opened the Chat page or ran `check.mjs` end to end.
+> Before that, **2026-08-27** — owner decision taken 14:12 ("yes lets do all of those"); code facts from
 > `black_bloc/chat.py` and `cogs/content/chat.py` at `1899f6e` (`code-notes.md` § "chat — @-mention
-> replies"). NOT verified: nothing has run. **Priority: after Phase 10 (polls).**
+> replies").
 >
 > ✅ **11b built in `1aba879` (contract + mock) and `cfc5a2f` (the Chat page)** on
 > branch `worktree-agent-aa53d8a518425a5df` off `main` @ `ebf99a2`, 2026-08-27 —
-> `docs/info/code-notes.md` § "chat 2 — dashboard (11b)". ⚠️ **Not merged.**
+> `docs/info/code-notes.md` § "chat 2 — dashboard (11b)". ⚠️ ~~**Not merged.**
 > **11a is still open**, so the page runs against `site/mock/server.mjs` only and
 > the eight new chat rows in `contract.json` fail `tests/api/test_contract.py`
-> until the real routes exist.
+> until the real routes exist.~~ **STALE — both halves merged and deployed together in
+> `5f5741a` on 2026-08-27**; the real routes exist and `contract.json` is green.
 
 ## What exists
 `chat.py`: `INTENTS` trigger tables, `LINES` (5–6 per intent), `ATTENDEE_LINES`, `classify(text)`,
@@ -48,7 +64,9 @@ reply with `mention_author=False`, `chat.insult` action row. Every reply passes 
 - Page `chat.html` + `page-chat.js`: one card per intent (name, trigger chips editable, enabled switch,
   lines as an editable list with add/remove, "{name}" / "{attendees}" token help one line), "New intent"
   form, a **Try it** box that shows which intent a sentence would hit and the line it would get; the
-  `chat_mode` / `chat_cooldown_seconds` / new settings in the page's Settings section. Level fields,
+  `chat_mode` / `chat_cooldown_seconds` / new settings in the page's Settings section *(the
+  Discord half of this is now the `/chat` panel — every `/chat …` subcommand was removed at
+  **v75**, 2026-09-04; the page itself is unchanged)*. Level fields,
   token-only CSS, pager scroll-to-top helper (owner ask 14:01) if any list pages.
 
 ### 2. Data intents (kind `data`, answered from live state, never stored lines)
@@ -72,7 +90,9 @@ Each data intent renders through a short template line that IS editable on the C
 
 ### 5. Later (not this phase)
 A conversation backend behind `reply_for` with a persona prompt assembled from the enabled lines; out of
-scope until the owner asks.
+scope until the owner asks. *(This BECAME **Phase 14**, live 2026-09-01 in `a49e77d` — three tiers
+(canned intents → Groq/Llama → Haiku), a knowledge store, personas and a spend ledger, all behind
+`chat_llm_mode`. See [`phase14-design.md`](phase14-design.md).)*
 
 ## Test-mode + guard
 Unchanged: guard first, replies and reactions only where `allows_channel`; the staff-channel route note
