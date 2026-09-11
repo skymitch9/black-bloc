@@ -1,6 +1,15 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-11 08:34** — the docs-wide staleness pass re-measured this header's numbers off `main`
+> `1d090e5`, and every one still holds: the file carries rows **1–350**; the live release is **v108**
+> (merge `73e2e44`, the **107th** and last line of [`../deploys.log`](../deploys.log));
+> `SCHEMA_VERSION` **34**; `len(settings_store.KEY_TYPES)` **202**; `pytest -n auto` **5,546
+> passed** in 40 s; `site/mock/contract.json` **17 pages / 150 routes / 115 action kinds**.
+> ⚠️ **NOT done in that pass: any sweep.** No Discord button was pressed, no bot was booted (a
+> worktree holds no token), no browser opened a page — so every row below is still the owner's to
+> do, and **343–350** remain the newest batch never seen in Discord. **No row was edited; the rows
+> are the owner's.** Before that,
 > **2026-09-11 00:38** — rows **343–350** (the WHERE FOLLOW-UP 4 build) are ✅ **LIVE v108** 00:37, merge `73e2e44` of
 > `where-smart` — ⚠️ **never seen in Discord.** Row **347**'s caveat was MEASURED at the review (real GETs from the worktree, 00:3x; the row says what).
 > Schema **UNCHANGED at 34** — no migration and no backfill. Registry keys **199 → 202**
