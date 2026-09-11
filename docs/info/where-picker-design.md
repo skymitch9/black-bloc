@@ -1,15 +1,22 @@
 # The "Where?" picker — a real place on `/event` Propose, like Discord's own create-event dialog
 
-> **Audience:** whoever maintains the events form. **Status:** TRACKED, 🔨 **BUILT** on branch
-> `where-picker` off `main` at `a47e43a`, worktree `C:/lcw/bb-where-picker` — ⚠️ **NOT merged, NOT
-> deployed, and NOTHING here has met Discord**: no test can click a Discord button
+> **Audience:** whoever maintains the events form. **Status:** TRACKED, ✅ **LIVE as v105** — branch
+> `where-picker` off `main` at `a47e43a`, merge **`3205c0f`**, deployed **2026-09-10 17:09** Phoenix
+> (`../deploys.log`); **schema 33 → 34** (`events.where_kind`, `events.where_channel_id`). The
+> worktree `C:/lcw/bb-where-picker` and the branch have been removed. ⚠️ **NOTHING here has met
+> Discord**: no test can click a Discord button
 > ([`../access/testing.md`](../access/testing.md)), `python -m black_bloc` was NOT booted (a worktree
 > holds no token), and TEST_MODE deliberately makes no scheduled event at all, so the kind mapping in
 > §2 is proven by TESTS ONLY. What IS measured: the suite (**5395 → 5444**, forward and `BB_REVERSE=1`),
 > `ruff check black_bloc tests`, and `node site/mock/check.mjs`
 > (*ok - 17 pages, 150 routes, 14 core settings, all keys present*). The owner's by-eye rows are
 > **329–335** in [`../access/sweeps.md`](../access/sweeps.md). Every departure from what is written
-> below is in the **`## Deviations`** foot. Last verified (the header: 2026-09-10 17:30, measured on
+> below is in the **`## Deviations`** foot. **Last verified: 2026-09-11 08:50** (the header: the
+> merge, the deploy and the follow-up status lines re-read against `../deploys.log` and `../DONE.md`
+> on `main` at `f3ae743`; the body: as at the design, not re-measured this pass). ⚠️ **NOT checked
+> this pass:** anything in Discord or a browser, and none of §1–§8 or the four follow-up bodies were
+> re-measured — only their STATUS lines were, which is what was stale. Before that (the header:
+> 2026-09-10 17:30, measured on
 > the branch; the body: as at the design) — what existed before the build was read in
 > `black_bloc/events.py` (`build_card`, `create_event`, `EventFields`/`checked_fields`,
 > `EventDraft`/`draft_lines`, `update_event`, `create_scheduled_event`), `cogs/community/events.py`
@@ -17,9 +24,11 @@
 > **33**), `api/tools/events.py`, `site/public/assets/page-events.js`, and `site/public/assets/api.js`
 > (`/api/ref/channels` is already cached client-side). ⚠️ **The FOUR follow-up sections below this one are each their own
 > build with their own status line and their own deviations foot** — §1–§8 and the `## Deviations`
-> foot describe the FIRST build only, and the header above is that build's. The newest is
-> **`## Follow-up 4`**, 🔨 BUILT 2026-09-11 00:21 on branch `where-smart` off `main` at `9fc3a33`
-> — ⚠️ NOT merged, NOT deployed, never seen in Discord; measured there: suite **5502 → 5546**
+> foot describe the FIRST build only, and the header above is that build's. **All four are LIVE:**
+> follow-up 1 as **v106** (merge `6c10b9d`, 17:41), follow-ups 2+3 as **v107** (merge `ac43a20`,
+> 23:41), follow-up 4 as **v108** (merge `73e2e44`, 2026-09-11 00:37). The newest is
+> **`## Follow-up 4`**, built 2026-09-11 00:21 on branch `where-smart` off `main` at `9fc3a33`
+> — ⚠️ never seen in Discord; measured there: suite **5502 → 5546**
 > forward and `BB_REVERSE=1`, `ruff` clean, `node site/mock/check.mjs` *ok - 17 pages, 150 routes,
 > 14 core settings, all keys present*, registry keys **199 → 202**, schema unchanged at **34**.
 > ⚠️ NOT re-verified for follow-up 4: everything in §1–§8 and in follow-ups 1–3, which were read
@@ -155,6 +164,9 @@ conductor's, at landing).
 
 ## Deviations
 
+> The FIRST build's foot. **Status: ✅ LIVE v105 — merged `3205c0f`, deployed 2026-09-10 17:09.**
+> ⚠️ Nothing here has met Discord.
+
 - **D1 (build) There is no `EditModal`, so staff got a Where BUTTON on the review card instead.**
   §5's table points at "the staff **Edit** on the review panel (`EditModal`,
   `cogs/community/events.py` ~1065)" with a `location` TextInput. No such class exists anywhere in
@@ -214,9 +226,10 @@ conductor's, at landing).
 
 ## Follow-up — a channel AND a link together, the link appended to the description
 
-> Written 2026-09-10 17:18 against `main` at `d5c0515` (v105 live). **Status: 🔨 BUILT** on branch
-> `where-link` off `main` at `ebe0ead` (commits `08173b7`, `2cfbdbe`) — ⚠️ **NOT merged, NOT deployed, and
-> NOTHING here has met Discord**: no test can click a Discord button, `python -m black_bloc` was NOT booted
+> Written 2026-09-10 17:18 against `main` at `d5c0515` (v105 live). **Status: ✅ LIVE v106**
+> (2026-09-10 17:41, merge `6c10b9d` of `where-link`; built off `main` at `ebe0ead`, commits
+> `08173b7`, `2cfbdbe`) — ⚠️ **NOTHING here has met
+> Discord**: no test can click a Discord button, `python -m black_bloc` was NOT booted
 > (a worktree holds no token), no browser rendered the events page, and TEST_MODE makes no scheduled event at
 > all, so **the appended description is proven by TESTS ONLY**. What IS measured: the suite (**5453 → 5473**,
 > forward and `BB_REVERSE=1`), `ruff check black_bloc tests`, and `node site/mock/check.mjs`
@@ -270,6 +283,9 @@ with both), `docs/info/code-notes.md` (a by-NAME `## Where follow-up` block unde
 (status line on the 🆕 item only — the MOVE to DONE is the conductor's).
 
 ## Follow-up deviations
+
+> Follow-up 1's foot. **Status: ✅ LIVE v106 — merged `6c10b9d`, deployed 2026-09-10 17:41.**
+> ⚠️ Nothing here has met Discord.
 
 - **F1 (build) The modal's TITLE flips as well as the button's label.** The table above names only the
   button (`Link or place (optional)…`). "Somewhere else" over a box that is adding a Twitch link *beside*
