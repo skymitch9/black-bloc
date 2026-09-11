@@ -1,13 +1,12 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-10 17:20** — rows **329–335** written by the WHERE PICKER build on branch `where-picker`, off
-> `main` at `a47e43a`; the conductor renumbers them at the merge. **Schema 33 → 34** (`events` gains
+> **2026-09-10 17:14** — rows **329–335** written by the WHERE PICKER build on branch `where-picker`, off
+> `main` at `a47e43a`, **merged `3205c0f` and LIVE as v105 17:09** (numbers kept — 328 was already on main). **Schema 33 → 34** (`events` gains
 > `where_kind` and `where_channel_id`); registry keys **unchanged** — the design says there is nothing to
 > decide; mock routes unchanged at **150** (checked: *17 pages, 150 routes, 14 core settings*); one new log
-> kind `event.where_channel_gone`; tests **5395 → 5444**. ⚠️ **Nothing in 329–335 has met Discord** — no
-> test can click a Discord button, the branch is NOT merged and NOT deployed, and `python -m black_bloc`
-> was NOT booted (a worktree holds no token). 329–334 are done in `#mute-me-bot-test-spam` or on the
+> kind `event.where_channel_gone`; tests **5403 → 5453** on main. ⚠️ **Nothing in 329–335 has met Discord** — no
+> test can click a Discord button; the deploy booted (selftest 107/0) but nobody has pressed **Where**. 329–334 are done in `#mute-me-bot-test-spam` or on the
 > website; **335 needs TEST_MODE lifted** and is owner-side. Before that,
 > **2026-09-10 16:40** — row **328** written by the RAID-TRAIN CALENDAR NAME build on branch `raidtrain-name`,
 > off `main` at `d25f87c`. Schema UNCHANGED at **33**; registry keys **196 → 197**; mock routes unchanged at
