@@ -27,7 +27,14 @@ from .settings_store import (
     NAME_PLACEHOLDER,
     TIME_STEP_KEY,
     TIMEZONE_CHOICES_KEY,
+    WHERE_ALIASES,
+    WHERE_ALIASES_KEY,
+    WHERE_CHECK_KEY,
+    WHERE_CHECK_MODE,
+    WHERE_CHECK_SECONDS,
+    WHERE_CHECK_SECONDS_KEY,
     staff_roles_sentence,
+    where_alias_table,
 )
 from .timezones import (
     AMBIGUOUS,
@@ -192,6 +199,9 @@ WHERE_BARE_HOST = "www."
 WHERE_ASSUMED_SCHEME = "https://"
 WHERE_OPEN_LINK_BUTTON = "Open link"
 ROW_ITEM_CAP = 5
+WHERE_HOST = re.compile(r"^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}(/\S*)?$", re.IGNORECASE)
+WHERE_HANDLE = re.compile(r"^@?[a-z0-9._-]{1,64}$", re.IGNORECASE)
+WHERE_ALIAS_SPLIT = re.compile(r"[/\s]+")
 
 
 class Where(NamedTuple):
@@ -249,7 +259,23 @@ def where_link(text: Any) -> str | None:
             return said if len(said) > len(scheme) else None
     if lowered.startswith(WHERE_BARE_HOST) and len(said) > len(WHERE_BARE_HOST):
         return f"{WHERE_ASSUMED_SCHEME}{said}"
+    if WHERE_HOST.match(said):
+        return f"{WHERE_ASSUMED_SCHEME}{said}"
     return None
+
+
+def where_typed(text: Any, aliases: Any = WHERE_ALIASES) -> str:
+    """`ttv/skyaiva` and `yt skyaiva` become the link they mean; anything else is left as typed."""
+    said = str(text or "").strip()
+    if not said or where_link(said) is not None:
+        return said
+    parts = WHERE_ALIAS_SPLIT.split(said, maxsplit=1)
+    if len(parts) != 2:
+        return said
+    template = where_alias_table(aliases).get(parts[0].lower())
+    if template is None or WHERE_HANDLE.match(parts[1]) is None:
+        return said
+    return template.format(handle=parts[1].lstrip("@"))
 
 
 def where_shown(text: Any) -> str:
@@ -308,10 +334,12 @@ WHERE_NOT_A_PLACE = (
 )
 
 
-def checked_where(guild: Any, kind: Any, channel_id: Any, text: Any) -> tuple[Where | None, str]:
+def checked_where(
+    guild: Any, kind: Any, channel_id: Any, text: Any, *, aliases: Any = WHERE_ALIASES
+) -> tuple[Where | None, str]:
     """The website's door onto the same three kinds, refusing in words rather than a status."""
     wanted = str(kind or "").strip().lower()
-    typed = clamp(text, LOCATION_LIMIT)
+    typed = clamp(where_typed(clamp(text, LOCATION_LIMIT), aliases), LOCATION_LIMIT)
     if not wanted:
         return (Where(WHERE_OTHER, None, typed) if typed else WHERE_UNSET), ""
     if wanted not in WHERE_KINDS:
@@ -338,8 +366,9 @@ def described_with_where(description: Any, where: Where, *, appended: bool = Tru
     text = clamp(where.text, LOCATION_LIMIT)
     if not appended or not text or where.kind not in WHERE_CHANNEL_KINDS:
         return body
-    trimmed = clamp(body, max(DESCRIPTION_LIMIT - len(text) - len(WHERE_LINK_JOIN), 0))
-    return f"{trimmed}{WHERE_LINK_JOIN}{text}" if trimmed else text
+    said = where_link(text) or text
+    trimmed = clamp(body, max(DESCRIPTION_LIMIT - len(said) - len(WHERE_LINK_JOIN), 0))
+    return f"{trimmed}{WHERE_LINK_JOIN}{said}" if trimmed else said
 
 
 def build_card(
@@ -1652,6 +1681,18 @@ def zone_choices(store: Any, guild_id: int) -> list[str]:
 
 def minute_step(store: Any, guild_id: int) -> int:
     return int(store.get(guild_id, TIME_STEP_KEY) or 15)
+
+
+def where_aliases(store: Any, guild_id: int) -> str:
+    return str(store.get(guild_id, WHERE_ALIASES_KEY) or WHERE_ALIASES)
+
+
+def link_check_mode(store: Any, guild_id: int) -> str:
+    return str(store.get(guild_id, WHERE_CHECK_KEY) or WHERE_CHECK_MODE).strip().lower()
+
+
+def link_check_seconds(store: Any, guild_id: int) -> int:
+    return int(store.get(guild_id, WHERE_CHECK_SECONDS_KEY) or WHERE_CHECK_SECONDS)
 
 
 def zone_line(name: str, *, chosen: bool) -> str:

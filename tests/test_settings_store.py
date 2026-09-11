@@ -62,6 +62,16 @@ from black_bloc.settings_store import (
     TIMEZONE_CHOICES,
     TIMEZONE_CHOICES_KEY,
     TIMEZONE_CHOICES_MAX,
+    WHERE_ALIAS_MAX,
+    WHERE_ALIASES,
+    WHERE_ALIASES_KEY,
+    WHERE_CHECK_KEY,
+    WHERE_CHECK_MAX_SECONDS,
+    WHERE_CHECK_MIN_SECONDS,
+    WHERE_CHECK_MODE,
+    WHERE_CHECK_MODES,
+    WHERE_CHECK_SECONDS,
+    WHERE_CHECK_SECONDS_KEY,
     YOUTUBE_MODES,
     YOUTUBE_TEMPLATE,
     SettingError,
@@ -75,6 +85,7 @@ from black_bloc.settings_store import (
     require_staff,
     resolved_staff_roles,
     staff_roles_sentence,
+    where_alias_table,
 )
 from black_bloc.storage.db import Database
 from black_bloc.timezones import is_known
@@ -535,6 +546,72 @@ def test_the_test_mode_retention_refuses_both_ends_in_words():
     with pytest.raises(SettingError, match="cannot be more than 1440") as too_big:
         coerce_value(EVENTS_TEST_RETENTION_KEY, EVENTS_TEST_RETENTION_MAX_MINUTES + 1)
     assert "events_channel_retention_days" in str(too_big.value)
+
+
+def test_the_shorthand_table_is_a_staff_editable_key(store):
+    """Follow-up 4: `ttv/skyaiva` is a decision, so it is a setting and not a hard-coded list."""
+    assert KEY_TYPES[WHERE_ALIASES_KEY] == "text"
+    assert KEY_HELP[WHERE_ALIASES_KEY]
+    assert namespace_of(WHERE_ALIASES_KEY) == "events"
+    assert store.get(1, WHERE_ALIASES_KEY) == WHERE_ALIASES
+    assert where_alias_table(WHERE_ALIASES)["ttv"] == "https://twitch.tv/{handle}"
+    assert where_alias_table(WHERE_ALIASES)["yt"] == "https://youtube.com/@{handle}"
+
+
+def test_the_shorthand_table_drops_an_entry_it_cannot_read_and_keeps_the_first_spelling():
+    kept = coerce_value(
+        WHERE_ALIASES_KEY,
+        "ttv=https://twitch.tv/{handle}, nonsense, sp ace=https://a.com/{handle}, "
+        "http=http://a.com/{handle}, none=https://a.com/there, two=https://a.com/{handle}{handle}, "
+        "stray=https://a.com/{who}, ttv=https://nope.example/{handle}",
+    )
+
+    assert kept == "ttv=https://twitch.tv/{handle}"
+
+
+def test_a_shorthand_table_with_nothing_readable_in_it_is_refused_in_words():
+    with pytest.raises(SettingError, match="shorthand Black Bloc can read") as caught:
+        coerce_value(WHERE_ALIASES_KEY, "nonsense, also nonsense")
+    said = str(caught.value)
+
+    assert "{handle}" in said and "ttv=https://twitch.tv/" in said
+    assert str(WHERE_ALIAS_MAX) in said
+
+
+def test_the_shorthand_table_stops_at_thirty_two_entries():
+    said = coerce_value(
+        WHERE_ALIASES_KEY,
+        ", ".join(f"a{one}=https://a.com/{{handle}}" for one in range(WHERE_ALIAS_MAX + 5)),
+    )
+
+    assert len(where_alias_table(said)) == WHERE_ALIAS_MAX == 32
+
+
+def test_whether_a_link_is_tried_first_is_a_three_way_key(store):
+    assert KEY_TYPES[WHERE_CHECK_KEY] == "enum"
+    assert KEY_HELP[WHERE_CHECK_KEY]
+    assert namespace_of(WHERE_CHECK_KEY) == "events"
+    assert store.get(1, WHERE_CHECK_KEY) == WHERE_CHECK_MODE == "warn"
+    for mode in WHERE_CHECK_MODES:
+        assert coerce_value(WHERE_CHECK_KEY, mode) == mode
+    with pytest.raises(SettingError, match="off, warn, refuse"):
+        coerce_value(WHERE_CHECK_KEY, "maybe")
+
+
+def test_how_long_the_link_check_waits_is_bounded_by_what_a_modal_has(store):
+    assert KEY_TYPES[WHERE_CHECK_SECONDS_KEY] == "int"
+    assert KEY_HELP[WHERE_CHECK_SECONDS_KEY]
+    assert store.get(1, WHERE_CHECK_SECONDS_KEY) == WHERE_CHECK_SECONDS == 2
+    assert coerce_value(WHERE_CHECK_SECONDS_KEY, WHERE_CHECK_MIN_SECONDS) == 1
+    assert coerce_value(WHERE_CHECK_SECONDS_KEY, WHERE_CHECK_MAX_SECONDS) == 3
+
+    with pytest.raises(SettingError, match="cannot be less than 1") as too_small:
+        coerce_value(WHERE_CHECK_SECONDS_KEY, 0)
+    assert "called unreachable" in str(too_small.value)
+
+    with pytest.raises(SettingError, match="cannot be more than 3") as too_big:
+        coerce_value(WHERE_CHECK_SECONDS_KEY, WHERE_CHECK_MAX_SECONDS + 1)
+    assert "three seconds" in str(too_big.value)
 
 
 def test_how_late_an_announcement_may_be_is_a_capped_whole_number():

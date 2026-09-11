@@ -96,6 +96,25 @@ EVENTS_SCHEDULED_NAME_KEY = "events_scheduled_name_template"
 EVENTS_SCHEDULED_NAME_TEMPLATE = "{title} Feat. BaF"
 NAME_PLACEHOLDER = "{title}"
 
+WHERE_ALIASES_KEY = "events_where_link_aliases"
+WHERE_ALIAS_MAX = 32
+HANDLE_PLACEHOLDER = "{handle}"
+WHERE_ALIASES = (
+    "ttv=https://twitch.tv/{handle}, twitch=https://twitch.tv/{handle}, "
+    "yt=https://youtube.com/@{handle}, youtube=https://youtube.com/@{handle}, "
+    "kick=https://kick.com/{handle}, tiktok=https://tiktok.com/@{handle}, "
+    "ig=https://instagram.com/{handle}, instagram=https://instagram.com/{handle}, "
+    "x=https://x.com/{handle}, twitter=https://x.com/{handle}, "
+    "discord=https://discord.gg/{handle}"
+)
+WHERE_CHECK_KEY = "events_where_link_check"
+WHERE_CHECK_MODES = ("off", "warn", "refuse")
+WHERE_CHECK_MODE = "warn"
+WHERE_CHECK_SECONDS_KEY = "events_where_link_check_seconds"
+WHERE_CHECK_SECONDS = 2
+WHERE_CHECK_MIN_SECONDS = 1
+WHERE_CHECK_MAX_SECONDS = 3
+
 DEFAULT_TIMEZONE_KEY = "default_timezone"
 TIMEZONE_CHOICES_KEY = "timezone_choices"
 TIME_STEP_KEY = "time_step_minutes"
@@ -239,6 +258,9 @@ KEY_TYPES: dict[str, str] = {
     "events_ping_role_id": "role",
     "events_create_scheduled": "bool",
     "events_where_link_in_description": "bool",
+    WHERE_ALIASES_KEY: "text",
+    WHERE_CHECK_KEY: "enum",
+    WHERE_CHECK_SECONDS_KEY: "int",
     "events_channel_retention_days": "int",
     EVENTS_TEST_RETENTION_KEY: "int",
     "events_max_late_minutes": "int",
@@ -339,6 +361,7 @@ KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "tempvoice_mode": TEMPVOICE_MODES,
     "honeypot_mode": HONEYPOT_MODES,
     "events_mode": EVENTS_MODES,
+    WHERE_CHECK_KEY: WHERE_CHECK_MODES,
     "poll_mode": POLL_MODES,
     "poll_review_mode": POLL_REVIEW_MODES,
     "poll_who_can_create": POLL_CREATORS,
@@ -365,6 +388,7 @@ KEY_MAX: dict[str, int] = {
     "honeypot_purge_days": HONEYPOT_PURGE_MAX_DAYS,
     "events_channel_retention_days": EVENTS_RETENTION_MAX_DAYS,
     EVENTS_TEST_RETENTION_KEY: EVENTS_TEST_RETENTION_MAX_MINUTES,
+    WHERE_CHECK_SECONDS_KEY: WHERE_CHECK_MAX_SECONDS,
     "events_max_late_minutes": EVENTS_LATE_CEILING_MINUTES,
     "events_default_minutes": EVENTS_DURATION_MAX_MINUTES,
     TIME_STEP_KEY: TIME_STEP_MAX_MINUTES,
@@ -390,6 +414,7 @@ KEY_MAX: dict[str, int] = {
 KEY_MIN: dict[str, int] = {
     "events_channel_retention_days": EVENTS_RETENTION_MIN_DAYS,
     EVENTS_TEST_RETENTION_KEY: EVENTS_TEST_RETENTION_MIN_MINUTES,
+    WHERE_CHECK_SECONDS_KEY: WHERE_CHECK_MIN_SECONDS,
     "events_default_minutes": EVENTS_DURATION_MIN_MINUTES,
     TIME_STEP_KEY: TIME_STEP_MIN_MINUTES,
     "chat_cooldown_seconds": CHAT_COOLDOWN_MIN_SECONDS,
@@ -417,6 +442,11 @@ KEY_MIN_REASON: dict[str, str] = {
     EVENTS_TEST_RETENTION_KEY: (
         "The sweep that deletes a test event's room only runs every five minutes, so anything "
         "under {limit} minute is the same as {limit} minute and only reads as broken."
+    ),
+    WHERE_CHECK_SECONDS_KEY: (
+        "A link check given less than {limit} second never gets an answer back, so every link "
+        "typed would be called unreachable. Set `events_where_link_check` to off if you would "
+        "rather no link was tried at all."
     ),
     "chat_cooldown_seconds": (
         "A gap shorter than {limit} seconds lets one person hold Black Bloc in a back-and-forth "
@@ -460,6 +490,11 @@ KEY_MAX_REASON: dict[str, str] = {
     EVENTS_TEST_RETENTION_KEY: (
         "{limit} minutes is a whole day, and a test room kept longer than that is not a test "
         "room any more. `events_channel_retention_days` is the setting for rooms meant to last."
+    ),
+    WHERE_CHECK_SECONDS_KEY: (
+        "Discord closes a box that has not been answered within three seconds, so waiting "
+        "longer than {limit} seconds on a link would lose whatever was typed into it. Set "
+        "`events_where_link_check` to off if you would rather no link was tried at all."
     ),
     "events_max_late_minutes": (
         "Announcing an event more than {limit} minutes after it started tells people to come to "
@@ -620,6 +655,23 @@ KEY_HELP: dict[str, str] = {
     "events_where_link_in_description": (
         "true to put the link or note typed beside a channel at the end of the Discord scheduled "
         "event's description, where a channel event has nowhere else to show it"
+    ),
+    WHERE_ALIASES_KEY: (
+        f"the shorthands the Where box turns into links, `alias=https://host/{HANDLE_PLACEHOLDER}`"
+        f" entries separated by commas, up to {WHERE_ALIAS_MAX} of them — so `ttv skyaiva` is "
+        f"stored as `https://twitch.tv/skyaiva`. An entry Black Bloc cannot read is dropped, and "
+        f"a bare host like `twitch.tv/skyaiva` is a link whatever this holds"
+    ),
+    WHERE_CHECK_KEY: (
+        "whether a link typed into the Where box is opened once before it is kept: off (never "
+        "tried), warn (kept either way, with a note on the draft when it does not answer) or "
+        "refuse (the box says so in words and keeps the old place). Twitch answers for any "
+        "channel name, so a misspelt Twitch name passes whatever this holds"
+    ),
+    WHERE_CHECK_SECONDS_KEY: (
+        f"seconds the link check waits for an answer, {WHERE_CHECK_MIN_SECONDS} to "
+        f"{WHERE_CHECK_MAX_SECONDS}; Discord closes a box that has not answered within three "
+        f"seconds, so the panel has to render in what is left"
     ),
     "events_channel_retention_days": (
         f"days a finished event's channel is kept before deletion, "
@@ -1604,6 +1656,12 @@ UNKNOWN_ZONE = (
     "`Asia/Tokyo`."
 )
 ZONE_DID_YOU_MEAN = " Did you mean {names}?"
+NO_LINK_ALIAS = (
+    "Not one of those is a shorthand Black Bloc can read, so nothing was changed. Each one is "
+    "an alias, an `=`, and a link with `{{handle}}` where the name goes — "
+    "`ttv=https://twitch.tv/{{handle}}, yt=https://youtube.com/@{{handle}}` — separated by "
+    "commas, and the list holds at most {limit} of them."
+)
 NO_KNOWN_ZONE = (
     "Not one of those is a time zone Black Bloc knows, so nothing was changed. They are "
     "`Region/City` names separated by commas — `America/Phoenix, Europe/London, Asia/Tokyo` — "
@@ -1646,6 +1704,35 @@ def checked_zones(given: Any) -> str:
     return ", ".join(wanted[:TIMEZONE_CHOICES_MAX])
 
 
+ALIAS_NAME = re.compile(r"^[a-z0-9]{1,16}$")
+
+
+def where_alias_table(given: Any) -> dict[str, str]:
+    """The one reader of the shorthand list; `events.where_typed` fills what it returns."""
+    table: dict[str, str] = {}
+    for part in str(given or "").split(","):
+        alias, sign, rest = part.strip().partition("=")
+        name, template = alias.strip().lower(), rest.strip()
+        if not sign or name in table or ALIAS_NAME.match(name) is None:
+            continue
+        if not template.startswith("https://"):
+            continue
+        if [one.strip() for one in PLACEHOLDERS.findall(template)] != ["handle"]:
+            continue
+        table[name] = template
+        if len(table) >= WHERE_ALIAS_MAX:
+            break
+    return table
+
+
+def checked_aliases(given: Any) -> str:
+    """The shorthand list: an entry Black Bloc cannot read is dropped, and 32 are kept."""
+    table = where_alias_table(given)
+    if not table:
+        raise SettingError(NO_LINK_ALIAS.format(limit=WHERE_ALIAS_MAX))
+    return ", ".join(f"{name}={template}" for name, template in table.items())
+
+
 def checked_name_template(given: Any) -> str:
     """`{title}` and nothing else, so a staff-typed name can never fail to render."""
     text = str(given or "").strip()
@@ -1667,6 +1754,7 @@ def checked_name_template(given: Any) -> str:
 TEXT_CHECKS: dict[str, Any] = {
     DEFAULT_TIMEZONE_KEY: checked_zone,
     TIMEZONE_CHOICES_KEY: checked_zones,
+    WHERE_ALIASES_KEY: checked_aliases,
     EVENTS_SCHEDULED_NAME_KEY: checked_name_template,
     RAIDTRAIN_SCHEDULED_NAME_KEY: checked_name_template,
 }
@@ -1985,6 +2073,12 @@ class SettingsStore:
             return True
         if key == "events_where_link_in_description":
             return True
+        if key == WHERE_ALIASES_KEY:
+            return WHERE_ALIASES
+        if key == WHERE_CHECK_KEY:
+            return WHERE_CHECK_MODE
+        if key == WHERE_CHECK_SECONDS_KEY:
+            return WHERE_CHECK_SECONDS
         if key == "events_channel_retention_days":
             return EVENTS_RETENTION_DAYS
         if key == EVENTS_TEST_RETENTION_KEY:

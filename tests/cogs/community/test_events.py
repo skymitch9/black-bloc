@@ -2813,7 +2813,9 @@ async def test_picking_a_channel_keeps_the_link_that_was_already_typed(cog, bot,
     back = await click(bot, member, pick(picker, [FakePicked(VOICE_CHANNEL, "voice")]))
 
     assert view.fields.where == Where(WHERE_VOICE, VOICE_CHANNEL, "twitch.tv/blackbloc")
-    assert f"<#{VOICE_CHANNEL}> · twitch.tv/blackbloc" in card_embed(back).description
+    assert f"<#{VOICE_CHANNEL}> · [twitch.tv/blackbloc](https://twitch.tv/blackbloc)" in (
+        card_embed(back).description
+    )
 
 
 async def test_the_box_beside_a_channel_stores_both_and_leaves_the_channel_alone(
@@ -2832,7 +2834,9 @@ async def test_the_box_beside_a_channel_stores_both_and_leaves_the_channel_alone
     await modal.on_submit(typed)
 
     assert view.fields.where == Where(WHERE_VOICE, VOICE_CHANNEL, "twitch.tv/blackbloc")
-    assert f"<#{VOICE_CHANNEL}> · twitch.tv/blackbloc" in card_embed(typed).description
+    assert f"<#{VOICE_CHANNEL}> · [twitch.tv/blackbloc](https://twitch.tv/blackbloc)" in (
+        card_embed(typed).description
+    )
 
 
 async def test_the_box_beside_a_channel_opens_on_what_is_already_there_and_empties_to_nothing(
@@ -2895,7 +2899,7 @@ async def test_the_calendar_entry_carries_the_link_in_its_description(cog, bot, 
     await approve(bot, lead, row["id"])
 
     made = bot.guild.scheduled[0].kwargs
-    assert made["description"] == "bring a chair\n\ntwitch.tv/blackbloc"
+    assert made["description"] == "bring a chair\n\nhttps://twitch.tv/blackbloc"
     assert made["entity_type"] is discord.EntityType.voice
     assert "location" not in made
 

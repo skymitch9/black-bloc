@@ -115,9 +115,11 @@ from ...events import (
     swept_anchor,
     tell_or_log,
     when_line,
+    where_aliases,
     where_button_label,
     where_link,
     where_of_channel,
+    where_typed,
     write_settings,
     zone_choices,
     zone_line,
@@ -823,7 +825,12 @@ class WhereModal(AnswersErrors, discord.ui.Modal, title=WHERE_MODAL_TITLE):
         self.place.default = where.text or None
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        typed = clamp(self.place, LOCATION_LIMIT)
+        store = interaction.client.store
+        guild_id = interaction.guild.id
+        typed = clamp(
+            where_typed(clamp(self.place, LOCATION_LIMIT), where_aliases(store, guild_id)),
+            LOCATION_LIMIT,
+        )
         where = self.previous.where
         if self.beside:
             await self.previous.take_where(interaction, where._replace(text=typed))
