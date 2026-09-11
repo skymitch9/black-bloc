@@ -1,6 +1,6 @@
 ﻿# Phase 12 — Logs: quiet Discord, loud website, `/… logs` everywhere
 
-> ⚠️ **SUPERSEDED IN PART, 2026-09-03 — the slash surface below is gone.** `/golive` and
+> ⚠️ **SUPERSEDED IN PART, 2026-09-03 (v70, `0aeed72`) — the slash surface below is gone.** `/golive` and
 > `/twitch` and all eight of their subcommands (`logs`, `optout`, `optin`, `status`, `mode`,
 > `test`, `link`, `unlink`) were replaced by ONE `/golive` command that opens an ephemeral
 > panel; every subcommand is a button, a select or a modal on it. The behaviour this doc
@@ -8,7 +8,15 @@
 > kinds are all exactly what it says. Only the way in moved:
 > [`golive-panel-design.md`](golive-panel-design.md). This doc is NOT rewritten.
 >
-> ⚠️ **`/mod logs` is gone too, 2026-09-05.** `/mod` became ONE command that opens a panel over
+> ⚠️ **EVERY `/<feature> logs` SUBCOMMAND IS GONE, 2026-09-03 → 2026-09-05.** §4 below lists
+> eleven of them; the panels program retired the lot. There are **zero `app_commands.Group`s
+> and zero subcommands** in the tree today (29 top-level commands), so every feature reaches
+> its lines through a **Logs button** on its panel, calling the same
+> `actionlog.send_logs(interaction, "<feature>")` the subcommand called. `black_bloc/logs_panel.py`
+> is the shared implementation. See [`logs-buttons-design.md`](logs-buttons-design.md) and
+> [`panels-program.md`](panels-program.md) invariant P11.
+>
+> ⚠️ **`/mod logs` is gone too, 2026-09-05 (v81, `a90f416`).** `/mod` became ONE command that opens a panel over
 > the case record, and its **Logs** button calls the same `send_logs(interaction, "mod")` — the
 > lines, the kinds and the gate are unchanged; only the way in moved
 > ([`mod-panel-design.md`](mod-panel-design.md)). `LOG_LEVEL_COMMANDS["mod"]` was REMOVED rather
@@ -27,10 +35,31 @@
 > and the decisions.
 
 
-> **Audience:** the Phase 12 build agents and the reviewer. **Status:** TRACKED (2026-08-31; private repo).
-> Last verified: **2026-08-27** — owner decisions taken 17:14–17:17; code facts from `black_bloc/actionlog.py`
-> and the per-phase code-notes kind lists (every phase reported its `log_action` kinds). NOT verified:
-> nothing has run. **Build after the Sunday 2026-08-30 16:00 weekly reset** unless the owner says otherwise.
+> **Audience:** the Phase 12 build agents and the reviewer. **Status:** TRACKED ·
+> ✅ **LIVE since 2026-08-27** — both halves deployed together as `417ef23`,
+> `2026-08-27T18:38:56-07:00` ("269 kinds classified (88 important), per-feature `_log_level`
+> gates the Discord line, `/<feature> logs` on 12 groups, `/api/actions` filters + CSV, Logs
+> sections on every page, Audit tab = Logs page"; 34 commands synced); `DONE.md` →
+> "2026-08-27 — Phase 12: Logs — quiet Discord, loud website, /… logs everywhere". ⚠️ Fly
+> release numbers were not written into `deploys.log` until **v59** (2026-09-03), so this
+> landing has a date and a commit but no `vNN`.
+>
+> ⚠️ **The COUNT "twelve" in decision 3 and §"Slices" is now EIGHTEEN.** Measured 2026-09-11:
+> `len(logkinds.FEATURES)` is **18** — `core, automod, honeypot, mod, modmail, golive,
+> **youtube**, events, birthday, tempvoice, rolemenu, poll, chat, **request**, **pings**,
+> **raidtrain**, **applications**, **selftest**` — and there are **18** `<feature>_log_level`
+> keys in `KEY_TYPES`, one per feature. `logkinds.IMPORTANT` holds **28** kinds today.
+> (The "269 kinds / 88 important" figure in the deploy line is a 2026-08-27 snapshot of the
+> whole classified surface, a different count from `IMPORTANT`'s explicit list.)
+>
+> Last verified: **2026-09-11 10:12** — re-measured against the tree at `1d090e5`:
+> `logkinds.FEATURES`, `logkinds.IMPORTANT`, `actionlog.send_logs` (`:299`) and
+> `settings_store.LOG_LEVEL_COMMANDS` (`:974`) all exist; the 18 `_log_level` keys listed
+> above are all in `KEY_TYPES`. ⚠️ **NOT verified:** still nothing against live Discord — no
+> line has been watched being suppressed or posted, no Logs button pressed, no dashboard page
+> opened in this pass.
+> Before that, **2026-08-27** — owner decisions taken 17:14–17:17; code facts from `black_bloc/actionlog.py`
+> and the per-phase code-notes kind lists (every phase reported its `log_action` kinds).
 
 > **12b built** in `48927b2` (contract + mock) / `32c8d23` (logsSection + the twelve mounts) /
 > `ec70c9b` (audit.html becomes the Logs page) / `6e2b6fc` (Overview important-only) / `047b21a`
@@ -47,9 +76,9 @@ discord spam to a minimum" — then (17:17) "a is fine, also any approvals need 
 |---|---|---|
 | 1 | What reaches the Discord log channel by default | **(a) important = acted on a member, or failed.** Shadow `would_*`, housekeeping, chat replies, poll creations, reminders, sweeps stay off Discord |
 | 2 | Approval requests | **Always notify.** Role requests, poll reviews and event proposals post their card/ping to their approval channel regardless of any log level — they are notifications, not log lines |
-| 3 | Per-feature control | `<feature>_log_level` ∈ `off` / `important` / `all`, default **important** (settings registry, one key per feature namespace: core, automod, honeypot, mod, modmail, golive, events, birthdays, tempvoice, rolemenu, poll, chat) |
+| 3 | Per-feature control | `<feature>_log_level` ∈ `off` / `important` / `all`, default **important** (settings registry, one key per feature namespace: core, automod, honeypot, mod, modmail, golive, events, birthdays, tempvoice, rolemenu, poll, chat) — ***eighteen** today: `youtube`, `request`, `pings`, `raidtrain`, `applications` and `selftest` joined with phases 13–19 and the self-test wave, and the key is `birthday_log_level` (singular)* |
 | 4 | Website | a **Logs** section on every feature page + the Audit tab becomes the global **Logs** page |
-| 5 | Slash | `/<feature> logs [count]` on every feature group, ephemeral, from the DB |
+| 5 | Slash | `/<feature> logs [count]` on every feature group, ephemeral, from the DB — *(removed 2026-09-03…09-05: every one is now a **Logs button** on the feature's panel calling the same `send_logs`; see the banner at the top)* |
 
 ## What exists (read, not remembered)
 `actionlog.log_action(bot, guild, kind, actor=…, target=…, details=…)` writes the `actions` row and posts a
@@ -86,7 +115,14 @@ Discord line for the handful of kinds the owner wants regardless (none today; th
   Health keeps its last-50 (different question: "is it alive").
 - Each feature page's Settings section shows its `<feature>_log_level` segment.
 
-### 4. Slash
+### 4. Slash — ⚠️ REMOVED 2026-09-03 → 2026-09-05 (every one is a Logs BUTTON now)
+
+*(Removed: all eleven `/<feature> logs` leaves retired with their groups as the panels program
+landed. The button on each panel calls the same `actionlog.send_logs`, loses the two options,
+and carries its own `require_staff`. `black_bloc/logs_panel.py` is the shared implementation;
+see [`logs-buttons-design.md`](logs-buttons-design.md). Kept below as the record of what the
+slash surface was.)*
+
 `/<feature> logs [count: 1–50, default 10] [important_only: bool]` added to every command group (`/golive`,
 `/event`, `/voice`, `/rolemenu`, `/role`, `/automod`, `/honeypot`, `/modmail`, `/poll`, `/chat`,
 plus `/mod logs` for cases/warns; `/request` and `/birthday` moved theirs onto a **Logs button** when they

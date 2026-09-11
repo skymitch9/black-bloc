@@ -563,7 +563,7 @@ old Audit page work unchanged.
 | `details` | `1` to include the `details` blob (unchanged; `summary` is always there) |
 | `kind` | a whole kind or a dotted prefix (unchanged) |
 | `user_id` | either end of the action (unchanged) |
-| `feature` | one of the twelve `logkinds.FEATURES`; anything else is a **400 with a sentence naming the twelve** |
+| `feature` | one of the twelve `logkinds.FEATURES`; anything else is a **400 with a sentence naming the twelve** — *`len(FEATURES)` is **18** today (2026-09-11); the route names whatever the set holds* |
 | `q` | case-insensitive substring over kind, actor name, target name, reason and the details JSON |
 | `since` / `until` | ISO; a bare `2026-08-27` as `until` means the **end** of that day |
 | `important` | `1` for the lines that acted on a member or failed |
@@ -596,7 +596,7 @@ one answers CSV, exactly as `/api/polls/{id}/export.csv` already is. Its
 refusals are the list route's refusals (400 on a bad feature / date / id, 401
 signed out, 503 with no guild or no database).
 
-### Twelve more settings keys
+### Twelve more settings keys *(**eighteen** today — one per `logkinds.FEATURES` entry, and the set grew)*
 
 `<feature>_log_level` for each of `logkinds.FEATURES`, enum
 `off`/`important`/`all` (quietest first — the order the page's segment renders),
