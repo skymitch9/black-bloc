@@ -1,15 +1,37 @@
 # Applications without a role — "let's have the bot store the info!"
 
-> ⚠️ **2026-09-03: `/applications show` is gone and its `TakeOffButton` moved.** The button lives on the application card the `/apply` panel renders, drawn from `applications.CARD_BUTTONS` for an `approved` row on a form that keeps a list — same `remove()`, same reason modal, same DM. `/apply` → **A form…** → **Roster** → **Take somebody off…** is the other door. See [`applications-panel-design.md`](applications-panel-design.md).
+> ⚠️ **2026-09-03: the WHOLE `/applications` group is gone — `/apply` is the one command** (v66,
+> `853776c`; [`applications-panel-design.md`](applications-panel-design.md)). Every `/applications …`
+> subcommand §C names — `create`, `edit`, `list`, `show` — retired into the panel, so read §C's slash
+> rows as the shape of the MOVE, not of a command that still exists. `/applications show`'s
+> `TakeOffButton` moved: the button lives on the application card the `/apply` panel renders, drawn
+> from `applications.CARD_BUTTONS` for an `approved` row on a form that keeps a list — same
+> `remove()`, same reason modal, same DM. `/apply` → **A form…** → **Roster** → **Take somebody off…**
+> (`TAKE_SOMEBODY_OFF`, `cogs/community/applications.py:143`) is the other door.
 
-**Audience:** the Opus build agent, then the reviewer. **Status:** TRACKED · ✅ **SHIPPED** — merged `main`
-`9891f71` 12:40, live in **v62** 12:48 (schema 28; the C1 rebuild ran on the live DB, boot log 19:47:59Z).
-**Last verified:** 2026-09-03 — built to this spec; 3414 tests pass, ruff clean, `check.mjs`
-reports 17 pages / 141 routes. Five deviations at the foot. NOT verified: no Discord surface
-and no deployed site surface was exercised — `docs/access/sweeps.md` rows **69–72** are the
-owner's by-eye checks. The `path:line` numbers in §A and §C are as they were in `46e3ba4` and
-have NOT been re-keyed since the build moved them; `code-notes.md`'s
-`# Applications, no-role pass` section carries the current ones.
+**Audience:** the Opus build agent, then the reviewer. **Status:** TRACKED · ✅ **LIVE** — merged `main`
+`9891f71` 12:40, live since **v62** 12:48 2026-09-03 (schema 28 then; the C1 rebuild ran on the live DB,
+boot log 19:47:59Z). Still live at **v108** (`73e2e44`, 2026-09-11 00:37).
+**Since then:** the `/applications` group retired into the `/apply` panel (v66, banner above) and the
+schema moved 28 → **34** (v105 `events.where_*`); nothing in §B's decision was undone.
+**Last verified:** 2026-09-11 08:29 — re-measured in this tree at `1d090e5`: `SCHEMA_VERSION` **34**,
+registry **202** keys, and every symbol §C names still exists and is imported where it says —
+`NO_ROLE` (`applications.py:41`), `ROSTER_SHOWS_LEFT_KEY`/`applications_roster_shows_left` (`:36`,
+`settings_store.py:1022`), `PANEL_MINUTES_KEY`/`applications_panel_minutes` (`:37`, `:1023`),
+`APPROVED_ON_RECORD` (`:195`), `REMOVED_SAID` (`:197`), `DM_REMOVED` (`:206`), `REMOVE_NEEDS_A_REASON`
+(`:164`), `REMOVE_NOT_APPROVED` (`:168`), `remove_application` (`:1038`), `twitch_logins_for` (`:968`),
+`REMOVE_IS_FOR_LISTS` (`cogs/community/applications.py:95`), log kind `application.removed`
+(`logkinds.py:368`), `GET /api/applications/roster` + the remove route (`api/tools/applications.py:354`,
+`:455`), `rosterFoldout`/`ROSTER_LINE`/**Copy as text** (`site/public/assets/page-rolemenus.js:1005`,
+`:1010`). ⚠️ One symbol is GONE: `ROLE_OR_NO_ROLE` (deviation 3) — it lived on `/applications edit`,
+which v66 retired. Five deviations at the foot.
+⚠️ **NOT verified in this pass:** nothing was opened in Discord or in a browser, no pytest/ruff/check.mjs
+run, no live dashboard read — `docs/access/sweeps.md` rows **69–72** (rewritten for the `/apply` panel at
+v66) are still the owner's by-eye checks. The `path:line` numbers in §A and §C are as they were in
+`46e3ba4` and have NOT been re-keyed since; `code-notes.md`'s `# Applications, no-role pass` section
+carries the current ones — trust the anchor text, not the number.
+**Before that, 2026-09-03:** built to this spec; 3414 tests pass, ruff clean, `check.mjs` reported
+17 pages / 141 routes (150 today).
 
 Ask (Discord, 2026-09-03): a member asked whether the Twitch-team application could be done
 *without a role*, or else a "stream team" role added as a reference point for who applied and
@@ -217,7 +239,10 @@ Five, all from the build on `feat/applications-no-role` (2026-09-03, commits `02
    ("That application is **{status}**, not approved…") — reusing `ALREADY_DECIDED` would have
    told somebody their pending application was "already **pending**". And `ROLE_OR_NO_ROLE`,
    for `/applications edit role: no_role:true` given together (§C3 required the refusal but
-   left it unnamed).
+   left it unnamed). ⚠️ **`ROLE_OR_NO_ROLE` no longer exists (since v66):** the two arguments
+   that could contradict each other went with `/applications edit`, and the panel's role picker
+   (`EDIT_ROLE_PICK`, `cogs/community/applications.py:149`) cannot express both at once.
+   `REMOVE_NOT_APPROVED` (`applications.py:168`) is still there.
 4. **`check.mjs` walks the ROUTES, not the DOM** (§C5's last row). `site/mock/check.mjs` is a
    route-contract runner with no DOM and no browser; the new `checkRoster()` performs the same
    walk over HTTP — roster lists 3 with a Twitch login and a left-the-server flag, one removal
