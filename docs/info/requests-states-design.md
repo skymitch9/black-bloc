@@ -122,7 +122,9 @@ that we marked something as hold and why".
   `NOTIFY_LINE`.
 - `request_dms_on_decision` stays the DM switch (rename its label to "DM the
   requester on every status change"; the key name stays — persisted keys are
-  migrations to change).
+  migrations to change). ⚠️ **The key is spelled `request_dm_on_decision`** (singular `dm`) —
+  this line's `request_dms_on_decision` never existed; measured 2026-09-11 against
+  `settings_store.KEY_TYPES`.
 - `AllowedMentions.none()` everywhere; guard-checked (`guard_allows`), a
   refused channel is logged `request.notify_skipped_test_mode`, not raised;
   a failed post logs `request.notify_failed` with the move in `details`.
