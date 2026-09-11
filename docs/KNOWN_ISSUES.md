@@ -2,7 +2,7 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-11 08:33** — every OPEN entry was re-read against the repo at
+> Last verified: **2026-09-11 10:50** — **KI-25 ADDED** (Discord-only sign-in, `WAIVED` by the owner: "A discord is fine"); **08:33** — every OPEN entry was re-read against the repo at
 > `main` `1d090e5` (**v108 LIVE**). What moved:
 > **KI-24 is now LIVE, not just closed on a branch** — it merged as `689eff5` and shipped
 > **v97** (`aa44e3b`, 2026-09-06 13:52; `deploys.log:96`); `black_bloc/loops.py` exists and
@@ -81,6 +81,27 @@
 >
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
+
+## KI-25 — Discord is the ONLY sign-in; the phase-8 Google SSO for the owner was never built — `WAIVED`
+
+**Symptom:** phase 8 decision 3 (2026-08-26, [`info/phase8-design.md`](info/phase8-design.md))
+planned two identity providers — Discord OAuth2 for staff and Google OAuth2 allow-listed to the
+owner's account, linked by a `user_identities` table. Neither the Google flow nor the table exists
+(`grep -ri google black_bloc/` finds only the YouTube Data API host). The owner signs in through
+Discord like every staffer and gets owner rights because `api/auth.py:222` matches the guild's
+`owner_id`.
+
+**Status:** `WAIVED` — owner, 2026-09-11 10:50, verbatim *"A discord is fine"* (answer to the
+docs-pass question, option A: drop it).
+
+**Why tolerated:** every gate on the site is a Discord role, so a Google identity would grant no
+permission the Discord one does not already carry; a second provider is a second login surface
+and a second secret to hold. The one thing it would buy is a Discord-independent door if the
+owner's Discord account were locked or Discord were down.
+
+**What would change it:** the owner being locked out of Discord with something on the site that
+cannot wait — that is the break-glass case. If it ever happens, the design is still written in
+`phase8-design.md` decision 3; build it then, not before.
 
 ## KI-24 — (RESOLVED 2026-09-06, **LIVE v97**) A `before_loop` failure bypasses `@loop.error` — `CLOSED`
 

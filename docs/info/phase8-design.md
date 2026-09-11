@@ -15,7 +15,7 @@
 > | Planned here | What actually shipped |
 > |---|---|
 > | Front end on **Cloudflare Pages** (`wrangler pages deploy site/public`) | Served by the **same Fly app** — `black_bloc/api/assets.py` mounts `site/public` through a `StaticFiles` subclass. There is no `wrangler.toml` in this repo and the Pages directory-deploy rules never applied. |
-> | **Google OAuth2** for the owner + a `user_identities` table | Never wired. Discord OAuth2 is the only identity provider; `grep -ri google black_bloc/` finds only the YouTube Data API host, and `user_identities` does not exist. |
+> | **Google OAuth2** for the owner + a `user_identities` table | Never wired, and **dropped by the owner 2026-09-11** (KI-25). Discord OAuth2 is the only identity provider; `grep -ri google black_bloc/` finds only the YouTube Data API host, and `user_identities` does not exist. |
 > | 12 pages, including named **Logging** and **Access** pages | **17** pages under `site/public/` (`index · golive · rolemenus · events · birthdays · tempvoice · honeypot · moderation · automod · modmail · polls · chat · requests · members · settings · audit · health`). The Logs page is `audit.html`; there is no Access page. |
 >
 > **Last verified: 2026-09-11 09:20** — re-measured against the tree at `1d090e5`: 17 HTML
@@ -149,7 +149,8 @@ Browser ──HTTPS──▶ Cloudflare Pages (static: HTML/JS, estate theme, es
    on a local account id — design it in now, wire Google later if it slows
    8b). ⚠️ **Google was never wired and `user_identities` was never built** (measured
    2026-09-11): Discord OAuth2 is the only identity provider. The owner signs in as a staff
-   member like everyone else. This is an OPEN gap against decision 3, not a quiet change.
+   member like everyone else. ✅ **WAIVED by the owner 2026-09-11 10:50 ("A discord is fine")** —
+   decision 3's Google half is dropped on purpose; [`../KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) KI-25.
 4. **Who gets in:** exactly the roles that can currently see
    `#mute-me-bot-test-spam` — `Aunties / Uncles` and the roles above it.
    This is Phase 1's `staff_role_ids` derivation from `staff_channel_id`,
