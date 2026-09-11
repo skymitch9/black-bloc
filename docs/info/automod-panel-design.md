@@ -8,7 +8,7 @@
 > `## Build deviations` at the foot is the delta.
 >
 > **Since then, four things this document predates** (each marked again where it bites):
-> 1. **v78** (`3429233`, 2026-09-05) — `HIDDEN_WHEN_OFF` grew from one key to fifteen, so
+> 1. **v78** (`3429233`, 2026-09-05) — `HIDDEN_WHEN_OFF` grew from one key to fourteen, so
 >    `automod_mode: ("automod",)` EXISTS now (`command_visibility.py:19`) and `/automod` DOES vanish
 >    while the mode is off, behind the new `hide_commands_when_off` bool. §E's last row and §I's
 >    fourth settled bullet are history.
@@ -551,7 +551,7 @@ Phase 6 appendix block at `:210–216` was rewritten **in place**, not added to.
 - ✅ **`/automod` does not vanish when the mode is off** — measured at the build, `HIDDEN_WHEN_OFF`
   (`command_visibility.py:16–19`) had no automod entry, and the owner answered this shape on
   2026-09-03 ("Visible") for applications. ⚠️ **REVERSED at v78** (2026-09-05, *"a feature turned
-  off on the portal takes its `/command` with it"*): the map now names all fifteen features,
+  off on the portal takes its `/command` with it"*): the map now names fourteen features,
   automod included, behind `hide_commands_when_off` (default true).
 - ✅ **The `Apply now` button on modlog case cards is left exactly as it is** (P14) — it is a
   persistent `DynamicItem` that belongs to the room, and it is already the staffer's phone-side

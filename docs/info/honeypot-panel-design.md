@@ -10,7 +10,7 @@
 >    (with `automod_mode` — the only three cog-gated writes in the app) to the cog's own move, so
 >    the website gets the SAME verdict the panel does. The issue was moved whole to `DONE.md`.
 > 2. **v78** (`3429233`) landed the hide-when-off build this document was written beside:
->    `HIDDEN_WHEN_OFF` went from one key to fifteen, so `honeypot_mode: ("honeypot",)` EXISTS now
+>    `HIDDEN_WHEN_OFF` went from one key to fourteen, so `honeypot_mode: ("honeypot",)` EXISTS now
 >    (`command_visibility.py:24`) — the measurement *"holds `request_mode` only today"* is history,
 >    and §E's row and §I's settled answer (the entry stays) both read correctly against it.
 > 3. **v84** (`ce97de0`) corrected `LOG_LEVEL_COMMANDS`, so `honeypot_log_level`'s help names

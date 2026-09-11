@@ -10,7 +10,9 @@
 > panels merged). Merged `--no-ff` `853776c` after Fable review 2026-09-03 (3697 tests).
 > **Since then:** ⚠️ **fork I-A2 was reversed at v78** (`3429233`, 2026-09-05, *"a feature turned off
 > on the portal takes its `/command` with it"*) — `HIDDEN_WHEN_OFF["applications_mode"] = ("apply",)`
-> is back (`command_visibility.py:18`), one of fifteen, behind the new `hide_commands_when_off` bool.
+> is back (`command_visibility.py:18`), one of **fourteen** today, behind the new
+> `hide_commands_when_off` bool (v78 added fifteen; `/memory`'s carve-out came straight back out at
+> `51b5164` the same day).
 > `/apply` DOES vanish again while the mode is off; §E's fork row and §I-A2 below are history, marked
 > in place. Also since: `/settings` became a panel and the whole `settings` Group retired (v84), the
 > tree fell 42 → **29** with zero Groups, and the mock grew 142 → **150** routes.
@@ -377,7 +379,7 @@ The three that are genuinely his:
   forms" so the search box finds it either way. Whichever he picks, it is member-visible (§B).
 - ✅ **I-A2 — DECIDED by the owner 2026-09-03 13:47: "Visible"** — ⚠️ **and REVERSED by him at v78**
   (2026-09-05, `3429233`, *"a feature turned off on the portal takes its `/command` with it"*), which
-  put `applications_mode: ("apply",)` back as one of fifteen entries behind the new
+  put `applications_mode: ("apply",)` back as one of fourteen entries behind the new
   `hide_commands_when_off` bool. The paragraph below is what was built at v66 and is history; today
   `/apply` vanishes while the mode is off, and the off-panel wording it also built still stands for
   staff, who reach the panel by turning `hide_commands_when_off` off or through the site.

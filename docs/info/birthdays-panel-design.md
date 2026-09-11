@@ -7,8 +7,8 @@
 > See the `## Deviations` foot for every departure.
 >
 > **Since then, four things this document predates:**
-> 1. **v78** (`3429233`) — `HIDDEN_WHEN_OFF` grew to fifteen entries, so `birthday_mode:
->    ("birthday",)` EXISTS now (`command_visibility.py:21`). §E's *"`command_visibility` has no
+> 1. **v78** (`3429233`) — `HIDDEN_WHEN_OFF` grew to fourteen entries, so `birthday_mode:
+>    ("birthday",)` EXISTS now (`command_visibility.py:20`). §E's *"`command_visibility` has no
 >    birthday entry"* is history: `/birthday` DOES vanish while the mode is off, behind
 >    `hide_commands_when_off`.
 > 2. **v84** (`ce97de0`) — `LOG_LEVEL_COMMANDS` was corrected for all 17 features and
