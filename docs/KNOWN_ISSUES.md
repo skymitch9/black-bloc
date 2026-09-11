@@ -2,11 +2,29 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-06 — KI-24 CLOSED** on branch `loop-guard`: the fourteen `before_loop`s
+> Last verified: **2026-09-11 08:33** — every OPEN entry was re-read against the repo at
+> `main` `1d090e5` (**v108 LIVE**). What moved:
+> **KI-24 is now LIVE, not just closed on a branch** — it merged as `689eff5` and shipped
+> **v97** (`aa44e3b`, 2026-09-06 13:52; `deploys.log:96`); `black_bloc/loops.py` exists and
+> `wait_ready` has **27** call sites, with the only bare `bot.wait_until_ready()` left in the
+> helper itself. **KI-20's symptom list was two panels and is now eighteen** — measured:
+> **18** `*_panel_minutes` keys in `settings_store.KEY_TYPES`, every one defaulting to **10**.
+> **KI-10's "15 cogs" is the 2026-09-03 boot line** and is left as the historical reading; the
+> tree holds **19** cogs today. Re-confirmed unchanged: KI-22 (`mod.purged` / `mod.purge_failed`
+> are still bare literals at `cogs/moderation/modcmds.py:874,895` and there is still **no**
+> `POST /api/mod/purge`), KI-2 (`bot.py:setup_hook` still calls `sync_dev_guild` unconditionally),
+> KI-11/KI-13 (`youtube_mode` default `off`, `youtube_poll_minutes` default **10**,
+> `FEED_ATTEMPTS` **4**), KI-14 (`chat_memory_mode` default `off`), KI-6 (`SESSION_TTL_SECONDS`
+> still 7 d). ⚠️ **NOT re-tested:** no entry's symptom was REPRODUCED — this was a read of the
+> code, not a run; nothing met live Discord, no browser rendered a page, and the two thresholds
+> flagged under KI-6 (">1 site user", ">1 person with `/data` access") are **still unmeasured and
+> still waiting on the owner**. Before that,
+> **2026-09-06 — KI-24 CLOSED** on branch `loop-guard`: the fourteen `before_loop`s
 > now go through `black_bloc/loops.py:wait_ready`, the restart is proved against a real
 > `tasks.Loop`, and two AST guards keep the helper the only copy — `info/loop-guard-design.md`
 > carries the design and its Deviations. ⚠️ Verified by the suite in a worktree only: not merged,
-> not deployed, and never exercised against live Discord. Nothing else here was re-checked.
+> not deployed, and never exercised against live Discord (that caveat is **superseded** by the
+> v97 line above). Nothing else here was re-checked.
 > Before that, **2026-09-05 22:10 — KI-24 ADDED** by ENGINEERING SWEEP 3 on
 > `worktree-agent-ab52a6d7c53bc1ecb`. It was found through a measured deploy-gate symptom that
 > is now **FIXED in the same branch**: `pytest -q -n 4` off `main` at `6af0ba0` (v92) was green
@@ -64,7 +82,7 @@
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
 
-## KI-24 — (CLOSED 2026-09-06, branch `loop-guard`) A `before_loop` failure bypasses `@loop.error` — `CLOSED`
+## KI-24 — (RESOLVED 2026-09-06, **LIVE v97**) A `before_loop` failure bypasses `@loop.error` — `CLOSED`
 
 **Was:** all fourteen `before_loop`s awaited `bot.wait_until_ready()` bare, and discord.py 2.7.1
 runs `before_loop` outside the `try` that dispatches to `error`, so a failure there killed the
@@ -73,6 +91,14 @@ hands the exception to the loop's own `@loop.error` handler; two AST guards in
 `tests/test_loops.py` keep it that way and a real `tasks.Loop` test proves the restart. The whole
 design, what was measured, and what deviated from it:
 [`info/loop-guard-design.md`](info/loop-guard-design.md).
+
+✅ **Resolved and SHIPPED — merge `689eff5`, deployed as v97 (`aa44e3b`, 2026-09-06 13:52,
+`deploys.log:96`)**, in the same deploy that took `OPERATOR_READ_TOKEN` live. Re-measured
+2026-09-11: `black_bloc/loops.py` is present, `wait_ready` has **27** call sites across the
+package, and the only bare `bot.wait_until_ready()` left in `black_bloc/` is the one inside the
+helper (`loops.py:12`). ⚠️ Still never exercised against a real `before_loop` failure on the live
+bot — the proof is the suite plus the AST guards, not an incident. Kept here rather than deleted
+so the reasoning stays findable; nothing about it is open.
 
 ## KI-22 — `/purge`'s two log kinds cannot say which door made them — `ACCEPTED`
 
@@ -94,6 +120,11 @@ not move, and spending it on a kind nobody can emit twice is a poor trade.
 **What would change it.** **One** — the moment a `POST /api/mod/purge` route is proposed. At that
 point the two kinds get `kind_via` and a `via` parameter in the same commit as the route, and
 `tests/test_logkinds.py`'s AST guard is what catches it if they do not.
+
+✅ **Re-measured 2026-09-11 (v108):** unchanged in both halves — the two literals are still bare
+at `black_bloc/cogs/moderation/modcmds.py:874` (`"mod.purge_failed"`) and `:895` (`"mod.purged"`),
+and `grep` over `black_bloc/api/` finds **no** `POST /api/mod/purge`, so the defect is still
+latent. The number stands.
 
 ## KI-14 — A memory note about a THIRD PERSON is prevented, not proved impossible — `ACCEPTED`
 
@@ -207,9 +238,14 @@ a migration.
 
 ## KI-20 — An ephemeral panel's buttons die on a bot restart — `WATCHING`
 
-**Symptom.** Every panel built on `black_bloc/panels.py` — `/request`
+**Symptom.** Every panel built on `black_bloc/panels.py` — ⚠️ **measured 2026-09-11 there are
+now EIGHTEEN of them, not the two this entry was written about**: `applications`, `automod`,
+`birthday`, `chat`, `event`, `golive`, `honeypot`, `memory`, `mod`, `modmail`, `pings`, `poll`,
+`raidtrain`, `request`, `rolemenu`, `settings`, `voice`, `youtube` (one `<feature>_panel_minutes`
+key each in `settings_store.KEY_TYPES`, **every one defaulting to 10**). It was `/request`
 (`requests-panel-design.md`) and, from 2026-09-03, `/poll`
-(`polls-panel-design.md`) — opens an ephemeral `discord.ui.View` with a real
+(`polls-panel-design.md`) alone when this was written. Each
+opens an ephemeral `discord.ui.View` with a real
 timeout (`<feature>_panel_minutes`), not a persistent `View(timeout=None)` re-registered
 with `bot.add_view()` on `cog_load` (the pattern `TempVoicePanel` uses). If the
 bot restarts while a member's panel or request card is still open, every button
@@ -219,9 +255,9 @@ missing, and this one is a setting anybody can walk into:** `<feature>_panel_min
 of **15 or more** loses the "this panel has gone quiet" footer entirely, because
 the footer is written through a Discord interaction token that expires 15 minutes
 after the click that made it — the buttons simply stop answering with nothing to
-explain why. Every such key ships at **10** for exactly this reason
-(`request_panel_minutes`, `poll_panel_minutes`) and each one's own help text in
-`settings_store.py` `KEY_HELP` carries the warning; the value is deliberately NOT
+explain why. All **eighteen** such keys ship at **10** for exactly this reason
+(re-measured 2026-09-11: `SettingsStore.default` returns 10 for every one) and each one's own
+help text in `settings_store.py` `KEY_HELP` carries the warning; the value is deliberately NOT
 clamped.
 
 **Why tolerated.** A panel is a moment, not a post: it exists for the seconds a
@@ -350,7 +386,8 @@ mis-announcement** the owner notices. Until then `youtube_mode` ships `off`.
 
 **Symptom.** In the Fly log stream during the `d777f57` deploy (2026-09-03
 00:42:59Z), the machine being retired printed `ERROR asyncio: Unclosed client
-session` on its way down. The NEW process booted clean (15 cogs, logged in,
+session` on its way down. The NEW process booted clean (15 cogs — that is the
+**2026-09-03** boot line, kept as read; the tree holds **19** cogs today — logged in,
 birthdays import ran) and the line has not reappeared since.
 
 **Status.** `WATCHING` — seen once, at shutdown only, on the process that was
