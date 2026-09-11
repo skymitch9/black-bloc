@@ -5,7 +5,36 @@
 > `worktree-agent-aba5d44f8e27a8e28` for 473k against the 380–450k estimate, merged clean, 4402 → 4465
 > tests, `commands synced` 38 → 37 measured at boot). The `## Deviations` foot (14 items) is the
 > BUILD agent's; landing entry in `DONE.md` 2026-09-04.
-> **Last verified: 2026-09-04** — every `path:line` below was READ against `main` at `4336a66`
+>
+> ⚠️ **Since then — three things this document describes have moved on.** The body is the v76 build;
+> read these beside it:
+> - **`Start a raid train` is a DRAFT PANEL, not `TrainModal`** (the "When?" picker, **v100**, merge
+>   `1f35f28`). `TrainModal` was **deleted** — and the build found it had been broken all along,
+>   calling a `submit_train` no class defined
+>   ([`when-picker-design.md`](when-picker-design.md) deviation D9). Start is now `TrainDraftPanel`
+>   with Day / Hour / Minute dropdowns, a `TrainTextModal` that never refuses, and a `ZonePanel`;
+>   `read_numbers`, `BAD_NUMBER` and `OUT_OF_RANGE` moved into `black_bloc/raidtrain.py`. So every
+>   *"`TrainModal` `:348` is REUSED, five fields unchanged"* line below is superseded.
+> - **The scheduled event's calendar name is a settings key** (**v104**, merge `b320031`; owner
+>   16:28, *"Leave raid train as it is now but let it be changeable on the dashboard"*):
+>   `raidtrain_scheduled_name_template`, `text`, default `{title}` — today's behaviour, made editable.
+> - **The Logs button's lost `count` / `important_only`** came back at **v96** as **Show more** /
+>   **Important only** under the list ([`logs-buttons-design.md`](logs-buttons-design.md)).
+>
+> **Last verified: 2026-09-11 09:36** (the header; the body is as at the design). Measured this pass
+> against `main` at `f3ae743` (v108 live): `settings_store.py` registers `raidtrain_panel_minutes`
+> (int) and `RAIDTRAIN_MODES` is still the **three** `("off", "shadow", "on")`;
+> `black_bloc/raidtrain.py` has `SLOT_COUNT_MAX = 24`, `root_selects(*, staff, has_trains)`,
+> `root_buttons`, `card_selects` and `card_buttons` (deviation 2);
+> `cogs/content/raidtrain.py` has `MOVE_KINDS` (deviation 6); deviation 1's move LANDED —
+> `Outcome` and `refusal` are defined **once**, in `black_bloc/panels.py`, and `chat_panel.py`
+> defines neither. ✅ **Deviation 12 is CLOSED**: all four earlier `*_panel_minutes` keys now have
+> `labels.js` rows — there are **18** `*_panel_minutes` labels, one per panel (engineering sweep 2,
+> sweep row 293). The sweep rows landed as **163–172**, as deviation 11 predicted. ⚠️ **NOT checked
+> this pass:** anything in Discord or a browser, and no raid train has ever run — `raidtrain_mode`
+> was `off` at the v76 landing and the live store was not re-read.
+>
+> Before that, **2026-09-04** — every `path:line` below was READ against `main` at `4336a66`
 > (the tree's newest commit; **code-identical to `bf3e447`** — the only commit between them is the
 > docs commit that dispatched these wave-3 designs, `git status` clean). Files read in full:
 > `black_bloc/cogs/content/raidtrain.py` (**1535 lines**), `black_bloc/raidtrain.py` (**404**),
@@ -278,6 +307,13 @@ Both `AnswersErrors` + `discord.ui.Modal`, one shape (P12).
   as its `on_submit` body. The only change is that it takes the panel's re-render callback and
   answers through it, so a new train lands on the root with its card already reachable.
   `MODAL_ZONE_HINT` `:69` and `get_timezone` stay exactly as they are.
+  ⚠️ **SUPERSEDED at v100** — `TrainModal` and `MODAL_ZONE_HINT` are **deleted**. Start is
+  `TrainDraftPanel`: Day / Hour / Minute dropdowns, a `TrainTextModal` (title, description, minutes
+  per slot, how many slots) that never refuses, a **Time zone** button opening `ZonePanel`, and a
+  **Start** button that renders only when everything passes.
+  [`when-picker-design.md`](when-picker-design.md) is that design — and its D9 records that
+  `TrainModal` had been **broken** the whole time (it called a `submit_train` no class defined, so a
+  real press would have raised; nothing in the suite touched it).
 - **`panels.NoteModal`** for `Call it off…` — one paragraph field labelled with what the note is for
   and who is sent it ("what the people who signed up are told"), `max_length` = the reason's real
   ceiling. ⚠️ **Typing the reason IS the confirmation** — no second Yes/No step, and a blank reason
@@ -666,6 +702,9 @@ lineup post is untouched and still carries no components; **F-R2 (a)** the train
 12. **The four earlier `*_panel_minutes` keys still have no `labels.js` / `server.mjs` rows.** §D
     offered that as an optional rider; it was left, because it is four unrelated keys' worth of
     diff in files two other wave-3 branches also touch. `raidtrain_panel_minutes` has both rows.
+    ✅ **CLOSED by engineering sweep 2 (v92), sweep row 293** — `labels.js` now carries **18**
+    `*_panel_minutes` labels, one per panel, and `NO_LABEL_YET` is empty for them. Re-measured
+    2026-09-11.
 13. **`python -m black_bloc` (invariant P17) was NOT run** — this build has no bot token and was
     told not to look for one. `python -c "import black_bloc.raidtrain, black_bloc.cogs.content
     .raidtrain, black_bloc.api.tools.raidtrain, black_bloc.personas, black_bloc.panels"` and
