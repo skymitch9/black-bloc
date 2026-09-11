@@ -1,8 +1,8 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-11 00:21** — rows **343–350** written by the WHERE FOLLOW-UP 4 build on branch
-> `where-smart`, off `main` at `9fc3a33`. ⚠️ **NOT merged, NOT deployed, never seen in Discord.**
+> **2026-09-11 00:38** — rows **343–350** (the WHERE FOLLOW-UP 4 build) are ✅ **LIVE v108** 00:37, merge `73e2e44` of
+> `where-smart` — ⚠️ **never seen in Discord.** Row **347**'s caveat was MEASURED at the review (real GETs from the worktree, 00:3x; the row says what).
 > Schema **UNCHANGED at 34** — no migration and no backfill. Registry keys **199 → 202**
 > (`events_where_link_aliases` text, `events_where_link_check` enum off/warn/refuse default **warn**,
 > `events_where_link_check_seconds` int 1–3 default **2**, all events group); mock routes unchanged at
