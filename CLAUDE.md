@@ -37,7 +37,7 @@ Thin on purpose. The living state is in `docs/` — **read `docs/README.md`,
   finished items MOVE whole to `docs/DONE.md` in the session they land.
 - Owner rule: on a Fable session, builds go to `model: 'opus'` subagents; Fable plans,
   briefs and reviews. Every build/review brief points at `docs/info/review-checklist.md`
-  (34 items traced to real findings here) and the phase's `docs/info/phaseN-design.md`.
+  (35 items traced to real findings here) and the phase's `docs/info/phaseN-design.md`.
 - ⚠️ **Minimise slash commands, maximise interactive windows (owner, 2026-09-03: "Let's try and
   minimize slash commands and maximize interactive windows").** One command per feature opens an
   ephemeral panel (embed + buttons + selects + modals); moves are buttons that render only when
