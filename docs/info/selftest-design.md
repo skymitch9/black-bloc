@@ -3,12 +3,23 @@
 > **Audience:** the build agent and the reviewer; the owner for §A and §H. **Status:** TRACKED ·
 > ✅ **SHIPPED 2026-09-05 as v86** (merge of `worktree-agent-a4aa5efd43f249ba6`; sweeps 252–261; schema
 > 30 → 31; deviations in the `## Build deviations` foot — read C.2 (18 panels, not 29), C.3 (route table,
-> not the contract) and B (the operator token reads but never starts). Not yet run by a person.
+> not the contract) and B (the operator token reads but never starts). ✅ **Run by a person** — the owner
+> ran it from `/settings` ▸ **Self-test…** (sweep row 252, recorded on `../TODO.md`'s v93 line); the line
+> here saying "not yet run by a person" stood until 2026-09-11.
 > 🔧 DESIGN 2026-09-05 14:05. Owner ask 13:52, verbatim: *"test it all, can we build
 > api test and endpoints"*; owner decision 14:02, verbatim: *"do a but after 5 minutes purge the
 > discord chat of all test, keep the logs on the website tho under test"* — (a) of the three readings
 > offered (see `TODO.md`), plus the purge and the website's Test view, which are §D and §F here.
-> **Last verified: 2026-09-05** — the paths below were READ against `main` at **`6bf6a48`**:
+> **Last verified: 2026-09-11 09:15** — docs-wide staleness pass against **v108** `73e2e44`.
+> **Re-measured:** the live boot line has said **107 ok, 0 failed, 24 messages posted** at every boot
+> from v90 onward (16 consecutive deploy records on `../deploys.log`) — this file's cost table said
+> **106**, the v86 figure, and was one behind from the moment the personality-pool check landed at v90.
+> **FIXED:** that table now carries the `pool.*` family and totals **107**; §A still said the cards are
+> deleted "five minutes later" when the default has been **1 minute** since v103 (the rest of the file
+> already said so). ⚠️ **NOT re-checked:** the per-family split (35 / 18 / 47 / 6) was not re-derived
+> by import — only the total is measured, from the boot line; schema is **34** now, not the 30/31 the
+> line-anchor list below was read against; and nothing here met Discord or a browser today.
+> Before that, **2026-09-05** — the paths below were READ against `main` at **`6bf6a48`**:
 > `black_bloc/actionlog.py` (`log_action` at :107), `black_bloc/logkinds.py` (`FEATURES` :24,
 > `HEADS` :44, `feature_of` :373, `should_post` :404, `log_level_key` :427), `black_bloc/guard.py`
 > (`test_channel_id`, `allows_channel` :60), `black_bloc/api/server.py` (25 routers, :143–165),
@@ -23,7 +34,8 @@
 against the REAL guild, it opens every panel the way a command would, posts each one's first card into
 the test channel as a real message, runs every read the website's pages make, and checks that every
 channel and role the settings point at still exists with the permissions that feature needs there. Each
-check writes one line to the log. **Five minutes later the bot deletes every message the test posted**,
+check writes one line to the log. **A minute later the bot deletes every message the test posted**
+(`selftest_purge_minutes`, default **1** since v103 — it was five until 2026-09-10),
 so Discord stays clean; **the log lines stay on the website under a "Test" view**, out of the way of the
 real logs. It runs at every boot (so every deploy proves itself in the Fly log without anyone opening
 Discord), and staff can run it on demand from `/settings` or the website's Health page.
@@ -209,6 +221,11 @@ testing runbook; check `access/README.md` first).
 | `panel.*` | 18 | 18 |
 | `read.*` | 47 | 0 |
 | `send.*` | 6 | 6 |
-| **total** | **106** | **24** |
+| `pool.*` | 1 | 0 |
+| **total** | **107** | **24** |
 
 ⚠️ The `read.*` count moves with the API: it is derived, so adding a GET route adds a check.
+⚠️ **The total was 106 at the v86 landing and has been 107 since v90**, when the personality pool's
+`pool.in_step_with_gabi` check landed (`personality-pool-design.md`). The measured total is the boot
+line on `../deploys.log` — `selftest: 107 ok, 0 failed, 24 messages posted` — not this table; the
+per-family split above is the v86 reading and was NOT re-derived on 2026-09-11.
