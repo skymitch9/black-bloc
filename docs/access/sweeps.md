@@ -1,15 +1,15 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-10 17:28** — rows **336–337** written by the WHERE FOLLOW-UP build on branch `where-link`, off
-> `main` at `ebe0ead`. ⚠️ **NOT merged, NOT deployed** — nothing in 336–337 is on the live bot yet, and the
-> conductor renumbers at the merge if something else takes 336 first. **Schema UNCHANGED at 34** — no
+> **2026-09-10 17:45** — rows **336–337** written by the WHERE FOLLOW-UP build on branch `where-link`, off
+> `main` at `ebe0ead`, **merged `6c10b9d` and LIVE as v106 17:41** (numbers kept — nothing else took 336). Boot `database ready`
+> 00:40:11Z, selftest 107 ok 0 failed, `/api/settings` answers the new key with default true — the bot side is on the live bot now; 336–337 still wait on a person. **Schema UNCHANGED at 34** — no
 > migration and no backfill; `location` simply now holds the typed text for the channel kinds too. Registry
 > keys **197 → 198** (`events_where_link_in_description`, events group, bool, default true); mock routes
 > unchanged at **150** (checked: *17 pages, 150 routes, 14 core settings, all keys present*); tests
 > **5453 → 5473**, forward and `BB_REVERSE=1`; `ruff check black_bloc tests` clean. ⚠️ **Nothing in 336–337
 > has met Discord** — no test can click a Discord button, `python -m black_bloc` was NOT booted (a worktree
-> holds no token), and the appended description cannot be seen at all until TEST_MODE is lifted, because the
+> holds no token; the v106 boot ran the self-test, not a Where pick), and the appended description cannot be seen at all until TEST_MODE is lifted, because the
 > guard makes no scheduled event: that half stays owner-side under row **335**. NOT checked: no browser
 > rendered the events page, so 337 is what a person has to confirm. Before that,
 > **2026-09-10 17:14** — rows **329–335** written by the WHERE PICKER build on branch `where-picker`, off

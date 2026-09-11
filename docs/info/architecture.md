@@ -2,13 +2,13 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner, 2026-08-31 — was
 > local-only until then).
-> Last verified: **2026-09-10 17:28** (the Where follow-up paragraph: keys and schema measured by import ON THE BRANCH, tests and the mock line from the gate; nothing else re-measured, and nothing on that branch is merged) — earlier **2026-09-10 16:40** (the raid-train calendar-name paragraph: keys measured by import, tests and mock routes from the gate; nothing else re-measured) — earlier **2026-09-10 16:02** (the v100 paragraph: keys and schema measured by import, tests from the gate; nothing else re-measured) — earlier **2026-09-05**: every figure below re-MEASURED on the ENGINEERING SWEEP 3
+> Last verified: **2026-09-10 17:45** (the Where follow-up paragraph: keys and schema measured by import on the branch, tests and the mock line from the v106 gate — 5473 passed, 198 keys answered by the live `/api/settings`; nothing else re-measured) — earlier **2026-09-10 16:40** (the raid-train calendar-name paragraph: keys measured by import, tests and mock routes from the gate; nothing else re-measured) — earlier **2026-09-10 16:02** (the v100 paragraph: keys and schema measured by import, tests from the gate; nothing else re-measured) — earlier **2026-09-05**: every figure below re-MEASURED on the ENGINEERING SWEEP 3
 > branch off `main` at `6af0ba0` (v92) by running the thing, not by reading a doc: the tree is
 > built the way `tests/test_bot.py` builds it (load all `bot.py:COGS`, then `tree.get_commands()`),
 > `SCHEMA_VERSION` is imported from `black_bloc/storage/db.py`, and the site figures come from
 > `node site/mock/check.mjs` against `site/mock/server.mjs`.
 >
-> **2026-09-10 (the Where follow-up — a channel AND a link, branch `where-link` off `ebe0ead`, ⚠️ NOT merged):**
+> **2026-09-10 (the Where follow-up — a channel AND a link, branch `where-link` off `ebe0ead`, merged `6c10b9d`, ✅ LIVE v106 17:41):**
 > schema **unchanged at 34** (measured: `SCHEMA_VERSION`) — no migration and no backfill, because `location`
 > already existed and simply now carries the typed link for the two channel kinds as well as the place for
 > `other`; registry keys **197 → 198** (measured: `len(KEY_TYPES)` — `events_where_link_in_description`, a bool
