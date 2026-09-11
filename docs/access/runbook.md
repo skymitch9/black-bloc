@@ -2,26 +2,30 @@
 
 > **Audience:** the owner (also away from the machine) and Claude sessions. **Status:** TRACKED
 > (owner, 2026-08-31 — permanently; the purge-vs-keep question is settled, `docs/` stays in git).
-> Secret NAMES only. Last verified: **2026-09-02** — the schema version, the mock page/route counts and the
-> boot-line cog/command counts were re-measured on the **Phase 16** branch (`SCHEMA_VERSION` = 22;
-> `node site/mock/check.mjs` = 17 pages / 116 routes; 16 cogs and 39 top-level commands, counted
-> from the loaded tree, ⚠️ NOT from a `deploys.log` line — nothing has been deployed from this
-> branch). ⚠️ **The LIVE bot is still the Phase 15 shape** — schema 21, 15 cogs, 37 commands —
-> until the conductor merges Phase 16; the boot line below is what to expect AFTER that merge. ⚠️ **NOT re-measured today:** the flyctl commands, the machine/volume ids, the
-> failure table and the laptop steps — those are the 2026-08-27 reading, and the phone-side steps
-> (Discord app) are what the owner did, not measured by Claude.
+> Secret NAMES only. Last verified: **2026-09-11 08:35** — re-measured off `main` `1d090e5`, which
+> **IS** the live shape (**v108**, merge `73e2e44`, deployed 2026-09-11 00:37): `SCHEMA_VERSION`
+> **34**, `bot.py:COGS` **19**, **29** top-level slash commands with **zero** groups left, **202**
+> registry keys, `site/mock/contract.json` **17 pages / 150 routes**, `pytest -n auto` **5,546
+> passed**. The GitHub row and the laptop section were corrected: the repo has been **PUBLIC since
+> 2026-09-10 20:06**, and `docs/` is tracked **permanently**, not "temporarily". ⚠️ **NOT
+> re-measured today:** the flyctl commands, the machine/volume ids, the failure table and the
+> laptop steps — those are still the 2026-08-27 reading; the phone-side steps (Discord app) are
+> what the owner did, not measured by Claude; and nothing in this pass ran against the live Fly
+> app, live Discord or a browser (the boot line below is what the last deploy's log showed, not a
+> boot taken today). Before that, **2026-09-02** — measured on the **Phase 16** branch
+> (`SCHEMA_VERSION` = 22; 17 pages / 116 routes; 16 cogs and 39 top-level commands).
 
 ## Where everything is
 
 | Thing | Where |
 |---|---|
 | Bot process | Fly.io app `black-bloc`, machine `85e744c4d959d8`, region `lax`, volume `black_bloc_data` at `/data` |
-| Database | SQLite `/data/black_bloc.sqlite3` on that volume (schema **20** — `black_bloc/storage/db.py:SCHEMA_VERSION`; 17 `sessions`, 18 `polls.vote_scheme`, 19 `golive_sessions.live_role_id`, 20 the Phase-14 chat tables) |
+| Database | SQLite `/data/black_bloc.sqlite3` on that volume (schema **34** — `black_bloc/storage/db.py:SCHEMA_VERSION`, measured 2026-09-11; landmarks on the way: 17 `sessions`, 18 `polls.vote_scheme`, 19 `golive_sessions.live_role_id`, 20 the Phase-14 chat tables, 30 the modmail ticket card, 31 the self-test, 34 `events.where_kind` + `where_channel_id`). Migrations are additive-only |
 | Dashboard | https://blackbloc.heygabi.ai (same Fly app; Discord sign-in; staff roles = roles that can see `#mute-me-bot-test-spam`) |
 | Health | https://blackbloc.heygabi.ai/health (public JSON: `ok`, `ready`, `guilds`, `latency_ms`) — and the dashboard's **Health** tab (loops, last 50 actions) |
 | Logs | `flyctl logs --app black-bloc --no-tail` (below), the dashboard **Logs/Audit** tab, and `/<feature> logs` in Discord (Phase 12, live since 2026-08-27 18:38) |
 | Test policy | `TEST_MODE=true`: the bot speaks only in `#mute-me-bot-test-spam` + DMs + the temp-voice channels it created. Owner lifts it (Fly secret), never Claude |
-| Code | GitHub `skymitch9/black-bloc` (private), branch `main`; every deploy line in [`../deploys.log`](../deploys.log) |
+| Code | GitHub `skymitch9/black-bloc` — 🔴 **PUBLIC since 2026-09-10 20:06** (so Actions run again; `.env.enc` was purged from history first and is gitignored). `docs/` is tracked, so **never write a secret VALUE under `docs/`**. Branch `main`; every deploy line in [`../deploys.log`](../deploys.log) (**107** lines, last v108) |
 
 ## The flyctl binary
 The Claude session shells never have `flyctl` on PATH. Always spell it out:
@@ -85,7 +89,7 @@ push, deploy. Schema migrations are additive-only, so an older build runs agains
 <flyctl> logs --app black-bloc --no-tail | grep -i "error\|traceback"
 <flyctl> logs --app black-bloc --no-tail | grep "database:"      # migrations on boot
 ```
-Boot sequence to expect: `database ready` → `loaded cog …` ×16 → `synced 39 app commands` → `logged in as
+Boot sequence to expect: `database ready` → `loaded cog …` ×**19** → `synced **29** app commands` → `logged in as
 Black_Bloc#6132` → `birthdays: the daily import …` → `chat: seeded N intent(s)` (first boot per guild only).
 With no `YOUTUBE_API_KEY` set you also get one INFO line at cog load — `youtube: no YOUTUBE_API_KEY,
 so uploads run on the public feed alone …`. That is the normal state, not a fault (see KI-11).
@@ -95,7 +99,8 @@ so uploads run on the public feed alone …`. That is the normal state, not a fa
 `TWITCH_CLIENT_SECRET`, `YOUTUBE_API_KEY` (F3 upload posts — OPTIONAL and not yet minted; unset
 leaves uploads on the public feed, which still names every video and still spots a Short, but
 cannot tell a live broadcast from an upload — KI-11), `TEST_MODE`, `TEST_CHANNEL_ID`,
-`DEV_GUILD_ID`, `DATABASE_PATH`.
+`DEV_GUILD_ID`, `DATABASE_PATH`, and `OPERATOR_READ_TOKEN` (read-only API access for a session —
+Fly-only, never in `.env`; [`operator-read.md`](operator-read.md)).
 Set on Fly with `<flyctl> secrets set NAME=value --app black-bloc` (each set restarts the machine);
 importing many: write an ASCII file and `cmd /c "<flyctl> secrets import --app black-bloc < file"` — a
 PowerShell pipe adds a BOM and the first key is rejected as `﻿KEY`.
@@ -140,7 +145,9 @@ winget install --id Fly-io.flyctl        # then, in a NEW terminal: flyctl auth 
 python -m venv .venv && .venv/Scripts/pip install -e ".[dev]"      # tests fake their own tokens
 node --version                            # for site/mock/check.mjs (Node 20+)
 ```
-Deploy = the block under **Deploy** above (`git pull` first). Docs are tracked temporarily, so `docs/` comes with the clone.
+Deploy = the block under **Deploy** above (`git pull` first). `docs/` is tracked **permanently**
+(owner, 2026-08-31), so the whole doc tree comes with the clone — and since the repo went public
+on 2026-09-10, so does everyone else's.
 
 **`.env` on another machine — 🔐 the 1Password vault `Black Bloc` is the master
 (2026-09-02):** on the laptop, open 1Password (the vault syncs to it), copy
@@ -153,7 +160,13 @@ is public since 2026-09-10, and the old copies were purged from history); laptop
 use `& "C:\Program Files\Git\bin\bash.exe" scripts/env-lock.sh`. After any
 rotation: vault item first, then `.env`, then Fly, then (optionally) a fresh
 `.env.enc`.
-Variable NAMES in `.env`: `DISCORD_TOKEN DISCORD_CLIENT_ID DISCORD_CLIENT_SECRET SESSION_SECRET POLL_VOTE_SECRET
-TWITCH_CLIENT_ID TWITCH_CLIENT_SECRET YOUTUBE_API_KEY DEV_GUILD_ID TEST_MODE TEST_CHANNEL_ID DATABASE_PATH
-API_ENABLED API_HOST API_PORT SITE_ORIGIN COMMAND_PREFIX LOG_LEVEL`. (`YOUTUBE_API_KEY` has no vault
-item yet — it has never been minted; the nine values above it are the ones the vault holds.)
+Variable NAMES in `.env` — the authority is the tracked `.env.example`, **21 names** (counted
+2026-09-11): `DISCORD_TOKEN DISCORD_CLIENT_ID DISCORD_CLIENT_SECRET SESSION_SECRET POLL_VOTE_SECRET
+TWITCH_CLIENT_ID TWITCH_CLIENT_SECRET YOUTUBE_API_KEY ANTHROPIC_API_KEY GROQ_API_KEY DEV_GUILD_ID
+TEST_MODE TEST_CHANNEL_ID DATABASE_PATH API_ENABLED API_HOST API_PORT SITE_ORIGIN SITE_ROOT
+COMMAND_PREFIX LOG_LEVEL`. (`YOUTUBE_API_KEY` has no vault item yet — it has never been minted;
+the nine secret values are the ones the vault holds.)
+⚠️ Two names `black_bloc/config.py` reads are **absent from `.env.example`** and so are easy to
+miss on a rebuild: **`OPERATOR_READ_TOKEN`** (never in `.env` by design — it lives in `fly secrets`
+plus the operator PC's own environment, [`operator-read.md`](operator-read.md)) and
+**`SESSION_COOKIE_SAMESITE`** (`lax` or `strict`, defaults to `lax`).
