@@ -43,6 +43,8 @@ from ...events import (
     SELECT_CAP,
     SITE_BUTTON,
     SUBMIT_BUTTON,
+    SWEEP_KEPT_DAYS,
+    SWEEP_KEPT_MINUTES,
     SWEPT_STATUSES,
     TEXT_BUTTON,
     TEXT_MODAL_TITLE,
@@ -110,6 +112,7 @@ from ...events import (
     site_page_url,
     stored_zone,
     submit_event,
+    swept_anchor,
     tell_or_log,
     when_line,
     where_button_label,
@@ -141,6 +144,7 @@ from ...panels import NoteModal as PanelNoteModal
 from ...settings_store import (
     DB_UNAVAILABLE,
     EVENTS_MODES,
+    EVENTS_TEST_RETENTION_KEY,
     GUILD_ONLY,
     require_staff,
 )
@@ -1552,16 +1556,20 @@ class Events(commands.Cog):
         await cancel_event(self.bot, guild, row, reason, by=by)
 
     async def _sweep_finished(self, guild: Any, now: datetime) -> None:
-        days = int(self.bot.store.get(guild.id, "events_channel_retention_days") or 0)
+        store = self.bot.store
+        days = int(store.get(guild.id, "events_channel_retention_days") or 0)
+        minutes = int(store.get(guild.id, EVENTS_TEST_RETENTION_KEY) or 0)
         guard = getattr(self.bot, "guard", None)
+        testing = guard is not None
+        kept = timedelta(minutes=minutes) if testing else timedelta(days=days)
         for row in await events_by_status(self.bot.db, guild.id, SWEPT_STATUSES):
             channel = (
                 guild.get_channel(row["review_channel_id"]) if row["review_channel_id"] else None
             )
             if channel is None:
                 continue
-            finished = parse_ts(row["ends_at"])
-            if finished is None or now - finished < timedelta(days=days):
+            finished = swept_anchor(row)
+            if finished is None or now - finished < kept:
                 continue
             if guard is not None and not guard.allows_place(channel):
                 await log_action(
@@ -1571,8 +1579,11 @@ class Events(commands.Cog):
                     details={"event_id": row["id"], "channel_id": channel.id},
                 )
                 continue
+            said = SWEEP_KEPT_MINUTES if testing else SWEEP_KEPT_DAYS
             try:
-                await channel.delete(reason=f"Black Bloc event {row['id']}: kept {days} day(s)")
+                await channel.delete(
+                    reason=said.format(event_id=row["id"], kept=minutes if testing else days)
+                )
             except NETWORK_ERRORS as exc:
                 log.warning("events: could not delete %s: %s", channel.id, exc)
                 continue
@@ -1587,7 +1598,11 @@ class Events(commands.Cog):
                 self.bot,
                 guild,
                 "event.channel_deleted",
-                details={"event_id": row["id"], "channel_id": channel.id, "kept_days": days},
+                details={
+                    "event_id": row["id"],
+                    "channel_id": channel.id,
+                    **({"kept_minutes": minutes} if testing else {"kept_days": days}),
+                },
             )
 
     @commands.Cog.listener()

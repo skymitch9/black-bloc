@@ -65,6 +65,10 @@ CANCELLED = "cancelled"
 STATUSES = (PENDING, APPROVED, DENIED, LIVE, DONE, CANCELLED)
 OPEN_STATUSES = (PENDING, APPROVED, LIVE)
 SWEPT_STATUSES = (DONE, DENIED, CANCELLED)
+DECIDED_STATUSES = (DENIED, CANCELLED)
+SWEPT_ANCHORS = ("decided_at", "ends_at", "created_at")
+SWEEP_KEPT_DAYS = "Black Bloc event {event_id}: kept {kept} day(s)"
+SWEEP_KEPT_MINUTES = "Black Bloc event {event_id}: kept {kept} minute(s) while in test mode"
 TRANSITIONS: dict[str, tuple[str, ...]] = {
     PENDING: (APPROVED, DENIED, CANCELLED),
     APPROVED: (LIVE, DONE, CANCELLED),
@@ -158,6 +162,17 @@ def can_transition(before: Any, after: Any) -> bool:
 def is_due(when: Any, now: datetime) -> bool:
     parsed = parse_ts(when)
     return parsed is not None and parsed <= now
+
+
+def swept_anchor(row: Any) -> datetime | None:
+    """A refused event's room counts from the decision; a finished one from when it ended."""
+    if str(cell(row, "status") or "") not in DECIDED_STATUSES:
+        return parse_ts(cell(row, "ends_at"))
+    for column in SWEPT_ANCHORS:
+        found = parse_ts(cell(row, column))
+        if found is not None:
+            return found
+    return None
 
 
 WHERE_VOICE = "voice"

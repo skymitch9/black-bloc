@@ -1030,3 +1030,36 @@ def test_a_button_label_never_masks_a_link_because_a_label_cannot_carry_one():
     assert events.where_button_label(Where(WHERE_OTHER, None, "https://twitch.tv/bb")) == (
         "Where: https://twitch.tv/bb"
     )
+
+
+# Follow-up 3 (`docs/info/where-picker-design.md` § Follow-up 3): a refused event's room counts
+# from the decision, not from a start that was never going to happen.
+
+
+def test_a_finished_event_s_room_counts_from_when_it_ended():
+    row = a_row(status=DONE, decided_at=WHEN.isoformat())
+
+    assert events.swept_anchor(row) == WHEN + timedelta(minutes=90)
+
+
+def test_a_denied_or_cancelled_room_counts_from_the_decision_instead():
+    decided = WHEN - timedelta(days=30)
+    for status in (DENIED, CANCELLED):
+        assert events.swept_anchor(a_row(status=status, decided_at=decided.isoformat())) == decided
+
+
+def test_a_decision_with_no_stamp_falls_back_to_the_end_and_then_to_the_row_s_birth():
+    assert events.swept_anchor(a_row(status=DENIED, decided_at=None)) == WHEN + timedelta(
+        minutes=90
+    )
+    assert events.swept_anchor(a_row(status=DENIED, decided_at=None, ends_at=None)) == WHEN
+    assert events.swept_anchor(a_row(status=DENIED, decided_at="", ends_at="soon")) == WHEN
+
+
+def test_a_row_with_nothing_readable_on_it_has_no_anchor_and_is_left_alone():
+    assert events.swept_anchor(a_row(status=DONE, ends_at=None)) is None
+    assert events.swept_anchor(a_row(status=DONE, ends_at="whenever")) is None
+    assert (
+        events.swept_anchor(a_row(status=DENIED, decided_at=None, ends_at=None, created_at=None))
+        is None
+    )

@@ -23,6 +23,10 @@ from black_bloc.settings_store import (
     EVENTS_RETENTION_MIN_DAYS,
     EVENTS_SCHEDULED_NAME_KEY,
     EVENTS_SCHEDULED_NAME_TEMPLATE,
+    EVENTS_TEST_RETENTION_KEY,
+    EVENTS_TEST_RETENTION_MAX_MINUTES,
+    EVENTS_TEST_RETENTION_MIN_MINUTES,
+    EVENTS_TEST_RETENTION_MINUTES,
     GOLIVE_END_EDIT,
     GOLIVE_END_MODES,
     GOLIVE_END_OFF,
@@ -512,6 +516,25 @@ def test_a_retention_of_zero_days_is_refused_because_it_deletes_an_unread_record
     with pytest.raises(SettingError, match="cannot be less than 1") as caught:
         coerce_value("events_channel_retention_days", 0)
     assert "before anybody has read it" in str(caught.value)
+
+
+def test_the_test_mode_retention_is_its_own_key_in_minutes(store):
+    """Follow-up 3: seven days of test rooms is clutter, so test mode counts in minutes."""
+    assert KEY_TYPES[EVENTS_TEST_RETENTION_KEY] == "int"
+    assert KEY_HELP[EVENTS_TEST_RETENTION_KEY]
+    assert store.get(1, EVENTS_TEST_RETENTION_KEY) == EVENTS_TEST_RETENTION_MINUTES == 5
+    assert coerce_value(EVENTS_TEST_RETENTION_KEY, EVENTS_TEST_RETENTION_MIN_MINUTES) == 1
+    assert coerce_value(EVENTS_TEST_RETENTION_KEY, EVENTS_TEST_RETENTION_MAX_MINUTES) == 1440
+
+
+def test_the_test_mode_retention_refuses_both_ends_in_words():
+    with pytest.raises(SettingError, match="cannot be less than 1") as too_small:
+        coerce_value(EVENTS_TEST_RETENTION_KEY, 0)
+    assert "every five minutes" in str(too_small.value)
+
+    with pytest.raises(SettingError, match="cannot be more than 1440") as too_big:
+        coerce_value(EVENTS_TEST_RETENTION_KEY, EVENTS_TEST_RETENTION_MAX_MINUTES + 1)
+    assert "events_channel_retention_days" in str(too_big.value)
 
 
 def test_how_late_an_announcement_may_be_is_a_capped_whole_number():
