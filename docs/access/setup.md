@@ -5,7 +5,7 @@
 > Last verified: **2026-09-11 08:38** — re-read against the repo. §1's commands and §4's table
 > still match `pyproject.toml` and `scripts/deploy.ps1` (`ruff check .` is what the deploy gate
 > runs). §3's expected boot lines were **stale by a whole project**: a first start now loads
-> **19** cogs and syncs **29** commands, not 2. `.env.example` carries **21** names (it did not
+> **19** cogs and syncs **29** commands, not 2. `.env.example` carries **23** names since 2026-09-11 09:25 — 21, plus `OPERATOR_READ_TOKEN` and `SESSION_COOKIE_SAMESITE` added when the docs pass found `config.py` reads them (it did not
 > exist in this shape in August); copying it is still the right first move. ⚠️ **NOT run today:**
 > nothing in this file — no venv was built, `python -m black_bloc` was **not** booted (a worktree
 > holds no token), and no Developer-Portal page was opened. The exact portal button labels in §2

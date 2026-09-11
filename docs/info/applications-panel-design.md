@@ -391,7 +391,7 @@ The three that are genuinely his:
   `HIDDEN_WHEN_OFF["applications_mode"] = ("apply",)` (`command_visibility.py:19`) hides the member
   group within about five seconds and leaves `/applications` for staff (sweeps row 53 tests exactly
   that). With one command, hiding it hides staff's only Discord door to form management, and the mode
-  can then only be turned back on from the site or `/settings set-value`.
+  can then only be turned back on from the site or `/settings` ▸ **Turn a feature back on…** (was `/settings set-value` until v84).
   **Recommended: drop the entry** — the command stays, and with the mode off the panel says so in
   words and renders no Apply control (P9). The alternative is `("applications",)`, which keeps the
   vanishing act he asked for and costs staff the Discord door.
@@ -435,7 +435,7 @@ sub-panel).
    caps a row at five; adding the new key would have been a sixth. The row is now three toggles +
    **Numbers…** + **Back**, and the **Open on the site** link moved off it (the root panel and the
    form card both carry one). Checklist 33 is satisfied either way — the key is in the registry, so
-   the Settings page and `/settings set-value` reach it — but a Lead should not have to leave
+   the Settings page and the `/settings` panel's key card reach it — but a Lead should not have to leave
    Discord to flip a decision the panel itself is about.
 5. **`Find #…` and the two confirm steps use `panels.NoteModal`, and `DenyModal` became a subclass
    of it.** §C only names `NoteModal` for Deny / Take off / Put back. `FindModal` is a one-field

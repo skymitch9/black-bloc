@@ -14,6 +14,56 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-11 — Update all docs: every tracked doc re-verified against v108 by six parallel agents, code-notes re-keyed whole (landed 09:20, no deploy — plus the `requests.py` refusal fix it found, v109)
+
+Moved WHOLE from `TODO.md` at 09:20. Six Opus agents in worktrees `C:/lcw/bb-docs-a…f`, branches
+`docs-a…f` off `1d090e5`, disjoint slices, merged `--no-ff` into main in landing order — A `03ae7bc`
+(232k; top level + `access/`, 15 files), D `e853fb4` (306k; panel designs 1, 12 files), B `6cf4da7`
+(267k; `info/` reference docs, 18 files), C `3224783` (297k; phase designs 1–19, 20 files), F `c2e4e7a`
+(355k; panel designs 2, 16 files), E `70df888` (277k; `code-notes.md` re-keyed: 1895 line keys checked,
+1334 moved, 50 marked `(GONE)`, 488 of 522 name-keyed rows converted to line+name; measured anchor
+quality 94 → 1256 of 2330 keys on a line that names what the row names; held-out accuracy 83% for rows
+with no quotable anchor). Every header now carries `Last verified: 2026-09-11 HH:MM` with what was
+measured and what was NOT (nothing in this pass met Discord or a browser; `node site/mock/check.mjs`
+was not run end to end — counts come from `site/mock/contract.json`). Conductor-side fixes on main at
+the merges: `CLAUDE.md` checklist count 33 → 34 (`328eff2`), sweeps row 252 self-test purge 5 → 1 minute,
+TODO F4 names its retired commands, secret-rotation count 22 → **21** (measured off `.env.example`),
+Where-picker sweep heading 329–335 → 329–350, raid-train name key struck from the When follow-ups
+(shipped v104) (`84a183d`), the re-key debt line cleared. Worst rot found (all fixed on the branches):
+`hosting.md` said `fly.toml` has no `[http_service]` and "none of it has been deployed"; `deploy.md`,
+`RECOVERY.md` ("private"), `site.md` ("nothing has been run") stated falsehoods; `feature-list.md`
+had six rows "not merged" for work live a week; `info/README.md` had 14 rows landing had overtaken;
+`where-picker-design.md`'s own top header still said NOT merged for all four Where builds; 13 phase
+docs said `LOCAL ONLY`/`DESIGN`; `settings-panel-design.md` said both builds undeployed (v83/v84);
+`requests-states-design.md` named a key that never existed (`request_dms_on_decision`).
+
+**Corrections to earlier entries (this file is append-only, so they live here):** the 2026-09-03
+Phase 17 entry and `deploys.log` line 54 say "9 `chat_memory_*` keys" — the landing added **8**;
+`chat_memory_log_level` was in the design table and never built (memory logs under `chat_log_level`).
+Measured 08:51 off `settings_store.KEY_TYPES`.
+
+**Findings that outgrew a docs fix** (the owner is asked ONE AT A TIME; open ones stay on `TODO.md`):
+(1) 🔴 `docs/info/pings-panel-design.md` lost its design body at `8426b1a` (408 → 140 lines; the foot
+still cites §C/§E/§F/§H/§J) — restore from `git show 8426b1a^:docs/info/pings-panel-design.md` or
+archive; (2) DECIDED bullets outlive their reversal — fork I-A2 and the automod/chat/birthdays/
+role-menus "does not vanish when off" bullets were reversed at v78 with the reversal only in a commit
+message; (3) `.env.example` omits `OPERATOR_READ_TOKEN` and `SESSION_COOKIE_SAMESITE`, which
+`config.py` reads; (4) `deploy.ps1` has hung at xdist five times (v97–v100, v103) with no
+`KNOWN_ISSUES.md` entry — filed in `gotchas.md` with the retry, cause unestablished; (5) the phase-8
+owner decision 3 (2026-08-26) — Google SSO for the owner + a `user_identities` table — was never wired
+and nothing tracks it; (6) six phase docs (8, 8b, 9, 10, 11, 12) carry a UTF-8 BOM; (7) 883 inline
+`` `path:N` `` cross-references inside note prose (413 rows of `code-notes.md`) were not re-keyed —
+the tool can, one more sweep; (8) `site/public/assets/theme.js:50` cites `docs/info/estate-themes.md`,
+which exists only in catalog-platform; (9) `OWNER_GUIDE.md:120` still tells the reader to use
+`/settings set-value` (retired v84). **Fixed in code, not just docs:** `black_bloc/requests.py` had
+three refusal sentences still sending people to `/request ready` / `/request accept` / `/request set`
+(gone since 2026-09-03 — a member following them got Discord's "unknown command"); they now name the
+card buttons (`00b0d45`, ships as **v109**). Not verified: nothing in this pass met Discord or a browser.
+
+The original item, whole:
+
+- 🆕 **Update all docs (owner, 2026-09-11 08:22, verbatim: "Update all docs").** A docs-wide staleness pass, the 2026-08-31 audit (`d87ee84`) done again against the v108 state. Ground truth measured 08:25 on `main` `f3ae743` (v108 live 00:37): schema **34**, registry keys **202**, `bot.py:COGS` **19**, **29** top-level slash commands and 29 leaves (no groups left — `about apply automod ban birthday chat event golive help honeypot kick memory mod modmail ping pings poll purge raidtrain reply request rolemenu settings timeout unban untimeout voice warn youtube`), tests **5546**, mock *17 pages / 150 routes / 14 core settings*, sweep rows 1–**350**, KI-1…**KI-24**, `deploys.log` 107 lines. Of 84 tracked docs, headers older than 2026-09-06 number ~60 (the phase 1–19 designs say 2026-08-26/27/09-02; `docs/README.md` still says schema 21 / 2714 tests / 37 commands / 15 cogs; `access/README.md` 08-31; `feature-list.md` 08-26; `gotchas.md` 08-26; `setup.md` 08-26). Plan: five Opus agents in their own worktrees, disjoint file slices — (A) top level + `access/`, (B) `info/` reference docs, (C) phase designs, (D) panel/feature designs, (E) `code-notes.md` line-diff re-key of the five listed debt ranges — each verifying every stated fact against the repo or the live system, refreshing headers with what was and was NOT checked, retiring nothing without a dated banner; Fable merges and reports. Dispatched 08:26 as SIX Opus agents (D split into D = panel designs 1 and F = panel designs 2), each in `C:/lcw/bb-docs-<letter>` on branch `docs-<letter>` off `1d090e5`. Landing (merges `--no-ff` into main, in order): A `03ae7bc` (232k; 15 files), D `e853fb4` (306k; 12 files), B `6cf4da7` (267k; 18 files); C, F, E in flight at 08:50. Agent findings that outgrew a docs fix are collected at the merge and go to the owner ONE AT A TIME (pings-panel-design.md lost its design body at `8426b1a`; DECIDED bullets outliving their reversal; `.env.example` omits `OPERATOR_READ_TOKEN` / `SESSION_COOKIE_SAMESITE`; `deploy.ps1` xdist hang ×5 with no KI entry; `theme.js:50` cites a doc that exists only in catalog-platform). Small conductor-side fixes made on main at the merge: `CLAUDE.md` checklist count 33 → 34, sweeps row 252 purge minutes 5 → 1, F4 row above names its retired commands, the 22 → 21 secret-name count.
+
 ## 2026-09-11 — Events: a SHORTHAND becomes a link (bare hosts, alias table) and the link is tried once before it is kept (v108, 00:37)
 
 Moved whole from `TODO.md` 2026-09-11 00:38, in the session the work landed.

@@ -17,7 +17,7 @@
 > header too); and the **Drill log was empty** while two drills were described in the
 > body. Re-measured today: `fly.toml` names app `black-bloc`, region `lax`, volume
 > `black_bloc_data` → `/data`, and `DATABASE_PATH=/data/black_bloc.sqlite3`;
-> `.env.example` carries **21** names.
+> `.env.example` carries **21** names (**23** since 09:25: `OPERATOR_READ_TOKEN` and `SESSION_COOKIE_SAMESITE`, both read by `config.py`, were added after the docs pass found them missing — the rotation list is still the 21 secrets plus `OPERATOR_READ_TOKEN` if it was set).
 > ⚠️ **NOT checked today:** anything against the live Fly app, the Fly dashboard, the
 > Discord Developer Portal, 1Password or a browser — no restore was attempted, and the
 > machine and volume ids below are still the 2026-08-26 reading.
