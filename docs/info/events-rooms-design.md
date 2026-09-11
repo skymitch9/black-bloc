@@ -198,4 +198,50 @@ in spam as well.
 
 ## Deviations
 
-(filled by the build agent — anything the code does differently from the above, with the reason)
+Filled by the build agent, 2026-09-11, on branch `event-rooms` off `main` `bd0b31d`. Nothing here
+has met Discord.
+
+1. ⚠️ **`delete_room` does NOT hold `event_lock` around steps 1–5 (§2C).** It cannot: `cancel_event`
+   takes that same `asyncio.Lock` itself, and an `asyncio.Lock` is not reentrant, so the design's
+   ordering would deadlock the first time a staffer pressed the button on an open event. The
+   atomicity that matters is the status change, which `cancel_event` still owns; `delete_room`
+   re-reads the row with `get_event` before and after the cancel, and a second press finds
+   `review_channel_id` already cleared and is answered `ROOM_ALREADY_GONE`.
+2. **`event.room_forgotten` is logged by the SWEEP only, not by `_recheck` (§1A vs §3).** Clearing
+   a dead `review_channel_id` on an OPEN row would break the two-consecutive-misses rule
+   (checklist 32): `_recheck` decides to cancel from "the id is set and the channel does not
+   resolve", and a cleared id sends the row down the `never_got_a_channel` path instead. Open rows
+   are still re-owned every pass; only swept rows forget.
+3. **The four keys live on a new `/event` ▸ Settings ▸ **Rooms…** page, not under the existing
+   `ModeSelect` row (§1C).** Discord allows five rows; the settings view already spends rows 0–3 on
+   one select each (a select fills its row) and row 4 on five buttons, which is the cap. **Rooms…**
+   takes the slot the settings page's duplicate **Open on the site** link had — the same link sits
+   one Back away on the panel itself, and on the Rooms page. `SETTINGS_KEYS` gains all four, so the
+   write path and `event.settings` are unchanged.
+4. **The room's cancelled/denied lines are skipped for four cancel reasons** (`ROOM_QUIET_REASONS`:
+   `room_deleted`, `review_channel_gone`, `review_channel_deleted`, `never_got_a_channel`). Three
+   are cancels *because* the room is missing, so the post could only log a failure; the fourth is
+   the Delete button's own cancel, moments before the channel goes.
+5. **`CANCEL_WHY["room_deleted"]` is `"staff removed its room."` with a full stop** — every other
+   entry ends its own sentence, and `CANCEL_NOTE` starts with a space, so the DM reads exactly as
+   §2C quotes it.
+6. **`post_to_room` takes `ping: bool`; the ended, cancelled and denied lines pass `False`.** §1B
+   says only the ended post has no ping role; the other two are not worth a notification either.
+   `mentions(None)` still pins `everyone=False`/`users=False`.
+7. **`approve_extra` gained a `where` argument.** With `room` the default, its old
+   "Nothing was announced publicly" sentence fired on every approval — reporting a failure where
+   there was a configured choice. It now says the event is announced in its own room.
+8. **`post_room_notice` logs only `event.room_notice_failed`, never a success** — the message is
+   visible in the room it was posted in, and a routine row per proposal is noise.
+9. **The website's `via` is `VIA_WEBSITE`** (§2D writes `VIA_SITE`, which does not exist in
+   `logkinds.py`). The route is `POST /api/events/{id}/room/delete`; `contract.json` counts
+   **150 → 151** routes.
+10. **`post_event`'s fan-out tests live in `tests/cogs/community/test_events.py`, not
+    `tests/test_events.py`** (§ Tests). The pure module's test file has no bot/guild/db fakes, and
+    building a second set there would be a second home for the fake world. `tests/test_events.py`
+    takes the pure half: `posts_where`, `posts_in_room`/`posts_in_announce`, `room_keeps`,
+    `may_delete_room`, `room_delete_role_id`, `rooms_lines`, `approve_extra` and the
+    `CANCEL_WHY["room_deleted"]` wording.
+11. **`decision_context` gained `staff: bool = True`** rather than being copied, so the guard,
+    database and row checks have one home and the Delete button's own gate (approver role / staff /
+    the host's own sentence) sits beside it in `ask_to_delete_room`.
