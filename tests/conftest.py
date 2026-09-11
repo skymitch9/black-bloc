@@ -40,6 +40,16 @@ def cog_modules_stay_the_ones_the_test_files_imported(cog_modules_as_collected):
     sys.modules.update(cog_modules_as_collected)
 
 
+@pytest.fixture(autouse=True)
+def no_test_ever_opens_a_link(monkeypatch):
+    """`link_answers` falls back to a real GET, so the suite takes that fallback away."""
+
+    async def refuse(url, *, seconds, headers):
+        raise AssertionError(f"a test asked the network for {url}; inject `fetch` instead")
+
+    monkeypatch.setattr("black_bloc.linkcheck.aiohttp_status", refuse)
+
+
 @pytest.fixture
 def settings(tmp_path, monkeypatch):
     monkeypatch.delenv("DISCORD_TOKEN", raising=False)

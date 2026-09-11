@@ -58,6 +58,7 @@ from black_bloc.events import (
     write_settings,
     zone_line,
 )
+from black_bloc.linkcheck import LINK_MISSING, LINK_OK, LINK_UNREACHABLE
 from black_bloc.timezones import START_EXAMPLE, local_time, unix
 from black_bloc.when_picker import WhenDraft
 
@@ -1123,6 +1124,51 @@ def test_a_bare_host_stored_before_this_build_still_reaches_the_calendar_with_it
     assert events.described_with_where("bring a chair", Where(WHERE_VOICE, 55, "the park")) == (
         "bring a chair\n\nthe park"
     )
+
+
+def test_the_draft_s_where_line_carries_the_note_and_the_row_never_does():
+    draft = a_draft(title="Cookout", where=Where(WHERE_OTHER, None, "https://twitch.tv/bb"))
+    draft.where_note = "that page answered 404 — check the name"
+
+    assert "**Where** — [twitch.tv/bb](https://twitch.tv/bb) — ⚠️ that page answered 404" in (
+        "\n".join(events.draft_lines(draft, NOW, chosen=True))
+    )
+    assert events.EventDraft().where_note == ""
+    assert "where_note" not in events.described_with_where("x", draft.where)
+
+
+def test_a_draft_with_nowhere_set_still_says_so_before_the_note():
+    draft = a_draft(title="Cookout")
+    draft.where_note = "nothing.example did not answer within 2 s"
+
+    assert "**Where** — (not set) — ⚠️ nothing.example did not answer" in "\n".join(
+        events.draft_lines(draft, NOW, chosen=True)
+    )
+
+
+def test_the_note_names_the_trouble_and_says_the_link_was_kept():
+    assert events.where_note(LINK_MISSING, "https://youtube.com/@nope", 2) == (
+        "that page answered 404 — check the name"
+    )
+    assert events.where_note(LINK_UNREACHABLE, "https://slow.example/x", 2) == (
+        "slow.example did not answer within 2 s — the link is kept as typed"
+    )
+    assert events.where_note(LINK_OK, "https://twitch.tv/bb", 2) == ""
+
+
+def test_the_refusing_mode_names_the_link_the_trouble_and_the_way_out():
+    missing = events.where_refused(LINK_MISSING, "https://youtube.com/@nope", 2)
+
+    assert "https://youtube.com/@nope" in missing
+    assert "404" in missing and "misspelt" in missing
+    assert "events_where_link_check" in missing and "warn" in missing
+    assert "nowhere was saved and the old place was kept" in missing
+
+    unreachable = events.where_refused(LINK_UNREACHABLE, "https://slow.example/x", 3)
+
+    assert "https://slow.example/x" in unreachable and "3 seconds" in unreachable
+    assert "events_where_link_check" in unreachable
+    assert not any(said.isdigit() and len(said) == 3 for said in unreachable.split())
 
 
 # Follow-up 3 (`docs/info/where-picker-design.md` § Follow-up 3): a refused event's room counts

@@ -108,8 +108,11 @@ WHERE_ALIASES = (
     "discord=https://discord.gg/{handle}"
 )
 WHERE_CHECK_KEY = "events_where_link_check"
-WHERE_CHECK_MODES = ("off", "warn", "refuse")
-WHERE_CHECK_MODE = "warn"
+WHERE_CHECK_OFF = "off"
+WHERE_CHECK_WARN = "warn"
+WHERE_CHECK_REFUSE = "refuse"
+WHERE_CHECK_MODES = (WHERE_CHECK_OFF, WHERE_CHECK_WARN, WHERE_CHECK_REFUSE)
+WHERE_CHECK_MODE = WHERE_CHECK_WARN
 WHERE_CHECK_SECONDS_KEY = "events_where_link_check_seconds"
 WHERE_CHECK_SECONDS = 2
 WHERE_CHECK_MIN_SECONDS = 1

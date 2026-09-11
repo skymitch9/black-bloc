@@ -13,6 +13,7 @@ import discord
 from .actionlog import log_action
 from .command_errors import NETWORK_ERRORS
 from .golive import now_iso, parse_ts
+from .linkcheck import LINK_MISSING, LINK_UNREACHABLE
 from .logkinds import VIA_DISCORD, kind_via
 from .panels import capped_placeholder
 from .panels import panel_minutes as library_panel_minutes
@@ -314,6 +315,43 @@ def where_button_label(where: Where, channel: Any = None) -> str:
     if not said:
         return WHERE_BUTTON
     return clamp(f"{WHERE_BUTTON}: {said}", BUTTON_LABEL_LIMIT)
+
+
+WHERE_NOTE_MARK = " — ⚠️ {note}"
+WHERE_NOTE_MISSING = "that page answered 404 — check the name"
+WHERE_NOTE_UNREACHABLE = "{host} did not answer within {seconds} s — the link is kept as typed"
+WHERE_REFUSED_MISSING = (
+    "**{url}** answered 404, so nowhere was saved and the old place was kept. That usually "
+    "means the name is misspelt — check it and open the box again. A Lead can set "
+    "`events_where_link_check` to warn if you would rather it were kept anyway."
+)
+WHERE_REFUSED_UNREACHABLE = (
+    "**{url}** did not answer within {seconds} seconds, so nowhere was saved and the old place "
+    "was kept. The site may be down, or slower than the box can wait — try again in a moment. A "
+    "Lead can set `events_where_link_check` to warn if you would rather it were kept anyway."
+)
+
+
+def link_host(url: Any) -> str:
+    """The host on its own, for a sentence that should not read out a whole href."""
+    return str(url or "").split("://", 1)[-1].split("/", 1)[0]
+
+
+def where_note(verdict: str, url: Any, seconds: Any) -> str:
+    """The draft's one-line warning; `LINK_OK` has nothing to say."""
+    if verdict == LINK_MISSING:
+        return WHERE_NOTE_MISSING
+    if verdict == LINK_UNREACHABLE:
+        return WHERE_NOTE_UNREACHABLE.format(host=link_host(url) or url, seconds=seconds)
+    return ""
+
+
+def where_refused(verdict: str, url: Any, seconds: Any) -> str:
+    """The refusing mode's sentence: what happened, what was kept, and what to do."""
+    said = clamp(url, LOCATION_LIMIT)
+    if verdict == LINK_MISSING:
+        return WHERE_REFUSED_MISSING.format(url=said)
+    return WHERE_REFUSED_UNREACHABLE.format(url=said, seconds=seconds)
 
 
 WHERE_UNKNOWN_KIND = (
@@ -716,6 +754,7 @@ class EventDraft:
     description: str = ""
     where: Where = WHERE_UNSET
     duration: str = ""
+    where_note: str = ""
 
 
 def draft_check(draft: EventDraft, now: datetime) -> tuple[EventFields | None, str]:
@@ -753,11 +792,14 @@ def draft_how_long(draft: EventDraft) -> str:
 def draft_lines(draft: EventDraft, now: datetime, *, chosen: bool, why: str = "") -> list[str]:
     """The draft card, in the order the design writes it, with one Still-needed line at most."""
     when = draft_when_line(draft, now)
+    said = where_line(draft.where) or DRAFT_NOT_SET
+    if draft.where_note:
+        said = f"{said}{WHERE_NOTE_MARK.format(note=draft.where_note)}"
     lines = [
         f"**Title** — {clamp(draft.title, TITLE_LIMIT) or DRAFT_NEEDED}",
         f"**When** — {when}",
         f"**How long** — {draft_how_long(draft)}",
-        f"**Where** — {where_line(draft.where) or DRAFT_NOT_SET}",
+        f"**Where** — {said}",
         f"**What** — {clamp(draft.description, DRAFT_WHAT_LIMIT) or DRAFT_NOTHING_YET}",
     ]
     lines.append((DRAFT_ZONE if chosen else DRAFT_ZONE_HINT).format(tz=draft.when.zone))
