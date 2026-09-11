@@ -1,13 +1,31 @@
 # Saved poll drafts — design
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · **BUILT** on `poll-drafts`
-> (off `main` at `9cd79d6`, v93) 2026-09-06 — see the `## Deviations` foot for what differs and
-> why; nothing has met live Discord. Last verified: **2026-09-06 10:05** —
-> every `path:name` below was read in the tree at `62ace89` (v93 + the fixture sweeps); nothing has been
-> built yet. Owner decision **2026-09-06 09:45**, verbatim: *"B but only save 1 draft per person max"*
+> **Audience:** the build agent and reviewers. **Status:** TRACKED, ✅ **LIVE as v94** — branch
+> `poll-drafts` (off `main` at `9cd79d6`, v93), merge **`8405bea`**, **schema 32 → 33**, deployed by
+> the owner **2026-09-06 11:13** Phoenix; Fly **v95 is the same commit**, a second run of the script
+> 72 s later with no code change (`../deploys.log`). Landing entry in [`../DONE.md`](../DONE.md).
+> See the `## Deviations` foot for what differs and why. ⚠️ **Never met live Discord** — no test can
+> click a Discord button ([`../access/testing.md`](../access/testing.md)); the owner's by-eye rows are
+> **300–304** in [`../access/sweeps.md`](../access/sweeps.md) (lettered `PD-a`–`PD-e` here; numbered
+> at the merge, as §7 said the conductor would).
+> Owner decision **2026-09-06 09:45**, verbatim: *"B but only save 1 draft per person max"*
 > — answering "polls' `draft` status: (a) drop it or (b) make saved drafts real". This closes fork I-3 of
 > [`polls-panel-design.md`](polls-panel-design.md) §I the other way: a member CAN leave the create flow
 > and come back to it.
+>
+> **Last verified: 2026-09-11 08:36** (the header; the body is as at the design). Measured this pass
+> against `main` at `f3ae743` (v108 live): the `poll_drafts` table is in `storage/db.py` (the schema
+> has moved on to **34** since, for events' `where_kind`/`where_channel_id` — nothing here changed);
+> `black_bloc/polls.py` carries `PollDraft.to_json`/`from_json`, `draft_row`, `load_draft`,
+> `save_draft`, `drop_draft`, `drafts`, `stale_drafts`; `DRAFT = "draft"` survives as a name but is in
+> **none** of `STATUSES` / `OPEN_STATUSES` / `TRANSITIONS` / `COLOURS` / `CARD_BUTTONS`, exactly as
+> §2.1 required; `settings_store.py` registers `poll_drafts` (bool) and `poll_draft_days` (int,
+> default `POLL_DRAFT_DAYS = 14`) with help sentences and a max; the three log kinds
+> `poll.draft_saved` / `poll.draft_discarded` / `poll.draft_expired` are in `logkinds.py` and written
+> by `cogs/community/polls.py`. ⚠️ **NOT checked this pass:** anything in Discord or a browser — no
+> button was pressed, no page was opened, the bot was not booted. Before that, **2026-09-06 10:05** —
+> every `path:name` below was read in the tree at `62ace89` (v93 + the fixture sweeps), before the
+> build.
 
 ## 1. What exists
 
@@ -113,13 +131,16 @@ resumed draft leaves zero draft rows and ONE log row with `from_draft`; discard 
 settings toggles land in the store. `tests/storage/test_db.py`: schema 33, table present after
 `connect()` on a 32 database. `tests/test_settings_store.py`: the two keys, defaults, bounds.
 `tests/api/test_contract.py`: `contract.json` is untouched unless a settings route enumerates keys —
-the mock check must still say 17 pages / 149 routes and its core-settings count.
+the mock check must still say 17 pages / 149 routes and its core-settings count. (149 was the count
+at this build; the mock has read **150 routes, 17 pages, 14 core settings** since v96, which added
+`POST /api/polls/recurrences` — [`recurrence-web-create-design.md`](recurrence-web-create-design.md)
+— and it still reads that at v108.)
 
 ## 7. Prove before merge, and the sweep rows
 
 `ruff` clean; full suite `-n auto` green forward and `BB_REVERSE=1`; `node site/mock/check.mjs` ok;
 `python -m black_bloc` NOT booted in a worktree (no token) — say so. Sweep rows lettered `PD-a…` in
-`docs/access/sweeps.md` (the conductor numbers them at the merge): save → resume → post; save twice
+`docs/access/sweeps.md` (**numbered 300–304 at the merge**): save → resume → post; save twice
 replaces; staff discard DMs; off hides everything; expiry after `poll_draft_days`. Code notes: a
 `# Saved poll drafts` section at the foot of `code-notes.md`, keyed by name.
 
@@ -132,7 +153,8 @@ path at all. Say which you did.
 
 ## Deviations
 
-Written by the build agent, 2026-09-06, on `poll-drafts` off `main` at `9cd79d6`. Everything not
+Written by the build agent, 2026-09-06, on `poll-drafts` off `main` at `9cd79d6`. **Status: ✅ LIVE
+v94 — merged `8405bea`, deployed 2026-09-06 11:13 (v95 is the same commit).** Everything not
 listed here was built as this document says. Details and reasoning for each are in
 [`code-notes.md`](code-notes.md) § *Saved poll drafts*.
 
