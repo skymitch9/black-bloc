@@ -1,8 +1,20 @@
-# Test-suite profile — where the 5188 tests actually spend their time
+# Test-suite profile — where the tests actually spend their time
 
 > **Audience:** the owner (the "do we truly need 5186 tests?" question) and
 > Claude sessions sizing a test change. **Status:** TRACKED.
-> **Last verified: 2026-09-05** — every number below was measured on this
+> **Last verified: 2026-09-11 09:00** — count and file total RE-MEASURED in a worktree of
+> `main` at `1d090e5` (v108). ⚠️ **The suite has grown: 5188 → 5546 tests** (`5546/5605
+> collected, 59 deselected`, 10.80 s) and **99 → 106 test files**
+> (`find tests -name 'test_*.py'`). **Nothing else was re-run** — §1–§5 stay the v93
+> snapshot they were written as, so treat every ratio, second and percentage in them as a
+> 2026-09-05 reading against a 5188-test suite, not as current. The three named individual
+> slowest tests WERE re-run serially as a cheap spot-check and all three still pass, but
+> their seconds are **not comparable** (3.69 / 2.58 / 2.22 s call, against 2.64 / 0.84 /
+> 0.68 s at v93) because four other agents were running on this machine at the time —
+> contention, not regression, and it is recorded here only so nobody reads the new figures
+> as a measurement. **NOT re-run:** the full `-n auto` wall clock, the per-file table, the
+> fixture costs, the duplicate analysis, coverage, or anything in Half A / Half B.
+> Before that, **2026-09-05** — every number in §1–§5 was measured on that
 > date, on branch `worktree-agent-a8faa99c1ac0f0922` off `5c9c2a6` (v93), against a
 > clean worktree, with `pytest 9.1.1` / Python 3.12.10 / 32 logical CPUs, and
 > each table names the exact command that produced it.
@@ -36,8 +48,8 @@ function-scoped fixture, not the assertions.
 
 | Measure | Value |
 |---|---|
-| Tests collected / run | **5188** (5247 collected, 59 deselected by `-m 'not live'`) |
-| Test files | **99** |
+| Tests collected / run | **5188** (5247 collected, 59 deselected by `-m 'not live'`) — ⚠️ **5546** (5605 collected, 59 deselected) as of 2026-09-11 v108 |
+| Test files | **99** — ⚠️ **106** as of 2026-09-11 |
 | Wall clock, `-n auto` (32 workers) | **79.12 s** |
 | Collection alone | **1.90 s** |
 | Failures / errors | 0 |
