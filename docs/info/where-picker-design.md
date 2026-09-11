@@ -203,3 +203,53 @@ conductor's, at landing).
 - **D10 (build) The sweep rows are 329–335, not 328 onwards.** The raid-train calendar-name build
   took 328 on `main` the same afternoon, while this branch was in flight. The conductor renumbers
   at the merge either way; this is recorded so the gap is not read as a missing row.
+
+## Follow-up — a channel AND a link together, the link appended to the description
+
+> Written 2026-09-10 17:18 against `main` at `d5c0515` (v105 live). **Status: DESIGN**, build dispatched
+> to an Opus agent the same evening; departures go in a `## Follow-up deviations` foot under this.
+
+### What the owner asked (2026-09-10 17:12, verbatim)
+
+> "We need an easy way to set a voice or text channel for an event with the same where box for Twitch
+> or something as optional / We then can append the link in the description of the event"
+
+v105 made Where an **either/or**: a channel, *or* a typed place. A raid streamed on Twitch and played
+in a voice channel has to choose. The follow-up lets a draft hold **both**: the channel is *where it
+happens*, the box is an optional **link or note** that rides along.
+
+### The change, half by half
+
+| Piece | v105 | After |
+|---|---|---|
+| `Where` type | `text` is only meaningful when `kind == other` | `text` is meaningful for **every** kind: the typed place for `other`, an optional link/note beside a channel for `voice`/`text`. Shape unchanged, `WHERE_UNSET` unchanged |
+| storage | `location` NULL for channel kinds | `location` holds the text for **every** kind — **schema unchanged at 34**, no migration, no backfill. `read_where` returns `Where(kind, id, clamp(location))` for a channel row (today it drops the text) |
+| `checked_where` | a channel kind discards `text` | a channel kind **keeps** `typed`; the four refusals unchanged; the three empty spellings still collapse to `WHERE_UNSET` |
+| `where_line` | mention *or* text | `<#id> · <text>` when both, `<#id>` alone, or the text alone. `where_said` / `where_button_label` the same with words (`🔊 Raid Night · twitch.tv/…`), clamped as now |
+| `WherePanel` | `Other — type a place or link…` opens the modal; picking a channel wipes the text | the modal button is always there, labelled **`Link or place (optional)…`** when a channel is set and `Other — type a place or link…` when none is; the ChannelSelect pick **keeps** the current text (`Where(kind, id, previous.text)`); submitting the modal with a channel set stores `Where(kind, id, typed)`, with none set stores `other`/unset as now; deselecting the channel keeps the text as `other` (`Where(other, None, text)`) — nobody loses what they typed; `Clear` still wipes everything; the panel's intro sentence says the box is optional beside a channel |
+| the scheduled event | `scheduled_place` gives the channel kinds no `location`; the description is the row's | unchanged place; **the description gets the text appended** for channel kinds — `description + "\n\n" + text`, clamped to `DESCRIPTION_LIMIT` (the text wins if the description has to give — the link is the reason it is there). Gated on a new bool key **`events_where_link_in_description`** (events group, default **true**, checklist 33: the owner decided it in chat, so the Settings page and `/settings set-value` can undo it). For `other` nothing changes: the text is already the location |
+| website `page-events.js` `whereControl` | the typed box is shown only for `— somewhere else —` | shown **always**; its hint reads `Optional beside a channel — a Twitch link, say.` when a channel is chosen, `Only used when it is somewhere else.` otherwise (`SOMEWHERE_ELSE` unchanged); the payload sends `location` for every kind; the row's `location` already comes back, so the editor pre-fills it |
+| `api/tools/events.py` | — | nothing new: `checked_where` does it; `event_row` already answers `location` |
+| `knowledge.py:event_where` | — | nothing new: `where_line` does it |
+| the staff card button | — | nothing new: same panel |
+| `/settings` + mock | — | the one key above in `settings_store.py` (`KEY_TYPES`, `KEY_HELP`, default resolver), `site/mock/server.mjs`, `labels.js`; keys **197 → 198** |
+
+### Tests (mirror the package)
+
+- `tests/test_events.py`: `read_where` keeps the text beside a channel; `where_line` / `where_said` for
+  both-set; `checked_where` keeps `typed` for a channel kind; `scheduled_place` unchanged; the
+  `create_scheduled_event` kwargs carry the appended description for a channel kind when the key is on,
+  the bare description when it is off, and the bare description for `other`; the append clamps.
+- `tests/cogs/community/test_events.py`: the modal button label flips with a channel set; a channel pick
+  keeps the text; the modal with a channel set stores both; deselecting keeps the text as `other`;
+  `Clear` wipes both.
+- `tests/api/tools/test_events.py`: PUT with a channel and a `location` stores both and the row answers both.
+- `tests/test_settings_store.py` + `labels.js` total guard: the new key.
+- `node site/mock/check.mjs` stays `ok - 17 pages, 150 routes, 14 core settings, all keys present`.
+
+### Docs the build touches
+
+`docs/access/sweeps.md` (two rows after 335: a voice pick plus a link on the draft; the website editor
+with both), `docs/info/code-notes.md` (a by-NAME `## Where follow-up` block under the Where section),
+`docs/info/architecture.md` (keys 197 → 198), `docs/info/README.md` (this doc's row), `docs/TODO.md`
+(status line on the 🆕 item only — the MOVE to DONE is the conductor's).
