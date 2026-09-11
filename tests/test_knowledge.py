@@ -336,6 +336,15 @@ def test_an_event_note_says_when_and_where_it_is():
     assert event_section({"title": "", "starts_at": "x"}) is None
 
 
+def test_an_event_note_gives_the_chat_a_bare_link_rather_than_markdown():
+    """The knowledge sections are read by a language model, which reads words, not markdown."""
+    section = event_section(
+        {"title": "Raid", "starts_at": "2026-09-05T02:00:00+00:00",
+         "location": "https://twitch.tv/bb"}
+    )
+    assert "https://twitch.tv/bb" in section[1] and "[" not in section[1]
+
+
 def test_a_role_menu_note_lists_what_a_member_could_pick():
     guild = SimpleNamespace(get_role=lambda role_id: SimpleNamespace(name="Runner"))
     section = menu_section({"title": "Colours", "name": "colours"}, [{"label": "", "role_id": 1}],

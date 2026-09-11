@@ -39,6 +39,7 @@ from ...events import (
     PANEL_TITLE,
     PENDING,
     REVIEW_ROOM_BUTTON,
+    ROW_ITEM_CAP,
     SELECT_CAP,
     SITE_BUTTON,
     SUBMIT_BUTTON,
@@ -53,6 +54,7 @@ from ...events import (
     WHERE_LINK_MODAL_TITLE,
     WHERE_MODAL_LABEL,
     WHERE_MODAL_TITLE,
+    WHERE_OPEN_LINK_BUTTON,
     WHERE_OTHER,
     WHERE_OTHER_BUTTON,
     WHERE_PANEL_INTRO,
@@ -111,6 +113,7 @@ from ...events import (
     tell_or_log,
     when_line,
     where_button_label,
+    where_link,
     where_of_channel,
     write_settings,
     zone_choices,
@@ -177,6 +180,7 @@ ZONE_MODAL_TITLE = "Your time zone"
 ZONE_MODAL_LABEL = "Region/City — Phoenix is America/Phoenix"
 ZONE_INPUT_LIMIT = 60
 DRAFT_BUTTON_ROW = 4
+CARD_LINK_ROWS = (1, 2, 3, 4)
 NUMBERS_MODAL_TITLE = "Events — numbers"
 FORGOT_NOTHING = "Nothing was picked, so nothing was forgotten."
 
@@ -310,6 +314,22 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
     return embed, view
 
 
+def add_open_link(view: EventView, text: Any, rows: Any) -> None:
+    """A typed link becomes a real button on the first of `rows` with a slot still free."""
+    url = where_link(text)
+    if not url:
+        return
+    taken = [item.row for item in view.children]
+    room = next((one for one in rows if taken.count(one) < ROW_ITEM_CAP), None)
+    if room is None:
+        return
+    view.add_item(
+        discord.ui.Button(
+            style=discord.ButtonStyle.link, label=WHERE_OPEN_LINK_BUTTON, url=url, row=room
+        )
+    )
+
+
 def build_card(bot: Any, guild: Any, row: Any, actor: Any) -> tuple[discord.Embed, EventView]:
     room = guild.get_channel(row["review_channel_id"]) if row["review_channel_id"] else None
     embed = card_for(row)
@@ -338,6 +358,7 @@ def build_card(bot: Any, guild: Any, row: Any, actor: Any) -> tuple[discord.Embe
                 row=1,
             )
         )
+    add_open_link(view, read_where(row).text, CARD_LINK_ROWS)
     return embed, view
 
 
@@ -619,6 +640,7 @@ async def build_draft(
     if checked is not None:
         view.add_item(SubmitButton())
     view.add_item(BackButton(row=DRAFT_BUTTON_ROW))
+    add_open_link(view, fields.where.text, (DRAFT_BUTTON_ROW,))
     return embed, view
 
 

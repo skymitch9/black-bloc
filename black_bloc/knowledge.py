@@ -479,7 +479,7 @@ def event_where(row: Any) -> str:
     """Schema 34: the place is a channel or a typed line, and `events` owns which."""
     from .events import read_where, where_line
 
-    return where_line(read_where(row)).strip()
+    return where_line(read_where(row), linked=False).strip()
 
 
 def event_section(row: Any) -> tuple[str, str, str] | None:

@@ -172,6 +172,11 @@ WHERE_GONE_WORD = "a channel that has gone"
 WHERE_JOIN = " · "
 WHERE_LINK_JOIN = "\n\n"
 WHERE_LINK_KEY = "events_where_link_in_description"
+WHERE_SCHEMES = ("http://", "https://")
+WHERE_BARE_HOST = "www."
+WHERE_ASSUMED_SCHEME = "https://"
+WHERE_OPEN_LINK_BUTTON = "Open link"
+ROW_ITEM_CAP = 5
 
 
 class Where(NamedTuple):
@@ -218,13 +223,38 @@ def read_where(row: Any) -> Where:
     return Where(WHERE_OTHER, None, text) if text else WHERE_UNSET
 
 
-def where_line(where: Where) -> str:
+def where_link(text: Any) -> str | None:
+    """The href when the typed place IS one link and nothing else; `the.bar at 8` is not."""
+    said = str(text or "").strip()
+    if len(said.split()) != 1:
+        return None
+    lowered = said.lower()
+    for scheme in WHERE_SCHEMES:
+        if lowered.startswith(scheme):
+            return said if len(said) > len(scheme) else None
+    if lowered.startswith(WHERE_BARE_HOST) and len(said) > len(WHERE_BARE_HOST):
+        return f"{WHERE_ASSUMED_SCHEME}{said}"
+    return None
+
+
+def where_shown(text: Any) -> str:
+    """A link masked so an embed shows the place rather than the scheme; anything else as typed."""
+    said = clamp(text, LOCATION_LIMIT)
+    url = where_link(said)
+    if url is None or ")" in url:
+        return said
+    label = url.split("://", 1)[-1].rstrip("/").replace("]", "").replace(")", "")
+    return f"[{clamp(label, LOCATION_LIMIT)}]({url})" if label else said
+
+
+def where_line(where: Where, *, linked: bool = True) -> str:
     """The card's and the draft's one Where line; empty means the field is left out."""
     text = clamp(where.text, LOCATION_LIMIT)
+    shown = where_shown(text) if linked else text
     if where.kind in WHERE_CHANNEL_KINDS and where.channel_id:
         said = f"<#{int(where.channel_id)}>"
-        return f"{said}{WHERE_JOIN}{text}" if text else said
-    return text
+        return f"{said}{WHERE_JOIN}{shown}" if shown else said
+    return shown
 
 
 def where_said(where: Where, channel: Any = None) -> str:

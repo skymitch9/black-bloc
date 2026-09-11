@@ -3115,3 +3115,70 @@ async def test_a_channel_that_has_gone_is_not_sent_back_as_a_pre_selected_defaul
 
     assert find_select(panel, events_pure.WHERE_PLACEHOLDER).default_values == []
     assert has_item(panel, events_pure.WHERE_CLEAR_BUTTON)
+
+
+# Follow-up 2 B (`docs/info/where-picker-design.md` § Follow-up 2): an "Open link" button.
+
+
+def find_open_link(view):
+    return next(
+        (
+            one
+            for one in view.children
+            if getattr(one, "label", None) == events_pure.WHERE_OPEN_LINK_BUTTON
+        ),
+        None,
+    )
+
+
+async def test_the_card_carries_an_open_link_button_for_every_viewer_when_the_place_is_a_link(
+    cog, bot, member, db
+):
+    await submit(cog, bot, member, where=Where(WHERE_OTHER, None, "https://twitch.tv/bb"))
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+
+    _theirs, view = await open_staff_card(cog, bot, member, row["id"])
+
+    button = find_open_link(view)
+    assert button is not None and button.style is discord.ButtonStyle.link
+    assert button.url == "https://twitch.tv/bb" and button.row == 1
+
+
+async def test_a_card_whose_place_is_words_gets_no_open_link_button(cog, bot, member, db):
+    await submit(cog, bot, member, where=Where(WHERE_OTHER, None, "the park"))
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+
+    _theirs, view = await open_staff_card(cog, bot, member, row["id"])
+
+    assert find_open_link(view) is None
+
+
+async def a_draft_with_a_link(cog, bot, member, *, full):
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.where = Where(WHERE_OTHER, None, "https://twitch.tv/bb")
+    if full:
+        view.fields.title = "Cookout at the park"
+        view.fields.when.day = future_day(3)
+        view.fields.when.hour = 19
+    picked = await click(bot, member, pick(find_select(view, MINUTE_PLACEHOLDER), ["30"]))
+    return picked, card_view(picked)
+
+
+async def test_the_draft_gets_the_open_link_button_while_its_button_row_has_a_slot(
+    cog, bot, member
+):
+    _picked, view = await a_draft_with_a_link(cog, bot, member, full=False)
+
+    button = find_open_link(view)
+    assert button is not None and button.url == "https://twitch.tv/bb"
+    assert button.row == events_cog.DRAFT_BUTTON_ROW
+
+
+async def test_a_submittable_draft_fills_its_row_so_the_link_button_is_skipped(cog, bot, member):
+    """Discord caps a row at five and Submit is the one that matters; the masked line carries it."""
+    picked, view = await a_draft_with_a_link(cog, bot, member, full=True)
+
+    row = [one for one in view.children if getattr(one, "row", None) == events_cog.DRAFT_BUTTON_ROW]
+    assert len(row) == events_pure.ROW_ITEM_CAP == 5
+    assert find_open_link(view) is None
+    assert "[twitch.tv/bb](https://twitch.tv/bb)" in card_embed(picked).description
