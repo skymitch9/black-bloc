@@ -309,7 +309,7 @@ with both), `docs/info/code-notes.md` (a by-NAME `## Where follow-up` block unde
 
 ## Follow-up 2 — a typed link LOOKS like a link (owner, 2026-09-10 ~23:09, verbatim: "Is there a way to make them look like links in the events slash" → "Do A + B")
 
-> **Status: 🔨 BUILT** on branch `where-links` off `main` at `8adbc75` (commit `a8a1210`) — ⚠️ **NOT merged, NOT deployed, never seen in Discord**. Measurements and every departure are the **`## Follow-up 2+3 deviations`** foot.
+> **Status: ✅ LIVE v107** (2026-09-10 23:41, merge `ac43a20`; built on branch `where-links` off `main` at `8adbc75`, commit `a8a1210`; review `2386050` dropped the draft's button) — ⚠️ **never seen in Discord**. Measurements and every departure are the **`## Follow-up 2+3 deviations`** foot.
 
 Today a typed `https://twitch.tv/mitchland` beside a channel renders as raw text in the draft (an embed
 description, `draft_lines`) and in the card's Where field (`card_for`, an embed field). Discord auto-links a
@@ -351,7 +351,7 @@ not a policy).
 
 ## Follow-up 3 — test rooms go after five minutes, and denied rooms count from the decision (owner, 2026-09-10 ~23:09, verbatim: "For test ones let's delete them after 5 minutes"; earlier "for a denied event do we have a timer before it's auto deleted?")
 
-> **Status: 🔨 BUILT** on branch `where-links` off `main` at `8adbc75` (commit `0e765d5`) — ⚠️ **NOT merged, NOT deployed, never seen in Discord**. Measurements and every departure are the **`## Follow-up 2+3 deviations`** foot.
+> **Status: ✅ LIVE v107** (2026-09-10 23:41, merge `ac43a20`; built on branch `where-links` off `main` at `8adbc75`, commit `0e765d5`) — ⚠️ **never seen in Discord**. Measurements and every departure are the **`## Follow-up 2+3 deviations`** foot.
 
 Measured 23:05: `EventsCog._sweep_finished` deletes a DONE / DENIED / CANCELLED event's review channel once
 `now - ends_at >= events_channel_retention_days` (live 7). Two things are wrong with that for the owner:
@@ -384,8 +384,8 @@ Two commits on the build branch: Follow-up 2 first, Follow-up 3 second, each wit
 
 ## Follow-up 2+3 deviations
 
-> Written at the build, 2026-09-10 23:55, on branch `where-links` off `main` at `8adbc75`
-> (commits `a8a1210`, `0e765d5`). **Status: 🔨 BUILT** — ⚠️ **NOT merged, NOT deployed, and NOTHING
+> Written at the build, 2026-09-10 ~23:30, on branch `where-links` off `main` at `8adbc75`
+> (commits `a8a1210`, `0e765d5`; G4 reversed at review, `2386050`). **Status: ✅ LIVE v107** 23:41, merge `ac43a20` — ⚠️ **NOTHING
 > here has met Discord**: no test can click a Discord button, `python -m black_bloc` was NOT booted
 > (a worktree holds no token), no browser rendered the Settings page, and TEST_MODE makes no
 > scheduled event at all. What IS measured: the suite (**5473 → 5503**, forward and `BB_REVERSE=1`),

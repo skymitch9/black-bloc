@@ -1,8 +1,8 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-10 23:55** — rows **338–342** written by the WHERE FOLLOW-UPS 2+3 build on branch
-> `where-links`, off `main` at `8adbc75`, ⚠️ **NOT merged, NOT deployed**. Schema **UNCHANGED at 34** —
+> **2026-09-10 23:45** — rows **338–342** written by the WHERE FOLLOW-UPS 2+3 build on branch
+> `where-links`, ✅ **LIVE v107** 23:41 (merge `ac43a20`; the v107 gate ran 5502 tests after the review dropped the draft's button and folded two draft tests into one). Schema **UNCHANGED at 34** —
 > no migration and no backfill. Registry keys **198 → 199** (`events_test_retention_minutes`, events
 > group, int, default **5**, bounds 1–1440); mock routes unchanged at **150** (checked: *17 pages, 150
 > routes, 14 core settings, all keys present*); tests **5473 → 5503**, forward and `BB_REVERSE=1`;
