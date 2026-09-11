@@ -2727,7 +2727,7 @@ async def test_picking_a_channel_stores_the_kind_the_channel_is(
 
 async def test_an_empty_channel_pick_leaves_the_draft_with_nowhere(cog, bot, member):
     _opened, view = await open_draft_panel(cog, bot, member)
-    view.fields.where = Where(WHERE_OTHER, None, "the park")
+    view.fields.where = Where(WHERE_VOICE, VOICE_CHANNEL, "")
     _shown, panel = await open_where(cog, bot, member, view)
 
     back = await click(bot, member, pick(find_select(panel, events_pure.WHERE_PLACEHOLDER), []))
@@ -2781,6 +2781,148 @@ async def test_clear_puts_the_draft_back_to_nowhere(cog, bot, member):
 
     assert view.fields.where == WHERE_UNSET
     assert card_embed(back).title == DRAFT_TITLE
+
+
+# The follow-up (`docs/info/where-picker-design.md` § Follow-up): the box stays open beside a
+# channel, so a raid can be in a voice channel AND on Twitch at once.
+
+
+async def test_the_box_is_called_a_link_once_a_channel_is_picked(cog, bot, member):
+    with_channels(bot)
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.where = WHERE_UNSET
+    _shown, panel = await open_where(cog, bot, member, view)
+    assert has_item(panel, events_pure.WHERE_OTHER_BUTTON)
+
+    view.fields.where = Where(WHERE_VOICE, VOICE_CHANNEL, "")
+    _shown, beside = await open_where(cog, bot, member, view)
+
+    assert has_item(beside, events_pure.WHERE_LINK_BUTTON)
+    assert not has_item(beside, events_pure.WHERE_OTHER_BUTTON)
+
+
+async def test_picking_a_channel_keeps_the_link_that_was_already_typed(cog, bot, member):
+    with_channels(bot)
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.where = Where(WHERE_OTHER, None, "twitch.tv/blackbloc")
+    _shown, panel = await open_where(cog, bot, member, view)
+
+    picker = find_select(panel, events_pure.WHERE_PLACEHOLDER)
+    back = await click(bot, member, pick(picker, [FakePicked(VOICE_CHANNEL, "voice")]))
+
+    assert view.fields.where == Where(WHERE_VOICE, VOICE_CHANNEL, "twitch.tv/blackbloc")
+    assert f"<#{VOICE_CHANNEL}> · twitch.tv/blackbloc" in card_embed(back).description
+
+
+async def test_the_box_beside_a_channel_stores_both_and_leaves_the_channel_alone(
+    cog, bot, member
+):
+    with_channels(bot)
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.where = Where(WHERE_VOICE, VOICE_CHANNEL, "")
+    _shown, panel = await open_where(cog, bot, member, view)
+
+    opened_modal = await click(bot, member, find_item(panel, events_pure.WHERE_LINK_BUTTON))
+    modal = opened_modal.response.modals[0]
+    assert isinstance(modal, WhereModal)
+    modal.place._value = "twitch.tv/blackbloc"
+    typed = FakeInteraction(bot, member)
+    await modal.on_submit(typed)
+
+    assert view.fields.where == Where(WHERE_VOICE, VOICE_CHANNEL, "twitch.tv/blackbloc")
+    assert f"<#{VOICE_CHANNEL}> · twitch.tv/blackbloc" in card_embed(typed).description
+
+
+async def test_the_box_beside_a_channel_opens_on_what_is_already_there_and_empties_to_nothing(
+    cog, bot, member
+):
+    with_channels(bot)
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.where = Where(WHERE_VOICE, VOICE_CHANNEL, "twitch.tv/blackbloc")
+    _shown, panel = await open_where(cog, bot, member, view)
+
+    opened_modal = await click(bot, member, find_item(panel, events_pure.WHERE_LINK_BUTTON))
+    modal = opened_modal.response.modals[0]
+    assert modal.place.default == "twitch.tv/blackbloc"
+    modal.place._value = ""
+    await modal.on_submit(FakeInteraction(bot, member))
+
+    assert view.fields.where == Where(WHERE_VOICE, VOICE_CHANNEL, "")
+
+
+async def test_dropping_the_channel_keeps_the_link_as_somewhere_else(cog, bot, member):
+    """Nobody loses what they typed, so an emptied picker leaves the words behind."""
+    with_channels(bot)
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.where = Where(WHERE_VOICE, VOICE_CHANNEL, "twitch.tv/blackbloc")
+    _shown, panel = await open_where(cog, bot, member, view)
+
+    back = await click(bot, member, pick(find_select(panel, events_pure.WHERE_PLACEHOLDER), []))
+
+    assert view.fields.where == Where(WHERE_OTHER, None, "twitch.tv/blackbloc")
+    assert "twitch.tv/blackbloc" in card_embed(back).description
+
+
+async def test_clear_wipes_the_channel_and_the_link_together(cog, bot, member):
+    with_channels(bot)
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.where = Where(WHERE_VOICE, VOICE_CHANNEL, "twitch.tv/blackbloc")
+    _shown, panel = await open_where(cog, bot, member, view)
+
+    back = await click(bot, member, find_item(panel, events_pure.WHERE_CLEAR_BUTTON))
+
+    assert view.fields.where == WHERE_UNSET
+    assert "**Where** — (not set)" in card_embed(back).description
+
+
+async def test_a_channel_and_a_link_are_both_stored_on_the_row(cog, bot, member, db):
+    with_channels(bot)
+    await submit(cog, bot, member, where=Where(WHERE_VOICE, VOICE_CHANNEL, "twitch.tv/blackbloc"))
+
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    assert row["where_kind"] == WHERE_VOICE
+    assert row["where_channel_id"] == VOICE_CHANNEL
+    assert row["location"] == "twitch.tv/blackbloc"
+
+
+async def test_the_calendar_entry_carries_the_link_in_its_description(cog, bot, member, lead, db):
+    with_channels(bot)
+    await submit(cog, bot, member, where=Where(WHERE_VOICE, VOICE_CHANNEL, "twitch.tv/blackbloc"))
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+
+    await approve(bot, lead, row["id"])
+
+    made = bot.guild.scheduled[0].kwargs
+    assert made["description"] == "bring a chair\n\ntwitch.tv/blackbloc"
+    assert made["entity_type"] is discord.EntityType.voice
+    assert "location" not in made
+
+
+async def test_the_link_stays_out_of_the_description_when_the_key_is_off(
+    cog, bot, member, lead, db
+):
+    with_channels(bot)
+    await bot.store.set(GUILD, "events_where_link_in_description", False)
+    await submit(cog, bot, member, where=Where(WHERE_VOICE, VOICE_CHANNEL, "twitch.tv/blackbloc"))
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+
+    await approve(bot, lead, row["id"])
+
+    assert bot.guild.scheduled[0].kwargs["description"] == "bring a chair"
+
+
+async def test_a_typed_place_is_still_only_the_location_and_never_the_description(
+    cog, bot, member, lead, db
+):
+    with_channels(bot)
+    await submit(cog, bot, member, where=Where(WHERE_OTHER, None, "twitch.tv/blackbloc"))
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+
+    await approve(bot, lead, row["id"])
+
+    made = bot.guild.scheduled[0].kwargs
+    assert made["description"] == "bring a chair"
+    assert made["location"] == "twitch.tv/blackbloc"
 
 
 async def test_back_from_the_where_panel_changes_nothing(cog, bot, member):
@@ -2928,9 +3070,9 @@ async def test_staff_can_set_any_kind_on_a_card_and_the_write_leaves_one_log_row
 
     fresh = await get_event(db, row["id"])
     assert fresh["where_kind"] == WHERE_VOICE and fresh["where_channel_id"] == STAGE_CHANNEL
-    assert fresh["location"] is None
+    assert fresh["location"] == "the park"
     assert (await action_kinds(db)).count("event.edited") == before + 1
-    assert f"<#{STAGE_CHANNEL}>" in [one.value for one in card_embed(back).fields]
+    assert f"<#{STAGE_CHANNEL}> · the park" in [one.value for one in card_embed(back).fields]
 
 
 async def test_staff_can_clear_a_where_off_a_card_altogether(cog, bot, member, lead, db):

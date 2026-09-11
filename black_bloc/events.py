@@ -169,10 +169,13 @@ WHERE_BUTTON = "Where"
 WHERE_VOICE_MARK = "🔊 "
 WHERE_TEXT_MARK = "#"
 WHERE_GONE_WORD = "a channel that has gone"
+WHERE_JOIN = " · "
+WHERE_LINK_JOIN = "\n\n"
+WHERE_LINK_KEY = "events_where_link_in_description"
 
 
 class Where(NamedTuple):
-    """The one shape the four writers agree on: a channel, or a typed place, or nothing."""
+    """A channel, a typed place, or a channel with a link beside it; `text` means all three."""
 
     kind: str | None = None
     channel_id: int | None = None
@@ -209,28 +212,30 @@ def read_where(row: Any) -> Where:
     """A stored event's place; a row from before schema 34 reads as the typed kind it was."""
     kind = cell(row, "where_kind")
     channel_id = cell(row, "where_channel_id")
-    if kind in WHERE_CHANNEL_KINDS and channel_id:
-        return Where(str(kind), int(channel_id), "")
     text = clamp(cell(row, "location"), LOCATION_LIMIT)
+    if kind in WHERE_CHANNEL_KINDS and channel_id:
+        return Where(str(kind), int(channel_id), text)
     return Where(WHERE_OTHER, None, text) if text else WHERE_UNSET
 
 
 def where_line(where: Where) -> str:
     """The card's and the draft's one Where line; empty means the field is left out."""
+    text = clamp(where.text, LOCATION_LIMIT)
     if where.kind in WHERE_CHANNEL_KINDS and where.channel_id:
-        return f"<#{int(where.channel_id)}>"
-    return clamp(where.text, LOCATION_LIMIT)
+        said = f"<#{int(where.channel_id)}>"
+        return f"{said}{WHERE_JOIN}{text}" if text else said
+    return text
 
 
 def where_said(where: Where, channel: Any = None) -> str:
     """Plain words for a button label, where a mention would render as its own id."""
+    text = clamp(where.text, LOCATION_LIMIT)
     if where.kind in WHERE_CHANNEL_KINDS and where.channel_id:
         name = str(getattr(channel, "name", "") or "")
-        if not name:
-            return WHERE_GONE_WORD
         mark = WHERE_VOICE_MARK if where.kind == WHERE_VOICE else WHERE_TEXT_MARK
-        return f"{mark}{name}"
-    return clamp(where.text, LOCATION_LIMIT)
+        said = f"{mark}{name}" if name else WHERE_GONE_WORD
+        return f"{said}{WHERE_JOIN}{text}" if text else said
+    return text
 
 
 def where_button_label(where: Where, channel: Any = None) -> str:
@@ -279,7 +284,17 @@ def checked_where(guild: Any, kind: Any, channel_id: Any, text: Any) -> tuple[Wh
         return None, WHERE_NOT_A_PLACE.format(
             name=clamp(getattr(channel, "name", ""), 60) or given
         )
-    return found, ""
+    return found._replace(text=typed), ""
+
+
+def described_with_where(description: Any, where: Where, *, appended: bool = True) -> str:
+    """A channel is the place, so the link typed beside it rides in the description instead."""
+    body = clamp(description, DESCRIPTION_LIMIT)
+    text = clamp(where.text, LOCATION_LIMIT)
+    if not appended or not text or where.kind not in WHERE_CHANNEL_KINDS:
+        return body
+    trimmed = clamp(body, max(DESCRIPTION_LIMIT - len(text) - len(WHERE_LINK_JOIN), 0))
+    return f"{trimmed}{WHERE_LINK_JOIN}{text}" if trimmed else text
 
 
 def build_card(
@@ -417,12 +432,15 @@ TEXT_MODAL_TITLE = "Title & details"
 WHERE_PANEL_TITLE = "Where is it?"
 WHERE_PANEL_INTRO = (
     "Pick the voice or text channel it happens in, or **Other** for a place or a link that is "
-    "not on this server. Leaving it empty is fine — the card just will not say where."
+    "not on this server. With a channel picked the box is still yours — a Twitch link or a note "
+    "beside it is optional. Leaving it all empty is fine — the card just will not say where."
 )
 WHERE_PLACEHOLDER = "A voice or text channel…"
 WHERE_OTHER_BUTTON = "Other — type a place or link…"
+WHERE_LINK_BUTTON = "Link or place (optional)…"
 WHERE_CLEAR_BUTTON = "Clear"
 WHERE_MODAL_TITLE = "Somewhere else"
+WHERE_LINK_MODAL_TITLE = "A link or a note"
 WHERE_MODAL_LABEL = "Where, or a link"
 WHERE_JOIN_NOTE = (
     "A voice or stage channel gives everybody a **Join** button on the Discord event; anything "
@@ -1028,7 +1046,12 @@ async def create_scheduled_event(bot: Any, guild: Any, row: Any) -> tuple[Any, s
             name=scheduled_name(
                 bot.store.get(guild.id, EVENTS_SCHEDULED_NAME_KEY), row["title"]
             ),
-            description=clamp(row["description"], DESCRIPTION_LIMIT) or None,
+            description=described_with_where(
+                row["description"],
+                read_where(row),
+                appended=bool(bot.store.get(guild.id, WHERE_LINK_KEY)),
+            )
+            or None,
             start_time=starts,
             end_time=finishes,
             privacy_level=discord.PrivacyLevel.guild_only,

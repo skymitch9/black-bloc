@@ -46,8 +46,11 @@ from ...events import (
     TEXT_BUTTON,
     TEXT_MODAL_TITLE,
     TITLE_LIMIT,
+    WHERE_CHANNEL_KINDS,
     WHERE_CLEAR_BUTTON,
     WHERE_JOIN_NOTE,
+    WHERE_LINK_BUTTON,
+    WHERE_LINK_MODAL_TITLE,
     WHERE_MODAL_LABEL,
     WHERE_MODAL_TITLE,
     WHERE_OTHER,
@@ -702,7 +705,7 @@ class WherePanel(Panel):
         self.takes_where = on_pick
         self.goes_back = on_back
         self.add_item(WhereSelect(where, known=known))
-        self.add_item(WhereOtherButton())
+        self.add_item(WhereOtherButton(where))
         if where.kind is not None:
             self.add_item(WhereClearButton())
         self.add_item(WhereBackButton())
@@ -735,14 +738,28 @@ class WhereSelect(discord.ui.ChannelSelect):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         picked = self.values[0] if self.values else None
+        kept = clamp(self.view.where.text, LOCATION_LIMIT)
+        if picked is None:
+            await self.view.take_where(
+                interaction, Where(WHERE_OTHER, None, kept) if kept else WHERE_UNSET
+            )
+            return
+        found = where_of_channel(picked)
         await self.view.take_where(
-            interaction, where_of_channel(picked) if picked is not None else WHERE_UNSET
+            interaction, found._replace(text=kept) if found.kind else WHERE_UNSET
         )
 
 
 class WhereOtherButton(discord.ui.Button):
-    def __init__(self) -> None:
-        super().__init__(label=WHERE_OTHER_BUTTON, style=discord.ButtonStyle.secondary, row=1)
+    """One door to the box, whose words change with what the channel picker already holds."""
+
+    def __init__(self, where: Where) -> None:
+        beside = where.kind in WHERE_CHANNEL_KINDS and bool(where.channel_id)
+        super().__init__(
+            label=WHERE_LINK_BUTTON if beside else WHERE_OTHER_BUTTON,
+            style=discord.ButtonStyle.secondary,
+            row=1,
+        )
 
     async def callback(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_modal(WhereModal(self.view))
@@ -765,7 +782,7 @@ class WhereBackButton(discord.ui.Button):
 
 
 class WhereModal(AnswersErrors, discord.ui.Modal, title=WHERE_MODAL_TITLE):
-    """One optional box with no failure path: what is typed is the place, and empty clears it."""
+    """One optional box, no failure path: beside a channel a link, alone the place itself."""
 
     place = discord.ui.TextInput(
         label=WHERE_MODAL_LABEL, max_length=LOCATION_LIMIT, required=False
@@ -774,10 +791,18 @@ class WhereModal(AnswersErrors, discord.ui.Modal, title=WHERE_MODAL_TITLE):
     def __init__(self, previous: Any) -> None:
         super().__init__()
         self.previous = previous
-        self.place.default = previous.where.text or None
+        where = previous.where
+        self.beside = where.kind in WHERE_CHANNEL_KINDS and bool(where.channel_id)
+        if self.beside:
+            self.title = WHERE_LINK_MODAL_TITLE
+        self.place.default = where.text or None
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         typed = clamp(self.place, LOCATION_LIMIT)
+        where = self.previous.where
+        if self.beside:
+            await self.previous.take_where(interaction, where._replace(text=typed))
+            return
         await self.previous.take_where(
             interaction, Where(WHERE_OTHER, None, typed) if typed else WHERE_UNSET
         )
