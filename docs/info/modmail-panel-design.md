@@ -16,6 +16,29 @@
 > 245–251): **A ticket…** and the ticket card ON the panel (§B S5, §C), `picked_values` one home,
 > the dead leftovers gone, the `modmail.card_failed` row — deviations in the `## Follow-up
 > deviations` foot. Not run against Discord by eye.
+> **All three halves are still LIVE at v108** (`73e2e44`, 2026-09-11 00:37).
+>
+> **Since then, the numbers this header measured have all moved, and three things landed:**
+> **schema 30 → 34** (v86 self-test tables, v89 log index, v94 poll drafts, v105 `events.where_*`);
+> the top-level tree **30 → 29** after the `/settings` panel retired the last Group at v84; the mock
+> **146 → 150 routes**; **v78** (`3429233`) gave fourteen features a `HIDDEN_WHEN_OFF` entry — ⚠️
+> **modmail is NOT one of them** (there is no `modmail_mode` in the map), so `/modmail` never hides;
+> **v84** corrected `LOG_LEVEL_COMMANDS`; **v88** (`794d3aa`) folded the confirm helpers onto
+> `panels.confirm`.
+> **Last verified: 2026-09-11 09:22** — re-measured in this tree at `1d090e5`: both keys registered
+> (`modmail_panel_minutes`, `modmail_reply_style`) beside five other `modmail_*` keys (registry
+> **202**); every move label reads the same string — `PICK_A_TICKET` "A ticket…" (`modmail.py:393`),
+> `SETUP_MOVE` / `BLOCKED_MOVE_BUTTON` / `SNIPPETS_MOVE` / `FORGET_MOVE` (`:443–446`), and the card's
+> `REPLY_MOVE` / `ANON_MOVE` "Reply as Staff" / `CARD_NOTE_MOVE` "Private note" / `CARD_CLOSE_MOVE`
+> "Close…" (`:633–636`); the renamed log kinds are known (`modmail.reply` `logkinds.py:259`,
+> `modmail.snippet_removed` `:261`, `modmail.snippet_saved` `:262`) and `modmail.card_failed` is
+> written at three sites (`cogs/moderation/modmail.py:771`, `:833`, `:863`); Build B's two columns
+> are in the schema (`storage/db.py:276–277`, backfilled at `:693–694`). `SCHEMA_VERSION` is **34**;
+> `site/mock/contract.json` **150 routes / 17 pages**; sweeps **200–207** (Build A), **219–230**
+> (Build B) and **245–251** (the follow-up), the file running to **350**.
+> ⚠️ **NOT checked in this pass:** anything in a Discord client or a browser; no boot, no pytest, no
+> ruff, no `check.mjs` run, no ticket opened, no card re-posted, no DM seen. The debounce figures in
+> §D are still reasoned, never measured against Discord's real buckets.
 > 🔑 **RE-KEYED 2026-09-05 against `63f016c`** on `worktree-agent-ad2fc0f5aad473c19` (the
 > follow-up build's own branch, since merged as v85), in
 > `black_bloc/cogs/moderation/modmail.py` (**3166 lines**). **109 bare `` `:N` `` references** to
@@ -1060,8 +1083,10 @@ discovering them at review:
 
 The wave-4 **follow-up** build (the seven `TODO.md` leftovers, 2026-09-05, on
 `worktree-agent-ad2fc0f5aad473c19`) against §B row S5 and §C *"The ticket card ON THE PANEL"*.
-⚠️ **NOT merged, NOT deployed, and nothing here has met live Discord** — the whole verification is
-`ruff`, `pytest` (**5020**) and `node site/mock/check.mjs` (**17 pages / 146 routes**, unchanged).
+⚠️ **"NOT merged, NOT deployed" was true only until the same day's merge: this SHIPPED as v85**
+(`1bac6fa`, 2026-09-05 15:28) and is live at v108. Nothing here has met live Discord even so — the
+whole verification was `ruff`, `pytest` (**5020**, **5546** today) and `node site/mock/check.mjs`
+(**17 pages / 146 routes**, unchanged then; **150** today).
 
 1. **`A ticket…` is drawn whenever ≥1 ticket is open, not only in S5.** §B's table hangs it off
    S5 (enabled **and** pointed **and** ≥1 open), but `_status_lines` already lists every open
