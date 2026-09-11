@@ -307,7 +307,7 @@ with both), `docs/info/code-notes.md` (a by-NAME `## Where follow-up` block unde
   Rewriting a row the owner may already have walked would lose that history, so 337 carries the ⚠️ clause
   instead. If the conductor would rather 334 were corrected at the merge, that is a one-line edit.
 
-## Follow-up 2 — a typed link LOOKS like a link (owner, 2026-09-10 23:10, verbatim: "Is there a way to make them look like links in the events slash" → "Do A + B")
+## Follow-up 2 — a typed link LOOKS like a link (owner, 2026-09-10 ~23:09, verbatim: "Is there a way to make them look like links in the events slash" → "Do A + B")
 
 Today a typed `https://twitch.tv/mitchland` beside a channel renders as raw text in the draft (an embed
 description, `draft_lines`) and in the card's Where field (`card_for`, an embed field). Discord auto-links a
@@ -347,7 +347,7 @@ is a link and none when it is a place; `tests/test_knowledge.py` — `event_wher
 Nothing to decide, so no settings key (checklist 33 satisfied by absence: a link that looks like a link is
 not a policy).
 
-## Follow-up 3 — test rooms go after five minutes, and denied rooms count from the decision (owner, 2026-09-10 23:14, verbatim: "For test ones let's delete them after 5 minutes"; earlier "for a denied event do we have a timer before it's auto deleted?")
+## Follow-up 3 — test rooms go after five minutes, and denied rooms count from the decision (owner, 2026-09-10 ~23:09, verbatim: "For test ones let's delete them after 5 minutes"; earlier "for a denied event do we have a timer before it's auto deleted?")
 
 Measured 23:05: `EventsCog._sweep_finished` deletes a DONE / DENIED / CANCELLED event's review channel once
 `now - ends_at >= events_channel_retention_days` (live 7). Two things are wrong with that for the owner:
