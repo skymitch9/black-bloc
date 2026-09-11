@@ -1,12 +1,45 @@
 # Ping roles — `/pings` is ONE command that opens a panel (wave 2)
 
 > **Audience:** the build agent and the reviewer (Claude sessions), and the owner for §I.
-> **Status:** TRACKED · ✅ **SHIPPED v72 `a5ad521` 2026-09-03 18:30** (merged clean after Fable
+> **Status:** TRACKED · ✅ **LIVE since v72** (`a5ad521`, 2026-09-03 18:30; merged clean after Fable
 > review, one merge-time fix: the Names… echo only follows a successful save; boot measured `commands
-> synced` **39**; 4050 tests; nothing run against Discord by eye — sweeps 126–134 and 38–42 are the
-> owner's). Written as BUILT 2026-09-03 on `worktree-agent-a86e71fd801362ca2` — see the
+> synced` **39** — **29** today; 4050 tests; nothing run against Discord by eye — sweeps 126–134 and
+> 38–42 are the owner's). Still live at **v108** (`73e2e44`, 2026-09-11 00:37).
+> Written as BUILT 2026-09-03 on `worktree-agent-a86e71fd801362ca2` — see the
 > `## Deviations` foot for what was built differently and what was measured.
-> **Last verified: 2026-09-03** — every `path:line` below was READ in this working tree on `main`
+>
+> 🔴 **THE DESIGN BODY OF THIS FILE IS GONE, DELIBERATELY, AND THE FOOT STILL REFERS TO IT.**
+> Commit `8426b1a` (2026-09-03, *"Pings: rewrite every string and doc that named a retired
+> subcommand"*) cut the file from 408 lines to 140 — §A–§J were removed and only this header plus the
+> Deviations foot were kept. So every `§C` / `§E` / `§F` / `§H` / `§J` the foot cites points at
+> nothing in this file. **Read the design at `git show 8426b1a^:docs/info/pings-panel-design.md`**;
+> the post-merge map of what actually shipped is `code-notes.md`'s `# Pings panel` section.
+>
+> **Since then, three things this document predates:**
+> 1. **v78** (`3429233`) gave `pings_mode` a `HIDDEN_WHEN_OFF` entry (`command_visibility.py:25`),
+>    one of fourteen, so `/pings` vanishes while the mode is off behind `hide_commands_when_off`.
+> 2. **v84** (`ce97de0`) corrected `LOG_LEVEL_COMMANDS` — the stale `"pings": "pingroles"` row
+>    deviation 14 and `automod-panel-design.md` deviation 9 both reported now reads `"pings": "pings"`.
+> 3. ✅ **Deviation 6's deliberately-unfolded youtube copy WAS folded, at v92** (`4b327cf`,
+>    *"youtube site link shared"*): `cogs/content/youtube.py:273` is now a two-line delegate over
+>    `panels.site_page_url` imported as `library_site_page_url` (`:29`), keeping the `""` return.
+>    Deviation 8's hand-rolled confirm folded too, at **v88** — `cogs/content/pings.py:417
+>    open_confirm` wraps `panels.confirm` + `confirm_items` (`:19–20`).
+> Also: **v86** (`ad5b614`) fixed *"Take my ping role away renders with the mode off"*.
+>
+> **Last verified: 2026-09-11 09:28** — re-measured in this tree at `1d090e5`: `pings_panel_minutes`
+> registered beside seven other `pings_*` keys (registry **202**); every move label still reads the
+> same string — `OWN_ADD_MOVE` "Start my own ping role" / `OWN_DROP_MOVE` "Take my ping role away"
+> (`pings.py:675–678`), `STREAMERS_MOVE` "Streamers…" (`:685`), `SETUP_MOVE` "Set up the Events role"
+> (`:686`), `SETTINGS_MOVE` "Settings" (`:687`), `LOGS_MOVE` (`:688`), `CARD_REMOVE_MOVE` "Remove
+> their ping role" (`:690`), `CARD_REMAKE_MOVE` "Make the role again" (`:693`), and `NAMES_BUTTON`
+> "Names…" (`cogs/content/pings.py:85`, `NAMES_MOVE` `:119`). `site/mock/contract.json` holds
+> **150 routes / 17 pages** (142 at the build); sweeps run to row **350**.
+> ⚠️ **NOT checked in this pass:** anything in a Discord client or a browser; no boot, no pytest, no
+> ruff, no `check.mjs` run. The empty-`RoleSelect` submit (deviation 5) is **still unproven** — sweep
+> row 132 is still the only thing that would settle it.
+>
+> **Before that, 2026-09-03** — every `path:line` below was READ in this working tree on `main`
 > (the tree whose newest commit is `1735ff8`, after the four wave-1 panels merged), in
 > `black_bloc/pings.py`, `black_bloc/cogs/content/pings.py`, `black_bloc/panels.py`,
 > `black_bloc/api/tools/pings.py`, `black_bloc/settings_store.py`, `black_bloc/command_visibility.py`,
@@ -87,6 +120,9 @@ role was moved. The empty-`RoleSelect` submit is still unproven (deviation 5).
    was deliberately left**: it returns `""` rather than `None` and names its page with a
    private `SITE_PAGE` constant rather than `FEATURE_PAGES`, so folding it would be a
    behaviour change in a file that landed hours ago. Reported, not fixed.
+   ✅ **Folded at v92** (`4b327cf`): `cogs/content/youtube.py:273` is a two-line delegate over
+   `panels.site_page_url` (imported as `library_site_page_url` `:29`) that keeps the `""` return,
+   so the behaviour is unchanged and the seventh copy is gone.
 
 7. **The `Names…` modal carries three fields, and the panel-minutes one is validated in
    the modal.** §C lists exactly those three. A modal has no `Range`, so a non-numeric
@@ -135,6 +171,8 @@ role was moved. The empty-`RoleSelect` submit is still unproven (deviation 5).
     channel** on `main`** — the golive panel landed and rewrote it. §E's instruction to
     "say `/twitch link` and let the conductor reconcile" is therefore moot; only its
     `/pingroles streamer add` half needed rewriting, to `/pings` ▸ **Streamers…**.
+    ✅ **The related stale row, `LOG_LEVEL_COMMANDS["pings"] = "pingroles"`, was fixed at v84**
+    (`ce97de0`) along with the other sixteen features; it reads `"pings": "pings"` today.
 
 15. **Checklist 15 caught one more duplicate during the sweep: the cog's own
     `LABEL_LIMIT = 100`.** `panels.SELECT_OPTION_LIMIT` is the same 100 and already has a
