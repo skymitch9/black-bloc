@@ -9,11 +9,31 @@
 > same **17 pages / 142 routes** as `main`, and `labels.js` parses. `commands synced` is
 > **41**, one lower than the base's 42, **measured** through
 > `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits` — ⚠️ **no boot was
-> run** (no bot token here), and **nothing has met live Discord**: no panel opened, no button
-> pressed, no Helix call made. **Not merged and not deployed.** Both owner forks were decided
+> run** (no bot token here) at build time, and **nothing has met live Discord**: no panel opened, no
+> button pressed, no Helix call made. ⚠️ **The sentence "Not merged and not deployed" that stood here
+> was stale from the moment the merge happened** — it was written on the branch and never updated;
+> this build merged as `0aeed72` and shipped as **v70** the same afternoon (`deploys.log`), and it is
+> still live at **v108** (`73e2e44`, 2026-09-11 00:37). Both owner forks were decided
 > before the build and built as decided: **I1 = `/golive`**, **I2 = build the `Streamers…`
 > sub-panel**. ⚠️ **Read the `## Deviations` foot before trusting the body of this doc.**
-> **Last verified: 2026-09-03** — every `path:line` below was READ at `f49e493` (`main`) in
+> **Since then, four things this document predates:** **v78** (`3429233`) gave `golive_mode` a
+> `HIDDEN_WHEN_OFF` entry (`command_visibility.py:23`), so `/golive` DOES vanish while the mode is
+> off, behind `hide_commands_when_off`; **v84** (`ce97de0`) corrected `LOG_LEVEL_COMMANDS` so
+> `golive_log_level`'s help names `/golive` ▸ **Logs** rather than a retired `/golive logs`;
+> **v92** (`4b327cf`) folded the youtube/golive site-link copy onto the shared helper; **v93**
+> (`09ff46b`) folded `golive.db_up` and added the AST guard that stops a cog keeping its own copy
+> (`cogs/content/golive.py:56`, `:1244`, `:1321`).
+> ✅ **"Findings, reported and NOT fixed" #1 is CLOSED** — all four wave-1 `*_panel_minutes` keys have
+> `labels.js` rows today (`:102`, `:117`, `:129`, `:193`), along with every later panel's.
+> **Last verified: 2026-09-11 08:58** — re-measured in this tree at `1d090e5`: `golive_panel_minutes`
+> registered beside **thirteen** other `golive_*` keys (registry **202**); every move label §C names
+> still reads the same string — `LINK_CHANNEL` / `CHANGE_CHANNEL` / `UNLINK_CHANNEL` /
+> `STOP_ANNOUNCING` / `ANNOUNCE_AGAIN` / `STREAMERS` (`golive.py:391–398`) and `PREVIEW_PICK`
+> (`cogs/content/golive.py:122`); sweeps landed as rows **109–117** and the file runs to **350**;
+> `site/mock/contract.json` **150 routes / 17 pages** (142 at the build).
+> ⚠️ **NOT checked in this pass:** anything in a Discord client, on Twitch or in a browser; no boot,
+> no pytest, no ruff, no `check.mjs` run; the flaky-test note below was not re-run.
+> **Before that, 2026-09-03** — every `path:line` below was READ at `f49e493` (`main`) in
 > `black_bloc/cogs/content/golive.py`, `black_bloc/golive.py`, `black_bloc/panels.py`,
 > `black_bloc/guard.py`, `black_bloc/settings_store.py`, `black_bloc/command_visibility.py`,
 > `black_bloc/actionlog.py`, `black_bloc/logkinds.py`, `black_bloc/personas.py`,
@@ -507,7 +527,10 @@ The design already lists five. These are the ones this build met:
    but appear in neither `site/public/assets/labels.js` nor `site/mock/server.mjs`, so the Settings
    page falls through to a tidied-up key name for all four. Measured today by grep while adding
    `golive_panel_minutes`, which HAS both. Four one-line rows in somebody else's feature; not
-   touched.
+   touched. ✅ **Closed** — measured 2026-09-11, `site/public/assets/labels.js` carries all four
+   (`event_panel_minutes` `:102`, `poll_panel_minutes` `:117`, `birthday_panel_minutes` `:129`,
+   `request_panel_minutes` `:193`) plus every later panel's; the sweep landed with v93's
+   *"13 labels.js sentences"* pass.
 2. **`api/tools/golive.py` still imports `clean_login` from the cog, for wording only.** The 400 and
    409 name the cleaned channel, and the shared function has no reason to hand it back. Harmless,
    but it means the route cleans a login it does not store — if `clean_login` ever became two
