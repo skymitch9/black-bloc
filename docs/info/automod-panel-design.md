@@ -1,11 +1,40 @@
 # Automod — `/automod` is ONE command that opens a panel (wave 3)
 
 > **Audience:** the build agent and the reviewer, and the owner for §I. **Status:** TRACKED ·
-> ✅ **SHIPPED in v74** (`0b1b2bf`, 2026-09-04 15:45; synced 38 measured on the boot log; built on
-> `worktree-agent-ae7bb4ba9c5540ad4`, deviations at the foot, one merge-time relabel of the Settings
-> toggle; sweeps 144–154 are the owner's). The body below is the design as briefed, not re-verified
-> against the merge — `## Build deviations` at the foot is the delta.
-> **Last verified: 2026-09-04** — every `path:line` below was READ against `main` at `bf3e447`
+> ✅ **LIVE since v74** (`0b1b2bf`, 2026-09-04 15:45; synced 38 measured on the boot log — **29**
+> today; built on `worktree-agent-ae7bb4ba9c5540ad4`, deviations at the foot, one merge-time relabel
+> of the Settings toggle; sweeps 144–154 are the owner's). Still live at **v108** (`73e2e44`,
+> 2026-09-11 00:37). The body below is the design as briefed, not re-verified against the merge —
+> `## Build deviations` at the foot is the delta.
+>
+> **Since then, four things this document predates** (each marked again where it bites):
+> 1. **v78** (`3429233`, 2026-09-05) — `HIDDEN_WHEN_OFF` grew from one key to fifteen, so
+>    `automod_mode: ("automod",)` EXISTS now (`command_visibility.py:19`) and `/automod` DOES vanish
+>    while the mode is off, behind the new `hide_commands_when_off` bool. §E's last row and §I's
+>    fourth settled bullet are history.
+> 2. **v84** (`ce97de0`) — `LOG_LEVEL_COMMANDS` was corrected for all 17 features, so deviation 9's
+>    removal was undone: the map reads `"automod": "automod"` again (`settings_store.py`) and
+>    `log_level_help` renders *"and in `/automod` ▸ **Logs**"*. The eight stale rows it reported are
+>    all fixed (`"pings": "pings"`, `"applications": "apply"`, …).
+> 3. **v88** (`794d3aa`) — deviation 12's hand-off happened: the cog imports `confirm` from
+>    `panels.py` (`cogs/moderation/automod.py:96`) and `open_confirm` `:1036` is a thin local wrapper.
+> 4. **v105** (`3205c0f`) — schema moved 33 → **34**; nothing automod owns changed with it.
+>
+> **Last verified: 2026-09-11 08:36** — re-measured in this tree at `1d090e5`: both new keys exist
+> (`automod_arm_needs_confirm`, `automod_panel_minutes`) in a **202**-key registry; the whole
+> `PANEL_MOVES` label set still reads the strings §C names — `TURN_ON_MOVE`/`TURN_OFF_MOVE`
+> (`automod.py:509–510`), `NUMBERS_MOVE` "Change the numbers…" (`:511`), `LOG_ONLY_MOVE` (`:512`),
+> `WORDS_MOVE` (`:513`), `EXEMPTIONS_MOVE`/`SETTINGS_MOVE`/`REFRESH_MOVE`/`LOGS_MOVE`/`SITE_MOVE`
+> (`:516–520`), `ARM_MOVE` "Yes, arm it" (`:526`), `KEEP_SHADOW_MOVE`/`KEEP_OFF_MOVE` (`:527–528`),
+> and the five placeholders `PICK_A_RULE` / `MODE_PLACEHOLDER` / `ADD_ROLE` / `ADD_CHANNEL` /
+> `REMOVE_PLACEHOLDER` / `WHAT_IT_DOES` (`cogs/moderation/automod.py:168`, `:185–189`); log kind
+> `automod.settings` registered (`logkinds.py:250`); `site/mock/contract.json` **150 routes / 17
+> pages** (was 142 at the build). ⚠️ **NOT checked in this pass:** nothing in a Discord client or a
+> browser, no boot, no `pytest`, no `ruff`, no `check.mjs` run (the 150 is read off `contract.json`,
+> the mock server was not started), and no live-guild `staff_channel_id` — still not knowable from
+> the repo. Every `path:line` below is as it was at `bf3e447`; trust the anchor text.
+>
+> **Before that, 2026-09-04** — every `path:line` below was READ against `main` at `bf3e447`
 > (the tree's HEAD is `4336a66`, a docs-only commit on top of it; no code differs), in
 > `black_bloc/cogs/moderation/automod.py` (**830 lines**), `black_bloc/automod.py` (**451
 > lines**), `black_bloc/panels.py` (194), `black_bloc/api/tools/mod.py` (297),
@@ -342,7 +371,7 @@ here, so neither becomes a key.
 | `tests/test_bot.py` `LOGS_GROUPS["automod"]` | `:14` | **deleted** — `/automod` is no longer a Group with a `logs` child, so the loops that walk it would `KeyError` |
 | `tests/test_bot.py` `STAFF_COMMANDS "automod"` | `:25` | **unchanged** — still staff-only |
 | `tests/test_bot.py` `assert len(top) == 38` | `:190` | **unchanged, and re-measured to prove it** (§A) |
-| `command_visibility.HIDDEN_WHEN_OFF` | `:16–19` | **nothing to change** — measured, automod has no entry, so `/automod` does not vanish when the mode is off (the settled precedent, §I) |
+| `command_visibility.HIDDEN_WHEN_OFF` | `:16–19` | **nothing to change** at the build — measured, automod had no entry. ⚠️ **Since v78** it does (`automod_mode: ("automod",)`, `command_visibility.py:19`), so `/automod` DOES vanish when the mode is off unless `hide_commands_when_off` is turned off |
 
 **Strings that name a retired subcommand and are rewritten in the SAME commit** — each
 currently tells somebody to run something that will not exist:
@@ -487,10 +516,12 @@ counter-example).
    so.
 
 **Sweep rows — numbered at BUILD time, starting at the next free row.** `docs/access/sweeps.md`
-holds 455 lines and its last row is **143** today, ⚠️ **but four wave-3 design docs are being
-written in parallel and their builds may land first, so this document claims NO numbers.** The
-build reads the file, starts at the next free row, and renumbers at landing. The Phase 6
-appendix block at `:210–216` is rewritten **in place**, not added to.
+held 455 lines and its last row was **143** when this was written, ⚠️ **but four wave-3 design docs
+were being written in parallel and their builds might land first, so this document claimed NO
+numbers.** The build read the file, started at the next free row, and renumbered at landing. The
+Phase 6 appendix block at `:210–216` was rewritten **in place**, not added to.
+✅ **The rows landed as 144–154** — `docs/access/sweeps.md` ▸ *The automod panel — rows 144–154*
+(still unticked, still the owner's). The file now runs to row **350**.
 
 | Do this | Expect |
 |---|---|
@@ -517,9 +548,11 @@ appendix block at `:210–216` is rewritten **in place**, not added to.
   in `STAFF_COMMANDS`. There is no member half of this feature.
 - ✅ **Staff are re-checked before every move, reads included** (P8, pings deviation 10).
 - ✅ **`on` is hidden rather than offered-and-refused** in S1/S2 (P3/P9).
-- ✅ **`/automod` does not vanish when the mode is off** — measured, `HIDDEN_WHEN_OFF`
-  (`command_visibility.py:16–19`) has no automod entry, and the owner answered this shape on
-  2026-09-03 ("Visible") for applications.
+- ✅ **`/automod` does not vanish when the mode is off** — measured at the build, `HIDDEN_WHEN_OFF`
+  (`command_visibility.py:16–19`) had no automod entry, and the owner answered this shape on
+  2026-09-03 ("Visible") for applications. ⚠️ **REVERSED at v78** (2026-09-05, *"a feature turned
+  off on the portal takes its `/command` with it"*): the map now names all fifteen features,
+  automod included, behind `hide_commands_when_off` (default true).
 - ✅ **The `Apply now` button on modlog case cards is left exactly as it is** (P14) — it is a
   persistent `DynamicItem` that belongs to the room, and it is already the staffer's phone-side
   review surface during the shadow rollout. Adding a verdict queue to the panel would be a
@@ -684,6 +717,11 @@ not listed here was built as this document says.
    of the remaining thirteen now name a retired subcommand too** (`pings` → `pingroles`,
    already flagged by §J; plus `tempvoice` → `voice`, `events` → `event`, `poll`, `birthday`,
    `golive`, `request`, `applications`). Reported, not fixed — it wants one pass of its own.
+   ✅ **That pass happened at v84** (`ce97de0`, *"`LOG_LEVEL_COMMANDS` corrected for 17
+   features"*): every row now names a live command, and **automod's row came back** as
+   `"automod": "automod"`, so `log_level_help` renders *"and in `/automod` ▸ **Logs**"* —
+   correct, because the panel carries a **Logs** button. This deviation's removal no longer
+   describes the tree.
 10. **A new log kind, `automod.settings`** (ROUTINE, beside `automod.rule`), for the Settings
     sub-panel's write. §F lists no function for those two keys because §D treated them as
     registry-only; `save_settings` follows `youtube.save_setup`'s shape exactly — validate
@@ -697,6 +735,9 @@ not listed here was built as this document says.
     instructs. `open_confirm` / `build_confirm` here is the third hand-rolled copy after
     `youtube.open_confirm` and pings' deviation 8 — **handed to the conductor to fold into
     `panels.py` at the merge**, the way `clamped` landed.
+    ✅ **Folded at v88** (`794d3aa`, *"confirm/opened fold — `panels.confirm` + `confirm_items`
+    replace 8 confirm copies"*): the cog imports `confirm` from `panels.py`
+    (`cogs/moderation/automod.py:96`) and `open_confirm` `:1036` is a thin local wrapper over it.
 
 ⚠️ **What was NOT verified.** Nothing was run against Discord: no boot (there is no bot
 token in this environment), no panel opened, no modal submitted, no message judged. The
