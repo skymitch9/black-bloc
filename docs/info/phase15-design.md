@@ -1,6 +1,6 @@
 # Phase 15 — Ping roles (F14): the opt-in Events role + per-streamer fan roles
 
-> ⚠️ **SUPERSEDED IN PART, 2026-09-03 — this feature's OWN slash surface is gone too.**
+> ⚠️ **SUPERSEDED IN PART, 2026-09-03 (v72, `a5ad521`) — this feature's OWN slash surface is gone too.**
 > `/pingroles` (with its `streamer` group) and `/pings` (with `events` and `fans`) and all
 > twelve of their leaf subcommands (`follow`, `unfollow`, `list`, `events on`/`off`,
 > `fans on`/`off`, `setup`, `streamer add`/`remove`/`list`, `logs`) were replaced by ONE
@@ -11,7 +11,7 @@
 > **Stop following… is not mode-gated** and **split feeds get two labelled toggles**. See
 > [`pings-panel-design.md`](pings-panel-design.md). This doc is NOT rewritten.
 
-> ⚠️ **SUPERSEDED IN PART, 2026-09-03 — the slash surface below is gone.** `/golive` and
+> ⚠️ **SUPERSEDED IN PART, 2026-09-03 (v70, `0aeed72`) — the slash surface below is gone.** `/golive` and
 > `/twitch` and all eight of their subcommands (`logs`, `optout`, `optin`, `status`, `mode`,
 > `test`, `link`, `unlink`) were replaced by ONE `/golive` command that opens an ephemeral
 > panel; every subcommand is a button, a select or a modal on it. The behaviour this doc
@@ -20,15 +20,27 @@
 > [`golive-panel-design.md`](golive-panel-design.md). This doc is NOT rewritten.
 
 > **Audience:** the Opus builder first, reviewers second, the owner for the
-> decisions table. **Status:** TRACKED — DESIGN, written 2026-09-02 by the Fable
-> session from the owner's 2026-08-26 ask (F14 in `../TODO.md`) and the
-> NEXT WAVE block ("the owner has already said go"). Secret NAMES only.
-> Last verified: **2026-09-02** — every "what exists" claim below was read in
-> the code today (`cogs/content/golive.py`, `golive.py:render`, `events.py:
+> decisions table. **Status:** TRACKED · ✅ **LIVE since 2026-09-02** (shipped with
+> `pings_mode` **off**, D6) — ~~DESIGN~~ deployed `2026-09-02T17:43:16-07:00` as `d777f57`
+> (schema 21 `golive_fan_roles`, 2714 tests, 15 cogs incl. `content.pings` loaded);
+> `DONE.md` → "2026-09-02 — Phase 15: ping roles (F14), NEXT WAVE item 1". ⚠️ Fly release
+> numbers were not written into `deploys.log` until **v59** (2026-09-03), so this landing has
+> a date and a commit but no `vNN`.
+>
+> Last verified: **2026-09-11 10:35** — re-checked against the tree at `1d090e5`:
+> `black_bloc/pings.py` exists with `sync_streamer_menus` (`:318`) and `ensure_fan_role`
+> (`:366`); all **seven** `pings_*` keys in §C are in `KEY_TYPES`;
+> `black_bloc/cogs/content/pings.py` is registered in `bot.py:COGS` (**19** cogs now, not 15).
+> ⚠️ **§D's command-count line is stale twice over** — the tree is **29** top-level commands
+> with zero groups, and `/pingroles` no longer exists at all.
+> ⚠️ **NOT verified:** whether `pings_mode` is still off on the live guild, whether any fan
+> role has ever been created, and anything in Discord or a browser — nothing in this pass met
+> either. The Discord select-menu cap (25 options) is still the documented platform limit, not
+> re-measured.
+> Before that, **2026-09-02** — every "what exists" claim below was read in
+> the code that day (`cogs/content/golive.py`, `golive.py:render`, `events.py:
 > post_to_announce`, `cogs/community/role_menus.py`, `storage/db.py` schema 20,
-> `settings_store.py`). ⚠️ NOT verified: anything against live Discord (no
-> role has been created yet); the Discord select-menu cap (25 options) is the
-> documented platform limit, not re-measured.
+> `settings_store.py`).
 
 ## The ask, verbatim
 
@@ -65,7 +77,8 @@ into the same render + mentions, with member-facing opt-in surfaces.
 
 ## A. The Events role (D3)
 
-`/pingroles setup [role]` (staff group, hidden below manage_messages like the
+`/pingroles setup [role]` *(removed: retired at **v72**, 2026-09-03 — **Set up the Events
+role** is a control on the `/pings` panel)* (staff group, hidden below manage_messages like the
 other 24 staff groups):
 
 1. If `role` is given, use it; else find a role named `pings_events_role_name`
@@ -133,7 +146,10 @@ does not re-ping; the guard is there so a mention is never *added* by an edit).
 **F5 event announcements are unchanged** — events are not per-streamer.
 
 ### Member opt-in surfaces (D7)
-- `/pings follow <streamer>` / `/pings unfollow <streamer>` / `/pings list` —
+- `/pings follow <streamer>` / `/pings unfollow <streamer>` / `/pings list` *(removed:
+  retired at **v72**, 2026-09-03 — the panel renders **Follow…** / **Stop following…** /
+  the list; ⚠️ **Stop following… is deliberately NOT mode-gated**, the access-REDUCING move
+  fails safe)* —
   member-facing group (visible to everyone, like `/twitch`). Autocomplete lists
   fan roles by streamer display name. Adds/removes the role; refuses in words
   when the feature is off. `/pings list` shows what the caller follows + the
@@ -160,7 +176,8 @@ does not re-ping; the guard is there so a mention is never *added* by an edit).
   If `add_roles` raises `Forbidden`, say so in words ("the bot's role is below
   this role — move it up in Server Settings ▸ Roles") and log `pings.forbidden`.
 
-## C. Settings registry (every one on the Settings page + `/settings set-value`)
+## C. Settings registry (every one on the Settings page + `/settings set-value` — *the slash
+half is now the `/settings` **panel**, v84, 2026-09-05; both doors still exist*)
 
 | Key | Type | Default | Help |
 |---|---|---|---|
@@ -177,7 +194,11 @@ KEY_TYPES / KEY_HELP / defaults, `site/public/assets/labels.js`,
 `site/mock/server.mjs` key list, `tests/test_settings_store.py`, the Settings
 page namespace list if it is enumerated anywhere in `site/`.
 
-## D. Commands
+## D. Commands — ⚠️ BOTH GROUPS RETIRED at v72 (2026-09-03)
+
+*(Removed: `/pingroles` is gone entirely and `/pings` is ONE member+staff command that opens
+the panel; all twelve leaves below are buttons, selects or one modal on it, `logs` included.
+See [`pings-panel-design.md`](pings-panel-design.md). Kept below as the record of the shape.)*
 
 | Group | Visibility | Commands |
 |---|---|---|
@@ -187,7 +208,8 @@ page namespace list if it is enumerated anywhere in `site/`.
 Both live in one cog `black_bloc/cogs/content/pings.py` (registered in
 `bot.py:COGS`), helpers in `black_bloc/pings.py`. Command count goes 35 → 37
 groups' worth — update the runbook boot line and `/help`. `/help` gets a
-"Pings" entry.
+"Pings" entry. *(The tree is **29** top-level commands with **zero** groups as of 2026-09-11
+— the panels program took it there; see [`panels-program.md`](panels-program.md) §3.)*
 
 ## E. Dashboard + API (`api/tools/pings.py`, `page-golive.js` Pings section)
 
