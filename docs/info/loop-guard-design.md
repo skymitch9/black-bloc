@@ -1,14 +1,35 @@
 # KI-24 loop guard, plus two small gates — design
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED. Last verified: **2026-09-06 11:50** —
-> every `path:name` below was read in the tree at `c71ed21` (v96 code). Owner decision **2026-09-06
+> **Audience:** the build agent and reviewers. **Status:** TRACKED, ✅ **LIVE as v97** — branch
+> `loop-guard`, merge **`689eff5`**, deployed **2026-09-06 13:52** Phoenix (`../deploys.log`);
+> landing entry in [`../DONE.md`](../DONE.md). **KI-24 is CLOSED** in
+> [`../KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) (the number is kept, never reused). ⚠️ **Never met
+> Discord** — no test can click a Discord button ([`../access/testing.md`](../access/testing.md));
+> the owner's by-eye rows are **315–319** in [`../access/sweeps.md`](../access/sweeps.md) (they were
+> lettered `LG-a`–`LG-e` here; renumbered at the merge). Owner decision **2026-09-06
 > 11:48**, verbatim: *"Build it a"* — answering Q4 "KI-24: (a) build the guard, bundled with two small
 > fixes, or (b) leave it WATCHING". Three items, one branch, one deploy.
+>
+> **Last verified: 2026-09-11 08:31** (the header; the body is as at the build). Measured this pass
+> against `main` at `f3ae743` (v108 live): `black_bloc/loops.py:wait_ready` exists and has **14
+> callers** (`grep -rn "wait_ready(" black_bloc` → 15 lines, one the `def`), one for each of the
+> **14 `@tasks.loop`s / 14 `before_loop`s**, which live in **12 files** — ⚠️ §1 below says *"thirteen
+> cogs"*; it was **twelve** even at `c71ed21` (`git grep -l before_loop c71ed21`), so that number was
+> wrong when written, and the loop count of fourteen was and is right.
+> `cogs/content/golive.py:_poller_stopped` exists (deviation 2); `cogs/core.py:_purge_failed` exists
+> and `cog_load` guards on `is_connected` before `purge_loop.start()` (deviations 3–4);
+> `api/tools/polls.py` raises `Refused(409, "polls_off", POLLS_OFF)` at **two** sites (the one-off
+> create and the recurrence route); `api/status.py:loop_health` still feeds the Health page. ⚠️ **NOT
+> checked this pass:** anything in Discord or a browser — the bot was not booted, the Health page was
+> not opened. Before that, **2026-09-06 11:50** — every `path:name` below was read in the tree at
+> `c71ed21` (v96 code).
 
 ## 1. What exists
 
-- **KI-24** (`docs/KNOWN_ISSUES.md`): fourteen `tasks.loop`s across thirteen cogs (`grep -rln
-  before_loop black_bloc --include=*.py`) each install `@loop.error` → record `last_error`, log,
+- **KI-24** (`docs/KNOWN_ISSUES.md`): fourteen `tasks.loop`s across **twelve** cog files (`grep -rln
+  before_loop black_bloc --include=*.py`; this line said *thirteen* until 2026-09-11 — it was twelve
+  at `c71ed21` too, so the file count was wrong when written; the loop count of fourteen is right and
+  is still fourteen at v108) each install `@loop.error` → record `last_error`, log,
   `loop.restart()` (the pattern: `cogs/community/polls.py:loop_failed` + `_polls_broke`). discord.py
   2.7.1 runs `before_loop` OUTSIDE the `try` that dispatches to `error` (`discord/ext/tasks/__init__.py`
   lines 210 / 217 / 278), so a `before_loop` that raises kills the task with no restart, no
@@ -63,7 +84,7 @@ answers 409 in words and writes zero rows.
 
 `ruff` clean; full suite `-n auto` forward and `BB_REVERSE=1`; `node site/mock/check.mjs` ok (routes
 stay 150 — say so); `python -m black_bloc` NOT booted in a worktree — say so. Sweep rows lettered
-`LG-a…` in `docs/access/sweeps.md`: the Health tab on https://blackbloc.heygabi.ai/health.html (or
+`LG-a…` in `docs/access/sweeps.md` (**renumbered 315–319 at the merge**): the Health tab on https://blackbloc.heygabi.ai/health.html (or
 wherever loop health renders — read `api/tools/` and name the page) shows every loop running after
 the deploy; `/poll` ▸ Settings ▸ polls **off** → the dashboard's Create-a-poll form refuses in a
 sentence. Code notes: `# Loop guard` at the foot of `code-notes.md`, keyed by name. Add a
@@ -71,7 +92,8 @@ sentence. Code notes: `# Loop guard` at the foot of `code-notes.md`, keyed by na
 
 ## Deviations
 
-Written by the build, 2026-09-06, branch `loop-guard`. Everything §2 asked for landed; these
+Written by the build, 2026-09-06, branch `loop-guard`. **Status: ✅ LIVE v97 — merged `689eff5`,
+deployed 2026-09-06 13:52.** Everything §2 asked for landed; these
 five are the places the build differs from the words above, and why.
 
 1. **`wait_ready` returns `bool`, not `None`.** §2.1 names one coroutine and says nothing about
@@ -110,4 +132,4 @@ five are the places the build differs from the words above, and why.
 this has met a live gateway; the restart claim is proved against a real `Loop` in-process, not
 against Discord. The Health surface was not opened: the claim that a `before_loop` failure now
 shows there rests on `last_error` being set (tested) and `api/status.py:loop_health` reading it
-onto https://blackbloc.heygabi.ai/health.html (unchanged by this branch). Both are sweep rows `LG-a` and `LG-b` in `access/sweeps.md`.
+onto https://blackbloc.heygabi.ai/health.html (unchanged by this branch). Both are sweep rows `LG-a` and `LG-b` — **315 and 316 since the merge** — in [`../access/sweeps.md`](../access/sweeps.md); as at 2026-09-11 nothing in that file's *Verified by the owner* table records them as run.
