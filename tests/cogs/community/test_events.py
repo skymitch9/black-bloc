@@ -3905,3 +3905,15 @@ async def test_the_rooms_page_is_reached_from_settings_and_writes_what_is_picked
     assert bot.store.get(GUILD, EVENTS_POSTS_WHERE_KEY) == POSTS_BOTH
     assert "both the room and the announce channel" in card_embed(picked).description
     assert "event.settings" in await action_kinds(db)
+
+
+async def test_the_delete_button_is_the_same_registration_the_card_buttons_use(cog, bot):
+    """One `add_dynamic_items(DecisionButton)`, so the template has to read all three moves."""
+    await cog.cog_load()
+    match = re.fullmatch(events_cog.DECISION_TEMPLATE, decision_id(12, "delete_room"))
+    rebuilt = await DecisionButton.from_custom_id(None, None, match)
+
+    assert events_cog.DecisionButton in bot.dynamic
+    assert match["event_id"] == "12" and match["action"] == "delete_room"
+    assert rebuilt.event_id == 12 and rebuilt.item.label == "Delete this room"
+    assert re.fullmatch(events_cog.DECISION_TEMPLATE, decision_id(12, "deny"))["action"] == "deny"
