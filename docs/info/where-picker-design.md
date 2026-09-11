@@ -306,3 +306,74 @@ with both), `docs/info/code-notes.md` (a by-NAME `## Where follow-up` block unde
   ends "The typed box appears ONLY when `— somewhere else —` is chosen", which this build makes false.
   Rewriting a row the owner may already have walked would lose that history, so 337 carries the ⚠️ clause
   instead. If the conductor would rather 334 were corrected at the merge, that is a one-line edit.
+
+## Follow-up 2 — a typed link LOOKS like a link (owner, 2026-09-10 23:10, verbatim: "Is there a way to make them look like links in the events slash" → "Do A + B")
+
+Today a typed `https://twitch.tv/mitchland` beside a channel renders as raw text in the draft (an embed
+description, `draft_lines`) and in the card's Where field (`card_for`, an embed field). Discord auto-links a
+bare URL in both places, but shows the whole scheme-and-all string, and nothing on the card is a real
+link control.
+
+**A — masked link in the text.** `black_bloc/events.py` gains:
+
+- `where_link(text) -> str | None` — the URL if the typed text IS one link and nothing else: after `strip()`,
+  a single token (no whitespace) that starts with `http://` or `https://`, or with `www.` (then `https://`
+  is put in front for the href). Anything else (a place, a sentence, two links) → `None`. No other
+  guessing — `the.bar at 8` is not a link.
+- `where_shown(text) -> str` — the masked form for embeds: `[twitch.tv/mitchland](https://twitch.tv/mitchland)`.
+  The label is the href without its scheme and without a trailing `/`, clamped to `LOCATION_LIMIT`; a
+  `]` or `)` in the label is dropped so the markdown cannot break. Non-links come back unchanged.
+- `where_line(where, *, linked=True)` — `linked=True` renders the text through `where_shown`;
+  `linked=False` is the plain form for `knowledge.event_where` (the chat LLM reads words, not markdown)
+  and any other non-embed reader. The draft (`draft_lines`) and the card (`card_for`) use the default.
+- `where_said` (button labels) is untouched — a label cannot carry a link. The scheduled event's
+  description (`described_with_where`) keeps the BARE url: Discord auto-links it there and masked links in
+  event descriptions are not reliable.
+
+**B — an "Open link" button on the card.** `build_card` adds
+`discord.ui.Button(style=discord.ButtonStyle.link, label=WHERE_OPEN_LINK_BUTTON, url=where_link(where.text), row=1)`
+— the `SITE_BUTTON` / `REVIEW_ROOM_BUTTON` pattern — for EVERY viewer (not staff-only), whenever
+`where_link(read_where(row).text)` is not `None`. `WHERE_OPEN_LINK_BUTTON = "Open link"`. If row 1 is full
+(five items) the button goes on the next row with room; if none has room it is skipped and noted as a
+deviation. The draft panel gets the same button on its Where row only if that row has a free slot —
+otherwise A alone covers the draft.
+
+Tests: `tests/test_events.py` — `where_link` (https, http, www, a place, two tokens, empty), `where_shown`
+(scheme stripped, trailing slash stripped, a bracket dropped, clamped), `where_line` both `linked` values,
+the card's Where field carries the masked form, `described_with_where` still bare;
+`tests/cogs/community/test_events.py` — the card view has a link-style item with the url when the text
+is a link and none when it is a place; `tests/test_knowledge.py` — `event_where` is plain.
+
+Nothing to decide, so no settings key (checklist 33 satisfied by absence: a link that looks like a link is
+not a policy).
+
+## Follow-up 3 — test rooms go after five minutes, and denied rooms count from the decision (owner, 2026-09-10 23:14, verbatim: "For test ones let's delete them after 5 minutes"; earlier "for a denied event do we have a timer before it's auto deleted?")
+
+Measured 23:05: `EventsCog._sweep_finished` deletes a DONE / DENIED / CANCELLED event's review channel once
+`now - ends_at >= events_channel_retention_days` (live 7). Two things are wrong with that for the owner:
+
+1. It anchors on the event's scheduled END even when the event was denied or called off — a denied
+   proposal for next month keeps its room until next month plus seven days. **Fix, both modes:** the
+   anchor is `decided_at` for DENIED and CANCELLED (falling back to `ends_at` when `decided_at` is NULL,
+   then to `created_at`), and `ends_at` for DONE. Helper `swept_anchor(row) -> datetime | None` in
+   `black_bloc/events.py`, tested for all three statuses and the NULL fallbacks.
+2. Under TEST_MODE every event is a test one, and seven days of test rooms is clutter. **New key**
+   `events_test_retention_minutes` (int, events group, default **5**, bounds 1–1440, help: "minutes a
+   finished or refused event's review room is kept while the bot is in test mode; the real retention
+   is `events_channel_retention_days`") — registered in `KEY_TYPES`, `KEY_HELP`, the default resolver,
+   `NUMBER_BOUNDS` / the min-max tables with the two refusal sentences, the mock `server.mjs`, `labels.js`,
+   and `contract.json` if keys are listed there (keys 198 → 199). `_sweep_finished` reads
+   `guard is not None and guard.enabled` (whatever `black_bloc/guard.py` exposes as "test mode is on" —
+   use the existing predicate, do not add a second) and, when it is, uses
+   `timedelta(minutes=events_test_retention_minutes)` instead of the days. The `event.channel_deleted`
+   log row carries `kept_minutes` in that case instead of `kept_days`. The `would_delete_channel` branch
+   stays exactly as it is — the guard still decides WHERE the bot may delete; this only decides WHEN.
+   The reconcile loop runs every `RECONCILE_MINUTES = 5`, so "after 5 minutes" lands between 5 and 10 —
+   say so in the key's help and in the owner guide line.
+
+Tests: `tests/cogs/community/test_events.py` — a denied row is swept `decided_at + N`, not `ends_at + N`;
+a done row still uses `ends_at`; with the guard on, the minutes key is what counts and `kept_minutes` is
+logged; with it off, the days key; `tests/test_settings_store.py` — the new key's type, default, bounds
+and both refusal sentences. Docs: `docs/access/OWNER_GUIDE.md` events section (one line), sweep rows.
+
+Two commits on the build branch: Follow-up 2 first, Follow-up 3 second, each with its tests green.
