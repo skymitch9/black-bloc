@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 33
+        assert SCHEMA_VERSION == 34
         cur = await db.conn.execute("PRAGMA table_info(requests)")
         assert {
             "built",
@@ -804,6 +804,47 @@ async def test_an_events_row_gains_a_card_channel_column_on_an_older_file(tmp_pa
         assert "card_channel_id" in names
     finally:
         await again.close()
+
+
+async def test_an_events_row_gains_the_two_where_columns_on_an_older_file(tmp_path):
+    path = tmp_path / "old.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("ALTER TABLE events DROP COLUMN where_kind")
+    await db.conn.execute("ALTER TABLE events DROP COLUMN where_channel_id")
+    await db.conn.execute(
+        "INSERT INTO events(id, guild_id, requester_id, title, location, starts_at, status, "
+        "created_at) VALUES (1, 7, 9, 'Block Party', 'the park', '2026-09-14T19:30:00+00:00', "
+        "'pending', '2026-09-10T00:00:00+00:00')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("PRAGMA table_info(events)")
+        names = {row["name"] for row in await cur.fetchall()}
+        assert {"where_kind", "where_channel_id"} <= names
+        cur = await again.conn.execute("SELECT * FROM events WHERE id = 1")
+        row = await cur.fetchone()
+        assert row["where_kind"] is None and row["where_channel_id"] is None
+        assert row["location"] == "the park"
+    finally:
+        await again.close()
+
+    third = Database(path)
+    await third.connect()
+    try:
+        cur = await third.conn.execute("PRAGMA table_info(events)")
+        names = [row["name"] for row in await cur.fetchall()]
+        assert names.count("where_kind") == 1 and names.count("where_channel_id") == 1
+        cur = await third.conn.execute(
+            "SELECT value FROM schema_meta WHERE key = 'schema_version'"
+        )
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await third.close()
 
 
 async def test_a_profile_and_an_optout_carry_what_the_memory_reads(tmp_path):

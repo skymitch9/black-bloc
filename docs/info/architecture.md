@@ -8,6 +8,13 @@
 > `SCHEMA_VERSION` is imported from `black_bloc/storage/db.py`, and the site figures come from
 > `node site/mock/check.mjs` against `site/mock/server.mjs`.
 >
+> **2026-09-10 (the "Where?" picker, branch `where-picker` off `a47e43a` — NOT merged, NOT deployed):**
+> schema **33 → 34** (measured: `SCHEMA_VERSION`) — `events` gains `where_kind TEXT` and
+> `where_channel_id INTEGER`, both nullable, both `ALTER TABLE` entries in `ADDED_COLUMNS`, no backfill
+> (a row with a `location` and no kind already reads as the `other` kind); registry keys **unchanged** —
+> the design says there is nothing to decide, so no group count moved either; mock routes unchanged at
+> **150**; no new module (the `Where` type and its readers live in `black_bloc/events.py`, the panel in
+> `cogs/community/events.py`); one new log kind `event.where_channel_gone`; tests **5395 → 5444**. Before that:
 > **2026-09-10 (the raid train's calendar name, branch `raidtrain-name`):** schema unchanged at **33**;
 > registry keys **196 → 197** (measured: `len(KEY_TYPES)` — `raidtrain_scheduled_name_template`, filed in the
 > `raidtrain` group by prefix, so **23** groups still); mock routes unchanged at **150**; no new module —
@@ -37,7 +44,7 @@
 > | Cogs | **19** | `bot.py:COGS` |
 > | Top-level slash commands | **29** — 15 staff-locked, 14 member-visible | `tree.get_commands()` |
 > | `app_commands.Group`s | **0** | ⚠️ every group retired by the panel waves |
-> | Schema version | **33** | `storage/db.py:SCHEMA_VERSION` |
+> | Schema version | **34** (on `where-picker`; **33** on `main`) | `storage/db.py:SCHEMA_VERSION` |
 > | Registry keys | **189** | `settings_store.KEY_TYPES` |
 > | Features (log-level keys) | **18** | `settings_store.FEATURES` == `logkinds.FEATURES` |
 > | Mock contract | **17 pages / 149 routes / 14 core settings** | `node site/mock/check.mjs` |

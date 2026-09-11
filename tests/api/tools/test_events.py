@@ -4,7 +4,15 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from black_bloc.events import create_event, get_event
+from black_bloc.events import (
+    WHERE_OTHER,
+    WHERE_TEXT,
+    WHERE_UNSET,
+    WHERE_VOICE,
+    Where,
+    create_event,
+    get_event,
+)
 
 ROUTES = [
     ("GET", "/api/events", None),
@@ -21,7 +29,10 @@ def a_start(days: int = 3) -> str:
     return (datetime.now(UTC) + timedelta(days=days)).strftime("%Y-%m-%d %H:%M")
 
 
-async def an_event(web, wf, *, status: str = "pending", requester: int = 21) -> int:
+async def an_event(
+    web, wf, *, status: str = "pending", requester: int = 21, where: Where | None = None
+) -> int:
+    where = Where(WHERE_OTHER, None, "the park") if where is None else where
     starts = datetime.now(UTC) + timedelta(days=1)
     event_id = await create_event(
         web.db,
@@ -29,7 +40,7 @@ async def an_event(web, wf, *, status: str = "pending", requester: int = 21) -> 
         requester,
         title="Bloc night",
         description="come along",
-        location="the park",
+        where=where,
         starts_at=starts,
         finishes_at=starts + timedelta(hours=2),
     )
@@ -271,3 +282,130 @@ async def test_the_review_channel_is_renamed_to_follow_the_title(
     )
 
     assert channel.name == "pending-ada-bloc-morning"
+
+
+# The "Where?" picker's website door (`docs/info/where-picker-design.md` §5): three fields on
+# every row, the same three kinds, and a sentence for anything the guild cannot make sense of.
+
+
+async def test_a_row_carries_the_kind_the_channel_and_a_label_the_page_need_not_resolve(
+    client, sign_in, web, wf
+):
+    typed = await an_event(web, wf)
+    voiced = await an_event(web, wf, where=Where(WHERE_VOICE, wf.VOICE_CHANNEL_ID, ""))
+    nowhere = await an_event(web, wf, where=WHERE_UNSET)
+    sign_in(client)
+
+    rows = {row["id"]: row for row in client.get("/api/events").json()}
+
+    assert rows[typed]["where_kind"] == WHERE_OTHER
+    assert rows[typed]["where_channel_id"] is None
+    assert rows[typed]["where_label"] == "the park"
+    assert rows[voiced]["where_kind"] == WHERE_VOICE
+    assert rows[voiced]["where_channel_id"] == str(wf.VOICE_CHANNEL_ID)
+    assert rows[voiced]["where_label"] == "🔊 voice"
+    assert rows[nowhere]["where_kind"] is None
+    assert rows[nowhere]["where_label"] == ""
+
+
+async def test_the_detail_route_carries_the_where_fields_the_queue_row_does(
+    client, sign_in, web, wf
+):
+    event_id = await an_event(web, wf, where=Where(WHERE_TEXT, wf.OTHER_CHANNEL_ID, ""))
+    sign_in(client)
+
+    body = client.get(f"/api/events/{event_id}").json()["event"]
+
+    assert body["where_kind"] == WHERE_TEXT
+    assert body["where_channel_id"] == str(wf.OTHER_CHANNEL_ID)
+    assert body["where_label"] == "#general"
+
+
+async def test_editing_can_set_each_of_the_three_kinds(client, sign_in, web, wf):
+    event_id = await an_event(web, wf)
+    sign_in(client)
+
+    def save(**where):
+        return client.put(
+            f"/api/events/{event_id}",
+            json={
+                "title": "Bloc night",
+                "description": "come along",
+                "start": a_start(),
+                "duration": "2h",
+                "tz": "UTC",
+                **where,
+            },
+        )
+
+    voiced = save(where_kind=WHERE_VOICE, where_channel_id=str(wf.VOICE_CHANNEL_ID))
+    assert voiced.status_code == 200
+    assert voiced.json()["event"]["where_kind"] == WHERE_VOICE
+    row = await get_event(web.db, event_id)
+    assert row["where_channel_id"] == wf.VOICE_CHANNEL_ID and row["location"] is None
+
+    texted = save(where_kind=WHERE_TEXT, where_channel_id=str(wf.OTHER_CHANNEL_ID))
+    assert texted.json()["event"]["where_label"] == "#general"
+
+    typed = save(where_kind=WHERE_OTHER, location="twitch.tv/blackbloc")
+    assert typed.json()["event"]["where_label"] == "twitch.tv/blackbloc"
+    row = await get_event(web.db, event_id)
+    assert row["where_channel_id"] is None and row["location"] == "twitch.tv/blackbloc"
+
+    cleared = save(where_kind=None, location="")
+    assert cleared.json()["event"]["where_kind"] is None
+    row = await get_event(web.db, event_id)
+    assert row["where_kind"] is None and row["location"] is None
+
+
+async def test_a_text_channel_sent_as_voice_is_stored_as_what_it_actually_is(
+    client, sign_in, web, wf
+):
+    event_id = await an_event(web, wf)
+    sign_in(client)
+
+    answer = client.put(
+        f"/api/events/{event_id}",
+        json={
+            "title": "Bloc night",
+            "start": a_start(),
+            "duration": "2h",
+            "tz": "UTC",
+            "where_kind": WHERE_VOICE,
+            "where_channel_id": str(wf.OTHER_CHANNEL_ID),
+        },
+    )
+
+    assert answer.json()["event"]["where_kind"] == WHERE_TEXT
+
+
+@pytest.mark.parametrize(
+    ("where", "why"),
+    [
+        ({"where_kind": "nowhere"}, "not a kind of place"),
+        ({"where_kind": "voice"}, "has to be picked"),
+        ({"where_kind": "voice", "where_channel_id": "4242"}, "cannot find channel"),
+        ({"where_kind": "text", "where_channel_id": "490"}, "not somewhere an event can happen"),
+    ],
+)
+async def test_a_where_the_guild_cannot_make_sense_of_is_refused_in_words(
+    client, sign_in, web, wf, where, why
+):
+    event_id = await an_event(web, wf)
+    sign_in(client)
+
+    answer = client.put(
+        f"/api/events/{event_id}",
+        json={
+            "title": "Bloc night",
+            "start": a_start(),
+            "duration": "2h",
+            "tz": "UTC",
+            **where,
+        },
+    )
+
+    assert answer.status_code == 400
+    said = answer.json()["message"]
+    assert why in said and len(said.split()) > 8
+    assert (await get_event(web.db, event_id))["location"] == "the park"

@@ -21,6 +21,11 @@ from black_bloc.events import (
     TERMINAL_STATUSES,
     TITLE_LIMIT,
     TRANSITIONS,
+    WHERE_OTHER,
+    WHERE_TEXT,
+    WHERE_UNSET,
+    WHERE_VOICE,
+    Where,
     announce_text,
     build_card,
     can_transition,
@@ -42,6 +47,7 @@ from black_bloc.events import (
     option_label,
     parse_duration,
     pick_placeholder,
+    read_where,
     review_channel_url,
     settings_lines,
     site_page_url,
@@ -146,7 +152,7 @@ def test_a_card_carries_both_hammertime_stamps():
         requester_id=900,
         starts_at=WHEN,
         minutes=90,
-        location="the park",
+        where=Where(WHERE_OTHER, None, "the park"),
         description="bring a chair",
     )
     when = next(field.value for field in card.fields if field.name == "When")
@@ -163,7 +169,7 @@ def test_a_card_clamps_what_the_requester_typed():
         starts_at=WHEN,
         minutes=60,
         description="D" * 4000,
-        location="L" * 300,
+        where=Where(WHERE_OTHER, None, "L" * 300),
     )
     assert len(card.title) == TITLE_LIMIT
     assert len(card.description) == DESCRIPTION_LIMIT
@@ -300,6 +306,8 @@ def a_row(**fields):
         "title": "Block Party",
         "description": None,
         "location": "the park",
+        "where_kind": None,
+        "where_channel_id": None,
         "starts_at": starts.isoformat(),
         "ends_at": (starts + timedelta(minutes=90)).isoformat(),
         "status": PENDING,
@@ -542,7 +550,7 @@ def test_a_complete_draft_comes_back_as_the_fields_submit_event_already_takes():
     draft = a_draft(
         title="Cookout",
         description="bring a chair",
-        location="the park",
+        where=Where(WHERE_OTHER, None, "the park"),
         when={"day": date(2026, 9, 12), "hour": 19, "minute": 30},
     )
 
@@ -551,7 +559,7 @@ def test_a_complete_draft_comes_back_as_the_fields_submit_event_already_takes():
     assert why == ""
     assert isinstance(fields, events.EventFields)
     assert fields.title == "Cookout" and fields.minutes == 120
-    assert fields.location == "the park"
+    assert fields.where == Where(WHERE_OTHER, None, "the park")
     assert local_time("America/Phoenix", fields.starts) == "2026-09-12 19:30"
 
 
@@ -679,3 +687,170 @@ def test_a_guild_that_has_stored_nothing_lands_on_the_shipped_figures():
     assert events.guild_zone(store, 7) == "America/Phoenix"
     assert events.zone_choices(store, 7) == []
     assert events.minute_step(store, 7) == 15
+
+
+# The "Where?" picker (`docs/info/where-picker-design.md`) — one `Where` through the pure half,
+# and the four kinds Discord's own create-event dialog offers.
+
+
+def test_a_where_reads_back_off_the_row_it_was_written_to():
+    assert read_where(a_row(where_kind=None, where_channel_id=None, location=None)) == WHERE_UNSET
+    assert read_where(a_row(where_kind=WHERE_VOICE, where_channel_id=55, location=None)) == Where(
+        WHERE_VOICE, 55, ""
+    )
+    assert read_where(a_row(where_kind=WHERE_TEXT, where_channel_id=56, location=None)) == Where(
+        WHERE_TEXT, 56, ""
+    )
+    assert read_where(a_row(location="twitch.tv/blackbloc")) == Where(
+        WHERE_OTHER, None, "twitch.tv/blackbloc"
+    )
+
+
+def test_a_row_written_before_schema_34_still_reads_as_a_typed_place():
+    """Every event that existed before the picker had its place in `location` and nothing else."""
+    old = FakeRow({"location": "the park"})
+
+    assert read_where(old) == Where(WHERE_OTHER, None, "the park")
+
+
+def test_a_channel_kind_with_no_channel_falls_back_to_whatever_was_typed():
+    assert read_where(a_row(where_kind=WHERE_VOICE, where_channel_id=None)) == Where(
+        WHERE_OTHER, None, "the park"
+    )
+
+
+def test_the_where_line_is_a_mention_for_a_channel_and_the_words_for_anything_else():
+    assert events.where_line(Where(WHERE_VOICE, 55, "")) == "<#55>"
+    assert events.where_line(Where(WHERE_TEXT, 56, "")) == "<#56>"
+    assert events.where_line(Where(WHERE_OTHER, None, "the park")) == "the park"
+    assert events.where_line(WHERE_UNSET) == ""
+    assert len(events.where_line(Where(WHERE_OTHER, None, "x" * 300))) == 100
+
+
+def test_a_button_label_says_the_channel_by_name_because_a_mention_would_not_render():
+    channel = SimpleNamespace(id=55, name="Raid Night")
+
+    assert events.where_button_label(WHERE_UNSET) == "Where"
+    assert events.where_button_label(Where(WHERE_VOICE, 55, ""), channel) == "Where: 🔊 Raid Night"
+    assert events.where_button_label(Where(WHERE_TEXT, 55, ""), channel) == "Where: #Raid Night"
+    assert events.where_button_label(Where(WHERE_OTHER, None, "twitch.tv/bb")) == (
+        "Where: twitch.tv/bb"
+    )
+    assert events.where_button_label(Where(WHERE_VOICE, 55, "")) == "Where: a channel that has gone"
+
+
+def test_a_button_label_stays_inside_discords_eighty_characters():
+    label = events.where_button_label(Where(WHERE_OTHER, None, "x" * 100))
+
+    assert len(label) == events.BUTTON_LABEL_LIMIT == 80
+
+
+def test_the_card_shows_a_channel_as_a_mention_and_leaves_the_field_out_when_unset():
+    with_channel = build_card(
+        event_id=1,
+        title="Block Party",
+        requester_id=900,
+        starts_at=WHEN,
+        minutes=60,
+        where=Where(WHERE_VOICE, 55, ""),
+    )
+    without = build_card(
+        event_id=1, title="Block Party", requester_id=900, starts_at=WHEN, minutes=60
+    )
+
+    assert next(f.value for f in with_channel.fields if f.name == "Where") == "<#55>"
+    assert "Where" not in [f.name for f in without.fields]
+
+
+def test_checked_fields_clamps_the_typed_place_and_refuses_nothing_new():
+    fields, why = events.checked_fields(
+        title="Cookout",
+        description="",
+        where=Where(WHERE_OTHER, None, "x" * 300),
+        start=events.local_time("America/Phoenix", datetime.now(UTC) + timedelta(days=2)),
+        duration="2h",
+        tz_name="America/Phoenix",
+        now=datetime.now(UTC),
+    )
+
+    assert why == "" and fields is not None
+    assert len(fields.where.text) == events.LOCATION_LIMIT == 100
+
+    kept, why = events.checked_fields(
+        title="Cookout",
+        description="",
+        where=Where(WHERE_VOICE, 55, ""),
+        start=events.local_time("America/Phoenix", datetime.now(UTC) + timedelta(days=2)),
+        duration="2h",
+        tz_name="America/Phoenix",
+        now=datetime.now(UTC),
+    )
+
+    assert why == "" and kept.where == Where(WHERE_VOICE, 55, "")
+
+
+def test_the_draft_card_names_the_channel_it_was_pointed_at():
+    draft = a_draft(title="Cookout", where=Where(WHERE_VOICE, 55, ""))
+
+    assert "**Where** — <#55>" in "\n".join(events.draft_lines(draft, NOW, chosen=True))
+
+
+class FakeChannelType:
+    def __init__(self, name):
+        self.name = name
+
+
+class FakeChannel:
+    def __init__(self, channel_id, kind, name="general"):
+        self.id = channel_id
+        self.type = FakeChannelType(kind)
+        self.name = name
+
+
+def test_a_channel_decides_which_of_the_two_channel_kinds_it_is():
+    assert events.where_of_channel(FakeChannel(55, "voice")) == Where(WHERE_VOICE, 55, "")
+    assert events.where_of_channel(FakeChannel(55, "stage_voice")) == Where(WHERE_VOICE, 55, "")
+    assert events.where_of_channel(FakeChannel(55, "text")) == Where(WHERE_TEXT, 55, "")
+    assert events.where_of_channel(FakeChannel(55, "news")) == Where(WHERE_TEXT, 55, "")
+    assert events.where_of_channel(FakeChannel(55, "category")) == WHERE_UNSET
+    assert events.where_of_channel(FakeChannel(55, "forum")) == WHERE_UNSET
+
+
+class FakeWhereGuild:
+    def __init__(self, *channels):
+        self.id = 7
+        self.channels = {one.id: one for one in channels}
+
+    def get_channel(self, channel_id):
+        return self.channels.get(channel_id)
+
+
+def test_the_website_door_takes_the_three_kinds_and_refuses_the_rest_in_words():
+    guild = FakeWhereGuild(FakeChannel(55, "voice", "Raid Night"), FakeChannel(60, "category"))
+
+    assert events.checked_where(guild, None, None, "") == (WHERE_UNSET, "")
+    assert events.checked_where(guild, "", None, "the park") == (
+        Where(WHERE_OTHER, None, "the park"),
+        "",
+    )
+    assert events.checked_where(guild, WHERE_OTHER, None, "") == (WHERE_UNSET, "")
+    assert events.checked_where(guild, WHERE_VOICE, 55, "") == (Where(WHERE_VOICE, 55, ""), "")
+
+    refused, why = events.checked_where(guild, "nowhere", None, "")
+    assert refused is None and "nowhere" in why and "voice channel" in why
+
+    refused, why = events.checked_where(guild, WHERE_VOICE, None, "")
+    assert refused is None and "has to be picked" in why
+
+    refused, why = events.checked_where(guild, WHERE_VOICE, 999, "")
+    assert refused is None and "999" in why and "cannot find" in why
+
+    refused, why = events.checked_where(guild, WHERE_TEXT, 60, "")
+    assert refused is None and "not somewhere an event can happen" in why
+
+
+def test_the_channel_itself_decides_the_kind_whatever_the_website_called_it():
+    """A text channel sent as `voice` would make Discord refuse the event, so it is corrected."""
+    guild = FakeWhereGuild(FakeChannel(56, "text"))
+
+    assert events.checked_where(guild, WHERE_VOICE, 56, "") == (Where(WHERE_TEXT, 56, ""), "")

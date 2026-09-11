@@ -1,4 +1,4 @@
-import { api, listOf, names, send } from './api.js';
+import { api, listOf, names, refChannels, send } from './api.js';
 import { start } from './app.js';
 import { logsSection } from './logs.js';
 import {
@@ -54,7 +54,7 @@ function detailCard(row) {
   return card(`What #${row.id} says`, [
     line('Title', row.title),
     line('What it is', row.description),
-    line('Where', row.location),
+    line('Where', row.where_label),
     line('Starts', when(row.starts_at)),
     line('Ends', when(row.ends_at)),
     line('How long', row.duration),
@@ -70,12 +70,60 @@ function detailCard(row) {
   ]);
 }
 
-function editCard(row, say) {
+const NOWHERE = '— nowhere in particular —';
+const SOMEWHERE_ELSE = '— somewhere else —';
+const ELSEWHERE = '__other__';
+const WHERE_HELP = 'A voice or stage channel gives everybody a Join button on the Discord '
+  + 'event; anything else is written on it as words.';
+
+/** The three-way Where control: a channel from the server, a typed place, or nothing. */
+function whereControl(row, channels) {
+  const select = el('select', { class: 'input' });
+  select.append(el('option', { value: '', text: NOWHERE }));
+  select.append(el('option', { value: ELSEWHERE, text: SOMEWHERE_ELSE }));
+  for (const [kind, label, mark] of [['voice', 'Voice channels', '🔊 '], ['text', 'Text channels', '#']]) {
+    const group = el('optgroup', { label });
+    for (const channel of channels.filter((one) => one.type === kind)) {
+      group.append(el('option', {
+        value: String(channel.id),
+        text: `${mark}${channel.name}`,
+        selected: String(row.where_channel_id || '') === String(channel.id) ? true : undefined,
+      }));
+    }
+    if (group.childElementCount) select.append(group);
+  }
+  if (row.where_kind === 'other') select.value = ELSEWHERE;
+  else if (!row.where_channel_id) select.value = '';
+
+  const typed = el('input', { class: 'input', type: 'text', value: row.where_kind === 'other' ? (row.location || '') : '', placeholder: 'twitch.tv/blackbloc' });
+  const typedField = field('Where, or a link', typed, 'Only used when it is somewhere else.');
+  const showTyped = () => { typedField.hidden = select.value !== ELSEWHERE; };
+  select.addEventListener('change', showTyped);
+  showTyped();
+
+  return {
+    nodes: [field('Where', select, WHERE_HELP), typedField],
+    payload: () => {
+      if (select.value === '') return { where_kind: null, where_channel_id: null, location: '' };
+      if (select.value === ELSEWHERE) {
+        return { where_kind: 'other', where_channel_id: null, location: typed.value.trim() };
+      }
+      const picked = channels.find((one) => String(one.id) === select.value);
+      return {
+        where_kind: picked && picked.type === 'voice' ? 'voice' : 'text',
+        where_channel_id: select.value,
+        location: '',
+      };
+    },
+  };
+}
+
+async function editCard(row, say) {
   if (!row.editable) return sayNothing(SETTLED);
   const title = el('input', { class: 'input', type: 'text', value: row.title || '' });
   const description = el('textarea', { class: 'input area', rows: '3' });
   description.value = row.description || '';
-  const location = el('input', { class: 'input', type: 'text', value: row.location || '' });
+  const where = whereControl(row, await refChannels());
   const start = el('input', { class: 'input', type: 'text', value: localStart(row.starts_at), placeholder: '2026-09-14 19:30' });
   const duration = el('input', { class: 'input', type: 'text', value: row.duration || '', placeholder: '2h' });
 
@@ -85,10 +133,10 @@ function editCard(row, say) {
       () => send(`/api/events/${encodeURIComponent(row.id)}`, 'PUT', {
         title: title.value.trim(),
         description: description.value.trim(),
-        location: location.value.trim(),
         start: start.value.trim(),
         duration: duration.value.trim(),
         tz: HERE,
+        ...where.payload(),
       }),
       (found) => [found?.message, ...(found?.notes || [])].filter(Boolean).join(' '),
     );
@@ -102,7 +150,7 @@ function editCard(row, say) {
     el('p', { class: 'field-help', text: `Times are read in ${HERE}. ${NOT_RESENT}` }),
     field('Title', title),
     field('What it is', description),
-    field('Where', location),
+    ...where.nodes,
     field('Starts', start, 'YYYY-MM-DD HH:MM on a 24-hour clock.'),
     field('How long', duration, 'Like 1h30m, 2h or 45m; blank means two hours.'),
     bar([save]),
@@ -405,7 +453,7 @@ async function load() {
   if (open) {
     const detail = section(`Event #${open.id} — ${open.title}`, null, { id: 'detail', open: true });
     const editSay = notice();
-    detail.body.append(detailCard(open), editCard(open, editSay), editSay);
+    detail.body.append(detailCard(open), await editCard(open, editSay), editSay);
     nodes.push(detail.node);
   }
 

@@ -143,6 +143,7 @@ IMPORTANT: frozenset[str] = frozenset(
         "event.cancelled",
         "event.missed",
         "event.announce_skipped_late",
+        "event.where_channel_gone",
         "golive.role_stuck",
         "mod.untimed_out",
         "mod.unbanned",

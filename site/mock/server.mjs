@@ -198,6 +198,7 @@ const IMPORTANT_SUFFIXES = [
 ];
 const IMPORTANT_KINDS = [
   'automod.deleted', 'mod.warn', 'mod.unbanned', 'mod.untimed_out',
+  'event.where_channel_gone',
   'request.declined', 'request.done', 'request.hold',
   'chat.memory_forgot', 'chat.memory_optout',
 ];
@@ -817,7 +818,7 @@ function seedState() {
     ],
   },
   events: [
-    { id: 3, requester_id: MEMBERS[3].id, title: 'Movie night', description: 'Bring snacks.', location: 'Voice: general', starts_at: minutesAgo(-2880), ends_at: null, status: 'pending', created_at: minutesAgo(60), decided_by: null, decided_at: null, deny_reason: null },
+    { id: 3, requester_id: MEMBERS[3].id, title: 'Movie night', description: 'Bring snacks.', location: null, where_kind: 'voice', where_channel_id: '800000000000000010', starts_at: minutesAgo(-2880), ends_at: null, status: 'pending', created_at: minutesAgo(60), decided_by: null, decided_at: null, deny_reason: null },
     { id: 2, requester_id: MEMBERS[1].id, title: 'Speedrun race', description: null, location: 'Twitch', starts_at: minutesAgo(-10080), ends_at: null, status: 'approved', created_at: minutesAgo(4000), decided_by: STAFF.id, decided_at: minutesAgo(3900), deny_reason: null },
     { id: 1, requester_id: MEMBERS[4].id, title: 'Crypto giveaway', description: 'trust me', location: 'DM', starts_at: minutesAgo(-500), ends_at: null, status: 'denied', created_at: minutesAgo(6000), decided_by: STAFF.id, decided_at: minutesAgo(5900), deny_reason: 'This is a scam.' },
   ],
@@ -2872,13 +2873,57 @@ function eventDuration(minutes) {
   return hours ? `${hours}h` : `${rest}m`;
 }
 
+// Mirrors black_bloc/events.py:read_where — a row from before schema 34 reads as `other`.
+function eventWhere(row) {
+  if ((row.where_kind === 'voice' || row.where_kind === 'text') && row.where_channel_id) {
+    return { kind: row.where_kind, channel_id: String(row.where_channel_id), text: '' };
+  }
+  const text = String(row.location || '').trim().slice(0, 100);
+  return text ? { kind: 'other', channel_id: null, text } : { kind: null, channel_id: null, text: '' };
+}
+
+function eventWhereLabel(where) {
+  if (!where.channel_id) return where.text;
+  const channel = CHANNELS.find((one) => String(one.id) === String(where.channel_id));
+  if (!channel) return 'a channel that has gone';
+  return `${where.kind === 'voice' ? '🔊 ' : '#'}${channel.name}`;
+}
+
+// Mirrors black_bloc/events.py:checked_where — every refusal is a sentence, never a bare status.
+function checkedWhere(body) {
+  const kind = String(body.where_kind || '').trim().toLowerCase();
+  const text = String(body.location || '').trim().slice(0, 100);
+  if (!kind || kind === 'other') {
+    return text ? { kind: 'other', channel_id: null, text } : { kind: null, channel_id: null, text: '' };
+  }
+  if (!['voice', 'text'].includes(kind)) {
+    throw new Refused(400, 'where_refused', `**${kind.slice(0, 40)}** is not a kind of place Black Bloc can set, so nothing was saved. It takes a voice channel, a text channel, or **somewhere else** with the place typed in.`);
+  }
+  const given = String(body.where_channel_id || '').trim();
+  if (!/^\d+$/.test(given)) {
+    throw new Refused(400, 'where_refused', 'A voice or text channel has to be picked before it can be saved, so nothing was changed. Pick one from the list, or choose **somewhere else** and type where it is.');
+  }
+  const channel = CHANNELS.find((one) => String(one.id) === given);
+  if (!channel) {
+    throw new Refused(400, 'where_refused', `Black Bloc cannot find channel **${given}** on this server, so nothing was saved. It may have been deleted — pick one from the list, or choose **somewhere else** and type it.`);
+  }
+  if (channel.type !== 'voice' && channel.type !== 'text') {
+    throw new Refused(400, 'where_refused', `**${channel.name}** is not somewhere an event can happen, so nothing was saved. Discord takes a voice channel, a stage or a text channel — or **somewhere else** with the place typed in.`);
+  }
+  return { kind: channel.type, channel_id: given, text: '' };
+}
+
 function eventRow(row) {
   const minutes = eventMinutes(row);
+  const where = eventWhere(row);
   return {
     id: row.id,
     title: row.title,
     description: row.description,
     location: row.location,
+    where_kind: where.kind,
+    where_channel_id: where.channel_id,
+    where_label: eventWhereLabel(where),
     starts_at: row.starts_at,
     ends_at: row.ends_at,
     minutes,
@@ -2942,9 +2987,12 @@ route('PUT', '/api/events/:id', async (context) => {
     throw new Refused(400, 'event_refused', `**${raw}** is not a length Black Bloc can read, so nothing was submitted. Write it as \`1h30m\`, \`2h\` or \`45m\`.`);
   }
   const minutes = Number(parts[1] || 0) * 60 + Number(parts[2] || 0);
+  const where = checkedWhere(body);
   event.title = title;
   event.description = String(body.description || '').trim() || null;
-  event.location = String(body.location || '').trim() || null;
+  event.location = where.text || null;
+  event.where_kind = where.kind;
+  event.where_channel_id = where.channel_id;
   event.starts_at = new Date(when).toISOString();
   event.ends_at = new Date(when + minutes * 60000).toISOString();
   logAction('web.event.edited', { target_id: event.requester_id, details: { event_id: event.id, title } });
