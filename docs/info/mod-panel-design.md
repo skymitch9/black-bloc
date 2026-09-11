@@ -1,7 +1,8 @@
 # Mod cases — `/mod [member]` is ONE command that opens a panel (wave 4)
 
 > **Audience:** the build agent and the reviewer, and the owner for §I. **Status:** TRACKED ·
-> ✅ **SHIPPED 2026-09-05 as v81 (`a90f416`, the merge commit)**, built on
+> ✅ **LIVE since v81** (2026-09-05, `a90f416`, the merge commit), still live at **v108**
+> (`73e2e44`, 2026-09-11 00:37), built on
 > `worktree-agent-ab5740f777a3dfd80`, six commits off `97531cc`. The
 > three forks were answered by the owner and all three took (a). Measured at the landing:
 > **pytest 4600** (4539 on `main`), `ruff` clean, `node site/mock/check.mjs` **17 pages, 146
@@ -13,7 +14,23 @@
 > The build's departures are in the `# Mod cases panel (wave 4)` section of
 > [`code-notes.md`](code-notes.md), keyed by `path:name`. **The body below is the design as
 > written and is deliberately NOT rewritten.**
-> **Last verified: 2026-09-05** — every `path:line` below was READ against `main` at
+> **Since then, the numbers this header measured have all moved, and two things landed:**
+> **schema 29 → 34** (v82 modmail cards, v86 self-test tables, v89 log index, v94 poll drafts,
+> v105 `events.where_*`); the top-level tree **34 → 29** with zero Groups, after the `/settings`
+> panel retired the last Group at v84; the mock **146 → 150 routes**; **v88** (`794d3aa`) folded the
+> confirm helpers onto `panels.confirm`; **v89** (`243dc0f`) added the `action_log_by_kind` index
+> and filtered `checks_of` in SQL. ⚠️ **KI-22, filed at this landing, is still OPEN** (`ACCEPTED`,
+> `docs/KNOWN_ISSUES.md:77` — `/purge`'s two log kinds cannot say which door made them).
+> **Last verified: 2026-09-11 09:16** — re-measured in this tree at `1d090e5`: `mod_panel_minutes`
+> registered (registry **202** keys); every move label §C names still reads the same string —
+> `WHOSE_CASES` / `PICK_A_CASE` (`modcases.py:531–532`), `EDIT_REASON_MOVE` (`:598`),
+> `ADD_NOTE_MOVE` "Add a note…" / `EDIT_NOTE_MOVE` "Edit the note…" (`:599–600`), `VOID_MOVE`
+> (`:601`), `RESTORE_MOVE` (`:602`), `JUMP_MOVE` (`:611`); `SCHEMA_VERSION` is **34**;
+> `site/mock/contract.json` **150 routes / 17 pages**; sweeps rows **208–218** are still the
+> owner's and the file runs to **350**.
+> ⚠️ **NOT checked in this pass:** anything in a Discord client or a browser; no boot, no pytest,
+> no ruff, no `check.mjs` run, no migration executed, no case voided or restored by a person.
+> **Before that, 2026-09-05** — every `path:line` below was READ against `main` at
 > **`46fba16`**. ⚠️ **`main` moved to `0fcbac2` while this was being written** — the
 > `hide_commands_when_off` build merged (`437b2d1`, then the merge commit). **Re-measured against
 > `0fcbac2`: `command_visibility.py`, `settings_store.py` and `tests/test_bot.py:179` only** — see
