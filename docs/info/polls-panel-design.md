@@ -8,7 +8,43 @@
 > This doc adds only what is specific to polls; the seventeen
 > invariants **P1–P17** live in that file's §2 and are **not restated here** — a reviewer checks
 > the build against §2 first, then this, then the `## Deviations` foot.
-> **Last verified: 2026-09-03 (build)** — MEASURED on the branch: `ruff check .` clean;
+> ⚠️ **Since then — three builds changed what this describes.** The body is the v65 build; read
+> these beside it:
+> - **Saved poll drafts, v94** (merge `8405bea`, schema 32 → 33) — **settles fork §I-3 the OTHER
+>   way**: a member CAN leave the create flow and come back. `Save for later` / `Resume draft` /
+>   `Discard draft` are on the panel (row 4, not row 0 — Discord's five-per-row cap), backed by a
+>   `poll_drafts` table, and **`draft` LEFT `STATUSES`** entirely. Live `polls.STATUSES` is
+>   `('pending_review', 'open', 'closed', 'archived', 'denied', 'cancelled', 'recurring')` and
+>   `CARD_BUTTONS` has no `draft` row. [`poll-drafts-design.md`](poll-drafts-design.md).
+> - **The Logs button's two knobs, v96** (merge `42d2e6e`) — §C's *"the `count` / `important_only`
+>   arguments are LOST"* is no longer true: **Show more** and **Important only** are buttons under
+>   the list. [`logs-buttons-design.md`](logs-buttons-design.md).
+> - **Create a recurring poll from the website, v96** (merge `c915ade`) — the Polls page can now
+>   MAKE a recurrence, not only pause/resume/delete one.
+>   [`recurrence-web-create-design.md`](recurrence-web-create-design.md).
+>
+> **And three counts in the body have moved on:** the slash tree is **29** top-level commands with
+> no Groups (not 44 — the later panel waves and the `/settings` panel took the rest); the mock
+> reads **150 routes** (not 142); the suite is **5546** (not 3526).
+>
+> **Last verified: 2026-09-11 09:12** (the header; the body is as at the build). Measured this pass
+> against `main` at `f3ae743` (v108 live): `polls.TRANSITIONS` is
+> `pending_review → (open, denied, cancelled)`, `open → (closed, cancelled)`,
+> `closed → (archived,)`, `cancelled → (archived,)`, **`denied → (open,)`** (fork I-1 as settled),
+> `archived → ()`, `recurring → (cancelled,)`, and `TERMINAL_STATUSES` is `('archived',)` alone;
+> `CARD_BUTTONS['denied']` is the single `MoveButton(action='post_anyway', label='Post it anyway',
+> style='success', staff_only=True)` (deviations 1–2); `polls.py` exports `MoveButton`,
+> `card_buttons`, `poll_id_from`, `summary_line`, `recur_line`, `recurrence_card`;
+> `cogs/community/polls.py` has `pause_recurrence`, `resume_recurrence`, `delete_recurrence`,
+> `save_recurrence`, `apply_poll_settings` and `RECUR_FUNCS`; `settings_store.py` registers
+> `poll_panel_minutes` (int) and `poll_creator_may_end` (bool). ⚠️ §H item 4 (*"`polls.py` imports
+> no database"*) **still holds**, but the import list in deviation 3 has grown: it is now
+> `json`, `logging`, `dataclasses`, `datetime`, `typing`, `discord`, `.timezones` — the two
+> additions are poll drafts' JSON round-trip, still no database and no gateway.
+> ⚠️ **NOT checked this pass:** anything in Discord or a browser — nothing was booted, no panel
+> opened, no modal rendered.
+>
+> Before that, **2026-09-03 (build)** — MEASURED on the branch: `ruff check .` clean;
 > `pytest -q -n auto` **3526 tests, all green** (3442 at the base `d3da02c`, +84); the command tree
 > loaded from every cog in `COGS` reports **44** top-level commands with `/poll` no longer a
 > `Group` and no children; `black_bloc/polls.py` imports only `logging`, `datetime`, `typing`,
@@ -49,6 +85,7 @@ member-visible (`tests/test_bot.py:71`, `MEMBER_COMMANDS`); `poll_mode` is **not
 
 **States** — `polls.py:85 STATUSES` = `draft · pending_review · open · closed · archived ·
 denied · cancelled · recurring`; `OPEN_STATUSES` `:86` = draft/pending_review/open;
+⚠️ **`draft` LEFT both tuples at v94** (saved poll drafts) — see the header.
 `TRANSITIONS` `:89`:
 
 | From | To |
@@ -61,7 +98,10 @@ denied · cancelled · recurring`; `OPEN_STATUSES` `:86` = draft/pending_review/
 | `recurring` | cancelled |
 
 ⚠️ **Nothing in the repo ever writes `draft`** — `store_poll:343` writes `pending_review` or
-`open` only. The status exists unused.
+`open` only. The status exists unused. **Resolved at v94:** rather than start writing it, the
+status was DELETED and drafts got their own table ([`poll-drafts-design.md`](poll-drafts-design.md)
+§2.1). `polls.DRAFT` survives as a name but is in none of `STATUSES`, `OPEN_STATUSES`,
+`TRANSITIONS`, `COLOURS` or `CARD_BUTTONS`.
 
 **The review flow.** `poll_review_mode == on` (`settings_store.py:1239`, default `off`) makes
 `store_poll` write `pending_review`; `send_review_card` `:1462` posts `card_for` `:1449` +
@@ -122,7 +162,7 @@ apply (P3):
 
 | Status | Buttons rendered (+ `Back` always) | Shared function |
 |---|---|---|
-| `draft` | `Post it` · `Cancel` (staff) | `post_poll` `:1288` · `cancel_poll` `:1238` |
+| ~~`draft`~~ *(the status was deleted at v94 — see the header)* | `Post it` · `Cancel` (staff) | `post_poll` `:1288` · `cancel_poll` `:1238` |
 | `pending_review` | `Approve` (staff, success) · `Deny` (staff, danger, **modal**) · `Cancel` (staff) | `apply_decision` `:1390` (OPEN / DENIED) · `cancel_poll` |
 | `open` | `End` (primary — rendered for the creator **or** staff, `:1978`) · `Cancel` (staff, danger) | `close_poll` `:1107` · `cancel_poll` |
 | `closed` | none — final | — |
@@ -132,7 +172,8 @@ apply (P3):
 | `recurring` | never reaches this card — see the recurrence card | — |
 
 `draft`'s row is unreachable today; it is in the table so the parametrised test covers every
-member of `STATUSES` and so §I-3 costs nothing later. Every move re-asks `guard_allows`
+member of `STATUSES` and so §I-3 costs nothing later. (It cost nothing: §I-3 was reopened and
+settled the other way at v94, and the row was deleted with the status — see the header.) Every move re-asks `guard_allows`
 (`:739`) — the test-mode rule — and `still_staff` (`panels.py:28`) before every staff move (P8).
 
 **The recurrence card** — embed from a new pure `recurrence_card(...)` (§F) showing question,
@@ -179,6 +220,8 @@ submit, as `:2360–2376` does today.
 **Logs** — `LogsButton` → `send_logs(interaction, "poll")` as a NEW ephemeral followup, the
 same three lines as `cogs/community/requests.py:704–709`. ⚠️ The `count` / `important_only`
 arguments (`:1821–1822`) are LOST, as they were for `/request`; the site's Logs page has both.
+**Given back at v96** as **Show more** / **Important only** buttons under the list, plus the
+`logs_count` and `logs_important_only` keys — [`logs-buttons-design.md`](logs-buttons-design.md).
 
 ## D. Settings (P13 / checklist 33)
 
@@ -304,6 +347,12 @@ Rows 6, 8, 9 and 27 are rewritten in place, not added.
 3. ✅ **SETTLED (reviewer): nothing is written before `Post it`.** One write, one log row
    (checklist 34), no orphan rows, and `draft` stays unused. A timed-out create costs one
    modal's typing, which the 10-minute default and the "gone quiet" footer already bound.
+   ⚠️ **REOPENED AND SETTLED THE OTHER WAY by the owner, 2026-09-06 09:45** (verbatim: *"B but
+   only save 1 draft per person max"*). A member CAN leave the create flow and come back:
+   `Save for later` writes a row in a **new `poll_drafts` table** — not in `polls`, so the
+   one-write-one-log-row shape above survives — and the unused `draft` status was deleted rather
+   than used. Live since v94. [`poll-drafts-design.md`](poll-drafts-design.md) is that design;
+   this bullet is what it overturned.
 
 ## Deviations
 
@@ -327,6 +376,9 @@ document says.
    same cycle, which is also why the pure module cannot use `capped_placeholder`. Passing the
    parsed value in from the cog is what keeps §H item 4 true — measured: `polls.py` imports
    `logging`, `datetime`, `typing`, `discord` and `.timezones`, and nothing else.
+   (Re-measured 2026-09-11: `json`, `logging`, `dataclasses`, `datetime`, `typing`, `discord`,
+   `.timezones` — the two extra are v94's draft JSON round-trip. Still no database, still no
+   gateway, so the rule this deviation protects is intact.)
 4. **The `Kind` radio offers `KNOWN_KINDS` (single / checkbox / yesno / rating / date), not
    `KINDS`.** §C's step-1 table names exactly those five, but the retired `/poll create` offered
    all eight, so `text` / `number` / `ranked` used to be typeable and were refused by name with
