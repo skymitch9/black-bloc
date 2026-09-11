@@ -11,6 +11,7 @@ LINK_UNREACHABLE = "unreachable"
 
 MISSING_STATUSES = (404, 410)
 SERVER_ERROR = 500
+HEADER_BYTES = 65536
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/124.0.0.0 Safari/537.36"
@@ -21,7 +22,11 @@ async def aiohttp_status(url: str, *, seconds: int, headers: dict[str, str]) -> 
     """One GET, redirects followed, the body never read and the session never kept."""
     import aiohttp
 
-    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=seconds)) as session:
+    async with aiohttp.ClientSession(
+        timeout=aiohttp.ClientTimeout(total=seconds),
+        max_line_size=HEADER_BYTES,
+        max_field_size=HEADER_BYTES,
+    ) as session:
         async with session.get(url, headers=headers, allow_redirects=True) as response:
             return int(response.status)
 

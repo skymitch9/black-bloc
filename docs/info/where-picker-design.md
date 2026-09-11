@@ -661,7 +661,26 @@ silent; the aliases key edited on Settings; the old-row case), `info/code-notes.
   that reason, but nothing here measured how long the render actually takes — no bot was booted. If
   the owner sees "This interaction failed" on a slow link, the first move is
   `events_where_link_check_seconds` → 1, and the second is `events_where_link_check` → off.
-- **H16 (could NOT do) The `twitch.tv` caveat is asserted from the design, not measured.** § Follow-up
-  4 B states that Twitch answers 200 for any channel name and YouTube 404s a wrong handle. Nothing in
-  this build tested that — the network is off limits here — so it is written into the owner guide and
-  sweep row **347** as the thing to confirm, not as a fact this build established.
+- **H16 (build → MEASURED at review) The `twitch.tv` caveat was asserted by the build; the review
+  measured it.** The build could not open a link (the network is off limits under pytest), so the
+  owner guide and sweep row **347** carried the caveat as a thing to confirm. The review (2026-09-11
+  00:3x, the real `aiohttp_status` from the worktree, `seconds=2`) opened each default alias host with
+  a real handle and a made-up one. Measured: **`twitch.tv`, `kick.com`, `tiktok.com`, `instagram.com`,
+  `x.com` and `discord.gg` answer 200 for ANY name** (single-page apps — the 404 happens in the
+  browser, not in the response); **`youtube.com/@…` answers 404 for a missing handle and 200 for a
+  real one**; a dead host is `ClientConnectorDNSError` → `unreachable` in 0.02 s. So under the default
+  table the check catches a typo'd HOST and a wrong YouTube handle, and nothing else; a wrong Twitch,
+  Kick, TikTok, Instagram, X or Discord name passes. Also measured: `kick.com` timed out once at 2 s on
+  its first probe and answered in 0.14 s afterwards, so a spurious "did not answer" note on Kick is
+  possible and the note's wording ("the link is kept as typed") is honest about it. And
+  `youtube.com/@skyaiva` — the owner's own example — answered **404**: that handle does not exist on
+  YouTube, so `yt skyaiva` will show the note until the owner types the handle YouTube actually has.
+- **H17 (review fix) `x.com` needed the header limits raised, or every X link was "did not
+  answer".** aiohttp's default `max_field_size` is 8190 bytes, and `x.com` sends a response header
+  (its 200 for a handle that does not exist, and the redirect from `twitter.com`) longer than that,
+  so the GET raised `ClientResponseError: 400, Got more than 8190 bytes when reading …` — which
+  `link_answers` classified as `unreachable`, a false "did not answer" for a host that had answered.
+  Fix: `aiohttp_status` builds its session with `max_line_size` and `max_field_size` at
+  `HEADER_BYTES = 65536`; re-probed, `x.com` is `ok` in 0.28 s for a missing handle and 0.46 s for a
+  real one. Nothing else changed; the fix cannot be unit-tested (the conftest guard forbids a real
+  GET, and an injected `fetch` never sees the session), so it is recorded here as a measurement.
