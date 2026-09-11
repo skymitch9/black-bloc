@@ -147,7 +147,8 @@ def test_asking_for_done_from_a_live_state_names_the_ready_step_rather_than_the_
             pure.checked_move(4, where, pure.DONE)
         said = str(caught.value)
         assert "checked it" in said
-        assert "/request ready 4" in said and "Ready to check" in said
+        assert "/request ready" not in said and "**Ready to check**" in said
+        assert "**Accept**" in said
 
 
 def test_a_finished_request_still_says_it_is_finished_rather_than_offering_the_ready_step():

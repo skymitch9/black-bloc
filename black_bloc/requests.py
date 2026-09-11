@@ -141,8 +141,7 @@ REASON_NEEDED: dict[str, str] = {
 READY_NEEDS_WHAT_WAS_BUILT = (
     "Marking a request ready to check needs a line saying what was actually built, so nothing was "
     "changed. That sentence is what the person who asked reads on the card. "
-    "`/request ready {request_id}` opens a box for it — or use the **Ready to check** button on "
-    "the site."
+    "**Ready to check** on its card opens a box for it — on the `/request` panel or on the site."
 )
 SENDING_BACK_NEEDS_A_NOTE = (
     "Sending a request back needs one line saying what is still to do, so nothing was changed. The "
@@ -155,9 +154,9 @@ TEXT_NEEDED: dict[str, str] = {
 }
 DONE_NEEDS_A_CHECK = (
     "Request **#{request_id}** is **{status}**, and a request only finishes once somebody has "
-    "checked it, so nothing was changed. `/request ready {request_id}` marks it ready to check — "
-    "what was built, and how to try it — and `/request accept {request_id}` finishes it after "
-    "that. On the site it is the **Ready to check** button on the card."
+    "checked it, so nothing was changed. **Ready to check** on its card marks it ready — what was "
+    "built, and how to try it — and **Accept** finishes it after that. The buttons are on the "
+    "`/request` panel and on the site."
 )
 REVIEW_BY_SOMEBODY_ELSE = (
     "You are the one who marked request **#{request_id}** ready to check, and this server asks "
@@ -170,7 +169,7 @@ NOT_READY_TO_CHECK = (
 )
 NOT_ON_HOLD = (
     "Request **#{request_id}** is **{status}**, not on hold, so there was nothing to resume. "
-    "`/request set` moves it from where it is."
+    "The buttons on its card are the moves it has from where it is."
 )
 BAD_PRIORITY = (
     "**{given}** is not a priority Black Bloc can read, so nothing was changed. Send a whole "
