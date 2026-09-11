@@ -1,4 +1,4 @@
-﻿# Phase 9 — Role menus 2: approval, time limits, reconciliation
+# Phase 9 — Role menus 2: approval, time limits, reconciliation
 
 > ⚠️ **SUPERSEDED IN PART, 2026-09-04 (v77, `43312b9`):** every `/rolemenu …` and `/role …` subcommand named below is retired — `/rolemenu` is now ONE staff command that opens a panel and BOTH groups' eighteen leaves are gone. The behaviour is unchanged; only the door is. See
 > [`role-menus-panel-design.md`](role-menus-panel-design.md) and

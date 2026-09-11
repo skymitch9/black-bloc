@@ -47,7 +47,8 @@
  *     always the RESOLVED mode ('auto' is resolved against
  *     prefers-color-scheme and re-resolved live when the OS flips);
  *   - keeps <meta name="theme-color"> in step with the active --et-bg
- *     (integration step 5 of docs/info/estate-themes.md — the browser chrome
+ *     (integration step 5 of catalog-platform's docs/info/estate-themes.md,
+ *     not a file in this repo — the browser chrome
  *     on a phone is a visible band of colour touching the design);
  *   - exposes window.estateTheme { get, setTheme, setMode, themes, modes,
  *     labels, label } and fires 'hg-themechange' on document — this API is

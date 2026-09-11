@@ -1,4 +1,4 @@
-﻿# Phase 11 — Chat 2 (F10 step 2): editable lines, data intents, routing, manners
+# Phase 11 — Chat 2 (F10 step 2): editable lines, data intents, routing, manners
 
 > ⚠️ **SUPERSEDED IN PART, 2026-09-04 (v75, `251dd14`), by [`chat-panel-design.md`](chat-panel-design.md)** —
 > the FEATURE behaviour below is what shipped, but every `/chat …` subcommand it names is

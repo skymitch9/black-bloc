@@ -1,4 +1,4 @@
-﻿# Phase 8b design — the full dashboard: tabs, names, settings pages, moderation tools
+# Phase 8b design — the full dashboard: tabs, names, settings pages, moderation tools
 
 > ⚠️ **2026-09-03 (v65 for `/poll`, v61 for `/request`): this document's `/request list` and
 > `/poll recur create` mentions are slash paths superseded by panels** — `/request` and

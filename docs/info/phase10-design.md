@@ -1,4 +1,4 @@
-﻿# Phase 10 — Polls (F15): native Discord polls, wrapped
+# Phase 10 — Polls (F15): native Discord polls, wrapped
 
 > ⚠️ **SUPERSEDED IN PART, 2026-09-03 (v65, `d13e1a4`): every `/poll …` subcommand this document names is
 > gone** — eleven of them, including the whole `/poll recur create|list|pause|delete` set.

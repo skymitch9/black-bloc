@@ -1,4 +1,4 @@
-﻿# Phase 12 — Logs: quiet Discord, loud website, `/… logs` everywhere
+# Phase 12 — Logs: quiet Discord, loud website, `/… logs` everywhere
 
 > ⚠️ **SUPERSEDED IN PART, 2026-09-03 (v70, `0aeed72`) — the slash surface below is gone.** `/golive` and
 > `/twitch` and all eight of their subcommands (`logs`, `optout`, `optin`, `status`, `mode`,

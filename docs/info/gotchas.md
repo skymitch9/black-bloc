@@ -132,7 +132,8 @@ from a commit that contains it.
 
 ## `deploy.ps1` hangs mid-pytest with every xdist worker idle (incidents ×5, 2026-09-06 and 2026-09-10)
 
-Recorded on `../deploys.log` at v97, v98, v99, v100 and (as the first attempt) v103. The
+Recorded on `../deploys.log` at v94, v97, v98, v99 and v100 (re-read 2026-09-11 — the v103 line
+says *no hang*; an earlier version of this entry miscounted it). The
 deploy gate's `pytest -n auto` stops making progress and sits there: **33 idle pythons, log
 untouched for 72 s, CPU flat over 20 s.** Two shapes were seen — a hang at *spawn* (the two
 morning ones) and a hang at **81–92 % of the run** (the rest). It is not a failing test and
@@ -140,7 +141,8 @@ it is not stoppable from the console.
 
 **What got past it, every time:** kill the process tree, then re-run the deploy **through
 the PowerShell tool with output redirected to a file** (`*> file`) rather than detached.
-The retry passed the gate in 26–30 s on each occasion. ⚠️ **Do not conclude the suite is
+The retry passed the gate in 26–30 s on each occasion. The count and the threshold that
+would make it worth chasing live in [`../KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) **KI-26**. ⚠️ **Do not conclude the suite is
 broken** — the same commit's tests pass forward and under `BB_REVERSE=1` on the retry. Cause
 never established; it is the retry, not a fix.
 

@@ -2,7 +2,7 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-11 10:50** — **KI-25 ADDED** (Discord-only sign-in, `WAIVED` by the owner: "A discord is fine"); **08:33** — every OPEN entry was re-read against the repo at
+> Last verified: **2026-09-11 10:55** — **KI-26 ADDED** (the xdist deploy-gate hang, `WATCHING`, 5 hangs v94–v100, 0 of 8 since v103); 10:50 — **KI-25 ADDED** (Discord-only sign-in, `WAIVED` by the owner: "A discord is fine"); **08:33** — every OPEN entry was re-read against the repo at
 > `main` `1d090e5` (**v108 LIVE**). What moved:
 > **KI-24 is now LIVE, not just closed on a branch** — it merged as `689eff5` and shipped
 > **v97** (`aa44e3b`, 2026-09-06 13:52; `deploys.log:96`); `black_bloc/loops.py` exists and
@@ -81,6 +81,32 @@
 >
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
+
+## KI-26 — `deploy.ps1` hangs mid-pytest with every xdist worker idle, roughly one run in four — `WATCHING`
+
+**Symptom:** the deploy gate's `pytest -q -n auto` stops making progress — 33 idle pythons,
+the log untouched for over a minute, CPU flat — at spawn (twice) or at 81–92 % of the run
+(three times). Five times so far, measured off `deploys.log` 2026-09-11: the runs before **v94**
+(10:42, detached, 92 %), **v97** (13:45, detached, 88 %), **v98** (14:09, foreground console, at
+spawn), **v99** (19:52, 81 %) and **v100** (15:55, detached, 82 %) — 2026-09-06 and 2026-09-10.
+(`gotchas.md` and the docs-pass finding said "v103 attempt 1"; the v103 line itself says *no hang*.) Not a failing test: the same commit passes
+forward and under `BB_REVERSE=1` on the retry, in 26–30 s. The hung tree cannot be stopped from
+the session; the owner kills it.
+
+**Status:** `WATCHING` — filed 2026-09-11 10:55 from the docs-pass finding (c). The retry is in
+[`info/gotchas.md`](info/gotchas.md) (*"`deploy.ps1` hangs mid-pytest…"*), which owns the
+what-to-do; this entry owns the count.
+
+**Why tolerated:** the retry has shipped every time and costs two minutes; nothing reaches Fly
+until the gate passes, so a hang is lost time, never a bad deploy. Cause unestablished — the
+pattern — detached runs and one foreground console run hung; every run through the PowerShell
+tool with `*> file` (the ritual since v98) has passed, 0 of 7 — points at console stdout handling of
+xdist workers rather than the suite.
+
+**What would change it:** a sixth hang **on a PowerShell-tool `*> file` run** (none of the five was),
+or the count passing **10** — then spend a session on it: run the gate under `-n auto -p no:cacheprovider`
+with `PYTEST_DEBUG` and a worker log, and compare a hung run's `py-spy dump` against a live one.
+Runs since v103: v103–v110 (eight) all passed the gate first time.
 
 ## KI-25 — Discord is the ONLY sign-in; the phase-8 Google SSO for the owner was never built — `WAIVED`
 

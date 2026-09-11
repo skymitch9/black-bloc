@@ -1,4 +1,4 @@
-﻿# Phase 8 design — the config website for mods and admins (F12)
+# Phase 8 design — the config website for mods and admins (F12)
 
 > **Audience:** the owner (this is the acknowledgment and the plan) and the
 > Phase 8 build agents. **Status:** TRACKED · ✅ **BOTH MILESTONES LIVE** — **8a** deployed
