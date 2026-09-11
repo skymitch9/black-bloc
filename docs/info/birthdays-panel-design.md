@@ -1,10 +1,40 @@
 # Birthdays — `/birthday` is ONE command that opens a panel
 
-> **Audience:** the build agent and the reviewer. **Status:** TRACKED · ✅ **SHIPPED** — built on
+> **Audience:** the build agent and the reviewer. **Status:** TRACKED · ✅ **LIVE** — built on
 > `worktree-agent-a19bdce15408f8243` (2026-09-03; branched from `main` at `d3da02c`), Fable-reviewed
-> with no defect found, merged `58974e1` 13:47, **live in v63** (`616adb3`, 13:58; `deploys.log` line 62).
+> with no defect found, merged `58974e1` 13:47, **live since v63** (`616adb3`, 2026-09-03 13:58;
+> `deploys.log` line 62). Still live at **v108** (`73e2e44`, 2026-09-11 00:37).
 > See the `## Deviations` foot for every departure.
-> **Last verified: 2026-09-03** — `ruff check .` clean and **3500 tests pass** on the branch
+>
+> **Since then, four things this document predates:**
+> 1. **v78** (`3429233`) — `HIDDEN_WHEN_OFF` grew to fifteen entries, so `birthday_mode:
+>    ("birthday",)` EXISTS now (`command_visibility.py:21`). §E's *"`command_visibility` has no
+>    birthday entry"* is history: `/birthday` DOES vanish while the mode is off, behind
+>    `hide_commands_when_off`.
+> 2. **v84** (`ce97de0`) — `LOG_LEVEL_COMMANDS` was corrected for all 17 features and
+>    `log_level_help` now renders *"and in `/birthday` ▸ **Logs**"*, which closes deviation 9's
+>    finding (and `/request`'s twin).
+> 3. **v88** (`794d3aa`) — deviation 2's three confirms now go through the library:
+>    `cogs/community/birthdays.py:592 open_confirm` wraps `panels.confirm` + `confirm_items`
+>    (`:63–68`), not a local builder.
+> 4. **v92** (`4b327cf`) — deviation 14's finding was repaired: `cogs/community/requests.py` passes
+>    `allowed_mentions` on its re-renders (`:176`, `:257`, `:625`, `:653`, `:657`).
+>
+> **Last verified: 2026-09-11 08:41** — re-measured in this tree at `1d090e5`: all three §D keys are
+> registered (`birthday_panel_minutes`, `birthday_panel_next_for_members`, `birthday_panel_lookup`)
+> in a **202**-key registry; the labels §B/§C name still read the same strings — `SET_MINE` /
+> `CHANGE_MINE` / `OPT_OUT` / `OPT_IN` (`birthdays.py:466–470`), `LOOKUP_PLACEHOLDER` /
+> `MONTH_PLACEHOLDER` / `MODE_PLACEHOLDER` (`:58–61`), **Clear the birthday role** / **Set their
+> birthday** / **Forget their birthday** (`cogs/community/birthdays.py:846`, `:871`, `:883`); the
+> tree is **29** top-level commands with zero Groups (`tests/test_bot.py:11`), `LOGS_GROUPS` is gone
+> as §E asked, and `"birthday"` is still in `MEMBER_COMMANDS` (`:44`). Sweep rows landed as
+> **87–93** (`docs/access/sweeps.md` ▸ *Birthdays — `/birthday` is ONE panel (wave 1). Live in v63*);
+> the file now runs to row **350**.
+> ⚠️ **NOT checked in this pass:** anything in a Discord client or a browser; no boot, no pytest, no
+> ruff, no `check.mjs`. The `path:line` keys in §A–§F are the `59ac96f` ones and have drifted —
+> trust the anchor text, and `code-notes.md`'s `# Birthdays panel (wave 1)` section for current keys.
+>
+> **Before that, 2026-09-03** — `ruff check .` clean and **3500 tests pass** on the branch
 > (3442 at `d3da02c`: +76 new, −19 command tests replaced by panel tests). `commands synced`
 > was measured at **44, unchanged**, by
 > `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`, which loads every cog
@@ -178,7 +208,8 @@ options. The six existing `birthday_*` keys (`:199–204`, `:563–568`) are unt
 
 **Unchanged, checked:** `MEMBER_COMMANDS` still contains `birthday` (`tests/test_bot.py:64`);
 `LOG_LEVEL_COMMANDS["birthday"] = "birthday"` (`settings_store.py:787`) still names a real
-command; `command_visibility` has no birthday entry (grep: none); `/help` follows the tree
+command; `command_visibility` has no birthday entry (grep: none — ⚠️ **since v78 it does**,
+`birthday_mode: ("birthday",)`, so the command hides while the mode is off); `/help` follows the tree
 (`cogs/core.py`), so it needs no edit (P15).
 
 **Strings that name a retired command and must be rewritten in the same commit** — each currently
@@ -302,7 +333,9 @@ was built as this document specifies.
    and then lists only three screens, none of them a forget-confirm. There are **four**: panel,
    person card, remove-confirm, forget-confirm, role-clear-confirm — five counting the last.
    All three confirms share one builder (`open_confirm`), because they differ only in a
-   sentence and two buttons.
+   sentence and two buttons. ✅ **Since v88** that builder is the library's:
+   `open_confirm` (`cogs/community/birthdays.py:592`) wraps `panels.confirm` +
+   `panels.confirm_items`, which replaced eight hand-rolled copies across the app.
 3. **`Status` answers a NEW ephemeral message rather than re-rendering the panel.** The §C
    followup/re-render table does not list `Status` at all. It is a report, not a move, and the
    panel is more useful still on screen behind it — the same shape `Logs` and `List a month…`
@@ -343,6 +376,9 @@ was built as this document specifies.
    points at a Logs button. ⚠️ **`/request` has exactly the same defect since its own panel
    shipped**, so fixing one and not the other would be worse than fixing neither; it is
    recorded here as a finding for the conductor rather than repaired in a birthdays branch.
+   ✅ **Fixed at v84** (`ce97de0`): `LOG_LEVEL_COMMANDS` was corrected for all 17 features and
+   `log_level_help` now renders *"and in `/<command>` ▸ **Logs**"* — the sentence names the
+   button, so both this and `/request` read correctly.
 10. **§H item 3's `node site/mock/check.mjs` and the `labels.js` parse were NOT run.** No site
     file is touched by this build (grep: no `site/` change in the diff), and the design's own
     §E lists no site edit. The full `pytest -q -n auto` and `ruff check .` WERE run and are
@@ -370,3 +406,5 @@ was built as this document specifies.
     ⚠️ **The same three edits in `cogs/community/requests.py` (`render_panel`, `open_card`,
     `finish_card`) pass no `allowed_mentions`** — recorded as a finding for the conductor, not
     repaired in a birthdays branch.
+    ✅ **Repaired at v92** (`4b327cf`, *"`allowed_mentions` on 27 re-renders + 3 confirm cards"*):
+    `cogs/community/requests.py` passes it at `:176`, `:257`, `:625`, `:653` and `:657`.
