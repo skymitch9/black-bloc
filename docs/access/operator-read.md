@@ -2,7 +2,21 @@
 
 > **Audience:** the owner (minting) and Claude sessions (reading). **Status:**
 > TRACKED — ⚠️ **secret NAMES only; no value appears in this file, ever.**
-> Last verified: **2026-09-06 19:45** — the refusal table at the foot gained the
+> Last verified: **2026-09-11 08:39** — the **paths table** was re-checked at last, against
+> `site/mock/contract.json` (which `tests/api/test_contract.py` asserts the real routers against):
+> every path in it resolves — `/api/status`, `/api/actions`, `/api/settings`,
+> `/api/settings/audit`, `/api/costs`, `/api/requests`, `/api/events`, `/api/polls`,
+> `/api/applications`, `/api/raidtrains`, `/api/mod/cases`, `/api/mod/rules`,
+> `/api/modmail/tickets`, `/api/golive/links`, `/api/youtube/links`, `/api/rolemenus`,
+> `/api/roles/grants`, `/api/birthdays`, `/api/pings/streamers`, `/api/tempvoice/channels`,
+> `/api/honeypot/hits`, `/api/chat/*`, `/api/members`, `/api/ref/*`. `/api/auth/me` is not in the
+> contract file but **does** exist (`black_bloc/api/auth.py:633`, `@router.get("/me")`), so that
+> row stands. The contract carries **150** routes in all, of which **128** distinct paths.
+> ⚠️ **NOT verified today:** nothing live — a worktree holds no token, so `scripts/read.ps1` was
+> **not run**, no bearer was sent to the deployed app, and neither refusal sentence below was
+> reproduced; the token itself was never seen (by design). The bounds in the refusal table (30
+> wrong-token guesses a minute, 300 reads a minute) are still the 2026-09-06 readings.
+> Before that, **2026-09-06 19:45** — the refusal table at the foot gained the
 > **300 reads a minute** row: branch `operator-read-bound` gives the RIGHT token
 > its own read bound, on the operator identity, where v98 left it bounded only by
 > the server. Measured there: `ruff check .` clean and `pytest -q -n auto` **5286
@@ -118,7 +132,10 @@ sentence for any non-2xx rather than a stack trace.
 ## The paths worth reading
 
 Every one is a `GET`. Verified against `server.py`'s routers and each router's
-prefix, 2026-09-03.
+prefix, 2026-09-03; **re-checked 2026-09-11** against `site/mock/contract.json` — every path
+below resolves (`/api/auth/me` is the one absent from the contract file, and it exists at
+`black_bloc/api/auth.py:633`). This table is a hand-picked reading list, **not** the full
+surface: the contract carries **150** routes.
 
 | Path | What it answers |
 |---|---|
