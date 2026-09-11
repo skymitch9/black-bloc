@@ -1238,7 +1238,7 @@ carries five new rows — `default_timezone`, `timezone_choices`, `time_step_min
 list with a name Black Bloc cannot resolve drops that name and says what it stored; setting it to
 nothing it knows at all is refused outright rather than leaving the dropdown empty.
 
-## The "Where?" picker — rows 329–335
+## The "Where?" picker — rows 329–350 (329–335 the first build, v105; 336–350 follow-ups 1–4, v106–v108)
 
 Written on `where-picker`, 2026-09-10, off `main` at `a47e43a`, in a worktree at
 `C:/lcw/bb-where-picker`; the conductor renumbers these at the merge (328 was taken by the
