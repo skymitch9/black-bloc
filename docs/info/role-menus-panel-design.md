@@ -5,7 +5,38 @@
 > against a 420–500k estimate, four commits off `4523118`, eight append-shaped merge conflicts, sweeps
 > **173–182**; the `## Deviations` foot (14 items) is the build agent's. Boot-verified only
 > (`synced 36`); nothing below has met live Discord.
-> **Last verified: 2026-09-04** — every `path:line` below was READ against `main` at `bf3e447`
+>
+> 🔴 **Since then — one settled fork was REVERSED the next day.** §I's *"`/rolemenu` no longer
+> vanishes when the mode is off"*, and deviation 11's new test that `rolemenu_mode` is **not** in
+> `HIDDEN_WHEN_OFF`, both stopped being true at **v78** (`baede2a`, 2026-09-05 07:05) — *"Hide
+> commands when off: a feature turned off on the portal takes its `/command` with it"*. Live
+> `command_visibility.HIDDEN_WHEN_OFF` now carries **14** entries including
+> `"rolemenu_mode": ("rolemenu",)`. What changed the argument is that hiding became a **setting**,
+> `hide_commands_when_off` (bool, default **true**), so the owner can turn it off and get this
+> design's behaviour back; `NEVER_HIDDEN` is `settings, help, about, ping`, and `/memory` is the one
+> feature deliberately left out of the 15 (fork I-M1). Landing entry in
+> [`../DONE.md`](../DONE.md). ⚠️ **Deviation 11's other claim — that `request_mode` is the only
+> entry left in `HIDDEN_WHEN_OFF` — is stale for the same reason.**
+>
+> ⚠️ **Also since then:** the **Logs** button's `count` / `important_only` came back at **v96** as
+> **Show more** / **Important only** under the list
+> ([`logs-buttons-design.md`](logs-buttons-design.md)).
+>
+> **Last verified: 2026-09-11 09:45** (the header; the body is as at the design). Measured this pass
+> against `main` at `f3ae743` (v108 live): `settings_store.py` registers `rolemenu_panel_minutes`
+> (int) and `labels.js` carries its row (§D); the pure `black_bloc/rolemenus.py` holds
+> `menu_heading`, `option_line` and `menu_lines(menu, options, *, note="")` (deviation 2) plus
+> `active_grants(db, guild_id, *, user_id=None)`, `grant_order`, `time_left`, `grant_line` and
+> `grant_lines` (deviation 1); `cogs/community/role_menus.py` holds `put_option`, `drop_option`,
+> `grant_role`, `extend_role`, `revoke_grant`, `repost_if_live` (fork F-R3 (a)) and `AssignPick`
+> (deviation 7), with **no `StaffAssignView` and no `ALREADY_TIMED`** (deviations 5, 7);
+> `logkinds.ROUTINE` carries the `role_menu.*` family (deviation 10) and the `web.` prefix is
+> stripped before classification (`logkinds.bare` / `WEB`), so `web.role_menu.create` classifies as
+> `role_menu.create` under feature `rolemenu`. The sweep rows landed as **173–182** (deviation 13).
+> ⚠️ **NOT checked this pass:** anything in Discord or a browser — nothing booted, no menu posted,
+> no role changed.
+>
+> Before that, **2026-09-04** — every `path:line` below was READ against `main` at `bf3e447`
 > (the working tree is `4336a66`, one docs-only commit on top of it; no source file differs), in
 > `black_bloc/cogs/community/role_menus.py` (**2164 lines**), `black_bloc/rolegrants.py` (467),
 > `black_bloc/rolemenu_panels.py` (187), `black_bloc/panels.py` (194),
@@ -540,6 +571,10 @@ Settled first, by the standing rules, so they are **not** put to him:
 - ✅ **`/rolemenu` no longer vanishes when the mode is off** (`HIDDEN_WHEN_OFF`, §B). The owner
   answered this shape for applications ("Visible") and for memory (I-M1, "open it"), and here the
   mode ships **off**, so hiding it hides the only Discord way to turn it on.
+  🔴 **REVERSED at v78, 2026-09-05** — `rolemenu_mode` is back in `HIDDEN_WHEN_OFF` (14 entries),
+  because hiding became the `hide_commands_when_off` setting (default **true**) rather than a
+  per-feature decision. The Settings page and `/settings set-value` are the way back in, and
+  `/help` says how many are hidden. See the header.
 - ✅ **Staff may decide a request from the panel as well as from the card.** Staff-final-say, and
   `decide_request`'s conditional UPDATE makes two doors safe rather than racy.
 - ✅ **`End it now` exists at last.** Every stored decision gets a staff reversal; the website has had
@@ -707,6 +742,9 @@ listed here was built as §B–§H say. The header above is the CONDUCTOR's to f
     **on**), and the one real-tree test that pins the staff LOCK still loads the role-menus cog,
     because `/request` is a member command and could not have proved it. A new test says
     `rolemenu_mode` is not in `HIDDEN_WHEN_OFF` and `/rolemenu` is never hidden.
+    🔴 **Both of those sentences went stale one day later, at v78** — `HIDDEN_WHEN_OFF` has **14**
+    entries, `rolemenu_mode` among them, and `/rolemenu` IS hidden while the mode is off unless
+    `hide_commands_when_off` is turned off. See the header.
 
 12. **Two strings the design did not list were rewritten**, because they also named a command that
     no longer exists: `black_bloc/applications.py` (twice, `/role grant`) and
