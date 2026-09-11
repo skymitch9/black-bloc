@@ -1,13 +1,13 @@
 # Phase 3 design — temporary voice channels (F8) + honeypot (F9)
 
-> ⚠️ **The temp-voice half's COMMAND SURFACE is superseded by the panel (2026-09-03)** —
+> ⚠️ **The temp-voice half's COMMAND SURFACE is superseded by the panel (2026-09-03, v73 `4d64b36`)** —
 > `/voice` is now ONE member-visible command that opens an ephemeral panel, and the
 > `tempvoice` and `voice` groups and all twenty-two subcommands below are retired. See
 > [`voice-panel-design.md`](voice-panel-design.md). Everything else here — the join-to-create
 > behaviour, the per-channel control post (§ below, unchanged), the remembered preferences, the
 > honeypot half — still describes what is built.
 
-> ⚠️ **The honeypot half's COMMAND SURFACE is superseded by the panel (2026-09-05)** —
+> ⚠️ **The honeypot half's COMMAND SURFACE is superseded by the panel (2026-09-05, v79 `361eaa2`)** —
 > `/honeypot` is now ONE staff-only command that opens an ephemeral panel, and the `honeypot`
 > and `exempt` groups and all seven leaf subcommands named below (`setup`, `status`, `mode`,
 > `forget`, `exempt add|remove`, `logs`) are retired. See
@@ -15,8 +15,23 @@
 > catches, the shadow-first rollout, the exemption matrix, the test-mode containment — still
 > describes what is built, and this build changed none of it.
 
-> **Audience:** the Phase 3 build agent and the reviewer. **Status:** LOCAL
-> ONLY. **Last verified: 2026-08-26** — channel IDs from the same-day scan;
+> **Audience:** the Phase 3 build agent and the reviewer. **Status:** TRACKED ·
+> ✅ **LIVE since 2026-08-26** (honeypot in `shadow`) — deployed `2026-08-27T03:23:40Z` as
+> `808686c` (`deploys.log` line 6, `synced 8 app commands`); `DONE.md` → "2026-08-26 — Phase 3
+> live: temp voice (F8), honeypot (F9, shadow), role-menu rider (F17)". A same-night hotfix
+> (`8fe0677`, `2026-08-27T06:19:07Z`) made the temp-voice lobby joinable; the 2026-08-27
+> section at the foot (the panel moving into the voice chat) landed on top.
+> ⚠️ Fly release numbers were not written into `deploys.log` until **v59** (2026-09-03), so
+> this landing has a date and a commit but no `vNN`.
+> **Last verified: 2026-09-11 08:50** — re-checked against the tree at `1d090e5`:
+> `cogs/community/tempvoice.py` and `cogs/moderation/honeypot.py` exist; all **four**
+> `tempvoice_*` and all **four** `honeypot_*` keys named below are in `KEY_TYPES`;
+> `guard.owned_channel_ids`, `allows_channel`, `allows_place`, `allows_interaction`,
+> `refusal_message`, `tempvoice.panel_home` and `tempvoice.may_act_in` all exist (⚠️ `may_act_in`
+> lives in `cogs/community/tempvoice.py:678`, NOT in `guard.py` as the 2026-08-27 table's
+> placement implies). ⚠️ **NOT checked:** anything in Discord — no panel watched appearing in a
+> voice chat, no trap post, and the channel/role IDs below need a live scan.
+> Before that, **2026-08-26** — channel IDs from the same-day scan;
 > TempVoice behaviour from `reference-bots.md` (vendor docs via
 > `easy.tempvoice.xyz/llms.txt`); Honeypot vendor docs never state triggers or
 > exemptions, so those are ours by design. Depends on Phase 1 (settings store,
@@ -75,7 +90,9 @@ in the channel → transfer to the clicker), Transfer (user select).
 Every action → `log_action("tempvoice.<action>")` and updates `tempvoice_prefs`
 for name/limit/lock/hide so the next channel remembers.
 
-**Setup commands** (staff): `/tempvoice setup` — creates the creator channel
+**Setup commands** (staff) *(removed: the `tempvoice` and `voice` groups and all twenty-two
+subcommands retired at **v73**, 2026-09-03 — `/voice` opens the panel; see
+[`voice-panel-design.md`](voice-panel-design.md))*: `/tempvoice setup` — creates the creator channel
 named "join to create a channel" **directly above the AFK channel** (find
 `guild.afk_channel`; if none, above the channel named "You Still Here?";
 if neither, at the bottom of the voice area and say so) and stores its id;
@@ -119,7 +136,10 @@ affordance); `on` → `guild.ban(user, reason="Honeypot: posted in
 #<channel>", delete_message_days=purge_days)`, DM the user one sentence
 first (best-effort), log `honeypot.banned`.
 
-**Setup** (staff): `/honeypot setup [name]` — creates a text channel (default
+**Setup** (staff) *(removed: the `honeypot` and `exempt` groups and all seven leaf subcommands
+retired at **v79**, 2026-09-05 — `/honeypot` opens the panel; see
+[`honeypot-panel-design.md`](honeypot-panel-design.md), and note `honeypot.exempt_add`/
+`exempt_remove` became one `honeypot.exempt_set` there)*: `/honeypot setup [name]` — creates a text channel (default
 `🍯-do-not-post-here`) at the **bottom** of the channel list, `@everyone`
 can view + send, slowmode 0, and posts + pins the notice: *"This channel is
 a trap for bots. Do not post here — anything posted is treated as spam and
@@ -143,7 +163,9 @@ Small changes to `cogs/community/role_menus.py`, one commit:
    stored emoji string starts with `<`. Store emojis as strings as now.
 2. **Staff-assigned menus.** Add a third mode `staff` to `MODES`: the panel
    is NOT posted for self-serve; instead `/rolemenu assign <name> @member`
-   and `/rolemenu unassign <name> @member` (staff only) open an ephemeral
+   and `/rolemenu unassign <name> @member` *(removed: retired with the rest of the
+   `rolemenu`/`role` groups at **v77**, 2026-09-04 — the moves are controls on the `/rolemenu`
+   panel; see [`role-menus-panel-design.md`](role-menus-panel-design.md))* (staff only) open an ephemeral
    select of that menu's roles and apply the diff to the *target* member,
    logging `role_menu.assign` with actor and target. `post` refuses a
    `staff`-mode menu with a sentence saying what to use instead.
@@ -168,6 +190,7 @@ with the new menu.
   exempt role / manage_guild / plain member); mode matrix → action; test-mode
   refusal; DM + ban call order with a fake guild.
 - `tests/storage/test_db.py`: `SCHEMA_VERSION == 4`, new tables exist.
+  *(`SCHEMA_VERSION` is **34** today; the tables are still there.)*
 
 ## Definition of done
 
