@@ -1,10 +1,28 @@
 # Create a recurring poll from the website — design
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED. Last verified: **2026-09-06 11:05** —
-> every `path:name` below was read in the tree at `c29b007` (v94 code, merge `8405bea`). Owner decision
+> **Audience:** the build agent and reviewers. **Status:** TRACKED, ✅ **LIVE as v96** — branch
+> `recur-web`, merge **`c915ade`**, deployed **2026-09-06 11:39** Phoenix (`../deploys.log`); it
+> shipped in the same release as the Logs buttons
+> ([`logs-buttons-design.md`](logs-buttons-design.md)), landing entry in
+> [`../DONE.md`](../DONE.md). The owner's by-eye rows are **310–314** in
+> [`../access/sweeps.md`](../access/sweeps.md) (lettered `RW-a`–`RW-e` here; renumbered at the merge).
+> Owner decision
 > **2026-09-06 11:00**, verbatim: *"2. A"* — answering "the dashboard has no create-recurrence route:
 > (a) add a dashboard form, or (b) Discord-only". The Polls page can already see, pause, resume and
 > delete recurrences; it can now also **make** one, the way Discord's `/poll` recurrence step does.
+>
+> **Last verified: 2026-09-11 08:33** (the header; the body is as at the build). Measured this pass
+> against `main` at `f3ae743` (v108 live): `api/tools/polls.py` carries `@router.post("/recurrences")`
+> beside the pause / resume / delete routes, plus `_asked_for`, `RECUR_CREATED_SAID`,
+> `_refuse_outside_the_test_channel_id` and `Refused(400, "not_a_recurrence", RECUR_NOT_A_DATE)`;
+> `black_bloc/polls.py` still owns `cadence_token`, `next_occurrence`, `describe_cadence`,
+> `RECUR_SAVED` and `RECUR_NOT_A_DATE`; `site/public/assets/page-polls.js` posts to
+> `/api/polls/recurrences` and its `NO_RECUR` line names the Create-a-poll form; there is still **no
+> `poll_recurring` key** in `settings_store.py`. `site/mock/contract.json` reads **150 routes, 17
+> pages, 14 core settings** (counted from the file — the live `check.mjs` needs the mock server up,
+> which was not started this pass). ⚠️ **NOT checked this pass:** anything in Discord or a browser —
+> no recurrence was created, no page was opened, the bot was not booted. Before that, **2026-09-06
+> 11:05** — every `path:name` below was read in the tree at `c29b007` (v94 code, merge `8405bea`).
 
 ## 1. What exists
 
@@ -22,7 +40,8 @@
   `actor_for(bot, who, guild)` and `via=VIA_WEBSITE`. The router carries `staff_dependency`.
 - **Site:** `site/public/assets/page-polls.js:createForm` posts `/api/polls`;
   `recurringSection` lists recurrences with pause/delete. The mock (`site/mock/server.mjs`) and
-  `site/mock/contract.json` describe **149 routes**.
+  `site/mock/contract.json` describe **149 routes** (that was the count before this build; it is
+  **150** from v96 onwards, and still 150 at v108 — this route is the one that was added).
 
 ## 2. Rules
 
@@ -73,7 +92,8 @@ Mock: `node site/mock/check.mjs` → `ok - 17 pages, 150 routes, N core settings
 ## 6. Prove before merge, and the sweep rows
 
 `ruff` clean; full suite `-n auto` forward and `BB_REVERSE=1`; mock check; `python -m black_bloc`
-NOT booted in a worktree — say so. Sweep rows lettered `RW-a…` in `docs/access/sweeps.md`: create
+NOT booted in a worktree — say so. Sweep rows lettered `RW-a…` in `docs/access/sweeps.md`
+(**renumbered 310–314 at the merge**): create
 a weekly recurrence from https://blackbloc.heygabi.ai/polls.html and see it in the recurring list
 with the right next-run; a bad time refused in a sentence; Discord's `/poll` panel shows the same
 recurrence with its stop-repeating card. Code notes: `# Recurrence create, website` at the foot of
@@ -83,7 +103,8 @@ differed, and why.
 ## Deviations
 
 Built on branch `recur-web` off `main` at `b428236`, in a worktree at `C:/lcw/bb-recur-web`,
-2026-09-06. The design was followed as written; these are the places the build made a call it
+2026-09-06. **Status: ✅ LIVE v96 — merged `c915ade`, deployed 2026-09-06 11:39.**
+The design was followed as written; these are the places the build made a call it
 did not spell out, plus one thing it got wrong.
 
 1. **§3's "same gates" resolved to `poll_mode` + staff — there is no recurrence key.** The
@@ -92,7 +113,10 @@ did not spell out, plus one thing it got wrong.
    `settings_store.py` has no `poll_recurring`. The router's `staff_dependency` already
    covers the staff half (and `may_create` with it), so the route adds exactly one gate:
    `409 polls_off` carrying the cog's own `POLLS_OFF`, in the shape `api/tools/rolemenus.py`
-   uses for `ROLE_MENUS_OFF`.
+   uses for `ROLE_MENUS_OFF`. **Since v97** the one-off `POST /api/polls` got the same gate — it was
+   deliberately left alone here and reported as a finding, then closed by the loop-guard build
+   ([`loop-guard-design.md`](loop-guard-design.md) §2.4). `api/tools/polls.py` now raises
+   `Refused(409, "polls_off", POLLS_OFF)` at **both** creation routes.
 2. **A gate the design did not name: a DATE poll cannot recur.** `CadenceModal.on_submit`
    refuses one with `polls.RECUR_NOT_A_DATE`, so the route does too (400, before any row),
    and the page hides the whole Repeat block for that kind rather than offering a control
