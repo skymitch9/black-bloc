@@ -58,6 +58,7 @@ from black_bloc.events import (
     write_settings,
     zone_line,
 )
+from black_bloc.linkcheck import LINK_MISSING, LINK_OK, LINK_UNREACHABLE
 from black_bloc.timezones import START_EXAMPLE, local_time, unix
 from black_bloc.when_picker import WhenDraft
 
@@ -870,9 +871,14 @@ def test_a_link_typed_beside_a_channel_reads_back_off_the_row_with_the_channel()
 
 
 def test_the_where_line_says_the_channel_and_the_link_when_there_are_both():
-    assert events.where_line(Where(WHERE_VOICE, 55, "twitch.tv/bb")) == "<#55> · twitch.tv/bb"
-    assert events.where_line(Where(WHERE_TEXT, 56, "twitch.tv/bb")) == "<#56> · twitch.tv/bb"
+    masked = "[twitch.tv/bb](https://twitch.tv/bb)"
+
+    assert events.where_line(Where(WHERE_VOICE, 55, "twitch.tv/bb")) == f"<#55> · {masked}"
+    assert events.where_line(Where(WHERE_TEXT, 56, "twitch.tv/bb")) == f"<#56> · {masked}"
     assert events.where_line(Where(WHERE_VOICE, 55, "")) == "<#55>"
+    assert events.where_line(Where(WHERE_VOICE, 55, "twitch.tv/bb"), linked=False) == (
+        "<#55> · twitch.tv/bb"
+    )
 
 
 def test_a_button_label_says_the_channel_and_the_link_in_words():
@@ -912,8 +918,10 @@ def test_the_three_spellings_of_nowhere_still_collapse_to_one_unset():
 def test_the_link_is_appended_to_the_description_only_for_a_channel_kind():
     beside = Where(WHERE_VOICE, 55, "twitch.tv/bb")
 
-    assert events.described_with_where("bring a chair", beside) == "bring a chair\n\ntwitch.tv/bb"
-    assert events.described_with_where("", beside) == "twitch.tv/bb"
+    assert events.described_with_where("bring a chair", beside) == (
+        "bring a chair\n\nhttps://twitch.tv/bb"
+    )
+    assert events.described_with_where("", beside) == "https://twitch.tv/bb"
     assert events.described_with_where("bring a chair", beside, appended=False) == "bring a chair"
     assert (
         events.described_with_where("bring a chair", Where(WHERE_OTHER, None, "the park"))
@@ -946,7 +954,6 @@ def test_a_link_is_one_token_with_a_scheme_and_a_place_is_not_a_link():
     assert events.where_link("the park") is None
     assert events.where_link("the.bar at 8") is None
     assert events.where_link("https://a.com https://b.com") is None
-    assert events.where_link("twitch.tv/bb") is None
     assert events.where_link("") is None
     assert events.where_link(None) is None
 
@@ -1030,6 +1037,138 @@ def test_a_button_label_never_masks_a_link_because_a_label_cannot_carry_one():
     assert events.where_button_label(Where(WHERE_OTHER, None, "https://twitch.tv/bb")) == (
         "Where: https://twitch.tv/bb"
     )
+
+
+# Follow-up 4 (`docs/info/where-picker-design.md` § Follow-up 4): a shorthand becomes a link.
+
+
+def test_a_bare_host_is_a_link_with_or_without_a_path():
+    assert events.where_link("twitch.tv/skyaiva") == "https://twitch.tv/skyaiva"
+    assert events.where_link("kick.com") == "https://kick.com"
+    assert events.where_link("youtube.com/@skyaiva") == "https://youtube.com/@skyaiva"
+    assert events.where_link("discord.gg/baf") == "https://discord.gg/baf"
+    assert events.where_link("TWITCH.TV/SkyAiva") == "https://TWITCH.TV/SkyAiva"
+    assert events.where_link("  twitch.tv/skyaiva  ") == "https://twitch.tv/skyaiva"
+
+
+def test_a_number_and_a_one_letter_tld_are_not_hosts():
+    """`8.30` is a time and `e.g` is an abbreviation; a TLD is letters, and at least two."""
+    assert events.where_link("8.30") is None
+    assert events.where_link("e.g") is None
+    assert events.where_link("7.30pm") is None
+    assert events.where_link("meet.me at the.bar") is None
+    assert events.where_link("the park") is None
+
+
+def test_a_shorthand_becomes_the_link_it_means():
+    assert events.where_typed("ttv/skyaiva") == "https://twitch.tv/skyaiva"
+    assert events.where_typed("ttv skyaiva") == "https://twitch.tv/skyaiva"
+    assert events.where_typed("TTV/SkyAiva") == "https://twitch.tv/SkyAiva"
+    assert events.where_typed("kick/skyaiva") == "https://kick.com/skyaiva"
+    assert events.where_typed("discord/baf") == "https://discord.gg/baf"
+
+
+def test_a_leading_at_is_stripped_so_a_template_never_renders_two():
+    assert events.where_typed("yt @skyaiva") == "https://youtube.com/@skyaiva"
+    assert events.where_typed("yt skyaiva") == "https://youtube.com/@skyaiva"
+    assert events.where_typed("ig/@skyaiva") == "https://instagram.com/skyaiva"
+
+
+def test_anything_that_is_not_two_readable_parts_is_left_as_words():
+    assert events.where_typed("nope/skyaiva") == "nope/skyaiva"
+    assert events.where_typed("ttv/sky/aiva") == "ttv/sky/aiva"
+    assert events.where_typed("ttv sky aiva") == "ttv sky aiva"
+    assert events.where_typed("ttv/") == "ttv/"
+    assert events.where_typed("ttv @") == "ttv @"
+    assert events.where_typed("the park") == "the park"
+    assert events.where_typed("") == ""
+    assert events.where_typed(None) == ""
+    assert events.where_typed("ttv/" + "x" * 65) == "ttv/" + "x" * 65
+
+
+def test_a_link_typed_in_full_is_never_run_through_the_table():
+    assert events.where_typed("https://twitch.tv/skyaiva") == "https://twitch.tv/skyaiva"
+    assert events.where_typed("twitch.tv/skyaiva") == "twitch.tv/skyaiva"
+
+
+def test_the_table_is_staff_editable_so_where_typed_takes_its_own():
+    mine = "cb=https://caffeine.tv/{handle}"
+
+    assert events.where_typed("cb/skyaiva", mine) == "https://caffeine.tv/skyaiva"
+    assert events.where_typed("ttv/skyaiva", mine) == "ttv/skyaiva"
+    assert events.where_typed("cb/skyaiva", "") == "cb/skyaiva"
+
+
+def test_the_website_door_normalises_a_shorthand_too():
+    guild = FakeWhereGuild(FakeChannel(55, "voice", "Raid Night"))
+
+    assert events.checked_where(guild, WHERE_OTHER, None, "ttv skyaiva") == (
+        Where(WHERE_OTHER, None, "https://twitch.tv/skyaiva"),
+        "",
+    )
+    assert events.checked_where(guild, WHERE_VOICE, 55, "yt @skyaiva") == (
+        Where(WHERE_VOICE, 55, "https://youtube.com/@skyaiva"),
+        "",
+    )
+    assert events.checked_where(guild, WHERE_OTHER, None, "the park") == (
+        Where(WHERE_OTHER, None, "the park"),
+        "",
+    )
+
+
+def test_a_bare_host_stored_before_this_build_still_reaches_the_calendar_with_its_scheme():
+    """The row keeps what was typed; the description is where the scheme is put back."""
+    said = events.described_with_where("bring a chair", Where(WHERE_VOICE, 55, "twitch.tv/bb"))
+
+    assert said == "bring a chair\n\nhttps://twitch.tv/bb"
+    assert events.described_with_where("bring a chair", Where(WHERE_VOICE, 55, "the park")) == (
+        "bring a chair\n\nthe park"
+    )
+
+
+def test_the_draft_s_where_line_carries_the_note_and_the_row_never_does():
+    draft = a_draft(title="Cookout", where=Where(WHERE_OTHER, None, "https://twitch.tv/bb"))
+    draft.where_note = "that page answered 404 — check the name"
+
+    assert "**Where** — [twitch.tv/bb](https://twitch.tv/bb) — ⚠️ that page answered 404" in (
+        "\n".join(events.draft_lines(draft, NOW, chosen=True))
+    )
+    assert events.EventDraft().where_note == ""
+    assert "where_note" not in events.described_with_where("x", draft.where)
+
+
+def test_a_draft_with_nowhere_set_still_says_so_before_the_note():
+    draft = a_draft(title="Cookout")
+    draft.where_note = "nothing.example did not answer within 2 s"
+
+    assert "**Where** — (not set) — ⚠️ nothing.example did not answer" in "\n".join(
+        events.draft_lines(draft, NOW, chosen=True)
+    )
+
+
+def test_the_note_names_the_trouble_and_says_the_link_was_kept():
+    assert events.where_note(LINK_MISSING, "https://youtube.com/@nope", 2) == (
+        "that page answered 404 — check the name"
+    )
+    assert events.where_note(LINK_UNREACHABLE, "https://slow.example/x", 2) == (
+        "slow.example did not answer within 2 s — the link is kept as typed"
+    )
+    assert events.where_note(LINK_OK, "https://twitch.tv/bb", 2) == ""
+
+
+def test_the_refusing_mode_names_the_link_the_trouble_and_the_way_out():
+    missing = events.where_refused(LINK_MISSING, "https://youtube.com/@nope", 2)
+
+    assert "https://youtube.com/@nope" in missing
+    assert "404" in missing and "misspelt" in missing
+    assert "events_where_link_check" in missing and "warn" in missing
+    assert "nowhere was saved and the old place was kept" in missing
+
+    unreachable = events.where_refused(LINK_UNREACHABLE, "https://slow.example/x", 3)
+
+    assert "https://slow.example/x" in unreachable and "3 seconds" in unreachable
+    assert "events_where_link_check" in unreachable
+    assert not any(said.isdigit() and len(said) == 3 for said in unreachable.split())
 
 
 # Follow-up 3 (`docs/info/where-picker-design.md` § Follow-up 3): a refused event's room counts

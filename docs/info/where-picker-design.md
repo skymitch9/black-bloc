@@ -15,7 +15,15 @@
 > `EventDraft`/`draft_lines`, `update_event`, `create_scheduled_event`), `cogs/community/events.py`
 > (`build_draft`, `EventTextModal`, the staff `EditModal`), `storage/db.py` (`events` table, schema
 > **33**), `api/tools/events.py`, `site/public/assets/page-events.js`, and `site/public/assets/api.js`
-> (`/api/ref/channels` is already cached client-side). Sibling: [`when-picker-design.md`](when-picker-design.md)
+> (`/api/ref/channels` is already cached client-side). ⚠️ **The FOUR follow-up sections below this one are each their own
+> build with their own status line and their own deviations foot** — §1–§8 and the `## Deviations`
+> foot describe the FIRST build only, and the header above is that build's. The newest is
+> **`## Follow-up 4`**, 🔨 BUILT 2026-09-11 00:21 on branch `where-smart` off `main` at `9fc3a33`
+> — ⚠️ NOT merged, NOT deployed, never seen in Discord; measured there: suite **5502 → 5546**
+> forward and `BB_REVERSE=1`, `ruff` clean, `node site/mock/check.mjs` *ok - 17 pages, 150 routes,
+> 14 core settings, all keys present*, registry keys **199 → 202**, schema unchanged at **34**.
+> ⚠️ NOT re-verified for follow-up 4: everything in §1–§8 and in follow-ups 1–3, which were read
+> but not re-measured. Sibling: [`when-picker-design.md`](when-picker-design.md)
 > — same panel, same rules, `WherePanel` is `ZonePanel`'s twin.
 
 ## 1. What the owner asked (2026-09-10 16:11, verbatim)
@@ -447,8 +455,9 @@ Two commits on the build branch: Follow-up 2 first, Follow-up 3 second, each wit
 
 ## Follow-up 4 — a SHORTHAND becomes a link, and the link is checked first (owner, 2026-09-10 23:5x, verbatim: "Can we do some smart work to make it a link / Like twitch.tv/skyaiva or ttv/skyaiva or yt skyaiva / We go and make those into links / Maybe even curl them first?")
 
-> **Status: 📐 DESIGNED 2026-09-11 00:01** — not built. Measurements and every departure go in a
-> **`## Follow-up 4 deviations`** foot the build writes.
+> **Status: 🔨 BUILT on branch `where-smart` off `main` at `9fc3a33`** (commits `6e81d83` part A,
+> `a876540` part B, `af63b63` docs) — ⚠️ **NOT merged, NOT deployed, never seen in Discord.**
+> Measurements and every departure are the **`## Follow-up 4 deviations`** foot.
 
 Follow-up 2 only recognises `https://…`, `http://…` and `www.…` (`where_link`). The owner types
 `twitch.tv/skyaiva`, `ttv/skyaiva` or `yt skyaiva` and wants each to become the link it obviously means —
@@ -544,3 +553,134 @@ silent; the aliases key edited on Settings; the old-row case), `info/code-notes.
 
 **What does NOT change.** Schema 34. `where_said`, `add_open_link`, the guard, the sweep,
 `knowledge.event_where` (still `linked=False`). No new log kind — the check logs at `debug` only.
+
+
+## Follow-up 4 deviations
+
+> Written at the build, 2026-09-11 00:2x, on branch `where-smart` off `main` at `9fc3a33`
+> (commits `6e81d83` part A, `a876540` part B, `af63b63` docs). **Status: 🔨 BUILT — ⚠️ NOT merged,
+> NOT deployed.** ⚠️ **NOTHING here has met Discord**: no test can click a Discord button,
+> `python -m black_bloc` was NOT booted (a worktree holds no token), no browser rendered the
+> Settings page, TEST_MODE makes no scheduled event at all, and — new for this build — **no link was
+> ever actually opened**: every test injects `fetch`, and `tests/conftest.py:no_test_ever_opens_a_link`
+> turns a real GET into an `AssertionError`, so the aiohttp path in `linkcheck.py` is the one piece of
+> this build that has never been executed at all. What IS measured: the suite (**5502 → 5546**,
+> forward and `BB_REVERSE=1`, both green), `ruff check black_bloc tests` (clean), the JS asset parse
+> the deploy script runs, and `node site/mock/check.mjs` (*ok - 17 pages, 150 routes, 14 core
+> settings, all keys present*). Keys **199 → 202** by `len(KEY_TYPES)`; schema unchanged at **34**.
+> The owner's by-eye rows are **343–350** in [`../access/sweeps.md`](../access/sweeps.md).
+
+- **H1 (build) `fetch` is injected through a MODULE-LEVEL hook, `cogs/community/events.py:LINK_FETCH`,
+  and the brief's choice is recorded here.** The brief offered a module hook or a cog attribute. The
+  modal is built by Discord from a button callback — `WhereModal(self.view)` — so no test can reach
+  its constructor to pass anything in, and the cog instance is not on the path either
+  (`WhereModal.on_submit` has `interaction.client` and `self.previous`, not the cog). A module
+  attribute is the smallest seam that both of those can see: `LINK_FETCH: Any = None` beside
+  `CARD_LINK_ROWS`, handed straight to `link_answers(..., fetch=LINK_FETCH)`, which falls back to
+  `linkcheck.aiohttp_status` when it is `None`. Tests set it with
+  `monkeypatch.setattr(events_cog, "LINK_FETCH", fetch)` in an autouse `link_check` fixture.
+- **H2 (build) A SECOND, suite-wide guard was added that the spec did not ask for:
+  `tests/conftest.py:no_test_ever_opens_a_link`.** § Follow-up 4 B says "every test injects `fetch`",
+  which is a rule prose cannot enforce — and it was already being broken before the fixture existed:
+  the pre-existing cog test `test_other_types_a_place_and_an_empty_box_clears_it` types
+  `twitch.tv/blackbloc`, which part A turns into a link, which the default `warn` mode then tried to
+  open for real. The autouse fixture replaces `linkcheck.aiohttp_status` with one that raises, so a
+  test that forgets to inject fails loudly instead of quietly reaching the internet. Mechanical guard
+  over written advice, per the global rule.
+- **H3 (build) `checked_where` normalises the ALIAS shape but leaves a bare host exactly as typed.**
+  § Follow-up 4 A says shape 1 is "render-time in `where_link`" and shape 2 runs "at entry, once", so
+  this follows the spec — but it is worth stating because the two doors then store different strings
+  for what a person would call the same thing: `ttv/skyaiva` is stored as
+  `https://twitch.tv/skyaiva`, while `twitch.tv/skyaiva` is stored verbatim and only grows its scheme
+  when it is drawn. That is deliberate: rewriting stored text would need a migration to be
+  consistent, and shape 1 exists precisely so old rows need none.
+- **H4 (build) The three constants live in `settings_store.py`, not `events.py`, and there are more
+  of them than the spec names.** § Follow-up 4 A asks for `WHERE_ALIASES_KEY`, `WHERE_ALIASES` and
+  `WHERE_ALIAS_MAX = 32`. They sit in `settings_store.py` beside `EVENTS_SCHEDULED_NAME_KEY` /
+  `EVENTS_SCHEDULED_NAME_TEMPLATE`, which is the existing pattern for a key whose default is a
+  string, and `events.py` imports them (the arrow already exists; the reverse one does not). The
+  build also added `HANDLE_PLACEHOLDER`, `WHERE_CHECK_KEY`, `WHERE_CHECK_OFF` / `WHERE_CHECK_WARN` /
+  `WHERE_CHECK_REFUSE` / `WHERE_CHECK_MODES` / `WHERE_CHECK_MODE`, `WHERE_CHECK_SECONDS_KEY`,
+  `WHERE_CHECK_SECONDS`, `WHERE_CHECK_MIN_SECONDS` and `WHERE_CHECK_MAX_SECONDS` — the spec named the
+  values but not the constants, and the cog comparing `mode != "off"` against a bare string is
+  exactly what the registry exists to stop.
+- **H5 (build) The alias TABLE PARSER is `settings_store.where_alias_table`, shared by the checker
+  and by `where_typed`.** § Follow-up 4 A describes the checker only. Writing the parse twice — once
+  to validate, once to use — is the near-duplicate the review checklist warns about, and the two
+  copies would have disagreed the first time a rule changed. `where_alias_table` is lenient (drop
+  what cannot be read, first spelling of an alias wins, stop at 32); `checked_aliases` is the thin
+  half that calls it and raises `NO_LINK_ALIAS` when nothing survives.
+- **H6 (build) The template is rejected unless its placeholders are EXACTLY `["handle"]`, which is
+  stricter than "contains `{handle}` exactly once".** A template like
+  `x=https://x.com/{who}/{handle}` contains `{handle}` exactly once and would pass the spec's test —
+  then raise `KeyError` inside `.format` at the moment a person typed `x/someone`, turning a settings
+  value into a crash at use time (checklist 17). Comparing the whole placeholder list rejects strays
+  and duplicates together.
+- **H7 (build) `where_typed` asks `where_link` FIRST, before it tries to split.** The spec does not
+  say in what order the two shapes are tried. Asking `where_link` first makes "a thing that is
+  already a link is never rewritten" true by construction rather than by accident of the alias table
+  not containing `twitch.tv`.
+- **H8 (build) The draft note is carried on the WherePanel and copied onto the draft by
+  `take_draft_where`, which is what makes it clear itself.** § Follow-up 4 B says `EventDraft` gains
+  `where_note` and that "the note is cleared whenever Where is set again", without saying how the
+  modal — which holds a `WherePanel`, not an `EventDraft` — reaches it. `WhereModal.on_submit` writes
+  `self.previous.where_note`; `WherePanel.__init__` sets it to `""`; `take_draft_where` copies it
+  unconditionally. Every other Where move (the channel select, **Clear**) goes through the same
+  copy with the panel's empty default, so clearing is automatic rather than remembered.
+- **H9 (build) `where_note` and `where_refused` are functions in `events.py`, not strings formatted
+  in the cog.** § Follow-up 4 B names four constants. The cog is not the home of any fact (the same
+  argument as G9 in the previous build), so the verdict → sentence mapping lives beside the
+  constants, and the cog reads `where_note(verdict, url, seconds)`.
+- **H10 (build) The refusal sentences are longer than the spec's sketch, and name the SETTING.** The
+  brief requires "what happened, what it needs, and how to get it". Each refusal says the link
+  answered 404 (or did not answer in N seconds), that nothing was saved and the old place was kept,
+  and that a Lead can set `events_where_link_check` to warn. The `warn` note is the short form,
+  because a draft line has no room for three clauses.
+- **H11 (build) `linkcheck.aiohttp_status` builds and closes a session per call, unlike
+  `groq.py`.** `groq.py` keeps a session because it talks to one host continuously. This makes at
+  most one request per modal submission, so a cached session would be a lifecycle to own — and a
+  loop-bound object to worry about — in a module that otherwise has no state at all.
+- **H12 (build) `link_answers("")` is `LINK_UNREACHABLE` and never calls `fetch`.** The spec does not
+  say what an empty url does. It cannot happen from the modal (the check only runs when `where_link`
+  returned an href), but returning `LINK_OK` for nothing would be the wrong default for the one case
+  where a caller is confused.
+- **H13 (build) Eight pre-existing assertions changed, because `twitch.tv/bb` is now a link.** Three
+  tests in `tests/test_events.py` and three in `tests/cogs/community/test_events.py` used a bare host
+  as an example of "typed text", which part A promotes to a link: the Where line is now masked, and
+  the scheduled event's description now carries `https://twitch.tv/bb`. The stored `location` is
+  unchanged in every one of them (see H3), which is the assertion that proves no migration is needed.
+- **H14 (docs) Sweep rows are 343–350 — eight, where § Follow-up 4 sketches roughly eight cases but
+  bundles some.** One row per thing the owner has to see by eye: the four shorthand spellings (343),
+  a bare host including the old-row case (344), the things that only look like hosts (345), the
+  shorthand that does not resolve (346), the 404 note in `warn` (347, the one that needs a real
+  internet connection), `refuse` / `off` / the seconds bounds (348), the aliases key edited on
+  Settings (349), and a shorthand beside a channel with the **Open link** button (350).
+- **H15 (could NOT do) The three-second budget is UNTESTED against the real thing.** The check runs
+  before the modal is answered, so a slow link eats into Discord's three-second window and then the
+  panel still has to render. `events_where_link_check_seconds` is capped at 3 and defaults to 2 for
+  that reason, but nothing here measured how long the render actually takes — no bot was booted. If
+  the owner sees "This interaction failed" on a slow link, the first move is
+  `events_where_link_check_seconds` → 1, and the second is `events_where_link_check` → off.
+- **H16 (build → MEASURED at review) The `twitch.tv` caveat was asserted by the build; the review
+  measured it.** The build could not open a link (the network is off limits under pytest), so the
+  owner guide and sweep row **347** carried the caveat as a thing to confirm. The review (2026-09-11
+  00:3x, the real `aiohttp_status` from the worktree, `seconds=2`) opened each default alias host with
+  a real handle and a made-up one. Measured: **`twitch.tv`, `kick.com`, `tiktok.com`, `instagram.com`,
+  `x.com` and `discord.gg` answer 200 for ANY name** (single-page apps — the 404 happens in the
+  browser, not in the response); **`youtube.com/@…` answers 404 for a missing handle and 200 for a
+  real one**; a dead host is `ClientConnectorDNSError` → `unreachable` in 0.02 s. So under the default
+  table the check catches a typo'd HOST and a wrong YouTube handle, and nothing else; a wrong Twitch,
+  Kick, TikTok, Instagram, X or Discord name passes. Also measured: `kick.com` timed out once at 2 s on
+  its first probe and answered in 0.14 s afterwards, so a spurious "did not answer" note on Kick is
+  possible and the note's wording ("the link is kept as typed") is honest about it. And
+  `youtube.com/@skyaiva` — the owner's own example — answered **404**: that handle does not exist on
+  YouTube, so `yt skyaiva` will show the note until the owner types the handle YouTube actually has.
+- **H17 (review fix) `x.com` needed the header limits raised, or every X link was "did not
+  answer".** aiohttp's default `max_field_size` is 8190 bytes, and `x.com` sends a response header
+  (its 200 for a handle that does not exist, and the redirect from `twitter.com`) longer than that,
+  so the GET raised `ClientResponseError: 400, Got more than 8190 bytes when reading …` — which
+  `link_answers` classified as `unreachable`, a false "did not answer" for a host that had answered.
+  Fix: `aiohttp_status` builds its session with `max_line_size` and `max_field_size` at
+  `HEADER_BYTES = 65536`; re-probed, `x.com` is `ok` in 0.28 s for a missing handle and 0.46 s for a
+  real one. Nothing else changed; the fix cannot be unit-tested (the conftest guard forbids a real
+  GET, and an injected `fetch` never sees the session), so it is recorded here as a measurement.

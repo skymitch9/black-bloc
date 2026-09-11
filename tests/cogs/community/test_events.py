@@ -64,6 +64,11 @@ from black_bloc.settings_store import (
     EVENTS_TEST_RETENTION_KEY,
     TIME_STEP_KEY,
     TIMEZONE_CHOICES_KEY,
+    WHERE_ALIASES_KEY,
+    WHERE_CHECK_KEY,
+    WHERE_CHECK_OFF,
+    WHERE_CHECK_REFUSE,
+    WHERE_CHECK_SECONDS_KEY,
     SettingsStore,
 )
 from black_bloc.timezones import (
@@ -423,6 +428,27 @@ class FakeInteraction:
 async def action_kinds(db):
     cur = await db.conn.execute("SELECT kind FROM action_log ORDER BY id")
     return [row["kind"] for row in await cur.fetchall()]
+
+
+class FakeLinkCheck:
+    """The injected `fetch`: what it was asked, and what the page is told to answer."""
+
+    def __init__(self, status=200):
+        self.status = status
+        self.asked = []
+
+    async def __call__(self, url, *, seconds, headers):
+        self.asked.append({"url": url, "seconds": seconds, "headers": headers})
+        if isinstance(self.status, Exception):
+            raise self.status
+        return self.status
+
+
+@pytest.fixture(autouse=True)
+def link_check(monkeypatch):
+    fetch = FakeLinkCheck()
+    monkeypatch.setattr(events_cog, "LINK_FETCH", fetch)
+    return fetch
 
 
 @pytest.fixture
@@ -2813,7 +2839,9 @@ async def test_picking_a_channel_keeps_the_link_that_was_already_typed(cog, bot,
     back = await click(bot, member, pick(picker, [FakePicked(VOICE_CHANNEL, "voice")]))
 
     assert view.fields.where == Where(WHERE_VOICE, VOICE_CHANNEL, "twitch.tv/blackbloc")
-    assert f"<#{VOICE_CHANNEL}> · twitch.tv/blackbloc" in card_embed(back).description
+    assert f"<#{VOICE_CHANNEL}> · [twitch.tv/blackbloc](https://twitch.tv/blackbloc)" in (
+        card_embed(back).description
+    )
 
 
 async def test_the_box_beside_a_channel_stores_both_and_leaves_the_channel_alone(
@@ -2832,7 +2860,9 @@ async def test_the_box_beside_a_channel_stores_both_and_leaves_the_channel_alone
     await modal.on_submit(typed)
 
     assert view.fields.where == Where(WHERE_VOICE, VOICE_CHANNEL, "twitch.tv/blackbloc")
-    assert f"<#{VOICE_CHANNEL}> · twitch.tv/blackbloc" in card_embed(typed).description
+    assert f"<#{VOICE_CHANNEL}> · [twitch.tv/blackbloc](https://twitch.tv/blackbloc)" in (
+        card_embed(typed).description
+    )
 
 
 async def test_the_box_beside_a_channel_opens_on_what_is_already_there_and_empties_to_nothing(
@@ -2895,7 +2925,7 @@ async def test_the_calendar_entry_carries_the_link_in_its_description(cog, bot, 
     await approve(bot, lead, row["id"])
 
     made = bot.guild.scheduled[0].kwargs
-    assert made["description"] == "bring a chair\n\ntwitch.tv/blackbloc"
+    assert made["description"] == "bring a chair\n\nhttps://twitch.tv/blackbloc"
     assert made["entity_type"] is discord.EntityType.voice
     assert "location" not in made
 
@@ -3174,6 +3204,184 @@ async def test_the_draft_never_gets_the_open_link_button_because_it_would_come_a
         picked, view = await a_draft_with_a_link(cog, bot, member, full=full)
         assert find_open_link(view) is None
         assert "[twitch.tv/bb](https://twitch.tv/bb)" in card_embed(picked).description
+
+
+# Follow-up 4 (`docs/info/where-picker-design.md` § Follow-up 4): a shorthand becomes a link, and
+# the link is tried once before it is kept. Every test here injects `fetch` — see `link_check`.
+
+
+async def type_where(cog, bot, member, typed, *, where=WHERE_UNSET):
+    """The Where box on the draft, opened and submitted; the answering interaction comes back."""
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.where = where
+    _shown, panel = await open_where(cog, bot, member, view)
+    button = events_pure.WHERE_LINK_BUTTON if where.channel_id else events_pure.WHERE_OTHER_BUTTON
+    opened_modal = await click(bot, member, find_item(panel, button))
+    modal = opened_modal.response.modals[0]
+    modal.place._value = typed
+    answering = FakeInteraction(bot, member)
+    await modal.on_submit(answering)
+    return view.fields, answering
+
+
+async def test_a_shorthand_typed_into_the_box_is_stored_as_the_link_it_means(
+    cog, bot, member, link_check
+):
+    fields, answering = await type_where(cog, bot, member, "ttv skyaiva")
+
+    assert fields.where == Where(WHERE_OTHER, None, "https://twitch.tv/skyaiva")
+    assert fields.where_note == ""
+    assert [one["url"] for one in link_check.asked] == ["https://twitch.tv/skyaiva"]
+    assert "[twitch.tv/skyaiva](https://twitch.tv/skyaiva)" in card_embed(answering).description
+
+
+async def test_warn_keeps_the_link_and_puts_the_reason_on_the_draft(cog, bot, member, link_check):
+    link_check.status = 404
+
+    fields, answering = await type_where(cog, bot, member, "yt no-such-handle-xyz")
+
+    assert fields.where == Where(WHERE_OTHER, None, "https://youtube.com/@no-such-handle-xyz")
+    assert fields.where_note == events_pure.WHERE_NOTE_MISSING
+    assert "⚠️ that page answered 404" in card_embed(answering).description
+
+
+async def test_warn_says_so_in_words_when_the_page_never_answers(cog, bot, member, link_check):
+    link_check.status = TimeoutError()
+
+    fields, answering = await type_where(cog, bot, member, "https://slow.example/x")
+
+    assert fields.where == Where(WHERE_OTHER, None, "https://slow.example/x")
+    assert "slow.example did not answer within 2 s" in fields.where_note
+    assert "⚠️ slow.example did not answer" in card_embed(answering).description
+
+
+async def test_the_note_is_cleared_the_next_time_where_is_set(cog, bot, member, link_check):
+    link_check.status = 404
+    _opened, view = await open_draft_panel(cog, bot, member)
+    _shown, panel = await open_where(cog, bot, member, view)
+    opened_modal = await click(bot, member, find_item(panel, events_pure.WHERE_OTHER_BUTTON))
+    modal = opened_modal.response.modals[0]
+    modal.place._value = "yt no-such-handle-xyz"
+    await modal.on_submit(FakeInteraction(bot, member))
+    assert view.fields.where_note == events_pure.WHERE_NOTE_MISSING
+
+    link_check.status = 200
+    _shown, panel = await open_where(cog, bot, member, view)
+    again = await click(bot, member, find_item(panel, events_pure.WHERE_OTHER_BUTTON))
+    again.response.modals[0].place._value = "the park"
+    answering = FakeInteraction(bot, member)
+    await again.response.modals[0].on_submit(answering)
+
+    assert view.fields.where == Where(WHERE_OTHER, None, "the park")
+    assert view.fields.where_note == ""
+    assert "⚠️" not in card_embed(answering).description
+
+
+async def test_picking_a_channel_clears_a_note_the_box_left_behind(cog, bot, member, link_check):
+    """The note belongs to the link that was typed, so any other Where move drops it."""
+    with_channels(bot)
+    link_check.status = 404
+    _opened, view = await open_draft_panel(cog, bot, member)
+    _shown, panel = await open_where(cog, bot, member, view)
+    opened_modal = await click(bot, member, find_item(panel, events_pure.WHERE_OTHER_BUTTON))
+    opened_modal.response.modals[0].place._value = "yt no-such-handle-xyz"
+    await opened_modal.response.modals[0].on_submit(FakeInteraction(bot, member))
+    assert view.fields.where_note
+
+    _shown, panel = await open_where(cog, bot, member, view)
+    await click(bot, member, find_item(panel, events_pure.WHERE_CLEAR_BUTTON))
+
+    assert view.fields.where_note == ""
+
+
+async def test_refuse_answers_in_words_and_leaves_the_draft_where_it_was(
+    cog, bot, member, link_check, db
+):
+    await bot.store.set(GUILD, WHERE_CHECK_KEY, WHERE_CHECK_REFUSE)
+    link_check.status = 404
+
+    fields, answering = await type_where(
+        cog, bot, member, "yt no-such-handle-xyz", where=Where(WHERE_OTHER, None, "the park")
+    )
+
+    assert fields.where == Where(WHERE_OTHER, None, "the park")
+    assert fields.where_note == ""
+    said = answering.response.messages[0]["content"]
+    assert "https://youtube.com/@no-such-handle-xyz" in said
+    assert "404" in said and "events_where_link_check" in said
+    assert said.count("\n") == 0 or "nowhere was saved" in said
+
+
+async def test_refuse_keeps_a_link_that_answers(cog, bot, member, link_check):
+    await bot.store.set(GUILD, WHERE_CHECK_KEY, WHERE_CHECK_REFUSE)
+
+    fields, _answering = await type_where(cog, bot, member, "ttv/skyaiva")
+
+    assert fields.where == Where(WHERE_OTHER, None, "https://twitch.tv/skyaiva")
+    assert fields.where_note == ""
+
+
+async def test_off_never_asks_the_page_anything(cog, bot, member, link_check):
+    await bot.store.set(GUILD, WHERE_CHECK_KEY, WHERE_CHECK_OFF)
+
+    fields, _answering = await type_where(cog, bot, member, "ttv/skyaiva")
+
+    assert fields.where == Where(WHERE_OTHER, None, "https://twitch.tv/skyaiva")
+    assert link_check.asked == []
+
+
+async def test_a_place_that_is_not_a_link_is_never_asked_about(cog, bot, member, link_check):
+    fields, _answering = await type_where(cog, bot, member, "the park, by the fountain")
+
+    assert fields.where == Where(WHERE_OTHER, None, "the park, by the fountain")
+    assert link_check.asked == []
+
+
+async def test_the_check_is_given_the_seconds_the_setting_says(cog, bot, member, link_check):
+    await bot.store.set(GUILD, WHERE_CHECK_SECONDS_KEY, 3)
+
+    await type_where(cog, bot, member, "ttv/skyaiva")
+
+    assert [one["seconds"] for one in link_check.asked] == [3]
+    assert "Mozilla/5.0" in link_check.asked[0]["headers"]["User-Agent"]
+
+
+async def test_a_link_typed_beside_a_channel_is_checked_too(cog, bot, member, link_check):
+    with_channels(bot)
+    link_check.status = 404
+
+    fields, answering = await type_where(
+        cog, bot, member, "ttv/skyaiva", where=Where(WHERE_VOICE, VOICE_CHANNEL, "")
+    )
+
+    assert fields.where == Where(WHERE_VOICE, VOICE_CHANNEL, "https://twitch.tv/skyaiva")
+    assert fields.where_note == events_pure.WHERE_NOTE_MISSING
+    assert f"<#{VOICE_CHANNEL}> · [twitch.tv/skyaiva]" in card_embed(answering).description
+
+
+async def test_a_staff_edited_table_is_what_the_box_reads(cog, bot, member, link_check):
+    await bot.store.set(GUILD, WHERE_ALIASES_KEY, "cb=https://caffeine.tv/{handle}")
+
+    fields, _answering = await type_where(cog, bot, member, "cb/skyaiva")
+
+    assert fields.where == Where(WHERE_OTHER, None, "https://caffeine.tv/skyaiva")
+
+    fields, _answering = await type_where(cog, bot, member, "ttv/skyaiva")
+
+    assert fields.where == Where(WHERE_OTHER, None, "ttv/skyaiva")
+
+
+async def test_a_note_never_reaches_the_stored_event(cog, bot, member, lead, db, link_check):
+    """The proposer saw the warning when it mattered; the row is schema 34 and carries none."""
+    link_check.status = 404
+    with_channels(bot)
+    await submit(
+        cog, bot, member, where=Where(WHERE_OTHER, None, "https://youtube.com/@no-such-handle")
+    )
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+
+    assert row["location"] == "https://youtube.com/@no-such-handle"
+    assert "where_note" not in row.keys()
 
 
 # Follow-up 3 (`docs/info/where-picker-design.md` § Follow-up 3): a refused room counts from the

@@ -93,6 +93,8 @@ from ...events import (
     get_event,
     golive_text,
     guild_zone,
+    link_check_mode,
+    link_check_seconds,
     list_lines,
     may_cancel,
     minute_step,
@@ -115,9 +117,13 @@ from ...events import (
     swept_anchor,
     tell_or_log,
     when_line,
+    where_aliases,
     where_button_label,
     where_link,
+    where_note,
     where_of_channel,
+    where_refused,
+    where_typed,
     write_settings,
     zone_choices,
     zone_line,
@@ -129,6 +135,7 @@ from ...events import (
     set_zone as store_zone,
 )
 from ...golive import now_iso, parse_ts
+from ...linkcheck import LINK_OK, link_answers
 from ...loops import wait_ready
 from ...panels import (
     KEEP_IT,
@@ -146,6 +153,8 @@ from ...settings_store import (
     EVENTS_MODES,
     EVENTS_TEST_RETENTION_KEY,
     GUILD_ONLY,
+    WHERE_CHECK_OFF,
+    WHERE_CHECK_REFUSE,
     require_staff,
 )
 from ...when_picker import (
@@ -185,6 +194,7 @@ ZONE_MODAL_LABEL = "Region/City — Phoenix is America/Phoenix"
 ZONE_INPUT_LIMIT = 60
 DRAFT_BUTTON_ROW = 4
 CARD_LINK_ROWS = (1, 2, 3, 4)
+LINK_FETCH: Any = None
 NUMBERS_MODAL_TITLE = "Events — numbers"
 FORGOT_NOTHING = "Nothing was picked, so nothing was forgotten."
 
@@ -727,6 +737,7 @@ class WherePanel(Panel):
     ) -> None:
         super().__init__(minutes, footer=PANEL_TIMEOUT_FOOTER)
         self.where = where
+        self.where_note = ""
         self.takes_where = on_pick
         self.goes_back = on_back
         self.add_item(WhereSelect(where, known=known))
@@ -823,7 +834,22 @@ class WhereModal(AnswersErrors, discord.ui.Modal, title=WHERE_MODAL_TITLE):
         self.place.default = where.text or None
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        typed = clamp(self.place, LOCATION_LIMIT)
+        store = interaction.client.store
+        guild_id = interaction.guild.id
+        typed = clamp(
+            where_typed(clamp(self.place, LOCATION_LIMIT), where_aliases(store, guild_id)),
+            LOCATION_LIMIT,
+        )
+        url, mode = where_link(typed), link_check_mode(store, guild_id)
+        note = ""
+        if url is not None and mode != WHERE_CHECK_OFF:
+            seconds = link_check_seconds(store, guild_id)
+            verdict = await link_answers(url, seconds=seconds, fetch=LINK_FETCH)
+            if verdict != LINK_OK and mode == WHERE_CHECK_REFUSE:
+                await answer(interaction, where_refused(verdict, url, seconds))
+                return
+            note = where_note(verdict, url, seconds)
+        self.previous.where_note = note
         where = self.previous.where
         if self.beside:
             await self.previous.take_where(interaction, where._replace(text=typed))
@@ -941,6 +967,7 @@ async def take_draft_where(
     interaction: discord.Interaction, fields: EventDraft, where: Where, previous: Any
 ) -> None:
     fields.where = where
+    fields.where_note = str(getattr(previous, "where_note", "") or "")
     await open_draft(interaction, fields, previous)
 
 
