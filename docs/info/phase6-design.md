@@ -1,19 +1,38 @@
 # Phase 6 design — moderation (F7), shadow beside Carl-bot
 
-> ⚠️ **2026-09-04 — the `/automod` COMMAND SHAPE below is superseded by
+> ⚠️ **2026-09-04 (v74, `0b1b2bf`) — the `/automod` COMMAND SHAPE below is superseded by
 > [`automod-panel-design.md`](automod-panel-design.md).** `/automod status|mode|rule …|exempt
 > …` is now ONE `/automod` that opens a panel; the eight leaf subcommands are retired. This
 > document is the record of what was decided in Phase 6 and is deliberately NOT rewritten —
 > every rule, bound, mode and log kind it names is still exactly what the engine does.
 >
-> ⚠️ **2026-09-05 — the `/case` and `/cases` COMMAND SHAPE below is superseded by
+> ⚠️ **2026-09-05 (v81, `a90f416`) — the `/case` and `/cases` COMMAND SHAPE below is superseded by
 > [`mod-panel-design.md`](mod-panel-design.md).** `/case <id>`, `/cases @user` and `/mod logs`
 > are now ONE `/mod [member]` that opens a panel, which also learned to edit a reason, note a
 > case, void one and restore it. The seven bare actions below are UNCHANGED. Same rule as above:
 > this document is the Phase 6 record and is deliberately not rewritten.
 >
-> **Audience:** the Phase 6 build agent and the reviewer. **Status:** LOCAL
-> ONLY. **Last verified: 2026-08-26** — Carl's live config from the owner's
+> ⚠️ **2026-08-27 — the PARITY MEASUREMENT section below describes a tool that no longer
+> exists.** `/automod parity`, `GET /api/mod/parity` and the dashboard's parity card were all
+> deleted in `47634b8` (owner: *"Carl bot has no actions or setup, lets remove the mentions
+> and parity to it"*) — see `DONE.md` "Batch 3 merged" / the parity lines around it. The
+> cut-over criterion it describes is therefore **historical**, not a thing to run.
+>
+> **Audience:** the Phase 6 build agent and the reviewer. **Status:** TRACKED ·
+> ✅ **LIVE since 2026-08-26** (automod in `shadow`) — deployed `2026-08-27T05:34:12Z` as
+> `4677597` (`deploys.log` line 10, `synced 27 app commands`); `DONE.md` → "2026-08-26 —
+> Phase 6 live (shadow): moderation (F7) — the seventh and last core phase". ⚠️ Fly release
+> numbers were not written into `deploys.log` until **v59** (2026-09-03), so this landing has
+> a date and a commit but no `vNN`.
+> **Last verified: 2026-09-11 09:05** — re-checked against the tree at `1d090e5`:
+> `black_bloc/automod.py`, `cogs/moderation/automod.py` and `cogs/moderation/modcmds.py` all
+> exist; all **six** settings keys named below are in `KEY_TYPES`, plus
+> `automod_warn_threshold` and the later `automod_arm_needs_confirm`; the seven bare actions
+> (`/warn`, `/timeout`, `/untimeout`, `/kick`, `/ban`, `/unban`, `/purge`) are all still
+> top-level commands in the tree of **29**. ⚠️ **NOT checked:** whether `automod_mode` is
+> still `shadow` on the live guild, whether Carl-bot is still armed, and anything in Discord —
+> nothing in this pass met Discord or a browser.
+> Before that, **2026-08-26** — Carl's live config from the owner's
 > `!am` dump (`archive/current-bots/carl-bot-dashboard-2026-08-26.md`);
 > modlog history (`#carlbot-logs`, 7 cases in ~2 years) from the scan. Depends
 > on Phase 1 (settings, action log, staff derivation).
@@ -89,6 +108,11 @@ actions, human sentence ("5 mentions in 30s").
 
 ## Commands (staff only; every one writes a `mod_cases` row + modlog embed)
 
+*(Removed in part: `/case <id>` and `/cases @user` retired at **v81**, 2026-09-05 — `/mod
+[member]` opens a panel over the case record; the `/automod status|mode|rule …|exempt …`
+leaves retired at **v74**, 2026-09-04 — `/automod` opens a panel. The seven bare actions are
+UNCHANGED and deliberately so: owner fork F1, `panels-program.md` §6.)*
+
 `/warn @user <reason>` · `/timeout @user <duration> <reason>` (durations
 `10m`, `2h`, `1d`; Discord max 28 d) · `/untimeout` · `/kick` · `/ban
 [purge_days] <reason>` · `/unban <user id>` · `/purge <n> [@user]` · `/case
@@ -100,7 +124,11 @@ staff** — simpler: **refused outright while TEST_MODE, logged as
 would-do** (the guard cannot see them). `/warn` is allowed (it only writes
 a row + DM).
 
-## Parity measurement (the cut-over criterion)
+## Parity measurement (the cut-over criterion) — ⚠️ REMOVED 2026-08-27 (`47634b8`)
+
+*(Removed: `/automod parity`, `GET /api/mod/parity` and the dashboard's parity card are all
+gone — the owner had already stripped Carl-bot's actions, so there was nothing to measure
+against. Kept below as the record of what the cut-over criterion WAS.)*
 
 `/automod parity [days]` (staff): lists shadow verdicts in the window and
 the Carl-bot modlog entries in `#carlbot-logs` for the same window (read via
@@ -123,4 +151,5 @@ As before; three commits (engine → automod cog → mod commands), not pushed.
 Owner's test sweep: `/warn` a throwaway in the test channel, spam 5
 mentions there and read the shadow verdict, `/automod parity 7` (expect
 Carl-only = the real cases, Bloc-only = 0 since the shadow only sees the
-test channel until `TEST_MODE` lifts).
+test channel until `TEST_MODE` lifts). *(The parity step is no longer runnable — see the
+banner on that section.)*
