@@ -447,7 +447,7 @@ Two commits on the build branch: Follow-up 2 first, Follow-up 3 second, each wit
 
 ## Follow-up 4 — a SHORTHAND becomes a link, and the link is checked first (owner, 2026-09-10 23:5x, verbatim: "Can we do some smart work to make it a link / Like twitch.tv/skyaiva or ttv/skyaiva or yt skyaiva / We go and make those into links / Maybe even curl them first?")
 
-> **Status: 📐 DESIGNED 2026-09-11 00:05** — not built. Measurements and every departure go in a
+> **Status: 📐 DESIGNED 2026-09-11 00:01** — not built. Measurements and every departure go in a
 > **`## Follow-up 4 deviations`** foot the build writes.
 
 Follow-up 2 only recognises `https://…`, `http://…` and `www.…` (`where_link`). The owner types
