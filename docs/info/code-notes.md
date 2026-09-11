@@ -5929,8 +5929,8 @@ the invariants it is reviewed against are [`panels-program.md`](panels-program.m
 
 # Confirm/opened fold (2026-09-05)
 
-> Keyed by NAME (`path:function`) against `worktree-agent-a1f44401815e31ccf`, branched off
-> `main` at `739c521`. A refactor with NO behaviour change: every card renders the same embed,
+> Keyed by LINE against `1d090e5` (2026-09-11); written keyed by NAME (`path:function`) against
+> `worktree-agent-a1f44401815e31ccf`, branched off `main` at `739c521`. A refactor with NO behaviour change: every card renders the same embed,
 > the same buttons in the same order with the same labels and styles, and leaves the same log
 > rows. **5110 tests before, 5122 after — none lost, +12 for the two new helpers** (11 new
 > tests plus one name added to the library's own `__all__` test); ruff clean; `python -m
@@ -6211,10 +6211,10 @@ line numbers — the standing re-key rule applies after the merge.
 
 # Operator bucket — 2026-09-06, branch `operator-bucket`
 
-> Written on `operator-bucket` off `main` at `6216e97` (v97 live), keyed by NAME.
-> ⚠️ Re-key at the merge. `black_bloc/api/auth.py` gained one constant and its
-> `operator_session` body moved, so `path:N` keys into the `# Operator read token`
-> section above are off by the insertions — trust the anchor text. What the first
+> Written on `operator-bucket` off `main` at `6216e97` (v97 live) keyed by NAME; **merged, and
+> keyed by LINE against `1d090e5` since 2026-09-11.** `black_bloc/api/auth.py` gained one
+> constant and its `operator_session` body moved at that merge; the `# Operator read token`
+> section above was re-keyed in the same pass. What the first
 > live run found, and why each half was decided this way, is the dated note at the
 > foot of [`operator-read-design.md`](operator-read-design.md); it is not repeated here.
 
@@ -6248,11 +6248,11 @@ line numbers — the standing re-key rule applies after the merge.
 
 # The "When?" picker — 2026-09-10, branch `when-picker`
 
-> Written on `when-picker` off `main` at `ef54e60`, keyed by NAME.
-> ⚠️ Re-key at the merge: `black_bloc/events.py` gained a block of draft helpers before
-> `update_event`, and `black_bloc/cogs/community/events.py` gained ~180 lines before
-> `ProposeButton`, so every `path:N` key into the two `# Events` sections above is off by the
-> insertions — trust the anchor text. Why each half was decided this way is
+> Written on `when-picker` off `main` at `ef54e60` keyed by NAME; **merged as v100 (`1f35f28`),
+> and keyed by LINE against `1d090e5` since 2026-09-11.** `black_bloc/events.py` gained a block
+> of draft helpers before `update_event` and `black_bloc/cogs/community/events.py` ~180 lines
+> before `ProposeButton` at that merge; the two `# Events` sections above were re-keyed in the
+> same pass. Why each half was decided this way is
 > [`when-picker-design.md`](when-picker-design.md) and its `## Deviations` foot; it is not
 > repeated here.
 
@@ -6278,7 +6278,8 @@ line numbers — the standing re-key rule applies after the merge.
 | `black_bloc/raidtrain.py:631` (`read_numbers`) — moved out of the cog with `BAD_NUMBER` and `OUT_OF_RANGE` | `draft_check` needs the bounds and lives in the pure half; leaving `read_numbers` in the cog would have meant the pure module importing the cog, or a second copy of the four constants. The sentences are byte-identical to the ones the modal said, which is why the four parametrised refusal cases in `tests/cogs/content/test_raidtrain.py` kept their expectations |
 | ⚠️ `black_bloc/cogs/content/raidtrain.py:1730` (`MoveButton.callback`) — `START_TRAIN` moved OUT of `open_modal` | `open_modal`'s remaining job is the cancel note, which is genuinely a modal; Start now opens a panel, and a panel is a `defer` + `edit_original_response`, not a `send_modal`. Leaving it in the `else` branch would have meant `open_modal` deferring for one action and not the other, which is the shape that produces "This interaction failed" |
 
-## The raid train's calendar name — keyed by NAME (branch `raidtrain-name`, off `main` at `d25f87c`)
+## The raid train's calendar name (branch `raidtrain-name`, off `main` at `d25f87c`; ✅ merged as
+v104 `b320031`, keyed by LINE against `1d090e5` since 2026-09-11)
 
 | Where | Why |
 | --- | --- |
@@ -6289,10 +6290,10 @@ line numbers — the standing re-key rule applies after the merge.
 
 # The "Where?" picker — written on `where-picker` off `main` at `a47e43a`, 2026-09-10
 
-> Keyed by NAME, not by `path:N`, for the same reason the section above it is: this branch is not
-> merged, so every line number in the four changed source files (`black_bloc/events.py`,
-> `cogs/community/events.py`, `api/tools/events.py`, `storage/db.py`) moves at the merge — trust
-> the anchor text. Why each half was decided this way is
+> Written keyed by NAME because the branch was not merged and every line number in the four
+> changed source files (`black_bloc/events.py`, `cogs/community/events.py`,
+> `api/tools/events.py`, `storage/db.py`) moved at the merge. ✅ **Merged as v105 (`3205c0f`);
+> keyed by LINE against `1d090e5` since 2026-09-11**, with the name kept beside each number. Why each half was decided this way is
 > [`where-picker-design.md`](where-picker-design.md) and its `## Deviations` foot; it is not
 > repeated here.
 
@@ -6317,11 +6318,12 @@ line numbers — the standing re-key rule applies after the merge.
 | ⚠️ `page-events.js:whereControl` — the payload is built by a closure, not read off the DOM at save time | `Save` sends `...where.payload()`, which knows which of the three states the control is in; reading `select.value` at the call site would put the `— somewhere else —` sentinel into the same place a channel id goes. The typed box is `hidden`, never removed, so what somebody typed survives switching to a channel and back without a round trip |
 | `black_bloc/knowledge.py:478` (`event_where`) — it imports `events` inside the function | `knowledge.py` already does this for `events_by_status`; the arrow between the two modules runs one way at import time and a top-level import would make it two. What it buys is that the chat's answer to "what's on?" names the channel for a channel-kind event instead of dropping the Where clause, which is what reading `location` alone would now do |
 
-## Where follow-up — a channel AND a link, keyed by NAME (branch `where-link`, off `main` at `ebe0ead`)
+## Where follow-up — a channel AND a link (branch `where-link`, off `main` at `ebe0ead`; ✅ merged
+as v106 `6c10b9d`, keyed by LINE against `1d090e5` since 2026-09-11)
 
-> Keyed by NAME for the same reason the section above it is: this branch is not merged, so every
-> line number in the three changed source files (`black_bloc/events.py`, `cogs/community/events.py`,
-> `settings_store.py`) moves at the merge — trust the anchor text. Why each half was decided this
+> Written keyed by NAME because the branch was not merged and every line number in the three
+> changed source files (`black_bloc/events.py`, `cogs/community/events.py`, `settings_store.py`)
+> moved at the merge. Keyed by LINE since 2026-09-11, with the name kept beside each number. Why each half was decided this
 > way is [`where-picker-design.md`](where-picker-design.md) § Follow-up and its
 > `## Follow-up deviations` foot; it is not repeated here.
 
@@ -6339,12 +6341,13 @@ line numbers — the standing re-key rule applies after the merge.
 | ⚠️ `page-events.js:whereControl` — the typed box is no longer hidden; its HINT changes instead | A control that disappears is precisely why the two facts could not be held at once before: the box was the `— somewhere else —` branch rather than a field of its own. It is now always rendered, always sent, and the `.field-help` paragraph swaps between *Optional beside a channel* and *Only used when it is somewhere else*. The payload still comes from the closure rather than the DOM, so the `__other__` sentinel can never reach `where_channel_id` |
 | `settings_store.py:events_where_link_in_description` — the one decision this build made, so it is a key | Checklist 33: the owner chose *append it* in chat, which is a default and not a law. It is a plain `bool` with a default resolver beside `events_create_scheduled`, filed under `events` by `namespace_of` with no override needed, and carried in `site/mock/server.mjs` and `labels.js` — the latter because the total guard in `test_settings_store.py` fails by name for a key with no sentence |
 
-## Where follow-ups 2 and 3 — links that look like links, and rooms that go on time, keyed by NAME (branch `where-links`, off `main` at `8adbc75`, merged `ac43a20` as v107)
+## Where follow-ups 2 and 3 — links that look like links, and rooms that go on time (branch
+`where-links`, off `main` at `8adbc75`; ✅ merged `ac43a20` as v107, keyed by LINE against
+`1d090e5` since 2026-09-11)
 
-> Keyed by NAME for the same reason the two sections above it are: this branch is not merged, so
-> every line number in the four changed source files (`black_bloc/events.py`,
-> `cogs/community/events.py`, `settings_store.py`, `knowledge.py`) moves at the merge — trust
-> the anchor text. Why each half was decided this way is
+> Written keyed by NAME because the branch was not merged and every line number in the four
+> changed source files (`black_bloc/events.py`, `cogs/community/events.py`, `settings_store.py`,
+> `knowledge.py`) moved at the merge. Keyed by LINE since 2026-09-11, name beside each number. Why each half was decided this way is
 > [`where-picker-design.md`](where-picker-design.md) § Follow-up 2 and § Follow-up 3, and its
 > `## Follow-up 2+3 deviations` foot; it is not repeated here.
 
@@ -6365,12 +6368,13 @@ line numbers — the standing re-key rule applies after the merge.
 | `black_bloc/settings_store.py:88` (`EVENTS_TEST_RETENTION_MIN_MINUTES`) — the floor is 1 because the SWEEP is what is coarse | `RECONCILE_MINUTES = 5`, so a room actually goes somewhere between the setting and five minutes after it; zero would read as “immediately” and deliver up to five minutes later, which looks broken. The refusal says so in words. The ceiling is 1440 — a day — with its sentence pointing at `events_channel_retention_days` for anything meant to last, so neither bound is a bare number |
 
 
-## Where follow-up 4 — a shorthand becomes a link, and the link is tried first, keyed by NAME (✅ LIVE v108, merge `73e2e44` of `where-smart`)
+## Where follow-up 4 — a shorthand becomes a link, and the link is tried first (✅ LIVE v108, merge
+`73e2e44` of `where-smart`; keyed by LINE against `1d090e5` since 2026-09-11)
 
-> Keyed by NAME for the same reason the sections above it are: this branch is not merged, so every
-> line number in the changed source files (`black_bloc/events.py`, `cogs/community/events.py`,
-> `settings_store.py`, and the new `black_bloc/linkcheck.py`) moves at the merge — trust the anchor
-> text. Why each half was decided this way is
+> Written keyed by NAME because the branch was not merged and every line number in the changed
+> source files (`black_bloc/events.py`, `cogs/community/events.py`, `settings_store.py`, and the
+> new `black_bloc/linkcheck.py`) moved at the merge. Keyed by LINE since 2026-09-11; `linkcheck.py`
+> is 45 lines and its four keys were verified by eye (14, 15, 21, 34). Why each half was decided this way is
 > [`where-picker-design.md`](where-picker-design.md) § Follow-up 4 and its
 > `## Follow-up 4 deviations` foot; it is not repeated here.
 
