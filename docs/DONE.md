@@ -14,6 +14,46 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-11 — Docs-pass findings (a)–(h): every finding the "Update all docs" landing raised is closed (last one 11:39, `f4b17e5`, no deploy)
+
+Moved WHOLE from `TODO.md` at 11:50. The 09:20 docs pass (entry below) surfaced eight findings; two needed the
+owner and were asked ONE AT A TIME, six were engineering. In landing order: **(h)** closed by v110 10:14
+(`event.room_forgotten` fired for events 1–3 on boot); **(a)** owner 10:33 *"Restore it"* → `cb612da` 10:45,
+§B/§C/§D/§F/§I/§J of `pings-panel-design.md` back verbatim from `8426b1a^` after verifying all 21 control
+labels still exist in `cogs/content/pings.py` / `pings.py`, §A/§E/§G/§H archived, `OWNER_GUIDE.md` gained its
+missing `/pings` row and `feature-list.md` F14 its fix; **(b)** owner 10:50 *"A discord is fine"* → KI-25
+`WAIVED` `b401e61`, phase-8 decision 3 bannered; **(c)** KI-26 `WATCHING` + **(f)** BOMs stripped from six
+phase docs + **(g)** `theme.js` comment → `7fd7c35` 10:55 (measuring `deploys.log` corrected the hang list to
+v94/v97/v98/v99/v100 — the first draft had said v97–v100 + v103); **(d)** review-checklist item 35 →
+`0f0282e` 11:00; **(e)** the inline refs → `f4b17e5` 11:39, Opus agent 178k against a 100–150k estimate.
+
+**(e) in detail, because the number in the finding was wrong and the tool's refusal rate is the story:** the
+docs pass had counted 883 inline `` `path:N` `` refs in 413 rows; the agent measured **542 in 447 rows** (606
+backticked `:N` in rows minus 7 clock times, 43 extra column-1 keys, 14 in frozen `(GONE)` rows) and did not
+chase the 883. The gitignored `scripts/scan/rekey_code_notes.py` gained a pass over column 2 (`INLINE_RE`,
+`external()`, `inline_path()`, `resolve_inline()`, `--no-inline`) that reuses the column-1 machinery and can
+only see offsets past the row's first `|`, so column 1 is structurally untouched. Result: **123 moved, 11
+already right, 367 unresolved and left exactly as they were, 26 gone (number kept, no `(GONE)` written in
+prose), 15 external (discord.py `app_commands/tree.py`)**. Why 367: the agent's first drafts moved 190 then
+110 and hand-sampling killed both (`db.py:387` "PRAGMA foreign_keys=ON" was landing on an unrelated
+`REFERENCES … ON DELETE CASCADE` line on word overlap); measured properly, each ref had a **median of 4
+distinct verified targets depending on which base commit you assume**, and only 61 of 520 were unanimous.
+The accepted rule: the note must name a construct the target file actually defines, the anchor must still
+carry it at the chosen base, the mapping must be verified, and the answer must resolve to itself (an
+oscillation is refused — which is also what makes the second `--write` a no-op; idempotence verified, third
+dry run `moved: 0`). Conductor spot-check: `cogs/content/golive.py:636` = `cog_unload`,
+`cogs/community/role_menus.py:680` = `post_panel`, `rolemenu_panels.py:171` = `install` — all as the notes
+say. BOM intact, 0 CRLF, 6435 lines and 3474 `|` rows before and after, 114/114 in the diff, only `:N`
+digits changed (asserted at write time). Two column-1 keys also moved in the same run (`theme.js:86→87`
+after `7fd7c35`, `settings_store.py:1859→2027`). **Residue filed on `TODO.md`:** 32 prose refs outside
+tables, 43 second keys in multi-key cells, all `.css` refs, and one doubted move (`server.mjs:2879→4164`,
+should be ~4387 — and that note's claim is stale too). NOT verified: no note's content was checked for
+truth; ~112 of the 123 moves rest on the tool's rule, not on eyes; nothing met Discord or a browser.
+
+The original item, whole:
+
+- 🔧 **Docs-pass findings still open (from the 2026-09-11 "Update all docs" landing, `DONE.md` same date) — owner questions go ONE AT A TIME, after the event-rooms questions above.** ⏳ OWNER: (a) ~~🔴 `docs/info/pings-panel-design.md` lost its design body at `8426b1a` (408 → 140 lines; the foot still cites §C/§E/§F/§H/§J) — restore it or archive the husk~~ ✅ **DONE 2026-09-11 10:45 (owner 10:33: "Restore it")** — §B/§C/§D/§F/§I/§J restored verbatim (21 control labels re-checked against the code), §A/§E/§G/§H archived to `archive/pings-panel-design-prebuild-2026-09-03.md`; the check also found `OWNER_GUIDE.md` had NO `/pings` row (added) and `feature-list.md` F14 still said `/pingroles setup` (fixed); (b) ~~the phase-8 owner decision 3 (2026-08-26: Google SSO for the owner + a `user_identities` table) was never wired — still wanted, or drop it?~~ ✅ **DROPPED 2026-09-11 10:50 (owner: "A discord is fine")** — KI-25 `WAIVED`, phase-8 doc banner; **both owner questions answered**; ENGINEERING (no owner needed): (c) ~~`deploy.ps1` has hung at xdist five times (v97–v100, v103-attempt-1) with every worker idle — needs a `KNOWN_ISSUES.md` WATCHING entry~~ ✅ **KI-26 `WATCHING` filed 10:55** (the five were v94/v97/v98/v99/v100 off `deploys.log`, not v103; cause still open; threshold: a hang on a foreground `*> file` run, or 10 total); (d) DECIDED bullets that outlived their reversal — fork I-A2 and the automod/chat/birthdays/role-menus "does not vanish when off" bullets were reversed at v78 with the reversal recorded only in a commit message (slices D/F annotated them) ✅ **the rule is checklist item 35, 11:00** (`review-checklist.md`; `CLAUDE.md` count 34 → 35); (e) ~~883 inline `` `path:N` `` cross-references inside `code-notes.md` note prose (413 rows) were not re-keyed — `scripts/scan/rekey_code_notes.py` can, one Sonnet sweep~~ ✅ **RE-KEYED 11:39, `f4b17e5`** (Opus, 178k — the tool gained an inline pass; the 883/413 count did not reproduce: 542 refs in 447 rows; 123 moved, 367 left because no base commit gave a verified answer, 26 gone, 15 discord.py; 32 prose refs outside tables + 43 second keys in multi-key rows remain — filed); (f) ~~six phase docs (8, 8b, 9, 10, 11, 12) carry a UTF-8 BOM the others do not — strip in one commit~~ ✅ **stripped 10:55**; (g) ~~`site/public/assets/theme.js:50` cites `docs/info/estate-themes.md`, which exists only in catalog-platform~~ ✅ **comment now says catalog-platform's, 10:55** (ships with the next deploy; comment-only); (h) ~~a denied event's row keeps its `review_channel_id` after the room is gone (events 1, 2, 3 on the live DB, 09:10) and the sweep is silent when the room is already missing — clear the id and log once~~ **CLOSED by v110 10:14** — `event.room_forgotten` fired for events 1–3 on the v110 boot (`DONE.md` 2026-09-11 Event rooms). DONE at the landing: `.env.example` gained `OPERATOR_READ_TOKEN` + `SESSION_COOKIE_SAMESITE` (23 names); every live `/settings set-value` mention (OWNER_GUIDE 119–120, sweeps 342/348, applications-panel-design 394/438) now names the `/settings` panel path; `requests.py` refusals → v109.
+
 ## 2026-09-11 — Event rooms: the event's posts live in its OWN room, staff get a Delete this room button, test rooms go 5 minutes after the end (v110, 10:14)
 
 Moved WHOLE from `TODO.md` at 10:20. Owner ask 09:12, three questions asked one at a time — **Q1 A** (the
