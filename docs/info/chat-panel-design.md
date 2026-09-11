@@ -8,10 +8,13 @@
 > `# Chat panel (wave 3)` section is the post-merge map. Sweeps **155–162**.
 >
 > **Since then, four things this document predates:**
-> 1. **v78** (`3429233`) — `HIDDEN_WHEN_OFF` grew to fifteen entries, so `chat_mode: ("chat",)` and
->    `chat_memory_mode: ("memory",)` both EXIST now (`command_visibility.py:20`, `:22`). §E's last
->    row and §I's second settled bullet are history: `/chat` DOES vanish while the mode is off,
->    behind `hide_commands_when_off`.
+> 1. **v78** (`3429233`) — `HIDDEN_WHEN_OFF` grew from one key to fourteen, so `chat_mode:
+>    ("chat",)` EXISTS now (`command_visibility.py:21`). §E's last row and §I's second settled
+>    bullet are history: `/chat` DOES vanish while the mode is off, behind `hide_commands_when_off`.
+>    ⚠️ **`/memory` is the one carve-out** — `chat_memory_mode` went in at v78 and was taken back
+>    out the same day (`51b5164`, *"fourteen features hide, not fifteen"*), because memory off
+>    deletes nothing and the site is staff-only, so the panel is a member's only door to the notes
+>    held about them (KI-14).
 > 2. **v84** (`ce97de0`) — `LOG_LEVEL_COMMANDS` corrected for all 17 features; `chat_log_level`'s
 >    help now names `/chat` ▸ **Logs**, not a retired `/chat logs`.
 > 3. **v88** (`794d3aa`) — the cog's remove-confirm goes through the library:
@@ -310,7 +313,7 @@ decisions — staff reaching every control, and the panel refusing in words rath
 | the children assertion | `tests/test_bot.py:172–178` | **deleted** — there are no children |
 | `"chat"` in `STAFF_COMMANDS` | `tests/test_bot.py:29` | **kept** (§B) |
 | `assert len(top) == 38` | `tests/test_bot.py:190` | ⚠️ **unchanged** — a group was already one slot. Re-measure; edit only if a sibling merge moved it |
-| `HIDDEN_WHEN_OFF` | `command_visibility.py:16–20` | **nothing to change** at the build — measured, chat had no entry. ⚠️ **Since v78** it has two (`chat_mode: ("chat",)`, `chat_memory_mode: ("memory",)`), so `/chat` DOES vanish when the mode is off unless `hide_commands_when_off` is turned off |
+| `HIDDEN_WHEN_OFF` | `command_visibility.py:16–20` | **nothing to change** at the build — measured, chat had no entry. ⚠️ **Since v78** it has one (`chat_mode: ("chat",)`, `command_visibility.py:21`), so `/chat` DOES vanish when the mode is off unless `hide_commands_when_off` is turned off. `/memory` is deliberately NOT in the map (`51b5164`) |
 
 **Strings that name a retired subcommand and are rewritten in the SAME commit** — each currently
 tells somebody to run something that will not exist:
