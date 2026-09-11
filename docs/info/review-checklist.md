@@ -2,17 +2,27 @@
 
 > **Audience:** every build agent (read BEFORE building) and every review
 > agent (score against it). **Status:** TRACKED (owner, 2026-08-31 — was
-> local-only until then). **Last verified:
-> 2026-09-03** — the file now holds **34 numbered items**, not
-> the 20 it started with: items 1–20 are CONFIRMED findings from the Phase 2
+> local-only until then). **Last verified: 2026-09-11 08:50** — docs-wide staleness pass.
+> **Counted:** the file holds **34** numbered items, 1–34 with none missing (items are NOT
+> in numeric order on the page — they are grouped by subject, and that is deliberate; do not
+> renumber). **Every item's named trace was checked to still exist on `main` at `1d090e5`:**
+> `command_errors.py` (items 8, 29), `settings_store.KEY_TYPES`/`KEY_HELP`/`KEY_CHOICES`
+> (33), `logkinds.kind_via` / `bare` / `VIA_WEBSITE` and all three guarding tests in
+> `tests/test_logkinds.py` — `test_a_route_never_notes_an_event_its_shared_path_already_logged:439`,
+> `test_a_shared_logger_stays_discord_unless_a_route_says_otherwise:549`,
+> `test_no_module_builds_the_web_head_for_itself:585` (34), `settings_store.GOLIVE_MODES` and
+> `cogs/community/role_menus.py:36 MODES` (15). **Two FIXED:** item 33 told a person to run
+> `/settings set-value`, a subcommand retired at the v84 landing (**zero hits in
+> `black_bloc/`** today) — it now names the panel; item 20's cost band was the 2026-08 figure
+> and is replaced with what builds in this repo actually measured. ⚠️ **NOT re-checked:** the
+> *wording* of items 1–32 was not re-traced to the incident that produced it, and no item was
+> exercised against Discord or a browser.
+> ⚠️ **`CLAUDE.md` says "33 items" — it is one behind; this file owns the count.**
+> Before that, **2026-09-03** — items 1–20 are CONFIRMED findings from the Phase 2
 > adversarial review (`phase2-design.md` build, commit `ece5e3b`) or an
 > incident earlier the same day; 21–33 were added by later phases, and **34**
-> (one web write leaves one log row) was added today from the owner's
+> (one web write leaves one log row) was added that day from the owner's
 > 2026-09-03 double-post report. Generic advice is deliberately absent.
-> ⚠️ Only item 34 was verified today — against the code it describes and the
-> three tests that guard it. The wording of items 1–33 was not re-traced to
-> its incident, and item 33's count line was the only thing checked on
-> 2026-08-31.
 
 ## Test policy and rollout
 
@@ -126,8 +136,12 @@
 19. A directory/Docker deploy ships the working tree: never deploy while a
     builder has uncommitted files; never run two builders in one tree.
 20. Subagent cost is invisible until it lands — read usage before dispatch
-    and after landing; builds run 150–260k Opus tokens here.
+    and after landing. ⚠️ **Measured in THIS repo, not estimated:** a
+    one-subsystem build 279k; the panel builds 370k (`automod`), 441k
+    (`chat`), 473k (`raidtrain`), 529k (`role-menus`) — several of them
+    **over their own 300–500k estimates**. A multi-layer build is the
+    expensive shape; a research or lookup agent is not.
 
-33. **Is every decision this change introduces configurable from BOTH the dashboard and the bot?** (owner rule 2026-08-27: "all decisions we make here can be configured in dashboard and with bot"). A decided default is a registry key (`KEY_TYPES`/`KEY_HELP`/`KEY_CHOICES`), which gives the Settings page + `/settings set-value` for free; a per-item choice (menu approval, poll anonymity, request status) needs a slash subcommand AND a dashboard control. Traced to: Phase 12 log levels, Phase 9 approval fields, Phase 10 per-poll flags — all built that way; the rule stops the next one from being a constant.
+33. **Is every decision this change introduces configurable from BOTH the dashboard and the bot?** (owner rule 2026-08-27: "all decisions we make here can be configured in dashboard and with bot"). A decided default is a registry key (`KEY_TYPES`/`KEY_HELP`/`KEY_CHOICES`), which gives the dashboard's Settings page + the `/settings` panel's own key card for free (⚠️ `/settings set-value` was retired at the v84 landing — do not tell anyone to run it); a per-item choice (menu approval, poll anonymity, request status) needs a slash subcommand AND a dashboard control. Traced to: Phase 12 log levels, Phase 9 approval fields, Phase 10 per-poll flags — all built that way; the rule stops the next one from being a constant.
 
 34. **A web route that calls a shared path which already logs passes `via=VIA_WEBSITE` and never `note()`s the same event again.** One write leaves ONE `action_log` row and ONE Discord embed. The shared function takes a keyword-only `via: str = VIA_DISCORD`, builds its kind with `logkinds.kind_via(kind, via)` — the single inverse of `bare()`, never a hand-rolled `f"{WEB}."` — and records `details["via"] = via`; the route passes `via=VIA_WEBSITE` and deletes its own `note()`. `note()` stays ONLY where the route is the sole logger (`web.request.filed`, `web.request.updated`, comments, withdraw, the raid-train and role-menu CRUD). Consequential rows the bot emits on its own (`request.dm_failed`, `request.notify_failed`, `modmail.place_kept`) keep their bare kind — only the actor's action row takes the head. Traced to: owner, 2026-09-03, "The app double posted all messages with a web.request and a request" — `apply_decision` logged `request.done` and the route noted `web.request.done` on top of it, in 8 route files. Guarded by `tests/test_logkinds.py::test_a_route_never_notes_an_event_its_shared_path_already_logged` (an AST walk of `api/tools/*.py`), `::test_no_module_builds_the_web_head_for_itself` and `::test_a_shared_logger_stays_discord_unless_a_route_says_otherwise`.
