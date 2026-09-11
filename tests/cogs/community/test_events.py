@@ -3166,24 +3166,14 @@ async def a_draft_with_a_link(cog, bot, member, *, full):
     return picked, card_view(picked)
 
 
-async def test_the_draft_gets_the_open_link_button_while_its_button_row_has_a_slot(
+async def test_the_draft_never_gets_the_open_link_button_because_it_would_come_and_go(
     cog, bot, member
 ):
-    _picked, view = await a_draft_with_a_link(cog, bot, member, full=False)
-
-    button = find_open_link(view)
-    assert button is not None and button.url == "https://twitch.tv/bb"
-    assert button.row == events_cog.DRAFT_BUTTON_ROW
-
-
-async def test_a_submittable_draft_fills_its_row_so_the_link_button_is_skipped(cog, bot, member):
-    """Discord caps a row at five and Submit is the one that matters; the masked line carries it."""
-    picked, view = await a_draft_with_a_link(cog, bot, member, full=True)
-
-    row = [one for one in view.children if getattr(one, "row", None) == events_cog.DRAFT_BUTTON_ROW]
-    assert len(row) == events_pure.ROW_ITEM_CAP == 5
-    assert find_open_link(view) is None
-    assert "[twitch.tv/bb](https://twitch.tv/bb)" in card_embed(picked).description
+    """Submit takes the row's fifth slot once the draft is ready; the masked line has the link."""
+    for full in (False, True):
+        picked, view = await a_draft_with_a_link(cog, bot, member, full=full)
+        assert find_open_link(view) is None
+        assert "[twitch.tv/bb](https://twitch.tv/bb)" in card_embed(picked).description
 
 
 # Follow-up 3 (`docs/info/where-picker-design.md` § Follow-up 3): a refused room counts from the

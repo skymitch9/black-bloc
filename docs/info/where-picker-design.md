@@ -408,14 +408,7 @@ Two commits on the build branch: Follow-up 2 first, Follow-up 3 second, each wit
   exists — hence the call at the foot of `build_card` and `build_draft` rather than beside the Where
   button. The card tries rows 1, 2, 3, 4 in that order; in practice row 1 always has room (Where,
   Back and the review-room link make three of five).
-- **G4 (build) On the DRAFT the button is present only while the draft is NOT submittable, and that
-  is the spec's own rule playing out.** § Follow-up 2 B says the draft gets it "only if that row has
-  a free slot". The button row holds Title & details · Where · Time zone · Back, and **Submit**
-  joins them the moment the draft passes — five, Discord's cap. So the link button appears while
-  something is still missing and goes when Submit arrives. It was built literally rather than
-  dropped, because the masked line in the embed carries the link either way ("A alone covers the
-  draft") and a row over the cap is not a cosmetic fault: Discord refuses the whole render.
-  ⚠️ Recorded here because it is the one place this build makes a control come and go.
+- **G4 (build → REVERSED at review) The DRAFT gets no Open link button at all.** § Follow-up 2 B said the draft gets it "only if that row has a free slot". The button row holds Title & details · Where · Time zone · Back, and **Submit** joins them the moment the draft passes — five, Discord's cap. The build put the button there while something was still missing and let Submit displace it; the conductor removed the draft call before the merge (`build_draft` no longer calls `add_open_link`; one test replaces two) because a control that appears only while the draft is incomplete and vanishes when it is ready is worse than no control. The masked Where line carries the link on the draft; the card keeps the button.
 - **G5 (build) `ROW_ITEM_CAP = 5` was added to `black_bloc/events.py`.** Nothing in the repo named
   Discord's per-row item cap; `SELECT_CAP` is the 25-option one, which is a different number for a
   different thing. It sits beside `BUTTON_LABEL_LIMIT`, which was added by the same argument in the

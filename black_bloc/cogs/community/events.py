@@ -644,7 +644,6 @@ async def build_draft(
     if checked is not None:
         view.add_item(SubmitButton())
     view.add_item(BackButton(row=DRAFT_BUTTON_ROW))
-    add_open_link(view, fields.where.text, (DRAFT_BUTTON_ROW,))
     return embed, view
 
 
