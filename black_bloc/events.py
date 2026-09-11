@@ -20,12 +20,23 @@ from .panels import panel_minutes as library_panel_minutes
 from .panels import site_page_url as library_site_page_url
 from .settings_store import (
     DEFAULT_TIMEZONE_KEY,
+    EVENTS_APPROVER_ROLE_KEY,
     EVENTS_LATE_CEILING_MINUTES,
+    EVENTS_POSTS_WHERE,
+    EVENTS_POSTS_WHERE_KEY,
     EVENTS_RETENTION_MAX_DAYS,
     EVENTS_RETENTION_MIN_DAYS,
+    EVENTS_ROOM_DELETE_KEY,
+    EVENTS_ROOM_DELETE_WHO,
+    EVENTS_ROOM_NOTICE_KEY,
     EVENTS_SCHEDULED_NAME_KEY,
     EVENTS_SCHEDULED_NAME_TEMPLATE,
+    EVENTS_TEST_RETENTION_KEY,
     NAME_PLACEHOLDER,
+    POSTS_ANNOUNCE,
+    POSTS_BOTH,
+    POSTS_ROOM,
+    ROOM_DELETE_APPROVER,
     TIME_STEP_KEY,
     TIMEZONE_CHOICES_KEY,
     WHERE_ALIASES,
@@ -630,6 +641,7 @@ CANCEL_WHY: dict[str, str] = {
         "Black Bloc could not read the start time stored for it. Propose it again with `/event` "
         "and write the time as `YYYY-MM-DD HH:MM`."
     ),
+    "room_deleted": "staff removed its room.",
 }
 CANCEL_WHY_DEFAULT = (
     "either you or a member of staff called it off. Ask a Lead there if that is a surprise."
@@ -646,6 +658,53 @@ NO_STAFF_WARNING = (
     "⚠️ **No staff roles resolve**, so nobody but server admins can see a review channel or press "
     "Approve. Point `staff_channel_id` at a channel only staff can see with `/settings` ▸ "
     "staff_channel_id`, then open `/event` again."
+)
+
+ENDED_TEXT = "**{title}** has ended. Thanks for coming."
+ROOM_DENIED = (
+    "**{title}** was not approved. The reason given was: {reason}. Ask a Lead if you want to "
+    "talk it over — Black Bloc cannot change the decision."
+)
+ROOM_QUIET_REASONS = (
+    "room_deleted",
+    "review_channel_gone",
+    "review_channel_deleted",
+    "never_got_a_channel",
+)
+ROOM_NOTICE = (
+    "This room is Black Bloc's — it goes away on its own **{when}**. Staff can remove it sooner."
+)
+ROOM_GOES_MINUTES = "{n} minutes after it ends"
+ROOM_GOES_DAYS = "{n} days after it ends"
+ROOM_DELETE_BUTTON = "Delete this room"
+ROOM_DELETE_TITLE = "Remove this room?"
+ROOM_DELETE_LABEL = "A line the host is sent (if the event is still open)"
+ROOM_DELETE_NOT_STAFF = (
+    "Only staff can remove this room. If you want your event called off, use **Call it off** on "
+    "`/event`."
+)
+ROOM_NOT_THIS_EVENT = (
+    "That button belongs to event #{event_id}, which is not the event this room is for any "
+    "more, so nothing was removed. `/event` has the one you want."
+)
+ROOM_ALREADY_GONE = (
+    "Event #{event_id} has no room any more, so there was nothing to remove."
+)
+ROOM_DELETED_SAID = "The room is gone."
+ROOM_ALSO_CANCELLED = (
+    " Event #{event_id} is cancelled, and the person who proposed it has been told why."
+)
+ROOM_DELETE_FAILED = (
+    "Discord would not remove this room just now, so it is still here — the log says why."
+)
+ROOM_DELETE_REFUSED_TEST = (
+    "Black Bloc is in test mode and may only delete channels inside its test channel's own "
+    "category, so this room was left alone — the log says `event.would_delete_channel`."
+)
+ROOM_DELETED_BY = "Black Bloc event {event_id}: room removed by {who}"
+ANNOUNCED_IN_ROOM = (
+    "It is announced in the event's own room rather than a public channel — "
+    "**events_posts_where** changes that."
 )
 
 PANEL_TITLE = "Events"
@@ -1272,6 +1331,217 @@ async def post_to_announce(
     return message.id
 
 
+def own_room(bot: Any, channel: Any) -> None:
+    """Tell the test-mode guard this room is one of Black Bloc's own, so it may speak in it."""
+    guard = getattr(bot, "guard", None)
+    if guard is not None and channel is not None:
+        guard.own_channel(channel)
+
+
+def disown_room(bot: Any, channel: Any) -> None:
+    guard = getattr(bot, "guard", None)
+    if guard is not None and channel is not None:
+        guard.disown_channel(channel)
+
+
+def room_of(guild: Any, row: Any) -> Any:
+    channel_id = cell(row, "review_channel_id")
+    return guild.get_channel(int(channel_id)) if channel_id else None
+
+
+def posts_where(store: Any, guild_id: int) -> str:
+    return str(store.get(guild_id, EVENTS_POSTS_WHERE_KEY) or EVENTS_POSTS_WHERE).strip().lower()
+
+
+def posts_in_room(store: Any, guild_id: int) -> bool:
+    return posts_where(store, guild_id) in (POSTS_ROOM, POSTS_BOTH)
+
+
+def posts_in_announce(store: Any, guild_id: int) -> bool:
+    return posts_where(store, guild_id) in (POSTS_ANNOUNCE, POSTS_BOTH)
+
+
+def room_keeps(store: Any, guild_id: int, *, testing: bool) -> str:
+    """How long the room has left, in the words the notice message says it in."""
+    if testing:
+        return ROOM_GOES_MINUTES.format(n=store.get(guild_id, EVENTS_TEST_RETENTION_KEY))
+    return ROOM_GOES_DAYS.format(n=store.get(guild_id, "events_channel_retention_days"))
+
+
+def room_delete_role_id(store: Any, guild_id: int) -> int | None:
+    who = str(store.get(guild_id, EVENTS_ROOM_DELETE_KEY) or EVENTS_ROOM_DELETE_WHO)
+    if who.strip().lower() != ROOM_DELETE_APPROVER:
+        return None
+    found = store.get(guild_id, EVENTS_APPROVER_ROLE_KEY)
+    try:
+        return int(found) if found else None
+    except (TypeError, ValueError):
+        return None
+
+
+def may_delete_room(store: Any, guild_id: int, member: Any) -> bool:
+    """The approver role may; staff always may, whatever `events_room_delete_who` holds."""
+    role_id = room_delete_role_id(store, guild_id)
+    if role_id is not None and any(
+        getattr(role, "id", None) == role_id for role in getattr(member, "roles", ())
+    ):
+        return True
+    return bool(store.is_staff(member))
+
+
+async def post_to_room(
+    bot: Any,
+    guild: Any,
+    row: Any,
+    text: str,
+    embed: discord.Embed | None,
+    kind: str,
+    *,
+    ping: bool = True,
+) -> int | None:
+    """The event's own room, which the guard allows only because Black Bloc made it."""
+    details = {"event_id": row["id"]}
+    mode = bot.store.get(guild.id, "events_mode")
+    if mode != "on":
+        await log_action(
+            bot, guild, f"event.would_{kind}_room", details=details | {"reason": f"mode_{mode}"}
+        )
+        return None
+    channel = room_of(guild, row)
+    if channel is None:
+        await log_action(
+            bot, guild, f"event.{kind}_room_failed", details=details | {"reason": "no_room"}
+        )
+        return None
+    guard = getattr(bot, "guard", None)
+    if guard is not None and not guard.allows_channel(channel.id):
+        await log_action(
+            bot, guild, f"event.would_{kind}_room", details=details | {"reason": "test_mode"}
+        )
+        return None
+    ping_role_id = bot.store.get(guild.id, "events_ping_role_id") if ping else None
+    try:
+        message = await channel.send(text, embed=embed, allowed_mentions=mentions(ping_role_id))
+    except Exception as exc:
+        log.warning("events: could not post %s in the room for %s: %s", kind, row["id"], exc)
+        await log_action(
+            bot,
+            guild,
+            f"event.{kind}_room_failed",
+            details=details | {"reason": f"{type(exc).__name__}: {exc}"},
+        )
+        return None
+    await log_action(
+        bot, guild, f"event.{kind}_room", details=details | {"channel_id": channel.id}
+    )
+    return message.id
+
+
+async def post_event(
+    bot: Any, guild: Any, row: Any, text: str, embed: discord.Embed | None, kind: str
+) -> int | None:
+    """One fan-out; the announce channel's message id is the one anything edits later."""
+    message_id = None
+    if posts_in_announce(bot.store, guild.id):
+        message_id = await post_to_announce(bot, guild, row, text, embed, kind)
+    if posts_in_room(bot.store, guild.id):
+        await post_to_room(bot, guild, row, text, embed, kind)
+    return message_id
+
+
+async def post_room_notice(bot: Any, guild: Any, row: Any, channel: Any, view: Any) -> int | None:
+    """The staff Delete button's own message, in a room the review card actually reached."""
+    if not bot.store.get(guild.id, EVENTS_ROOM_NOTICE_KEY):
+        return None
+    testing = getattr(bot, "guard", None) is not None
+    said = ROOM_NOTICE.format(when=room_keeps(bot.store, guild.id, testing=testing))
+    try:
+        message = await channel.send(
+            said, view=view, allowed_mentions=discord.AllowedMentions.none()
+        )
+    except Exception as exc:
+        log.warning("events: could not post the room notice for %s: %s", row["id"], exc)
+        await log_action(
+            bot,
+            guild,
+            "event.room_notice_failed",
+            details={
+                "event_id": row["id"],
+                "channel_id": getattr(channel, "id", None),
+                "reason": f"{type(exc).__name__}: {exc}",
+            },
+        )
+        return None
+    return message.id
+
+
+async def forget_room(bot: Any, guild: Any, row: Any) -> None:
+    """A row whose room is already gone stops carrying its id, and says so once."""
+    await set_review(bot.db, row["id"], None, row["review_message_id"], row["card_channel_id"])
+    await log_action(
+        bot,
+        guild,
+        "event.room_forgotten",
+        details={"event_id": row["id"], "channel_id": row["review_channel_id"]},
+    )
+
+
+async def delete_room(
+    bot: Any,
+    guild: Any,
+    row: Any,
+    *,
+    by: Any,
+    note: Any = None,
+    via: str = VIA_DISCORD,
+) -> tuple[str, bool]:
+    """Staff removing one room: settle the event first, then the channel, then the record."""
+    actor_id = getattr(by, "id", by)
+    fresh = await get_event(bot.db, row["id"])
+    if fresh is None:
+        return (NO_SUCH_EVENT, False)
+    channel = room_of(guild, fresh)
+    if channel is None:
+        return (ROOM_ALREADY_GONE.format(event_id=fresh["id"]), False)
+    cancelled = False
+    if fresh["status"] in OPEN_STATUSES:
+        cancelled = await cancel_event(
+            bot, guild, fresh, "room_deleted", by=actor_id, note=note, via=via
+        )
+        fresh = await get_event(bot.db, row["id"])
+    extra = ROOM_ALSO_CANCELLED.format(event_id=fresh["id"]) if cancelled else ""
+    details = {"event_id": fresh["id"], "channel_id": channel.id, "by": actor_id}
+    guard = getattr(bot, "guard", None)
+    if guard is not None and not guard.allows_place(channel):
+        await log_action(bot, guild, "event.would_delete_channel", details=details)
+        return (f"{ROOM_DELETE_REFUSED_TEST}{extra}", False)
+    try:
+        await channel.delete(
+            reason=ROOM_DELETED_BY.format(event_id=fresh["id"], who=actor_id)
+        )
+    except NETWORK_ERRORS as exc:
+        log.warning("events: could not delete the room %s: %s", channel.id, exc)
+        await log_action(
+            bot,
+            guild,
+            "event.room_delete_failed",
+            details=details | {"reason": f"{type(exc).__name__}: {exc}"},
+        )
+        return (f"{ROOM_DELETE_FAILED}{extra}", False)
+    await set_review(
+        bot.db, fresh["id"], None, fresh["review_message_id"], fresh["card_channel_id"]
+    )
+    disown_room(bot, channel)
+    await log_action(
+        bot,
+        guild,
+        kind_via("event.channel_deleted", via),
+        actor=by,
+        details=details | {"cancelled": cancelled, "via": via},
+    )
+    return (f"{ROOM_DELETED_SAID}{extra}", True)
+
+
 async def edit_announcement(bot: Any, guild: Any, row: Any) -> None:
     """A public post must stop advertising an event that is off."""
     message_id = row["announce_message_id"]
@@ -1343,6 +1613,16 @@ async def cancel_event(
         await cancel_scheduled_event(bot, guild, fresh)
         fresh = await get_event(bot.db, row["id"])
         await edit_announcement(bot, guild, fresh)
+        if reason not in ROOM_QUIET_REASONS and posts_in_room(bot.store, guild.id):
+            await post_to_room(
+                bot,
+                guild,
+                fresh,
+                CANCELLED_ANNOUNCEMENT.format(title=clamp(fresh["title"], TITLE_LIMIT)),
+                None,
+                "cancelled",
+                ping=False,
+            )
         if by == fresh["requester_id"]:
             return True
         why = CANCEL_WHY.get(reason, CANCEL_WHY_DEFAULT)
@@ -1396,7 +1676,7 @@ async def apply_decision(
             made, why_not = await create_scheduled_event(bot, guild, fresh)
             fresh = await get_event(bot.db, event_id)
             ping_role_id = bot.store.get(guild.id, "events_ping_role_id")
-            message_id = await post_to_announce(
+            message_id = await post_event(
                 bot,
                 guild,
                 fresh,
@@ -1415,8 +1695,27 @@ async def apply_decision(
         name = getattr(requester, "display_name", str(row["requester_id"]))
         await rename_channel(bot, guild, fresh, status, name)
         if status == DENIED:
+            if posts_in_room(bot.store, guild.id):
+                await post_to_room(
+                    bot,
+                    guild,
+                    fresh,
+                    ROOM_DENIED.format(
+                        title=clamp(fresh["title"], TITLE_LIMIT), reason=reason or "none given"
+                    ),
+                    None,
+                    "denied",
+                    ping=False,
+                )
             return (DENIED_SAID, fresh)
-        return (APPROVED_SAID.format(extra=approve_extra(why_not, message_id)), fresh)
+        return (
+            APPROVED_SAID.format(
+                extra=approve_extra(
+                    why_not, message_id, where=posts_where(bot.store, guild.id)
+                )
+            ),
+            fresh,
+        )
 
 
 async def tell_requester(
@@ -1441,7 +1740,9 @@ async def tell_requester(
     )
 
 
-def approve_extra(why_not: str | None, message_id: int | None) -> str:
+def approve_extra(
+    why_not: str | None, message_id: int | None, *, where: str = POSTS_ANNOUNCE
+) -> str:
     parts = []
     if why_not == "test_mode":
         parts.append(
@@ -1452,7 +1753,9 @@ def approve_extra(why_not: str | None, message_id: int | None) -> str:
         parts.append("Scheduled events are turned off in **Settings**.")
     elif why_not is not None:
         parts.append("Discord refused to make the scheduled event — the log says why.")
-    if message_id is None:
+    if where == POSTS_ROOM:
+        parts.append(ANNOUNCED_IN_ROOM)
+    elif message_id is None:
         parts.append("Nothing was announced publicly; the log says why.")
     return " ".join(parts) or "The event is announced and the requester has been told."
 
@@ -1463,7 +1766,7 @@ async def make_review_channel(bot: Any, guild: Any, row: Any, actor: Any, catego
     if not staff:
         log.warning("events: no staff roles resolve, so %s is admin-only", row["id"])
     try:
-        return await guild.create_text_channel(
+        room = await guild.create_text_channel(
             channel_name(PENDING, getattr(actor, "display_name", str(actor)), row["title"]),
             category=category,
             overwrites=review_overwrites(guild, staff, getattr(guild, "me", None), actor),
@@ -1480,6 +1783,8 @@ async def make_review_channel(bot: Any, guild: Any, row: Any, actor: Any, catego
             details={"event_id": row["id"], "reason": f"{type(exc).__name__}: {exc}"},
         )
         return None
+    own_room(bot, room)
+    return room
 
 
 async def post_review_card(bot: Any, guild: Any, row: Any, channel: Any, view: Any) -> int | None:
@@ -1517,6 +1822,7 @@ async def submit_event(
     fields: EventFields,
     *,
     review_view: Any = None,
+    room_view: Any = None,
     via: str = VIA_DISCORD,
 ) -> tuple[str, Any]:
     """One proposal, whichever door it came through: a row, a room, a card and the sentence."""
@@ -1559,6 +1865,9 @@ async def submit_event(
         said = SUBMITTED_NO_CARD
     elif posted == channel.id:
         said = SUBMITTED_HERE
+        await post_room_notice(
+            bot, guild, row, channel, room_view(event_id) if room_view is not None else None
+        )
     else:
         said = SUBMITTED_TEST
     return (
@@ -1776,7 +2085,39 @@ SETTINGS_KEYS = (
     "events_create_scheduled",
     "events_channel_retention_days",
     "events_max_late_minutes",
+    EVENTS_POSTS_WHERE_KEY,
+    EVENTS_ROOM_DELETE_KEY,
+    EVENTS_APPROVER_ROLE_KEY,
+    EVENTS_ROOM_NOTICE_KEY,
 )
+
+ROOMS_TITLE = "Events — rooms"
+ROOMS_BUTTON = "Rooms…"
+POSTS_WHERE_PLACEHOLDER = "Where an event's posts go…"
+ROOM_DELETE_PLACEHOLDER = "Who may remove a room…"
+ROOM_APPROVER_PLACEHOLDER = "The role that may remove a room (pick nothing for staff)"
+ROOM_NOTICE_BUTTON = "Delete message: {state}"
+POSTS_WHERE_WORDS: dict[str, str] = {
+    POSTS_ROOM: "the event's own room",
+    POSTS_ANNOUNCE: "the announce channel",
+    POSTS_BOTH: "both the room and the announce channel",
+}
+
+
+def rooms_lines(store: Any, guild: Any) -> list[str]:
+    """What the Rooms sub-panel says: the four keys, in words, and how long a room lasts."""
+    where = posts_where(store, guild.id)
+    who = str(store.get(guild.id, EVENTS_ROOM_DELETE_KEY) or EVENTS_ROOM_DELETE_WHO)
+    role_id = store.get(guild.id, EVENTS_APPROVER_ROLE_KEY)
+    return [
+        f"**posts go to** — {POSTS_WHERE_WORDS.get(where, where)}",
+        f"**who may remove a room** — {who}",
+        "**the role that may** — " + (f"<@&{role_id}>" if role_id else "nobody, so staff do"),
+        "**the Delete message** — "
+        + ("posted in every room" if store.get(guild.id, EVENTS_ROOM_NOTICE_KEY) else "off"),
+        f"**a room is kept** — {room_keeps(store, guild.id, testing=False)}, or "
+        f"{room_keeps(store, guild.id, testing=True)} while Black Bloc is in test mode",
+    ]
 
 
 def settings_lines(store: Any, guild: Any, health: Any = ()) -> list[str]:

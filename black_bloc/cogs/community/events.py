@@ -25,6 +25,7 @@ from ...events import (
     DM_MISSED,
     DONE,
     DRAFT_TITLE,
+    ENDED_TEXT,
     EVENTS_OFF,
     LIST_PAGE,
     LIVE,
@@ -38,7 +39,19 @@ from ...events import (
     PANEL_TIMEOUT_FOOTER,
     PANEL_TITLE,
     PENDING,
+    POSTS_WHERE_PLACEHOLDER,
     REVIEW_ROOM_BUTTON,
+    ROOM_ALREADY_GONE,
+    ROOM_APPROVER_PLACEHOLDER,
+    ROOM_DELETE_BUTTON,
+    ROOM_DELETE_LABEL,
+    ROOM_DELETE_NOT_STAFF,
+    ROOM_DELETE_PLACEHOLDER,
+    ROOM_DELETE_TITLE,
+    ROOM_NOT_THIS_EVENT,
+    ROOM_NOTICE_BUTTON,
+    ROOMS_BUTTON,
+    ROOMS_TITLE,
     ROW_ITEM_CAP,
     SELECT_CAP,
     SITE_BUTTON,
@@ -81,6 +94,8 @@ from ...events import (
     counts_line,
     counts_of,
     default_minutes,
+    delete_room,
+    disown_room,
     dm,
     draft_check,
     draft_lines,
@@ -90,6 +105,7 @@ from ...events import (
     event_line,
     event_lock,
     events_by_status,
+    forget_room,
     get_event,
     golive_text,
     guild_zone,
@@ -97,16 +113,21 @@ from ...events import (
     link_check_seconds,
     list_lines,
     may_cancel,
+    may_delete_room,
     minute_step,
     option_label,
     own_events,
+    own_room,
     panel_minutes,
     panel_shows_own_list,
     pick_placeholder,
-    post_to_announce,
+    post_event,
+    post_to_room,
+    posts_in_room,
     read_where,
     rename_channel,
     review_channel_url,
+    rooms_lines,
     set_review,
     set_status,
     set_where,
@@ -150,7 +171,13 @@ from ...panels import (
 from ...panels import NoteModal as PanelNoteModal
 from ...settings_store import (
     DB_UNAVAILABLE,
+    EVENTS_APPROVER_ROLE_KEY,
     EVENTS_MODES,
+    EVENTS_POSTS_WHERE_KEY,
+    EVENTS_POSTS_WHERES,
+    EVENTS_ROOM_DELETE_KEY,
+    EVENTS_ROOM_DELETE_WHOS,
+    EVENTS_ROOM_NOTICE_KEY,
     EVENTS_TEST_RETENTION_KEY,
     GUILD_ONLY,
     WHERE_CHECK_OFF,
@@ -170,7 +197,13 @@ from ...when_picker import ZoneModal as WhenZoneModal
 
 log = logging.getLogger(__name__)
 
-DECISION_TEMPLATE = r"event:(?P<event_id>[0-9]+):(?P<action>approve|deny)"
+DECISION_TEMPLATE = r"event:(?P<event_id>[0-9]+):(?P<action>approve|deny|delete_room)"
+DELETE_ROOM = "delete_room"
+DECISION_LABELS: dict[str, str] = {
+    "approve": "Approve",
+    "deny": "Deny",
+    DELETE_ROOM: ROOM_DELETE_BUTTON,
+}
 GOLIVE_MINUTES = 1
 RECONCILE_MINUTES = 5
 LOOP_NAMES = ("golive", "reconcile")
@@ -229,6 +262,12 @@ def review_view(event_id: int) -> discord.ui.View:
     return view
 
 
+def room_notice_view(event_id: int) -> discord.ui.View:
+    view = discord.ui.View(timeout=None)
+    view.add_item(DecisionButton(event_id, DELETE_ROOM))
+    return view
+
+
 async def decide(
     interaction: discord.Interaction, event_id: int, status: str, reason: str | None = None
 ) -> None:
@@ -252,14 +291,16 @@ async def close_card(interaction: discord.Interaction, row: Any) -> None:
         log.warning("events: could not close the card for event %s: %s", row["id"], exc)
 
 
-async def decision_context(interaction: discord.Interaction, event_id: int) -> Any:
+async def decision_context(
+    interaction: discord.Interaction, event_id: int, *, staff: bool = True
+) -> Any:
     """This click's event row, or None once the clicker has been answered."""
     bot = interaction.client
     guard = getattr(bot, "guard", None)
     if guard is not None and not guard.allows_channel(interaction.channel_id):
         await interaction.response.send_message(guard.refusal_message(), ephemeral=True)
         return None
-    if not await require_staff(interaction):
+    if staff and not await require_staff(interaction):
         return None
     if not bot.db.is_connected:
         await interaction.response.send_message(DB_UNAVAILABLE, ephemeral=True)
@@ -391,14 +432,32 @@ def build_settings(bot: Any, guild: Any, health: Any = ()) -> tuple[discord.Embe
     view.add_item(ScheduledButton(bool(store.get(guild.id, "events_create_scheduled"))))
     view.add_item(NumbersButton())
     view.add_item(ForgetButton())
+    view.add_item(RoomsButton())
+    view.add_item(BackButton(row=4))
+    return embed, view
+
+
+def build_rooms(bot: Any, guild: Any) -> tuple[discord.Embed, EventView]:
+    """The four room keys, on their own page because a settings row holds one select."""
+    store = bot.store
+    embed = discord.Embed(
+        title=ROOMS_TITLE,
+        description="\n".join(rooms_lines(store, guild)),
+        colour=discord.Colour(COLOURS[PENDING]),
+    )
+    view = EventView(panel_minutes(store, guild.id))
+    view.add_item(PostsWhereSelect(str(store.get(guild.id, EVENTS_POSTS_WHERE_KEY))))
+    view.add_item(RoomDeleteSelect(str(store.get(guild.id, EVENTS_ROOM_DELETE_KEY))))
+    view.add_item(RoomApproverSelect())
+    view.add_item(RoomNoticeButton(bool(store.get(guild.id, EVENTS_ROOM_NOTICE_KEY))))
+    view.add_item(SettingsButton(row=3))
     page = site_page_url(origin_of(bot))
     if page:
         view.add_item(
             discord.ui.Button(
-                style=discord.ButtonStyle.link, label=SITE_BUTTON, url=page, row=4
+                style=discord.ButtonStyle.link, label=SITE_BUTTON, url=page, row=3
             )
         )
-    view.add_item(BackButton(row=4))
     return embed, view
 
 
@@ -436,6 +495,24 @@ async def render_settings(interaction: discord.Interaction, previous: Any = None
     )
 
 
+async def render_rooms(interaction: discord.Interaction, previous: Any = None) -> None:
+    embed, view = build_rooms(interaction.client, interaction.guild)
+    retire(previous)
+    view.message = await interaction.edit_original_response(
+        embed=embed,
+        view=view,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
+
+
+async def open_rooms(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await still_staff(interaction):
+        return
+    if not await opened(interaction, staff=False):
+        return
+    await render_rooms(interaction, previous)
+
+
 async def back_to_panel(interaction: discord.Interaction, previous: Any = None) -> None:
     if not await opened(interaction, staff=False):
         return
@@ -465,7 +542,10 @@ async def open_forget(interaction: discord.Interaction, previous: Any = None) ->
 
 
 async def change_settings(
-    interaction: discord.Interaction, changes: dict[str, Any], previous: Any = None
+    interaction: discord.Interaction,
+    changes: dict[str, Any],
+    previous: Any = None,
+    render: Any = None,
 ) -> None:
     """Every settings control lands here: one write per key, one log row, one re-render."""
     if not await still_staff(interaction):
@@ -476,7 +556,7 @@ async def change_settings(
     changed = await write_settings(
         bot.store, interaction.guild.id, interaction.user.id, changes
     )
-    await render_settings(interaction, previous)
+    await (render or render_settings)(interaction, previous)
     if changed:
         await log_action(
             bot, interaction.guild, "event.settings", actor=interaction.user, details=changed
@@ -693,7 +773,12 @@ async def submit_draft(interaction: discord.Interaction, previous: Any) -> None:
         await answer(interaction, why)
         return
     said, row = await submit_event(
-        bot, interaction.guild, interaction.user, checked, review_view=review_view
+        bot,
+        interaction.guild,
+        interaction.user,
+        checked,
+        review_view=review_view,
+        room_view=room_notice_view,
     )
     if row is None:
         await render_draft(interaction, fields, previous)
@@ -1124,6 +1209,78 @@ class PingRoleSelect(discord.ui.RoleSelect):
         await change_settings(interaction, {"events_ping_role_id": picked}, self.view)
 
 
+class RoomsButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label=ROOMS_BUTTON, style=discord.ButtonStyle.secondary, row=4)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_rooms(interaction, self.view)
+
+
+class PostsWhereSelect(discord.ui.Select):
+    def __init__(self, current: str) -> None:
+        super().__init__(
+            placeholder=POSTS_WHERE_PLACEHOLDER,
+            options=[
+                discord.SelectOption(label=name, value=name, default=name == current)
+                for name in EVENTS_POSTS_WHERES
+            ],
+            min_values=1,
+            max_values=1,
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await change_settings(
+            interaction, {EVENTS_POSTS_WHERE_KEY: self.values[0]}, self.view, render_rooms
+        )
+
+
+class RoomDeleteSelect(discord.ui.Select):
+    def __init__(self, current: str) -> None:
+        super().__init__(
+            placeholder=ROOM_DELETE_PLACEHOLDER,
+            options=[
+                discord.SelectOption(label=name, value=name, default=name == current)
+                for name in EVENTS_ROOM_DELETE_WHOS
+            ],
+            min_values=1,
+            max_values=1,
+            row=1,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await change_settings(
+            interaction, {EVENTS_ROOM_DELETE_KEY: self.values[0]}, self.view, render_rooms
+        )
+
+
+class RoomApproverSelect(discord.ui.RoleSelect):
+    def __init__(self) -> None:
+        super().__init__(placeholder=ROOM_APPROVER_PLACEHOLDER, min_values=0, max_values=1, row=2)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        picked = self.values[0].id if self.values else None
+        await change_settings(
+            interaction, {EVENTS_APPROVER_ROLE_KEY: picked}, self.view, render_rooms
+        )
+
+
+class RoomNoticeButton(discord.ui.Button):
+    def __init__(self, on: bool) -> None:
+        super().__init__(
+            label=ROOM_NOTICE_BUTTON.format(state="on" if on else "off"),
+            style=discord.ButtonStyle.success if on else discord.ButtonStyle.secondary,
+            row=3,
+        )
+        self.on = on
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await change_settings(
+            interaction, {EVENTS_ROOM_NOTICE_KEY: not self.on}, self.view, render_rooms
+        )
+
+
 class ForgetPick(discord.ui.Select):
     def __init__(self) -> None:
         super().__init__(
@@ -1326,7 +1483,7 @@ class DecisionButton(
         approving = action == "approve"
         super().__init__(
             discord.ui.Button(
-                label="Approve" if approving else "Deny",
+                label=DECISION_LABELS[action],
                 style=discord.ButtonStyle.success if approving else discord.ButtonStyle.danger,
                 custom_id=decision_id(event_id, action),
             )
@@ -1337,6 +1494,9 @@ class DecisionButton(
         return cls(int(match["event_id"]), match["action"])
 
     async def on_click(self, interaction: discord.Interaction) -> None:
+        if self.action == DELETE_ROOM:
+            await ask_to_delete_room(interaction, self.event_id)
+            return
         row = await decision_context(interaction, self.event_id)
         if row is None:
             return
@@ -1352,6 +1512,69 @@ class DecisionButton(
             return
         await interaction.response.defer(ephemeral=True)
         await decide(interaction, self.event_id, APPROVED)
+
+
+async def ask_to_delete_room(interaction: discord.Interaction, event_id: int) -> None:
+    """The gate, in words: the approver role or staff open the box, the host is told why not."""
+    row = await decision_context(interaction, event_id, staff=False)
+    if row is None:
+        return
+    store = interaction.client.store
+    if not may_delete_room(store, interaction.guild.id, interaction.user):
+        said = (
+            ROOM_DELETE_NOT_STAFF
+            if interaction.user.id == row["requester_id"]
+            else store.staff_refusal(interaction.guild.id)
+        )
+        await interaction.response.send_message(said, ephemeral=True)
+        return
+    await interaction.response.send_modal(RoomDeleteModal(event_id))
+
+
+async def said_after_the_room(interaction: discord.Interaction, said: str) -> None:
+    try:
+        await interaction.followup.send(
+            said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+        )
+    except Exception as exc:
+        log.debug("events: could not answer after removing a room: %s", exc)
+
+
+async def remove_this_room(
+    interaction: discord.Interaction, event_id: int, note: str
+) -> None:
+    """Deferred first, because a reply into a channel that is about to go raises."""
+    bot = interaction.client
+    await interaction.response.defer(ephemeral=True)
+    fresh = await get_event(bot.db, event_id)
+    if fresh is None:
+        await said_after_the_room(interaction, NO_SUCH_EVENT)
+        return
+    if fresh["review_channel_id"] is None:
+        await said_after_the_room(interaction, ROOM_ALREADY_GONE.format(event_id=event_id))
+        return
+    if fresh["review_channel_id"] != interaction.channel_id:
+        await said_after_the_room(interaction, ROOM_NOT_THIS_EVENT.format(event_id=event_id))
+        return
+    said, _ = await delete_room(
+        bot, interaction.guild, fresh, by=interaction.user, note=note or None
+    )
+    await said_after_the_room(interaction, said)
+
+
+class RoomDeleteModal(PanelNoteModal):
+    def __init__(self, event_id: int) -> None:
+        self.event_id = event_id
+        super().__init__(
+            title=ROOM_DELETE_TITLE,
+            label=ROOM_DELETE_LABEL,
+            max_length=CANCEL_NOTE_LIMIT,
+            required=False,
+            on_submit=self.room_submit,
+        )
+
+    async def room_submit(self, interaction: discord.Interaction, text: str) -> None:
+        await remove_this_room(interaction, self.event_id, text)
 
 
 class EventTextModal(AnswersErrors, discord.ui.Modal, title=TEXT_MODAL_TITLE):
@@ -1482,7 +1705,7 @@ class Events(commands.Cog):
                     },
                 )
                 return
-            await post_to_announce(
+            await post_event(
                 self.bot,
                 guild,
                 fresh,
@@ -1541,6 +1764,16 @@ class Events(commands.Cog):
                 DONE,
                 getattr(member, "display_name", str(fresh["requester_id"])),
             )
+            if posts_in_room(self.bot.store, guild.id):
+                await post_to_room(
+                    self.bot,
+                    guild,
+                    fresh,
+                    ENDED_TEXT.format(title=clamp(fresh["title"], TITLE_LIMIT)),
+                    None,
+                    "ended",
+                    ping=False,
+                )
 
     async def reconcile_events(self) -> None:
         """Events whose review channel has gone are cancelled; finished ones are tidied away."""
@@ -1564,7 +1797,9 @@ class Events(commands.Cog):
                 return
             await self._cancel(guild, row, "never_got_a_channel")
             return
-        if guild.get_channel(channel_id) is not None:
+        room = guild.get_channel(channel_id)
+        if room is not None:
+            own_room(self.bot, room)
             self._missing_since.pop(row["id"], None)
             return
         if row["id"] not in self._missing_since:
@@ -1593,7 +1828,10 @@ class Events(commands.Cog):
                 guild.get_channel(row["review_channel_id"]) if row["review_channel_id"] else None
             )
             if channel is None:
+                if row["review_channel_id"]:
+                    await forget_room(self.bot, guild, row)
                 continue
+            own_room(self.bot, channel)
             finished = swept_anchor(row)
             if finished is None or now - finished < kept:
                 continue
@@ -1613,6 +1851,7 @@ class Events(commands.Cog):
             except NETWORK_ERRORS as exc:
                 log.warning("events: could not delete %s: %s", channel.id, exc)
                 continue
+            disown_room(self.bot, channel)
             await set_review(
                 self.bot.db,
                 row["id"],
@@ -1643,6 +1882,7 @@ class Events(commands.Cog):
             if channel.id == self.bot.store.get(guild.id, key):
                 await self.bot.store.clear(guild.id, key)
                 await log_action(self.bot, guild, kind, details={"channel_id": channel.id})
+        disown_room(self.bot, channel)
         row = await event_for_channel(self.bot.db, channel.id)
         if row is not None and row["status"] in OPEN_STATUSES:
             await self._cancel(guild, row, "review_channel_deleted")
@@ -1773,8 +2013,14 @@ __all__ = [
     "ModeSelect",
     "NoteModal",
     "NumbersModal",
+    "PostsWhereSelect",
     "ProposeButton",
     "RefreshButton",
+    "RoomApproverSelect",
+    "RoomDeleteModal",
+    "RoomDeleteSelect",
+    "RoomNoticeButton",
+    "RoomsButton",
     "SettingsButton",
     "SubmitButton",
     "TextButton",
@@ -1786,10 +2032,12 @@ __all__ = [
     "WhereSelect",
     "ZoneButton",
     "ZoneModal",
+    "ask_to_delete_room",
     "back_to_panel",
     "build_card",
     "build_draft",
     "build_panel",
+    "build_rooms",
     "build_settings",
     "change_settings",
     "close_card",
@@ -1798,17 +2046,21 @@ __all__ = [
     "decision_context",
     "decision_id",
     "finish_card",
-    "open_card",
     "open_cancel_confirm",
+    "open_card",
     "open_draft",
+    "open_rooms",
     "open_settings",
     "open_where_panel",
     "open_zone_panel",
+    "remove_this_room",
     "render_card",
     "render_draft",
     "render_panel",
+    "render_rooms",
     "render_settings",
     "review_view",
+    "room_notice_view",
     "run_move",
     "store_card_where",
     "submit_draft",
