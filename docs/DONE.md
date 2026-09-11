@@ -14,6 +14,51 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-11 — Event rooms: the event's posts live in its OWN room, staff get a Delete this room button, test rooms go 5 minutes after the end (v110, 10:14)
+
+Moved WHOLE from `TODO.md` at 10:20. Owner ask 09:12, three questions asked one at a time — **Q1 A** (the
+posts go to the event's OWN room, not the announce channel), **Q2 B** (5 minutes after the end is TEST MODE
+ONLY — `events_test_retention_minutes` while the guard is on; live keeps `events_channel_retention_days`),
+**Q3 B** (Delete = delete + settle: an open event is cancelled with a DM'd reason, done/denied left alone).
+Design `docs/info/events-rooms-design.md` 09:50 (`bd0b31d`); Opus build in `C:/lcw/bb-rooms`, branch
+`event-rooms`, dispatched 09:55, landed 10:08 at **399k** against a 250–350k estimate; merged `--no-ff`
+`9c6201d`; gate 5593 passed + `check.mjs` 17 pages / 151 routes; **v110 live 10:14**, boot `database ready`
++ `synced 29` 17:14Z, `/health` ready, `/api/settings` 206 keys with defaults room / staff / blank / true.
+
+**Root cause of "the event stuff posts in the spam channel":** `make_review_channel` never called
+`guard.own_channel` (polls, tempvoice, modmail and raidtrain all do), so `card_channel` redirected the
+card and `post_to_announce` only ever aimed at the announce channel. Fixed by owning the room at creation
+and re-owning on every reconcile pass (the owned set is in memory and lost on restart).
+
+**What shipped:** `black_bloc/events.py` +351 (`post_to_room`, `post_event` fan-out by
+`events_posts_where`, `delete_room(bot, guild, row, *, by, note, via)` — cancels first with reason
+`room_deleted` so `on_guild_channel_delete` does not double-cancel, a guard refusal logs
+`event.would_delete_channel`; `own_room` / `disown_room` / `room_of`, `may_delete_room`, `ROOM_*` strings,
+`CANCEL_WHY["room_deleted"]`); `cogs/community/events.py` +278 (`DELETE_ROOM`, `ask_to_delete_room`,
+`RoomDeleteModal`, `decision_context(..., staff=True)`, reconcile re-own / forget, a `/event` ▸ Settings ▸
+**Rooms…** page for the four keys); `DECISION_TEMPLATE` gains `delete_room`; `logkinds.py`
+(`event.{announce,go_live,ended,cancelled,denied}_room` + `would_*_room` + `*_room_failed`,
+`event.room_forgotten`, `event.room_notice_failed`, `event.room_delete_failed`,
+`web.event.channel_deleted`); site `POST /api/events/{id}/room/delete` with `{note}`, `Refused(409,
+"no_room" / "room_kept")`, a **Remove its room** control on `events.html`; four keys 202 → **206**
+(`events_posts_where` room · `events_room_delete_who` staff · `events_approver_role_id` blank →
+staff · `events_room_notice` true); schema stays 34; +47 tests to **5593**; sweep rows **351–359**.
+
+**Deviations the agent recorded (11, all in the design doc):** the spec's `event_lock` around
+`delete_room` would have deadlocked (`cancel_event` takes the same non-reentrant lock) — built without it,
+the status change is still atomic inside `cancel_event`; `room_forgotten` is logged by the SWEEP only, an
+open row keeps its id so the two-consecutive-misses rule (checklist 32) still decides cancels; the four
+keys got their own **Rooms…** page (Discord's five-row cap); cancelled / denied room lines are skipped for
+the four "room already missing" reasons; `VIA_SITE` in the spec is `VIA_WEBSITE`; fan-out tests live
+beside the cog's fakes. Finding (h) of the docs pass (dead `review_channel_id` on events 1–3) closed by
+this landing — `room_forgotten` fired for all three on the v110 boot, **twice each** (`on_ready` vs the
+loop's first tick, filed on `TODO.md`). Not verified: nothing here has met Discord; `events.html` /
+`settings.html` not opened in a browser.
+
+The original item, whole:
+
+- 🆕 **Event rooms: a staff Delete button, deletion 5 minutes after the end, and the event's posts in its own channel (owner, 2026-09-11 09:12, verbatim: "In the channels how about we have the bot post an additional message for deleting the channel that only staff can press. I thought we had decided a newly generated room would go away after 5 minutes of creation. We can instead use the bot button I just mentioned to delete it and then have it 5 minutes after event ends. Also if we're making channels now don't have the event stuff post in the spam channel have the event stuff post in the actual channel like a real event would.").** Context measured 09:10: event 4 (`Cool kids club`, approved 08:30, 09:30–11:30) keeps `approved-sky-cool-kids-club` until it ends because the sweep (`events.py:_sweep_finished`, every 5 min) only removes rooms of done/denied/called-off events — `events_test_retention_minutes` (5) after they settle in test mode, `events_channel_retention_days` (7) live; `events_announce_channel_id` is the test-spam channel by default, which is why "event stuff" lands there. Three parts: (1) the bot posts one more message in every review room with a **Delete this room** button that only staff can press (staff/approver gate, confirm step, logs `event.channel_deleted` with the presser) — **DECIDED 09:34 (owner answer to question 3 of 3: **B**): delete + settle** — pressing it also cancels an open event with a DM'd reason; done/denied events are left as they are. All three answered; design written `docs/info/events-rooms-design.md` 09:50 (four keys 202 → 206, schema stays 34, no retention change); **BUILT 2026-09-11 10:08 on branch `event-rooms` (worktree `C:/lcw/bb-rooms`, off `bd0b31d`) — pushed, ⚠️ NOT merged, NOT deployed, and nothing in it has met Discord.** Four commits: `3d7e200` parts 1+2 (own the room, `post_to_room`/`post_event` fan-out, the **Delete this room** button + `delete_room`, `event.room_forgotten`), `7a14e88` the website (`POST /api/events/{id}/room/delete`, **Remove its room**, mock routes 150 → 151), then the docs. Keys **202 → 206**, schema **34**, tests **5546 → 5593** (`-n auto`, 28 s), `ruff check .` clean, `node site/mock/check.mjs` green (*17 pages, 151 routes, 14 core settings*). Eleven deviations are in the design's `## Deviations` foot — the load-bearing one: `delete_room` cannot hold `event_lock` (`cancel_event` takes the same non-reentrant lock, so the design's ordering deadlocks). Owner sweeps **351–359**. NEXT: merge `--no-ff`, gate, deploy, re-key `code-notes.md`, remove the worktree + branch; (2) the automatic deletion becomes **5 minutes after the event ends** (staff use the button to go earlier) — DECIDED 09:31 (owner answer to question 2 of 3: **B**): TEST MODE ONLY — `events_test_retention_minutes` stays the after-end figure while `bot.guard` is on; live events keep `events_channel_retention_days` (7) as their own key; (3) the event's announce / go-live / ended posts go to "the actual channel like a real event would" — **DECIDED 09:14 (owner: "A"): the event's OWN ROOM** — announce card, go-live ping and the ended post land in the review room itself, not the announce channel; test mode untouched. Design after the answers; Opus build; every default a settings key (checklist 33).
+
 ## 2026-09-11 — Update all docs: every tracked doc re-verified against v108 by six parallel agents, code-notes re-keyed whole (landed 09:20, no deploy — plus the `requests.py` refusal fix it found, v109)
 
 Moved WHOLE from `TODO.md` at 09:20. Six Opus agents in worktrees `C:/lcw/bb-docs-a…f`, branches

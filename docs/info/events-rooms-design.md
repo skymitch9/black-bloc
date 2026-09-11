@@ -1,9 +1,10 @@
 # Event rooms — the event's posts live in its own room, staff get a Delete button, test rooms go 5 minutes after the end
 
 > **Audience:** the build agent, then whoever maintains `black_bloc/events.py` / `cogs/community/events.py`.
-> **Status:** 📐 DESIGN, TRACKED — written 2026-09-11 09:50 from the owner's 09:12 ask and his three answers
-> (09:14 A · 09:31 B · 09:34 B). **Last verified: 2026-09-11 09:45** against `3d11e52` (v109 live): every
-> function and key named below was read in the source that morning; nothing here has met Discord.
+> **Status:** ✅ LIVE **v110** (10:14, merge `9c6201d`), TRACKED — written 2026-09-11 09:50 from the owner's 09:12 ask and his three answers
+> (09:14 A · 09:31 B · 09:34 B); built as written except the 11 items under `## Deviations` at the foot, which win
+> over the body where they differ. **Last verified: 2026-09-11 10:20** against `9c6201d`: keys 206 on `/api/settings`, `event.room_forgotten`
+> fired for events 1–3 on the v110 boot; ⚠️ nothing here has met Discord — sweeps 351–359 are the owner's.
 > Extends [`events-panel-design.md`](events-panel-design.md) (the panel, card and moves are unchanged) and
 > the retention rules in [`where-picker-design.md`](where-picker-design.md) follow-up 3.
 
