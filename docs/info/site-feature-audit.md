@@ -2,8 +2,19 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-08-27** (STATUS line only re-checked 2026-08-31) — a READ-ONLY code audit of `site/public` at `666dd8e` by an
-> Opus agent; nothing was executed or rendered. The `[object Object]` finding is a
+> Last verified: **2026-09-11 09:30** — docs-wide staleness pass. ⚠️ **This is a RESEARCH
+> RECORD of a 2026-08-27 audit, not a current picture of the site.** Two weeks and ~60
+> releases separate it from `main` at `1d090e5`, and the whole panels program (17 features,
+> one command each) plus the Direction-A restyle landed in between. What was re-checked
+> today is ONLY that the **20 repo paths it cites still exist** — they all do, including
+> `black_bloc/cogs/community/role_menus.py` and `black_bloc/api/settings_api.py`, which it
+> names by bare filename. ⚠️ **NOT re-checked and presumed stale:** every `file:line`
+> anchor, every A/B/C ranking, and whether any listed defect is still present — the
+> `[object Object]` finding included. Nothing was executed or rendered, then or now; the
+> site has **17 pages / 150 routes** today. Read this for the OWNER'S INSTRUCTION and the
+> displays-vs-controls rule, not for the state of a page.
+> Before that, **2026-08-27** (STATUS line only re-checked 2026-08-31) — a READ-ONLY code audit of `site/public` at `666dd8e` by an
+> Opus agent; nothing was executed or rendered. The `[object Object]` finding was a
 > high-confidence code read, not a measurement — one browser load confirms it. The
 > concurrent themes+Members build may already have moved some `file:line` anchors.
 

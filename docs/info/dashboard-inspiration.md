@@ -2,11 +2,21 @@
 
 > **Audience:** the owner + the mock builder. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then). **Last
-> verified: 2026-08-27** (STATUS line only re-checked 2026-08-31) — every
-> observation cites its page.
+> verified: 2026-09-11 09:30** — docs-wide staleness pass. ⚠️ **This is a SURVEY of
+> eleven OTHER products' dashboards, captured 2026-08-27 and not re-fetched** — nothing
+> in it is a claim about Black Bloc except the "what is wrong with ours today" section,
+> which describes the site as it was BEFORE the Direction-A restyle and the R1 pass and
+> is therefore history, not a defect list. The only repo paths it cites are
+> `/moderation.html` and `/settings.html`, both of which still exist under `site/public/`
+> (17 pages there today). ⚠️ **NOT re-checked:** no external dashboard was re-visited,
+> so every observation about Carl, YAGPDB, MEE6, Dyno, Wick, ProBot, Sapphire, Discord,
+> Linear, Vercel or Cloudflare is a 2026-08-27 reading.
 > ℹ️ The restyle this doc fed has SHIPPED: **Direction A** was chosen and
-> deployed 2026-08-27 (`666dd8e`), with the theme dropdown kept. The four open
-> owner questions in §7 are therefore answered by that build, not still open.
+> deployed 2026-08-27 (`666dd8e`), with the theme dropdown kept, and the **A/C-hybrid R1
+> pass** landed 2026-08-31 (`0c49257`) — see [`site-restyle-design.md`](site-restyle-design.md).
+> The four open owner questions in §7 are therefore answered by those builds, not still open.
+> Before that, **2026-08-27** (STATUS line only re-checked 2026-08-31) — every
+> observation cites its page.
 
 Owner's ask, verbatim (2026-08-27 ~08:40): *"It's still not quite the look and
 feel I want. Can you research some other bot sites for inspiration and then make

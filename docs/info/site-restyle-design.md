@@ -1,7 +1,22 @@
 # Site restyle — the A/C hybrid (design brief)
 
-> **Audience:** the restyle builder + the owner. **Status:** TRACKED.
-> **Last verified: 2026-08-31 (afternoon)** — ⚠️ the morning draft claimed "nothing
+> **Audience:** the restyle builder + the owner. **Status:** TRACKED · ✅ **COMPLETE — BOTH
+> SLICES ARE LIVE.** R1 `0c49257` deployed 2026-08-31 12:20; **R2 `c334922` deployed
+> 2026-08-31 13:14** ("Restyle R2: Black Bloc theme (dark+light, new default, worst contrast
+> 4.51), Bangers wordmark+titles, sentence-voice labels (90) + group captions + Overview
+> TODAY sentence, table toolbars/tooltip heads/count feet, Cases drawer, Ctrl+K palette,
+> Show-keys toggle" — `../deploys.log` line 41; landing entry in
+> [`../DONE.md`](../DONE.md), *"2026-08-31 — Restyle R2 live: the site wears Black Bloc"*).
+> **Last verified: 2026-09-11 09:35** — docs-wide staleness pass. **FIXED:** the header said
+> R2 was "BUILT and awaiting review … not yet deployed"; it had shipped the same afternoon
+> and has been live for eleven days. **Re-checked on `main` at `1d090e5`:**
+> `site/public/assets/shell.js:7 GROUPS` exists, `site/public/assets/fonts/bangers.woff2` is
+> on disk with its OFL file beside it, and `code-notes.md` carries the `# R2 — the restyle
+> skin` section at :4008 with its *What R2 did NOT do* foot at :4076. ⚠️ **NOT re-checked:**
+> nothing was rendered in a browser, no contrast ratio was re-measured, and the §2–§4 body
+> was not re-traced against the CSS that shipped — the deviation notes below are the
+> builder's own, not a fresh reading.
+> Before that, **2026-08-31 (afternoon)** — ⚠️ the morning draft claimed "nothing
 > here has been built yet"; the R1 builder measured otherwise: the top bar (server
 > name, health dot, user chip, theme cog), the 4-group rail and the
 > settingsEditor/saveBar/humanLabel plumbing had ALL already shipped with the
@@ -13,8 +28,9 @@
 > R1 deviations worth knowing: Requests sits under Overview and Members under
 > Moderation (as shipped 08-27, contrary to §2 — one line in `shell.js:GROUPS` to
 > change); labels are short noun phrases (the sentence voice is R2's copy pass).
-> **R2 (the skin) is BUILT and awaiting review** (`a28caef`..`c9d14b7`, not yet
-> deployed): the Black Bloc theme dark+light as the default, the wordmark and the
+> **R2 (the skin) is ✅ LIVE** (`a28caef`..`c9d14b7`, deployed as `c334922`
+> 2026-08-31 13:14 — this line said "BUILT and awaiting review … not yet deployed" until
+> 2026-09-11): the Black Bloc theme dark+light as the default, the wordmark and the
 > display-face rule, the copy voice (group captions, all 90 sentence labels, the
 > Overview's TODAY sentence), table toolbars/tooltip heads/row-count feet plus a
 > Cases detail drawer, the Ctrl K command palette, and the Show keys switch.
