@@ -1,13 +1,22 @@
 # The global personality pool — runbook
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED — secret NAMES only.
-> **Last verified: 2026-09-05** — every command and file path below was run or read on the
-> build branch `worktree-agent-a9f7e266cd87f5c2c`, off `main` at `a93f3e1`.
-> ⚠️ **NOT verified:** nothing here has met live Discord, the live dashboard or the live Fly
-> app; GABI's health route was **never fetched** (she does not publish
-> `gabi_personality_pool_version` yet — her half of the design is a later build); and
-> `scripts/sync_personality_pool.py` has never copied the real canonical file, because that
-> file does not exist yet. The script's refusal path is the part that was exercised.
+> **Last verified: 2026-09-11 08:38** — 🔴 **the "not built yet" half of this file was wrong
+> and is corrected below.** GABI's half LANDED on 2026-09-05 19:45 (KI-23 closed and moved to
+> [`../DONE.md`](../DONE.md)): her `/api/health` answers `gabi_personality_pool_version: 1`
+> (owner deploy `755cfd54`), and **the canonical file EXISTS** —
+> `catalog-platform/apps/discord-worker/src/personality-pool.json`, confirmed present on this
+> machine today. `black_bloc/personality_pool.json` is a **synced** copy, not a hand-built one:
+> `version` **1**, `synced_from` **`catalog-platform@de4ef63`**, **11** tropes. Black Bloc v91
+> (`604226f`) compares her roster by name. So the two "⚠️ does not exist yet / exits 1 every
+> time" warnings below no longer apply and say so in place.
+> ⚠️ **NOT verified today:** nothing here met live Discord, the live dashboard, the live Fly app
+> or a browser; GABI's health route was **not fetched in this pass** (the 2026-09-05 reading is
+> what is quoted); and `scripts/sync_personality_pool.py` was **not run** — its default source is
+> the sibling checkout `../catalog-platform`, which resolves only from the main checkout, not from
+> an agent worktree under `C:/lcw`. Before that, **2026-09-05** — every command and file path
+> below was run or read on the build branch `worktree-agent-a9f7e266cd87f5c2c`, off `main` at
+> `a93f3e1`, when the GABI half was still to come.
 >
 > The design and the reasoning are in [`../info/personality-pool-design.md`](../info/personality-pool-design.md).
 > This file is only how to operate it.
@@ -27,10 +36,10 @@ visible by one field on each health route and one self-test check that reads her
 
 | Where | What |
 |---|---|
-| `black_bloc/personality_pool.json` | the synced copy. `synced_from` is the ONE field allowed to differ from the canonical |
+| `black_bloc/personality_pool.json` | the synced copy. `synced_from` is the ONE field allowed to differ from the canonical. Today: version **1**, `synced_from` `catalog-platform@de4ef63`, **11** tropes (read 2026-09-11) |
 | `black_bloc/personas.py` | derives `TROPES` / labels / neighbours / sort / `DRIFT_*` / `INVARIANT` / `REGISTER` from it; holds `VOICES` (this server's words) |
 | `scripts/sync_personality_pool.py` | copies the canonical over the local copy and stamps the commit it came from |
-| `catalog-platform/apps/discord-worker/src/personality-pool.json` | the canonical. ⚠️ **Does not exist yet** — the GABI half is a later build, and today's local copy is hand-built from her `personality.ts` |
+| `catalog-platform/apps/discord-worker/src/personality-pool.json` | the canonical. ✅ **It exists** — confirmed on this machine 2026-09-11. (This row said "does not exist yet" until then; the GABI half landed 2026-09-05 and the local copy is now genuinely synced, not hand-built) |
 
 ## Order of operations for a roster change
 
@@ -61,8 +70,14 @@ tropes — it never prints success over a stale copy. On success it prints the s
 destination, the pool version, the `synced_from` stamp, and says `(unchanged)` when the copy
 already said exactly that.
 
-⚠️ **Today it exits 1 every time**, because the canonical does not exist. That is correct
-behaviour and not a fault to fix: the local manifest is hand-built until the GABI half lands.
+✅ **It exits 0 now.** (This paragraph said "today it exits 1 every time, because the canonical
+does not exist" — true only until 2026-09-05.) The canonical landed with GABI's half, the last
+real sync stamped `synced_from: catalog-platform@de4ef63`, and a run today should print `(unchanged)`
+unless somebody has bumped the manifest.
+⚠️ **Run it from the main checkout.** The default source is the sibling `../catalog-platform`,
+which does not resolve from an agent worktree under `C:/lcw` — from one of those, pass
+`--from C:\Users\nbasl\OneDrive\Documents\vs-code-repos\catalog-platform\apps\discord-worker\src\personality-pool.json`
+or the exit-1 refusal is about your working directory, not about the manifest.
 
 ## What the boot sync does, and the one column it never touches
 
@@ -106,8 +121,8 @@ the **Chat** feature. Its detail line is one of:
 
 | It says | It means |
 |---|---|
-| `pool v1 on both; 11 moods here; GABI has the same 11` | in step |
-| `pool v1 here; GABI does not say its pool version yet` | ✅ pass. Today's expected line — her half is not built |
+| `pool v1 on both; 11 moods here; GABI has the same 11` | in step. ⬅️ **This is the expected line now** — GABI has published `gabi_personality_pool_version: 1` since 2026-09-05 |
+| `pool v1 here; GABI does not say its pool version yet` | ✅ pass, but it should no longer appear. It was the expected line until 2026-09-05; seeing it today means her deploy rolled back or the peer URL points somewhere else |
 | `could not reach GABI's health route (…) — the pool itself is fine` | ✅ pass. A network fault is NOT a drift fault |
 | `pool v1 here; no peer address is set, so nothing was asked` | ✅ pass |
 | **FAILED** *"GABI is on personality pool v2, this bot on v1…"* | ❌ the two rosters can differ. Run the sync script and redeploy |

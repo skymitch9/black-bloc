@@ -3,22 +3,37 @@
 > **Audience:** whoever has to rebuild this with no memory of it — a weaker
 > executor must be able to follow it cold. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then), secret NAMES
-> only. Last verified: **2026-09-03** — one row was ADDED to the secrets table,
-> `OPERATOR_READ_TOKEN`, by the build that introduced it; it is a NAME with no
-> value anywhere yet (the owner has not minted it) and nothing else in this file
-> was re-measured today. Before that, **2026-08-31** — only the `docs/` gap row and the
-> tracking status were re-measured today (`git ls-files docs` = 48 files,
-> `.gitignore` no longer lists `docs/`). The Fly/GitHub/secret inventory below
-> is still the **2026-08-26 (evening)** reading and was NOT re-checked against
-> the live Fly app or the Developer Portal today.
-> ⚠️ **Drilled so far: the DB backup pull (2026-08-31, below).** Every other
-> restore claim is inference until a dated drill line says otherwise.
+> only. Last verified: **2026-09-11 08:36** — re-read against the repo (`fly.toml`,
+> `.env.example`, `black_bloc/config.py`, `.gitignore`, `git ls-files`). What changed:
+> 🔴 **the GitHub repo is PUBLIC** (since 2026-09-10 20:06) — the Inventory said
+> "private", which is the single most dangerous stale fact a recovery doc can carry
+> now that `docs/` is tracked; **`git ls-files docs` is 94 files**, not 48;
+> **"Machine state: none"** was wrong — the daily DB-backup scheduled task IS machine
+> state, and the named-gaps row above already said so, so the two rows disagreed;
+> **four secret NAMES were missing** from the custody table (`DISCORD_CLIENT_ID`,
+> `DISCORD_CLIENT_SECRET`, `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`) even though
+> `.env.example` lists them and the vault holds them; **`OPERATOR_READ_TOKEN` was
+> minted 2026-09-06** (that was already noted below the table and is now in the
+> header too); and the **Drill log was empty** while two drills were described in the
+> body. Re-measured today: `fly.toml` names app `black-bloc`, region `lax`, volume
+> `black_bloc_data` → `/data`, and `DATABASE_PATH=/data/black_bloc.sqlite3`;
+> `.env.example` carries **21** names.
+> ⚠️ **NOT checked today:** anything against the live Fly app, the Fly dashboard, the
+> Discord Developer Portal, 1Password or a browser — no restore was attempted, and the
+> machine and volume ids below are still the 2026-08-26 reading.
+> ⚠️ **Drilled so far: the DB backup pull (2026-08-31) and the end-to-end scheduled
+> backup (2026-09-01) — both in the Drill log at the foot.** Every other restore claim
+> is inference until a dated drill line says otherwise. Before that, **2026-09-03** —
+> one row was ADDED to the secrets table, `OPERATOR_READ_TOKEN`. Before that,
+> **2026-08-31** — the `docs/` gap row and the tracking status (`git ls-files docs` =
+> 48 files, `.gitignore` no longer lists `docs/`).
 
 ## 🔴 Named gaps (fix these before there is anything worth losing)
 
 | Gap | Consequence today | Closes when |
 |---|---|---|
-| ~~**`docs/` is local-only**~~ **CLOSED 2026-08-31** | Was: the whole docs tree existed on ONE machine under OneDrive sync. Now `docs/` is **tracked in git and pushed** to `github.com/skymitch9/black-bloc` (owner, 2026-08-31, commit `1eb8870`) — measured: `git ls-files docs` returns 48 files. A clone restores the docs tree with the code. | Closed. ⚠️ Consequence: the repo is the backup, so **never write a secret VALUE under `docs/`** — names and custody only. |
+| ~~**`docs/` is local-only**~~ **CLOSED 2026-08-31** | Was: the whole docs tree existed on ONE machine under OneDrive sync. Now `docs/` is **tracked in git and pushed** to `github.com/skymitch9/black-bloc` (owner, 2026-08-31, commit `1eb8870`) — measured 2026-09-11: `git ls-files docs` returns **94** files (48 on 2026-08-31). A clone restores the docs tree with the code. | Closed. 🔴 Consequence, **sharper since the repo went PUBLIC 2026-09-10**: the docs tree is world-readable, so **never write a secret VALUE under `docs/`** — names and custody only. |
+| 🔴 **Every secret named in `.env.example` is due a ROTATION** | `.env.enc` (an OpenSSL-encrypted copy of the whole `.env`) sat in the tree and in two commits before the repo was made public. It was purged with `git filter-repo` and force-pushed on 2026-09-10 16:55, but the old commit stays fetchable by SHA on GitHub until GC, so the encrypted file must be treated as **exposed**. | The owner rotating all **21** names in `.env.example` — tracked as the repo-public item on [`../TODO.md`](../TODO.md), where the current status lives. Not closed at the time of writing (2026-09-11). |
 | ~~DB backup is manual~~ **CLOSED 2026-09-01** | Windows scheduled task **"BlackBloc DB backup"** (daily 04:00, StartWhenAvailable, on the owner's main machine) runs `scripts/backup_db.ps1`: consistent snapshot via `python3 -m black_bloc.dbsnapshot` on the Fly machine, sftp pull to `%USERPROFILE%\black-bloc-backups\backup-<date>.sqlite3`, keeps 14, logs to `backup.log` there. **End-to-end tested 2026-09-01** (311,296 bytes pulled, "ok" logged). | Residual: runs only while THAT machine exists and is signed into flyctl — it is machine state; re-register with the one `Register-ScheduledTask` block in `deploy.md`-style docs (or re-run the drill by hand) after a rebuild. Check `backup.log` if in doubt — a silent stop is the failure mode. |
 
 ### DB backup — the drilled procedure (2026-08-31)
@@ -42,10 +57,11 @@ data and `docs/` is tracked).
 
 | Asset | Where it lives | How to restore |
 |---|---|---|
-| Code | git — private remote `github.com/skymitch9/black-bloc` (pushed 2026-08-26) | `git clone`, then `access/setup.md` §1 |
-| SQLite DB | Local: `data/black_bloc.sqlite3` (gitignored). Hosted: Fly volume `black_bloc_data` at `/data` | Copy the file back into place; schema is created on start if absent (`storage/db.py`) |
-| Generated data | none yet | — |
-| Machine state | none — no scheduled tasks, no installed services. The venv is disposable | `python -m venv .venv && pip install -e ".[dev]"` |
+| Code | git — `github.com/skymitch9/black-bloc`, 🔴 **PUBLIC since 2026-09-10 20:06** (was private; made public so GitHub Actions would run, `.env.enc` purged from history first). A clone needs no credentials — and neither does anyone else's. `docs/` is tracked, so **no secret VALUE may ever be written under it** | `git clone`, then `access/setup.md` §1 |
+| SQLite DB | Local: `DATABASE_PATH` — `C:/Users/nbasl/black-bloc-data/black_bloc.sqlite3` on the owner's machine since KI-1 was closed (the `data/` default is gitignored and inert). Hosted: Fly volume `black_bloc_data` mounted at `/data`, file `/data/black_bloc.sqlite3` (`fly.toml` `[env] DATABASE_PATH`) | Copy the file back into place; the schema (**34** as of 2026-09-11) is created on start if absent and migrations are additive-only (`storage/db.py`) |
+| Backups | `%USERPROFILE%\black-bloc-backups\backup-<date>.sqlite3`, 14 kept, written by the daily scheduled task below. **NEVER inside the repo** — the DB holds member data and the repo is public | Copy one into `DATABASE_PATH`, or sftp it back onto the volume |
+| Generated data | none — everything is either in the DB or regenerated at boot (the personality-pool sync, the birthday import, the chat intent seed) | — |
+| Machine state | ⚠️ **NOT none.** The Windows scheduled task **"BlackBloc DB backup"** (daily 04:00, `scripts/backup_db.ps1`) exists only on the owner's main machine, and it needs `flyctl` installed and signed in there. Also machine-local: `flyctl auth login`, `gh auth`, the `BLACK_BLOC_OPERATOR_TOKEN` User environment variable, and the `.claude` junction to `C:\lcw\onedrive-excluded\black_bot_baf\.claude`. The venv is disposable | `python -m venv .venv && pip install -e ".[dev]"`; re-register the scheduled task; `winget install --id Fly-io.flyctl` then `flyctl auth login`; re-mint the operator token (`access/operator-read.md`) |
 | Hosting | Fly.io app `black-bloc`, org *Sky* (`personal`), machine `85e744c4d959d8`, region `lax`, volume `black_bloc_data` (`vol_r6826q32xq583qd4`) | `deploy.md` first-launch steps recreate all of it from `fly.toml` + `Dockerfile` |
 
 ## Secrets — by NAME, with custody
@@ -73,7 +89,10 @@ data and `docs/` is tracked).
 | Fly account | `flyctl auth login` as the owner's Fly login | — |
 | GitHub | `gh auth` as `skymitch9` | — |
 | `DEV_GUILD_ID` | Not secret; readable in Discord with Developer Mode | `fly secrets` or `[env]` |
-| `SESSION_SECRET` | Re-mintable at will (any long random string) — rotating signs everyone out, nothing else | `fly secrets` + local `.env` |
+| `DISCORD_CLIENT_ID` | **Not secret**, but sign-in is off without it (`site_login_configured` is false) — Developer Portal → Black Bloc → OAuth2 | `fly secrets` + local `.env` |
+| `DISCORD_CLIENT_SECRET` | Re-mintable in the Developer Portal → OAuth2 → **Reset Secret**. Rotating breaks sign-in until Fly has the new value | `fly secrets` + local `.env` |
+| `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` | Re-mintable at dev.twitch.tv/console/apps (owner's Twitch account). **Fallback path only** for the go-live feed — Discord presence is primary — so losing them costs a fallback, not the feature | `fly secrets` + local `.env` |
+| `SESSION_SECRET` | Re-mintable at will (any long random string, ≥32 chars) — rotating signs everyone out, nothing else | `fly secrets` + local `.env` |
 | `POLL_VOTE_SECRET` | ⚠️ **NOT freely re-mintable** (set 2026-08-31): anonymous polls created while it is set key their vote hashes to it — without it those polls refuse votes in words. Custody = local `.env` + `fly secrets` (write-only). If both copies die, close the affected polls and mint a new one. | `fly secrets` + local `.env` |
 | `OPERATOR_READ_TOKEN` | **Freely re-mintable — nothing depends on the old value.** The OWNER mints it (never a session) with the one command in [`operator-read.md`](operator-read.md), which sets the Fly secret and the operator PC's `BLACK_BLOC_OPERATOR_TOKEN` in one motion without printing it. Custody = Fly (write-only) + the HKCU environment on the operator PC; there is deliberately no third copy. Losing both costs one re-mint. It only ever grants **read** access to `/api/*` — a leaked one is revoked with `flyctl secrets unset OPERATOR_READ_TOKEN`, which is immediate and total. | `fly secrets` (unset until the owner mints it) — **never** in `.env` on the host |
 | `ANTHROPIC_API_KEY` | Re-mintable at console.anthropic.com (owner's Anthropic account; rotating just swaps the key). Powers the chat "important" tier (Phase 14). ⚠️ The image must contain the `anthropic` dependency (any deploy ≥ Phase 14) or the tier silently never exists. | `fly secrets` + local `.env` (unset until the owner mints it) |
@@ -96,12 +115,32 @@ a convenience.
 
 ## Full rebuild, in order
 
-1. `git clone` (or copy the folder) → `access/setup.md` §1.
-2. Re-mint `DISCORD_TOKEN` in the portal (§2 there) if the old one is lost.
-3. Restore the DB file if one exists; otherwise start clean — the bot creates
-   the schema.
-4. Local: `python -m black_bloc`. Hosted: `deploy.md` from "First launch".
+1. `git clone https://github.com/skymitch9/black-bloc.git` (public — no credentials
+   needed) → `access/setup.md` §1.
+2. Rebuild `.env` from the tracked `.env.example` (**21** names), pasting each value from
+   the 1Password vault **`Black Bloc`**. Re-mint `DISCORD_TOKEN` in the portal
+   (`setup.md` §2) if the old one is lost.
+3. Restore the DB file if one exists (`%USERPROFILE%\black-bloc-backups\`, newest);
+   otherwise start clean — the bot creates schema **34** on first run.
+4. Local: `python -m black_bloc`. Hosted: `deploy.md` from "First launch" — which
+   recreates the app, the volume and the `[http_service]` block from `fly.toml`.
+5. Machine state the clone does NOT carry: re-register the daily backup scheduled task,
+   `flyctl auth login`, and re-mint `OPERATOR_READ_TOKEN` if a session needs live reads
+   ([`operator-read.md`](operator-read.md)).
+
+⚠️ **Steps 3–5 have never been drilled** — see the Drill log.
 
 ## Drill log
 
-*(none yet — add `YYYY-MM-DD — what was drilled — result`)*
+*(the log was empty until 2026-09-11; these two entries were transcribed from the
+procedures already described above, which record what was actually run and when.)*
+
+| Date | What was drilled | Result |
+|---|---|---|
+| **2026-08-31** | DB backup **pull** by hand — `sqlite3.backup()` on the Fly machine, `ssh sftp get` to `%USERPROFILE%\black-bloc-backups\`, delete the temp file. The full commands are in "DB backup — the drilled procedure" above | ✅ **PASSED.** Backup written and pulled; verified by opening the pulled file and counting rows (birthdays **38**). Gotchas found and kept: a raw copy can tear (WAL), the image has no `sqlite3` CLI but has `python3`, Git Bash needs `MSYS_NO_PATHCONV=1`, and `flyctl ssh console -C` can exit "The handle is invalid" on Windows *after* the command ran |
+| **2026-09-01** | The same thing **as the scheduled task** — "BlackBloc DB backup", daily 04:00, `scripts/backup_db.ps1`, end to end | ✅ **PASSED.** **311,296 bytes** pulled, `ok` logged to `backup.log`. ⚠️ Residual: it runs only while that one machine exists and is signed into flyctl — a silent stop is the failure mode, so check `backup.log` if in doubt |
+
+⚠️ **Never drilled:** a RESTORE (nothing has ever been rebuilt from a backup), a
+`git clone`-from-nothing rebuild, re-minting `DISCORD_TOKEN`, recreating the Fly app or
+the volume from `fly.toml`, and the 1Password `.env` reconstruction on a second machine.
+Every claim about those is inference, and is labelled as such wherever it appears.

@@ -2,9 +2,14 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then; secret NAMES only).
-> Last verified: **2026-08-31** — the HEADER only. The entries below are an
-> append-only archive and were deliberately NOT re-verified or edited; a wrong
-> one gets a superseding entry, never a correction in place.
+> Last verified: **2026-09-11 08:32** — the HEADER only, by the docs-wide staleness
+> pass. Measured while here: the file is **3,964 lines**; the newest entry is
+> **2026-09-11 (v108, merge `73e2e44`)**, which matches the last line of
+> [`deploys.log`](deploys.log); both links in this header resolve. The entries below
+> are an append-only archive and were deliberately NOT re-verified or edited; a wrong
+> one gets a superseding entry, never a correction in place. ⚠️ **NOT checked:** any
+> individual entry's facts, and nothing in this pass met live Discord or a browser.
+> Before that, **2026-08-31** — the HEADER only, on the same terms.
 >
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.

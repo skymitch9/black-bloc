@@ -3,9 +3,15 @@
 > **Audience:** every future AI session (Claude, Kiro, anything else) and the
 > owner. **Status:** TRACKED (owner, 2026-08-31 — was local-only until then;
 > secret NAMES only).
-> Last verified: **2026-08-31** — only the STATUS line and §9's tracking bullet
-> were re-checked (against `git ls-files docs` and `.gitignore`). §1–§8 are the
-> portable standard and were NOT re-read against the estate copy.
+> Last verified: **2026-09-11 08:33** — **§9 only**, re-checked against the repo:
+> `git ls-files docs` = **94** files (was 48 on 2026-08-31), `.gitignore` still does
+> not list `docs/`, and the secret-NAME bullet was widened because `.env.example`
+> now carries **21** names, not one. ⚠️ The repo went **PUBLIC 2026-09-10 20:06**
+> (`TODO.md`, the repo-public item) — that raises the stakes on §9's no-values rule
+> and is now stated there. §1–§8 are the portable standard, were NOT re-read against
+> the estate copy, and were deliberately NOT edited by this pass. Before that,
+> **2026-08-31** — only the STATUS line and §9's tracking bullet
+> were re-checked (against `git ls-files docs` and `.gitignore`).
 >
 > ⚠️ **§1–§8 ARE GENERIC AND PORTABLE. Copy this file into any project
 > unchanged.** Nothing in them names a company, a stack, a service or a repo.
@@ -308,14 +314,26 @@ In a multi-repo checkout this means **every** repo's `docs/`.
 
 - `docs/` is ✅ **TRACKED** — in git and pushed (owner, 2026-08-31: "actually
   lets keep it tracked", commit `1eb8870`, which also dropped `docs/` from
-  `.gitignore`). A clone HAS it. This retires the 2026-08-26 local-only rule,
+  `.gitignore`). A clone HAS it — **94 files** as of 2026-09-11 (48 on
+  2026-08-31). This retires the 2026-08-26 local-only rule,
   under which the tree was gitignored and purged from GitHub history; it was
   force-added as a temporary away-window exception on 2026-08-27 and that
-  exception is now permanent. ⚠️ Because a clone now carries it:
-  **never write a secret VALUE anywhere under `docs/`**; names and custody only.
-- Secret names in this project: `DISCORD_TOKEN` (custody: Discord Developer
-  Portal; deployed copy: `fly secrets`). Inventory and custody table:
-  [`access/RECOVERY.md`](access/RECOVERY.md).
+  exception is now permanent.
+- 🔴 **The GitHub repo `skymitch9/black-bloc` has been PUBLIC since 2026-09-10
+  20:06** (owner: "Make the repo public so we can run actions again"; `.env.enc`
+  was purged from history first and is gitignored now). `docs/` is tracked, so
+  every word here is world-readable: **never write a secret VALUE anywhere under
+  `docs/`** — names and custody only, and no session ids, no member ids that are
+  not already public, no tokens.
+- Secret NAMES in this project: the authority is the tracked
+  [`.env.example`](../.env.example) (**21** names, 2026-09-11) —
+  `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `SESSION_SECRET`,
+  `POLL_VOTE_SECRET`, `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`,
+  `YOUTUBE_API_KEY`, `ANTHROPIC_API_KEY`, `GROQ_API_KEY` and the non-secret
+  configuration beside them — plus `OPERATOR_READ_TOKEN`, which
+  `black_bloc/config.py` reads but `.env.example` does **not** list. Custody and
+  the rebuild inventory: [`access/RECOVERY.md`](access/RECOVERY.md), which owns
+  that table; this bullet links rather than restating it (§3.3).
 - This file was copied from `catalog-platform/docs/DOCS_STANDARD.md` on
   2026-08-26 with §1–§8 unchanged. If the estate copy changes, re-copy §1–§8
   rather than patching by hand.

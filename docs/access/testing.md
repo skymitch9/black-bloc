@@ -1,7 +1,16 @@
 # Testing — the hermetic suite, the mock, and the live api
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED — ⚠️ secret NAMES only.
-> Last verified: **2026-09-05** — the counts below were MEASURED on the wave-5 self-test branch
+> Last verified: **2026-09-11 08:37** — re-measured off `main` `1d090e5` (**v108 LIVE**):
+> `pytest -q -n auto` = **5,546 passed** in **40.1 s** (was 5087 on 2026-09-05);
+> `site/mock/contract.json` = **17 pages / 150 routes / 115 action kinds** (was 149 routes);
+> `pytest -m live tests/live --co` = **59 collected**, unchanged. Also corrected below:
+> `selftest_purge_minutes` defaults to **1**, not 5 (`settings_store.SELFTEST_PURGE_MINUTES_DEFAULT`
+> — it was lowered on 2026-09-10). ⚠️ **NOT run today:** `tests/live/` (a worktree holds no token,
+> so nothing reached the deployed host), the mock **server** (`node site/mock/check.mjs` needs
+> `site/mock/server.mjs` listening on 8788 — the 17/150 figures were read straight out of
+> `contract.json`, which is the file both halves read), and nothing met live Discord or a browser.
+> Before that, **2026-09-05** — the counts were MEASURED on the wave-5 self-test branch
 > (`pytest -q -n auto` = 5087 passed; `node site/mock/check.mjs` = 17 pages / 149 routes; `pytest
 > -m live tests/live` = 59 collected, all skipped with neither env name set).
 > **2026-09-06 13:55 — `tests/live/` ran against the deployed host for the first time** (v97,
@@ -25,7 +34,7 @@
 
 | Layer | Command | Proves | Needs |
 |---|---|---|---|
-| Hermetic | `pytest -q -n auto` | every module, every route shape, every panel card, against fakes | nothing but the venv |
+| Hermetic | `pytest -q -n auto` | every module, every route shape, every panel card, against fakes — **5,546 tests, 40 s** (2026-09-11) | nothing but the venv |
 | Mock | `node site/mock/server.mjs` then `node site/mock/check.mjs` | the PAGES' half of the contract: the mock answers the same shapes the real routers do | node |
 | Live | `pytest -m live tests/live` | the DEPLOYED host answers, the bot is connected, a self-test run really exercises Discord and cleans up | two env names, below |
 | Live, in Discord | `/settings` ▸ **Self-test…** ▸ **Run the self-test** | the only thing no test can: what a card LOOKS like in the client | staff, in the test channel |
@@ -101,5 +110,6 @@ $env:BLACK_BLOC_LIVE_TOKEN = "<the operator token>"     # never paste this into 
 - FastAPI keeps an included router as ONE entry in `app.routes`, not as its routes flattened —
   `selftest.walk_routes` recurses for that reason.
 - A live run posts real messages into `selftest_channel_id` and deletes them again after
-  `selftest_purge_minutes` (5 by default). If a run dies mid-way, the next boot's first purge tick
-  clears the leftovers before it posts anything new.
+  `selftest_purge_minutes` — **1 minute by default** (measured 2026-09-11:
+  `settings_store.SELFTEST_PURGE_MINUTES_DEFAULT` is `1`; it was **5** until 2026-09-10). If a run
+  dies mid-way, the next boot's first purge tick clears the leftovers before it posts anything new.

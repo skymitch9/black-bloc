@@ -2,10 +2,17 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then; secret NAMES only).
-> Last verified: **2026-08-26** (STATUS line only re-checked 2026-08-31) — §1, §3 and §4 executed that day in a fresh
-> `.venv` on Windows 11 / Python 3.12.10; §2 was walked through by the owner
-> the same afternoon (the bot logged in). ⚠️ The exact portal button labels in
-> §2 were not re-checked by Claude — the owner followed them successfully.
+> Last verified: **2026-09-11 08:38** — re-read against the repo. §1's commands and §4's table
+> still match `pyproject.toml` and `scripts/deploy.ps1` (`ruff check .` is what the deploy gate
+> runs). §3's expected boot lines were **stale by a whole project**: a first start now loads
+> **19** cogs and syncs **29** commands, not 2. `.env.example` carries **21** names (it did not
+> exist in this shape in August); copying it is still the right first move. ⚠️ **NOT run today:**
+> nothing in this file — no venv was built, `python -m black_bloc` was **not** booted (a worktree
+> holds no token), and no Developer-Portal page was opened. The exact portal button labels in §2
+> have never been re-checked by Claude; the owner followed them successfully on 2026-08-26.
+> Before that, **2026-08-26** (STATUS line re-checked 2026-08-31) — §1, §3 and §4 executed that
+> day in a fresh `.venv` on Windows 11 / Python 3.12.10; §2 was walked through by the owner the
+> same afternoon (the bot logged in).
 
 ## 1. Environment
 
@@ -59,9 +66,12 @@ python -m black_bloc
 ```
 
 Expected log lines, in order: `TEST MODE ON ...`, `database ready at ...`,
-`invite URL: ...`, `loaded cog black_bloc.cogs.core`, `synced 2 app commands
+`invite URL: ...`, `loaded cog black_bloc.cogs.core` and **eighteen more**
+(`bot.py:COGS` holds **19**, measured 2026-09-11), `synced 29 app commands
 to dev guild ...`, `logged in as Black Bloc#... ; 1 guild(s)`. Then `/ping`
 and `/about` **in `#mute-me-bot-test-spam`**. Both reply ephemerally.
+(This said "loaded cog …core, synced **2** app commands" until 2026-09-11 — that was the
+day-one shape, when `core` was the only cog.)
 
 With no token, the process exits **2** and prints one line saying so — that is
 the designed behaviour, not a crash.
@@ -70,7 +80,8 @@ the designed behaviour, not a crash.
 
 | Task | Command |
 |---|---|
-| Tests | `pytest` |
-| Lint | `ruff check .` (`ruff check --fix .` to auto-fix imports etc.) |
+| Tests | `pytest` — or `pytest -q -n auto`, which is what the deploy gate runs (**5,546** tests in 40 s, 2026-09-11). `tests/live/` is deselected by default; see [`testing.md`](testing.md) |
+| Lint | `ruff check .` (`ruff check --fix .` to auto-fix imports etc.) — the same invocation `scripts/deploy.ps1` uses |
 | Run | `python -m black_bloc` (Ctrl+C stops it cleanly) |
-| Turn the API on | `.env`: `API_ENABLED=true` → <http://127.0.0.1:8080/health> |
+| Turn the API on | `.env`: `API_ENABLED=true` → <http://127.0.0.1:8080/health>. On Fly it is already `true` (`fly.toml` `[env]`) and serves the dashboard too |
+| Look at the dashboard with no bot | `node site/mock/server.mjs` → <http://127.0.0.1:8788> ([`site.md`](site.md)) |
