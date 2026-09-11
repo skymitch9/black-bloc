@@ -83,6 +83,10 @@ EVENTS_MODES = ("off", "shadow", "on")
 EVENTS_RETENTION_DAYS = 7
 EVENTS_RETENTION_MIN_DAYS = 1
 EVENTS_RETENTION_MAX_DAYS = 365
+EVENTS_TEST_RETENTION_KEY = "events_test_retention_minutes"
+EVENTS_TEST_RETENTION_MINUTES = 5
+EVENTS_TEST_RETENTION_MIN_MINUTES = 1
+EVENTS_TEST_RETENTION_MAX_MINUTES = 24 * 60
 EVENTS_MAX_LATE_MINUTES = 15
 EVENTS_LATE_CEILING_MINUTES = 24 * 60
 EVENTS_DEFAULT_MINUTES = 120
@@ -236,6 +240,7 @@ KEY_TYPES: dict[str, str] = {
     "events_create_scheduled": "bool",
     "events_where_link_in_description": "bool",
     "events_channel_retention_days": "int",
+    EVENTS_TEST_RETENTION_KEY: "int",
     "events_max_late_minutes": "int",
     "events_default_minutes": "int",
     EVENTS_SCHEDULED_NAME_KEY: "text",
@@ -359,6 +364,7 @@ KEY_CHOICES: dict[str, tuple[str, ...]] = {
 KEY_MAX: dict[str, int] = {
     "honeypot_purge_days": HONEYPOT_PURGE_MAX_DAYS,
     "events_channel_retention_days": EVENTS_RETENTION_MAX_DAYS,
+    EVENTS_TEST_RETENTION_KEY: EVENTS_TEST_RETENTION_MAX_MINUTES,
     "events_max_late_minutes": EVENTS_LATE_CEILING_MINUTES,
     "events_default_minutes": EVENTS_DURATION_MAX_MINUTES,
     TIME_STEP_KEY: TIME_STEP_MAX_MINUTES,
@@ -383,6 +389,7 @@ KEY_MAX: dict[str, int] = {
 
 KEY_MIN: dict[str, int] = {
     "events_channel_retention_days": EVENTS_RETENTION_MIN_DAYS,
+    EVENTS_TEST_RETENTION_KEY: EVENTS_TEST_RETENTION_MIN_MINUTES,
     "events_default_minutes": EVENTS_DURATION_MIN_MINUTES,
     TIME_STEP_KEY: TIME_STEP_MIN_MINUTES,
     "chat_cooldown_seconds": CHAT_COOLDOWN_MIN_SECONDS,
@@ -406,6 +413,10 @@ KEY_MIN_REASON: dict[str, str] = {
     "events_channel_retention_days": (
         "Deleting a finished event's channel the moment it ends throws away the record before "
         "anybody has read it, so the shortest Black Bloc will keep one is {limit} day."
+    ),
+    EVENTS_TEST_RETENTION_KEY: (
+        "The sweep that deletes a test event's room only runs every five minutes, so anything "
+        "under {limit} minute is the same as {limit} minute and only reads as broken."
     ),
     "chat_cooldown_seconds": (
         "A gap shorter than {limit} seconds lets one person hold Black Bloc in a back-and-forth "
@@ -445,6 +456,10 @@ KEY_MAX_REASON: dict[str, str] = {
     "events_channel_retention_days": (
         "A finished event's channel kept for more than {limit} days is a channel nobody will "
         "ever tidy up."
+    ),
+    EVENTS_TEST_RETENTION_KEY: (
+        "{limit} minutes is a whole day, and a test room kept longer than that is not a test "
+        "room any more. `events_channel_retention_days` is the setting for rooms meant to last."
     ),
     "events_max_late_minutes": (
         "Announcing an event more than {limit} minutes after it started tells people to come to "
@@ -609,6 +624,12 @@ KEY_HELP: dict[str, str] = {
     "events_channel_retention_days": (
         f"days a finished event's channel is kept before deletion, "
         f"{EVENTS_RETENTION_MIN_DAYS} to {EVENTS_RETENTION_MAX_DAYS}"
+    ),
+    EVENTS_TEST_RETENTION_KEY: (
+        f"minutes a finished or refused event's review room is kept while Black Bloc is in test "
+        f"mode, {EVENTS_TEST_RETENTION_MIN_MINUTES} to {EVENTS_TEST_RETENTION_MAX_MINUTES}; the "
+        f"real retention is `events_channel_retention_days`. The sweep runs every five minutes, "
+        f"so a room goes between this many minutes and five minutes later"
     ),
     "events_max_late_minutes": (
         "minutes an event may start late and still be announced; later than that it goes live "
@@ -1966,6 +1987,8 @@ class SettingsStore:
             return True
         if key == "events_channel_retention_days":
             return EVENTS_RETENTION_DAYS
+        if key == EVENTS_TEST_RETENTION_KEY:
+            return EVENTS_TEST_RETENTION_MINUTES
         if key == "events_max_late_minutes":
             return EVENTS_MAX_LATE_MINUTES
         if key == "events_default_minutes":

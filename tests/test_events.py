@@ -932,3 +932,134 @@ def test_the_appended_link_wins_when_the_description_has_to_give():
     assert len(said) == DESCRIPTION_LIMIT
     assert said.endswith("\n\n" + "x" * 100)
     assert said.startswith("d" * (DESCRIPTION_LIMIT - 102))
+
+
+# Follow-up 2 (`docs/info/where-picker-design.md` § Follow-up 2): a typed link LOOKS like a link.
+
+
+def test_a_link_is_one_token_with_a_scheme_and_a_place_is_not_a_link():
+    assert events.where_link("https://twitch.tv/mitchland") == "https://twitch.tv/mitchland"
+    assert events.where_link("http://example.com") == "http://example.com"
+    assert events.where_link("  https://twitch.tv/bb  ") == "https://twitch.tv/bb"
+    assert events.where_link("HTTPS://Twitch.TV/BB") == "HTTPS://Twitch.TV/BB"
+    assert events.where_link("www.twitch.tv/bb") == "https://www.twitch.tv/bb"
+    assert events.where_link("the park") is None
+    assert events.where_link("the.bar at 8") is None
+    assert events.where_link("https://a.com https://b.com") is None
+    assert events.where_link("twitch.tv/bb") is None
+    assert events.where_link("") is None
+    assert events.where_link(None) is None
+
+
+def test_a_bare_scheme_with_nothing_after_it_is_not_a_link():
+    """`[](https://)` is a broken control, so half a link counts as none."""
+    assert events.where_link("https://") is None
+    assert events.where_link("www.") is None
+
+
+def test_the_masked_form_shows_the_place_and_hides_the_scheme():
+    assert events.where_shown("https://twitch.tv/mitchland") == (
+        "[twitch.tv/mitchland](https://twitch.tv/mitchland)"
+    )
+    assert events.where_shown("https://twitch.tv/bb/") == "[twitch.tv/bb](https://twitch.tv/bb/)"
+    assert events.where_shown("www.twitch.tv/bb") == (
+        "[www.twitch.tv/bb](https://www.twitch.tv/bb)"
+    )
+    assert events.where_shown("the park") == "the park"
+    assert events.where_shown("") == ""
+
+
+def test_a_bracket_cannot_break_the_markdown_around_a_link():
+    assert events.where_shown("https://x.com/a]b") == "[x.com/ab](https://x.com/a]b)"
+    assert events.where_shown("https://x.com/a(b)c") == "https://x.com/a(b)c"
+
+
+def test_the_masked_label_is_clamped_like_every_other_typed_place():
+    said = events.where_shown("https://x.com/" + "y" * 300)
+    label, _, href = said[1:-1].partition("](")
+
+    assert len(href) == events.LOCATION_LIMIT == 100
+    assert label == "x.com/" + "y" * 86
+
+
+def test_the_where_line_masks_a_link_for_an_embed_and_leaves_it_bare_for_a_reader():
+    where = Where(WHERE_VOICE, 55, "https://twitch.tv/bb")
+
+    assert events.where_line(where) == "<#55> · [twitch.tv/bb](https://twitch.tv/bb)"
+    assert events.where_line(where, linked=False) == "<#55> · https://twitch.tv/bb"
+    assert events.where_line(Where(WHERE_OTHER, None, "https://twitch.tv/bb")) == (
+        "[twitch.tv/bb](https://twitch.tv/bb)"
+    )
+    assert events.where_line(Where(WHERE_OTHER, None, "the park"), linked=False) == "the park"
+
+
+def test_the_card_s_where_field_carries_the_masked_link():
+    card = build_card(
+        event_id=1,
+        title="Block Party",
+        requester_id=900,
+        starts_at=WHEN,
+        minutes=60,
+        where=Where(WHERE_OTHER, None, "https://twitch.tv/bb"),
+    )
+
+    assert next(f.value for f in card.fields if f.name == "Where") == (
+        "[twitch.tv/bb](https://twitch.tv/bb)"
+    )
+
+
+def test_the_draft_line_carries_the_masked_link_too():
+    draft = a_draft(title="Cookout", where=Where(WHERE_VOICE, 55, "https://twitch.tv/bb"))
+
+    assert "**Where** — <#55> · [twitch.tv/bb](https://twitch.tv/bb)" in "\n".join(
+        events.draft_lines(draft, NOW, chosen=True)
+    )
+
+
+def test_the_scheduled_event_s_description_keeps_the_bare_url():
+    """Discord auto-links a description; a masked link in one is not reliable."""
+    said = events.described_with_where("bring a chair", Where(WHERE_VOICE, 55, "https://tw.tv/b"))
+
+    assert said == "bring a chair\n\nhttps://tw.tv/b"
+
+
+def test_a_button_label_never_masks_a_link_because_a_label_cannot_carry_one():
+    assert events.where_said(Where(WHERE_OTHER, None, "https://twitch.tv/bb")) == (
+        "https://twitch.tv/bb"
+    )
+    assert events.where_button_label(Where(WHERE_OTHER, None, "https://twitch.tv/bb")) == (
+        "Where: https://twitch.tv/bb"
+    )
+
+
+# Follow-up 3 (`docs/info/where-picker-design.md` § Follow-up 3): a refused event's room counts
+# from the decision, not from a start that was never going to happen.
+
+
+def test_a_finished_event_s_room_counts_from_when_it_ended():
+    row = a_row(status=DONE, decided_at=WHEN.isoformat())
+
+    assert events.swept_anchor(row) == WHEN + timedelta(minutes=90)
+
+
+def test_a_denied_or_cancelled_room_counts_from_the_decision_instead():
+    decided = WHEN - timedelta(days=30)
+    for status in (DENIED, CANCELLED):
+        assert events.swept_anchor(a_row(status=status, decided_at=decided.isoformat())) == decided
+
+
+def test_a_decision_with_no_stamp_falls_back_to_the_end_and_then_to_the_row_s_birth():
+    assert events.swept_anchor(a_row(status=DENIED, decided_at=None)) == WHEN + timedelta(
+        minutes=90
+    )
+    assert events.swept_anchor(a_row(status=DENIED, decided_at=None, ends_at=None)) == WHEN
+    assert events.swept_anchor(a_row(status=DENIED, decided_at="", ends_at="soon")) == WHEN
+
+
+def test_a_row_with_nothing_readable_on_it_has_no_anchor_and_is_left_alone():
+    assert events.swept_anchor(a_row(status=DONE, ends_at=None)) is None
+    assert events.swept_anchor(a_row(status=DONE, ends_at="whenever")) is None
+    assert (
+        events.swept_anchor(a_row(status=DENIED, decided_at=None, ends_at=None, created_at=None))
+        is None
+    )

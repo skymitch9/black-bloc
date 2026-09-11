@@ -1,4 +1,5 @@
 import asyncio
+import json
 import re
 from datetime import UTC, datetime, timedelta
 
@@ -60,6 +61,7 @@ from black_bloc.events import (
 )
 from black_bloc.settings_store import (
     DEFAULT_TIMEZONE_KEY,
+    EVENTS_TEST_RETENTION_KEY,
     TIME_STEP_KEY,
     TIMEZONE_CHOICES_KEY,
     SettingsStore,
@@ -3115,3 +3117,203 @@ async def test_a_channel_that_has_gone_is_not_sent_back_as_a_pre_selected_defaul
 
     assert find_select(panel, events_pure.WHERE_PLACEHOLDER).default_values == []
     assert has_item(panel, events_pure.WHERE_CLEAR_BUTTON)
+
+
+# Follow-up 2 B (`docs/info/where-picker-design.md` § Follow-up 2): an "Open link" button.
+
+
+def find_open_link(view):
+    return next(
+        (
+            one
+            for one in view.children
+            if getattr(one, "label", None) == events_pure.WHERE_OPEN_LINK_BUTTON
+        ),
+        None,
+    )
+
+
+async def test_the_card_carries_an_open_link_button_for_every_viewer_when_the_place_is_a_link(
+    cog, bot, member, db
+):
+    await submit(cog, bot, member, where=Where(WHERE_OTHER, None, "https://twitch.tv/bb"))
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+
+    _theirs, view = await open_staff_card(cog, bot, member, row["id"])
+
+    button = find_open_link(view)
+    assert button is not None and button.style is discord.ButtonStyle.link
+    assert button.url == "https://twitch.tv/bb" and button.row == 1
+
+
+async def test_a_card_whose_place_is_words_gets_no_open_link_button(cog, bot, member, db):
+    await submit(cog, bot, member, where=Where(WHERE_OTHER, None, "the park"))
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+
+    _theirs, view = await open_staff_card(cog, bot, member, row["id"])
+
+    assert find_open_link(view) is None
+
+
+async def a_draft_with_a_link(cog, bot, member, *, full):
+    _opened, view = await open_draft_panel(cog, bot, member)
+    view.fields.where = Where(WHERE_OTHER, None, "https://twitch.tv/bb")
+    if full:
+        view.fields.title = "Cookout at the park"
+        view.fields.when.day = future_day(3)
+        view.fields.when.hour = 19
+    picked = await click(bot, member, pick(find_select(view, MINUTE_PLACEHOLDER), ["30"]))
+    return picked, card_view(picked)
+
+
+async def test_the_draft_never_gets_the_open_link_button_because_it_would_come_and_go(
+    cog, bot, member
+):
+    """Submit takes the row's fifth slot once the draft is ready; the masked line has the link."""
+    for full in (False, True):
+        picked, view = await a_draft_with_a_link(cog, bot, member, full=full)
+        assert find_open_link(view) is None
+        assert "[twitch.tv/bb](https://twitch.tv/bb)" in card_embed(picked).description
+
+
+# Follow-up 3 (`docs/info/where-picker-design.md` § Follow-up 3): a refused room counts from the
+# decision, and a test room goes in minutes rather than days.
+
+
+async def action_details(db, kind):
+    cur = await db.conn.execute(
+        "SELECT details FROM action_log WHERE kind = ? ORDER BY id DESC LIMIT 1", (kind,)
+    )
+    row = await cur.fetchone()
+    return json.loads(row["details"]) if row and row["details"] else {}
+
+
+async def decided_long_ago(db, event_id, ago):
+    await db.conn.execute(
+        "UPDATE events SET decided_at = ? WHERE id = ?",
+        ((datetime.now(UTC) - ago).isoformat(), event_id),
+    )
+    await db.conn.commit()
+
+
+async def test_a_denied_room_goes_a_retention_after_the_decision_not_after_the_start(
+    cog, bot, db
+):
+    """A proposal refused today for next month kept its room until next month plus seven days."""
+    channel = bot.guild.add(FakeText(700, name="denied-alice-block-party"))
+    event_id = await store_event(
+        db, status=DENIED, starts_in=timedelta(days=30), minutes=60, channel_id=channel.id
+    )
+    await decided_long_ago(db, event_id, timedelta(days=10))
+
+    await cog.reconcile_events()
+
+    assert channel.deleted is True
+    assert (await get_event(db, event_id))["review_channel_id"] is None
+
+
+async def test_a_denied_room_decided_a_moment_ago_is_still_kept(cog, bot, db):
+    channel = bot.guild.add(FakeText(701, name="denied-alice-block-party"))
+    event_id = await store_event(
+        db, status=DENIED, starts_in=-timedelta(days=30), minutes=60, channel_id=channel.id
+    )
+    await decided_long_ago(db, event_id, timedelta(minutes=1))
+
+    await cog.reconcile_events()
+
+    assert channel.deleted is False
+
+
+async def test_a_finished_room_still_counts_from_the_end_whatever_the_decision_said(cog, bot, db):
+    channel = bot.guild.add(FakeText(702, name="done-alice-block-party"))
+    event_id = await store_event(
+        db, status=DONE, starts_in=-timedelta(days=10), minutes=60, channel_id=channel.id
+    )
+    await decided_long_ago(db, event_id, timedelta(minutes=1))
+
+    await cog.reconcile_events()
+
+    assert channel.deleted is True
+
+
+async def test_in_test_mode_a_room_goes_after_the_minutes_key_and_the_log_says_minutes(
+    cog, bot, db
+):
+    bot.guard = FakeGuard()
+    channel = bot.guild.add(FakeText(703, name="denied-alice-block-party"))
+    channel.category_id = CATEGORY
+    event_id = await store_event(
+        db, status=DENIED, starts_in=timedelta(days=30), minutes=60, channel_id=channel.id
+    )
+    await decided_long_ago(db, event_id, timedelta(minutes=6))
+
+    await cog.reconcile_events()
+
+    assert channel.deleted is True
+    details = await action_details(db, "event.channel_deleted")
+    assert details["kept_minutes"] == 5 and "kept_days" not in details
+
+
+async def test_in_test_mode_a_room_younger_than_the_minutes_key_is_left_alone(cog, bot, db):
+    bot.guard = FakeGuard()
+    channel = bot.guild.add(FakeText(704, name="denied-alice-block-party"))
+    channel.category_id = CATEGORY
+    event_id = await store_event(
+        db, status=DENIED, starts_in=-timedelta(days=30), minutes=60, channel_id=channel.id
+    )
+    await decided_long_ago(db, event_id, timedelta(minutes=2))
+
+    await cog.reconcile_events()
+
+    assert channel.deleted is False
+    assert "event.channel_deleted" not in await action_kinds(db)
+
+
+async def test_the_minutes_key_is_what_test_mode_reads_and_the_days_key_is_left_alone(
+    cog, bot, db
+):
+    bot.guard = FakeGuard()
+    await bot.store.set(GUILD, EVENTS_TEST_RETENTION_KEY, 60)
+    channel = bot.guild.add(FakeText(705, name="denied-alice-block-party"))
+    channel.category_id = CATEGORY
+    event_id = await store_event(
+        db, status=DENIED, starts_in=-timedelta(days=30), minutes=60, channel_id=channel.id
+    )
+    await decided_long_ago(db, event_id, timedelta(minutes=30))
+
+    await cog.reconcile_events()
+
+    assert channel.deleted is False
+
+    await decided_long_ago(db, event_id, timedelta(minutes=90))
+    await cog.reconcile_events()
+
+    assert channel.deleted is True
+
+
+async def test_with_no_guard_the_days_key_is_what_counts_and_the_log_says_days(cog, bot, db):
+    channel = bot.guild.add(FakeText(706, name="done-alice-block-party"))
+    await store_event(
+        db, status=DONE, starts_in=-timedelta(days=10), minutes=60, channel_id=channel.id
+    )
+
+    await cog.reconcile_events()
+
+    assert channel.deleted is True
+    details = await action_details(db, "event.channel_deleted")
+    assert details["kept_days"] == 7 and "kept_minutes" not in details
+
+
+async def test_a_room_outside_the_test_category_is_still_only_logged_never_deleted(cog, bot, db):
+    """Follow-up 3 changes WHEN a room goes; the guard still decides WHERE it may."""
+    bot.guard = FakeGuard()
+    outside = bot.guild.add(FakeText(707, name="denied-alice-block-party"))
+    event_id = await store_event(
+        db, status=DENIED, starts_in=timedelta(days=30), minutes=60, channel_id=outside.id
+    )
+    await decided_long_ago(db, event_id, timedelta(minutes=30))
+
+    await cog.reconcile_events()
+
+    assert outside.deleted is False
+    assert "event.would_delete_channel" in await action_kinds(db)

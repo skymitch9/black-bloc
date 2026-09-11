@@ -309,6 +309,8 @@ with both), `docs/info/code-notes.md` (a by-NAME `## Where follow-up` block unde
 
 ## Follow-up 2 — a typed link LOOKS like a link (owner, 2026-09-10 ~23:09, verbatim: "Is there a way to make them look like links in the events slash" → "Do A + B")
 
+> **Status: 🔨 BUILT** on branch `where-links` off `main` at `8adbc75` (commit `a8a1210`) — ⚠️ **NOT merged, NOT deployed, never seen in Discord**. Measurements and every departure are the **`## Follow-up 2+3 deviations`** foot.
+
 Today a typed `https://twitch.tv/mitchland` beside a channel renders as raw text in the draft (an embed
 description, `draft_lines`) and in the card's Where field (`card_for`, an embed field). Discord auto-links a
 bare URL in both places, but shows the whole scheme-and-all string, and nothing on the card is a real
@@ -349,6 +351,8 @@ not a policy).
 
 ## Follow-up 3 — test rooms go after five minutes, and denied rooms count from the decision (owner, 2026-09-10 ~23:09, verbatim: "For test ones let's delete them after 5 minutes"; earlier "for a denied event do we have a timer before it's auto deleted?")
 
+> **Status: 🔨 BUILT** on branch `where-links` off `main` at `8adbc75` (commit `0e765d5`) — ⚠️ **NOT merged, NOT deployed, never seen in Discord**. Measurements and every departure are the **`## Follow-up 2+3 deviations`** foot.
+
 Measured 23:05: `EventsCog._sweep_finished` deletes a DONE / DENIED / CANCELLED event's review channel once
 `now - ends_at >= events_channel_retention_days` (live 7). Two things are wrong with that for the owner:
 
@@ -377,3 +381,66 @@ logged; with it off, the days key; `tests/test_settings_store.py` — the new ke
 and both refusal sentences. Docs: `docs/access/OWNER_GUIDE.md` events section (one line), sweep rows.
 
 Two commits on the build branch: Follow-up 2 first, Follow-up 3 second, each with its tests green.
+
+## Follow-up 2+3 deviations
+
+> Written at the build, 2026-09-10 23:55, on branch `where-links` off `main` at `8adbc75`
+> (commits `a8a1210`, `0e765d5`). **Status: 🔨 BUILT** — ⚠️ **NOT merged, NOT deployed, and NOTHING
+> here has met Discord**: no test can click a Discord button, `python -m black_bloc` was NOT booted
+> (a worktree holds no token), no browser rendered the Settings page, and TEST_MODE makes no
+> scheduled event at all. What IS measured: the suite (**5473 → 5503**, forward and `BB_REVERSE=1`),
+> `ruff check black_bloc tests`, and `node site/mock/check.mjs` (*ok - 17 pages, 150 routes, 14 core
+> settings, all keys present*). Keys **198 → 199**, schema unchanged at **34**. The owner's by-eye
+> rows are **338–342** in [`../access/sweeps.md`](../access/sweeps.md).
+
+- **G1 (build) `where_link` refuses a bare scheme.** § Follow-up 2 says a single token "that starts
+  with `http://` or `https://`". `https://` on its own passes that test and would mask to
+  `[](https://)` — an empty label, which renders as nothing clickable. Something has to follow the
+  scheme (and `www.`) for it to count as a link.
+- **G2 (build) `where_shown` returns the BARE text when the href itself contains a `)`.** The spec
+  drops `]` and `)` from the LABEL only. The label is safe to edit; the href is not, because editing
+  it changes where the reader lands. Discord's parser ends a link destination at the first `)`, so a
+  URL carrying one (a Wikipedia article, say) would render as half a link plus loose text. Bailing
+  out whole gives Discord's own auto-linking instead, which is correct and visibly a link.
+- **G3 (build) The "Open link" button is added LAST in both builders, so its row is counted after
+  everything else.** § Follow-up 2 B says `row=1` with a fall-through to the next row with room.
+  `add_open_link` counts `view.children` to decide, which only works once the rest of the view
+  exists — hence the call at the foot of `build_card` and `build_draft` rather than beside the Where
+  button. The card tries rows 1, 2, 3, 4 in that order; in practice row 1 always has room (Where,
+  Back and the review-room link make three of five).
+- **G4 (build → REVERSED at review) The DRAFT gets no Open link button at all.** § Follow-up 2 B said the draft gets it "only if that row has a free slot". The button row holds Title & details · Where · Time zone · Back, and **Submit** joins them the moment the draft passes — five, Discord's cap. The build put the button there while something was still missing and let Submit displace it; the conductor removed the draft call before the merge (`build_draft` no longer calls `add_open_link`; one test replaces two) because a control that appears only while the draft is incomplete and vanishes when it is ready is worse than no control. The masked Where line carries the link on the draft; the card keeps the button.
+- **G5 (build) `ROW_ITEM_CAP = 5` was added to `black_bloc/events.py`.** Nothing in the repo named
+  Discord's per-row item cap; `SELECT_CAP` is the 25-option one, which is a different number for a
+  different thing. It sits beside `BUTTON_LABEL_LIMIT`, which was added by the same argument in the
+  first Where build (D8).
+- **G6 (build) `where_line` gained a `linked=` FLAG rather than a second function.** The Where
+  section of `code-notes.md` argues that `where_line` and `where_said` are deliberately two
+  functions. `linked` is not that case: it does not change what is said, only whether the same text
+  wears markdown, and the plain caller wants the identical channel-and-join logic. A second function
+  would have been that logic copied.
+- **G7 (build) `swept_anchor` falls back through THREE columns, and a row with none readable is
+  left standing.** § Follow-up 3 gives `decided_at` → `ends_at` → `created_at`, which is what was
+  built. What it does not say is what happens when all three are unreadable: the helper returns
+  `None` and `_sweep_finished` skips the row, which is exactly what it already did for an
+  unparseable `ends_at`. Deleting a room because its timestamps are broken would be the one
+  irreversible reading of a bad row.
+- **G8 (build) "Test mode is on" is `guard is not None`, with no `enabled` to read.** § Follow-up 3
+  writes `guard is not None and guard.enabled`, hedged with "whatever `guard.py` exposes". It
+  exposes no such attribute: `TestModeGuard` is installed or it is not, and `events_category`,
+  `card_channel` and `rename_channel` all ask exactly `getattr(bot, "guard", None)`. The brief's own
+  instruction — use the existing predicate, do not add a second — is what was followed.
+- **G9 (build) The channel-delete REASON flips with the window, not just the log row.**
+  § Follow-up 3 names only `kept_minutes` in the `event.channel_deleted` details. The reason string
+  handed to `channel.delete` said "kept N day(s)", which would have been a false sentence in
+  Discord's own audit log every time test mode swept a room. `SWEEP_KEPT_DAYS` /
+  `SWEEP_KEPT_MINUTES` live in `events.py` beside the statuses, because the cog is not the home of
+  any fact.
+- **G10 (docs) The key's min/max reasons say "every five minutes" in words rather than importing
+  `RECONCILE_MINUTES`.** `settings_store.py` importing from a cog would be a new arrow between
+  layers for one number in one sentence. The number is stated in prose in three places (the key's
+  help, its floor refusal, and the owner-guide line) and owned in code by
+  `cogs/community/events.py:RECONCILE_MINUTES`.
+- **G11 (docs) Sweep rows are 338–342 — five, where § Follow-up 3 implies fewer.** One row per thing
+  the owner has to see by eye: the masked link and the card button (338), the draft row's cap (339),
+  a place that is not a link (340), the denied room's new anchor (341, the one that needs ten
+  minutes of waiting), and the new key with both refusals (342).
