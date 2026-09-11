@@ -1,11 +1,42 @@
 # Chat — `/chat` is ONE command that opens a panel (wave 3)
 
 > **Audience:** the build agent and the reviewer, and the owner for §I. **Status:** TRACKED ·
-> ✅ **SHIPPED in v75** (`251dd14`, 2026-09-04 15:58; built on `worktree-agent-ab33797d235cf0d96` for
-> 441k, five commits off `5db58fb`; landing entry in `docs/DONE.md` 2026-09-04). The `path:line`
+> ✅ **LIVE since v75** (`251dd14`, 2026-09-04 15:58; built on `worktree-agent-ab33797d235cf0d96` for
+> 441k, five commits off `5db58fb`; landing entry in `docs/DONE.md` 2026-09-04). Still live at
+> **v108** (`73e2e44`, 2026-09-11 00:37). The `path:line`
 > keys below are the PLANNING-time ones and were not re-read after the build — `code-notes.md`'s
 > `# Chat panel (wave 3)` section is the post-merge map. Sweeps **155–162**.
-> **Last verified: 2026-09-04** — every `path:line` below was READ against `main` at `bf3e447`
+>
+> **Since then, four things this document predates:**
+> 1. **v78** (`3429233`) — `HIDDEN_WHEN_OFF` grew from one key to fourteen, so `chat_mode:
+>    ("chat",)` EXISTS now (`command_visibility.py:21`). §E's last row and §I's second settled
+>    bullet are history: `/chat` DOES vanish while the mode is off, behind `hide_commands_when_off`.
+>    ⚠️ **`/memory` is the one carve-out** — `chat_memory_mode` went in at v78 and was taken back
+>    out the same day (`51b5164`, *"fourteen features hide, not fifteen"*), because memory off
+>    deletes nothing and the site is staff-only, so the panel is a member's only door to the notes
+>    held about them (KI-14).
+> 2. **v84** (`ce97de0`) — `LOG_LEVEL_COMMANDS` corrected for all 17 features; `chat_log_level`'s
+>    help now names `/chat` ▸ **Logs**, not a retired `/chat logs`.
+> 3. **v88** (`794d3aa`) — the cog's remove-confirm goes through the library:
+>    `cogs/content/chat.py:517 open_remove_confirm` wraps `panels.confirm` + `confirm_items`
+>    (`:55–56`).
+> 4. **v90/v91** (`7c59eb1`, `604226f`) — the personality roster became a SYNCED manifest:
+>    `black_bloc/personality_pool.json` (11 tropes) drives `personas.py`, `sync_tropes`/`sync_pool`
+>    replaced `seed_tropes`, two log kinds `chat.pool_synced` / `chat.pool_retired`
+>    (`logkinds.py:166`, `:202`) and two keys `personality_pool_sync` / `personality_pool_peer_url`
+>    joined the registry. The counts this header measured are unchanged by it —
+>    `PERSONALITY_CHOICES` is still **13** and `TROPE_NAMES` still **11**, re-measured today.
+>
+> **Last verified: 2026-09-11 08:47** — re-measured in this tree at `1d090e5`: `chat_panel_minutes`
+> registered (registry **202** keys), `black_bloc/chat_panel.py` exists, and every label §C names
+> still reads the same string — `PERSONALITY_MOVE` / `KNOWLEDGE_MOVE` (`chat_panel.py:159–160`),
+> `WRITE_MOVE` / `FIND_MOVE` (`:165–166`), `VOICE_PLACEHOLDER` / `MOOD_OFF_PLACEHOLDER` /
+> `MOOD_ON_PLACEHOLDER` / `NOTE_PLACEHOLDER` (`cogs/content/chat.py:161–164`). `site/mock/contract.json`
+> now holds **150 routes / 17 pages** (142 at the build — later features added them, not this one).
+> ⚠️ **NOT checked in this pass:** anything in a Discord client or a browser, no boot, no pytest, no
+> ruff, no `check.mjs` run, no model provider called; `chat_llm_mode` was not read on the live guild.
+>
+> **Before that, 2026-09-04** — every `path:line` below was READ against `main` at `bf3e447`
 > (the working tree is `4336a66`, a docs-only commit on top of it; **no source file differs**),
 > in `black_bloc/cogs/content/chat.py` (757 lines), `black_bloc/knowledge.py` (554),
 > `black_bloc/personas.py` (407), `black_bloc/chat_llm.py` (705), `black_bloc/chat.py` (1100),
@@ -282,7 +313,7 @@ decisions — staff reaching every control, and the panel refusing in words rath
 | the children assertion | `tests/test_bot.py:172–178` | **deleted** — there are no children |
 | `"chat"` in `STAFF_COMMANDS` | `tests/test_bot.py:29` | **kept** (§B) |
 | `assert len(top) == 38` | `tests/test_bot.py:190` | ⚠️ **unchanged** — a group was already one slot. Re-measure; edit only if a sibling merge moved it |
-| `HIDDEN_WHEN_OFF` | `command_visibility.py:16–20` | **nothing to change** — measured, chat has no entry, so `/chat` does not vanish when a mode is off |
+| `HIDDEN_WHEN_OFF` | `command_visibility.py:16–20` | **nothing to change** at the build — measured, chat had no entry. ⚠️ **Since v78** it has one (`chat_mode: ("chat",)`, `command_visibility.py:21`), so `/chat` DOES vanish when the mode is off unless `hide_commands_when_off` is turned off. `/memory` is deliberately NOT in the map (`51b5164`) |
 
 **Strings that name a retired subcommand and are rewritten in the SAME commit** — each currently
 tells somebody to run something that will not exist:
@@ -441,7 +472,9 @@ Settled first, by the standing rules, so they are NOT put to him:
   it. Members reach chat by @-mentioning the bot, which is not a command.
 - ✅ **`/chat` does not vanish when a mode is off.** `command_visibility.HIDDEN_WHEN_OFF`
   (`:16–20`) has no chat entry to remove, and the owner answered this shape on 2026-09-03 13:47
-  ("Visible") for applications.
+  ("Visible") for applications. ⚠️ **REVERSED at v78** (2026-09-05, *"a feature turned off on the
+  portal takes its `/command` with it"*): the map now names all fifteen features, `chat_mode`
+  included, behind `hide_commands_when_off` (default true).
 - ✅ **`chat_status_admin_only` now hides the spend BLOCK, not the whole command.** Forced by §B:
   the command that carried Status also carries Knowledge and Personality, which a non-admin
   staffer may use.
@@ -626,7 +659,7 @@ note written, no model called. The substitutes are named in the measurements at 
 | Full suite | **4338 passed**, 0 failed (baseline measured on this worktree at `5db58fb` before any change: **4268**). `tests/cogs/content/test_chat.py` went 72 → **98** tests; `tests/test_chat_panel.py` is new at **43** |
 | `ruff check .` | clean |
 | Import edge | `python -c "import black_bloc.chat_panel, black_bloc.cogs.content.chat, black_bloc.api.tools.chat, black_bloc.knowledge, black_bloc.personas, black_bloc.settings_store"` — passes, no cycle |
-| `node site/mock/check.mjs` | **17 pages / 142 routes, all keys present** — unchanged, as §E predicted (no route added, removed or renamed) |
+| `node site/mock/check.mjs` | **17 pages / 142 routes, all keys present** — unchanged, as §E predicted (no route added, removed or renamed). **150 routes today** (v108), none of them chat's |
 | `labels.js` / `server.mjs` parse | both parse |
 | The AST guard | `test_a_route_never_notes_an_event_its_shared_path_already_logged` passes with the five `note()`s gone |
 | Not measured | anything live: no Discord, no dashboard in a browser, no model provider called. `chat_llm_mode` is still `off` and this build does not change it |

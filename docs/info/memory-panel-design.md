@@ -1,9 +1,33 @@
 # Chat memory — `/memory` is ONE command that opens a panel (wave 2)
 
 > **Audience:** the build agent and the reviewer, then the owner for §I. **Status:** TRACKED ·
-> ✅ **SHIPPED 2026-09-03 — v68 `cb941d9` 16:48** (built on `worktree-agent-aaaa13e778f0ba65a`, base
-> `main` `8cbe453`, merged `cb941d9`; landing entry in `DONE.md`). Fork **I-M1 = OPEN IT** (owner, 2026-09-03 16:12), built as decided. The
+> ✅ **LIVE since v68** (2026-09-03 16:48, `cb941d9`; built on `worktree-agent-aaaa13e778f0ba65a`, base
+> `main` `8cbe453`, merged `cb941d9`; landing entry in `DONE.md`). Still live at **v108** (`73e2e44`,
+> 2026-09-11 00:37). Fork **I-M1 = OPEN IT** (owner, 2026-09-03 16:12), built as decided. The
 > `## Deviations` foot names every place the build departed from this document.
+>
+> **Since then, three things this document predates:**
+> 1. ⚠️ **Fork I-M1 was nearly lost and then held.** The 2026-09-04 "hide commands when off" ask
+>    named every feature, so the v78 build (`3429233`) put `chat_memory_mode: ("memory",)` into
+>    `HIDDEN_WHEN_OFF` — undoing I-M1. It was taken back out at the merge the same day
+>    (`51b5164`, *"/memory keeps its carve-out: fourteen features hide, not fifteen"*), with the two
+>    tests that pin it, because memory off deletes nothing and the site is staff-only, so the panel
+>    is a member's only door to the notes held about them (KI-14). **Measured 2026-09-11: `memory`
+>    is NOT in `HIDDEN_WHEN_OFF` — fourteen entries, none of them `chat_memory_mode`.**
+> 2. **v84** (`ce97de0`) corrected `LOG_LEVEL_COMMANDS` across 17 features.
+> 3. ✅ **§D's parenthetical finding is CLOSED** — `request_`/`event_`/`poll_`/`birthday_panel_minutes`
+>    all have `labels.js` rows today (`:193`, `:102`, `:117`, `:129`), as does `memory_panel_minutes`
+>    (`:225`); the v93 labels pass finished the set.
+>
+> **Last verified: 2026-09-11 09:10** — re-measured in this tree at `1d090e5`: `memory_panel_minutes`
+> registered (registry **202** keys), the panel's move labels still read the same strings —
+> `FORGET_WORDS_MOVE` "Forget by words…" and `STOP_MOVE` "Stop remembering me"
+> (`cogs/content/chat_memory.py:152–153`), `PICK_CAPPED` (`:112`), `FORGET_WORDS_TITLE` (`:113`),
+> `MEMORY_IS_OFF` as a LINE (`:63`, appended at `:366`) with the route's own copy at
+> `api/tools/chat_memory.py:34`; `panels.db_up` exists (deviation 4's move); the tree is **29**
+> top-level commands. `site/mock/contract.json` holds **150 routes / 17 pages** (142 at the build).
+> ⚠️ **NOT checked in this pass:** anything in a Discord client or a browser; no boot, no pytest, no
+> ruff, no `check.mjs` run; sweep rows **104–108** are still the owner's and still unrun.
 > **Measured on the branch:** ruff clean · **3744 tests pass** (3710 at the base, +34, none
 > lost) · `commands synced` **42, UNCHANGED** (measured through the real tree, not booted —
 > no bot token here) · the five-module import check passes · `node site/mock/check.mjs` still
@@ -171,7 +195,8 @@ governs decisions the server may reasonably differ on; a privacy floor is not on
 **Also needed for the key to be usable, both ways:** `site/public/assets/labels.js` gains
 `memory_panel_minutes: 'How long the /memory panel stays live'` beside `:168`. (⚠️ Finding, not
 this build's job: `request_`/`event_`/`poll_`/`birthday_panel_minutes` have **no** `labels.js`
-entry at all — only `applications_panel_minutes` `:168` does.)
+entry at all — only `applications_panel_minutes` `:168` does. ✅ **Closed** — measured 2026-09-11,
+every `*_panel_minutes` key in the registry has a `labels.js` row, including all four of these.)
 
 ## E. What goes away, and every line that names it
 
@@ -344,7 +369,9 @@ something has been misread: stop and say so.
 
 Written by the build agent, 2026-09-03. Everything not listed here was built as this document
 says, including the decided fork **I-M1** (open it: `HIDDEN_WHEN_OFF["chat_memory_mode"]` is
-gone and `MEMORY_IS_OFF` is a LINE).
+gone and `MEMORY_IS_OFF` is a LINE). ✅ **Still true on 2026-09-11** — it went back in at the v78
+hide-when-off build and came straight back out at `51b5164`; measured today, `chat_memory_mode`
+is not in the map.
 
 1. ⚠️ **`Forget by words…` renders above the cap for an OPTED-OUT member too, which §C's table
    does not.** The table's last row lumps `no · ≥1` into one case with no `Forget by words…`;

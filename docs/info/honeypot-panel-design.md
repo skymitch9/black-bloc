@@ -1,8 +1,35 @@
 # Honeypot — `/honeypot` is ONE command that opens a panel
 
 > **Audience:** the build agent and the reviewer, and the owner for §I.
-> **Status:** TRACKED · ✅ **SHIPPED 2026-09-05 as v79 (`361eaa2`, merged `fa845a6`)** — see the `## Build deviations` foot for what changed and what is NOT verified. Boot-verified from the Fly log only; **never run against live Discord by eye** (sweeps 188–199 are the owner's). KI-21 covers the generic-route bypass.
-> **Last verified: 2026-09-05** — every `path:line` below was READ against `main` at
+> **Status:** TRACKED · ✅ **LIVE since v79** (2026-09-05, `361eaa2`, merged `fa845a6`) — see the `## Build deviations` foot for what changed and what is NOT verified. Boot-verified from the Fly log only; **never run against live Discord by eye** (sweeps 188–199 are the owner's). KI-21 covered the generic-route bypass and is now CLOSED (see 1 below). Still live at **v108** (`73e2e44`, 2026-09-11 00:37).
+>
+> **Since then, three things this document predates:**
+> 1. ✅ **KI-21 is CLOSED** (v89, `243dc0f`, 2026-09-05) — the generic-route bypass this header and
+>    §E flag was fixed: `PUT`/`DELETE /api/settings/{key}` now write through `set_key`/`clear_key`
+>    with `via=website`, and `gated_writers()` hands `honeypot_mode` and `honeypot_exempt_role_ids`
+>    (with `automod_mode` — the only three cog-gated writes in the app) to the cog's own move, so
+>    the website gets the SAME verdict the panel does. The issue was moved whole to `DONE.md`.
+> 2. **v78** (`3429233`) landed the hide-when-off build this document was written beside:
+>    `HIDDEN_WHEN_OFF` went from one key to fourteen, so `honeypot_mode: ("honeypot",)` EXISTS now
+>    (`command_visibility.py:24`) — the measurement *"holds `request_mode` only today"* is history,
+>    and §E's row and §I's settled answer (the entry stays) both read correctly against it.
+> 3. **v84** (`ce97de0`) corrected `LOG_LEVEL_COMMANDS`, so `honeypot_log_level`'s help names
+>    `/honeypot` ▸ **Logs**, not a retired subcommand.
+>
+> **Last verified: 2026-09-11 09:02** — re-measured in this tree at `1d090e5`: `black_bloc/honeypot.py`
+> exists (§F's new pure module), `honeypot_panel_minutes` is registered beside five other
+> `honeypot_*` keys (registry **202**), both new log kinds are known (`honeypot.exempt_set`
+> `logkinds.py:239`, `honeypot.settings` `:242`) and `honeypot.exempt_add`/`exempt_remove` are gone
+> (only automod's remain, `:245–246`), and every move label reads the same string — `SETUP_MOVE`
+> "Setup…", `FORGET_MOVE`, `CLEAR_EXEMPT_MOVE` "Exempt nobody", `SETTINGS_MOVE`, `REFRESH_MOVE`,
+> `LOGS_MOVE`, `SITE_MOVE`, `PANEL_NUMBERS_MOVE`, `BACK_MOVE` (`honeypot.py:49–57`).
+> `site/mock/contract.json` holds **150 routes / 17 pages** — which finally replaces the OLD 142
+> reading this header could not take (port 8788 was held then; the count here is read off
+> `contract.json`, not from a running mock).
+> ⚠️ **NOT checked in this pass:** anything in a Discord client or a browser; no boot, no pytest, no
+> ruff, no `check.mjs` run, no trap created, no ban path exercised.
+>
+> **Before that, 2026-09-05** — every `path:line` below was READ against `main` at
 > **`git rev-parse --short HEAD` = `12979c2`** (the two commits since `46fba16` touch
 > `docs/TODO.md` only — `git diff --stat 46fba16 12979c2` = 1 file, 5 insertions — so every code
 > line number here is valid at both). Files read in full or grepped exhaustively:
@@ -511,6 +538,8 @@ flight and adds at least one row of its own, so this document claims NO numbers 
 writes them as `H1`–`H10` (letters on purpose, so a half-renumbered table cannot look
 finished)** — the shape the role-menus build landed with. The Phase 3 appendix block at
 `:212–216` is rewritten **in place**, not added to.
+✅ **The conductor numbered them 188–199** at the merge (`docs/access/sweeps.md` ▸ *The honeypot
+panel — rows 188–199*); the file now runs to row **350**.
 
 | Do this | Expect |
 |---|---|
@@ -709,7 +738,9 @@ builds it from `panels.py:123`). The report names both, plus the `H1`–`H12` ro
 ## Build deviations — what the build did differently, and why
 
 > Written by the build agent on `worktree-agent-a7ea6b0dbeac7f753`, off `932f34e`, 2026-09-05.
-> **Status: BUILT, not shipped.** `pytest` **4593 passed** (4539 on `main` before), `ruff check`
+> ⚠️ **"BUILT, not shipped" was true for the hours between this foot being written and the merge;
+> it SHIPPED the same day as v79** (`361eaa2`, merged `fa845a6`) and is live at v108. The
+> measurements below are the branch's and were not retaken. `pytest` **4593 passed** (4539 on `main` before — **5546** today), `ruff check`
 > clean over `black_bloc` and `tests`, `node --input-type=module --check` clean on
 > `site/public/assets/labels.js`. ⚠️ **Nothing has met live Discord** — no boot, no token, no
 > sync, no panel opened, no trap created, nothing deployed.

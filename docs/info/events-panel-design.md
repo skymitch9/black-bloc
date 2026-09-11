@@ -7,12 +7,40 @@
 > still true and is exactly why that option exists. Everything else here — the panel, the card, the
 > button tables, the settings sub-panel — is unchanged and still current.
 
-> **Audience:** the build agent and the reviewer. **Status:** TRACKED · ✅ **SHIPPED — live in v64** (`e670542`, merged `--no-ff` 2026-09-03 after Fable review,
-> deployed 14:05, `deploys.log` line 63; synced 43 app commands, not run against Discord by eye). Built on
+> ⚠️ **AND PARTLY SUPERSEDED AGAIN, 2026-09-10/11** by [`where-picker-design.md`](where-picker-design.md)
+> and its three follow-ups (v105 `3205c0f` · v106 `6c10b9d` · v107 `ac43a20` · v108 `73e2e44`): the draft
+> panel has a fifth **Where** button opening a `WherePanel` (ChannelSelect over voice/stage/text, a typed
+> box beside it, **Clear**, **Back**); `events.where_kind` + `where_channel_id` are new columns
+> (**schema 33 → 34**); a typed link is masked and gets an **Open link** button on the review card; a
+> shorthand such as `ttv/skyaiva` is normalised at entry and a bare host is a link at render time; and
+> the link is tried once with a bounded GET before it is kept. **Six new settings keys in the Events
+> group** this §D predates — `events_scheduled_name_template`, `events_test_retention_minutes`,
+> `events_where_link_in_description`, `events_where_link_aliases`, `events_where_link_check`,
+> `events_where_link_check_seconds` (plus `raidtrain_scheduled_name_template` on the sibling feature).
+> Sweeps **329–350**. Everything else here still stands.
+
+> **Audience:** the build agent and the reviewer. **Status:** TRACKED · ✅ **LIVE since v64** (`e670542`, merged `--no-ff` 2026-09-03 after Fable review,
+> deployed 14:05, `deploys.log` line 63; synced 43 app commands — **29** today — not run against Discord
+> by eye). Still live at **v108** (`73e2e44`, 2026-09-11 00:37), with the two banners above naming what
+> changed on top of it. Built on
 > `feat/events-panel` (worktree branch `worktree-agent-a448c7ab780ed3c2b`, commits `9a1beb4`
 > code, `d85274e` tests, `fbaf046` docs, `e6030c5` a one-constant cleanup; the branch is also
 > tagged `feat/events-panel` at the same commit).
-> **Last verified: 2026-09-03** on that branch: `ruff check .` clean, **3502 tests pass** (3442 at
+> **Since then, beyond the two banners:** **v78** (`3429233`) gave `events_mode` a `HIDDEN_WHEN_OFF`
+> entry (`command_visibility.py:22`), so `/event` DOES vanish while the mode is off, behind
+> `hide_commands_when_off`; **v92** (`4b327cf`) made the staff **Yes** re-ask `may_cancel`; the
+> confirm cards elsewhere folded onto `panels.confirm` at **v88** while the events withdraw card was
+> deliberately left unfolded.
+> **Last verified: 2026-09-11 08:52** — re-measured in this tree at `1d090e5`: both §D keys are
+> registered under the names given (`event_panel_minutes`, `event_panel_own_list`) in a **202**-key
+> registry, beside **fourteen** `events_*` keys — seven more than the "seven existing" §D counted,
+> every one of them added by the When/Where work the banners name. `SCHEMA_VERSION` is **34**;
+> `site/mock/contract.json` **150 routes / 17 pages**; sweeps run to row **350** and the events rows
+> are **73–79** plus **323–327** (When) and **329–350** (Where).
+> ⚠️ **NOT checked in this pass:** anything in a Discord client or a browser, no boot, no pytest, no
+> ruff, no `check.mjs` run; in particular the "one flaky test" at the foot was **not re-run**, so
+> whether it still flakes under `-n auto` is unknown.
+> **Before that, 2026-09-03** on that branch: `ruff check .` clean, **3502 tests pass** (3442 at
 > the base `d3da02c`), `commands synced` measured at **43** through
 > `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`, and
 > `import black_bloc.events, black_bloc.cogs.community.events, black_bloc.api.tools.events,
@@ -168,7 +196,10 @@ Registered in the three places `request_panel_minutes` is — `settings_store.py
 `:892` `KEY_HELP`, `:1305` `default()` — so the Settings page and `/settings set-value` both
 reach them with no new command. Nothing else here is a decision: the 25 cap is Discord's, the
 button table is `TRANSITIONS`, and the seven existing `events_*` keys (`settings_store.py:181–187`)
-are untouched.
+are untouched. ⚠️ **There are FOURTEEN `events_*` keys today** (measured 2026-09-11): the seven here
+plus `events_scheduled_name_template` (v100), `events_test_retention_minutes` (v107),
+`events_where_link_in_description` (v106), `events_where_link_aliases` / `events_where_link_check` /
+`events_where_link_check_seconds` (v108) — see the Where banner at the top.
 
 ## E. What goes away
 
@@ -388,7 +419,9 @@ Written by the build agent, 2026-09-03. Everything not listed here was built as 
     conductor lands `TODO.md`, `DONE.md` and `deploys.log`, and that instruction wins over §E's
     "F4's decision line gets a dated pointer". **The pointer is still owed**: F4's row
     (`docs/TODO.md:94`) still describes `/event create` and `/timezone set` as the way in, and
-    needs a dated line saying the slash surface changed on 2026-09-03 and pointing here. Every
+    needs a dated line saying the slash surface changed on 2026-09-03 and pointing here.
+    ⚠️ **Still owed on 2026-09-11** — re-checked: F4's row is now `docs/TODO.md:92` and still
+    reads *"`/event create` **modal**"* and *"entered once via `/timezone set`"*. Every
     OTHER doc §E lists was rewritten in the docs commit, plus three §E did not name —
     `phase11-design.md:57` (chat's `time_for_me` pointed at `/timezone set`),
     `phase18-design.md:64` (raid trains "type the start in their `/timezone` like `/event
