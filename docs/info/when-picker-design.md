@@ -8,7 +8,35 @@
 > and `BB_REVERSE=1`), `ruff`, the mock (`ok - 17 pages, 150 routes, 14 core settings`) and a clean boot.
 > The sweep rows a person still has to run by eye are **323–327** in
 > [`../access/sweeps.md`](../access/sweeps.md). Every departure from what is written below is in
-> the **`## Deviations`** foot. Last verified: **2026-09-10 16:00** (the header: merge, deploy and boot measured; the body: as at the build) — the design below was verified
+> the **`## Deviations`** foot.
+>
+> ⚠️ **Since then — four releases changed what this describes.** The design body is the v100 build;
+> read these beside it:
+> - **v101 (`b5f2288`, 16:11) and v102 (`3609b3e`, 16:14)** — the dropdown placeholders the owner
+>   asked to reword. `when_picker.py` now reads `DAY_PLACEHOLDER = "Date"`,
+>   `HOUR_PLACEHOLDER = "Start time — hour"`, `MINUTE_PLACEHOLDER = "Start time — minute"` (they
+>   were *Which day? / Which hour? / Which minute?*). `ZONE_PLACEHOLDER` is still
+>   `"Which time zone?"` and `DURATION_PLACEHOLDER` still `"How long?"`.
+> - **v104 (merge `b320031`, 16:44)** — raid trains got their own calendar-name key,
+>   `raidtrain_scheduled_name_template` (default `{title}` = the behaviour it already had), which is
+>   the open question §5b left for the owner. Answered.
+> - **v105–v108** — the **Where** picker: `/event` Propose has a **fifth** button and
+>   `EventTextModal` lost its *Where or a link* box. [`where-picker-design.md`](where-picker-design.md)
+>   is that build; `WherePanel` is `ZonePanel`'s twin.
+>
+> **Last verified: 2026-09-11 08:45** (the header; the body is as at the build). Measured this pass
+> against `main` at `f3ae743` (v108 live): `black_bloc/when_picker.py` carries `WhenDraft`,
+> `resolve`, `day_options` / `hour_options` / `minute_options` / `zone_options` /
+> `duration_options`, `DaySelect` / `HourSelect` / `MinuteSelect` / `ZoneSelect` / `DurationSelect`,
+> `LaterModal`, `ZoneModal`, `BackButton` and `BAD_DAY` (D6); the five keys of this build —
+> `default_timezone`, `timezone_choices`, `time_step_minutes`, `events_default_minutes`,
+> `events_scheduled_name_template` — are all in `settings_store.py`, and the registry now holds
+> **202** keys (196 at this build's landing; the difference is v104's raid-train name key and the
+> five Where keys). `build_draft` in `cogs/community/events.py` adds `DaySelect`, `HourSelect`,
+> `MinuteSelect`, `DurationSelect`, `TextButton`, **`WhereButton`**, `DraftZoneButton`,
+> `SubmitButton` (only when `checked is not None`) and `BackButton`. ⚠️ **NOT checked this pass:**
+> anything in Discord or a browser — no dropdown was opened, the bot was not booted, and sweep rows
+> 323–327 are still the owner's. Before that, **2026-09-10 16:00** (the header: merge, deploy and boot measured; the body: as at the build) — the design below was verified
 > against `main` at `c3f842b` before the build (what existed then was read in
 > `black_bloc/cogs/community/events.py`,
 > `black_bloc/cogs/content/raidtrain.py`, `black_bloc/events.py`, `black_bloc/timezones.py`,
@@ -71,6 +99,10 @@ class WhenDraft:
 | `minute_options(step)` | `:00`, `:15`, `:30`, `:45` at step 15 | `step` = setting `time_step_minutes` (5–60 → ≤ 12 options) |
 | `zone_options(choices, stored, guild_default, now)` | the `timezone_choices` list (≤ 24) + **`Other — type it…`** | label `America/Phoenix · now 3:07 PM`; the member's stored zone, if absent from the list, replaces the 24th; the selected default is stored → guild default |
 
+⚠️ **The three dropdown placeholders were reworded after the build** (v101, v102 — see the header):
+Day says **`Date`**, Hour **`Start time — hour`**, Minute **`Start time — minute`**. The option
+*labels* in the table above are unchanged.
+
 `DaySelect`, `HourSelect`, `MinuteSelect`, `ZoneSelect(discord.ui.Select)` each write one field
 of `view.draft` and call `view.rerender(interaction)`. `Later — pick a date…` sends
 `LaterModal` (one `TextInput`, label `Date — YYYY-MM-DD`, `default=draft.later_text`), whose
@@ -100,6 +132,10 @@ Still needed: a title                 ← one line, omitted when nothing is
 
 - **Title & details** → `EventTextModal` (3 fields: Title, What is it?, Where or a link —
   `default=` from the draft). Stores, re-renders. Never refuses (length is clamped as today).
+  ⚠️ **Since v105 it is TWO fields** — *Where or a link* became its own **Where** button and
+  `WherePanel` ([`where-picker-design.md`](where-picker-design.md)), so the button row above is
+  `( Title & details ) ( Where ) ( Time zone ) ( Submit ) ( Back )` — five, exactly at Discord's
+  per-row cap.
 - **How long ▾** → `duration_options()`: 30m, 45m, 1h, 1h30m, 2h, 2h30m, 3h, 4h, 5h, 6h, 8h,
   12h, All day. Default = new setting `events_default_minutes` (replaces the hard-coded
   `DEFAULT_DURATION_MINUTES = 120` at `events.py:47`; `parse_duration`'s default reads it).
@@ -165,10 +201,14 @@ template without `{title}` is refused on set, in words) and clamped to `EVENT_NA
 rendering so a long title never makes Discord refuse the event. Applies to the scheduled event
 only — the review card, the announcement and the DM keep the plain title (they already say whose
 server it is). Raid trains' `raidtrain_scheduled_event` keeps its own name; if the owner wants
-the suffix there too that is one more key, not a shared one. Owner, 15:12: "Also make that standard name format something changeable on the website" — it
+the suffix there too that is one more key, not a shared one. ⚠️ **Answered at v104** (owner 16:28,
+*"Leave raid train as it is now but let it be changeable on the dashboard"*): the one more key is
+**`raidtrain_scheduled_name_template`**, `text`, default **`{title}`** — today's behaviour, with the
+same `checked_name_template` validation as the events key. Owner, 15:12: "Also make that standard name format something changeable on the website" — it
 is a registry key, so the Settings page (https://blackbloc.heygabi.ai/settings.html, Events
 group) and `/settings set-value` both edit it; the agent verifies the key renders there in the
-mock (`check.mjs`) and names the group in its report. Key count → **196**. One test in
+mock (`check.mjs`) and names the group in its report. Key count → **196** (that was the count at
+the v100 landing; the registry holds **202** at v108). One test in
 `tests/test_events.py` (`.format` result, clamp, the refusal on set in `test_settings_store.py`).
 Sweep row: approve an event outside TEST_MODE and read the calendar name — owner-side, since
 TEST_MODE makes no scheduled event (`event.would_create_scheduled`).
@@ -203,8 +243,11 @@ TEST_MODE makes no scheduled event (`event.would_create_scheduled`).
 `docs/info/README.md` (this row → BUILT), `docs/access/sweeps.md` (rows **323+**: propose with a
 bad Later date and see the title kept; pick a zone from the dropdown; start a train with `"abc"`
 slot minutes; the Settings page shows the three keys), `docs/TODO.md` item → `DONE.md` at the
-landing (conductor does the move), `docs/info/settings-registry.md` or wherever the key table
-lives (the agent greps for `logs_important_only` to find it).
+landing (conductor does the move), and wherever the key table
+lives (the agent greps for `logs_important_only` to find it). ⚠️ **There is no
+`docs/info/settings-registry.md`** — that name was a guess when this was written; the key COUNT
+lives in [`architecture.md`](architecture.md)'s header table, and `black_bloc/settings_store.py`
+is the registry itself. One fact, one home.
 
 ## Deviations
 
@@ -216,7 +259,11 @@ lives (the agent greps for `logs_important_only` to find it).
   first thing to revisit (a `when_drafts` table keyed on (guild, user, feature)).
 - **D3** Dates further than 24 days out are typed, not scrolled — a second page of days would
   cost a row the panel does not have.
-- **D4** The website forms keep their typed date; filed on TODO, not built here.
+- **D4** The website forms keep their typed date; filed on TODO, not built here. ⚠️ **Still NOT
+  built at v108, deliberately** — `site/public/assets/page-events.js` and `page-raidtrain.js` still
+  take a typed `YYYY-MM-DD HH:MM`. It is its own small item on [`../TODO.md`](../TODO.md) (the
+  *When-picker follow-ups* bullet, item 1: a `datetime-local` input plus a zone select fed by
+  `timezone_choices`). This is the one item in this document that is not live and is not meant to be.
 - **D5** (build) **The zone line never disappears; only the "the server's default" half does.**
   §5 says the hint drops once a zone is stored. It does — but a member with a stored zone and no
   time picked yet would then see no zone at all on the draft, which is the confusion the whole
