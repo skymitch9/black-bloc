@@ -444,3 +444,103 @@ Two commits on the build branch: Follow-up 2 first, Follow-up 3 second, each wit
   the owner has to see by eye: the masked link and the card button (338), the draft row's cap (339),
   a place that is not a link (340), the denied room's new anchor (341, the one that needs ten
   minutes of waiting), and the new key with both refusals (342).
+
+## Follow-up 4 — a SHORTHAND becomes a link, and the link is checked first (owner, 2026-09-10 23:5x, verbatim: "Can we do some smart work to make it a link / Like twitch.tv/skyaiva or ttv/skyaiva or yt skyaiva / We go and make those into links / Maybe even curl them first?")
+
+> **Status: 📐 DESIGNED 2026-09-11 00:05** — not built. Measurements and every departure go in a
+> **`## Follow-up 4 deviations`** foot the build writes.
+
+Follow-up 2 only recognises `https://…`, `http://…` and `www.…` (`where_link`). The owner types
+`twitch.tv/skyaiva`, `ttv/skyaiva` or `yt skyaiva` and wants each to become the link it obviously means —
+and, since the bot is going to hand people a link, to have tried opening it once.
+
+**A — three more shapes are links.** All three are the WHOLE typed text after `strip()` (a sentence with a
+link inside it is still not a link — `the.bar at 8` stays words). Case-insensitive throughout.
+
+1. **A bare host, with a path or not** — one token, `^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}(/\S*)?$`
+   (`twitch.tv/skyaiva`, `youtube.com/@skyaiva`, `discord.gg/baf`, `kick.com`). The TLD must be letters
+   and at least two of them, so `8.30` and `e.g` are not links. `https://` goes in front for the href.
+   This rule lives in **`where_link` itself**, so rows stored before this build render as links too.
+2. **An alias and a handle** — `ttv/skyaiva`, `ttv skyaiva`, `yt @skyaiva`: exactly two parts split on
+   the FIRST `/` or run of whitespace; the first part is an alias in the table below, the second a handle
+   matching `^@?[a-z0-9._-]{1,64}$` (a leading `@` is stripped before the template is filled, so a
+   template that carries its own `@` never renders `@@`). Anything else (three parts, a handle with a
+   space, an unknown alias) is words.
+3. The table is a **settings key**, so it is staff-editable both ways (checklist 33):
+   `events_where_link_aliases` — type `text`, events group, the `timezone_choices` shape (comma-separated
+   entries, a checker that drops what it cannot read and refuses in words when nothing is left). Each
+   entry is `alias=https://host/path/{handle}`; the checker keeps an entry only when the alias is
+   `^[a-z0-9]{1,16}$`, the template starts with `https://` and contains `{handle}` exactly once, and the
+   first spelling of an alias wins. Default:
+   `ttv=https://twitch.tv/{handle}, twitch=https://twitch.tv/{handle}, yt=https://youtube.com/@{handle},
+   youtube=https://youtube.com/@{handle}, kick=https://kick.com/{handle}, tiktok=https://tiktok.com/@{handle},
+   ig=https://instagram.com/{handle}, instagram=https://instagram.com/{handle}, x=https://x.com/{handle},
+   twitter=https://x.com/{handle}, discord=https://discord.gg/{handle}`.
+   Constants `WHERE_ALIASES_KEY`, `WHERE_ALIASES` (the default string), `WHERE_ALIAS_MAX = 32` entries.
+
+Where the alias rule runs is **at entry, once**: a new `where_typed(text, aliases) -> str` in
+`black_bloc/events.py` returns the href when the text is shape 2, else the text unchanged. It is called in
+`WhereModal.on_submit` (both the beside-a-channel and the somewhere-else branches) with the live table, and
+in `checked_where` (the website's door, which gains an `aliases` keyword defaulting to `WHERE_ALIASES`).
+So the STORED `location` is the full `https://twitch.tv/skyaiva`, and everything Follow-up 2 built —
+the masked line, the card's **Open link** button, the description — needs no second table. Shape 1 is
+render-time in `where_link`, and `described_with_where` appends `where_link(text) or text` so a bare
+host typed before this build still reaches the scheduled event's description with its scheme.
+The draft shows the normalised form (the masked `twitch.tv/skyaiva`), which is the point.
+
+**B — the link is tried before it is kept.** New module `black_bloc/linkcheck.py` (tests in
+`tests/test_linkcheck.py`), nothing Discord in it:
+
+- `async def link_answers(url, *, seconds, fetch=None) -> str` — one `GET` with `allow_redirects=True`,
+  a browser-shaped `User-Agent` (a bare aiohttp UA gets WAF-blocked — global gotcha), no body read,
+  bounded by `aiohttp.ClientTimeout(total=seconds)`; `fetch` is the injectable request (the `groq.py`
+  `request or self._aiohttp_request` pattern) so tests never touch the network. Returns one of
+  `LINK_OK` (any status that is not the two below — a 403 from Cloudflare means *reachable, refuses
+  bots*, not missing), `LINK_MISSING` (404 / 410), `LINK_UNREACHABLE` (timeout, DNS, connection error,
+  5xx). ⚠️ `twitch.tv` answers 200 for ANY channel name (it is a single-page app), so a wrong Twitch
+  name passes; `youtube.com/@…` does 404 a wrong handle. Say so in the owner guide, not the UI.
+- Two more settings keys, events group: `events_where_link_check` — enum `off` / `warn` / `refuse`,
+  default **`warn`**; `events_where_link_check_seconds` — int, 1–3, default **2** (a modal must answer
+  Discord inside three seconds, and the panel still has to render after the check).
+- In `WhereModal.on_submit`, after `where_typed`: when the result is a link and the mode is not `off`,
+  `await link_answers(...)`. `LINK_OK` → nothing. Otherwise **`warn`** keeps the link and puts a note on
+  the draft — `EventDraft` gains `where_note: str = ""`, `draft_lines` appends it to the Where line as
+  ` — ⚠️ {note}` (`WHERE_NOTE_MISSING = "that page answered 404 — check the name"`,
+  `WHERE_NOTE_UNREACHABLE = "{host} did not answer within {seconds} s — the link is kept as typed"`);
+  the note is cleared whenever Where is set again, and it never reaches the stored event (no schema
+  change — the card and the description do not carry it; the proposer saw it when it mattered).
+  **`refuse`** answers the modal in words through `AnswersErrors` (`WHERE_REFUSED_MISSING`,
+  `WHERE_REFUSED_UNREACHABLE`, each naming the link and the fix) and leaves the draft as it was.
+  The website's `checked_where` does NOT check (it is synchronous and its caller already answers in
+  words); noted as a deliberate difference on the dashboard doc's Where line.
+- `linkcheck` never runs against a non-link, and never under `pytest` — every test injects `fetch`.
+  TEST_MODE is about Discord posting, not outbound HTTP, so the check runs live in test mode too.
+
+**C — everywhere it shows.** `where_shown`'s label for a bare host is the host and path as typed
+(`twitch.tv/skyaiva`); for an alias form it is the filled template's host and path
+(`youtube.com/@skyaiva`). The knowledge line (`linked=False`) says the href in plain words.
+
+**Tests (mirror the package).** `tests/test_events.py`: `where_link` for a bare host with / without a
+path, a digits-only TLD, a one-letter TLD, a host inside a sentence; `where_typed` for `ttv/x`, `ttv x`,
+`yt @x` (no `@@`), an unknown alias, three parts, a handle with a slash, an alias typed in capitals,
+a custom table; `described_with_where` carries the scheme for a bare host; `checked_where` normalises.
+`tests/test_settings_store.py`: the three keys with defaults and bounds, the aliases checker drops a
+bad entry and refuses an empty result in words, the enum refuses an unknown mode in words.
+`tests/test_linkcheck.py`: each verdict from an injected `fetch`, a timeout is `LINK_UNREACHABLE`, the
+UA header is sent, the body is never read. `tests/cogs/community/test_events.py`: the modal with an
+injected `fetch` — `warn` puts the note on the draft and keeps the link, `refuse` answers in words and
+keeps the previous Where, `off` never calls `fetch`, a non-link never calls `fetch`, the note clears
+when Where is set again.
+
+**Mock / labels / contract.** The three keys go in `site/mock/server.mjs`, `site/public/assets/labels.js`
+and `site/mock/contract.json` like `events_test_retention_minutes` did.
+
+**Docs the build touches.** `access/OWNER_GUIDE.md` (one line: shorthand that becomes a link, the check
+and its Twitch caveat), `access/sweeps.md` (rows 343+: `ttv/skyaiva` beside a channel renders
+`twitch.tv/skyaiva`; `yt skyaiva` → `youtube.com/@skyaiva`; a bare `twitch.tv/skyaiva`; a typo'd
+`youtube.com/@no-such-handle-xyz` shows the 404 note in `warn`; `refuse` answers in words; `off` is
+silent; the aliases key edited on Settings; the old-row case), `info/code-notes.md` (keyed by NAME),
+`info/architecture.md` (the new module), `info/README.md` row.
+
+**What does NOT change.** Schema 34. `where_said`, `add_open_link`, the guard, the sweep,
+`knowledge.event_where` (still `linked=False`). No new log kind — the check logs at `debug` only.
