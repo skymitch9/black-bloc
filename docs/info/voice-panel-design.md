@@ -6,7 +6,27 @@
 > what differs and what was measured. ⚠️ Several numbers in the body below were measured against
 > `main` at `1735ff8` and were already stale at build time; the Deviations foot carries the
 > re-measured ones.
-> **Last verified: 2026-09-03** — every `path:line` below was READ against `main` at `1735ff8`, in
+>
+> ⚠️ **Since then:** the **Logs** button's lost `count` / `important_only` (see §J *"Not in this
+> build"*) came back at **v96** as **Show more** / **Important only** buttons under the list
+> ([`logs-buttons-design.md`](logs-buttons-design.md)), and the `Forget my settings` confirm is
+> drawn by the shared `panels.confirm` since the confirm/opened fold (**v88**, sweep row **275**) —
+> one builder, the same card.
+>
+> **Last verified: 2026-09-11 09:20** (the header; the body is as at the design). Measured this pass
+> against `main` at `f3ae743` (v108 live): the pure `black_bloc/tempvoice.py` holds `CARD_BUTTONS`,
+> `panel_state`, `card_buttons` and `people_controls` (deviation 1);
+> `cogs/community/tempvoice.py` holds `has_voice_role`, `may_open` (deviation 4), `stray_lobbies`
+> and `lobby_choices` (deviation 6), `voice_health` (deviation 9) and `status_lines`;
+> `settings_store.py` registers `voice_panel_minutes` (int) and `TEMPVOICE_MODES` is still
+> `("off", "on")` — no `shadow`; deviation 8's fold LANDED — `clamped` exists **once**, in
+> `black_bloc/panels.py`, and neither the pings nor the tempvoice cog carries a copy; the sweep rows
+> are **135–143** in [`../access/sweeps.md`](../access/sweeps.md) (deviation 11), not the 104-onward
+> the body predicts. Fork **F1 = (a)**: the owner re-confirmed 2026-09-03 21:20 (*"Leave it as is"*),
+> so the in-channel control post is untouched and still is. ⚠️ **NOT checked this pass:** anything
+> in Discord or a browser — nothing booted, no panel opened, no channel made.
+>
+> Before that, **2026-09-03** — every `path:line` below was READ against `main` at `1735ff8`, in
 > `black_bloc/cogs/community/tempvoice.py` (1986 lines), `black_bloc/panels.py`,
 > `black_bloc/api/tools/tempvoice.py`, `black_bloc/settings_store.py`,
 > `black_bloc/command_visibility.py`, `black_bloc/personas.py`, `black_bloc/logkinds.py`,
@@ -328,6 +348,9 @@ changes.**
 
 **Sweep rows — this feature takes 104 onward.** `docs/access/sweeps.md`'s last row today is **102**;
 ⚠️ **row 103 is claimed by another build in flight, so start at 104 and renumber at landing.**
+⚠️ **They landed as 135–143** — the file's last row was 134 by the time the build ran, and staff
+reassigning somebody else's channel got a ninth row (deviation 11). The table below keeps the
+design's numbering; read it as 135 onward.
 Rows 19, 20 and the Phase 3 appendix block are rewritten in place, not added.
 
 | # | Do this | Expect |
@@ -358,6 +381,8 @@ Settled first, by the standing rules, so they are NOT put to him:
 
 **One question is genuinely his:**
 
+- ✅ **F1 ANSWERED: (a), "Leave it as is"** — the owner, 2026-09-03 21:20, re-confirming an earlier
+  answer. The in-channel control post is untouched, and still is at v108.
 - **F1 — the in-channel control post.** Every spawned channel gets a persistent post with eleven
   always-visible buttons (`TempVoicePanel` `:1303`, posted by `_post_panel` `:1632`). After this
   build it is a second door onto the same functions, and it is the only surface left in the app that
@@ -387,7 +412,9 @@ Settled first, by the standing rules, so they are NOT put to him:
 - **Per-guild region shortlists, a bitrate preset picker, or anything `/voice` does not do today.**
   This is a door swap, not a feature pass.
 - **`count` / `important_only` on `Logs`.** Lost exactly as they were for `/request` and `/apply`;
-  the site's Logs page has both.
+  the site's Logs page has both. ⚠️ **Given back at v96** to all eighteen Logs buttons as **Show
+  more** / **Important only** under the list, plus the `logs_count` and `logs_important_only` keys
+  — [`logs-buttons-design.md`](logs-buttons-design.md).
 - **Touching `TEMPVOICE_MODES`.** Two modes, not three — do not add `shadow` to make it rhyme with
   other features.
 
@@ -482,7 +509,9 @@ delta and re-measure. The delta is one, as predicted.
    smell. Adding it to `panels.py` would edit a file that three other unmerged wave-2 branches are
    also editing, and a clean textual merge is worth more than one-fact-one-home for four lines.
    ⚠️ **This is a job for the conductor at merge**: fold `clamped` into `panels.py` and delete both
-   copies. `code-notes.md` carries the same note against the line.
+   copies. `code-notes.md` carries the same note against the line. ✅ **Done at the merge** —
+   `clamped` and `DESCRIPTION_LIMIT` live once in `black_bloc/panels.py`; re-measured 2026-09-11,
+   there is still exactly one `def clamped` in the tree and neither cog carries a copy.
 
 9. **`voice_health` reads the reconcile loop's health off the cog through `bot.get_cog`.** The
    panel builders are module-level (they are called from the command, from every button and from

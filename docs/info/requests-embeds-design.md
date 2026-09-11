@@ -3,19 +3,32 @@
 > ⚠️ **2026-09-03: slash paths superseded by the panel** — `/request` is now ONE
 > command that opens an interactive panel; see [`requests-panel-design.md`](requests-panel-design.md).
 > The embed builder (`request_embed`, the seven looks) this document designed is unchanged
-> and is exactly what the panel's card reuses.
+> and is exactly what the panel's card reuses. ⚠️ **There are EIGHT looks since v61** — the sixth
+> pass added `check_asked` ([`requests-check-design.md`](requests-check-design.md)), and the
+> `review` and `done` field tuples each gained an `asked` field.
 
 **Audience:** the builder and the reviewer. **Status:** TRACKED · ✅ **SHIPPED — merge
 `355d6e9` + anchor fix `70a6720`, deployed `70a6720` 2026-09-03 06:34; the landing one-off
 at the foot was RUN at 06:41 (#1, #2 `done → review`; #3 `hold`)** — see the
 `## Deviations` list (14). Owner's ask 2026-09-03
-~00:50 (verbatim in `../TODO.md`, "🔧 Open engineering items"). **Last verified:
-2026-09-03** against `black_bloc/requests.py`, `cogs/community/requests.py`,
+~00:50 (verbatim in `../TODO.md`, "🔧 Open engineering items").
+**Last verified: 2026-09-11 09:05** (the header; the body is as at the build). Measured this pass
+against `main` at `f3ae743` (v108 live): `requests.LOOKS` is
+`('filed', 'in_progress', 'review', 'sent_back', 'done', 'hold', 'declined', 'check_asked')` and
+every look's colour and title matches the table below (the eighth is v61's — see the banner);
+`REQUEST_ANCHOR = "{origin}/requests.html#r-{request_id}"` (deviation 14) and
+`logkinds.FEATURE_PAGES["request"] == "requests.html"`; `settings_store.REQUEST_CARD_MOVES` is the
+eight moves and `REQUEST_CARD_DEFAULT` is the **six** that are neither `done` nor `check_asked`;
+`request_channel_moves` is type `enums` (deviation 3) and `request_review_by_other` is `bool`.
+⚠️ **Three counts in the body have moved on:** schema is **34** (not 26), the mock reads
+**150 routes** (not 139), and the suite is **5546** (not 3260). ⚠️ **NOT verified this pass:** any
+card by eye in Discord, and nothing in a browser. Before that, **2026-09-03** against
+`black_bloc/requests.py`, `cogs/community/requests.py`,
 `api/tools/requests.py`, `site/public/assets/page-requests.js` as built (3260 tests,
 ruff clean, `check.mjs` 17 pages / 139 routes; the page rendered against the mock).
-Live: boot log clean (schema 26 added four columns), `/requests.html` renders with
-Ready to check 2 / On hold 1 / Done 0 and no console errors. ⚠️ **NOT verified:** any
-card by eye in Discord — the one-off posts nothing; the first real staff move posts the
+Live at that landing: boot log clean (schema 26 added four columns), `/requests.html` renders with
+Ready to check 2 / On hold 1 / Done 0 and no console errors; no
+card had been seen by eye — the one-off posts nothing; the first real staff move posts the
 first card. Slash paths and the DM look are on the sweep list. Extends
 [`requests-states-design.md`](requests-states-design.md); the
 state machine grows ONE state (`review`, owner decision 2026-09-03 ~01:00, below).
@@ -115,11 +128,12 @@ columns; no backfill.
 |---|---|---|---|
 | filed | `New request #N` | blurple `0x5865F2` | Asked for · Why · Requested by · Due (if set) |
 | in_progress | `Request #N is being worked on` | amber `0xFEE75C` | Asked for · Requested by · Assignee (if set) |
-| review | `Request #N is ready to check 🔎` | teal `0x1ABC9C` | Asked for · **What was built** · **How to test** (if given) · Marked ready by · Requested by |
+| review | `Request #N is ready to check 🔎` | teal `0x1ABC9C` | Asked for · **What was built** · **How to test** (if given) · Marked ready by · Requested by — **plus `asked` since v61** |
 | sent_back | `Request #N was sent back` | orange `0xE67E22` | Asked for · What needs doing (the note) · Sent back by · Marked ready by |
-| done | `Request #N is done ✅` | green `0x57F287` | Asked for · **What was built** · **How to test** (if given) · Accepted by · Requested by |
+| done | `Request #N is done ✅` | green `0x57F287` | Asked for · **What was built** · **How to test** (if given) · Accepted by · Requested by — **plus `asked` since v61** |
 | hold | `Request #N is on hold` | grey `0x99AAB5` | Asked for · Why it is waiting (the reason) · Was (`held_from`) · Requested by |
 | declined | `Request #N was declined` | red `0xED4245` | Asked for · Why (the reason) · Requested by |
+| **check_asked** *(added v61, not this build)* | `Request #N is ready for you to try 🙌` | blue `0x3498DB` | Asked for · What was built · How to test · Marked ready by · Asked by — and the only look that sets `embed.description` ([`requests-check-design.md`](requests-check-design.md)) |
 
 `sent_back` is a card look, not a state — the row is `in_progress` again; the move
 is told apart by `was == review`. Log kinds: `request.review` and `request.sent_back`
@@ -156,6 +170,10 @@ status (global rule).
 
 ## The moves, on both surfaces (checklist 33 — a slash path AND a site control)
 
+⚠️ **The Slash column below is retired.** `/request ready|accept|sendback|set` all went with the
+fourth pass the same day — `/request` is one command opening a panel, and the moves are its card
+buttons ([`requests-panel-design.md`](requests-panel-design.md)). The SITE column is unchanged.
+
 | Move | Site (Requests page) | Slash |
 |---|---|---|
 | in_progress → review | **Ready to check** button on the board card → dialog: "What was built" (required) + "How to test it" | `/request ready <id>` → modal, same two fields |
@@ -181,7 +199,7 @@ says "ready to check".
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `request_channel_moves` | multi-enum of `filed,in_progress,review,sent_back,done,hold,declined` | ~~all seven~~ every one but `done` (deviation 15) | which moves post a card to the channel |
+| `request_channel_moves` | multi-enum of `filed,in_progress,review,sent_back,done,hold,declined` — **plus `check_asked` since v61**, so eight choices | ~~all seven~~ every one but `done` (deviation 15) — **and but `check_asked` since v61**, so six of eight | which moves post a card to the channel |
 | `request_review_by_other` | bool | **off** (owner, 2026-09-03) | when on, the staffer in `ready_by` cannot accept their own review |
 
 Both in `settings_store.py` (registry, `KEY_TYPES`, descriptions), `labels.js`,

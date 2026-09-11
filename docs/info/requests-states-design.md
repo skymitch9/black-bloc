@@ -5,15 +5,44 @@
 > The state machine itself (this document's `TRANSITIONS` table) is unchanged.
 
 **Audience:** the builder carrying this (rides along in the Phase 17 build),
-and the reviewer. **Status:** TRACKED · **BUILT on branch `worktree-agent-a268aa7fa2979dd4a`,
-2026-09-02, NOT merged and NOT deployed** — see the `## Deviations` list at the
+and the reviewer. **Status:** TRACKED · ✅ **LIVE** — built on branch
+`worktree-agent-a268aa7fa2979dd4a` 2026-09-02, merged as Phase 17 (**`6d61994`**) and deployed in
+the Phase 17+18+19 release **`7b1c592`, 2026-09-03 00:31** Phoenix (`../deploys.log`; that release
+predates the `vNN` numbering, so it has a sha and no version). Landing entry in
+[`../DONE.md`](../DONE.md) (*"Phases 17/18/19"*). See the `## Deviations` list at the
 foot. Every decision below
 is the owner's, taken 2026-09-02 20:19–20:42 while reviewing the first three
-member requests. **Last verified: 2026-09-02** against `black_bloc/requests.py`,
-`cogs/community/requests.py`, `api/tools/requests.py`,
-`site/public/assets/page-requests.js` at `7295f61`. Supersedes the status
+member requests. Supersedes the status
 part of [`phase13-design.md`](phase13-design.md); everything else in Phase 13
 stands.
+
+> ⚠️ **Since then — the machine grew a `review` state and lost its slash paths.** Read this
+> document for the *shape* of the decision, then the two that changed it:
+> - **`review` ("ready to check"), 2026-09-03 06:34** (merge `355d6e9` + anchor fix `70a6720`):
+>   `open → in_progress → review → done`, and **`done` is reachable ONLY from `review`**. The live
+>   `requests.TRANSITIONS` is now `open → {in_progress, hold, declined}`, `in_progress → {review,
+>   hold, declined}`, `review → {done, in_progress, hold, declined}`, `hold → {in_progress, review,
+>   declined}`, and `done` / `declined` / `withdrawn` final — so the ASCII diagram and the
+>   From \ To table below are the FIRST version of the machine, not today's.
+> - **"Ask them to check", merge `44170f4`, 2026-09-03 12:29** —
+>   [`requests-check-design.md`](requests-check-design.md).
+> - The slash paths in **Surfaces** went with the panel (banner above);
+>   [`requests-panel-design.md`](requests-panel-design.md) is the surface now.
+>
+> **Last verified: 2026-09-11 08:40** (the header; the body is as at the design). Measured this pass
+> against `main` at `f3ae743` (v108 live): `requests.TRANSITIONS` is the seven-state table quoted
+> above; `NEEDS_A_REASON = ('hold', 'declined')`; `open_count` exists and `pending_count` does not
+> (deviation 4); `requests.held_from` is a column in `storage/db.py` and is set/cleared in
+> `requests.py`; `settings_store.py` has `request_status_channel_id` (channel) with the
+> *"blank uses request_notify_channel_id"* help sentence beside `request_notify_channel_id`, and
+> **no `request_auto_approve*` key of either spelling**; `logkinds.py` carries `request.hold`,
+> `request.in_progress`, `request.resumed` and `request.notify_skipped_test_mode`;
+> `requests.NOTIFY_FAILED_KIND = "request.notify_failed"`; `api/tools/requests.py` has
+> `POST /{id}/hold` and `POST /{id}/resume` and **no `/approve`** (deviation 2). ⚠️ **NOT checked
+> this pass:** anything in Discord or a browser, and the live database (so the actual status of
+> request #3 is taken from `../DONE.md`, not re-read). Before that, **2026-09-02** against
+> `black_bloc/requests.py`, `cogs/community/requests.py`, `api/tools/requests.py`,
+> `site/public/assets/page-requests.js` at `7295f61`.
 
 ## Why
 
@@ -24,6 +53,10 @@ be bad"); there was no way to put a request on hold (the API refused
 DMs the requester but nothing is ever posted to a channel after filing.
 
 ## The machine (owner's words, then the table)
+
+> ⚠️ **This is the machine as designed on 2026-09-02.** A `review` step was added the next morning
+> (see the *Since then* note in the header); the live table is in `black_bloc/requests.py:TRANSITIONS`
+> and that is the one home for it.
 
 > "add a new status for open and then change pending to hold. so it goes from
 > open -> planned -> in prog -> done with hold and declined as side states.
@@ -64,6 +97,7 @@ on the move out. Shown on the page as a badge on the hold card
 **Data migration (in schema 23, with the Phase 17 tables):**
 `pending → open`, `approved → open`, `planned → open`; the rest unchanged.
 Rows already `in_progress`/`done`/`declined`/`withdrawn` keep their status.
+(Schema has moved on since — **34** at v108 — for reasons unrelated to requests.)
 
 ## Notifications — on EVERY staff move
 
@@ -88,7 +122,9 @@ that we marked something as hold and why".
   `NOTIFY_LINE`.
 - `request_dms_on_decision` stays the DM switch (rename its label to "DM the
   requester on every status change"; the key name stays — persisted keys are
-  migrations to change).
+  migrations to change). ⚠️ **The key is spelled `request_dm_on_decision`** (singular `dm`) —
+  this line's `request_dms_on_decision` never existed; measured 2026-09-11 against
+  `settings_store.KEY_TYPES`.
 - `AllowedMentions.none()` everywhere; guard-checked (`guard_allows`), a
   refused channel is logged `request.notify_skipped_test_mode`, not raised;
   a failed post logs `request.notify_failed` with the move in `details`.
@@ -107,6 +143,9 @@ that we marked something as hold and why".
 - **Slash:** `/request set` choices follow the table; `/request hold
   <id> <reason>` and `/request resume <id>` as explicit paths (both ways
   rule); `/request list` scopes `mine | open | all` (`pending` → `open`).
+  ⚠️ **All four retired 2026-09-03** when `/request` became ONE command opening a panel — the moves
+  are buttons now ([`requests-panel-design.md`](requests-panel-design.md)). The `mine | open | all`
+  scoping survives as the panel's own lists.
 - **Mock contract:** update `contract.json` + `server.mjs` fixtures for the
   new statuses; `check.mjs` must stay green.
 - **Logs:** kinds `request.in_progress`, `request.hold`, `request.resumed`
@@ -160,3 +199,9 @@ built as specified.
    the build agent has no access to the live database, so it stays for the
    reviewer. The exact move: `/request hold 3 youtube player is currently
    unreliable. Will do further research on this.`
+   **Since then:** #3 reached `on hold` and the underlying project was **scrapped by the owner on
+   2026-09-07** (*"scrap this whole project … let's be done with me"*) — see
+   [`../DONE.md`](../DONE.md) *"Music bot scrapped"*. Its row is still `on hold` in the live
+   database because the operator token is read-only; moving it on is a staff write at
+   https://blackbloc.heygabi.ai/requests.html. The `/request hold 3 …` command in the line above no
+   longer exists (see the Surfaces note).

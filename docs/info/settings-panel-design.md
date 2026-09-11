@@ -3,7 +3,41 @@
 > **Audience:** the build agent and the reviewer, and the owner for §I. **Status:** TRACKED ·
 ✅ **SHIPPED 2026-09-05 — Build 1 as v83 (`57a878d`, merge `9a7c87e`, `worktree-agent-a3e6ccbead5a90537`), Build 2 as v84 (`ce97de0`, merge `ce97de0`, `worktree-agent-a56c7b5137d9a609d`); sweeps 231–244; tree 30 → 29 with ZERO Groups, measured at the v84 boot (`synced 29`). See [Build 1 deviations](#build-1-deviations--what-the-build-did-differently-and-why) and `## Build 2 deviations` at the foot, which carry the RE-MEASURED numbers.** Forks F-S1–F-S5 all (a), decided by the conductor on this document's recommendation under the owner's "don't wait for me". ⚠️ **Everything above the deviations foot was keyed against `0304c4d` and its counts are STALE** — the registry is **179** keys, not 175, and `tests/test_bot.py` pins **30** top-level, not 36. This is the LAST panel of the program: it retires the last two
 > `app_commands.Group`s in the tree.
-> **Last verified: 2026-09-05** — every `path:line` below was READ against `main` at
+>
+> ⚠️ **Since then — the registry has grown a long way and two reported items are CLOSED.**
+> - **The key count is now 202** (`len(settings_store.KEY_TYPES)`, measured 2026-09-11). It was 175
+>   when §§A–J were written, 181 at the Build 2 measurement, 185 at the panels-program refresh.
+>   ⚠️ **Every key count in this document is a snapshot, not a current fact** — the registry itself
+>   is the one home, and `test_every_registry_key_is_reachable_from_the_panel_as_well_as_the_dashboard`
+>   is what keeps the panel's reach equal to it. The panel's own tests count `KEY_TYPES`, so the
+>   growth costs nothing.
+> - 🟢 **KI-21 is CLOSED** (engineering sweep, v89, 2026-09-05 — moved whole to
+>   [`../DONE.md`](../DONE.md)): *"Found while building"* item 1's one-commit wiring landed.
+>   `api/settings_api.py` imports `set_key` and `clear_key` from `cogs.core` and calls them with
+>   `via=VIA_WEBSITE`; the website gets the same verdict the panel does, and there is no KI-21 entry
+>   in [`../KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) any more.
+> - 🟢 **Build 2 deviation 14 is CLOSED**: `panels-program.md` and `feature-list.md` were both
+>   brought current by the conductor — F3 is answered there, the Core row says v84, and
+>   `feature-list.md` has its `/settings` row.
+> - **The Logs button** this build gave `/settings` grew **Show more** / **Important only** at v96
+>   ([`logs-buttons-design.md`](logs-buttons-design.md)), and the shared `LogsPanel` times out on
+>   **`settings_panel_minutes`** — this design's own key — because no `logs_panel_minutes` was added.
+>
+> **Last verified: 2026-09-11 09:55** (the header; the body is as at the design). Measured this pass
+> against `main` at `f3ae743` (v108 live): `settings_store.py` holds `SETTINGS_PANEL_MINUTES` and
+> `SETTINGS_CORE_KEYS_ADMIN_ONLY` (default `True`, fork F-S3 (a)) and owns `CORE_KEYS`, which
+> `api/settings_api.py` re-exports; `labels.js` carries both new keys' rows word for word as §D
+> asks; `black_bloc/settings_panel.py` has `has_editor`, `keys_in`, `reachable_on_the_panel`
+> (Build 2 deviation 4), `bounds_line`, `confirm_lines` and `key_card_buttons`;
+> `cogs/core.py` has `set_key`, `clear_key` and `number_label` (deviations 6, 7) and **no
+> `VALUE_KEYS`**; `cogs/community/birthdays.py` still carries `from ..core import clear_key`
+> (deviation 8 / reported item 5 — the first cog-package-to-cog-package import, still the only one,
+> still a module-level function and still unreviewed against `architecture.md` rule 2). The tree is
+> still **29** top-level with **zero** Groups. ⚠️ **NOT checked this pass:** anything in Discord or
+> a browser, and none of the §§A–J line numbers were re-keyed — **trust the anchor text, not the
+> number.**
+>
+> Before that, **2026-09-05** — every `path:line` below was READ against `main` at
 > **`0304c4d`** ("TODO: F-M2/F-M3 = (a); /mod build dispatched"), in
 > `black_bloc/cogs/core.py` (**307 lines**), `black_bloc/cogs/presence.py` (**132**),
 > `black_bloc/presence.py`, `black_bloc/settings_store.py` (**1782**),
@@ -885,9 +919,13 @@ settled number, and two of its string sites are inside files those branches own.
 ## Build 1 deviations — what the build did differently, and why
 
 > Written by the Build 1 agent on `worktree-agent-a3e6ccbead5a90537`, off `main` at `34331ec`,
-> 2026-09-05. **Status: BUILT, not merged, not deployed.** `pytest` **4973 passed** (4739 on
+> 2026-09-05. **Status: ✅ LIVE as v83** — merge `9a7c87e`, shipped at `57a878d`, deployed
+> **2026-09-05 12:53** Phoenix (`../deploys.log`).
+> (This line said *"BUILT, not merged, not deployed"* until 2026-09-11; it was stale from the merge
+> onwards, and the page header already said SHIPPED.)
+> `pytest` **4973 passed** (4739 on
 > `main` before, +234), `ruff check .` clean, `node site/mock/check.mjs` **17 pages / 146
-> routes** — unchanged before and after — and `node --input-type=module --check` clean on
+> routes** — unchanged before and after, and **150 routes** at v108 — and `node --input-type=module --check` clean on
 > `site/public/assets/labels.js`. ⚠️ **Nothing has met live Discord** — no boot, no token, no
 > sync, no panel opened, nothing deployed. Build 1 retires nothing: the `settings` and
 > `presence` Groups and all six leaf subcommands still exist, and the top-level count is
@@ -1032,9 +1070,13 @@ and none of the five `/settings` subcommands checks the database. Three more:
 ## Build 2 deviations — what the build did differently, and why
 
 > Written by the Build 2 agent on `worktree-agent-a56c7b5137d9a609d`, off `main` at `57a878d`
-> (Build 1 merged as `9a7c87e`), 2026-09-05. **Status: BUILT, not merged, not deployed.**
+> (Build 1 merged as `9a7c87e`), 2026-09-05. **Status: ✅ LIVE as v84** — merge `ce97de0`, deployed
+> **2026-09-05 13:44** Phoenix (`../deploys.log`), boot `synced 29`. (This line said *"BUILT, not merged, not
+> deployed"* until 2026-09-11; it was stale from the merge onwards, and the page header above it
+> already said SHIPPED.)
 > `pytest` **5002 passed** (4973 on the base, +29), `ruff check .` clean,
-> `node site/mock/check.mjs` **17 pages / 146 routes** — unchanged before and after — and
+> `node site/mock/check.mjs` **17 pages / 146 routes** — unchanged before and after, and **150
+> routes** at v108 — and
 > `node --input-type=module --check` clean on `site/public/assets/labels.js`.
 > ⚠️ **Nothing has met live Discord** — no boot, no token, no sync, no panel opened, nothing
 > deployed. What Build 2 retires: `/settings show|set|set-role|set-value|clear` and the whole
@@ -1046,7 +1088,7 @@ and none of the five `/settings` subcommands checks the database. Three more:
 
 | Build 1 measured | Build 2 measures | Consequence |
 |---|---|---|
-| registry **181** keys after Build 1 | **181**, unchanged — this build adds no key | every "175" in §§A–J is six low; the panel's own tests count `KEY_TYPES` rather than a literal |
+| registry **181** keys after Build 1 | **181**, unchanged — this build adds no key | every "175" in §§A–J is six low; the panel's own tests count `KEY_TYPES` rather than a literal. **202 at v108** — see the header |
 | `tests/test_bot.py` pins **30** | **29**, and there are **0** `app_commands.Group`s | the design's arithmetic table predicted exactly this, and the delta off 30 is exactly 1 |
 | 22 namespaces, `chat` the only one over 25 | **both still true**; `chat` is **28** | `capped_placeholder` fires exactly once in the app, on `chat` |
 | `CLEARABLE_KEYS` was **34** | **all 181** keys are now clearable | §I's settled item; `store.clear` never had a type restriction |
@@ -1140,6 +1182,9 @@ and none of the five `/settings` subcommands checks the database. Three more:
     therefore stale**: `panels-program.md` still asks fork F3 as an open question, still says
     "~120 keys", and its Core row and totals line still describe a `settings` Group. Left for
     the conductor with `docs/info/README.md`.
+    🟢 **The conductor did it.** Re-measured 2026-09-11: `panels-program.md` answers F3 (*"the paged
+    panel"*), its Core row says v84 / zero Groups, and it carries a measured key count;
+    `feature-list.md` has its `/settings` row. Neither is stale on this build's account.
 15. **`docs/TODO.md` and `docs/DONE.md` were not touched either**, for the same reason — the
     brief's scope list does not name them and the conductor moves the item at the merge.
 16. **Nothing was accepted into `docs/KNOWN_ISSUES.md`.** No defect found here is being
@@ -1148,7 +1193,11 @@ and none of the five `/settings` subcommands checks the database. Three more:
 
 ### Found while building, REPORTED and not fixed
 
-1. ⚠️ **KI-21 is still open and the keyword to close it now exists.** `set_key`/`clear_key` take
+1. 🟢 **CLOSED at v89** (engineering sweep, 2026-09-05, the same day) — the one commit described
+   below was written: `api/settings_api.py` now does `from ..cogs.core import NOTHING_STORED,
+   clear_key, set_key` and calls both with `via=VIA_WEBSITE`, its own `note()` is gone, and KI-21
+   has been moved whole to [`../DONE.md`](../DONE.md). Re-measured 2026-09-11. The original report:
+   ⚠️ **KI-21 is still open and the keyword to close it now exists.** `set_key`/`clear_key` take
    `via`; `api/settings_api.py` still writes through `store.set`/`store.clear` and `note()`s
    `web.settings.set`/`web.settings.clear` itself. Wiring the route through the shared writers
    with `via=VIA_WEBSITE` and deleting its `note()` is one commit, closes KI-21 (the website can

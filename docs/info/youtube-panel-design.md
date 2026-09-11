@@ -24,7 +24,25 @@
 > **Announcements are…** on the panel itself) after the deploy; the stored value and the
 > registry default are **untouched by this build** and `youtube_mode` still ships `off`.
 >
-> **Last verified: 2026-09-03** — every `path:line` below was READ at `main` `1735ff8` in
+> ⚠️ **Since then:** the **Logs** button's lost `count` / `important_only` (§C, §J) came back at
+> **v96** as **Show more** / **Important only** buttons under the list
+> ([`logs-buttons-design.md`](logs-buttons-design.md)). Nothing else in this build has been touched.
+>
+> **Last verified: 2026-09-11 09:28** (the header; the body is as at the design). Measured this pass
+> against `main` at `f3ae743` (v108 live): `settings_store.py` registers **both** new keys,
+> `youtube_panel_minutes` (int) and `youtube_unlink_dms_them` (bool);
+> `black_bloc/youtube.py` has `YouTubeError(..., network=…)` set at **four** raise sites
+> (deviation 7) and `status_lines(row, latest_title, *, where, shorts)` (deviation 2);
+> `cogs/content/youtube.py` has `LinkRefused`, `link_channel`, `save_setup`, `SETUP_DONE`,
+> `LinkModal`, `NumbersModal` and `UnlinkForModal(NoteModal)` (deviations 1, 8, 9, 10);
+> `logkinds.FEATURE_PAGES["youtube"]` is still `golive.html`, so `Open on the site` is the Go-live
+> page as §C says. The sweep rows landed as **118–125** in
+> [`../access/sweeps.md`](../access/sweeps.md) — ⚠️ **not the 104-onward §H predicts**; the conductor
+> renumbered at the merge, exactly as §H said he would. ⚠️ **NOT checked this pass:** anything in
+> Discord, a browser or YouTube, and the LIVE value of `youtube_mode` (the header records the
+> conductor's 17:42 flip to `shadow` at the v71 landing; it was not re-read from the live store).
+>
+> Before that, **2026-09-03** — every `path:line` below was READ at `main` `1735ff8` in
 > `black_bloc/cogs/content/youtube.py`, `black_bloc/youtube.py`, `black_bloc/api/tools/youtube.py`,
 > `black_bloc/panels.py`, `black_bloc/settings_store.py`, `black_bloc/command_visibility.py`,
 > `black_bloc/logkinds.py`, `black_bloc/personas.py`, `tests/test_bot.py`,
@@ -199,7 +217,9 @@ but the sub-panel renders the result beneath it so a mistake is visible before i
 **`Logs`** — a button answering a NEW ephemeral followup (P11), `send_logs(interaction,
 "youtube")`, which carries its own `require_staff`. ⚠️ The `count` / `important_only` options
 `:665–673` are LOST, as they were for `/request` and every wave-1 panel; the site's Logs page has
-both, and `logkinds.py:94` already points the feature at `golive.html`.
+both, and `logkinds.py:94` already points the feature at `golive.html`. **Given back at v96** as
+**Show more** / **Important only** buttons under the list, plus the `logs_count` and
+`logs_important_only` keys — [`logs-buttons-design.md`](logs-buttons-design.md).
 
 **`Open on the site`** — a link button to `{origin}/golive.html` (`FEATURE_PAGES["youtube"]`,
 `logkinds.py:94`), built with `site_page_url`'s shape (`requests.py:503`). **No origin, no
@@ -336,6 +356,8 @@ behind the door (wave-0 deviation 4).
 **Sweep rows — this feature takes 104 onward** (`docs/access/sweeps.md`'s last row today is **102**;
 **103 is taken by a sibling wave-2 build** — ⚠️ **renumber at landing**, the conductor reconciles).
 Rows 43, 44 and 47 are rewritten in place, not added.
+⚠️ **They landed as 118–125**, under the heading *"The YouTube panel — `/youtube` is one window
+(wave 2, 2026-09-03)"*. The table below keeps the design's numbering; read it as 118 onward.
 
 | # | Do this | Expect |
 |---|---|---|

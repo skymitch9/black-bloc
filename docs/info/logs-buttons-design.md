@@ -1,10 +1,26 @@
 # The Logs button's two knobs, as buttons — design
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED. Last verified: **2026-09-06 11:05** —
-> every `path:name` below was read in the tree at `c29b007` (v94 code). Owner decision **2026-09-06
+> **Audience:** the build agent and reviewers. **Status:** TRACKED, ✅ **LIVE as v96** — branch
+> `logs-buttons`, merge **`42d2e6e`**, deployed **2026-09-06 11:39** Phoenix (`../deploys.log`);
+> landing entry in [`../DONE.md`](../DONE.md) (*"Logs buttons … and Create-a-recurring-poll from the
+> website … shipping as v96"*). ⚠️ **Never met Discord** — no test can click a Discord button
+> ([`../access/testing.md`](../access/testing.md)); the owner's by-eye rows are **305–309** in
+> [`../access/sweeps.md`](../access/sweeps.md) (they were lettered `LB-a`–`LB-e` in this document;
+> renumbered at the merge). Owner decision **2026-09-06
 > 11:00**, verbatim: *"3. B"* — answering "every panel's Logs button dropped the old `count` /
 > `important_only` options: (a) a modal first, (b) `Show more` + `Important only` buttons ON the
 > list, (c) leave it". So: the list shows first, and refines after.
+>
+> **Last verified: 2026-09-11 08:29** (the header; the body is as at the build). Measured this pass
+> against `main` at `f3ae743` (v108 live): `black_bloc/logs_panel.py` exists with `MORE` /
+> `ONLY_IMPORTANT` / `EVERYTHING`, `LogsPanel(Panel)`, `buttons_for`, `refresh`, `panel_for`;
+> `actionlog.py` has `lines_for`, `recent_lines`, `logs_embed`, `send_logs`; `send_logs` still has
+> **18 call sites** (`grep -rn "send_logs(" black_bloc` → 19 lines, one of them the `def`);
+> `settings_store.py` holds `LOGS_MIN = 1`, `LOGS_MAX = 50`, `LOGS_DEFAULT = 10`, `LOGS_COUNT =
+> "logs_count"`, `LOGS_IMPORTANT_ONLY = "logs_important_only"` and `SETTINGS_PANEL_MINUTES =
+> "settings_panel_minutes"` (which `logs_panel.py` imports). ⚠️ **NOT checked this pass:** anything in
+> Discord or a browser — no button was pressed, no page was opened, the bot was not booted. Before
+> that, **2026-09-06 11:05** — every `path:name` below was read in the tree at `c29b007` (v94 code).
 
 ## 1. What exists
 
@@ -70,9 +86,11 @@ the two keys, defaults, bounds, help sentences; `labels.js` guard stays empty.
 ## 5. Prove before merge, and the sweep rows
 
 `ruff` clean; full suite `-n auto` forward and `BB_REVERSE=1`; `node site/mock/check.mjs` ok (say
-the core-settings count before/after; routes stay 149 unless a settings route enumerates keys);
+the core-settings count before/after; routes stay 149 unless a settings route enumerates keys — the
+mock is at **150** since v96, and the one added route came from the `recur-web` build merged the
+same morning, not from this one; it is **150** still at v108);
 `python -m black_bloc` NOT booted in a worktree — say so. Sweep rows lettered `LB-a…` in
-`docs/access/sweeps.md`: `/poll` ▸ **Logs** shows 10 lines with `Show more` and `Important only`
+`docs/access/sweeps.md` (**renumbered 305–309 at the merge**): `/poll` ▸ **Logs** shows 10 lines with `Show more` and `Important only`
 under it; `Show more` → 20, then 30 … and the button goes away at 50 or when the log runs out;
 `Important only` flips to `Show everything` and the list shrinks to refusals/errors/staff moves;
 Dashboard → settings.html → `logs_count` 25 → the next Logs press starts at 25. Code notes:
@@ -82,7 +100,8 @@ this file for anything that differed, and why.
 ## Deviations
 
 Built on branch `logs-buttons`, off `main` at `b428236`, in a worktree at
-`C:/lcw/bb-logs-buttons`. §2–§5 were built as written except for the following.
+`C:/lcw/bb-logs-buttons`. **Status: ✅ LIVE v96 — merged `42d2e6e`, deployed 2026-09-06 11:39.**
+§2–§5 were built as written except for the following.
 
 1. ⚠️ **`site/mock/contract.json` was edited, though the build was told to stay out of it.** Two
    lines: `settings.min.logs_count = 1` and `settings.max.logs_count = 50`. A bounded registry key
@@ -135,4 +154,6 @@ Built on branch `logs-buttons`, off `main` at `b428236`, in a worktree at
 **Not verified:** anything against live Discord or the live dashboard. `python -m black_bloc` was
 NOT booted — a worktree has no token — so no button has been pressed by a person, no ephemeral
 edit has been made by a real client, and the new **Logs** section on `settings.html` has not been
-opened in a browser. The sweep rows `LB-a`–`LB-e` are what close that gap.
+opened in a browser. The sweep rows `LB-a`–`LB-e` — **numbered 305–309 at the merge** — are what
+close that gap; as at 2026-09-11 nothing in `../access/sweeps.md`'s *Verified by the owner* table
+records them as run.
