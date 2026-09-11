@@ -2,15 +2,27 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then; secret NAMES only).
-> Last verified: **2026-09-03** — "Every later deploy" rewritten around `scripts/deploy.ps1`
-> (the only path since 2026-09-01) and the detached-run gotcha added from that morning's
-> killed deploy; the first-launch sequence below was RUN on
-> 2026-08-26, in this order, and the bot logged in from Fly (machine
-> `85e744c4d959d8`, region `lax`). The **redeploy** path is now well exercised:
-> [`../deploys.log`](../deploys.log) records **37 deploys** (counted 2026-08-31), the last
-> `8036918` at **2026-08-27 20:15**. ⚠️ rotate/SFTP/scale commands are still
-> from Fly's docs and have NOT been exercised. ⚠️ Only the header was
-> re-verified today; the command bodies below were not re-run.
+> Last verified: **2026-09-11 08:35** — re-read against `fly.toml` and
+> `scripts/deploy.ps1`. 🔴 **One real error fixed:** this file said *"`fly.toml` has no
+> `[http_service]` on purpose"*, which has been false since the dashboard went live —
+> `fly.toml` **has** an `[http_service]` block, and the three settings in it
+> (`auto_stop_machines = false`, `auto_start_machines = false`,
+> `min_machines_running = 1`) are what keep Fly from stopping the machine that holds the
+> gateway websocket. The old sentence would have led someone to *delete* the block. The
+> **redeploy** path is now heavily exercised: [`../deploys.log`](../deploys.log) records
+> **107 deploys** (counted 2026-09-11; was 37 on 2026-08-31), the last **v108** `73e2e44`
+> at **2026-09-11 00:37**. The gate in `scripts/deploy.ps1` was re-read line by line and
+> matches what is described below (`ruff check .` → `pytest -q -n auto` → an ES-module
+> `node --check` of every `site/public/assets/*.js` → `site/mock/server.mjs` +
+> `check.mjs` → `git push` through `cmd /c` → `flyctl deploy --ha=false --remote-only
+> --yes` → the `deploys.log` skeleton line; escape hatch `BLACKBLOC_SKIP_GATE=1`).
+> The suite it runs is **5,546 tests in 40 s** (measured today, `-n auto`).
+> ⚠️ **NOT re-run today:** every command body below — first launch, rotate, SFTP, scale
+> — and nothing in this pass touched the live Fly app, Discord or a browser. The
+> first-launch sequence was RUN on 2026-08-26, in this order, and the bot logged in from
+> Fly (machine `85e744c4d959d8`, region `lax`). Before that, **2026-09-03** — "Every
+> later deploy" rewritten around `scripts/deploy.ps1` (the only path since 2026-09-01)
+> and the detached-run gotcha added from that morning's killed deploy.
 > Hosting decision: Fly.io (owner, 2026-08-26). Rationale:
 > [`../info/hosting.md`](../info/hosting.md). Every deploy appends a line to
 > [`../deploys.log`](../deploys.log).
@@ -57,8 +69,24 @@ flyctl deploy --app black-bloc --ha=false --remote-only --yes
 flyctl logs --app black-bloc --no-tail      # expect "logged in as Black_Bloc#..."
 ```
 
-`fly.toml` has **no `[http_service]`** on purpose - with one, Fly auto-stops
-idle machines and the gateway connection dies with them. Keep `[mounts]`.
+🔴 **`fly.toml` DOES have an `[http_service]` — and its three settings are
+load-bearing, not tuning.** (This file said the opposite until 2026-09-11; it was true
+only before the dashboard went live on the same app.) The machine answering HTTP is the
+machine holding the outbound gateway websocket, so Fly's default auto-stop-on-idle would
+kill the bot — an idle HTTP service is not an idle bot. All three must survive every
+edit:
+
+```toml
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = false
+  min_machines_running = 1
+```
+
+Keep `[mounts]` too (`black_bloc_data` → `/data`, where the SQLite file lives), and
+never run `fly launch` — it rewrites the file.
 
 ## Every later deploy — `scripts/deploy.ps1`, nothing else
 
@@ -79,8 +107,9 @@ flyctl releases --app black-bloc              # a NEW version number = it landed
 
 The script USED to take **~10 minutes** end to end (measured 2026-09-03 morning: pytest
 alone 8:27 for 3345 tests, single process). Since the same afternoon it runs pytest under
-`pytest-xdist` (`-n auto`): **3371 tests in 54 s wall on the 32-logical-core machine**, same
-count, so the whole script is now ~3–4 minutes and most of that is the Fly build. The
+`pytest-xdist` (`-n auto`): 3371 tests in 54 s wall on the 32-logical-core machine, and the
+suite has since grown to **5,546 tests — still 40 s wall** (measured 2026-09-11 08:28), so
+the whole script is ~3–4 minutes and most of that is the Fly build. The
 ceiling gotcha still stands — a slow builder can push it past ten. A Claude tool call has a
 **10-minute ceiling**: when it kills
 the wrapper mid-`flyctl deploy`, the orphaned flyctl keeps running with a dead stdout pipe,
