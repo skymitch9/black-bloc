@@ -1,9 +1,32 @@
 # Applications — `/applications` is ONE command that opens a panel
 
-> **Audience:** the build agent and the reviewer. **Status:** TRACKED · ✅ **SHIPPED — live in v66** (`853776c`, 15:00, `deploys.log` line 65; synced 42 app commands measured on the boot log). Built on
+> ⚠️ **The command is `/apply`, not `/applications`** — fork I-A1, decided by the owner mid-design
+> (§I). Everywhere the title and body say `/applications` for the COMMAND, read **`/apply`**
+> (`cogs/community/applications.py:2679`); the feature, the log kinds, the settings keys and the site
+> section keep the word "applications".
+>
+> **Audience:** the build agent and the reviewer. **Status:** TRACKED · ✅ **LIVE since v66** (`853776c`, 2026-09-03 15:00, `deploys.log` line 65; synced 42 app commands measured on the boot log — **29** today). Still live at **v108** (`73e2e44`, 2026-09-11 00:37). Built on
 > `worktree-agent-abf063b9177e02f17`** (base `main` `27452ac`, after the birthdays/events/polls
 > panels merged). Merged `--no-ff` `853776c` after Fable review 2026-09-03 (3697 tests).
-> **Last verified: 2026-09-03** — the build measured `len(bot.tree.get_commands())` at **42**
+> **Since then:** ⚠️ **fork I-A2 was reversed at v78** (`3429233`, 2026-09-05, *"a feature turned off
+> on the portal takes its `/command` with it"*) — `HIDDEN_WHEN_OFF["applications_mode"] = ("apply",)`
+> is back (`command_visibility.py:18`), one of fifteen, behind the new `hide_commands_when_off` bool.
+> `/apply` DOES vanish again while the mode is off; §E's fork row and §I-A2 below are history, marked
+> in place. Also since: `/settings` became a panel and the whole `settings` Group retired (v84), the
+> tree fell 42 → **29** with zero Groups, and the mock grew 142 → **150** routes.
+> **Last verified: 2026-09-11 08:33** — re-measured in this tree at `1d090e5`: `TOP_LEVEL_NOW = 29`
+> and `"apply"` in `MEMBER_COMMANDS` (`tests/test_bot.py:11`, `:42`), `LOGS_GROUPS` gone as §E asked,
+> `site/mock/contract.json` **150 routes / 17 pages**, all three settings keys registered
+> (`applications_panel_minutes`, `applications_roster_shows_left`, `applications_panel_own_list` —
+> `settings_store.py`, **202** keys in the registry), and every label §B/§C names still reads the same
+> string in the cog: `PICK_AN_APPLICATION` (`applications.py:233`), `TAKE_SOMEBODY_OFF`
+> (`cogs/…/applications.py:143`), `FILL_IT_IN` (`:141`), `Find #…` (`:1518`), `New form` (`:1543`),
+> `Roster` (`:1772`), `APPROVE_AFTER_ALL` / `PUT_BACK` (`applications.py:265–266`), `SITE_BUTTON`
+> (`:236`). ⚠️ **NOT checked in this pass:** anything in a Discord client or a browser; no boot, no
+> pytest, no ruff, no `check.mjs` run (its server was not started — the 150 is read off
+> `contract.json`); the `path:line` keys in §A/§C/§E are still the `9891f71` ones and have drifted
+> further, so trust the anchor text.
+> **Before that, 2026-09-03** — the build measured `len(bot.tree.get_commands())` at **42**
 > (43 at the base: exactly the one-slot drop §B predicts), **3697 tests pass** (3644 at the base),
 > `ruff check .` clean, `node site/mock/check.mjs` **17 pages / 142 routes** (unchanged by this
 > build — 142 is what `main` reads today, not the 141 §H guessed at `9891f71`), and both site
@@ -204,7 +227,7 @@ Nothing else here is a decision: the 25 cap and the 5-per-row cap are Discord's,
 | `STAFF_COMMANDS` `"applications"` | `tests/test_bot.py:32` | **moves to `MEMBER_COMMANDS`** (§B) |
 | `MEMBER_COMMANDS` `"apply"` | `tests/test_bot.py:63` | **deleted** |
 | `assert len(top) == 44` | `tests/test_bot.py:204` | **one lower than whatever the build measures at boot** — never a hard-coded absolute (§B) |
-| `HIDDEN_WHEN_OFF["applications_mode"] = ("apply",)` | `command_visibility.py:19` | fork **I2** — `("applications",)` or dropped |
+| `HIDDEN_WHEN_OFF["applications_mode"] = ("apply",)` | `command_visibility.py:19` | fork **I-A2** — dropped at the build (23f670c), ⚠️ **back since v78** as `("apply",)` (`command_visibility.py:18`) |
 
 **Strings that name a retired subcommand and are rewritten in the SAME commit** — each currently tells
 somebody to run something that will not exist: `black_bloc/applications.py:83` `:87` `:96` `:100`
@@ -352,7 +375,13 @@ The three that are genuinely his:
   actually type, and it is the half that gets used a hundred times to the staff half's one.
   **Recommended: `/applications`**, with the description reading "Apply for something, or manage the
   forms" so the search box finds it either way. Whichever he picks, it is member-visible (§B).
-- ✅ **I-A2 — DECIDED by the owner 2026-09-03 13:47: "Visible".** `/apply` stays in Discord when
+- ✅ **I-A2 — DECIDED by the owner 2026-09-03 13:47: "Visible"** — ⚠️ **and REVERSED by him at v78**
+  (2026-09-05, `3429233`, *"a feature turned off on the portal takes its `/command` with it"*), which
+  put `applications_mode: ("apply",)` back as one of fifteen entries behind the new
+  `hide_commands_when_off` bool. The paragraph below is what was built at v66 and is history; today
+  `/apply` vanishes while the mode is off, and the off-panel wording it also built still stands for
+  staff, who reach the panel by turning `hide_commands_when_off` off or through the site.
+  `/apply` stays in Discord when
   `applications_mode` is off: the `HIDDEN_WHEN_OFF["applications_mode"]` entry goes, the panel says
   the feature is off in words and renders no Apply control, staff keep their door. Sweeps row 53
   (the vanishing act) is rewritten to test the off-panel wording instead.
@@ -445,7 +474,7 @@ sub-panel).
 12. **§H item 4's route count is 142, not 141.** `node site/mock/check.mjs` reports **17 pages /
     142 routes** on `main` at `27452ac` — the design's 141 was measured at `9891f71`, before
     polls. This build adds no route and `site/mock/contract.json` is untouched, so 142 is the
-    unchanged number.
+    unchanged number. (**150 today**, v108 — later features added the routes, not this one.)
 13. **The Roster sub-panel does not honour a 25-cap placeholder on its LIST, only on its select.**
     The embed writes every approved row it is allowed to show (clamped at 4000 characters, one
     query, as §C requires); the "Take somebody off…" select caps at 25 with the shared
