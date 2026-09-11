@@ -1,15 +1,27 @@
 # Cutover plan — from test mode to running the server
 
 > **Audience:** the owner (who flips the switches) + Claude sessions (who watch and
-> verify). **Status:** TRACKED. **Last verified: 2026-09-05 20:55** — re-measured against
-> **v92** `4b327cf`: the command roster (29 top-level commands, zero groups — the panels
-> program's finish line), every `*_mode` / `*_channel_id` key named below exists in
-> `black_bloc/settings_store.py`, every button label quoted is the string in the cog, and
-> every `KI-n` cited is still open in `KNOWN_ISSUES.md`. ⚠️ **NOT checked:** the LIVE value of
+> verify). **Status:** TRACKED · ⏸️ **NOT STARTED — PAUSED ON THE OWNER.**
+> **Last verified: 2026-09-11 09:10** — docs-wide staleness pass against **v108** `73e2e44`.
+> ⚠️ **Six days and sixteen releases on, step P5 has still not been taken: `TEST_MODE` is ON
+> and the bot still speaks only in `#mute-me-bot-test-spam` and DMs.** Not one row of §2 has
+> been executed. That is not drift — the owner paces this and nothing here is a promise about
+> dates — but a reader must not mistake this file for a record of what happened. **Re-measured
+> today:** the command roster is still **29 top-level commands, zero `app_commands.Group`s**;
+> the self-test is still **107 checks**; `../access/sweeps.md` now runs to **350** rows (294 at
+> v92). **FIXED:** the sweep-row count in P1, and §4's KI-21 clause — **KI-21 is CLOSED** (v89
+> `243dc0f`) and no longer appears in `KNOWN_ISSUES.md`. Every other `KI-n` cited below was
+> re-checked and is still listed: KI-5, KI-8, KI-11, KI-16, KI-17, KI-20, KI-22.
+> ⚠️ **NOT checked:** the LIVE value of
 > any key (the Settings page needs a Discord sign-in) — "already `on`" rows say what the
 > registry default is, and the owner reads the live value on
-> https://blackbloc.heygabi.ai/settings.html before flipping anything. Nothing below has
-> been executed. The owner paces this; nothing here is a promise about dates.
+> https://blackbloc.heygabi.ai/settings.html before flipping anything; every `*_mode` /
+> `*_channel_id` key name and every quoted button label was verified on 2026-09-05 and NOT
+> re-verified today.
+> Before that, **2026-09-05 20:55** — re-measured against
+> **v92** `4b327cf`: the command roster, every `*_mode` / `*_channel_id` key named below in
+> `black_bloc/settings_store.py`, every button label quoted against the string in the cog, and
+> every `KI-n` cited then open in `KNOWN_ISSUES.md`.
 >
 > The 2026-09-01 version of this doc named slash sub-commands the panel waves have since
 > retired (`/settings set-value`, `/golive test`, `/automod mode on`, `/rolemenu post`,
@@ -36,7 +48,7 @@ Settings page — nothing needs a deploy (checklist item 33).
 
 | # | Step | Who | How |
 |---|---|---|---|
-| P1 | The sweep rows for whatever you are about to flip are green, and the core ones (1–3, 6, 10, 12, 14–16, 21–24) at minimum | owner | `access/sweeps.md` — 294 rows at v92, grouped by feature; round 1 of the site sweep passed 2026-09-01, the self-test row (252) was run by the owner 2026-09-05. Rows 253–294 are still the owner's |
+| P1 | The sweep rows for whatever you are about to flip are green, and the core ones (1–3, 6, 10, 12, 14–16, 21–24) at minimum | owner | [`../access/sweeps.md`](../access/sweeps.md) — **350** rows as of 2026-09-11 (294 at v92), grouped by feature; round 1 of the site sweep passed 2026-09-01, the self-test row (252) was run by the owner 2026-09-05. Rows 253–294 are still the owner's |
 | P2 | Rename `#mute-me-bot-test-spam` → **`#black-block-logs`** (spelling confirmed 2026-08-26) | owner | Discord; the channel id survives a rename so `TEST_CHANNEL_ID`, `log_channel_id` and `selftest_channel_id` keep working. Not done as of 2026-09-05 (every sweep row still names the old name) |
 | P3 | Point `staff_channel_id` at the REAL staff channel | owner (+Claude verifies) | Settings page ▸ **Core**, or `/settings` ▸ **A setting group…** ▸ **core**. This drives who counts as staff everywhere (site access, approvers, exemptions). ⚠️ `/automod` ▸ **What automod does…** ▸ on refuses in words while it still points at the log channel (`automod.arming_refusal`) — that refusal is the guard working |
 | P4 | Decide the approval channels | owner | `rolemenu_approval_channel_id`, `events_category_id`, `applications_channel_id`, `poll_channel_id`, `request_status_channel_id` / `request_notify_channel_id` — every one defaults to the staff channel or to the feature's own panel's Setup; leave defaults unless wanted elsewhere |
@@ -86,7 +98,7 @@ under `archive/current-bots/`).
 - **The one brake after P5 is per-feature modes.** Anything already `on`
   (tempvoice, polls, chat, events, requests, golive-once-flipped) acts on the
   real server immediately. That is by design; the sweep is what earns it.
-- **The dashboard carries automod's arming refusal too** (KI-21's gate pass, v84
+- **The dashboard carries automod's arming refusal too** (the gate pass filed as KI-21, **CLOSED at v89** `243dc0f` and gone from `KNOWN_ISSUES.md`; landed v84
   `675f233`: `api/settings_api.py:gated_writers` hands `automod_mode`, `honeypot_mode`
   and `honeypot_exempt_role_ids` to the cog's own move, so a `PUT` gets the panel's
   verdict). Either door is safe to flip from; the 2026-09-04 finding that said
