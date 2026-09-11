@@ -8,12 +8,27 @@ with one review fix — `moment()` now stamps the check card with `check_asked_a
 request app. I want to have it message the requesters to check the work."* — then *"Keep
 building"*, so the design calls below were made by the conductor and are listed under §D for
 the owner to overturn later (each is a setting or a one-line table change).
-**Last verified: 2026-09-03** — every `path:line` below was read at `46e3ba4` (v60, the wave-0
-merge + gate change); the state machine, looks, card tables, settings registry, site route
-shapes and the `deploys.log` line are as this doc says. ⚠️ **NOT verified:** anything against
-live Discord — whether a closed-DM member's `user.send` raises `Forbidden` (assumed; the
-existing `dm()` at `cogs/community/requests.py:150` already treats ANY exception as "not
-told", so the fallback does not depend on which one).
+**Last verified: 2026-09-11 08:55** (the header; the body is as at the design). Measured this
+pass against `main` at `f3ae743` (v108 live): `black_bloc/requests.py` carries `CHECK_ASKED`
+**last in `LOOKS`**, `CHECK_FALLBACK_KEY` / `CHECK_ON_READY_KEY`, `check_falls_back` /
+`checks_on_ready`, `CHECK_ASKED_DM` / `_CHANNEL` / `_NOBODY` / `_DESCRIPTION`, the colour
+`0x3498DB`, the title *"Request #{request_id} is ready for you to try 🙌"* and the field tuple
+`("what", "built", "how_to_test", "ready_by", "asked_by")`; `NOT_READY_TO_CHECK` says
+*"**Ready to check** on its card is what puts one there"* — the stale `/request ready` sentence
+§C1 flagged is gone; `cogs/community/requests.py:ask_check` exists and `MOVE_FUNCS["check"]`
+points at it; `settings_store.py` registers both keys and `REQUEST_CARD_DEFAULT` excludes
+`("done", "check_asked")`; `logkinds.py` classifies `request.check_asked`; `storage/db.py` has
+`check_asked_by` / `check_asked_at` on `requests` and in the added-columns tuple. ⚠️ **NOT
+verified:** anything against
+live Discord or a browser — whether a closed-DM member's `user.send` raises `Forbidden` (assumed; the
+existing `dm()` in `cogs/community/requests.py` already treats ANY exception as "not
+told", so the fallback does not depend on which one), the embed by eye, the site button and chip.
+Before that, **2026-09-03** — every `path:line` below was read at `46e3ba4` (v60, the wave-0
+merge + gate change).
+
+> ⚠️ **Line numbers below are as at `46e3ba4` and have drifted** — trust the NAMES. Three counts in
+> the body have moved on since v61: **schema is 34** (not 27 — later builds, none of them requests);
+> the mock reads **150 routes** (not 140); the registry holds **202** keys.
 
 Follows the pattern: [`requests-panel-design.md`](requests-panel-design.md) for the panel,
 [`requests-embeds-design.md`](requests-embeds-design.md) for the one-builder cards,
@@ -165,7 +180,8 @@ that `REQUEST_CARD_DEFAULT` excludes `check_asked`.
   (`:4745`) — stamps the two fields on the row, 409 off-review, returns `{request, message}`.
 - `site/mock/check.mjs:340–343`: the review walk becomes `ready → check → sendback → ready →
   accept` so the contract exercises `/check` on a review row; the route count in the
-  `deploys.log` line goes 139 → **140**.
+  `deploys.log` line goes 139 → **140**. (The mock has grown since: **150 routes, 17 pages, 14 core
+  settings** at v108, none of them requests routes.)
 
 ### C6. Log kinds
 
@@ -294,10 +310,13 @@ Built 2026-09-03 on `feat/requests-check` (four commits off `59ac96f`). 3399 tes
     contract that guards "every key the page reads" has to cover them there too.
 11. **`SCHEMA_VERSION` is 27 as the doc says, and `feat/applications-no-role` claims 27 too.**
     Whichever merges second re-keys to 28 — recorded here so the merge does not have to
-    rediscover it.
+    rediscover it. **Resolved:** applications-no-role merged second and took **28** (v62,
+    `9891f71`). The schema is **34** at v108; the two `check_asked_*` columns are untouched since.
 
 **Not verified** (no live Discord and no deploy from this build): the `check_asked` embed by
 eye; whether a closed-DM member's `user.send` raises what `dm()` expects (it treats any
 exception as "not told", so the fallback does not depend on which); the real channel ping
 reaching the right person; the site button and chip on the deployed page. Those are sweeps
-[66–68](../access/sweeps.md).
+[66–68](../access/sweeps.md) — still the right three rows at 2026-09-11 (66 the DM, 67 the
+closed-DM ping, 68 `request_check_on_ready`), and nothing in that file's *Verified by the owner*
+table records them as run.
