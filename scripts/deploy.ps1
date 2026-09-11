@@ -35,7 +35,7 @@ if ($env:BLACKBLOC_SKIP_GATE -eq "1") {
 cmd /c "git push origin main 2>&1"
 if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: the push failed." }
 
-& $flyctl deploy --app black-bloc --ha=false --remote-only --yes
+cmd /c "`"$flyctl`" deploy --app black-bloc --ha=false --remote-only --yes 2>&1"
 if ($LASTEXITCODE -ne 0) { Write-Error "The deploy itself failed - fix before logging." }
 
 $commit = git rev-parse --short HEAD

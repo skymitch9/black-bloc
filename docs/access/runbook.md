@@ -70,6 +70,10 @@ to stderr — including the harmless `To https://github.com/…` progress line �
 stopped before `flyctl`. Fixed by routing the push through `cmd /c "… 2>&1"`. If it recurs
 for another native command in the script, that is the cause; check `origin/main` before
 assuming the push failed, then rerun the script (the gate reruns; it is idempotent).
+It DID recur, 2026-09-11 09:27, on `flyctl` itself: the v109 run died on flyctl's first
+stderr line (`==> Verifying app config`) with no release made (`releases` still said v108).
+Same fix, same line shape — flyctl now runs through `cmd /c "... 2>&1"` too. If a third
+native command is ever added to the script, wrap it the same way from the start.
 
 ## Restart / stop / start
 ```
