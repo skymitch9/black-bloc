@@ -919,9 +919,13 @@ settled number, and two of its string sites are inside files those branches own.
 ## Build 1 deviations — what the build did differently, and why
 
 > Written by the Build 1 agent on `worktree-agent-a3e6ccbead5a90537`, off `main` at `34331ec`,
-> 2026-09-05. **Status: BUILT, not merged, not deployed.** `pytest` **4973 passed** (4739 on
+> 2026-09-05. **Status: ✅ LIVE as v83** — merge `9a7c87e`, shipped at `57a878d`, deployed
+> **2026-09-05 12:53** Phoenix (`../deploys.log`).
+> (This line said *"BUILT, not merged, not deployed"* until 2026-09-11; it was stale from the merge
+> onwards, and the page header already said SHIPPED.)
+> `pytest` **4973 passed** (4739 on
 > `main` before, +234), `ruff check .` clean, `node site/mock/check.mjs` **17 pages / 146
-> routes** — unchanged before and after — and `node --input-type=module --check` clean on
+> routes** — unchanged before and after, and **150 routes** at v108 — and `node --input-type=module --check` clean on
 > `site/public/assets/labels.js`. ⚠️ **Nothing has met live Discord** — no boot, no token, no
 > sync, no panel opened, nothing deployed. Build 1 retires nothing: the `settings` and
 > `presence` Groups and all six leaf subcommands still exist, and the top-level count is
@@ -1067,7 +1071,7 @@ and none of the five `/settings` subcommands checks the database. Three more:
 
 > Written by the Build 2 agent on `worktree-agent-a56c7b5137d9a609d`, off `main` at `57a878d`
 > (Build 1 merged as `9a7c87e`), 2026-09-05. **Status: ✅ LIVE as v84** — merge `ce97de0`, deployed
-> 2026-09-05 (`../deploys.log`), boot `synced 29`. (This line said *"BUILT, not merged, not
+> **2026-09-05 13:44** Phoenix (`../deploys.log`), boot `synced 29`. (This line said *"BUILT, not merged, not
 > deployed"* until 2026-09-11; it was stale from the merge onwards, and the page header above it
 > already said SHIPPED.)
 > `pytest` **5002 passed** (4973 on the base, +29), `ruff check .` clean,
