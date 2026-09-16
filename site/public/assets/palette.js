@@ -1,7 +1,10 @@
+import { listOf } from './api.js';
 import { LABELS } from './labels.js';
+import { guidesIndex } from './shell.js';
 import { el, icon, setShowKeys } from './ui.js';
 
 const SETTINGS_TAB = 'settings';
+const GUIDES_TAB = 'guides';
 const SHOWN = 12;
 
 /** Fired when a setting on THIS page is the thing that was picked. */
@@ -53,6 +56,32 @@ function settingsEntries() {
   }));
 }
 
+let guideTitles = [];
+let guidesAsked = false;
+
+/**
+ * Every guide by its title, read once the first time the palette opens — the
+ * hub is a member's own page, so the list is whatever this person may read.
+ */
+function guideEntries() {
+  const link = document.querySelector(`.nav-link[data-tab="${GUIDES_TAB}"]:not([hidden])`);
+  if (!link) return [];
+  const href = link.getAttribute('href');
+  if (!guidesAsked) {
+    guidesAsked = true;
+    guidesIndex().then((found) => {
+      guideTitles = found.ok ? listOf(found.payload, 'guides') : [];
+      if (node && node.open) paint(index());
+    });
+  }
+  return guideTitles.map((one) => ({
+    kind: 'Page',
+    title: one.title,
+    note: `${href}#${one.slug}`,
+    run: () => location.assign(`${href}#${one.slug}`),
+  }));
+}
+
 function modeActions() {
   const theme = window.estateTheme;
   if (!theme) return [];
@@ -94,7 +123,7 @@ function doings() {
 }
 
 function index() {
-  return [...railPages(), ...settingsEntries(), ...doings()].map((entry) => ({
+  return [...railPages(), ...guideEntries(), ...settingsEntries(), ...doings()].map((entry) => ({
     ...entry,
     hay: `${entry.title} ${entry.note} ${entry.kind}`.toLowerCase(),
   }));

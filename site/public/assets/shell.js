@@ -1,8 +1,9 @@
 import { api } from './api.js';
 import { duration, el, icon } from './ui.js';
 
-/** The one page a signed-in member who is not staff may use. */
-export const MEMBER_TAB = 'requests';
+/** The pages a signed-in member who is not staff may use; the first is where they land. */
+export const MEMBER_TABS = ['requests', 'guides'];
+export const MEMBER_TAB = MEMBER_TABS[0];
 
 export const GROUPS = [
   {
@@ -12,6 +13,7 @@ export const GROUPS = [
       { tab: 'health', label: 'Health', icon: 'navHealth' },
       { tab: 'audit', label: 'Logs', icon: 'navLogs' },
       { tab: 'requests', label: 'Requests', icon: 'navRequests', feature: 'request', count: 'featurerequests' },
+      { tab: 'guides', label: 'Guides', icon: 'navGuides', feature: 'guides' },
     ],
   },
   {
@@ -49,6 +51,22 @@ let membersOnce = null;
 let requestsOnce = null;
 let pollsOnce = null;
 let featureOnce = null;
+let guidesOnce = null;
+
+/**
+ * The hub payload, memoised so the rail and `page-guides.js` share ONE read.
+ * It resolves rather than throws, because the rail asks it only to find out
+ * whether guides are off for this person.
+ */
+export function guidesIndex() {
+  if (guidesOnce === null) {
+    guidesOnce = api('/api/guides').then(
+      (payload) => ({ ok: true, payload, error: null }),
+      (error) => ({ ok: false, payload: null, error }),
+    );
+  }
+  return guidesOnce;
+}
 
 export function shellStatus() {
   if (statusOnce === null) statusOnce = api('/api/status').catch(() => null);
@@ -96,6 +114,7 @@ export function forgetShellStatus() {
   requestsOnce = null;
   pollsOnce = null;
   featureOnce = null;
+  guidesOnce = null;
 }
 
 export function renderNav(current, hrefFor) {
@@ -257,17 +276,28 @@ function paintCounts(tally, waiting, running) {
 }
 
 /**
- * A signed-in member who is not staff gets ONE thing in the rail, because
- * every other page would refuse them. The nav is built before `me` arrives,
- * so this trims it rather than the renderer knowing who is looking.
+ * A signed-in member who is not staff gets Requests and Guides, because every
+ * other page would refuse them. The nav is built before `me` arrives, so this
+ * trims it rather than the renderer knowing who is looking.
  */
 function paintNavFor(member) {
   for (const link of document.querySelectorAll('.nav-link')) {
-    link.hidden = member && link.getAttribute('data-tab') !== MEMBER_TAB;
+    link.hidden = member && !MEMBER_TABS.includes(link.getAttribute('data-tab'));
   }
+  paintGroups();
+}
+
+function paintGroups() {
   for (const group of document.querySelectorAll('.nav-group')) {
     group.hidden = ![...group.querySelectorAll('.nav-link')].some((link) => !link.hidden);
   }
+}
+
+function hideTab(tab) {
+  for (const link of document.querySelectorAll(`.nav-link[data-tab="${tab}"]`)) {
+    link.hidden = true;
+  }
+  paintGroups();
 }
 
 export function isMemberOnly(me) {
@@ -282,6 +312,9 @@ export async function paintShell(me) {
     paintCounts(null, null, null);
     paintCount('featurerequests', null, () => '');
     paintGuild(null, me);
+    // guides_mode off answers this member 409 guides_off, so the rail stops offering it.
+    const guides = await guidesIndex();
+    if (!guides.ok) hideTab('guides');
     return null;
   }
   const [status, tally, waiting, running, asked] = await Promise.all([
