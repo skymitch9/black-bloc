@@ -283,6 +283,14 @@ attachments; a per-member welcome DM; Carl's autorole on `#landing` (unconfirmed
   clarifies or stops, never widens. **It belongs in a fresh agent's initial brief**, where it
   will proceed normally. What is on the branch is §C7 as written: an `off` / `on` enum
   defaulting to `on`.
+  ⚠️ **The decision itself is real and is recorded on `main` at `94c4b5b`** ("Posts design:
+  posts_mode off/shadow/on, default shadow", owner verbatim), which is the commit AFTER this
+  branch's base `193dac9`. So §C1, §C7 and §C9 on `main` already say off/shadow/on and this
+  branch's code is one design revision behind them. Merging will conflict in
+  `docs/info/posts-design.md` — take `main`'s §C1/§C7/§C9 and keep this file's `## Deviations`.
+  The follow-up is small and well bounded: one column (schema 36 → 37), three kinds, a
+  `shadow_channel_id` resolution in `publish_post`, the `off/shadow/on` choices on the key, and
+  the mode control that already exists on both surfaces gaining a third value.
 - **Nothing here has met Discord.** No message was sent, no pin taken, no `/posts` panel opened
   in a real client. The whole feature is proved against fakes, the mock and the Node fixtures.
 - **`site/mock/check.mjs` was not run against the REAL API** — that is `tests/api/test_contract.py`'s
