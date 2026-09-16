@@ -46,9 +46,13 @@ they show `dm`).
 ### C2. The member half of `/modmail`
 
 `/modmail` stops being staff-only in `command_visibility`/`is_staff_command`; the cog splits on
-`store.is_staff` exactly as `/request` does (`panels-program.md` P2). A member sees ONE ephemeral
-panel: a line ("Modmail is how you reach staff privately.") and either **Open a ticket** (→ the modal)
-or, with a ticket open, the line *"Your ticket is open: <#…>"* with **no** button. Nothing else: no
+`store.is_staff` exactly as `/request` does (`panels-program.md` P2). **Owner, 16:3x, verbatim:**
+*"basically for modmail, anyone can make it, if youre a staff when you do a /modmail you see more than
+just create and a modal with header and comment and stuff, you also see the other settings"* — so the
+first row is the SAME for everybody: **Open a ticket** (→ the modal: header + comment) or, with a
+ticket open, the line *"Your ticket is open: <#…>"* and no button; a member sees ONE ephemeral panel
+with just that and a line ("Modmail is how you reach staff privately."); staff see that row and then
+everything the staff root has today, plus **Open a ticket with…** (§C4). Nothing else: no
 list, no logs, no site link (every `/api/modmail/*` route is staff-only). `modmail_panel_minutes`
 governs it.
 
