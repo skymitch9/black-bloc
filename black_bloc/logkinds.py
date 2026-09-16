@@ -381,6 +381,7 @@ ROUTINE: frozenset[str] = frozenset(
         "selftest.check",
         "selftest.finished",
         "selftest.purged",
+        "guide.confirmed",
         "guide.created",
         "guide.deleted",
         "guide.edited",

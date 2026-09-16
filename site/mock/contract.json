@@ -3684,10 +3684,30 @@
         "may_edit",
         "mode",
         "stale",
+        "features",
+        "fact_choices",
+        "right_now",
         "notes",
         "checked_at"
       ],
+      "nested": {
+        "right_now": [
+          "test_mode",
+          "test_channel",
+          "on",
+          "shadow",
+          "off"
+        ],
+        "fact_choices": [
+          "settings",
+          "probes"
+        ]
+      },
       "rows": {
+        "features": [
+          "feature",
+          "page"
+        ],
         "guides": [
           "id",
           "slug",
@@ -3696,6 +3716,7 @@
           "audience",
           "feature",
           "feature_page",
+          "feature_mode",
           "command",
           "sort",
           "published",
@@ -3764,6 +3785,7 @@
         "media",
         "read_at",
         "may_edit",
+        "fault_files_request",
         "notes"
       ],
       "nested": {
@@ -3775,6 +3797,7 @@
           "audience",
           "feature",
           "feature_page",
+          "feature_mode",
           "command",
           "sort",
           "published",
@@ -3870,6 +3893,7 @@
           "audience",
           "feature",
           "feature_page",
+          "feature_mode",
           "command",
           "sort",
           "published",
@@ -3933,6 +3957,7 @@
           "audience",
           "feature",
           "feature_page",
+          "feature_mode",
           "command",
           "sort",
           "published",
@@ -4002,6 +4027,7 @@
           "audience",
           "feature",
           "feature_page",
+          "feature_mode",
           "command",
           "sort",
           "published",
@@ -4085,6 +4111,21 @@
         "deleted",
         "message"
       ]
+    },
+    {
+      "_": "Guides (G2), §C8's left-hand foot button. Member-gated like the reads, not staff-gated: it is the one guide write a member makes, and it leaves one routine web.guide.confirmed row and nothing else.",
+      "method": "POST",
+      "path": "/api/guides/{guide_slug}/confirmed",
+      "body": {},
+      "read_by": [
+        "page-guides.js This guide was right"
+      ],
+      "shape": "object",
+      "keys": [
+        "slug",
+        "release",
+        "message"
+      ]
     }
   ],
   "pages": [
@@ -4104,7 +4145,8 @@
     "/health.html",
     "/polls.html",
     "/chat.html",
-    "/requests.html"
+    "/requests.html",
+    "/guides.html"
   ],
   "action_kinds": [
     "web.operator.read",
@@ -4223,6 +4265,7 @@
     "web.selftest.finished",
     "web.selftest.purged",
     "web.selftest.check",
+    "web.guide.confirmed",
     "web.guide.created",
     "web.guide.deleted",
     "web.guide.edited",
