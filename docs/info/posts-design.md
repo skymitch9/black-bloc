@@ -43,7 +43,8 @@ under `TEST_MODE` posts nowhere until the cutover; a staffer who wants to see it
 ```
 posts  id, guild_id, slug UNIQUE(guild_id, slug), title, channel_id (NULL ok), body, style
        (plain|embed), pin (bool, default 1), message_id (NULL ok), posted_hash (NULL ok), posted_at,
-       posted_by, seed_hash (NULL ok), updated_at, updated_by
+       posted_by, shadow_message_id (NULL ok — the copy a shadow publish keeps up), seed_hash (NULL ok),
+       updated_at, updated_by
 ```
 
 - One message per post. `body` is capped by style at save time **and** at post time: `plain` **2000**,
@@ -155,7 +156,7 @@ a staff edit. **Never posted by the seed** — posting is a person's press.
 
 | Key | Type | Default | Help |
 |---|---|---|---|
-| `posts_mode` | enum on/off | **on** | whether staff can post from the site or `/posts`; off hides `/posts` |
+| `posts_mode` | enum off/shadow/on | **shadow** | ~~enum on/off, default on~~ **changed 2026-09-16 15:4x, owner: "lets have all the test work go to blackbloc-logs until we're ready to go live, another shadow mode"** — `shadow` sends and edits the message in the shadow channel (the guard's test channel while `TEST_MODE`, else `log_channel_id`) whatever the post's own channel says, tracked in `shadow_message_id`; `on` posts to the post's channel and removes the shadow copy on the first real post; `off` refuses and hides `/posts` |
 | `posts_panel_minutes` | int 1–1440 | **10** | how long the `/posts` panel stays live |
 | `posts_log_level` | the log-level family | family default | generated |
 
@@ -169,12 +170,9 @@ Per-post choices (channel, style, pin) live on the row with both doors. Registry
 `FEATURE_PAGES["posts"] = "posts.html"`; `posted` / `updated` / `taken_down` / `post_failed` important,
 the rest routine.
 
-### C9. Test mode and the cutover
+### C9. Test mode, shadow, and the cutover
 
-Under `TEST_MODE`, **Post it** on a post aimed at `#welcome` logs `post.would_post` and the site says so
-in the guard's own sentence; a staffer who wants to see the real message points the post at
-`#blackbloc-logs`, posts, reads it, then points it back — the row keeps the `message_id` of the test
-post until **Take it down**. `cutover-plan.md` gains one row: *point `welcome` at `#welcome`, press Post
+~~Under `TEST_MODE`, **Post it** on a post aimed at `#welcome` logs `post.would_post` and the site says so; a staffer points the post at `#blackbloc-logs` to see it~~ **Superseded 2026-09-16 15:4x by the owner's shadow mode:** with `posts_mode` = **shadow** (the default), **Post it** sends the real message into `#blackbloc-logs` (the shadow channel) and keeps it edited in place there, whatever channel the post names — so staff see exactly what would go up, where the bot is allowed to speak. The site's "how it will post" line and the panel card say so. Flipping to **on** is the go-live: the next Post it posts to `#welcome` and removes the shadow copy. `cutover-plan.md` gains one row: *point `welcome` at `#welcome`, press Post
 it, then delete Carl's `1285806434050768927` by hand and turn Carl's welcome off*. Nothing here deletes
 Carl's message.
 
@@ -184,6 +182,7 @@ Carl's message.
 2. Pin by default → the seed's `pin`.
 3. Links in the preview are not clickable → one attribute in `discordmd.js`.
 4. `/posts` exists at all (F-P1 below) → drop the cog, keep the module.
+6. `shadow` as the default mode (owner's own call, 15:4x) → the seed of the key.
 5. A seeded post cannot be deleted → one refusal.
 
 ## E. Out of scope
