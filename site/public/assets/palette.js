@@ -14,6 +14,7 @@ let node = null;
 let input = null;
 let list = null;
 let found = [];
+let all = [];
 let at = 0;
 
 function railPages() {
@@ -69,9 +70,12 @@ function guideEntries() {
   const href = link.getAttribute('href');
   if (!guidesAsked) {
     guidesAsked = true;
-    guidesIndex().then((found) => {
-      guideTitles = found.ok ? listOf(found.payload, 'guides') : [];
-      if (node && node.open) paint(index());
+    guidesIndex().then((answer) => {
+      guideTitles = answer.ok ? listOf(answer.payload, 'guides') : [];
+      if (node && node.open) {
+        all = index();
+        paint();
+      }
     });
   }
   return guideTitles.map((one) => ({
@@ -155,9 +159,9 @@ function paintRows() {
   if (on) on.scrollIntoView({ block: 'nearest' });
 }
 
-function paint(entries) {
+function paint() {
   const query = input.value.trim().toLowerCase();
-  found = rank(entries, query);
+  found = rank(all, query);
   at = 0;
   if (found.length === 0) {
     list.replaceChildren(el('p', { class: 'say-nothing' }, [
@@ -210,9 +214,9 @@ function build() {
 function open() {
   if (node === null) build();
   if (node.open) return;
-  const entries = index();
+  all = index();
   input.value = '';
-  input.oninput = () => paint(entries);
+  input.oninput = () => paint();
   input.onkeydown = (event) => {
     if (event.key === 'ArrowDown') {
       event.preventDefault();
@@ -225,7 +229,7 @@ function open() {
       run(at);
     }
   };
-  paint(entries);
+  paint();
   node.showModal();
   input.focus();
 }

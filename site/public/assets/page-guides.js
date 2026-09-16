@@ -80,6 +80,8 @@ const PICTURE_TOO_WIDE = 'That picture is {side} pixels on its longest side and 
   'again.';
 const PICTURE_UNREADABLE = 'This browser could not read that file as a picture, so nothing was ' +
   'uploaded. Send a PNG, a JPEG or a WebP.';
+const PICTURE_GONE = 'This picture did not load. The words above are the whole step; tell a Lead ' +
+  'if it stays missing.';
 
 const AUDIENCE_SAID = { member: 'For everyone', staff: 'For staff' };
 const SOURCE_SAID = { capture: 'screenshot', mock: 'illustration' };
@@ -101,6 +103,12 @@ const state = { audience: '', where: '', onlyOn: false, editing: false };
 
 let refresh = () => {};
 let factTimer = null;
+
+/** layout.js balances #dash into two columns; a block marked full is never halved. */
+function full(node) {
+  if (node) node.setAttribute('data-span', 'full');
+  return node;
+}
 
 function stopFacts() {
   if (factTimer === null) return;
@@ -157,7 +165,7 @@ function metaOf(row) {
   return parts.join(' · ');
 }
 
-function hubCard(row) {
+function hubCard(row, mayEdit) {
   return el('a', { class: 'guidecard', href: `#${row.slug}`, 'data-slug': row.slug }, [
     el('div', { class: 'guidecard-head' }, [
       el('h3', { class: 'guidecard-title', text: row.title }),
@@ -165,7 +173,7 @@ function hubCard(row) {
         audiencePill(row),
         modePill(row.feature_mode),
         publishPill(row),
-        stalePill(row.stale_count),
+        mayEdit ? stalePill(row.stale_count) : null,
       ]),
     ]),
     el('p', { class: 'guidecard-goal', text: row.goal }),
@@ -186,10 +194,10 @@ function rightNowStrip(payload) {
   parts.push(`${found.on ?? 0} features on`);
   parts.push(`${found.shadow ?? 0} in shadow`);
   parts.push(`${found.off ?? 0} off`);
-  return el('div', { class: 'today' }, [
+  return full(el('div', { class: 'today' }, [
     el('div', { class: 'today-head', text: 'Right now' }),
     el('p', { class: 'today-line', text: parts.join(' · ') }),
-  ]);
+  ]));
 }
 
 function chipRow(choices, current, onPick) {
@@ -289,9 +297,10 @@ function featureSelect(payload, current) {
   const rows = listOf(payload, 'features');
   const select = el('select', { class: 'input' });
   for (const one of rows) {
+    const label = featureLabel(one.feature);
     select.append(el('option', {
       value: one.feature,
-      text: `${featureLabel(one.feature)} (${one.feature})`,
+      text: label === one.feature ? label : `${label} (${one.feature})`,
       selected: one.feature === current || undefined,
     }));
   }
@@ -310,7 +319,7 @@ async function loadHub(payload) {
 
   for (const line of payload.notes || []) blocks.push(notice(line, 'warn'));
   blocks.push(rightNowStrip(payload));
-  blocks.push(say);
+  blocks.push(full(say));
 
   const list = section('Guides', HUB_NOTE, { count: rows.length || null, open: true });
   list.body.append(
@@ -325,9 +334,9 @@ async function loadHub(payload) {
           refresh();
         }),
       )
-      : el('div', { class: 'guidegrid' }, shown.map(hubCard)),
+      : el('div', { class: 'guidegrid' }, shown.map((one) => hubCard(one, payload.may_edit))),
   );
-  blocks.push(list.node);
+  blocks.push(full(list.node));
 
   if (payload.may_edit) {
     if (payload.stale) {
@@ -408,17 +417,25 @@ function captionOf(picture) {
   return parts.join(' · ');
 }
 
+/** The alt is the step's own words; the bold markers are typography, not speech. */
+function plain(text) {
+  return String(text ?? '').split('**').join('');
+}
+
 function pictureBlock(picture, alt) {
   if (!picture) return null;
+  const said = plain(alt || picture.alt || '');
+  const shot = el('img', {
+    class: 'step-img',
+    src: picture.url,
+    alt: said,
+    loading: 'lazy',
+    width: picture.width || undefined,
+    height: picture.height || undefined,
+    on: { error: () => shot.replaceWith(el('p', { class: 'step-gone', text: PICTURE_GONE })) },
+  });
   return el('figure', { class: 'step-shot' }, [
-    el('img', {
-      class: 'step-img',
-      src: picture.url,
-      alt: alt || picture.alt || '',
-      loading: 'lazy',
-      width: picture.width || undefined,
-      height: picture.height || undefined,
-    }),
+    shot,
     el('figcaption', { class: 'step-caption' }, [
       el('span', { text: captionOf(picture) }),
       picture.stale
@@ -443,7 +460,7 @@ function stepBlock(step, mayEdit) {
       step.expect_text
         ? el('p', { class: 'step-expect' }, [
           el('span', { class: 'step-expect-label', text: 'Expect' }),
-          el('span', { text: step.expect_text }),
+          el('span', {}, boldParts(step.expect_text)),
         ])
         : null,
       warningsBlock(step, mayEdit),
@@ -492,8 +509,8 @@ function factsCard(payload) {
 function faultsBlock(payload) {
   return table(
     [
-      { key: 'symptom', label: 'If this happens' },
-      { key: 'answer', label: 'Do this' },
+      { key: 'symptom', label: 'If this happens', cell: (row) => el('span', {}, boldParts(row.symptom)) },
+      { key: 'answer', label: 'Do this', cell: (row) => el('span', {}, boldParts(row.answer)) },
     ],
     payload.faults || [],
     { empty: NO_FAULTS, search: false },
@@ -619,7 +636,7 @@ function readGuide(payload, hub) {
       audiencePill(guide),
       modePill(guide.feature_mode),
       publishPill(guide),
-      stalePill(guide.stale_count),
+      payload.may_edit ? stalePill(guide.stale_count) : null,
     ]),
     guide.command ? bar([copyChip(guide.command, say)]) : null,
     say,
@@ -634,7 +651,7 @@ function readGuide(payload, hub) {
     footButtons(payload),
   ]);
 
-  return [head, el('div', { class: 'guidebody' }, [main, rail(payload, hub)])];
+  return [full(head), full(el('div', { class: 'guidebody' }, [main, rail(payload, hub)]))];
 }
 
 /* ---- one guide, edit mode ------------------------------------------------ */
@@ -837,8 +854,12 @@ function stepEditor(slug, draft, step, at, say, dirty, repaint) {
   return el('li', { class: 'step step-edit' }, [
     el('span', { class: 'step-n', text: String(at + 1) }),
     el('div', { class: 'step-body' }, [
-      field('Do this', doBox, 'One press. Write the button in **bold**, spelled the way Discord spells it.'),
-      field('Expect', expectBox, 'What is on the screen afterwards. Leave it blank if there is nothing to see.'),
+      el('div', { class: 'formrow' }, [
+        field('Do this', doBox, 'One press. Write the button in **bold**, spelled the way Discord spells it.'),
+      ]),
+      el('div', { class: 'formrow' }, [
+        field('Expect', expectBox, 'What is on the screen afterwards. Leave it blank if there is nothing to see.'),
+      ]),
       warningsBlock(step, true),
       pictureBlock(step.media, step.do_text),
       pictureControls(slug, step, say, dirty),
@@ -876,7 +897,7 @@ function faultEditor(draft, fault, at, repaint) {
   });
   return el('div', { class: 'formrow faultrow' }, [
     field('If this happens', symptom, null),
-    field('Do this', answer, null),
+    field('The answer', answer, null),
     bar([button('×', () => {
       draft.faults.splice(at, 1);
       repaint();
@@ -1117,7 +1138,7 @@ function editGuide(payload, hub) {
     ]),
   ]);
 
-  return [head, body];
+  return [full(head), full(body)];
 }
 
 /* ---- the page ------------------------------------------------------------ */
