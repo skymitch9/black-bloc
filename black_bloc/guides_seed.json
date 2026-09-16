@@ -1,0 +1,430 @@
+{
+  "version": 1,
+  "guides": [
+    {
+      "slug": "golive-announce",
+      "title": "Get your stream announced in #live-now",
+      "goal": "Link your Twitch channel once. Black Bloc posts whenever Discord shows you streaming.",
+      "audience": "member",
+      "feature": "golive",
+      "command": "/golive",
+      "sort": 10,
+      "steps": [
+        {"do": "Type **/golive** in any channel.", "expect": "A panel only you can see, with **Link my Twitch channel** on it."},
+        {"do": "Press **Link my Twitch channel** and type the part after twitch.tv/.", "expect": "The panel reads twitch.tv/your-name. A name somebody else holds is refused without naming them."},
+        {"do": "Start your stream with Discord showing you as **Streaming** (Discord ▸ Settings ▸ Connections ▸ Twitch, Display on profile on).", "expect": "The announcement posts in the go-live channel with your fans pinged. In shadow, nothing posts and the bot logs what it would have said."},
+        {"do": "Press **Stop announcing my streams** to pause.", "expect": "The button becomes **Announce my streams again**. Your link is kept."}
+      ],
+      "faults": [
+        {"symptom": "Nothing posted", "answer": "Announcements are in shadow. The panel's Announcements line says so; a Lead flips it."},
+        {"symptom": "Discord does not show you streaming", "answer": "Reconnect Twitch under Discord's Connections and turn Display on profile on. The bot reads Discord, not Twitch."},
+        {"symptom": "You went live twice in a short time", "answer": "The second one waits for the cooldown shown above."},
+        {"symptom": "Your game shows as \"something\"", "answer": "Twitch had no category set. Set one and go live again."}
+      ],
+      "facts": [
+        {"kind": "setting", "ref": "golive_mode"},
+        {"kind": "setting", "ref": "golive_channel_id"},
+        {"kind": "setting", "ref": "golive_cooldown_minutes"},
+        {"kind": "probe", "ref": "golive.linked_count"}
+      ]
+    },
+    {
+      "slug": "pings-follow",
+      "title": "Follow a streamer's pings",
+      "goal": "Wear a streamer's ping role, or start your own so your fans get pinged.",
+      "audience": "member",
+      "feature": "pings",
+      "command": "/pings",
+      "sort": 20,
+      "steps": [
+        {"do": "Type **/pings**.", "expect": "A panel titled Your pings, listing the roles you wear."},
+        {"do": "Press **Follow a streamer…** and pick a name.", "expect": "The role goes on and the panel lists it. **Stop following…** takes it off."},
+        {"do": "Press the **Events** toggle to get pinged for events and go-lives.", "expect": "The Events role goes on. Press it again to take it off."},
+        {"do": "If you stream: press **Start my own ping role**.", "expect": "A role named after you appears on the Streamer pings menu. **Take my ping role away** removes it."}
+      ],
+      "faults": [
+        {"symptom": "No Events toggle", "answer": "Staff have not set the Events role up yet. The panel says so."},
+        {"symptom": "No Start my own ping role", "answer": "Link your Twitch channel first with /golive, or staff make the role for you."},
+        {"symptom": "Follow a streamer… says 25 of N", "answer": "The rest are on the Streamer pings menus in the roles channel."}
+      ],
+      "facts": [
+        {"kind": "setting", "ref": "pings_mode"},
+        {"kind": "setting", "ref": "pings_fan_role_creation"}
+      ]
+    },
+    {
+      "slug": "event-propose",
+      "title": "Propose an event",
+      "goal": "Pick a day, a start time and a place. Staff approve it and it lands on the server calendar.",
+      "audience": "member",
+      "feature": "events",
+      "command": "/event",
+      "sort": 30,
+      "steps": [
+        {"do": "Type **/event**, then press **My time zone** and pick yours.", "expect": "The panel shows your zone and the time it is there now. Do this once."},
+        {"do": "Press **Propose an event**, then **Title & details**. Type a title and what it is.", "expect": "The draft shows your title. Nothing you type is ever thrown away."},
+        {"do": "Pick a **Day**, an **Hour** and a **Minute**.", "expect": "The When line reads the full date and time in your zone. **Submit** appears only once all three are set."},
+        {"do": "Press **Where** and pick a voice or text channel, or type a place or link.", "expect": "The Where line shows the channel or the words. Where is optional."},
+        {"do": "Press **Submit**.", "expect": "A review room named pending-you-title appears. Staff decide there and you are DMed the answer."}
+      ],
+      "faults": [
+        {"symptom": "The day you typed was refused", "answer": "Write it as YYYY-MM-DD. The box reopens with what you typed."},
+        {"symptom": "No Submit button", "answer": "A title and all three of Day, Hour and Minute are needed. The panel says which is missing."},
+        {"symptom": "You want to withdraw it", "answer": "Press **Call one off…** on /event and confirm."}
+      ],
+      "facts": [
+        {"kind": "setting", "ref": "events_mode"},
+        {"kind": "setting", "ref": "default_timezone"},
+        {"kind": "probe", "ref": "events.open_count"}
+      ]
+    },
+    {
+      "slug": "birthday-set",
+      "title": "Set your birthday, in your own time zone",
+      "goal": "One date and an opt-in. The wish lands at your midnight, not Phoenix's.",
+      "audience": "member",
+      "feature": "birthday",
+      "command": "/birthday",
+      "sort": 40,
+      "steps": [
+        {"do": "Type **/birthday**.", "expect": "A panel showing the next five birthdays and **Set my birthday**."},
+        {"do": "Press **Set my birthday** and type MM-DD, or MM-DD-YYYY if you want the age shown.", "expect": "The panel reads the date, your zone and when it next comes round."},
+        {"do": "Set your zone with **/event** ▸ **My time zone** if you have not.", "expect": "The wish fires at midnight in that zone. Without one it fires at midnight in the server's zone."}
+      ],
+      "faults": [
+        {"symptom": "The date was refused", "answer": "Use two-digit month and day: 09-15. Years before 1900 or in the future are refused."},
+        {"symptom": "You want it gone", "answer": "Press **Remove**, then **Yes, forget it**. **Opt out** keeps the date but posts nothing."}
+      ],
+      "facts": [
+        {"kind": "setting", "ref": "birthday_mode"},
+        {"kind": "setting", "ref": "birthday_channel_id"},
+        {"kind": "probe", "ref": "birthdays.next"}
+      ]
+    },
+    {
+      "slug": "voice-room",
+      "title": "Make your own voice room",
+      "goal": "Join the creator channel. Rename, cap, lock and hand your room over from its panel.",
+      "audience": "member",
+      "feature": "tempvoice",
+      "command": "/voice",
+      "sort": 50,
+      "steps": [
+        {"do": "Join the voice channel named **join to create a channel**.", "expect": "A channel named after you appears and you are moved into it."},
+        {"do": "Type **/voice**.", "expect": "Your room's card: **Rename · Limit · Lock · Hide · Bitrate**, then **People… · Region… · Hand it over…**."},
+        {"do": "Press **Lock** to keep people out, **People…** to let one in.", "expect": "The button reads **Unlock** afterwards. Your choices are remembered for next time."},
+        {"do": "Leave the room when you are done.", "expect": "It deletes itself once empty."}
+      ],
+      "faults": [
+        {"symptom": "No creator channel", "answer": "Temp voice is off or not set up. Ask a Lead."},
+        {"symptom": "You cannot claim a room", "answer": "The owner is still in it. Ask them for **Hand it over…**."},
+        {"symptom": "A bitrate was refused", "answer": "It is above the server's boost level. The panel names the ceiling."}
+      ],
+      "facts": [
+        {"kind": "setting", "ref": "tempvoice_mode"},
+        {"kind": "setting", "ref": "tempvoice_creator_name"},
+        {"kind": "probe", "ref": "tempvoice.open_rooms"}
+      ]
+    },
+    {
+      "slug": "poll-vote-make",
+      "title": "Vote in a poll, or make one",
+      "goal": "Native polls, anonymous panels, date slots and a saved draft you can come back to.",
+      "audience": "member",
+      "feature": "poll",
+      "command": "/poll",
+      "sort": 60,
+      "steps": [
+        {"do": "To vote, press an answer on the poll message.", "expect": "Your vote counts once. On an anonymous poll nobody sees who chose what."},
+        {"do": "To make one, type **/poll** and press **Create**.", "expect": "A box with the question, the options one per line or split by |, the hours, and the kind."},
+        {"do": "Submit the box and check the preview. Pick a channel, then press **Post it**.", "expect": "Nothing is written until Post it. The poll appears in the channel you picked."},
+        {"do": "To finish early, type **/poll**, pick your poll, press **End**.", "expect": "The result posts in the channel and the poll closes."}
+      ],
+      "faults": [
+        {"symptom": "No Create button", "answer": "Creating is staff-only on this server. The panel says who may."},
+        {"symptom": "Your poll is waiting on a decision", "answer": "Review is on. Staff approve it from /poll and you are DMed."},
+        {"symptom": "You want to finish later", "answer": "Press **Save the draft** on the preview. /poll offers **Resume the draft** next time. One draft per person."}
+      ],
+      "facts": [
+        {"kind": "setting", "ref": "poll_mode"},
+        {"kind": "setting", "ref": "poll_who_can_create"},
+        {"kind": "setting", "ref": "poll_review_mode"},
+        {"kind": "probe", "ref": "polls.open_count"}
+      ]
+    },
+    {
+      "slug": "request-file",
+      "title": "Ask for something to be built",
+      "goal": "File a request, watch it move to ready, and check the work when you are asked.",
+      "audience": "member",
+      "feature": "request",
+      "command": "/request",
+      "sort": 70,
+      "steps": [
+        {"do": "Type **/request** and press **File a request**.", "expect": "A box for what you want and why."},
+        {"do": "Submit the box.", "expect": "A card lands in the requests channel and you are DMed the number. Staff move it from there."},
+        {"do": "When staff press **Ask them to check**, read the DM and try the work.", "expect": "The DM says what was built and how to test it. Reply in the server with how it went."}
+      ],
+      "faults": [
+        {"symptom": "You want it withdrawn", "answer": "Type **/request**, use **Take one back…**, press **Yes, take it back**."},
+        {"symptom": "You cannot see your requests on the panel", "answer": "The list is staff-only unless a Lead turns request_panel_own_list on. The website's Requests page shows yours."},
+        {"symptom": "No DM arrived", "answer": "Your DMs are closed to server members. The bot pings you in the requests channel instead."}
+      ],
+      "facts": [
+        {"kind": "setting", "ref": "request_mode"},
+        {"kind": "setting", "ref": "request_who_can_file"},
+        {"kind": "probe", "ref": "requests.open_count"}
+      ]
+    },
+    {
+      "slug": "chat-memory",
+      "title": "Talk to the bot, and see what it remembers",
+      "goal": "@-mention it for live answers. /memory shows every note it holds about you, with a Forget.",
+      "audience": "member",
+      "feature": "chat",
+      "command": "/memory",
+      "sort": 80,
+      "steps": [
+        {"do": "Type **@Black Bloc** and a question: who's live, what's next, birthdays, my roles.", "expect": "An answer in the bot's voice. Anything else gets a conversation, when the models are on."},
+        {"do": "Type **/memory**.", "expect": "A panel only you can see, listing every note the bot keeps about you, numbered."},
+        {"do": "Press **Forget one of these…** and pick a number, or **Forget everything**.", "expect": "The panel redraws without it. The text of a note never reaches any log."},
+        {"do": "Press **Stop remembering me** to opt out.", "expect": "Everything is wiped and nothing new is written. **Remember me again** turns it back on."}
+      ],
+      "faults": [
+        {"symptom": "The bot says memory is off", "answer": "A Lead has chat_memory_mode off. Your stored notes still show and Forget still works."},
+        {"symptom": "The bot did not answer an @-mention", "answer": "It answers once per cooldown, and never in ignored channels. Wait and try again."}
+      ],
+      "facts": [
+        {"kind": "setting", "ref": "chat_mode"},
+        {"kind": "setting", "ref": "chat_memory_mode"},
+        {"kind": "setting", "ref": "chat_cooldown_seconds"}
+      ]
+    },
+    {
+      "slug": "raidtrain-slot",
+      "title": "Take an hour on a raid train",
+      "goal": "Claim a slot, get a DM before it, raid the next streamer.",
+      "audience": "member",
+      "feature": "raidtrain",
+      "command": "/raidtrain",
+      "sort": 90,
+      "steps": [
+        {"do": "Link your Twitch channel with **/golive** ▸ **Link my Twitch channel** if you have not.", "expect": "Without a link the train card offers no hour to take."},
+        {"do": "Type **/raidtrain**, press **A train…**, pick the train.", "expect": "The lineup, one hour per row, with **Take an hour…** under it."},
+        {"do": "Press **Take an hour…** and pick an open hour.", "expect": "Your name is on that row and the lineup post updates in place. **Give back slot #N** appears."},
+        {"do": "Wait for the DM before your slot.", "expect": "It names your time, who raids into you and who you raid next, with their Twitch links."}
+      ],
+      "faults": [
+        {"symptom": "Take an hour… is gone", "answer": "You hold the most hours one person may. Give one back first."},
+        {"symptom": "The hour you wanted was taken", "answer": "Somebody claimed it first. The card refuses in words and keeps their claim."},
+        {"symptom": "No trains listed", "answer": "None is open, or raid trains are off. The panel says which."}
+      ],
+      "facts": [
+        {"kind": "setting", "ref": "raidtrain_mode"},
+        {"kind": "setting", "ref": "raidtrain_reminder_minutes"},
+        {"kind": "setting", "ref": "raidtrain_max_slots_per_member"},
+        {"kind": "probe", "ref": "raidtrain.next"}
+      ]
+    },
+    {
+      "slug": "apply-form",
+      "title": "Apply to the Twitch Team",
+      "goal": "Answer the form once. Staff decide, and you are told either way.",
+      "audience": "member",
+      "feature": "applications",
+      "command": "/apply",
+      "sort": 100,
+      "steps": [
+        {"do": "Type **/apply** and press **Apply for…**, then pick the form.", "expect": "A box with the form's questions, five at most."},
+        {"do": "Submit the box.", "expect": "The panel says it went to staff and you are DMed the same. Your application is listed on the panel."},
+        {"do": "Wait for the decision.", "expect": "A DM with yes or no. A yes names the next step, such as the Team owner sending your twitch.tv invite."}
+      ],
+      "faults": [
+        {"symptom": "You already have an application waiting", "answer": "One open application per form. Press **Take one back…** to withdraw it, then apply again."},
+        {"symptom": "You were denied", "answer": "The DM says when you may apply again."},
+        {"symptom": "No form on Apply for…", "answer": "No form is taking applications, or applications are off. The panel says which."}
+      ],
+      "facts": [
+        {"kind": "setting", "ref": "applications_mode"}
+      ]
+    },
+    {
+      "slug": "event-review",
+      "title": "Approve or deny an event",
+      "goal": "Decide from the review room, the panel or the website. The requester is told either way.",
+      "audience": "staff",
+      "feature": "events",
+      "command": "/event",
+      "sort": 200,
+      "steps": [
+        {"do": "Open the room named pending-name-title, or type **/event** and use **Pick an event…**.", "expect": "The review card: title, when in every reader's own clock, where, who asked."},
+        {"do": "Press **Approve**, or **Deny** and type a reason.", "expect": "The room renames to approved- or denied-, the requester is DMed, and an approved event lands on the server calendar."},
+        {"do": "To change something first, open the event on the website's Events page and press **Change it**.", "expect": "The room and card update. An announcement already posted keeps its text and the reply says so."},
+        {"do": "To take the room away, press **Delete this room** and type why.", "expect": "The room goes. An open event is cancelled and the requester is DMed the reason."}
+      ],
+      "faults": [
+        {"symptom": "You denied and changed your mind", "answer": "Open the card again and press **Approve after all** while the room exists."},
+        {"symptom": "The announcement landed in the spam channel", "answer": "Test mode is on. Every post goes to the test channel until it is lifted."},
+        {"symptom": "No scheduled event was made", "answer": "Test mode makes none. Or events_create_scheduled is off."}
+      ],
+      "facts": [
+        {"kind": "setting", "ref": "events_mode"},
+        {"kind": "setting", "ref": "events_category_id"},
+        {"kind": "setting", "ref": "events_posts_where"},
+        {"kind": "probe", "ref": "events.open_count"}
+      ]
+    },
+    {
+      "slug": "modmail-ticket",
+      "title": "Handle a modmail ticket",
+      "goal": "Reply, reply as staff, a private note, close. Try it on the practice ticket first.",
+      "audience": "staff",
+      "feature": "modmail",
+      "command": "/modmail",
+      "sort": 210,
+      "steps": [
+        {"do": "Type **/modmail** and press **Try a fake ticket**, then **Yes, open one**.", "expect": "A private thread with the same card a real ticket carries. Nobody is DMed."},
+        {"do": "In a ticket, press **Reply** and type your answer.", "expect": "The member gets it as a DM from you. **Reply as Staff** sends it with no name."},
+        {"do": "Press **Private note** to write something the member never sees.", "expect": "A note embed in the ticket. No DM."},
+        {"do": "Press **Close…** and type a reason.", "expect": "The member is DMed, the transcript is filed, the channel goes."}
+      ],
+      "faults": [
+        {"symptom": "The card is in the spam channel, not the ticket", "answer": "Test mode redirects real tickets' cards there. The practice thread shows it in place."},
+        {"symptom": "A typed message did not reach the member", "answer": "modmail_reply_style is buttons. Set it to typing or both under **Setup…** ▸ **Reply style…**."},
+        {"symptom": "You want to block somebody", "answer": "**Blocked…** ▸ **Block someone…** ▸ pick them ▸ a reason. **Unblock them** reverses it."}
+      ],
+      "facts": [
+        {"kind": "setting", "ref": "modmail_enabled"},
+        {"kind": "setting", "ref": "modmail_mode"},
+        {"kind": "setting", "ref": "modmail_reply_style"}
+      ]
+    },
+    {
+      "slug": "mod-case",
+      "title": "Warn, time out, and correct a case",
+      "goal": "The seven actions, and the four corrections a case can take afterwards.",
+      "audience": "staff",
+      "feature": "mod",
+      "command": "/mod",
+      "sort": 220,
+      "steps": [
+        {"do": "Type **/warn**, **/timeout**, **/kick** or **/ban** with the member and a reason.", "expect": "A case is written, the modlog gets a card, and the member is DMed if mod_dm_on_action is on."},
+        {"do": "Type **/mod** to see the record, or **/mod @member** for one person.", "expect": "The newest cases, ten a page, with **A case…** to open one."},
+        {"do": "On a case press **Edit reason…**, **Add a note…** or **Void this case…**.", "expect": "The card and the modlog card update. Voiding marks it and undoes no punishment."},
+        {"do": "On a voided case press **Restore this case**.", "expect": "The strike-through goes and the member is DMed that it was put back."}
+      ],
+      "faults": [
+        {"symptom": "Voiding did not lift the timeout", "answer": "By design. Use **/untimeout** or **/unban** for the punishment itself."},
+        {"symptom": "The modlog card did not update", "answer": "Test mode is on and the modlog is not the test channel."},
+        {"symptom": "A warn still counts toward automod", "answer": "Only a voided warn stops counting. Check the case reads voided."}
+      ],
+      "facts": [
+        {"kind": "setting", "ref": "modlog_channel_id"},
+        {"kind": "setting", "ref": "mod_dm_on_action"},
+        {"kind": "setting", "ref": "automod_warn_threshold"}
+      ]
+    },
+    {
+      "slug": "automod-arm",
+      "title": "Arm automod without surprising anyone",
+      "goal": "Shadow first, read the would-act lines for a week, then on.",
+      "audience": "staff",
+      "feature": "automod",
+      "command": "/automod",
+      "sort": 230,
+      "steps": [
+        {"do": "Type **/automod**.", "expect": "One panel: the mode, resolved staff, every rule on its own line."},
+        {"do": "Press **A rule…**, pick one, press **Change the numbers…** or **Turn it off**.", "expect": "The card redraws. A bad number is refused and nothing at all is saved."},
+        {"do": "Press **What automod does…** and pick **shadow**.", "expect": "Every rule logs what it would do. Nothing is deleted, nobody is timed out."},
+        {"do": "Read the automod log for a week on the website's Automod page.", "expect": "would_ lines with the rule and the member. Tune the numbers until they are right."},
+        {"do": "Press **What automod does…** and pick **on**, then **Yes, arm it**.", "expect": "The same rules now act. One automod.mode row."}
+      ],
+      "faults": [
+        {"symptom": "on is not offered", "answer": "The staff channel is still the test channel, or no staff role resolves. The panel says which to fix first."},
+        {"symptom": "Somebody was caught who should not be", "answer": "**Exemptions…** ▸ add their role or the channel. Or void the case on /mod."},
+        {"symptom": "Nothing is caught in test mode", "answer": "The guard only watches the test channel, and on behaves like shadow there."}
+      ],
+      "facts": [
+        {"kind": "setting", "ref": "automod_mode"},
+        {"kind": "setting", "ref": "staff_channel_id"},
+        {"kind": "setting", "ref": "automod_warn_threshold"},
+        {"kind": "probe", "ref": "test_mode"}
+      ]
+    },
+    {
+      "slug": "honeypot-set",
+      "title": "Set a honeypot trap",
+      "goal": "A channel nobody should post in. A post there is a ban, once the trap is armed.",
+      "audience": "staff",
+      "feature": "honeypot",
+      "command": "/honeypot",
+      "sort": 240,
+      "steps": [
+        {"do": "Type **/honeypot** and press **Setup…**. Keep or change the channel name and submit.", "expect": "The trap channel is made at the bottom with a pinned do-not-post notice. Setup… disappears."},
+        {"do": "Press **Roles the trap ignores…** and tick the roles that may never be caught.", "expect": "Staff and bots are never caught anyway. The list above updates."},
+        {"do": "Press **What the trap does…** and pick **shadow**.", "expect": "A post in the trap is deleted and a would_ban card with **Ban now** appears in the log channel. Nobody is banned."},
+        {"do": "After a quiet week, pick **on**.", "expect": "A post in the trap bans and purges. The tally on the panel counts it."}
+      ],
+      "faults": [
+        {"symptom": "on is not offered", "answer": "No staff role resolves from the staff channel. The panel says what to set."},
+        {"symptom": "The trap was deleted by hand", "answer": "The bot forgot it already. Setup… is back."},
+        {"symptom": "Purge days was refused", "answer": "Discord allows 0 to 7. The sentence names the ceiling."}
+      ],
+      "facts": [
+        {"kind": "setting", "ref": "honeypot_mode"},
+        {"kind": "setting", "ref": "honeypot_purge_days"},
+        {"kind": "probe", "ref": "test_mode"}
+      ]
+    },
+    {
+      "slug": "rolemenu-post",
+      "title": "Post a role menu",
+      "goal": "New menu, add roles, post it. Approval-gated or timed roles when you need them.",
+      "audience": "staff",
+      "feature": "rolemenu",
+      "command": "/rolemenu",
+      "sort": 250,
+      "steps": [
+        {"do": "Type **/rolemenu** and press **New menu**. Type a name.", "expect": "The menu's card, empty, with **Add a role…**."},
+        {"do": "Press **Add a role…**, pick a role, then **Use the role's own name** or **Give it a label…**.", "expect": "The role is listed with its label and emoji. Repeat for each role."},
+        {"do": "Press **Words…** to set the heading, then **Post it** and pick the channel.", "expect": "A panel with a select appears in that channel. Members pick from it."},
+        {"do": "For roles staff must approve, press **Ask staff first**. For roles that expire, press **Rules…** and set the days.", "expect": "The posted panel refreshes itself and says so. Requests land in the approval channel."}
+      ],
+      "faults": [
+        {"symptom": "A role was refused", "answer": "It sits above Black Bloc's role in Server Settings ▸ Roles. Move the bot's role up."},
+        {"symptom": "Any channel but the spam channel was refused", "answer": "Test mode. Post there until it is lifted."},
+        {"symptom": "You want the panel down", "answer": "**Take it down** on the card. Nobody loses a role they have."}
+      ],
+      "facts": [
+        {"kind": "setting", "ref": "rolemenu_mode"},
+        {"kind": "setting", "ref": "role_menu_channel_id"},
+        {"kind": "setting", "ref": "rolemenu_approval_channel_id"}
+      ]
+    },
+    {
+      "slug": "feature-modes",
+      "title": "Turn a feature on, off, or to shadow",
+      "goal": "What each mode means, what hides when a feature is off, and the way back.",
+      "audience": "staff",
+      "feature": "core",
+      "command": "/settings",
+      "sort": 260,
+      "steps": [
+        {"do": "Type **/settings**.", "expect": "Every feature's mode on one panel, each line naming the command that changes it."},
+        {"do": "Press **A setting group…**, pick the feature, pick its _mode key, choose the mode.", "expect": "off does nothing. shadow logs what it would do. on acts. One settings.set row."},
+        {"do": "Wait a minute and press Ctrl+R in Discord.", "expect": "A feature set to off loses its slash command. shadow keeps it."},
+        {"do": "To bring one back, press **Turn a feature back on…** on /settings.", "expect": "The command returns within a minute. /settings itself can never hide."}
+      ],
+      "faults": [
+        {"symptom": "You want every command showing while features stay off", "answer": "**Panels & commands…** ▸ **Leave every command showing**."},
+        {"symptom": "The website and Discord disagree", "answer": "They read one registry. Refresh the page; a change lands within a minute."},
+        {"symptom": "A value was refused", "answer": "The sentence names the range or the shape. Nothing was saved."}
+      ],
+      "facts": [
+        {"kind": "setting", "ref": "hide_commands_when_off"},
+        {"kind": "setting", "ref": "staff_channel_id"},
+        {"kind": "probe", "ref": "test_mode"}
+      ]
+    }
+  ]
+}
