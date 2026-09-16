@@ -758,6 +758,7 @@ export async function channelSelect(value, { multiple = false, id = null } = {})
   for (const channel of channels) {
     select.append(optionNode(channel.id, channelLabel(channel), chosen.has(String(channel.id))));
   }
+  keepUnlisted(select, chosen, channels, 'a channel the server no longer has');
   return select;
 }
 
@@ -774,7 +775,16 @@ export async function roleSelect(value, { multiple = false, id = null } = {}) {
   for (const role of roles) {
     select.append(optionNode(role.id, `@${role.name}`, chosen.has(String(role.id))));
   }
+  keepUnlisted(select, chosen, roles, 'a role the server no longer has');
   return select;
+}
+
+/** A stored id the list cannot show still reads back as itself, so a save elsewhere never clears it. */
+function keepUnlisted(select, chosen, listed, said) {
+  const known = new Set(listed.map((one) => String(one.id)));
+  for (const id of chosen) {
+    if (!known.has(id)) select.append(optionNode(id, `${said} · ${id}`, true));
+  }
 }
 
 export function readSelect(select, multiple) {
@@ -1045,7 +1055,7 @@ export async function settingRow(spec, { onDirty = null } = {}) {
 
   const paint = () => {
     const found = readNow();
-    row.dirty = found.ok ? !same(found.value, state.loaded) : true;
+    row.dirty = found.ok ? !(same(found.value, state.loaded) || (blank(found.value) && blank(state.loaded))) : true;
     node.setAttribute('data-dirty', row.dirty ? 'true' : 'false');
     mark.hidden = !row.dirty;
     wipe.hidden = !(clearable() && found.ok && !blank(found.value));

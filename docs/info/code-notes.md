@@ -6502,3 +6502,11 @@ as v106 `6c10b9d`, keyed by LINE against `1d090e5` since 2026-09-11)
 | `site/public/assets/page-guides.js` (`settingsLink`) — a fact's key links to `settings.html` only for staff | The global refusal rule: prefer not drawing a control somebody cannot use. A member sees the key as plain text rather than a link to a page that would refuse them |
 | `site/public/assets/site.css` (`.guidecard-title`) — `font-family: var(--et-font)` | `site-restyle-design.md` §2 keeps the display face for the wordmark and page titles, 20–26 px, never in a control. A card title inherits it from the global heading rule unless it says otherwise |
 | `tests/api/tools/test_guides.py` (`test_the_hub_carries_the_strip…`) — asserts against the fixture's own `web.settings.test_mode` | Not a literal `True`. A test that hard-codes the test-mode flag passes for the wrong reason the day somebody flips it |
+
+# Settings editor — the false "1 change pending" (v112, 2026-09-16)
+
+| Where | Why |
+|---|---|
+| `site/public/assets/ui.js` `settingRow` → `paint` | An empty text box reads back `null` while the stored value is `""` (`chat_memory_model`'s default), so `same()` said the row had changed on every load and the save sent `null`, which the validator refuses in words — every save from the page reported "1 refused" (found by the capture session, 2026-09-16). A blank read against a blank stored value is now not dirty. |
+| `ui.js` `keepUnlisted` (used by `channelSelect` / `roleSelect`) | The worse twin: a stored channel or role id that the picker's list does not carry (deleted from the server, or a cold cache) read back as `null`, counted as dirty, and the next **Save Changes** would have CLEARED it — measured on the mock, whose `chat_visibility_role_id` names a role its fixture list lacks. Such an id is now kept as a selected option labelled *a role the server no longer has · id*, so it reads back as itself; a person can still pick "not set" on purpose. |
+
