@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 34
+SCHEMA_VERSION = 35
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -676,6 +676,93 @@ CREATE INDEX IF NOT EXISTS selftest_messages_by_run
 
 CREATE INDEX IF NOT EXISTS action_log_by_kind
     ON action_log(guild_id, kind, id);
+
+CREATE TABLE IF NOT EXISTS guides (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id   INTEGER NOT NULL,
+    slug       TEXT    NOT NULL,
+    title      TEXT    NOT NULL,
+    goal       TEXT    NOT NULL,
+    audience   TEXT    NOT NULL DEFAULT 'member'
+               CHECK (audience IN ('member', 'staff')),
+    feature    TEXT    NOT NULL,
+    command    TEXT,
+    sort       INTEGER NOT NULL DEFAULT 0,
+    published  INTEGER NOT NULL DEFAULT 1,
+    seed_hash  TEXT,
+    updated_at TEXT    NOT NULL,
+    updated_by INTEGER,
+    UNIQUE (guild_id, slug)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS guides_one_published_command
+    ON guides(guild_id, command, audience) WHERE published = 1 AND command IS NOT NULL;
+CREATE INDEX IF NOT EXISTS guides_by_guild ON guides(guild_id, sort, id);
+
+CREATE TABLE IF NOT EXISTS guide_steps (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    guide_id    INTEGER NOT NULL REFERENCES guides(id) ON DELETE CASCADE,
+    position    INTEGER NOT NULL,
+    do_text     TEXT    NOT NULL,
+    expect_text TEXT,
+    media_id    INTEGER,
+    seed_do     TEXT,
+    seed_expect TEXT
+);
+
+CREATE INDEX IF NOT EXISTS guide_steps_by_guide ON guide_steps(guide_id, position, id);
+
+CREATE TABLE IF NOT EXISTS guide_faults (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    guide_id INTEGER NOT NULL REFERENCES guides(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    symptom  TEXT    NOT NULL,
+    answer   TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS guide_faults_by_guide ON guide_faults(guide_id, position, id);
+
+CREATE TABLE IF NOT EXISTS guide_facts (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    guide_id INTEGER NOT NULL REFERENCES guides(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    kind     TEXT    NOT NULL CHECK (kind IN ('setting', 'probe')),
+    ref      TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS guide_facts_by_guide ON guide_facts(guide_id, position, id);
+
+CREATE TABLE IF NOT EXISTS guide_media (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id     INTEGER NOT NULL,
+    guide_id     INTEGER NOT NULL REFERENCES guides(id) ON DELETE CASCADE,
+    step_id      INTEGER,
+    file         TEXT    NOT NULL,
+    sha256       TEXT    NOT NULL,
+    width        INTEGER,
+    height       INTEGER,
+    bytes        INTEGER NOT NULL DEFAULT 0,
+    source       TEXT    NOT NULL DEFAULT 'capture'
+                 CHECK (source IN ('capture', 'mock')),
+    surface      TEXT    NOT NULL DEFAULT 'discord'
+                 CHECK (surface IN ('discord', 'website')),
+    shot_release TEXT,
+    shot_by      INTEGER,
+    shot_at      TEXT    NOT NULL,
+    caption      TEXT,
+    stale        INTEGER NOT NULL DEFAULT 0,
+    stale_since  TEXT
+);
+
+CREATE INDEX IF NOT EXISTS guide_media_by_guide ON guide_media(guide_id, id);
+CREATE INDEX IF NOT EXISTS guide_media_stale ON guide_media(guild_id, stale, id);
+
+CREATE TABLE IF NOT EXISTS guide_releases (
+    release          TEXT PRIMARY KEY,
+    "commit"         TEXT,
+    shipped_at       TEXT NOT NULL,
+    changed_features TEXT NOT NULL DEFAULT '[]'
+);
 """
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (

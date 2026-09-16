@@ -23,6 +23,7 @@ from .tools import (
     chat_memory,
     events,
     golive,
+    guides,
     honeypot,
     members,
     mod,
@@ -51,6 +52,7 @@ SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
 }
 NO_STORE_HEADERS = {"Cache-Control": NO_STORE, "Pragma": "no-cache"}
+KEEPS_ITS_OWN_CACHE = ("/api/guides/media/",)
 
 API_PREFIX = "/api"
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
@@ -124,7 +126,8 @@ def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
         response = await call_next(request)
         for name, value in SECURITY_HEADERS.items():
             response.headers.setdefault(name, value)
-        if request.url.path.startswith(API_PREFIX):
+        path = request.url.path
+        if path.startswith(API_PREFIX) and not path.startswith(KEEPS_ITS_OWN_CACHE):
             for name, value in NO_STORE_HEADERS.items():
                 response.headers[name] = value
         return response
@@ -182,6 +185,7 @@ def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
     app.include_router(requests.build_router(bot))
     app.include_router(raidtrain.build_router(bot))
     app.include_router(applications.build_router(bot))
+    app.include_router(guides.build_router(bot))
     app.include_router(selftest_api.build_router(bot))
 
     root = Path(bot.settings.site_root)

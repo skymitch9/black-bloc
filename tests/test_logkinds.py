@@ -54,6 +54,13 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.chat.line_deleted",
         "web.chat.line_edited",
         "web.event.edited",
+        "web.guide.created",
+        "web.guide.deleted",
+        "web.guide.edited",
+        "web.guide.media_replaced",
+        "web.guide.published",
+        "web.guide.reset",
+        "web.guide.unpublished",
         "web.request.comment",
         "web.request.filed",
         "web.request.updated",
@@ -801,8 +808,8 @@ def test_an_unknown_level_is_todays_behaviour():
 
 
 def test_every_feature_has_one_settings_key():
-    assert len(FEATURES) == 18
-    assert len(set(FEATURES)) == 18
+    assert len(FEATURES) == 19
+    assert len(set(FEATURES)) == 19
     assert log_level_key("golive") == "golive_log_level"
     assert LEVELS == (OFF, IMPORTANT_ONLY, ALL)
 

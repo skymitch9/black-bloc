@@ -999,6 +999,11 @@ async def a_request_subcommand(interaction):
     await interaction.response.send_message("filed")
 
 
+@app_commands.command(name="golive", description="Announce your streams")
+async def a_golive_command(interaction):
+    await interaction.response.send_message("live")
+
+
 @app_commands.command(name="here", description="Only this guild has it")
 async def a_guild_only_command(interaction):
     await interaction.response.send_message("here")
@@ -1361,3 +1366,159 @@ async def test_a_purge_that_stopped_is_restarted_like_every_other_loop_here(bot,
 
     assert cog.loop_health("purge_loop")[1] == "RuntimeError: the sweep fell over"
     assert restarted == [True]
+
+
+# --- the guide links on /help ---------------------------------------------------------------------
+
+
+async def seed_guides_for(bot):
+    from black_bloc import guides
+
+    await guides.seed_guides(bot.db, GUILD)
+    return await guides.links_for(bot, GUILD)
+
+
+def test_help_lines_put_a_masked_guide_link_on_the_line_that_has_one():
+    links = {"/ping": "https://blackbloc.test/guides.html#ping-it"}
+
+    lines = help_lines([a_plain_command, tempvoice], "", links)
+
+    assert lines[0] == (
+        "**/ping** — Check that Black Bloc is alive"
+        " · [guide](https://blackbloc.test/guides.html#ping-it)"
+    )
+    assert lines[1] == "**/tempvoice** — Temporary voice channels"
+    assert lines[2:] == [
+        "/tempvoice claim — Take over an abandoned channel",
+        "/tempvoice setup — Create or repair the join-to-create channel (staff)",
+        "/tempvoice zoo feed — Feed the animals",
+    ]
+
+
+def test_the_guide_link_rides_the_heading_and_leaves_the_filter_alone():
+    links = {"/tempvoice": "https://blackbloc.test/guides.html#voice-room"}
+
+    assert help_lines([a_plain_command, tempvoice], "zoo", links) == [
+        "**/tempvoice** — Temporary voice channels"
+        " · [guide](https://blackbloc.test/guides.html#voice-room)",
+        "/tempvoice zoo feed — Feed the animals",
+    ]
+    assert help_lines([a_plain_command, tempvoice], "nothing like this", links) == []
+    assert help_lines([a_plain_command, tempvoice]) == help_lines(
+        [a_plain_command, tempvoice], "", {}
+    )
+
+
+async def test_help_links_the_guide_for_a_command_that_has_one_and_nothing_else(
+    helpful, cog, member
+):
+    await seed_guides_for(helpful)
+    interaction = FakeInteraction(helpful, member)
+
+    await cog.help_command.callback(cog, interaction, None)
+
+    said = "\n".join(message["content"] for message in interaction.response.messages)
+    assert "**/ping** — Check that Black Bloc is alive" in said
+    assert "[guide](" not in said.split("**/ping**")[1].split("\n")[0]
+    assert "**/here** — Only this guild has it" in said
+
+
+async def test_a_command_with_a_seeded_guide_carries_the_link(bot, cog, member):
+    from black_bloc import guides
+
+    bot.tree = FakeTree([a_plain_command, a_golive_command])
+    await seed_guides_for(bot)
+    interaction = FakeInteraction(bot, member)
+
+    await cog.help_command.callback(cog, interaction, None)
+
+    said = "\n".join(message["content"] for message in interaction.response.messages)
+    url = guides.guide_url(bot.settings.origin, "golive-announce")
+    assert f"**/golive** — Announce your streams · [guide]({url})" in said
+    assert "[guide](" not in said.split("**/ping**")[1].split("\n")[0]
+
+
+async def test_the_last_page_carries_one_link_button_to_the_hub(bot, cog, member):
+    from black_bloc import guides
+
+    bot.tree = FakeTree([a_plain_command, a_golive_command])
+    await seed_guides_for(bot)
+    interaction = FakeInteraction(bot, member)
+
+    await cog.help_command.callback(cog, interaction, None)
+
+    view = interaction.response.messages[-1]["view"]
+    assert [one.label for one in view.children] == ["All the guides"]
+    assert view.children[0].url == guides.hub_url(bot.settings.origin)
+    assert view.children[0].style is discord.ButtonStyle.link
+    assert all(message["ephemeral"] for message in interaction.response.messages)
+    assert interaction.response.messages[-1]["allowed_mentions"].everyone is False
+
+
+async def test_help_links_nothing_when_the_help_links_switch_is_off(bot, cog, member):
+    bot.tree = FakeTree([a_plain_command, a_golive_command])
+    await seed_guides_for(bot)
+    await bot.store.set(GUILD, "guides_help_links", False)
+    interaction = FakeInteraction(bot, member)
+
+    await cog.help_command.callback(cog, interaction, None)
+
+    said = "\n".join(message["content"] for message in interaction.response.messages)
+    assert "[guide](" not in said
+    assert "view" not in interaction.response.messages[-1]
+
+
+async def test_help_links_nothing_while_guides_are_off_altogether(bot, cog, member):
+    bot.tree = FakeTree([a_plain_command, a_golive_command])
+    await seed_guides_for(bot)
+    await bot.store.set(GUILD, "guides_mode", "off")
+    interaction = FakeInteraction(bot, member)
+
+    await cog.help_command.callback(cog, interaction, None)
+
+    said = "\n".join(message["content"] for message in interaction.response.messages)
+    assert "[guide](" not in said
+    assert "view" not in interaction.response.messages[-1]
+
+
+async def test_an_unpublished_guide_leaves_its_command_unlinked(bot, cog, member):
+    bot.tree = FakeTree([a_plain_command, a_golive_command])
+    await seed_guides_for(bot)
+    await bot.db.conn.execute(
+        "UPDATE guides SET published = 0 WHERE guild_id = ? AND slug = 'golive-announce'",
+        (GUILD,),
+    )
+    await bot.db.conn.commit()
+    interaction = FakeInteraction(bot, member)
+
+    await cog.help_command.callback(cog, interaction, None)
+
+    said = "\n".join(message["content"] for message in interaction.response.messages)
+    assert "[guide](" not in said
+
+
+async def test_seventeen_guide_links_keep_every_help_page_under_discords_limit(settings, bot):
+    """Measured rather than assumed: the longest page with a link on every line."""
+    from black_bloc import guides
+    from black_bloc.modcases import PAGE_LIMIT, pages_under_limit
+
+    black_bloc = BlackBlocBot(settings)
+    for name in COGS:
+        await black_bloc.load_extension(name)
+    entries = tree_commands(black_bloc.tree)
+    await black_bloc.close()
+
+    origin = bot.settings.origin
+    links = {
+        one["command"]: guides.guide_url(origin, one["slug"])
+        for one in guides.seed_entries()
+        if one["command"]
+    }
+    assert len(links) == 16
+
+    pages = pages_under_limit([core_cog.HELP_HEADER, *help_lines(entries, "", links)])
+    longest = max(len(page) for page in pages)
+
+    assert longest <= PAGE_LIMIT, longest
+    assert len(pages) >= 1
+    assert sum("[guide](" in page for page in pages) >= 1

@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 34
+        assert SCHEMA_VERSION == 35
         cur = await db.conn.execute("PRAGMA table_info(requests)")
         assert {
             "built",
@@ -1323,3 +1323,159 @@ async def test_a_schema_32_file_gains_the_draft_table_and_keeps_its_polls(tmp_pa
             )
     finally:
         await again.close()
+
+
+GUIDE_TABLES = (
+    "guides",
+    "guide_steps",
+    "guide_faults",
+    "guide_facts",
+    "guide_media",
+    "guide_releases",
+)
+
+
+async def a_schema_34_file(path):
+    """What the code at `main` leaves behind: everything but the six guides tables."""
+    db = Database(path)
+    await db.connect()
+    for name in GUIDE_TABLES:
+        await db.conn.execute(f"DROP TABLE IF EXISTS {name}")
+    await db.conn.execute("DROP INDEX IF EXISTS guides_one_published_command")
+    await db.conn.execute(
+        "INSERT INTO settings(guild_id, key, value, updated_at) VALUES (1, 'golive_mode', "
+        "'\"on\"', '2026-09-16T00:00:00+00:00')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '34')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+
+async def test_a_schema_34_file_gains_the_six_guides_tables_and_keeps_its_rows(tmp_path):
+    """Schema 35 is additive: the file that ships before guides gets the six tables and the
+    partial unique index, and nothing already in it is rewritten."""
+    path = tmp_path / "old34.sqlite3"
+    await a_schema_34_file(path)
+
+    db = Database(path)
+    await db.connect()
+    try:
+        cur = await db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        assert set(GUIDE_TABLES) <= {row["name"] for row in await cur.fetchall()}
+        cur = await db.conn.execute("SELECT key, value FROM settings")
+        assert [tuple(row) for row in await cur.fetchall()] == [("golive_mode", '"on"')]
+        cur = await db.conn.execute(
+            "SELECT value FROM schema_meta WHERE key = 'schema_version'"
+        )
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("PRAGMA table_info(guides)")
+        assert {row["name"] for row in await cur.fetchall()} == {
+            "id",
+            "guild_id",
+            "slug",
+            "title",
+            "goal",
+            "audience",
+            "feature",
+            "command",
+            "sort",
+            "published",
+            "seed_hash",
+            "updated_at",
+            "updated_by",
+        }
+    finally:
+        await again.close()
+
+
+async def test_a_guide_keeps_one_slug_and_one_published_guide_per_command(tmp_path):
+    db = Database(tmp_path / "guides.sqlite3")
+    await db.connect()
+    try:
+        await db.conn.execute(
+            "INSERT INTO guides(guild_id, slug, title, goal, audience, feature, command, "
+            "published, updated_at) VALUES (1, 'a', 'A', 'g', 'member', 'golive', '/golive', "
+            "1, '2026-09-16T00:00:00+00:00')"
+        )
+        await db.conn.commit()
+
+        with pytest.raises(sqlite3.IntegrityError):
+            await db.conn.execute(
+                "INSERT INTO guides(guild_id, slug, title, goal, audience, feature, command, "
+                "published, updated_at) VALUES (1, 'b', 'B', 'g', 'member', 'golive', "
+                "'/golive', 1, '2026-09-16T00:00:00+00:00')"
+            )
+        # Unpublished, a staff one, and another guild are all allowed beside it.
+        await db.conn.execute(
+            "INSERT INTO guides(guild_id, slug, title, goal, audience, feature, command, "
+            "published, updated_at) VALUES (1, 'c', 'C', 'g', 'member', 'golive', '/golive', "
+            "0, '2026-09-16T00:00:00+00:00')"
+        )
+        await db.conn.execute(
+            "INSERT INTO guides(guild_id, slug, title, goal, audience, feature, command, "
+            "published, updated_at) VALUES (1, 'd', 'D', 'g', 'staff', 'golive', '/golive', "
+            "1, '2026-09-16T00:00:00+00:00')"
+        )
+        await db.conn.execute(
+            "INSERT INTO guides(guild_id, slug, title, goal, audience, feature, command, "
+            "published, updated_at) VALUES (2, 'a', 'A', 'g', 'member', 'golive', '/golive', "
+            "1, '2026-09-16T00:00:00+00:00')"
+        )
+        await db.conn.commit()
+
+        with pytest.raises(sqlite3.IntegrityError):
+            await db.conn.execute(
+                "INSERT INTO guides(guild_id, slug, title, goal, audience, feature, "
+                "updated_at) VALUES (1, 'a', 'Again', 'g', 'member', 'golive', "
+                "'2026-09-16T00:00:00+00:00')"
+            )
+    finally:
+        await db.close()
+
+
+async def test_a_deleted_guide_takes_its_steps_faults_facts_and_pictures_with_it(tmp_path):
+    db = Database(tmp_path / "guides.sqlite3")
+    await db.connect()
+    try:
+        cur = await db.conn.execute(
+            "INSERT INTO guides(guild_id, slug, title, goal, audience, feature, updated_at) "
+            "VALUES (1, 'a', 'A', 'g', 'member', 'golive', '2026-09-16T00:00:00+00:00')"
+        )
+        guide_id = cur.lastrowid
+        await db.conn.execute(
+            "INSERT INTO guide_steps(guide_id, position, do_text) VALUES (?, 1, 'Press **A**.')",
+            (guide_id,),
+        )
+        await db.conn.execute(
+            "INSERT INTO guide_faults(guide_id, position, symptom, answer) "
+            "VALUES (?, 1, 'no', 'yes')",
+            (guide_id,),
+        )
+        await db.conn.execute(
+            "INSERT INTO guide_facts(guide_id, position, kind, ref) "
+            "VALUES (?, 1, 'setting', 'golive_mode')",
+            (guide_id,),
+        )
+        await db.conn.execute(
+            "INSERT INTO guide_media(guild_id, guide_id, file, sha256, shot_at) "
+            "VALUES (1, ?, '1.png', 'abc', '2026-09-16T00:00:00+00:00')",
+            (guide_id,),
+        )
+        await db.conn.commit()
+
+        await db.conn.execute("DELETE FROM guides WHERE id = ?", (guide_id,))
+        await db.conn.commit()
+
+        for table in ("guide_steps", "guide_faults", "guide_facts", "guide_media"):
+            cur = await db.conn.execute(f"SELECT COUNT(*) AS n FROM {table}")
+            assert (await cur.fetchone())["n"] == 0, table
+    finally:
+        await db.close()

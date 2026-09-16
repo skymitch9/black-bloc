@@ -11,7 +11,7 @@ from black_bloc.loops import wait_ready
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "black_bloc"
-BEFORE_LOOPS = 14
+BEFORE_LOOPS = 15
 
 
 class FakeReady:
@@ -139,7 +139,7 @@ def _calls(node: ast.AST) -> set[str]:
 
 
 def test_every_before_loop_in_the_package_goes_through_the_one_helper():
-    """KI-24: one guard, fourteen callers — a new loop that hand-rolls its own wait is the bug."""
+    """KI-24: one guard, fifteen callers — a new loop that hand-rolls its own wait is the bug."""
     methods = _before_loop_methods()
 
     assert len(methods) == BEFORE_LOOPS, [where for where, _ in methods]

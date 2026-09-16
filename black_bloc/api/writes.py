@@ -34,6 +34,7 @@ BUCKET_ATTR = "_api_write_bucket"
 MEMBER_RATE = 10
 MEMBER_WINDOW_SECONDS = 60
 MEMBER_BUCKET_ATTR = "_api_member_bucket"
+MEMBER_READ_BUCKET_ATTR = "_api_member_read_bucket"
 
 TOO_MANY_WRITES = (
     "That is more changes than Black Bloc will take in a minute, so this one was not made. "
@@ -79,16 +80,44 @@ def member_bucket_for(bot: Any) -> TokenBucket:
     return _bucket(bot, MEMBER_BUCKET_ATTR, MEMBER_RATE, MEMBER_WINDOW_SECONDS)
 
 
-def member_dependency(bot: Any):
-    """Signed in AND in the server — the only gate on the site that is not staff-only."""
+def member_read_bucket_for(bot: Any) -> TokenBucket:
+    """A read must not spend a member's ten writes a minute — four guides is not four requests."""
+    return _bucket(bot, MEMBER_READ_BUCKET_ATTR, READ_RATE, READ_WINDOW_SECONDS)
 
-    async def dependency(request: Request) -> dict[str, Any]:
+
+def _member_who(bot: Any):
+    async def state_of(request: Request) -> dict[str, Any]:
         who = await current_session(request, bot)
         state = member_state(who)
         if state == "member_unknown":
             raise Refused(503, "member_unknown", MEMBER_UNKNOWN)
         if state == "not_a_member":
             raise Refused(403, "not_a_member", NOT_A_MEMBER)
+        return who
+
+    return state_of
+
+
+def member_read_dependency(bot: Any):
+    """`member_dependency`'s read-only twin: the same gate, the read bucket, no write spent."""
+    signed_in = _member_who(bot)
+
+    async def dependency(request: Request) -> dict[str, Any]:
+        who = await signed_in(request)
+        if not member_read_bucket_for(bot).take(str(who["id"])):
+            log.warning("api: rate-limited member reads from %s", who["id"])
+            raise Refused(429, "slow_down", TOO_MANY_READS)
+        return who
+
+    return dependency
+
+
+def member_dependency(bot: Any):
+    """Signed in AND in the server — the only gate on the site that is not staff-only."""
+    signed_in = _member_who(bot)
+
+    async def dependency(request: Request) -> dict[str, Any]:
+        who = await signed_in(request)
         if not member_bucket_for(bot).take(str(who["id"])):
             log.warning("api: rate-limited member writes from %s", who["id"])
             raise Refused(429, "slow_down", TOO_MANY_MEMBER_WRITES)
@@ -210,6 +239,8 @@ __all__ = [
     "guard_of",
     "member_bucket_for",
     "member_dependency",
+    "member_read_bucket_for",
+    "member_read_dependency",
     "note",
     "read_bucket_for",
     "reader_dependency",

@@ -73,8 +73,12 @@ guide_releases release (text, e.g. 'v112'), commit, shipped_at, changed_features
 ```
 
 - `slug` is the URL and the `/help` link target: `{origin}/guides.html#golive-announce`.
-- One partial unique index keeps one `published` guide per `(guild_id, command)`, so `/help` never has
-  two links to choose from for one line (checklist 6).
+- One partial unique index keeps one `published` guide per ~~`(guild_id, command)`~~
+  **`(guild_id, command, audience)`** (widened at the G1 build, 2026-09-16, `guides-core` — the
+  seed in §C11 publishes a member AND a staff guide against `/event`, so the narrower index
+  refuses the shipped seed on the first boot; **Deviation 1**), so `/help` never has two links to
+  choose from for one line (checklist 6). `/help` links member guides only, for the same reason
+  F-G3 hides a staff guide from a member (**Deviation 2**).
 - Media files live at `/data/guides/<id>.<ext>` on the volume, served by `GET /api/guides/media/{id}`
   (member-gated, `Cache-Control: private, max-age=86400`, ETag = sha). **Not** under `site/public` —
   that mount is public and ships with the image. `scripts/backup_db.ps1` grows one line to copy the
@@ -345,4 +349,78 @@ guides for the website's own pages (the site is the guide for itself — the Set
 
 ## Deviations
 
-*(empty until the build lands; the builder appends what departed from the above and why)*
+> Written by the G1 build (branch `guides-core`, off `main` at `ecb2bb6`), 2026-09-16. Every
+> departure from §A–§G above and why. G2's own list goes under it.
+
+1. ⚠️ **The partial unique index is `(guild_id, command, audience)`, not `(guild_id, command)`
+   (§C1).** The seed in §C11 publishes **two** guides against `/event` — `event-propose` (member)
+   and `event-review` (staff) — so the literal index makes the shipped seed un-seedable. Measured:
+   seeding seventeen guides raised `sqlite3.IntegrityError: UNIQUE constraint failed:
+   guides.guild_id, guides.command`. §C7's *reason* for the index is kept whole, because `/help`
+   links member guides only (2 below), so no line ever has two links to choose from.
+2. ⚠️ **`/help` links MEMBER guides only, never a staff one.** F-G3 hides a staff guide from a
+   member, so a `[guide]` clause on `/automod` or `/mod` would be a 404 for everybody who is not
+   staff — a dead link in the one place a member is most likely to press it. `guides.links_for`
+   filters `audience = 'member'`: the **ten** member guides carry a link, the seven staff ones do
+   not. Staff reach theirs from the hub.
+3. **Seeding runs on the guides loop's FIRST TICK, not inside `cog_load` itself (§C11).**
+   `cog_load` runs before the gateway is ready, so `bot.guilds` is empty there and a seed written
+   from it would write nothing at all. `Core.guides_loop`'s `before_loop` is `loops.wait_ready`
+   and its first tick is at boot — the same moment, with a guild list. The loop is 5 minutes
+   (checklist 25) and carries `@loop.error` + `loop_health("guides_loop")` like every other.
+4. ⚠️ **A screenshot is uploaded as base64 in a JSON body, not as multipart (§C3).**
+   `api/server.py:same_site_writes` answers **415 in words** to any `/api/*` write whose
+   content-type is not `application/json`, so a multipart upload cannot reach the route at all.
+   `POST /api/guides/{slug}/media` takes `{filename, data, step_id, caption, source, surface,
+   shot_release}` and `data` may be a bare base64 string or a `data:` URL.
+5. ⚠️ **Pillow is NOT a dependency — measured, not assumed** (`import PIL` in the repo venv:
+   `ModuleNotFoundError`). §C1's own fallback applies: nothing is re-encoded, and a picture over
+   **2 MB** or over **1600 px** on its longest side is refused in a sentence that says what to do.
+   `guides.picture_size` reads the dimensions out of the PNG / JPEG / WebP header, so no
+   dependency was added to find them.
+6. **`GET /api/guides/media/{id}` is exempt from the `no-store` middleware.**
+   `api/server.py:security_headers` forced `Cache-Control: no-store` onto every `/api/*` response,
+   which silently overwrote §C1's `private, max-age=86400`. One named prefix,
+   `server.KEEPS_ITS_OWN_CACHE`, is the exemption; the ETag is the sha and a repeat read answers
+   **304**.
+7. **`guide.confirmed` is NOT a log kind yet; `guide.deleted` IS (§C10).** §C8's two foot buttons
+   are G2's page work, so nothing in G1 can write `guide.confirmed`, and
+   `tests/test_logkinds.py::test_no_classification_entry_is_dead` refuses a classification entry
+   nothing emits. `DELETE /api/guides/{slug}` is in G1's scope and §C10 named no kind for it — a
+   write that leaves no log row is worse than one kind more.
+8. **`guides` is NOT in `logkinds.HIDDEN_BY_DEFAULT`** although §C10 asks for `guide.confirmed` to
+   be hidden like the self-test's rows. That list is per **feature**, not per kind, so adding
+   `guides` would have hidden every guide edit from the Logs page as well. Revisit it at G2, when
+   `guide.confirmed` exists and its volume is measurable.
+9. ⚠️ **Two structural guards gained ONE named exception:
+   `logkinds.FEATURES_WITHOUT_A_COMMAND = ("guides",)`.** `guides` joins `logkinds.FEATURES`
+   so that `guides_log_level` generates with every other feature's and the Logs page can filter on
+   it — but F-G1 gives it no Discord panel and no slash command, which
+   `tests/test_bot.py::test_every_features_logs_is_a_panel_button…` and
+   `::test_every_log_level_names_a_command_that_still_exists` both assumed of every feature. The
+   exception is one constant with the reason beside it, read by both tests; `LOG_LEVEL_COMMANDS`
+   simply has no `guides` row, and `log_level_help` already drops the panel clause when there is
+   none.
+10. **The registry is 206 → 212, not 204 → 210 (§C9).** 204 was measured at `b32fb43`; `main` at
+    `ecb2bb6` holds **206**. The five decided keys plus `guides_log_level` make **212**. The
+    `/settings` group select is **23 → 24** namespaces exactly as designed, so no `Find…` path was
+    added (the cap is 25).
+11. **`seed_hash` doubles as "is this guide seeded".** §C1 lists no `seeded` column and one would
+    be a second home for the same fact: a guide with a `seed_hash` is one Black Bloc ships with,
+    which is what **Reset the whole guide** reads and what makes DELETE refuse in words.
+12. **A new guide starts with ZERO steps, not one blank step (§C3).** `PUT` refuses a step with
+    nothing in it (`STEP_NEEDS_TEXT`), so a blank row would be a guide that cannot be saved until
+    it is filled or removed. The page adds the first step.
+13. ⚠️ **`black_bloc/guides_seed.json` was NOT reworded, and it trips the linter's first rule on
+    36 of its 70 steps.** Measured. Almost every one is a step that bolds a button AND a value —
+    *"Press **Propose an event…** and pick a **day**"* — which §C2's literal *"two bold button
+    names"* counts as two actions. The linter warns and the save happens (§D.4), so nothing is
+    blocked, but the editor will paint amber on half the shipped copy. Narrowing the rule to two
+    bold spans that both look like CONTROLS is one line in `guides.lint_step`; the conductor owns
+    the call, so nothing was changed here.
+14. **Not built, and left to G2 as §F says:** `site/public/guides.html`, `assets/page-guides.js`,
+    the rail change in `shell.js`, the `Ctrl K` palette entry, the `scripts/deploy.ps1` step that
+    writes `site/public/assets/release.json`, the `scripts/backup_db.ps1` line for
+    `/data/guides/`, the RECOVERY row, `docs/access/guides-capture.md`, and §C8's two foot buttons
+    (`This guide was right` / `Something's off`) with `guide.confirmed`. `guides.FEATURE_PATHS`
+    and `guides.features_changed()` are in place for the deploy step to call.
