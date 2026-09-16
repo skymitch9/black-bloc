@@ -12,10 +12,11 @@
 > morning were partial — the drill log at the foot has all three). The **first population**
 > ran: the purge window was borrowed, self-test **run #28** posted **24 cards**, **16 root
 > cards** were shot and **16 guides** got a picture (`media/1`–`media/16`), the window was put
-> back, and the pictures were seen rendering on two guides. Every step below except §5 (mocks)
-> has now been done at least once, and the page's own refusal sentences in §4's table are
-> **still** unreproduced — nothing was refused, so that table remains written from the code.
-> 🔴 **One guide has NO picture on purpose: `birthday-set`** — see §2's isolation rule.
+> back, and the pictures were seen rendering on two guides. **§5 was then exercised too**: the
+> one card a capture must not publish (`/birthday`) was drawn as a mock and uploaded as
+> `a drawn illustration`, so **all 17 guides now carry a picture** (`media/1`–`media/17`).
+> The page's own refusal sentences in §4's table are **still** unreproduced — nothing was
+> refused, so that table remains written from the code.
 > **First drill, 2026-09-16 09:1x Phoenix (partial — stopped at step 2, nothing shot, nothing uploaded).** Found: (1) step 1 answered `count: 0` on the live app right after v111 — there is nothing STALE, because no guide has a picture yet; the runbook says stop there, but the FIRST population of pictures is a different job it does not describe. (2) The self-test's cards are purged **one minute** after they post (`selftest_purge_minutes`, default 1 — the owner's choice, "mainly for you and not me"), so by the time a session reads the to-do list and opens Discord the cards are gone; a capture needs a self-test triggered from the dashboard's Health page and the shots taken inside that minute, or the key raised for the session and put back. (3) The owner's Chrome IS signed in to Discord web and `#mute-me-bot-test-spam` renders — that half works. (4) ⚠️ Step 2's "screenshot the tab" lands on disk only with the `computer` tool's `save_to_disk: true`, which returns the path; a plain screenshot is an image in the transcript, not a file, and `$env:TEMP	ab.png` does not exist by itself. (5) Pillow venv, crop and upload were NOT reached. The question of the purge window is the owner's (`TODO.md`).
 > **Second drill, 2026-09-16 09:19–09:3x Phoenix (partial — stopped at step 2 again, nothing
 > uploaded).** Dispatched to do the FIRST POPULATION with the owner at the machine. Blocked on
@@ -212,10 +213,12 @@ to them.
    catch by eye-balling the edges.** `/birthday` prints **Next birthdays** — five members'
    IDs, one resolved display name and five dates. The capture was clean of neighbours and
    still unpublishable, because a guide picture is served to **every member**. It was deleted
-   and `birthday-set` was left with no picture. **Read the card's text, not just its
-   borders**, and check `/mod`, `/modmail`, `/honeypot`, `/apply` and `/request` the same way
-   — they were all clean this time **only because the server had no open cases, tickets, hits
-   or applications**. On a live server they will not be.
+   and `birthday-set` went to §5 as a **mock** instead (owner's call, 2026-09-16: *"C"*).
+   **Read the card's text, not just its borders**, and check `/mod`, `/modmail`, `/honeypot`,
+   `/apply` and `/request` the same way — they were all clean this time **only because the
+   server had no open cases, tickets, hits or applications**. On a live server they will not be.
+   ⚠️ **This is the second reason to draw a mock**, and §5 did not have it: not just *"a
+   capture cannot reach it"* but *"a capture reaches it and must not be published"*.
 
 ⚠️ **One shot was uploaded WITH a judgement call, and the next session should know:**
 `/golive`'s card ends with `live now — 1 · [BK CEO] The BaF Blue Shell on Twitch`. That is one
@@ -372,15 +375,67 @@ freshly opened guide `img.naturalWidth` is **0** and `img.complete` is **false**
 the page past it and back and the attribute catches up (`1055×902`, `complete: true`). Judging
 it by `naturalWidth` alone would report a working picture as broken.
 
-## 5. When a capture cannot reach it — draw a mock
+## 5. When a capture cannot reach it — or must not be published — draw a mock
 
-A modal, a sub-panel (**Streamers…**, **Settings**), a DM card, or any state the self-test
-does not post: build the screen as HTML in the Discord look, screenshot **that**, and
-upload it with **What it is** = `a drawn illustration`. The page then captions it
-*illustration · v111 · …* rather than *screenshot*, so nobody mistakes a drawing for the
-real thing. A mock goes stale by the same rule and is redrawn by the same session step.
+✅ **Drilled 2026-09-16 on `birthday-set`** (`media/17`). The recipe below is what was
+actually done, not a sketch.
 
-**A mock is a fallback, never a substitute for a root card that can be shot.**
+**Two reasons to draw one**, and the second was found the hard way:
+
+1. **A capture cannot reach it** — a modal, a sub-panel (**Streamers…**, **Settings**), a DM
+   card, or any state the self-test does not post.
+2. 🔴 **A capture reaches it and must NOT be published** — the card's own body carries member
+   data (§2's isolation rule). `/birthday` is the case: it prints five real members' names and
+   dates, so the real card can never be a guide picture, however cleanly it is cropped.
+
+**The recipe:**
+
+1. **Write the screen as one self-contained HTML file** under `scripts/scan/shots/`
+   (gitignored). ⚠️ **Sample the real colours rather than guessing them** — the owner runs a
+   purple custom theme, so Discord's stock `#313338` looks wrong beside the other sixteen
+   pictures. Read them straight out of a real capture:
+
+   ```powershell
+   Add-Type -AssemblyName System.Drawing
+   $b = New-Object System.Drawing.Bitmap "scripts\scan\shots\card-golive.png"
+   $c = $b.GetPixel(400, 300); '#{0:X2}{1:X2}{2:X2}' -f $c.R, $c.G, $c.B
+   ```
+
+   Measured off `card-golive.png` / `card-poll.png`, 2026-09-16:
+
+   | Part | Colour |
+   |---|---|
+   | message area behind the card | `#271231` |
+   | embed body | `#34223E` |
+   | embed left accent bar | `#46384F` |
+   | title | `#F7F5FA` · body `#C9C0CE` · muted `#8E8494` |
+   | inline chip (dates, code) | `#26102B` |
+   | mention | `#9BA7F5` on `rgba(88,101,242,.16)` |
+   | primary button | **`#5865F2`** (Discord blurple, unchanged by the theme) |
+   | secondary button | `#342440`, 1 px `#412F4D`, radius 8 |
+
+   Font stack `"gg sans","Noto Sans","Segoe UI",sans-serif`; body 15 px / 1.42, title 17 px
+   bold, buttons 14 px. Give the whole card one wrapper with an **`id`** so its box can be
+   measured exactly.
+
+2. ⚠️ **Make every name and date INVENTED, and obviously not a member.** The point of the
+   mock is that no real person is in it. Read the card's row in
+   [`sweeps.md`](sweeps.md) for what the panel actually says — `/birthday`'s member panel is
+   **row 87** — so the drawing tells the truth about the feature.
+3. **Serve it and shoot it like a real card:**
+   `python -m http.server 8799 --bind 127.0.0.1` from `scripts/scan/shots`, open
+   `http://127.0.0.1:8799/<file>.html` in a **new tab**, `getBoundingClientRect()` the
+   wrapper, convert to frame coordinates (§3) and `zoom` with `save_to_disk`. **Stop the
+   server afterwards** and close the tab.
+4. **Upload with What it is = `a drawn illustration`.** That select is the only field that
+   differs from a capture; `form_input` sets it reliably where a click does not. ✅ The page
+   then captions it **`illustration in Discord · v111 · …`** instead of `screenshot …`, so
+   nobody mistakes a drawing for the real thing.
+
+A mock goes stale by the same rule and is redrawn by the same session step.
+
+**A mock is a fallback, never a substitute for a root card that can be shot** — except where
+reason 2 applies, and there it is the ONLY correct answer.
 
 ## 6. Say what you did, and what you did not
 
@@ -496,7 +551,8 @@ if __name__ == "__main__":
 | 2026-09-16 09:1x | §1 against the live app; Discord tab opened | `/api/guides/stale` → `count: 0`. Discord signed in, channel renders, **no cards** (purged). Stopped at §2. Found the `save_to_disk` gap |
 | 2026-09-16 09:2x | §1 again, §2's Discord half, §3 end to end | 🔴 **Blocked at §2's dashboard half — `/api/auth/me` = 401 `not_signed_in`.** Nothing shot for a guide, nothing uploaded. §3's `zoom`-to-disk path measured and written up; §1 gained the first-population case; `/api/guides` found unreadable with the operator token; the owner's isolation rule written into §2 |
 | 2026-09-16 09:35–10:03 | ✅ **THE FIRST POPULATION, end to end** — purge window 1 → 30, self-test run #28, 16 cards shot, **16 guides uploaded**, window → 1, two guides verified rendering | ✅ **Worked.** `media/1`–`media/16`. 1 guide deliberately left without a picture (`birthday-set`, member data in the card body). §2 gained the card→guide table and Discord's scroll traps; §3 gained the painted-union recipe; §4 gained the upload folder rule, the moving-button rule and the readback rule |
-| — | 🔴 §4's refusal table, §5 (mocks), a RE-SHOOT session (a stale count above zero) | still **never run** — nothing was refused and nothing was stale, so both remain written from the code |
+| 2026-09-16 10:10–10:2x | ✅ **§5 EXERCISED** — the owner chose *"C"* for `birthday-set` (a drawn mock) and *"A"* for `golive-announce` (keep the real shot). Drew `scripts/scan/shots/birthday-mock.html` as the `/birthday` **member** panel per `sweeps.md` row 87, with five invented people; served it on `127.0.0.1:8799`, shot the wrapper, uploaded it as `a drawn illustration` | ✅ `media/17`, **848×695, 111 017 bytes**, captioned **`illustration in Discord · v111 · …`**. All **17 of 17** guides now have a picture. §5 rewritten with the sampled palette and the recipe; §2 gained the second reason to mock |
+| — | 🔴 §4's refusal table, a RE-SHOOT session (a stale count above zero) | still **never run** — nothing was refused and nothing was stale, so both remain written from the code |
 
 ## Measured, 2026-09-16 (second drill)
 
@@ -519,8 +575,8 @@ if __name__ == "__main__":
 |---|---|
 | `selftest_purge_minutes` | **1** before · **30** during · **1** after (all three read back from `/api/settings`, not just the page) |
 | Self-test | **run #28, 9:33:22**, `109 OK · 0 FAILED`, **24 cards**, *"they go after 30 minute(s)"*, *"Started from website"* |
-| Root cards shot | **16 of 16** attempted, **15 clean**, **1 withheld** (`/birthday`) |
-| Guides given a picture | **16 of 17** — `media/1`–`media/16`; only `birthday-set` has none |
+| Root cards shot | **16 of 16** attempted, **15 clean**, **1 withheld** (`/birthday` — it became the §5 mock) |
+| Guides given a picture | ✅ **17 of 17** — `media/1`–`media/16` captures, **`media/17` the `birthday-set` illustration** |
 | Capture sizes | 618×285 … 1055×914; **38 857 … 203 232 bytes**. Nothing came near 1600 px or 2 MB |
 | `/api/guides/stale` | **0** before, **0** after — see the warning above about what that does and does not prove |
 | Two guides re-opened | `golive-announce` → `media/1`, `feature-modes` → `media/16`, both captioned `screenshot in Discord · v111 · …`, both pictures visible on screen |
