@@ -13,7 +13,10 @@
 > just very empirical almost ikea like steps on how to achieve each thing"*.
 >
 > **Last verified: 2026-09-15 21:48 Phoenix** — every `path:name` in §A was read on `main` at
-> `b32fb43` (v110 live). ⚠️ **NOT checked:** nothing here met Discord or a browser; the `/help`
+> `b32fb43` (v110 live). **§C4 rewritten 21:5x** after the owner's "You can screenshot discord in
+> browser mode no? If not make mocks": captures are a Claude-in-Chrome session step over the cards the
+> self-test posts, mocks only for screens a capture cannot reach without clicking as the owner.
+> **F-G1 DECIDED 21:5x, owner verbatim "A"** — no Discord editing door; see §G. ⚠️ **NOT checked:** nothing here met Discord or a browser; the `/help`
 > reply and the member rail were read from the source, not rendered. Estimates are estimates.
 
 ## A. What exists (measured at `b32fb43`)
@@ -32,7 +35,7 @@
 | `access/sweeps.md` carries a **Do this / Expect** row for every button in the app (rows 1–359) | [`../access/sweeps.md`](../access/sweeps.md) | the seed copy for every guide already exists in the right voice |
 | Filing a request from the site is `POST /api/requests` through the shared function `/request` ▸ **File a request** uses; the route is the sole logger (`web.request.filed`, checklist 34) | `api/tools/requests.py`, `black_bloc/requests.py` | "Something's off" is one call to that function |
 | Schema **34**; the DB and its nightly snapshot live on the Fly volume `/data` (`dbsnapshot.py`, `scripts/backup_db.ps1`) | `storage/db.py:11`, [`../access/RECOVERY.md`](../access/RECOVERY.md) | uploaded screenshots go beside the DB and into the same backup, or they are not recoverable |
-| ⚠️ **A bot cannot take a screenshot of Discord, and automating a user account to do it is against Discord's terms** (self-bots). Nothing in the tree or `reference-bots.md` contradicts this | — | "re-shot each release" is a PERSON with a phone or the desktop app; the bot's job is to know WHEN a shot is stale and to say so |
+| ⚠️ **The bot cannot take a screenshot of Discord** (a bot user has no rendered view of anything). **A Claude session CAN** — Claude in Chrome drives the owner's own signed-in Discord web tab and screenshots it (the same browser automation this repo already uses to read usage), and the self-test has already posted every panel's root card in the test channel by then, so shooting a root card needs no click on the owner's account. Pressing buttons on the account through automation is the line this design stays behind: ~~automating a user account is against Discord's terms~~ — **reading and screenshotting the owner's own tab is not** (owner, 2026-09-15 21:5x: "You can screenshot discord in browser mode no? If not make mocks") | Claude in Chrome tools; `selftest.py` | "re-shot each release" is a SESSION step in a runbook, not the owner's chore; screens the self-test does not post (modals, sub-panels, DM cards) are drawn mocks, labelled as such |
 
 ## B. The decision in one paragraph
 
@@ -43,9 +46,11 @@ followed by an **"If it did not work"** table and up to four **"Right now"** fac
 bot. The site's new **Guides** page (member-gated through `member_dependency`, the second thing a
 non-staff member may open) renders the hub and each guide from `/api/guides`; staff edit every word
 in place on the same page (a docked save bar, like Settings), never a form elsewhere. Screenshots
-are real captures a person uploads through that editor; the deploy writes which features changed,
-and a shot older than its feature's last change is marked **stale** on the page and on the staff
-panel until somebody re-shoots it. `/help` keeps its list and gains a small `guide` link per line.
+are real captures — a Claude session shoots the cards the self-test posts, through the owner's
+browser, and uploads them through that editor; a screen a capture cannot reach without clicking as
+the owner is a drawn mock labelled *illustration*. The deploy writes which features changed, and a
+shot older than its feature's last change is marked **stale** on the page and on the staff panel
+until the next capture session replaces it. `/help` keeps its list and gains a small `guide` link per line.
 Every guide ships from a seed written off `access/sweeps.md` in the IKEA voice, seeded once and
 never overwritten; **Put the original back** is per step. No new slash command.
 
@@ -62,7 +67,7 @@ guide_steps   id, guide_id, position, do_text, expect_text (NULL ok), media_id (
 guide_faults  id, guide_id, position, symptom, answer          ("If it did not work")
 guide_facts   id, guide_id, position, kind (setting|probe), ref (a registry key, or a probe name)
 guide_media   id, guild_id, guide_id, step_id (NULL ok), file (relative under /data/guides/),
-              sha256, width, height, bytes, source (discord|website), shot_release, shot_by,
+              sha256, width, height, bytes, source (capture|mock), surface (discord|website), shot_release, shot_by,
               shot_at, caption, stale (bool), stale_since
 guide_releases release (text, e.g. 'v112'), commit, shipped_at, changed_features (JSON list)
 ```
@@ -118,16 +123,23 @@ is the whole vocabulary; the seed follows it and the linter keeps edits inside i
   row carrying the diff summary (`steps +1 −0 ~2, faults ~1`). Media upload is its own
   `POST /api/guides/{slug}/media` and one `web.guide.media_replaced` row. Checklist 34: these routes
   are the sole loggers, so `note()` is correct here.
-- ⚠️ **No Discord editing door** — fork **F-G1** below; the recommendation is (a) and the reason is
-  written there. The settings KEYS are both ways as always.
+- ⚠️ **No Discord editing door** — fork **F-G1**, DECIDED (a) by the owner; the reason is written
+  there, and the waiver goes to `KNOWN_ISSUES.md` at the build's landing. The settings KEYS are both ways as always.
 
-### C4. Screenshots — real, and honest about their age
+### C4. Screenshots — real captures by a session, drawn mocks where a capture cannot reach
 
-1. **Capture is a person.** After a deploy the self-test has already posted every panel's root card in
-   the test channel; the owner (or any staffer) screenshots the card on the desktop app, opens the
-   guide, presses **Replace screenshot…** on the step. Website screenshots CAN be scripted
-   (`scripts/scan/shoot_site.mjs`, Playwright against the mock with `?as=staff`, gitignored per the
-   only-bot-code rule) — the build may ship that script but the design does not depend on it.
+1. **Capture is a session step, in the owner's browser.** After a deploy whose `release.json`
+   (step 2) names a feature, the landing ritual gains one step: the session opens
+   [`../access/guides-capture.md`](../access/guides-capture.md) (new runbook, written at the G2
+   landing) and, with Claude in Chrome: (i) opens the test channel in the owner's signed-in Discord
+   web tab, where the self-test has just posted every panel's root card; (ii) scrolls each stale
+   card into view, reads its bounding box with the page-script tool, screenshots the tab and crops
+   with Pillow (`scripts/scan/crop_shot.py`, gitignored — not bot code); (iii) opens the dashboard
+   page for a website shot (the owner is signed in there too); (iv) uploads each file through the
+   guide's own **Replace screenshot…** in the same browser, which is the one write path.
+   ⚠️ **The session presses nothing on the owner's Discord account** — it reads and screenshots.
+   That is the line: the self-test posts the cards so no interaction is needed, and a screen that
+   WOULD need one is a mock (4).
 2. **The deploy records what changed.** `scripts/deploy.ps1` gains one step before `flyctl deploy`:
    `git diff --name-only <last line of deploys.log>..HEAD` mapped through `guides.FEATURE_PATHS`
    (one home: a dict `feature → [path prefixes]`, e.g. `golive → [black_bloc/golive.py,
@@ -139,13 +151,21 @@ is the whole vocabulary; the seed follows it and the linter keeps edits inside i
 3. **Boot marks stale.** `guides.reconcile_releases(bot)` on `cog_load` (and every 5 min, checklist 25)
    reads `release.json`, inserts the `guide_releases` row if new, and sets `stale = true, stale_since`
    on every `guide_media` row whose `feature ∈ changed_features` and `shot_release < release`. One
-   log row per release: `guide.shots_stale` with the count and the features.
-4. **Stale is visible in three places:** a `STALE` pill on the screenshot for members ("from v110 —
-   the feature changed in v112"), the hub's staff-only line "3 screenshots need re-shooting", and the
-   `/help` reply's existing hidden-note footer does **not** mention it (members cannot act on it).
-5. **A shot is never deleted by staleness.** An old real picture beats no picture; only a person
-   replaces it. Replacing clears `stale`.
-6. Alt text is the step's `do_text`; the caption is `shot on <release> by <name>`.
+   log row per release: `guide.shots_stale` with the count and the features. The staff line on the
+   hub ("3 screenshots need re-shooting") IS the capture session's to-do list — `GET /api/guides/stale`
+   returns it as JSON so the session reads it with the operator token before opening a browser.
+4. **Mocks for what a capture cannot reach.** A modal, a sub-panel (`Streamers…`, `Settings`), a DM
+   card, or a state the self-test does not post (a linked member's panel) is drawn — HTML in the
+   Discord look, the way the design canvas drew them — exported to PNG once and uploaded with
+   `source = mock`. The page labels it *illustration, drawn from v110*; a capture is *screenshot,
+   v110*. A mock goes stale by the same rule and is redrawn by the same session step. **A mock is a
+   fallback, never a substitute for a root card that can be shot.**
+5. **Stale is visible in three places:** a `STALE` pill on the picture for members ("from v110 —
+   the feature changed in v112"), the hub's staff-only line with the count, and the stale list
+   route. The `/help` reply does **not** mention it (members cannot act on it).
+6. **A picture is never deleted by staleness.** An old real picture beats no picture; only an upload
+   replaces it, and replacing clears `stale`.
+7. Alt text is the step's `do_text`; the caption is `screenshot|illustration · <release> · <name>`.
 
 ### C5. "Right now" — live values, chosen by staff
 
@@ -257,9 +277,9 @@ only refreshes `seed_do` / `seed_expect` (what **Put the original back** restore
 | `rolemenu-post` (staff) | Post a role menu | `/rolemenu` | 1, 22–23, 173–182 |
 | `feature-modes` (staff) | Turn a feature on, off, or to shadow | `/settings` | 183–187, 231–244 |
 
-Seventeen guides, zero screenshots at seed time (the person shoots them; the page renders a step
-without a picture as text only, never a broken image — the mock's "screenshot" frames are for the
-owner, not the seed).
+Seventeen guides, zero pictures at seed time (the first capture session at the G2 landing shoots
+the root cards and draws the first mocks; the page renders a step without a picture as text only,
+never a broken image).
 
 ## D. Calls the owner may overturn (each is one key or one line)
 
@@ -272,7 +292,7 @@ owner, not the seed).
 
 ## E. Out of scope (so nobody builds it by accident)
 
-Video or GIF captures; automated Discord screenshots of any kind (terms); per-member progress
+Video or GIF captures; a session PRESSING buttons on the owner's Discord account to reach deeper screens (those are mocks); the bot rendering its own panels to images (a browser in the container); per-member progress
 ("you did step 2"); translations; a Discord editing panel (fork F-G1 unless the owner picks b);
 guides for the website's own pages (the site is the guide for itself — the Settings page's
 `KEY_HELP` sentences already are); comments or threads under a guide; a public, signed-out guide
@@ -286,7 +306,9 @@ guides for the website's own pages (the site is the guide for itself — the Set
   and button, the six keys, the log kinds. Est. **200–280k**.
   **G2 pages** — `guides.html` + `page-guides.js` (hub, guide, the in-place editor, the docked save
   bar, upload, stale pills, the two foot buttons), the rail change, the palette entry, the
-  `deploy.ps1` step + `release.json`, the backup line and the RECOVERY row. Est. **220–320k**.
+  `deploy.ps1` step + `release.json`, `GET /api/guides/stale`, the backup line, the RECOVERY row and
+  the `access/guides-capture.md` runbook (the session's step-by-step, with the crop helper). Est.
+  **220–320k**. The FIRST capture session runs at the G2 landing and is the runbook's drill.
   ⚠️ Both are multi-layer; prep per the global rule (clean tree, before-read, commit often).
 - Tests mirror the package: `tests/test_guides.py`, `tests/api/tools/test_guides.py` (contract +
   member gate: a signed-out read is 401 in words, a non-member 403, a member 200, a staff write 200,
@@ -304,11 +326,12 @@ guides for the website's own pages (the site is the guide for itself — the Set
   off hides everything.
 - Docs ritual: this header → BUILT → LIVE; `info/README.md` row; `feature-list.md` row **G1**;
   `access/site.md` page count 17 → 18; `architecture.md` fact table; RECOVERY row for
-  `/data/guides/`; `code-notes.md` section by NAME.
+  `/data/guides/`; `access/README.md` row for the capture runbook; the landing ritual in `TODO.md`
+  gains "capture session if `release.json` names a feature"; `code-notes.md` section by NAME.
 
 ## G. Open forks (one at a time to the owner, recommendation first)
 
-- **F-G1 — a Discord editing door.** (a) **None** — wording and screenshots are edited on the website
+- **F-G1 — a Discord editing door. ✅ DECIDED 2026-09-15 21:5x, owner verbatim "A": none.** (a) **None** — wording and screenshots are edited on the website
   only; the Discord half of this feature is `/help`'s links, and a multi-field long-text edit is what
   the website exists for (the same reason the Settings page, not the panel, owns `bot_bio`). This is
   a deliberate exception to checklist 33's "both ways" for CONTENT, not for the keys — record it in
