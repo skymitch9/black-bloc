@@ -14,7 +14,8 @@
 > cards** were shot and **16 guides** got a picture (`media/1`–`media/16`), the window was put
 > back, and the pictures were seen rendering on two guides. **§5 was then exercised too**: the
 > one card a capture must not publish (`/birthday`) was drawn as a mock and uploaded as
-> `a drawn illustration`, so **all 17 guides now carry a picture** (`media/1`–`media/17`).
+> `a drawn illustration`, so **all 17 guides now carry a picture** (`media/1`–`media/16`, plus
+> **`media/18`** for `birthday-set` after the mock was redrawn — see the drill log).
 > The page's own refusal sentences in §4's table are **still** unreproduced — nothing was
 > refused, so that table remains written from the code.
 > **First drill, 2026-09-16 09:1x Phoenix (partial — stopped at step 2, nothing shot, nothing uploaded).** Found: (1) step 1 answered `count: 0` on the live app right after v111 — there is nothing STALE, because no guide has a picture yet; the runbook says stop there, but the FIRST population of pictures is a different job it does not describe. (2) The self-test's cards are purged **one minute** after they post (`selftest_purge_minutes`, default 1 — the owner's choice, "mainly for you and not me"), so by the time a session reads the to-do list and opens Discord the cards are gone; a capture needs a self-test triggered from the dashboard's Health page and the shots taken inside that minute, or the key raised for the session and put back. (3) The owner's Chrome IS signed in to Discord web and `#mute-me-bot-test-spam` renders — that half works. (4) ⚠️ Step 2's "screenshot the tab" lands on disk only with the `computer` tool's `save_to_disk: true`, which returns the path; a plain screenshot is an image in the transcript, not a file, and `$env:TEMP	ab.png` does not exist by itself. (5) Pillow venv, crop and upload were NOT reached. The question of the purge window is the owner's (`TODO.md`).
@@ -252,6 +253,13 @@ const dy = 802 - window.innerHeight * k; // browser chrome above the viewport
 // region = [r.x*k, r.y*k + dy, (r.x+r.width)*k, (r.y+r.height)*k + dy]
 ```
 
+⚠️ **Take a `screenshot` first and use the frame IT reports — and do not trust the first zoom
+in a tab you have just created.** Measured 2026-09-16: the same region that captured a card
+perfectly in one tab came back clipped to ~60% of its width on the first zoom in a fresh tab,
+then worked on the retry with the identical numbers. If a zoom comes back clipped or
+mis-scaled, **re-shoot it rather than reasoning about it** — and if two attempts disagree,
+calibrate with a throwaway `zoom` of `[0,0,200,200]` and see which CSS area comes back.
+
 Measured on the owner's machine 2026-09-16: frame **1512×802**, `innerWidth` **2498**,
 `innerHeight` **1269**, `devicePixelRatio` **1.5** → `k` = **0.6053**, `dy` = **34**. A card
 predicted this way landed exactly on its box first time. ⚠️ **Re-measure every session** —
@@ -350,6 +358,19 @@ nothing happens. Convert the element's `getBoundingClientRect()` to frame coordi
 click those. The same is true on the Settings page; there, one **Save Changes** click needed a
 `hover` at the point first before it registered.
 
+🔴 ⚠️ **Coordinate clicks do not land in a BACKGROUND tab either** — and this one looks exactly
+like a missed coordinate, so it wastes a lot of calls. Measured 2026-09-16: with the owner
+browsing his own tab, every click into the session's tab reported success and did nothing,
+while `elementFromPoint` at those very coordinates returned the right button. **If the owner
+is using the browser, work in the tab HE is looking at, or drive the sanctioned control with
+`element.click()` from the page-script tool**, which does not depend on focus. ⚠️ Use that
+only for controls this runbook names — it is a way around a focus problem, never around a
+gate. `form_input` and `file_upload` are unaffected and keep working in a background tab.
+
+⚠️ **A re-upload creates a NEW media id rather than replacing the old one.** Redrawing
+`birthday-set`'s mock moved it from `media/17` to `media/18`. Quote the id you last saw, and
+re-read it after any re-upload.
+
 | If it says | It means | Do this |
 |---|---|---|
 | *"…is not a picture Black Bloc can serve"* | the file is not PNG/JPEG/WebP | re-export it |
@@ -377,7 +398,7 @@ it by `naturalWidth` alone would report a working picture as broken.
 
 ## 5. When a capture cannot reach it — or must not be published — draw a mock
 
-✅ **Drilled 2026-09-16 on `birthday-set`** (`media/17`). The recipe below is what was
+✅ **Drilled 2026-09-16 on `birthday-set`** (`media/17`, redrawn as `media/18`). The recipe below is what was
 actually done, not a sketch.
 
 **Two reasons to draw one**, and the second was found the hard way:
@@ -552,6 +573,7 @@ if __name__ == "__main__":
 | 2026-09-16 09:2x | §1 again, §2's Discord half, §3 end to end | 🔴 **Blocked at §2's dashboard half — `/api/auth/me` = 401 `not_signed_in`.** Nothing shot for a guide, nothing uploaded. §3's `zoom`-to-disk path measured and written up; §1 gained the first-population case; `/api/guides` found unreadable with the operator token; the owner's isolation rule written into §2 |
 | 2026-09-16 09:35–10:03 | ✅ **THE FIRST POPULATION, end to end** — purge window 1 → 30, self-test run #28, 16 cards shot, **16 guides uploaded**, window → 1, two guides verified rendering | ✅ **Worked.** `media/1`–`media/16`. 1 guide deliberately left without a picture (`birthday-set`, member data in the card body). §2 gained the card→guide table and Discord's scroll traps; §3 gained the painted-union recipe; §4 gained the upload folder rule, the moving-button rule and the readback rule |
 | 2026-09-16 10:10–10:2x | ✅ **§5 EXERCISED** — the owner chose *"C"* for `birthday-set` (a drawn mock) and *"A"* for `golive-announce` (keep the real shot). Drew `scripts/scan/shots/birthday-mock.html` as the `/birthday` **member** panel per `sweeps.md` row 87, with five invented people; served it on `127.0.0.1:8799`, shot the wrapper, uploaded it as `a drawn illustration` | ✅ `media/17`, **848×695, 111 017 bytes**, captioned **`illustration in Discord · v111 · …`**. All **17 of 17** guides now have a picture. §5 rewritten with the sampled palette and the recipe; §2 gained the second reason to mock |
+| 2026-09-16 10:3x–10:5x | ✅ **A MOCK REDRAWN, and §5's re-upload path proved** — the owner asked for the five invented people to become famous Black celebrities (*"Chadwick Boseman, Halley Berry, etc Zendaya"*). Same HTML, five real public birthdays in next-occurrence order from today; re-rendered, re-shot, re-uploaded over the old one | ✅ `media/18`, **854×699, 110 604 bytes**, still captioned **`illustration in Discord · v111 · …`**, editor left at `0 changes pending`. ⚠️ A re-upload makes a **NEW media id** — it does not overwrite `media/17`. Two new traps found, both below: the zoom frame can go stale right after a tab is created, and clicks do not land in a **background** tab |
 | — | 🔴 §4's refusal table, a RE-SHOOT session (a stale count above zero) | still **never run** — nothing was refused and nothing was stale, so both remain written from the code |
 
 ## Measured, 2026-09-16 (second drill)
@@ -576,7 +598,7 @@ if __name__ == "__main__":
 | `selftest_purge_minutes` | **1** before · **30** during · **1** after (all three read back from `/api/settings`, not just the page) |
 | Self-test | **run #28, 9:33:22**, `109 OK · 0 FAILED`, **24 cards**, *"they go after 30 minute(s)"*, *"Started from website"* |
 | Root cards shot | **16 of 16** attempted, **15 clean**, **1 withheld** (`/birthday` — it became the §5 mock) |
-| Guides given a picture | ✅ **17 of 17** — `media/1`–`media/16` captures, **`media/17` the `birthday-set` illustration** |
+| Guides given a picture | ✅ **17 of 17** — `media/1`–`media/16` captures, plus the `birthday-set` illustration (`media/17`, redrawn the same morning as **`media/18`**) |
 | Capture sizes | 618×285 … 1055×914; **38 857 … 203 232 bytes**. Nothing came near 1600 px or 2 MB |
 | `/api/guides/stale` | **0** before, **0** after — see the warning above about what that does and does not prove |
 | Two guides re-opened | `golive-announce` → `media/1`, `feature-modes` → `media/16`, both captioned `screenshot in Discord · v111 · …`, both pictures visible on screen |
