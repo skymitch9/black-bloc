@@ -1359,7 +1359,7 @@ is `https://blackbloc.heygabi.ai/guides.html`.
 | **386** (was `G2-n`) | Turn `guides_mode` off (Settings ▸ guides), then open `/requests.html` as a member | **Guides** is gone from the rail. Opening `/guides.html` directly says, in words, that guides are turned off and who turns them back on — no status code, no blank page. Staff still open it, with an amber note at the top saying it is off for members |
 | **387** (was `G2-o`) | Press **Ctrl K** and type part of a guide's title | It is listed as a **Page** with `/guides.html#<slug>` beside it, and Enter goes there |
 | **388** (was `G2-p`) | ⚠️ Deploy a change to a go-live file, then open a go-live guide | The picture on each go-live step wears a **stale** pill naming the release it was shot at. The hub's staff line counts them, and `scripts/read.ps1 -Path /api/guides/stale` lists exactly those and nothing else. 🔴 **Never run** — it needs a real deploy |
-| **389** (was `G2-q`) | ⚠️ Run `docs/access/guides-capture.md` end to end after that deploy | Every stale shot is replaced and the count reaches zero. 🔴 **Never run — the runbook has never been drilled.** The session that runs it owns correcting the doc and dating its drill line |
+| **389** (was `G2-q`) ✅ **first population run 2026-09-16 10:06 by a Claude session (16 of 17 uploaded; a stale>0 re-shoot still never run)** | ⚠️ Run `docs/access/guides-capture.md` end to end after that deploy | Every stale shot is replaced and the count reaches zero. 🔴 **Never run — the runbook has never been drilled.** The session that runs it owns correcting the doc and dating its drill line |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that
