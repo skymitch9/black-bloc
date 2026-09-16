@@ -43,6 +43,10 @@ GUIDES_ARE_OFF_FOR_STAFF = (
     "Guides are off for members right now, so nobody but staff can open this page. A Lead turns "
     "them back on from the Settings page under **guides**."
 )
+NOT_A_NUMBER = (
+    "The {what} that arrived is not a number, so nothing was saved. It is a fault in the page "
+    "rather than in what you typed — reload the guide and try again."
+)
 NOTHING_TO_SAVE = (
     "That change arrived with nothing in it, so nothing was saved. It is a fault in the page "
     "rather than in what you typed — reload the guide and try again."
@@ -140,6 +144,15 @@ def guide_row(
     }
 
 
+def wanted_int(value: Any, what: str) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise Refused(400, "bad_number", NOT_A_NUMBER.format(what=what)) from None
+
+
 def wanted_text(payload: dict[str, Any], name: str, limit: int) -> str:
     return guides.clamp(payload.get(name), limit)
 
@@ -157,7 +170,7 @@ def wanted_steps(payload: dict[str, Any]) -> list[dict[str, Any]]:
                 "id": raw.get("id"),
                 "do_text": do_text,
                 "expect_text": guides.clamp(raw.get("expect_text"), guides.EXPECT_MAX) or None,
-                "media_id": int(raw["media_id"]) if raw.get("media_id") else None,
+                "media_id": wanted_int(raw.get("media_id"), "picture id"),
             }
         )
     return found
@@ -395,7 +408,7 @@ def build_router(bot: Any) -> APIRouter:
             audience=wanted_audience(payload.get("audience"), guides.MEMBER),
             feature=wanted_feature(payload.get("feature"), "core"),
             command=wanted_command(payload.get("command")),
-            sort=int(payload.get("sort") or 0),
+            sort=wanted_int(payload.get("sort"), "sort order") or 0,
             published=False,
             by=int(who["id"]),
         )
@@ -454,7 +467,7 @@ def build_router(bot: Any) -> APIRouter:
             audience=audience,
             feature=wanted_feature(payload.get("feature"), str(row["feature"])),
             command=command,
-            sort=int(payload.get("sort", row["sort"]) or 0),
+            sort=wanted_int(payload.get("sort", row["sort"]), "sort order") or 0,
             published=1 if published else 0,
         )
         summary = guides.diff_summary(moved_steps, moved_faults, moved_facts)
@@ -541,7 +554,7 @@ def build_router(bot: Any) -> APIRouter:
             )
         guide_id = int(row["id"])
         steps = await guides.steps_of(bot.db, guide_id)
-        step_id = int(payload["step_id"]) if payload.get("step_id") else None
+        step_id = wanted_int(payload.get("step_id"), "step id")
         step = next((one for one in steps if int(one["id"]) == step_id), None)
         if step_id is not None and step is None:
             raise Refused(404, "no_such_step", NO_SUCH_STEP.format(slug=slug))

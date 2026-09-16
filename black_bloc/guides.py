@@ -338,7 +338,7 @@ def lint_step(do_text: Any, expect_text: Any = None) -> list[str]:
     do = str(do_text or "").strip()
     expect = str(expect_text or "").strip()
     bolds = BOLD.findall(do)
-    if AND_THEN.search(do) or len(bolds) > 1:
+    if AND_THEN.search(do):
         said.append(LINT_ONE_ACTION)
     if not bolds:
         said.append(LINT_NAME_THE_CONTROL)

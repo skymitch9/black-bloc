@@ -95,6 +95,16 @@ def as_payload(body: dict) -> dict:
     }
 
 
+async def test_a_step_id_that_is_not_a_number_is_refused_in_words(as_staff):
+    answer = as_staff.post(
+        "/api/guides/golive-announce/media",
+        json=upload(png(), step_id="abc"),
+    )
+    assert answer.status_code == 400
+    assert answer.json()["error"] == "bad_number"
+    assert "not a number" in answer.json()["message"]
+
+
 # --- the gate ---------------------------------------------------------------------------------
 
 
