@@ -1,7 +1,15 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-11 10:08 Phoenix** — rows **351–359** added for the EVENT-ROOMS build (branch `event-rooms`, off
+> **2026-09-16** — rows **G2-a … G2-q** added at the foot for the GUIDES G2 build (branch
+> `guides-pages`, off `main` `cad1abc`; ⚠️ **not merged, not deployed, and nothing in it has met
+> Discord**). What changed underneath them: `site/public/guides.html` is the second page a
+> non-staff member may open, staff edit every word of a guide in place behind the site's docked
+> save bar, and `scripts/deploy.ps1` now writes `site/public/assets/release.json` so a boot can
+> tell which screenshots went stale. Schema **UNCHANGED at 35**; registry keys **unchanged at
+> 212**; mock **17 pages / 159 routes → 18 / 160** (checked: *18 pages, 160 routes, 14 core
+> settings, all keys present*). **G2-a … G2-h were exercised against the MOCK by the build; the
+> rest have never been run anywhere.** Before that, **2026-09-11 10:08 Phoenix** — rows **351–359** added for the EVENT-ROOMS build (branch `event-rooms`, off
 > `main` `bd0b31d`; ⚠️ **not merged, not deployed, and nothing in it has met Discord**). What changed
 > underneath them: the event's posts go to its own review room by default (`events_posts_where`,
 > default **room**), the room carries a staff-only **Delete this room** button that also cancels an
@@ -1323,6 +1331,34 @@ event at all (`event.would_create_scheduled`) — so the Join button is owner-si
 | **G-k** | Upload a screenshot over 2 MB, then one over 1600 px wide, then a `.gif` | Three different sentences, none of them a bare status: the first says how big it is and what the limit is, the second says Black Bloc cannot resize it for you, the third says to send a PNG, a JPEG or a WebP. Nothing is uploaded in any of the three |
 | **G-l** | Upload a good PNG against step 1, then open the picture's own address in a second tab and reload it | The picture shows, the response says `Cache-Control: private, max-age=86400`, and the reload answers **304**. Signed out, the same address is refused in words |
 | **G-m** | After a deploy whose `release.json` names `golive` (G2), open `https://blackbloc.heygabi.ai/api/guides/stale` with the operator token | Only the go-live guides' shots are listed, each with its `slug`, `title` and `feature`; a shot already taken at that release is NOT listed, and neither is a shot on any other guide. One `guide.shots_stale` line carries the release, the features and the count |
+
+## Guides, the page (G2) — branch `guides-pages`, off `main` at `cad1abc`
+
+⚠️ **Not merged, not deployed.** Every row below was written against the mock at
+`http://127.0.0.1:8788`; rows **G2-a** through **G2-h** were exercised THERE by the build
+(the mock's two fixture guides, not the seeded seventeen), and rows **G2-i** onwards have
+never been run anywhere. Nothing here has met Discord or the live app. The live address
+is `https://blackbloc.heygabi.ai/guides.html`.
+
+| # | Do this | Expect |
+|---|---|---|
+| **G2-a** | Open `/guides.html` signed in as a member who is not staff | The rail shows **Requests** and **Guides** and nothing else. The page leads with a **Right now** strip naming test mode and the count of features on / in shadow / off, then the filter chips, then the cards. No **Edit this guide** button, no Settings section, no log |
+| **G2-b** | On the hub as a member, press **In Discord**, then **On this site**, then **Only what is on** | The cards narrow each time and the pressed chip fills with the accent. With nothing matching, one sentence says so and offers **Clear the filters**. A member never sees the **For members / For staff** chips — their list is member guides already |
+| **G2-c** | Open a guide from a card | Breadcrumb ▸ title ▸ goal ▸ pills ▸ a **Copy /golive** button. Then **Right now** with the live values and "updated just now", the numbered steps with the screenshot under each one, an `EXPECT` line, the **If it did not work** table, the two foot buttons, and a right-hand rail: who it is for, where it happens with a link to that feature's page, the keys it reads, the other guides for the same feature, and what this page is |
+| **G2-d** | Leave a guide open for a minute and watch the **Right now** card | "updated just now" becomes "updated 1m ago" and then resets — the card re-reads itself every 60 seconds. Nothing else on the page moves, and nothing scrolls |
+| **G2-e** | Press **This guide was right** | One sentence: *"Thank you — **<title>** is marked as working. Staff read the count; nothing else was sent."* Nothing moves on the page. On the Logs page, staff see one `web.guide.confirmed` line |
+| **G2-f** | Press **Something's off**, leave the box empty and confirm, then fill it in and confirm | Empty is refused in words and nothing is filed. Filled, it files a request under your own name reading `Guide "<title>", step N: <what you typed>`, with the guide's address as the why — the same row the Requests page would have made |
+| **G2-g** | As staff, open a guide and press **Edit this guide** | Every word becomes a box. The head gains **editing**; the steps get ↑ ↓ ×; the faults and the live values get their own rows. Type one character and the docked bar appears at the foot: *"<title> — 1 change pending"* with **Discard** and **Save Changes** |
+| **G2-h** | Change the title and press **Save Changes** | The bar goes, the head reads the new title, and the sentence says it is saved. Press **Discard** instead and every box goes back with no request made |
+| **G2-i** | As staff, press **Replace screenshot…** on a step while the save bar is showing | It refuses in words — *"Save your changes first…"* — and no file picker opens. Save first and it opens |
+| **G2-j** | Upload a picture through **Replace screenshot…** with **Which release** set to the release in `release.json` | The picture appears under the step with the caption `screenshot in Discord · v111 · <your caption>`. Any `stale` pill on that step is gone, and `/api/guides/stale` no longer lists it |
+| **G2-k** | Press **Put the original back** on a step of a guide Black Bloc ships, then **Save Changes** | The two boxes go back to the shipped wording and the bar counts the change. The button is not drawn at all on a step nobody has edited, or on a guide staff wrote here |
+| **G2-l** | On a guide Black Bloc ships, look for **Delete this guide** | It is not drawn — only **Reset the whole guide**. On a guide staff wrote here it is the other way round, and Delete asks first |
+| **G2-m** | On the hub as staff, fill in **New guide** and press **Make it** | The new guide opens in edit mode with no steps, marked **not published**. Press **Add a step**, write one, **Save Changes**, then **Publish** |
+| **G2-n** | Turn `guides_mode` off (Settings ▸ guides), then open `/requests.html` as a member | **Guides** is gone from the rail. Opening `/guides.html` directly says, in words, that guides are turned off and who turns them back on — no status code, no blank page. Staff still open it, with an amber note at the top saying it is off for members |
+| **G2-o** | Press **Ctrl K** and type part of a guide's title | It is listed as a **Page** with `/guides.html#<slug>` beside it, and Enter goes there |
+| **G2-p** | ⚠️ Deploy a change to a go-live file, then open a go-live guide | The picture on each go-live step wears a **stale** pill naming the release it was shot at. The hub's staff line counts them, and `scripts/read.ps1 -Path /api/guides/stale` lists exactly those and nothing else. 🔴 **Never run** — it needs a real deploy |
+| **G2-q** | ⚠️ Run `docs/access/guides-capture.md` end to end after that deploy | Every stale shot is replaced and the count reaches zero. 🔴 **Never run — the runbook has never been drilled.** The session that runs it owns correcting the doc and dating its drill line |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that
