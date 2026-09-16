@@ -85,6 +85,8 @@ there as on the panel (§4). The panel move is named because it is where staff w
 | 9 | **Moderation commands** (`/warn` `/timeout` `/untimeout` `/kick` `/ban` `/unban` `/purge`, `/mod` for cases) | nothing to flip — live once TEST_MODE lifts; staff just start using them | case log correctness on `/mod` ▸ **Logs** (**KI-22**: `/purge` cannot say which door made a row) | Carl mod commands (habit change, not a switch) |
 | 10 | **Honeypot** | `/honeypot` → **Setup…** in the real channel list, bottom; **What the trap does…** → `shadow` for 1 week (owner decision 2026-08-26) → `on` | any would-ban of a real member who isn't a bot — that's a tuning failure, stop | (new capability) |
 
+| 11 | **Posts (F-P)** — the welcome and rules message, live on branch `posts`, `posts_mode` default `on` | point `welcome` at `#welcome` on https://blackbloc.heygabi.ai/posts.html (or `/posts` ▸ the post ▸ **Channel…**), press **Save Changes**, then **Post it** — ⚠️ this needs P5 done, because `#welcome` is not the test channel. Then delete Carl-bot's `1285806434050768927` by hand and turn Carl's welcome off | the message is pinned, reads exactly as Carl's did, and the Posts page shows **posted · pinned** with no **changes not yet posted** pill. Nothing here deletes Carl's message for you | Carl-bot's welcome post |
+
 ## 3. Retire the incumbents
 
 Per-module turn-offs happen inside the ladder (rows 2, 3, 6, 7, 8). The **kick**

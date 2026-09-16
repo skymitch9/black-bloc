@@ -8,7 +8,7 @@ from black_bloc.logkinds import FEATURES
 
 TOP_LEVEL_MAX = 100
 CHILDREN_MAX = 25
-TOP_LEVEL_NOW = 29
+TOP_LEVEL_NOW = 30
 RETIRED_GROUPS = (
     "chat",
     "mod",
@@ -29,6 +29,7 @@ STAFF_COMMANDS = {
     "kick",
     "mod",
     "modmail",
+    "posts",
     "purge",
     "reply",
     "rolemenu",
@@ -232,7 +233,7 @@ async def test_every_features_logs_is_a_panel_button_and_no_group_is_left_to_hol
 
 
 async def test_the_command_tree_stays_inside_discords_limits(settings):
-    """29 top-level slots and ZERO groups — the panels program's finish line, measured."""
+    """30 top-level slots and ZERO groups — the panels program's finish line, measured."""
     bot = BlackBlocBot(settings)
     for name in COGS:
         await bot.load_extension(name)

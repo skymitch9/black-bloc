@@ -6510,3 +6510,75 @@ as v106 `6c10b9d`, keyed by LINE against `1d090e5` since 2026-09-11)
 | `site/public/assets/ui.js` `settingRow` → `paint` | An empty text box reads back `null` while the stored value is `""` (`chat_memory_model`'s default), so `same()` said the row had changed on every load and the save sent `null`, which the validator refuses in words — every save from the page reported "1 refused" (found by the capture session, 2026-09-16). A blank read against a blank stored value is now not dirty. |
 | `ui.js` `keepUnlisted` (used by `channelSelect` / `roleSelect`) | The worse twin: a stored channel or role id that the picker's list does not carry (deleted from the server, or a cold cache) read back as `null`, counted as dirty, and the next **Save Changes** would have CLEARED it — measured on the mock, whose `chat_visibility_role_id` names a role its fixture list lacks. Such an id is now kept as a selected option labelled *a role the server no longer has · id*, so it reads back as itself; a person can still pick "not set" on purpose. |
 
+
+# Posts (branch `posts`, off `main` at `193dac9`)
+
+**`black_bloc/posts.py` — `render_message`.** The design (§C2) says it answers
+`{"content": body}` or `{"embed": Embed}`. It answers BOTH keys every time instead, with the
+other one `None`. The reason is the edit path: a post whose style a staffer changes from
+`embed` back to `plain` is `message.edit(**payload)`, and an edit that does not pass
+`embed=None` leaves the old embed sitting under the new content. One function, one payload,
+both doors.
+
+**`black_bloc/posts.py` — `refused_title`.** Titles are REFUSED over 256, never clipped.
+The first draft clamped with `clamp(title, TITLE_MAX)` and then checked the cap, which made the
+check dead code and silently shortened what a staffer typed — the "validators silently
+stripping instead of rejecting" bug the verification-culture rule names. The embed wording
+offers the way out (set the style back to plain); the plain wording does not, because there is
+no bigger title.
+
+**`black_bloc/posts.py` — `body_hash` / `changes_pending`.** The pill compares a hash of
+(style, title, body) as the row reads NOW against the hash taken at the moment the message was
+sent. It is deliberately not a timestamp: an edit that puts a word back where it was leaves the
+row identical to what Discord holds, and the pill goes away, which is the truth.
+
+**`black_bloc/posts.py` — `allowed_mentions_for`.** Checklist 11. Nothing pings unless the
+body names a role AND either that role is `mentionable` or the actor holds Mention Everyone. It
+reads the ACTOR's permissions rather than the bot's, because the attacker-controlled text here
+is the post body and the person who typed it is the one being held to it.
+
+**`black_bloc/posts.py` — `_pin`.** Checklist 12. The row and its `post.posted` line are
+written before the pin is tried, so `post.pin_failed` can never undo a post that did happen.
+`reconcile_posts` re-pins one a person unpinned; an unpinned post (`pin = 0`) is left alone.
+
+**`black_bloc/posts.py` — `note`.** Every kind this module writes goes through one helper
+that builds the kind with `logkinds.kind_via` and records `details["via"]`, so the API routes
+never `note()` on top (checklist 34) and `tests/test_logkinds.py`'s AST guards stay green. The
+two kinds that do NOT go through it — `post.mode` and `post.seed_channel_unknown` — are
+written as STRING LITERALS at their single call sites, which is what keeps them out of
+`KNOWN_DYNAMIC`.
+
+**`black_bloc/cogs/community/posts.py` — `_reconcile_loop`.** The first tick is where the
+seed happens, not `cog_load`: at `cog_load` the gateway has handed over no guild, so
+`bot.guilds` is empty and `seed_posts` has nothing to resolve `#welcome` against. Same shape as
+`cogs/core.py`'s `guides_loop`. The loop also carries the five-minute reconcile (checklist 25).
+
+**`black_bloc/cogs/community/posts.py` — `ModeButton`.** `/posts` is hidden when
+`posts_mode` is off, so the panel's own button can only ever turn it OFF in practice; turning it
+back on is `/settings` ▸ **Turn a feature back on…** or the Posts page's own switch. That is
+the same shape every other `HIDDEN_WHEN_OFF` feature has.
+
+**`site/public/assets/discordmd.js` — the order of the passes.** `escapeHtml` runs FIRST and
+everything after it works on escaped text. That is why the mention patterns read
+`&lt;#(\d+)&gt;` rather than `<#(\d+)>`: by the time they run, the angle brackets are already
+entities, and there is no path by which raw markup reaches the output. Anything already rendered
+(code, mentions, links) is parked behind a `\u0000N\u0000` marker so the span pass cannot reach
+inside it and turn a URL's underscores into italics.
+
+**`site/public/assets/discordmd.js` — links.** A masked link renders as `<span class="md-link"
+title="…">` and never an anchor. A preview of text somebody else typed is not a place to click:
+an anchor here would be a phishing surface on a staff-only page, and the `title` is enough to
+read the address. §D.3 is the one line that flips it back.
+
+**`site/public/assets/discordmd.js` — embed style.** `renderDiscord(..., {style: 'embed'})`
+does not draw `#` headers, matching what Discord does with an embed description; `-#` subtext
+still renders, because that one does. `renderPreview` adds the embed box around it.
+
+**`site/public/assets/page-posts.js` — `refs()`.** The three `/api/ref/*` lists are read once
+per page load and handed to every render, rather than re-read per keystroke. The preview is
+re-rendered on a 60 ms timer so a fast typist does not run the renderer per character.
+
+**`site/mock/discordmd.test.mjs`.** The renderer is the only part of this site with no Python
+half, so its fixtures are a Node file rather than a pytest one. It reads
+`black_bloc/posts_seed.json` directly, which is what makes "the seed still renders its header
+and its three quotes" a real assertion rather than a copy of the text.

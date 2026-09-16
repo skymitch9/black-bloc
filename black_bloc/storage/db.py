@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 35
+SCHEMA_VERSION = 36
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -763,6 +763,28 @@ CREATE TABLE IF NOT EXISTS guide_releases (
     shipped_at       TEXT NOT NULL,
     changed_features TEXT NOT NULL DEFAULT '[]'
 );
+
+CREATE TABLE IF NOT EXISTS posts (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id    INTEGER NOT NULL,
+    slug        TEXT    NOT NULL,
+    title       TEXT    NOT NULL,
+    channel_id  INTEGER,
+    body        TEXT    NOT NULL DEFAULT '',
+    style       TEXT    NOT NULL DEFAULT 'plain'
+                CHECK (style IN ('plain', 'embed')),
+    pin         INTEGER NOT NULL DEFAULT 1,
+    message_id  INTEGER,
+    posted_hash TEXT,
+    posted_at   TEXT,
+    posted_by   INTEGER,
+    seed_hash   TEXT,
+    updated_at  TEXT    NOT NULL,
+    updated_by  INTEGER,
+    UNIQUE (guild_id, slug)
+);
+
+CREATE INDEX IF NOT EXISTS posts_by_guild ON posts(guild_id, id);
 """
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (

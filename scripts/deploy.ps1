@@ -55,6 +55,8 @@ if ($env:BLACKBLOC_SKIP_GATE -eq "1") {
     $contract = $LASTEXITCODE
     try { Stop-Process -Id $mock.Id -Force -Confirm:$false -ErrorAction Stop } catch {}
     if ($contract -ne 0) { Write-Error "REFUSED: check.mjs is not green." }
+    node site/mock/discordmd.test.mjs
+    if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: the preview renderer's fixtures are not green." }
 }
 
 cmd /c "git push origin main 2>&1"

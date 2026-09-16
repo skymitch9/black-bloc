@@ -23,6 +23,7 @@ export const TABS = [
   { tab: 'requests', href: '/requests.html', label: 'Requests' },
   { tab: 'health', href: '/health.html', label: 'Health' },
   { tab: 'guides', href: '/guides.html', label: 'Guides' },
+  { tab: 'posts', href: '/posts.html', label: 'Posts' },
 ];
 
 export const FEATURE_TABS = {
@@ -39,6 +40,7 @@ export const FEATURE_TABS = {
   chat: 'chat',
   request: 'requests',
   guides: 'guides',
+  posts: 'posts',
 };
 
 export function tabHref(tab) {

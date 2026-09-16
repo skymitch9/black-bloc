@@ -271,6 +271,36 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.role_menu.unpost_failed",
         "web.role_menu.would_unpost",
     ),
+    "black_bloc/posts.py::kind": (
+        "post.created",
+        "post.deleted",
+        "post.message_gone",
+        "post.pin_failed",
+        "post.pinned",
+        "post.post_failed",
+        "post.posted",
+        "post.reset",
+        "post.saved",
+        "post.taken_down",
+        "post.updated",
+        "post.would_post",
+        "post.would_take_down",
+        # The dashboard's Posts page calls the same moves with a website via, so every kind
+        # the panel writes arrives under a `web.` head as well.
+        "web.post.created",
+        "web.post.deleted",
+        "web.post.message_gone",
+        "web.post.pin_failed",
+        "web.post.pinned",
+        "web.post.post_failed",
+        "web.post.posted",
+        "web.post.reset",
+        "web.post.saved",
+        "web.post.taken_down",
+        "web.post.updated",
+        "web.post.would_post",
+        "web.post.would_take_down",
+    ),
 }
 
 
@@ -809,8 +839,8 @@ def test_an_unknown_level_is_todays_behaviour():
 
 
 def test_every_feature_has_one_settings_key():
-    assert len(FEATURES) == 19
-    assert len(set(FEATURES)) == 19
+    assert len(FEATURES) == 20
+    assert len(set(FEATURES)) == 20
     assert log_level_key("golive") == "golive_log_level"
     assert LEVELS == (OFF, IMPORTANT_ONLY, ALL)
 

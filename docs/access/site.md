@@ -208,16 +208,16 @@ In order, because each step's failure looks different:
 
 ## The pages
 
-**Eighteen** HTML files in `site/public/`, served by the same app at `/`
-(re-counted 2026-09-16 — **17 → 18**, `guides.html` added by the Guides G2 build on
-branch `guides-pages`; the eighteen names below match `site/mock/contract.json`'s
-`pages` list exactly. It said "Thirteen" until 2026-08-31, which predates Polls, Chat,
-Requests and Members):
+**Nineteen** HTML files in `site/public/`, served by the same app at `/`
+(re-counted 2026-09-16 — **18 → 19**, `posts.html` added by the Posts build on branch
+`posts`; `guides.html` was **17 → 18** on branch `guides-pages` before it. The nineteen
+names below match `site/mock/contract.json`'s `pages` list exactly. It said "Thirteen"
+until 2026-08-31, which predates Polls, Chat, Requests and Members):
 `index.html` (Overview), `moderation.html`, `automod.html`, `modmail.html`,
 `events.html`, `golive.html`, `rolemenus.html`, `birthdays.html`,
 `tempvoice.html`, `honeypot.html`, `polls.html`, `chat.html`, `requests.html`,
 `members.html`, `settings.html`, `audit.html`,
-`health.html`, `guides.html`. `site/README.md` says what each one does.
+`health.html`, `guides.html`, `posts.html`. `site/README.md` says what each one does.
 
 ⚠️ **`guides.html` is the SECOND page a signed-in member who is not staff may open**
 (`requests.html` was the first). It is one page for two views — the hub, and a guide at
@@ -227,6 +227,15 @@ for the writes. `POST /api/guides/{slug}/confirmed` is the one guide write a mem
 `GET /api/guides/media/{id}` answers a picture rather than JSON and keeps its own
 `Cache-Control: private, max-age=86400` — the one named exception to the site's
 `no-store` middleware (`api/server.py:KEEPS_ITS_OWN_CACHE`).
+
+⚠️ **`posts.html` is staff-only and is the only page that draws text nobody here
+wrote.** Its preview is `assets/discordmd.js`, which escapes HTML **first** and works on the
+escaped text from there — the reason its mention patterns read `&lt;#(\d+)&gt;`. It never
+emits an anchor: a masked link renders as link-coloured text with the address in a `title`.
+The renderer has no Python half, so its fixtures are `site/mock/discordmd.test.mjs`, run by
+`scripts/deploy.ps1` and by CI beside `check.mjs`; an injection fixture and Carl's own seed
+text are both in it. Its routes are under `/api/posts`, staff-gated end to end, and
+**Post it** answers the guard's existing **409** while `TEST_MODE` is on.
 
 ⚠️ **Every page links `/favicon.ico`** (added 2026-08-27 — the log showed a
 `GET /favicon.ico 404` on every single page load). The file is a 32×32 ICO
@@ -312,7 +321,7 @@ MOCK_TEST_MODE=0 MOCK_PORT=8788 node site/mock/server.mjs &
 MOCK_PORT=8788 node site/mock/check.mjs
 ```
 
-It fetches all **18** pages and every route (**160** as of 2026-09-16) and asserts the keys in
+It fetches all **19** pages and every route (**168** as of 2026-09-16) and asserts the keys in
 `site/mock/contract.json`. ⚠️ **`site/mock/contract.json` is the one home for
 those shapes**, and `tests/api/test_contract.py` asserts the **real** routers
 against the same file — so the mock cannot teach a shape the bot does not

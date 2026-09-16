@@ -27,6 +27,7 @@
       "logs_count": 1,
       "poll_archive_days": 1,
       "poll_default_hours": 1,
+      "posts_panel_minutes": 1,
       "raidtrain_poll_minutes": 1,
       "raidtrain_reminder_minutes": 5,
       "raidtrain_slot_minutes": 15,
@@ -57,6 +58,7 @@
       "poll_default_hours": 768,
       "poll_draft_days": 365,
       "poll_reminder_minutes": 10080,
+      "posts_panel_minutes": 1440,
       "raidtrain_max_slots_per_member": 24,
       "raidtrain_poll_minutes": 60,
       "raidtrain_reminder_minutes": 1440,
@@ -4126,6 +4128,417 @@
         "release",
         "message"
       ]
+    },
+    {
+      "_": "Posts (§C4). {post_slug} is the post Black Bloc SHIPS with — both halves seed Carl's welcome text — so it is the one /reset takes and the one DELETE refuses; {scratch_post_slug} is one staff wrote here, which is the other way round, and {posted_post_slug} already has a message in Discord so /takedown has something to remove. Every entry is staff-only: there is no member view of this page at all.",
+      "method": "GET",
+      "path": "/api/posts",
+      "read_by": [
+        "page-posts.js list"
+      ],
+      "shape": "object",
+      "keys": [
+        "posts",
+        "mode",
+        "may_edit",
+        "styles",
+        "guard",
+        "notes",
+        "checked_at"
+      ],
+      "nested": {
+        "guard": [
+          "test_mode",
+          "test_channel",
+          "said"
+        ]
+      },
+      "rows": {
+        "posts": [
+          "id",
+          "slug",
+          "title",
+          "body",
+          "style",
+          "cap",
+          "title_cap",
+          "pin",
+          "channel_id",
+          "channel_name",
+          "posted",
+          "pinned",
+          "changes_pending",
+          "status",
+          "move",
+          "message_id",
+          "posted_at",
+          "posted_by",
+          "posted_by_name",
+          "seeded",
+          "updated_at",
+          "updated_by",
+          "updated_by_name"
+        ],
+        "styles": [
+          "style",
+          "cap",
+          "label"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/posts/{post_slug}",
+      "read_by": [
+        "page-posts.js editor"
+      ],
+      "shape": "object",
+      "keys": [
+        "post",
+        "styles",
+        "guard",
+        "notes",
+        "read_at"
+      ],
+      "nested": {
+        "post": [
+          "id",
+          "slug",
+          "title",
+          "body",
+          "style",
+          "cap",
+          "title_cap",
+          "pin",
+          "channel_id",
+          "channel_name",
+          "posted",
+          "pinned",
+          "changes_pending",
+          "status",
+          "move",
+          "message_id",
+          "posted_at",
+          "posted_by",
+          "posted_by_name",
+          "seeded",
+          "updated_at",
+          "updated_by",
+          "updated_by_name"
+        ],
+        "guard": [
+          "test_mode",
+          "test_channel",
+          "said"
+        ]
+      },
+      "rows": {
+        "styles": [
+          "style",
+          "cap",
+          "label"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/posts",
+      "body": {
+        "title": "How the contract runs"
+      },
+      "read_by": [
+        "page-posts.js New post"
+      ],
+      "shape": "object",
+      "keys": [
+        "post",
+        "styles",
+        "guard",
+        "notes",
+        "read_at",
+        "message"
+      ],
+      "nested": {
+        "post": [
+          "id",
+          "slug",
+          "title",
+          "body",
+          "style",
+          "cap",
+          "title_cap",
+          "pin",
+          "channel_id",
+          "channel_name",
+          "posted",
+          "pinned",
+          "changes_pending",
+          "status",
+          "move",
+          "message_id",
+          "posted_at",
+          "posted_by",
+          "posted_by_name",
+          "seeded",
+          "updated_at",
+          "updated_by",
+          "updated_by_name"
+        ],
+        "guard": [
+          "test_mode",
+          "test_channel",
+          "said"
+        ]
+      },
+      "rows": {
+        "styles": [
+          "style",
+          "cap",
+          "label"
+        ]
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/posts/{post_slug}",
+      "body": {
+        "title": "Welcome and rules",
+        "body": "Welcome to Black in a Flash.",
+        "style": "plain",
+        "pin": true,
+        "channel_id": "{test_channel_id}"
+      },
+      "read_by": [
+        "page-posts.js save bar"
+      ],
+      "shape": "object",
+      "keys": [
+        "post",
+        "styles",
+        "guard",
+        "notes",
+        "read_at",
+        "message"
+      ],
+      "nested": {
+        "post": [
+          "id",
+          "slug",
+          "title",
+          "body",
+          "style",
+          "cap",
+          "title_cap",
+          "pin",
+          "channel_id",
+          "channel_name",
+          "posted",
+          "pinned",
+          "changes_pending",
+          "status",
+          "move",
+          "message_id",
+          "posted_at",
+          "posted_by",
+          "posted_by_name",
+          "seeded",
+          "updated_at",
+          "updated_by",
+          "updated_by_name"
+        ],
+        "guard": [
+          "test_mode",
+          "test_channel",
+          "said"
+        ]
+      },
+      "rows": {
+        "styles": [
+          "style",
+          "cap",
+          "label"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/posts/{post_slug}/publish",
+      "body": {},
+      "read_by": [
+        "page-posts.js Post it"
+      ],
+      "shape": "object",
+      "keys": [
+        "post",
+        "styles",
+        "guard",
+        "notes",
+        "read_at",
+        "message"
+      ],
+      "nested": {
+        "post": [
+          "id",
+          "slug",
+          "title",
+          "body",
+          "style",
+          "cap",
+          "title_cap",
+          "pin",
+          "channel_id",
+          "channel_name",
+          "posted",
+          "pinned",
+          "changes_pending",
+          "status",
+          "move",
+          "message_id",
+          "posted_at",
+          "posted_by",
+          "posted_by_name",
+          "seeded",
+          "updated_at",
+          "updated_by",
+          "updated_by_name"
+        ],
+        "guard": [
+          "test_mode",
+          "test_channel",
+          "said"
+        ]
+      },
+      "rows": {
+        "styles": [
+          "style",
+          "cap",
+          "label"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/posts/{posted_post_slug}/takedown",
+      "body": {},
+      "read_by": [
+        "page-posts.js Take it down"
+      ],
+      "shape": "object",
+      "keys": [
+        "post",
+        "styles",
+        "guard",
+        "notes",
+        "read_at",
+        "message"
+      ],
+      "nested": {
+        "post": [
+          "id",
+          "slug",
+          "title",
+          "body",
+          "style",
+          "cap",
+          "title_cap",
+          "pin",
+          "channel_id",
+          "channel_name",
+          "posted",
+          "pinned",
+          "changes_pending",
+          "status",
+          "move",
+          "message_id",
+          "posted_at",
+          "posted_by",
+          "posted_by_name",
+          "seeded",
+          "updated_at",
+          "updated_by",
+          "updated_by_name"
+        ],
+        "guard": [
+          "test_mode",
+          "test_channel",
+          "said"
+        ]
+      },
+      "rows": {
+        "styles": [
+          "style",
+          "cap",
+          "label"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/posts/{post_slug}/reset",
+      "body": {},
+      "read_by": [
+        "page-posts.js Put the original back"
+      ],
+      "shape": "object",
+      "keys": [
+        "post",
+        "styles",
+        "guard",
+        "notes",
+        "read_at",
+        "message"
+      ],
+      "nested": {
+        "post": [
+          "id",
+          "slug",
+          "title",
+          "body",
+          "style",
+          "cap",
+          "title_cap",
+          "pin",
+          "channel_id",
+          "channel_name",
+          "posted",
+          "pinned",
+          "changes_pending",
+          "status",
+          "move",
+          "message_id",
+          "posted_at",
+          "posted_by",
+          "posted_by_name",
+          "seeded",
+          "updated_at",
+          "updated_by",
+          "updated_by_name"
+        ],
+        "guard": [
+          "test_mode",
+          "test_channel",
+          "said"
+        ]
+      },
+      "rows": {
+        "styles": [
+          "style",
+          "cap",
+          "label"
+        ]
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/posts/{scratch_post_slug}",
+      "read_by": [
+        "page-posts.js Delete"
+      ],
+      "shape": "object",
+      "keys": [
+        "deleted",
+        "message"
+      ]
     }
   ],
   "pages": [
@@ -4146,7 +4559,8 @@
     "/polls.html",
     "/chat.html",
     "/requests.html",
-    "/guides.html"
+    "/guides.html",
+    "/posts.html"
   ],
   "action_kinds": [
     "web.operator.read",
@@ -4272,6 +4686,19 @@
     "web.guide.media_replaced",
     "web.guide.published",
     "web.guide.reset",
-    "web.guide.unpublished"
+    "web.guide.unpublished",
+    "web.post.created",
+    "web.post.deleted",
+    "web.post.message_gone",
+    "web.post.pin_failed",
+    "web.post.pinned",
+    "web.post.post_failed",
+    "web.post.posted",
+    "web.post.reset",
+    "web.post.saved",
+    "web.post.taken_down",
+    "web.post.updated",
+    "web.post.would_post",
+    "web.post.would_take_down"
   ]
 }

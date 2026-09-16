@@ -74,6 +74,12 @@ const IDS = {
   // is the other way round.
   guide_slug: 'golive-announce',
   scratch_guide_slug: 'house-rules',
+  // Posts (§C4): welcome is the one Black Bloc SHIPS with, so /reset takes it and DELETE
+  // refuses it; opening-hours already has a message in the test channel, which is the only
+  // channel the guard lets a takedown reach; scratch-post is staff's own and unposted.
+  post_slug: 'welcome',
+  posted_post_slug: 'opening-hours',
+  scratch_post_slug: 'scratch-post',
 };
 
 const failures = [];
@@ -223,6 +229,9 @@ const GUARDED = [
   ['POST', '/api/modmail/tickets/{ticket_id}/close', {}],
   // The body is NOT run through fill(), so this one carries the id itself.
   ['POST', '/api/applications/forms/{application_form_id}/panel', { channel_id: IDS.test_channel_id }],
+  // §C9: the seed post points at #welcome, which is not the test channel, so Post it under
+  // the guard writes post.would_post and sends nothing.
+  ['POST', '/api/posts/{post_slug}/publish', {}],
 ];
 const UNGUARDED = [
   // A room action is place-gated (tempvoice.py:may_act_in), not blanket-refused: a room
@@ -382,6 +391,15 @@ async function checkActionKinds() {
   await post(`/api/applications/${IDS.application_id}/decide`, { status: 'denied', reason: 'contract check' });
   await post('/api/applications/4/decide', { status: 'approved' });
   await post(`/api/applications/${IDS.listed_application_id}/remove`, { reason: 'contract check' });
+  // The nine web.post.* kinds. Publishing twice off one row is the whole point of the
+  // feature — the second press is an edit, not a second copy — so both spellings are left.
+  await post('/api/posts', { title: 'Contract post' });
+  await send('PUT', `/api/posts/${IDS.post_slug}`, { title: 'Welcome and rules', body: 'A contract line.', channel_id: IDS.test_channel_id });
+  await post(`/api/posts/${IDS.post_slug}/publish`, {});
+  await post(`/api/posts/${IDS.post_slug}/publish`, {});
+  await post(`/api/posts/${IDS.post_slug}/takedown`, {});
+  await post(`/api/posts/${IDS.post_slug}/reset`, {});
+  await send('DELETE', `/api/posts/${IDS.scratch_post_slug}`, undefined);
   const response = await fetch(`${BASE}/api/actions?limit=200`, { headers: { cookie: 'mock_as=staff' } });
   const payload = await response.json();
   const known = new Set(contract.action_kinds);

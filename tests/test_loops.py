@@ -11,7 +11,7 @@ from black_bloc.loops import wait_ready
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "black_bloc"
-BEFORE_LOOPS = 15
+BEFORE_LOOPS = 16
 
 
 class FakeReady:

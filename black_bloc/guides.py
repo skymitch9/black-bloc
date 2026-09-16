@@ -280,6 +280,15 @@ FEATURE_PATHS: dict[str, tuple[str, ...]] = {
         "black_bloc/api/tools/applications.py",
     ),
     "selftest": ("black_bloc/selftest.py", "black_bloc/selftest_panels.py"),
+    "posts": (
+        "black_bloc/posts.py",
+        "black_bloc/posts_seed.json",
+        "black_bloc/cogs/community/posts.py",
+        "black_bloc/api/tools/posts.py",
+        "site/public/posts.html",
+        "site/public/assets/page-posts.js",
+        "site/public/assets/discordmd.js",
+    ),
     "guides": (
         "black_bloc/guides.py",
         "black_bloc/guides_seed.json",

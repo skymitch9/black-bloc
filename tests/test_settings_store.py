@@ -1009,7 +1009,7 @@ def test_the_ping_role_mode_is_read_as_a_feature_switch_on_the_health_page():
 
 async def test_every_feature_has_a_log_level_key_defaulting_to_important(store):
     keys = [f"{feature}_log_level" for feature in FEATURES]
-    assert len(keys) == 19
+    assert len(keys) == 20
     assert "request_log_level" in keys
     assert "pings_log_level" in keys
     assert "raidtrain_log_level" in keys
@@ -1309,7 +1309,7 @@ async def test_both_new_settings_keys_file_under_core_not_a_group_of_their_own(s
     """
     assert namespace_of("settings_panel_minutes") == "core"
     assert namespace_of("settings_core_keys_admin_only") == "core"
-    assert len({namespace_of(key) for key in KEY_TYPES}) == 24
+    assert len({namespace_of(key) for key in KEY_TYPES}) == 25
 
 
 async def test_the_automod_panel_stays_up_ten_minutes_by_default(store):

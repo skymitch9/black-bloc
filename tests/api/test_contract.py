@@ -10,7 +10,7 @@ import pytest
 import pytest_asyncio
 from discord.ext import tasks
 
-from black_bloc import applications, guides, knowledge, pings
+from black_bloc import applications, guides, knowledge, pings, posts
 from black_bloc import rolegrants as grants
 from black_bloc.api.auth import SESSION_COOKIE, SESSION_TTL_SECONDS, sign_session
 from black_bloc.api.settings_api import grouped
@@ -540,6 +540,37 @@ async def seed_world(client, web, guild, wf) -> dict:
         scratch,
         [{"do_text": "Press **Edit this guide**.", "expect_text": "Every line becomes a box."}],
     )
+    # Posts (§C4): the one Black Bloc ships with, pointed at a channel this guild HAS so the
+    # publish entry reaches it; one already posted so the takedown entry has something to
+    # remove; and one staff wrote here, which is the only kind DELETE takes.
+    await posts.seed_posts(web, guild)
+    welcome = await posts.get_post(db, guild_id, "welcome")
+    await posts.set_post_fields(db, int(welcome["id"]), channel_id=wf.TEST_CHANNEL_ID)
+    posted_id = await posts.create_post(
+        db,
+        guild_id,
+        slug="opening-hours",
+        title="When staff are around",
+        body="\n".join(
+            ["**Staff hours**", "> Somebody is usually around between 6pm and 11pm."]
+        ),
+        channel_id=wf.TEST_CHANNEL_ID,
+        style=posts.EMBED,
+        pin=False,
+        by=7,
+    )
+    await posts.publish_post(
+        web, guild, await posts.get_post_by_id(db, posted_id), guild.get_member(7)
+    )
+    await posts.set_post_fields(db, posted_id, body="Edited since it was posted.")
+    await posts.create_post(
+        db,
+        guild_id,
+        slug="scratch-post",
+        title="A post staff wrote here",
+        body="",
+        by=7,
+    )
     golive_guide = await guides.get_guide(db, guild_id, "golive-announce")
     first_step = (await guides.steps_of(db, golive_guide["id"]))[0]
     shot = await guides.save_media(
@@ -610,6 +641,9 @@ async def seed_world(client, web, guild, wf) -> dict:
         "selftest_run_id": str(selftest_run_id),
         "guide_slug": "golive-announce",
         "scratch_guide_slug": "house-rules",
+        "post_slug": "welcome",
+        "posted_post_slug": "opening-hours",
+        "scratch_post_slug": "scratch-post",
     }
 
 

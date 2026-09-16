@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 35
+        assert SCHEMA_VERSION == 36
         cur = await db.conn.execute("PRAGMA table_info(requests)")
         assert {
             "built",
@@ -1477,5 +1477,107 @@ async def test_a_deleted_guide_takes_its_steps_faults_facts_and_pictures_with_it
         for table in ("guide_steps", "guide_faults", "guide_facts", "guide_media"):
             cur = await db.conn.execute(f"SELECT COUNT(*) AS n FROM {table}")
             assert (await cur.fetchone())["n"] == 0, table
+    finally:
+        await db.close()
+
+
+async def a_schema_35_file(path):
+    """What the code at `main` leaves behind: everything but the posts table."""
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("DROP INDEX IF EXISTS posts_by_guild")
+    await db.conn.execute("DROP TABLE IF EXISTS posts")
+    await db.conn.execute(
+        "INSERT INTO settings(guild_id, key, value, updated_at) VALUES (1, 'guides_mode', "
+        "'\"on\"', '2026-09-16T00:00:00+00:00')"
+    )
+    await db.conn.execute(
+        "INSERT INTO guides(guild_id, slug, title, goal, feature, updated_at) "
+        "VALUES (1, 'kept', 'Kept', 'Nothing here moves.', 'core', '2026-09-16T00:00:00+00:00')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '35')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+
+async def test_a_schema_35_file_gains_the_posts_table_and_keeps_its_rows(tmp_path):
+    """Schema 36 is additive: the file that ships before posts gets the table and its index,
+    and nothing already in it is rewritten."""
+    path = tmp_path / "old35.sqlite3"
+    await a_schema_35_file(path)
+
+    db = Database(path)
+    await db.connect()
+    try:
+        cur = await db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        assert "posts" in {row["name"] for row in await cur.fetchall()}
+        cur = await db.conn.execute("SELECT name FROM sqlite_master WHERE type='index'")
+        assert "posts_by_guild" in {row["name"] for row in await cur.fetchall()}
+        cur = await db.conn.execute("SELECT key, value FROM settings")
+        assert [tuple(row) for row in await cur.fetchall()] == [("guides_mode", '"on"')]
+        cur = await db.conn.execute("SELECT slug FROM guides")
+        assert [row["slug"] for row in await cur.fetchall()] == ["kept"]
+        cur = await db.conn.execute(
+            "SELECT value FROM schema_meta WHERE key = 'schema_version'"
+        )
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+        cur = await db.conn.execute("SELECT COUNT(*) AS n FROM posts")
+        assert (await cur.fetchone())["n"] == 0
+    finally:
+        await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("PRAGMA table_info(posts)")
+        assert {row["name"] for row in await cur.fetchall()} == {
+            "id",
+            "guild_id",
+            "slug",
+            "title",
+            "channel_id",
+            "body",
+            "style",
+            "pin",
+            "message_id",
+            "posted_hash",
+            "posted_at",
+            "posted_by",
+            "seed_hash",
+            "updated_at",
+            "updated_by",
+        }
+    finally:
+        await again.close()
+
+
+async def test_two_posts_cannot_share_a_slug_and_only_the_two_styles_are_storable(tmp_path):
+    db = Database(tmp_path / "posts.sqlite3")
+    await db.connect()
+    try:
+        await db.conn.execute(
+            "INSERT INTO posts(guild_id, slug, title, body, style, updated_at) "
+            "VALUES (1, 'welcome', 'Welcome', '', 'plain', 'now')"
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            await db.conn.execute(
+                "INSERT INTO posts(guild_id, slug, title, body, style, updated_at) "
+                "VALUES (1, 'welcome', 'Again', '', 'plain', 'now')"
+            )
+        # The same slug in another server is a different post, and that is allowed.
+        await db.conn.execute(
+            "INSERT INTO posts(guild_id, slug, title, body, style, updated_at) "
+            "VALUES (2, 'welcome', 'Welcome', '', 'embed', 'now')"
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            await db.conn.execute(
+                "INSERT INTO posts(guild_id, slug, title, body, style, updated_at) "
+                "VALUES (3, 'welcome', 'Welcome', '', 'markdown', 'now')"
+            )
+        cur = await db.conn.execute("SELECT pin, message_id FROM posts WHERE guild_id = 1")
+        row = await cur.fetchone()
+        assert row["pin"] == 1 and row["message_id"] is None
     finally:
         await db.close()
