@@ -8,14 +8,14 @@
 > `site/public/assets/page-guides.js` (**Replace screenshot…**), `scripts/deploy.ps1` and
 > `scripts/release_json.py` (`release.json`), `docs/access/operator-read.md`
 > (`scripts/read.ps1`).
-> 🔴 ⚠️ **STILL NEVER DRILLED END TO END.** Two partial drills have now run (both
-> 2026-09-16, see the drill log at the foot) and **nothing has ever been uploaded to a live
-> guide** — the write half of this runbook is still written from the code, not from having
-> done it. What IS now measured: `/api/guides/stale` against the live app, Discord signed in
-> and the test channel rendering, and the **capture** mechanics (the `computer` tool's `zoom`
-> with `save_to_disk`, which replaces the Pillow crop — §3). What is still unmeasured: the
-> self-test trigger, the purge-window change, **every upload**, and every refusal sentence in
-> the table in §4. **The next session to follow it owns correcting the rest.**
+> ✅ **DRILLED END TO END, 2026-09-16 09:19–10:03 Phoenix** (third drill; the first two that
+> morning were partial — the drill log at the foot has all three). The **first population**
+> ran: the purge window was borrowed, self-test **run #28** posted **24 cards**, **16 root
+> cards** were shot and **16 guides** got a picture (`media/1`–`media/16`), the window was put
+> back, and the pictures were seen rendering on two guides. Every step below except §5 (mocks)
+> has now been done at least once, and the page's own refusal sentences in §4's table are
+> **still** unreproduced — nothing was refused, so that table remains written from the code.
+> 🔴 **One guide has NO picture on purpose: `birthday-set`** — see §2's isolation rule.
 > **First drill, 2026-09-16 09:1x Phoenix (partial — stopped at step 2, nothing shot, nothing uploaded).** Found: (1) step 1 answered `count: 0` on the live app right after v111 — there is nothing STALE, because no guide has a picture yet; the runbook says stop there, but the FIRST population of pictures is a different job it does not describe. (2) The self-test's cards are purged **one minute** after they post (`selftest_purge_minutes`, default 1 — the owner's choice, "mainly for you and not me"), so by the time a session reads the to-do list and opens Discord the cards are gone; a capture needs a self-test triggered from the dashboard's Health page and the shots taken inside that minute, or the key raised for the session and put back. (3) The owner's Chrome IS signed in to Discord web and `#mute-me-bot-test-spam` renders — that half works. (4) ⚠️ Step 2's "screenshot the tab" lands on disk only with the `computer` tool's `save_to_disk: true`, which returns the path; a plain screenshot is an image in the transcript, not a file, and `$env:TEMP	ab.png` does not exist by itself. (5) Pillow venv, crop and upload were NOT reached. The question of the purge window is the owner's (`TODO.md`).
 > **Second drill, 2026-09-16 09:19–09:3x Phoenix (partial — stopped at step 2 again, nothing
 > uploaded).** Dispatched to do the FIRST POPULATION with the owner at the machine. Blocked on
@@ -116,6 +116,49 @@ message is days old. So the session posts them itself, on the dashboard:
 Then open the owner's Discord tab at
 `https://discord.com/channels/1073710702776299640/1542316174472380517`.
 
+⚠️ **Discord's message list will not paginate for a script.** Two traps, both measured:
+
+- **Setting `scrollTop` loads nothing.** Discord paginates on real wheel events. Use the
+  `computer` tool's `scroll` action over the message area; `scrollTop = 0` sits at the top of
+  what is already loaded and never fetches more. Measured: stuck at 14 messages until two
+  `scroll up` bursts brought it to 42.
+- **Pick the right scroller.** `document.querySelector('[class*=scroller]')` finds a sidebar.
+  The message scroller is the one that *contains* the messages:
+  `document.querySelector('li[id^="chat-messages"]').closest('[class*="scroller__"]')`.
+- Keep page scripts **short**: a loop of ~20 scroll-and-wait steps blew the 45 s CDP timeout.
+
+### The cards the self-test posts, and which guide each belongs to
+
+⚠️ **The panels are components-v2 containers, not embeds** — half of them have no
+`embedTitle`, so matching on that alone finds about ten of the sixteen. Match on body text
+instead. Measured at run #28 (24 cards, 16 of them root panels):
+
+| Guide slug | Command | Card title | A needle that finds it |
+|---|---|---|---|
+| `golive-announce` | `/golive` | Go-live | `Your Twitch channel` |
+| `pings-follow` | `/pings` | Your pings | `What Black Bloc pings you` |
+| `event-propose` · `event-review` | `/event` | Events | `Propose an event` |
+| `birthday-set` | `/birthday` | Birthdays | `Tell Black Bloc when your birthday` |
+| `voice-room` | `/voice` | Your voice channel | `Your voice channel` |
+| `poll-vote-make` | `/poll` | Polls | `Put something to the room` |
+| `request-file` | `/request` | Requests | `Ask the server` |
+| `chat-memory` | `/memory` | What Black Bloc remembers about you | (the title) |
+| `raidtrain-slot` | `/raidtrain` | Raid trains | `Raid trains are on` |
+| `apply-form` | `/apply` | Applications | `Apply for what this server` |
+| `modmail-ticket` | `/modmail` | The modmail inbox | (the title) |
+| `mod-case` | `/mod` | What Black Bloc has done | (the title) |
+| `automod-arm` | `/automod` | What automod is watching | (the title) |
+| `honeypot-set` | `/honeypot` | The trap that catches spam bots | (the title) |
+| `rolemenu-post` | `/rolemenu` | Role menus | `event-alerts — 1 role(s)` |
+| `feature-modes` | `/settings` | Black Bloc's settings for this server | (the title) |
+
+⚠️ **A select's placeholder is not `innerText`.** `Whose cases?` looks like text on screen but
+is a custom select — matching on it finds nothing. Match on the card's prose.
+
+The other eight cards are announcements and self-test scaffolding (a go-live announcement, a
+birthday wish, a raid-train announcement, `event.approved` / `event.denied` / `event.cancelled`
+log lines, `Black Bloc self-test`), and **no guide uses them**.
+
 - Scroll the card for the feature into view.
 - Read its bounding box with the page-script tool — find the message by its text and take
   `getBoundingClientRect()` of the closest `li[id^="chat-messages"]`:
@@ -157,9 +200,28 @@ to them.
 - The same rule covers the rendered-guide-page screenshot taken for the owner at §6: the
   guide page only.
 
-🔎 **Measured 2026-09-16:** a region taken from a `li`'s full box caught the *next* message's
-author line at its foot — one member's name and server tag. That file was deleted unused.
-This is not a theoretical edge: on a busy channel the neighbour is always there.
+🔎 **Measured 2026-09-16, three separate ways this bit:**
+
+1. A region taken from a `li`'s full box caught the *next* message's author line at its foot —
+   one member's name and server tag. Deleted unused. On a busy channel the neighbour is
+   always there.
+2. ⚠️ **Padding UPWARD is the dangerous direction.** A 6 px pad above the card caught a sliver
+   of the *previous* message's button row on `/settings`. Re-shot with the top edge on the
+   container's own top. **Pad left/right/bottom; never up.**
+3. 🔴 **A card's OWN BODY can carry member data, and that is the case the rule above does not
+   catch by eye-balling the edges.** `/birthday` prints **Next birthdays** — five members'
+   IDs, one resolved display name and five dates. The capture was clean of neighbours and
+   still unpublishable, because a guide picture is served to **every member**. It was deleted
+   and `birthday-set` was left with no picture. **Read the card's text, not just its
+   borders**, and check `/mod`, `/modmail`, `/honeypot`, `/apply` and `/request` the same way
+   — they were all clean this time **only because the server had no open cases, tickets, hits
+   or applications**. On a live server they will not be.
+
+⚠️ **One shot was uploaded WITH a judgement call, and the next session should know:**
+`/golive`'s card ends with `live now — 1 · [BK CEO] The BaF Blue Shell on Twitch`. That is one
+member's name and that they were streaming — inside Black Bloc's own card, and already public
+in `#live-now`. It was uploaded and flagged to the owner rather than withheld. If he would
+rather it were not there, re-shoot `/golive` when nobody is live.
 
 ## 3. Shoot it — `zoom` straight to disk, no Pillow
 
@@ -208,26 +270,82 @@ lands two orders of magnitude inside the 2 MB limit. Shoot the card, not the who
 If a card is taller than the viewport, scroll it fully into view first and re-read the box —
 a region partly off-screen captures the background, not the card.
 
+### The box to use: the union of the card's PAINTED elements
+
+✅ **This is the recipe that produced all 16 shots, and it needs no per-card tuning.** A
+components-v2 panel is a `.container_…` inside the `li`, and the container is full channel
+width (1997 CSS px) while the card paints only ~500 of it. Take the union of the descendants
+that actually paint — the embed box and the buttons — and clamp it inside the `li`:
+
+```js
+const li = [...document.querySelectorAll('li[id^="chat-messages"]')]
+  .find(l => l.innerText.includes(NEEDLE));
+li.scrollIntoView({block: 'center'});            // then wait ~700 ms and re-find it
+const c = li.querySelector('.container_b7e1cb') || li;
+const painted = [...c.querySelectorAll('*')].filter(e => {
+  const s = getComputedStyle(e), r = e.getBoundingClientRect();
+  return r.width && r.height &&
+    (s.backgroundColor !== 'rgba(0, 0, 0, 0)' || s.borderLeftWidth !== '0px');
+});
+// union of their rects → pad 6 px LEFT/RIGHT/BOTTOM ONLY → clamp bottom to li.bottom - 4
+```
+
+⚠️ **Re-find the `li` after scrolling** — the message list is virtualised and the element you
+measured can be replaced. ⚠️ **The class hash (`container_b7e1cb`) is Discord's and will
+change**; fall back to the `li` and re-read the hash from a live card when it does.
+
+Measured outputs, all 16 well inside both limits: **618×285 to 1055×914**, **38–203 KB**.
+
 ## 4. Upload it through the guide's own page
 
 ⚠️ **The editor is the only write path.** There is no back door, no `flyctl ssh` copy, no
 route that takes a file any other way.
 
+🔴 **Move the files first: `file_upload` REFUSES the folder `zoom` saved them in.**
+`%TEMP%\claude-chrome-screenshots-<rand>\` is not a folder the session may upload from —
+*"only files this session is allowed to read can be uploaded"*. Copy them under the repo, into
+**`scripts/scan/shots/`**, which is gitignored (`scripts/scan/` never enters git, per
+`CLAUDE.md`) and is a path the session may read. Name them for the feature while you are
+there; `card-golive.png` beats `screenshot-1789576802368-2.png` sixteen times over.
+
 1. Open `https://blackbloc.heygabi.ai/guides.html#<slug>` in the same browser.
 2. Press **Edit this guide** (staff only; `guides_who_edits` decides who counts).
-3. On the step the picture belongs to, fill **Caption**, **What it is**
-   (`a real screenshot` / `a drawn illustration`), **Where it is from** and
-   **Which release** — the release is the one in `release.json`, e.g. `v111`, and it is
-   what staleness is measured against later.
-4. Press **Replace screenshot…** and pick the file §3 saved (it is in
-   `%TEMP%\claude-chrome-screenshots-<rand>\`, and the `zoom` result printed the full path).
+   ⚠️ **Measure that button every time and then CHECK IT OPENED.** Its x moves with the
+   title's width — measured **1481** on most guides and **1490** on `mod-case` and
+   `feature-modes`, and a 9 px miss is a silent no-op. After the click, assert
+   `document.querySelectorAll('.step-shotedit').length > 0` before doing anything else.
+3. On the step the picture belongs to, fill **Caption** and **Which release** —
+   ✅ **What it is** and **Where it is from** already default to `a real screenshot` and
+   `Discord`, so a capture session touches neither. The release is the one in `release.json`,
+   e.g. `v111`, and it is what staleness is measured against later.
+   ⚠️ **Measure the two text inputs too** — step 1's block sat at frame y **396** on some
+   guides and **372** on others. 🔴 **Then read the values back before uploading.** A miss of
+   ~20 px lands on the **What it is** select, and typing into a focused `<select>` moves it by
+   type-ahead: you get a phantom "1 change pending" and a metadata field silently changed.
+   Measured twice. **If the readback is empty, do not upload** — reload the page (which
+   discards the pending change; nothing has been saved) and start the guide again.
+4. Press **Replace screenshot…** and pick the file.
    ⚠️ **Never CLICK a file input** — that opens a native picker no session can see. **Replace
    screenshot…** is a `<label>` over an `<input type=file>`: find that input with `find` or
    `read_page` and hand its `ref` to the **`file_upload`** tool with the path. The page then
    base64s the bytes into the JSON body itself (`guides-design.md` § *G2 deviations*), so
-   there is no multipart request to build. 🔴 **Untested** — no upload has ever been made.
+   there is no multipart request to build. ✅ Measured 16 times, 38–203 KB each.
+   ⚠️ `find` returns **one ref per step** on a guide with several picture slots — take the one
+   it names as the **first** step.
 5. The sentence beside the button is the answer. A refusal is the bot's own words —
    read it, do what it says, and do not retry blindly.
+6. ✅ **Verify each upload before moving on**, because an upload is the one thing here with no
+   undo: the block gains a **Remove screenshot** button, and
+   `document.querySelector('img[src*="media"]')` answers `/api/guides/media/<id>` with the
+   caption rendered as **`screenshot in Discord · v111 · <your caption>`**. Ids ran 1–16 in
+   upload order.
+
+✅ **No save was ever needed.** The upload lands on its own and the page re-renders; across 16
+uploads the editor never asked for **Save Changes** and the refusal table below never fired.
+⚠️ **`computer left_click` with a `ref` does NOT work on these pages** — it reports success and
+nothing happens. Convert the element's `getBoundingClientRect()` to frame coordinates (§3) and
+click those. The same is true on the Settings page; there, one **Save Changes** click needed a
+`hover` at the point first before it registered.
 
 | If it says | It means | Do this |
 |---|---|---|
@@ -242,6 +360,17 @@ would be lost, which is why the page refuses while the save bar is showing.
 
 Uploading clears `stale` on that step. Re-read `/api/guides/stale` when you think you are
 finished — the count going to zero is the only proof.
+
+⚠️ **On a FIRST population `/api/guides/stale` proves nothing** — it reads `count: 0` before
+you start and `count: 0` when you finish, because a fresh shot is not stale (§1). The proof
+there is the media ids and the rendered captions from step 6.
+
+🔴 **The picture is `loading="lazy"`, so check the PIXELS, not the attribute.** Measured: on a
+freshly opened guide `img.naturalWidth` is **0** and `img.complete` is **false** even after
+`scrollIntoView` and a 3 s wait, while `fetch('/api/guides/media/1')` answers **200
+`image/png`** with the right byte count and a screenshot shows the picture on the page. Wheel
+the page past it and back and the attribute catches up (`1055×902`, `complete: true`). Judging
+it by `naturalWidth` alone would report a working picture as broken.
 
 ## 5. When a capture cannot reach it — draw a mock
 
@@ -366,7 +495,8 @@ if __name__ == "__main__":
 |---|---|---|
 | 2026-09-16 09:1x | §1 against the live app; Discord tab opened | `/api/guides/stale` → `count: 0`. Discord signed in, channel renders, **no cards** (purged). Stopped at §2. Found the `save_to_disk` gap |
 | 2026-09-16 09:2x | §1 again, §2's Discord half, §3 end to end | 🔴 **Blocked at §2's dashboard half — `/api/auth/me` = 401 `not_signed_in`.** Nothing shot for a guide, nothing uploaded. §3's `zoom`-to-disk path measured and written up; §1 gained the first-population case; `/api/guides` found unreadable with the operator token; the owner's isolation rule written into §2 |
-| — | 🔴 §2's self-test trigger, the purge-window change, §4 **every upload**, §4's refusal table, §5, §6 | still **never run** |
+| 2026-09-16 09:35–10:03 | ✅ **THE FIRST POPULATION, end to end** — purge window 1 → 30, self-test run #28, 16 cards shot, **16 guides uploaded**, window → 1, two guides verified rendering | ✅ **Worked.** `media/1`–`media/16`. 1 guide deliberately left without a picture (`birthday-set`, member data in the card body). §2 gained the card→guide table and Discord's scroll traps; §3 gained the painted-union recipe; §4 gained the upload folder rule, the moving-button rule and the readback rule |
+| — | 🔴 §4's refusal table, §5 (mocks), a RE-SHOOT session (a stale count above zero) | still **never run** — nothing was refused and nothing was stale, so both remain written from the code |
 
 ## Measured, 2026-09-16 (second drill)
 
@@ -381,4 +511,30 @@ if __name__ == "__main__":
 | Self-test | **not run** |
 | Screenshot frame / CSS viewport | 1512×802 frame; `innerWidth` 2498, `innerHeight` 1269, `dpr` 1.5 → `k` 0.6053, `dy` 34 |
 | `zoom` + `save_to_disk` | works, returns the path, needs no Pillow. 773×186 region → **1568×377 PNG, 195 115 bytes**. Upscale 2.478×, long side capped at 1568 |
-| Guides with a picture | **0 of 17.** The whole first population is still to do |
+| Guides with a picture | **0 of 17** before the third drill |
+
+## Measured, 2026-09-16 — the first population (third drill)
+
+| Thing | Reading |
+|---|---|
+| `selftest_purge_minutes` | **1** before · **30** during · **1** after (all three read back from `/api/settings`, not just the page) |
+| Self-test | **run #28, 9:33:22**, `109 OK · 0 FAILED`, **24 cards**, *"they go after 30 minute(s)"*, *"Started from website"* |
+| Root cards shot | **16 of 16** attempted, **15 clean**, **1 withheld** (`/birthday`) |
+| Guides given a picture | **16 of 17** — `media/1`–`media/16`; only `birthday-set` has none |
+| Capture sizes | 618×285 … 1055×914; **38 857 … 203 232 bytes**. Nothing came near 1600 px or 2 MB |
+| `/api/guides/stale` | **0** before, **0** after — see the warning above about what that does and does not prove |
+| Two guides re-opened | `golive-announce` → `media/1`, `feature-modes` → `media/16`, both captioned `screenshot in Discord · v111 · …`, both pictures visible on screen |
+| Coordinate frame that day | 1543×784 vs `innerWidth` 2498 / `innerHeight` 1269 → `k` **0.6177**, `dy` **≈0** (the earlier drill that morning measured `dy` **34** in the same session — it is per-window, re-measure it) |
+
+## A defect this drill found, outside Guides
+
+🔴 **The Settings page loads with a false "1 change pending", and that change cannot be
+saved.** `chat_memory_model` is a `text` key whose stored value and default are both `""`.
+The page marks its row `data-dirty="true"` on **every** load — it survives `location.reload()`
+and there is no draft in `localStorage` — and sends `null` for it, which the bot refuses in
+words: **`'chat_memory_model' takes some text, not None.`** So every save from that page
+reports **"1 saved, 1 refused"** even when the staffer changed one thing and it worked.
+
+It is cosmetic-but-loud: it trains staff to ignore a refusal line. Filed here because this
+runbook is where it was measured; it belongs in `KNOWN_ISSUES.md`, which this session did not
+own. ⚠️ A capture session should **expect** that second refusal and not go hunting for it.
