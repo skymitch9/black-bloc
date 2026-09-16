@@ -82,6 +82,24 @@
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
 
+## KI-27 — Guide wording and screenshots are edited on the WEBSITE only; there is no Discord door — `WAIVED`
+
+**Symptom:** the "every decision configurable BOTH ways" rule (`CLAUDE.md`, checklist 33) has a
+Discord half for every setting, but a guide's steps, faults, facts and pictures can only be changed
+on `guides.html` (**Edit this guide**). Discord's half of the feature is `/help`'s guide links and
+nothing more. The six `guides_*` KEYS are both ways as always.
+
+**Status:** `WAIVED` — owner, 2026-09-16 06:5x, verbatim *"A"* (fork F-G1 in
+[`info/guides-design.md`](info/guides-design.md) §G: (a) none, (b) a `/guides` staff panel).
+
+**Why tolerated:** a guide is up to forty steps of long text plus a table and pictures; Discord's
+modal holds five fields, so a Discord editor would be a modal per step with no way to reorder or
+see the whole. The website exists for exactly this shape of edit (the same reason `bot_bio` is the
+Settings page's). The rule is about DECISIONS; guide copy is CONTENT.
+
+**What would change it:** a staffer asking for it **once** — then fork (b) as designed, a `/guides`
+panel with **A guide…** → **A step…** → a modal, built on `panels.py`.
+
 ## KI-26 — `deploy.ps1` hangs mid-pytest with every xdist worker idle, roughly one run in four — `WATCHING`
 
 **Symptom:** the deploy gate's `pytest -q -n auto` stops making progress — 33 idle pythons,
@@ -437,8 +455,10 @@ session` on its way down. The NEW process booted clean (15 cogs — that is the
 **2026-09-03** boot line, kept as read; the tree holds **19** cogs today — logged in,
 birthdays import ran) and the line has not reappeared since.
 
-**Status.** `WATCHING` — seen once, at shutdown only, on the process that was
-already being stopped.
+**Status.** `WATCHING` — seen **twice**, both at shutdown only, on the process that was
+already being stopped: the `d777f57` deploy (2026-09-03) and the **v111** deploy (2026-09-16 16:06:56Z,
+the retiring machine's last line before the new one's `database ready` at 16:07:02Z). Still never on a
+running machine, still one per deploy.
 
 **Why tolerated.** An aiohttp `ClientSession` that was never `close()`d is
 reported by its finaliser at interpreter exit; it costs nothing after the

@@ -1,7 +1,6 @@
 # Guides — one web page per goal, staff-editable, with real screenshots and live values
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN, not built, not
-> dispatched** (owner, 2026-09-15: "dont build yet jusy mock", then "write the design doc").
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v111** — merges `cad1abc` (G1 core) and `307b759` (G2 pages), release `67aee7e`, deployed **2026-09-16 09:07** Phoenix (`../deploys.log`); landing entry in [`../DONE.md`](../DONE.md) (*"2026-09-16 — GUIDES"*). The two `## Deviations` feet below are the truth where they depart from the body. ⚠️ Rows **360–389** of [`../access/sweeps.md`](../access/sweeps.md) are the owner's; the capture runbook has never been drilled. Was: 📐 DESIGN, not built (owner, 2026-09-15: "dont build yet jusy mock", then "write the design doc"; 2026-09-16 06:5x: "do it all").
 > Mock the owner reacted to: https://claude.ai/artifact/C6MGnYLSdSyDHL42y729YA (the hub, one guide,
 > the phone view, the augmented `/help`). Owner asks, verbatim, 2026-09-15 21:2x–21:5x:
 > *"we need guides on how to use each feature. I dont want just readmes, and i dont want more menus,

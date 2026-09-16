@@ -161,3 +161,31 @@ the last clean commit's body verbatim and re-apply only the new entry (done
 additions only). When editing docs from Python on Windows, pass
 `encoding="utf-8"` on BOTH the read and the write; from PowerShell, prefer
 not to — use the Edit tool or Python.
+
+## The session shell exports `.env` and the deploy gate inherits it — nine "no key" tests go red (incident ×2, 2026-09-16)
+
+Landing v111, `scripts/deploy.ps1` refused twice with `REFUSED: the test suite is red` — **9 failed**,
+then **1 failed** — on a suite that is green in CI and green under `env -i` in a worktree. The names
+this session's Bash **and** PowerShell tools carry: `POLL_VOTE_SECRET`, `ANTHROPIC_API_KEY`,
+`GROQ_API_KEY`, `TWITCH_CLIENT_ID/SECRET`, `DISCORD_TOKEN/CLIENT_ID/CLIENT_SECRET`, `SESSION_SECRET`,
+`BLACK_BLOC_OPERATOR_TOKEN`, `DATABASE_PATH`, `DEV_GUILD_ID`, `TEST_CHANNEL_ID`, `TEST_MODE`,
+`LOG_LEVEL`, `API_*`, `SITE_ORIGIN`. The tests that assert "nothing is keyed" (`test_polls.py` ×4,
+`test_chat.py` ×3, `test_costs.py`, `test_golive.py`) read them and fail; the last one
+(`test_a_reply_in_a_dm_needs_no_guild_setting…`) fails on `DEV_GUILD_ID` alone. **The fix that
+shipped v111:** clear every bot-shaped name in the PowerShell process before invoking the script —
+`foreach ($n in '…') { if (Test-Path "Env:$n") { Remove-Item "Env:$n" } }` — the child inherits the
+cleared set and `flyctl` needs none of them. Where the names come from was NOT established (the
+gotcha *"`pytest` picks up your real `.env`"* above covers the dotenv path, not an exported shell).
+For a worktree suite, `env -i PATH="$PATH" SYSTEMROOT="$SYSTEMROOT" PYTHONPATH=<worktree>` is the
+green invocation (G1/G2 reports, 2026-09-16).
+
+## A refused deploy gate leaves a `Release vN: release.json` commit behind (since v111, 2026-09-16)
+
+`deploy.ps1` writes and commits `site/public/assets/release.json` BEFORE the check-clean and test
+gates (guides-design §C4.2). When a gate then refuses, that commit stays on `main`, unpushed; the
+retry writes a new one on top. Landing v111 took three refusals and three `git reset --hard
+<merge>` before the run that shipped. Until the step moves after the gates (`TODO.md`, guides
+follow-up 1): after a refusal, `git log --oneline -1` — if it reads `Release vN: release.json`,
+reset it before retrying. And keep the `*> file` deploy log OUTSIDE the tree (the scratchpad), or
+check-clean refuses on the log itself (refusal 1 of 3).
+
