@@ -295,10 +295,10 @@ def build_router(bot: Any) -> APIRouter:
             "read_at": now(),
         }
 
-    async def _published_elsewhere(guild: Any, row: Any, command: Any) -> None:
+    async def _published_elsewhere(guild: Any, row: Any, command: Any, audience: str) -> None:
         if not command:
             return
-        found = await guides.published_for(bot.db, guild.id, command)
+        found = await guides.published_for(bot.db, guild.id, command, audience)
         if found is not None and int(found["id"]) != int(row["id"]):
             raise Refused(
                 409,
@@ -438,8 +438,9 @@ def build_router(bot: Any) -> APIRouter:
         command = (
             wanted_command(payload.get("command")) if "command" in payload else row["command"]
         )
+        audience = wanted_audience(payload.get("audience"), str(row["audience"]))
         if published:
-            await _published_elsewhere(guild, row, command)
+            await _published_elsewhere(guild, row, command, audience)
         guide_id = int(row["id"])
         moved_steps = await guides.put_steps(bot.db, guide_id, steps)
         moved_faults = await guides.put_faults(bot.db, guide_id, faults)
@@ -450,7 +451,7 @@ def build_router(bot: Any) -> APIRouter:
             by=int(who["id"]),
             title=title,
             goal=goal,
-            audience=wanted_audience(payload.get("audience"), str(row["audience"])),
+            audience=audience,
             feature=wanted_feature(payload.get("feature"), str(row["feature"])),
             command=command,
             sort=int(payload.get("sort", row["sort"]) or 0),

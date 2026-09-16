@@ -696,7 +696,7 @@ CREATE TABLE IF NOT EXISTS guides (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS guides_one_published_command
-    ON guides(guild_id, command) WHERE published = 1 AND command IS NOT NULL;
+    ON guides(guild_id, command, audience) WHERE published = 1 AND command IS NOT NULL;
 CREATE INDEX IF NOT EXISTS guides_by_guild ON guides(guild_id, sort, id);
 
 CREATE TABLE IF NOT EXISTS guide_steps (

@@ -620,10 +620,11 @@ async def stale_media(db: Any, guild_id: int) -> list[Any]:
     return list(await cur.fetchall())
 
 
-async def published_for(db: Any, guild_id: int, command: str) -> Any:
+async def published_for(db: Any, guild_id: int, command: str, audience: str = MEMBER) -> Any:
     cur = await db.conn.execute(
-        "SELECT * FROM guides WHERE guild_id = ? AND command = ? AND published = 1",
-        (int(guild_id), str(command)),
+        "SELECT * FROM guides WHERE guild_id = ? AND command = ? AND audience = ? "
+        "AND published = 1",
+        (int(guild_id), str(command), str(audience)),
     )
     return await cur.fetchone()
 
@@ -1031,8 +1032,8 @@ async def links_for(bot: Any, guild_id: int) -> dict[str, str]:
         return {}
     cur = await db.conn.execute(
         "SELECT command, slug FROM guides WHERE guild_id = ? AND published = 1 "
-        "AND command IS NOT NULL ORDER BY sort, id",
-        (int(guild_id),),
+        "AND command IS NOT NULL AND audience = ? ORDER BY sort, id",
+        (int(guild_id), MEMBER),
     )
     return {
         str(row["command"]): guide_url(origin, str(row["slug"]))
