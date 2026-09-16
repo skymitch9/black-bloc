@@ -61,7 +61,8 @@ const NOT_STAFF = 'This dashboard is for the mods and admins of Black in a Flash
 const STAFF_UNKNOWN = 'Black Bloc could not ask Discord which roles you hold, so it cannot tell whether you are staff. That is a fault at the bot, not a problem with your access. Try again in a minute.';
 const MEMBER_NOT_STAFF = 'The rest of this dashboard is for the mods and admins of Black in a Flash!, but you are a member here, so you can still file a request and follow your own. Ask a Lead for a staff role if you need the rest.';
 const ROLE_MENUS_OFF = 'Role menus are turned off right now, so nothing was changed. A Lead can turn them back on from the dashboard\'s Role menus tab, or with `/settings` ▸ **Turn a feature back on…**.';
-const GUARD = 'TEST MODE is on, so Black Bloc refuses to act outside #black_bloc-logs. Nothing was done. Ask the owner to lift the test guard first.';
+const TEST_CHANNEL_NAME = 'black_bloc-logs';
+const GUARD = `TEST MODE is on, so Black Bloc refuses to act outside #${TEST_CHANNEL_NAME}. Nothing was done. Ask the owner to lift the test guard first.`;
 const UNKNOWN_ROUTE = 'This dashboard asked Black Bloc for something it does not serve. That is a fault in the page, not a problem with your access.';
 
 const now = () => new Date().toISOString();
@@ -88,7 +89,7 @@ const ROLES = [
 const CHANNELS = [
   { id: '800000000000000001', name: 'welcome', type: 'text', category_id: null, position: 0 },
   { id: '800000000000000002', name: 'general', type: 'text', category_id: null, position: 1 },
-  { id: '800000000000000003', name: 'black_bloc-logs', type: 'text', category_id: null, position: 2 },
+  { id: '800000000000000003', name: TEST_CHANNEL_NAME, type: 'text', category_id: null, position: 2 },
   { id: '800000000000000004', name: 'bot-log', type: 'text', category_id: null, position: 3 },
   { id: '800000000000000005', name: 'staff-room', type: 'text', category_id: null, position: 4 },
   { id: '800000000000000006', name: 'announcements', type: 'text', category_id: null, position: 5 },
@@ -1894,7 +1895,7 @@ const GUIDE_PROBE_VALUES = {
   'polls.open_count': '2 open',
   'birthdays.next': 'Ada, in 6 days',
   'raidtrain.next': '1 upcoming, 2 of 3 hours taken',
-  test_mode: 'on \u2014 #black_bloc-logs',
+  test_mode: `on \u2014 #${TEST_CHANNEL_NAME}`,
 };
 const GUIDE_FEATURE_PAGES = {
   core: 'settings.html', automod: 'automod.html', honeypot: 'honeypot.html', mod: 'moderation.html',
@@ -2062,7 +2063,7 @@ function guideRightNow() {
   }
   return {
     test_mode: testMode,
-    test_channel: testMode ? 'black_bloc-logs' : null,
+    test_channel: testMode ? TEST_CHANNEL_NAME : null,
     on,
     shadow,
     off,
