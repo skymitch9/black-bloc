@@ -8,12 +8,28 @@
 > `site/public/assets/page-guides.js` (**Replace screenshot…**), `scripts/deploy.ps1` and
 > `scripts/release_json.py` (`release.json`), `docs/access/operator-read.md`
 > (`scripts/read.ps1`).
-> 🔴 ⚠️ **NEVER DRILLED.** No session has run this end to end: no browser has been opened
-> at Discord for it, no `/api/guides/stale` has been read against the live app, no picture
-> has been cropped by `crop_shot.py` on a real capture, and nothing has been uploaded to a
-> live guide. Every sentence below is written from the code, not from having done it.
-> **The first session to follow it owns correcting it**, and dating a drill line at the foot.
+> 🔴 ⚠️ **STILL NEVER DRILLED END TO END.** Two partial drills have now run (both
+> 2026-09-16, see the drill log at the foot) and **nothing has ever been uploaded to a live
+> guide** — the write half of this runbook is still written from the code, not from having
+> done it. What IS now measured: `/api/guides/stale` against the live app, Discord signed in
+> and the test channel rendering, and the **capture** mechanics (the `computer` tool's `zoom`
+> with `save_to_disk`, which replaces the Pillow crop — §3). What is still unmeasured: the
+> self-test trigger, the purge-window change, **every upload**, and every refusal sentence in
+> the table in §4. **The next session to follow it owns correcting the rest.**
 > **First drill, 2026-09-16 09:1x Phoenix (partial — stopped at step 2, nothing shot, nothing uploaded).** Found: (1) step 1 answered `count: 0` on the live app right after v111 — there is nothing STALE, because no guide has a picture yet; the runbook says stop there, but the FIRST population of pictures is a different job it does not describe. (2) The self-test's cards are purged **one minute** after they post (`selftest_purge_minutes`, default 1 — the owner's choice, "mainly for you and not me"), so by the time a session reads the to-do list and opens Discord the cards are gone; a capture needs a self-test triggered from the dashboard's Health page and the shots taken inside that minute, or the key raised for the session and put back. (3) The owner's Chrome IS signed in to Discord web and `#mute-me-bot-test-spam` renders — that half works. (4) ⚠️ Step 2's "screenshot the tab" lands on disk only with the `computer` tool's `save_to_disk: true`, which returns the path; a plain screenshot is an image in the transcript, not a file, and `$env:TEMP	ab.png` does not exist by itself. (5) Pillow venv, crop and upload were NOT reached. The question of the purge window is the owner's (`TODO.md`).
+> **Second drill, 2026-09-16 09:19–09:3x Phoenix (partial — stopped at step 2 again, nothing
+> uploaded).** Dispatched to do the FIRST POPULATION with the owner at the machine. Blocked on
+> a precondition this file lists but does not weight: 🔴 **the dashboard was SIGNED OUT.**
+> `GET /api/auth/me` from the page answered **401 `not_signed_in`**, so the Settings page, the
+> Health page's **Run the self-test** and every guide editor were all shut — and the session
+> may not press **Sign in with Discord** (an OAuth grant on the owner's account is his click,
+> not a session's). Discord was fine: signed in, `#mute-me-bot-test-spam` rendered, and — as
+> the first drill predicted — **no self-test cards were left** (newest bot message 9/12). Also
+> found: (1) the operator token **cannot** read `/api/guides` — it is member-gated and answers
+> `not_a_member` in words, so the slug list comes from `black_bloc/guides_seed.json`;
+> (2) `zoom` + `save_to_disk` works and needs no Pillow, **but its `region` is in SCREENSHOT
+> coordinates, not the CSS pixels `getBoundingClientRect()` returns** — see §2/§3 for the
+> conversion and the measured numbers.
 
 ## What this is for
 
@@ -42,12 +58,8 @@ with `source = mock`, and the page labels it *illustration* (§C4.4 of
 | The deploy landed and named a feature | `release.json` is committed by `scripts/deploy.ps1`; the `guide.shots_stale` log row says how many shots it marked and for which features |
 | The operator token | `BLACK_BLOC_OPERATOR_TOKEN` on this machine — [`operator-read.md`](operator-read.md). It never appears in a transcript |
 | Chrome, with the owner signed in to Discord **and** to the dashboard | the Claude in Chrome extension, with permission for `discord.com` and `blackbloc.heygabi.ai` |
-| Pillow, for the crop | ⚠️ **NOT in the repo's `.venv`, and it must stay out** — Black Bloc does not depend on it. Use a throwaway one |
-
-```powershell
-python -m venv $env:TEMP\shots-venv
-& $env:TEMP\shots-venv\Scripts\pip install pillow
-```
+| 🔴 **CHECK THE DASHBOARD SIGN-IN FIRST — it is the precondition that actually fails** | in the tab, `await fetch('/api/auth/me',{credentials:'include'}).then(r=>r.status)`. **200** and you may work; **401 `not_signed_in`** and the session is done — ⚠️ **the session does NOT press Sign in with Discord.** That link is `/api/auth/login`, an OAuth grant on the owner's own account, and pressing it is his click, not a session's. Ask him to sign in, then carry on. Measured 2026-09-16 09:19: 401 |
+| ~~Pillow, for the crop~~ | ⚠️ **NO LONGER NEEDED — and no venv is built.** The `computer` tool's `zoom` action with `save_to_disk: true` crops and writes the file in one call (§3). The old Pillow path is kept only as the fallback block at the foot |
 
 ## 1. Read the to-do list, before any browser
 
@@ -58,46 +70,143 @@ python -m venv $env:TEMP\shots-venv
 Each row in `shots` carries `slug`, `title`, `feature`, `caption`, `source`
 (`capture` or `mock`), `surface` (`discord` or `website`), `shot_release` and
 `stale_since`. **That list is the whole job.** An empty `shots` list means there is
-nothing to do; say so and stop — do not go hunting.
+nothing to **RE-SHOOT**; say so and stop — do not go hunting.
+
+⚠️ **`count: 0` has TWO meanings, and this file only ever described one.** Staleness is a
+fact about pictures that EXIST. Until a guide has a picture there is nothing to mark, so a
+brand-new guide reads exactly like a freshly re-shot one. Measured 2026-09-16 09:18 on the
+live app at v111: `{"shots": [], "count": 0}` — with **zero pictures in the whole app.**
+
+- **Re-shoot session** (what §1–§6 describe): `count > 0`, and the rows are the job.
+- 🔴 **FIRST POPULATION** (what this runbook does not otherwise describe): `count == 0` *and*
+  no guide has a picture. The job is then **one shot of each feature's ROOT PANEL CARD on
+  step 1 of each guide**, and the list comes from the seed, not from the API:
+
+```powershell
+.\.venv\Scripts\python -c "import json;[print(g['slug'],g['command']) for g in json.load(open('black_bloc/guides_seed.json'))['guides']]"
+```
+
+⚠️ **`GET /api/guides` is NOT readable with the operator token** — it is member-gated and the
+operator identity is deliberately not a member, so it answers *"You are signed in, but Discord
+does not show you as a member…"* (the same rule `operator-read.md` records for
+`/api/requests/mine`). Measured 2026-09-16 09:18. The seed file is the slug list.
+
+The 17 seeded guides cover 16 distinct commands; **`event-review` (staff) and `event-propose`
+(member) share `/event`**, so one `/event` card serves both.
 
 Write the list down before opening a browser: it is what stops the session wandering
 around Discord looking for something to shoot.
 
-## 2. Open the test channel, and find the card
+## 2. Put the cards on screen, then find one
 
-In Chrome, open the owner's Discord tab at `#mute-me-bot-test-spam`. The self-test has
-just posted every panel's root card there.
+⚠️ **The cards are almost certainly NOT there when you arrive.** They are posted by the
+self-test on deploy and **purged one minute later** (`selftest_purge_minutes`, default 1 —
+the owner's 2026-09-10 choice, *"mainly for you and not me"*). Measured in both drills: by
+the time a session has read the to-do list and opened Discord, the channel's newest bot
+message is days old. So the session posts them itself, on the dashboard:
+
+1. **Raise the purge window** — `https://blackbloc.heygabi.ai/settings.html`,
+   `selftest_purge_minutes` (Core group; the page has a **Show keys** toggle and <kbd>Ctrl</kbd>
+   <kbd>K</kbd> jumps to a key) → **30** → Save, and read the row back. ⚠️ **Put it back to 1
+   at the end of the session** — this is a borrowed setting, not a change.
+2. **Trigger the self-test** — `https://blackbloc.heygabi.ai/health.html` ▸ **Run the
+   self-test**. It posts every panel's root card into `#mute-me-bot-test-spam` in about 30 s
+   (the boot line says ~24 messages).
+
+Then open the owner's Discord tab at
+`https://discord.com/channels/1073710702776299640/1542316174472380517`.
 
 - Scroll the card for the feature into view.
-- Read its bounding box with the page-script tool, e.g.
-  `document.querySelector('[id="chat-messages-…"]').getBoundingClientRect()`, or find
-  the message by its text and take `getBoundingClientRect()` of the closest `li`.
-- Screenshot the tab.
+- Read its bounding box with the page-script tool — find the message by its text and take
+  `getBoundingClientRect()` of the closest `li[id^="chat-messages"]`:
+
+```js
+[...document.querySelectorAll('li[id^="chat-messages"]')]
+  .filter(li => /New request #/.test(li.innerText))
+  .map(li => li.getBoundingClientRect())
+```
 
 ⚠️ **Do not click anything in Discord.** Scrolling and reading are the whole
 interaction. If the card you need is not on screen without a press, it is a mock
 (step 5).
 
-## 3. Crop it
+### 🔴 A capture contains the bot's card and NOTHING ELSE
 
-`scripts/scan/crop_shot.py` — **gitignored**, because it gathers pictures rather than
-making the bot work. If the folder is empty, write it back from the block at the foot of
-this file.
+**Owner rule, 2026-09-16, verbatim:** *"we need to make sure no chats that arent with the bot
+or channels not whats trying to be shown off are visible. wouldn't want to leak mod stuff"*.
+A guide screenshot is served to every member, so anything caught at its edges is published
+to them.
 
-```powershell
-& $env:TEMP\shots-venv\Scripts\python scripts\scan\crop_shot.py `
-    $env:TEMP\tab.png $env:TEMP\golive-panel.png --box 420 310 860 520
+| Must be in the shot | Must **NOT** be in the shot |
+|---|---|
+| Black Bloc's own card — the embed, its buttons, its footer | any other member's message, name, avatar or reaction |
+| | the channel sidebar and the server list |
+| | the member list |
+| | the message box at the foot |
+| | the channel-name strip at the head |
+
+- **Crop to the message element's own rect** — the bot's `li[id^="chat-messages"]`, or
+  tighter (the embed plus its buttons). ⚠️ **Never a wider region "to be safe"**: wider is
+  the failure mode, not the safe one. A `li` is full-channel-width, so most of its box is the
+  empty gutter where the NEXT message's first line sits — shoot the embed's own box instead,
+  and clip the height to the card, not to the row.
+- ⚠️ **LOOK AT THE FILE BEFORE YOU UPLOAD IT.** The `Read` tool renders a PNG. Confirm by eye
+  that nothing but the card is in it. **A file showing anything else is DELETED, not
+  uploaded** — not re-cropped in place, not uploaded "because it is only a username".
+- If a card cannot be isolated this way, **do not take it**; report it as not taken (§6).
+- The same rule covers the rendered-guide-page screenshot taken for the owner at §6: the
+  guide page only.
+
+🔎 **Measured 2026-09-16:** a region taken from a `li`'s full box caught the *next* message's
+author line at its foot — one member's name and server tag. That file was deleted unused.
+This is not a theoretical edge: on a busy channel the neighbour is always there.
+
+## 3. Shoot it — `zoom` straight to disk, no Pillow
+
+✅ **Measured 2026-09-16 09:2x — this replaces the crop helper entirely.** The `computer`
+tool's **`zoom`** action takes a `region` and, with **`save_to_disk: true`**, writes the
+cropped PNG and returns its path in the result. One call; nothing to install, nothing to
+crop afterwards.
+
+```
+computer  action: "zoom"
+          region: [x0, y0, x1, y1]     ← SCREENSHOT coordinates, see below
+          save_to_disk: true
+→ "Successfully captured zoomed screenshot of region (227,248) to (1000,434) - 1568x377 pixels"
+→ "Screenshot saved to: C:\Users\…\Temp\claude-chrome-screenshots-<rand>\screenshot-<ms>-0.png"
 ```
 
-| Flag | What it does | Default |
-|---|---|---|
-| `--box X Y W H` | the rectangle to keep, in the coordinates `getBoundingClientRect()` gave | required |
-| `--pad N` | pixels of breathing room around the box | 8 |
-| `--max-side N` | shrinks so the longest side is at most this | **1600** — the API refuses more, in words |
-| `--max-bytes N` | shrinks further until the file fits | **2097152** (2 MB) — the API refuses more |
+🔴 ⚠️ **`region` is NOT in the CSS pixels `getBoundingClientRect()` gives you.** This is the
+one thing that will waste a session. The screenshot has its own coordinate frame (every
+screenshot result prints it, e.g. *"coordinate frame: 1512x802"*) and the page's CSS
+viewport is a different size. Convert:
 
-It prints the final `WxH` and byte count. Those two numbers are exactly what the upload
-is checked against, twice: once in the browser before the request, and once at the bot.
+```js
+const k = 1512 / window.innerWidth;     // frame width ÷ CSS width
+const dy = 802 - window.innerHeight * k; // browser chrome above the viewport
+// region = [r.x*k, r.y*k + dy, (r.x+r.width)*k, (r.y+r.height)*k + dy]
+```
+
+Measured on the owner's machine 2026-09-16: frame **1512×802**, `innerWidth` **2498**,
+`innerHeight` **1269**, `devicePixelRatio` **1.5** → `k` = **0.6053**, `dy` = **34**. A card
+predicted this way landed exactly on its box first time. ⚠️ **Re-measure every session** —
+`k` and `dy` change with the window size and the zoom level; nothing here is hardcodable.
+
+**The two limits take care of themselves, and here is why.** `zoom` upscales the crop by
+`devicePixelRatio × (innerWidth / frameWidth)` — **2.478** in the reading above — and **caps
+the long side at 1568 px**, which is under `MEDIA_SIDE_MAX` (1600). Both measured:
+
+| Region (frame px) | Output | Bytes |
+|---|---|---|
+| 773 × 186 (a full-width card) | **1568 × 377** — capped | **195 115** (191 KB) |
+| 343 × 186 | 850 × 460 — uncapped, 343 × 2.478 | not saved |
+
+So a zoom in this window **cannot** breach the 1600 px side limit, and a card-sized region
+lands two orders of magnitude inside the 2 MB limit. Shoot the card, not the whole row: a
+`li[id^="chat-messages"]` spans the full channel width (2107 CSS px) and most of it is empty.
+
+If a card is taller than the viewport, scroll it fully into view first and re-read the box —
+a region partly off-screen captures the background, not the card.
 
 ## 4. Upload it through the guide's own page
 
@@ -110,7 +219,13 @@ route that takes a file any other way.
    (`a real screenshot` / `a drawn illustration`), **Where it is from** and
    **Which release** — the release is the one in `release.json`, e.g. `v111`, and it is
    what staleness is measured against later.
-4. Press **Replace screenshot…** and pick the cropped file.
+4. Press **Replace screenshot…** and pick the file §3 saved (it is in
+   `%TEMP%\claude-chrome-screenshots-<rand>\`, and the `zoom` result printed the full path).
+   ⚠️ **Never CLICK a file input** — that opens a native picker no session can see. **Replace
+   screenshot…** is a `<label>` over an `<input type=file>`: find that input with `find` or
+   `read_page` and hand its `ref` to the **`file_upload`** tool with the path. The page then
+   base64s the bytes into the JSON body itself (`guides-design.md` § *G2 deviations*), so
+   there is no multipart request to build. 🔴 **Untested** — no upload has ever been made.
 5. The sentence beside the button is the answer. A refusal is the bot's own words —
    read it, do what it says, and do not retry blindly.
 
@@ -144,7 +259,12 @@ The report names: which slugs were re-shot, which were left (and why), the relea
 shots carry, and `/api/guides/stale`'s count before and after. A shot you could not take
 is reported as not taken — never quietly skipped.
 
-## The crop helper, in full
+## The crop helper, in full — ⚠️ RETIRED, kept only as a fallback
+
+🔴 **You do not need this.** §3's `zoom` + `save_to_disk` does the same job in one tool call
+with no Pillow and no venv, and was measured working 2026-09-16. This block is kept for the
+one case it still covers: cropping a picture that did **not** come from the browser (a mock
+exported elsewhere, or a file the owner took with <kbd>Win</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>).
 
 `scripts/scan/crop_shot.py` is gitignored, so a fresh clone does not have it. This is the
 copy of record.
@@ -244,4 +364,21 @@ if __name__ == "__main__":
 
 | Date | What was drilled | Result |
 |---|---|---|
-| — | 🔴 nothing yet | this runbook is **untested**; the first capture session is its drill |
+| 2026-09-16 09:1x | §1 against the live app; Discord tab opened | `/api/guides/stale` → `count: 0`. Discord signed in, channel renders, **no cards** (purged). Stopped at §2. Found the `save_to_disk` gap |
+| 2026-09-16 09:2x | §1 again, §2's Discord half, §3 end to end | 🔴 **Blocked at §2's dashboard half — `/api/auth/me` = 401 `not_signed_in`.** Nothing shot for a guide, nothing uploaded. §3's `zoom`-to-disk path measured and written up; §1 gained the first-population case; `/api/guides` found unreadable with the operator token; the owner's isolation rule written into §2 |
+| — | 🔴 §2's self-test trigger, the purge-window change, §4 **every upload**, §4's refusal table, §5, §6 | still **never run** |
+
+## Measured, 2026-09-16 (second drill)
+
+| Thing | Reading |
+|---|---|
+| `/api/guides/stale` | `{"shots": [], "count": 0}` at 09:18 and unchanged at the end — **nothing was uploaded** |
+| `/api/guides` with the operator token | refused in words: *"…Discord does not show you as a member of Black in a Flash!…"* |
+| `/health` | `ok: true`, `ready: true`, `guilds: 1`, `latency_ms: 67`, version `0.1.0` |
+| `/api/auth/me` in the browser | **401 `not_signed_in`** — the session-stopper |
+| Discord | signed in; `#mute-me-bot-test-spam` renders; newest bot message **9/12/26**, i.e. no self-test cards |
+| `selftest_purge_minutes` | **not read and not changed** — the Settings page was behind the sign-in |
+| Self-test | **not run** |
+| Screenshot frame / CSS viewport | 1512×802 frame; `innerWidth` 2498, `innerHeight` 1269, `dpr` 1.5 → `k` 0.6053, `dy` 34 |
+| `zoom` + `save_to_disk` | works, returns the path, needs no Pillow. 773×186 region → **1568×377 PNG, 195 115 bytes**. Upscale 2.478×, long side capped at 1568 |
+| Guides with a picture | **0 of 17.** The whole first population is still to do |
