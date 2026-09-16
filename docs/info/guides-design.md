@@ -12,7 +12,7 @@
 > of it is editable by the staff. wording more than screen shots. As little fluff text as possible,
 > just very empirical almost ikea like steps on how to achieve each thing"*.
 >
-> **Last verified: 2026-09-15 22:05 Phoenix** — every `path:name` in §A was read on `main` at
+> **Last verified: 2026-09-15 21:48 Phoenix** — every `path:name` in §A was read on `main` at
 > `b32fb43` (v110 live). ⚠️ **NOT checked:** nothing here met Discord or a browser; the `/help`
 > reply and the member rail were read from the source, not rendered. Estimates are estimates.
 
