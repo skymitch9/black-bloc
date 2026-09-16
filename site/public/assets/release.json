@@ -1,0 +1,8 @@
+{
+  "release": "v111",
+  "commit": "307b759",
+  "changed_features": [
+    "core",
+    "guides"
+  ]
+}
