@@ -338,7 +338,7 @@ guides for the website's own pages (the site is the guide for itself — the Set
   `KNOWN_ISSUES.md` as `WAIVED` if chosen. (b) A `/guides` staff panel with **A guide…** → **A step…**
   → a modal per step (five fields is Discord's cap; the faults table and facts would need more
   modals). Recommend **(a)**; the owner's words were "webpages".
-- **F-G2 — where "Something's off" lands. ✅ DECIDED 2026-09-15 22:0x, owner verbatim "a": a request.** (a) A request, as designed (staff see it where they see
+- **F-G2 — where "Something's off" lands. ✅ DECIDED 2026-09-16 06:51, owner verbatim "a": a request.** (a) A request, as designed (staff see it where they see
   everything else). (b) A `guide.fault` log row only, no request. Recommend **(a)**.
 - **F-G3 — the hub for a member.** (a) Member guides only, staff guides hidden. (b) Both, staff ones
   marked. Recommend **(a)** — a member cannot press any button a staff guide names.
