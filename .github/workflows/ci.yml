@@ -35,3 +35,6 @@ jobs:
           node site/mock/server.mjs &
           sleep 2
           node site/mock/check.mjs
+
+      - name: Preview renderer
+        run: node site/mock/discordmd.test.mjs

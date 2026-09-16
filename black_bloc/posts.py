@@ -65,6 +65,10 @@ BODY_TOO_LONG = (
 )
 SWITCH_TO_EMBED = " — or set the style to an embed, which holds 4096"
 TITLE_TOO_LONG = (
+    "A post's title holds {limit} characters and that one is {count}, so nothing was saved. "
+    "Take {over} character{s} out of the title."
+)
+EMBED_TITLE_TOO_LONG = (
     "An embed's title holds {limit} characters and that one is {count}, so nothing was saved. "
     "Take {over} character{s} out of the title, or set the style back to a plain message, where "
     "the title is never sent."
@@ -86,6 +90,8 @@ NOT_POSTED = (
     "it first."
 )
 CHANNEL_GONE = "the channel is not one Black Bloc can see any more"
+NO_CHANNEL_WORD = "no channel yet"
+CHANNEL_UNSEEN = "a channel Black Bloc cannot see"
 POST_FAILED_SAID = (
     "Discord would not take that post, so **{title}** is unchanged: {reason}. That is a fault "
     "between Black Bloc and Discord rather than a problem with your access — try again, and "
@@ -225,15 +231,13 @@ def refused_body(body: Any, style: str, doing: str) -> str | None:
 
 
 def refused_title(title: Any, style: str) -> str | None:
-    if style != EMBED:
-        return None
+    """Over the cap is REFUSED, never quietly shortened — a clipped title is a silent edit."""
     count = len(str(title or ""))
     if count <= TITLE_MAX:
         return None
     over = count - TITLE_MAX
-    return TITLE_TOO_LONG.format(
-        limit=TITLE_MAX, count=count, over=over, s="" if over == 1 else "s"
-    )
+    said = EMBED_TITLE_TOO_LONG if style == EMBED else TITLE_TOO_LONG
+    return said.format(limit=TITLE_MAX, count=count, over=over, s="" if over == 1 else "s")
 
 
 def posts_are_on(store: Any, guild_id: int) -> bool:
@@ -255,8 +259,11 @@ def channel_name(guild: Any, channel_id: Any) -> str | None:
 
 
 def where_words(guild: Any, channel_id: Any) -> str:
+    """One spelling of where a post lives, for the panel's lines and every sentence."""
+    if not channel_id:
+        return NO_CHANNEL_WORD
     name = channel_name(guild, channel_id)
-    return f"#{name}" if name else "that channel"
+    return f"#{name}" if name else CHANNEL_UNSEEN
 
 
 def status_words(row: Any) -> list[str]:
@@ -545,9 +552,12 @@ async def make_post(
     via: str = VIA_DISCORD,
 ) -> Outcome:
     """A new, empty post; posting it is somebody's press, never this."""
-    kept = clamp(title, TITLE_MAX)
+    kept = str(title or "").strip()
     if not kept:
         return refusal(TITLE_NEEDED, "no_title", 400)
+    said = refused_title(kept, PLAIN)
+    if said is not None:
+        return refusal(said, "title_too_long", 400)
     wanted = slugify(slug or kept)
     if not wanted:
         return refusal(SLUG_NEEDED, "no_slug", 400)
@@ -575,7 +585,7 @@ async def save_post(
     via: str = VIA_DISCORD,
 ) -> Outcome:
     """The one write both doors make. Anything left out keeps what the row already says."""
-    wanted_title = row_value(row, "title") if title is ... else clamp(title, TITLE_MAX)
+    wanted_title = row_value(row, "title") if title is ... else str(title or "").strip()
     wanted_body = str(row_value(row, "body", "")) if body is ... else str(body or "")
     kept_style = (
         wanted_style(row_value(row, "style", PLAIN))
@@ -882,6 +892,7 @@ __all__ = [
     "PUT_THE_ORIGINAL_BACK",
     "RESET",
     "SAVED",
+    "EMBED_TITLE_TOO_LONG",
     "SEEDED_CANNOT_BE_DELETED",
     "SITE_BUTTON",
     "SLUG_NEEDED",
