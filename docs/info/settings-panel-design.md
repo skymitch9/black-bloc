@@ -340,7 +340,7 @@ one line each with `display_value` (`settings_store.py:1309`) plus `KEY_HELP`.
 > 🔴 **The one measurement that decides how this card must read.** `staff_channel_id`'s
 > default is `settings.test_channel_id` **always** — `settings_store.py:1436–1437`, on every
 > guild in every mode, not only under `TEST_MODE`. So *"put the default back"* on this key
-> points the staff channel at `#mute-me-bot-test-spam`, which disarms `/automod mode on`
+> points the staff channel at `#black_bloc-logs`, which disarms `/automod mode on`
 > (`STAFF_IS_THE_TEST_CHANNEL`) and the honeypot's arming gate in one press, silently. The card
 > **states what the default IS** before any reset is offered, and fork **F-S2** decides whether
 > the reset is offered here at all.
@@ -692,7 +692,7 @@ today, keep it that way — and `panels.site_page_url(origin, "core")` (`:123`),
    backstop, never the only check), **26** (every list-typed key keeps a way to remove an entry
    — `Clear the list` plus the multi-select), **33** (§D, and the §G assertion that every key is
    reachable), **34** (no kind changed; `set_key` deliberately takes no `via`, argued in §F).
-7. ⚠️ **TEST MODE stands.** The bot speaks only in `#mute-me-bot-test-spam` (`TEST_CHANNEL_ID`)
+7. ⚠️ **TEST MODE stands.** The bot speaks only in `#black_bloc-logs` (`TEST_CHANNEL_ID`)
    and DMs, enforced by `black_bloc/guard.py`. Run every sweep row in that channel.
 8. ⚠️ **Three sibling branches are rewriting `honeypot.py`, `modmail.py` and `modcmds.py` right
    now.** Two of this build's string sites live in the first two files. **Do the string sweep
@@ -708,7 +708,7 @@ not added to.
 
 | # | Do this | Expect |
 |---|---|---|
-| S1 | `/settings` as a Lead in `#mute-me-bot-test-spam` | ONE ephemeral panel. The top reads every feature's mode — sixteen lines, each naming the command that changes it — and **not one of them is a control here.** Below: **Turn a feature back on… · A setting group… · Roles & channels… · How Black Bloc looks… · Panels & commands… · Log levels… · Logs · Open on the site · Refresh**. Nothing says `/settings show` or `/settings set-value` anywhere |
+| S1 | `/settings` as a Lead in `#black_bloc-logs` | ONE ephemeral panel. The top reads every feature's mode — sixteen lines, each naming the command that changes it — and **not one of them is a control here.** Below: **Turn a feature back on… · A setting group… · Roles & channels… · How Black Bloc looks… · Panels & commands… · Log levels… · Logs · Open on the site · Refresh**. Nothing says `/settings show` or `/settings set-value` anywhere |
 | S2 | `A setting group…` → **chat** | the group card lists the chat settings and the picker says **25 of 28 — the rest are on the site**. Press **Find a setting…**, type `memory`, and the three that were off the end are now on the picker. That is the only namespace over 25 |
 | S3 | `A setting group…` → **birthday** → `birthday_color` → type `blue` | one sentence naming the shape `#4eefff` and **nothing is saved** — re-open the card and the colour is what it was. Type `#4eefff` and it saves, one `settings.set` row, **Via: Discord** on the Logs page |
 | S4 | the same key card → **Put the default back**, then press it again | the first press says the default is back and leaves one `settings.clear` row; **the second press is not there** — the button does not render on a key with nothing stored. No state is terminal and no button answers "nothing changed" |
@@ -718,7 +718,7 @@ not added to.
 | S8 | `/settings set-value` | ⚠️ **there is no such command.** `/help` says so too: its missing-commands line now names **`/settings` ▸ Turn a feature back on…**, not `set-value` |
 | S9 | `hide_commands_when_off` → **false** (Panels & commands…), with two features still off, then `/settings` again | every command is back at once; **Turn a feature back on… is absent**, and the embed says hiding is switched off altogether rather than "every command is showing" — the two sentences mean different things |
 | S10 | `How Black Bloc looks…` → **Re-apply presence** | the same sentence `/presence apply` used to print — whether the About Me changed and what the status now reads — and a `presence.bio_set` row when it did change. ⚠️ `/presence` itself is **gone from the command list** |
-| S11 | `Roles & channels…` as a staff member who does **not** have Manage Server | the button is **not drawn** and the panel says in one line that re-pointing the staff and log channels is for a Lead. It is not offered-and-refused; it is not offered. As a Lead it is there, and the `staff_channel_id` card says in words that its default is **#mute-me-bot-test-spam** |
+| S11 | `Roles & channels…` as a staff member who does **not** have Manage Server | the button is **not drawn** and the panel says in one line that re-pointing the staff and log channels is for a Lead. It is not offered-and-refused; it is not offered. As a Lead it is there, and the `staff_channel_id` card says in words that its default is **#black_bloc-logs** |
 | S12 | `Log levels…` → **chat** → the two buttons; then `Logs`; then leave the panel `settings_panel_minutes` (10) minutes | the level card offers only the two levels it is **not** on; `Logs` answers a **NEW** ephemeral message and the panel stays where it is; after ten minutes every control greys out and the footer reads *this panel has gone quiet — run /settings again* |
 
 ---

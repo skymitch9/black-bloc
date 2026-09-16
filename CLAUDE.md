@@ -16,7 +16,7 @@ Thin on purpose. The living state is in `docs/` — **read `docs/README.md`,
   else reads `os.environ`.
 - Secrets: `.env` is gitignored; token custody is the Discord Developer Portal.
   Docs carry secret NAMES only.
-- ⚠️ **TEST POLICY (owner, 2026-08-26): the bot speaks ONLY in `#mute-me-bot-test-spam`
+- ⚠️ **TEST POLICY (owner, 2026-08-26): the bot speaks ONLY in `#black_bloc-logs`
   (`TEST_CHANNEL_ID`) and DMs until the owner lifts it.** Enforced by `black_bloc/guard.py`
   (`TEST_MODE=true`). Never flip it, never post elsewhere, brief every subagent with this.
 - This is a GATEWAY bot (persistent websocket). It cannot run on Cloudflare

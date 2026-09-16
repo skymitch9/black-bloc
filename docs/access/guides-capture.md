@@ -18,14 +18,14 @@
 > **`media/18`** for `birthday-set` after the mock was redrawn — see the drill log).
 > The page's own refusal sentences in §4's table are **still** unreproduced — nothing was
 > refused, so that table remains written from the code.
-> **First drill, 2026-09-16 09:1x Phoenix (partial — stopped at step 2, nothing shot, nothing uploaded).** Found: (1) step 1 answered `count: 0` on the live app right after v111 — there is nothing STALE, because no guide has a picture yet; the runbook says stop there, but the FIRST population of pictures is a different job it does not describe. (2) The self-test's cards are purged **one minute** after they post (`selftest_purge_minutes`, default 1 — the owner's choice, "mainly for you and not me"), so by the time a session reads the to-do list and opens Discord the cards are gone; a capture needs a self-test triggered from the dashboard's Health page and the shots taken inside that minute, or the key raised for the session and put back. (3) The owner's Chrome IS signed in to Discord web and `#mute-me-bot-test-spam` renders — that half works. (4) ⚠️ Step 2's "screenshot the tab" lands on disk only with the `computer` tool's `save_to_disk: true`, which returns the path; a plain screenshot is an image in the transcript, not a file, and `$env:TEMP	ab.png` does not exist by itself. (5) Pillow venv, crop and upload were NOT reached. The question of the purge window is the owner's (`TODO.md`).
+> **First drill, 2026-09-16 09:1x Phoenix (partial — stopped at step 2, nothing shot, nothing uploaded).** Found: (1) step 1 answered `count: 0` on the live app right after v111 — there is nothing STALE, because no guide has a picture yet; the runbook says stop there, but the FIRST population of pictures is a different job it does not describe. (2) The self-test's cards are purged **one minute** after they post (`selftest_purge_minutes`, default 1 — the owner's choice, "mainly for you and not me"), so by the time a session reads the to-do list and opens Discord the cards are gone; a capture needs a self-test triggered from the dashboard's Health page and the shots taken inside that minute, or the key raised for the session and put back. (3) The owner's Chrome IS signed in to Discord web and `#black_bloc-logs` renders — that half works. (4) ⚠️ Step 2's "screenshot the tab" lands on disk only with the `computer` tool's `save_to_disk: true`, which returns the path; a plain screenshot is an image in the transcript, not a file, and `$env:TEMP	ab.png` does not exist by itself. (5) Pillow venv, crop and upload were NOT reached. The question of the purge window is the owner's (`TODO.md`).
 > **Second drill, 2026-09-16 09:19–09:3x Phoenix (partial — stopped at step 2 again, nothing
 > uploaded).** Dispatched to do the FIRST POPULATION with the owner at the machine. Blocked on
 > a precondition this file lists but does not weight: 🔴 **the dashboard was SIGNED OUT.**
 > `GET /api/auth/me` from the page answered **401 `not_signed_in`**, so the Settings page, the
 > Health page's **Run the self-test** and every guide editor were all shut — and the session
 > may not press **Sign in with Discord** (an OAuth grant on the owner's account is his click,
-> not a session's). Discord was fine: signed in, `#mute-me-bot-test-spam` rendered, and — as
+> not a session's). Discord was fine: signed in, `#black_bloc-logs` rendered, and — as
 > the first drill predicted — **no self-test cards were left** (newest bot message 9/12). Also
 > found: (1) the operator token **cannot** read `/api/guides` — it is member-gated and answers
 > `not_a_member` in words, so the slug list comes from `black_bloc/guides_seed.json`;
@@ -47,7 +47,7 @@ session can, because it drives the owner's own already-signed-in browser.
 
 🔴 **The line this runbook does not cross: the session PRESSES NOTHING on the owner's
 Discord account.** It scrolls, it reads, it screenshots. The self-test posts every panel's
-root card into `#mute-me-bot-test-spam` on every deploy, so the thing worth shooting is
+root card into `#black_bloc-logs` on every deploy, so the thing worth shooting is
 already on screen without anybody clicking it. A screen that would need a press —
 a modal, a sub-panel, a DM card — is **not** captured: it is drawn as a mock and uploaded
 with `source = mock`, and the page labels it *illustration* (§C4.4 of
@@ -112,7 +112,7 @@ message is days old. So the session posts them itself, on the dashboard:
    <kbd>K</kbd> jumps to a key) → **30** → Save, and read the row back. ⚠️ **Put it back to 1
    at the end of the session** — this is a borrowed setting, not a change.
 2. **Trigger the self-test** — `https://blackbloc.heygabi.ai/health.html` ▸ **Run the
-   self-test**. It posts every panel's root card into `#mute-me-bot-test-spam` in about 30 s
+   self-test**. It posts every panel's root card into `#black_bloc-logs` in about 30 s
    (the boot line says ~24 messages).
 
 Then open the owner's Discord tab at
@@ -584,7 +584,7 @@ if __name__ == "__main__":
 | `/api/guides` with the operator token | refused in words: *"…Discord does not show you as a member of Black in a Flash!…"* |
 | `/health` | `ok: true`, `ready: true`, `guilds: 1`, `latency_ms: 67`, version `0.1.0` |
 | `/api/auth/me` in the browser | **401 `not_signed_in`** — the session-stopper |
-| Discord | signed in; `#mute-me-bot-test-spam` renders; newest bot message **9/12/26**, i.e. no self-test cards |
+| Discord | signed in; `#black_bloc-logs` renders; newest bot message **9/12/26**, i.e. no self-test cards |
 | `selftest_purge_minutes` | **not read and not changed** — the Settings page was behind the sign-in |
 | Self-test | **not run** |
 | Screenshot frame / CSS viewport | 1512×802 frame; `innerWidth` 2498, `innerHeight` 1269, `dpr` 1.5 → `k` 0.6053, `dy` 34 |

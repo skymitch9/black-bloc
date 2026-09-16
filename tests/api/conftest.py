@@ -214,7 +214,7 @@ class WebGuild:
             category,
             WebChannel(
                 TEST_CHANNEL_ID,
-                "mute-me-bot-test-spam",
+                "black_bloc-logs",
                 position=1,
                 category_id=CATEGORY_ID,
                 viewers={STAFF_ROLE_ID},

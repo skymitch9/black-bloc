@@ -4,7 +4,7 @@
 > verify). **Status:** TRACKED · ⏸️ **NOT STARTED — PAUSED ON THE OWNER.**
 > **Last verified: 2026-09-11 09:10** — docs-wide staleness pass against **v108** `73e2e44`.
 > ⚠️ **Six days and sixteen releases on, step P5 has still not been taken: `TEST_MODE` is ON
-> and the bot still speaks only in `#mute-me-bot-test-spam` and DMs.** Not one row of §2 has
+> and the bot still speaks only in `#black_bloc-logs` and DMs.** Not one row of §2 has
 > been executed. That is not drift — the owner paces this and nothing here is a promise about
 > dates — but a reader must not mistake this file for a record of what happened. **Re-measured
 > today:** the command roster is still **29 top-level commands, zero `app_commands.Group`s**;
@@ -49,7 +49,7 @@ Settings page — nothing needs a deploy (checklist item 33).
 | # | Step | Who | How |
 |---|---|---|---|
 | P1 | The sweep rows for whatever you are about to flip are green, and the core ones (1–3, 6, 10, 12, 14–16, 21–24) at minimum | owner | [`../access/sweeps.md`](../access/sweeps.md) — **350** rows as of 2026-09-11 (294 at v92), grouped by feature; round 1 of the site sweep passed 2026-09-01, the self-test row (252) was run by the owner 2026-09-05. Rows 253–294 are still the owner's |
-| P2 | Rename `#mute-me-bot-test-spam` → **`#black-block-logs`** (spelling confirmed 2026-08-26) | owner | Discord; the channel id survives a rename so `TEST_CHANNEL_ID`, `log_channel_id` and `selftest_channel_id` keep working. Not done as of 2026-09-05 (every sweep row still names the old name) |
+| P2 | Rename `#black_bloc-logs` → **`#black-block-logs`** (spelling confirmed 2026-08-26) | owner | Discord; the channel id survives a rename so `TEST_CHANNEL_ID`, `log_channel_id` and `selftest_channel_id` keep working. Not done as of 2026-09-05 (every sweep row still names the old name) |
 | P3 | Point `staff_channel_id` at the REAL staff channel | owner (+Claude verifies) | Settings page ▸ **Core**, or `/settings` ▸ **A setting group…** ▸ **core**. This drives who counts as staff everywhere (site access, approvers, exemptions). ⚠️ `/automod` ▸ **What automod does…** ▸ on refuses in words while it still points at the log channel (`automod.arming_refusal`) — that refusal is the guard working |
 | P4 | Decide the approval channels | owner | `rolemenu_approval_channel_id`, `events_category_id`, `applications_channel_id`, `poll_channel_id`, `request_status_channel_id` / `request_notify_channel_id` — every one defaults to the staff channel or to the feature's own panel's Setup; leave defaults unless wanted elsewhere |
 | P5 | **Lift `TEST_MODE`** — `flyctl secrets set TEST_MODE=false --app black-bloc` (restarts the bot) | ⚠️ **owner only** (standing rule: never Claude) | after P2–P4. From this moment the bot can post anywhere its features are pointed, so the per-feature modes below become the only brake — which is why everything acting on members is still `shadow` here. ⚠️ The restart kills every open ephemeral panel (**KI-20**) — do it at a quiet hour and tell staff |

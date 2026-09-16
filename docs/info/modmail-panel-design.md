@@ -482,7 +482,7 @@ distinct kind from `modmail.card_failed`. This is the same reasoning `react` `:6
 
 ⚠️ **`speak` `:633` is the only send path, and it redirects.** While the guard is installed and the
 ticket's own channel is not allowed, `speak` `:515–518` sends to the **test channel** instead. So
-under `TEST_MODE` a real ticket's card appears in `#mute-me-bot-test-spam`, not in the ticket — and
+under `TEST_MODE` a real ticket's card appears in `#black_bloc-logs`, not in the ticket — and
 `allows_interaction` `:97` still accepts its buttons, because the test channel is the test channel.
 That is a real, visible difference from production, and §G is the reason the practice ticket exists.
 
@@ -726,7 +726,7 @@ access-INCREASING and does not get made as a side effect of a practice button.
 
 ⚠️ **A consequence to state plainly, because it will look like a bug:** in the practice thread the
 sticky card behaves as it will in production; in a REAL ticket under `TEST_MODE` the card appears
-in `#mute-me-bot-test-spam` instead. That difference is the practice ticket's entire justification,
+in `#black_bloc-logs` instead. That difference is the practice ticket's entire justification,
 and the sweep row must say so or the owner will report the real ticket as broken.
 
 ⚠️ **Creating a thread is invisible to the guard** — the guard patches `send_message`,

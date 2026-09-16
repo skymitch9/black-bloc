@@ -509,7 +509,7 @@ embed — a 24-slot lineup plus the header runs long), `panels.site_page_url`, `
 
 1. `python -m black_bloc` boots; **read `commands synced` and record both numbers** — the drop must
    be exactly one. ⚠️ **TEST_MODE stands and is not touched**: the bot speaks only in
-   `#mute-me-bot-test-spam` (`TEST_CHANNEL_ID`) and DMs; `guard.py` is not edited, `_post` `:643`
+   `#black_bloc-logs` (`TEST_CHANNEL_ID`) and DMs; `guard.py` is not edited, `_post` `:643`
    keeps logging `raidtrain.post_skipped_test_mode` for any other channel, and this build must not
    look for a token. With no token, measure the tree the only other way:
    `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`.

@@ -21,7 +21,7 @@ class Guild:
     def __init__(self, guild_id=GUILD):
         self.id = guild_id
         self.name = "Black in a Flash!"
-        self.channels = [Channel(500, "mute-me-bot-test-spam"), Channel(501, "general")]
+        self.channels = [Channel(500, "black_bloc-logs"), Channel(501, "general")]
         self.members = {}
 
     def get_channel(self, channel_id):
@@ -249,7 +249,7 @@ async def test_every_probe_reads_without_a_query_of_its_own(bot, db):
     )
     assert [one["value"] for one in found] != []
     assert all(one["value"] and one["label"] for one in found)
-    assert found[-1]["value"] == "on — #mute-me-bot-test-spam"
+    assert found[-1]["value"] == "on — #black_bloc-logs"
 
 
 async def test_a_probe_that_throws_says_not_readable_rather_than_breaking_the_page(
@@ -502,7 +502,7 @@ async def test_right_now_names_the_test_channel_and_counts_the_modes(bot):
     found = guides.right_now(bot, bot.guilds[0])
 
     assert found["test_mode"] is True
-    assert found["test_channel"] == "mute-me-bot-test-spam"
+    assert found["test_channel"] == "black_bloc-logs"
     assert found["on"] + found["shadow"] + found["off"] > 10
 
 

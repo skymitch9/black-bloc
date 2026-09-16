@@ -405,7 +405,7 @@ The two that are genuinely his:
   Options: **(a) leave it `off`** — this build changes no runtime behaviour and row 104 tests the
   off-state wording, which is the wording most likely to be wrong; (b) flip to **`shadow`** after
   the deploy so rows 44 and 45 run against real uploads with nothing posted; (c) flip to **`on`**,
-  which posts into `#mute-me-bot-test-spam` only while `TEST_MODE` stands. **Recommended: (b)** —
+  which posts into `#black_bloc-logs` only while `TEST_MODE` stands. **Recommended: (b)** —
   shadow is the mode the sweeps were written for, it posts nothing, and it is the only way to learn
   whether the poller has been quietly failing for a day. It is an operational call, not a build
   call: **the build lands either way.**

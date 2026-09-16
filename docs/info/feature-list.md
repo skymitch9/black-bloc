@@ -81,7 +81,7 @@ scoped.
 
 ## Cross-cutting (every feature)
 
-- **Test policy** — everything runs inside `#mute-me-bot-test-spam` + DMs
+- **Test policy** — everything runs inside `#black_bloc-logs` + DMs
   until the owner lifts `TEST_MODE`; side effects check `bot.guard`.
 - **Rollout** — anything that acts on members ships shadow/log → watch → on,
   flipped per feature; the incumbent stays on until parity is measured.
@@ -101,7 +101,7 @@ scoped.
   features stay off. `/help` says how many are missing and how to get them
   back; `modmail_mode` is `channel`/`thread` and has no off, so `/modmail`
   never hides. `command_visibility.py`, sweeps rows 183–187.
-- **Logging** — one log channel (`#mute-me-bot-test-spam` now → renamed `#black-block-logs` later; it is a setting); every action the bot takes on a
+- **Logging** — one log channel (`#black_bloc-logs` now → renamed `#black-block-logs` later; it is a setting); every action the bot takes on a
   member is one line there with who/what/why.
 - **Permissions** — the bot holds `Bots` (Administrator) by owner decision;
   the code still checks *its own* permission model so a future narrowing

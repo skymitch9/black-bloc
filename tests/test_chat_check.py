@@ -9,7 +9,7 @@ from black_bloc.chat_check import (
     tidy,
 )
 
-CHANNELS = ("general", "live-now", "mute-me-bot-test-spam")
+CHANNELS = ("general", "live-now", "black_bloc-logs")
 ROLES = ("leads", "aunties / uncles", "aunties", "member", "everyone", "here")
 
 

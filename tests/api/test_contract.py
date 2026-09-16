@@ -701,7 +701,7 @@ async def seed_selftest_run(db, guild_id: int, channel_id: int) -> int:
                     "name": "config.log_channel_id",
                     "feature": "core",
                     "ok": True,
-                    "detail": "#mute-me-bot-test-spam (500); view_channel",
+                    "detail": "#black_bloc-logs (500); view_channel",
                     "via": "website",
                 }
             ),
