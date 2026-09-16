@@ -16,7 +16,7 @@
 > `b32fb43` (v110 live). **§C4 rewritten 21:5x** after the owner's "You can screenshot discord in
 > browser mode no? If not make mocks": captures are a Claude-in-Chrome session step over the cards the
 > self-test posts, mocks only for screens a capture cannot reach without clicking as the owner.
-> **F-G1 DECIDED 21:5x, owner verbatim "A"** — no Discord editing door; see §G. ⚠️ **NOT checked:** nothing here met Discord or a browser; the `/help`
+> **F-G1 DECIDED 21:5x "A"** (no Discord editing door), **F-G2 06:51 "a"** (a request), **F-G3 06:53 "a"** (member guides only) — §G. Nothing waits on the owner; the seed copy (§C11) is the conductor's next step, then dispatch on the owner's word. ⚠️ **NOT checked:** nothing here met Discord or a browser; the `/help`
 > reply and the member rail were read from the source, not rendered. Estimates are estimates.
 
 ## A. What exists (measured at `b32fb43`)
@@ -329,7 +329,7 @@ guides for the website's own pages (the site is the guide for itself — the Set
   `/data/guides/`; `access/README.md` row for the capture runbook; the landing ritual in `TODO.md`
   gains "capture session if `release.json` names a feature"; `code-notes.md` section by NAME.
 
-## G. Open forks (one at a time to the owner, recommendation first)
+## G. Forks — ALL THREE DECIDED 2026-09-15/16 (kept with their reasoning)
 
 - **F-G1 — a Discord editing door. ✅ DECIDED 2026-09-15 21:5x, owner verbatim "A": none.** (a) **None** — wording and screenshots are edited on the website
   only; the Discord half of this feature is `/help`'s links, and a multi-field long-text edit is what
@@ -340,7 +340,7 @@ guides for the website's own pages (the site is the guide for itself — the Set
   modals). Recommend **(a)**; the owner's words were "webpages".
 - **F-G2 — where "Something's off" lands. ✅ DECIDED 2026-09-16 06:51, owner verbatim "a": a request.** (a) A request, as designed (staff see it where they see
   everything else). (b) A `guide.fault` log row only, no request. Recommend **(a)**.
-- **F-G3 — the hub for a member.** (a) Member guides only, staff guides hidden. (b) Both, staff ones
+- **F-G3 — the hub for a member. ✅ DECIDED 2026-09-16 06:53, owner verbatim "a": member guides only.** (a) Member guides only, staff guides hidden. (b) Both, staff ones
   marked. Recommend **(a)** — a member cannot press any button a staff guide names.
 
 ## Deviations
