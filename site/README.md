@@ -9,9 +9,9 @@ Phase 8b — the **staff dashboard**. It signs staff in with Discord and gives
 every feature its own tab: what the bot is doing, and the controls that change
 it. Phase 8a's read-only status page is still here, as the **Health** tab.
 
-Thirteen tabs, one HTML file each, one module each. The nav is a left rail on
+Eighteen pages, one HTML file each, one module each. The nav is a left rail on
 wide screens and a scrolling strip of tabs on a phone, and it is built from one
-list in `app.js` — never thirteen copies to drift.
+list in `app.js` — never eighteen copies to drift.
 
 | Tab | File | What it does |
 |---|---|---|
@@ -28,6 +28,7 @@ list in `app.js` — never thirteen copies to drift.
 | Settings | `settings.html` | every registry key, grouped by namespace, typed inputs |
 | Audit | `audit.html` | the settings audit and everything done from the web |
 | Health | `health.html` | 8a: gateway, uptime, loop health, the last 50 actions |
+| Guides | `guides.html` | one page per goal — the hub, and a guide at `#<slug>`: steps with a screenshot each, the values read live from the bot, and the whole thing edited in place by staff. The **second** page a signed-in member who is not staff may open |
 
 | Path | What |
 |---|---|
@@ -104,7 +105,7 @@ then the checker:
 
 ```
 MOCK_TEST_MODE=0 node site/mock/server.mjs &
-node site/mock/check.mjs         # 13 pages, 49 routes, every key the pages read
+node site/mock/check.mjs         # 18 pages, 160 routes, every key the pages read
 ```
 
 `site/mock/README.md` has the table of states. A bare static server

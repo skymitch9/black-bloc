@@ -424,3 +424,81 @@ guides for the website's own pages (the site is the guide for itself — the Set
     `/data/guides/`, the RECOVERY row, `docs/access/guides-capture.md`, and §C8's two foot buttons
     (`This guide was right` / `Something's off`) with `guide.confirmed`. `guides.FEATURE_PATHS`
     and `guides.features_changed()` are in place for the deploy step to call.
+
+## G2 deviations
+
+> Written by the G2 build (branch `guides-pages`, off `main` at `cad1abc`), 2026-09-16.
+> Every departure from §A–§G and from G1's own list above, and why. Each one is a fact
+> measured on this branch, not a preference.
+
+1. ⚠️ **The hub's Right now strip is read from `GET /api/guides`, NOT from `/api/status`
+   (§C5, last bullet).** `/api/status` is `staff_dependency`, and `shell.js:paintShell`
+   returns early for a member-only viewer *specifically so a member is asked for no staff
+   route*. Following §C5 literally would have given a member a hub with no strip at all,
+   or a 403 on every load. `guides.right_now(bot, guild)` is the one home and it answers
+   `{test_mode, test_channel, on, shadow, off}` inside the hub payload, reusing
+   `api.status.feature_modes` so the mode list is still counted in one place.
+2. ⚠️ **`guide.confirmed` is NOT hidden by default, and cannot be without hiding every
+   guide edit (§C10).** G1's deviation 8 left this to be measured at G2; measured:
+   `logkinds.hidden_by_default_patterns()` builds from `like_patterns(feature)`, which is
+   every kind head belonging to a FEATURE. There is no per-kind entry. Putting `guides` in
+   `HIDDEN_BY_DEFAULT` would take `guide.edited`, `guide.published` and the rest off the
+   Logs page's default view as well, which is the opposite of what staff want. The kind
+   is in `ROUTINE`, so it is already out of the "important only" view — which is what the
+   Logs page opens on. **Left visible, deliberately.**
+3. **Four fields and one route were added to G1's API**, each minimal and each with a
+   test, because the page could not be built honestly without them:
+   - `right_now` on the hub (1 above);
+   - `feature_mode` on every guide row — §C6's card and §C6's rail both show a mode pill,
+     and nothing in G1's payload carried one. `None` for a feature with no `_mode` key
+     (`core`), because a pill saying "not set" is a lie about a feature with no switch;
+   - `features` and `fact_choices` on the hub, staff only — the editor's feature picker
+     and fact picker. The alternative was the page re-deriving `guides.refused_setting`'s
+     rule in JavaScript, which is checklist 15's exact failure. A member gets
+     `{"settings": [], "probes": []}`;
+   - `fault_files_request` on a guide (asked for by the brief) so §C8's right-hand button
+     is drawn only when filing is on;
+   - `POST /api/guides/{slug}/confirmed`, §C8's left-hand button, member-gated through
+     `member_read_dependency` like the reads.
+   Contract: **17 → 18 pages, 159 → 160 routes.**
+4. **The hub's filter chips are "who it is for", "where you do it" and "only what is on"
+   (§C6 names no chips; the brief did).** "Where you do it" is derived from `command`: a
+   guide with one is done in Discord, one without is done on the site. There is no column
+   for it and one would be a second home for what `command` already says. The audience
+   chips are drawn for staff only — F-G3 means a member's list is member guides already.
+5. **The stale pill on a hub CARD is staff-only; the pill on the picture is everyone's.**
+   §C4.5 makes the count a staff line and the pill a thing on the picture. The card's pill
+   is a count, so it follows the staff line.
+6. **An upload is refused, in words, while the editor has unsaved changes.** The media
+   POST lands immediately and the page must reload to show the new picture, which would
+   throw away everything typed. §C3 does not say what happens here; losing a staffer's
+   typing silently was the alternative. Same for a step that has not been saved yet — it
+   has no id for the bot to file a picture against, and the sentence says so.
+7. **Publish / Unpublish is a pending change on the save bar, not an immediate write.**
+   §C3 lists it beside **Reset** and **Delete**, which are immediate; but §C3 also says
+   the PUT takes the WHOLE guide including `published`, and two write paths for one field
+   is two places for it to disagree. Reset and Delete stay immediate (both are confirmed).
+8. ⚠️ **`scripts/deploy.ps1` writes and commits `release.json` FIRST, before the
+   check-clean gate.** §C4.2 says "one step before `flyctl deploy`" and that the file is
+   committed by the deploy commit. The gate at the top of the script refuses a dirty tree,
+   so a file written later in the run would either be swept into a commit nobody reviewed
+   or left behind. It stages exactly one path — never `git add -A`, per the global rule
+   about a job that commits beside an agent — and the check-clean two lines later still
+   refuses anything else dirty.
+9. **The release step REFUSES when the last `deploys.log` line's commit is unreadable.**
+   §C4.2 does not say. The silent alternative — an empty diff — is indistinguishable from
+   "nothing changed", so a whole release of screenshots would be wrong and nobody would
+   know. A one-line fix to `deploys.log` is cheaper. When the *number* is missing (§C4.2's
+   own fallback), the release is named after the commit and the script says so on stderr.
+10. **`release.json`'s `commit` is HEAD BEFORE the release commit**, because that commit
+    does not exist until the file is written. It names the code the diff was taken
+    against; `deploys.log` carries the hash that actually shipped.
+11. **The page speaks a sentence when a picture will not load**, rather than leaving the
+    reserved box empty. §C4.6 says a picture is never deleted by staleness; it says
+    nothing about one that 404s. A silent hole is indistinguishable from a page fault.
+12. **`docs/access/guides-capture.md` is written but 🔴 NEVER DRILLED**, and its header
+    says so at the top rather than in a footnote. §F says "the FIRST capture session runs
+    at the G2 landing and is the runbook's drill" — that session has not run. No browser
+    opened Discord for it, nothing was cropped, nothing was uploaded to a live guide.
+13. **Nothing in G1's list was reversed.** Deviations 1–14 there all still hold; 14's list
+    of what it left to G2 is now built, except the drill in 12 above.

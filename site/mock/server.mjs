@@ -1911,6 +1911,7 @@ const GUIDE_NOT_SEEDED = '**{slug}** was written here rather than shipped with B
 const GUIDE_BAD_PICTURE = 'That upload did not arrive as a picture Black Bloc could read, so nothing was uploaded. It is a fault in the page rather than in the file \u2014 reload the guide and try again.';
 const GUIDE_WRONG_TYPE = '**{name}** is not a picture Black Bloc can serve. Nothing was uploaded \u2014 send a PNG, a JPEG or a WebP.';
 const GUIDE_OFF = 'Guides are turned off for this server, so there is nothing to show. A Lead turns them back on from the dashboard\u2019s Settings page under **guides**.';
+const GUIDE_RELEASE = 'v110';
 const GUIDES_OFF_FOR_STAFF = 'Guides are off for members right now, so nobody but staff can open this page. A Lead turns them back on from the Settings page under **guides**.';
 
 function guideOrigin() {
@@ -1985,6 +1986,9 @@ function guideRow(guide) {
     audience: guide.audience,
     feature: guide.feature,
     feature_page: GUIDE_FEATURE_PAGES[guide.feature] || null,
+    feature_mode: state.settings.has(`${guide.feature}_mode`)
+      ? String(state.settings.get(`${guide.feature}_mode`) ?? '')
+      : null,
     command: guide.command,
     sort: guide.sort,
     published: Boolean(guide.published),
@@ -2033,6 +2037,38 @@ function guidesAreOn() {
   return String(state.settings.get('guides_mode') || 'on') === 'on';
 }
 
+/** What the editor's fact picker may offer; the same rule black_bloc/guides.py refuses by. */
+function guideFactChoices() {
+  return {
+    settings: SETTING_SPECS
+      .map(([key]) => key)
+      .filter((key) => !GUIDE_CORE_KEYS.includes(key) && !key.endsWith('_log_level'))
+      .sort(),
+    probes: Object.keys(GUIDE_PROBE_LABELS).sort().map((ref) => ({ ref, label: GUIDE_PROBE_LABELS[ref] })),
+  };
+}
+
+/** G2's hub strip. /api/status is staff-only, so the hub reads the same facts from here. */
+function guideRightNow() {
+  let on = 0;
+  let shadow = 0;
+  let off = 0;
+  for (const [key] of SETTING_SPECS) {
+    if (!key.endsWith('_mode') || NOT_A_FEATURE.includes(key)) continue;
+    const mode = String(state.settings.get(key) ?? '');
+    if (mode === 'shadow') shadow += 1;
+    else if (mode === 'off') off += 1;
+    else on += 1;
+  }
+  return {
+    test_mode: testMode,
+    test_channel: testMode ? 'mute-me-bot-test-spam' : null,
+    on,
+    shadow,
+    off,
+  };
+}
+
 function wantedGuide(slug, session) {
   const staff = session !== 'member';
   const found = state.guides.find((one) => one.slug === slug);
@@ -2065,6 +2101,9 @@ route('GET', '/api/guides', (context) => {
     may_edit: staff,
     mode: state.settings.get('guides_mode') || 'on',
     stale: staff ? rows.reduce((total, one) => total + one.stale_count, 0) : 0,
+    features: Object.entries(GUIDE_FEATURE_PAGES).map(([feature, page]) => ({ feature, page })),
+    fact_choices: staff ? guideFactChoices() : { settings: [], probes: [] },
+    right_now: guideRightNow(),
     notes: guidesAreOn() ? [] : [GUIDES_OFF_FOR_STAFF],
     checked_at: now(),
   };
@@ -2132,7 +2171,28 @@ route('GET', '/api/guides/:slug', (context) => {
   const staff = context.session !== 'member';
   if (!guidesAreOn() && !staff) throw new Refused(409, 'guides_off', GUIDE_OFF);
   const guide = wantedGuide(context.params.slug, context.session);
-  return { ...guideWhole(guide), may_edit: staff, notes: guidesAreOn() ? [] : [GUIDES_OFF_FOR_STAFF] };
+  return {
+    ...guideWhole(guide),
+    may_edit: staff,
+    fault_files_request: Boolean(state.settings.get('guides_fault_files_request')),
+    notes: guidesAreOn() ? [] : [GUIDES_OFF_FOR_STAFF],
+  };
+});
+
+route('POST', '/api/guides/:slug/confirmed', (context) => {
+  requireMember(context.session);
+  const staff = context.session !== 'member';
+  if (!guidesAreOn() && !staff) throw new Refused(409, 'guides_off', GUIDE_OFF);
+  const guide = wantedGuide(context.params.slug, context.session);
+  logAction('web.guide.confirmed', {
+    actor_id: actorOf(context.session),
+    details: { slug: guide.slug, guide_id: guide.id, release: GUIDE_RELEASE },
+  });
+  return {
+    slug: guide.slug,
+    release: GUIDE_RELEASE,
+    message: `Thank you — **${guide.title}** is marked as working. Staff read the count; nothing else was sent.`,
+  };
 });
 
 route('PUT', '/api/guides/:slug', async (context) => {

@@ -1,7 +1,10 @@
+import { listOf } from './api.js';
 import { LABELS } from './labels.js';
+import { guidesIndex } from './shell.js';
 import { el, icon, setShowKeys } from './ui.js';
 
 const SETTINGS_TAB = 'settings';
+const GUIDES_TAB = 'guides';
 const SHOWN = 12;
 
 /** Fired when a setting on THIS page is the thing that was picked. */
@@ -11,6 +14,7 @@ let node = null;
 let input = null;
 let list = null;
 let found = [];
+let all = [];
 let at = 0;
 
 function railPages() {
@@ -50,6 +54,35 @@ function settingsEntries() {
       }
       location.assign(settingsHref(key));
     },
+  }));
+}
+
+let guideTitles = [];
+let guidesAsked = false;
+
+/**
+ * Every guide by its title, read once the first time the palette opens — the
+ * hub is a member's own page, so the list is whatever this person may read.
+ */
+function guideEntries() {
+  const link = document.querySelector(`.nav-link[data-tab="${GUIDES_TAB}"]:not([hidden])`);
+  if (!link) return [];
+  const href = link.getAttribute('href');
+  if (!guidesAsked) {
+    guidesAsked = true;
+    guidesIndex().then((answer) => {
+      guideTitles = answer.ok ? listOf(answer.payload, 'guides') : [];
+      if (node && node.open) {
+        all = index();
+        paint();
+      }
+    });
+  }
+  return guideTitles.map((one) => ({
+    kind: 'Page',
+    title: one.title,
+    note: `${href}#${one.slug}`,
+    run: () => location.assign(`${href}#${one.slug}`),
   }));
 }
 
@@ -94,7 +127,7 @@ function doings() {
 }
 
 function index() {
-  return [...railPages(), ...settingsEntries(), ...doings()].map((entry) => ({
+  return [...railPages(), ...guideEntries(), ...settingsEntries(), ...doings()].map((entry) => ({
     ...entry,
     hay: `${entry.title} ${entry.note} ${entry.kind}`.toLowerCase(),
   }));
@@ -126,9 +159,9 @@ function paintRows() {
   if (on) on.scrollIntoView({ block: 'nearest' });
 }
 
-function paint(entries) {
+function paint() {
   const query = input.value.trim().toLowerCase();
-  found = rank(entries, query);
+  found = rank(all, query);
   at = 0;
   if (found.length === 0) {
     list.replaceChildren(el('p', { class: 'say-nothing' }, [
@@ -181,9 +214,9 @@ function build() {
 function open() {
   if (node === null) build();
   if (node.open) return;
-  const entries = index();
+  all = index();
   input.value = '';
-  input.oninput = () => paint(entries);
+  input.oninput = () => paint();
   input.onkeydown = (event) => {
     if (event.key === 'ArrowDown') {
       event.preventDefault();
@@ -196,7 +229,7 @@ function open() {
       run(at);
     }
   };
-  paint(entries);
+  paint();
   node.showModal();
   input.focus();
 }

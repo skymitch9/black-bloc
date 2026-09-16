@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Request, Response
 
 from ... import guides
 from ...logkinds import FEATURE_PAGES
+from ...settings_store import KEY_TYPES
 from ..auth import Refused
 from ..names import resolve_one
 from ..writes import (
@@ -29,6 +30,9 @@ PUBLISHED_SAID = "**{title}** is published — members and `/help` can see it no
 UNPUBLISHED_SAID = "**{title}** is unpublished. Staff still see it; members and `/help` do not."
 DELETED_SAID = "**{title}** is gone."
 RESET_SAID = "**{title}** is back to the words it shipped with."
+CONFIRMED_SAID = (
+    "Thank you — **{title}** is marked as working. Staff read the count; nothing else was sent."
+)
 MEDIA_SAID = "The picture on step {position} is replaced."
 MEDIA_GUIDE_SAID = "The picture on **{title}** is replaced."
 NOT_SEEDED = (
@@ -130,6 +134,7 @@ def guide_row(
         "audience": row["audience"],
         "feature": feature,
         "feature_page": FEATURE_PAGES.get(feature),
+        "feature_mode": guides.feature_mode(bot.store, guild.id, feature) if guild else None,
         "command": row["command"],
         "sort": int(row["sort"] or 0),
         "published": bool(row["published"]),
@@ -232,6 +237,19 @@ def picture_bytes(payload: dict[str, Any]) -> bytes:
         return base64.b64decode(raw, validate=True)
     except (binascii.Error, ValueError):
         raise Refused(400, "bad_picture", guides.MEDIA_UNREADABLE) from None
+
+
+def fact_choices() -> dict[str, Any]:
+    """What the editor's fact picker may offer — the API's own answer, not a second list."""
+    return {
+        "settings": sorted(
+            key for key in KEY_TYPES if guides.refused_fact(guides.SETTING, key) is None
+        ),
+        "probes": [
+            {"ref": ref, "label": guides.PROBE_LABELS.get(ref, ref)}
+            for ref in sorted(guides.PROBES)
+        ],
+    }
 
 
 def bytes_word(count: int) -> str:
@@ -346,6 +364,11 @@ def build_router(bot: Any) -> APIRouter:
             "may_edit": staff,
             "mode": bot.store.get(guild.id, "guides_mode"),
             "stale": sum(one["stale_count"] for one in found) if staff else 0,
+            "features": [
+                {"feature": name, "page": page} for name, page in FEATURE_PAGES.items()
+            ],
+            "fact_choices": fact_choices() if staff else {"settings": [], "probes": []},
+            "right_now": guides.right_now(bot, guild),
             "notes": [] if on else [GUIDES_ARE_OFF_FOR_STAFF],
             "checked_at": now(),
         }
@@ -429,10 +452,39 @@ def build_router(bot: Any) -> APIRouter:
         row = await _wanted(guild, slug, who)
         whole = await _whole(guild, row)
         whole["may_edit"] = staff
+        whole["fault_files_request"] = guides.fault_files_request(bot.store, guild.id)
         whole["notes"] = (
             [] if guides.guides_on(bot.store, guild.id) else [GUIDES_ARE_OFF_FOR_STAFF]
         )
         return whole
+
+    @router.post("/{slug}/confirmed")
+    async def guide_confirmed(request: Request, slug: str) -> dict[str, Any]:
+        """§C8's left-hand button: one routine row a member leaves, and nothing else."""
+        who = await reading_member(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        staff = bool(who.get("staff"))
+        if not guides.guides_on(bot.store, guild.id) and not staff:
+            raise Refused(409, "guides_off", guides.GUIDES_OFF)
+        row = await _wanted(guild, slug, who)
+        release = guides.read_release(bot) or {}
+        await note(
+            bot,
+            guild,
+            "web.guide.confirmed",
+            who,
+            details={
+                "slug": slug,
+                "guide_id": int(row["id"]),
+                "release": release.get("release"),
+            },
+        )
+        return {
+            "slug": slug,
+            "release": release.get("release"),
+            "message": CONFIRMED_SAID.format(title=row["title"]),
+        }
 
     @router.put("/{slug}")
     async def guide_save(request: Request, slug: str, payload: dict[str, Any]) -> dict[str, Any]:

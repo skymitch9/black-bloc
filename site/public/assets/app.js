@@ -1,7 +1,7 @@
 import { api, Outage, signInHref } from './api.js';
 import { lastTab, mountColumns, mountSections, rememberTab } from './layout.js';
 import { mountPalette } from './palette.js';
-import { MEMBER_TAB, forgetShellStatus, isMemberOnly, mountShell, paintShell, renderNav } from './shell.js';
+import { MEMBER_TAB, MEMBER_TABS, forgetShellStatus, isMemberOnly, mountShell, paintShell, renderNav } from './shell.js';
 import { clearDock } from './ui.js';
 
 export const TABS = [
@@ -22,6 +22,7 @@ export const TABS = [
   { tab: 'audit', href: '/audit.html', label: 'Logs' },
   { tab: 'requests', href: '/requests.html', label: 'Requests' },
   { tab: 'health', href: '/health.html', label: 'Health' },
+  { tab: 'guides', href: '/guides.html', label: 'Guides' },
 ];
 
 export const FEATURE_TABS = {
@@ -37,6 +38,7 @@ export const FEATURE_TABS = {
   poll: 'polls',
   chat: 'chat',
   request: 'requests',
+  guides: 'guides',
 };
 
 export function tabHref(tab) {
@@ -177,7 +179,7 @@ export function rememberedMe() {
  */
 function refuseFor(me, tab) {
   if (isMemberOnly(me)) {
-    if (tab === MEMBER_TAB) return false;
+    if (MEMBER_TABS.includes(tab)) return false;
     location.replace(tabHref(MEMBER_TAB));
     return true;
   }

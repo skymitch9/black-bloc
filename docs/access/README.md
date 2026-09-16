@@ -3,7 +3,7 @@
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not
 > temporarily) — secret NAMES only. Last verified: **2026-09-11 08:34** — the index was checked BOTH
 > ways: every row below points at a file that exists, and `ls docs/access/*.md` returns exactly
-> **11** files — this index plus the **10** rows — so nothing in the folder is unlisted. Each row's
+> **12** files — this index plus the **11** rows (2026-09-16: `guides-capture.md` added by the Guides G2 build) — so nothing in the folder is unlisted. Each row's
 > one-line hook was re-read against its file and is still true. ⚠️ **NOT checked here:** the facts
 > INSIDE each file (those were re-verified file by file in the same pass — see each one's own
 > "Last verified"), and nothing in this pass met live Discord, the live Fly app or a browser.
@@ -21,4 +21,5 @@
 | [`operator-read.md`](operator-read.md) | **`OPERATOR_READ_TOKEN`**: the one command the OWNER runs to mint it (it never prints the value), how a session reads live state with `scripts/read.ps1`, the table of readable paths, and how to rotate or revoke. Unset = the door does not exist |
 | [`personality-pool.md`](personality-pool.md) | **The shared mood manifest**: the order of operations for a roster change across both estate bots, `scripts/sync_personality_pool.py`, the two `personality_pool_*` settings, what the boot sync writes (and the one column it never touches), and how to read the `pool.in_step_with_gabi` self-test row. Added 2026-09-05; **both halves have landed since** (KI-23 closed 2026-09-05 19:45) |
 | [`site.md`](site.md) | The config website: the one-hostname deploy, the custom domain, the EXACT Discord OAuth redirect URI to register, the **17** pages and the mock. It is LIVE at https://blackbloc.heygabi.ai |
+| [`guides-capture.md`](guides-capture.md) | **After a deploy whose `release.json` names a feature:** the step-by-step a Claude session follows to re-shoot the guide screenshots that went stale — read `/api/guides/stale` with the operator token, shoot the cards the self-test already posted in the owner's own Discord tab (⚠️ **pressing nothing on his account**), crop with `scripts/scan/crop_shot.py`, upload through the guide page's own **Replace screenshot…**. Added 2026-09-16 by the Guides G2 build. 🔴 **Never drilled** |
 | [`testing.md`](testing.md) | **How to run the tests:** the hermetic suite, the mock's contract check, and `tests/live/` against the DEPLOYED api (the two env NAMES it needs, and why the operator token cannot start a self-test). Added 2026-09-05 by the self-test build |

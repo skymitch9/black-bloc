@@ -554,3 +554,104 @@ async def test_the_stale_list_is_staff_only_and_names_the_guide_each_shot_belong
     assert body["shots"][0]["slug"] == "golive-announce"
     assert body["shots"][0]["feature"] == "golive"
     assert as_staff.get("/api/guides").json()["stale"] == 1
+
+
+# --- G2: what the page reads ------------------------------------------------------------------
+
+
+async def test_the_hub_carries_the_strip_the_page_draws_because_status_is_staff_only(
+    as_member, web
+):
+    found = as_member.get("/api/guides").json()["right_now"]
+
+    assert found["test_mode"] is bool(web.settings.test_mode)
+    assert found["on"] + found["shadow"] + found["off"] > 0
+    assert isinstance(found["shadow"], int) and isinstance(found["off"], int)
+
+
+async def test_every_card_carries_the_mode_of_the_feature_it_belongs_to(as_member, web, wf):
+    await web.store.set(wf.GUILD_ID, "golive_mode", "shadow", by=LEAD)
+
+    rows = as_member.get("/api/guides").json()["guides"]
+    found = next(one for one in rows if one["slug"] == "golive-announce")
+
+    assert found["feature_mode"] == "shadow"
+    assert found["feature_page"] == "golive.html"
+
+
+async def test_a_feature_with_no_mode_key_says_so_rather_than_guessing(as_staff):
+    rows = as_staff.get("/api/guides").json()["guides"]
+
+    assert any(one["feature_mode"] is None for one in rows)
+
+
+async def test_the_fact_picker_offers_staff_every_key_the_save_would_take(as_staff):
+    staff = as_staff.get("/api/guides").json()["fact_choices"]
+
+    assert "golive_mode" in staff["settings"]
+    assert "staff_channel_id" not in staff["settings"]
+    assert not [one for one in staff["settings"] if one.endswith("_log_level")]
+    assert {one["ref"] for one in staff["probes"]} == set(pure.PROBES)
+
+
+async def test_the_fact_picker_is_never_sent_to_a_member(as_member):
+    assert as_member.get("/api/guides").json()["fact_choices"] == {"settings": [], "probes": []}
+
+
+async def test_every_choice_the_picker_offers_is_one_the_save_takes(as_staff):
+    choices = as_staff.get("/api/guides").json()["fact_choices"]
+
+    assert all(pure.refused_fact("setting", key) is None for key in choices["settings"])
+    assert all(pure.refused_fact("probe", one["ref"]) is None for one in choices["probes"])
+
+
+async def test_the_feature_list_is_the_bots_own_so_the_picker_cannot_offer_a_refused_one(as_staff):
+    rows = as_staff.get("/api/guides").json()["features"]
+
+    assert {one["feature"] for one in rows} == set(pure.features())
+    assert {"feature", "page"} == set(rows[0])
+
+
+async def test_a_guide_says_whether_somethings_off_files_a_request(as_member, web, wf):
+    assert whole(as_member)["fault_files_request"] is True
+
+    await web.store.set(wf.GUILD_ID, "guides_fault_files_request", False, by=LEAD)
+
+    assert whole(as_member)["fault_files_request"] is False
+
+
+async def test_this_guide_was_right_leaves_one_routine_row_and_says_thank_you(
+    as_member, web, wf
+):
+    answered = as_member.post("/api/guides/golive-announce/confirmed", json={})
+
+    assert answered.status_code == 200
+    assert "marked as working" in answered.json()["message"]
+    kinds = await wf.kinds_in(web.db)
+    assert kinds.count("web.guide.confirmed") == 1
+
+
+async def test_a_member_cannot_confirm_a_staff_guide_or_one_that_is_not_published(as_member):
+    hidden = as_member.post("/api/guides/event-review/confirmed", json={})
+
+    assert hidden.status_code == 404
+    assert "no_such_guide" == hidden.json()["error"]
+
+
+async def test_confirming_is_refused_in_words_when_guides_are_off(client, sign_in, people, web, wf):
+    await web.store.set(wf.GUILD_ID, "guides_mode", "off", by=LEAD)
+
+    become(client, sign_in, READER, staff=False)
+    answered = client.post("/api/guides/golive-announce/confirmed", json={})
+
+    assert answered.status_code == 409
+    assert "turned off for this server" in answered.json()["message"]
+
+
+async def test_a_signed_out_confirm_is_refused_in_words_and_never_a_bare_status(client, people):
+    client.cookies.clear()
+    answered = client.post("/api/guides/golive-announce/confirmed", json={})
+
+    assert answered.status_code == 401
+    assert answered.json()["message"].strip()
+    assert answered.json()["error"] == "not_signed_in"

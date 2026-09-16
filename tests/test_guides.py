@@ -493,3 +493,61 @@ def test_the_module_reads_no_environment_of_its_own():
 
 def test_a_fake_guild_is_all_the_names_resolver_needs():
     assert guides.named_value(SimpleNamespace(get_member=lambda _: None), "nothing") == "nothing"
+
+
+# --- G2: what the page and the deploy read ------------------------------------------------------
+
+
+async def test_right_now_names_the_test_channel_and_counts_the_modes(bot):
+    found = guides.right_now(bot, bot.guilds[0])
+
+    assert found["test_mode"] is True
+    assert found["test_channel"] == "mute-me-bot-test-spam"
+    assert found["on"] + found["shadow"] + found["off"] > 10
+
+
+async def test_right_now_says_off_without_naming_a_channel_nobody_is_in(bot):
+    bot.settings.test_mode = False
+
+    found = guides.right_now(bot, bot.guilds[0])
+
+    assert found["test_mode"] is False and found["test_channel"] is None
+
+
+async def test_a_feature_mode_is_read_from_the_registry_and_never_guessed(bot):
+    await bot.store.set(GUILD, "golive_mode", "shadow", by=1)
+
+    assert guides.feature_mode(bot.store, GUILD, "golive") == "shadow"
+    assert guides.feature_mode(bot.store, GUILD, "guides") == "on"
+    assert guides.feature_mode(bot.store, GUILD, "nothing_like_this") is None
+
+
+async def test_whether_somethings_off_files_a_request_is_the_key_and_not_a_constant(bot):
+    assert guides.fault_files_request(bot.store, GUILD) is True
+
+    await bot.store.set(GUILD, "guides_fault_files_request", False, by=1)
+
+    assert guides.fault_files_request(bot.store, GUILD) is False
+
+
+def test_release_json_is_what_the_deploy_step_writes_and_the_boot_reads(bot):
+    payload = guides.release_payload(
+        ["black_bloc/golive.py", "site/public/assets/page-guides.js"], "v111", "abc1234"
+    )
+
+    assert payload == {
+        "release": "v111",
+        "commit": "abc1234",
+        "changed_features": ["golive", "guides"],
+    }
+
+    guides.release_path(bot).write_text(json.dumps(payload), encoding="utf-8")
+    assert guides.read_release(bot) == payload
+
+
+def test_the_next_release_is_one_past_the_last_line_of_the_deploys_log():
+    line = "2026-09-11T10:14:50-07:00  black-bloc  9c6201d  by=deploy.ps1  v110: EVENT ROOMS"
+
+    assert guides.next_release(line) == "v111"
+    assert guides.next_release("a line with v9 in it") == "v10"
+    assert guides.next_release("nothing numbered here") is None

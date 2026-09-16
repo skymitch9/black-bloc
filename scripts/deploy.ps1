@@ -1,10 +1,34 @@
 # The one deploy path (incident 2026-09-01: an ungated chain deployed on a red suite).
 # Refuses a dirty tree and a failing gate; escape hatch BLACKBLOC_SKIP_GATE=1 for a
 # genuine emergency only. Appends the deploys.log line skeleton on success.
+# It also writes and commits site/public/assets/release.json FIRST, so the tree the
+# check-clean gate looks at is clean and the file ships inside the image.
 $ErrorActionPreference = "Stop"
 $repo = Split-Path $PSScriptRoot -Parent
 Set-Location $repo
 $flyctl = "$env:LOCALAPPDATA/Microsoft/WinGet/Packages/Fly-io.flyctl_Microsoft.Winget.Source_8wekyb3d8bbwe/flyctl.exe"
+
+# Which features changed since the last deploy, so the boot can mark the guide screenshots
+# of those features stale (guides-design §C4.2). The map lives in black_bloc/guides.py and is
+# NEVER copied here; scripts/release_json.py is the only caller.
+$logLine = (Get-Content docs\deploys.log -Encoding UTF8 | Where-Object { $_.Trim() } | Select-Object -Last 1)
+if (-not $logLine) { Write-Error "REFUSED: docs\deploys.log has no line to diff against." }
+$lastCommit = ($logLine -split '\s+')[2]
+git cat-file -e "$lastCommit^{commit}" 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "REFUSED: $lastCommit (column 3 of the last docs\deploys.log line) is not a commit in this tree, so this deploy cannot tell which features changed. Fix that line and run again."
+}
+$changed = git diff --name-only "$lastCommit..HEAD"
+$releaseFile = "site/public/assets/release.json"
+$changed | & .venv/Scripts/python scripts/release_json.py "$logLine" (git rev-parse --short HEAD) $releaseFile
+if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: $releaseFile could not be written." }
+if (git status --porcelain -- $releaseFile) {
+    git add -- $releaseFile
+    $release = ((Get-Content $releaseFile -Raw) | ConvertFrom-Json).release
+    git commit -q -m "Release ${release}: release.json"
+    if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: $releaseFile could not be committed." }
+    Write-Host "Wrote and committed $releaseFile for $release."
+}
 
 $dirty = git status --porcelain
 if ($dirty) { Write-Error "REFUSED: the working tree is dirty. Commit first.`n$dirty" }

@@ -83,6 +83,8 @@ UNOBSERVABLE = ("It should", "It will", "This should", "There should", "You will
 BOLD = re.compile(r"\*\*(.+?)\*\*", re.DOTALL)
 AND_THEN = re.compile(r"\s+(and\s+then|then)\s+")
 SLUG_SHAPE = re.compile(r"[^a-z0-9-]+")
+RELEASE_IN_LOG = re.compile(r"\bv(\d+)\b")
+DEPLOY_MARKER = "by=deploy.ps1"
 
 NO_SUCH_GUIDE = (
     "There is no guide called **{slug}**, so nothing was done. It may have been renamed — open "
@@ -916,6 +918,23 @@ async def reset_to_seed(db: Any, guild_id: int, guide: Any) -> bool:
 # --- releases and staleness -------------------------------------------------------------------
 
 
+def next_release(line: Any) -> str | None:
+    """`v110` in the last `deploys.log` line makes this deploy `v111`; no number, no guess."""
+    text = str(line or "")
+    _, marker, after = text.partition(DEPLOY_MARKER)
+    found = RELEASE_IN_LOG.search(after if marker else text)
+    return f"v{int(found.group(1)) + 1}" if found else None
+
+
+def release_payload(paths: Any, release: Any, commit: Any) -> dict[str, Any]:
+    """What `scripts/deploy.ps1` writes to `release.json` before it ships (§C4.2)."""
+    return {
+        "release": str(release or commit),
+        "commit": str(commit),
+        "changed_features": features_changed(paths),
+    }
+
+
 def release_path(bot: Any) -> Path:
     return Path(bot.settings.site_root).joinpath(*RELEASE_FILE)
 
@@ -1009,6 +1028,43 @@ def guides_on(store: Any, guild_id: int) -> bool:
 
 def help_links_on(store: Any, guild_id: int) -> bool:
     return bool(store.get(guild_id, "guides_help_links"))
+
+
+def feature_mode(store: Any, guild_id: int, feature: str) -> str | None:
+    """The mode pill a guide card wears. A feature with no `_mode` key has none."""
+    key = f"{feature}_mode"
+    if key not in KEY_TYPES:
+        return None
+    value = store.get(guild_id, key)
+    return None if value is None else str(value)
+
+
+def fault_files_request(store: Any, guild_id: int) -> bool:
+    return bool(store.get(guild_id, "guides_fault_files_request"))
+
+
+def right_now(bot: Any, guild: Any) -> dict[str, Any]:
+    """The hub's fixed strip. `/api/status` is staff-only, so the hub reads it from here."""
+    from .api.status import feature_modes
+
+    on = shadow = off = 0
+    for row in feature_modes(bot.store, guild.id):
+        mode = str(row["mode"] or "")
+        if mode == "shadow":
+            shadow += 1
+        elif mode == "off":
+            off += 1
+        else:
+            on += 1
+    testing = bool(getattr(bot.settings, "test_mode", False))
+    channel = guild.get_channel(bot.settings.test_channel_id) if testing else None
+    return {
+        "test_mode": testing,
+        "test_channel": getattr(channel, "name", None),
+        "on": on,
+        "shadow": shadow,
+        "off": off,
+    }
 
 
 def guide_url(origin: str, slug: str) -> str:
@@ -1203,8 +1259,10 @@ __all__ = [
     "diff_summary",
     "drop_media",
     "facts_of",
+    "fault_files_request",
     "faults_of",
     "features",
+    "feature_mode",
     "features_changed",
     "get_guide",
     "get_guide_by_id",
@@ -1228,8 +1286,11 @@ __all__ = [
     "put_facts",
     "put_faults",
     "put_steps",
+    "next_release",
     "reconcile_releases",
     "refresh_seeds",
+    "release_payload",
+    "right_now",
     "refused_fact",
     "refused_probe",
     "refused_setting",
