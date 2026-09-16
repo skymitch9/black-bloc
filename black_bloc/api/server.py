@@ -30,6 +30,7 @@ from .tools import (
     modmail,
     pings,
     polls,
+    posts,
     raidtrain,
     requests,
     rolemenus,
@@ -186,6 +187,7 @@ def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
     app.include_router(raidtrain.build_router(bot))
     app.include_router(applications.build_router(bot))
     app.include_router(guides.build_router(bot))
+    app.include_router(posts.build_router(bot))
     app.include_router(selftest_api.build_router(bot))
 
     root = Path(bot.settings.site_root)

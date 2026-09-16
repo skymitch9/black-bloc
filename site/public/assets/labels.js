@@ -231,6 +231,10 @@ export const LABELS = {
   personality_pool_sync: 'Whether the mood pool follows the estate’s shared manifest',
   personality_pool_peer_url: 'Where the estate’s other bot reports its health',
 
+  posts_mode: 'Whether staff can post the server’s standing messages',
+  posts_panel_minutes: 'How long the /posts panel stays live',
+  posts_log_level: 'How much of the posts is repeated into Discord',
+
   guides_mode: 'Whether members can read the guides',
   guides_who_edits: 'Who may rewrite a guide',
   guides_help_links: 'Whether /help puts a guide link beside each command',

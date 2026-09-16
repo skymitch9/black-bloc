@@ -43,6 +43,7 @@ FEATURES = (
     "applications",
     "selftest",
     "guides",
+    "posts",
 )
 
 HEADS: dict[str, str] = {
@@ -74,6 +75,8 @@ HEADS: dict[str, str] = {
     "selftest": "selftest",
     "guide": "guides",
     "guides": "guides",
+    "post": "posts",
+    "posts": "posts",
 }
 
 FEATURE_LABELS: dict[str, str] = {
@@ -96,6 +99,7 @@ FEATURE_LABELS: dict[str, str] = {
     "applications": "Applications",
     "selftest": "Test",
     "guides": "Guides",
+    "posts": "Posts",
 }
 
 FEATURE_PAGES: dict[str, str] = {
@@ -118,6 +122,7 @@ FEATURE_PAGES: dict[str, str] = {
     "applications": "rolemenus.html",
     "selftest": "health.html",
     "guides": "guides.html",
+    "posts": "posts.html",
 }
 
 IMPORTANT_SUFFIXES = (
@@ -170,6 +175,9 @@ IMPORTANT: frozenset[str] = frozenset(
         "chat.memory_optout",
         "chat.pool_retired",
         "role.extended",
+        "post.posted",
+        "post.updated",
+        "post.taken_down",
     }
 )
 
@@ -392,6 +400,15 @@ ROUTINE: frozenset[str] = frozenset(
         "guide.seeded",
         "guide.shots_stale",
         "guide.unpublished",
+        "post.created",
+        "post.deleted",
+        "post.message_gone",
+        "post.mode",
+        "post.pinned",
+        "post.reset",
+        "post.saved",
+        "post.seeded",
+        "post.seed_channel_unknown",
     }
 )
 

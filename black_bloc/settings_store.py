@@ -1030,6 +1030,7 @@ LOG_LEVEL_COMMANDS: dict[str, str] = {
     "raidtrain": "raidtrain",
     "applications": "apply",
     "selftest": "settings",
+    "posts": "posts",
 }
 
 
@@ -1689,6 +1690,43 @@ KEY_HELP.update(
     }
 )
 
+
+# Posts (§C7) — the two decisions the Posts page and `/posts` introduce; the third is the log
+# level, generated with every other feature's. Its own block so a parallel branch merges
+# textually.
+POSTS_MODES = ("off", "on")
+POSTS_MODE_DEFAULT = "on"
+POSTS_PANEL_MINUTES_DEFAULT = 10
+POSTS_PANEL_MIN_MINUTES = 1
+POSTS_PANEL_MAX_MINUTES = 1440
+
+KEY_TYPES.update({"posts_mode": "enum", "posts_panel_minutes": "int"})
+KEY_CHOICES.update({"posts_mode": POSTS_MODES})
+KEY_MIN["posts_panel_minutes"] = POSTS_PANEL_MIN_MINUTES
+KEY_MAX["posts_panel_minutes"] = POSTS_PANEL_MAX_MINUTES
+KEY_MIN_REASON["posts_panel_minutes"] = (
+    "A panel that goes quiet in less than {limit} minute is gone before anybody has read it."
+)
+KEY_MAX_REASON["posts_panel_minutes"] = (
+    "{limit} minutes is a day, and a panel nobody has touched since yesterday is not one "
+    "anybody is still looking at."
+)
+KEY_HELP.update(
+    {
+        "posts_mode": (
+            "on to let staff write the server's standing messages on the dashboard's Posts page "
+            "and push them with `/posts`; off hides `/posts` and refuses both doors in words. "
+            "Every word already written is kept either way, and a message already posted stays "
+            "in Discord until somebody presses Take it down"
+        ),
+        "posts_panel_minutes": (
+            "minutes the /posts panel stays live before its buttons disable themselves; 10 by "
+            "default. The 'this panel has gone quiet' footer can only be written while "
+            "Discord's 15-minute interaction window is still open, so 15 or more means the "
+            "buttons simply stop working with no footer to explain it"
+        ),
+    }
+)
 
 # The one grouping of the registry, read by the dashboard's Settings page and by /settings.
 CORE_KEYS = (
@@ -2423,6 +2461,10 @@ class SettingsStore:
             return PERSONALITY_POOL_SYNC_DEFAULT
         if key == PERSONALITY_POOL_PEER_URL:
             return PERSONALITY_POOL_PEER_URL_DEFAULT
+        if key == "posts_mode":
+            return POSTS_MODE_DEFAULT
+        if key == "posts_panel_minutes":
+            return POSTS_PANEL_MINUTES_DEFAULT
         if key == "guides_mode":
             return GUIDES_MODE_DEFAULT
         if key == "guides_who_edits":
