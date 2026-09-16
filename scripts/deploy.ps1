@@ -20,7 +20,8 @@ if ($LASTEXITCODE -ne 0) {
 }
 $changed = git diff --name-only "$lastCommit..HEAD"
 $releaseFile = "site/public/assets/release.json"
-$changed | & .venv/Scripts/python scripts/release_json.py "$logLine" (git rev-parse --short HEAD) $releaseFile
+$env:BB_LAST_DEPLOY_LINE = $logLine
+$changed | & .venv/Scripts/python scripts/release_json.py (git rev-parse --short HEAD) $releaseFile
 if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: $releaseFile could not be written." }
 if (git status --porcelain -- $releaseFile) {
     git add -- $releaseFile

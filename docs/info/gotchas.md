@@ -189,3 +189,12 @@ follow-up 1): after a refusal, `git log --oneline -1` — if it reads `Release v
 reset it before retrying. And keep the `*> file` deploy log OUTSIDE the tree (the scratchpad), or
 check-clean refuses on the log itself (refusal 1 of 3).
 
+## A `"` in a deploys.log line broke the release step (incident, v112, 2026-09-16)
+
+`deploy.ps1` handed the last `deploys.log` line to `scripts/release_json.py` as a native-command
+argument. PowerShell 5.1 passes an embedded `"` through unescaped, so the v111 line — which quoted
+*"no key"* — split into extra arguments and the script printed its usage: `REFUSED:
+site/public/assets/release.json could not be written`. The line now travels in
+`$env:BB_LAST_DEPLOY_LINE` and the script takes two arguments. Do not put the line back on the
+command line, and do not stop writing quotes in deploys.log — the log is prose.
+
