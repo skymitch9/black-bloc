@@ -36,7 +36,7 @@ def test_channels_come_back_with_ids_as_strings(client, sign_in, wf):
     sign_in(client)
     rows = client.get("/api/ref/channels").json()
     by_id = {row["id"]: row for row in rows}
-    assert by_id[str(wf.TEST_CHANNEL_ID)]["name"] == "black_bloc-logs"
+    assert by_id[str(wf.TEST_CHANNEL_ID)]["name"] == "blackbloc-logs"
     assert by_id[str(wf.TEST_CHANNEL_ID)]["type"] == "text"
     assert by_id[str(wf.VOICE_CHANNEL_ID)]["type"] == "voice"
     assert all(isinstance(row["id"], str) for row in rows)

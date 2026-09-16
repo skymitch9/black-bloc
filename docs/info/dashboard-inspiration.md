@@ -337,10 +337,10 @@ SETTINGS ───────────────────────�
 │  Settings                                                                   │
 │  [ 🔍 filter 48 keys… ]                                    48 keys · 7 groups│
 │  ┌ Core ───────────────────────────────────────────────────────────────────┐│
-│  │ Log channel                              [ # black_bloc-logs  ▾ ] ││
+│  │ Log channel                              [ # blackbloc-logs  ▾ ] ││
 │  │ where Black Bloc posts what it did         core.log_channel_id          ││
 │  │ ─────────────────────────────────────────────────────────────────────── ││
-│  │ Staff channel                            [ # black_bloc-logs  ▾ ] ││
+│  │ Staff channel                            [ # blackbloc-logs  ▾ ] ││
 │  │ whoever can see it can see this dashboard  core.staff_channel_id        ││
 │  └─────────────────────────────────────────────────────────────────────────┘│
 │  ┌ Automod  7 ▸ ┐  ┌ Birthdays  6 ▸ ┐  ┌ Events  7 ▸ ┐  (collapsed groups)  │
@@ -442,8 +442,8 @@ SETTINGS ───────────────────────�
 │ Settings                                          48 keys · 3 changed today │
 │ [ 🔍 filter…            ] [ Group: all ▾ ] [ ☐ only changed ]               │
 │  KEY                    VALUE                              DEFAULT   SET BY │
-│  core.log_channel_id    [ # black_bloc-logs    ▾ ]   —         Sky    │
-│  core.staff_channel_id  [ # black_bloc-logs    ▾ ]   —         Sky    │
+│  core.log_channel_id    [ # blackbloc-logs    ▾ ]   —         Sky    │
+│  core.staff_channel_id  [ # blackbloc-logs    ▾ ]   —         Sky    │
 │  automod.mode           [ shadow ▾ ]                       off       Sky    │
 │  automod.mention_limit  [ 5 ] per [ 30 ] s                 5/30      —      │
 │  golive.channel_id      [ # live-now                 ▾ ]   —         Sky    │
@@ -552,8 +552,8 @@ SETTINGS ───────────────────────�
 │  SETTINGS                                              48 knobs, 7 groups   │
 │  [ 🔍 what are you looking for? ]                                           │
 │  ┌ The basics  5 ──────────────────────────────────────────────────────────┐│
-│  │  Where the bot writes its log     [ # black_bloc-logs        ▾ ]  ││
-│  │  Who counts as staff              [ # black_bloc-logs        ▾ ]  ││
+│  │  Where the bot writes its log     [ # blackbloc-logs        ▾ ]  ││
+│  │  Who counts as staff              [ # blackbloc-logs        ▾ ]  ││
 │  │  What the bot's status says       [ Cookout attendees                ]  ││
 │  └─────────────────────────────────────────────────────────────────────────┘│
 │  ┌ Moderation  7 ▸ ┐ ┌ Birthdays  6 ▸ ┐ ┌ Go-live  9 ▸ ┐ ┌ Cookout  7 ▸ ┐   │

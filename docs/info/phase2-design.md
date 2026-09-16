@@ -253,5 +253,5 @@ rendered by the real client, the `/helix/games` response shape is from Twitch's
 documentation rather than a measured call, and the `youtube:`/`twitch:` presence
 asset prefixes are inferred — an address that turns out wrong renders as an
 embed with no image, never as a broken announcement. The owner should run
-`/golive test` (both platforms) in `#black_bloc-logs` and then go live
+`/golive test` (both platforms) in `#blackbloc-logs` and then go live
 once with `golive_mode` on.

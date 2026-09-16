@@ -312,7 +312,7 @@ green **untouched**: this build does not go near the write path.
 
 | # | Do this | Expect |
 |---|---|---|
-| 104 | `/memory` in `#black_bloc-logs` after a conversation or two | ONE ephemeral panel: *What Black Bloc remembers about you*, "Nobody else can read this", your lines NUMBERED (one learned in a DM marked as such), a **Forget one of these…** picker, **Forget everything**, **Stop remembering me**, **Refresh**. No Logs, no site link, nothing staff-shaped |
+| 104 | `/memory` in `#blackbloc-logs` after a conversation or two | ONE ephemeral panel: *What Black Bloc remembers about you*, "Nobody else can read this", your lines NUMBERED (one learned in a DM marked as such), a **Forget one of these…** picker, **Forget everything**, **Stop remembering me**, **Refresh**. No Logs, no site link, nothing staff-shaped |
 | 105 | **Forget one of these…** → pick line 2 | the panel re-renders with that line gone and the rest renumbered; the Chat log carries ONE `chat.memory_forgot` with `lines: 1` and **no trace of what the line said** |
 | 106 | **Forget everything** → **Keep it**; then again → **Yes, forget it all** | Keep it changes nothing; Yes clears it, the panel re-renders saying nothing is written down and offers only **Stop remembering me** / **Refresh**; one log row |
 | 107 | **Stop remembering me** → confirm, then **Remember me again** | the first wipes and opts out (`chat.memory_optout`), and the panel then offers **Remember me again** only; the second brings the writing back (`chat.memory_optin`) |

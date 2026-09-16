@@ -152,7 +152,7 @@ Browser ──HTTPS──▶ Cloudflare Pages (static: HTML/JS, estate theme, es
    member like everyone else. ✅ **WAIVED by the owner 2026-09-11 10:50 ("A discord is fine")** —
    decision 3's Google half is dropped on purpose; [`../KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) KI-25.
 4. **Who gets in:** exactly the roles that can currently see
-   `#black_bloc-logs` — `Aunties / Uncles` and the roles above it.
+   `#blackbloc-logs` — `Aunties / Uncles` and the roles above it.
    This is Phase 1's `staff_role_ids` derivation from `staff_channel_id`,
    so the site and the slash commands share one definition; changing the
    channel's overwrites changes both.

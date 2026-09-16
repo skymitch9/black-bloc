@@ -214,7 +214,7 @@ class WebGuild:
             category,
             WebChannel(
                 TEST_CHANNEL_ID,
-                "black_bloc-logs",
+                "blackbloc-logs",
                 position=1,
                 category_id=CATEGORY_ID,
                 viewers={STAFF_ROLE_ID},

@@ -515,7 +515,7 @@ only acts on somebody who posts in a channel whose pinned notice says not to.
    list-typed `honeypot_exempt_role_ids` keeps a way to remove an entry — that is the select plus
    **Exempt nobody**; and `honeypot_channel_ids` keeps **Forget…**), **33** (§D), **34**
    (`set_mode`, `set_exempt_roles`, `forget_trap` and `save_settings` all gain `kind_via`).
-6. ⚠️ **TEST MODE stands.** The bot speaks only in `#black_bloc-logs` (`TEST_CHANNEL_ID`)
+6. ⚠️ **TEST MODE stands.** The bot speaks only in `#blackbloc-logs` (`TEST_CHANNEL_ID`)
    and DMs, enforced by `black_bloc/guard.py`. Run every sweep row in that channel. Three
    consequences worth stating rather than discovering: **(a)** `Setup…` creates the trap **inside
    the test channel's category** (`test_category` `:355–363`) and the pinned notice is **not
@@ -543,7 +543,7 @@ panel — rows 188–199*); the file now runs to row **350**.
 
 | Do this | Expect |
 |---|---|
-| `H1` — `/honeypot` as a Lead in `#black_bloc-logs` | ONE ephemeral panel: the whole block `/honeypot status` used to print — mode, resolved staff roles by name, trap channels, purge days, exempt roles, and the banned/shadow/failed/ignored tally — over **What the trap does… · Roles the trap ignores… · Setup… · Settings… · Refresh · Logs · Open on the site**. Nothing says `/honeypot status`, `/honeypot setup` or `/honeypot exempt` anywhere. ⚠️ One line says test mode contains the trap and nobody will be banned |
+| `H1` — `/honeypot` as a Lead in `#blackbloc-logs` | ONE ephemeral panel: the whole block `/honeypot status` used to print — mode, resolved staff roles by name, trap channels, purge days, exempt roles, and the banned/shadow/failed/ignored tally — over **What the trap does… · Roles the trap ignores… · Setup… · Settings… · Refresh · Logs · Open on the site**. Nothing says `/honeypot status`, `/honeypot setup` or `/honeypot exempt` anywhere. ⚠️ One line says test mode contains the trap and nobody will be banned |
 | `H2` — look at the mode picker while at least one staff role resolves | it offers **off · shadow · on**, with the current one already ticked. Then point `staff_channel_id` at a channel no role can see and re-open: it offers **off** and **shadow** and **NOT on**, and the panel says in words that no staff role resolves and what to set. Arming is not offered-and-refused; it is not offered |
 | `H3` — `Setup…` → leave the name box as it arrives → submit | the trap is created **inside the test channel's category**, the reply names it and says the notice was not posted because of test mode, and the panel's **trap channels** line now names it. Re-open `/honeypot`: **Setup… is gone** — a second trap is not offered rather than offered-and-refused |
 | `H4` — `Setup…` again after typing a name of 101 characters | ⚠️ it cannot be typed: the box stops at 100. This is the bound the `name` parameter used to carry |
@@ -731,7 +731,7 @@ file and the §H layer order, plus the standing rules that **`git stash` is neve
 tree** and **TEST_MODE is never flipped**.
 
 **Review link for the report** — the panel is Discord-only, so the reviewable surfaces are
-`/honeypot` in `#black_bloc-logs` and the dashboard page it links to:
+`/honeypot` in `#blackbloc-logs` and the dashboard page it links to:
 `https://<dashboard-origin>/honeypot.html` (the origin is the deployment's own; `site_page_url`
 builds it from `panels.py:123`). The report names both, plus the `H1`–`H12` rows above.
 

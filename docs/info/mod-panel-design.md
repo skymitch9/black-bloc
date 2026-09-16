@@ -596,7 +596,7 @@ both already exist. That is this build's single biggest saving against role menu
    four `NO_SUCH_CASE` copies, §A), **22** (`REASON_LIMIT` rebuilt as `max_length` where the
    `app_commands` parameter used to bound it), **33** (§D), **34** (four new routes, four new
    `kind_via` heads, zero `note()` calls).
-7. ⚠️ **TEST MODE stands.** The bot speaks only in `#black_bloc-logs` (`TEST_CHANNEL_ID`),
+7. ⚠️ **TEST MODE stands.** The bot speaks only in `#blackbloc-logs` (`TEST_CHANNEL_ID`),
    enforced by `black_bloc/guard.py`. Run every sweep row there. Two consequences worth stating
    rather than discovering: **the void DM is a DM and is allowed**; and `edit_case_card`
    `modcases.py:399–402` will NOT rewrite a modlog card that is outside the test channel, so on
@@ -611,7 +611,7 @@ appendix block at `:248–257` is rewritten **in place**, not added to.
 
 | # | Do this | Expect |
 |---|---|---|
-| D1 | `/mod` as a Lead in `#black_bloc-logs` | ONE ephemeral panel: the newest ten cases as the lines `/cases` used to print, newest first, *page 1 of N*, over **A case… · Whose cases? · Older › · Jump to case #… · Refresh · Logs · Open on the site**. Nothing anywhere says `/case` or `/cases` |
+| D1 | `/mod` as a Lead in `#blackbloc-logs` | ONE ephemeral panel: the newest ten cases as the lines `/cases` used to print, newest first, *page 1 of N*, over **A case… · Whose cases? · Older › · Jump to case #… · Refresh · Logs · Open on the site**. Nothing anywhere says `/case` or `/cases` |
 | D2 | `Older ›`, then `‹ Newer` | the page changes in place, the footer's page number agrees, and `‹ Newer` is simply **not there** on page 1 — not there and refusing |
 | D3 | `Whose cases?` → a member with cases, then **Everyone's cases** | the list narrows and the first line reads *"**N** case(s) for @them"*; **Everyone's cases** appears only while the filter is on and takes it back off. A member with none says so and still offers the way out |
 | D4 | `/mod @somebody-with-no-cases` | the same "no cases" sentence, straight from the command — no empty select, no dead page buttons |

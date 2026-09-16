@@ -439,7 +439,7 @@ description, never a fourth local copy (checklist 15; `voice`'s deviation 8 is t
 ⚠️ **TEST_MODE stands and it bites this feature specifically.** `black_bloc/guard.py:147`
 installs a tree `interaction_check` that refuses any command whose `channel_id` is not
 `TEST_CHANNEL_ID` and is not a DM (`allows_interaction` `:94`), so **`/chat` must be run in
-`#black_bloc-logs`** — every sweep row below assumes that. The panel itself is ephemeral and
+`#blackbloc-logs`** — every sweep row below assumes that. The panel itself is ephemeral and
 posts nothing to a room; the only thing chat sends into a channel is the `on_message` reply and the
 staff route note, and both already go through `allows_channel` (`cogs/content/chat.py:645`, `:738`)
 and are untouched by this build.
@@ -452,7 +452,7 @@ place, not added.
 
 | Do this | Expect |
 |---|---|
-| `/chat` in `#black_bloc-logs` as a Lead | ONE ephemeral panel: the mode and tier lines, the notes count, then **Personality… · Knowledge… · Settings**, the two mode toggles, **Logs · Refresh · Open on the site**. Nothing says `/chat status`, `/chat knowledge` or `/chat personality` anywhere |
+| `/chat` in `#blackbloc-logs` as a Lead | ONE ephemeral panel: the mode and tier lines, the notes count, then **Personality… · Knowledge… · Settings**, the two mode toggles, **Logs · Refresh · Open on the site**. Nothing says `/chat status`, `/chat knowledge` or `/chat personality` anywhere |
 | the same as a staffer who is NOT an administrator, `chat_status_admin_only` on | the whole panel opens; the turns-and-money lines are absent and one sentence says what they are and who can read them. Then set the key off and re-open: they appear |
 | `Personality…` → **The voice…** → `noir`; then **Turn a mood off…** → `peppy`; then **Turn a mood on…** → `peppy` | the voice line changes and says it applies from the next answer on; the mood moves between the two selects; ONE `chat.personality_mode` and one `chat.trope_disabled`/`chat.trope_enabled` row each, `via: discord`. With `chat_llm_mode` off the card also says nothing is using the voice yet |
 | `Personality…` with the voice set to a mood, then **Turn a mood off…** | that mood is **not on the select at all** (fork F-C4) — the panel never offers a move its own function would refuse |

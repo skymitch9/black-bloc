@@ -215,7 +215,7 @@ path (C3) and a dashboard editor (C5).
   mock + check.mjs; (4) settings key + docs. Finish fewer things completely.
 - Gate expectations: `pytest -q -n auto` ≥ 3371 + new; ruff clean; every `site/public/assets/*.js`
   parses as an ES module; `check.mjs` reports 141 routes.
-- `TEST_MODE` stays on; the bot speaks only in `#black_bloc-logs` and DMs. Secret NAMES
+- `TEST_MODE` stays on; the bot speaks only in `#blackbloc-logs` and DMs. Secret NAMES
   only. Near-zero comments — explanations go to `code-notes.md`. Refusals in words, never a
   bare status. Review against `docs/info/review-checklist.md` (33 items) before reporting.
 - Report: what was verified by running it, what was not, and the review links (Role menus page

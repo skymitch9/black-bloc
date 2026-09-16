@@ -94,7 +94,7 @@ class Guild:
         self.name = "Black in a Flash!"
         self.owner_id = 999
         self.roles = [Role(STAFF_ROLE, "Aunties / Uncles"), Role(PING_ROLE, "Events")]
-        self.channels = [Channel(TEST_CHANNEL, "black_bloc-logs")]
+        self.channels = [Channel(TEST_CHANNEL, "blackbloc-logs")]
         for channel in self.channels:
             channel.guild = self
         self.members = {}

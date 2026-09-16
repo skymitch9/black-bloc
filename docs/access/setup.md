@@ -51,7 +51,7 @@ pytest                       # must be green before anything else
 | | |
 |---|---|
 | Server | *Black in a Flash!* — `DEV_GUILD_ID=1073710702776299640` |
-| The ONLY channel | `#black_bloc-logs` — `TEST_CHANNEL_ID=1542316174472380517` |
+| The ONLY channel | `#blackbloc-logs` — `TEST_CHANNEL_ID=1542316174472380517` |
 | Also allowed | DMs to the bot |
 | Enforced by | `black_bloc/guard.py` while `TEST_MODE=true` (default). Sends elsewhere raise `TestModeViolation`; commands elsewhere get an ephemeral "test mode" reply |
 | Lifting it | `TEST_MODE=false` — **only when the owner says so**, never as a side effect of a feature |
@@ -69,7 +69,7 @@ Expected log lines, in order: `TEST MODE ON ...`, `database ready at ...`,
 `invite URL: ...`, `loaded cog black_bloc.cogs.core` and **eighteen more**
 (`bot.py:COGS` holds **19**, measured 2026-09-11), `synced 29 app commands
 to dev guild ...`, `logged in as Black Bloc#... ; 1 guild(s)`. Then `/ping`
-and `/about` **in `#black_bloc-logs`**. Both reply ephemerally.
+and `/about` **in `#blackbloc-logs`**. Both reply ephemerally.
 (This said "loaded cog …core, synced **2** app commands" until 2026-09-11 — that was the
 day-one shape, when `core` was the only cog.)
 

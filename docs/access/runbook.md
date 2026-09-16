@@ -21,10 +21,10 @@
 |---|---|
 | Bot process | Fly.io app `black-bloc`, machine `85e744c4d959d8`, region `lax`, volume `black_bloc_data` at `/data` |
 | Database | SQLite `/data/black_bloc.sqlite3` on that volume (schema **34** — `black_bloc/storage/db.py:SCHEMA_VERSION`, measured 2026-09-11; landmarks on the way: 17 `sessions`, 18 `polls.vote_scheme`, 19 `golive_sessions.live_role_id`, 20 the Phase-14 chat tables, 30 the modmail ticket card, 31 the self-test, 34 `events.where_kind` + `where_channel_id`). Migrations are additive-only |
-| Dashboard | https://blackbloc.heygabi.ai (same Fly app; Discord sign-in; staff roles = roles that can see `#black_bloc-logs`) |
+| Dashboard | https://blackbloc.heygabi.ai (same Fly app; Discord sign-in; staff roles = roles that can see `#blackbloc-logs`) |
 | Health | https://blackbloc.heygabi.ai/health (public JSON: `ok`, `ready`, `guilds`, `latency_ms`) — and the dashboard's **Health** tab (loops, last 50 actions) |
 | Logs | `flyctl logs --app black-bloc --no-tail` (below), the dashboard **Logs/Audit** tab, and `/<feature> logs` in Discord (Phase 12, live since 2026-08-27 18:38) |
-| Test policy | `TEST_MODE=true`: the bot speaks only in `#black_bloc-logs` + DMs + the temp-voice channels it created. Owner lifts it (Fly secret), never Claude |
+| Test policy | `TEST_MODE=true`: the bot speaks only in `#blackbloc-logs` + DMs + the temp-voice channels it created. Owner lifts it (Fly secret), never Claude |
 | Code | GitHub `skymitch9/black-bloc` — 🔴 **PUBLIC since 2026-09-10 20:06** (so Actions run again; `.env.enc` was purged from history first and is gitignored). `docs/` is tracked, so **never write a secret VALUE under `docs/`**. Branch `main`; every deploy line in [`../deploys.log`](../deploys.log) (**107** lines, last v108) |
 
 ## The flyctl binary

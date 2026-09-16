@@ -506,7 +506,7 @@ counter-example).
    `app_commands.Choice`/`Range` parameters are rebuilt in the modal), **26** (both list-typed
    exemption keys keep a way to remove an entry — that is the removal select), **33** (§D),
    **34** (`set_mode`'s and `set_exempt`'s new `kind_via`).
-6. ⚠️ **TEST MODE stands.** The bot speaks only in `#black_bloc-logs`
+6. ⚠️ **TEST MODE stands.** The bot speaks only in `#blackbloc-logs`
    (`TEST_CHANNEL_ID`) and DMs, enforced by `black_bloc/guard.py`. Run every sweep row in that
    channel. Two consequences worth stating rather than discovering: `_may_read` `:492` means
    the engine only ever sees the test channel while the guard is on, and **while a guard is
@@ -525,7 +525,7 @@ Phase 6 appendix block at `:210–216` was rewritten **in place**, not added to.
 
 | Do this | Expect |
 |---|---|
-| `/automod` as a Lead in `#black_bloc-logs` | ONE ephemeral panel: the whole block `/automod status` used to print — mode, resolved staff, what the member is told, warn threshold, modlog, both exemption lists, the acted-on/logged-only counts, then every rule on its own line — over **A rule… · What automod does… · Exemptions… · Refresh · Logs · Open on the site**. Nothing says `/automod status` or `/automod rule` anywhere |
+| `/automod` as a Lead in `#blackbloc-logs` | ONE ephemeral panel: the whole block `/automod status` used to print — mode, resolved staff, what the member is told, warn threshold, modlog, both exemption lists, the acted-on/logged-only counts, then every rule on its own line — over **A rule… · What automod does… · Exemptions… · Refresh · Logs · Open on the site**. Nothing says `/automod status` or `/automod rule` anywhere |
 | Look at the mode picker while `staff_channel_id` is still the test channel | it offers **off** and **shadow** and **NOT on**, and the panel says in words that the staff channel is still the test channel and what to set it to. Arming is not offered-and-refused; it is not offered |
 | `A rule…` → `mention_spam` | its card: **Turn it off · Change the numbers… · Log only · Back**, and a *What it does…* picker showing delete, warn and timeout already ticked. **No Words…** — that button is `bad_words`' only |
 | `Change the numbers…` → type `abc` in the window box | one sentence saying `window_s` takes a whole number — and **nothing is saved**: re-open the card and all three numbers are what they were, including the two that parsed |

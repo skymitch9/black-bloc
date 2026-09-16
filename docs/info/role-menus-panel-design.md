@@ -535,7 +535,7 @@ merge is worth more than one-fact-one-home for a few lines. Fold it at the condu
    (§D), **34** (nine routes lose their `note()` and gain `via=VIA_WEBSITE`).
 
 ⚠️ **TEST_MODE stands, and this feature is where it matters most.** `TEST_MODE=true`
-(`black_bloc/guard.py`): the bot speaks only in `#black_bloc-logs` and DMs. `Post it` to any
+(`black_bloc/guard.py`): the bot speaks only in `#blackbloc-logs` and DMs. `Post it` to any
 other channel is refused by `guard.allows_channel` (`:1990` today) and logged; `card_target` `:741`
 redirects an approval card to the test channel and `CARD_IN_TEST_CHANNEL` `:206` says so;
 `rolemenu_panels.unpost` `:72` logs `would_unpost` instead of deleting. ⚠️ **But `Hand roles out…`,

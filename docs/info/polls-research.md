@@ -523,7 +523,7 @@ Black Bloc does if the owner says "your call".
 4. **Default duration?** → *recommended:* **24 hours** (Discord's own default), owner-changeable per poll, hard ceiling 32 days.
 5. **Anonymous votes?** → *recommended:* **off by default, and only available on panel polls.** On a native poll anyone can list every voter, so offering "anonymous" on native would be a false promise.
 6. **Results live or only at close?** → *recommended:* **live** — it is what native does and cannot be turned off there. "Hide until close" available on panel polls only.
-7. **Which channel do polls go to?** → *recommended:* **the channel the command was run in**, with `poll_channel_id` as an optional pin. ⚠️ Under `TEST_MODE` this is `#black_bloc-logs` regardless.
+7. **Which channel do polls go to?** → *recommended:* **the channel the command was run in**, with `poll_channel_id` as an optional pin. ⚠️ Under `TEST_MODE` this is `#blackbloc-logs` regardless.
 8. **Ping a role when a poll opens?** → *recommended:* **none by default**, `poll_ping_role_id` available — the same call the owner already made for events and go-live.
 9. **Reminder before close?** → *recommended:* **60 minutes, in the poll's channel, no role ping**; `0` turns it off.
 10. **Recurring polls in v1?** → *recommended:* **yes, but staff-only and capped at daily/weekly/monthly.** It is the feature Polly charges $19/month for and the loop is already the events/birthdays shape.

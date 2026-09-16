@@ -61,7 +61,7 @@ const NOT_STAFF = 'This dashboard is for the mods and admins of Black in a Flash
 const STAFF_UNKNOWN = 'Black Bloc could not ask Discord which roles you hold, so it cannot tell whether you are staff. That is a fault at the bot, not a problem with your access. Try again in a minute.';
 const MEMBER_NOT_STAFF = 'The rest of this dashboard is for the mods and admins of Black in a Flash!, but you are a member here, so you can still file a request and follow your own. Ask a Lead for a staff role if you need the rest.';
 const ROLE_MENUS_OFF = 'Role menus are turned off right now, so nothing was changed. A Lead can turn them back on from the dashboard\'s Role menus tab, or with `/settings` ▸ **Turn a feature back on…**.';
-const TEST_CHANNEL_NAME = 'black_bloc-logs';
+const TEST_CHANNEL_NAME = 'blackbloc-logs';
 const GUARD = `TEST MODE is on, so Black Bloc refuses to act outside #${TEST_CHANNEL_NAME}. Nothing was done. Ask the owner to lift the test guard first.`;
 const UNKNOWN_ROUTE = 'This dashboard asked Black Bloc for something it does not serve. That is a fault in the page, not a problem with your access.';
 
