@@ -1,8 +1,5 @@
 {
-  "release": "v111",
-  "commit": "307b759",
-  "changed_features": [
-    "core",
-    "guides"
-  ]
+  "release": "v112",
+  "commit": "d7c56e5",
+  "changed_features": []
 }
