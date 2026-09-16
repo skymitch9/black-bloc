@@ -75,6 +75,8 @@ const dayAhead = (d) => {
   return `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`;
 };
 
+const POST_SEED_BODY = "Welcome to** Black in a Flash**, a dedicated space for Black gamers!  While we appreciate and see multiple teams around the content creation space we don't see one that is just for us, and that is what this Discord hopes to alleviate: the creation of a space where we can authentically and openly be ourselves.\n# Familiarize yourselves with the rules before you join the discord.\n**Failure to comply with the rules may lead to moderator action.**\n\n***1. The moderation team reserve the right to remove anyone from the space.***\n> If you cannot abide the rules or plainly speaking are not a good fit for the space, the moderators can remove you at will.\n\n***2. Be respectful of others.***\n> We will not tolerate any forms of harassment or bigotry, such as- but not limited to- harassment about race, gender/identity expression, sexual orientation, religion, disability, physical appearances. There's a line between a friendly roast and being a jerk.\n\n***3. First and foremost, this space is to adapt, learn, and grow.***\n> Let's try to keep that as the primary focus. It's okay to have off topic conversations or to be upset about things, but this is a space to empower ourselves. If you are going to detract from the experience of others, there may be moderator intervention.\n\nYou can head to the landing channel and type a message so you gain access to the rest of the discord. If you are unsure of something, you are welcome to ping the Aunties / Uncles role.";
+
 const ROLES = [
   { id: '900000000000000001', name: 'Aunties / Uncles', color: '#e04a6d', position: 12, managed: false },
   { id: '900000000000000002', name: 'Leads', color: '#4eefff', position: 14, managed: false },
@@ -280,6 +282,7 @@ const LOG_LEVEL_FEATURES = [
   ['applications', 'applications', 'applications'],
   // F-G1: guides are edited on the website only, so there is no panel to name.
   ['guides', 'guides', null],
+  ['posts', 'posts', 'posts'],
 ];
 
 const SETTING_SPECS = [
@@ -482,6 +485,9 @@ const SETTING_SPECS = [
   ["events_scheduled_name_template", "text", "{title} Feat. BaF", "{title} Feat. BaF", "what an approved event is called on Discord's own calendar; `{title}` stands for the event's title and is the only thing that may be filled in. The review card, the announcement and the DM keep the plain title"],
   ["default_timezone", "text", "America/Phoenix", "America/Phoenix", "the `Region/City` zone times are read in for anybody who has never picked their own — the Time zone button on `/event` is how a member changes theirs"],
   ["timezone_choices", "text", "America/Phoenix, America/Los_Angeles, America/Denver, America/Chicago, America/New_York, America/Anchorage, Pacific/Honolulu, America/Toronto, America/Vancouver, America/Mexico_City, America/Sao_Paulo, Europe/London, Europe/Paris, Europe/Berlin, Europe/Madrid, Europe/Moscow, Asia/Tokyo, Asia/Seoul, Asia/Shanghai, Asia/Kolkata, Asia/Dubai, Australia/Sydney, Australia/Perth, Pacific/Auckland", "America/Phoenix, America/Los_Angeles, America/Denver, America/Chicago, America/New_York, America/Anchorage, Pacific/Honolulu, America/Toronto, America/Vancouver, America/Mexico_City, America/Sao_Paulo, Europe/London, Europe/Paris, Europe/Berlin, Europe/Madrid, Europe/Moscow, Asia/Tokyo, Asia/Seoul, Asia/Shanghai, Asia/Kolkata, Asia/Dubai, Australia/Sydney, Australia/Perth, Pacific/Auckland", "the zones the Time zone dropdown offers, `Region/City` names separated by commas, up to 24 of them; a name Black Bloc cannot resolve is dropped, and Other — type it… always sits at the bottom of the list for the rest"],
+  // Posts (§C7) — black_bloc/settings_store.py owns them; these are the mock's copy.
+  ['posts_mode', 'enum', 'on', 'on', 'on to let staff write the server’s standing messages on the dashboard’s Posts page and push them with `/posts`; off hides `/posts` and refuses both doors in words. Every word already written is kept either way, and a message already posted stays in Discord until somebody presses Take it down', ['off', 'on']],
+  ['posts_panel_minutes', 'int', 10, 10, "minutes the /posts panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440, 1],
   // Guides (G1) — black_bloc/settings_store.py owns them; these are the mock's copy.
   ['guides_mode', 'enum', 'on', 'on', 'on to give members the Guides page and to put a guide link beside a command in /help; off hides both. Staff can still open a guide\u2019s web address while it is off, and the page says so. There is no slash command to hide either way', ['off', 'on']],
   ['guides_who_edits', 'enum', 'staff', 'staff', 'who may change a guide\u2019s wording and screenshots: staff (anybody who can see the staff channel, the default) or manage_guild (a Lead only). It is read when Save is pressed rather than when the page is drawn, so taking the role away stops the next save', ['staff', 'manage_guild']],
@@ -741,6 +747,60 @@ function seedState() {
       stale_since: minutesAgo(120),
     },
   ],
+  posts: [
+    {
+      id: 1,
+      slug: 'welcome',
+      title: 'Welcome and rules',
+      channel_id: '800000000000000001',
+      body: POST_SEED_BODY,
+      style: 'plain',
+      pin: true,
+      message_id: null,
+      posted_hash: null,
+      posted_at: null,
+      posted_by: null,
+      seeded: true,
+      updated_at: minutesAgo(500),
+      updated_by: null,
+    },
+    {
+      id: 2,
+      slug: 'opening-hours',
+      title: 'When staff are around',
+      channel_id: '800000000000000003',
+      body: '**Staff hours**\n> Somebody is usually around between 6pm and 11pm Phoenix time.\n> Outside that, open a modmail and it is answered in the morning.',
+      style: 'embed',
+      pin: false,
+      message_id: '810000000000000004',
+      // Deliberately the hash of something else, so this one wears "changes not yet posted"
+      // the moment the page opens — the pill has to be visible in the mock to be looked at.
+      posted_hash: 'not-what-the-row-says-now',
+      posted_at: minutesAgo(300),
+      posted_by: STAFF.id,
+      seeded: false,
+      updated_at: minutesAgo(90),
+      updated_by: STAFF.id,
+    },
+    {
+      id: 3,
+      slug: 'scratch-post',
+      title: 'A post staff wrote here',
+      channel_id: null,
+      body: '',
+      style: 'plain',
+      pin: true,
+      message_id: null,
+      posted_hash: null,
+      posted_at: null,
+      posted_by: null,
+      seeded: false,
+      updated_at: minutesAgo(20),
+      updated_by: STAFF.id,
+    },
+  ],
+  nextPost: 4,
+  nextPostMessage: 820000000000000001,
   nextGuide: 3,
   nextGuideStep: 4,
   nextGuideMedia: 2,
@@ -1869,6 +1929,286 @@ route('GET', '/api/ref/names', (context) => {
   const found = {};
   for (const id of ids) found[id] = nameFor(id);
   return found;
+});
+
+// --- posts (§C4) ------------------------------------------------------------------------------
+// The shapes black_bloc/api/tools/posts.py answers with. Staff only: there is no member view.
+
+const POST_CAPS = { plain: 2000, embed: 4096 };
+const POST_STYLE_WORDS = { plain: 'a plain message', embed: 'an embed' };
+const POST_TITLE_MAX = 256;
+const POST_NO_SUCH = 'There is no post called **{slug}**, so nothing was done. It may have been renamed — open the Posts page and pick it from the list.';
+const POST_SEEDED = '**{slug}** is the post Black Bloc ships with, so it cannot be deleted — a deploy would only put it back. Press **Take it down** instead: the message goes and every word you have written is kept.';
+const POST_NOT_SEEDED = '**{slug}** was written here rather than shipped with Black Bloc, so there is no original to put back. Nothing was changed.';
+const POST_STILL_POSTED = '**{title}** is still posted in Discord, so it was not deleted. Press **Take it down** first — every word is kept either way.';
+const POST_NO_CHANNEL = '**{title}** has no channel to go in yet, so there is nothing to post it to. Pick one under **Channel**, press Save Changes, then press Post it.';
+const POST_NOTHING_TO_POST = '**{title}** has nothing written in it yet, so there is nothing to post. Write the message in the box, save it, then press Post it.';
+const POST_NOT_POSTED = '**{title}** is not posted anywhere right now, so there is nothing to take down. Press Post it first.';
+const POST_UNKNOWN_CHANNEL = '**{given}** is not a channel Black Bloc can see in this server, so nothing was saved. Pick one from the list under **Channel**.';
+const POST_TITLE_NEEDED = 'A post needs a title, so nothing was saved. Fill it in and save again.';
+const POST_SLUG_TAKEN = 'There is already a post at **{slug}**, so nothing was made. Give this one a different title, or edit the one that is there.';
+const POST_SLUG_NEEDED = 'A post needs a title Black Bloc can turn into a web address, and that one came out empty, so nothing was made. Use some letters or numbers in the title.';
+const POSTS_ARE_OFF = 'Posts are off for this server, so **Post it** and **Take it down** refuse in words and `/posts` is hidden. Every word written here is kept — a Lead turns them back on from the Settings page under **posts**.';
+const POST_TEST_MODE_NOTE = `Black Bloc is in test mode, so a post only reaches #${TEST_CHANNEL_NAME} or a channel it made itself. **Post it** on anything else writes down what it would have sent and sends nothing.`;
+
+function postCap(style) {
+  return POST_CAPS[style] || POST_CAPS.plain;
+}
+
+function postHash(row) {
+  return JSON.stringify([row.style, row.title, row.body]);
+}
+
+function postPending(row) {
+  return Boolean(row.message_id) && row.posted_hash !== postHash(row);
+}
+
+function postStatus(row) {
+  if (!row.message_id) return ['not posted'];
+  const found = ['posted'];
+  if (row.pin) found.push('pinned');
+  if (postPending(row)) found.push('changes not yet posted');
+  return found;
+}
+
+function postTooLong(count, limit, style, doing) {
+  const over = count - limit;
+  const switched = style === 'plain' ? ' — or set the style to an embed, which holds 4096' : '';
+  return `That post is ${count} characters and ${POST_STYLE_WORDS[style]} holds ${limit}, so nothing was ${doing}. Take ${over} character${over === 1 ? '' : 's'} out${switched}.`;
+}
+
+function postChannelName(id) {
+  const found = CHANNELS.find((one) => one.id === String(id));
+  return found ? found.name : null;
+}
+
+function postRow(row) {
+  return {
+    id: String(row.id),
+    slug: row.slug,
+    title: row.title,
+    body: row.body,
+    style: row.style,
+    cap: postCap(row.style),
+    title_cap: POST_TITLE_MAX,
+    pin: Boolean(row.pin),
+    channel_id: row.channel_id ? String(row.channel_id) : null,
+    channel_name: postChannelName(row.channel_id),
+    posted: Boolean(row.message_id),
+    pinned: Boolean(row.message_id) && Boolean(row.pin),
+    changes_pending: postPending(row),
+    status: postStatus(row),
+    move: row.message_id ? 'Update the post' : 'Post it',
+    message_id: row.message_id ? String(row.message_id) : null,
+    posted_at: row.posted_at,
+    posted_by: row.posted_by ? String(row.posted_by) : null,
+    posted_by_name: row.posted_by ? memberName(row.posted_by) : null,
+    seeded: Boolean(row.seeded),
+    updated_at: row.updated_at,
+    updated_by: row.updated_by ? String(row.updated_by) : null,
+    updated_by_name: row.updated_by ? memberName(row.updated_by) : null,
+  };
+}
+
+function postStyles() {
+  return Object.keys(POST_CAPS).map((style) => ({
+    style,
+    cap: POST_CAPS[style],
+    label: POST_STYLE_WORDS[style],
+  }));
+}
+
+function postGuard() {
+  return {
+    test_mode: testMode,
+    test_channel: testMode ? TEST_CHANNEL_NAME : null,
+    said: testMode ? POST_TEST_MODE_NOTE : null,
+  };
+}
+
+function postsAreOn() {
+  return String(state.settings.get('posts_mode') || 'on') === 'on';
+}
+
+function postNotes() {
+  return postsAreOn() ? [] : [POSTS_ARE_OFF];
+}
+
+function postWhole(row, said) {
+  const found = {
+    post: postRow(row),
+    styles: postStyles(),
+    guard: postGuard(),
+    notes: postNotes(),
+    read_at: now(),
+  };
+  return said === undefined ? found : { ...found, message: said };
+}
+
+function wantedPost(slug) {
+  const found = state.posts.find((one) => one.slug === slug);
+  if (!found) throw new Refused(404, 'no_such_post', POST_NO_SUCH.split('{slug}').join(slug));
+  return found;
+}
+
+function postSlugify(text) {
+  return String(text || '')
+    .toLowerCase()
+    .split('\u2019').join('')
+    .split("'").join('')
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+}
+
+route('GET', '/api/posts', (context) => {
+  requireStaff(context.session);
+  return {
+    posts: state.posts.map(postRow),
+    mode: state.settings.get('posts_mode') || 'on',
+    may_edit: true,
+    styles: postStyles(),
+    guard: postGuard(),
+    notes: postNotes(),
+    checked_at: now(),
+  };
+});
+
+route('POST', '/api/posts', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const title = String(body.title || '').trim().slice(0, POST_TITLE_MAX);
+  if (!title) throw new Refused(400, 'no_title', POST_TITLE_NEEDED);
+  const slug = postSlugify(body.slug || title);
+  if (!slug) throw new Refused(400, 'no_slug', POST_SLUG_NEEDED);
+  if (state.posts.some((one) => one.slug === slug)) {
+    throw new Refused(409, 'slug_taken', POST_SLUG_TAKEN.split('{slug}').join(slug));
+  }
+  const made = {
+    id: state.nextPost++,
+    slug,
+    title,
+    channel_id: null,
+    body: '',
+    style: 'plain',
+    pin: true,
+    message_id: null,
+    posted_hash: null,
+    posted_at: null,
+    posted_by: null,
+    seeded: false,
+    updated_at: now(),
+    updated_by: STAFF.id,
+  };
+  state.posts.push(made);
+  logAction('web.post.created', { details: { slug, post_id: made.id, via: 'website' } });
+  return postWhole(made, `**${title}** is made. Nothing is in Discord until you press Post it.`);
+});
+
+route('GET', '/api/posts/:slug', (context) => {
+  requireStaff(context.session);
+  return postWhole(wantedPost(context.params.slug));
+});
+
+route('PUT', '/api/posts/:slug', async (context) => {
+  requireStaff(context.session);
+  const row = wantedPost(context.params.slug);
+  const body = await context.body();
+  const title = 'title' in body ? String(body.title || '').trim().slice(0, POST_TITLE_MAX) : row.title;
+  if (!title) throw new Refused(400, 'no_title', POST_TITLE_NEEDED);
+  const style = 'style' in body && POST_CAPS[body.style] ? body.style : row.style;
+  const wanted = 'body' in body ? String(body.body || '') : row.body;
+  if (wanted.length > postCap(style)) {
+    throw new Refused(400, 'body_too_long', postTooLong(wanted.length, postCap(style), style, 'saved'));
+  }
+  if ('channel_id' in body && body.channel_id) {
+    if (!postChannelName(body.channel_id)) {
+      throw new Refused(400, 'unknown_channel', POST_UNKNOWN_CHANNEL.split('{given}').join(String(body.channel_id)));
+    }
+    row.channel_id = String(body.channel_id);
+  } else if ('channel_id' in body) {
+    row.channel_id = null;
+  }
+  row.title = title;
+  row.style = style;
+  row.body = wanted;
+  if ('pin' in body) row.pin = Boolean(body.pin);
+  row.updated_at = now();
+  row.updated_by = STAFF.id;
+  logAction('web.post.saved', { details: { slug: row.slug, post_id: row.id, via: 'website' } });
+  return postWhole(row, `**${row.title}** is saved.`);
+});
+
+route('POST', '/api/posts/:slug/publish', (context) => {
+  requireStaff(context.session);
+  const row = wantedPost(context.params.slug);
+  if (!row.channel_id) throw new Refused(409, 'no_channel', POST_NO_CHANNEL.split('{title}').join(row.title));
+  if (!row.body.trim()) throw new Refused(409, 'nothing_to_post', POST_NOTHING_TO_POST.split('{title}').join(row.title));
+  if (row.body.length > postCap(row.style)) {
+    throw new Refused(400, 'body_too_long', postTooLong(row.body.length, postCap(row.style), row.style, 'posted'));
+  }
+  if (testMode && String(row.channel_id) !== '800000000000000003') {
+    logAction('web.post.would_post', { details: { slug: row.slug, post_id: row.id, via: 'website' } });
+    throw new Refused(409, 'test_mode', GUARD);
+  }
+  const updating = Boolean(row.message_id);
+  if (!updating) row.message_id = String(state.nextPostMessage++);
+  row.posted_hash = postHash(row);
+  row.posted_at = now();
+  row.posted_by = STAFF.id;
+  logAction(updating ? 'web.post.updated' : 'web.post.posted', {
+    details: { slug: row.slug, post_id: row.id, message_id: row.message_id, via: 'website' },
+  });
+  if (row.pin) {
+    logAction('web.post.pinned', { details: { slug: row.slug, post_id: row.id, via: 'website' } });
+  }
+  const where = `#${postChannelName(row.channel_id)}`;
+  return postWhole(
+    row,
+    updating
+      ? `**${row.title}** is updated where it was already posted, in ${where}.`
+      : `**${row.title}** is posted in ${where}.`,
+  );
+});
+
+route('POST', '/api/posts/:slug/takedown', (context) => {
+  requireStaff(context.session);
+  const row = wantedPost(context.params.slug);
+  if (!row.message_id) throw new Refused(409, 'not_posted', POST_NOT_POSTED.split('{title}').join(row.title));
+  if (testMode && String(row.channel_id) !== '800000000000000003') {
+    logAction('web.post.would_take_down', { details: { slug: row.slug, post_id: row.id, via: 'website' } });
+    throw new Refused(409, 'test_mode', GUARD);
+  }
+  const was = row.message_id;
+  row.message_id = null;
+  row.posted_hash = null;
+  row.posted_at = null;
+  row.posted_by = null;
+  logAction('web.post.taken_down', { details: { slug: row.slug, post_id: row.id, message_id: was, via: 'website' } });
+  return postWhole(row, `**${row.title}** is taken down. Every word is still here.`);
+});
+
+route('POST', '/api/posts/:slug/reset', (context) => {
+  requireStaff(context.session);
+  const row = wantedPost(context.params.slug);
+  if (!row.seeded) throw new Refused(409, 'not_seeded', POST_NOT_SEEDED.split('{slug}').join(row.slug));
+  row.title = 'Welcome and rules';
+  row.body = POST_SEED_BODY;
+  row.style = 'plain';
+  row.pin = true;
+  row.updated_at = now();
+  logAction('web.post.reset', { details: { slug: row.slug, post_id: row.id, via: 'website' } });
+  return postWhole(row, `**${row.title}** is back to the words it shipped with.`);
+});
+
+route('DELETE', '/api/posts/:slug', (context) => {
+  requireStaff(context.session);
+  const row = wantedPost(context.params.slug);
+  if (row.seeded) throw new Refused(409, 'seeded_post', POST_SEEDED.split('{slug}').join(row.slug));
+  if (row.message_id) throw new Refused(409, 'still_posted', POST_STILL_POSTED.split('{title}').join(row.title));
+  state.posts = state.posts.filter((one) => one.id !== row.id);
+  logAction('web.post.deleted', { details: { slug: row.slug, post_id: row.id, via: 'website' } });
+  return { deleted: row.slug, message: `**${row.title}** is gone.` };
 });
 
 // --- guides (G1) ------------------------------------------------------------------------------

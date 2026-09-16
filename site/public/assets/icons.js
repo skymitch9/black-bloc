@@ -24,6 +24,7 @@ export const ICONS = {
   navRolemenus: { body: '<path d="M11.2 3H4v7.2l9.8 9.8 7.2-7.2z"></path><circle cx="7.6" cy="7.6" r="1.3"></circle>', width: 1.7 },
   navPolls: { body: '<path d="M5 20v-7M12 20V4M19 20v-5"></path>', width: 1.7 },
   navChat: { body: '<path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v6.8a2.5 2.5 0 0 1-2.5 2.5H10l-4.4 3.7v-3.7A1.6 1.6 0 0 1 4 13.9z"></path>', width: 1.7 },
+  navPosts: { body: '<rect x="3.5" y="4" width="17" height="13" rx="2"></rect><path d="M7 8.5h10M7 12h6"></path><path d="M8.5 17 7 21l4.5-4"></path>', width: 1.7 },
   navGuides: { body: '<path d="M4 5.2A1.7 1.7 0 0 1 5.7 3.5H10a2 2 0 0 1 2 2v13a1.7 1.7 0 0 0-1.7-1.7H4z"></path><path d="M20 5.2a1.7 1.7 0 0 0-1.7-1.7H14a2 2 0 0 0-2 2v13a1.7 1.7 0 0 1 1.7-1.7H20z"></path>', width: 1.7 },
   navSettings: { body: '<path d="M4 8h16M4 16h16"></path><circle cx="9.5" cy="8" r="2.3"></circle><circle cx="14.5" cy="16" r="2.3"></circle>', width: 1.7 },
 };
