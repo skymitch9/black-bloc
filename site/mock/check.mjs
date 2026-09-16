@@ -69,6 +69,11 @@ const IDS = {
   // Wave 5: run 2 is the recent one whose cards are still in Discord, so the purge entry has
   // something to take down. Run 1 is already cleaned up.
   selftest_run_id: '2',
+  // Guides (G1): golive-announce is one of the seventeen Black Bloc ships with, so it is
+  // the one /reset takes and the one DELETE refuses; house-rules is written here, which
+  // is the other way round.
+  guide_slug: 'golive-announce',
+  scratch_guide_slug: 'house-rules',
 };
 
 const failures = [];

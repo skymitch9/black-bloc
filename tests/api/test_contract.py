@@ -10,7 +10,7 @@ import pytest
 import pytest_asyncio
 from discord.ext import tasks
 
-from black_bloc import applications, knowledge, pings
+from black_bloc import applications, guides, knowledge, pings
 from black_bloc import rolegrants as grants
 from black_bloc.api.auth import SESSION_COOKIE, SESSION_TTL_SECONDS, sign_session
 from black_bloc.api.settings_api import grouped
@@ -520,6 +520,47 @@ async def seed_world(client, web, guild, wf) -> dict:
     await applications.decide_application(
         db, listed_application_id, grants.APPROVED, decided_by=7
     )
+    # Guides (G1): the seventeen Black Bloc ships with, one written here so DELETE has
+    # something only staff made, and one shot already stale so /api/guides/stale is never
+    # empty. The mock seeds the same shapes as golive-announce and house-rules.
+    await guides.seed_guides(db, guild_id)
+    scratch = await guides.create_guide(
+        db,
+        guild_id,
+        slug="house-rules",
+        title="Write the house rules down",
+        goal="A guide staff wrote here rather than one Black Bloc ships with.",
+        audience="staff",
+        feature="core",
+        published=False,
+        by=7,
+    )
+    await guides.put_steps(
+        db,
+        scratch,
+        [{"do_text": "Press **Edit this guide**.", "expect_text": "Every line becomes a box."}],
+    )
+    golive_guide = await guides.get_guide(db, guild_id, "golive-announce")
+    first_step = (await guides.steps_of(db, golive_guide["id"]))[0]
+    shot = await guides.save_media(
+        web,
+        guild_id,
+        int(golive_guide["id"]),
+        b"\x89PNG\r\n\x1a\n" + b"\x00" * 8 + (1280).to_bytes(4, "big")
+        + (720).to_bytes(4, "big"),
+        step_id=int(first_step["id"]),
+        caption="the /golive panel",
+        shot_release="v110",
+        shot_by=7,
+    )
+    await db.conn.execute(
+        "UPDATE guide_steps SET media_id = ? WHERE id = ?", (shot, int(first_step["id"]))
+    )
+    await db.conn.execute(
+        "UPDATE guide_media SET stale = 1, stale_since = ? WHERE id = ?",
+        (datetime.now(UTC).isoformat(), shot),
+    )
+    await db.conn.commit()
     # Wave 5: one finished self-test run with a check row and a card still waiting to be
     # deleted, so GET /api/selftest/{id} has a shape and the purge entry has something to do.
     selftest_run_id = await seed_selftest_run(db, guild_id, wf.TEST_CHANNEL_ID)
@@ -567,6 +608,8 @@ async def seed_world(client, web, guild, wf) -> dict:
         "listed_form_id": str(listed_form_id),
         "listed_application_id": str(listed_application_id),
         "selftest_run_id": str(selftest_run_id),
+        "guide_slug": "golive-announce",
+        "scratch_guide_slug": "house-rules",
     }
 
 

@@ -277,6 +277,8 @@ const LOG_LEVEL_FEATURES = [
   ['pings', 'ping roles', 'pingroles'],
   ['raidtrain', 'raid trains', 'raidtrains'],
   ['applications', 'applications', 'applications'],
+  // F-G1: guides are edited on the website only, so there is no panel to name.
+  ['guides', 'guides', null],
 ];
 
 const SETTING_SPECS = [
@@ -479,6 +481,12 @@ const SETTING_SPECS = [
   ["events_scheduled_name_template", "text", "{title} Feat. BaF", "{title} Feat. BaF", "what an approved event is called on Discord's own calendar; `{title}` stands for the event's title and is the only thing that may be filled in. The review card, the announcement and the DM keep the plain title"],
   ["default_timezone", "text", "America/Phoenix", "America/Phoenix", "the `Region/City` zone times are read in for anybody who has never picked their own — the Time zone button on `/event` is how a member changes theirs"],
   ["timezone_choices", "text", "America/Phoenix, America/Los_Angeles, America/Denver, America/Chicago, America/New_York, America/Anchorage, Pacific/Honolulu, America/Toronto, America/Vancouver, America/Mexico_City, America/Sao_Paulo, Europe/London, Europe/Paris, Europe/Berlin, Europe/Madrid, Europe/Moscow, Asia/Tokyo, Asia/Seoul, Asia/Shanghai, Asia/Kolkata, Asia/Dubai, Australia/Sydney, Australia/Perth, Pacific/Auckland", "America/Phoenix, America/Los_Angeles, America/Denver, America/Chicago, America/New_York, America/Anchorage, Pacific/Honolulu, America/Toronto, America/Vancouver, America/Mexico_City, America/Sao_Paulo, Europe/London, Europe/Paris, Europe/Berlin, Europe/Madrid, Europe/Moscow, Asia/Tokyo, Asia/Seoul, Asia/Shanghai, Asia/Kolkata, Asia/Dubai, Australia/Sydney, Australia/Perth, Pacific/Auckland", "the zones the Time zone dropdown offers, `Region/City` names separated by commas, up to 24 of them; a name Black Bloc cannot resolve is dropped, and Other — type it… always sits at the bottom of the list for the rest"],
+  // Guides (G1) — black_bloc/settings_store.py owns them; these are the mock's copy.
+  ['guides_mode', 'enum', 'on', 'on', 'on to give members the Guides page and to put a guide link beside a command in /help; off hides both. Staff can still open a guide\u2019s web address while it is off, and the page says so. There is no slash command to hide either way', ['off', 'on']],
+  ['guides_who_edits', 'enum', 'staff', 'staff', 'who may change a guide\u2019s wording and screenshots: staff (anybody who can see the staff channel, the default) or manage_guild (a Lead only). It is read when Save is pressed rather than when the page is drawn, so taking the role away stops the next save', ['staff', 'manage_guild']],
+  ['guides_help_links', 'bool', true, true, 'true to add a small guide link beside every /help line whose command has a published guide, and an All the guides button on the last page; false leaves /help exactly as it was'],
+  ['guides_show_facts', 'bool', true, true, 'true to show the Right now block on a guide \u2014 up to four live values read from the bot as the page opens, such as which mode a feature is in; false shows the steps only'],
+  ['guides_fault_files_request', 'bool', true, true, 'true to make Something\u2019s off at the foot of a guide file a request, so staff see it where they see everything else; false makes it a sentence telling the reader to tell a Lead'],
   ["time_step_minutes", "int", 15, 15, "how far apart the Minute dropdown's choices are on the /event and /raidtrain draft panels, 5 to 60 minutes; 15 gives :00, :15, :30 and :45", null, 60, 5],
 ];
 
@@ -665,6 +673,76 @@ function seedState() {
     { key: 'honeypot_channel_ids', value: ['800000000000000007'], updated_by: STAFF.id, updated_at: minutesAgo(2600) },
   ],
   actions: [],
+  guides: [
+    {
+      id: 1,
+      slug: 'golive-announce',
+      title: 'Get your stream announced in #live-now',
+      goal: 'Link your Twitch channel once. Black Bloc posts whenever Discord shows you streaming.',
+      audience: 'member',
+      feature: 'golive',
+      command: '/golive',
+      sort: 10,
+      published: true,
+      seeded: true,
+      updated_at: minutesAgo(400),
+      updated_by: null,
+      steps: [
+        { id: 1, do_text: 'Type **/golive** in any channel.', expect_text: 'A panel only you can see, with **Link my Twitch channel** on it.', media_id: 1, seed_do: 'Type **/golive** in any channel.', seed_expect: 'A panel only you can see, with **Link my Twitch channel** on it.' },
+        { id: 2, do_text: 'Press **Link my Twitch channel** and type the part after twitch.tv/.', expect_text: 'The panel reads twitch.tv/your-name.', media_id: null, seed_do: 'Press **Link my Twitch channel** and type the part after twitch.tv/.', seed_expect: 'The panel reads twitch.tv/your-name.' },
+      ],
+      faults: [
+        { id: 1, symptom: 'Nothing posted', answer: 'Announcements are in shadow. The panel\u2019s Announcements line says so; a Lead flips it.' },
+        { id: 2, symptom: 'Discord does not show you streaming', answer: 'Reconnect Twitch under Discord\u2019s Connections and turn Display on profile on.' },
+      ],
+      facts: [
+        { kind: 'setting', ref: 'golive_mode' },
+        { kind: 'probe', ref: 'golive.linked_count' },
+      ],
+    },
+    {
+      id: 2,
+      slug: 'house-rules',
+      title: 'Write the house rules down',
+      goal: 'A guide staff wrote here rather than one Black Bloc ships with.',
+      audience: 'staff',
+      feature: 'core',
+      command: null,
+      sort: 900,
+      published: false,
+      seeded: false,
+      updated_at: minutesAgo(60),
+      updated_by: STAFF.id,
+      steps: [
+        { id: 3, do_text: 'Press **Edit this guide**.', expect_text: 'Every line becomes a box.', media_id: null, seed_do: null, seed_expect: null },
+      ],
+      faults: [{ id: 3, symptom: 'No Edit this guide', answer: 'guides_who_edits is manage_guild. Ask a Lead.' }],
+      facts: [{ kind: 'probe', ref: 'test_mode' }],
+    },
+  ],
+  guideMedia: [
+    {
+      id: 1,
+      guide_id: 1,
+      step_id: 1,
+      file: '1.png',
+      sha256: 'a2b7c2fc4f1c6a3f2e3f4e5d6c7b8a99001122334455667788990011223344ff',
+      width: 1280,
+      height: 720,
+      bytes: 84210,
+      source: 'capture',
+      surface: 'discord',
+      shot_release: 'v110',
+      shot_by: STAFF.id,
+      shot_at: minutesAgo(2600),
+      caption: 'the /golive panel',
+      stale: true,
+      stale_since: minutesAgo(120),
+    },
+  ],
+  nextGuide: 3,
+  nextGuideStep: 4,
+  nextGuideMedia: 2,
   rules: JSON.parse(JSON.stringify(RULES)),
   menus: [
     {
@@ -1790,6 +1868,377 @@ route('GET', '/api/ref/names', (context) => {
   const found = {};
   for (const id of ids) found[id] = nameFor(id);
   return found;
+});
+
+// --- guides (G1) ------------------------------------------------------------------------------
+// The shapes black_bloc/api/tools/guides.py answers with. F-G3: a member sees member guides,
+// published, and nothing else.
+
+const GUIDE_PROBE_LABELS = {
+  'golive.linked_count': 'Twitch channels linked',
+  'golive.live_now': 'Streaming right now',
+  'events.open_count': 'Events waiting on staff',
+  'requests.open_count': 'Requests still open',
+  'tempvoice.open_rooms': 'Voice rooms open',
+  'polls.open_count': 'Polls open',
+  'birthdays.next': 'The next birthday',
+  'raidtrain.next': 'Raid trains',
+  test_mode: 'Test mode',
+};
+const GUIDE_PROBE_VALUES = {
+  'golive.linked_count': '3 linked',
+  'golive.live_now': '1 live now',
+  'events.open_count': '2 waiting',
+  'requests.open_count': '4 open',
+  'tempvoice.open_rooms': '1 open',
+  'polls.open_count': '2 open',
+  'birthdays.next': 'Ada, in 6 days',
+  'raidtrain.next': '1 upcoming, 2 of 3 hours taken',
+  test_mode: 'on \u2014 #mute-me-bot-test-spam',
+};
+const GUIDE_FEATURE_PAGES = {
+  core: 'settings.html', automod: 'automod.html', honeypot: 'honeypot.html', mod: 'moderation.html',
+  modmail: 'modmail.html', golive: 'golive.html', youtube: 'golive.html', events: 'events.html',
+  birthday: 'birthdays.html', tempvoice: 'tempvoice.html', rolemenu: 'rolemenus.html',
+  poll: 'polls.html', chat: 'chat.html', request: 'requests.html', pings: 'golive.html',
+  raidtrain: 'events.html', applications: 'rolemenus.html', selftest: 'health.html',
+  guides: 'guides.html',
+};
+const GUIDE_CORE_KEYS = ['staff_channel_id', 'log_channel_id', 'modlog_channel_id', 'role_menu_channel_id'];
+const GUIDE_NO_SUCH = 'There is no guide called **{slug}**, so nothing was done. It may have been renamed \u2014 open the guides page and pick it from the list.';
+const GUIDE_SEEDED = '**{slug}** is one of the guides Black Bloc ships with, so it cannot be deleted \u2014 a deploy would only put it back. Press **Unpublish** instead: members and `/help` stop seeing it and every word you have written is kept.';
+const GUIDE_NOT_SEEDED = '**{slug}** was written here rather than shipped with Black Bloc, so there is no original to put back. Nothing was changed.';
+const GUIDE_BAD_PICTURE = 'That upload did not arrive as a picture Black Bloc could read, so nothing was uploaded. It is a fault in the page rather than in the file \u2014 reload the guide and try again.';
+const GUIDE_WRONG_TYPE = '**{name}** is not a picture Black Bloc can serve. Nothing was uploaded \u2014 send a PNG, a JPEG or a WebP.';
+const GUIDE_OFF = 'Guides are turned off for this server, so there is nothing to show. A Lead turns them back on from the dashboard\u2019s Settings page under **guides**.';
+const GUIDES_OFF_FOR_STAFF = 'Guides are off for members right now, so nobody but staff can open this page. A Lead turns them back on from the Settings page under **guides**.';
+
+function guideOrigin() {
+  return 'https://blackbloc.heygabi.ai';
+}
+
+function guideLint(doText, expectText) {
+  const said = [];
+  const bolds = String(doText || '').match(/\*\*(.+?)\*\*/g) || [];
+  if (/\s+(and\s+then|then)\s+/.test(String(doText || '')) || bolds.length > 1) {
+    said.push('This step asks for more than one thing. Split it so each step is one press.');
+  }
+  if (bolds.length === 0) {
+    said.push('No control is named. Write the button, select or menu item in **bold**, spelled the way Discord spells it.');
+  }
+  for (const word of ['You can', 'Simply', 'Just', 'Easily', 'Please']) {
+    if (String(doText || '').toLowerCase().startsWith(word.toLowerCase())) {
+      said.push(`This step opens with **${word}**. Start with the verb \u2014 Press, Type, Pick \u2014 and say it straight.`);
+      break;
+    }
+  }
+  if (String(doText || '').length > 140) said.push(`This step is ${String(doText).length} characters. Keep it under 140.`);
+  if (String(expectText || '').length > 200) said.push(`This expect line is ${String(expectText).length} characters. Keep it under 200.`);
+  return said;
+}
+
+function guideMediaRow(row, alt) {
+  return {
+    id: String(row.id),
+    url: `/api/guides/media/${row.id}`,
+    step_id: row.step_id === null ? null : String(row.step_id),
+    source: row.source,
+    surface: row.surface,
+    caption: row.caption,
+    width: row.width,
+    height: row.height,
+    bytes: row.bytes,
+    sha256: row.sha256,
+    shot_release: row.shot_release,
+    shot_at: row.shot_at,
+    shot_by: row.shot_by === null ? null : String(row.shot_by),
+    shot_by_name: memberName(row.shot_by),
+    stale: Boolean(row.stale),
+    stale_since: row.stale_since,
+    alt: alt || '',
+  };
+}
+
+function guideStepRow(step) {
+  const picture = state.guideMedia.find((one) => one.id === step.media_id) || null;
+  return {
+    id: String(step.id),
+    position: state.guides.find((one) => one.steps.includes(step)).steps.indexOf(step) + 1,
+    do_text: step.do_text,
+    expect_text: step.expect_text,
+    media_id: step.media_id === null ? null : String(step.media_id),
+    media: picture ? guideMediaRow(picture, step.do_text) : null,
+    seed_do: step.seed_do,
+    seed_expect: step.seed_expect,
+    can_restore: Boolean(step.seed_do) && (step.seed_do !== step.do_text || step.seed_expect !== step.expect_text),
+    warnings: guideLint(step.do_text, step.expect_text),
+  };
+}
+
+function guideRow(guide) {
+  const pictures = state.guideMedia.filter((one) => one.guide_id === guide.id);
+  return {
+    id: String(guide.id),
+    slug: guide.slug,
+    title: guide.title,
+    goal: guide.goal,
+    audience: guide.audience,
+    feature: guide.feature,
+    feature_page: GUIDE_FEATURE_PAGES[guide.feature] || null,
+    command: guide.command,
+    sort: guide.sort,
+    published: Boolean(guide.published),
+    seeded: Boolean(guide.seeded),
+    url: `${guideOrigin()}/guides.html#${guide.slug}`,
+    step_count: guide.steps.length,
+    media_count: pictures.length,
+    stale_count: pictures.filter((one) => one.stale).length,
+    updated_at: guide.updated_at,
+    updated_by: guide.updated_by === null ? null : String(guide.updated_by),
+    updated_by_name: memberName(guide.updated_by),
+  };
+}
+
+function guideFactRows(guide) {
+  if (!state.settings.get('guides_show_facts')) return [];
+  const at = now();
+  return guide.facts
+    .filter((one) => one.kind !== 'setting' || (!GUIDE_CORE_KEYS.includes(one.ref) && !one.ref.endsWith('_log_level')))
+    .map((one) => {
+      const spec = one.kind === 'setting' ? specOf(one.ref) : null;
+      return {
+        kind: one.kind,
+        ref: one.ref,
+        label: one.kind === 'setting' ? one.ref : GUIDE_PROBE_LABELS[one.ref] || one.ref,
+        value: one.kind === 'setting' ? String(state.settings.get(one.ref) ?? 'not set') : GUIDE_PROBE_VALUES[one.ref] || 'not readable',
+        help: one.kind === 'setting' && spec ? spec[4] : '',
+        read_at: at,
+      };
+    });
+}
+
+function guideWhole(guide) {
+  return {
+    guide: guideRow(guide),
+    steps: guide.steps.map(guideStepRow),
+    faults: guide.faults.map((one, at) => ({ id: String(one.id), position: at + 1, symptom: one.symptom, answer: one.answer })),
+    facts: guideFactRows(guide),
+    chosen_facts: guide.facts.map((one) => ({ kind: one.kind, ref: one.ref })),
+    media: state.guideMedia.filter((one) => one.guide_id === guide.id).map((one) => guideMediaRow(one, '')),
+    read_at: now(),
+  };
+}
+
+function guidesAreOn() {
+  return String(state.settings.get('guides_mode') || 'on') === 'on';
+}
+
+function wantedGuide(slug, session) {
+  const staff = session !== 'member';
+  const found = state.guides.find((one) => one.slug === slug);
+  const hidden = found && !staff && (!found.published || found.audience === 'staff');
+  if (!found || hidden) throw new Refused(404, 'no_such_guide', GUIDE_NO_SUCH.split('{slug}').join(slug));
+  return found;
+}
+
+function guideSlugify(text) {
+  return String(text || '')
+    .toLowerCase()
+    .split('\u2019').join('')
+    .split("'").join('')
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+}
+
+route('GET', '/api/guides', (context) => {
+  requireMember(context.session);
+  const staff = context.session !== 'member';
+  if (!guidesAreOn() && !staff) throw new Refused(409, 'guides_off', GUIDE_OFF);
+  const rows = state.guides
+    .filter((one) => staff || (one.published && one.audience === 'member'))
+    .sort((a, b) => a.sort - b.sort)
+    .map(guideRow);
+  return {
+    guides: rows,
+    audience: staff ? 'staff' : 'member',
+    may_edit: staff,
+    mode: state.settings.get('guides_mode') || 'on',
+    stale: staff ? rows.reduce((total, one) => total + one.stale_count, 0) : 0,
+    notes: guidesAreOn() ? [] : [GUIDES_OFF_FOR_STAFF],
+    checked_at: now(),
+  };
+});
+
+route('GET', '/api/guides/stale', (context) => {
+  requireStaff(context.session);
+  const shots = state.guideMedia
+    .filter((one) => one.stale)
+    .map((one) => {
+      const guide = state.guides.find((row) => row.id === one.guide_id);
+      return { ...guideMediaRow(one, ''), slug: guide.slug, title: guide.title, feature: guide.feature };
+    });
+  return { shots, count: shots.length, checked_at: now() };
+});
+
+route('GET', '/api/guides/media/:id', (context) => {
+  requireMember(context.session);
+  const row = state.guideMedia.find((one) => String(one.id) === String(context.params.id));
+  if (!row) {
+    throw new Refused(404, 'no_such_media', 'That picture is not one of this server\u2019s guide screenshots, so nothing was shown. It may have been replaced \u2014 reload the guide.');
+  }
+  return {
+    status: 200,
+    headers: { 'content-type': 'image/png', 'cache-control': 'private, max-age=86400', etag: `"${row.sha256}"` },
+    body: Buffer.from('89504e470d0a1a0a', 'hex'),
+  };
+});
+
+route('POST', '/api/guides', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const title = String(body.title || '').trim().slice(0, 120);
+  const goal = String(body.goal || '').trim().slice(0, 300);
+  if (!title || !goal) throw new Refused(400, 'no_title', 'A guide needs a title and a goal, so nothing was saved. Fill both in and save again.');
+  const slug = guideSlugify(body.slug || title);
+  if (!slug) throw new Refused(400, 'no_slug', 'A guide needs a title Black Bloc can turn into a web address, and that one came out empty, so nothing was made. Use some letters or numbers in the title.');
+  if (state.guides.some((one) => one.slug === slug)) {
+    throw new Refused(409, 'slug_taken', `There is already a guide at **${slug}**, so nothing was made. Give this one a different title, or edit the one that is there.`);
+  }
+  const made = {
+    id: state.nextGuide++,
+    slug,
+    title,
+    goal,
+    audience: body.audience === 'staff' ? 'staff' : 'member',
+    feature: body.feature || 'core',
+    command: body.command ? String(body.command) : null,
+    sort: Number(body.sort || 0),
+    published: false,
+    seeded: false,
+    updated_at: now(),
+    updated_by: STAFF.id,
+    steps: [],
+    faults: [],
+    facts: [],
+  };
+  state.guides.push(made);
+  logAction('web.guide.created', { actor_id: STAFF.id, details: { slug, guide_id: made.id } });
+  return { ...guideWhole(made), message: `**${title}** is made. It is unpublished until you press Publish.` };
+});
+
+route('GET', '/api/guides/:slug', (context) => {
+  requireMember(context.session);
+  const staff = context.session !== 'member';
+  if (!guidesAreOn() && !staff) throw new Refused(409, 'guides_off', GUIDE_OFF);
+  const guide = wantedGuide(context.params.slug, context.session);
+  return { ...guideWhole(guide), may_edit: staff, notes: guidesAreOn() ? [] : [GUIDES_OFF_FOR_STAFF] };
+});
+
+route('PUT', '/api/guides/:slug', async (context) => {
+  requireStaff(context.session);
+  const guide = wantedGuide(context.params.slug, context.session);
+  const body = await context.body();
+  const was = guide.published;
+  guide.title = String(body.title || guide.title).slice(0, 120);
+  guide.goal = String(body.goal || guide.goal).slice(0, 300);
+  if (Array.isArray(body.steps)) {
+    guide.steps = body.steps.map((one) => ({
+      id: one.id ? Number(one.id) : state.nextGuideStep++,
+      do_text: String(one.do_text || ''),
+      expect_text: one.expect_text ? String(one.expect_text) : null,
+      media_id: one.media_id ? Number(one.media_id) : null,
+      seed_do: null,
+      seed_expect: null,
+    }));
+  }
+  if (Array.isArray(body.faults)) {
+    guide.faults = body.faults.map((one, at) => ({ id: at + 1, symptom: String(one.symptom || ''), answer: String(one.answer || '') }));
+  }
+  if (Array.isArray(body.facts)) guide.facts = body.facts.map((one) => ({ kind: one.kind, ref: one.ref }));
+  if ('published' in body) guide.published = Boolean(body.published);
+  guide.updated_at = now();
+  guide.updated_by = STAFF.id;
+  logAction('web.guide.edited', { actor_id: STAFF.id, details: { slug: guide.slug, guide_id: guide.id, changed: 'steps +0 \u22120 ~1, faults +0 \u22120 ~0, facts +0 \u22120 ~0' } });
+  let said = `**${guide.title}** is saved.`;
+  if (guide.published !== was) {
+    logAction(guide.published ? 'web.guide.published' : 'web.guide.unpublished', { actor_id: STAFF.id, details: { slug: guide.slug, guide_id: guide.id } });
+    said = guide.published
+      ? `**${guide.title}** is published \u2014 members and \`/help\` can see it now.`
+      : `**${guide.title}** is unpublished. Staff still see it; members and \`/help\` do not.`;
+  }
+  return { ...guideWhole(guide), message: said };
+});
+
+route('DELETE', '/api/guides/:slug', (context) => {
+  requireStaff(context.session);
+  const guide = wantedGuide(context.params.slug, context.session);
+  if (guide.seeded) throw new Refused(409, 'seeded_guide', GUIDE_SEEDED.split('{slug}').join(guide.slug));
+  state.guideMedia = state.guideMedia.filter((one) => one.guide_id !== guide.id);
+  state.guides = state.guides.filter((one) => one.id !== guide.id);
+  logAction('web.guide.deleted', { actor_id: STAFF.id, details: { slug: guide.slug, guide_id: guide.id } });
+  return { deleted: guide.slug, message: `**${guide.title}** is gone.` };
+});
+
+route('POST', '/api/guides/:slug/reset', (context) => {
+  requireStaff(context.session);
+  const guide = wantedGuide(context.params.slug, context.session);
+  if (!guide.seeded) throw new Refused(409, 'not_seeded', GUIDE_NOT_SEEDED.split('{slug}').join(guide.slug));
+  for (const step of guide.steps) {
+    step.do_text = step.seed_do === null ? step.do_text : step.seed_do;
+    step.expect_text = step.seed_expect === null ? step.expect_text : step.seed_expect;
+  }
+  guide.updated_at = now();
+  logAction('web.guide.reset', { actor_id: STAFF.id, details: { slug: guide.slug, guide_id: guide.id } });
+  return { ...guideWhole(guide), message: `**${guide.title}** is back to the words it shipped with.` };
+});
+
+route('POST', '/api/guides/:slug/media', async (context) => {
+  requireStaff(context.session);
+  const guide = wantedGuide(context.params.slug, context.session);
+  const body = await context.body();
+  const name = String(body.filename || 'shot.png');
+  if (!/\.(png|jpe?g|webp)$/i.test(name)) {
+    throw new Refused(415, 'bad_picture', GUIDE_WRONG_TYPE.split('{name}').join(name));
+  }
+  let raw;
+  try {
+    raw = Buffer.from(String(body.data || '').split(',').pop(), 'base64');
+  } catch (e) {
+    throw new Refused(400, 'bad_picture', GUIDE_BAD_PICTURE);
+  }
+  if (!raw || raw.length === 0) throw new Refused(400, 'bad_picture', GUIDE_BAD_PICTURE);
+  if (raw.length > 2 * 1024 * 1024) {
+    throw new Refused(413, 'picture_too_big', `That picture is ${Math.round(raw.length / 1024)} KB and Black Bloc keeps guide screenshots under 2.0 MB. Nothing was uploaded \u2014 crop it, or save it again as a PNG at no more than 1600 pixels on its longest side.`);
+  }
+  const stepId = body.step_id ? Number(body.step_id) : null;
+  const step = guide.steps.find((one) => one.id === stepId) || null;
+  state.guideMedia = state.guideMedia.filter((one) => !(one.guide_id === guide.id && one.step_id === stepId));
+  const made = {
+    id: state.nextGuideMedia++,
+    guide_id: guide.id,
+    step_id: stepId,
+    file: `${state.nextGuideMedia}.png`,
+    sha256: 'b1'.repeat(32),
+    width: 1,
+    height: 1,
+    bytes: raw.length,
+    source: body.source === 'mock' ? 'mock' : 'capture',
+    surface: body.surface === 'website' ? 'website' : 'discord',
+    shot_release: body.shot_release ? String(body.shot_release) : null,
+    shot_by: STAFF.id,
+    shot_at: now(),
+    caption: body.caption ? String(body.caption) : null,
+    stale: false,
+    stale_since: null,
+  };
+  state.guideMedia.push(made);
+  if (step) step.media_id = made.id;
+  logAction('web.guide.media_replaced', { actor_id: STAFF.id, details: { slug: guide.slug, guide_id: guide.id, media_id: made.id } });
+  return {
+    media: guideMediaRow(made, step ? step.do_text : ''),
+    message: step ? `The picture on step ${guide.steps.indexOf(step) + 1} is replaced.` : `The picture on **${guide.title}** is replaced.`,
+  };
 });
 
 route('GET', '/api/settings', (context) => {

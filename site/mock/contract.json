@@ -335,6 +335,7 @@
         "cost",
         "events",
         "golive",
+        "guides",
         "honeypot",
         "modmail",
         "pings",
@@ -3668,6 +3669,422 @@
         "purged",
         "notes"
       ]
+    },
+    {
+      "_": "Guides (G1). {guide_slug} is a SEEDED guide — both halves seed the 17 that ship with Black Bloc — and {scratch_guide_slug} is one staff wrote here, which is the only kind DELETE takes and the only kind /reset refuses. F-G3: a member sees member guides, published, and nothing else, so every entry below runs as staff. GET /api/guides/media/{id} is NOT here: it answers a picture, not JSON, and this table only checks JSON keys.",
+      "method": "GET",
+      "path": "/api/guides",
+      "read_by": [
+        "page-guides.js hub"
+      ],
+      "shape": "object",
+      "keys": [
+        "guides",
+        "audience",
+        "may_edit",
+        "mode",
+        "stale",
+        "notes",
+        "checked_at"
+      ],
+      "rows": {
+        "guides": [
+          "id",
+          "slug",
+          "title",
+          "goal",
+          "audience",
+          "feature",
+          "feature_page",
+          "command",
+          "sort",
+          "published",
+          "seeded",
+          "url",
+          "step_count",
+          "media_count",
+          "stale_count",
+          "updated_at",
+          "updated_by",
+          "updated_by_name"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/guides/stale",
+      "read_by": [
+        "page-guides.js staff line",
+        "the capture session, with the operator token"
+      ],
+      "shape": "object",
+      "keys": [
+        "shots",
+        "count",
+        "checked_at"
+      ],
+      "rows": {
+        "shots": [
+          "id",
+          "url",
+          "step_id",
+          "source",
+          "surface",
+          "caption",
+          "width",
+          "height",
+          "bytes",
+          "sha256",
+          "shot_release",
+          "shot_at",
+          "shot_by",
+          "shot_by_name",
+          "stale",
+          "stale_since",
+          "alt",
+          "slug",
+          "title",
+          "feature"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/guides/{guide_slug}",
+      "read_by": [
+        "page-guides.js guide"
+      ],
+      "shape": "object",
+      "keys": [
+        "guide",
+        "steps",
+        "faults",
+        "facts",
+        "chosen_facts",
+        "media",
+        "read_at",
+        "may_edit",
+        "notes"
+      ],
+      "nested": {
+        "guide": [
+          "id",
+          "slug",
+          "title",
+          "goal",
+          "audience",
+          "feature",
+          "feature_page",
+          "command",
+          "sort",
+          "published",
+          "seeded",
+          "url",
+          "step_count",
+          "media_count",
+          "stale_count",
+          "updated_at",
+          "updated_by",
+          "updated_by_name"
+        ]
+      },
+      "rows": {
+        "steps": [
+          "id",
+          "position",
+          "do_text",
+          "expect_text",
+          "media_id",
+          "media",
+          "seed_do",
+          "seed_expect",
+          "can_restore",
+          "warnings"
+        ],
+        "faults": [
+          "id",
+          "position",
+          "symptom",
+          "answer"
+        ],
+        "facts": [
+          "kind",
+          "ref",
+          "label",
+          "value",
+          "help",
+          "read_at"
+        ],
+        "chosen_facts": [
+          "kind",
+          "ref"
+        ],
+        "media": [
+          "id",
+          "url",
+          "step_id",
+          "source",
+          "surface",
+          "caption",
+          "width",
+          "height",
+          "bytes",
+          "sha256",
+          "shot_release",
+          "shot_at",
+          "shot_by",
+          "shot_by_name",
+          "stale",
+          "stale_since",
+          "alt"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/guides",
+      "body": {
+        "title": "How the contract runs",
+        "goal": "So the table has a new guide."
+      },
+      "read_by": [
+        "page-guides.js New guide"
+      ],
+      "shape": "object",
+      "keys": [
+        "guide",
+        "steps",
+        "faults",
+        "facts",
+        "chosen_facts",
+        "media",
+        "read_at",
+        "message"
+      ],
+      "nested": {
+        "guide": [
+          "id",
+          "slug",
+          "title",
+          "goal",
+          "audience",
+          "feature",
+          "feature_page",
+          "command",
+          "sort",
+          "published",
+          "seeded",
+          "url",
+          "step_count",
+          "media_count",
+          "stale_count",
+          "updated_at",
+          "updated_by",
+          "updated_by_name"
+        ]
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/guides/{guide_slug}",
+      "body": {
+        "title": "Get your stream announced in #live-now",
+        "goal": "Link your Twitch channel once.",
+        "published": true,
+        "steps": [
+          {
+            "do_text": "Press **Save Changes**.",
+            "expect_text": "The save bar goes and the page reads what you wrote."
+          }
+        ],
+        "faults": [
+          {
+            "symptom": "Save Changes is grey",
+            "answer": "Nothing has changed yet."
+          }
+        ],
+        "facts": [
+          {
+            "kind": "probe",
+            "ref": "test_mode"
+          }
+        ]
+      },
+      "read_by": [
+        "page-guides.js save bar"
+      ],
+      "shape": "object",
+      "keys": [
+        "guide",
+        "steps",
+        "faults",
+        "facts",
+        "chosen_facts",
+        "media",
+        "read_at",
+        "message"
+      ],
+      "nested": {
+        "guide": [
+          "id",
+          "slug",
+          "title",
+          "goal",
+          "audience",
+          "feature",
+          "feature_page",
+          "command",
+          "sort",
+          "published",
+          "seeded",
+          "url",
+          "step_count",
+          "media_count",
+          "stale_count",
+          "updated_at",
+          "updated_by",
+          "updated_by_name"
+        ]
+      },
+      "rows": {
+        "steps": [
+          "id",
+          "position",
+          "do_text",
+          "expect_text",
+          "media_id",
+          "media",
+          "seed_do",
+          "seed_expect",
+          "can_restore",
+          "warnings"
+        ],
+        "faults": [
+          "id",
+          "position",
+          "symptom",
+          "answer"
+        ],
+        "facts": [
+          "kind",
+          "ref",
+          "label",
+          "value",
+          "help",
+          "read_at"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/guides/{guide_slug}/reset",
+      "body": {},
+      "read_by": [
+        "page-guides.js Reset the whole guide"
+      ],
+      "shape": "object",
+      "keys": [
+        "guide",
+        "steps",
+        "faults",
+        "facts",
+        "chosen_facts",
+        "media",
+        "read_at",
+        "message"
+      ],
+      "nested": {
+        "guide": [
+          "id",
+          "slug",
+          "title",
+          "goal",
+          "audience",
+          "feature",
+          "feature_page",
+          "command",
+          "sort",
+          "published",
+          "seeded",
+          "url",
+          "step_count",
+          "media_count",
+          "stale_count",
+          "updated_at",
+          "updated_by",
+          "updated_by_name"
+        ]
+      },
+      "rows": {
+        "steps": [
+          "id",
+          "position",
+          "do_text",
+          "expect_text",
+          "media_id",
+          "media",
+          "seed_do",
+          "seed_expect",
+          "can_restore",
+          "warnings"
+        ],
+        "faults": [
+          "id",
+          "position",
+          "symptom",
+          "answer"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/guides/{guide_slug}/media",
+      "body": {
+        "filename": "shot.png",
+        "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+        "source": "capture"
+      },
+      "read_by": [
+        "page-guides.js Replace screenshot…"
+      ],
+      "shape": "object",
+      "keys": [
+        "media",
+        "message"
+      ],
+      "nested": {
+        "media": [
+          "id",
+          "url",
+          "step_id",
+          "source",
+          "surface",
+          "caption",
+          "width",
+          "height",
+          "bytes",
+          "sha256",
+          "shot_release",
+          "shot_at",
+          "shot_by",
+          "shot_by_name",
+          "stale",
+          "stale_since",
+          "alt"
+        ]
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/guides/{scratch_guide_slug}",
+      "read_by": [
+        "page-guides.js Delete this guide"
+      ],
+      "shape": "object",
+      "keys": [
+        "deleted",
+        "message"
+      ]
     }
   ],
   "pages": [
@@ -3805,6 +4222,13 @@
     "web.selftest.started",
     "web.selftest.finished",
     "web.selftest.purged",
-    "web.selftest.check"
+    "web.selftest.check",
+    "web.guide.created",
+    "web.guide.deleted",
+    "web.guide.edited",
+    "web.guide.media_replaced",
+    "web.guide.published",
+    "web.guide.reset",
+    "web.guide.unpublished"
   ]
 }
