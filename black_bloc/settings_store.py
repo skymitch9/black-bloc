@@ -1641,6 +1641,55 @@ KEY_HELP.update(
 )
 
 
+# Guides (G1) — the five decisions the guides pages introduce; the sixth is the log level,
+# generated with every other feature's. Its own block so a parallel branch merges textually.
+GUIDES_MODES = ("off", "on")
+GUIDES_EDITORS = ("staff", "manage_guild")
+GUIDES_MODE_DEFAULT = "on"
+GUIDES_WHO_EDITS_DEFAULT = GUIDES_EDITORS[0]
+
+KEY_TYPES.update(
+    {
+        "guides_mode": "enum",
+        "guides_who_edits": "enum",
+        "guides_help_links": "bool",
+        "guides_show_facts": "bool",
+        "guides_fault_files_request": "bool",
+    }
+)
+KEY_CHOICES.update({"guides_mode": GUIDES_MODES, "guides_who_edits": GUIDES_EDITORS})
+KEY_HELP.update(
+    {
+        "guides_mode": (
+            "on to give members the Guides page and to put a guide link beside a command in "
+            "/help; off hides both. Staff can still open a guide's web address while it is off, "
+            "and the page says so. There is no slash command to hide either way"
+        ),
+        "guides_who_edits": (
+            "who may change a guide's wording and screenshots: staff (anybody who can see the "
+            "staff channel, the default) or manage_guild (a Lead only). It is read when Save is "
+            "pressed rather than when the page is drawn, so taking the role away stops the next "
+            "save"
+        ),
+        "guides_help_links": (
+            "true to add a small guide link beside every /help line whose command has a "
+            "published guide, and an All the guides button on the last page; false leaves /help "
+            "exactly as it was"
+        ),
+        "guides_show_facts": (
+            "true to show the Right now block on a guide — up to four live values read from the "
+            "bot as the page opens, such as which mode a feature is in; false shows the steps "
+            "only"
+        ),
+        "guides_fault_files_request": (
+            "true to make Something's off at the foot of a guide file a request, so staff see it "
+            "where they see everything else; false makes it a sentence telling the reader to "
+            "tell a Lead"
+        ),
+    }
+)
+
+
 # The one grouping of the registry, read by the dashboard's Settings page and by /settings.
 CORE_KEYS = (
     "log_channel_id",
@@ -2374,6 +2423,12 @@ class SettingsStore:
             return PERSONALITY_POOL_SYNC_DEFAULT
         if key == PERSONALITY_POOL_PEER_URL:
             return PERSONALITY_POOL_PEER_URL_DEFAULT
+        if key == "guides_mode":
+            return GUIDES_MODE_DEFAULT
+        if key == "guides_who_edits":
+            return GUIDES_WHO_EDITS_DEFAULT
+        if key in ("guides_help_links", "guides_show_facts", "guides_fault_files_request"):
+            return True
         if key.endswith("_log_level"):
             return LEVEL_DEFAULT
         if KEY_TYPES.get(key) in ("channels", "roles"):

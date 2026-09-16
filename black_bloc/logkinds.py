@@ -42,6 +42,7 @@ FEATURES = (
     "raidtrain",
     "applications",
     "selftest",
+    "guides",
 )
 
 HEADS: dict[str, str] = {
@@ -71,6 +72,8 @@ HEADS: dict[str, str] = {
     "application": "applications",
     "applications": "applications",
     "selftest": "selftest",
+    "guide": "guides",
+    "guides": "guides",
 }
 
 FEATURE_LABELS: dict[str, str] = {
@@ -92,6 +95,7 @@ FEATURE_LABELS: dict[str, str] = {
     "raidtrain": "Raid trains",
     "applications": "Applications",
     "selftest": "Test",
+    "guides": "Guides",
 }
 
 FEATURE_PAGES: dict[str, str] = {
@@ -113,6 +117,7 @@ FEATURE_PAGES: dict[str, str] = {
     "raidtrain": "events.html",
     "applications": "rolemenus.html",
     "selftest": "health.html",
+    "guides": "guides.html",
 }
 
 IMPORTANT_SUFFIXES = (
@@ -376,6 +381,16 @@ ROUTINE: frozenset[str] = frozenset(
         "selftest.check",
         "selftest.finished",
         "selftest.purged",
+        "guide.created",
+        "guide.deleted",
+        "guide.edited",
+        "guide.media_replaced",
+        "guide.published",
+        "guide.reset",
+        "guide.seed_refreshed",
+        "guide.seeded",
+        "guide.shots_stale",
+        "guide.unpublished",
     }
 )
 
@@ -424,6 +439,8 @@ def like_patterns(feature: str) -> tuple[str, ...]:
         found.append(f"{WEB}.{head}.%")
     return tuple(found)
 
+
+FEATURES_WITHOUT_A_COMMAND: tuple[str, ...] = ("guides",)
 
 HIDDEN_BY_DEFAULT: tuple[str, ...] = (SELFTEST,)
 
@@ -484,6 +501,7 @@ __all__ = [
     "CHAT_POOL_SYNCED",
     "CORE",
     "FEATURES",
+    "FEATURES_WITHOUT_A_COMMAND",
     "FEATURE_LABELS",
     "FEATURE_PAGES",
     "HEADS",

@@ -230,6 +230,13 @@ export const LABELS = {
 
   personality_pool_sync: 'Whether the mood pool follows the estate’s shared manifest',
   personality_pool_peer_url: 'Where the estate’s other bot reports its health',
+
+  guides_mode: 'Whether members can read the guides',
+  guides_who_edits: 'Who may rewrite a guide',
+  guides_help_links: 'Whether /help puts a guide link beside each command',
+  guides_show_facts: 'Whether a guide shows live values read from the bot',
+  guides_fault_files_request: 'What Something’s off on a guide does',
+  guides_log_level: 'How much of the guides is repeated into Discord',
 };
 
 const NAMESPACES = ['golive', 'youtube', 'pings', 'tempvoice', 'honeypot', 'events', 'birthday', 'modmail', 'automod', 'rolemenu', 'raidtrain', 'applications'];

@@ -73,7 +73,7 @@ from black_bloc.storage.db import Database
 
 GUILD = 7
 TEST_CH = 111
-GROUP_COUNT = 23
+GROUP_COUNT = 24
 
 
 @pytest.fixture
@@ -167,7 +167,7 @@ def test_the_mode_block_says_modmail_in_words_and_never_as_on_or_off():
     assert "**Modmail** — True" not in said
 
 
-def test_every_key_lands_in_exactly_one_of_the_twenty_three_groups():
+def test_every_key_lands_in_exactly_one_of_the_twenty_four_groups():
     found = groups()
     assert len(found) == GROUP_COUNT
     counted = Counter(key for group in found for key in keys_in(group))
@@ -299,7 +299,7 @@ def test_every_log_level_fits_one_select_and_shows_the_level_it_is_on():
     store = FakeStore(defaults={f"{feature}_log_level": "important" for feature in FEATURES})
     found = log_level_options(store, GUILD)
 
-    assert len(found) == len(FEATURES) == 18 <= SELECT_LIMIT
+    assert len(found) == len(FEATURES) == 19 <= SELECT_LIMIT
     assert all(label.endswith("— important") for _, label in found)
 
 

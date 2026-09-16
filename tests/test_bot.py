@@ -216,16 +216,19 @@ async def test_every_features_logs_is_a_panel_button_and_no_group_is_left_to_hol
             if any("app_commands" in ast.unparse(one) for one in decorators):
                 from_a_command.append(f"{path.name}::{getattr(owner, 'name', '?')}")
 
+    from black_bloc.logkinds import FEATURES_WITHOUT_A_COMMAND
+
     assert groups == []
     assert not [name for name in RETIRED_GROUPS if name in groups]
-    assert logged == set(FEATURES)
+    # F-G1: guides are edited on the website only, so the one feature with no Discord door
+    # has no panel and therefore no Logs button to find.
+    assert logged == set(FEATURES) - set(FEATURES_WITHOUT_A_COMMAND)
     assert not from_a_command, (
         "Logs is a panel button now, not a subcommand — these reach send_logs from a slash "
         f"command callback: {sorted(from_a_command)}"
     )
-    assert labels >= len(FEATURES), (
-        f"only {labels} controls are labelled Logs for {len(FEATURES)} features"
-    )
+    wanted = len(FEATURES) - len(FEATURES_WITHOUT_A_COMMAND)
+    assert labels >= wanted, f"only {labels} controls are labelled Logs for {wanted} features"
 
 
 async def test_the_command_tree_stays_inside_discords_limits(settings):
@@ -245,7 +248,7 @@ async def test_every_log_level_names_a_command_that_still_exists(settings):
     """`LOG_LEVEL_COMMANDS` writes the help text a person reads on the Settings page and on
     `/settings` — "`/<command>` ▸ **Logs**". It went stale eight times over the panels program,
     each wave renaming a command under it, and nothing failed. This is what fails now."""
-    from black_bloc.logkinds import FEATURES
+    from black_bloc.logkinds import FEATURES, FEATURES_WITHOUT_A_COMMAND
     from black_bloc.settings_store import LOG_LEVEL_COMMANDS, log_level_help
 
     bot = BlackBlocBot(settings)
@@ -254,7 +257,7 @@ async def test_every_log_level_names_a_command_that_still_exists(settings):
     names = {one.name for one in bot.tree.get_commands()}
     await bot.close()
 
-    assert set(LOG_LEVEL_COMMANDS) == set(FEATURES)
+    assert set(LOG_LEVEL_COMMANDS) == set(FEATURES) - set(FEATURES_WITHOUT_A_COMMAND)
     gone = sorted(
         f"{feature} -> /{command}"
         for feature, command in LOG_LEVEL_COMMANDS.items()
@@ -263,6 +266,9 @@ async def test_every_log_level_names_a_command_that_still_exists(settings):
     assert not gone, f"these log levels name a command that no longer exists: {gone}"
     for feature in FEATURES:
         said = log_level_help(feature)
+        if feature in FEATURES_WITHOUT_A_COMMAND:
+            assert "▸ **Logs**" not in said, feature
+            continue
         assert f"`/{LOG_LEVEL_COMMANDS[feature]}` ▸ **Logs**" in said, feature
         assert "logs`" not in said, feature
 

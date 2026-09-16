@@ -8,12 +8,12 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from .. import __version__, selftest
+from .. import __version__, guides, selftest
 from .. import settings_panel as sp
 from ..actionlog import log_action, send_logs
 from ..command_errors import AnswersErrors
 from ..command_visibility import STAFF_ONLY, hidden_names
-from ..logkinds import CORE, SELFTEST, VIA_DISCORD, kind_via
+from ..logkinds import CORE, SELFTEST, VIA_BOOT, VIA_DISCORD, kind_via
 from ..loops import wait_ready
 from ..modcases import pages_under_limit
 from ..panels import (
@@ -54,6 +54,8 @@ NO_MATCH = (
     "No command matches **{filter}**, so there is nothing to list. Run `/help` with nothing in "
     "the filter to see all of them."
 )
+GUIDE_CLAUSE = " · [guide]({url})"
+ALL_THE_GUIDES = "All the guides"
 HIDDEN_NOTE = (
     "\n*{count} command(s) are not listed because their feature is turned off. A Lead brings "
     "one back from the dashboard's Settings page, or with `/settings` ▸ "
@@ -69,6 +71,8 @@ log = logging.getLogger(__name__)
 
 PURGE_EVERY_SECONDS = 60
 PURGE_LOOP = "purge_loop"
+GUIDES_EVERY_SECONDS = 300
+GUIDES_LOOP = "guides_loop"
 
 
 def actor_id(actor: Any) -> int | None:
@@ -127,16 +131,23 @@ def subcommand_lines(command: Any, path: str) -> list[str]:
     return [line for child in children for line in subcommand_lines(child, f"{path} {child.name}")]
 
 
-def help_lines(entries: Any, wanted: str = "") -> list[str]:
+def guide_clause(links: Any, path: str) -> str:
+    """Masked Markdown, which Discord draws as a small link: no embed, no second message."""
+    url = (links or {}).get(path)
+    return GUIDE_CLAUSE.format(url=url) if url else ""
+
+
+def help_lines(entries: Any, wanted: str = "", guides: Any = None) -> list[str]:
     """A bold heading per top-level command, then the commands under it, filtered and sorted."""
     needle = wanted.strip().lower()
     found: list[str] = []
     for command in sorted(entries, key=lambda item: item.name):
         path = f"/{command.name}"
         heading = command_line(command, path, heading=True)
+        clause = guide_clause(guides, path)
         if not (getattr(command, "commands", ()) or ()):
             if not needle or needle in heading.lower():
-                found.append(heading)
+                found.append(heading + clause)
             continue
         body = subcommand_lines(command, path)
         if needle:
@@ -144,8 +155,18 @@ def help_lines(entries: Any, wanted: str = "") -> list[str]:
             if not kept and needle not in heading.lower():
                 continue
             body = kept or body
-        found.extend([heading, *body])
+        found.extend([heading + clause, *body])
     return found
+
+
+class AllTheGuides(discord.ui.View):
+    """One link button on the last page of `/help`; a link button never calls back."""
+
+    def __init__(self, url: str) -> None:
+        super().__init__(timeout=None)
+        self.add_item(
+            discord.ui.Button(style=discord.ButtonStyle.link, label=ALL_THE_GUIDES, url=url)
+        )
 
 
 def tree_commands(tree: Any, guild: Any = None) -> list[Any]:
@@ -164,14 +185,18 @@ class Core(commands.Cog):
         self.bot = bot
         self.last_purge_ok_at: Any = None
         self.last_purge_error: Any = None
+        self.last_guides_ok_at: Any = None
+        self.last_guides_error: Any = None
 
     async def cog_load(self) -> None:
         if not getattr(self.bot.db, "is_connected", False):
             return
         self.purge_loop.start()
+        self.guides_loop.start()
 
     async def cog_unload(self) -> None:
         self.purge_loop.cancel()
+        self.guides_loop.cancel()
 
     @tasks.loop(seconds=PURGE_EVERY_SECONDS)
     async def purge_loop(self) -> None:
@@ -195,7 +220,67 @@ class Core(commands.Cog):
         log.warning("selftest: the purge loop stopped — %s", self.last_purge_error, exc_info=exc)
         self.purge_loop.restart()
 
+    @tasks.loop(seconds=GUIDES_EVERY_SECONDS)
+    async def guides_loop(self) -> None:
+        """The first tick seeds a guild that has none; every tick after it re-reads the release."""
+        if not getattr(self.bot.db, "is_connected", False):
+            return
+        for guild in list(getattr(self.bot, "guilds", ()) or ()):
+            await self._seed_guides(guild)
+        await self._mark_stale_shots()
+        self.last_guides_ok_at = discord.utils.utcnow().isoformat()
+        self.last_guides_error = None
+
+    async def _seed_guides(self, guild: Any) -> None:
+        if await guides.count_guides(self.bot.db, guild.id) == 0:
+            made = await guides.seed_guides(self.bot.db, guild.id)
+            if made:
+                await log_action(
+                    self.bot,
+                    guild,
+                    "guide.seeded",
+                    details={"count": made, "via": VIA_BOOT},
+                )
+            return
+        changed = await guides.refresh_seeds(self.bot.db, guild.id)
+        if changed:
+            await log_action(
+                self.bot,
+                guild,
+                "guide.seed_refreshed",
+                details={"count": changed, "via": VIA_BOOT},
+            )
+
+    async def _mark_stale_shots(self) -> None:
+        found = await guides.reconcile_releases(self.bot)
+        if found is None:
+            return
+        for guild in list(getattr(self.bot, "guilds", ()) or ()):
+            await log_action(
+                self.bot,
+                guild,
+                "guide.shots_stale",
+                details={
+                    "release": found["release"],
+                    "features": found["features"],
+                    "count": found["counts"].get(int(guild.id), 0),
+                    "via": VIA_BOOT,
+                },
+            )
+
+    @guides_loop.before_loop
+    async def _before_guides(self) -> None:
+        await wait_ready(self.bot, self._guides_failed)
+
+    @guides_loop.error
+    async def _guides_failed(self, exc: BaseException) -> None:
+        self.last_guides_error = f"{type(exc).__name__}: {exc}"
+        log.warning("guides: the guides loop stopped — %s", self.last_guides_error, exc_info=exc)
+        self.guides_loop.restart()
+
     def loop_health(self, name: str) -> tuple[Any, Any]:
+        if name == GUIDES_LOOP:
+            return (self.last_guides_ok_at, self.last_guides_error)
         if name != PURGE_LOOP:
             return (None, None)
         return (self.last_purge_ok_at, self.last_purge_error)
@@ -225,7 +310,8 @@ class Core(commands.Cog):
             for command in tree_commands(self.bot.tree, guild)
             if command.name not in hidden
         ]
-        lines = help_lines(entries, filter or "")
+        links = await self._guide_links(guild)
+        lines = help_lines(entries, filter or "", links)
         if not lines:
             await interaction.response.send_message(
                 NO_MATCH.format(filter=str(filter)[:80]),
@@ -235,11 +321,28 @@ class Core(commands.Cog):
             return
         if hidden and not (filter or "").strip():
             lines.append(HIDDEN_NOTE.format(count=len(hidden)))
-        for index, chunk in enumerate(pages_under_limit([HELP_HEADER, *lines])):
+        pages = pages_under_limit([HELP_HEADER, *lines])
+        view = self._guides_button(guild) if links else None
+        for index, chunk in enumerate(pages):
             answer = interaction.followup.send if index else interaction.response.send_message
+            last = index == len(pages) - 1
+            extra = {"view": view} if last and view is not None else {}
             await answer(
-                chunk, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+                chunk,
+                ephemeral=True,
+                allowed_mentions=discord.AllowedMentions.none(),
+                **extra,
             )
+
+    async def _guide_links(self, guild: Any) -> dict[str, str]:
+        guild_id = getattr(guild, "id", None)
+        if guild_id is None or not guides.help_links_on(self.bot.store, guild_id):
+            return {}
+        return await guides.links_for(self.bot, guild_id)
+
+    def _guides_button(self, guild: Any) -> Any:
+        origin = getattr(getattr(self.bot, "settings", None), "origin", "")
+        return AllTheGuides(guides.hub_url(origin)) if origin else None
 
     def _help_guild(self, interaction: discord.Interaction) -> Any:
         if interaction.guild is not None:
